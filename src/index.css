@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 7%;
+    --foreground: 0 0% 95%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 4 85% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 16%;
+    --secondary-foreground: 0 0% 90%;
+
+    --muted: 220 15% 14%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 30 95% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 18%;
+    --input: 220 15% 18%;
+    --ring: 4 85% 55%;
+
+    --radius: 0.5rem;
+
+    --racing-red: 4 85% 55%;
+    --racing-orange: 30 95% 55%;
+    --racing-dark: 220 20% 5%;
+    --racing-surface: 220 18% 10%;
+    --racing-surface-hover: 220 18% 14%;
+    --racing-stripe: 4 85% 55%;
+    --racing-glow: 4 85% 55%;
+
+    --sidebar-background: 220 20% 7%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 4 85% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 15% 16%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 4 85% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-bold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .text-gradient-racing {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(var(--racing-red)), hsl(var(--racing-orange)));
+  }
+
+  .bg-gradient-racing {
+    background-image: linear-gradient(135deg, hsl(var(--racing-red)), hsl(var(--racing-orange)));
+  }
+
+  .border-glow {
+    box-shadow: 0 0 15px -3px hsl(var(--racing-glow) / 0.3);
+  }
+
+  .racing-stripe-left {
+    border-left: 3px solid hsl(var(--racing-stripe));
+  }
+
+  .card-hover {
+    @apply transition-all duration-300;
+  }
+  .card-hover:hover {
+    @apply border-primary/50;
+    box-shadow: 0 0 20px -5px hsl(var(--racing-glow) / 0.2);
+    transform: translateY(-2px);
+  }
+}
