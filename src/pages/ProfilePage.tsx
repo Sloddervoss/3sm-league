@@ -21,7 +21,7 @@ const ProfilePage = () => {
         .from("profiles")
         .select("*")
         .eq("user_id", user!.id)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -90,14 +90,14 @@ const ProfilePage = () => {
     mutationFn: async () => {
       const { error } = await supabase
         .from("profiles")
-        .update({
+        .upsert({
+          user_id: user!.id,
           display_name: displayName,
           iracing_id: iracingId || null,
           iracing_name: iracingName || null,
           irating: irating ? parseInt(irating) : null,
           safety_rating: safetyRating || null,
-        } as any)
-        .eq("user_id", user!.id);
+        } as any, { onConflict: "user_id" });
       if (error) throw error;
     },
     onSuccess: () => {
