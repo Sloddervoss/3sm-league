@@ -27,18 +27,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session);
+        setLoading(false);
+
         if (session?.user) {
-          const { data } = await supabase.rpc("has_role", {
-            _user_id: session.user.id,
-            _role: "admin",
-          });
-          setIsAdmin(!!data);
+          // Direct fetch to avoid Web Locks deadlock inside onAuthStateChange
+          fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/has_role`, {
+            method: "POST",
+            headers: {
+              "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+              "Authorization": `Bearer ${session.access_token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ _user_id: session.user.id, _role: "admin" }),
+          })
+            .then((r) => r.json())
+            .then((data) => setIsAdmin(!!data))
+            .catch(() => setIsAdmin(false));
         } else {
           setIsAdmin(false);
         }
-        setLoading(false);
       }
     );
 
