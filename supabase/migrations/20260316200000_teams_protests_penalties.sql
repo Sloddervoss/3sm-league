@@ -36,8 +36,8 @@ CREATE POLICY "Admins can manage team memberships" ON public.team_memberships FO
 CREATE TABLE public.protests (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   race_id UUID REFERENCES public.races(id) ON DELETE CASCADE NOT NULL,
-  reporter_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  accused_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  reporter_user_id UUID REFERENCES public.profiles(user_id) ON DELETE CASCADE NOT NULL,
+  accused_user_id UUID REFERENCES public.profiles(user_id) ON DELETE CASCADE NOT NULL,
   lap_number INTEGER,
   description TEXT NOT NULL,
   video_link TEXT,
