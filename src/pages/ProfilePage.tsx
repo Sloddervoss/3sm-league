@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -76,14 +76,15 @@ const ProfilePage = () => {
   const [irating, setIrating] = useState("");
   const [safetyRating, setSafetyRating] = useState("");
 
-  const initialized = profile && displayName === "" && iracingId === "";
-  if (initialized) {
-    setDisplayName(profile.display_name || "");
-    setIracingId((profile as any).iracing_id || "");
-    setIracingName((profile as any).iracing_name || "");
-    setIrating(String((profile as any).irating || ""));
-    setSafetyRating((profile as any).safety_rating || "");
-  }
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.display_name || "");
+      setIracingId((profile as any).iracing_id || "");
+      setIracingName((profile as any).iracing_name || "");
+      setIrating(String((profile as any).irating || ""));
+      setSafetyRating((profile as any).safety_rating || "");
+    }
+  }, [profile]);
 
   const updateProfile = useMutation({
     mutationFn: async () => {
@@ -101,7 +102,7 @@ const ProfilePage = () => {
     },
     onSuccess: () => {
       toast.success("Profiel opgeslagen!");
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -114,7 +115,7 @@ const ProfilePage = () => {
     },
     onSuccess: () => {
       toast.success("Team gejoint!");
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["teams-list"] });
       setSelectedTeamId("");
     },
@@ -130,7 +131,7 @@ const ProfilePage = () => {
     },
     onSuccess: () => {
       toast.success("Team verlaten.");
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
     },
     onError: (err: Error) => toast.error(err.message),
   });
