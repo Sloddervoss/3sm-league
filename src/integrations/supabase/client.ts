@@ -11,7 +11,11 @@ export const isDemoMode = !(supabaseUrl && supabaseAnonKey);
 let _supabase: any;
 
 if (supabaseUrl && supabaseAnonKey) {
-  _supabase = createClient(supabaseUrl, supabaseAnonKey);
+  _supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn(),
+    },
+  });
 } else {
   const { mockSupabase } = await import("./mockClient");
   _supabase = mockSupabase;
