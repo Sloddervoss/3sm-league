@@ -10,6 +10,9 @@ export default defineConfig({
       overlay: false,
     },
   },
+  build: {
+    target: "esnext", // Enables top-level await support (Chrome 89+, Firefox 89+, Safari 15+)
+  },
   plugins: [react()],
   resolve: {
     alias: {
