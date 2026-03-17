@@ -140,15 +140,29 @@ const ProfilePage = () => {
   const submitCreationRequest = useMutation({
     mutationFn: async () => {
       if (!newTeamReq.name.trim()) throw new Error("Geef een teamnaam op");
-      const { error } = await (supabase as any).from("team_creation_requests").insert({
-        user_id: user!.id,
-        team_name: newTeamReq.name.trim(),
-        team_description: newTeamReq.description.trim() || null,
-        team_color: newTeamReq.color,
-        logo_url: newTeamLogo || null,
-        status: "pending",
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session) throw new Error("Niet ingelogd");
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/team_creation_requests`, {
+        method: "POST",
+        headers: {
+          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal",
+        },
+        body: JSON.stringify({
+          user_id: user!.id,
+          team_name: newTeamReq.name.trim(),
+          team_description: newTeamReq.description.trim() || null,
+          team_color: newTeamReq.color,
+          logo_url: newTeamLogo || null,
+          status: "pending",
+        }),
       });
-      if (error) throw error;
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
     },
     onSuccess: () => {
       toast.success("Aanvraag ingediend! Een admin zal je verzoek beoordelen.");
@@ -456,12 +470,12 @@ const ProfilePage = () => {
                                   const url = URL.createObjectURL(file);
                                   img.onload = () => {
                                     const canvas = document.createElement("canvas");
-                                    const max = 256;
+                                    const max = 128;
                                     const scale = Math.min(max / img.width, max / img.height, 1);
-                                    canvas.width = img.width * scale;
-                                    canvas.height = img.height * scale;
+                                    canvas.width = Math.round(img.width * scale);
+                                    canvas.height = Math.round(img.height * scale);
                                     canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                    setNewTeamLogo(canvas.toDataURL("image/webp", 0.8));
+                                    setNewTeamLogo(canvas.toDataURL("image/jpeg", 0.7));
                                     URL.revokeObjectURL(url);
                                   };
                                   img.src = url;
