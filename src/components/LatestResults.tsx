@@ -20,7 +20,7 @@ const LatestResults = () => {
         .eq("status", "completed")
         .order("race_date", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
       if (error) return null;
       return data;
     },

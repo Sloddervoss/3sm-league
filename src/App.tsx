@@ -4,7 +4,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { resetDemoData } from "@/integrations/supabase/mockClient";
 import { isDemoMode } from "@/integrations/supabase/client";
 import Index from "./pages/Index.tsx";
 import CalendarPage from "./pages/CalendarPage.tsx";
@@ -19,13 +18,23 @@ import AdminPage from "./pages/AdminPage.tsx";
 import ProfilePage from "./pages/ProfilePage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 2, // 2 minuten — voorkomt constant refetchen bij navigatie
+      retry: 1,
+    },
+  },
+});
 
 const DemoBanner = () => (
   <div className="fixed bottom-0 left-0 right-0 z-[100] bg-yellow-500/95 backdrop-blur text-black text-xs font-bold flex items-center justify-between px-4 py-2 border-t-2 border-yellow-400">
     <span>⚡ DEMO MODUS — Nep testdata, auto-ingelogd als admin (Vincent de Vos)</span>
     <button
-      onClick={resetDemoData}
+      onClick={async () => {
+        const { resetDemoData } = await import("@/integrations/supabase/mockClient");
+        resetDemoData();
+      }}
       className="px-3 py-1 rounded bg-black/20 hover:bg-black/30 transition-colors text-black font-bold ml-4 shrink-0"
     >
       Reset data
