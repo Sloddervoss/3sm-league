@@ -5,16 +5,26 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undef
 
 export const isDemoMode = !(supabaseUrl && supabaseAnonKey);
 
-// In production: env vars are constant strings baked in by Vite.
-// Rollup eliminates the else branch (dead code), so no top-level await remains.
-// In demo mode: mock client loaded via dynamic import (no side effects in production).
-let _supabase: any;
-
-if (supabaseUrl && supabaseAnonKey) {
-  _supabase = createClient(supabaseUrl, supabaseAnonKey);
-} else {
-  const { mockSupabase } = await import("./mockClient");
-  _supabase = mockSupabase;
+// Use a global singleton to prevent multiple client instances competing for Web Locks.
+// This can happen with HMR, React re-renders, or dynamic imports creating duplicate clients.
+declare global {
+  // eslint-disable-next-line no-var
+  var __supabaseClient: any;
 }
 
-export const supabase = _supabase;
+if (!globalThis.__supabaseClient) {
+  if (supabaseUrl && supabaseAnonKey) {
+    globalThis.__supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+  } else {
+    // Demo mode: async load mock client (only in dev without env vars)
+    import("./mockClient").then(({ mockSupabase }) => {
+      globalThis.__supabaseClient = mockSupabase;
+    });
+  }
+}
+
+export const supabase = new Proxy({} as any, {
+  get(_target, prop: string) {
+    return globalThis.__supabaseClient?.[prop];
+  },
+});
