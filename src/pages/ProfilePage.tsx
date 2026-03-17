@@ -452,9 +452,19 @@ const ProfilePage = () => {
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (!file) return;
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => setNewTeamLogo(ev.target?.result as string);
-                                  reader.readAsDataURL(file);
+                                  const img = new Image();
+                                  const url = URL.createObjectURL(file);
+                                  img.onload = () => {
+                                    const canvas = document.createElement("canvas");
+                                    const max = 256;
+                                    const scale = Math.min(max / img.width, max / img.height, 1);
+                                    canvas.width = img.width * scale;
+                                    canvas.height = img.height * scale;
+                                    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                    setNewTeamLogo(canvas.toDataURL("image/webp", 0.8));
+                                    URL.revokeObjectURL(url);
+                                  };
+                                  img.src = url;
                                 }}
                               />
                             </label>
