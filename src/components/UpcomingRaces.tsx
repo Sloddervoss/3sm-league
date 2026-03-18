@@ -324,6 +324,11 @@ const UpcomingRaces = () => {
                                 <CloudSun className="w-3 h-3" /> {race.weather}
                               </span>
                             )}
+                            {race.setup && (
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Gauge className="w-3 h-3" /> Setup: {race.setup}
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
