@@ -542,16 +542,20 @@ const UpcomingRaces = () => {
                               <Timer className="w-3 h-3" /> {countdown}
                             </span>
                           )}
-                          {race.status !== "completed" && user && (
+                          {race.status !== "completed" && user && (() => {
+                            const seasonReg = isRegisteredForSeason(leagueId);
+                            const raceReg = isRegisteredForRace(race.id);
+                            return (
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 <Users className="w-3 h-3" />{raceRegCount(race.id)}
                               </span>
-                              {isRegisteredForRace(race.id) ? (
+                              {(seasonReg || raceReg) ? (
                                 <button
-                                  onClick={() => unregisterFromRace.mutate(race.id)}
-                                  disabled={unregisterFromRace.isPending}
-                                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors"
+                                  onClick={() => !seasonReg && unregisterFromRace.mutate(race.id)}
+                                  disabled={seasonReg || unregisterFromRace.isPending}
+                                  title={seasonReg ? "Aangemeld via seizoensinschrijving" : undefined}
+                                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-accent/20 text-accent border border-accent/30 ${seasonReg ? "cursor-default opacity-80" : "hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors"}`}
                                 >
                                   <Check className="w-3 h-3" /> Aangemeld
                                 </button>
@@ -568,7 +572,8 @@ const UpcomingRaces = () => {
                                 </button>
                               )}
                             </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       </motion.div>
                     );
