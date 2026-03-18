@@ -20,7 +20,7 @@ const DriversPage = () => {
     queryKey: ["drivers"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("profiles")
+        .from("confirmed_profiles")
         .select("*");
       if (error) throw error;
       return data;
