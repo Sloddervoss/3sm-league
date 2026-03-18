@@ -290,11 +290,11 @@ const UpcomingRaces = () => {
                     <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
                       <span className="flex items-center gap-1.5">
                         <Calendar className="w-4 h-4" />
-                        {new Date(nextRace.race_date).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" })}
+                        {new Date(nextRace.race_date).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}
                       </span>
                       <span className="flex items-center gap-1.5">
                         <Clock className="w-4 h-4" />
-                        {new Date(nextRace.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(nextRace.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}
                       </span>
                       {(nextRace as any).leagues?.name && (
                         <span className="px-2 py-0.5 rounded bg-secondary text-xs font-bold">
@@ -525,11 +525,11 @@ const UpcomingRaces = () => {
                           <div className="flex items-center gap-4 text-sm">
                             <span className="flex items-center gap-1.5 text-muted-foreground">
                               <Calendar className="w-3.5 h-3.5" />
-                              {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}
+                              {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", timeZone: "UTC" })}
                             </span>
                             <span className="flex items-center gap-1.5 text-muted-foreground">
                               <Clock className="w-3.5 h-3.5" />
-                              {new Date(race.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(race.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}
                             </span>
                           </div>
                           <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit ${statusStyles[race.status] || statusStyles.upcoming}`}>
