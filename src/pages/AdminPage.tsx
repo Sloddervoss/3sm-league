@@ -521,7 +521,7 @@ const AdminPage = () => {
                                 const url = URL.createObjectURL(file);
                                 img.onload = () => {
                                   const canvas = document.createElement("canvas");
-                                  const max = 128;
+                                  const max = 256;
                                   const scale = Math.min(max / img.width, max / img.height, 1);
                                   canvas.width = Math.round(img.width * scale);
                                   canvas.height = Math.round(img.height * scale);
@@ -608,7 +608,7 @@ const AdminPage = () => {
                                   const url = URL.createObjectURL(file);
                                   img.onload = () => {
                                     const canvas = document.createElement("canvas");
-                                    const max = 128;
+                                    const max = 256;
                                     const scale = Math.min(max / img.width, max / img.height, 1);
                                     canvas.width = Math.round(img.width * scale);
                                     canvas.height = Math.round(img.height * scale);
