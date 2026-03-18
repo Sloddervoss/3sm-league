@@ -715,7 +715,7 @@ const AdminPage = () => {
   const { data: allRaces } = useQuery({
     queryKey: ["all-races-admin"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("races").select("id, name, track, race_date, league_id, status, leagues(name)").order("race_date", { ascending: false });
+      const { data, error } = await supabase.from("races").select("id, name, track, race_date, league_id, status, leagues(name)").order("race_date", { ascending: true });
       if (error) throw error;
       return data;
     },
