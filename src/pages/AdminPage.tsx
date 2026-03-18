@@ -3,7 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Trophy, Calendar, Trash2, Settings, Users, Car, Shield, BarChart2, Upload, Save, FileText, X, Check, ImagePlus, Clock, Pencil } from "lucide-react";
+import { Plus, Trophy, Calendar, Trash2, Settings, Users, Car, Shield, BarChart2, Upload, Save, FileText, X, Check, ImagePlus, Clock, Pencil, MapPin, Flag, CloudSun, Gauge, Timer } from "lucide-react";
+import { getTrackInfo } from "@/lib/trackData";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
@@ -715,7 +716,7 @@ const AdminPage = () => {
   const { data: allRaces } = useQuery({
     queryKey: ["all-races-admin"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("races").select("id, name, track, race_date, league_id, status, leagues(name)").order("race_date", { ascending: true });
+      const { data, error } = await supabase.from("races").select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name)").order("race_date", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -1058,13 +1059,64 @@ const AdminPage = () => {
                   ))}
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
-                  {nextRace && (
-                    <div className="bg-card border border-border rounded-lg p-5 racing-stripe-left">
-                      <div className="text-sm font-medium text-primary uppercase tracking-[0.1em] flex items-center gap-2 mb-1"><Calendar className="w-4 h-4" />Volgende Race</div>
-                      <h3 className="font-heading font-black text-xl">{(nextRace as any).name}</h3>
-                      <p className="text-muted-foreground text-sm mt-1">{(nextRace as any).track} — {new Date((nextRace as any).race_date).toLocaleString("nl-NL", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}</p>
-                    </div>
-                  )}
+                  {nextRace && (() => {
+                    const nr = nextRace as any;
+                    const trackInfo = getTrackInfo(nr.track);
+                    const diff = new Date(nr.race_date).getTime() - Date.now();
+                    const d = Math.floor(diff / 86400000);
+                    const h = Math.floor((diff % 86400000) / 3600000);
+                    const m = Math.floor((diff % 3600000) / 60000);
+                    const countdown = diff > 0 ? (d > 0 ? `${d}d ${String(h).padStart(2,"0")}h ${String(m).padStart(2,"0")}m` : `${String(h).padStart(2,"0")}h ${String(m).padStart(2,"0")}m`) : null;
+                    const sessions = [
+                      nr.practice_duration  && { label: "Practice",   dur: nr.practice_duration,   color: "bg-blue-500/70" },
+                      nr.qualifying_duration && { label: "Qualifying", dur: nr.qualifying_duration, color: "bg-yellow-500/70" },
+                      nr.race_duration       && { label: "Race",       dur: nr.race_duration,       color: "bg-primary/80" },
+                    ].filter(Boolean) as { label: string; dur: string; color: string }[];
+                    return (
+                      <div className="bg-card border border-primary/30 rounded-lg p-5 racing-stripe-left relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
+                        <div className="relative flex gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-primary uppercase tracking-[0.1em] flex items-center gap-2 mb-2"><Calendar className="w-4 h-4" />Volgende Race</div>
+                            <h3 className="font-heading font-black text-xl mb-1">{nr.name}</h3>
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
+                              <MapPin className="w-3.5 h-3.5 shrink-0" />
+                              <span>{nr.track}</span>
+                              {trackInfo?.country && <span className="opacity-60 text-xs">— {trackInfo.country}</span>}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
+                              <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(nr.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "UTC" })}</span>
+                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(nr.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}</span>
+                              {nr.leagues?.name && <span className="px-1.5 py-0.5 rounded bg-secondary text-[10px] font-bold">{nr.leagues.name}</span>}
+                            </div>
+                            {sessions.length > 0 && (
+                              <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                                {sessions.map((s, i) => (
+                                  <span key={i} className={`${s.color} px-2 py-0.5 rounded text-[10px] font-bold text-white tracking-wide`}>{s.label} · {s.dur}</span>
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {nr.start_type && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Flag className="w-3 h-3" /> {nr.start_type} start</span>}
+                              {nr.weather && <span className="flex items-center gap-1 text-xs text-muted-foreground"><CloudSun className="w-3 h-3" /> Weather: {nr.weather}</span>}
+                              {nr.setup && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Gauge className="w-3 h-3" /> Setup: {nr.setup}</span>}
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-3 shrink-0">
+                            {trackInfo?.imageUrl && (
+                              <img src={trackInfo.imageUrl} alt="" aria-hidden className="w-24 h-16 object-contain invert opacity-25" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            )}
+                            {countdown && (
+                              <div className="text-right">
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Aftellen</p>
+                                <p className="font-heading font-black text-xl tabular-nums flex items-center gap-1"><Timer className="w-4 h-4 text-primary" />{countdown}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {activeLeague && (
                     <div className="bg-card border border-border rounded-lg p-5 racing-stripe-left">
                       <div className="text-sm font-medium text-accent uppercase tracking-[0.1em] flex items-center gap-2 mb-1"><Trophy className="w-4 h-4" />Actief Seizoen</div>
