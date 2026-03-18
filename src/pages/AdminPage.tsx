@@ -661,7 +661,7 @@ const AdminPage = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
 
   const [newLeague, setNewLeague] = useState({ name: "", description: "", season: "", car_class: "", raceCount: 6 });
-  const [races, setRaces] = useState<{ name: string; track: string; date: string; time: string; race_type: string; race_duration: string; practice_duration: string; qualifying_duration: string; start_type: string; weather: string }[]>([]);
+  const [races, setRaces] = useState<{ name: string; track: string; date: string; time: string; race_type: string; race_duration: string; practice_duration: string; qualifying_duration: string; start_type: string; weather: string; setup: string }[]>([]);
   const [showLeagueForm, setShowLeagueForm] = useState(false);
   const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
   const [editingLeagueData, setEditingLeagueData] = useState({ name: "", description: "", season: "", car_class: "" });
@@ -771,7 +771,7 @@ const AdminPage = () => {
       if (error) throw error;
       if (races.length > 0) {
         const { error: re } = await supabase.from("races").insert(
-          races.map((r, i) => ({ league_id: league.id, round: i + 1, name: r.name, track: r.track, race_date: `${r.date}T${r.time}:00`, status: "upcoming" as const, race_type: r.race_type || null, race_duration: r.race_duration || null, practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null, start_type: r.start_type || null, weather: r.weather || null } as any))
+          races.map((r, i) => ({ league_id: league.id, round: i + 1, name: r.name, track: r.track, race_date: `${r.date}T${r.time}:00`, status: "upcoming" as const, race_type: r.race_type || null, race_duration: r.race_duration || null, practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null, start_type: r.start_type || null, weather: r.weather || null, setup: r.setup || null } as any))
         );
         if (re) throw re;
       }
@@ -808,6 +808,7 @@ const AdminPage = () => {
         qualifying_duration: data.qualifying_duration || null,
         start_type: data.start_type || null,
         weather: data.weather || null,
+        setup: data.setup || null,
       }).eq("id", id);
       if (error) throw error;
     },
@@ -960,7 +961,7 @@ const AdminPage = () => {
   });
 
   const generateRaceSlots = () => {
-    setRaces(Array.from({ length: newLeague.raceCount }, (_, i) => ({ name: `Race ${i + 1}`, track: "", date: "", time: "20:00", race_type: "Feature", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", start_type: "Standing", weather: "Fixed" })));
+    setRaces(Array.from({ length: newLeague.raceCount }, (_, i) => ({ name: `Race ${i + 1}`, track: "", date: "", time: "20:00", race_type: "Feature", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", start_type: "Standing", weather: "Fixed", setup: "Fixed" })));
   };
 
   if (loading) return null;
@@ -1139,6 +1140,12 @@ const AdminPage = () => {
                                     {["Fixed", "Dynamic"].map((v) => <option key={v}>{v}</option>)}
                                   </select>
                                 </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Setup</label>
+                                  <select value={race.setup} onChange={(e) => upd("setup", e.target.value)} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                    {["Fixed", "Open"].map((v) => <option key={v}>{v}</option>)}
+                                  </select>
+                                </div>
                               </div>
                             </div>
                           );
@@ -1260,6 +1267,13 @@ const AdminPage = () => {
                                           <select value={rd.weather || ""} onChange={e => setRd("weather", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
                                             <option value="">—</option>
                                             {["Clear", "Partly Cloudy", "Overcast", "Rain", "Dynamic"].map(t => <option key={t} value={t}>{t}</option>)}
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Setup</label>
+                                          <select value={rd.setup || ""} onChange={e => setRd("setup", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                            <option value="">—</option>
+                                            {["Fixed", "Open"].map(t => <option key={t} value={t}>{t}</option>)}
                                           </select>
                                         </div>
                                       </div>
