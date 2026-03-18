@@ -9,7 +9,7 @@ import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import { Navigate } from "react-router-dom";
 
-type AdminTab = "overview" | "seasons" | "teams" | "results" | "points";
+type AdminTab = "overview" | "seasons" | "teams" | "results" | "points" | "drivers";
 
 const DEFAULT_POINTS = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
@@ -137,6 +137,75 @@ const IRACING_TRACKS = [
   "Charlotte Motor Speedway - Oval",
   "Charlotte Motor Speedway - Roval",
 ].sort();
+
+const DriversList = () => {
+  const queryClient = useQueryClient();
+
+  const { data: profiles, isLoading } = useQuery({
+    queryKey: ["admin-all-profiles"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("profiles").select("user_id, display_name, iracing_name, iracing_id, irating, safety_rating, is_admin");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const deleteDriver = useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await (supabase as any).rpc("admin_delete_user", { target_user_id: userId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Driver verwijderd");
+      queryClient.invalidateQueries({ queryKey: ["admin-all-profiles"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  if (isLoading) return <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-card rounded-lg animate-pulse" />)}</div>;
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_4rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        <span>Driver</span>
+        <span>iRacing ID</span>
+        <span>iRating</span>
+        <span>Safety</span>
+        <span></span>
+      </div>
+      {profiles?.map((p: any) => (
+        <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_4rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
+          <div>
+            <div className="font-heading font-bold text-sm flex items-center gap-2">
+              {p.display_name || p.iracing_name || "—"}
+              {p.is_admin && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent border border-accent/30 font-bold">ADMIN</span>}
+            </div>
+            {p.iracing_name && p.display_name !== p.iracing_name && (
+              <div className="text-xs text-muted-foreground">{p.iracing_name}</div>
+            )}
+          </div>
+          <span className="text-xs font-mono text-muted-foreground">{p.iracing_id || "—"}</span>
+          <span className="text-sm font-heading font-bold">{p.irating ? p.irating.toLocaleString() : "—"}</span>
+          <span className="text-sm text-muted-foreground">{p.safety_rating || "—"}</span>
+          <button
+            onClick={() => {
+              if (confirm(`Weet je zeker dat je ${p.display_name || p.iracing_name} wilt verwijderen?`)) {
+                deleteDriver.mutate(p.user_id);
+              }
+            }}
+            disabled={deleteDriver.isPending}
+            className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+      {!profiles?.length && (
+        <div className="py-12 text-center text-muted-foreground text-sm">Geen drivers gevonden.</div>
+      )}
+    </div>
+  );
+};
 
 const AdminPage = () => {
   const { user, isAdmin, loading } = useAuth();
@@ -448,6 +517,7 @@ const AdminPage = () => {
     { id: "overview", label: "Dashboard", icon: BarChart2 },
     { id: "seasons", label: "Seizoenen", icon: Trophy },
     { id: "teams", label: "Teams", icon: Car },
+    { id: "drivers", label: "Drivers", icon: Users },
     { id: "results", label: "Resultaten", icon: Upload },
     { id: "points", label: "Punten", icon: Shield },
   ];
@@ -1104,6 +1174,13 @@ const AdminPage = () => {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {activeTab === "drivers" && (
+              <div>
+                <h2 className="font-heading text-2xl font-black mb-6">DRIVERS</h2>
+                <DriversList />
               </div>
             )}
 
