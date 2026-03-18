@@ -19,7 +19,7 @@ const statusLabels: Record<string, string> = {
 };
 
 const UpcomingRaces = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -59,7 +59,7 @@ const UpcomingRaces = () => {
     user && (seasonRegs || []).some((r: any) => r.league_id === leagueId && r.user_id === user.id);
 
   const registrationCount = (leagueId: string) =>
-    (seasonRegs || []).filter((r: any) => r.league_id === leagueId).length;
+    (seasonRegs || []).filter((r: any) => r.league_id === leagueId && !(isAdmin && r.user_id === user?.id)).length;
 
   const registerForSeason = useMutation({
     mutationFn: async (leagueId: string) => {
