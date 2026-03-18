@@ -105,13 +105,13 @@ const TeamsPage = () => {
                       <div className="p-6">
                         <div className="flex items-center justify-between mb-4">
                           <div
-                            className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-heading font-black text-lg"
-                            style={{ backgroundColor: team.color + "33", border: `2px solid ${team.color}` }}
+                            className="w-16 h-16 rounded-lg flex items-center justify-center"
+                            style={{ backgroundColor: team.color + "22", border: `2px solid ${team.color}` }}
                           >
                             {team.logo_url ? (
-                              <img src={team.logo_url} alt={team.name} className="w-8 h-8 object-contain" />
+                              <img src={team.logo_url} alt={team.name} className="w-12 h-12 object-contain p-1" />
                             ) : (
-                              <Shield className="w-6 h-6" style={{ color: team.color }} />
+                              <Shield className="w-8 h-8" style={{ color: team.color }} />
                             )}
                           </div>
                           <div className="text-right">
