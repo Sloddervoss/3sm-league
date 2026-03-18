@@ -26,6 +26,7 @@ const AdminPage = () => {
   const [newTeamLogoPreview, setNewTeamLogoPreview] = useState<string>("");
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamLogo, setEditingTeamLogo] = useState<string>("");
+  const [editingTeamCurrentLogo, setEditingTeamCurrentLogo] = useState<string>("");
   const [showTeamForm, setShowTeamForm] = useState(false);
 
   const [importRaceId, setImportRaceId] = useState("");
@@ -51,7 +52,7 @@ const AdminPage = () => {
   const { data: teams } = useQuery({
     queryKey: ["admin-teams"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("teams").select("*, team_memberships(*, profiles(display_name))");
+      const { data, error } = await supabase.from("teams").select("id, name, description, color, created_at, team_memberships(id, user_id, profiles(display_name, iracing_name))");
       if (error) throw error;
       return data;
     },
@@ -516,11 +517,19 @@ const AdminPage = () => {
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (!file) return;
-                                const reader = new FileReader();
-                                reader.onload = (ev) => {
-                                  setNewTeamLogoPreview(ev.target?.result as string);
+                                const img = new Image();
+                                const url = URL.createObjectURL(file);
+                                img.onload = () => {
+                                  const canvas = document.createElement("canvas");
+                                  const max = 128;
+                                  const scale = Math.min(max / img.width, max / img.height, 1);
+                                  canvas.width = Math.round(img.width * scale);
+                                  canvas.height = Math.round(img.height * scale);
+                                  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                  setNewTeamLogoPreview(canvas.toDataURL("image/jpeg", 0.7));
+                                  URL.revokeObjectURL(url);
                                 };
-                                reader.readAsDataURL(file);
+                                img.src = url;
                               }}
                             />
                           </label>
@@ -548,14 +557,8 @@ const AdminPage = () => {
                     <div key={team.id} className="bg-card border border-border rounded-lg p-5" style={{ borderTopColor: team.color, borderTopWidth: 3 }}>
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="relative group/logo">
-                            {team.logo_url ? (
-                              <img src={team.logo_url} alt={team.name} className="w-10 h-10 object-contain rounded-md border border-border bg-secondary/50" />
-                            ) : (
-                              <div className="w-10 h-10 rounded-md border border-border bg-secondary/50 flex items-center justify-center">
-                                <Car className="w-5 h-5 text-muted-foreground/50" />
-                              </div>
-                            )}
+                          <div className="w-10 h-10 rounded-md border border-border bg-secondary/50 flex items-center justify-center" style={{ backgroundColor: team.color + "33" }}>
+                            <Car className="w-5 h-5 text-muted-foreground/50" />
                           </div>
                           <div>
                             <h3 className="font-heading font-bold text-lg">{team.name}</h3>
@@ -564,7 +567,19 @@ const AdminPage = () => {
                         </div>
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={() => { setEditingTeamId(editingTeamId === team.id ? null : team.id); setEditingTeamLogo(""); }}
+                            onClick={() => {
+                              if (editingTeamId === team.id) {
+                                setEditingTeamId(null);
+                                setEditingTeamLogo("");
+                                setEditingTeamCurrentLogo("");
+                              } else {
+                                setEditingTeamId(team.id);
+                                setEditingTeamLogo("");
+                                setEditingTeamCurrentLogo("");
+                                supabase.from("teams").select("logo_url").eq("id", team.id).single()
+                                  .then(({ data }) => setEditingTeamCurrentLogo((data as any)?.logo_url || ""));
+                              }
+                            }}
                             className="p-2 text-muted-foreground hover:text-primary transition-colors"
                             title="Logo wijzigen"
                           >
@@ -589,15 +604,25 @@ const AdminPage = () => {
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (!file) return;
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => setEditingTeamLogo(ev.target?.result as string);
-                                  reader.readAsDataURL(file);
+                                  const img = new Image();
+                                  const url = URL.createObjectURL(file);
+                                  img.onload = () => {
+                                    const canvas = document.createElement("canvas");
+                                    const max = 128;
+                                    const scale = Math.min(max / img.width, max / img.height, 1);
+                                    canvas.width = Math.round(img.width * scale);
+                                    canvas.height = Math.round(img.height * scale);
+                                    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                    setEditingTeamLogo(canvas.toDataURL("image/jpeg", 0.7));
+                                    URL.revokeObjectURL(url);
+                                  };
+                                  img.src = url;
                                 }}
                               />
                             </label>
-                            {(editingTeamLogo || team.logo_url) && (
+                            {(editingTeamLogo || editingTeamCurrentLogo) && (
                               <img
-                                src={editingTeamLogo || team.logo_url}
+                                src={editingTeamLogo || editingTeamCurrentLogo}
                                 alt="preview"
                                 className="w-10 h-10 object-contain rounded-md border border-border bg-secondary/50"
                               />
@@ -611,16 +636,16 @@ const AdminPage = () => {
                             >
                               <Save className="w-3 h-3" /> Opslaan
                             </button>
-                            {team.logo_url && (
+                            {editingTeamCurrentLogo && (
                               <button
-                                onClick={() => updateTeamLogo.mutate({ teamId: team.id, logoUrl: "" })}
+                                onClick={() => { updateTeamLogo.mutate({ teamId: team.id, logoUrl: "" }); setEditingTeamCurrentLogo(""); }}
                                 disabled={updateTeamLogo.isPending}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold border border-border text-muted-foreground hover:text-destructive transition-colors"
                               >
                                 <X className="w-3 h-3" /> Verwijderen
                               </button>
                             )}
-                            <button onClick={() => { setEditingTeamId(null); setEditingTeamLogo(""); }} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors">Annuleren</button>
+                            <button onClick={() => { setEditingTeamId(null); setEditingTeamLogo(""); setEditingTeamCurrentLogo(""); }} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors">Annuleren</button>
                           </div>
                         </motion.div>
                       )}

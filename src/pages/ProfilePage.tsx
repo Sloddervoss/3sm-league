@@ -43,7 +43,7 @@ const ProfilePage = () => {
   const { data: teams } = useQuery({
     queryKey: ["teams-list"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("teams").select("id, name, color, logo_url");
+      const { data, error } = await supabase.from("teams").select("id, name, color");
       if (error) throw error;
       return data || [];
     },
