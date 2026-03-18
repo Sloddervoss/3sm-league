@@ -150,6 +150,30 @@ const DriversList = () => {
     },
   });
 
+  const { data: userRoles } = useQuery({
+    queryKey: ["admin-user-roles"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("admin_get_user_roles");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const isAdmin = (userId: string) =>
+    (userRoles || []).some((r: any) => r.user_id === userId && r.role === "admin");
+
+  const toggleAdmin = useMutation({
+    mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
+      const fn = grant ? "admin_grant_role" : "admin_revoke_role";
+      const { error } = await (supabase as any).rpc(fn, { target_user_id: userId, target_role: "admin" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-user-roles"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const deleteDriver = useMutation({
     mutationFn: async (userId: string) => {
       const { error } = await (supabase as any).rpc("admin_delete_user", { target_user_id: userId });
@@ -166,40 +190,48 @@ const DriversList = () => {
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_4rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_5rem_3rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
         <span>Driver</span>
         <span>iRacing ID</span>
         <span>iRating</span>
         <span>Safety</span>
+        <span>Admin</span>
         <span></span>
       </div>
-      {profiles?.map((p: any) => (
-        <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_4rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
-          <div>
-            <div className="font-heading font-bold text-sm flex items-center gap-2">
-              {p.display_name || p.iracing_name || "—"}
-              {p.is_admin && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent border border-accent/30 font-bold">ADMIN</span>}
+      {profiles?.map((p: any) => {
+        const admin = isAdmin(p.user_id);
+        return (
+          <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_5rem_3rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
+            <div>
+              <div className="font-heading font-bold text-sm">{p.display_name || p.iracing_name || "—"}</div>
+              {p.iracing_name && p.display_name !== p.iracing_name && (
+                <div className="text-xs text-muted-foreground">{p.iracing_name}</div>
+              )}
             </div>
-            {p.iracing_name && p.display_name !== p.iracing_name && (
-              <div className="text-xs text-muted-foreground">{p.iracing_name}</div>
-            )}
+            <span className="text-xs font-mono text-muted-foreground">{p.iracing_id || "—"}</span>
+            <span className="text-sm font-heading font-bold">{p.irating ? p.irating.toLocaleString() : "—"}</span>
+            <span className="text-sm text-muted-foreground">{p.safety_rating || "—"}</span>
+            <button
+              onClick={() => toggleAdmin.mutate({ userId: p.user_id, grant: !admin })}
+              disabled={toggleAdmin.isPending}
+              className={`text-xs px-2 py-1 rounded font-bold transition-colors ${admin ? "bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30" : "bg-secondary text-muted-foreground border border-border hover:bg-accent/10 hover:text-accent"}`}
+            >
+              {admin ? "Admin" : "—"}
+            </button>
+            <button
+              onClick={() => {
+                if (confirm(`Weet je zeker dat je ${p.display_name || p.iracing_name} wilt verwijderen?`)) {
+                  deleteDriver.mutate(p.user_id);
+                }
+              }}
+              disabled={deleteDriver.isPending}
+              className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
-          <span className="text-xs font-mono text-muted-foreground">{p.iracing_id || "—"}</span>
-          <span className="text-sm font-heading font-bold">{p.irating ? p.irating.toLocaleString() : "—"}</span>
-          <span className="text-sm text-muted-foreground">{p.safety_rating || "—"}</span>
-          <button
-            onClick={() => {
-              if (confirm(`Weet je zeker dat je ${p.display_name || p.iracing_name} wilt verwijderen?`)) {
-                deleteDriver.mutate(p.user_id);
-              }
-            }}
-            disabled={deleteDriver.isPending}
-            className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      ))}
+        );
+      })}
       {!profiles?.length && (
         <div className="py-12 text-center text-muted-foreground text-sm">Geen drivers gevonden.</div>
       )}
