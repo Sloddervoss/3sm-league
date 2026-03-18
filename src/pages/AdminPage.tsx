@@ -740,6 +740,17 @@ const AdminPage = () => {
     },
   });
 
+  const { data: raceRegistrations } = useQuery({
+    queryKey: ["admin-race-registrations"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("race_registrations")
+        .select("race_id, user_id, status, created_at");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const { data: creationRequests } = useQuery({
     queryKey: ["team-creation-requests"],
     refetchOnMount: "always",
@@ -1292,21 +1303,74 @@ const AdminPage = () => {
                           </motion.div>
                         )}
 
-                        {regs.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-border/50">
-                            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Ingeschreven deelnemers</p>
-                            <div className="flex flex-wrap gap-2">
-                              {regs.map((r: any) => {
-                                const p = (profiles || []).find((p: any) => p.user_id === r.user_id);
-                                return (
-                                  <span key={r.user_id} className="px-2.5 py-1 rounded-full bg-secondary text-xs font-medium border border-border">
-                                    {p?.display_name || p?.iracing_name || r.user_id.slice(0, 8)}
-                                  </span>
-                                );
-                              })}
+                        {(() => {
+                          // Season registrations for this league
+                          const seasonRegs = regs;
+                          const seasonUserIds = new Set(seasonRegs.map((r: any) => r.user_id));
+
+                          // Race registrations for races in this league, excluding season-registered users
+                          const leagueRaceIds = new Set(((league as any).races || []).map((r: any) => r.id));
+                          const raceRegsForLeague = (raceRegistrations || []).filter(
+                            (r: any) => leagueRaceIds.has(r.race_id) && !seasonUserIds.has(r.user_id)
+                          );
+                          // Group by user
+                          const raceRegsByUser: Record<string, { userId: string; raceIds: string[] }> = {};
+                          raceRegsForLeague.forEach((r: any) => {
+                            if (!raceRegsByUser[r.user_id]) raceRegsByUser[r.user_id] = { userId: r.user_id, raceIds: [] };
+                            raceRegsByUser[r.user_id].raceIds.push(r.race_id);
+                          });
+                          const raceRegUsers = Object.values(raceRegsByUser);
+
+                          if (seasonRegs.length === 0 && raceRegUsers.length === 0) return null;
+
+                          return (
+                            <div className="mt-3 pt-3 border-t border-border/50 space-y-3">
+                              {seasonRegs.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-accent inline-block" />
+                                    Heel seizoen ({seasonRegs.length})
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {seasonRegs.map((r: any) => {
+                                      const p = (profiles || []).find((p: any) => p.user_id === r.user_id);
+                                      return (
+                                        <span key={r.user_id} className="px-2.5 py-1 rounded-full bg-accent/15 text-accent text-xs font-medium border border-accent/30">
+                                          {p?.display_name || p?.iracing_name || r.user_id.slice(0, 8)}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                              {raceRegUsers.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-primary inline-block" />
+                                    Los per race ({raceRegUsers.length})
+                                  </p>
+                                  <div className="space-y-1.5">
+                                    {raceRegUsers.map(({ userId, raceIds }) => {
+                                      const p = (profiles || []).find((p: any) => p.user_id === userId);
+                                      const raceNames = raceIds.map(rid => {
+                                        const race = ((league as any).races || []).find((r: any) => r.id === rid);
+                                        return race ? `R${String(race.round).padStart(2, "0")}` : rid.slice(0, 6);
+                                      }).sort().join(", ");
+                                      return (
+                                        <div key={userId} className="flex items-center gap-2 text-xs">
+                                          <span className="px-2.5 py-1 rounded-full bg-secondary text-foreground font-medium border border-border">
+                                            {p?.display_name || p?.iracing_name || userId.slice(0, 8)}
+                                          </span>
+                                          <span className="text-muted-foreground">{raceNames}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     );
                   })}
