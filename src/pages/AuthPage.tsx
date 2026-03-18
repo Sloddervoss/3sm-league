@@ -172,8 +172,6 @@ const AuthPage = () => {
                 )}
               </button>
             </form>
-
-            </form>
             )}
 
             <div className="mt-6 text-center space-y-2">
