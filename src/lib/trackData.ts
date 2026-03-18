@@ -74,7 +74,7 @@ export const TRACK_DATA: Record<string, TrackInfo> = {
   "Barber Motorsports Park": { flag: "🇺🇸", country: "USA", imageUrl: `${WP}1/1c/Barber_Motorsports_Park.svg/330px-Barber_Motorsports_Park.svg.png` },
   "Summit Point Raceway": { flag: "🇺🇸", country: "USA", imageUrl: `${WP}0/08/Summit_Point_-_Original_Track.svg/330px-Summit_Point_-_Original_Track.svg.png` },
   "Chicago Street Course": { flag: "🇺🇸", country: "USA", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Chicago_Street_Course.svg/330px-Chicago_Street_Course.svg.png" },
-  "Miami International Autodrome": { flag: "🇺🇸", country: "USA" },
+  "Miami International Autodrome": { flag: "🇺🇸", country: "USA", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/49/Hard_Rock_Stadium_Circuit_2022.svg/330px-Hard_Rock_Stadium_Circuit_2022.svg.png" },
   "New Jersey Motorsports Park": { flag: "🇺🇸", country: "USA", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/7/79/NJMP_Lightning.png" },
   "Charlotte Motor Speedway": { flag: "🇺🇸", country: "USA", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Charlotte_Motor_Speedway_2024.svg/330px-Charlotte_Motor_Speedway_2024.svg.png" },
   "EchoPark Speedway (Atlanta)": { flag: "🇺🇸", country: "USA", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Atlanta_Motor_Speedway_2024.svg/330px-Atlanta_Motor_Speedway_2024.svg.png" },
