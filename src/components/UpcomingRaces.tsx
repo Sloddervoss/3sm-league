@@ -1,11 +1,12 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, MapPin, Clock, UserPlus, Check, Lock, Users, Timer, Flag, CloudSun, Gauge, AlertCircle, X } from "lucide-react";
+import { Calendar, MapPin, Clock, UserPlus, Check, Lock, Users, Timer, Flag, CloudSun, Gauge, AlertCircle, X, Zap } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getTrackInfo } from "@/lib/trackData";
 
 const statusStyles: Record<string, string> = {
   completed: "bg-muted text-muted-foreground",
@@ -19,11 +20,53 @@ const statusLabels: Record<string, string> = {
   live:      "🔴 LIVE",
 };
 
+function useNow() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function formatCountdown(raceDate: string, now: Date) {
+  const diff = new Date(raceDate).getTime() - now.getTime();
+  if (diff <= 0) return null;
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  if (d > 0) return `${d}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
+  if (h > 0) return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+  return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+}
+
+function SessionTimeline({ practice, qualifying, race }: { practice?: string; qualifying?: string; race?: string }) {
+  const sessions = [
+    practice  && { label: "Practice", duration: practice,   color: "bg-blue-500/70" },
+    qualifying && { label: "Qualifying", duration: qualifying, color: "bg-yellow-500/70" },
+    race      && { label: "Race",     duration: race,       color: "bg-primary/80" },
+  ].filter(Boolean) as { label: string; duration: string; color: string }[];
+
+  if (!sessions.length) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+      {sessions.map((s, i) => (
+        <span key={i} className={`${s.color} px-2 py-0.5 rounded text-[10px] font-bold text-white tracking-wide`}>
+          {s.label} · {s.duration}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const UpcomingRaces = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showProfileWarning, setShowProfileWarning] = useState(false);
+  const now = useNow();
 
   const { data: races, isLoading } = useQuery({
     queryKey: ["races-with-leagues"],
@@ -48,16 +91,12 @@ const UpcomingRaces = () => {
 
   const profileComplete = !!(profile as any)?.iracing_id && !!(profile as any)?.iracing_name;
 
-  // All league IDs referenced by races
   const leagueIds = [...new Set((races || []).map((r: any) => r.league_id))];
 
-  // Season registrations for all leagues
   const { data: seasonRegs } = useQuery({
     queryKey: ["season-registrations"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("season_registrations")
-        .select("*");
+      const { data, error } = await supabase.from("season_registrations").select("*");
       if (error) throw error;
       return data || [];
     },
@@ -109,10 +148,8 @@ const UpcomingRaces = () => {
     },
   });
 
-  // Is this season "started" = has at least one completed race?
-  const seasonStarted = (leagueId: string) => {
-    return (races || []).some((r: any) => r.league_id === leagueId && r.status === "completed");
-  };
+  const seasonStarted = (leagueId: string) =>
+    (races || []).some((r: any) => r.league_id === leagueId && r.status === "completed");
 
   const isRegisteredForSeason = (leagueId: string) =>
     user && (seasonRegs || []).some((r: any) => r.league_id === leagueId && r.user_id === user.id);
@@ -181,7 +218,11 @@ const UpcomingRaces = () => {
     );
   }
 
-  // Group races by league
+  // Find the single next upcoming race across all leagues
+  const nextRace = [...(races || [])]
+    .filter((r: any) => r.status !== "completed" && new Date(r.race_date) > now)
+    .sort((a: any, b: any) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as any | undefined;
+
   const leagueGroups = leagueIds.map((lid) => ({
     leagueId: lid,
     leagueName: (races.find((r: any) => r.league_id === lid) as any)?.leagues?.name || "Unknown",
@@ -198,6 +239,140 @@ const UpcomingRaces = () => {
         </div>
         <h2 className="font-heading text-3xl md:text-4xl font-black mb-10">RACE KALENDER</h2>
 
+        {/* ── Next Race Hero Card ── */}
+        {nextRace && (() => {
+          const trackInfo = getTrackInfo(nextRace.track);
+          const countdown = formatCountdown(nextRace.race_date, now);
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative overflow-hidden rounded-xl border border-primary/30 bg-card mb-12"
+            >
+              {/* Circuit SVG watermark */}
+              {trackInfo?.imageUrl && (
+                <img
+                  src={trackInfo.imageUrl}
+                  alt=""
+                  aria-hidden
+                  className="absolute right-0 top-1/2 -translate-y-1/2 h-[140%] w-auto object-contain opacity-[0.07] pointer-events-none select-none"
+                />
+              )}
+              {/* Racing stripe accent */}
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-racing" />
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
+
+              <div className="relative p-6 md:p-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold text-primary uppercase tracking-[0.2em]">Volgende Race</span>
+                </div>
+
+                <div className="flex flex-col md:flex-row md:items-center gap-6">
+                  {/* Left: round + track info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-3 mb-1">
+                      <span className="font-heading font-black text-5xl text-primary/20">
+                        R{String(nextRace.round).padStart(2, "0")}
+                      </span>
+                      <h3 className="font-heading font-black text-2xl md:text-3xl truncate">
+                        {nextRace.name}
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-2 text-base text-muted-foreground mb-3">
+                      {trackInfo?.flag && <span className="text-xl">{trackInfo.flag}</span>}
+                      <MapPin className="w-4 h-4 shrink-0" />
+                      <span>{nextRace.track}</span>
+                      {trackInfo?.country && (
+                        <span className="text-sm opacity-60">— {trackInfo.country}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4" />
+                        {new Date(nextRace.race_date).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" })}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-4 h-4" />
+                        {new Date(nextRace.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                      {(nextRace as any).leagues?.name && (
+                        <span className="px-2 py-0.5 rounded bg-secondary text-xs font-bold">
+                          {(nextRace as any).leagues.name}
+                        </span>
+                      )}
+                    </div>
+                    <SessionTimeline
+                      practice={nextRace.practice_duration}
+                      qualifying={nextRace.qualifying_duration}
+                      race={nextRace.race_duration}
+                    />
+                    {(nextRace.start_type || nextRace.weather || nextRace.setup) && (
+                      <div className="flex items-center gap-3 mt-2 flex-wrap">
+                        {nextRace.start_type && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Flag className="w-3 h-3" /> {nextRace.start_type} start
+                          </span>
+                        )}
+                        {nextRace.weather && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <CloudSun className="w-3 h-3" /> {nextRace.weather}
+                          </span>
+                        )}
+                        {nextRace.setup && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Gauge className="w-3 h-3" /> Setup: {nextRace.setup}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right: countdown + registration */}
+                  <div className="flex flex-col items-start md:items-end gap-4 shrink-0">
+                    {countdown && (
+                      <div className="text-right">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Aftellen</p>
+                        <p className="font-heading font-black text-3xl text-foreground tabular-nums">
+                          {countdown}
+                        </p>
+                      </div>
+                    )}
+                    {user && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5" />{raceRegCount(nextRace.id)} aangemeld
+                        </span>
+                        {isRegisteredForRace(nextRace.id) ? (
+                          <button
+                            onClick={() => unregisterFromRace.mutate(nextRace.id)}
+                            disabled={unregisterFromRace.isPending}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Aangemeld
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (!profileComplete) { setShowProfileWarning(true); return; }
+                              registerForRace.mutate(nextRace.id);
+                            }}
+                            disabled={registerForRace.isPending}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold bg-gradient-racing text-white hover:opacity-90 transition-opacity"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" /> Aanmelden
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })()}
+
+        {/* ── Per-league calendar ── */}
         <div className="space-y-10">
           {leagueGroups.map(({ leagueId, leagueName, carClass, races: leagueRaces }) => {
             const started = seasonStarted(leagueId);
@@ -206,7 +381,7 @@ const UpcomingRaces = () => {
 
             return (
               <div key={leagueId}>
-                {/* Season header + registration */}
+                {/* Season header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-border">
                   <div>
                     <h3 className="font-heading font-black text-xl">{leagueName}</h3>
@@ -221,7 +396,6 @@ const UpcomingRaces = () => {
                     </div>
                   </div>
 
-                  {/* Season registration button */}
                   {!started ? (
                     user ? (
                       registered ? (
@@ -265,118 +439,138 @@ const UpcomingRaces = () => {
 
                 {/* Race list */}
                 <div className="grid gap-3">
-                  {leagueRaces.map((race: any, i: number) => (
-                    <motion.div
-                      key={race.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.05 }}
-                      className="group bg-card border border-border rounded-lg p-4 md:p-5 card-hover racing-stripe-left flex flex-col md:flex-row md:items-center gap-3 md:gap-6"
-                    >
-                      <div className="flex items-center gap-4 md:w-16 shrink-0">
-                        <span className={`font-heading font-black text-2xl ${race.status === "completed" ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
-                          R{String(race.round).padStart(2, "0")}
-                        </span>
-                      </div>
+                  {leagueRaces.map((race: any, i: number) => {
+                    const trackInfo = getTrackInfo(race.track);
+                    const isNext = nextRace?.id === race.id;
+                    const countdown = race.status !== "completed" ? formatCountdown(race.race_date, now) : null;
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className={`font-heading font-bold text-lg ${race.status === "completed" ? "text-muted-foreground" : ""}`}>
-                            {race.name}
-                          </h3>
-                          {race.race_type && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
-                              {race.race_type}
-                            </span>
+                    return (
+                      <motion.div
+                        key={race.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: i * 0.05 }}
+                        className={`group relative overflow-hidden bg-card border rounded-lg p-4 md:p-5 card-hover racing-stripe-left flex flex-col md:flex-row md:items-center gap-3 md:gap-6 ${
+                          isNext ? "border-primary/40 shadow-[0_0_20px_rgba(var(--primary),0.08)]" : "border-border"
+                        }`}
+                      >
+                        {/* Circuit SVG watermark */}
+                        {trackInfo?.imageUrl && (
+                          <img
+                            src={trackInfo.imageUrl}
+                            alt=""
+                            aria-hidden
+                            className="absolute right-2 top-1/2 -translate-y-1/2 h-[120%] w-auto object-contain opacity-[0.06] pointer-events-none select-none"
+                          />
+                        )}
+
+                        {/* Round number */}
+                        <div className="flex items-center gap-4 md:w-16 shrink-0 relative">
+                          <span className={`font-heading font-black text-2xl ${race.status === "completed" ? "text-muted-foreground/40" : isNext ? "text-primary/60" : "text-muted-foreground"}`}>
+                            R{String(race.round).padStart(2, "0")}
+                          </span>
+                        </div>
+
+                        {/* Track info */}
+                        <div className="flex-1 min-w-0 relative">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className={`font-heading font-bold text-lg ${race.status === "completed" ? "text-muted-foreground" : ""}`}>
+                              {race.name}
+                            </h3>
+                            {race.race_type && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
+                                {race.race_type}
+                              </span>
+                            )}
+                            {isNext && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/20 text-primary border border-primary/30">
+                                Volgende race
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                            {trackInfo?.flag && <span>{trackInfo.flag}</span>}
+                            <MapPin className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">{race.track}</span>
+                          </div>
+                          <SessionTimeline
+                            practice={race.practice_duration}
+                            qualifying={race.qualifying_duration}
+                            race={race.race_duration}
+                          />
+                          {(race.start_type || race.weather || race.setup) && (
+                            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                              {race.start_type && (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Flag className="w-3 h-3" /> {race.start_type} start
+                                </span>
+                              )}
+                              {race.weather && (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <CloudSun className="w-3 h-3" /> {race.weather}
+                                </span>
+                              )}
+                              {race.setup && (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Gauge className="w-3 h-3" /> Setup: {race.setup}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 shrink-0" />
-                            {race.track}
-                          </span>
-                        </div>
-                        {(race.race_duration || race.practice_duration || race.qualifying_duration || race.start_type || race.weather) && (
-                          <div className="flex items-center gap-3 mt-2 flex-wrap">
-                            {race.race_duration && (
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Timer className="w-3 h-3" /> {race.race_duration}
-                              </span>
-                            )}
-                            {race.practice_duration && (
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Gauge className="w-3 h-3" /> Practice {race.practice_duration}
-                              </span>
-                            )}
-                            {race.qualifying_duration && (
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Clock className="w-3 h-3" /> Quali {race.qualifying_duration}
-                              </span>
-                            )}
-                            {race.start_type && (
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Flag className="w-3 h-3" /> {race.start_type} start
-                              </span>
-                            )}
-                            {race.weather && (
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <CloudSun className="w-3 h-3" /> {race.weather}
-                              </span>
-                            )}
-                            {race.setup && (
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Gauge className="w-3 h-3" /> Setup: {race.setup}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
 
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        <div className="flex items-center gap-4 text-sm">
-                          <span className="flex items-center gap-1.5 text-muted-foreground">
-                            <Calendar className="w-3.5 h-3.5" />
-                            {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}
-                          </span>
-                          <span className="flex items-center gap-1.5 text-muted-foreground">
-                            <Clock className="w-3.5 h-3.5" />
-                            {new Date(race.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit ${statusStyles[race.status] || statusStyles.upcoming}`}>
-                          {statusLabels[race.status] || race.status}
-                        </span>
-                        {race.status !== "completed" && user && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Users className="w-3 h-3" />{raceRegCount(race.id)}
+                        {/* Right: date + status + countdown + registration */}
+                        <div className="flex flex-col items-end gap-2 shrink-0 relative">
+                          <div className="flex items-center gap-4 text-sm">
+                            <span className="flex items-center gap-1.5 text-muted-foreground">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}
                             </span>
-                            {isRegisteredForRace(race.id) ? (
-                              <button
-                                onClick={() => unregisterFromRace.mutate(race.id)}
-                                disabled={unregisterFromRace.isPending}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors"
-                              >
-                                <Check className="w-3 h-3" /> Aangemeld
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  if (!profileComplete) { setShowProfileWarning(true); return; }
-                                  registerForRace.mutate(race.id);
-                                }}
-                                disabled={registerForRace.isPending}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-secondary border border-border hover:border-primary/50 hover:text-primary transition-colors"
-                              >
-                                <UserPlus className="w-3 h-3" /> Aanmelden
-                              </button>
-                            )}
+                            <span className="flex items-center gap-1.5 text-muted-foreground">
+                              <Clock className="w-3.5 h-3.5" />
+                              {new Date(race.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit ${statusStyles[race.status] || statusStyles.upcoming}`}>
+                            {statusLabels[race.status] || race.status}
+                          </span>
+                          {countdown && (
+                            <span className="flex items-center gap-1 text-xs font-bold text-primary tabular-nums">
+                              <Timer className="w-3 h-3" /> {countdown}
+                            </span>
+                          )}
+                          {race.status !== "completed" && user && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Users className="w-3 h-3" />{raceRegCount(race.id)}
+                              </span>
+                              {isRegisteredForRace(race.id) ? (
+                                <button
+                                  onClick={() => unregisterFromRace.mutate(race.id)}
+                                  disabled={unregisterFromRace.isPending}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors"
+                                >
+                                  <Check className="w-3 h-3" /> Aangemeld
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    if (!profileComplete) { setShowProfileWarning(true); return; }
+                                    registerForRace.mutate(race.id);
+                                  }}
+                                  disabled={registerForRace.isPending}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-secondary border border-border hover:border-primary/50 hover:text-primary transition-colors"
+                                >
+                                  <UserPlus className="w-3 h-3" /> Aanmelden
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
             );
