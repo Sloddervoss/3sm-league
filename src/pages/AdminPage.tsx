@@ -89,7 +89,7 @@ const AdminPage = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("season_registrations")
-        .select("*, profiles(display_name, iracing_name)");
+        .select("league_id, user_id, status, created_at");
       if (error) throw error;
       return data || [];
     },
@@ -428,7 +428,7 @@ const AdminPage = () => {
                 )}
                 <div className="space-y-3">
                   {leagues?.map((league: any) => {
-                    const regs = (seasonRegistrations || []).filter((r: any) => r.league_id === league.id);
+                    const regs = (seasonRegistrations || []).filter((r: any) => r.league_id === league.id && r.user_id !== user?.id);
                     return (
                       <div key={league.id} className="bg-card border border-border rounded-lg p-5 racing-stripe-left">
                         <div className="flex items-start justify-between">
@@ -447,11 +447,14 @@ const AdminPage = () => {
                           <div className="mt-3 pt-3 border-t border-border/50">
                             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Ingeschreven deelnemers</p>
                             <div className="flex flex-wrap gap-2">
-                              {regs.map((r: any) => (
-                                <span key={r.id} className="px-2.5 py-1 rounded-full bg-secondary text-xs font-medium border border-border">
-                                  {r.profiles?.display_name || r.profiles?.iracing_name || r.user_id.slice(0, 8)}
-                                </span>
-                              ))}
+                              {regs.map((r: any) => {
+                                const p = (profiles || []).find((p: any) => p.user_id === r.user_id);
+                                return (
+                                  <span key={r.user_id} className="px-2.5 py-1 rounded-full bg-secondary text-xs font-medium border border-border">
+                                    {p?.display_name || p?.iracing_name || r.user_id.slice(0, 8)}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
