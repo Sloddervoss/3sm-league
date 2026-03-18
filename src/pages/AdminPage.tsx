@@ -144,7 +144,7 @@ const DriversList = () => {
   const { data: profiles, isLoading } = useQuery({
     queryKey: ["admin-all-profiles"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("user_id, display_name, iracing_name, iracing_id, irating, safety_rating, is_admin");
+      const { data, error } = await (supabase as any).rpc("admin_get_all_profiles");
       if (error) throw error;
       return data || [];
     },
