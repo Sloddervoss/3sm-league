@@ -674,6 +674,8 @@ const AdminPage = () => {
   const [editingTeamLogo, setEditingTeamLogo] = useState<string>("");
   const [editingTeamCurrentLogo, setEditingTeamCurrentLogo] = useState<string>("");
   const [showTeamForm, setShowTeamForm] = useState(false);
+  const [iratingSyncing, setIratingSyncing] = useState(false);
+  const [iratingSyncResult, setIratingSyncResult] = useState<{ updated?: number; error?: string } | null>(null);
 
   const [importRaceId, setImportRaceId] = useState("");
   const [importRows, setImportRows] = useState<
@@ -1853,7 +1855,48 @@ const AdminPage = () => {
 
             {activeTab === "drivers" && (
               <div>
-                <h2 className="font-heading text-2xl font-black mb-6">DRIVERS</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="font-heading text-2xl font-black">DRIVERS</h2>
+                  <button
+                    onClick={async () => {
+                      setIratingSyncing(true);
+                      setIratingSyncResult(null);
+                      try {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        const resp = await fetch(
+                          "https://cwwfriypwdluynajubhz.supabase.co/functions/v1/sync-irating",
+                          { method: "POST", headers: { Authorization: `Bearer ${session?.access_token}`, "Content-Type": "application/json" } },
+                        );
+                        const result = await resp.json();
+                        setIratingSyncResult(result);
+                        if (result.updated !== undefined) {
+                          toast.success(`iRating gesynchroniseerd — ${result.updated} drivers bijgewerkt`);
+                          queryClient.invalidateQueries({ queryKey: ["all-profiles"] });
+                        } else {
+                          toast.error(result.error ?? "Sync mislukt");
+                        }
+                      } catch (e: any) {
+                        toast.error(e.message);
+                        setIratingSyncResult({ error: e.message });
+                      } finally {
+                        setIratingSyncing(false);
+                      }
+                    }}
+                    disabled={iratingSyncing}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {iratingSyncing ? (
+                      <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Synchroniseren...</>
+                    ) : (
+                      <><BarChart2 className="w-4 h-4" />iRating Sync</>
+                    )}
+                  </button>
+                </div>
+                {iratingSyncResult && (
+                  <div className={`mb-4 px-4 py-3 rounded-md text-sm font-medium border ${iratingSyncResult.error ? "bg-red-500/10 text-red-400 border-red-500/30" : "bg-accent/10 text-accent border-accent/30"}`}>
+                    {iratingSyncResult.error ? `Fout: ${iratingSyncResult.error}` : `${iratingSyncResult.updated} driver${iratingSyncResult.updated !== 1 ? "s" : ""} bijgewerkt met iRating & safety rating van iRacing.`}
+                  </div>
+                )}
                 <DriversList />
               </div>
             )}
