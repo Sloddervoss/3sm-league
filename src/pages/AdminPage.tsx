@@ -526,7 +526,7 @@ const AdminPage = () => {
                                   canvas.width = Math.round(img.width * scale);
                                   canvas.height = Math.round(img.height * scale);
                                   canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                  setNewTeamLogoPreview(canvas.toDataURL("image/jpeg", 0.7));
+                                  setNewTeamLogoPreview(canvas.toDataURL("image/png"));
                                   URL.revokeObjectURL(url);
                                 };
                                 img.src = url;
@@ -613,7 +613,7 @@ const AdminPage = () => {
                                     canvas.width = Math.round(img.width * scale);
                                     canvas.height = Math.round(img.height * scale);
                                     canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                    setEditingTeamLogo(canvas.toDataURL("image/jpeg", 0.7));
+                                    setEditingTeamLogo(canvas.toDataURL("image/png"));
                                     URL.revokeObjectURL(url);
                                   };
                                   img.src = url;

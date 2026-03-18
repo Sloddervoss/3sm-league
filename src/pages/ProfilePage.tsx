@@ -475,7 +475,7 @@ const ProfilePage = () => {
                                     canvas.width = Math.round(img.width * scale);
                                     canvas.height = Math.round(img.height * scale);
                                     canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                    setNewTeamLogo(canvas.toDataURL("image/jpeg", 0.7));
+                                    setNewTeamLogo(canvas.toDataURL("image/png"));
                                     URL.revokeObjectURL(url);
                                   };
                                   img.src = url;
