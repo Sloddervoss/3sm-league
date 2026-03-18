@@ -84,6 +84,17 @@ const AdminPage = () => {
     },
   });
 
+  const { data: seasonRegistrations } = useQuery({
+    queryKey: ["admin-season-registrations"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("season_registrations")
+        .select("*, profiles(display_name, iracing_name)");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const { data: creationRequests } = useQuery({
     queryKey: ["team-creation-requests"],
     refetchOnMount: "always",
@@ -416,19 +427,37 @@ const AdminPage = () => {
                   </motion.div>
                 )}
                 <div className="space-y-3">
-                  {leagues?.map((league: any) => (
-                    <div key={league.id} className="bg-card border border-border rounded-lg p-5 racing-stripe-left flex items-start justify-between">
-                      <div>
-                        <h3 className="font-heading font-bold text-lg">{league.name}</h3>
-                        <div className="flex gap-3 text-sm text-muted-foreground mt-1">
-                          {league.season && <span>{league.season}</span>}
-                          {league.car_class && <span>• {league.car_class}</span>}
-                          <span>• {(league as any).races?.length || 0} races</span>
+                  {leagues?.map((league: any) => {
+                    const regs = (seasonRegistrations || []).filter((r: any) => r.league_id === league.id);
+                    return (
+                      <div key={league.id} className="bg-card border border-border rounded-lg p-5 racing-stripe-left">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="font-heading font-bold text-lg">{league.name}</h3>
+                            <div className="flex gap-3 text-sm text-muted-foreground mt-1">
+                              {league.season && <span>{league.season}</span>}
+                              {league.car_class && <span>• {league.car_class}</span>}
+                              <span>• {(league as any).races?.length || 0} races</span>
+                              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{regs.length} ingeschreven</span>
+                            </div>
+                          </div>
+                          <button onClick={() => deleteLeague.mutate(league.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
                         </div>
+                        {regs.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-border/50">
+                            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Ingeschreven deelnemers</p>
+                            <div className="flex flex-wrap gap-2">
+                              {regs.map((r: any) => (
+                                <span key={r.id} className="px-2.5 py-1 rounded-full bg-secondary text-xs font-medium border border-border">
+                                  {r.profiles?.display_name || r.profiles?.iracing_name || r.user_id.slice(0, 8)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <button onClick={() => deleteLeague.mutate(league.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {!leagues?.length && <div className="text-center py-16 text-muted-foreground"><Trophy className="w-10 h-10 mx-auto mb-3 opacity-40" /><p>Nog geen seizoenen.</p></div>}
                 </div>
               </div>
