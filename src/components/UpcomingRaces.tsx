@@ -332,33 +332,38 @@ const UpcomingRaces = () => {
                         </p>
                       </div>
                     )}
-                    {user && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5" />{raceRegCount(nextRace.id)} aangemeld
-                        </span>
-                        {isRegisteredForRace(nextRace.id) ? (
-                          <button
-                            onClick={() => unregisterFromRace.mutate(nextRace.id)}
-                            disabled={unregisterFromRace.isPending}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors"
-                          >
-                            <Check className="w-3.5 h-3.5" /> Aangemeld
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              if (!profileComplete) { setShowProfileWarning(true); return; }
-                              registerForRace.mutate(nextRace.id);
-                            }}
-                            disabled={registerForRace.isPending}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold bg-gradient-racing text-white hover:opacity-90 transition-opacity"
-                          >
-                            <UserPlus className="w-3.5 h-3.5" /> Aanmelden
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    {user && (() => {
+                      const nextSeasonReg = isRegisteredForSeason(nextRace.league_id);
+                      const nextRaceReg = isRegisteredForRace(nextRace.id);
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5" />{raceRegCount(nextRace.id)} aangemeld
+                          </span>
+                          {(nextSeasonReg || nextRaceReg) ? (
+                            <button
+                              onClick={() => !nextSeasonReg && unregisterFromRace.mutate(nextRace.id)}
+                              disabled={nextSeasonReg || unregisterFromRace.isPending}
+                              title={nextSeasonReg ? "Aangemeld via seizoensinschrijving" : undefined}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold bg-accent/20 text-accent border border-accent/30 ${nextSeasonReg ? "cursor-default opacity-80" : "hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors"}`}
+                            >
+                              <Check className="w-3.5 h-3.5" /> Aangemeld
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (!profileComplete) { setShowProfileWarning(true); return; }
+                                registerForRace.mutate(nextRace.id);
+                              }}
+                              disabled={registerForRace.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold bg-gradient-racing text-white hover:opacity-90 transition-opacity"
+                            >
+                              <UserPlus className="w-3.5 h-3.5" /> Aanmelden
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
