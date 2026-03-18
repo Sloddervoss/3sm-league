@@ -63,6 +63,52 @@ const UpcomingRaces = () => {
     },
   });
 
+  const { data: raceRegs } = useQuery({
+    queryKey: ["race-registrations"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("race_registrations").select("*");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const isRegisteredForRace = (raceId: string) =>
+    user && (raceRegs || []).some((r: any) => r.race_id === raceId && r.user_id === user.id);
+
+  const raceRegCount = (raceId: string) =>
+    (raceRegs || []).filter((r: any) => r.race_id === raceId).length;
+
+  const registerForRace = useMutation({
+    mutationFn: async (raceId: string) => {
+      const { error } = await (supabase as any).from("race_registrations").insert({
+        race_id: raceId,
+        user_id: user!.id,
+        status: "registered",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Ingeschreven voor race!");
+      queryClient.invalidateQueries({ queryKey: ["race-registrations"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const unregisterFromRace = useMutation({
+    mutationFn: async (raceId: string) => {
+      const { error } = await (supabase as any)
+        .from("race_registrations")
+        .delete()
+        .eq("race_id", raceId)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Uitgeschreven van race");
+      queryClient.invalidateQueries({ queryKey: ["race-registrations"] });
+    },
+  });
+
   // Is this season "started" = has at least one completed race?
   const seasonStarted = (leagueId: string) => {
     return (races || []).some((r: any) => r.league_id === leagueId && r.status === "completed");
@@ -296,6 +342,33 @@ const UpcomingRaces = () => {
                         <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit ${statusStyles[race.status] || statusStyles.upcoming}`}>
                           {statusLabels[race.status] || race.status}
                         </span>
+                        {race.status !== "completed" && user && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Users className="w-3 h-3" />{raceRegCount(race.id)}
+                            </span>
+                            {isRegisteredForRace(race.id) ? (
+                              <button
+                                onClick={() => unregisterFromRace.mutate(race.id)}
+                                disabled={unregisterFromRace.isPending}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors"
+                              >
+                                <Check className="w-3 h-3" /> Aangemeld
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  if (!profileComplete) { setShowProfileWarning(true); return; }
+                                  registerForRace.mutate(race.id);
+                                }}
+                                disabled={registerForRace.isPending}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-secondary border border-border hover:border-primary/50 hover:text-primary transition-colors"
+                              >
+                                <UserPlus className="w-3 h-3" /> Aanmelden
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   ))}
