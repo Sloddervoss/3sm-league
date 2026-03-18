@@ -249,14 +249,14 @@ const UpcomingRaces = () => {
               animate={{ opacity: 1, y: 0 }}
               className="relative overflow-hidden rounded-xl border border-primary/30 bg-card mb-12"
             >
-              {/* Circuit SVG watermark */}
-              {trackInfo?.imageUrl && (
-                <img
-                  src={trackInfo.imageUrl}
-                  alt=""
+              {/* Country flag watermark */}
+              {trackInfo?.flag && (
+                <span
                   aria-hidden
-                  className="absolute right-0 top-1/2 -translate-y-1/2 h-[140%] w-auto object-contain opacity-[0.07] pointer-events-none select-none"
-                />
+                  className="absolute right-6 top-1/2 -translate-y-1/2 text-[9rem] leading-none opacity-[0.08] pointer-events-none select-none"
+                >
+                  {trackInfo.flag}
+                </span>
               )}
               {/* Racing stripe accent */}
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-racing" />
@@ -455,14 +455,14 @@ const UpcomingRaces = () => {
                           isNext ? "border-primary/40 shadow-[0_0_20px_rgba(var(--primary),0.08)]" : "border-border"
                         }`}
                       >
-                        {/* Circuit SVG watermark */}
-                        {trackInfo?.imageUrl && (
-                          <img
-                            src={trackInfo.imageUrl}
-                            alt=""
+                        {/* Country flag watermark */}
+                        {trackInfo?.flag && (
+                          <span
                             aria-hidden
-                            className="absolute right-2 top-1/2 -translate-y-1/2 h-[120%] w-auto object-contain opacity-[0.06] pointer-events-none select-none"
-                          />
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-[5rem] leading-none opacity-[0.07] pointer-events-none select-none"
+                          >
+                            {trackInfo.flag}
+                          </span>
                         )}
 
                         {/* Round number */}
