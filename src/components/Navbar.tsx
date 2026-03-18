@@ -124,55 +124,72 @@ const Navbar = () => {
         </button>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu — full-screen overlay */}
       {mobileOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="xl:hidden bg-card border-b border-border px-4 pb-4"
-        >
-          {navItems.map((item) => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium ${
-                  active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </Link>
-            );
-          })}
-          <div className="h-px bg-border my-2" />
-          {user ? (
-            <>
-              {isAdmin && (
-                <>
-                  <Link to="/admin" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
-                    <Settings className="w-4 h-4" /> Admin
-                  </Link>
-                  <Link to="/stewards" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
-                    <Trophy className="w-4 h-4" /> Stewards
-                  </Link>
-                </>
-              )}
-              <Link to="/profile" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
-                <User className="w-4 h-4" /> Profiel
-              </Link>
-              <button onClick={() => { signOut(); setMobileOpen(false); }} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground w-full text-left">
-                <LogOut className="w-4 h-4" /> Uitloggen
+        <>
+          {/* Backdrop */}
+          <div
+            className="xl:hidden fixed inset-0 bg-black/60 z-40"
+            onClick={() => setMobileOpen(false)}
+          />
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "tween", duration: 0.25 }}
+            className="xl:hidden fixed top-0 right-0 bottom-0 w-72 bg-card border-l border-border z-50 flex flex-col overflow-y-auto"
+          >
+            <div className="flex items-center justify-between px-4 h-16 border-b border-border shrink-0">
+              <span className="font-heading font-bold text-base">Menu</span>
+              <button onClick={() => setMobileOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
               </button>
-            </>
-          ) : (
-            <Link to="/auth" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium bg-primary text-primary-foreground">
-              <LogIn className="w-4 h-4" /> Inloggen
-            </Link>
-          )}
-        </motion.div>
+            </div>
+            <nav className="flex-1 px-3 py-4 space-y-1">
+              {navItems.map((item) => {
+                const active = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-colors ${
+                      active ? "bg-gradient-racing text-white" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    <item.icon className="w-4 h-4 shrink-0" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+              <div className="h-px bg-border my-2" />
+              {user ? (
+                <>
+                  {isAdmin && (
+                    <>
+                      <Link to="/admin" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                        <Settings className="w-4 h-4 shrink-0" /> Admin
+                      </Link>
+                      <Link to="/stewards" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                        <Trophy className="w-4 h-4 shrink-0" /> Stewards
+                      </Link>
+                    </>
+                  )}
+                  <Link to="/profile" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+                    <User className="w-4 h-4 shrink-0" /> Profiel
+                  </Link>
+                  <button onClick={() => { signOut(); setMobileOpen(false); }} className="flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors w-full text-left">
+                    <LogOut className="w-4 h-4 shrink-0" /> Uitloggen
+                  </button>
+                </>
+              ) : (
+                <Link to="/auth" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-4 py-3 rounded-md text-sm font-bold bg-gradient-racing text-white">
+                  <LogIn className="w-4 h-4 shrink-0" /> Inloggen
+                </Link>
+              )}
+            </nav>
+          </motion.div>
+        </>
       )}
     </nav>
   );

@@ -131,7 +131,8 @@ const ResultsPage = () => {
                           exit={{ opacity: 0, height: 0 }}
                           className="border-t border-border"
                         >
-                          <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2 bg-secondary/30 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          <div className="overflow-x-auto">
+                          <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2 bg-secondary/30 text-xs font-bold uppercase tracking-wider text-muted-foreground min-w-[380px]">
                             <span>Pos</span>
                             <span>Driver</span>
                             <span className="text-center">Laps</span>
@@ -167,6 +168,7 @@ const ResultsPage = () => {
                               <span className="text-center font-heading font-black">{result.points}</span>
                             </div>
                           ))}
+                          </div>
                         </motion.div>
                       )}
 
