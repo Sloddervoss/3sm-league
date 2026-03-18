@@ -14,50 +14,128 @@ type AdminTab = "overview" | "seasons" | "teams" | "results" | "points";
 const DEFAULT_POINTS = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
 const IRACING_TRACKS = [
-  "Autodromo Enzo e Dino Ferrari (Imola)",
-  "Autodromo Nazionale Monza",
-  "Autódromo José Carlos Pace (Interlagos)",
-  "Autodromo Internazionale del Mugello",
-  "Barcelona-Catalunya",
-  "Brands Hatch",
-  "Circuit de la Sarthe (Le Mans)",
-  "Circuit de Monaco",
-  "Circuit de Spa-Francorchamps",
-  "Circuit Gilles Villeneuve",
-  "Circuit of the Americas (COTA)",
-  "Circuit Paul Ricard",
-  "Daytona International Speedway",
-  "Donington Park",
-  "Fuji International Speedway",
-  "Hockenheimring Baden-Württemberg",
-  "Hungaroring",
-  "Indianapolis Motor Speedway",
-  "Kyalami Grand Prix Circuit",
-  "Laguna Seca (WeatherTech Raceway)",
-  "Lime Rock Park",
-  "Mid-Ohio Sports Car Course",
-  "Nürburgring Combined",
-  "Nürburgring GP-Strecke",
-  "Nürburgring Nordschleife",
-  "Okayama International Circuit",
-  "Oulton Park",
-  "Phoenix Raceway",
-  "Portimão (Autodromo Internacional do Algarve)",
-  "Red Bull Ring",
-  "Road America",
-  "Road Atlanta",
-  "Sebring International Raceway",
-  "Silverstone Circuit",
-  "Snetterton Circuit",
-  "Suzuka Circuit",
-  "Virginia International Raceway",
-  "Watkins Glen International",
-  "Zandvoort (Circuit Park)",
-  "Zolder",
-  "Assen (TT Circuit)",
-  "Charlotte Motor Speedway",
-  "Talladega Superspeedway",
-  "Bristol Motor Speedway",
+  // Autodromo Enzo e Dino Ferrari
+  "Autodromo Enzo e Dino Ferrari (Imola) - Grand Prix",
+  // Autodromo Nazionale Monza
+  "Autodromo Nazionale Monza - Grand Prix",
+  "Autodromo Nazionale Monza - Junior",
+  // Autódromo José Carlos Pace
+  "Autódromo José Carlos Pace (Interlagos) - Grand Prix",
+  "Autódromo José Carlos Pace (Interlagos) - Short",
+  // Mugello
+  "Autodromo Internazionale del Mugello - Grand Prix",
+  // Barcelona
+  "Circuit de Barcelona-Catalunya - Grand Prix",
+  "Circuit de Barcelona-Catalunya - National",
+  "Circuit de Barcelona-Catalunya - School",
+  // Brands Hatch
+  "Brands Hatch - Grand Prix",
+  "Brands Hatch - Indy",
+  // Le Mans
+  "Circuit de la Sarthe - 24h Circuit",
+  "Circuit de la Sarthe - 24h Circuit (No Chicanes)",
+  // Monaco
+  "Circuit de Monaco - Grand Prix",
+  // Spa
+  "Circuit de Spa-Francorchamps - Grand Prix",
+  "Circuit de Spa-Francorchamps - Raidillon",
+  // Gilles Villeneuve
+  "Circuit Gilles Villeneuve - Grand Prix",
+  // COTA
+  "Circuit of the Americas - Grand Prix",
+  // Paul Ricard
+  "Circuit Paul Ricard - Grand Prix",
+  "Circuit Paul Ricard - Mistral Chicane",
+  "Circuit Paul Ricard - Short Chicane",
+  // Zandvoort
+  "Circuit Zandvoort - Grand Prix",
+  "Circuit Zandvoort - Club",
+  // Daytona
+  "Daytona International Speedway - Oval",
+  "Daytona International Speedway - Road Course",
+  // Donington Park
+  "Donington Park - Grand Prix",
+  "Donington Park - National",
+  // Fuji
+  "Fuji International Speedway - Grand Prix",
+  // Hockenheim
+  "Hockenheimring Baden-Württemberg - Grand Prix",
+  "Hockenheimring Baden-Württemberg - National",
+  "Hockenheimring Baden-Württemberg - Short",
+  // Hungaroring
+  "Hungaroring - Grand Prix",
+  // Indianapolis
+  "Indianapolis Motor Speedway - Oval",
+  "Indianapolis Motor Speedway - Road Course",
+  // Kyalami
+  "Kyalami Grand Prix Circuit - Grand Prix",
+  // Laguna Seca
+  "WeatherTech Raceway Laguna Seca - Full",
+  // Lime Rock
+  "Lime Rock Park - Full",
+  "Lime Rock Park - Short",
+  // Mid-Ohio
+  "Mid-Ohio Sports Car Course - Full",
+  "Mid-Ohio Sports Car Course - Short",
+  // Nürburgring
+  "Nürburgring - Combined",
+  "Nürburgring GP-Strecke - Grand Prix",
+  "Nürburgring GP-Strecke - Sprint",
+  "Nürburgring Nordschleife - Nordschleife",
+  "Nürburgring Nordschleife - Nordschleife + GP-Strecke",
+  // Okayama
+  "Okayama International Circuit - Full",
+  "Okayama International Circuit - Short",
+  // Oulton Park
+  "Oulton Park - Fosters",
+  "Oulton Park - International",
+  "Oulton Park - Island",
+  // Phoenix
+  "Phoenix Raceway - Oval",
+  "Phoenix Raceway - Road Course",
+  // Portimão
+  "Autodromo Internacional do Algarve (Portimão) - Grand Prix",
+  // Red Bull Ring
+  "Red Bull Ring - Grand Prix",
+  "Red Bull Ring - National",
+  // Road America
+  "Road America - Full",
+  // Road Atlanta
+  "Road Atlanta - Full",
+  "Road Atlanta - Short",
+  // Sebring
+  "Sebring International Raceway - Full",
+  "Sebring International Raceway - Short",
+  // Silverstone
+  "Silverstone Circuit - Grand Prix",
+  "Silverstone Circuit - International",
+  "Silverstone Circuit - National",
+  // Snetterton
+  "Snetterton Circuit - 100",
+  "Snetterton Circuit - 200",
+  "Snetterton Circuit - 300",
+  // Suzuka
+  "Suzuka Circuit - Grand Prix",
+  "Suzuka Circuit - East",
+  // VIR
+  "Virginia International Raceway - Full",
+  "Virginia International Raceway - North",
+  "Virginia International Raceway - Patriot",
+  "Virginia International Raceway - South",
+  // Watkins Glen
+  "Watkins Glen International - Boot",
+  "Watkins Glen International - Grand Prix",
+  "Watkins Glen International - Short",
+  // Zolder
+  "Zolder - Grand Prix",
+  // Assen
+  "TT Circuit Assen - Grand Prix",
+  // Bahrain
+  "Bahrain International Circuit - Grand Prix",
+  "Bahrain International Circuit - Outer",
+  // Charlotte
+  "Charlotte Motor Speedway - Oval",
+  "Charlotte Motor Speedway - Roval",
 ].sort();
 
 const AdminPage = () => {
