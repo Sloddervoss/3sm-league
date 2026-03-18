@@ -249,15 +249,6 @@ const UpcomingRaces = () => {
               animate={{ opacity: 1, y: 0 }}
               className="relative overflow-hidden rounded-xl border border-primary/30 bg-card mb-12"
             >
-              {/* Country flag watermark */}
-              {trackInfo?.flag && (
-                <span
-                  aria-hidden
-                  className="absolute right-6 top-1/2 -translate-y-1/2 text-[9rem] leading-none opacity-[0.08] pointer-events-none select-none"
-                >
-                  {trackInfo.flag}
-                </span>
-              )}
               {/* Racing stripe accent */}
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-racing" />
               <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
@@ -280,7 +271,6 @@ const UpcomingRaces = () => {
                       </h3>
                     </div>
                     <div className="flex items-center gap-2 text-base text-muted-foreground mb-3">
-                      {trackInfo?.flag && <span className="text-xl">{trackInfo.flag}</span>}
                       <MapPin className="w-4 h-4 shrink-0" />
                       <span>{nextRace.track}</span>
                       {trackInfo?.country && (
@@ -328,8 +318,17 @@ const UpcomingRaces = () => {
                     )}
                   </div>
 
-                  {/* Right: countdown + registration */}
+                  {/* Right: circuit image + countdown + registration */}
                   <div className="flex flex-col items-start md:items-end gap-4 shrink-0">
+                    {trackInfo?.imageUrl && (
+                      <img
+                        src={trackInfo.imageUrl}
+                        alt=""
+                        aria-hidden
+                        className="w-36 h-24 object-contain invert opacity-30 hidden md:block"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    )}
                     {countdown && (
                       <div className="text-right">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Aftellen</p>
@@ -455,21 +454,30 @@ const UpcomingRaces = () => {
                           isNext ? "border-primary/40 shadow-[0_0_20px_rgba(var(--primary),0.08)]" : "border-border"
                         }`}
                       >
-                        {/* Country flag watermark */}
-                        {trackInfo?.flag && (
-                          <span
-                            aria-hidden
-                            className="absolute right-4 top-1/2 -translate-y-1/2 text-[5rem] leading-none opacity-[0.07] pointer-events-none select-none"
-                          >
-                            {trackInfo.flag}
-                          </span>
-                        )}
-
-                        {/* Round number */}
-                        <div className="flex items-center gap-4 md:w-16 shrink-0 relative">
-                          <span className={`font-heading font-black text-2xl ${race.status === "completed" ? "text-muted-foreground/40" : isNext ? "text-primary/60" : "text-muted-foreground"}`}>
-                            R{String(race.round).padStart(2, "0")}
-                          </span>
+                        {/* Round number / circuit map */}
+                        <div className="md:w-20 shrink-0 flex items-center justify-center relative self-stretch">
+                          {trackInfo?.imageUrl ? (
+                            <div className="relative w-16 h-14 flex items-center justify-center">
+                              <img
+                                src={trackInfo.imageUrl}
+                                alt=""
+                                aria-hidden
+                                className="w-full h-full object-contain invert opacity-40"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = "none";
+                                  const fb = (e.target as HTMLImageElement).nextElementSibling as HTMLElement | null;
+                                  if (fb) fb.style.display = "block";
+                                }}
+                              />
+                              <span className="absolute bottom-0 left-0 font-heading font-black text-[10px] text-muted-foreground/40 hidden" data-fallback>
+                                R{String(race.round).padStart(2, "0")}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className={`font-heading font-black text-2xl ${race.status === "completed" ? "text-muted-foreground/40" : isNext ? "text-primary/60" : "text-muted-foreground"}`}>
+                              R{String(race.round).padStart(2, "0")}
+                            </span>
+                          )}
                         </div>
 
                         {/* Track info */}
@@ -490,7 +498,6 @@ const UpcomingRaces = () => {
                             )}
                           </div>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                            {trackInfo?.flag && <span>{trackInfo.flag}</span>}
                             <MapPin className="w-3.5 h-3.5 shrink-0" />
                             <span className="truncate">{race.track}</span>
                           </div>
