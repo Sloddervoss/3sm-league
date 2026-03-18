@@ -249,6 +249,7 @@ const AdminPage = () => {
   const [showLeagueForm, setShowLeagueForm] = useState(false);
   const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
   const [editingLeagueData, setEditingLeagueData] = useState({ name: "", description: "", season: "", car_class: "" });
+  const [editingRaces, setEditingRaces] = useState<Record<string, any>>({});
 
   const [newTeam, setNewTeam] = useState({ name: "", description: "", color: "#f97316", logo_url: "" });
   const [newTeamLogoPreview, setNewTeamLogoPreview] = useState<string>("");
@@ -377,6 +378,28 @@ const AdminPage = () => {
       if (error) throw error;
     },
     onSuccess: () => { toast.success("Verwijderd"); queryClient.invalidateQueries({ queryKey: ["admin-leagues"] }); },
+  });
+
+  const updateRace = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const { error } = await (supabase as any).from("races").update({
+        name: data.name,
+        track: data.track,
+        race_date: data.race_date,
+        race_type: data.race_type || null,
+        race_duration: data.race_duration || null,
+        practice_duration: data.practice_duration || null,
+        qualifying_duration: data.qualifying_duration || null,
+        start_type: data.start_type || null,
+        weather: data.weather || null,
+      }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Race opgeslagen!");
+      queryClient.invalidateQueries({ queryKey: ["admin-leagues"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const updateLeague = useMutation({
@@ -734,9 +757,12 @@ const AdminPage = () => {
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => {
-                                if (isEditing) { setEditingLeagueId(null); return; }
+                                if (isEditing) { setEditingLeagueId(null); setEditingRaces({}); return; }
                                 setEditingLeagueId(league.id);
                                 setEditingLeagueData({ name: league.name, description: league.description || "", season: league.season || "", car_class: league.car_class || "" });
+                                const raceMap: Record<string, any> = {};
+                                (league as any).races?.forEach((r: any) => { raceMap[r.id] = { ...r }; });
+                                setEditingRaces(raceMap);
                               }}
                               className="p-2 text-muted-foreground hover:text-primary transition-colors"
                             >
@@ -747,7 +773,8 @@ const AdminPage = () => {
                         </div>
 
                         {isEditing && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-4 pt-4 border-t border-border space-y-3">
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-4 pt-4 border-t border-border space-y-4">
+                            {/* Seizoen info */}
                             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Seizoen bewerken</p>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                               {([["Naam", "name", "GT3 Championship"], ["Seizoen", "season", "2026 S1"], ["Auto klasse", "car_class", "GT3"], ["Beschrijving", "description", ""]] as const).map(([label, key, ph]) => (
@@ -761,8 +788,83 @@ const AdminPage = () => {
                               <button onClick={() => updateLeague.mutate({ id: league.id, data: editingLeagueData })} disabled={updateLeague.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-gradient-racing text-white hover:opacity-90 disabled:opacity-50">
                                 <Save className="w-3 h-3" /> Opslaan
                               </button>
-                              <button onClick={() => setEditingLeagueId(null)} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground border border-border">Annuleren</button>
+                              <button onClick={() => { setEditingLeagueId(null); setEditingRaces({}); }} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground border border-border">Annuleren</button>
                             </div>
+
+                            {/* Races bewerken */}
+                            {(league as any).races?.length > 0 && (
+                              <div className="pt-3 border-t border-border/50 space-y-3">
+                                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Races bewerken</p>
+                                {[...(league as any).races].sort((a: any, b: any) => a.round - b.round).map((race: any) => {
+                                  const rd = editingRaces[race.id] || race;
+                                  const setRd = (field: string, val: string) => setEditingRaces(prev => ({ ...prev, [race.id]: { ...prev[race.id], [field]: val } }));
+                                  return (
+                                    <div key={race.id} className="p-3 rounded-md bg-secondary/30 border border-border/50 space-y-2">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-heading font-black text-sm text-muted-foreground">R{String(race.round).padStart(2, "0")}</span>
+                                      </div>
+                                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Naam</label>
+                                          <input type="text" value={rd.name || ""} onChange={e => setRd("name", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Circuit</label>
+                                          <select value={rd.track || ""} onChange={e => setRd("track", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                            <option value="">Kies circuit...</option>
+                                            {IRACING_TRACKS.map(t => <option key={t} value={t}>{t}</option>)}
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Datum & tijd</label>
+                                          <input type="datetime-local" value={rd.race_date ? rd.race_date.slice(0, 16) : ""} onChange={e => setRd("race_date", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Race type</label>
+                                          <select value={rd.race_type || ""} onChange={e => setRd("race_type", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                            <option value="">—</option>
+                                            {["Laps", "Timed", "Laps + Timed"].map(t => <option key={t} value={t}>{t}</option>)}
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Race duur</label>
+                                          <input type="text" value={rd.race_duration || ""} onChange={e => setRd("race_duration", e.target.value)} placeholder="bv. 45 min" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Practice</label>
+                                          <input type="text" value={rd.practice_duration || ""} onChange={e => setRd("practice_duration", e.target.value)} placeholder="bv. 15 min" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Qualifying</label>
+                                          <input type="text" value={rd.qualifying_duration || ""} onChange={e => setRd("qualifying_duration", e.target.value)} placeholder="bv. 10 min" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Start type</label>
+                                          <select value={rd.start_type || ""} onChange={e => setRd("start_type", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                            <option value="">—</option>
+                                            {["Rolling", "Standing"].map(t => <option key={t} value={t}>{t}</option>)}
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Weather</label>
+                                          <select value={rd.weather || ""} onChange={e => setRd("weather", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                            <option value="">—</option>
+                                            {["Clear", "Partly Cloudy", "Overcast", "Rain", "Dynamic"].map(t => <option key={t} value={t}>{t}</option>)}
+                                          </select>
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => updateRace.mutate({ id: race.id, data: rd })}
+                                        disabled={updateRace.isPending}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-secondary border border-border hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-50"
+                                      >
+                                        <Save className="w-3 h-3" /> Race opslaan
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </motion.div>
                         )}
 
