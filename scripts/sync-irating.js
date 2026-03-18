@@ -33,10 +33,20 @@ function hashPassword(password, email) {
 async function iracingLogin() {
   const resp = await fetch("https://members-ng.iracing.com/auth", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Origin": "https://members.iracing.com",
+      "Referer": "https://members.iracing.com/",
+    },
     body: JSON.stringify({ email: IRACING_EMAIL, password: hashPassword(IRACING_PASSWORD, IRACING_EMAIL) }),
   });
-  if (!resp.ok) throw new Error(`iRacing auth mislukt: ${resp.status}`);
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`iRacing auth mislukt: ${resp.status} — ${body}`);
+  }
   const cookies = resp.headers.getSetCookie?.() ?? [resp.headers.get("set-cookie") ?? ""];
   return cookies.map(c => c.split(";")[0]).join("; ");
 }
