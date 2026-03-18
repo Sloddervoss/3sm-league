@@ -104,7 +104,7 @@ const TeamsPage = () => {
                     >
                       <div
                         className="w-full h-48 flex items-center justify-center relative overflow-hidden"
-                        style={{ background: `linear-gradient(135deg, ${team.color}30 0%, ${team.color}08 100%)` }}
+                        style={{ background: `radial-gradient(ellipse at center, ${team.color}50 0%, ${team.color}15 50%, transparent 75%), linear-gradient(180deg, #0d0d0d 0%, #1a1a1a 100%)` }}
                       >
                         {team.logo_url ? (
                           <img src={team.logo_url} alt={team.name} className="h-40 w-40 object-contain drop-shadow-lg" />
