@@ -103,11 +103,11 @@ const TeamsPage = () => {
                       style={{ borderTopColor: team.color, borderTopWidth: 3 }}
                     >
                       <div
-                        className="w-full h-32 flex items-center justify-center relative overflow-hidden"
+                        className="w-full h-48 flex items-center justify-center relative overflow-hidden"
                         style={{ background: `linear-gradient(135deg, ${team.color}30 0%, ${team.color}08 100%)` }}
                       >
                         {team.logo_url ? (
-                          <img src={team.logo_url} alt={team.name} className="h-28 w-28 object-contain drop-shadow-lg" />
+                          <img src={team.logo_url} alt={team.name} className="h-40 w-40 object-contain drop-shadow-lg" />
                         ) : (
                           <Shield className="w-14 h-14" style={{ color: team.color, opacity: 0.25 }} />
                         )}
