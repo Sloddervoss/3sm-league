@@ -102,20 +102,18 @@ const TeamsPage = () => {
                       className="bg-card border border-border rounded-lg overflow-hidden card-hover group"
                       style={{ borderTopColor: team.color, borderTopWidth: 3 }}
                     >
-                      {team.logo_url ? (
-                        <div
-                          className="w-full h-36 flex items-center justify-center"
-                          style={{ backgroundColor: team.color + "18" }}
-                        >
-                          <img src={team.logo_url} alt={team.name} className="h-28 w-full object-contain p-3" />
-                        </div>
-                      ) : (
-                        <div className="w-full h-36 flex items-center justify-center" style={{ backgroundColor: team.color + "18" }}>
-                          <Shield className="w-16 h-16" style={{ color: team.color, opacity: 0.4 }} />
-                        </div>
-                      )}
-                      <div className="p-6">
-                        <div className="flex items-center justify-between mb-4">
+                      <div
+                        className="w-full h-32 flex items-center justify-center relative overflow-hidden"
+                        style={{ background: `linear-gradient(135deg, ${team.color}30 0%, ${team.color}08 100%)` }}
+                      >
+                        {team.logo_url ? (
+                          <img src={team.logo_url} alt={team.name} className="h-24 w-24 object-contain drop-shadow-lg" />
+                        ) : (
+                          <Shield className="w-14 h-14" style={{ color: team.color, opacity: 0.25 }} />
+                        )}
+                      </div>
+                      <div className="p-5">
+                        <div className="flex items-center justify-between mb-3">
                           <h3 className="font-heading font-black text-xl">{team.name}</h3>
                           <div className="text-right">
                             <div className="font-heading font-black text-2xl" style={{ color: team.color }}>{total}</div>
