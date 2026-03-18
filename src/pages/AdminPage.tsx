@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Trophy, Calendar, Trash2, Settings, Users, Car, Shield, BarChart2, Upload, Save, FileText, X, Check, ImagePlus, Clock } from "lucide-react";
+import { Plus, Trophy, Calendar, Trash2, Settings, Users, Car, Shield, BarChart2, Upload, Save, FileText, X, Check, ImagePlus, Clock, Pencil } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
@@ -13,14 +13,63 @@ type AdminTab = "overview" | "seasons" | "teams" | "results" | "points";
 
 const DEFAULT_POINTS = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
+const IRACING_TRACKS = [
+  "Autodromo Enzo e Dino Ferrari (Imola)",
+  "Autodromo Nazionale Monza",
+  "Autódromo José Carlos Pace (Interlagos)",
+  "Autodromo Internazionale del Mugello",
+  "Barcelona-Catalunya",
+  "Brands Hatch",
+  "Circuit de la Sarthe (Le Mans)",
+  "Circuit de Monaco",
+  "Circuit de Spa-Francorchamps",
+  "Circuit Gilles Villeneuve",
+  "Circuit of the Americas (COTA)",
+  "Circuit Paul Ricard",
+  "Daytona International Speedway",
+  "Donington Park",
+  "Fuji International Speedway",
+  "Hockenheimring Baden-Württemberg",
+  "Hungaroring",
+  "Indianapolis Motor Speedway",
+  "Kyalami Grand Prix Circuit",
+  "Laguna Seca (WeatherTech Raceway)",
+  "Lime Rock Park",
+  "Mid-Ohio Sports Car Course",
+  "Nürburgring Combined",
+  "Nürburgring GP-Strecke",
+  "Nürburgring Nordschleife",
+  "Okayama International Circuit",
+  "Oulton Park",
+  "Phoenix Raceway",
+  "Portimão (Autodromo Internacional do Algarve)",
+  "Red Bull Ring",
+  "Road America",
+  "Road Atlanta",
+  "Sebring International Raceway",
+  "Silverstone Circuit",
+  "Snetterton Circuit",
+  "Suzuka Circuit",
+  "Virginia International Raceway",
+  "Watkins Glen International",
+  "Zandvoort (Circuit Park)",
+  "Zolder",
+  "Assen (TT Circuit)",
+  "Charlotte Motor Speedway",
+  "Talladega Superspeedway",
+  "Bristol Motor Speedway",
+].sort();
+
 const AdminPage = () => {
   const { user, isAdmin, loading } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
 
   const [newLeague, setNewLeague] = useState({ name: "", description: "", season: "", car_class: "", raceCount: 6 });
-  const [races, setRaces] = useState<{ name: string; track: string; date: string; time: string }[]>([]);
+  const [races, setRaces] = useState<{ name: string; track: string; date: string; time: string; race_type: string; race_duration: string; practice_duration: string; qualifying_duration: string; start_type: string; weather: string }[]>([]);
   const [showLeagueForm, setShowLeagueForm] = useState(false);
+  const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
+  const [editingLeagueData, setEditingLeagueData] = useState({ name: "", description: "", season: "", car_class: "" });
 
   const [newTeam, setNewTeam] = useState({ name: "", description: "", color: "#f97316", logo_url: "" });
   const [newTeamLogoPreview, setNewTeamLogoPreview] = useState<string>("");
@@ -126,7 +175,7 @@ const AdminPage = () => {
       if (error) throw error;
       if (races.length > 0) {
         const { error: re } = await supabase.from("races").insert(
-          races.map((r, i) => ({ league_id: league.id, round: i + 1, name: r.name, track: r.track, race_date: `${r.date}T${r.time}:00`, status: "upcoming" as const }))
+          races.map((r, i) => ({ league_id: league.id, round: i + 1, name: r.name, track: r.track, race_date: `${r.date}T${r.time}:00`, status: "upcoming" as const, race_type: r.race_type || null, race_duration: r.race_duration || null, practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null, start_type: r.start_type || null, weather: r.weather || null } as any))
         );
         if (re) throw re;
       }
@@ -149,6 +198,19 @@ const AdminPage = () => {
       if (error) throw error;
     },
     onSuccess: () => { toast.success("Verwijderd"); queryClient.invalidateQueries({ queryKey: ["admin-leagues"] }); },
+  });
+
+  const updateLeague = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof editingLeagueData }) => {
+      const { error } = await supabase.from("leagues").update({ name: data.name, description: data.description || null, season: data.season || null, car_class: data.car_class || null }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Seizoen bijgewerkt!");
+      queryClient.invalidateQueries({ queryKey: ["admin-leagues"] });
+      setEditingLeagueId(null);
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const createTeam = useMutation({
@@ -269,7 +331,7 @@ const AdminPage = () => {
   });
 
   const generateRaceSlots = () => {
-    setRaces(Array.from({ length: newLeague.raceCount }, (_, i) => ({ name: `Race ${i + 1}`, track: "", date: "", time: "20:00" })));
+    setRaces(Array.from({ length: newLeague.raceCount }, (_, i) => ({ name: `Race ${i + 1}`, track: "", date: "", time: "20:00", race_type: "Feature", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", start_type: "Standing", weather: "Fixed" })));
   };
 
   if (loading) return null;
@@ -405,19 +467,55 @@ const AdminPage = () => {
                     </div>
                     <button onClick={generateRaceSlots} className="mb-4 px-3 py-1.5 rounded-md border border-border text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Genereer {newLeague.raceCount} race slots</button>
                     {races.length > 0 && (
-                      <div className="space-y-2 mb-4">
-                        {races.map((race, i) => (
-                          <div key={i} className="grid grid-cols-2 md:grid-cols-4 gap-2 p-3 bg-secondary/50 rounded-md border border-border/50">
-                            {[
-                              { type: "text", value: race.name, key: "name", placeholder: `Race ${i + 1}` },
-                              { type: "text", value: race.track, key: "track", placeholder: "Circuit" },
-                              { type: "date", value: race.date, key: "date", placeholder: "" },
-                              { type: "time", value: race.time, key: "time", placeholder: "" },
-                            ].map(({ type, value, key, placeholder }) => (
-                              <input key={key} type={type} value={value} onChange={(e) => { const u = [...races]; (u[i] as any)[key] = e.target.value; setRaces(u); }} placeholder={placeholder} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
-                            ))}
-                          </div>
-                        ))}
+                      <div className="space-y-3 mb-4">
+                        {races.map((race, i) => {
+                          const upd = (key: string, val: string) => { const u = [...races]; (u[i] as any)[key] = val; setRaces(u); };
+                          return (
+                            <div key={i} className="p-3 bg-secondary/50 rounded-md border border-border/50 space-y-2">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <input type="text" value={race.name} onChange={(e) => upd("name", e.target.value)} placeholder={`Race ${i + 1}`} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                <select value={race.track} onChange={(e) => upd("track", e.target.value)} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                  <option value="">Circuit kiezen...</option>
+                                  {IRACING_TRACKS.map((t) => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                                <input type="date" value={race.date} onChange={(e) => upd("date", e.target.value)} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                <input type="time" value={race.time} onChange={(e) => upd("time", e.target.value)} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Race type</label>
+                                  <select value={race.race_type} onChange={(e) => upd("race_type", e.target.value)} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                    {["Sprint", "Feature", "Endurance"].map((v) => <option key={v}>{v}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Duur race</label>
+                                  <input type="text" value={race.race_duration} onChange={(e) => upd("race_duration", e.target.value)} placeholder="60 min / 30 laps" className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Start type</label>
+                                  <select value={race.start_type} onChange={(e) => upd("start_type", e.target.value)} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                    {["Standing", "Rolling"].map((v) => <option key={v}>{v}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Practice</label>
+                                  <input type="text" value={race.practice_duration} onChange={(e) => upd("practice_duration", e.target.value)} placeholder="15 min" className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Qualifying</label>
+                                  <input type="text" value={race.qualifying_duration} onChange={(e) => upd("qualifying_duration", e.target.value)} placeholder="10 min" className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Weather</label>
+                                  <select value={race.weather} onChange={(e) => upd("weather", e.target.value)} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                    {["Fixed", "Dynamic"].map((v) => <option key={v}>{v}</option>)}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     <div className="flex gap-3">
@@ -429,6 +527,7 @@ const AdminPage = () => {
                 <div className="space-y-3">
                   {leagues?.map((league: any) => {
                     const regs = (seasonRegistrations || []).filter((r: any) => r.league_id === league.id);
+                    const isEditing = editingLeagueId === league.id;
                     return (
                       <div key={league.id} className="bg-card border border-border rounded-lg p-5 racing-stripe-left">
                         <div className="flex items-start justify-between">
@@ -441,8 +540,41 @@ const AdminPage = () => {
                               <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{regs.length} ingeschreven</span>
                             </div>
                           </div>
-                          <button onClick={() => deleteLeague.mutate(league.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => {
+                                if (isEditing) { setEditingLeagueId(null); return; }
+                                setEditingLeagueId(league.id);
+                                setEditingLeagueData({ name: league.name, description: league.description || "", season: league.season || "", car_class: league.car_class || "" });
+                              }}
+                              className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => deleteLeague.mutate(league.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          </div>
                         </div>
+
+                        {isEditing && (
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-4 pt-4 border-t border-border space-y-3">
+                            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Seizoen bewerken</p>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                              {([["Naam", "name", "GT3 Championship"], ["Seizoen", "season", "2026 S1"], ["Auto klasse", "car_class", "GT3"], ["Beschrijving", "description", ""]] as const).map(([label, key, ph]) => (
+                                <div key={key}>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">{label}</label>
+                                  <input type="text" value={(editingLeagueData as any)[key]} onChange={(e) => setEditingLeagueData({ ...editingLeagueData, [key]: e.target.value })} placeholder={ph} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => updateLeague.mutate({ id: league.id, data: editingLeagueData })} disabled={updateLeague.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-gradient-racing text-white hover:opacity-90 disabled:opacity-50">
+                                <Save className="w-3 h-3" /> Opslaan
+                              </button>
+                              <button onClick={() => setEditingLeagueId(null)} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground border border-border">Annuleren</button>
+                            </div>
+                          </motion.div>
+                        )}
+
                         {regs.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-border/50">
                             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Ingeschreven deelnemers</p>

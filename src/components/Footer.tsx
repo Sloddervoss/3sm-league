@@ -13,7 +13,10 @@ const Footer = () => {
               <span className="font-heading font-bold text-base">3 Stripe Motorsport</span>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              De officiële sim racing league voor iRacing. Race mee, klim in het klassement en bewijs jezelf op de baan.
+              Driven by passion. Powered by community.
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+              Samen bouwen we aan de ultieme sim racing experience.
             </p>
           </div>
           <div>
@@ -48,7 +51,7 @@ const Footer = () => {
             3 Stripe Motorsport © 2026
           </span>
           <p className="text-xs text-muted-foreground">
-            Powered by iRacing • Niet geaffilieerd met iRacing.com
+            Powered by Sloddervos — Niet geaffilieerd met iRacing.com
           </p>
         </div>
       </div>
