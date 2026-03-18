@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Calendar, MapPin, Clock, UserPlus, Check, Lock, Users } from "lucide-react";
+import { Calendar, MapPin, Clock, UserPlus, Check, Lock, Users, Timer, Flag, CloudSun, Gauge } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -219,35 +219,68 @@ const UpcomingRaces = () => {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <h3 className={`font-heading font-bold text-lg ${race.status === "completed" ? "text-muted-foreground" : ""}`}>
-                          {race.name}
-                        </h3>
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className={`font-heading font-bold text-lg ${race.status === "completed" ? "text-muted-foreground" : ""}`}>
+                            {race.name}
+                          </h3>
+                          {race.race_type && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
+                              {race.race_type}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
                           <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5" />
+                            <MapPin className="w-3.5 h-3.5 shrink-0" />
                             {race.track}
                           </span>
-                          {race.car && <span className="text-xs">· {race.car}</span>}
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 text-sm shrink-0">
-                        <span className="flex items-center gap-1.5 text-muted-foreground">
-                          <Calendar className="w-3.5 h-3.5" />
-                          {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}
-                        </span>
-                        <span className="flex items-center gap-1.5 text-muted-foreground">
-                          <Clock className="w-3.5 h-3.5" />
-                          {new Date(race.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                        {race.total_laps && (
-                          <span className="text-xs text-muted-foreground">{race.total_laps} ronden</span>
+                        {(race.race_duration || race.practice_duration || race.qualifying_duration || race.start_type || race.weather) && (
+                          <div className="flex items-center gap-3 mt-2 flex-wrap">
+                            {race.race_duration && (
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Timer className="w-3 h-3" /> {race.race_duration}
+                              </span>
+                            )}
+                            {race.practice_duration && (
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Gauge className="w-3 h-3" /> Practice {race.practice_duration}
+                              </span>
+                            )}
+                            {race.qualifying_duration && (
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Clock className="w-3 h-3" /> Quali {race.qualifying_duration}
+                              </span>
+                            )}
+                            {race.start_type && (
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Flag className="w-3 h-3" /> {race.start_type} start
+                              </span>
+                            )}
+                            {race.weather && (
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <CloudSun className="w-3 h-3" /> {race.weather}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
 
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit shrink-0 ${statusStyles[race.status] || statusStyles.upcoming}`}>
-                        {statusLabels[race.status] || race.status}
-                      </span>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(race.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit ${statusStyles[race.status] || statusStyles.upcoming}`}>
+                          {statusLabels[race.status] || race.status}
+                        </span>
+                      </div>
                     </motion.div>
                   ))}
                 </div>
