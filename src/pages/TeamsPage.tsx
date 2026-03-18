@@ -102,25 +102,26 @@ const TeamsPage = () => {
                       className="bg-card border border-border rounded-lg overflow-hidden card-hover group"
                       style={{ borderTopColor: team.color, borderTopWidth: 3 }}
                     >
+                      {team.logo_url ? (
+                        <div
+                          className="w-full h-36 flex items-center justify-center"
+                          style={{ backgroundColor: team.color + "18" }}
+                        >
+                          <img src={team.logo_url} alt={team.name} className="h-28 w-full object-contain p-3" />
+                        </div>
+                      ) : (
+                        <div className="w-full h-36 flex items-center justify-center" style={{ backgroundColor: team.color + "18" }}>
+                          <Shield className="w-16 h-16" style={{ color: team.color, opacity: 0.4 }} />
+                        </div>
+                      )}
                       <div className="p-6">
                         <div className="flex items-center justify-between mb-4">
-                          <div
-                            className="w-16 h-16 rounded-lg flex items-center justify-center"
-                            style={{ backgroundColor: team.color + "22", border: `2px solid ${team.color}` }}
-                          >
-                            {team.logo_url ? (
-                              <img src={team.logo_url} alt={team.name} className="w-12 h-12 object-contain p-1" />
-                            ) : (
-                              <Shield className="w-8 h-8" style={{ color: team.color }} />
-                            )}
-                          </div>
+                          <h3 className="font-heading font-black text-xl">{team.name}</h3>
                           <div className="text-right">
                             <div className="font-heading font-black text-2xl" style={{ color: team.color }}>{total}</div>
                             <div className="text-xs text-muted-foreground uppercase tracking-wider">punten</div>
                           </div>
                         </div>
-
-                        <h3 className="font-heading font-black text-xl mb-1">{team.name}</h3>
                         {team.description && (
                           <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{team.description}</p>
                         )}
