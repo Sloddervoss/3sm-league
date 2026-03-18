@@ -262,14 +262,9 @@ const UpcomingRaces = () => {
                 <div className="flex flex-col md:flex-row md:items-center gap-6">
                   {/* Left: round + track info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-3 mb-1">
-                      <span className="font-heading font-black text-5xl text-primary/20">
-                        R{String(nextRace.round).padStart(2, "0")}
-                      </span>
-                      <h3 className="font-heading font-black text-2xl md:text-3xl truncate">
-                        {nextRace.name}
-                      </h3>
-                    </div>
+                    <h3 className="font-heading font-black text-2xl md:text-3xl mb-1">
+                      {nextRace.name}
+                    </h3>
                     <div className="flex items-center gap-2 text-base text-muted-foreground mb-3">
                       <MapPin className="w-4 h-4 shrink-0" />
                       <span>{nextRace.track}</span>
@@ -306,7 +301,7 @@ const UpcomingRaces = () => {
                         )}
                         {nextRace.weather && (
                           <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <CloudSun className="w-3 h-3" /> {nextRace.weather}
+                            <CloudSun className="w-3 h-3" /> Weather: {nextRace.weather}
                           </span>
                         )}
                         {nextRace.setup && (
@@ -515,7 +510,7 @@ const UpcomingRaces = () => {
                               )}
                               {race.weather && (
                                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                  <CloudSun className="w-3 h-3" /> {race.weather}
+                                  <CloudSun className="w-3 h-3" /> Weather: {race.weather}
                                 </span>
                               )}
                               {race.setup && (
