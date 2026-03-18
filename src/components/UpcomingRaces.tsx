@@ -1,10 +1,11 @@
-import { motion } from "framer-motion";
-import { Calendar, MapPin, Clock, UserPlus, Check, Lock, Users, Timer, Flag, CloudSun, Gauge } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Calendar, MapPin, Clock, UserPlus, Check, Lock, Users, Timer, Flag, CloudSun, Gauge, AlertCircle, X } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 const statusStyles: Record<string, string> = {
   completed: "bg-muted text-muted-foreground",
@@ -22,6 +23,7 @@ const UpcomingRaces = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [showProfileWarning, setShowProfileWarning] = useState(false);
 
   const { data: races, isLoading } = useQuery({
     queryKey: ["races-with-leagues"],
@@ -34,6 +36,17 @@ const UpcomingRaces = () => {
       return data;
     },
   });
+
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("iracing_id, iracing_name").eq("user_id", user!.id).maybeSingle();
+      return data;
+    },
+  });
+
+  const profileComplete = !!(profile as any)?.iracing_id && !!(profile as any)?.iracing_name;
 
   // All league IDs referenced by races
   const leagueIds = [...new Set((races || []).map((r: any) => r.league_id))];
@@ -176,7 +189,10 @@ const UpcomingRaces = () => {
                         </button>
                       ) : (
                         <button
-                          onClick={() => registerForSeason.mutate(leagueId)}
+                          onClick={() => {
+                            if (!profileComplete) { setShowProfileWarning(true); return; }
+                            registerForSeason.mutate(leagueId);
+                          }}
                           disabled={registerForSeason.isPending}
                           className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold bg-gradient-racing text-white hover:opacity-90 transition-opacity"
                         >
@@ -289,6 +305,71 @@ const UpcomingRaces = () => {
           })}
         </div>
       </div>
+
+      {/* Profile incomplete warning modal */}
+      <AnimatePresence>
+        {showProfileWarning && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 z-50"
+              onClick={() => setShowProfileWarning(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md px-4"
+            >
+              <div className="bg-card border border-border rounded-xl p-6 shadow-2xl">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center shrink-0">
+                      <AlertCircle className="w-5 h-5 text-yellow-400" />
+                    </div>
+                    <h3 className="font-heading font-black text-lg">Profiel incompleet</h3>
+                  </div>
+                  <button onClick={() => setShowProfileWarning(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <p className="text-sm text-muted-foreground mb-4">
+                  Om je in te schrijven voor een seizoen moet je eerst je iRacing gegevens invullen. Dit is nodig om je resultaten correct te koppelen.
+                </p>
+
+                <div className="space-y-2 mb-5">
+                  <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${(profile as any)?.iracing_id ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${(profile as any)?.iracing_id ? "bg-green-400" : "bg-red-400"}`} />
+                    iRacing Customer ID — {(profile as any)?.iracing_id ? "ingevuld ✓" : "nog niet ingevuld"}
+                  </div>
+                  <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${(profile as any)?.iracing_name ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${(profile as any)?.iracing_name ? "bg-green-400" : "bg-red-400"}`} />
+                    iRacing Naam — {(profile as any)?.iracing_name ? `"${(profile as any).iracing_name}" ✓` : "nog niet ingevuld"}
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setShowProfileWarning(false); navigate("/profile"); }}
+                    className="flex-1 px-4 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm hover:opacity-90 transition-opacity"
+                  >
+                    Naar mijn profiel
+                  </button>
+                  <button
+                    onClick={() => setShowProfileWarning(false)}
+                    className="px-4 py-2.5 rounded-md border border-border text-muted-foreground font-heading font-bold text-sm hover:text-foreground transition-colors"
+                  >
+                    Annuleren
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </section>
   );
 };
