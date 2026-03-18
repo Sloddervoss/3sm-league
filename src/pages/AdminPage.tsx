@@ -158,7 +158,7 @@ const AdminPage = () => {
 
   const [importRaceId, setImportRaceId] = useState("");
   const [importRows, setImportRows] = useState<
-    { position: number; display_name: string; laps: number; best_lap: string; incidents: number; fastest_lap: boolean }[]
+    { position: number; display_name: string; laps: number; best_lap: string; incidents: number; fastest_lap: boolean; iracing_cust_id?: string; new_irating?: number; new_license_level?: number; new_license_sub_level?: number }[]
   >([{ position: 1, display_name: "", laps: 0, best_lap: "", incidents: 0, fastest_lap: false }]);
   const [pointsConfig] = useState<number[]>(DEFAULT_POINTS);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
@@ -367,12 +367,14 @@ const AdminPage = () => {
   const importResults = useMutation({
     mutationFn: async () => {
       if (!importRaceId) throw new Error("Selecteer een race");
+      let iRatingUpdates = 0;
       for (const row of importRows) {
         if (!row.display_name.trim()) continue;
-        const profile = profiles?.find(
-          (p: any) =>
-            (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
-            (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
+        // Match by iRacing Customer ID first, then by name
+        const profile = profiles?.find((p: any) =>
+          (row.iracing_cust_id && String((p as any).iracing_id) === String(row.iracing_cust_id)) ||
+          (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
+          (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
         );
         if (!profile) { toast.error(`Driver niet gevonden: ${row.display_name}`); continue; }
         const pts = (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0);
@@ -381,8 +383,17 @@ const AdminPage = () => {
           { onConflict: "race_id,user_id" }
         );
         if (error) throw error;
+        // Auto-update iRating + safety rating from CSV data
+        if (row.new_irating && row.new_license_level && row.new_license_sub_level != null) {
+          const licLetters = ["", "R", "D", "C", "B", "A"];
+          const licIdx = Math.min(Math.ceil(row.new_license_level / 4), 5);
+          const safetyRating = `${licLetters[licIdx]} ${(row.new_license_sub_level / 100).toFixed(2)}`;
+          await supabase.from("profiles").update({ irating: row.new_irating, safety_rating: safetyRating } as any).eq("user_id", profile.user_id);
+          iRatingUpdates++;
+        }
       }
       await supabase.from("races").update({ status: "completed" }).eq("id", importRaceId);
+      if (iRatingUpdates > 0) toast.success(`iRating bijgewerkt voor ${iRatingUpdates} drivers`);
     },
     onSuccess: () => {
       toast.success("Resultaten geïmporteerd!");
@@ -967,24 +978,36 @@ const AdminPage = () => {
                                   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
                                   if (lines.length < 2) { toast.error("CSV lijkt leeg"); return; }
 
-                                  // Detect header row
-                                  const header = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/"/g, ""));
-                                  const finPosIdx   = header.findIndex(h => h.includes("finpos") || h === "pos" || h === "finish");
-                                  const custIdIdx   = header.findIndex(h => h.includes("custid") || h.includes("cust id") || h.includes("customerid"));
-                                  const nameIdx     = header.findIndex(h => h.includes("display name") || h.includes("name") || h.includes("driver"));
-                                  const lapsIdx     = header.findIndex(h => h === "laps");
-                                  const bestLapIdx  = header.findIndex(h => h.includes("best lap") || h.includes("bestlap"));
-                                  const incIdx      = header.findIndex(h => h.includes("incident") || h.includes("inc"));
+                                  // Detect header row — skip metadata rows (iRacing CSV has 2 header rows)
+                                  let headerLineIdx = 0;
+                                  for (let li = 0; li < Math.min(lines.length, 5); li++) {
+                                    if (lines[li].toLowerCase().includes("fin pos") || lines[li].toLowerCase().includes("finpos") || lines[li].toLowerCase().startsWith('"fin pos"')) { headerLineIdx = li; break; }
+                                  }
+                                  const header = lines[headerLineIdx].split(",").map(h => h.trim().toLowerCase().replace(/"/g, ""));
+                                  const finPosIdx        = header.findIndex(h => h === "fin pos" || h === "finpos" || h === "pos" || h === "finish");
+                                  const custIdIdx        = header.findIndex(h => h === "cust id" || h.includes("custid") || h.includes("customerid"));
+                                  const nameIdx          = header.findIndex(h => h === "name" || h.includes("display name") || h.includes("driver"));
+                                  const lapsIdx          = header.findIndex(h => h === "laps comp" || h === "laps" || h === "laps completed");
+                                  const bestLapIdx       = header.findIndex(h => h === "fastest lap time" || h.includes("best lap") || h.includes("bestlap") || h.includes("fastest lap"));
+                                  const incIdx           = header.findIndex(h => h === "inc" || h.includes("incident"));
+                                  const newIRatingIdx    = header.findIndex(h => h === "new irating");
+                                  const newLicLevelIdx   = header.findIndex(h => h === "new license level");
+                                  const newLicSubIdx     = header.findIndex(h => h === "new license sub-level");
 
-                                  const parsed = lines.slice(1).map((line, i) => {
+                                  const parsed = lines.slice(headerLineIdx + 1).map((line, i) => {
                                     const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
+                                    if (cols.length < 3) return null;
                                     const pos      = finPosIdx >= 0  ? parseInt(cols[finPosIdx]) || i + 1 : i + 1;
                                     const name     = nameIdx >= 0    ? cols[nameIdx]   : `Driver ${i + 1}`;
                                     const laps     = lapsIdx >= 0    ? parseInt(cols[lapsIdx]) || 0 : 0;
                                     const bestLap  = bestLapIdx >= 0 ? cols[bestLapIdx] : "";
                                     const incidents= incIdx >= 0     ? parseInt(cols[incIdx]) || 0 : 0;
-                                    return { position: pos, display_name: name, laps, best_lap: bestLap, incidents, fastest_lap: false };
-                                  }).filter(r => r.display_name);
+                                    const custId   = custIdIdx >= 0  ? cols[custIdIdx] : undefined;
+                                    const newIR    = newIRatingIdx >= 0    ? parseInt(cols[newIRatingIdx]) || undefined : undefined;
+                                    const newLL    = newLicLevelIdx >= 0   ? parseInt(cols[newLicLevelIdx]) || undefined : undefined;
+                                    const newLS    = newLicSubIdx >= 0     ? parseInt(cols[newLicSubIdx]) || undefined : undefined;
+                                    return { position: pos, display_name: name, laps, best_lap: bestLap, incidents, fastest_lap: false, iracing_cust_id: custId, new_irating: newIR, new_license_level: newLL, new_license_sub_level: newLS };
+                                  }).filter((r): r is NonNullable<typeof r> => !!r && !!r.display_name && !isNaN(r.position));
 
                                   if (parsed.length === 0) { toast.error("Geen geldige rijen gevonden in CSV"); return; }
                                   setImportRows(parsed);
