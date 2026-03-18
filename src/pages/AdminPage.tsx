@@ -428,7 +428,7 @@ const AdminPage = () => {
                 )}
                 <div className="space-y-3">
                   {leagues?.map((league: any) => {
-                    const regs = (seasonRegistrations || []).filter((r: any) => r.league_id === league.id && r.user_id !== user?.id);
+                    const regs = (seasonRegistrations || []).filter((r: any) => r.league_id === league.id);
                     return (
                       <div key={league.id} className="bg-card border border-border rounded-lg p-5 racing-stripe-left">
                         <div className="flex items-start justify-between">
