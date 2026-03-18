@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 /**
  * iRating & Safety Rating sync script
- * Run manually: node scripts/sync-irating.js
- * Or via cron:  0 3 * * * cd /opt/3sm-source && node scripts/sync-irating.js
+ * Run manually:  node scripts/sync-irating.js
+ * Setup:         npm install axios @supabase/supabase-js (in project root)
  */
 
 import crypto from "crypto";
+import https from "https";
 import { createClient } from "@supabase/supabase-js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const SUPABASE_URL      = process.env.SUPABASE_URL      || "http://localhost:8000";
-const SUPABASE_KEY      = process.env.SUPABASE_SERVICE_KEY;   // service role key
-const IRACING_EMAIL     = process.env.IRACING_EMAIL;
-const IRACING_PASSWORD  = process.env.IRACING_PASSWORD;
+const SUPABASE_URL     = process.env.SUPABASE_URL     || "http://localhost:8000";
+const SUPABASE_KEY     = process.env.SUPABASE_SERVICE_KEY;
+const IRACING_EMAIL    = process.env.IRACING_EMAIL;
+const IRACING_PASSWORD = process.env.IRACING_PASSWORD;
 
 if (!SUPABASE_KEY || !IRACING_EMAIL || !IRACING_PASSWORD) {
   console.error("Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_KEY, IRACING_EMAIL, IRACING_PASSWORD");
@@ -21,41 +22,95 @@ if (!SUPABASE_KEY || !IRACING_EMAIL || !IRACING_PASSWORD) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ── Low-level HTTPS helper (no fetch/axios deps) ──────────────────────────────
+function httpsRequest(url, options = {}, body = null) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = https.request({
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      method: options.method || "GET",
+      headers: options.headers || {},
+    }, (res) => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => {
+        const raw = Buffer.concat(chunks).toString();
+        resolve({ status: res.statusCode, headers: res.headers, body: raw });
+      });
+    });
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
 // ── iRacing auth ──────────────────────────────────────────────────────────────
 function hashPassword(password, email) {
-  const hash = crypto
+  return crypto
     .createHash("sha256")
     .update(password + email.toLowerCase())
-    .digest("binary");
-  return Buffer.from(hash, "binary").toString("base64");
+    .digest("base64");
 }
 
 async function iracingLogin() {
-  const resp = await fetch("https://members-ng.iracing.com/auth", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Origin": "https://members.iracing.com",
-      "Referer": "https://members.iracing.com/",
-    },
-    body: JSON.stringify({ email: IRACING_EMAIL, password: hashPassword(IRACING_PASSWORD, IRACING_EMAIL) }),
+  const payload = JSON.stringify({
+    email: IRACING_EMAIL,
+    password: hashPassword(IRACING_PASSWORD, IRACING_EMAIL),
   });
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`iRacing auth mislukt: ${resp.status} — ${body}`);
+
+  const resp = await httpsRequest(
+    "https://members-ng.iracing.com/auth",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(payload),
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": "https://members.iracing.com",
+        "Referer": "https://members.iracing.com/",
+        "Connection": "keep-alive",
+      },
+    },
+    payload,
+  );
+
+  if (resp.status !== 200) {
+    throw new Error(`iRacing auth mislukt: ${resp.status} — ${resp.body}`);
   }
-  const cookies = resp.headers.getSetCookie?.() ?? [resp.headers.get("set-cookie") ?? ""];
-  return cookies.map(c => c.split(";")[0]).join("; ");
+
+  // Verzamel cookies uit set-cookie header
+  const raw = resp.headers["set-cookie"] ?? [];
+  const cookies = (Array.isArray(raw) ? raw : [raw])
+    .map(c => c.split(";")[0].trim())
+    .filter(Boolean)
+    .join("; ");
+
+  if (!cookies) throw new Error("iRacing auth: geen cookies ontvangen — controleer email/wachtwoord");
+  return cookies;
+}
+
+async function iracingFetch(path, cookieHeader) {
+  const resp = await httpsRequest(
+    `https://members-ng.iracing.com${path}`,
+    {
+      headers: {
+        "Cookie": cookieHeader,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+      },
+    },
+  );
+  if (resp.status !== 200) throw new Error(`iRacing fetch mislukt: ${resp.status} ${path}`);
+  return JSON.parse(resp.body);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   console.log("🔄 iRating sync gestart...");
 
-  // 1. Haal alle profielen op met een iRacing ID
   const { data: profiles, error } = await supabase
     .from("profiles")
     .select("user_id, iracing_id, display_name")
@@ -63,34 +118,30 @@ async function main() {
 
   if (error) throw new Error(error.message);
   if (!profiles?.length) { console.log("Geen profielen met iRacing ID."); return; }
-
   console.log(`👥 ${profiles.length} drivers gevonden`);
 
-  // 2. Login op iRacing
   const cookieHeader = await iracingLogin();
   console.log("✅ iRacing ingelogd");
 
-  // 3. Haal member data op (max 100 per request)
   const custIds = profiles.map(p => p.iracing_id).join(",");
-  const memberResp = await fetch(
-    `https://members-ng.iracing.com/data/member/get?cust_ids=${custIds}&include_licenses=1`,
-    { headers: { Cookie: cookieHeader } },
+  const { link } = await iracingFetch(
+    `/data/member/get?cust_ids=${custIds}&include_licenses=1`,
+    cookieHeader,
   );
-  if (!memberResp.ok) throw new Error(`iRacing member fetch mislukt: ${memberResp.status}`);
 
-  const { link } = await memberResp.json();
-  const dataResp = await fetch(link);
-  const { members } = await dataResp.json();
+  // iRacing geeft een S3 link terug voor de data
+  const dataResp = await httpsRequest(link, {
+    headers: { "Accept": "application/json" },
+  });
+  const { members } = JSON.parse(dataResp.body);
 
   if (!members?.length) { console.log("Geen member data ontvangen."); return; }
 
-  // 4. Update profielen
   let updated = 0;
   for (const member of members) {
     const profile = profiles.find(p => String(p.iracing_id) === String(member.cust_id));
     if (!profile) continue;
 
-    // Pak road license (category_id 2), anders eerste beschikbare
     const license = member.licenses?.find(l => l.category_id === 2) ?? member.licenses?.[0];
     if (!license) continue;
 
