@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { Navigate } from "react-router-dom";
 
 const ProfilePage = () => {
-  const { user, loading } = useAuth();
+  const { user, session, loading } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: profile } = useQuery({
@@ -140,8 +140,8 @@ const ProfilePage = () => {
   const submitCreationRequest = useMutation({
     mutationFn: async () => {
       if (!newTeamReq.name.trim()) throw new Error("Geef een teamnaam op");
-      const session = (await supabase.auth.getSession()).data.session;
       if (!session) throw new Error("Niet ingelogd");
+      if (newTeamLogo && newTeamLogo.length > 100_000) throw new Error(`Logo te groot (${Math.round(newTeamLogo.length / 1024)}KB), gebruik een kleiner afbeelding`);
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/team_creation_requests`, {
         method: "POST",
         headers: {
