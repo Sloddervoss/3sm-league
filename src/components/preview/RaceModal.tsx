@@ -64,18 +64,39 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
   });
 
   const { data: registrants = [] } = useQuery({
-    queryKey: ["race-modal-registrants", race.id],
+    queryKey: ["race-modal-registrants", race.id, (race as any).leagues?.id],
     enabled: !mockMode && race.status !== "completed",
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      // Direct race registrants
+      const { data: raceRegs } = await (supabase as any)
         .from("race_registrations")
         .select("user_id, profiles(display_name, iracing_name, team_id)")
         .eq("race_id", race.id);
-      return (data || []).map((r: any) => ({
-        user_id: r.user_id,
-        display_name: r.profiles?.display_name || r.profiles?.iracing_name || "Unknown",
-        team_id: r.profiles?.team_id,
-      }));
+
+      // Season registrants (if race belongs to a league)
+      let seasonRegs: any[] = [];
+      const leagueId = (race as any).leagues?.id;
+      if (leagueId) {
+        const { data } = await (supabase as any)
+          .from("season_registrations")
+          .select("user_id, profiles(display_name, iracing_name, team_id)")
+          .eq("league_id", leagueId);
+        seasonRegs = data || [];
+      }
+
+      // Merge + deduplicate by user_id
+      const seen = new Set<string>();
+      return [...(raceRegs || []), ...seasonRegs]
+        .filter((r: any) => {
+          if (seen.has(r.user_id)) return false;
+          seen.add(r.user_id);
+          return true;
+        })
+        .map((r: any) => ({
+          user_id: r.user_id,
+          display_name: r.profiles?.display_name || r.profiles?.iracing_name || "Unknown",
+          team_id: r.profiles?.team_id,
+        }));
     },
   });
 

@@ -1,124 +1,114 @@
-import { motion } from "framer-motion";
-import { Trophy, TrendingUp, Minus } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-
-interface DriverStanding {
-  user_id: string;
-  display_name: string;
-  total_points: number;
-  wins: number;
-}
+import { Trophy, ChevronRight } from "lucide-react";
+import NewStandingsTable from "@/components/preview/NewStandingsTable";
+import PreviewModal from "@/components/preview/PreviewModal";
+import DriverModal from "@/components/preview/DriverModal";
 
 const StandingsPreview = ({ leagueId }: { leagueId?: string }) => {
-  const { data: standings, isLoading } = useQuery({
-    queryKey: ["standings", leagueId],
+  const [selectedDriver, setSelectedDriver] = useState<any>(null);
+
+  const { data: leagues = [] } = useQuery({
+    queryKey: ["leagues-for-standings"],
     queryFn: async () => {
-      // Get all race results with profiles
-      let query = supabase
-        .from("race_results")
-        .select("user_id, position, points, race_id, races(league_id)");
-
-      const { data: results, error } = await query;
-      if (error) throw error;
-
-      // Filter by league if specified
-      const filtered = leagueId
-        ? results?.filter((r: any) => r.races?.league_id === leagueId)
-        : results;
-
-      // Aggregate by user
-      const driverMap = new Map<string, { total_points: number; wins: number }>();
-      filtered?.forEach((r: any) => {
-        const existing = driverMap.get(r.user_id) || { total_points: 0, wins: 0 };
-        existing.total_points += r.points;
-        if (r.position === 1) existing.wins += 1;
-        driverMap.set(r.user_id, existing);
-      });
-
-      // Get profiles for these users
-      const userIds = Array.from(driverMap.keys());
-      if (userIds.length === 0) return [];
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, display_name")
-        .in("user_id", userIds);
-
-      const standings: DriverStanding[] = userIds.map((uid) => {
-        const stats = driverMap.get(uid)!;
-        const profile = profiles?.find((p) => p.user_id === uid);
-        return {
-          user_id: uid,
-          display_name: profile?.display_name || "Unknown",
-          total_points: stats.total_points,
-          wins: stats.wins,
-        };
-      });
-
-      return standings.sort((a, b) => b.total_points - a.total_points);
+      const { data } = await supabase
+        .from("leagues")
+        .select("id, name")
+        .order("created_at", { ascending: false });
+      return data || [];
     },
   });
 
-  if (isLoading) {
-    return (
-      <section className="py-20 bg-card/50">
-        <div className="container mx-auto px-4">
-          <div className="animate-pulse space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 bg-secondary rounded" />
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
+  const { data: teams = [] } = useQuery({
+    queryKey: ["teams"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("teams").select("id, name, color");
+      return data || [];
+    },
+  });
+
+  const { data: profiles = [] } = useQuery({
+    queryKey: ["drivers"],
+    queryFn: async () => {
+      const { data } = await supabase.from("confirmed_profiles").select("*");
+      return data || [];
+    },
+  });
+
+  const activeLeagueId = leagueId ?? leagues?.[0]?.id;
+
+  const { data: standings = [] } = useQuery({
+    queryKey: ["standings-preview", activeLeagueId],
+    enabled: !!activeLeagueId && !!teams.length,
+    queryFn: async () => {
+      const { data: res } = await supabase
+        .from("race_results")
+        .select("user_id, position, points, race_id, races(league_id)");
+      const filtered = (res || []).filter((r: any) => r.races?.league_id === activeLeagueId);
+      const map = new Map<string, { total_points: number; wins: number }>();
+      filtered.forEach((r: any) => {
+        const e = map.get(r.user_id) || { total_points: 0, wins: 0 };
+        e.total_points += r.points;
+        if (r.position === 1) e.wins++;
+        map.set(r.user_id, e);
+      });
+      const userIds = Array.from(map.keys());
+      if (!userIds.length) return [];
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, team_id")
+        .in("user_id", userIds);
+      return userIds.map((uid) => {
+        const stats = map.get(uid)!;
+        const prof = (profs || []).find((p: any) => p.user_id === uid);
+        const team = teams.find((t: any) => t.id === prof?.team_id);
+        return {
+          user_id: uid,
+          display_name: prof?.display_name || "Unknown",
+          total_points: stats.total_points,
+          wins: stats.wins,
+          team: team ? { name: team.name, color: team.color } : undefined,
+        };
+      }).sort((a: any, b: any) => b.total_points - a.total_points);
+    },
+  });
+
+  if (!standings.length) return null;
+
+  const leagueName = leagues.find((l: any) => l.id === activeLeagueId)?.name;
 
   return (
-    <section className="py-20 bg-card/50">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Trophy className="w-5 h-5 text-accent" />
-          <span className="text-sm font-medium text-accent uppercase tracking-[0.15em]">Championship</span>
-        </div>
-        <h2 className="font-heading text-3xl md:text-4xl font-black mb-10">DRIVER STANDINGS</h2>
+    <section className="py-20" style={{ background: "#08080f" }}>
+      <div className="container mx-auto px-4 max-w-4xl">
 
-        {!standings?.length ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Trophy className="w-10 h-10 mx-auto mb-3 opacity-50" />
-            <p>Nog geen resultaten beschikbaar. De standings worden bijgewerkt na elke race.</p>
-          </div>
-        ) : (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[3rem_1fr_4rem_4rem] md:grid-cols-[4rem_1fr_5rem_5rem] gap-2 px-4 py-3 bg-secondary/50 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
-              <span>Pos</span>
-              <span>Driver</span>
-              <span className="text-center">Wins</span>
-              <span className="text-center">Pts</span>
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <Trophy className="w-4 h-4 text-orange-500" />
+              <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Championship</span>
             </div>
-
-            {standings.map((driver, i) => (
-              <motion.div
-                key={driver.user_id}
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05 }}
-                className={`grid grid-cols-[3rem_1fr_4rem_4rem] md:grid-cols-[4rem_1fr_5rem_5rem] gap-2 px-4 py-3.5 items-center border-b border-border/50 hover:bg-secondary/30 transition-colors ${
-                  i === 0 ? "racing-stripe-left" : ""
-                }`}
-              >
-                <span className={`font-heading font-black text-lg ${i === 0 ? "text-accent" : i < 3 ? "text-primary" : "text-muted-foreground"}`}>
-                  {i + 1}
-                </span>
-                <span className="font-heading font-bold text-sm md:text-base truncate">{driver.display_name}</span>
-                <span className="text-center font-heading font-bold">{driver.wins}</span>
-                <span className="text-center font-heading font-black text-lg">{driver.total_points}</span>
-              </motion.div>
-            ))}
+            <h2 className="font-heading font-black text-3xl md:text-4xl text-white leading-none">DRIVER STANDINGS</h2>
           </div>
-        )}
+          <Link to="/standings" className="flex items-center gap-1 text-xs font-bold text-gray-600 hover:text-orange-500 transition-colors">
+            Volledig <ChevronRight className="w-3 h-3" />
+          </Link>
+        </div>
+
+        <NewStandingsTable
+          standings={standings}
+          leagueName={leagueName}
+          onSelectDriver={(uid) => {
+            const driver = profiles.find((p: any) => p.user_id === uid);
+            if (driver) setSelectedDriver(driver);
+          }}
+        />
       </div>
+
+      <PreviewModal open={!!selectedDriver} onClose={() => setSelectedDriver(null)}>
+        {selectedDriver && <DriverModal driver={selectedDriver} />}
+      </PreviewModal>
     </section>
   );
 };
