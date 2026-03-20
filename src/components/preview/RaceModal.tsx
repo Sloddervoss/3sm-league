@@ -70,33 +70,45 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
       // Direct race registrants
       const { data: raceRegs } = await (supabase as any)
         .from("race_registrations")
-        .select("user_id, profiles(display_name, iracing_name, team_id)")
+        .select("user_id")
         .eq("race_id", race.id);
 
       // Season registrants (if race belongs to a league)
-      let seasonRegs: any[] = [];
+      let seasonUserIds: string[] = [];
       const leagueId = (race as any).leagues?.id;
       if (leagueId) {
         const { data } = await (supabase as any)
           .from("season_registrations")
-          .select("user_id, profiles(display_name, iracing_name, team_id)")
+          .select("user_id")
           .eq("league_id", leagueId);
-        seasonRegs = data || [];
+        seasonUserIds = (data || []).map((r: any) => r.user_id);
       }
 
-      // Merge + deduplicate by user_id
+      // Merge + deduplicate user_ids
       const seen = new Set<string>();
-      return [...(raceRegs || []), ...seasonRegs]
-        .filter((r: any) => {
-          if (seen.has(r.user_id)) return false;
-          seen.add(r.user_id);
-          return true;
-        })
-        .map((r: any) => ({
-          user_id: r.user_id,
-          display_name: r.profiles?.display_name || r.profiles?.iracing_name || "Unknown",
-          team_id: r.profiles?.team_id,
-        }));
+      const raceUserIds = (raceRegs || []).map((r: any) => r.user_id);
+      const allUserIds = [...raceUserIds, ...seasonUserIds].filter((uid) => {
+        if (seen.has(uid)) return false;
+        seen.add(uid);
+        return true;
+      });
+
+      if (!allUserIds.length) return [];
+
+      // Fetch profiles for all user_ids
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, iracing_name, team_id")
+        .in("user_id", allUserIds);
+
+      return allUserIds.map((uid) => {
+        const prof = (profs || []).find((p: any) => p.user_id === uid);
+        return {
+          user_id: uid,
+          display_name: prof?.display_name || prof?.iracing_name || "Unknown",
+          team_id: prof?.team_id,
+        };
+      });
     },
   });
 
