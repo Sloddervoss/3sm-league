@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Users, Trophy, Shield } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface Team {
   id: string;
@@ -35,13 +36,14 @@ const NewTeamCard = ({ team, members, points, wins, rank }: Props) => {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.35 }}
-      whileHover={{ y: -4 }}
+      whileHover={{ y: -4, boxShadow: `0 12px 40px ${color}20` }}
       className="relative rounded-2xl overflow-hidden"
       style={{
         background: "linear-gradient(160deg, #111118 0%, #0c0c12 100%)",
         border: "1px solid rgba(255,255,255,0.07)",
       }}
     >
+    <Link to={`/preview/team?id=${team.id}`} className="absolute inset-0 z-10" aria-label={`Open profiel van ${team.name}`} />
       {/* Top color bar */}
       <div
         className="h-[3px]"

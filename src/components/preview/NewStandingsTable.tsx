@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Trophy, Medal } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface Standing {
   user_id: string;
@@ -132,6 +133,7 @@ const NewStandingsTable = ({ standings, leagueName }: Props) => {
             const delta = i > 0 ? driver.total_points - standings[i - 1].total_points : 0;
             const isFirst = i === 0;
             const podiumColor = i < 3 ? PODIUM[i].color : null;
+            const teamColor = driver.team?.color;
 
             return (
               <motion.div
@@ -140,56 +142,65 @@ const NewStandingsTable = ({ standings, leagueName }: Props) => {
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: Math.min(i, 10) * 0.03 }}
-                className="group grid gap-2 px-5 py-3.5 items-center cursor-default"
-                style={{
-                  gridTemplateColumns: "2.5rem 1fr 4rem 4.5rem",
-                  borderTop: "1px solid rgba(255,255,255,0.04)",
-                  background: isFirst ? "rgba(249,115,22,0.04)" : "transparent",
-                  transition: "background 0.15s",
-                }}
-                whileHover={{ backgroundColor: "rgba(255,255,255,0.025)" }}
+                className="relative overflow-hidden"
+                style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
               >
-                {/* Position */}
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm"
-                  style={
-                    podiumColor
-                      ? { background: `${podiumColor}15`, color: podiumColor }
-                      : { color: "#4b5563" }
-                  }
+                {/* Team color left glow bar */}
+                {teamColor && (
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-0.5"
+                    style={{ background: teamColor, boxShadow: `2px 0 8px ${teamColor}60` }}
+                  />
+                )}
+                <Link
+                  to={`/preview/driver?id=${driver.user_id}`}
+                  className="group grid gap-2 pl-5 pr-5 py-3.5 items-center"
+                  style={{
+                    gridTemplateColumns: "2.5rem 1fr 4rem 4.5rem",
+                    background: teamColor
+                      ? `linear-gradient(90deg, ${teamColor}08 0%, transparent 40%)`
+                      : isFirst ? "rgba(249,115,22,0.04)" : "transparent",
+                    display: "grid",
+                    transition: "background 0.15s",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = teamColor ? `linear-gradient(90deg, ${teamColor}18 0%, rgba(255,255,255,0.02) 60%)` : "rgba(255,255,255,0.025)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = teamColor ? `linear-gradient(90deg, ${teamColor}08 0%, transparent 40%)` : isFirst ? "rgba(249,115,22,0.04)" : "transparent")}
                 >
-                  {i + 1}
-                </div>
-
-                {/* Name + team */}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    {isFirst && <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />}
-                    <span className="font-heading font-bold text-sm text-white truncate">{driver.display_name}</span>
-                  </div>
-                  {driver.team && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <div className="w-1 h-1 rounded-full" style={{ backgroundColor: driver.team.color }} />
-                      <span className="text-[10px] text-gray-700 truncate">{driver.team.name}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Wins */}
-                <div className="text-center font-heading font-bold text-sm text-gray-500">{driver.wins}</div>
-
-                {/* Points */}
-                <div className="text-center">
-                  <span
-                    className="font-heading font-black text-base"
-                    style={{ color: podiumColor || "#d1d5db" }}
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm"
+                    style={
+                      podiumColor
+                        ? { background: `${podiumColor}15`, color: podiumColor }
+                        : { color: "#4b5563" }
+                    }
                   >
-                    {driver.total_points}
-                  </span>
-                  {delta < 0 && (
-                    <div className="text-[10px] text-gray-700">{delta}</div>
-                  )}
-                </div>
+                    {i + 1}
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      {isFirst && <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />}
+                      <span className="font-heading font-bold text-sm text-white truncate group-hover:text-orange-400 transition-colors">{driver.display_name}</span>
+                    </div>
+                    {driver.team && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <div className="w-1 h-1 rounded-full" style={{ backgroundColor: driver.team.color }} />
+                        <span className="text-[10px] truncate" style={{ color: driver.team.color + "99" }}>{driver.team.name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-center font-heading font-bold text-sm text-gray-500">{driver.wins}</div>
+
+                  <div className="text-center">
+                    <span className="font-heading font-black text-base" style={{ color: podiumColor || "#d1d5db" }}>
+                      {driver.total_points}
+                    </span>
+                    {delta < 0 && (
+                      <div className="text-[10px] text-gray-700">{delta}</div>
+                    )}
+                  </div>
+                </Link>
               </motion.div>
             );
           })}

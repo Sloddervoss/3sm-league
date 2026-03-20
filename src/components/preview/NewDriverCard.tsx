@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { TrendingUp, Shield, Trophy, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface Driver {
   user_id: string;
@@ -76,6 +77,7 @@ const NewDriverCard = ({ driver, stats, team, rank }: Props) => {
         border: "1px solid rgba(255,255,255,0.07)",
       }}
     >
+    <Link to={`/preview/driver?id=${driver.user_id}`} className="absolute inset-0 z-10" aria-label={`Open profiel van ${name}`} />
       {/* Team color top bar */}
       <div
         className="h-[3px]"
