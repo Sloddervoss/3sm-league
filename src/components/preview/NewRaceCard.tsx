@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { MapPin, Clock, Timer, CloudSun, Zap } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
+import { getTrackPhoto } from "@/lib/trackPhotos";
 
 interface Race {
   id: string;
@@ -36,6 +37,7 @@ const SESSION_COLORS: Record<string, { color: string; bg: string }> = {
 
 const NewRaceCard = ({ race, index = 0, countdown }: Props) => {
   const trackInfo = getTrackInfo(race.track);
+  const trackPhoto = getTrackPhoto(race.track);
   const st = STATUS[race.status as keyof typeof STATUS] || STATUS.upcoming;
 
   const raceDate = new Date(race.race_date);
@@ -67,23 +69,18 @@ const NewRaceCard = ({ race, index = 0, countdown }: Props) => {
         style={{ background: st.bar }}
       />
 
-      {/* Circuit image */}
-      <div
-        className="w-20 h-20 shrink-0 self-center flex items-center justify-center relative overflow-hidden mx-1"
-      >
-        {trackInfo?.imageUrl ? (
-          <img
-            src={trackInfo.imageUrl}
-            alt={race.track}
-            className="w-16 h-16 object-contain invert"
-            style={{ opacity: race.status === "completed" ? 0.12 : 0.2 }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
-        ) : (
-          <span className="font-heading font-black text-xs text-gray-800 text-center">
-            {race.track.slice(0, 4).toUpperCase()}
-          </span>
-        )}
+      {/* Track photo */}
+      <div className="w-24 h-20 shrink-0 self-center relative overflow-hidden rounded-lg mx-2 my-2">
+        <img
+          src={trackPhoto}
+          alt={race.track}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ opacity: race.status === "completed" ? 0.25 : 0.55, filter: "saturate(0.6) brightness(0.7)" }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(to right, transparent 60%, #0d0d14 100%)" }}
+        />
       </div>
 
       {/* Main content */}
