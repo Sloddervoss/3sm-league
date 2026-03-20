@@ -26,17 +26,33 @@ const TRACK_PHOTOS: Record<string, string> = {
   "Brands Hatch Circuit":                  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Brands-hatch.jpg/1200px-Brands-hatch.jpg",
 };
 
+// Extra tracks
+const EXTRA_PHOTOS: Record<string, string> = {
+  "Summit Point Raceway":                  "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Summit_Point_Motorsports_Park.jpg/1200px-Summit_Point_Motorsports_Park.jpg",
+  "Donington Park Racing Circuit":         "https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Donington_Park_from_the_air.jpg/1200px-Donington_Park_from_the_air.jpg",
+  "Oulton Park Circuit":                   "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Oulton_Park_aerial.jpg/1200px-Oulton_Park_aerial.jpg",
+  "Autodromo Internazionale del Mugello":  "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Mugello_aerial_2007.jpg/1200px-Mugello_aerial_2007.jpg",
+  "Autodromo Internazionale Enzo e Dino Ferrari": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Imola_aerial.jpg/1200px-Imola_aerial.jpg",
+  "Hockenheimring Baden-Württemberg":      "https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Aerial_view_Hockenheim_2009_Superbike.jpg/1200px-Aerial_view_Hockenheim_2009_Superbike.jpg",
+  "Laguna Seca Raceway":                   "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Laguna_seca_2009_us_superbike.jpg/1200px-Laguna_seca_2009_us_superbike.jpg",
+  "WeatherTech Raceway at Laguna Seca":    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Laguna_seca_2009_us_superbike.jpg/1200px-Laguna_seca_2009_us_superbike.jpg",
+};
+
+/** Fallback voor onbekende tracks — algemeen motorsport foto */
+const DEFAULT_PHOTO = "https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Aerial_view_Hockenheim_2009_Superbike.jpg/1200px-Aerial_view_Hockenheim_2009_Superbike.jpg";
+
+const ALL_PHOTOS = { ...TRACK_PHOTOS, ...EXTRA_PHOTOS };
+
 /**
- * Geeft een echte track foto URL terug (aerial/scenic).
- * Probeert eerst exacte match, dan base naam (voor iRacing varianten zoals "Spa - Grand Prix").
- * Geeft undefined als er geen foto beschikbaar is.
+ * Geeft een track foto URL terug.
+ * Probeert: exacte match → base naam → fallback foto.
  */
-export function getTrackPhoto(trackName: string): string | undefined {
-  if (TRACK_PHOTOS[trackName]) return TRACK_PHOTOS[trackName];
+export function getTrackPhoto(trackName: string): string {
+  if (ALL_PHOTOS[trackName]) return ALL_PHOTOS[trackName];
 
-  // iRacing heeft track namen zoals "Circuit de Spa-Francorchamps - Grand Prix"
+  // iRacing track namen: "Circuit de Spa-Francorchamps - Grand Prix"
   const base = trackName.split(" - ")[0].trim();
-  if (TRACK_PHOTOS[base]) return TRACK_PHOTOS[base];
+  if (ALL_PHOTOS[base]) return ALL_PHOTOS[base];
 
-  return undefined;
+  return DEFAULT_PHOTO;
 }

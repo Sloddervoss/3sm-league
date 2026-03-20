@@ -46,7 +46,7 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
       style={{ minHeight: 340 }}
     >
       {/* Track photo background */}
-      {trackPhoto ? (
+      {trackPhoto && (
         <div className="absolute inset-0 overflow-hidden">
           <img
             src={trackPhoto}
@@ -55,7 +55,9 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
             style={{ opacity: 0.18, filter: "saturate(0.6)" }}
           />
         </div>
-      ) : trackInfo?.imageUrl ? (
+      )}
+      {/* Circuit map (alleen als geen foto) */}
+      {!trackPhoto && trackInfo?.imageUrl ? (
         <div className="absolute inset-0 flex items-center justify-end overflow-hidden">
           <img
             src={trackInfo.imageUrl}
@@ -65,13 +67,11 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
         </div>
       ) : null}
 
-      {/* Gradient overlay — sterker als er een foto is */}
+      {/* Gradient overlay */}
       <div
         className="absolute inset-0"
         style={{
-          background: trackPhoto
-            ? "linear-gradient(135deg, rgba(8,8,15,0.92) 0%, rgba(10,10,18,0.75) 50%, rgba(8,8,15,0.88) 100%)"
-            : "linear-gradient(135deg, #0d0d16 0%, #111120 50%, #0a0a12 100%)",
+          background: "linear-gradient(135deg, rgba(8,8,15,0.92) 0%, rgba(10,10,18,0.75) 50%, rgba(8,8,15,0.88) 100%)",
         }}
       />
       <div
