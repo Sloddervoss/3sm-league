@@ -17,7 +17,7 @@ const PHOTOS: Record<string, string> = {
   "Silverstone Circuit":                              "/tracks/photos/silverstone.jpg",
   "Brands Hatch Circuit":                             "/tracks/photos/brandshatchcircuit-sm.jpg",
   "Donington Park Racing Circuit":                    "/tracks/photos/update-doningtonpark.jpg",
-  "Snetterton Circuit":                               "/tracks/photos/update-doningtonpark.jpg",
+  "Snetterton Circuit":                               "/tracks/photos/snetterton.jpg",
   "Oulton Park Circuit":                              "/tracks/photos/oultonpark.jpg",
   "Cadwell Park Circuit":                             "/tracks/photos/cadwell.jpg",
   "Thruxton Circuit":                                 "/tracks/photos/thruxton.jpg",
