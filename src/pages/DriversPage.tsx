@@ -1,4 +1,5 @@
 import Navbar from "@/components/Navbar";
+import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import NewDriverCard from "@/components/preview/NewDriverCard";
 import PreviewModal from "@/components/preview/PreviewModal";
@@ -58,7 +59,8 @@ const DriversPage = () => {
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>
       <Navbar />
-      <main className="pt-16">
+      <StickyRaceBar />
+      <main className="pt-[108px]">
         <div className="container mx-auto px-4 max-w-7xl py-12">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
             <div>

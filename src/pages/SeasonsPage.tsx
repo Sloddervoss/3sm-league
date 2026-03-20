@@ -1,4 +1,5 @@
 import Navbar from "@/components/Navbar";
+import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
 import { Trophy, Calendar, Flag, Car, Users, ChevronRight } from "lucide-react";
@@ -57,7 +58,8 @@ const SeasonsPage = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="pt-16">
+      <StickyRaceBar />
+      <main className="pt-[108px]">
         {/* Header */}
         <section className="py-12 bg-gradient-to-b from-card/50 to-transparent border-b border-border">
           <div className="container mx-auto px-4">

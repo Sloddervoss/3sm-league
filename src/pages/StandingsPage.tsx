@@ -1,4 +1,5 @@
 import Navbar from "@/components/Navbar";
+import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import NewStandingsTable from "@/components/preview/NewStandingsTable";
 import PreviewModal from "@/components/preview/PreviewModal";
@@ -82,7 +83,8 @@ const StandingsPage = () => {
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>
       <Navbar />
-      <main className="pt-16">
+      <StickyRaceBar />
+      <main className="pt-[108px]">
         <div className="container mx-auto px-4 max-w-4xl py-12">
 
           {/* Header */}
