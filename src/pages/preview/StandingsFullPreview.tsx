@@ -251,55 +251,77 @@ const StandingsFullPreview = () => {
                 </div>
 
                 {(view === "drivers" ? standings : teamStandings).map((item: any, i: number) => {
-                  const podColor = i < 3 ? PODIUM_C[i] : null;
-                  const name = view === "drivers" ? item.display_name : item.name;
+                  const podColor  = i < 3 ? PODIUM_C[i] : null;
+                  const name      = view === "drivers" ? item.display_name : item.name;
+                  const glowColor = view === "drivers" ? item.team?.color : item.color;
+                  const linkTo    = view === "drivers"
+                    ? `/preview/driver?id=${item.user_id}`
+                    : `/preview/team?id=${item.id}`;
+
                   return (
                     <motion.div
                       key={item.user_id || item.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: Math.min(i, 10) * 0.03 }}
-                      className="group grid gap-2 px-5 py-3.5 items-center"
-                      style={{
-                        gridTemplateColumns: view === "drivers" ? "2.5rem 1fr 4rem 4rem 4rem 4rem" : "2.5rem 1fr 4rem 5rem",
-                        borderTop: "1px solid rgba(255,255,255,0.04)",
-                        background: i === 0 ? "rgba(249,115,22,0.04)" : "transparent",
-                      }}
-                      whileHover={{ backgroundColor: "rgba(255,255,255,0.025)" }}
+                      className="relative overflow-hidden"
+                      style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
                     >
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm"
-                        style={podColor ? { background: `${podColor}15`, color: podColor } : { color: "#4b5563" }}
-                      >
-                        {i + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          {i === 0 && <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />}
-                          {view === "teams" && item.color && (
-                            <div className="w-2 h-6 rounded-sm shrink-0" style={{ backgroundColor: item.color }} />
-                          )}
-                          <span className="font-heading font-bold text-sm text-white truncate">{name}</span>
-                        </div>
-                        {view === "drivers" && item.team && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <div className="w-1 h-1 rounded-full" style={{ backgroundColor: item.team.color }} />
-                            <span className="text-[10px] text-gray-700 truncate">{item.team.name}</span>
-                          </div>
-                        )}
-                      </div>
-                      {view === "drivers" ? (
-                        <>
-                          <div className="text-center text-xs text-gray-600">{item.races}</div>
-                          <div className="text-center font-bold text-sm" style={{ color: item.wins > 0 ? "#facc15" : "#4b5563" }}>{item.wins}</div>
-                          <div className="text-center text-xs" style={{ color: item.fastest > 0 ? "#a855f7" : "#4b5563" }}>{item.fastest}</div>
-                        </>
-                      ) : (
-                        <div className="text-center font-bold text-sm" style={{ color: item.wins > 0 ? "#facc15" : "#4b5563" }}>{item.wins}</div>
+                      {/* Team/own color left glow bar */}
+                      {glowColor && (
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-0.5"
+                          style={{ background: glowColor, boxShadow: `2px 0 8px ${glowColor}60` }}
+                        />
                       )}
-                      <div className="text-center font-heading font-black text-base" style={{ color: podColor || "#d1d5db" }}>
-                        {item.points}
-                      </div>
+                      <Link
+                        to={linkTo}
+                        className="group grid gap-2 pl-5 pr-5 py-3.5 items-center"
+                        style={{
+                          gridTemplateColumns: view === "drivers" ? "2.5rem 1fr 4rem 4rem 4rem 4rem" : "2.5rem 1fr 4rem 5rem",
+                          display: "grid",
+                          background: glowColor
+                            ? `linear-gradient(90deg, ${glowColor}08 0%, transparent 40%)`
+                            : "transparent",
+                          transition: "background 0.15s",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = glowColor ? `linear-gradient(90deg, ${glowColor}18 0%, rgba(255,255,255,0.02) 60%)` : "rgba(255,255,255,0.025)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = glowColor ? `linear-gradient(90deg, ${glowColor}08 0%, transparent 40%)` : "transparent")}
+                      >
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm"
+                          style={podColor ? { background: `${podColor}15`, color: podColor } : { color: "#4b5563" }}
+                        >
+                          {i + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            {i === 0 && <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />}
+                            {view === "teams" && item.color && (
+                              <div className="w-2 h-6 rounded-sm shrink-0" style={{ backgroundColor: item.color, boxShadow: `0 0 6px ${item.color}80` }} />
+                            )}
+                            <span className="font-heading font-bold text-sm text-white truncate group-hover:text-orange-400 transition-colors">{name}</span>
+                          </div>
+                          {view === "drivers" && item.team && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <div className="w-1 h-1 rounded-full" style={{ backgroundColor: item.team.color }} />
+                              <span className="text-[10px] truncate" style={{ color: item.team.color + "99" }}>{item.team.name}</span>
+                            </div>
+                          )}
+                        </div>
+                        {view === "drivers" ? (
+                          <>
+                            <div className="text-center text-xs text-gray-600">{item.races}</div>
+                            <div className="text-center font-bold text-sm" style={{ color: item.wins > 0 ? "#facc15" : "#4b5563" }}>{item.wins}</div>
+                            <div className="text-center text-xs" style={{ color: item.fastest > 0 ? "#a855f7" : "#4b5563" }}>{item.fastest}</div>
+                          </>
+                        ) : (
+                          <div className="text-center font-bold text-sm" style={{ color: item.wins > 0 ? "#facc15" : "#4b5563" }}>{item.wins}</div>
+                        )}
+                        <div className="text-center font-heading font-black text-base" style={{ color: podColor || "#d1d5db" }}>
+                          {item.points}
+                        </div>
+                      </Link>
                     </motion.div>
                   );
                 })}

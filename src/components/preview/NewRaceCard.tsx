@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { MapPin, Clock, Timer, CloudSun, Zap } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
+import { Link } from "react-router-dom";
 
 interface Race {
   id: string;
@@ -63,6 +64,7 @@ const NewRaceCard = ({ race, index = 0, countdown }: Props) => {
         border: "1px solid rgba(255,255,255,0.06)",
       }}
     >
+      <Link to={`/preview/race?id=${race.id}`} className="absolute inset-0 z-10" aria-label={`Open ${race.name}`} />
       {/* Status bar left */}
       <div
         className="w-1 shrink-0 rounded-l-xl"
