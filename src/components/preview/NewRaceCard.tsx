@@ -14,7 +14,7 @@ interface Race {
   practice_duration?: string;
   qualifying_duration?: string;
   race_duration?: string;
-  leagues?: { name: string; car_class?: string };
+  leagues?: { name: string; car_class?: string; season?: string };
 }
 
 interface Props {
@@ -31,6 +31,8 @@ const STATUS = {
   completed: { label: "Afgelopen", dot: "#374151", text: "#6b7280", bg: "rgba(55,65,81,0.1)",    bar: "#1f2937" },
 };
 
+const SOLO_COLOR = "#818cf8";
+
 const SESSION_COLORS: Record<string, { color: string; bg: string }> = {
   P: { color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
   Q: { color: "#eab308", bg: "rgba(234,179,8,0.12)" },
@@ -40,7 +42,10 @@ const SESSION_COLORS: Record<string, { color: string; bg: string }> = {
 const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Props) => {
   const trackInfo = getTrackInfo(race.track);
   const trackPhoto = getTrackPhoto(race.track);
+  const isStandalone = !race.leagues;
   const st = STATUS[race.status as keyof typeof STATUS] || STATUS.upcoming;
+  const barColor = isStandalone ? SOLO_COLOR : st.bar;
+  const countdownColor = isStandalone ? SOLO_COLOR : "#f97316";
 
   const raceDate = new Date(race.race_date);
   const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
@@ -69,7 +74,7 @@ const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Pro
       {/* Status bar left */}
       <div
         className="w-1 shrink-0 rounded-l-xl"
-        style={{ background: st.bar }}
+        style={{ background: barColor }}
       />
 
       {/* Track photo */}
@@ -97,6 +102,21 @@ const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Pro
           >
             {st.label}
           </span>
+          {isStandalone ? (
+            <span
+              className="shrink-0 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+              style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.2)" }}
+            >
+              Losse Race
+            </span>
+          ) : race.leagues && (
+            <span
+              className="shrink-0 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+              style={{ background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.2)" }}
+            >
+              {race.leagues.name}{race.leagues.season ? ` · ${race.leagues.season}` : ""}
+            </span>
+          )}
           {isRegistered && race.status === "upcoming" && (
             <span
               className="shrink-0 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -149,7 +169,7 @@ const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Pro
       <div className="shrink-0 flex flex-col items-end justify-center gap-1.5 pr-4 pl-2">
         {countdown && race.status === "upcoming" ? (
           <div className="text-right">
-            <div className="font-heading font-black text-lg leading-none" style={{ color: "#f97316" }}>
+            <div className="font-heading font-black text-lg leading-none" style={{ color: countdownColor }}>
               {countdown}
             </div>
             <div className="flex items-center justify-end gap-1 text-[10px] text-gray-700 mt-0.5">
