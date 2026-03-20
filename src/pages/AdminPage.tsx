@@ -723,7 +723,7 @@ const AdminPage = () => {
   const { data: allRaces } = useQuery({
     queryKey: ["all-races-admin"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("races").select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name)").order("race_date", { ascending: true });
+      const { data, error } = await supabase.from("races").select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, season)").order("race_date", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -1126,10 +1126,14 @@ const AdminPage = () => {
                               <span>{nr.track}</span>
                               {trackInfo?.country && <span className="opacity-60 text-xs">— {trackInfo.country}</span>}
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2 flex-wrap">
                               <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(nr.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "UTC" })}</span>
                               <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(nr.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}</span>
-                              {nr.leagues?.name && <span className="px-1.5 py-0.5 rounded bg-secondary text-[10px] font-bold">{nr.leagues.name}</span>}
+                              {!nr.leagues ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wide" style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.2)" }}>Losse Race</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wide" style={{ background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.2)" }}>{nr.leagues.name}{nr.leagues.season ? ` · ${nr.leagues.season}` : ""}</span>
+                              )}
                             </div>
                             {sessions.length > 0 && (
                               <div className="flex items-center gap-1.5 flex-wrap mb-2">
