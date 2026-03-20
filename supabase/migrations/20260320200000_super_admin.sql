@@ -1,20 +1,13 @@
 -- ─────────────────────────────────────────────────────────────
--- Super Admin: voeg super_admin toe aan de role enum,
--- stel de super admin in en beveilig de RPC functies.
+-- Super Admin — STAP 1: run dit blok eerst alleen, dan STAP 2.
+-- PostgreSQL vereist dat ALTER TYPE ADD VALUE in een aparte
+-- transactie zit voordat de nieuwe waarde gebruikt kan worden.
 -- ─────────────────────────────────────────────────────────────
 
--- 1. Voeg super_admin toe aan de enum (veilig / idempotent)
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_enum
-    WHERE enumlabel = 'super_admin'
-      AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'app_role')
-  ) THEN
-    ALTER TYPE public.app_role ADD VALUE 'super_admin';
-  END IF;
-END
-$$;
+-- ══ STAP 1 — run dit als eerste (apart) ══
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'super_admin';
+
+-- ══ STAP 2 — run dit daarna (apart) ══
 
 -- 2. Wijs super_admin toe aan de eigenaar (idempotent)
 INSERT INTO public.user_roles (user_id, role)
