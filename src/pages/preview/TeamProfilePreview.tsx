@@ -6,15 +6,18 @@ import { useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
-import { Users, Trophy, Shield, ArrowLeft, Flag, TrendingUp, Star } from "lucide-react";
+import { Users, Trophy, Shield, ArrowLeft, Flag, TrendingUp, FlaskConical } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { useMockMode } from "@/lib/useMockMode";
+import { MOCK_TEAMS, MOCK_MEMBERSHIPS, MOCK_ALL_RESULTS } from "@/lib/mockData";
 
 const PODIUM = ["#facc15", "#94a3b8", "#d97706"];
 
 const TeamProfilePreview = () => {
   const [params] = useSearchParams();
   const selectedId = params.get("id");
+  const [mockMode, setMockMode] = useMockMode();
 
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
@@ -23,9 +26,6 @@ const TeamProfilePreview = () => {
       return data || [];
     },
   });
-
-  const team: any = selectedId ? teams.find((t: any) => t.id === selectedId) : teams[0];
-  const color = team?.color || "#f97316";
 
   const { data: memberships = [] } = useQuery({
     queryKey: ["team-memberships-with-profiles"],
@@ -43,24 +43,33 @@ const TeamProfilePreview = () => {
     },
   });
 
-  const members = memberships.filter((m: any) => m.team_id === team?.id);
+  const activeTeams      = mockMode ? MOCK_TEAMS      : teams;
+  const activeMemberships = mockMode ? MOCK_MEMBERSHIPS : memberships;
+  const activeAllResults  = mockMode ? MOCK_ALL_RESULTS  : allResults;
+
+  const team: any = selectedId
+    ? activeTeams.find((t: any) => t.id === selectedId)
+    : activeTeams[0];
+
+  const color = team?.color || "#f97316";
+
+  const members = activeMemberships.filter((m: any) => m.team_id === team?.id);
   const memberIds = members.map((m: any) => m.user_id);
 
-  const teamResults = allResults.filter((r: any) => memberIds.includes(r.user_id));
+  const teamResults = activeAllResults.filter((r: any) => memberIds.includes(r.user_id));
   const totalPoints = teamResults.reduce((a: number, r: any) => a + (r.points || 0), 0);
-  const wins = teamResults.filter((r: any) => r.position === 1).length;
+  const wins    = teamResults.filter((r: any) => r.position === 1).length;
   const podiums = teamResults.filter((r: any) => r.position <= 3).length;
-  const races = new Set(teamResults.map((r: any) => r.race_id)).size;
+  const races   = new Set(teamResults.map((r: any) => r.race_id)).size;
 
-  // Per driver stats
   const driverStats = members.map((m: any) => {
     const dr = teamResults.filter((r: any) => r.user_id === m.user_id);
     return {
       ...m,
-      races: dr.length,
-      wins: dr.filter((r: any) => r.position === 1).length,
+      races:   dr.length,
+      wins:    dr.filter((r: any) => r.position === 1).length,
       podiums: dr.filter((r: any) => r.position <= 3).length,
-      points: dr.reduce((a: number, r: any) => a + (r.points || 0), 0),
+      points:  dr.reduce((a: number, r: any) => a + (r.points || 0), 0),
     };
   }).sort((a: any, b: any) => b.points - a.points);
 
@@ -85,20 +94,34 @@ const TeamProfilePreview = () => {
       <main className="pt-16">
 
         {/* Preview banner */}
-        <div className="sticky top-16 z-40 flex items-center gap-3 px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>
-          <Link to="/preview" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-500 transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" /> Terug naar preview
-          </Link>
-          <div className="w-px h-3 bg-white/10" />
-          <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Team Profile Preview</span>
+        <div className="sticky top-16 z-40 flex items-center justify-between px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>
+          <div className="flex items-center gap-3">
+            <Link to="/preview" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-500 transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Terug
+            </Link>
+            <div className="w-px h-3 bg-white/10" />
+            <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Team Profile Preview</span>
+          </div>
+          <button
+            onClick={() => setMockMode(m => !m)}
+            className="flex items-center gap-2 px-3 py-1 rounded-lg transition-all text-[11px] font-bold"
+            style={{
+              background: mockMode ? "rgba(168,85,247,0.15)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${mockMode ? "rgba(168,85,247,0.4)" : "rgba(255,255,255,0.08)"}`,
+              color: mockMode ? "#a855f7" : "#4b5563",
+            }}
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            {mockMode ? "Mock data aan" : "Mock data"}
+          </button>
         </div>
 
         {/* Team selector */}
-        {teams.length > 1 && (
+        {activeTeams.length > 1 && (
           <div className="border-b border-white/5 overflow-x-auto">
             <div className="container mx-auto px-4">
               <div className="flex gap-1 py-2">
-                {teams.map((t: any) => (
+                {activeTeams.map((t: any) => (
                   <Link
                     key={t.id}
                     to={`/preview/team?id=${t.id}`}
@@ -126,7 +149,6 @@ const TeamProfilePreview = () => {
 
           <div className="relative container mx-auto px-4 py-12">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-10">
-              {/* Logo */}
               <div
                 className="w-32 h-32 rounded-3xl flex items-center justify-center shrink-0"
                 style={{ background: `${color}15`, border: `2px solid ${color}35` }}
@@ -156,11 +178,8 @@ const TeamProfilePreview = () => {
                 </div>
               </div>
 
-              {/* Big points */}
               <div className="text-right shrink-0">
-                <div className="font-heading font-black text-6xl leading-none" style={{ color }}>
-                  {totalPoints}
-                </div>
+                <div className="font-heading font-black text-6xl leading-none" style={{ color }}>{totalPoints}</div>
                 <div className="text-xs text-gray-600 uppercase tracking-widest mt-1">Championship punten</div>
               </div>
             </div>
@@ -171,10 +190,10 @@ const TeamProfilePreview = () => {
           {/* Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-12">
             {[
-              { label: "Wins", value: wins, accent: wins > 0 ? "#facc15" : null },
-              { label: "Podiums", value: podiums, accent: podiums > 0 ? "#d97706" : null },
-              { label: "Races", value: races, accent: null },
-              { label: "Drivers", value: members.length, accent: null },
+              { label: "Wins",    value: wins,           accent: wins > 0 ? "#facc15" : null },
+              { label: "Podiums", value: podiums,         accent: podiums > 0 ? "#d97706" : null },
+              { label: "Races",   value: races,           accent: null },
+              { label: "Drivers", value: members.length,  accent: null },
             ].map(({ label, value, accent }) => (
               <div key={label} className="rounded-2xl p-5 text-center" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="font-heading font-black text-3xl leading-none mb-1" style={{ color: accent || "#e5e7eb" }}>{value}</div>
