@@ -1,6 +1,6 @@
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
-import UpcomingRaces from "@/components/UpcomingRaces";
+import NextRaceTeaser from "@/components/NextRaceTeaser";
 import StandingsPreview from "@/components/StandingsPreview";
 import LatestResults from "@/components/LatestResults";
 import ChampionshipLeader from "@/components/ChampionshipLeader";
@@ -13,7 +13,7 @@ const Index = () => {
       <Navbar />
       <main className="pt-16">
         <HeroSection />
-        <UpcomingRaces />
+        <NextRaceTeaser />
         <ChampionshipLeader />
         <LatestResults />
         <TopDrivers />
