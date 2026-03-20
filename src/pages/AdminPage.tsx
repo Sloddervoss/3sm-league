@@ -672,6 +672,8 @@ const AdminPage = () => {
 
   const [showSoloRaceForm, setShowSoloRaceForm] = useState(false);
   const [newSoloRace, setNewSoloRace] = useState({ name: "", track: "", date: "", time: "20:00", race_type: "Feature", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", start_type: "Standing", weather: "Fixed", setup: "Fixed" });
+  const [editingSoloRaceId, setEditingSoloRaceId] = useState<string | null>(null);
+  const [editingSoloRaceData, setEditingSoloRaceData] = useState<any>({});
 
   const [newTeam, setNewTeam] = useState({ name: "", description: "", color: "#f97316", logo_url: "" });
   const [newTeamLogoPreview, setNewTeamLogoPreview] = useState<string>("");
@@ -1543,19 +1545,118 @@ const AdminPage = () => {
                   <div className="space-y-3">
                     {(allRaces || []).filter((r: any) => !r.league_id).map((race: any) => {
                       const raceRegs = (raceRegistrations || []).filter((r: any) => r.race_id === race.id);
+                      const isEditingSolo = editingSoloRaceId === race.id;
+                      const srd = editingSoloRaceData;
+                      const setSrd = (field: string, val: string) => setEditingSoloRaceData((prev: any) => ({ ...prev, [field]: val }));
                       return (
-                        <div key={race.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-4">
-                          <div>
-                            <div className="font-heading font-bold">{race.name}</div>
-                            <div className="text-sm text-muted-foreground flex gap-3 mt-0.5">
-                              <span>{race.track}</span>
-                              <span>•</span>
-                              <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                              <span>•</span>
-                              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{raceRegs.length} ingeschreven</span>
+                        <div key={race.id} className="bg-card border border-border rounded-lg p-4">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-heading font-bold">{race.name}</div>
+                              <div className="text-sm text-muted-foreground flex gap-3 mt-0.5 flex-wrap">
+                                <span>{race.track}</span>
+                                <span>•</span>
+                                <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                                <span>•</span>
+                                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{raceRegs.length} ingeschreven</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => {
+                                  if (isEditingSolo) { setEditingSoloRaceId(null); setEditingSoloRaceData({}); }
+                                  else { setEditingSoloRaceId(race.id); setEditingSoloRaceData({ ...race, race_date: race.race_date ? race.race_date.slice(0, 16) : "" }); }
+                                }}
+                                className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => deleteSoloRace.mutate(race.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           </div>
-                          <button onClick={() => deleteSoloRace.mutate(race.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors shrink-0"><Trash2 className="w-4 h-4" /></button>
+
+                          {/* Registrant badges */}
+                          {raceRegs.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-border/50">
+                              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />
+                                Ingeschreven ({raceRegs.length})
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {raceRegs.map((reg: any) => {
+                                  const p = (profiles || []).find((p: any) => p.user_id === reg.user_id);
+                                  return (
+                                    <span key={reg.user_id} className="px-2.5 py-1 rounded-full bg-violet-500/15 text-violet-400 text-xs font-medium border border-violet-500/30">
+                                      {p?.display_name || p?.iracing_name || reg.user_id.slice(0, 8)}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Edit form */}
+                          {isEditingSolo && (
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-3 pt-3 border-t border-border/50 space-y-3">
+                              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Race bewerken</p>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Naam</label>
+                                  <input type="text" value={srd.name || ""} onChange={e => setSrd("name", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Circuit</label>
+                                  <TrackSelect value={srd.track || ""} onChange={v => setSrd("track", v)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Datum & tijd</label>
+                                  <input type="datetime-local" value={srd.race_date || ""} onChange={e => setSrd("race_date", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Race duur</label>
+                                  <input type="text" value={srd.race_duration || ""} onChange={e => setSrd("race_duration", e.target.value)} placeholder="bv. 60 min" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Practice</label>
+                                  <input type="text" value={srd.practice_duration || ""} onChange={e => setSrd("practice_duration", e.target.value)} placeholder="bv. 15 min" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Qualifying</label>
+                                  <input type="text" value={srd.qualifying_duration || ""} onChange={e => setSrd("qualifying_duration", e.target.value)} placeholder="bv. 10 min" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Weather</label>
+                                  <select value={srd.weather || ""} onChange={e => setSrd("weather", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                    <option value="">—</option>
+                                    {["Clear", "Partly Cloudy", "Overcast", "Rain", "Dynamic"].map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Setup</label>
+                                  <select value={srd.setup || ""} onChange={e => setSrd("setup", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                    <option value="">—</option>
+                                    {["Fixed", "Open"].map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Status</label>
+                                  <select value={srd.status || ""} onChange={e => setSrd("status", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
+                                    {["upcoming", "live", "completed"].map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => updateRace.mutate({ id: race.id, data: srd }, { onSuccess: () => { setEditingSoloRaceId(null); setEditingSoloRaceData({}); } })}
+                                  disabled={updateRace.isPending}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-gradient-racing text-white hover:opacity-90 disabled:opacity-50"
+                                >
+                                  <Save className="w-3 h-3" /> Opslaan
+                                </button>
+                                <button onClick={() => { setEditingSoloRaceId(null); setEditingSoloRaceData({}); }} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground border border-border">Annuleren</button>
+                              </div>
+                            </motion.div>
+                          )}
                         </div>
                       );
                     })}
