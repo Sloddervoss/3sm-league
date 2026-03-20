@@ -559,6 +559,7 @@ const TrackSelect = ({ value, onChange, className }: { value: string; onChange: 
 
 const DriversList = () => {
   const queryClient = useQueryClient();
+  const { user: currentUser, isSuperAdmin: currentIsSuperAdmin } = useAuth();
 
   const { data: profiles, isLoading } = useQuery({
     queryKey: ["admin-all-profiles"],
@@ -580,6 +581,8 @@ const DriversList = () => {
 
   const isAdmin = (userId: string) =>
     (userRoles || []).some((r: any) => r.user_id === userId && r.role === "admin");
+  const isSuperAdmin = (userId: string) =>
+    (userRoles || []).some((r: any) => r.user_id === userId && r.role === "super_admin");
 
   const toggleAdmin = useMutation({
     mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
@@ -609,20 +612,29 @@ const DriversList = () => {
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_5rem_3rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_3rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
         <span>Driver</span>
         <span>iRacing ID</span>
         <span>iRating</span>
         <span>Safety</span>
-        <span>Admin</span>
+        <span>Rol</span>
         <span></span>
       </div>
       {profiles?.map((p: any) => {
         const admin = isAdmin(p.user_id);
+        const superAdmin = isSuperAdmin(p.user_id);
+        const isMe = p.user_id === currentUser?.id;
         return (
-          <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_5rem_3rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
+          <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_3rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
             <div>
-              <div className="font-heading font-bold text-sm">{p.display_name || p.iracing_name || "—"}</div>
+              <div className="font-heading font-bold text-sm flex items-center gap-2">
+                {p.display_name || p.iracing_name || "—"}
+                {superAdmin && (
+                  <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded" style={{ background: "rgba(250,204,21,0.12)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)" }}>
+                    ★ Super Admin
+                  </span>
+                )}
+              </div>
               {p.iracing_name && p.display_name !== p.iracing_name && (
                 <div className="text-xs text-muted-foreground">{p.iracing_name}</div>
               )}
@@ -630,21 +642,32 @@ const DriversList = () => {
             <span className="text-xs font-mono text-muted-foreground">{p.iracing_id || "—"}</span>
             <span className="text-sm font-heading font-bold">{p.irating ? p.irating.toLocaleString() : "—"}</span>
             <span className="text-sm text-muted-foreground">{p.safety_rating || "—"}</span>
-            <button
-              onClick={() => toggleAdmin.mutate({ userId: p.user_id, grant: !admin })}
-              disabled={toggleAdmin.isPending}
-              className={`text-xs px-2 py-1 rounded font-bold transition-colors ${admin ? "bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30" : "bg-secondary text-muted-foreground border border-border hover:bg-accent/10 hover:text-accent"}`}
-            >
-              {admin ? "Admin" : "—"}
-            </button>
+            {/* Role toggle: only super_admin can change roles, super_admin row is locked */}
+            {superAdmin ? (
+              <span className="text-xs px-2 py-1 rounded font-bold" style={{ background: "rgba(250,204,21,0.12)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)" }}>
+                Super Admin
+              </span>
+            ) : currentIsSuperAdmin ? (
+              <button
+                onClick={() => toggleAdmin.mutate({ userId: p.user_id, grant: !admin })}
+                disabled={toggleAdmin.isPending}
+                className={`text-xs px-2 py-1 rounded font-bold transition-colors ${admin ? "bg-accent/20 text-accent border border-accent/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30" : "bg-secondary text-muted-foreground border border-border hover:bg-accent/10 hover:text-accent"}`}
+              >
+                {admin ? "Admin" : "—"}
+              </button>
+            ) : (
+              <span className={`text-xs px-2 py-1 rounded font-bold ${admin ? "bg-accent/20 text-accent border border-accent/30" : "text-muted-foreground"}`}>
+                {admin ? "Admin" : "—"}
+              </span>
+            )}
             <button
               onClick={() => {
                 if (confirm(`Weet je zeker dat je ${p.display_name || p.iracing_name} wilt verwijderen?`)) {
                   deleteDriver.mutate(p.user_id);
                 }
               }}
-              disabled={deleteDriver.isPending}
-              className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+              disabled={deleteDriver.isPending || superAdmin || isMe}
+              className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
             >
               <Trash2 className="w-4 h-4" />
             </button>
