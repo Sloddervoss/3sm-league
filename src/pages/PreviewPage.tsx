@@ -19,6 +19,7 @@ import { Eye, Users, Car, Trophy, Calendar, ChevronRight, ExternalLink, FlaskCon
 import {
   MOCK_TEAMS, MOCK_PROFILES, MOCK_STATS, MOCK_STANDINGS, MOCK_MEMBERSHIPS,
 } from "@/lib/mockData";
+import { useMockMode } from "@/lib/useMockMode";
 
 // ── Countdown ──────────────────────────────────────────────
 function useNow() {
@@ -107,7 +108,7 @@ const PreviewBanner = ({ mockMode, onToggle }: BannerProps) => (
 // ══════════════════════════════════════════════════════════
 const PreviewPage = () => {
   const now = useNow();
-  const [mockMode, setMockMode] = useState(false);
+  const [mockMode, setMockMode] = useMockMode();
 
   // ── Data (exact zelfde queries als bestaande pagina's) ──
   const { data: profiles = [] } = useQuery({

@@ -6,16 +6,34 @@ import { useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
-import { MapPin, Clock, CloudSun, Gauge, Users, Trophy, ArrowLeft, Flag, Zap, Timer } from "lucide-react";
+import { MapPin, Clock, CloudSun, Gauge, Users, Trophy, ArrowLeft, Flag, Zap, Timer, FlaskConical } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { getTrackInfo } from "@/lib/trackData";
+import { useMockMode } from "@/lib/useMockMode";
+import { MOCK_TEAMS, MOCK_RACE_DETAIL_RESULTS } from "@/lib/mockData";
 
 const PODIUM = ["#facc15", "#94a3b8", "#d97706"];
+
+// Mock race voor detail view (gebruik Race 1 als completed voorbeeld)
+const MOCK_RACE_DETAIL = {
+  id: "r1",
+  name: "Race 1",
+  track: "Summit Point Raceway",
+  race_date: "2025-04-02T19:00:00Z",
+  status: "completed",
+  weather: "Droog",
+  setup: "Fixed",
+  practice_duration: "20 min",
+  qualifying_duration: "10 min",
+  race_duration: "30 min",
+  leagues: { name: "GT Master Challenge Cup", car_class: "GT3" },
+};
 
 const RaceDetailPreview = () => {
   const [params] = useSearchParams();
   const selectedId = params.get("id");
+  const [mockMode, setMockMode] = useMockMode();
 
   const { data: races = [] } = useQuery({
     queryKey: ["races-with-leagues"],
@@ -25,16 +43,17 @@ const RaceDetailPreview = () => {
     },
   });
 
-  const race: any = selectedId ? races.find((r: any) => r.id === selectedId) : races[0];
+  const realRace: any = selectedId ? races.find((r: any) => r.id === selectedId) : races[0];
+  const race: any = mockMode ? MOCK_RACE_DETAIL : (realRace || MOCK_RACE_DETAIL);
 
-  const { data: raceResults = [] } = useQuery({
-    queryKey: ["race-detail-results", race?.id],
-    enabled: !!race?.id,
+  const { data: realRaceResults = [] } = useQuery({
+    queryKey: ["race-detail-results", realRace?.id],
+    enabled: !!realRace?.id && !mockMode,
     queryFn: async () => {
       const { data } = await supabase
         .from("race_results")
         .select("*, profiles(display_name, iracing_name, team_id)")
-        .eq("race_id", race.id)
+        .eq("race_id", realRace.id)
         .order("position");
       return data || [];
     },
@@ -49,24 +68,17 @@ const RaceDetailPreview = () => {
   });
 
   const { data: regCount } = useQuery({
-    queryKey: ["race-reg-count", race?.id],
-    enabled: !!race?.id,
+    queryKey: ["race-reg-count", realRace?.id],
+    enabled: !!realRace?.id && !mockMode,
     queryFn: async () => {
-      const { count } = await (supabase as any).from("race_registrations").select("id", { count: "exact" }).eq("race_id", race.id);
+      const { count } = await (supabase as any).from("race_registrations").select("id", { count: "exact" }).eq("race_id", realRace.id);
       return count || 0;
     },
   });
 
-  if (!race) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#08080f" }}>
-        <div className="text-center">
-          <p className="text-gray-600 text-sm mb-4">Geen race geselecteerd</p>
-          <Link to="/preview" className="text-orange-500 text-sm hover:underline">← Terug naar preview</Link>
-        </div>
-      </div>
-    );
-  }
+  const activeTeams = mockMode ? MOCK_TEAMS : teams;
+  const raceResults = mockMode ? MOCK_RACE_DETAIL_RESULTS : realRaceResults;
+  const activeRegCount = mockMode ? 6 : (regCount || 0);
 
   const trackInfo = getTrackInfo(race.track);
   const raceDate = new Date(race.race_date);
@@ -89,16 +101,30 @@ const RaceDetailPreview = () => {
       <main className="pt-16">
 
         {/* Preview banner */}
-        <div className="sticky top-16 z-40 flex items-center gap-3 px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>
-          <Link to="/preview" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-500 transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" /> Terug naar preview
-          </Link>
-          <div className="w-px h-3 bg-white/10" />
-          <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Race Detail Preview</span>
+        <div className="sticky top-16 z-40 flex items-center justify-between px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>
+          <div className="flex items-center gap-3">
+            <Link to="/preview" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-500 transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Terug
+            </Link>
+            <div className="w-px h-3 bg-white/10" />
+            <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Race Detail Preview</span>
+          </div>
+          <button
+            onClick={() => setMockMode(m => !m)}
+            className="flex items-center gap-2 px-3 py-1 rounded-lg transition-all text-[11px] font-bold"
+            style={{
+              background: mockMode ? "rgba(168,85,247,0.15)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${mockMode ? "rgba(168,85,247,0.4)" : "rgba(255,255,255,0.08)"}`,
+              color: mockMode ? "#a855f7" : "#4b5563",
+            }}
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            {mockMode ? "Mock data aan" : "Mock data"}
+          </button>
         </div>
 
-        {/* Race selector */}
-        {races.length > 1 && (
+        {/* Race selector (alleen echte races in de tabs, mock data toont altijd Race 1) */}
+        {races.length > 1 && !mockMode && (
           <div className="border-b border-white/5 overflow-x-auto">
             <div className="container mx-auto px-4">
               <div className="flex gap-1 py-2">
@@ -108,7 +134,7 @@ const RaceDetailPreview = () => {
                     to={`/preview/race?id=${r.id}`}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors"
                     style={
-                      r.id === race.id
+                      r.id === realRace?.id
                         ? { background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)" }
                         : { color: "#6b7280", border: "1px solid transparent" }
                     }
@@ -123,7 +149,6 @@ const RaceDetailPreview = () => {
 
         {/* Hero */}
         <div className="relative overflow-hidden" style={{ minHeight: 320 }}>
-          {/* Circuit image background */}
           {trackInfo?.imageUrl && (
             <div className="absolute inset-0 flex items-center justify-end">
               <img
@@ -141,7 +166,6 @@ const RaceDetailPreview = () => {
           <div className="relative container mx-auto px-4 py-12">
             <div className="flex flex-col lg:flex-row gap-8 items-start">
               <div className="flex-1 min-w-0">
-                {/* Status + league */}
                 <div className="flex items-center gap-3 mb-3">
                   <span
                     className="text-xs font-bold px-2.5 py-1 rounded-full"
@@ -152,14 +176,10 @@ const RaceDetailPreview = () => {
                   >
                     {race.status === "completed" ? "Afgelopen" : race.status === "live" ? "🔴 LIVE" : "Upcoming"}
                   </span>
-                  {race.leagues && (
-                    <span className="text-xs text-gray-600">{race.leagues.name}</span>
-                  )}
+                  {race.leagues && <span className="text-xs text-gray-600">{race.leagues.name}</span>}
                 </div>
 
-                <h1 className="font-heading font-black text-4xl md:text-5xl text-white leading-none mb-4">
-                  {race.name}
-                </h1>
+                <h1 className="font-heading font-black text-4xl md:text-5xl text-white leading-none mb-4">{race.name}</h1>
 
                 <div className="flex items-center gap-2 mb-4 text-gray-400">
                   <MapPin className="w-4 h-4 text-orange-500" />
@@ -174,8 +194,8 @@ const RaceDetailPreview = () => {
                     <span className="font-bold text-orange-400 px-2 py-0.5 rounded" style={{ background: "rgba(249,115,22,0.08)" }}>{timeStr}</span>
                   </div>
                   {race.weather && <div className="flex items-center gap-1.5"><CloudSun className="w-4 h-4" />{race.weather}</div>}
-                  {race.setup && <div className="flex items-center gap-1.5"><Gauge className="w-4 h-4" />{race.setup}</div>}
-                  {regCount > 0 && <div className="flex items-center gap-1.5"><Users className="w-4 h-4" />{regCount} deelnemers</div>}
+                  {race.setup  && <div className="flex items-center gap-1.5"><Gauge className="w-4 h-4" />{race.setup}</div>}
+                  {activeRegCount > 0 && <div className="flex items-center gap-1.5"><Users className="w-4 h-4" />{activeRegCount} deelnemers</div>}
                 </div>
 
                 {sessions.length > 0 && (
@@ -189,17 +209,12 @@ const RaceDetailPreview = () => {
                 )}
               </div>
 
-              {/* Track map large */}
               {trackInfo?.imageUrl && (
                 <div
                   className="w-64 h-64 rounded-2xl shrink-0 flex items-center justify-center"
                   style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
                 >
-                  <img
-                    src={trackInfo.imageUrl}
-                    alt={race.track}
-                    className="w-56 h-56 object-contain invert opacity-60"
-                  />
+                  <img src={trackInfo.imageUrl} alt={race.track} className="w-56 h-56 object-contain invert opacity-60" />
                 </div>
               )}
             </div>
@@ -208,7 +223,7 @@ const RaceDetailPreview = () => {
 
         <div className="container mx-auto px-4 py-10">
 
-          {/* Summary stats (alleen als completed) */}
+          {/* Summary stats */}
           {race.status === "completed" && raceResults.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">
               {[
@@ -219,7 +234,7 @@ const RaceDetailPreview = () => {
               ].map(({ label, value, accent, icon }) => (
                 <div key={label} className="rounded-2xl p-5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
                   <div className="flex items-center gap-2 mb-2 text-gray-600" style={{ color: accent || undefined }}>{icon}<span className="text-[10px] uppercase tracking-widest">{label}</span></div>
-                  <div className="font-heading font-black text-xl text-white" style={{ color: accent || "#e5e7eb" }}>{value}</div>
+                  <div className="font-heading font-black text-xl" style={{ color: accent || "#e5e7eb" }}>{value}</div>
                 </div>
               ))}
             </div>
@@ -241,7 +256,7 @@ const RaceDetailPreview = () => {
                 </div>
                 {raceResults.map((r: any, i: number) => {
                   const posColor = r.position <= 3 ? PODIUM[r.position - 1] : (r.dnf ? "#ef4444" : "#6b7280");
-                  const team = teams.find((t: any) => t.id === r.profiles?.team_id);
+                  const team = activeTeams.find((t: any) => t.id === r.profiles?.team_id);
                   return (
                     <motion.div
                       key={r.id || i}

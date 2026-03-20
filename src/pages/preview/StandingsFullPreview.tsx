@@ -7,17 +7,20 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
-import { Trophy, Users, Car, ArrowLeft, Medal, TrendingUp } from "lucide-react";
+import { Trophy, Users, Car, ArrowLeft, FlaskConical } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { useMockMode } from "@/lib/useMockMode";
+import { MOCK_LEAGUE, MOCK_STANDINGS_FULL, MOCK_TEAM_STANDINGS } from "@/lib/mockData";
 
-const PODIUM_C = ["#facc15", "#94a3b8", "#d97706"];
-const PODIUM_BG = ["rgba(250,204,21,0.08)", "rgba(148,163,184,0.06)", "rgba(217,119,6,0.07)"];
+const PODIUM_C      = ["#facc15", "#94a3b8", "#d97706"];
+const PODIUM_BG     = ["rgba(250,204,21,0.08)", "rgba(148,163,184,0.06)", "rgba(217,119,6,0.07)"];
 const PODIUM_BORDER = ["rgba(250,204,21,0.2)", "rgba(148,163,184,0.15)", "rgba(217,119,6,0.15)"];
 
 const StandingsFullPreview = () => {
   const [activeLeague, setActiveLeague] = useState<string | null>(null);
   const [view, setView] = useState<"drivers" | "teams">("drivers");
+  const [mockMode, setMockMode] = useMockMode();
 
   const { data: leagues = [] } = useQuery({
     queryKey: ["leagues-for-standings"],
@@ -27,7 +30,7 @@ const StandingsFullPreview = () => {
     },
   });
 
-  const leagueId = activeLeague ?? leagues[0]?.id ?? null;
+  const leagueId = activeLeague ?? (mockMode ? MOCK_LEAGUE.id : (leagues[0]?.id ?? null));
 
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
@@ -37,9 +40,9 @@ const StandingsFullPreview = () => {
     },
   });
 
-  const { data: standings = [], isLoading } = useQuery({
+  const { data: realStandings = [], isLoading } = useQuery({
     queryKey: ["standings-full", leagueId],
-    enabled: !!leagueId,
+    enabled: !!leagueId && !mockMode,
     queryFn: async () => {
       const { data: res } = await supabase.from("race_results").select("user_id, position, points, incidents, fastest_lap, race_id, races(league_id)");
       const filtered = (res || []).filter((r: any) => r.races?.league_id === leagueId);
@@ -60,20 +63,14 @@ const StandingsFullPreview = () => {
         const s = map.get(uid)!;
         const prof = (profs || []).find((p: any) => p.user_id === uid);
         const team = teams.find((t: any) => t.id === prof?.team_id);
-        return {
-          user_id: uid,
-          display_name: prof?.display_name || "Unknown",
-          irating: prof?.irating,
-          team,
-          ...s,
-        };
+        return { user_id: uid, display_name: prof?.display_name || "Unknown", irating: prof?.irating, team, ...s };
       }).sort((a, b) => b.points - a.points);
     },
   });
 
-  const { data: teamStandings = [] } = useQuery({
+  const { data: realTeamStandings = [] } = useQuery({
     queryKey: ["team-standings-full", leagueId, teams],
-    enabled: !!leagueId && teams.length > 0,
+    enabled: !!leagueId && teams.length > 0 && !mockMode,
     queryFn: async () => {
       const { data: res } = await supabase.from("race_results").select("user_id, position, points, race_id, races(league_id)");
       const filtered = (res || []).filter((r: any) => r.races?.league_id === leagueId);
@@ -93,12 +90,14 @@ const StandingsFullPreview = () => {
     },
   });
 
+  const standings     = mockMode ? MOCK_STANDINGS_FULL  : realStandings;
+  const teamStandings = mockMode ? MOCK_TEAM_STANDINGS   : realTeamStandings;
+  const activeLeagues = mockMode ? [MOCK_LEAGUE]          : leagues;
+
   const top3Driver = [standings[1], standings[0], standings[2]];
-  const top3Team = [teamStandings[1], teamStandings[0], teamStandings[2]];
-  const topPodium = view === "drivers" ? top3Driver : top3Team;
+  const top3Team   = [teamStandings[1], teamStandings[0], teamStandings[2]];
+  const topPodium  = view === "drivers" ? top3Driver : top3Team;
   const actualRanks = [2, 1, 3];
-  const restDrivers = standings.slice(3);
-  const restTeams = teamStandings.slice(3);
 
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>
@@ -106,12 +105,26 @@ const StandingsFullPreview = () => {
       <main className="pt-16">
 
         {/* Preview banner */}
-        <div className="sticky top-16 z-40 flex items-center gap-3 px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>
-          <Link to="/preview" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-500 transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" /> Terug naar preview
-          </Link>
-          <div className="w-px h-3 bg-white/10" />
-          <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Standings Preview</span>
+        <div className="sticky top-16 z-40 flex items-center justify-between px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>
+          <div className="flex items-center gap-3">
+            <Link to="/preview" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-500 transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Terug
+            </Link>
+            <div className="w-px h-3 bg-white/10" />
+            <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Standings Preview</span>
+          </div>
+          <button
+            onClick={() => setMockMode(m => !m)}
+            className="flex items-center gap-2 px-3 py-1 rounded-lg transition-all text-[11px] font-bold"
+            style={{
+              background: mockMode ? "rgba(168,85,247,0.15)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${mockMode ? "rgba(168,85,247,0.4)" : "rgba(255,255,255,0.08)"}`,
+              color: mockMode ? "#a855f7" : "#4b5563",
+            }}
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            {mockMode ? "Mock data aan" : "Mock data"}
+          </button>
         </div>
 
         {/* Header */}
@@ -129,13 +142,12 @@ const StandingsFullPreview = () => {
           </div>
         </div>
 
-        {/* League tabs + driver/team toggle */}
+        {/* League tabs + toggle */}
         <div className="sticky top-[calc(4rem+2.25rem)] z-30 border-b border-white/5" style={{ background: "rgba(8,8,15,0.95)", backdropFilter: "blur(12px)" }}>
           <div className="container mx-auto px-4">
             <div className="flex items-center justify-between py-2">
-              {/* League tabs */}
               <div className="flex gap-1 overflow-x-auto">
-                {leagues.map((l: any) => (
+                {activeLeagues.map((l: any) => (
                   <button
                     key={l.id}
                     onClick={() => setActiveLeague(l.id)}
@@ -151,8 +163,6 @@ const StandingsFullPreview = () => {
                   </button>
                 ))}
               </div>
-
-              {/* Driver / Team toggle */}
               <div className="flex items-center gap-1 p-1 rounded-lg shrink-0" style={{ background: "rgba(255,255,255,0.05)" }}>
                 <button
                   onClick={() => setView("drivers")}
@@ -174,12 +184,11 @@ const StandingsFullPreview = () => {
         </div>
 
         <div className="container mx-auto px-4 py-12">
-          {isLoading ? (
+          {isLoading && !mockMode ? (
             <div className="animate-pulse space-y-3">
               {[1,2,3,4,5].map(i => <div key={i} className="h-14 rounded-xl bg-white/5" />)}
             </div>
           ) : (
-
             <>
               {/* Podium */}
               {topPodium.filter(Boolean).length >= 2 && (
@@ -190,7 +199,7 @@ const StandingsFullPreview = () => {
                     const c = PODIUM_C[rank - 1];
                     const isCenter = vi === 1;
                     const name = view === "drivers" ? item.display_name : item.name;
-                    const pts = view === "drivers" ? item.points : item.points;
+                    const pts  = item.points;
                     const delta = (topPodium[1] as any)?.points - pts;
 
                     return (
@@ -202,7 +211,6 @@ const StandingsFullPreview = () => {
                         className={`rounded-2xl p-5 text-center ${isCenter ? "pt-7 pb-7" : ""}`}
                         style={{ background: PODIUM_BG[rank-1], border: `1px solid ${PODIUM_BORDER[rank-1]}`, boxShadow: isCenter ? `0 8px 40px ${c}20` : "none" }}
                       >
-                        {/* Team color for team view */}
                         {view === "teams" && item.color && (
                           <div className="w-8 h-8 rounded-full mx-auto mb-2" style={{ background: item.color, boxShadow: `0 0 12px ${item.color}50` }} />
                         )}
@@ -236,14 +244,15 @@ const StandingsFullPreview = () => {
                 >
                   <span>Pos</span>
                   <span>{view === "drivers" ? "Driver" : "Team"}</span>
-                  {view === "drivers" ? <><span className="text-center">Races</span><span className="text-center">Wins</span><span className="text-center">FL</span></> : <span className="text-center">Wins</span>}
+                  {view === "drivers"
+                    ? <><span className="text-center">Races</span><span className="text-center">Wins</span><span className="text-center">FL</span></>
+                    : <span className="text-center">Wins</span>}
                   <span className="text-center">PTS</span>
                 </div>
 
                 {(view === "drivers" ? standings : teamStandings).map((item: any, i: number) => {
                   const podColor = i < 3 ? PODIUM_C[i] : null;
                   const name = view === "drivers" ? item.display_name : item.name;
-
                   return (
                     <motion.div
                       key={item.user_id || item.id}
@@ -264,7 +273,6 @@ const StandingsFullPreview = () => {
                       >
                         {i + 1}
                       </div>
-
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           {i === 0 && <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />}
@@ -280,7 +288,6 @@ const StandingsFullPreview = () => {
                           </div>
                         )}
                       </div>
-
                       {view === "drivers" ? (
                         <>
                           <div className="text-center text-xs text-gray-600">{item.races}</div>
@@ -290,7 +297,6 @@ const StandingsFullPreview = () => {
                       ) : (
                         <div className="text-center font-bold text-sm" style={{ color: item.wins > 0 ? "#facc15" : "#4b5563" }}>{item.wins}</div>
                       )}
-
                       <div className="text-center font-heading font-black text-base" style={{ color: podColor || "#d1d5db" }}>
                         {item.points}
                       </div>

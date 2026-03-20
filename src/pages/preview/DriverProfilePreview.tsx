@@ -6,9 +6,11 @@ import { useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
-import { TrendingUp, Shield, Trophy, Flag, Zap, ArrowLeft, Users, AlertTriangle, Medal } from "lucide-react";
+import { TrendingUp, Shield, Trophy, Flag, Zap, ArrowLeft, Users, AlertTriangle, Medal, FlaskConical } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { useMockMode } from "@/lib/useMockMode";
+import { MOCK_PROFILES, MOCK_TEAMS, MOCK_DRIVER_RESULTS } from "@/lib/mockData";
 
 const SAFETY_COLOR: Record<string, string> = {
   A: "#22c55e", B: "#eab308", C: "#f97316", D: "#ef4444",
@@ -25,26 +27,12 @@ const StatBox = ({ label, value, accent }: { label: string; value: React.ReactNo
 const DriverProfilePreview = () => {
   const [params] = useSearchParams();
   const selectedId = params.get("id");
+  const [mockMode, setMockMode] = useMockMode();
 
   const { data: profiles = [] } = useQuery({
     queryKey: ["drivers"],
     queryFn: async () => {
       const { data } = await supabase.from("confirmed_profiles").select("*");
-      return data || [];
-    },
-  });
-
-  const driver = selectedId ? profiles.find((p: any) => p.user_id === selectedId) : profiles[0];
-
-  const { data: raceResults = [] } = useQuery({
-    queryKey: ["driver-race-results", driver?.user_id],
-    enabled: !!driver?.user_id,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("race_results")
-        .select("*, races(name, track, race_date, league_id, leagues(name))")
-        .eq("user_id", driver.user_id)
-        .order("races(race_date)", { ascending: false });
       return data || [];
     },
   });
@@ -57,11 +45,34 @@ const DriverProfilePreview = () => {
     },
   });
 
-  const team = driver ? teams.find((t: any) => t.id === driver.team_id) : null;
+  const activeProfiles = mockMode ? MOCK_PROFILES : profiles;
+  const activeTeams    = mockMode ? MOCK_TEAMS    : teams;
+
+  const driver: any = selectedId
+    ? activeProfiles.find((p: any) => p.user_id === selectedId)
+    : activeProfiles[0];
+
+  const { data: realRaceResults = [] } = useQuery({
+    queryKey: ["driver-race-results", driver?.user_id],
+    enabled: !!driver?.user_id && !mockMode,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("race_results")
+        .select("*, races(name, track, race_date, league_id, leagues(name))")
+        .eq("user_id", driver.user_id)
+        .order("races(race_date)", { ascending: false });
+      return data || [];
+    },
+  });
+
+  const raceResults = mockMode
+    ? (MOCK_DRIVER_RESULTS[driver?.user_id] || [])
+    : realRaceResults;
+
+  const team = driver ? activeTeams.find((t: any) => t.id === driver.team_id) : null;
   const safetyLetter = (driver?.safety_rating || "").split(" ")[0] || "?";
   const safColor = SAFETY_COLOR[safetyLetter] || "#6b7280";
 
-  // Berekende stats
   const wins = raceResults.filter((r: any) => r.position === 1).length;
   const podiums = raceResults.filter((r: any) => r.position <= 3).length;
   const totalPoints = raceResults.reduce((acc: number, r: any) => acc + (r.points || 0), 0);
@@ -91,20 +102,34 @@ const DriverProfilePreview = () => {
       <main className="pt-16">
 
         {/* Preview banner */}
-        <div className="sticky top-16 z-40 flex items-center gap-3 px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>
-          <Link to="/preview" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-500 transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" /> Terug naar preview
-          </Link>
-          <div className="w-px h-3 bg-white/10" />
-          <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Driver Profile Preview</span>
+        <div className="sticky top-16 z-40 flex items-center justify-between px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>
+          <div className="flex items-center gap-3">
+            <Link to="/preview" className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-orange-500 transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> Terug
+            </Link>
+            <div className="w-px h-3 bg-white/10" />
+            <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Driver Profile Preview</span>
+          </div>
+          <button
+            onClick={() => setMockMode(m => !m)}
+            className="flex items-center gap-2 px-3 py-1 rounded-lg transition-all text-[11px] font-bold"
+            style={{
+              background: mockMode ? "rgba(168,85,247,0.15)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${mockMode ? "rgba(168,85,247,0.4)" : "rgba(255,255,255,0.08)"}`,
+              color: mockMode ? "#a855f7" : "#4b5563",
+            }}
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            {mockMode ? "Mock data aan" : "Mock data"}
+          </button>
         </div>
 
-        {/* Driver selector (als er meerdere zijn) */}
-        {profiles.length > 1 && (
+        {/* Driver selector */}
+        {activeProfiles.length > 1 && (
           <div className="border-b border-white/5 overflow-x-auto">
             <div className="container mx-auto px-4">
               <div className="flex gap-1 py-2">
-                {profiles.map((p: any) => (
+                {activeProfiles.map((p: any) => (
                   <Link
                     key={p.user_id}
                     to={`/preview/driver?id=${p.user_id}`}
@@ -131,7 +156,6 @@ const DriverProfilePreview = () => {
 
           <div className="relative container mx-auto px-4 py-12">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
-              {/* Avatar placeholder */}
               <div
                 className="w-24 h-24 rounded-3xl flex items-center justify-center font-heading font-black text-3xl shrink-0"
                 style={{ background: `${teamColor}20`, border: `2px solid ${teamColor}40`, color: teamColor }}
@@ -179,7 +203,6 @@ const DriverProfilePreview = () => {
                 </div>
               </div>
 
-              {/* Total points big */}
               <div className="text-right shrink-0">
                 <div className="font-heading font-black text-6xl leading-none" style={{ color: teamColor }}>
                   {totalPoints}
@@ -193,10 +216,10 @@ const DriverProfilePreview = () => {
         {/* Stats grid */}
         <div className="container mx-auto px-4 py-10">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-12">
-            <StatBox label="Races" value={raceResults.length} />
-            <StatBox label="Wins" value={wins} accent={wins > 0 ? "#facc15" : undefined} />
-            <StatBox label="Podiums" value={podiums} accent={podiums > 0 ? "#d97706" : undefined} />
-            <StatBox label="Beste finish" value={bestFinish ? `P${bestFinish}` : "—"} accent={bestFinish === 1 ? "#facc15" : undefined} />
+            <StatBox label="Races"          value={raceResults.length} />
+            <StatBox label="Wins"           value={wins}        accent={wins > 0 ? "#facc15" : undefined} />
+            <StatBox label="Podiums"        value={podiums}     accent={podiums > 0 ? "#d97706" : undefined} />
+            <StatBox label="Beste finish"   value={bestFinish ? `P${bestFinish}` : "—"} accent={bestFinish === 1 ? "#facc15" : undefined} />
             <StatBox label="Snelste ronden" value={fastestLaps} accent={fastestLaps > 0 ? "#a855f7" : undefined} />
             <StatBox label="Gem. incidents" value={avgInc} />
           </div>
@@ -256,14 +279,9 @@ const DriverProfilePreview = () => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.04 }}
                     className="grid gap-2 px-5 py-3.5 items-center"
-                    style={{
-                      gridTemplateColumns: "3rem 1fr 5rem 4rem 5rem 5rem",
-                      borderTop: "1px solid rgba(255,255,255,0.04)",
-                    }}
+                    style={{ gridTemplateColumns: "3rem 1fr 5rem 4rem 5rem 5rem", borderTop: "1px solid rgba(255,255,255,0.04)" }}
                   >
-                    <div className="font-heading font-black text-base" style={{ color: posColor }}>
-                      P{r.position}
-                    </div>
+                    <div className="font-heading font-black text-base" style={{ color: posColor }}>P{r.position}</div>
                     <div>
                       <div className="text-sm font-bold text-white truncate">{r.races?.name || "—"}</div>
                       <div className="text-[10px] text-gray-600">{r.races?.leagues?.name}</div>
