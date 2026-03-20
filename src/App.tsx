@@ -16,6 +16,7 @@ import StewardPage from "./pages/StewardPage.tsx";
 import AuthPage from "./pages/AuthPage.tsx";
 import AdminPage from "./pages/AdminPage.tsx";
 import ProfilePage from "./pages/ProfilePage.tsx";
+import PreviewPage from "./pages/PreviewPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient({
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/preview" element={<PreviewPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
