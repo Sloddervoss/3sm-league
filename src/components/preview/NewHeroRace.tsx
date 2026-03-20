@@ -68,7 +68,7 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
           alt=""
           aria-hidden
           className="absolute right-6 top-1/2 -translate-y-1/2 w-64 h-64 object-contain select-none pointer-events-none hidden md:block"
-          style={{ opacity: 0.28, filter: "invert(1) brightness(2)", mixBlendMode: "screen" }}
+          style={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
       )}
