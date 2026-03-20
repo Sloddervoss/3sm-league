@@ -129,3 +129,12 @@ export const MOCK_RACE_DETAIL_RESULTS = [
 
 // Alle resultaten gecombineerd (voor TeamProfilePreview)
 export const MOCK_ALL_RESULTS = Object.values(MOCK_DRIVER_RESULTS).flat();
+
+// Mock deelnemers voor upcoming race (ingeschreven via race of seizoen)
+export const MOCK_RACE_REGISTRANTS = [
+  { user_id: "u1", display_name: "Vincent de Vos",  team_id: "t1" },
+  { user_id: "u2", display_name: "Sander van Dijk", team_id: "t1" },
+  { user_id: "u3", display_name: "Lars Hoekstra",   team_id: "t2" },
+  { user_id: "u4", display_name: "Daan Vermeulen",  team_id: "t2" },
+  { user_id: "u6", display_name: "Rick Brouwers",   team_id: "t3" },
+];

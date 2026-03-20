@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { MapPin, Clock, Timer, CloudSun, Zap } from "lucide-react";
+import { MapPin, Clock, Timer, CloudSun, Zap, CheckCircle2 } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
 
@@ -21,6 +21,7 @@ interface Props {
   race: Race;
   index?: number;
   countdown?: string | null;
+  isRegistered?: boolean;
   onSelect?: () => void;
 }
 
@@ -36,7 +37,7 @@ const SESSION_COLORS: Record<string, { color: string; bg: string }> = {
   R: { color: "#f97316", bg: "rgba(249,115,22,0.12)" },
 };
 
-const NewRaceCard = ({ race, index = 0, countdown, onSelect }: Props) => {
+const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Props) => {
   const trackInfo = getTrackInfo(race.track);
   const trackPhoto = getTrackPhoto(race.track);
   const st = STATUS[race.status as keyof typeof STATUS] || STATUS.upcoming;
@@ -96,6 +97,15 @@ const NewRaceCard = ({ race, index = 0, countdown, onSelect }: Props) => {
           >
             {st.label}
           </span>
+          {isRegistered && race.status === "upcoming" && (
+            <span
+              className="shrink-0 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}
+            >
+              <CheckCircle2 className="w-2.5 h-2.5" />
+              Ingeschreven
+            </span>
+          )}
         </div>
 
         {/* Track */}

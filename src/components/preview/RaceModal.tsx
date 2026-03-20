@@ -4,10 +4,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
-import { MapPin, Clock, CloudSun, Gauge, Users, Trophy, Flag, Zap } from "lucide-react";
+import { MapPin, Clock, CloudSun, Gauge, Users, Trophy, Flag, Zap, LogIn, LogOut, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
-import { MOCK_TEAMS, MOCK_RACE_DETAIL_RESULTS } from "@/lib/mockData";
+import { MOCK_TEAMS, MOCK_RACE_DETAIL_RESULTS, MOCK_RACE_REGISTRANTS } from "@/lib/mockData";
 
 const PODIUM = ["#facc15", "#94a3b8", "#d97706"];
 
@@ -25,12 +25,22 @@ interface Race {
   leagues?: { name: string; car_class?: string };
 }
 
+interface RegistrationProps {
+  isRegistered: boolean;
+  isRegisteredViaSeason: boolean;
+  profileComplete: boolean;
+  isLoading?: boolean;
+  onRegister: () => void;
+  onUnregister: () => void;
+}
+
 interface Props {
   race: Race;
   mockMode?: boolean;
+  registration?: RegistrationProps;
 }
 
-const RaceModal = ({ race, mockMode = false }: Props) => {
+const RaceModal = ({ race, mockMode = false, registration }: Props) => {
   const { data: realResults = [] } = useQuery({
     queryKey: ["race-modal-results", race.id],
     enabled: !mockMode,
@@ -52,19 +62,29 @@ const RaceModal = ({ race, mockMode = false }: Props) => {
     },
   });
 
-  const { data: regCount } = useQuery({
-    queryKey: ["race-modal-reg", race.id],
-    enabled: !mockMode,
+  const { data: registrants = [] } = useQuery({
+    queryKey: ["race-modal-registrants", race.id],
+    enabled: !mockMode && race.status !== "completed",
     queryFn: async () => {
-      const { count } = await (supabase as any)
-        .from("race_registrations").select("id", { count: "exact" }).eq("race_id", race.id);
-      return count || 0;
+      const { data } = await (supabase as any)
+        .from("race_registrations")
+        .select("user_id, profiles(display_name, iracing_name, team_id)")
+        .eq("race_id", race.id);
+      return (data || []).map((r: any) => ({
+        user_id: r.user_id,
+        display_name: r.profiles?.display_name || r.profiles?.iracing_name || "Unknown",
+        team_id: r.profiles?.team_id,
+      }));
     },
   });
 
-  const activeTeams   = mockMode ? MOCK_TEAMS : teams;
-  const results       = mockMode ? MOCK_RACE_DETAIL_RESULTS : realResults;
-  const activeRegCount = mockMode ? 6 : (regCount || 0);
+  const activeTeams    = mockMode ? MOCK_TEAMS : teams;
+  const results        = mockMode && race.status === "completed" ? MOCK_RACE_DETAIL_RESULTS : realResults;
+  const activeRegistrants = mockMode ? MOCK_RACE_REGISTRANTS : registrants;
+  const activeRegCount = mockMode ? MOCK_RACE_REGISTRANTS.length : registrants.length;
+
+  const showResults    = race.status === "completed" && results.length > 0;
+  const showRegistrants = !showResults;
 
   const trackInfo  = getTrackInfo(race.track);
   const trackPhoto = getTrackPhoto(race.track);
@@ -138,32 +158,81 @@ const RaceModal = ({ race, mockMode = false }: Props) => {
               ))}
             </div>
           )}
+
+          {/* Registration button — only for upcoming races */}
+          {registration && race.status === "upcoming" && (
+            <div className="mt-5 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+              {!registration.profileComplete ? (
+                <div className="flex items-center gap-2 text-sm text-yellow-500/80 px-4 py-2.5 rounded-xl w-fit"
+                  style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.15)" }}>
+                  <AlertCircle className="w-4 h-4" />
+                  Vul eerst je iRacing profiel in om je in te schrijven
+                </div>
+              ) : registration.isRegisteredViaSeason ? (
+                <div className="flex items-center gap-2 text-sm font-bold text-green-400 px-4 py-2.5 rounded-xl w-fit"
+                  style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                  <CheckCircle2 className="w-4 h-4" />
+                  Ingeschreven via seizoensregistratie
+                </div>
+              ) : registration.isRegistered ? (
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-sm font-bold text-green-400">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Ingeschreven voor deze race
+                  </div>
+                  <button
+                    onClick={registration.onUnregister}
+                    disabled={registration.isLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                    style={{ background: "rgba(107,114,128,0.1)", border: "1px solid rgba(107,114,128,0.2)", color: "#6b7280", opacity: registration.isLoading ? 0.6 : 1 }}
+                  >
+                    {registration.isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
+                    Uitschrijven
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={registration.onRegister}
+                  disabled={registration.isLoading}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all"
+                  style={{
+                    background: "rgba(249,115,22,0.15)",
+                    border: "1px solid rgba(249,115,22,0.35)",
+                    color: "#f97316",
+                    opacity: registration.isLoading ? 0.6 : 1,
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(249,115,22,0.25)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(249,115,22,0.15)"; }}
+                >
+                  {registration.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+                  Schrijf in voor deze race
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div className="px-8 pb-8">
 
-        {/* Summary stats bij completed race */}
-        {race.status === "completed" && results.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-            {[
-              { label: "Winner",        value: winner?.profiles?.display_name || "—",      accent: "#facc15", icon: <Trophy className="w-4 h-4" /> },
-              { label: "Snelste ronde", value: fastestLap?.profiles?.display_name || "—",  accent: "#a855f7", icon: <Zap className="w-4 h-4" /> },
-              { label: "Starters",      value: results.length,                              accent: null,      icon: <Users className="w-4 h-4" /> },
-              { label: "DNF's",         value: dnfCount,                                    accent: dnfCount > 0 ? "#ef4444" : null, icon: <Flag className="w-4 h-4" /> },
-            ].map(({ label, value, accent, icon }) => (
-              <div key={label} className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                <div className="flex items-center gap-2 mb-1.5" style={{ color: accent || "#6b7280" }}>{icon}<span className="text-[10px] uppercase tracking-widest text-gray-600">{label}</span></div>
-                <div className="font-heading font-black text-lg text-white" style={{ color: accent || "#e5e7eb" }}>{value}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* ── COMPLETED: summary stats + uitslag ── */}
+        {showResults && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+              {[
+                { label: "Winner",        value: winner?.profiles?.display_name || "—",      accent: "#facc15", icon: <Trophy className="w-4 h-4" /> },
+                { label: "Snelste ronde", value: fastestLap?.profiles?.display_name || "—",  accent: "#a855f7", icon: <Zap className="w-4 h-4" /> },
+                { label: "Starters",      value: results.length,                              accent: null,      icon: <Users className="w-4 h-4" /> },
+                { label: "DNF's",         value: dnfCount,                                    accent: dnfCount > 0 ? "#ef4444" : null, icon: <Flag className="w-4 h-4" /> },
+              ].map(({ label, value, accent, icon }) => (
+                <div key={label} className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="flex items-center gap-2 mb-1.5" style={{ color: accent || "#6b7280" }}>{icon}<span className="text-[10px] uppercase tracking-widest text-gray-600">{label}</span></div>
+                  <div className="font-heading font-black text-lg text-white" style={{ color: accent || "#e5e7eb" }}>{value}</div>
+                </div>
+              ))}
+            </div>
 
-        {/* Results table */}
-        {results.length > 0 ? (
-          <div>
             <div className="flex items-center gap-2 mb-4">
               <Trophy className="w-4 h-4 text-orange-500" />
               <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Race Uitslag</span>
@@ -212,10 +281,68 @@ const RaceModal = ({ race, mockMode = false }: Props) => {
                 );
               })}
             </div>
-          </div>
-        ) : (
-          <div className="text-center py-10 text-gray-700 text-sm">
-            {race.status === "upcoming" ? "Race nog niet gereden" : "Geen resultaten beschikbaar"}
+          </>
+        )}
+
+        {/* ── UPCOMING / LIVE: deelnemers ── */}
+        {showRegistrants && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-orange-500" />
+                <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Ingeschreven</span>
+              </div>
+              {activeRegistrants.length > 0 && (
+                <span className="text-xs text-gray-600">{activeRegistrants.length} deelnemer{activeRegistrants.length !== 1 ? "s" : ""}</span>
+              )}
+            </div>
+
+            {activeRegistrants.length > 0 ? (
+              <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                {activeRegistrants.map((r: any, i: number) => {
+                  const team = activeTeams.find((t: any) => t.id === r.team_id);
+                  return (
+                    <motion.div
+                      key={r.user_id}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      className="relative overflow-hidden"
+                      style={{ borderTop: i > 0 ? "1px solid rgba(255,255,255,0.04)" : undefined }}
+                    >
+                      {team?.color && (
+                        <div className="absolute left-0 top-0 bottom-0 w-0.5" style={{ background: team.color, boxShadow: `2px 0 6px ${team.color}50` }} />
+                      )}
+                      <div
+                        className="flex items-center gap-3 pl-5 pr-5 py-3"
+                        style={{
+                          background: team?.color
+                            ? `linear-gradient(90deg, ${team.color}08 0%, transparent 40%)`
+                            : "transparent",
+                        }}
+                      >
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0"
+                          style={{ background: "rgba(255,255,255,0.05)", color: "#4b5563" }}
+                        >
+                          {i + 1}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-bold text-white truncate">{r.display_name}</div>
+                          {team && (
+                            <div className="text-[10px] mt-0.5" style={{ color: team.color + "99" }}>{team.name}</div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-10 text-gray-700 text-sm">
+                Nog niemand ingeschreven
+              </div>
+            )}
           </div>
         )}
       </div>

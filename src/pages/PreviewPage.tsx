@@ -13,6 +13,7 @@ import NewRaceCard from "@/components/preview/NewRaceCard";
 import PreviewModal from "@/components/preview/PreviewModal";
 import RaceModal from "@/components/preview/RaceModal";
 import DriverModal from "@/components/preview/DriverModal";
+import SeasonBanner from "@/components/preview/SeasonBanner";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
@@ -20,9 +21,10 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Eye, Users, Car, Trophy, Calendar, ChevronRight, ExternalLink, FlaskConical } from "lucide-react";
 import {
-  MOCK_TEAMS, MOCK_PROFILES, MOCK_STATS, MOCK_STANDINGS, MOCK_MEMBERSHIPS,
+  MOCK_TEAMS, MOCK_PROFILES, MOCK_STATS, MOCK_STANDINGS, MOCK_MEMBERSHIPS, MOCK_LEAGUE,
 } from "@/lib/mockData";
 import { useMockMode } from "@/lib/useMockMode";
+import { useRegistration } from "@/lib/useRegistration";
 
 // ── Countdown ──────────────────────────────────────────────
 function useNow() {
@@ -221,6 +223,20 @@ const PreviewPage = () => {
     },
   });
 
+  const { data: seasonRegCount } = useQuery({
+    queryKey: ["season-reg-count", leagues?.[0]?.id],
+    enabled: !!leagues?.length,
+    queryFn: async () => {
+      const { count } = await (supabase as any)
+        .from("season_registrations")
+        .select("id", { count: "exact" })
+        .eq("league_id", leagues[0].id);
+      return count || 0;
+    },
+  });
+
+  const reg = useRegistration();
+
   // ── Mock data merge ──────────────────────────────────────
   const activeProfiles  = mockMode ? MOCK_PROFILES  : profiles;
   const activeTeams     = mockMode ? MOCK_TEAMS     : teams;
@@ -329,16 +345,38 @@ const PreviewPage = () => {
                   title="KALENDER"
                   action="Alle races"
                 />
+
+                {/* Season registration banner */}
+                {(mockMode ? MOCK_LEAGUE.id : leagues?.[0]?.id) && (
+                  <SeasonBanner
+                    leagueId={mockMode ? MOCK_LEAGUE.id : leagues[0].id}
+                    leagueName={mockMode ? MOCK_LEAGUE.name : leagues?.[0]?.name}
+                    season={mockMode ? MOCK_LEAGUE.season : leagues?.[0]?.season}
+                    carClass={mockMode ? MOCK_LEAGUE.car_class : leagues?.[0]?.car_class}
+                    registrantCount={mockMode ? 8 : (seasonRegCount || 0)}
+                    isRegistered={mockMode ? false : reg.isRegisteredForSeason(mockMode ? MOCK_LEAGUE.id : leagues?.[0]?.id)}
+                    profileComplete={mockMode ? true : reg.profileComplete}
+                    isLoading={reg.registerForSeason.isPending || reg.unregisterFromSeason.isPending}
+                    onRegister={() => reg.registerForSeason.mutate(mockMode ? MOCK_LEAGUE.id : leagues?.[0]?.id)}
+                    onUnregister={() => reg.unregisterFromSeason.mutate(mockMode ? MOCK_LEAGUE.id : leagues?.[0]?.id)}
+                  />
+                )}
+
                 <div className="space-y-3">
-                  {upcomingRaces.map((race: any, i: number) => (
-                    <NewRaceCard
-                      key={race.id}
-                      race={race}
-                      index={i}
-                      countdown={race.status === "upcoming" ? formatCountdown(race.race_date, now) : null}
-                      onSelect={() => setSelectedRace(race)}
-                    />
-                  ))}
+                  {upcomingRaces.map((race: any, i: number) => {
+                    const leagueId = race.leagues?.id || leagues?.[0]?.id;
+                    const isRaceRegistered = mockMode ? false : reg.isRegisteredForRace(race.id, leagueId);
+                    return (
+                      <NewRaceCard
+                        key={race.id}
+                        race={race}
+                        index={i}
+                        countdown={race.status === "upcoming" ? formatCountdown(race.race_date, now) : null}
+                        isRegistered={isRaceRegistered}
+                        onSelect={() => setSelectedRace(race)}
+                      />
+                    );
+                  })}
                   {!upcomingRaces.length && (
                     <div className="text-center py-16 text-gray-700 text-sm">Geen aankomende races</div>
                   )}
@@ -463,7 +501,20 @@ const PreviewPage = () => {
 
       {/* Race modal */}
       <PreviewModal open={!!selectedRace} onClose={() => setSelectedRace(null)}>
-        {selectedRace && <RaceModal race={selectedRace} mockMode={mockMode} />}
+        {selectedRace && (
+          <RaceModal
+            race={selectedRace}
+            mockMode={mockMode}
+            registration={mockMode ? undefined : {
+              isRegistered: reg.isRegisteredForRace(selectedRace.id, selectedRace.leagues?.id || leagues?.[0]?.id),
+              isRegisteredViaSeason: reg.isRegisteredViaSeason(selectedRace.leagues?.id || leagues?.[0]?.id),
+              profileComplete: reg.profileComplete,
+              isLoading: reg.registerForRace.isPending || reg.unregisterFromRace.isPending,
+              onRegister: () => reg.registerForRace.mutate(selectedRace.id),
+              onUnregister: () => reg.unregisterFromRace.mutate(selectedRace.id),
+            }}
+          />
+        )}
       </PreviewModal>
 
       {/* Driver modal */}
