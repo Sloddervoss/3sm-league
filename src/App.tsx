@@ -54,7 +54,7 @@ const AppLayout = () => {
   const location = useLocation();
   const showBar = !EXCLUDED_PATHS.includes(location.pathname);
   return (
-    <div className="overflow-x-hidden">
+    <>
       {isDemoMode && <DemoBanner />}
       {showBar && <StickyRaceBar />}
       <div style={{ paddingTop: showBar ? 44 : 0 }}>
@@ -78,7 +78,7 @@ const AppLayout = () => {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
-    </div>
+    </>
   );
 };
 
