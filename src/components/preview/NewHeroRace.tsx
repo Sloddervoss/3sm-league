@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { MapPin, Clock, Timer, CloudSun, Gauge, Users } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
+import { getTrackPhoto } from "@/lib/trackPhotos";
 
 interface Race {
   id: string;
@@ -30,6 +31,7 @@ const sessions = (race: Race) => [
 
 const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
   const trackInfo = getTrackInfo(race.track);
+  const trackPhoto = getTrackPhoto(race.track);
   const raceDate = new Date(race.race_date);
   const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
   const timeStr = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
@@ -43,29 +45,39 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
       className="relative w-full overflow-hidden rounded-2xl"
       style={{ minHeight: 340 }}
     >
-      {/* Circuit image background */}
-      {trackInfo?.imageUrl && (
+      {/* Track photo background */}
+      {trackPhoto ? (
+        <div className="absolute inset-0 overflow-hidden">
+          <img
+            src={trackPhoto}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+            style={{ opacity: 0.18, filter: "saturate(0.6)" }}
+          />
+        </div>
+      ) : trackInfo?.imageUrl ? (
         <div className="absolute inset-0 flex items-center justify-end overflow-hidden">
           <img
             src={trackInfo.imageUrl}
             alt=""
             className="absolute right-0 w-2/3 max-w-md h-full object-contain opacity-[0.06] invert select-none pointer-events-none"
-            style={{ filter: "invert(1) blur(1px)" }}
           />
         </div>
-      )}
+      ) : null}
 
-      {/* Gradient layers */}
+      {/* Gradient overlay — sterker als er een foto is */}
       <div
         className="absolute inset-0"
         style={{
-          background: "linear-gradient(135deg, #0d0d16 0%, #111120 50%, #0a0a12 100%)",
+          background: trackPhoto
+            ? "linear-gradient(135deg, rgba(8,8,15,0.92) 0%, rgba(10,10,18,0.75) 50%, rgba(8,8,15,0.88) 100%)"
+            : "linear-gradient(135deg, #0d0d16 0%, #111120 50%, #0a0a12 100%)",
         }}
       />
       <div
         className="absolute inset-0"
         style={{
-          background: "linear-gradient(90deg, rgba(249,115,22,0.08) 0%, transparent 60%)",
+          background: "linear-gradient(90deg, rgba(249,115,22,0.1) 0%, transparent 60%)",
         }}
       />
       {/* Top orange accent bar */}
