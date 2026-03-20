@@ -122,6 +122,70 @@ const PHOTOS: Record<string, string> = {
   "Algarve International Circuit":                    "/tracks/photos/algarve.jpg",
   // Japan
   "Okayama International Circuit":                    "/tracks/photos/included-okayamainternationalcircuit.jpg",
+  // USA — ovals & short tracks
+  "Bristol Motor Speedway":                           "/tracks/photos/bristolmotorspeedway-sm.jpg",
+  "Talladega Superspeedway":                          "/tracks/photos/talladega.jpg",
+  "Darlington Raceway":                               "/tracks/photos/update-darlingtonraceway.jpg",
+  "Dover Motor Speedway":                             "/tracks/photos/dover-ms.jpg",
+  "Pocono Raceway":                                   "/tracks/photos/pocono.jpg",
+  "Martinsville Speedway":                            "/tracks/photos/martinsville.jpg",
+  "Richmond Raceway":                                 "/tracks/photos/richmond.jpg",
+  "Michigan International Speedway":                  "/tracks/photos/michigan.jpg",
+  "Texas Motor Speedway":                             "/tracks/photos/texasmotorspeedway.jpg",
+  "Kentucky Speedway":                                "/tracks/photos/kentuckyspeedway-sm.jpg",
+  "Las Vegas Motor Speedway":                         "/tracks/photos/lasvegasmotorspeedway-sm.jpg",
+  "Nashville Superspeedway":                          "/tracks/photos/nashvilless.jpg",
+  "Nashville Fairgrounds Speedway":                   "/tracks/photos/nashvillefairgroundsspeedway.jpg",
+  "New Hampshire Motor Speedway":                     "/tracks/photos/newhampshiremotorspeedway-sm.jpg",
+  "New Smyrna Speedway":                              "/tracks/photos/newsmyrnaspeedway-sm.jpg",
+  "North Wilkesboro Speedway":                        "/tracks/photos/northwilkesborospeedway.jpg",
+  "The Milwaukee Mile":                               "/tracks/photos/themilwaukeemile-sm.jpg",
+  "Irwindale Speedway":                               "/tracks/photos/irwindalespeedway-sm.jpg",
+  "Slinger Speedway":                                 "/tracks/photos/slingerspeedway.jpg",
+  "South Boston Speedway":                            "/tracks/photos/southbostonspeedway-included.jpg",
+  "Stafford Motor Speedway":                          "/tracks/photos/staffordmotorspeedway-sm.jpg",
+  "Lucas Oil Indianapolis Raceway Park":              "/tracks/photos/irp.jpg",
+  "Lucas Oil Speedway":                               "/tracks/photos/lucas-oil-speedway.jpg",
+  "Millbridge Speedway":                              "/tracks/photos/millbridgespeedway.jpg",
+  "Los Angeles Memorial Coliseum":                    "/tracks/photos/la-coliseum.jpg",
+  "Auto Club Speedway":                               "/tracks/photos/autoclubspeedway-sm1.jpg",
+  "Daytona Rallycross and Dirt Road":                 "/tracks/photos/daytona-rallycross.jpg",
+  "The Dirt Track at Charlotte":                      "/tracks/photos/update-thedirttrackatcharlotte.jpg",
+  "The Bullring":                                     "/tracks/photos/bullring-tile.jpg",
+  "Volusia Speedway Park":                            "/tracks/photos/volusia-tile.jpg",
+  "Eldora Speedway":                                  "/tracks/photos/eldora-tile1.jpg",
+  "Weedsport Speedway":                               "/tracks/photos/weedsport-speedway.jpg",
+  "Oswego Speedway":                                  "/tracks/photos/oswego.jpg",
+  "Port Royal Speedway":                              "/tracks/photos/port-royal-speedway.jpg",
+  "Firebird Motorsports Park":                        "/tracks/photos/firebird-motorsports-park.jpg",
+  "Wild West Motorsports Park":                       "/tracks/photos/wild-west-motorsports-park.jpg",
+  "Cedar Lake Speedway":                              "/tracks/photos/cedarlakespeedway.jpg",
+  "Crandon International Raceway":                    "/tracks/photos/crandoninternationalraceway.jpg",
+  "Chili Bowl":                                       "/tracks/photos/chilibowl.jpg",
+  "Fairbury Speedway":                                "/tracks/photos/update-fairburyspeedway.jpg",
+  "Federated Auto Parts Raceway at I-55":             "/tracks/photos/federated-auto-parts-raceway-at-i-55.jpg",
+  "Hickory Motor Speedway":                           "/tracks/photos/hickory-motor-speedwa.jpg",
+  "Huset's Speedway":                                 "/tracks/photos/husets.jpg",
+  "Kevin Harvick's Kern Raceway":                     "/tracks/photos/kern.jpg",
+  "Lernerville Speedway":                             "/tracks/photos/lerner-main-1.png",
+  "Lincoln Speedway":                                 "/tracks/photos/lincolnspeedway.jpg",
+  "Centripetal Circuit":                              "/tracks/photos/included-centripetalcircuit.jpg",
+  "Concord Speedway":                                 "/tracks/photos/included-concordspeedway.jpg",
+  "Langley Speedway":                                 "/tracks/photos/included-langleyspeedway.jpg",
+  "Lanier National Speedway":                         "/tracks/photos/included-laniernationalspeedway.jpg",
+  "Limaland Motorsports Park":                        "/tracks/photos/included-limalandmotorsportspark.jpg",
+  "Oxford Plains Speedway":                           "/tracks/photos/included-oxfordplainsspeedway.jpg",
+  "Southern National Motorsports Park":               "/tracks/photos/included-southernnationalmotorsportspark.jpg",
+  "Thompson Speedway Motorsports Park":               "/tracks/photos/included-thompsonmotorsportspark.jpg",
+  "USA International Speedway":                       "/tracks/photos/included-usainternationalspeedway.jpg",
+  "Mount Washington Auto Road":                       "/tracks/photos/mount-washington-auto-road-1.png",
+  // Legacy tracks
+  "[Legacy] Charlotte Motor Speedway":                "/tracks/photos/charlottemotorspeedway.jpg",
+  "[Legacy] Kentucky Speedway":                       "/tracks/photos/kentuckyspeedway-sm.jpg",
+  "[Legacy] Michigan International Speedway":         "/tracks/photos/michigan.jpg",
+  "[Legacy] Phoenix Raceway":                         "/tracks/photos/phoenix.jpg",
+  "[Legacy] Silverstone Circuit":                     "/tracks/photos/legacy-silverstonecircuit-2008.jpg",
+  "[Legacy] Texas Motor Speedway":                    "/tracks/photos/legacy-texasmotorspeedway.jpg",
 };
 
 /** Fallback als er geen specifieke foto is */
@@ -129,14 +193,19 @@ const FALLBACK = "/tracks/photos/daytona.jpg";
 
 /**
  * Geeft de lokale track foto terug.
- * Probeert exacte match → base naam (splits op " - ") → fallback.
+ * Probeert exacte match → progressief kortere base naam → fallback.
+ * Bijv. "Circuito de Jerez - Ángel Nieto - Grand Prix"
+ *   → "Circuito de Jerez - Ángel Nieto" → gevonden!
  */
 export function getTrackPhoto(trackName: string): string {
   if (PHOTOS[trackName]) return PHOTOS[trackName];
 
-  // iRacing varianten: "Silverstone Circuit - Grand Prix" → "Silverstone Circuit"
-  const base = trackName.split(" - ")[0].trim();
-  if (PHOTOS[base]) return PHOTOS[base];
+  // Probeer progressief kortere varianten door laatste " - ..." te verwijderen
+  const parts = trackName.split(" - ");
+  for (let i = parts.length - 1; i >= 1; i--) {
+    const base = parts.slice(0, i).join(" - ").trim();
+    if (PHOTOS[base]) return PHOTOS[base];
+  }
 
   return FALLBACK;
 }
