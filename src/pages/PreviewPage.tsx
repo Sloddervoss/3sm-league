@@ -364,7 +364,7 @@ const PreviewPage = () => {
 
                 <div className="space-y-3">
                   {upcomingRaces.map((race: any, i: number) => {
-                    const leagueId = race.leagues?.id || leagues?.[0]?.id;
+                    const leagueId = race.leagues?.id;
                     const isRaceRegistered = mockMode ? false : reg.isRegisteredForRace(race.id, leagueId);
                     return (
                       <NewRaceCard
@@ -506,13 +506,13 @@ const PreviewPage = () => {
             race={selectedRace}
             mockMode={mockMode}
             registration={{
-              isRegistered: reg.isRegisteredForRace(selectedRace.id, selectedRace.leagues?.id || leagues?.[0]?.id),
-              isRegisteredViaSeason: reg.isRegisteredViaSeason(selectedRace.leagues?.id || leagues?.[0]?.id),
+              isRegistered: reg.isRegisteredForRace(selectedRace.id, selectedRace.leagues?.id),
+              isRegisteredViaSeason: reg.isRegisteredViaSeason(selectedRace.leagues?.id),
               profileComplete: mockMode ? true : reg.profileComplete,
               isLoading: reg.registerForRace.isPending || reg.unregisterFromRace.isPending,
               onRegister: () => reg.registerForRace.mutate(selectedRace.id),
               onUnregister: () => reg.unregisterFromRace.mutate(selectedRace.id),
-              hasLeague: !!(selectedRace.leagues?.id || leagues?.[0]?.id),
+              hasLeague: !!selectedRace.leagues?.id,
             }}
           />
         )}
