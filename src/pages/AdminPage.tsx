@@ -670,6 +670,9 @@ const AdminPage = () => {
   const [editingLeagueData, setEditingLeagueData] = useState({ name: "", description: "", season: "", car_class: "" });
   const [editingRaces, setEditingRaces] = useState<Record<string, any>>({});
 
+  const [showSoloRaceForm, setShowSoloRaceForm] = useState(false);
+  const [newSoloRace, setNewSoloRace] = useState({ name: "", track: "", date: "", time: "20:00", race_type: "Feature", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", start_type: "Standing", weather: "Fixed", setup: "Fixed" });
+
   const [newTeam, setNewTeam] = useState({ name: "", description: "", color: "#f97316", logo_url: "" });
   const [newTeamLogoPreview, setNewTeamLogoPreview] = useState<string>("");
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
@@ -810,6 +813,41 @@ const AdminPage = () => {
       if (error) throw error;
     },
     onSuccess: () => { toast.success("Verwijderd"); queryClient.invalidateQueries({ queryKey: ["admin-leagues"] }); },
+  });
+
+  const createSoloRace = useMutation({
+    mutationFn: async () => {
+      const { error } = await (supabase as any).from("races").insert({
+        league_id: null,
+        name: newSoloRace.name,
+        track: newSoloRace.track,
+        race_date: `${newSoloRace.date}T${newSoloRace.time}:00`,
+        status: "upcoming",
+        race_type: newSoloRace.race_type || null,
+        race_duration: newSoloRace.race_duration || null,
+        practice_duration: newSoloRace.practice_duration || null,
+        qualifying_duration: newSoloRace.qualifying_duration || null,
+        start_type: newSoloRace.start_type || null,
+        weather: newSoloRace.weather || null,
+        setup: newSoloRace.setup || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Losse race aangemaakt!");
+      queryClient.invalidateQueries({ queryKey: ["all-races-admin"] });
+      setShowSoloRaceForm(false);
+      setNewSoloRace({ name: "", track: "", date: "", time: "20:00", race_type: "Feature", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", start_type: "Standing", weather: "Fixed", setup: "Fixed" });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const deleteSoloRace = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("races").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Race verwijderd"); queryClient.invalidateQueries({ queryKey: ["all-races-admin"] }); },
   });
 
   const updateRace = useMutation({
@@ -1431,6 +1469,96 @@ const AdminPage = () => {
                     );
                   })}
                   {!leagues?.length && <div className="text-center py-16 text-muted-foreground"><Trophy className="w-10 h-10 mx-auto mb-3 opacity-40" /><p>Nog geen seizoenen.</p></div>}
+                </div>
+
+                {/* ── Losse Races ── */}
+                <div className="mt-10">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="font-heading text-2xl font-black">LOSSE RACES</h2>
+                    <button onClick={() => setShowSoloRaceForm(!showSoloRaceForm)} className="flex items-center gap-2 px-4 py-2 rounded-md bg-secondary border border-border text-white font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity">
+                      <Plus className="w-4 h-4" />Losse Race
+                    </button>
+                  </div>
+
+                  {showSoloRaceForm && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-6 mb-6">
+                      <h3 className="font-heading text-lg font-bold mb-4">NIEUWE LOSSE RACE</h3>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          <input type="text" value={newSoloRace.name} onChange={(e) => setNewSoloRace({ ...newSoloRace, name: e.target.value })} placeholder="Race naam *" className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                          <TrackSelect value={newSoloRace.track} onChange={v => setNewSoloRace({ ...newSoloRace, track: v })} />
+                          <input type="date" value={newSoloRace.date} onChange={(e) => setNewSoloRace({ ...newSoloRace, date: e.target.value })} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                          <input type="time" value={newSoloRace.time} onChange={(e) => setNewSoloRace({ ...newSoloRace, time: e.target.value })} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Race type</label>
+                            <select value={newSoloRace.race_type} onChange={(e) => setNewSoloRace({ ...newSoloRace, race_type: e.target.value })} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                              {["Sprint", "Feature", "Endurance"].map((v) => <option key={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Duur race</label>
+                            <input type="text" value={newSoloRace.race_duration} onChange={(e) => setNewSoloRace({ ...newSoloRace, race_duration: e.target.value })} placeholder="60 min / 30 laps" className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Start type</label>
+                            <select value={newSoloRace.start_type} onChange={(e) => setNewSoloRace({ ...newSoloRace, start_type: e.target.value })} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                              {["Standing", "Rolling"].map((v) => <option key={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Practice</label>
+                            <input type="text" value={newSoloRace.practice_duration} onChange={(e) => setNewSoloRace({ ...newSoloRace, practice_duration: e.target.value })} placeholder="15 min" className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Qualifying</label>
+                            <input type="text" value={newSoloRace.qualifying_duration} onChange={(e) => setNewSoloRace({ ...newSoloRace, qualifying_duration: e.target.value })} placeholder="10 min" className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Weather</label>
+                            <select value={newSoloRace.weather} onChange={(e) => setNewSoloRace({ ...newSoloRace, weather: e.target.value })} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                              {["Fixed", "Dynamic"].map((v) => <option key={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Setup</label>
+                            <select value={newSoloRace.setup} onChange={(e) => setNewSoloRace({ ...newSoloRace, setup: e.target.value })} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                              {["Fixed", "Open"].map((v) => <option key={v}>{v}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-3 mt-4">
+                        <button onClick={() => createSoloRace.mutate()} disabled={!newSoloRace.name || !newSoloRace.track || !newSoloRace.date || createSoloRace.isPending} className="px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">{createSoloRace.isPending ? "Aanmaken..." : "Aanmaken"}</button>
+                        <button onClick={() => setShowSoloRaceForm(false)} className="px-6 py-2.5 rounded-md border border-border text-muted-foreground font-heading font-bold text-sm hover:text-foreground transition-colors">Annuleren</button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  <div className="space-y-3">
+                    {(allRaces || []).filter((r: any) => !r.league_id).map((race: any) => {
+                      const raceRegs = (raceRegistrations || []).filter((r: any) => r.race_id === race.id);
+                      return (
+                        <div key={race.id} className="bg-card border border-border rounded-lg p-4 flex items-center justify-between gap-4">
+                          <div>
+                            <div className="font-heading font-bold">{race.name}</div>
+                            <div className="text-sm text-muted-foreground flex gap-3 mt-0.5">
+                              <span>{race.track}</span>
+                              <span>•</span>
+                              <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{raceRegs.length} ingeschreven</span>
+                            </div>
+                          </div>
+                          <button onClick={() => deleteSoloRace.mutate(race.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors shrink-0"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      );
+                    })}
+                    {!(allRaces || []).some((r: any) => !r.league_id) && (
+                      <div className="text-center py-10 text-muted-foreground text-sm">Geen losse races aangemaakt.</div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
