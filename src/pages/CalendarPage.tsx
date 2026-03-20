@@ -184,7 +184,7 @@ const CalendarPage = () => {
 
               <div className="space-y-3">
                 {races.map((race: any, i: number) => {
-                  const leagueId = race.leagues?.id || activeLeague?.id;
+                  const leagueId = race.leagues?.id;
                   return (
                     <NewRaceCard
                       key={race.id}
@@ -228,11 +228,11 @@ const CalendarPage = () => {
           <RaceModal
             race={selectedRace}
             registration={{
-              isRegistered: reg.isRegisteredForRace(selectedRace.id, selectedRace.leagues?.id || activeLeague?.id),
-              isRegisteredViaSeason: reg.isRegisteredViaSeason(selectedRace.leagues?.id || activeLeague?.id),
+              isRegistered: reg.isRegisteredForRace(selectedRace.id, selectedRace.leagues?.id),
+              isRegisteredViaSeason: reg.isRegisteredViaSeason(selectedRace.leagues?.id),
               profileComplete: reg.profileComplete,
               isLoading: reg.registerForRace.isPending || reg.unregisterFromRace.isPending,
-              hasLeague: !!(selectedRace.leagues?.id || activeLeague?.id),
+              hasLeague: !!selectedRace.leagues?.id,
               onRegister: () => reg.registerForRace.mutate(selectedRace.id),
               onUnregister: () => reg.unregisterFromRace.mutate(selectedRace.id),
             }}
