@@ -150,6 +150,16 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
           className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
           style={{ opacity: 0.45, filter: "saturate(0.6) brightness(0.7)", objectPosition: "center right" }}
         />
+        {trackInfo?.imageUrl && (
+          <img
+            src={trackInfo.imageUrl}
+            alt=""
+            aria-hidden
+            className="absolute right-6 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
+            style={{ opacity: 0.12, filter: "invert(1) brightness(2)", mixBlendMode: "screen" }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        )}
         <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(14,14,22,0.95) 0%, rgba(14,14,22,0.7) 55%, rgba(14,14,22,0.3) 100%)" }} />
         <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(14,14,22,1) 0%, transparent 50%)" }} />
         <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg, #f97316, transparent)" }} />
