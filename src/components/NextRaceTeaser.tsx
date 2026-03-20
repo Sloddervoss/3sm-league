@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
-import { MapPin, Clock, Timer, ChevronRight, Calendar, CheckCircle2, LogIn, LogOut, AlertCircle, Loader2 } from "lucide-react";
+import { MapPin, Clock, Timer, ChevronRight, Calendar, CheckCircle2 } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
 import { useRegistration } from "@/lib/useRegistration";
@@ -62,7 +62,6 @@ const NextRaceTeaser = () => {
   const leagueId = nextRace.leagues?.id;
   const isRegistered = reg.isRegisteredForRace(nextRace.id, leagueId);
   const isRegisteredViaSeason = reg.isRegisteredViaSeason(leagueId);
-  const isLoading = reg.registerForRace.isPending || reg.unregisterFromRace.isPending;
 
   const trackInfo  = getTrackInfo(nextRace.track);
   const trackPhoto = getTrackPhoto(nextRace.track);
@@ -202,54 +201,25 @@ const NextRaceTeaser = () => {
                   </div>
                 ) : <div />}
 
-                {/* Registration CTA */}
-                {!reg.user ? (
+                {/* Registration status + CTA */}
+                <div className="flex items-center gap-3">
+                  {(isRegistered || isRegisteredViaSeason) && (
+                    <div className="flex items-center gap-2 text-sm font-bold text-green-400 px-3 py-1.5 rounded-lg"
+                      style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                      <CheckCircle2 className="w-4 h-4" />
+                      {isRegisteredViaSeason ? "Ingeschreven via seizoen" : "Ingeschreven"}
+                    </div>
+                  )}
                   <Link
                     to="/calendar"
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-heading font-bold text-sm transition-all"
                     style={{ background: `${accentColor}26`, border: `1px solid ${accentColor}4d`, color: accentColor }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = `${accentColor}40`; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = `${accentColor}26`; }}
                   >
-                    Schrijf in <ChevronRight className="w-4 h-4" />
+                    {isRegistered || isRegisteredViaSeason ? "Bekijk kalender" : "Schrijf in"} <ChevronRight className="w-4 h-4" />
                   </Link>
-                ) : !reg.profileComplete ? (
-                  <div className="flex items-center gap-2 text-sm text-yellow-500/80 px-4 py-2.5 rounded-xl"
-                    style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.15)" }}>
-                    <AlertCircle className="w-4 h-4" />
-                    Vul iRacing profiel in
-                  </div>
-                ) : isRegisteredViaSeason ? (
-                  <div className="flex items-center gap-2 text-sm font-bold text-green-400 px-4 py-2.5 rounded-xl"
-                    style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                    <CheckCircle2 className="w-4 h-4" />
-                    Ingeschreven via seizoen
-                  </div>
-                ) : isRegistered ? (
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-sm font-bold text-green-400">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Ingeschreven
-                    </div>
-                    <button
-                      onClick={() => reg.unregisterFromRace.mutate(nextRace.id)}
-                      disabled={isLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                      style={{ background: "rgba(107,114,128,0.1)", border: "1px solid rgba(107,114,128,0.2)", color: "#6b7280" }}
-                    >
-                      {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
-                      Uitschrijven
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => reg.registerForRace.mutate(nextRace.id)}
-                    disabled={isLoading}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-heading font-bold text-sm transition-all"
-                    style={{ background: `${accentColor}26`, border: `1px solid ${accentColor}4d`, color: accentColor, opacity: isLoading ? 0.6 : 1 }}
-                  >
-                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-                    Schrijf in
-                  </button>
-                )}
+                </div>
               </div>
             </div>
           </div>
