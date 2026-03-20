@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { MapPin, Clock, Timer, CloudSun, Gauge, Users } from "lucide-react";
+import { MapPin, Clock, Timer, CloudSun, Gauge, Users, CheckCircle2, ChevronRight } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
 
@@ -21,6 +21,9 @@ interface Props {
   race: Race;
   countdown: string | null;
   registrantCount?: number;
+  isRegistered?: boolean;
+  isRegisteredViaSeason?: boolean;
+  onSelect?: () => void;
 }
 
 const sessions = (race: Race) => [
@@ -31,7 +34,7 @@ const sessions = (race: Race) => [
 
 const SOLO_COLOR = "#818cf8";
 
-const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
+const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isRegisteredViaSeason, onSelect }: Props) => {
   const trackInfo = getTrackInfo(race.track);
   const trackPhoto = getTrackPhoto(race.track);
   const isStandalone = !race.leagues;
@@ -73,8 +76,13 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
         style={{ background: "linear-gradient(to top, rgba(8,8,15,0.8), transparent)" }}
       />
 
+      {/* Clickable overlay */}
+      {onSelect && (
+        <button onClick={onSelect} className="absolute inset-0 z-10 w-full text-left" aria-label={`Open ${race.name}`} />
+      )}
+
       {/* Content */}
-      <div className="relative z-10 p-8 md:p-10 flex flex-col h-full" style={{ minHeight: 340 }}>
+      <div className="relative z-20 p-8 md:p-10 flex flex-col h-full" style={{ minHeight: 340 }}>
 
         {/* Top row: label + countdown */}
         <div className="flex items-start justify-between mb-6">
@@ -187,7 +195,7 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
 
           {/* Session pills */}
           {ses.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap mb-4">
               {ses.map((s) => (
                 <span
                   key={s.label}
@@ -199,6 +207,29 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
               ))}
             </div>
           )}
+
+          {/* Registration status + open hint */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {(isRegistered || isRegisteredViaSeason) && (
+              <div
+                className="flex items-center gap-2 text-sm font-bold px-3 py-1.5 rounded-lg"
+                style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {isRegisteredViaSeason ? "Ingeschreven via seizoen" : "Ingeschreven"}
+              </div>
+            )}
+            {onSelect && (
+              <button
+                onClick={onSelect}
+                className="relative z-30 flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+                style={{ background: "rgba(255,255,255,0.06)", color: "#6b7280", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                Details & inschrijven
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
       </div>

@@ -178,7 +178,7 @@ const PreviewPage = () => {
   const { data: races = [] } = useQuery({
     queryKey: ["races-with-leagues"],
     queryFn: async () => {
-      const { data } = await supabase.from("races").select("*, leagues(name, car_class, id)").order("race_date", { ascending: true });
+      const { data } = await supabase.from("races").select("*, leagues(name, car_class, id, season)").order("race_date", { ascending: true });
       return data || [];
     },
   });
@@ -329,6 +329,9 @@ const PreviewPage = () => {
                 race={nextRace}
                 countdown={formatCountdown(nextRace.race_date, now)}
                 registrantCount={nextRaceRegCount}
+                isRegistered={reg.isRegisteredForRace(nextRace.id, nextRace.leagues?.id)}
+                isRegisteredViaSeason={reg.isRegisteredViaSeason(nextRace.leagues?.id)}
+                onSelect={() => setSelectedRace(nextRace)}
               />
             </section>
           )}
