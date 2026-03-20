@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { MapPin, Clock, Timer, CloudSun, Gauge, Users } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
+import { getTrackPhoto } from "@/lib/trackPhotos";
 
 interface Race {
   id: string;
@@ -30,6 +31,7 @@ const sessions = (race: Race) => [
 
 const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
   const trackInfo = getTrackInfo(race.track);
+  const trackPhoto = getTrackPhoto(race.track);
   const raceDate = new Date(race.race_date);
   const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
   const timeStr = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
@@ -43,22 +45,18 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
       className="relative w-full overflow-hidden rounded-2xl"
       style={{ minHeight: 340 }}
     >
-      {/* Achtergrond */}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #0d0d16 0%, #111120 100%)" }} />
+      {/* Track foto achtergrond */}
+      <div className="absolute inset-0" style={{ background: "#08080f" }} />
+      <img
+        src={trackPhoto}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+        style={{ opacity: 0.3, filter: "saturate(0.5) brightness(0.6)" }}
+      />
 
-      {/* Circuit map groot rechts als visueel element */}
-      {trackInfo?.imageUrl && (
-        <img
-          src={trackInfo.imageUrl}
-          alt=""
-          className="absolute right-[-2rem] top-1/2 -translate-y-1/2 select-none pointer-events-none"
-          style={{ width: "55%", maxWidth: 480, opacity: 0.07, filter: "invert(1)", mixBlendMode: "screen" }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      )}
-
-      {/* Oranje glow links */}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(249,115,22,0.1) 0%, transparent 55%)" }} />
+      {/* Gradient overlay */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(8,8,15,0.8) 0%, rgba(8,8,15,0.5) 50%, rgba(8,8,15,0.75) 100%)" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(249,115,22,0.12) 0%, transparent 55%)" }} />
       {/* Top orange accent bar */}
       <div
         className="absolute top-0 left-0 right-0 h-0.5"
