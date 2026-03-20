@@ -59,7 +59,7 @@ const LatestResults = () => {
           </Link>
         </div>
 
-        <div className="bg-card border border-border rounded-lg overflow-hidden racing-stripe-left">
+        <div className="bg-card border border-border rounded-lg overflow-hidden racing-stripe-left overflow-x-auto">
           {/* Race header */}
           <div className="px-5 py-4 bg-secondary/30 border-b border-border">
             <h3 className="font-heading font-black text-lg">{lastRace.name}</h3>
@@ -71,7 +71,7 @@ const LatestResults = () => {
           </div>
 
           {/* Column headers */}
-          <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 px-5 py-2.5 bg-secondary/20 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
+          <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 px-5 py-2.5 bg-secondary/20 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border min-w-[320px]">
             <span>Pos</span><span>Driver</span><span className="text-center hidden md:block">Best Lap</span><span className="text-center">Pts</span>
           </div>
 
@@ -82,7 +82,7 @@ const LatestResults = () => {
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.04 }}
-              className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 px-5 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors"
+              className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 px-5 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors min-w-[320px]"
             >
               <span className={`font-heading font-black text-xl ${positionColors[result.position] || "text-muted-foreground"}`}>
                 {result.dnf ? "DNF" : result.position}

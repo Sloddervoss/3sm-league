@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { isDemoMode } from "@/integrations/supabase/client";
+import StickyRaceBar from "@/components/StickyRaceBar";
 import Index from "./pages/Index.tsx";
 import CalendarPage from "./pages/CalendarPage.tsx";
 import StandingsPage from "./pages/StandingsPage.tsx";
@@ -47,6 +48,40 @@ const DemoBanner = () => (
   </div>
 );
 
+const EXCLUDED_PATHS = ["/calendar", "/admin", "/stewards", "/profile"];
+
+const AppLayout = () => {
+  const location = useLocation();
+  const showBar = !EXCLUDED_PATHS.includes(location.pathname);
+  return (
+    <div className="overflow-x-hidden">
+      {isDemoMode && <DemoBanner />}
+      {showBar && <StickyRaceBar />}
+      <div style={{ paddingTop: showBar ? 44 : 0 }}>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/standings" element={<StandingsPage />} />
+          <Route path="/drivers" element={<DriversPage />} />
+          <Route path="/teams" element={<TeamsPage />} />
+          <Route path="/results" element={<ResultsPage />} />
+          <Route path="/seasons" element={<SeasonsPage />} />
+          <Route path="/stewards" element={<StewardPage />} />
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/preview" element={<PreviewPage />} />
+          <Route path="/preview/driver" element={<DriverProfilePreview />} />
+          <Route path="/preview/race" element={<RaceDetailPreview />} />
+          <Route path="/preview/team" element={<TeamProfilePreview />} />
+          <Route path="/preview/standings" element={<StandingsFullPreview />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </div>
+    </div>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -54,26 +89,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          {isDemoMode && <DemoBanner />}
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/standings" element={<StandingsPage />} />
-            <Route path="/drivers" element={<DriversPage />} />
-            <Route path="/teams" element={<TeamsPage />} />
-            <Route path="/results" element={<ResultsPage />} />
-            <Route path="/seasons" element={<SeasonsPage />} />
-            <Route path="/stewards" element={<StewardPage />} />
-            <Route path="/auth" element={<AuthPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/preview" element={<PreviewPage />} />
-            <Route path="/preview/driver" element={<DriverProfilePreview />} />
-            <Route path="/preview/race" element={<RaceDetailPreview />} />
-            <Route path="/preview/team" element={<TeamProfilePreview />} />
-            <Route path="/preview/standings" element={<StandingsFullPreview />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppLayout />
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

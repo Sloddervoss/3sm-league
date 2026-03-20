@@ -132,7 +132,7 @@ const ResultsPage = () => {
                           className="border-t border-border"
                         >
                           <div className="overflow-x-auto">
-                          <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2 bg-secondary/30 text-xs font-bold uppercase tracking-wider text-muted-foreground min-w-[380px]">
+                          <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2 bg-secondary/30 text-xs font-bold uppercase tracking-wider text-muted-foreground min-w-[500px]">
                             <span>Pos</span>
                             <span>Driver</span>
                             <span className="text-center">Laps</span>
@@ -143,7 +143,7 @@ const ResultsPage = () => {
                           {raceResults.map((result: any) => (
                             <div
                               key={result.id}
-                              className={`grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/30 hover:bg-secondary/20 transition-colors ${result.position <= 3 ? "racing-stripe-left" : ""}`}
+                              className={`grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/30 hover:bg-secondary/20 transition-colors min-w-[500px] ${result.position <= 3 ? "racing-stripe-left" : ""}`}
                             >
                               <span className={`font-heading font-black text-lg ${positionColors[result.position] || "text-muted-foreground"}`}>
                                 {result.dnf ? "DNF" : result.position}

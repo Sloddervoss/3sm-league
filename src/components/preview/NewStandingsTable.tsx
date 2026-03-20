@@ -116,7 +116,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => 
       {/* Full table */}
       {rest.length > 0 && (
         <div
-          className="rounded-2xl overflow-hidden"
+          className="rounded-2xl overflow-x-auto"
           style={{ border: "1px solid rgba(255,255,255,0.06)" }}
         >
           {/* Header */}
