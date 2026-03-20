@@ -121,7 +121,17 @@ const NextRaceTeaser = () => {
             </div>
 
             {/* Content */}
-            <div className="flex-1 p-6 md:p-8 flex flex-col justify-between">
+            <div className="relative flex-1 p-6 md:p-8 flex flex-col justify-between overflow-hidden">
+              {trackInfo?.imageUrl && (
+                <img
+                  src={trackInfo.imageUrl}
+                  alt=""
+                  aria-hidden
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
+                  style={{ opacity: 0.28, filter: "invert(1) brightness(2)", mixBlendMode: "screen" }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              )}
               <div>
                 {/* Status + type badge */}
                 <div className="flex items-center gap-3 mb-3 flex-wrap">
