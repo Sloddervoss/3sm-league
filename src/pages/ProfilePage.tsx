@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, UserPlus, X, Clock, ImagePlus, Plus } from "lucide-react";
+import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, UserPlus, X, Clock, ImagePlus, Plus, Camera, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
@@ -75,6 +75,54 @@ const ProfilePage = () => {
   const [iracingName, setIracingName] = useState("");
   const [irating, setIrating] = useState("");
   const [safetyRating, setSafetyRating] = useState("");
+
+  // Avatar upload
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const uploadAvatar = async (file: File) => {
+    if (!user) return;
+    setAvatarUploading(true);
+    try {
+      // Resize to max 256x256 via canvas
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.src = url;
+      });
+      const canvas = document.createElement("canvas");
+      const max = 256;
+      const scale = Math.min(max / img.width, max / img.height, 1);
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+
+      const blob: Blob = await new Promise((res) => canvas.toBlob((b) => res(b!), "image/jpeg", 0.85));
+      const path = `${user.id}/avatar.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+      const avatarUrl = `${publicUrl}?t=${Date.now()}`;
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .upsert({ user_id: user.id, avatar_url: avatarUrl } as any, { onConflict: "user_id" });
+      if (updateError) throw updateError;
+
+      toast.success("Profielfoto opgeslagen!");
+      queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
+      queryClient.invalidateQueries({ queryKey: ["drivers"] });
+    } catch (err: any) {
+      toast.error(err.message || "Upload mislukt");
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (profile) {
@@ -229,6 +277,55 @@ const ProfilePage = () => {
                 ))}
               </div>
             )}
+
+            {/* Avatar upload */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-6 racing-stripe-left mb-6">
+              <h2 className="font-heading font-bold text-lg mb-4 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-primary" /> Profielfoto
+              </h2>
+              <div className="flex items-center gap-5">
+                {/* Avatar preview */}
+                <div className="relative shrink-0">
+                  {(profile as any)?.avatar_url ? (
+                    <img
+                      src={(profile as any).avatar_url}
+                      alt="Avatar"
+                      className="w-20 h-20 rounded-2xl object-cover border-2 border-border"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-2xl bg-secondary border-2 border-border flex items-center justify-center">
+                      <User className="w-8 h-8 text-muted-foreground opacity-40" />
+                    </div>
+                  )}
+                  {avatarUploading && (
+                    <div className="absolute inset-0 rounded-2xl bg-black/60 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-white animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Kies een foto die zichtbaar is op je driver profiel. Max 256×256px, JPEG/PNG.
+                  </p>
+                  <label className="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-border hover:border-primary/50 bg-secondary/50 cursor-pointer transition-colors text-sm font-medium text-muted-foreground hover:text-foreground w-fit">
+                    <ImagePlus className="w-4 h-4" />
+                    {avatarUploading ? "Uploaden..." : (profile as any)?.avatar_url ? "Foto wijzigen" : "Foto kiezen"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={avatarUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) uploadAvatar(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            </motion.div>
 
             <div className="grid gap-6 md:grid-cols-2">
               {/* General info */}
