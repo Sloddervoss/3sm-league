@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { TrendingUp, Shield, Trophy, Flag, Zap, ArrowLeft, Users, AlertTriangle, Medal, FlaskConical } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import { useMockMode } from "@/lib/useMockMode";
 import { MOCK_PROFILES, MOCK_TEAMS, MOCK_DRIVER_RESULTS } from "@/lib/mockData";
@@ -99,7 +100,8 @@ const DriverProfilePreview = () => {
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>
       <Navbar />
-      <main className="pt-16">
+      <StickyRaceBar />
+      <main className="pt-[108px]">
 
         {/* Preview banner */}
         <div className="sticky top-16 z-40 flex items-center justify-between px-6 py-2" style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}>

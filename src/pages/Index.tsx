@@ -1,4 +1,5 @@
 import Navbar from "@/components/Navbar";
+import StickyRaceBar from "@/components/StickyRaceBar";
 import HeroSection from "@/components/HeroSection";
 import NextRaceTeaser from "@/components/NextRaceTeaser";
 import StandingsPreview from "@/components/StandingsPreview";
@@ -12,7 +13,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <StickyRaceBar />
-      <main className="pt-16">
+      <main className="pt-[108px]">
         <HeroSection />
         <NextRaceTeaser />
         <ChampionshipLeader />
