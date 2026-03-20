@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import { TrendingUp, Shield, Trophy, Zap } from "lucide-react";
-import { Link } from "react-router-dom";
 
 interface Driver {
   user_id: string;
@@ -31,6 +30,7 @@ interface Props {
   stats?: DriverStats;
   team?: Team;
   rank: number;
+  onSelect?: () => void;
 }
 
 const safetyGrade = (sr: string) => sr?.split(" ")[0] || "?";
@@ -54,7 +54,7 @@ const rankStyle = (rank: number) => {
   return               { color: "#374151",  glow: "transparent",            label: `P${rank}` };
 };
 
-const NewDriverCard = ({ driver, stats, team, rank }: Props) => {
+const NewDriverCard = ({ driver, stats, team, rank, onSelect }: Props) => {
   const name = driver.display_name || driver.iracing_name || "Unknown";
   const safetyLetter = safetyGrade(driver.safety_rating || "");
   const safColor = safetyColor[safetyLetter] || "#6b7280";
@@ -77,7 +77,7 @@ const NewDriverCard = ({ driver, stats, team, rank }: Props) => {
         border: "1px solid rgba(255,255,255,0.07)",
       }}
     >
-    <Link to={`/preview/driver?id=${driver.user_id}`} className="absolute inset-0 z-10" aria-label={`Open profiel van ${name}`} />
+      {onSelect && <button onClick={onSelect} className="absolute inset-0 z-10 w-full text-left" aria-label={`Open profiel van ${name}`} />}
       {/* Team color top bar */}
       <div
         className="h-[3px]"

@@ -13,6 +13,7 @@ interface Standing {
 interface Props {
   standings: Standing[];
   leagueName?: string;
+  onSelectDriver?: (userId: string) => void;
 }
 
 const PODIUM = [
@@ -21,7 +22,7 @@ const PODIUM = [
   { color: "#d97706", bg: "rgba(217,119,6,0.07)",   border: "rgba(217,119,6,0.15)",  shadow: "rgba(217,119,6,0.1)" },
 ];
 
-const NewStandingsTable = ({ standings, leagueName }: Props) => {
+const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => {
   if (!standings.length) {
     return (
       <div className="text-center py-16 text-gray-700">
@@ -152,9 +153,9 @@ const NewStandingsTable = ({ standings, leagueName }: Props) => {
                     style={{ background: teamColor, boxShadow: `2px 0 8px ${teamColor}60` }}
                   />
                 )}
-                <Link
-                  to={`/preview/driver?id=${driver.user_id}`}
-                  className="group grid gap-2 pl-5 pr-5 py-3.5 items-center"
+                <button
+                  onClick={() => onSelectDriver ? onSelectDriver(driver.user_id) : undefined}
+                  className="group grid gap-2 pl-5 pr-5 py-3.5 items-center w-full text-left"
                   style={{
                     gridTemplateColumns: "2.5rem 1fr 4rem 4.5rem",
                     background: teamColor
@@ -200,7 +201,7 @@ const NewStandingsTable = ({ standings, leagueName }: Props) => {
                       <div className="text-[10px] text-gray-700">{delta}</div>
                     )}
                   </div>
-                </Link>
+                </button>
               </motion.div>
             );
           })}

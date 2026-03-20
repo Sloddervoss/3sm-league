@@ -10,6 +10,9 @@ import NewDriverCard from "@/components/preview/NewDriverCard";
 import NewTeamCard from "@/components/preview/NewTeamCard";
 import NewStandingsTable from "@/components/preview/NewStandingsTable";
 import NewRaceCard from "@/components/preview/NewRaceCard";
+import PreviewModal from "@/components/preview/PreviewModal";
+import RaceModal from "@/components/preview/RaceModal";
+import DriverModal from "@/components/preview/DriverModal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
@@ -109,6 +112,8 @@ const PreviewBanner = ({ mockMode, onToggle }: BannerProps) => (
 const PreviewPage = () => {
   const now = useNow();
   const [mockMode, setMockMode] = useMockMode();
+  const [selectedRace, setSelectedRace] = useState<any>(null);
+  const [selectedDriver, setSelectedDriver] = useState<any>(null);
 
   // ── Data (exact zelfde queries als bestaande pagina's) ──
   const { data: profiles = [] } = useQuery({
@@ -331,6 +336,7 @@ const PreviewPage = () => {
                       race={race}
                       index={i}
                       countdown={race.status === "upcoming" ? formatCountdown(race.race_date, now) : null}
+                      onSelect={() => setSelectedRace(race)}
                     />
                   ))}
                   {!upcomingRaces.length && (
@@ -350,6 +356,10 @@ const PreviewPage = () => {
                 <NewStandingsTable
                   standings={activeStandings}
                   leagueName={mockMode ? "GT Master Challenge Cup" : activeLeagueName}
+                  onSelectDriver={(uid) => {
+                    const driver = activeProfiles.find((p: any) => p.user_id === uid);
+                    if (driver) setSelectedDriver(driver);
+                  }}
                 />
               </div>
             </div>
@@ -373,6 +383,7 @@ const PreviewPage = () => {
                   stats={activeStatsMap?.get(driver.user_id)}
                   team={activeTeams.find((t: any) => t.id === driver.team_id)}
                   rank={i + 1}
+                  onSelect={() => setSelectedDriver(driver)}
                 />
               ))}
             </div>
@@ -449,6 +460,16 @@ const PreviewPage = () => {
         </div>
       </main>
       <Footer />
+
+      {/* Race modal */}
+      <PreviewModal open={!!selectedRace} onClose={() => setSelectedRace(null)}>
+        {selectedRace && <RaceModal race={selectedRace} mockMode={mockMode} />}
+      </PreviewModal>
+
+      {/* Driver modal */}
+      <PreviewModal open={!!selectedDriver} onClose={() => setSelectedDriver(null)}>
+        {selectedDriver && <DriverModal driver={selectedDriver} mockMode={mockMode} />}
+      </PreviewModal>
     </div>
   );
 };
