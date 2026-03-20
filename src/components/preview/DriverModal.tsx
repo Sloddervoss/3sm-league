@@ -27,6 +27,7 @@ interface Driver {
   irating?: number;
   safety_rating?: string;
   team_id?: string;
+  avatar_url?: string;
 }
 
 interface Props {
@@ -103,12 +104,21 @@ const DriverModal = ({ driver, mockMode = false }: Props) => {
 
         <div className="relative flex items-start gap-6">
           {/* Avatar */}
-          <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center font-heading font-black text-3xl shrink-0"
-            style={{ background: `${teamColor}20`, border: `2px solid ${teamColor}40`, color: teamColor }}
-          >
-            {name.charAt(0).toUpperCase()}
-          </div>
+          {driver.avatar_url ? (
+            <img
+              src={driver.avatar_url}
+              alt={name}
+              className="w-20 h-20 rounded-2xl object-cover shrink-0"
+              style={{ border: `2px solid ${teamColor}40` }}
+            />
+          ) : (
+            <div
+              className="w-20 h-20 rounded-2xl flex items-center justify-center font-heading font-black text-3xl shrink-0"
+              style={{ background: `${teamColor}20`, border: `2px solid ${teamColor}40`, color: teamColor }}
+            >
+              {name.charAt(0).toUpperCase()}
+            </div>
+          )}
 
           <div className="flex-1 min-w-0">
             {team && (

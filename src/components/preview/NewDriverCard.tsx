@@ -9,6 +9,7 @@ interface Driver {
   irating?: number;
   safety_rating?: string;
   team_id?: string;
+  avatar_url?: string;
 }
 
 interface DriverStats {
@@ -96,6 +97,7 @@ const NewDriverCard = ({ driver, stats, team, rank, onSelect }: Props) => {
         {/* Rank badge + name row */}
         <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-3">
+            {/* Rank badge */}
             <div
               className="w-11 h-11 rounded-xl flex items-center justify-center font-heading font-black text-base shrink-0"
               style={{
@@ -107,6 +109,17 @@ const NewDriverCard = ({ driver, stats, team, rank, onSelect }: Props) => {
             >
               {rs.label}
             </div>
+
+            {/* Avatar */}
+            {driver.avatar_url ? (
+              <img
+                src={driver.avatar_url}
+                alt={name}
+                className="w-11 h-11 rounded-xl object-cover shrink-0"
+                style={{ border: `1.5px solid ${teamColor}40` }}
+              />
+            ) : null}
+
             <div>
               <h3 className="font-heading font-black text-lg leading-tight text-white">{name}</h3>
               {team && (
