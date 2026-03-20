@@ -17,6 +17,10 @@ import AuthPage from "./pages/AuthPage.tsx";
 import AdminPage from "./pages/AdminPage.tsx";
 import ProfilePage from "./pages/ProfilePage.tsx";
 import PreviewPage from "./pages/PreviewPage.tsx";
+import DriverProfilePreview from "./pages/preview/DriverProfilePreview.tsx";
+import RaceDetailPreview from "./pages/preview/RaceDetailPreview.tsx";
+import TeamProfilePreview from "./pages/preview/TeamProfilePreview.tsx";
+import StandingsFullPreview from "./pages/preview/StandingsFullPreview.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient({
@@ -64,6 +68,10 @@ const App = () => (
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/preview" element={<PreviewPage />} />
+            <Route path="/preview/driver" element={<DriverProfilePreview />} />
+            <Route path="/preview/race" element={<RaceDetailPreview />} />
+            <Route path="/preview/team" element={<TeamProfilePreview />} />
+            <Route path="/preview/standings" element={<StandingsFullPreview />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

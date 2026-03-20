@@ -14,7 +14,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Eye, Users, Car, Trophy, Calendar, ChevronRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Eye, Users, Car, Trophy, Calendar, ChevronRight, ExternalLink } from "lucide-react";
 
 // ── Countdown ──────────────────────────────────────────────
 function useNow() {
@@ -234,6 +235,36 @@ const PreviewPage = () => {
 
       <main className="pt-8">
         <div className="container mx-auto px-4 max-w-7xl">
+
+          {/* ═══ PREVIEW SUB-PAGES NAV ═════════════════════ */}
+          <div className="py-8 mb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <ExternalLink className="w-4 h-4 text-orange-500" />
+              <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Preview Sub-Pages</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { to: "/preview/driver", label: "Driver Profile", icon: <Users className="w-5 h-5" />, desc: "Driver stats, race history, iRating" },
+                { to: "/preview/race",   label: "Race Detail",    icon: <Calendar className="w-5 h-5" />, desc: "Race info, resultaten, track map" },
+                { to: "/preview/team",   label: "Team Profile",   icon: <Car className="w-5 h-5" />, desc: "Team stats, drivers, resultaten" },
+                { to: "/preview/standings", label: "Standings",   icon: <Trophy className="w-5 h-5" />, desc: "Volledig kampioenschap overzicht" },
+              ].map(({ to, label, icon, desc }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  className="group rounded-xl p-4 transition-all"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-orange-500 group-hover:scale-110 transition-transform">{icon}</span>
+                    <span className="font-heading font-black text-sm text-white">{label}</span>
+                    <ExternalLink className="w-3 h-3 text-gray-700 ml-auto group-hover:text-orange-500 transition-colors" />
+                  </div>
+                  <p className="text-[11px] text-gray-600">{desc}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
 
           {/* ═══ HERO NEXT RACE ════════════════════════════ */}
           {nextRace && (
