@@ -51,12 +51,13 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
         src={trackPhoto}
         alt=""
         className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
-        style={{ opacity: 0.3, filter: "saturate(0.5) brightness(0.6)" }}
+        style={{ opacity: 0.5, filter: "saturate(0.7) brightness(0.75)", objectPosition: "center right" }}
       />
 
       {/* Gradient overlay */}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(8,8,15,0.8) 0%, rgba(8,8,15,0.5) 50%, rgba(8,8,15,0.75) 100%)" }} />
-      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(249,115,22,0.12) 0%, transparent 55%)" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(8,8,15,0.92) 0%, rgba(8,8,15,0.7) 50%, rgba(8,8,15,0.3) 100%)" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(8,8,15,0.4) 0%, transparent 60%)" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(249,115,22,0.1) 0%, transparent 45%)" }} />
       {/* Top orange accent bar */}
       <div
         className="absolute top-0 left-0 right-0 h-0.5"
