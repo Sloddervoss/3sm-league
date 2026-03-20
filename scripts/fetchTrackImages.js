@@ -14,10 +14,12 @@
  *   Node.js 18+ (heeft ingebouwde fetch)
  */
 
-const https = require("https");
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
+import https from "https";
+import http from "http";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Track data (kopie van src/lib/trackData.ts URLs) ─────────────────────────
 const WP = "https://upload.wikimedia.org/wikipedia/commons/thumb/";
@@ -103,17 +105,27 @@ async function main() {
     }
 
     process.stdout.write(`⬇  ${name.padEnd(45)} `);
-    try {
-      await download(url, dest);
-      console.log(`✓`);
-      ok++;
-    } catch (err) {
-      console.log(`✗  ${err.message}`);
-      fail++;
+    let success = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await download(url, dest);
+        success = true;
+        break;
+      } catch (err) {
+        if (attempt < 3 && err.message.includes("429")) {
+          process.stdout.write(`⏳ retry ${attempt}... `);
+          await new Promise((r) => setTimeout(r, 5000 * attempt));
+        } else {
+          console.log(`✗  ${err.message}`);
+          fail++;
+          break;
+        }
+      }
     }
+    if (success) { console.log(`✓`); ok++; }
 
-    // Kleine pauze om de server niet te overbelasten
-    await new Promise((r) => setTimeout(r, 300));
+    // Pauze om rate limiting te vermijden
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
   console.log(`\n──────────────────────────────`);
