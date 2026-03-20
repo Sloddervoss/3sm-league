@@ -68,7 +68,7 @@ const StickyRaceBar = () => {
 
   return (
     <div
-      className="sticky top-16 z-30 w-full"
+      className="fixed top-16 left-0 right-0 z-30 w-full"
       style={{
         background: "rgba(10,10,18,0.92)",
         borderBottom: `1px solid ${accentColor}33`,
