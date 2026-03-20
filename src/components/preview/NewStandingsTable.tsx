@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Trophy } from "lucide-react";
+import { Trophy, Medal } from "lucide-react";
 
 interface Standing {
   user_id: string;
@@ -14,161 +14,187 @@ interface Props {
   leagueName?: string;
 }
 
-const podiumColors = ["#facc15", "#94a3b8", "#d97706"];
-const podiumBg = ["rgba(250,204,21,0.08)", "rgba(148,163,184,0.06)", "rgba(217,119,6,0.06)"];
+const PODIUM = [
+  { color: "#facc15", bg: "rgba(250,204,21,0.08)",  border: "rgba(250,204,21,0.2)",  shadow: "rgba(250,204,21,0.15)" },
+  { color: "#94a3b8", bg: "rgba(148,163,184,0.06)", border: "rgba(148,163,184,0.15)", shadow: "rgba(148,163,184,0.1)" },
+  { color: "#d97706", bg: "rgba(217,119,6,0.07)",   border: "rgba(217,119,6,0.15)",  shadow: "rgba(217,119,6,0.1)" },
+];
 
 const NewStandingsTable = ({ standings, leagueName }: Props) => {
   if (!standings.length) {
     return (
-      <div className="text-center py-16 text-gray-600">
-        <Trophy className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="text-sm">Nog geen resultaten</p>
+      <div className="text-center py-16 text-gray-700">
+        <Trophy className="w-10 h-10 mx-auto mb-3 opacity-20" />
+        <p className="text-sm">Nog geen resultaten beschikbaar</p>
       </div>
     );
   }
 
+  const top3 = [standings[1], standings[0], standings[2]]; // left=P2, center=P1, right=P3
+  const actualRanks = [2, 1, 3];
+  const rest = standings.slice(3);
   const leader = standings[0];
 
   return (
     <div>
       {leagueName && (
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex items-center gap-2 mb-8">
           <Trophy className="w-4 h-4 text-orange-500" />
-          <span className="text-xs font-bold text-orange-500 uppercase tracking-widest">{leagueName}</span>
+          <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">{leagueName}</span>
         </div>
       )}
 
-      {/* Podium top-3 */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        {[standings[1], standings[0], standings[2]].map((driver, visualIdx) => {
-          // Reorder: left=2nd, center=1st, right=3rd
-          const actualRank = visualIdx === 0 ? 2 : visualIdx === 1 ? 1 : 3;
-          if (!driver) return <div key={visualIdx} />;
-          const color = podiumColors[actualRank - 1];
-          const bg = podiumBg[actualRank - 1];
-          const delta = leader.total_points - driver.total_points;
+      {/* Podium */}
+      {standings.length >= 2 && (
+        <div className="grid grid-cols-3 gap-3 mb-6 items-end">
+          {top3.map((driver, visualIdx) => {
+            const rank = actualRanks[visualIdx];
+            const p = PODIUM[rank - 1];
+            if (!driver) return <div key={visualIdx} className="h-0" />;
+            const delta = leader.total_points - driver.total_points;
+            const isCenter = visualIdx === 1;
 
-          return (
-            <motion.div
-              key={driver.user_id}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: visualIdx * 0.08 }}
-              className={`relative rounded-xl p-4 text-center ${visualIdx === 1 ? "mt-0" : "mt-4"}`}
-              style={{
-                background: bg,
-                border: `1px solid ${color}30`,
-              }}
-            >
-              {/* Rank crown */}
-              <div
-                className="w-9 h-9 rounded-full flex items-center justify-center font-heading font-black text-base mx-auto mb-2"
-                style={{ background: `${color}20`, border: `2px solid ${color}60`, color }}
+            return (
+              <motion.div
+                key={driver.user_id}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: visualIdx * 0.1 }}
+                className={`rounded-2xl p-4 text-center ${isCenter ? "pb-6 pt-6" : "pt-4 pb-4"}`}
+                style={{
+                  background: p.bg,
+                  border: `1px solid ${p.border}`,
+                  boxShadow: isCenter ? `0 8px 32px ${p.shadow}` : "none",
+                }}
               >
-                {actualRank}
-              </div>
-              <div className="font-heading font-bold text-sm text-white truncate">{driver.display_name}</div>
-              {driver.team && (
-                <div className="flex items-center justify-center gap-1 mt-0.5">
-                  <div className="w-1 h-1 rounded-full" style={{ backgroundColor: driver.team.color }} />
-                  <span className="text-[10px] text-gray-500 truncate">{driver.team.name}</span>
+                {/* Rank icon */}
+                <div
+                  className={`mx-auto mb-3 flex items-center justify-center rounded-full font-heading font-black ${isCenter ? "w-12 h-12 text-lg" : "w-9 h-9 text-sm"}`}
+                  style={{
+                    background: `${p.color}20`,
+                    border: `2px solid ${p.color}50`,
+                    color: p.color,
+                    boxShadow: isCenter ? `0 0 20px ${p.shadow}` : "none",
+                  }}
+                >
+                  {rank}
                 </div>
-              )}
-              <div className="font-heading font-black text-xl mt-2" style={{ color }}>
-                {driver.total_points}
-              </div>
-              <div className="text-[10px] text-gray-600">pts</div>
-              {delta > 0 && (
-                <div className="text-[10px] text-gray-600 mt-1">-{delta} van #1</div>
-              )}
-            </motion.div>
-          );
-        })}
-      </div>
 
-      {/* Full table */}
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{ border: "1px solid rgba(255,255,255,0.06)" }}
-      >
-        {/* Header */}
-        <div
-          className="grid grid-cols-[2.5rem_1fr_4rem_4rem] gap-2 px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-600"
-          style={{ background: "rgba(255,255,255,0.03)" }}
-        >
-          <span>Pos</span>
-          <span>Driver</span>
-          <span className="text-center">Wins</span>
-          <span className="text-center">Pts</span>
-        </div>
-
-        {standings.map((driver, i) => {
-          const color = i < 3 ? podiumColors[i] : null;
-          const delta = i > 0 ? driver.total_points - standings[i - 1].total_points : 0;
-
-          return (
-            <motion.div
-              key={driver.user_id}
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: Math.min(i, 8) * 0.04 }}
-              className="group grid grid-cols-[2.5rem_1fr_4rem_4rem] gap-2 px-4 py-3 items-center transition-colors"
-              style={{
-                borderTop: "1px solid rgba(255,255,255,0.04)",
-                background: i === 0 ? "rgba(249,115,22,0.04)" : "transparent",
-              }}
-              whileHover={{ backgroundColor: "rgba(255,255,255,0.025)" }}
-            >
-              {/* Position */}
-              <div
-                className="font-heading font-black text-base w-7 h-7 flex items-center justify-center rounded-md"
-                style={
-                  color
-                    ? { background: `${color}15`, color }
-                    : { color: "#6b7280" }
-                }
-              >
-                {i + 1}
-              </div>
-
-              {/* Driver name + team */}
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  {i === 0 && (
-                    <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />
-                  )}
-                  <span className="font-heading font-bold text-sm text-white truncate">
-                    {driver.display_name}
-                  </span>
+                <div
+                  className={`font-heading font-bold leading-tight text-white truncate ${isCenter ? "text-base" : "text-sm"}`}
+                >
+                  {driver.display_name}
                 </div>
+
                 {driver.team && (
-                  <div className="flex items-center gap-1 mt-0.5">
+                  <div className="flex items-center justify-center gap-1 mt-0.5 mb-2">
                     <div className="w-1 h-1 rounded-full" style={{ backgroundColor: driver.team.color }} />
                     <span className="text-[10px] text-gray-600 truncate">{driver.team.name}</span>
                   </div>
                 )}
-              </div>
 
-              {/* Wins */}
-              <div className="text-center font-heading font-bold text-sm text-gray-400">
-                {driver.wins}
-              </div>
-
-              {/* Points */}
-              <div className="text-center">
-                <span className="font-heading font-black text-base" style={{ color: color || "#e5e7eb" }}>
+                <div
+                  className={`font-heading font-black mt-2 leading-none ${isCenter ? "text-3xl" : "text-2xl"}`}
+                  style={{ color: p.color }}
+                >
                   {driver.total_points}
-                </span>
-                {delta < 0 && (
-                  <div className="text-[10px] text-gray-700">{delta}</div>
+                </div>
+                <div className="text-[10px] text-gray-600 uppercase tracking-wide mt-0.5">pts</div>
+
+                {delta > 0 && (
+                  <div className="text-[10px] text-gray-700 mt-1">-{delta}</div>
                 )}
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Full table */}
+      {rest.length > 0 && (
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{ border: "1px solid rgba(255,255,255,0.06)" }}
+        >
+          {/* Header */}
+          <div
+            className="grid gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600"
+            style={{
+              gridTemplateColumns: "2.5rem 1fr 4rem 4.5rem",
+              background: "rgba(255,255,255,0.03)",
+            }}
+          >
+            <span>Pos</span><span>Driver</span><span className="text-center">W</span><span className="text-center">PTS</span>
+          </div>
+
+          {standings.map((driver, i) => {
+            const delta = i > 0 ? driver.total_points - standings[i - 1].total_points : 0;
+            const isFirst = i === 0;
+            const podiumColor = i < 3 ? PODIUM[i].color : null;
+
+            return (
+              <motion.div
+                key={driver.user_id}
+                initial={{ opacity: 0, x: -12 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: Math.min(i, 10) * 0.03 }}
+                className="group grid gap-2 px-5 py-3.5 items-center cursor-default"
+                style={{
+                  gridTemplateColumns: "2.5rem 1fr 4rem 4.5rem",
+                  borderTop: "1px solid rgba(255,255,255,0.04)",
+                  background: isFirst ? "rgba(249,115,22,0.04)" : "transparent",
+                  transition: "background 0.15s",
+                }}
+                whileHover={{ backgroundColor: "rgba(255,255,255,0.025)" }}
+              >
+                {/* Position */}
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm"
+                  style={
+                    podiumColor
+                      ? { background: `${podiumColor}15`, color: podiumColor }
+                      : { color: "#4b5563" }
+                  }
+                >
+                  {i + 1}
+                </div>
+
+                {/* Name + team */}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    {isFirst && <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />}
+                    <span className="font-heading font-bold text-sm text-white truncate">{driver.display_name}</span>
+                  </div>
+                  {driver.team && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <div className="w-1 h-1 rounded-full" style={{ backgroundColor: driver.team.color }} />
+                      <span className="text-[10px] text-gray-700 truncate">{driver.team.name}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Wins */}
+                <div className="text-center font-heading font-bold text-sm text-gray-500">{driver.wins}</div>
+
+                {/* Points */}
+                <div className="text-center">
+                  <span
+                    className="font-heading font-black text-base"
+                    style={{ color: podiumColor || "#d1d5db" }}
+                  >
+                    {driver.total_points}
+                  </span>
+                  {delta < 0 && (
+                    <div className="text-[10px] text-gray-700">{delta}</div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
