@@ -54,13 +54,13 @@ const CompareBar = ({ label }: { label: string }) => (
 );
 
 const PreviewPage = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading } = useAuth();
   const navigate = useNavigate();
   const now = useNow();
 
   useEffect(() => {
-    if (isAdmin === false) navigate("/");
-  }, [isAdmin, navigate]);
+    if (!loading && !isAdmin) navigate("/");
+  }, [isAdmin, loading, navigate]);
 
   // -- Data queries (identical to existing pages) --
   const { data: profiles } = useQuery({
