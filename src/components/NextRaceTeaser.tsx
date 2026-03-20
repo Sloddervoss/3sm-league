@@ -128,7 +128,7 @@ const NextRaceTeaser = () => {
                   alt=""
                   aria-hidden
                   className="absolute right-4 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
-                  style={{ opacity: 0.28, filter: "invert(1) brightness(2)", mixBlendMode: "screen" }}
+                  style={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               )}
