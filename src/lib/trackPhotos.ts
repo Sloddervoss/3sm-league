@@ -29,12 +29,15 @@ const PHOTOS: Record<string, string> = {
   // Germany
   "Nürburgring Combined":                             "/tracks/photos/hock.jpg",
   "Nürburgring Grand Prix Circuit":                   "/tracks/photos/hock.jpg",
+  "Nürburgring Grand-Prix-Strecke":                   "/tracks/photos/hock.jpg",
   "Hockenheimring Baden-Württemberg":                 "/tracks/photos/hock.jpg",
   "Sachsenring":                                      "/tracks/photos/sachsenring.jpg",
+  "Motorsport Arena Oschersleben":                    "/tracks/photos/motorsportarenaoschersleben.jpg",
   // Austria
   "Red Bull Ring":                                    "/tracks/photos/rbr.jpg",
   // Hungary
   "Hungaroring":                                      "/tracks/photos/hungaroring.jpg",
+  "Hungaroring Circuit":                              "/tracks/photos/hungaroring.jpg",
   // Spain
   "Circuit de Barcelona-Catalunya":                   "/tracks/photos/update-circuitdebarcelona.jpg",
   "Circuit de Barcelona Catalunya":                   "/tracks/photos/update-circuitdebarcelona.jpg",
@@ -45,7 +48,9 @@ const PHOTOS: Record<string, string> = {
   "Circuit Paul Ricard":                              "/tracks/photos/magnycours.jpg",
   "Circuit de Nevers Magny-Cours":                    "/tracks/photos/magnycours.jpg",
   "Circuit de la Sarthe":                             "/tracks/photos/24hlemans.jpg",
+  "Circuit des 24 Heures du Mans":                    "/tracks/photos/24hlemans.jpg",
   "Lédenon":                                          "/tracks/photos/circuitdeledenon.jpg",
+  "Circuit de Lédenon":                               "/tracks/photos/circuitdeledenon.jpg",
   // Monaco
   "Circuit de Monaco":                                "/tracks/photos/circuitgillesvilleneuve-sm.jpg",
   // USA
@@ -53,6 +58,7 @@ const PHOTOS: Record<string, string> = {
   "Watkins Glen International":                       "/tracks/photos/watkinsglen.jpg",
   "Road America":                                     "/tracks/photos/update-roadamerica.jpg",
   "WeatherTech Raceway at Laguna Seca":               "/tracks/photos/lagunaseca.jpg",
+  "WeatherTech Raceway Laguna Seca":                  "/tracks/photos/lagunaseca.jpg",
   "Laguna Seca Raceway":                              "/tracks/photos/lagunaseca.jpg",
   "Sebring International Raceway":                    "/tracks/photos/sebring.jpg",
   "Daytona International Speedway":                   "/tracks/photos/daytona.jpg",
@@ -66,8 +72,10 @@ const PHOTOS: Record<string, string> = {
   "Summit Point Motorsports Park":                    "/tracks/photos/included-summitpointmotorsportspark.jpg",
   "Long Beach Street Circuit":                        "/tracks/photos/longbeach.jpg",
   "Chicago Street Course":                            "/tracks/photos/chicagostreetcourse.jpg",
+  "Chicagoland Speedway":                             "/tracks/photos/update-chicagolandspeedway.jpg",
   "Phoenix Raceway":                                  "/tracks/photos/phoenix.jpg",
   "Homestead-Miami Speedway":                         "/tracks/photos/homestead-miami-speedway.jpg",
+  "Homestead Miami Speedway":                         "/tracks/photos/homestead-miami-speedway.jpg",
   "Kansas Speedway":                                  "/tracks/photos/kansasspeedway.jpg",
   "Iowa Speedway":                                    "/tracks/photos/iowa.jpg",
   "Lime Rock Park":                                   "/tracks/photos/limerock2019.jpg",
@@ -75,7 +83,14 @@ const PHOTOS: Record<string, string> = {
   "Portland International Raceway":                   "/tracks/photos/portland.jpg",
   "St. Petersburg Street Circuit":                    "/tracks/photos/st-petersburg.jpg",
   "Autodromo Hermanos Rodriguez":                     "/tracks/photos/mexicocity.jpg",
+  "Autódromo Hermanos Rodríguez (Mexico City)":       "/tracks/photos/mexicocity.jpg",
+  "Charlotte Motor Speedway":                         "/tracks/photos/charlottemotorspeedway.jpg",
+  "EchoPark Speedway (Atlanta)":                      "/tracks/photos/echoparkspeedway.jpg",
+  "New Jersey Motorsports Park":                      "/tracks/photos/newjerseymotorsportspark-sm.jpg",
+  "Auto Club Speedway":                               "/tracks/photos/autoclubspeedway-sm1.jpg",
+  "World Wide Technology Raceway (Gateway)":          "/tracks/photos/worldwidetechnologyraceway.jpg",
   "Willow Springs Raceway":                           "/tracks/photos/willow-springs-raceway.jpg",
+  "Willow Springs International Raceway":             "/tracks/photos/willow-springs-raceway.jpg",
   // Japan
   "Mobility Resort Motegi":                           "/tracks/photos/mobilityresortmotegi.jpg",
   "Twin Ring Motegi":                                 "/tracks/photos/mobilityresortmotegi.jpg",
@@ -87,19 +102,24 @@ const PHOTOS: Record<string, string> = {
   "Circuit Gilles Villeneuve":                        "/tracks/photos/circuitgillesvilleneuve-sm.jpg",
   // Australia
   "The Bend Motorsport Park":                         "/tracks/photos/the-bend.jpg",
+  "Shell V-Power Motorsport Park at The Bend":        "/tracks/photos/the-bend.jpg",
   "Adelaide Street Circuit":                          "/tracks/photos/adelaide-street-circuit.jpg",
   "Sandown Motor Raceway":                            "/tracks/photos/sandown-motor-raceway.jpg",
+  "Sandown International Motor Raceway":              "/tracks/photos/sandown-motor-raceway.jpg",
   "Winton Motor Raceway":                             "/tracks/photos/winton-motor-raceway-included.jpg",
   "Phillip Island Circuit":                           "/tracks/photos/phillipisland-sm.jpg",
   "Mount Panorama Circuit":                           "/tracks/photos/update-mountpanoramacircuit.jpg",
-  "Oran Park Raceway":                               "/tracks/photos/included-oranparkraceway.jpg",
+  "Oran Park Raceway":                                "/tracks/photos/included-oranparkraceway.jpg",
   // Brazil
   "Autodromo Jose Carlos Pace":                       "/tracks/photos/autodromojosecarlospace.jpg",
+  "Autódromo José Carlos Pace":                       "/tracks/photos/autodromojosecarlospace.jpg",
   // Norway
   "Rudskogen Motorsenter":                            "/tracks/photos/rudskogen-motorsenter.jpg",
   "Lånkebanen":                                       "/tracks/photos/update-hellrxlaankebanen.jpg",
+  "Lånkebanen (Hell RX)":                             "/tracks/photos/update-hellrxlaankebanen.jpg",
   // Portugal
   "Autodromo Internacional do Algarve":               "/tracks/photos/algarve.jpg",
+  "Algarve International Circuit":                    "/tracks/photos/algarve.jpg",
   // Japan
   "Okayama International Circuit":                    "/tracks/photos/included-okayamainternationalcircuit.jpg",
 };
