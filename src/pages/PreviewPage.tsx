@@ -15,7 +15,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Eye, Users, Car, Trophy, Calendar, ChevronRight, ExternalLink } from "lucide-react";
+import { Eye, Users, Car, Trophy, Calendar, ChevronRight, ExternalLink, FlaskConical } from "lucide-react";
+import {
+  MOCK_TEAMS, MOCK_PROFILES, MOCK_STATS, MOCK_STANDINGS, MOCK_MEMBERSHIPS,
+} from "@/lib/mockData";
 
 // ── Countdown ──────────────────────────────────────────────
 function useNow() {
@@ -72,7 +75,8 @@ const Divider = () => (
 );
 
 // ── Preview Banner ─────────────────────────────────────────
-const PreviewBanner = () => (
+interface BannerProps { mockMode: boolean; onToggle: () => void; }
+const PreviewBanner = ({ mockMode, onToggle }: BannerProps) => (
   <div
     className="sticky top-16 z-40 flex items-center justify-between px-6 py-2"
     style={{ background: "rgba(8,8,15,0.9)", borderBottom: "1px solid rgba(249,115,22,0.15)", backdropFilter: "blur(12px)" }}
@@ -85,13 +89,25 @@ const PreviewBanner = () => (
       <div className="w-px h-3 bg-white/10" />
       <span className="text-xs text-gray-600">Nieuwe UI · geen bestaande pagina's gewijzigd</span>
     </div>
-    <span className="text-[10px] text-gray-700 font-mono">/preview</span>
+    <button
+      onClick={onToggle}
+      className="flex items-center gap-2 px-3 py-1 rounded-lg transition-all text-[11px] font-bold"
+      style={{
+        background: mockMode ? "rgba(168,85,247,0.15)" : "rgba(255,255,255,0.05)",
+        border: `1px solid ${mockMode ? "rgba(168,85,247,0.4)" : "rgba(255,255,255,0.08)"}`,
+        color: mockMode ? "#a855f7" : "#4b5563",
+      }}
+    >
+      <FlaskConical className="w-3.5 h-3.5" />
+      {mockMode ? "Mock data aan" : "Mock data"}
+    </button>
   </div>
 );
 
 // ══════════════════════════════════════════════════════════
 const PreviewPage = () => {
   const now = useNow();
+  const [mockMode, setMockMode] = useState(false);
 
   // ── Data (exact zelfde queries als bestaande pagina's) ──
   const { data: profiles = [] } = useQuery({
@@ -199,13 +215,31 @@ const PreviewPage = () => {
     },
   });
 
+  // ── Mock data merge ──────────────────────────────────────
+  const activeProfiles  = mockMode ? MOCK_PROFILES  : profiles;
+  const activeTeams     = mockMode ? MOCK_TEAMS     : teams;
+  const activeMemberships = mockMode ? MOCK_MEMBERSHIPS : memberships;
+  const activeStandings = mockMode ? MOCK_STANDINGS : standingsData;
+  const activeStatsMap  = mockMode
+    ? new Map(Object.entries(MOCK_STATS))
+    : driverStats;
+
   // ── Derived data ─────────────────────────────────────────
-  const sortedDrivers = [...profiles].sort((a: any, b: any) =>
-    (driverStats?.get(b.user_id)?.points || 0) - (driverStats?.get(a.user_id)?.points || 0)
+  const sortedDrivers = [...activeProfiles].sort((a: any, b: any) =>
+    (activeStatsMap?.get(b.user_id)?.points || 0) - (activeStatsMap?.get(a.user_id)?.points || 0)
   );
 
-  const getTeamMembers = (teamId: string) => memberships.filter((m: any) => m.team_id === teamId);
+  const getTeamMembers = (teamId: string) => activeMemberships.filter((m: any) => m.team_id === teamId);
   const getTeamStats = (teamId: string) => {
+    if (mockMode) {
+      const ids = getTeamMembers(teamId).map((m: any) => m.user_id);
+      let total = 0, wins = 0;
+      ids.forEach((id: string) => {
+        const s = MOCK_STATS[id];
+        if (s) { total += s.points; wins += s.wins; }
+      });
+      return { total, wins };
+    }
     const ids = getTeamMembers(teamId).map((m: any) => m.user_id);
     let total = 0, wins = 0;
     results.forEach((r: any) => { if (ids.includes(r.user_id)) { total += r.points; if (r.position === 1) wins++; } });
@@ -219,7 +253,7 @@ const PreviewPage = () => {
   const upcomingRaces = races.filter((r: any) => r.status !== "completed").slice(0, 8);
   const activeLeagueName = leagues?.[0]?.name;
 
-  const sortedTeams = [...teams]
+  const sortedTeams = [...activeTeams]
     .map((t: any) => ({ ...t, ...getTeamStats(t.id) }))
     .sort((a: any, b: any) => b.total - a.total);
 
@@ -231,7 +265,7 @@ const PreviewPage = () => {
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>
       <Navbar />
-      <PreviewBanner />
+      <PreviewBanner mockMode={mockMode} onToggle={() => setMockMode(m => !m)} />
 
       <main className="pt-8">
         <div className="container mx-auto px-4 max-w-7xl">
@@ -313,8 +347,8 @@ const PreviewPage = () => {
                   action="Volledig"
                 />
                 <NewStandingsTable
-                  standings={standingsData}
-                  leagueName={activeLeagueName}
+                  standings={activeStandings}
+                  leagueName={mockMode ? "GT Master Challenge Cup" : activeLeagueName}
                 />
               </div>
             </div>
@@ -335,8 +369,8 @@ const PreviewPage = () => {
                 <NewDriverCard
                   key={driver.user_id}
                   driver={driver}
-                  stats={driverStats?.get(driver.user_id)}
-                  team={teams.find((t: any) => t.id === driver.team_id)}
+                  stats={activeStatsMap?.get(driver.user_id)}
+                  team={activeTeams.find((t: any) => t.id === driver.team_id)}
                   rank={i + 1}
                 />
               ))}
