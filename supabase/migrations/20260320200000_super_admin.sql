@@ -15,6 +15,7 @@ VALUES ('103daeb3-9f46-4d79-a0a1-c460e43ed3b7', 'super_admin')
 ON CONFLICT (user_id, role) DO NOTHING;
 
 -- 3. admin_get_user_roles — alle rollen teruggeven (alleen voor admins/super_admin)
+DROP FUNCTION IF EXISTS public.admin_get_user_roles();
 CREATE OR REPLACE FUNCTION public.admin_get_user_roles()
 RETURNS TABLE(user_id UUID, role app_role)
 LANGUAGE plpgsql
