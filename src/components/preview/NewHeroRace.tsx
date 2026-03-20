@@ -45,39 +45,30 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
       className="relative w-full overflow-hidden rounded-2xl"
       style={{ minHeight: 340 }}
     >
-      {/* Track photo background */}
-      {trackPhoto && (
-        <div className="absolute inset-0 overflow-hidden">
-          <img
-            src={trackPhoto}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
-            style={{ opacity: 0.18, filter: "saturate(0.6)" }}
-          />
-        </div>
-      )}
-      {/* Circuit map (alleen als geen foto) */}
-      {!trackPhoto && trackInfo?.imageUrl ? (
-        <div className="absolute inset-0 flex items-center justify-end overflow-hidden">
-          <img
-            src={trackInfo.imageUrl}
-            alt=""
-            className="absolute right-0 w-2/3 max-w-md h-full object-contain opacity-[0.06] invert select-none pointer-events-none"
-          />
-        </div>
-      ) : null}
+      {/* Donkere base achtergrond */}
+      <div className="absolute inset-0" style={{ background: "#0a0a12" }} />
 
-      {/* Gradient overlay */}
+      {/* Track photo — hoog in de stack, vóór de overlay */}
+      {trackPhoto && (
+        <img
+          src={trackPhoto}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+          style={{ opacity: 0.35, filter: "saturate(0.5) brightness(0.7)" }}
+        />
+      )}
+
+      {/* Gradient overlay bovenop de foto */}
       <div
         className="absolute inset-0"
         style={{
-          background: "linear-gradient(135deg, rgba(8,8,15,0.92) 0%, rgba(10,10,18,0.75) 50%, rgba(8,8,15,0.88) 100%)",
+          background: "linear-gradient(135deg, rgba(8,8,15,0.75) 0%, rgba(8,8,15,0.4) 50%, rgba(8,8,15,0.65) 100%)",
         }}
       />
       <div
         className="absolute inset-0"
         style={{
-          background: "linear-gradient(90deg, rgba(249,115,22,0.1) 0%, transparent 60%)",
+          background: "linear-gradient(90deg, rgba(249,115,22,0.12) 0%, transparent 60%)",
         }}
       />
       {/* Top orange accent bar */}
