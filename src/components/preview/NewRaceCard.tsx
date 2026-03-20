@@ -63,7 +63,7 @@ const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Pro
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay: Math.min(index, 6) * 0.06 }}
-      whileHover={{ x: 4 }}
+      whileHover={{ x: 2 }}
       className="relative flex items-stretch overflow-hidden rounded-xl"
       style={{
         background: "linear-gradient(135deg, #111118 0%, #0d0d14 100%)",
