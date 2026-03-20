@@ -4,7 +4,15 @@
       "Bash(npx tsc:*)",
       "Bash(node_modules/.bin/tsc --noEmit)",
       "Bash(npm run:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "WebFetch(domain:en.wikipedia.org)",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/api/rest_v1/page/summary/Circuit_de_Spa-Francorchamps\")",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/api/rest_v1/page/summary/Zolder\")",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/api/rest_v1/page/summary/Autodromo_Nazionale_Monza\")",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/api/rest_v1/page/summary/Autodromo_Enzo_e_Dino_Ferrari\")",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/api/rest_v1/page/summary/Mugello_Circuit\")",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/api/rest_v1/page/summary/Misano_World_Circuit\")",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/api/rest_v1/page/summary/Circuit_Gilles_Villeneuve\")"
     ]
   }
 }
