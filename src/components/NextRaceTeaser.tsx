@@ -7,9 +7,10 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
-import { MapPin, Clock, Timer, ChevronRight, Calendar } from "lucide-react";
+import { MapPin, Clock, Timer, ChevronRight, Calendar, CheckCircle2, LogIn, LogOut, AlertCircle, Loader2 } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
+import { useRegistration } from "@/lib/useRegistration";
 
 function useNow() {
   const [now, setNow] = useState(() => new Date());
@@ -32,15 +33,18 @@ function formatCountdown(raceDate: string, now: Date) {
   return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
 }
 
+const SOLO_COLOR = "#818cf8";
+
 const NextRaceTeaser = () => {
   const now = useNow();
+  const reg = useRegistration();
 
   const { data: races = [] } = useQuery({
     queryKey: ["races-with-leagues"],
     queryFn: async () => {
       const { data } = await supabase
         .from("races")
-        .select("*, leagues(name, car_class, id)")
+        .select("*, leagues(name, car_class, id, season)")
         .order("race_date", { ascending: true });
       return data || [];
     },
@@ -51,6 +55,14 @@ const NextRaceTeaser = () => {
     .sort((a: any, b: any) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as any;
 
   if (!nextRace) return null;
+
+  const isStandalone = !nextRace.leagues;
+  const accentColor = isStandalone ? SOLO_COLOR : "#f97316";
+
+  const leagueId = nextRace.leagues?.id;
+  const isRegistered = reg.isRegisteredForRace(nextRace.id, leagueId);
+  const isRegisteredViaSeason = reg.isRegisteredViaSeason(leagueId);
+  const isLoading = reg.registerForRace.isPending || reg.unregisterFromRace.isPending;
 
   const trackInfo  = getTrackInfo(nextRace.track);
   const trackPhoto = getTrackPhoto(nextRace.track);
@@ -90,11 +102,11 @@ const NextRaceTeaser = () => {
           className="relative overflow-hidden rounded-2xl"
           style={{
             background: "linear-gradient(135deg, #111118 0%, #0d0d14 100%)",
-            border: "1px solid rgba(249,115,22,0.2)",
+            border: `1px solid ${accentColor}33`,
           }}
         >
-          {/* Orange top bar */}
-          <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg, #f97316, transparent)" }} />
+          {/* Top accent bar */}
+          <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: `linear-gradient(90deg, ${accentColor}, transparent)` }} />
 
           <div className="flex flex-col md:flex-row items-stretch">
             {/* Track photo */}
@@ -112,20 +124,27 @@ const NextRaceTeaser = () => {
             {/* Content */}
             <div className="flex-1 p-6 md:p-8 flex flex-col justify-between">
               <div>
-                {/* League + status */}
-                <div className="flex items-center gap-3 mb-3">
+                {/* Status + type badge */}
+                <div className="flex items-center gap-3 mb-3 flex-wrap">
                   <span
                     className="text-[10px] font-bold px-2.5 py-1 rounded-full"
-                    style={{ background: "rgba(249,115,22,0.12)", color: "#f97316" }}
+                    style={{ background: `${accentColor}1f`, color: accentColor }}
                   >
                     Upcoming
                   </span>
-                  {nextRace.leagues?.name && (
-                    <span className="text-xs text-gray-600">{nextRace.leagues.name}</span>
-                  )}
-                  {nextRace.leagues?.car_class && (
-                    <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.05)", color: "#6b7280" }}>
-                      {nextRace.leagues.car_class}
+                  {isStandalone ? (
+                    <span
+                      className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+                      style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.2)" }}
+                    >
+                      Losse Race
+                    </span>
+                  ) : nextRace.leagues && (
+                    <span
+                      className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+                      style={{ background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.2)" }}
+                    >
+                      {nextRace.leagues.name}{nextRace.leagues.season ? ` · ${nextRace.leagues.season}` : ""}
                     </span>
                   )}
                 </div>
@@ -171,31 +190,66 @@ const NextRaceTeaser = () => {
               </div>
 
               {/* Bottom row: countdown + CTA */}
-              <div className="flex items-end justify-between mt-6 pt-6" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="flex items-end justify-between mt-6 pt-6 flex-wrap gap-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 {countdown ? (
                   <div>
                     <div className="flex items-center gap-1.5 text-[10px] text-gray-600 uppercase tracking-wide mb-1">
                       <Timer className="w-3 h-3" /> Tot start
                     </div>
-                    <div className="font-heading font-black text-2xl leading-none tabular-nums" style={{ color: "#f97316" }}>
+                    <div className="font-heading font-black text-2xl leading-none tabular-nums" style={{ color: accentColor }}>
                       {countdown}
                     </div>
                   </div>
                 ) : <div />}
 
-                <Link
-                  to="/calendar"
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-heading font-bold text-sm transition-all"
-                  style={{
-                    background: "rgba(249,115,22,0.15)",
-                    border: "1px solid rgba(249,115,22,0.3)",
-                    color: "#f97316",
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(249,115,22,0.25)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(249,115,22,0.15)"; }}
-                >
-                  Schrijf in <ChevronRight className="w-4 h-4" />
-                </Link>
+                {/* Registration CTA */}
+                {!reg.user ? (
+                  <Link
+                    to="/calendar"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-heading font-bold text-sm transition-all"
+                    style={{ background: `${accentColor}26`, border: `1px solid ${accentColor}4d`, color: accentColor }}
+                  >
+                    Schrijf in <ChevronRight className="w-4 h-4" />
+                  </Link>
+                ) : !reg.profileComplete ? (
+                  <div className="flex items-center gap-2 text-sm text-yellow-500/80 px-4 py-2.5 rounded-xl"
+                    style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.15)" }}>
+                    <AlertCircle className="w-4 h-4" />
+                    Vul iRacing profiel in
+                  </div>
+                ) : isRegisteredViaSeason ? (
+                  <div className="flex items-center gap-2 text-sm font-bold text-green-400 px-4 py-2.5 rounded-xl"
+                    style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Ingeschreven via seizoen
+                  </div>
+                ) : isRegistered ? (
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 text-sm font-bold text-green-400">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Ingeschreven
+                    </div>
+                    <button
+                      onClick={() => reg.unregisterFromRace.mutate(nextRace.id)}
+                      disabled={isLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                      style={{ background: "rgba(107,114,128,0.1)", border: "1px solid rgba(107,114,128,0.2)", color: "#6b7280" }}
+                    >
+                      {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
+                      Uitschrijven
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => reg.registerForRace.mutate(nextRace.id)}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-heading font-bold text-sm transition-all"
+                    style={{ background: `${accentColor}26`, border: `1px solid ${accentColor}4d`, color: accentColor, opacity: isLoading ? 0.6 : 1 }}
+                  >
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+                    Schrijf in
+                  </button>
+                )}
               </div>
             </div>
           </div>
