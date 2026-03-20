@@ -505,13 +505,14 @@ const PreviewPage = () => {
           <RaceModal
             race={selectedRace}
             mockMode={mockMode}
-            registration={mockMode ? undefined : {
+            registration={{
               isRegistered: reg.isRegisteredForRace(selectedRace.id, selectedRace.leagues?.id || leagues?.[0]?.id),
               isRegisteredViaSeason: reg.isRegisteredViaSeason(selectedRace.leagues?.id || leagues?.[0]?.id),
-              profileComplete: reg.profileComplete,
+              profileComplete: mockMode ? true : reg.profileComplete,
               isLoading: reg.registerForRace.isPending || reg.unregisterFromRace.isPending,
               onRegister: () => reg.registerForRace.mutate(selectedRace.id),
               onUnregister: () => reg.unregisterFromRace.mutate(selectedRace.id),
+              hasLeague: !!(selectedRace.leagues?.id || leagues?.[0]?.id),
             }}
           />
         )}

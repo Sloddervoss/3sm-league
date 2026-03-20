@@ -30,6 +30,7 @@ interface RegistrationProps {
   isRegisteredViaSeason: boolean;
   profileComplete: boolean;
   isLoading?: boolean;
+  hasLeague: boolean;
   onRegister: () => void;
   onUnregister: () => void;
 }
@@ -159,8 +160,8 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
             </div>
           )}
 
-          {/* Registration button — only for upcoming races */}
-          {registration && race.status === "upcoming" && (
+          {/* Registration button — alle niet-afgeronde races */}
+          {registration && race.status !== "completed" && (
             <div className="mt-5 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
               {!registration.profileComplete ? (
                 <div className="flex items-center gap-2 text-sm text-yellow-500/80 px-4 py-2.5 rounded-xl w-fit"
@@ -205,7 +206,7 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(249,115,22,0.15)"; }}
                 >
                   {registration.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-                  Schrijf in voor deze race
+                  {registration.hasLeague ? "Schrijf in voor deze race" : "Schrijf in voor race"}
                 </button>
               )}
             </div>
