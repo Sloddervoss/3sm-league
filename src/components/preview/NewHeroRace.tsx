@@ -14,7 +14,7 @@ interface Race {
   practice_duration?: string;
   qualifying_duration?: string;
   race_duration?: string;
-  leagues?: { name: string; car_class?: string };
+  leagues?: { name: string; car_class?: string; season?: string };
 }
 
 interface Props {
@@ -29,9 +29,13 @@ const sessions = (race: Race) => [
   race.race_duration       && { label: "Race",        dur: race.race_duration,        color: "#f97316", bg: "rgba(249,115,22,0.15)" },
 ].filter(Boolean) as { label: string; dur: string; color: string; bg: string }[];
 
+const SOLO_COLOR = "#818cf8";
+
 const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
   const trackInfo = getTrackInfo(race.track);
   const trackPhoto = getTrackPhoto(race.track);
+  const isStandalone = !race.leagues;
+  const accentColor = isStandalone ? SOLO_COLOR : "#f97316";
   const raceDate = new Date(race.race_date);
   const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
   const timeStr = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
@@ -57,11 +61,11 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
       {/* Gradient overlay */}
       <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(8,8,15,0.92) 0%, rgba(8,8,15,0.7) 50%, rgba(8,8,15,0.3) 100%)" }} />
       <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(8,8,15,0.4) 0%, transparent 60%)" }} />
-      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(249,115,22,0.1) 0%, transparent 45%)" }} />
-      {/* Top orange accent bar */}
+      <div className="absolute inset-0" style={{ background: `linear-gradient(90deg, ${accentColor}1a 0%, transparent 45%)` }} />
+      {/* Top accent bar */}
       <div
         className="absolute top-0 left-0 right-0 h-0.5"
-        style={{ background: "linear-gradient(90deg, #f97316, #f9731640, transparent)" }}
+        style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor}40, transparent)` }}
       />
       {/* Bottom fade */}
       <div
@@ -74,14 +78,31 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
 
         {/* Top row: label + countdown */}
         <div className="flex items-start justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"
-              style={{ boxShadow: "0 0 8px #f97316" }}
-            />
-            <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">
-              Volgende Race
-            </span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-2 h-2 rounded-full animate-pulse"
+                style={{ background: accentColor, boxShadow: `0 0 8px ${accentColor}` }}
+              />
+              <span className="text-xs font-black uppercase tracking-[0.25em]" style={{ color: accentColor }}>
+                Volgende Race
+              </span>
+            </div>
+            {isStandalone ? (
+              <span
+                className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+                style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.2)" }}
+              >
+                Losse Race
+              </span>
+            ) : race.leagues && (
+              <span
+                className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded"
+                style={{ background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.2)" }}
+              >
+                {race.leagues.name}{race.leagues.season ? ` · ${race.leagues.season}` : ""}
+              </span>
+            )}
           </div>
 
           {/* Countdown */}
@@ -90,8 +111,8 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
               <div
                 className="font-heading font-black text-4xl md:text-5xl tabular-nums leading-none"
                 style={{
-                  color: "#f97316",
-                  textShadow: "0 0 30px rgba(249,115,22,0.4)",
+                  color: accentColor,
+                  textShadow: `0 0 30px ${accentColor}66`,
                 }}
               >
                 {countdown}
@@ -180,15 +201,6 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0 }: Props) => {
           )}
         </div>
 
-        {/* League name bottom-right */}
-        {race.leagues && (
-          <div className="flex justify-end mt-6">
-            <span className="text-xs text-gray-700 font-medium">
-              {race.leagues.name}
-              {race.leagues.car_class && ` · ${race.leagues.car_class}`}
-            </span>
-          </div>
-        )}
       </div>
     </motion.div>
   );
