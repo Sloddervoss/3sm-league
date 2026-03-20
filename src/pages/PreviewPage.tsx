@@ -7,8 +7,6 @@ import NewRaceCard from "@/components/preview/NewRaceCard";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
 import { Eye, Users, Car, Trophy, Calendar } from "lucide-react";
 
 // -- Countdown hook --
@@ -54,13 +52,7 @@ const CompareBar = ({ label }: { label: string }) => (
 );
 
 const PreviewPage = () => {
-  const { isAdmin, loading } = useAuth();
-  const navigate = useNavigate();
   const now = useNow();
-
-  useEffect(() => {
-    if (!loading && !isAdmin) navigate("/");
-  }, [isAdmin, loading, navigate]);
 
   // -- Data queries (identical to existing pages) --
   const { data: profiles } = useQuery({
