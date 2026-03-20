@@ -423,6 +423,8 @@ const IRACING_TRACKS = [...new Set([
   "Slinger Speedway - Figure Eight",
   "Slinger Speedway - Oval",
   "Snetterton Circuit",
+  "St. Petersburg Street Circuit",
+  "St. Petersburg Grand Prix",
   "Snetterton Circuit - 100",
   "Snetterton Circuit - 200",
   "Snetterton Circuit - 300",
