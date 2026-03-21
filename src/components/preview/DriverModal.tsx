@@ -9,6 +9,16 @@ import { TrendingUp, Shield, Trophy, Flag, Zap } from "lucide-react";
 const SAFETY_COLOR: Record<string, string> = { A: "#22c55e", B: "#eab308", C: "#f97316", D: "#ef4444" };
 const PODIUM_COLOR = ["#facc15", "#94a3b8", "#d97706"];
 
+const RANK_STYLE: Record<string, { color: string; bg: string; border: string }> = {
+  "Rookie":        { color: "#9ca3af", bg: "rgba(156,163,175,0.1)", border: "rgba(156,163,175,0.25)" },
+  "Stripe 3":      { color: "#cd7f32", bg: "rgba(205,127,50,0.1)",  border: "rgba(205,127,50,0.25)" },
+  "Stripe 2":      { color: "#94a3b8", bg: "rgba(148,163,184,0.1)", border: "rgba(148,163,184,0.25)" },
+  "Stripe 1":      { color: "#f59e0b", bg: "rgba(245,158,11,0.1)",  border: "rgba(245,158,11,0.25)" },
+  "Elite Stripe":  { color: "#f97316", bg: "rgba(249,115,22,0.1)",  border: "rgba(249,115,22,0.25)" },
+  "Pro Stripe":    { color: "#a855f7", bg: "rgba(168,85,247,0.1)",  border: "rgba(168,85,247,0.25)" },
+  "Legend Stripe": { color: "#facc15", bg: "rgba(250,204,21,0.1)",  border: "rgba(250,204,21,0.25)" },
+};
+
 const iRatingTier = (ir?: number) => {
   if (!ir)        return { label: "—",            pct: 0,   color: "#374151" };
   if (ir >= 6000) return { label: "World Class",  pct: 100, color: "#a855f7" };
@@ -46,6 +56,18 @@ const DriverModal = ({ driver }: Props) => {
     queryFn: async () => {
       const { data } = await (supabase as any).from("teams").select("id, name, color, logo_url");
       return data || [];
+    },
+  });
+
+  const { data: sr } = useQuery({
+    queryKey: ["driver-3sr", driver.user_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("driver_3sr")
+        .select("current_score, ranked_races, is_ranked, rank_label")
+        .eq("user_id", driver.user_id)
+        .maybeSingle();
+      return data;
     },
   });
 
@@ -148,6 +170,35 @@ const DriverModal = ({ driver }: Props) => {
                 </div>
               )}
             </div>
+
+            {/* 3SR rank badge */}
+            {sr && (
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {sr.is_ranked && sr.rank_label ? (() => {
+                  const rs = RANK_STYLE[sr.rank_label] ?? RANK_STYLE["Rookie"];
+                  return (
+                    <span
+                      className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg"
+                      style={{ background: rs.bg, color: rs.color, border: `1px solid ${rs.border}` }}
+                    >
+                      3SR · {sr.rank_label}
+                    </span>
+                  );
+                })() : (
+                  <span
+                    className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg"
+                    style={{ background: "rgba(255,255,255,0.04)", color: "#4b5563", border: "1px solid rgba(255,255,255,0.08)" }}
+                  >
+                    3SR · Unranked
+                  </span>
+                )}
+                {sr.is_ranked && (
+                  <span className="text-[10px] text-gray-600 tabular-nums">
+                    {Math.round(sr.current_score)} pts · {sr.ranked_races} races
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Total points */}
