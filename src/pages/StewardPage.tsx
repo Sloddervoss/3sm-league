@@ -56,6 +56,7 @@ const StewardPage = () => {
   const { data: protests, isLoading } = useQuery({
     queryKey: ["my-protests", user?.id, isAdmin],
     enabled: !!user,
+    refetchOnMount: "always",
     queryFn: async () => {
       let query = supabase
         .from("protests")

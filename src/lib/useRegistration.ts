@@ -13,6 +13,7 @@ export function useRegistration() {
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user,
+    refetchOnMount: "always",
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
