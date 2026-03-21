@@ -12,7 +12,8 @@ const ChampionshipLeader = () => {
     queryFn: async () => {
       const { data: results } = await supabase
         .from("race_results")
-        .select("user_id, position, points, profiles(display_name, iracing_name, iracing_id)");
+        .select("user_id, position, points, profiles(display_name, iracing_name, iracing_id), races!inner(league_id)")
+        .not("races.league_id", "is", null);
 
       const map = new Map<string, { name: string; points: number; wins: number; races: number; podiums: number }>();
       results?.forEach((r: any) => {
