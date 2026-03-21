@@ -7,7 +7,6 @@ import { motion } from "framer-motion";
 import { MapPin, Clock, CloudSun, Gauge, Users, Trophy, Flag, Zap, LogIn, LogOut, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
-import { MOCK_TEAMS, MOCK_RACE_DETAIL_RESULTS, MOCK_RACE_REGISTRANTS } from "@/lib/mockData";
 
 const PODIUM = ["#facc15", "#94a3b8", "#d97706"];
 
@@ -37,14 +36,12 @@ interface RegistrationProps {
 
 interface Props {
   race: Race;
-  mockMode?: boolean;
   registration?: RegistrationProps;
 }
 
-const RaceModal = ({ race, mockMode = false, registration }: Props) => {
-  const { data: realResults = [] } = useQuery({
+const RaceModal = ({ race, registration }: Props) => {
+  const { data: results = [] } = useQuery({
     queryKey: ["race-modal-results", race.id],
-    enabled: !mockMode,
     queryFn: async () => {
       const { data } = await supabase
         .from("race_results")
@@ -65,7 +62,7 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
 
   const { data: registrants = [] } = useQuery({
     queryKey: ["race-modal-registrants", race.id, (race as any).leagues?.id],
-    enabled: !mockMode && race.status !== "completed",
+    enabled: race.status !== "completed",
     queryFn: async () => {
       // Direct race registrants
       const { data: raceRegs } = await (supabase as any)
@@ -111,11 +108,6 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
       });
     },
   });
-
-  const activeTeams    = mockMode ? MOCK_TEAMS : teams;
-  const results        = mockMode && race.status === "completed" ? MOCK_RACE_DETAIL_RESULTS : realResults;
-  const activeRegistrants = mockMode ? MOCK_RACE_REGISTRANTS : registrants;
-  const activeRegCount = mockMode ? MOCK_RACE_REGISTRANTS.length : registrants.length;
 
   const showResults    = race.status === "completed" && results.length > 0;
   const showRegistrants = !showResults;
@@ -190,7 +182,7 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
             </div>
             {race.weather && <div className="flex items-center gap-1.5"><CloudSun className="w-4 h-4" />{race.weather}</div>}
             {race.setup   && <div className="flex items-center gap-1.5"><Gauge className="w-4 h-4" />{race.setup}</div>}
-            {activeRegCount > 0 && <div className="flex items-center gap-1.5"><Users className="w-4 h-4" />{activeRegCount} deelnemers</div>}
+            {registrants.length > 0 && <div className="flex items-center gap-1.5"><Users className="w-4 h-4" />{registrants.length} deelnemers</div>}
           </div>
 
           {sessions.length > 0 && (
@@ -290,7 +282,7 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
               </div>
               {results.map((r: any, i: number) => {
                 const posColor = r.position <= 3 ? PODIUM[r.position - 1] : (r.dnf ? "#ef4444" : "#6b7280");
-                const team = activeTeams.find((t: any) => t.id === r.profiles?.team_id);
+                const team = teams.find((t: any) => t.id === r.profiles?.team_id);
                 return (
                   <motion.div
                     key={r.id || i}
@@ -336,15 +328,15 @@ const RaceModal = ({ race, mockMode = false, registration }: Props) => {
                 <Users className="w-4 h-4 text-orange-500" />
                 <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Ingeschreven</span>
               </div>
-              {activeRegistrants.length > 0 && (
-                <span className="text-xs text-gray-600">{activeRegistrants.length} deelnemer{activeRegistrants.length !== 1 ? "s" : ""}</span>
+              {registrants.length > 0 && (
+                <span className="text-xs text-gray-600">{registrants.length} deelnemer{registrants.length !== 1 ? "s" : ""}</span>
               )}
             </div>
 
-            {activeRegistrants.length > 0 ? (
+            {registrants.length > 0 ? (
               <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
-                {activeRegistrants.map((r: any, i: number) => {
-                  const team = activeTeams.find((t: any) => t.id === r.team_id);
+                {registrants.map((r: any, i: number) => {
+                  const team = teams.find((t: any) => t.id === r.team_id);
                   return (
                     <motion.div
                       key={r.user_id}

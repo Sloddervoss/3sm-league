@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { TrendingUp, Shield, Trophy, Flag, Zap } from "lucide-react";
-import { MOCK_TEAMS, MOCK_DRIVER_RESULTS } from "@/lib/mockData";
 
 const SAFETY_COLOR: Record<string, string> = { A: "#22c55e", B: "#eab308", C: "#f97316", D: "#ef4444" };
 const PODIUM_COLOR = ["#facc15", "#94a3b8", "#d97706"];
@@ -32,7 +31,6 @@ interface Driver {
 
 interface Props {
   driver: Driver;
-  mockMode?: boolean;
 }
 
 const StatBox = ({ label, value, accent }: { label: string; value: React.ReactNode; accent?: string }) => (
@@ -42,7 +40,7 @@ const StatBox = ({ label, value, accent }: { label: string; value: React.ReactNo
   </div>
 );
 
-const DriverModal = ({ driver, mockMode = false }: Props) => {
+const DriverModal = ({ driver }: Props) => {
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -51,9 +49,8 @@ const DriverModal = ({ driver, mockMode = false }: Props) => {
     },
   });
 
-  const { data: realResults = [] } = useQuery({
+  const { data: raceResults = [] } = useQuery({
     queryKey: ["driver-modal-results", driver.user_id],
-    enabled: !mockMode,
     queryFn: async () => {
       const { data } = await supabase
         .from("race_results")
@@ -64,9 +61,7 @@ const DriverModal = ({ driver, mockMode = false }: Props) => {
     },
   });
 
-  const activeTeams  = mockMode ? MOCK_TEAMS : teams;
-  const raceResults  = mockMode ? (MOCK_DRIVER_RESULTS[driver.user_id] || []) : realResults;
-  const team         = activeTeams.find((t: any) => t.id === driver.team_id);
+  const team         = teams.find((t: any) => t.id === driver.team_id);
   const teamColor    = team?.color || "#f97316";
 
   const safetyLetter = (driver.safety_rating || "").split(" ")[0] || "?";
