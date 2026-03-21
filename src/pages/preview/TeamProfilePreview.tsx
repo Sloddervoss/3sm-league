@@ -48,8 +48,9 @@ const TeamProfilePreview = () => {
   const activeMemberships = mockMode ? MOCK_MEMBERSHIPS : memberships;
   const activeAllResults  = mockMode ? MOCK_ALL_RESULTS  : allResults;
 
+  // When navigating from /teams with a real ID, always search real data first
   const team: any = selectedId
-    ? activeTeams.find((t: any) => t.id === selectedId)
+    ? (teams.find((t: any) => t.id === selectedId) || activeTeams.find((t: any) => t.id === selectedId))
     : activeTeams[0];
 
   const color = team?.color || "#f97316";
@@ -78,7 +79,7 @@ const TeamProfilePreview = () => {
     .sort((a: any, b: any) => new Date(b.races?.race_date || 0).getTime() - new Date(a.races?.race_date || 0).getTime())
     .slice(0, 10);
 
-  if (teamsLoading && !mockMode) {
+  if (!mockMode && selectedId && !team && (teamsLoading || teams.length === 0)) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "#08080f" }}>
         <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin" />

@@ -49,8 +49,9 @@ const DriverProfilePreview = () => {
   const activeProfiles = mockMode ? MOCK_PROFILES : profiles;
   const activeTeams    = mockMode ? MOCK_TEAMS    : teams;
 
+  // When navigating from /drivers with a real ID, always search real data first
   const driver: any = selectedId
-    ? activeProfiles.find((p: any) => p.user_id === selectedId)
+    ? (profiles.find((p: any) => p.user_id === selectedId) || activeProfiles.find((p: any) => p.user_id === selectedId))
     : activeProfiles[0];
 
   const { data: realRaceResults = [] } = useQuery({
@@ -83,7 +84,7 @@ const DriverProfilePreview = () => {
   const bestFinish = raceResults.length > 0 ? Math.min(...raceResults.map((r: any) => r.position)) : null;
   const fastestLaps = raceResults.filter((r: any) => r.fastest_lap).length;
 
-  if (driversLoading && !mockMode) {
+  if (!mockMode && selectedId && !driver && (driversLoading || profiles.length === 0)) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "#08080f" }}>
         <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin" />
