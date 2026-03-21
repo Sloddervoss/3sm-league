@@ -38,7 +38,8 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
   const trackInfo = getTrackInfo(race.track);
   const trackPhoto = getTrackPhoto(race.track);
   const isStandalone = !race.leagues;
-  const accentColor = isStandalone ? SOLO_COLOR : "#f97316";
+  const isLive = countdown === null && race.status !== "completed";
+  const accentColor = isLive ? "#22c55e" : isStandalone ? SOLO_COLOR : "#f97316";
   const raceDate = new Date(race.race_date);
   const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" });
   const timeStr = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
@@ -105,7 +106,7 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
                 style={{ background: accentColor, boxShadow: `0 0 8px ${accentColor}` }}
               />
               <span className="text-xs font-black uppercase tracking-[0.25em]" style={{ color: accentColor }}>
-                Volgende Race
+                {isLive ? "● Live" : "Volgende Race"}
               </span>
             </div>
             {isStandalone ? (
@@ -125,15 +126,24 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
             )}
           </div>
 
-          {/* Countdown */}
-          {countdown && (
+          {/* Countdown of LIVE badge */}
+          {isLive ? (
+            <div className="text-right">
+              <div
+                className="font-heading font-black text-4xl md:text-5xl leading-none animate-pulse"
+                style={{ color: "#22c55e", textShadow: "0 0 30px rgba(34,197,94,0.5)" }}
+              >
+                LIVE
+              </div>
+              <div className="text-[10px] text-gray-600 uppercase tracking-widest mt-1">
+                Nu bezig
+              </div>
+            </div>
+          ) : countdown ? (
             <div className="text-right">
               <div
                 className="font-heading font-black text-4xl md:text-5xl tabular-nums leading-none"
-                style={{
-                  color: accentColor,
-                  textShadow: `0 0 30px ${accentColor}66`,
-                }}
+                style={{ color: accentColor, textShadow: `0 0 30px ${accentColor}66` }}
               >
                 {countdown}
               </div>
@@ -142,7 +152,7 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
                 tot start
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Race name */}
