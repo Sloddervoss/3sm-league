@@ -172,33 +172,31 @@ const DriverModal = ({ driver }: Props) => {
             </div>
 
             {/* 3SR rank badge */}
-            {sr && (
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                {sr.is_ranked && sr.rank_label ? (() => {
-                  const rs = RANK_STYLE[sr.rank_label] ?? RANK_STYLE["Rookie"];
-                  return (
-                    <span
-                      className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg"
-                      style={{ background: rs.bg, color: rs.color, border: `1px solid ${rs.border}` }}
-                    >
-                      3SR · {sr.rank_label}
-                    </span>
-                  );
-                })() : (
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              {sr?.is_ranked && sr.rank_label ? (() => {
+                const rs = RANK_STYLE[sr.rank_label] ?? RANK_STYLE["Rookie"];
+                return (
                   <span
                     className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg"
-                    style={{ background: "rgba(255,255,255,0.04)", color: "#4b5563", border: "1px solid rgba(255,255,255,0.08)" }}
+                    style={{ background: rs.bg, color: rs.color, border: `1px solid ${rs.border}` }}
                   >
-                    3SR · Unranked
+                    3SR · {sr.rank_label}
                   </span>
-                )}
-                {sr.is_ranked && (
-                  <span className="text-[10px] text-gray-600 tabular-nums">
-                    {Math.round(sr.current_score)} pts · {sr.ranked_races} races
-                  </span>
-                )}
-              </div>
-            )}
+                );
+              })() : (
+                <span
+                  className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.04)", color: "#4b5563", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  3SR · Unranked
+                </span>
+              )}
+              {sr?.is_ranked && (
+                <span className="text-[10px] text-gray-600 tabular-nums">
+                  {Math.round(sr.current_score)} pts · {sr.ranked_races} races
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Total points */}
