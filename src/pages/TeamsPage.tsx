@@ -1,13 +1,17 @@
+import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import NewTeamCard from "@/components/preview/NewTeamCard";
 import NewStandingsTable from "@/components/preview/NewStandingsTable";
+import PreviewModal from "@/components/preview/PreviewModal";
+import TeamModal from "@/components/preview/TeamModal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Car, Trophy } from "lucide-react";
 
 const TeamsPage = () => {
+  const [selectedTeam, setSelectedTeam] = useState<any>(null);
   const { data: teams = [], isLoading } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
@@ -99,6 +103,7 @@ const TeamsPage = () => {
                       points={team.total}
                       wins={team.wins}
                       rank={i + 1}
+                      onSelect={() => setSelectedTeam(team)}
                     />
                   ))}
                 </div>
@@ -117,6 +122,10 @@ const TeamsPage = () => {
         </div>
       </main>
       <Footer />
+
+      <PreviewModal open={!!selectedTeam} onClose={() => setSelectedTeam(null)} maxWidth="780px">
+        {selectedTeam && <TeamModal team={selectedTeam} />}
+      </PreviewModal>
     </div>
   );
 };
