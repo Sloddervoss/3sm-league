@@ -14,6 +14,34 @@ type AdminTab = "overview" | "seasons" | "teams" | "results" | "points" | "drive
 
 const DEFAULT_POINTS = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
+// Tijdzone utilities — admin voert altijd Amsterdam (CET/CEST) tijd in
+const TZ = "Europe/Amsterdam";
+
+/** Amsterdam lokale tijd string → UTC ISO string (voor opslaan in DB) */
+function amsToUTC(localStr: string): string {
+  const temp = new Date(localStr + ":00.000Z");
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(temp);
+  const p: Record<string, string> = {};
+  parts.forEach(({ type, value }) => { p[type] = value; });
+  const amsDate = new Date(`${p.year}-${p.month}-${p.day}T${p.hour === "24" ? "00" : p.hour}:${p.minute}:00.000Z`);
+  return new Date(temp.getTime() - (amsDate.getTime() - temp.getTime())).toISOString();
+}
+
+/** UTC ISO string → "YYYY-MM-DDTHH:mm" in Amsterdam tijd (voor datetime-local input) */
+function utcToAmsLocal(utcStr: string): string {
+  const date = new Date(utcStr);
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(date);
+  const p: Record<string, string> = {};
+  parts.forEach(({ type, value }) => { p[type] = value; });
+  return `${p.year}-${p.month}-${p.day}T${p.hour === "24" ? "00" : p.hour}:${p.minute}`;
+}
+
 const IRACING_TRACKS = [...new Set([
   "Adelaide Street Circuit",
   "Algarve International Circuit",
@@ -815,7 +843,7 @@ const AdminPage = () => {
       if (error) throw error;
       if (races.length > 0) {
         const { error: re } = await supabase.from("races").insert(
-          races.map((r, i) => ({ league_id: league.id, round: i + 1, name: r.name, track: r.track, race_date: `${r.date}T${r.time}:00`, status: "upcoming" as const, race_type: r.race_type || null, race_duration: r.race_duration || null, practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null, start_type: r.start_type || null, weather: r.weather || null, setup: r.setup || null } as any))
+          races.map((r, i) => ({ league_id: league.id, round: i + 1, name: r.name, track: r.track, race_date: amsToUTC(`${r.date}T${r.time}`), status: "upcoming" as const, race_type: r.race_type || null, race_duration: r.race_duration || null, practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null, start_type: r.start_type || null, weather: r.weather || null, setup: r.setup || null } as any))
         );
         if (re) throw re;
       }
@@ -846,7 +874,7 @@ const AdminPage = () => {
         league_id: null,
         name: newSoloRace.name,
         track: newSoloRace.track,
-        race_date: `${newSoloRace.date}T${newSoloRace.time}:00`,
+        race_date: amsToUTC(`${newSoloRace.date}T${newSoloRace.time}`),
         status: "upcoming",
         race_type: newSoloRace.race_type || null,
         race_duration: newSoloRace.race_duration || null,
@@ -880,7 +908,7 @@ const AdminPage = () => {
       const { error } = await (supabase as any).from("races").update({
         name: data.name,
         track: data.track,
-        race_date: data.race_date,
+        race_date: amsToUTC(data.race_date),
         race_type: data.race_type || null,
         race_duration: data.race_duration || null,
         practice_duration: data.practice_duration || null,
@@ -1153,8 +1181,8 @@ const AdminPage = () => {
                               {trackInfo?.country && <span className="opacity-60 text-xs">— {trackInfo.country}</span>}
                             </div>
                             <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2 flex-wrap">
-                              <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(nr.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "UTC" })}</span>
-                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(nr.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}</span>
+                              <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(nr.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" })}</span>
+                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(nr.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" })}</span>
                               {!nr.leagues ? (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wide" style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.2)" }}>Losse Race</span>
                               ) : (
@@ -1369,7 +1397,7 @@ const AdminPage = () => {
                                         </div>
                                         <div>
                                           <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Datum & tijd</label>
-                                          <input type="datetime-local" value={rd.race_date ? rd.race_date.slice(0, 16) : ""} onChange={e => setRd("race_date", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                          <input type="datetime-local" value={rd.race_date ? (rd.race_date.length > 16 ? utcToAmsLocal(rd.race_date) : rd.race_date) : ""} onChange={e => setRd("race_date", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
                                         </div>
                                         <div>
                                           <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Race type</label>
@@ -1589,7 +1617,7 @@ const AdminPage = () => {
                               <button
                                 onClick={() => {
                                   if (isEditingSolo) { setEditingSoloRaceId(null); setEditingSoloRaceData({}); }
-                                  else { setEditingSoloRaceId(race.id); setEditingSoloRaceData({ ...race, race_date: race.race_date ? race.race_date.slice(0, 16) : "" }); }
+                                  else { setEditingSoloRaceId(race.id); setEditingSoloRaceData({ ...race, race_date: race.race_date ? utcToAmsLocal(race.race_date) : "" }); }
                                 }}
                                 className="p-2 text-muted-foreground hover:text-primary transition-colors"
                               >
