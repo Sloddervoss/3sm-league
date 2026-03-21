@@ -999,7 +999,7 @@ const AdminPage = () => {
         if (!profile) { toast.error(`Driver niet gevonden: ${row.display_name}`); continue; }
         const pts = (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0);
         const { error } = await supabase.from("race_results").upsert(
-          { race_id: importRaceId, user_id: profile.user_id, position: row.position, points: pts, fastest_lap: row.fastest_lap, laps: row.laps, best_lap: row.best_lap || null, incidents: row.incidents, dnf: false },
+          { race_id: importRaceId, user_id: profile.user_id, position: row.position, points: pts, fastest_lap: row.fastest_lap, laps: row.laps, best_lap: row.best_lap || null, incidents: row.incidents, dnf: false, irating_snapshot: (row as any).new_irating ?? null },
           { onConflict: "race_id,user_id" }
         );
         if (error) throw error;
@@ -1012,7 +1012,8 @@ const AdminPage = () => {
           iRatingUpdates++;
         }
       }
-      await supabase.from("races").update({ status: "completed" }).eq("id", importRaceId);
+      await supabase.from("races").update({ status: "completed", counts_for_3sr: true }).eq("id", importRaceId);
+      await supabase.rpc("recalculate_3sr_for_race", { p_race_id: importRaceId });
       if (iRatingUpdates > 0) toast.success(`iRating bijgewerkt voor ${iRatingUpdates} drivers`);
     },
     onSuccess: () => {
