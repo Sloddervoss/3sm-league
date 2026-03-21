@@ -1032,7 +1032,7 @@ const AdminPage = () => {
         );
         if (error) throw error;
         // Auto-update iRating + safety rating from CSV data
-        if (row.new_irating && row.new_license_level && row.new_license_sub_level != null) {
+        if (row.new_irating && row.new_license_level && row.new_license_sub_level !== undefined) {
           const licLetters = ["", "R", "D", "C", "B", "A"];
           const licIdx = Math.min(Math.ceil(row.new_license_level / 4), 5);
           const safetyRating = `${licLetters[licIdx]} ${(row.new_license_sub_level / 100).toFixed(2)}`;
@@ -2037,9 +2037,9 @@ const AdminPage = () => {
                                     const bestLap  = bestLapIdx >= 0 ? cols[bestLapIdx] : "";
                                     const incidents= incIdx >= 0     ? parseInt(cols[incIdx]) || 0 : 0;
                                     const custId   = custIdIdx >= 0  ? cols[custIdIdx] : undefined;
-                                    const newIR    = newIRatingIdx >= 0    ? parseInt(cols[newIRatingIdx]) || undefined : undefined;
-                                    const newLL    = newLicLevelIdx >= 0   ? parseInt(cols[newLicLevelIdx]) || undefined : undefined;
-                                    const newLS    = newLicSubIdx >= 0     ? parseInt(cols[newLicSubIdx]) || undefined : undefined;
+                                    const newIR    = newIRatingIdx >= 0 && cols[newIRatingIdx]  ? parseInt(cols[newIRatingIdx])  : undefined;
+                                    const newLL    = newLicLevelIdx >= 0 && cols[newLicLevelIdx] ? parseInt(cols[newLicLevelIdx]) : undefined;
+                                    const newLS    = newLicSubIdx >= 0 && cols[newLicSubIdx] !== "" ? parseInt(cols[newLicSubIdx])  : undefined;
                                     return { position: pos, display_name: name, laps, best_lap: bestLap, incidents, fastest_lap: false, iracing_cust_id: custId, new_irating: newIR, new_license_level: newLL, new_license_sub_level: newLS };
                                   }).filter((r): r is NonNullable<typeof r> => !!r && !!r.display_name && !isNaN(r.position));
 
