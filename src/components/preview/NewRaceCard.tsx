@@ -48,8 +48,8 @@ const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Pro
   const countdownColor = isStandalone ? SOLO_COLOR : "#f97316";
 
   const raceDate = new Date(race.race_date);
-  const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
-  const timeStr = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Amsterdam" });
+  const timeStr = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
 
   const sessions = [
     race.practice_duration   && { key: "P", label: "P",  dur: race.practice_duration },

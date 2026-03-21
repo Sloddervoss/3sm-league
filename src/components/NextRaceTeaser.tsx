@@ -45,8 +45,8 @@ const NextRaceTeaser = () => {
   const trackInfo  = getTrackInfo(nextRace.track);
   const trackPhoto = getTrackPhoto(nextRace.track);
   const countdown  = formatCountdown(nextRace.race_date, now);
-  const dateStr    = new Date(nextRace.race_date).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
-  const timeStr    = new Date(nextRace.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  const dateStr    = new Date(nextRace.race_date).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" });
+  const timeStr    = new Date(nextRace.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
 
   const sessions = [
     nextRace.practice_duration   && { key: "P", label: "Practice",   dur: nextRace.practice_duration,   color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
