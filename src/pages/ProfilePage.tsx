@@ -31,6 +31,7 @@ const ProfilePage = () => {
   const { data: myResults } = useQuery({
     queryKey: ["my-results", user?.id],
     enabled: !!user,
+    refetchOnMount: "always",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("race_results")
@@ -53,6 +54,7 @@ const ProfilePage = () => {
   const { data: myCreationRequest } = useQuery({
     queryKey: ["my-creation-request", user?.id],
     enabled: !!user,
+    refetchOnMount: "always",
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("team_creation_requests")
