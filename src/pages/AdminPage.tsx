@@ -1036,8 +1036,9 @@ const AdminPage = () => {
           const licLetters = ["", "R", "D", "C", "B", "A"];
           const licIdx = Math.min(Math.ceil(row.new_license_level / 4), 5);
           const safetyRating = `${licLetters[licIdx]} ${(row.new_license_sub_level / 100).toFixed(2)}`;
-          await supabase.from("profiles").update({ irating: row.new_irating, safety_rating: safetyRating } as any).eq("user_id", profile.user_id);
-          iRatingUpdates++;
+          const { error: profErr } = await supabase.from("profiles").update({ irating: row.new_irating, safety_rating: safetyRating }).eq("user_id", profile.user_id);
+          if (profErr) toast.error(`iRating update mislukt voor ${row.display_name}: ${profErr.message}`);
+          else iRatingUpdates++;
         }
       }
       await supabase.from("races").update({ status: "completed", counts_for_3sr: true }).eq("id", importRaceId);
