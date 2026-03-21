@@ -28,33 +28,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
+  const applySession = (session: Session | null) => {
+    setSession(session);
+    if (session?.user) {
+      const headers = {
+        "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      };
+      const base = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/has_role`;
+      fetch(base, { method: "POST", headers, body: JSON.stringify({ _user_id: session.user.id, _role: "admin" }) })
+        .then((r) => r.json())
+        .then((data) => setIsAdmin(!!data))
+        .catch(() => setIsAdmin(false));
+      fetch(base, { method: "POST", headers, body: JSON.stringify({ _user_id: session.user.id, _role: "super_admin" }) })
+        .then((r) => r.json())
+        .then((data) => setIsSuperAdmin(!!data))
+        .catch(() => setIsSuperAdmin(false));
+    } else {
+      setIsAdmin(false);
+      setIsSuperAdmin(false);
+    }
+  };
+
   useEffect(() => {
+    // Load initial session immediately so user is available on first render
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      applySession(session);
+      setLoading(false);
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        setSession(session);
-        setLoading(false);
-
-        if (session?.user) {
-          const headers = {
-            "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
-            "Authorization": `Bearer ${session.access_token}`,
-            "Content-Type": "application/json",
-          };
-          const base = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/has_role`;
-          // Check admin role
-          fetch(base, { method: "POST", headers, body: JSON.stringify({ _user_id: session.user.id, _role: "admin" }) })
-            .then((r) => r.json())
-            .then((data) => setIsAdmin(!!data))
-            .catch(() => setIsAdmin(false));
-          // Check super_admin role
-          fetch(base, { method: "POST", headers, body: JSON.stringify({ _user_id: session.user.id, _role: "super_admin" }) })
-            .then((r) => r.json())
-            .then((data) => setIsSuperAdmin(!!data))
-            .catch(() => setIsSuperAdmin(false));
-        } else {
-          setIsAdmin(false);
-          setIsSuperAdmin(false);
-        }
+        applySession(session);
       }
     );
 

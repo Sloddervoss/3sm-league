@@ -16,6 +16,7 @@ const ProfilePage = () => {
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user,
+    refetchOnMount: "always",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
