@@ -40,8 +40,8 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
   const isStandalone = !race.leagues;
   const accentColor = isStandalone ? SOLO_COLOR : "#f97316";
   const raceDate = new Date(race.race_date);
-  const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
-  const timeStr = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  const dateStr = raceDate.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" });
+  const timeStr = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
   const ses = sessions(race);
 
   return (

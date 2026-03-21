@@ -115,8 +115,8 @@ const RaceModal = ({ race, registration }: Props) => {
   const trackInfo  = getTrackInfo(race.track);
   const trackPhoto = getTrackPhoto(race.track);
   const raceDate   = new Date(race.race_date);
-  const dateStr    = raceDate.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
-  const timeStr    = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  const dateStr    = raceDate.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" });
+  const timeStr    = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
 
   const sessions = [
     race.practice_duration   && { label: "Practice",   dur: race.practice_duration,   color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },

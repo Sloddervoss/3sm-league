@@ -39,10 +39,10 @@ const StickyRaceBar = () => {
   const countdown = formatCountdown(nextRace.race_date, now);
 
   const dateStr = new Date(nextRace.race_date).toLocaleDateString("nl-NL", {
-    weekday: "short", day: "numeric", month: "short", timeZone: "UTC",
+    weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Amsterdam",
   });
   const timeStr = new Date(nextRace.race_date).toLocaleTimeString("nl-NL", {
-    hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+    hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam",
   });
 
   return (
