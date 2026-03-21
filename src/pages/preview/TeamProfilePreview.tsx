@@ -20,7 +20,7 @@ const TeamProfilePreview = () => {
   const selectedId = params.get("id");
   const [mockMode, setMockMode] = useMockMode();
 
-  const { data: teams = [] } = useQuery({
+  const { data: teams = [], isLoading: teamsLoading } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
       const { data } = await (supabase as any).from("teams").select("*").order("name");
@@ -78,12 +78,20 @@ const TeamProfilePreview = () => {
     .sort((a: any, b: any) => new Date(b.races?.race_date || 0).getTime() - new Date(a.races?.race_date || 0).getTime())
     .slice(0, 10);
 
+  if (teamsLoading && !mockMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#08080f" }}>
+        <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
   if (!team) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "#08080f" }}>
         <div className="text-center">
           <p className="text-gray-600 text-sm mb-4">Geen team geselecteerd</p>
-          <Link to="/preview" className="text-orange-500 text-sm hover:underline">← Terug naar preview</Link>
+          <Link to="/teams" className="text-orange-500 text-sm hover:underline">← Terug naar teams</Link>
         </div>
       </div>
     );
