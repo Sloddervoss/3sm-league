@@ -216,6 +216,9 @@ export type Database = {
           iracing_name: string | null
           updated_at: string
           user_id: string
+          team_id: string | null
+          irating: number | null
+          safety_rating: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -226,6 +229,9 @@ export type Database = {
           iracing_name?: string | null
           updated_at?: string
           user_id: string
+          team_id?: string | null
+          irating?: number | null
+          safety_rating?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -236,6 +242,9 @@ export type Database = {
           iracing_name?: string | null
           updated_at?: string
           user_id?: string
+          team_id?: string | null
+          irating?: number | null
+          safety_rating?: string | null
         }
         Relationships: []
       }
@@ -271,6 +280,98 @@ export type Database = {
           },
         ]
       }
+      race_3sr_results: {
+        Row: {
+          id: string
+          race_id: string
+          user_id: string
+          position: number
+          effective_position: number
+          finishers: number
+          dnf: boolean
+          irating_snapshot: number | null
+          irating_rank: number | null
+          expected_position: number | null
+          delta: number | null
+          position_score: number
+          performance_bonus: number
+          penalty_deduction: number
+          race_score: number
+          calculated_at: string
+        }
+        Insert: {
+          id?: string
+          race_id: string
+          user_id: string
+          position: number
+          effective_position: number
+          finishers: number
+          dnf?: boolean
+          irating_snapshot?: number | null
+          irating_rank?: number | null
+          expected_position?: number | null
+          delta?: number | null
+          position_score: number
+          performance_bonus?: number
+          penalty_deduction?: number
+          race_score: number
+          calculated_at?: string
+        }
+        Update: {
+          id?: string
+          race_id?: string
+          user_id?: string
+          position?: number
+          effective_position?: number
+          finishers?: number
+          dnf?: boolean
+          irating_snapshot?: number | null
+          irating_rank?: number | null
+          expected_position?: number | null
+          delta?: number | null
+          position_score?: number
+          performance_bonus?: number
+          penalty_deduction?: number
+          race_score?: number
+          calculated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_3sr_results_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_3sr: {
+        Row: {
+          user_id: string
+          current_score: number
+          ranked_races: number
+          is_ranked: boolean
+          rank_label: string | null
+          last_updated: string
+        }
+        Insert: {
+          user_id: string
+          current_score?: number
+          ranked_races?: number
+          is_ranked?: boolean
+          rank_label?: string | null
+          last_updated?: string
+        }
+        Update: {
+          user_id?: string
+          current_score?: number
+          ranked_races?: number
+          is_ranked?: boolean
+          rank_label?: string | null
+          last_updated?: string
+        }
+        Relationships: []
+      }
       race_results: {
         Row: {
           created_at: string
@@ -286,6 +387,7 @@ export type Database = {
           best_lap: string | null
           incidents: number | null
           iracing_cust_id: string | null
+          irating_snapshot: number | null
         }
         Insert: {
           created_at?: string
@@ -301,6 +403,7 @@ export type Database = {
           best_lap?: string | null
           incidents?: number | null
           iracing_cust_id?: string | null
+          irating_snapshot?: number | null
         }
         Update: {
           created_at?: string
@@ -316,6 +419,7 @@ export type Database = {
           best_lap?: string | null
           incidents?: number | null
           iracing_cust_id?: string | null
+          irating_snapshot?: number | null
         }
         Relationships: [
           {
@@ -331,35 +435,38 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          league_id: string
+          league_id: string | null
           name: string
           race_date: string
           round: number
           status: string
           track: string
           updated_at: string
+          counts_for_3sr: boolean
         }
         Insert: {
           created_at?: string
           id?: string
-          league_id: string
+          league_id?: string | null
           name: string
           race_date: string
           round: number
           status?: string
           track: string
           updated_at?: string
+          counts_for_3sr?: boolean
         }
         Update: {
           created_at?: string
           id?: string
-          league_id?: string
+          league_id?: string | null
           name?: string
           race_date?: string
           round?: number
           status?: string
           track?: string
           updated_at?: string
+          counts_for_3sr?: boolean
         }
         Relationships: [
           {
@@ -391,7 +498,20 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_3sr_race_eligibility: {
+        Row: {
+          race_id: string
+          name: string
+          race_date: string
+          counts_for_3sr: boolean
+          total_starters: number
+          valid_finishers: number
+          dnf_count: number
+          with_irating: number
+          eligibility_status: string
+          has_3sr_results: boolean
+        }
+      }
     }
     Functions: {
       has_role: {
@@ -401,9 +521,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      recalculate_3sr_for_race: {
+        Args: { p_race_id: string }
+        Returns: undefined
+      }
+      recalculate_3sr_all: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user"
+      app_role: "admin" | "moderator" | "user" | "super_admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -531,7 +659,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user"],
+      app_role: ["admin", "moderator", "user", "super_admin"],
     },
   },
 } as const
