@@ -43,7 +43,8 @@ const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Pro
   const trackInfo = getTrackInfo(race.track);
   const trackPhoto = getTrackPhoto(race.track);
   const isStandalone = !race.leagues;
-  const st = STATUS[race.status as keyof typeof STATUS] || STATUS.upcoming;
+  const effectiveStatus = race.status === "upcoming" && countdown === null ? "live" : race.status;
+  const st = STATUS[effectiveStatus as keyof typeof STATUS] || STATUS.upcoming;
   const barColor = isStandalone ? SOLO_COLOR : st.bar;
   const countdownColor = isStandalone ? SOLO_COLOR : "#f97316";
 

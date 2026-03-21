@@ -95,7 +95,7 @@ const ResultsPage = () => {
                         className="w-full px-6 py-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors text-left"
                       >
                         <div className="font-heading font-black text-2xl text-muted-foreground w-10 shrink-0">
-                          R{String(race.round).padStart(2, "0")}
+                          {race.round != null ? `R${String(race.round).padStart(2, "0")}` : ""}
                         </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="font-heading font-bold text-lg">{race.name}</h3>
