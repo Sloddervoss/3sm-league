@@ -30,7 +30,7 @@ const DriverProfilePreview = () => {
   const selectedId = params.get("id");
   const [mockMode, setMockMode] = useMockMode();
 
-  const { data: profiles = [] } = useQuery({
+  const { data: profiles = [], isLoading: driversLoading } = useQuery({
     queryKey: ["drivers"],
     queryFn: async () => {
       const { data } = await supabase.from("confirmed_profiles").select("*");
@@ -83,12 +83,20 @@ const DriverProfilePreview = () => {
   const bestFinish = raceResults.length > 0 ? Math.min(...raceResults.map((r: any) => r.position)) : null;
   const fastestLaps = raceResults.filter((r: any) => r.fastest_lap).length;
 
+  if (driversLoading && !mockMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#08080f" }}>
+        <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
   if (!driver) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "#08080f" }}>
         <div className="text-center">
           <p className="text-gray-600 text-sm mb-4">Geen driver geselecteerd</p>
-          <Link to="/preview" className="text-orange-500 text-sm hover:underline">← Terug naar preview</Link>
+          <Link to="/drivers" className="text-orange-500 text-sm hover:underline">← Terug naar drivers</Link>
         </div>
       </div>
     );
