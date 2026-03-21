@@ -107,9 +107,13 @@ const CalendarPage = () => {
     },
   });
 
-  const nextRace = [...races]
+  const liveRace = races.find((r: any) =>
+    r.status !== "completed" && new Date(r.race_date) <= now
+  ) as any;
+  const upcomingRace = [...races]
     .filter((r: any) => r.status !== "completed" && new Date(r.race_date) > now)
     .sort((a: any, b: any) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as any;
+  const nextRace = liveRace || upcomingRace;
 
   const activeLeague = leagues?.[0];
 
