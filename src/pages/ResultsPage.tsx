@@ -107,7 +107,7 @@ const ResultsPage = () => {
                                 {(race as any).leagues.name}
                               </span>
                             )}
-                            <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" })}</span>
+                            <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" })}</span>
                           </div>
                         </div>
                         {winner && (
