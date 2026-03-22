@@ -67,7 +67,7 @@ const LatestResults = () => {
             <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mt-1">
               <span>{lastRace.track}</span>
               {(lastRace as any).leagues?.name && <span className="text-xs px-2 py-0.5 rounded bg-secondary">{(lastRace as any).leagues.name}</span>}
-              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{new Date(lastRace.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long" })}</span>
+              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{new Date(lastRace.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" })}</span>
             </div>
           </div>
 

@@ -1612,7 +1612,7 @@ const AdminPage = () => {
                               <div className="text-sm text-muted-foreground flex gap-3 mt-0.5 flex-wrap">
                                 <span>{race.track}</span>
                                 <span>•</span>
-                                <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                                <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" })}</span>
                                 <span>•</span>
                                 <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{raceRegs.length} ingeschreven</span>
                               </div>
