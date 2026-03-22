@@ -2160,10 +2160,10 @@ const AdminPage = () => {
                                       toast.error("Geen resultaten gevonden in Race sessie");
                                       return;
                                     }
-                                    // Best lap: iRacing stores in microseconds, -1 = no lap
+                                    // Best lap: iRacing stores in ten-thousandths of a second, -1 = no lap
                                     const fmtLap = (us: number) => {
                                       if (!us || us < 0) return "";
-                                      const totalMs = Math.round(us / 1000);
+                                      const totalMs = Math.round(us / 10);
                                       const mins = Math.floor(totalMs / 60000);
                                       const secs = Math.floor((totalMs % 60000) / 1000);
                                       const ms = totalMs % 1000;
