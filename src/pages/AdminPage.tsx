@@ -2130,9 +2130,10 @@ const AdminPage = () => {
                                 reader.onload = (ev) => {
                                   try {
                                     const json = JSON.parse(ev.target?.result as string);
-                                    // iRacing JSON export: session_results[] — find race session
+                                    // iRacing JSON export has a "data" wrapper: { type, data: { session_results: [] } }
+                                    const root = json.data ?? json;
                                     // simsession_type 6 = Race, or match by name, or fallback to session with most results
-                                    const sessions: any[] = json.session_results || [];
+                                    const sessions: any[] = root.session_results || [];
                                     const raceSession = sessions.find((s: any) =>
                                       s.simsession_type === 6 ||
                                       (s.simsession_type_name || "").toLowerCase().includes("race") ||
