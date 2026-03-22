@@ -741,7 +741,8 @@ const AdminPage = () => {
   >([{ position: 1, display_name: "", laps: 0, best_lap: "", incidents: 0, fastest_lap: false }]);
   const [pointsConfig] = useState<number[]>(DEFAULT_POINTS);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
-  const [importMode, setImportMode] = useState<"manual" | "csv">("csv");
+  const [jsonFileName, setJsonFileName] = useState<string | null>(null);
+  const [importMode, setImportMode] = useState<"manual" | "csv" | "json">("csv");
 
   const [selectedLeagueForPoints, setSelectedLeagueForPoints] = useState("");
   const [leaguePoints, setLeaguePoints] = useState<number[]>(DEFAULT_POINTS);
@@ -1052,6 +1053,8 @@ const AdminPage = () => {
       queryClient.invalidateQueries({ queryKey: ["completed-races"] });
       setImportRaceId("");
       setImportRows([{ position: 1, display_name: "", laps: 0, best_lap: "", incidents: 0, fastest_lap: false }]);
+      setCsvFileName(null);
+      setJsonFileName(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -1963,6 +1966,9 @@ const AdminPage = () => {
                   <button onClick={() => setImportMode("csv")} className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-colors ${importMode === "csv" ? "bg-gradient-racing text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
                     <FileText className="w-4 h-4" /> CSV Upload
                   </button>
+                  <button onClick={() => setImportMode("json")} className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-colors ${importMode === "json" ? "bg-gradient-racing text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+                    <BarChart2 className="w-4 h-4" /> JSON Export
+                  </button>
                   <button onClick={() => setImportMode("manual")} className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-colors ${importMode === "manual" ? "bg-gradient-racing text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
                     <Upload className="w-4 h-4" /> Handmatig
                   </button>
@@ -2082,6 +2088,133 @@ const AdminPage = () => {
                                   <span className="text-muted-foreground">{row.laps}</span>
                                   <span className="font-mono text-muted-foreground text-xs">{row.best_lap || "—"}</span>
                                   <span className="text-muted-foreground">{row.incidents}x</span>
+                                  <div className="flex items-center justify-center">
+                                    <input type="checkbox" checked={row.fastest_lap} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], fastest_lap: e.target.checked }; setImportRows(u); }} className="w-4 h-4 accent-primary cursor-pointer" />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {importRows.length > 10 && <div className="px-3 py-2 text-xs text-muted-foreground">...en {importRows.length - 10} meer</div>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── JSON MODE ── */}
+                  {importMode === "json" && (
+                    <div>
+                      {/* Info box */}
+                      <div className="mb-5 p-4 rounded-md bg-purple-500/10 border border-purple-500/20 text-sm text-purple-300">
+                        <div className="font-bold mb-1">📊 iRacing JSON Export</div>
+                        <p className="text-xs leading-relaxed mb-2">Download de race resultaten als JSON van <strong>members.iracing.com</strong> → Race Results → Export to JSON. De JSON bevat ook iRating-data per driver en wordt automatisch ingelezen.</p>
+                        <p className="text-xs text-purple-400 font-bold">iRating, licentieniveau en positie worden automatisch ingevuld vanuit de JSON.</p>
+                      </div>
+
+                      {/* File upload */}
+                      <div className="mb-5">
+                        <label className="text-sm font-medium text-muted-foreground mb-1.5 block">JSON Bestand</label>
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-dashed border-border hover:border-primary/50 bg-secondary/50 cursor-pointer transition-colors">
+                            <BarChart2 className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">{jsonFileName || "Kies JSON bestand..."}</span>
+                            <input
+                              type="file"
+                              accept=".json"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setJsonFileName(file.name);
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  try {
+                                    const json = JSON.parse(ev.target?.result as string);
+                                    // iRacing JSON export: session_results[] — find race session (simsession_number 0 or simsession_type_name "Race")
+                                    const sessions: any[] = json.session_results || [];
+                                    const raceSession = sessions.find((s: any) =>
+                                      s.simsession_type_name === "Race" || s.simsession_number === 0
+                                    );
+                                    if (!raceSession) {
+                                      toast.error("Geen Race sessie gevonden in JSON");
+                                      return;
+                                    }
+                                    const results: any[] = raceSession.results || [];
+                                    if (!results.length) {
+                                      toast.error("Geen resultaten gevonden in Race sessie");
+                                      return;
+                                    }
+                                    // Best lap: iRacing stores in microseconds, -1 = no lap
+                                    const fmtLap = (us: number) => {
+                                      if (!us || us < 0) return "";
+                                      const totalMs = Math.round(us / 1000);
+                                      const mins = Math.floor(totalMs / 60000);
+                                      const secs = Math.floor((totalMs % 60000) / 1000);
+                                      const ms = totalMs % 1000;
+                                      return `${mins}:${String(secs).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+                                    };
+                                    const parsed = results
+                                      .sort((a: any, b: any) => a.finish_position - b.finish_position)
+                                      .map((r: any) => ({
+                                        position: r.finish_position + 1,
+                                        display_name: r.display_name || "",
+                                        laps: r.laps_complete || 0,
+                                        best_lap: fmtLap(r.best_lap_time),
+                                        incidents: r.incidents || 0,
+                                        fastest_lap: false,
+                                        iracing_cust_id: String(r.cust_id),
+                                        new_irating: r.newi_rating ?? undefined,
+                                        new_license_level: r.new_license_level ?? undefined,
+                                        new_license_sub_level: r.new_sub_level ?? undefined,
+                                      }))
+                                      .filter((r: any) => r.display_name);
+                                    if (!parsed.length) {
+                                      toast.error("Geen geldige drivers gevonden in JSON");
+                                      return;
+                                    }
+                                    setImportRows(parsed);
+                                    toast.success(`${parsed.length} drivers geladen uit JSON (inclusief iRating)`);
+                                  } catch {
+                                    toast.error("Ongeldig JSON bestand");
+                                  }
+                                };
+                                reader.readAsText(file);
+                              }}
+                            />
+                          </label>
+                          {jsonFileName && (
+                            <button onClick={() => { setJsonFileName(null); setImportRows([{ position: 1, display_name: "", laps: 0, best_lap: "", incidents: 0, fastest_lap: false }]); }} className="p-2 text-muted-foreground hover:text-destructive transition-colors">
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Preview of parsed rows */}
+                      {importRows.length > 0 && importRows[0].display_name && (
+                        <div className="mb-5">
+                          <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} drivers geladen — preview:</div>
+                          <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
+                            <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
+                              <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span>iRating</span><span className="text-center">FL</span>
+                            </div>
+                            {importRows.slice(0, 10).map((row, i) => {
+                              const matched = profiles?.find((p: any) =>
+                                (p.iracing_cust_id && row.iracing_cust_id && String(p.iracing_cust_id) === String(row.iracing_cust_id)) ||
+                                (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
+                                (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
+                              );
+                              return (
+                                <div key={i} className={`grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 items-center border-b border-border/30 text-sm ${matched ? "" : "opacity-60"}`}>
+                                  <span className="font-heading font-bold">{row.position}</span>
+                                  <div>
+                                    <span>{row.display_name}</span>
+                                    {matched ? <span className="ml-2 text-[10px] text-green-400 font-bold">✓ gevonden</span> : <span className="ml-2 text-[10px] text-red-400 font-bold">✗ niet gevonden</span>}
+                                  </div>
+                                  <span className="text-muted-foreground">{row.laps}</span>
+                                  <span className="font-mono text-muted-foreground text-xs">{row.best_lap || "—"}</span>
+                                  <span className="text-muted-foreground">{row.incidents}x</span>
+                                  <span className="text-purple-400 font-bold text-xs">{(row as any).new_irating ?? "—"}</span>
                                   <div className="flex items-center justify-center">
                                     <input type="checkbox" checked={row.fastest_lap} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], fastest_lap: e.target.checked }; setImportRows(u); }} className="w-4 h-4 accent-primary cursor-pointer" />
                                   </div>
