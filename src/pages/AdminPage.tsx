@@ -2049,6 +2049,18 @@ const AdminPage = () => {
                                     return { position: pos, display_name: name, laps, best_lap: bestLap, incidents, fastest_lap: false, iracing_cust_id: custId, new_irating: newIR, new_license_level: newLL, new_license_sub_level: newLS };
                                   }).filter((r): r is NonNullable<typeof r> => !!r && !!r.display_name && !isNaN(r.position));
 
+                                  // Auto-detect fastest lap: find driver with lowest parseable best_lap string
+                                  const parseLapMs = (s: string) => {
+                                    const m = s.match(/^(\d+):(\d+)[.,](\d+)$/);
+                                    if (!m) return Infinity;
+                                    return parseInt(m[1]) * 60000 + parseInt(m[2]) * 1000 + parseInt(m[3].padEnd(3, "0").slice(0, 3));
+                                  };
+                                  const withLaps = parsed.filter(r => r.best_lap && parseLapMs(r.best_lap) < Infinity);
+                                  if (withLaps.length) {
+                                    const fastest = withLaps.reduce((a, b) => parseLapMs(a.best_lap) < parseLapMs(b.best_lap) ? a : b);
+                                    fastest.fastest_lap = true;
+                                  }
+
                                   if (parsed.length === 0) { toast.error("Geen geldige rijen gevonden in CSV"); return; }
                                   setImportRows(parsed);
                                   toast.success(`${parsed.length} drivers geladen uit CSV`);
@@ -2157,6 +2169,11 @@ const AdminPage = () => {
                                       const ms = totalMs % 1000;
                                       return `${mins}:${String(secs).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
                                     };
+                                    // Auto-detect fastest lap: lowest best_lap_time (excluding -1)
+                                    const validLaps = results.filter((r: any) => r.best_lap_time > 0);
+                                    const fastestCustId = validLaps.length
+                                      ? validLaps.reduce((a: any, b: any) => a.best_lap_time < b.best_lap_time ? a : b).cust_id
+                                      : null;
                                     const parsed = results
                                       .sort((a: any, b: any) => a.finish_position - b.finish_position)
                                       .map((r: any) => ({
@@ -2165,7 +2182,7 @@ const AdminPage = () => {
                                         laps: r.laps_complete || 0,
                                         best_lap: fmtLap(r.best_lap_time),
                                         incidents: r.incidents || 0,
-                                        fastest_lap: false,
+                                        fastest_lap: r.cust_id === fastestCustId,
                                         iracing_cust_id: String(r.cust_id),
                                         new_irating: r.newi_rating ?? undefined,
                                         new_license_level: r.new_license_level ?? undefined,
