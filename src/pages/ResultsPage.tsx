@@ -23,7 +23,8 @@ const ResultsPage = () => {
         .from("races")
         .select("*, leagues(name, car_class)")
         .eq("status", "completed")
-        .order("race_date", { ascending: false });
+        .order("race_date", { ascending: false })
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },

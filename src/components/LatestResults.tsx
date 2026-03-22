@@ -19,6 +19,7 @@ const LatestResults = () => {
         .select("*, leagues(name)")
         .eq("status", "completed")
         .order("race_date", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (error) return null;
