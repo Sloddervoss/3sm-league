@@ -2130,13 +2130,16 @@ const AdminPage = () => {
                                 reader.onload = (ev) => {
                                   try {
                                     const json = JSON.parse(ev.target?.result as string);
-                                    // iRacing JSON export: session_results[] — find race session (simsession_number 0 or simsession_type_name "Race")
+                                    // iRacing JSON export: session_results[] — find race session
+                                    // simsession_type 6 = Race, or match by name, or fallback to session with most results
                                     const sessions: any[] = json.session_results || [];
                                     const raceSession = sessions.find((s: any) =>
-                                      s.simsession_type_name === "Race" || s.simsession_number === 0
-                                    );
+                                      s.simsession_type === 6 ||
+                                      (s.simsession_type_name || "").toLowerCase().includes("race") ||
+                                      s.simsession_number === 0
+                                    ) ?? sessions.sort((a: any, b: any) => (b.results?.length ?? 0) - (a.results?.length ?? 0))[0];
                                     if (!raceSession) {
-                                      toast.error("Geen Race sessie gevonden in JSON");
+                                      toast.error("Geen Race sessie gevonden in JSON — controleer of het een iRacing event result JSON is");
                                       return;
                                     }
                                     const results: any[] = raceSession.results || [];
