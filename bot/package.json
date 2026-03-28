@@ -1,0 +1,16 @@
+{
+  "name": "3sm-discord-bot",
+  "version": "1.0.0",
+  "description": "3 Stripe Motorsport — Discord race notificatie bot",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7",
+    "node-cron": "^3.0.3"
+  }
+}
