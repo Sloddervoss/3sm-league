@@ -56,31 +56,33 @@ function buildEmbed(race, windowKey) {
     timeZone: 'Europe/Amsterdam',
   });
 
+  const ronde = race.round != null ? `Ronde ${race.round}` : race.name;
+
   const configs = {
     '24h': {
       color: 0x3b82f6,
       title: `🏁  Race morgen — ${race.name}`,
-      description: `**Ronde ${race.round}** gaat morgen van start.\nZorg dat je klaarstaat en je setup klaar hebt!`,
+      description: `**${ronde}** gaat morgen van start.\nZorg dat je klaarstaat en je setup klaar hebt!`,
     },
     '1h': {
       color: 0xf97316,
       title: `⏱️  Race over 1 uur — ${race.name}`,
-      description: `**Ronde ${race.round}** begint over een uur.\nOpen iRacing en warm op!`,
+      description: `**${ronde}** begint over een uur.\nOpen iRacing en warm op!`,
     },
     '15m': {
       color: 0xef4444,
       title: `🚨  Race over 15 minuten — ${race.name}`,
-      description: `**Ronde ${race.round}** begint zo!\nGa naar de grid — succes allemaal!`,
+      description: `**${ronde}** begint zo!\nGa naar de grid — succes allemaal!`,
     },
     'live': {
       color: 0x22c55e,
       title: `🟢  Race gestart — ${race.name}`,
-      description: `**Ronde ${race.round}** is officieel van start gegaan!\nVeel succes op de baan! 🏎️`,
+      description: `**${ronde}** is officieel van start gegaan!\nVeel succes op de baan! 🏎️`,
     },
     'cancelled': {
       color: 0x6b7280,
       title: `❌  Race gecanceld — ${race.name}`,
-      description: `**Ronde ${race.round}** is helaas gecanceld.\nHoud de site in de gaten voor meer informatie.`,
+      description: `**${ronde}** is helaas gecanceld.\nHoud de site in de gaten voor meer informatie.`,
     },
   };
 
