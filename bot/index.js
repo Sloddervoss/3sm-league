@@ -72,6 +72,16 @@ function buildEmbed(race, windowKey) {
       title: `🚨  Race over 15 minuten — ${race.name}`,
       description: `**Ronde ${race.round}** begint zo!\nGa naar de grid — succes allemaal!`,
     },
+    'live': {
+      color: 0x22c55e,
+      title: `🟢  Race gestart — ${race.name}`,
+      description: `**Ronde ${race.round}** is officieel van start gegaan!\nVeel succes op de baan! 🏎️`,
+    },
+    'cancelled': {
+      color: 0x6b7280,
+      title: `❌  Race gecanceld — ${race.name}`,
+      description: `**Ronde ${race.round}** is helaas gecanceld.\nHoud de site in de gaten voor meer informatie.`,
+    },
   };
 
   const cfg = configs[windowKey];
@@ -89,10 +99,16 @@ function buildEmbed(race, windowKey) {
     .setTimestamp();
 }
 
-// ── Main check — runs every minute ───────────────────────────────────────────
-async function checkRaces() {
+// ── Helper: fetch channel once ────────────────────────────────────────────────
+async function getChannel() {
+  const channel = await client.channels.fetch(process.env.DISCORD_CHANNEL_ID).catch(() => null);
+  if (!channel) console.error('[bot] Channel niet gevonden:', process.env.DISCORD_CHANNEL_ID);
+  return channel;
+}
+
+// ── Check upcoming races (24h / 1h / 15m reminders) ──────────────────────────
+async function checkUpcoming() {
   const now = new Date();
-  // Only look at races in the next 25 hours
   const lookahead = new Date(now.getTime() + 25 * 60 * 60 * 1000);
 
   const { data: races, error } = await supabase
@@ -102,42 +118,89 @@ async function checkRaces() {
     .gte('race_date', now.toISOString())
     .lte('race_date', lookahead.toISOString());
 
-  if (error) {
-    console.error('[checkRaces] Supabase error:', error.message);
-    return;
-  }
-  if (!races || races.length === 0) return;
+  if (error) { console.error('[checkUpcoming]', error.message); return; }
+  if (!races?.length) return;
 
-  const channel = await client.channels.fetch(process.env.DISCORD_CHANNEL_ID).catch(() => null);
-  if (!channel) {
-    console.error('[checkRaces] Channel niet gevonden:', process.env.DISCORD_CHANNEL_ID);
-    return;
-  }
+  const channel = await getChannel();
+  if (!channel) return;
 
   for (const race of races) {
     const diff = new Date(race.race_date).getTime() - now.getTime();
-
     for (const win of WINDOWS) {
-      // Fire as soon as diff drops at or below the threshold, but race hasn't started yet
       if (diff > 0 && diff <= win.ms && !wasSent(race.id, win.key)) {
         try {
           await channel.send({ embeds: [buildEmbed(race, win.key)] });
           markSent(race.id, win.key);
-          console.log(`[${new Date().toISOString()}] ✓ ${win.key} melding verstuurd voor: ${race.name}`);
+          console.log(`[${new Date().toISOString()}] ✓ ${win.key} melding: ${race.name}`);
         } catch (err) {
-          console.error(`[checkRaces] Fout bij versturen embed:`, err.message);
+          console.error('[checkUpcoming] Versturen mislukt:', err.message);
         }
       }
     }
   }
 }
 
+// ── Check live races (race gestart melding) ───────────────────────────────────
+async function checkLive() {
+  const { data: races, error } = await supabase
+    .from('races')
+    .select('id, name, track, round, race_date')
+    .eq('status', 'live');
+
+  if (error) { console.error('[checkLive]', error.message); return; }
+  if (!races?.length) return;
+
+  const channel = await getChannel();
+  if (!channel) return;
+
+  for (const race of races) {
+    if (!wasSent(race.id, 'live')) {
+      try {
+        await channel.send({ embeds: [buildEmbed(race, 'live')] });
+        markSent(race.id, 'live');
+        console.log(`[${new Date().toISOString()}] ✓ Live melding: ${race.name}`);
+      } catch (err) {
+        console.error('[checkLive] Versturen mislukt:', err.message);
+      }
+    }
+  }
+}
+
+// ── Check cancelled races ─────────────────────────────────────────────────────
+async function checkCancelled() {
+  const { data: races, error } = await supabase
+    .from('races')
+    .select('id, name, track, round, race_date')
+    .eq('status', 'cancelled');
+
+  if (error) { console.error('[checkCancelled]', error.message); return; }
+  if (!races?.length) return;
+
+  const channel = await getChannel();
+  if (!channel) return;
+
+  for (const race of races) {
+    if (!wasSent(race.id, 'cancelled')) {
+      try {
+        await channel.send({ embeds: [buildEmbed(race, 'cancelled')] });
+        markSent(race.id, 'cancelled');
+        console.log(`[${new Date().toISOString()}] ✓ Cancel melding: ${race.name}`);
+      } catch (err) {
+        console.error('[checkCancelled] Versturen mislukt:', err.message);
+      }
+    }
+  }
+}
+
+// ── Main check ────────────────────────────────────────────────────────────────
+async function checkRaces() {
+  await Promise.all([checkUpcoming(), checkLive(), checkCancelled()]);
+}
+
 // ── Bot ready ─────────────────────────────────────────────────────────────────
 client.once('ready', () => {
   console.log(`[3SM Bot] Online als ${client.user.tag}`);
-  // Run every minute
   cron.schedule('* * * * *', checkRaces);
-  // Also run immediately on startup
   checkRaces();
 });
 
