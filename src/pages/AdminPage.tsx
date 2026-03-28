@@ -1697,7 +1697,7 @@ const AdminPage = () => {
                                 <div>
                                   <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Status</label>
                                   <select value={srd.status || ""} onChange={e => setSrd("status", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
-                                    {["upcoming", "live", "completed"].map(t => <option key={t} value={t}>{t}</option>)}
+                                    {["upcoming", "live", "completed", "cancelled"].map(t => <option key={t} value={t}>{t}</option>)}
                                   </select>
                                 </div>
                               </div>
