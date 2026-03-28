@@ -917,6 +917,7 @@ const AdminPage = () => {
         start_type: data.start_type || null,
         weather: data.weather || null,
         setup: data.setup || null,
+        status: data.status || "upcoming",
       }).eq("id", id);
       if (error) throw error;
     },
