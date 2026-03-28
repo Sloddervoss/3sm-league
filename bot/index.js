@@ -279,16 +279,30 @@ async function handleRaces(interaction) {
   const next = races[0];
   const nextRonde = next.round != null ? `R${next.round} — ${next.name}` : next.name;
 
-  // Check of gebruiker al aangemeld is
+  // Check of gebruiker al aangemeld is (race_registrations OF season_registrations)
   const { data: profile } = await supabase
     .from('profiles').select('user_id').eq('discord_id', discordId).maybeSingle();
 
   let isRegistered = false;
   if (profile) {
-    const { data: reg } = await supabase
+    // Check directe race aanmelding
+    const { data: raceReg } = await supabase
       .from('race_registrations').select('id')
       .eq('race_id', next.id).eq('user_id', profile.user_id).maybeSingle();
-    isRegistered = !!reg;
+
+    if (raceReg) {
+      isRegistered = true;
+    } else {
+      // Check seizoen aanmelding — haal league_id van de race op
+      const { data: race } = await supabase
+        .from('races').select('league_id').eq('id', next.id).maybeSingle();
+      if (race?.league_id) {
+        const { data: seasonReg } = await supabase
+          .from('season_registrations').select('id')
+          .eq('league_id', race.league_id).eq('user_id', profile.user_id).maybeSingle();
+        isRegistered = !!seasonReg;
+      }
+    }
   }
 
   const statusLine = isRegistered
