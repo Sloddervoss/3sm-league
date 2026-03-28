@@ -44,7 +44,9 @@ const WINDOWS = [
   { key: '15m', ms:      15 * 60 * 1000 },
 ];
 
-// ── Build Discord embed ───────────────────────────────────────────────────────
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+// ── Build reminder embed ──────────────────────────────────────────────────────
 function buildEmbed(race, windowKey) {
   const raceDate = new Date(race.race_date);
   const dateStr = raceDate.toLocaleDateString('nl-NL', {
@@ -101,7 +103,55 @@ function buildEmbed(race, windowKey) {
     .setTimestamp();
 }
 
-// ── Helper: fetch channel once ────────────────────────────────────────────────
+// ── Build podium embed ────────────────────────────────────────────────────────
+function buildPodiumEmbed(race, results) {
+  const ronde = race.round != null ? `Ronde ${race.round}` : race.name;
+  const raceDate = new Date(race.race_date);
+  const dateStr = raceDate.toLocaleDateString('nl-NL', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    timeZone: 'Europe/Amsterdam',
+  });
+
+  const finishers = results.filter(r => !r.dnf);
+  const podium = finishers.slice(0, 3);
+  const fastestLap = results.find(r => r.fastest_lap);
+
+  // Podium lines
+  const podiumLines = podium.map((r, i) => {
+    const name = r.profiles?.display_name || 'Onbekend';
+    const pts = r.points > 0 ? ` · **${r.points} pts**` : '';
+    const gap = i > 0 && r.gap_to_leader ? ` · +${r.gap_to_leader}` : '';
+    return `${MEDALS[i]} **${name}**${pts}${gap}`;
+  }).join('\n');
+
+  const embed = new EmbedBuilder()
+    .setColor(0xf59e0b)
+    .setTitle(`🏆  Race uitslag — ${race.name}`)
+    .setDescription(`**${ronde}** is afgelopen! Bekijk de volledige uitslag op de site.`)
+    .addFields(
+      { name: '🗓️ Circuit', value: `${race.track} · ${dateStr}`, inline: false },
+      { name: '🏅 Podium', value: podiumLines || 'Geen resultaten', inline: false },
+    );
+
+  if (fastestLap) {
+    const flName = fastestLap.profiles?.display_name || 'Onbekend';
+    embed.addFields({ name: '⚡ Snelste ronde', value: `**${flName}**`, inline: true });
+  }
+
+  const dnfCount = results.filter(r => r.dnf).length;
+  if (dnfCount > 0) {
+    embed.addFields({ name: '🔴 DNF', value: `${dnfCount}`, inline: true });
+  }
+
+  embed
+    .addFields({ name: '👥 Finishers', value: `${finishers.length}`, inline: true })
+    .setFooter({ text: '3 Stripe Motorsport' })
+    .setTimestamp();
+
+  return embed;
+}
+
+// ── Helper: fetch channel ─────────────────────────────────────────────────────
 async function getChannel() {
   const channel = await client.channels.fetch(process.env.DISCORD_CHANNEL_ID).catch(() => null);
   if (!channel) console.error('[bot] Channel niet gevonden:', process.env.DISCORD_CHANNEL_ID);
@@ -142,7 +192,7 @@ async function checkUpcoming() {
   }
 }
 
-// ── Check live races (race gestart melding) ───────────────────────────────────
+// ── Check live races ──────────────────────────────────────────────────────────
 async function checkLive() {
   const { data: races, error } = await supabase
     .from('races')
@@ -194,9 +244,45 @@ async function checkCancelled() {
   }
 }
 
+// ── Check completed races — podium embed ──────────────────────────────────────
+async function checkCompleted() {
+  const { data: races, error } = await supabase
+    .from('races')
+    .select('id, name, track, round, race_date')
+    .eq('status', 'completed');
+
+  if (error) { console.error('[checkCompleted]', error.message); return; }
+  if (!races?.length) return;
+
+  const channel = await getChannel();
+  if (!channel) return;
+
+  for (const race of races) {
+    if (wasSent(race.id, 'podium')) continue;
+
+    // Fetch results with driver names
+    const { data: results, error: re } = await supabase
+      .from('race_results')
+      .select('position, points, fastest_lap, dnf, gap_to_leader, profiles(display_name)')
+      .eq('race_id', race.id)
+      .order('position', { ascending: true });
+
+    if (re) { console.error('[checkCompleted] Results error:', re.message); continue; }
+    if (!results?.length) continue; // Geen resultaten geïmporteerd, wachten
+
+    try {
+      await channel.send({ embeds: [buildPodiumEmbed(race, results)] });
+      markSent(race.id, 'podium');
+      console.log(`[${new Date().toISOString()}] ✓ Podium embed: ${race.name}`);
+    } catch (err) {
+      console.error('[checkCompleted] Versturen mislukt:', err.message);
+    }
+  }
+}
+
 // ── Main check ────────────────────────────────────────────────────────────────
 async function checkRaces() {
-  await Promise.all([checkUpcoming(), checkLive(), checkCancelled()]);
+  await Promise.all([checkUpcoming(), checkLive(), checkCancelled(), checkCompleted()]);
 }
 
 // ── Bot ready ─────────────────────────────────────────────────────────────────
