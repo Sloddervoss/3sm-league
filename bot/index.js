@@ -265,6 +265,8 @@ async function handleKoppel(interaction) {
 
 // /races
 async function handleRaces(interaction) {
+  const discordId = interaction.user.id;
+
   const { data: races } = await supabase
     .from('races').select('id, name, track, round, race_date')
     .eq('status', 'upcoming').gte('race_date', new Date().toISOString())
@@ -277,25 +279,44 @@ async function handleRaces(interaction) {
   const next = races[0];
   const nextRonde = next.round != null ? `R${next.round} — ${next.name}` : next.name;
 
+  // Check of gebruiker al aangemeld is
+  const { data: profile } = await supabase
+    .from('profiles').select('user_id').eq('discord_id', discordId).maybeSingle();
+
+  let isRegistered = false;
+  if (profile) {
+    const { data: reg } = await supabase
+      .from('race_registrations').select('id')
+      .eq('race_id', next.id).eq('user_id', profile.user_id).maybeSingle();
+    isRegistered = !!reg;
+  }
+
+  const statusLine = isRegistered
+    ? `\n\n✅ **Je bent aangemeld voor ${nextRonde}**`
+    : profile ? `\n\n⬜ Je bent nog niet aangemeld voor ${nextRonde}` : '';
+
   const embed = new EmbedBuilder()
-    .setColor(0xf97316).setTitle('🏁  Aankomende Races')
+    .setColor(isRegistered ? 0x22c55e : 0xf97316)
+    .setTitle('🏁  Aankomende Races')
     .setDescription(races.map((r, i) => {
       const ronde = r.round != null ? `R${r.round} · ` : '';
       const prefix = i === 0 ? '**→ ' : '';
       const suffix = i === 0 ? '** *(eerstvolgende)*' : '';
       return `${prefix}${ronde}${r.name}${suffix}\n🏎️ ${r.track} · ${fmtDate(r.race_date)} ${fmtTime(r.race_date)}`;
-    }).join('\n\n'))
+    }).join('\n\n') + statusLine)
     .setFooter({ text: '3 Stripe Motorsport' });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`aanmelden_${next.id}`)
       .setLabel(`✅  Aanmelden voor ${nextRonde}`)
-      .setStyle(ButtonStyle.Success),
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(isRegistered),
     new ButtonBuilder()
       .setCustomId(`afmelden_${next.id}`)
       .setLabel(`❌  Afmelden voor ${nextRonde}`)
-      .setStyle(ButtonStyle.Danger),
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(!isRegistered),
   );
 
   interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
