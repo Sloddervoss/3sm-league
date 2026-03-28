@@ -334,7 +334,7 @@ async function handleRaces(interaction) {
   );
 
   await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-  setTimeout(() => interaction.deleteReply().catch(() => {}), 10_000);
+  setTimeout(() => interaction.deleteReply().catch(() => {}), 20_000);
 }
 
 // /aanmelden of /afmelden (eerstvolgende race)
