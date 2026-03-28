@@ -274,15 +274,30 @@ async function handleRaces(interaction) {
     return interaction.reply({ content: 'Geen aankomende races gevonden.', ephemeral: true });
   }
 
+  const next = races[0];
+  const nextRonde = next.round != null ? `R${next.round} — ${next.name}` : next.name;
+
   const embed = new EmbedBuilder()
     .setColor(0xf97316).setTitle('🏁  Aankomende Races')
-    .setDescription(races.map(r => {
+    .setDescription(races.map((r, i) => {
       const ronde = r.round != null ? `R${r.round} · ` : '';
-      return `**${ronde}${r.name}**\n🏎️ ${r.track} · ${fmtDate(r.race_date)} ${fmtTime(r.race_date)}`;
+      const prefix = i === 0 ? '**→ ' : '';
+      const suffix = i === 0 ? '** *(eerstvolgende)*' : '';
+      return `${prefix}${ronde}${r.name}${suffix}\n🏎️ ${r.track} · ${fmtDate(r.race_date)} ${fmtTime(r.race_date)}`;
     }).join('\n\n'))
     .setFooter({ text: '3 Stripe Motorsport' });
 
-  const row = registrationRow(races[0].id);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`aanmelden_${next.id}`)
+      .setLabel(`✅  Aanmelden voor ${nextRonde}`)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`afmelden_${next.id}`)
+      .setLabel(`❌  Afmelden voor ${nextRonde}`)
+      .setStyle(ButtonStyle.Danger),
+  );
+
   interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
 }
 
