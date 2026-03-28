@@ -333,7 +333,8 @@ async function handleRaces(interaction) {
       .setDisabled(!isRegistered),
   );
 
-  interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+  await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+  setTimeout(() => interaction.deleteReply().catch(() => {}), 10_000);
 }
 
 // /aanmelden of /afmelden (eerstvolgende race)
@@ -373,7 +374,8 @@ async function doRegistration(interaction, raceId, raceName, action) {
     ? `✅ Je bent aangemeld voor **${raceName}**!`
     : `✅ Je bent afgemeld voor **${raceName}**.`;
 
-  interaction.reply({ content: msg, ephemeral: true });
+  await interaction.reply({ content: msg, ephemeral: true });
+  setTimeout(() => interaction.deleteReply().catch(() => {}), 2_000);
 }
 
 // ── Bot ready ─────────────────────────────────────────────────────────────────
