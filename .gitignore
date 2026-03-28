@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 3sm-league/
+
+# Discord bot — credentials nooit in git
+bot/.env
+bot/sent_notifications.json
+bot/node_modules/
