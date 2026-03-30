@@ -737,7 +737,7 @@ const AdminPage = () => {
 
   const [importRaceId, setImportRaceId] = useState("");
   const [importRows, setImportRows] = useState<
-    { position: number; display_name: string; laps: number; best_lap: string; incidents: number; fastest_lap: boolean; iracing_cust_id?: string; new_irating?: number; new_license_level?: number; new_license_sub_level?: number }[]
+    { position: number; display_name: string; laps: number; best_lap: string; incidents: number; fastest_lap: boolean; iracing_cust_id?: string; new_irating?: number; new_license_level?: number; new_license_sub_level?: number; car_name?: string }[]
   >([{ position: 1, display_name: "", laps: 0, best_lap: "", incidents: 0, fastest_lap: false }]);
   const [pointsConfig] = useState<number[]>(DEFAULT_POINTS);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
@@ -796,7 +796,7 @@ const AdminPage = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("season_registrations")
-        .select("league_id, user_id, status, created_at");
+        .select("league_id, user_id, status, created_at, car_choice, car_locked");
       if (error) throw error;
       return data || [];
     },
@@ -1045,6 +1045,20 @@ const AdminPage = () => {
       }
       await supabase.from("races").update({ status: "completed", counts_for_3sr: true }).eq("id", importRaceId);
       await supabase.rpc("recalculate_3sr_for_race", { p_race_id: importRaceId });
+      // Auto-fill car_choice in season_registrations (only if not locked)
+      const raceForCar = (allRaces || []).find((r: any) => r.id === importRaceId);
+      if (raceForCar?.league_id) {
+        for (const row of importRows) {
+          if (!row.car_name || !row.iracing_cust_id) continue;
+          const profile = (profiles || []).find((p: any) => p.iracing_id === row.iracing_cust_id);
+          if (!profile) continue;
+          await (supabase as any).from("season_registrations")
+            .update({ car_choice: row.car_name })
+            .eq("league_id", raceForCar.league_id)
+            .eq("user_id", profile.user_id)
+            .eq("car_locked", false);
+        }
+      }
       if (iRatingUpdates > 0) toast.success(`iRating bijgewerkt voor ${iRatingUpdates} drivers`);
     },
     onSuccess: () => {
@@ -1494,13 +1508,42 @@ const AdminPage = () => {
                                     <span className="w-2 h-2 rounded-full bg-accent inline-block" />
                                     Heel seizoen ({seasonRegs.length})
                                   </p>
-                                  <div className="flex flex-wrap gap-2">
+                                  <div className="space-y-1.5">
                                     {seasonRegs.map((r: any) => {
                                       const p = (profiles || []).find((p: any) => p.user_id === r.user_id);
                                       return (
-                                        <span key={r.user_id} className="px-2.5 py-1 rounded-full bg-accent/15 text-accent text-xs font-medium border border-accent/30">
-                                          {p?.display_name || p?.iracing_name || r.user_id.slice(0, 8)}
-                                        </span>
+                                        <div key={r.user_id} className="flex items-center gap-2">
+                                          <span className="w-28 shrink-0 px-2.5 py-1 rounded-full bg-accent/15 text-accent text-xs font-medium border border-accent/30 truncate">
+                                            {p?.display_name || p?.iracing_name || r.user_id.slice(0, 8)}
+                                          </span>
+                                          <input
+                                            type="text"
+                                            defaultValue={r.car_choice || ""}
+                                            disabled={r.car_locked}
+                                            placeholder="Auto..."
+                                            className="flex-1 px-2 py-1 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            onBlur={async (e) => {
+                                              const val = e.target.value.trim();
+                                              if (val === (r.car_choice || "")) return;
+                                              await (supabase as any).from("season_registrations")
+                                                .update({ car_choice: val || null })
+                                                .eq("league_id", r.league_id).eq("user_id", r.user_id);
+                                              queryClient.invalidateQueries({ queryKey: ["admin-season-registrations"] });
+                                            }}
+                                          />
+                                          <button
+                                            title={r.car_locked ? "Klik om te unlocken" : "Klik om te locken"}
+                                            onClick={async () => {
+                                              await (supabase as any).from("season_registrations")
+                                                .update({ car_locked: !r.car_locked })
+                                                .eq("league_id", r.league_id).eq("user_id", r.user_id);
+                                              queryClient.invalidateQueries({ queryKey: ["admin-season-registrations"] });
+                                            }}
+                                            className="text-base leading-none hover:scale-110 transition-transform"
+                                          >
+                                            {r.car_locked ? "🔒" : "🔓"}
+                                          </button>
+                                        </div>
                                       );
                                     })}
                                   </div>
@@ -2194,6 +2237,7 @@ const AdminPage = () => {
                                         new_irating: r.newi_rating ?? undefined,
                                         new_license_level: r.new_license_level ?? undefined,
                                         new_license_sub_level: r.new_sub_level ?? undefined,
+                                        car_name: r.car_name || r.livery?.car_name || undefined,
                                       }))
                                       .filter((r: any) => r.display_name);
                                     if (!parsed.length) {
