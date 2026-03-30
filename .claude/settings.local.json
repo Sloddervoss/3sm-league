@@ -18,7 +18,12 @@
       "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/wiki/N%C3%BCrburgring\")",
       "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/wiki/Red_Bull_Ring\")",
       "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/wiki/Hungaroring\")",
-      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/wiki/Indianapolis_Motor_Speedway\")"
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://en.wikipedia.org/wiki/Indianapolis_Motor_Speedway\")",
+      "Bash(xargs grep:*)",
+      "Bash(grep -A5 \"ALTER TABLE.*profiles\\\\|ADD COLUMN.*team_id\\\\|ADD COLUMN.*irating\" /c/Users/vdevo/Desktop/3-stripe-league-hub-main/supabase/migrations/*.sql)",
+      "Bash(find /c/Users/vdevo/Desktop/3-stripe-league-hub-main -type f \\\\\\(-name sync-irating* -o -path */functions/* \\\\\\))",
+      "Bash(grep -A3 \"ALTER TABLE.*races\\\\|ADD COLUMN.*car\\\\|ADD COLUMN.*total_laps\\\\|ADD COLUMN.*iracing_session_id\" /c/Users/vdevo/Desktop/3-stripe-league-hub-main/supabase/migrations/*.sql)",
+      "Bash(grep \"CREATE TABLE\" /c/Users/vdevo/Desktop/3-stripe-league-hub-main/supabase/migrations/*.sql)"
     ]
   }
 }
