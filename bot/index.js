@@ -148,9 +148,8 @@ async function checkUpcoming() {
 
   for (const race of races) {
     const diff = new Date(race.race_date).getTime() - now.getTime();
-    // Stuur alleen de dichtstbijzijnde window die nog niet verstuurd is
-    // WINDOWS is gesorteerd van groot naar klein (24h → 1h → 15m)
-    const activeWindow = WINDOWS.find(win => diff > 0 && diff <= win.ms && !wasSent(race.id, win.key));
+    // Stuur de kleinste passende window die nog niet verstuurd is (15m → 1h → 24h)
+    const activeWindow = [...WINDOWS].reverse().find(win => diff > 0 && diff <= win.ms && !wasSent(race.id, win.key));
     if (!activeWindow) continue;
     // Sla alle grotere windows over die we nooit hebben gestuurd (race is al dichterbij)
     for (const win of WINDOWS) {
