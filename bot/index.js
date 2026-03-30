@@ -148,19 +148,24 @@ async function checkUpcoming() {
 
   for (const race of races) {
     const diff = new Date(race.race_date).getTime() - now.getTime();
+    // Stuur alleen de dichtstbijzijnde window die nog niet verstuurd is
+    // WINDOWS is gesorteerd van groot naar klein (24h → 1h → 15m)
+    const activeWindow = WINDOWS.find(win => diff > 0 && diff <= win.ms && !wasSent(race.id, win.key));
+    if (!activeWindow) continue;
+    // Sla alle grotere windows over die we nooit hebben gestuurd (race is al dichterbij)
     for (const win of WINDOWS) {
-      if (diff > 0 && diff <= win.ms && !wasSent(race.id, win.key)) {
-        try {
-          const embed = buildReminderEmbed(race, win.key);
-          // 24h notification gets aanmelden buttons
-          const components = win.key === '24h' ? [registrationRow(race.id)] : [];
-          await channel.send({ embeds: [embed], components });
-          markSent(race.id, win.key);
-          console.log(`[${new Date().toISOString()}] ✓ ${win.key}: ${race.name}`);
-        } catch (err) {
-          console.error('[checkUpcoming]', err.message);
-        }
+      if (win.ms > activeWindow.ms && !wasSent(race.id, win.key)) {
+        markSent(race.id, win.key); // stil overslaan
       }
+    }
+    try {
+      const embed = buildReminderEmbed(race, activeWindow.key);
+      const components = activeWindow.key === '24h' ? [registrationRow(race.id)] : [];
+      await channel.send({ embeds: [embed], components });
+      markSent(race.id, activeWindow.key);
+      console.log(`[${new Date().toISOString()}] ✓ ${activeWindow.key}: ${race.name}`);
+    } catch (err) {
+      console.error('[checkUpcoming]', err.message);
     }
   }
 }
