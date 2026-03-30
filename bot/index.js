@@ -160,7 +160,7 @@ async function checkUpcoming() {
     }
     try {
       const embed = buildReminderEmbed(race, activeWindow.key);
-      const components = activeWindow.key === '24h' ? [registrationRow(race.id)] : [];
+      const components = [registrationRow(race.id)];
       await channel.send({ embeds: [embed], components });
       markSent(race.id, activeWindow.key);
       console.log(`[${new Date().toISOString()}] ✓ ${activeWindow.key}: ${race.name}`);
