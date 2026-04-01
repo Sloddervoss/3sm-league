@@ -1048,10 +1048,11 @@ const AdminPage = () => {
       // Auto-fill car_choice in season_registrations (only if not locked)
       const raceForCar = (allRaces || []).find((r: any) => r.id === importRaceId);
       if (raceForCar?.league_id) {
+        const { data: freshProfiles } = await supabase.from("profiles").select("user_id, iracing_id, display_name, iracing_name");
         for (const row of importRows) {
           if (!row.car_name) continue;
-          const profile = profiles?.find((p: any) =>
-            (row.iracing_cust_id && String((p as any).iracing_id) === String(row.iracing_cust_id)) ||
+          const profile = freshProfiles?.find((p: any) =>
+            (row.iracing_cust_id && String(p.iracing_id) === String(row.iracing_cust_id)) ||
             (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
             (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
           );
