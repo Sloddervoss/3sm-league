@@ -1075,6 +1075,7 @@ const AdminPage = () => {
       queryClient.invalidateQueries({ queryKey: ["all-results-with-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["all-races-admin"] });
       queryClient.invalidateQueries({ queryKey: ["completed-races"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-season-registrations"] });
       setImportRaceId("");
       setImportRows([{ position: 1, display_name: "", laps: 0, best_lap: "", incidents: 0, fastest_lap: false }]);
       setCsvFileName(null);
