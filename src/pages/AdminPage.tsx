@@ -768,7 +768,7 @@ const AdminPage = () => {
   const { data: profiles } = useQuery({
     queryKey: ["all-profiles"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("user_id, display_name, iracing_name");
+      const { data, error } = await supabase.from("profiles").select("user_id, display_name, iracing_name, iracing_id");
       if (error) throw error;
       return data;
     },
