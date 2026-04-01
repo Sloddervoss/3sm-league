@@ -1049,6 +1049,8 @@ const AdminPage = () => {
       const raceForCar = (allRaces || []).find((r: any) => r.id === importRaceId);
       if (raceForCar?.league_id) {
         const { data: freshProfiles } = await supabase.from("profiles").select("user_id, iracing_id, display_name, iracing_name");
+        console.log("[car_choice] league_id:", raceForCar.league_id);
+        console.log("[car_choice] profiles:", freshProfiles?.map((p: any) => ({ id: p.iracing_id, name: p.display_name })));
         for (const row of importRows) {
           if (!row.car_name) continue;
           const profile = freshProfiles?.find((p: any) =>
@@ -1056,12 +1058,14 @@ const AdminPage = () => {
             (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
             (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
           );
+          console.log(`[car_choice] ${row.display_name} (${row.iracing_cust_id}) → car: ${row.car_name} → profile: ${profile?.user_id ?? "NOT FOUND"}`);
           if (!profile) continue;
-          await (supabase as any).from("season_registrations")
+          const { error: carErr } = await (supabase as any).from("season_registrations")
             .update({ car_choice: row.car_name })
             .eq("league_id", raceForCar.league_id)
             .eq("user_id", profile.user_id)
             .eq("car_locked", false);
+          if (carErr) console.error("[car_choice] update error:", carErr.message);
         }
       }
       if (iRatingUpdates > 0) toast.success(`iRating bijgewerkt voor ${iRatingUpdates} drivers`);
