@@ -1060,12 +1060,12 @@ const AdminPage = () => {
           );
           console.log(`[car_choice] ${row.display_name} (${row.iracing_cust_id}) → car: ${row.car_name} → profile: ${profile?.user_id ?? "NOT FOUND"}`);
           if (!profile) continue;
-          const { error: carErr } = await (supabase as any).from("season_registrations")
-            .update({ car_choice: row.car_name })
+          const { data: updResult, error: carErr, count } = await (supabase as any).from("season_registrations")
+            .update({ car_choice: row.car_name }, { count: 'exact' })
             .eq("league_id", raceForCar.league_id)
             .eq("user_id", profile.user_id)
-            .eq("car_locked", false);
-          if (carErr) console.error("[car_choice] update error:", carErr.message);
+            .select();
+          console.log(`[car_choice] update result for ${row.display_name}: count=${count}, rows=`, updResult, "err=", carErr?.message);
         }
       }
       if (iRatingUpdates > 0) toast.success(`iRating bijgewerkt voor ${iRatingUpdates} drivers`);
