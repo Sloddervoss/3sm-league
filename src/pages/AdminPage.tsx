@@ -1049,8 +1049,12 @@ const AdminPage = () => {
       const raceForCar = (allRaces || []).find((r: any) => r.id === importRaceId);
       if (raceForCar?.league_id) {
         for (const row of importRows) {
-          if (!row.car_name || !row.iracing_cust_id) continue;
-          const profile = (profiles || []).find((p: any) => p.iracing_id === row.iracing_cust_id);
+          if (!row.car_name) continue;
+          const profile = profiles?.find((p: any) =>
+            (row.iracing_cust_id && String((p as any).iracing_id) === String(row.iracing_cust_id)) ||
+            (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
+            (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
+          );
           if (!profile) continue;
           await (supabase as any).from("season_registrations")
             .update({ car_choice: row.car_name })
