@@ -83,6 +83,13 @@ async function getNotificationChannel() {
   return ch;
 }
 
+async function getUitslagenChannel() {
+  const cfg = loadConfig();
+  const channelId = cfg.uitslagen_channel_id;
+  if (!channelId) return null;
+  return client.channels.fetch(channelId).catch(() => null);
+}
+
 async function getCalendarChannel() {
   const cfg = loadConfig();
   if (!cfg.kalender_channel_id) return null;
@@ -275,7 +282,8 @@ async function checkCompleted() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'completed');
   if (error) { console.error('[checkCompleted]', error.message); return; }
   if (!races?.length) return;
-  const channel = await getNotificationChannel(); if (!channel) return;
+  const channel = await getUitslagenChannel() || await getNotificationChannel();
+  if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'podium')) continue;
     const { data: results, error: re } = await supabase
@@ -496,6 +504,7 @@ async function handleSetupServer(interaction) {
   saveConfig({
     guild_id:              guild.id,
     meldingen_channel_id:  resolvedChannels.meldingen,
+    uitslagen_channel_id:  resolvedChannels.uitslagen,
     kalender_channel_id:   resolvedChannels.kalender,
     welkom_channel_id:     resolvedChannels.welkom,
     bot_logs_channel_id:   resolvedChannels.bot_logs,
