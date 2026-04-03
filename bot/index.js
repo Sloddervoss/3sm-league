@@ -292,7 +292,10 @@ async function checkRaces() {
 
 // ── Cron: team rol sync ───────────────────────────────────────────────────────
 async function syncTeamRoles() {
-  const guild = client.guilds.cache.first();
+  const cfg = loadConfig();
+  const guildId = cfg.guild_id || client.guilds.cache.first()?.id;
+  if (!guildId) return;
+  const guild = await client.guilds.fetch(guildId).catch(() => null);
   if (!guild) return;
 
   const { data: teams } = await supabase.from('teams').select('id, name, discord_role_id');
@@ -484,6 +487,7 @@ async function handleSetupServer(interaction) {
 
   // Sla config op
   saveConfig({
+    guild_id:              guild.id,
     meldingen_channel_id:  createdChannels.meldingen,
     kalender_channel_id:   createdChannels.kalender,
     welkom_channel_id:     createdChannels.welkom,
