@@ -573,7 +573,7 @@ async function handleSetupServer(interaction) {
         .setDescription('Fijn dat je er bent! Hier vind je alles over onze iRacing league.')
         .addFields(
           { name: '🏎️ Races bekijken',    value: 'Typ `/races` om aankomende races te zien en je aan te melden.', inline: false },
-          { name: '🔗 Account koppelen',  value: `Koppel je Discord aan je 3SM account:\n1. Typ \`/koppel\` in dit kanaal of ergens in de server\n2. De bot stuurt je een persoonlijke link\n3. Open de link (je moet ingelogd zijn op de site)\n\nDaarna krijg je automatisch je teamrol!`, inline: false },
+          { name: '🔗 Account koppelen',  value: `Koppel je Discord aan je 3SM account:\n1. Typ \`/koppel\` hier in Discord\n2. De bot stuurt je een persoonlijke link\n3. Open de link — log in als je dat nog niet hebt gedaan\n4. Koppeling is automatisch klaar!\n\nJe krijgt daarna automatisch je teamrol en nickname.`, inline: false },
           { name: '📋 Reglement',         value: `Lees het reglement in <#${resolvedChannels.reglement}> voordat je meedoet.`, inline: false },
           { name: '❓ Hulp nodig?',       value: `Stel je vraag in <#${resolvedChannels.setup_hulp}>.`, inline: false },
         )
