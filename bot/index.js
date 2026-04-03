@@ -306,28 +306,36 @@ async function syncTeamRoles() {
   const guild = await client.guilds.fetch(guildId).catch(() => null);
   if (!guild) return;
 
-  const { data: teams } = await supabase.from('teams').select('id, name, discord_role_id');
+  const { data: teams } = await supabase.from('teams').select('id, name, color, discord_role_id');
   if (!teams?.length) return;
 
   // Maak ontbrekende team-rollen aan (controleer eerst op naam in Discord)
   for (const team of teams) {
+    const colorInt = team.color ? parseInt(team.color.replace('#', ''), 16) : 0xf97316;
     if (!team.discord_role_id) {
       // Zoek bestaande rol op naam om duplicaten te voorkomen
       const existing = guild.roles.cache.find(r => r.name === team.name);
       if (existing) {
+        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
         console.log(`[syncTeamRoles] Bestaande rol gevonden: ${team.name}`);
         continue;
       }
       try {
-        const role = await guild.roles.create({ name: team.name, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+        const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
         await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
         team.discord_role_id = role.id;
         console.log(`[syncTeamRoles] Rol aangemaakt: ${team.name}`);
       } catch (e) {
         console.error(`[syncTeamRoles] Kon rol niet aanmaken voor ${team.name}:`, e.message);
         continue;
+      }
+    } else {
+      // Update kleur/hoist van bestaande rol als die afwijkt
+      const existing = guild.roles.cache.get(team.discord_role_id);
+      if (existing) {
+        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
       }
     }
   }
