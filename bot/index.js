@@ -504,6 +504,36 @@ async function handleSetupServer(interaction) {
     steward_role_id:       resolvedRoles.steward_role,
   });
 
+  // ── Reglement embed (alleen sturen als kanaal leeg is) ───────────────────
+  const regelementCh = await client.channels.fetch(resolvedChannels.reglement).catch(() => null);
+  if (regelementCh) {
+    const messages = await regelementCh.messages.fetch({ limit: 1 });
+    if (messages.size === 0) {
+      const regelementEmbed = new EmbedBuilder()
+        .setColor(0xf97316)
+        .setTitle('📋  3 Stripe Motorsport — Serverregels')
+        .setDescription('Welkom bij **3 Stripe Motorsport**. Dit is een community voor simracers die houden van competitie, respect en plezier.\nDoor deel te nemen aan deze Discord ga je akkoord met onderstaande regels.')
+        .addFields(
+          { name: '📜 1. Algemeen gedrag', value: '• Behandel iedereen met respect.\n• Geen haatdragend, racistisch of discriminerend gedrag.\n• Geen toxic gedrag (onnodig schelden, rage, provoceren).\n• Discussies mogen, maar houd het normaal.', inline: false },
+          { name: '🚫 2. Verboden content', value: '• Geen spam of self-promo zonder toestemming.\n• Geen NSFW content.\n• Geen illegale content of cheats/hacks.\n• Geen misleidende info verspreiden.', inline: false },
+          { name: '🎙️ 3. Voice chat regels', value: '• Geen geschreeuw of mic spam.\n• Gebruik push-to-talk als je veel achtergrondgeluid hebt.\n• Respecteer racers tijdens races (geen onnodig praten in race voice).', inline: false },
+          { name: '🏎️ 4. Racing etiquette', value: '• Clean racing staat centraal.\n• Geen intentional wrecking of brake checks.\n• Geef positie terug bij unfair voordeel.\n• Respecteer blue flags en snellere rijders.\n• Incidenten? Meld via de juiste kanalen, niet in chat ruzie maken.', inline: false },
+          { name: '📅 5. League & deelname', value: '• Zorg dat je op tijd bent voor races.\n• Meld je af als je niet kunt.\n• Admins beslissen bij conflicten.\n• Beslissingen van stewards zijn leidend.', inline: false },
+          { name: '🛠️ 6. Discord gebruik', value: '• Gebruik kanalen waarvoor ze bedoeld zijn.\n• Geen onnodige ping spam (@everyone / @here).\n• Volg instructies van staff altijd op.', inline: false },
+          { name: '👮 7. Staff & handhaving', value: '• Staff heeft altijd het laatste woord.\n• Overtredingen kunnen leiden tot:\n  → Waarschuwing → Mute → Kick → Ban', inline: false },
+          { name: '🔒 8. Account & veiligheid', value: '• Gebruik geen alt accounts om bans te omzeilen.\n• Houd je account veilig (niet delen).', inline: false },
+          { name: '⚠️ 9. Aanvullingen', value: '• Regels kunnen aangepast worden.\n• Onvoorziene situaties worden door staff beoordeeld.', inline: false },
+          { name: '✅ Akkoord', value: 'Door in deze server te blijven ga je akkoord met deze regels.', inline: false },
+        )
+        .setFooter({ text: '3 Stripe Motorsport' })
+        .setTimestamp();
+      await regelementCh.send({ embeds: [regelementEmbed] });
+      log('Reglement embed geplaatst');
+    } else {
+      log('Reglement embed al aanwezig, overgeslagen');
+    }
+  }
+
   // ── Welkom embed (alleen sturen als kanaal leeg is) ───────────────────────
   const welkomCh = await client.channels.fetch(resolvedChannels.welkom).catch(() => null);
   if (welkomCh) {
