@@ -301,9 +301,17 @@ async function syncTeamRoles() {
   const { data: teams } = await supabase.from('teams').select('id, name, discord_role_id');
   if (!teams?.length) return;
 
-  // Maak ontbrekende team-rollen aan
+  // Maak ontbrekende team-rollen aan (controleer eerst op naam in Discord)
   for (const team of teams) {
     if (!team.discord_role_id) {
+      // Zoek bestaande rol op naam om duplicaten te voorkomen
+      const existing = guild.roles.cache.find(r => r.name === team.name);
+      if (existing) {
+        await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
+        team.discord_role_id = existing.id;
+        console.log(`[syncTeamRoles] Bestaande rol gevonden: ${team.name}`);
+        continue;
+      }
       try {
         const role = await guild.roles.create({ name: team.name, mentionable: false, reason: '3SM team rol auto-aanmaak' });
         await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
