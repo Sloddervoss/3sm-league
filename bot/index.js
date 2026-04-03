@@ -340,6 +340,19 @@ async function syncTeamRoles() {
     }
   }
 
+  // Verwijder Discord rollen van teams die niet meer in Supabase staan
+  const teamRoleIds = teams.map(t => t.discord_role_id).filter(Boolean);
+  for (const [, role] of guild.roles.cache) {
+    if (role.hoist && !['Admin', 'Steward', 'Rijder'].includes(role.name) && !teamRoleIds.includes(role.id)) {
+      // Controleer of dit ooit een teamrol was (staat niet meer in teams tabel)
+      const wasTeamRole = await supabase.from('teams').select('id').eq('discord_role_id', role.id).maybeSingle();
+      if (!wasTeamRole.data) {
+        await role.delete('3SM team verwijderd').catch(() => {});
+        console.log(`[syncTeamRoles] Rol verwijderd: ${role.name}`);
+      }
+    }
+  }
+
   // Sync Discord-rollen voor alle gekoppelde leden
   const { data: profiles } = await supabase
     .from('profiles').select('user_id, discord_id, iracing_name, display_name')
