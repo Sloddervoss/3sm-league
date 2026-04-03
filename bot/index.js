@@ -411,6 +411,9 @@ async function handleSetupServer(interaction) {
     return ch;
   }
 
+  // Guild_id direct opslaan zodat syncTeamRoles de juiste server pakt
+  saveConfig({ guild_id: guild.id });
+
   const resolvedChannels = {};
   const resolvedRoles    = {};
 
@@ -424,9 +427,6 @@ async function handleSetupServer(interaction) {
     const role = await getOrCreateRole(def.name, { color: def.color, hoist: def.hoist });
     resolvedRoles[def.key] = role.id;
   }
-
-  const adminRoleId = resolvedRoles.admin_role;
-  const everyoneId  = guild.roles.everyone.id;
 
   // ── Structuur ─────────────────────────────────────────────────────────────
   const STRUCTURE = [
@@ -467,7 +467,6 @@ async function handleSetupServer(interaction) {
     },
     {
       label: '🔒 ADMIN',
-      adminOnly: true,
       channels: [
         { key: 'admin_chat', name: '💼・admin-chat', type: ChannelType.GuildText },
         { key: 'bot_logs',   name: '🤖・bot-logs',  type: ChannelType.GuildText },
@@ -477,17 +476,10 @@ async function handleSetupServer(interaction) {
 
   for (const section of STRUCTURE) {
     const separatorName = `━━━━━━━| ${section.label} |━━━━━━━`;
-    const catOverwrites = section.adminOnly
-      ? [{ id: everyoneId, deny: [PermissionFlagsBits.ViewChannel] }, { id: adminRoleId, allow: [PermissionFlagsBits.ViewChannel] }]
-      : [];
-
-    const category = await getOrCreateCategory(separatorName, catOverwrites);
+    const category = await getOrCreateCategory(separatorName, []);
 
     for (const chDef of section.channels) {
-      const overrides = section.adminOnly
-        ? [{ id: everyoneId, deny: [PermissionFlagsBits.ViewChannel] }, { id: adminRoleId, allow: [PermissionFlagsBits.ViewChannel] }]
-        : [];
-      const ch = await getOrCreateChannel(chDef.name, chDef.type, category.id, overrides);
+      const ch = await getOrCreateChannel(chDef.name, chDef.type, category.id, []);
       resolvedChannels[chDef.key] = ch.id;
     }
   }
