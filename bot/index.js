@@ -723,6 +723,7 @@ client.once('ready', async () => {
 
   checkRaces();
   updateCalendarEmbed();
+  syncTeamRoles();
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
