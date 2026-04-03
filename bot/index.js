@@ -457,6 +457,15 @@ async function handleSetupServer(interaction) {
       ],
     },
     {
+      label: '🎙️ SPRAAK',
+      channels: [
+        { key: 'race_lobby',      name: '🏁・race-lobby',      type: ChannelType.GuildVoice },
+        { key: 'endurance_lobby', name: '🏎️・endurance-lobby', type: ChannelType.GuildVoice },
+        { key: 'pit_wall',        name: '🔧・pit-wall',        type: ChannelType.GuildVoice },
+        { key: 'algemeen_spraak', name: '💬・algemeen-spraak', type: ChannelType.GuildVoice },
+      ],
+    },
+    {
       label: '🔒 ADMIN',
       adminOnly: true,
       channels: [
