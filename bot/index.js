@@ -342,7 +342,7 @@ async function syncTeamRoles() {
 
   // Sync Discord-rollen voor alle gekoppelde leden
   const { data: profiles } = await supabase
-    .from('profiles').select('user_id, discord_id')
+    .from('profiles').select('user_id, discord_id, iracing_name, display_name')
     .not('discord_id', 'is', null);
 
   if (!profiles?.length) return;
@@ -354,6 +354,12 @@ async function syncTeamRoles() {
     try {
       const member = await guild.members.fetch(profile.discord_id).catch(() => null);
       if (!member) continue;
+
+      // Nickname instellen op iRacing naam (of display_name als fallback)
+      const nickname = profile.iracing_name || profile.display_name;
+      if (nickname && member.displayName !== nickname) {
+        await member.setNickname(nickname).catch(() => {});
+      }
 
       const userTeams = memberships?.filter(m => m.user_id === profile.user_id) || [];
       const expectedRoleIds = userTeams.map(m => teams.find(t => t.id === m.team_id)?.discord_role_id).filter(Boolean);
@@ -384,7 +390,12 @@ client.on('guildMemberAdd', async (member) => {
 
   // Geef ook team-rollen als discord al gekoppeld is
   const { data: profile } = await supabase
-    .from('profiles').select('user_id').eq('discord_id', member.user.id).maybeSingle();
+    .from('profiles').select('user_id, iracing_name, display_name').eq('discord_id', member.user.id).maybeSingle();
+
+  if (profile) {
+    const nickname = profile.iracing_name || profile.display_name;
+    if (nickname) await member.setNickname(nickname).catch(() => {});
+  }
   if (!profile) return;
 
   const { data: memberships } = await supabase
