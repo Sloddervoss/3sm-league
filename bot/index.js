@@ -3,6 +3,7 @@ import {
   Client, GatewayIntentBits, EmbedBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
   REST, Routes, SlashCommandBuilder,
+  ChannelType, PermissionFlagsBits,
 } from 'discord.js';
 import { createClient } from '@supabase/supabase-js';
 import cron from 'node-cron';
@@ -11,7 +12,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SENT_FILE = path.join(__dirname, 'sent_notifications.json');
+const SENT_FILE   = path.join(__dirname, 'sent_notifications.json');
+const CONFIG_FILE = path.join(__dirname, 'config.json');
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const supabase = createClient(
@@ -20,7 +22,22 @@ const supabase = createClient(
 );
 
 // ── Discord client ────────────────────────────────────────────────────────────
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+  ],
+});
+
+// ── Config (channel/role IDs na /setup-server) ────────────────────────────────
+function loadConfig() {
+  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
+  catch { return {}; }
+}
+function saveConfig(data) {
+  const current = loadConfig();
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...current, ...data }, null, 2));
+}
 
 // ── Sent-notification tracking ────────────────────────────────────────────────
 function loadSent() {
@@ -57,10 +74,19 @@ function rondeName(race) {
   return race.round != null ? `Ronde ${race.round}` : race.name;
 }
 
-async function getChannel() {
-  const ch = await client.channels.fetch(process.env.DISCORD_CHANNEL_ID).catch(() => null);
-  if (!ch) console.error('[bot] Channel niet gevonden');
+async function getNotificationChannel() {
+  const cfg = loadConfig();
+  const channelId = cfg.meldingen_channel_id || process.env.DISCORD_CHANNEL_ID;
+  if (!channelId) { console.error('[bot] Geen meldingen channel geconfigureerd'); return null; }
+  const ch = await client.channels.fetch(channelId).catch(() => null);
+  if (!ch) console.error('[bot] Meldingen channel niet gevonden:', channelId);
   return ch;
+}
+
+async function getCalendarChannel() {
+  const cfg = loadConfig();
+  if (!cfg.kalender_channel_id) return null;
+  return client.channels.fetch(cfg.kalender_channel_id).catch(() => null);
 }
 
 // ── Registration buttons ──────────────────────────────────────────────────────
@@ -129,6 +155,60 @@ function buildPodiumEmbed(race, results) {
   return embed;
 }
 
+// ── Kalender embed ────────────────────────────────────────────────────────────
+async function buildCalendarEmbed() {
+  const { data: races } = await supabase
+    .from('races')
+    .select('id, name, track, round, race_date, status, leagues(name)')
+    .in('status', ['upcoming', 'live'])
+    .order('race_date', { ascending: true })
+    .limit(15);
+
+  if (!races?.length) {
+    return new EmbedBuilder()
+      .setColor(0x1e293b)
+      .setTitle('📅  Racekalender')
+      .setDescription('Geen aankomende races gepland.')
+      .setFooter({ text: '3 Stripe Motorsport · automatisch bijgewerkt' })
+      .setTimestamp();
+  }
+
+  const lines = races.map(r => {
+    const ronde  = r.round != null ? `R${r.round}` : '';
+    const status = r.status === 'live' ? ' 🟢 **LIVE**' : '';
+    const label  = [ronde, r.name].filter(Boolean).join(' · ');
+    return `**${label}**${status}\n🏎️ ${r.track} · ${fmtDate(r.race_date)} ${fmtTime(r.race_date)}`;
+  }).join('\n\n');
+
+  return new EmbedBuilder()
+    .setColor(0x3b82f6)
+    .setTitle('📅  Racekalender')
+    .setDescription(lines)
+    .setFooter({ text: '3 Stripe Motorsport · automatisch bijgewerkt' })
+    .setTimestamp();
+}
+
+async function updateCalendarEmbed() {
+  const ch = await getCalendarChannel();
+  if (!ch) return;
+
+  const cfg = loadConfig();
+  const embed = await buildCalendarEmbed();
+
+  if (cfg.kalender_message_id) {
+    try {
+      const msg = await ch.messages.fetch(cfg.kalender_message_id);
+      await msg.edit({ embeds: [embed] });
+      return;
+    } catch {
+      // bericht bestaat niet meer, maak nieuw aan
+    }
+  }
+
+  const msg = await ch.send({ embeds: [embed] });
+  saveConfig({ kalender_message_id: msg.id });
+}
+
 // ── Cron: upcoming (24h/1h/15m) ──────────────────────────────────────────────
 async function checkUpcoming() {
   const now      = new Date();
@@ -143,24 +223,21 @@ async function checkUpcoming() {
   if (error) { console.error('[checkUpcoming]', error.message); return; }
   if (!races?.length) return;
 
-  const channel = await getChannel();
+  const channel = await getNotificationChannel();
   if (!channel) return;
 
   for (const race of races) {
     const diff = new Date(race.race_date).getTime() - now.getTime();
-    // Stuur de kleinste passende window die nog niet verstuurd is (15m → 1h → 24h)
     const activeWindow = [...WINDOWS].reverse().find(win => diff > 0 && diff <= win.ms && !wasSent(race.id, win.key));
     if (!activeWindow) continue;
-    // Sla alle grotere windows over die we nooit hebben gestuurd (race is al dichterbij)
     for (const win of WINDOWS) {
       if (win.ms > activeWindow.ms && !wasSent(race.id, win.key)) {
-        markSent(race.id, win.key); // stil overslaan
+        markSent(race.id, win.key);
       }
     }
     try {
       const embed = buildReminderEmbed(race, activeWindow.key);
-      const components = [registrationRow(race.id)];
-      await channel.send({ embeds: [embed], components });
+      await channel.send({ embeds: [embed], components: [registrationRow(race.id)] });
       markSent(race.id, activeWindow.key);
       console.log(`[${new Date().toISOString()}] ✓ ${activeWindow.key}: ${race.name}`);
     } catch (err) {
@@ -174,7 +251,7 @@ async function checkLive() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'live');
   if (error) { console.error('[checkLive]', error.message); return; }
   if (!races?.length) return;
-  const channel = await getChannel(); if (!channel) return;
+  const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'live')) continue;
     try { await channel.send({ embeds: [buildReminderEmbed(race, 'live')] }); markSent(race.id, 'live'); } catch (e) { console.error(e.message); }
@@ -186,7 +263,7 @@ async function checkCancelled() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'cancelled');
   if (error) { console.error('[checkCancelled]', error.message); return; }
   if (!races?.length) return;
-  const channel = await getChannel(); if (!channel) return;
+  const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'cancelled')) continue;
     try { await channel.send({ embeds: [buildReminderEmbed(race, 'cancelled')] }); markSent(race.id, 'cancelled'); } catch (e) { console.error(e.message); }
@@ -198,7 +275,7 @@ async function checkCompleted() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'completed');
   if (error) { console.error('[checkCompleted]', error.message); return; }
   if (!races?.length) return;
-  const channel = await getChannel(); if (!channel) return;
+  const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'podium')) continue;
     const { data: results, error: re } = await supabase
@@ -213,12 +290,245 @@ async function checkRaces() {
   await Promise.all([checkUpcoming(), checkLive(), checkCancelled(), checkCompleted()]);
 }
 
+// ── Cron: team rol sync ───────────────────────────────────────────────────────
+async function syncTeamRoles() {
+  const guild = client.guilds.cache.first();
+  if (!guild) return;
+
+  const { data: teams } = await supabase.from('teams').select('id, name, discord_role_id');
+  if (!teams?.length) return;
+
+  // Maak ontbrekende team-rollen aan
+  for (const team of teams) {
+    if (!team.discord_role_id) {
+      try {
+        const role = await guild.roles.create({ name: team.name, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+        await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
+        team.discord_role_id = role.id;
+        console.log(`[syncTeamRoles] Rol aangemaakt: ${team.name}`);
+      } catch (e) {
+        console.error(`[syncTeamRoles] Kon rol niet aanmaken voor ${team.name}:`, e.message);
+        continue;
+      }
+    }
+  }
+
+  // Sync Discord-rollen voor alle gekoppelde leden
+  const { data: profiles } = await supabase
+    .from('profiles').select('user_id, discord_id')
+    .not('discord_id', 'is', null);
+
+  if (!profiles?.length) return;
+
+  const { data: memberships } = await supabase
+    .from('team_memberships').select('user_id, team_id');
+
+  for (const profile of profiles) {
+    try {
+      const member = await guild.members.fetch(profile.discord_id).catch(() => null);
+      if (!member) continue;
+
+      const userTeams = memberships?.filter(m => m.user_id === profile.user_id) || [];
+      const expectedRoleIds = userTeams.map(m => teams.find(t => t.id === m.team_id)?.discord_role_id).filter(Boolean);
+
+      for (const team of teams) {
+        if (!team.discord_role_id) continue;
+        const shouldHave = expectedRoleIds.includes(team.discord_role_id);
+        const hasIt = member.roles.cache.has(team.discord_role_id);
+        if (shouldHave && !hasIt) await member.roles.add(team.discord_role_id).catch(() => {});
+        if (!shouldHave && hasIt) await member.roles.remove(team.discord_role_id).catch(() => {});
+      }
+    } catch (e) {
+      console.error('[syncTeamRoles] lid fout:', e.message);
+    }
+  }
+}
+
+// ── guildMemberAdd: Rijder rol + team rollen ──────────────────────────────────
+client.on('guildMemberAdd', async (member) => {
+  const cfg = loadConfig();
+  if (!cfg.rijder_role_id) return;
+
+  try {
+    await member.roles.add(cfg.rijder_role_id);
+  } catch (e) {
+    console.error('[guildMemberAdd] Rijder rol:', e.message);
+  }
+
+  // Geef ook team-rollen als discord al gekoppeld is
+  const { data: profile } = await supabase
+    .from('profiles').select('user_id').eq('discord_id', member.user.id).maybeSingle();
+  if (!profile) return;
+
+  const { data: memberships } = await supabase
+    .from('team_memberships').select('team_id').eq('user_id', profile.user_id);
+  if (!memberships?.length) return;
+
+  const teamIds = memberships.map(m => m.team_id);
+  const { data: teams } = await supabase
+    .from('teams').select('discord_role_id').in('id', teamIds);
+
+  for (const team of teams || []) {
+    if (team.discord_role_id) {
+      await member.roles.add(team.discord_role_id).catch(() => {});
+    }
+  }
+});
+
+// ── /setup-server ─────────────────────────────────────────────────────────────
+async function handleSetupServer(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const guild = interaction.guild;
+
+  const log = (msg) => console.log(`[setup] ${msg}`);
+
+  // Verwijder alle bestaande kanalen en categorieën
+  try {
+    for (const [, ch] of guild.channels.cache) {
+      await ch.delete().catch(() => {});
+    }
+  } catch (e) {
+    log('Fout bij opruimen: ' + e.message);
+  }
+
+  const createdChannels = {};
+  const createdRoles    = {};
+
+  // ── Rollen aanmaken ───────────────────────────────────────────────────────
+  const ROLE_DEFS = [
+    { key: 'admin_role',   name: 'Admin',   color: 0xef4444, hoist: true },
+    { key: 'steward_role', name: 'Steward', color: 0xf97316, hoist: true },
+    { key: 'rijder_role',  name: 'Rijder',  color: 0x3b82f6, hoist: true },
+  ];
+
+  for (const def of ROLE_DEFS) {
+    const role = await guild.roles.create({ name: def.name, color: def.color, hoist: def.hoist, reason: '3SM setup' });
+    createdRoles[def.key] = role.id;
+    log(`Rol aangemaakt: ${def.name}`);
+  }
+
+  // ── Structuur definitie ───────────────────────────────────────────────────
+  const STRUCTURE = [
+    {
+      type: 'separator', label: '📢 INFORMATIE',
+      channels: [
+        { key: 'welkom',         name: '👋・welkom',          type: ChannelType.GuildText },
+        { key: 'aankondigingen', name: '📣・aankondigingen',  type: ChannelType.GuildText },
+        { key: 'reglement',      name: '📋・reglement',       type: ChannelType.GuildText },
+      ],
+    },
+    {
+      type: 'separator', label: '🏎️ RACING',
+      channels: [
+        { key: 'meldingen',       name: '🔔・meldingen',       type: ChannelType.GuildText },
+        { key: 'uitslagen',       name: '🏆・uitslagen',       type: ChannelType.GuildText },
+        { key: 'kalender',        name: '📅・kalender',        type: ChannelType.GuildText },
+        { key: 'livery_showcase', name: '🎨・livery-showcase', type: ChannelType.GuildForum },
+        { key: 'racelaps',        name: '🏎️・racelaps',        type: ChannelType.GuildText },
+      ],
+    },
+    {
+      type: 'separator', label: '💬 COMMUNITY',
+      channels: [
+        { key: 'algemeen',   name: '💬・algemeen',   type: ChannelType.GuildText },
+        { key: 'setup_hulp', name: '🔧・setup-hulp', type: ChannelType.GuildText },
+        { key: 'media',      name: '📸・media',      type: ChannelType.GuildText },
+      ],
+    },
+    {
+      type: 'separator', label: '🔒 ADMIN',
+      channels: [
+        { key: 'admin_chat', name: '💼・admin-chat', type: ChannelType.GuildText, adminOnly: true },
+        { key: 'bot_logs',   name: '🤖・bot-logs',  type: ChannelType.GuildText, adminOnly: true },
+      ],
+    },
+  ];
+
+  const adminRoleId  = createdRoles.admin_role;
+  const everyoneId   = guild.roles.everyone.id;
+
+  for (const section of STRUCTURE) {
+    // Scheidingscategorie (naam-only, geen echte Discord-categorie)
+    const separatorName = `━━━━━━━| ${section.label} |━━━━━━━`;
+    const category = await guild.channels.create({
+      name: separatorName,
+      type: ChannelType.GuildCategory,
+      permissionOverwrites: section.channels.some(c => c.adminOnly)
+        ? [
+            { id: everyoneId,  deny: [PermissionFlagsBits.ViewChannel] },
+            { id: adminRoleId, allow: [PermissionFlagsBits.ViewChannel] },
+          ]
+        : [],
+    });
+    log(`Categorie: ${separatorName}`);
+
+    for (const chDef of section.channels) {
+      const overrides = chDef.adminOnly
+        ? [
+            { id: everyoneId,  deny: [PermissionFlagsBits.ViewChannel] },
+            { id: adminRoleId, allow: [PermissionFlagsBits.ViewChannel] },
+          ]
+        : [];
+
+      const ch = await guild.channels.create({
+        name: chDef.name,
+        type: chDef.type,
+        parent: category.id,
+        permissionOverwrites: overrides,
+        reason: '3SM setup',
+      });
+      createdChannels[chDef.key] = ch.id;
+      log(`Kanaal: ${chDef.name}`);
+    }
+  }
+
+  // Sla config op
+  saveConfig({
+    meldingen_channel_id:  createdChannels.meldingen,
+    kalender_channel_id:   createdChannels.kalender,
+    welkom_channel_id:     createdChannels.welkom,
+    bot_logs_channel_id:   createdChannels.bot_logs,
+    rijder_role_id:        createdRoles.rijder_role,
+    admin_role_id:         createdRoles.admin_role,
+    steward_role_id:       createdRoles.steward_role,
+  });
+
+  // ── Welkom embed ──────────────────────────────────────────────────────────
+  const welkomCh = await client.channels.fetch(createdChannels.welkom).catch(() => null);
+  if (welkomCh) {
+    const siteUrl = process.env.SITE_URL || 'https://jouw-site.nl';
+    const welcomeEmbed = new EmbedBuilder()
+      .setColor(0x3b82f6)
+      .setTitle('👋  Welkom bij 3 Stripe Motorsport!')
+      .setDescription('Fijn dat je er bent! Hier vind je alles over onze iRacing league.')
+      .addFields(
+        { name: '🏎️ Races',      value: 'Bekijk aankomende races met `/races`', inline: true },
+        { name: '✅ Aanmelden',   value: 'Meld je aan voor races via `/aanmelden`', inline: true },
+        { name: '🔗 Account koppelen', value: `Koppel je Discord aan de site:\n1. Log in op [3SM](${siteUrl})\n2. Ga naar je profiel\n3. Klik op **Discord Koppelen**\nJe krijgt een link — open die en je bent klaar!`, inline: false },
+        { name: '👕 Teamrol',    value: 'Zodra je account gekoppeld is krijg je automatisch je teamrol bij het joinen.', inline: false },
+        { name: '📋 Reglement',  value: `Lees het reglement in <#${createdChannels.reglement}>`, inline: false },
+      )
+      .setFooter({ text: '3 Stripe Motorsport' })
+      .setTimestamp();
+    await welkomCh.send({ embeds: [welcomeEmbed] });
+  }
+
+  // ── Kalender embed initiëren ──────────────────────────────────────────────
+  await updateCalendarEmbed();
+
+  // ── Team rollen aanmaken via sync ────────────────────────────────────────
+  await syncTeamRoles();
+
+  await interaction.editReply({
+    content: `✅ **Server opgezet!**\n\nKanalen, rollen en embeds zijn aangemaakt.\n\n**Volgende stap:** Geef jezelf de Admin rol en nodig de bot opnieuw uit als je dat nog niet hebt gedaan.\n\n> Let op: je moet de bot opnieuw uitnodigen met **Manage Channels** + **Manage Roles** permissies als de setup mislukt.`,
+  });
+}
+
 // ── Slash commands ────────────────────────────────────────────────────────────
 const COMMANDS = [
   new SlashCommandBuilder()
     .setName('koppel')
-    .setDescription('Koppel je Discord account aan je 3SM profiel')
-    .addStringOption(o => o.setName('code').setDescription('De koppelcode van je profielpagina').setRequired(true)),
+    .setDescription('Koppel je Discord account aan je 3SM profiel (stuur je een link)'),
   new SlashCommandBuilder()
     .setName('races')
     .setDescription('Bekijk aankomende races en meld je aan'),
@@ -228,6 +538,10 @@ const COMMANDS = [
   new SlashCommandBuilder()
     .setName('afmelden')
     .setDescription('Meld je af voor de eerstvolgende race'),
+  new SlashCommandBuilder()
+    .setName('setup-server')
+    .setDescription('Maak de volledige 3SM serverstructuur aan (alleen voor admins)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ].map(c => c.toJSON());
 
 async function registerCommands(guildId) {
@@ -242,10 +556,11 @@ async function registerCommands(guildId) {
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'koppel')    await handleKoppel(interaction);
-      if (interaction.commandName === 'races')     await handleRaces(interaction);
-      if (interaction.commandName === 'aanmelden') await handleRegister(interaction, 'register');
-      if (interaction.commandName === 'afmelden')  await handleRegister(interaction, 'unregister');
+      if (interaction.commandName === 'koppel')        await handleKoppel(interaction);
+      if (interaction.commandName === 'races')         await handleRaces(interaction);
+      if (interaction.commandName === 'aanmelden')     await handleRegister(interaction, 'register');
+      if (interaction.commandName === 'afmelden')      await handleRegister(interaction, 'unregister');
+      if (interaction.commandName === 'setup-server')  await handleSetupServer(interaction);
     } else if (interaction.isButton()) {
       const [action, raceId] = interaction.customId.split('_');
       if (action === 'aanmelden') await handleButtonReg(interaction, raceId, 'register');
@@ -254,17 +569,29 @@ client.on('interactionCreate', async (interaction) => {
   } catch (e) { console.error('[interaction]', e.message); }
 });
 
-// /koppel <code>
+// /koppel → magic link
 async function handleKoppel(interaction) {
-  const code      = interaction.options.getString('code').toUpperCase();
-  const discordId = interaction.user.id;
+  const discordId  = interaction.user.id;
+  const discordTag = interaction.user.tag;
+  const siteUrl    = process.env.SITE_URL || 'https://jouw-site.nl';
 
-  const { data, error } = await supabase.rpc('discord_link_account', { p_discord_id: discordId, p_code: code });
+  // Maak een token aan in Supabase
+  const { data, error } = await supabase
+    .from('discord_link_tokens')
+    .insert({ discord_id: discordId, discord_tag: discordTag })
+    .select('token')
+    .single();
 
-  if (error || data !== 'ok') {
-    return interaction.reply({ content: '❌ Ongeldige of verlopen code. Genereer een nieuwe code op je profielpagina.', ephemeral: true });
+  if (error || !data?.token) {
+    return interaction.reply({ content: '❌ Er ging iets mis bij het aanmaken van de koppellink. Probeer het opnieuw.', ephemeral: true });
   }
-  interaction.reply({ content: '✅ Je Discord is gekoppeld aan je 3SM profiel! Je kan nu aanmelden via Discord.', ephemeral: true });
+
+  const link = `${siteUrl}/koppel?token=${data.token}`;
+
+  return interaction.reply({
+    content: `🔗 **Koppel je account**\n\nKlik op onderstaande link om je Discord te koppelen aan je 3SM profiel. De link is **30 minuten** geldig.\n\n${link}\n\n> Je moet ingelogd zijn op de site om de koppeling te voltooien.`,
+    ephemeral: true,
+  });
 }
 
 // /races
@@ -283,13 +610,11 @@ async function handleRaces(interaction) {
   const next = races[0];
   const nextRonde = next.round != null ? `R${next.round} — ${next.name}` : next.name;
 
-  // Check of gebruiker al aangemeld is (race_registrations OF season_registrations)
   const { data: profile } = await supabase
     .from('profiles').select('user_id').eq('discord_id', discordId).maybeSingle();
 
   let isRegistered = false;
   if (profile) {
-    // Check directe race aanmelding
     const { data: raceReg } = await supabase
       .from('race_registrations').select('id')
       .eq('race_id', next.id).eq('user_id', profile.user_id).maybeSingle();
@@ -297,7 +622,6 @@ async function handleRaces(interaction) {
     if (raceReg) {
       isRegistered = true;
     } else {
-      // Check seizoen aanmelding — haal league_id van de race op
       const { data: race } = await supabase
         .from('races').select('league_id').eq('id', next.id).maybeSingle();
       if (race?.league_id) {
@@ -317,7 +641,7 @@ async function handleRaces(interaction) {
     .setColor(isRegistered ? 0x22c55e : 0xf97316)
     .setTitle('🏁  Aankomende Races')
     .setDescription(races.map((r, i) => {
-      const ronde = r.round != null ? `R${r.round} · ` : '';
+      const ronde  = r.round != null ? `R${r.round} · ` : '';
       const prefix = i === 0 ? '**→ ' : '';
       const suffix = i === 0 ? '** *(eerstvolgende)*' : '';
       return `${prefix}${ronde}${r.name}${suffix}\n🏎️ ${r.track} · ${fmtDate(r.race_date)} ${fmtTime(r.race_date)}`;
@@ -341,7 +665,7 @@ async function handleRaces(interaction) {
   setTimeout(() => interaction.deleteReply().catch(() => {}), 20_000);
 }
 
-// /aanmelden of /afmelden (eerstvolgende race)
+// /aanmelden of /afmelden
 async function handleRegister(interaction, action) {
   const { data: race } = await supabase
     .from('races').select('id, name').eq('status', 'upcoming')
@@ -369,7 +693,7 @@ async function doRegistration(interaction, raceId, raceName, action) {
 
   if (data === 'not_linked') {
     return interaction.reply({
-      content: '❌ Je Discord is nog niet gekoppeld. Ga naar je profielpagina op de site → Discord Koppeling → genereer een code → typ `/koppel <code>` hier.',
+      content: '❌ Je Discord is nog niet gekoppeld. Typ `/koppel` om een koppellink te ontvangen.',
       ephemeral: true,
     });
   }
@@ -387,8 +711,17 @@ client.once('ready', async () => {
   console.log(`[3SM Bot] Online als ${client.user.tag}`);
   const guild = client.guilds.cache.first();
   if (guild) await registerCommands(guild.id);
+
+  // Elke minuut: race checks
   cron.schedule('* * * * *', checkRaces);
+  // Elk uur: team rol sync + kalender update
+  cron.schedule('0 * * * *', async () => {
+    await syncTeamRoles();
+    await updateCalendarEmbed();
+  });
+
   checkRaces();
+  updateCalendarEmbed();
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
