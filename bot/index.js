@@ -411,8 +411,24 @@ async function syncTeamRoles() {
 }
 
 // ── guildMemberAdd: Rijder rol + team rollen ──────────────────────────────────
+const MIN_ACCOUNT_AGE_DAYS = 7;
+
 client.on('guildMemberAdd', async (member) => {
   const cfg = loadConfig();
+
+  // Account leeftijd check — kick als jonger dan 7 dagen
+  const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
+  if (accountAgeDays < MIN_ACCOUNT_AGE_DAYS) {
+    try {
+      await member.send(`❌ Je Discord account is te nieuw om deze server te joinen. Accounts moeten minimaal **${MIN_ACCOUNT_AGE_DAYS} dagen** oud zijn.`).catch(() => {});
+      await member.kick(`Account te nieuw (${Math.floor(accountAgeDays)} dagen oud)`);
+      console.log(`[guildMemberAdd] Gekickt: ${member.user.tag} — account ${Math.floor(accountAgeDays)} dagen oud`);
+    } catch (e) {
+      console.error('[guildMemberAdd] Kick fout:', e.message);
+    }
+    return;
+  }
+
   if (!cfg.rijder_role_id) return;
 
   try {
