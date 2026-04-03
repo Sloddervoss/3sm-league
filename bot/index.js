@@ -377,7 +377,12 @@ async function syncTeamRoles() {
       // Nickname instellen op iRacing naam (of display_name als fallback)
       const nickname = profile.iracing_name || profile.display_name;
       if (nickname && member.displayName !== nickname) {
-        await member.setNickname(nickname).catch(() => {});
+        const result = await member.setNickname(nickname).catch(e => e);
+        if (result instanceof Error) {
+          console.error(`[syncTeamRoles] Nickname fout voor ${member.user.tag}: ${result.message}`);
+        } else {
+          console.log(`[syncTeamRoles] Nickname gezet: ${member.user.tag} → ${nickname}`);
+        }
       }
 
       // Team rollen
