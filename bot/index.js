@@ -799,11 +799,10 @@ client.once('ready', async () => {
 
   // Elke minuut: race checks
   cron.schedule('* * * * *', checkRaces);
-  // Elk uur: team rol sync + kalender update
-  cron.schedule('0 * * * *', async () => {
-    await syncTeamRoles();
-    await updateCalendarEmbed();
-  });
+  // Elke 5 minuten: team rol sync
+  cron.schedule('*/5 * * * *', syncTeamRoles);
+  // Elk uur: kalender update
+  cron.schedule('0 * * * *', updateCalendarEmbed);
 
   checkRaces();
   updateCalendarEmbed();
