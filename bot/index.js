@@ -316,14 +316,14 @@ async function syncTeamRoles() {
       // Zoek bestaande rol op naam om duplicaten te voorkomen
       const existing = guild.roles.cache.find(r => r.name === team.name);
       if (existing) {
-        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+        await existing.edit({ colors: [colorInt], hoist: true }).catch(() => {});
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
         console.log(`[syncTeamRoles] Bestaande rol gevonden: ${team.name}`);
         continue;
       }
       try {
-        const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+        const role = await guild.roles.create({ name: team.name, colors: [colorInt], hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
         await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
         team.discord_role_id = role.id;
         console.log(`[syncTeamRoles] Rol aangemaakt: ${team.name}`);
@@ -335,7 +335,7 @@ async function syncTeamRoles() {
       // Update kleur/hoist van bestaande rol als die afwijkt
       const existing = guild.roles.cache.get(team.discord_role_id);
       if (existing) {
-        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+        await existing.edit({ colors: [colorInt], hoist: true }).catch(() => {});
       }
     }
   }
@@ -443,7 +443,7 @@ client.on('guildMemberAdd', async (member) => {
 
 // ── /setup-server ─────────────────────────────────────────────────────────────
 async function handleSetupServer(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: 64 });
   const guild = interaction.guild;
   const log = (msg) => console.log(`[setup] ${msg}`);
 
@@ -682,14 +682,14 @@ async function handleKoppel(interaction) {
     .single();
 
   if (error || !data?.token) {
-    return interaction.reply({ content: '❌ Er ging iets mis bij het aanmaken van de koppellink. Probeer het opnieuw.', ephemeral: true });
+    return interaction.reply({ content: '❌ Er ging iets mis bij het aanmaken van de koppellink. Probeer het opnieuw.', flags: 64 });
   }
 
   const link = `${siteUrl}/koppel?token=${data.token}`;
 
   return interaction.reply({
     content: `🔗 **Koppel je account**\n\nKlik op onderstaande link om je Discord te koppelen aan je 3SM profiel. De link is **30 minuten** geldig.\n\n${link}\n\n> Je moet ingelogd zijn op de site om de koppeling te voltooien.`,
-    ephemeral: true,
+    flags: 64,
   });
 }
 
@@ -703,7 +703,7 @@ async function handleRaces(interaction) {
     .order('race_date', { ascending: true }).limit(5);
 
   if (!races?.length) {
-    return interaction.reply({ content: 'Geen aankomende races gevonden.', ephemeral: true });
+    return interaction.reply({ content: 'Geen aankomende races gevonden.', flags: 64 });
   }
 
   const next = races[0];
@@ -760,7 +760,7 @@ async function handleRaces(interaction) {
       .setDisabled(!isRegistered),
   );
 
-  await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+  await interaction.reply({ embeds: [embed], components: [row], flags: 64 });
   setTimeout(() => interaction.deleteReply().catch(() => {}), 20_000);
 }
 
@@ -771,7 +771,7 @@ async function handleRegister(interaction, action) {
     .gte('race_date', new Date().toISOString())
     .order('race_date', { ascending: true }).limit(1).maybeSingle();
 
-  if (!race) return interaction.reply({ content: 'Geen aankomende race gevonden.', ephemeral: true });
+  if (!race) return interaction.reply({ content: 'Geen aankomende race gevonden.', flags: 64 });
   await doRegistration(interaction, race.id, race.name, action);
 }
 
@@ -788,12 +788,12 @@ async function doRegistration(interaction, raceId, raceName, action) {
     p_action:     action,
   });
 
-  if (error) return interaction.reply({ content: '❌ Er ging iets mis.', ephemeral: true });
+  if (error) return interaction.reply({ content: '❌ Er ging iets mis.', flags: 64 });
 
   if (data === 'not_linked') {
     return interaction.reply({
       content: '❌ Je Discord is nog niet gekoppeld. Typ `/koppel` om een koppellink te ontvangen.',
-      ephemeral: true,
+      flags: 64,
     });
   }
 
@@ -801,7 +801,7 @@ async function doRegistration(interaction, raceId, raceName, action) {
     ? `✅ Je bent aangemeld voor **${raceName}**!`
     : `✅ Je bent afgemeld voor **${raceName}**.`;
 
-  await interaction.reply({ content: msg, ephemeral: true });
+  await interaction.reply({ content: msg, flags: 64 });
   setTimeout(() => interaction.deleteReply().catch(() => {}), 2_000);
 }
 
