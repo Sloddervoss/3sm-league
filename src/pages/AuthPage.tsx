@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { LogIn, UserPlus, Mail, Lock, User } from "lucide-react";
@@ -15,6 +15,8 @@ const AuthPage = () => {
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/";
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +43,7 @@ const AuthPage = () => {
         toast.error(error.message);
       } else {
         toast.success("Ingelogd!");
-        navigate("/");
+        navigate(redirectTo);
       }
     } else {
       const { error } = await supabase.auth.signUp({
