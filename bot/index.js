@@ -363,6 +363,12 @@ async function syncTeamRoles() {
   const { data: memberships } = await supabase
     .from('team_memberships').select('user_id, team_id');
 
+  const { data: adminRoles } = await supabase
+    .from('user_roles').select('user_id, role')
+    .in('role', ['admin', 'super_admin']);
+
+  const syncCfg = loadConfig();
+
   for (const profile of profiles) {
     try {
       const member = await guild.members.fetch(profile.discord_id).catch(() => null);
@@ -374,6 +380,7 @@ async function syncTeamRoles() {
         await member.setNickname(nickname).catch(() => {});
       }
 
+      // Team rollen
       const userTeams = memberships?.filter(m => m.user_id === profile.user_id) || [];
       const expectedRoleIds = userTeams.map(m => teams.find(t => t.id === m.team_id)?.discord_role_id).filter(Boolean);
 
@@ -383,6 +390,14 @@ async function syncTeamRoles() {
         const hasIt = member.roles.cache.has(team.discord_role_id);
         if (shouldHave && !hasIt) await member.roles.add(team.discord_role_id).catch(() => {});
         if (!shouldHave && hasIt) await member.roles.remove(team.discord_role_id).catch(() => {});
+      }
+
+      // Admin rol sync
+      if (syncCfg.admin_role_id) {
+        const isAdmin = adminRoles?.some(r => r.user_id === profile.user_id);
+        const hasAdminRole = member.roles.cache.has(syncCfg.admin_role_id);
+        if (isAdmin && !hasAdminRole) await member.roles.add(syncCfg.admin_role_id).catch(() => {});
+        if (!isAdmin && hasAdminRole) await member.roles.remove(syncCfg.admin_role_id).catch(() => {});
       }
     } catch (e) {
       console.error('[syncTeamRoles] lid fout:', e.message);
