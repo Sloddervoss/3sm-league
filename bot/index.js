@@ -382,38 +382,56 @@ client.on('guildMemberAdd', async (member) => {
 async function handleSetupServer(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const guild = interaction.guild;
-
   const log = (msg) => console.log(`[setup] ${msg}`);
 
-  // Verwijder alle bestaande kanalen en categorieën
-  try {
-    for (const [, ch] of guild.channels.cache) {
-      await ch.delete().catch(() => {});
-    }
-  } catch (e) {
-    log('Fout bij opruimen: ' + e.message);
+  // Helper: zoek bestaande rol op naam, anders aanmaken
+  async function getOrCreateRole(name, options) {
+    const existing = guild.roles.cache.find(r => r.name === name);
+    if (existing) { log(`Rol bestaat al: ${name}`); return existing; }
+    const role = await guild.roles.create({ name, ...options, reason: '3SM setup' });
+    log(`Rol aangemaakt: ${name}`);
+    return role;
   }
 
-  const createdChannels = {};
-  const createdRoles    = {};
+  // Helper: zoek bestaande categorie op naam, anders aanmaken
+  async function getOrCreateCategory(name, overwrites) {
+    const existing = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === name);
+    if (existing) { log(`Categorie bestaat al: ${name}`); return existing; }
+    const cat = await guild.channels.create({ name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites, reason: '3SM setup' });
+    log(`Categorie aangemaakt: ${name}`);
+    return cat;
+  }
 
-  // ── Rollen aanmaken ───────────────────────────────────────────────────────
+  // Helper: zoek bestaand kanaal op naam, anders aanmaken
+  async function getOrCreateChannel(name, type, parentId, overwrites) {
+    const existing = guild.channels.cache.find(c => c.name === name && c.parentId === parentId);
+    if (existing) { log(`Kanaal bestaat al: ${name}`); return existing; }
+    const ch = await guild.channels.create({ name, type, parent: parentId, permissionOverwrites: overwrites, reason: '3SM setup' });
+    log(`Kanaal aangemaakt: ${name}`);
+    return ch;
+  }
+
+  const resolvedChannels = {};
+  const resolvedRoles    = {};
+
+  // ── Rollen ────────────────────────────────────────────────────────────────
   const ROLE_DEFS = [
     { key: 'admin_role',   name: 'Admin',   color: 0xef4444, hoist: true },
     { key: 'steward_role', name: 'Steward', color: 0xf97316, hoist: true },
     { key: 'rijder_role',  name: 'Rijder',  color: 0x3b82f6, hoist: true },
   ];
-
   for (const def of ROLE_DEFS) {
-    const role = await guild.roles.create({ name: def.name, color: def.color, hoist: def.hoist, reason: '3SM setup' });
-    createdRoles[def.key] = role.id;
-    log(`Rol aangemaakt: ${def.name}`);
+    const role = await getOrCreateRole(def.name, { color: def.color, hoist: def.hoist });
+    resolvedRoles[def.key] = role.id;
   }
 
-  // ── Structuur definitie ───────────────────────────────────────────────────
+  const adminRoleId = resolvedRoles.admin_role;
+  const everyoneId  = guild.roles.everyone.id;
+
+  // ── Structuur ─────────────────────────────────────────────────────────────
   const STRUCTURE = [
     {
-      type: 'separator', label: '📢 INFORMATIE',
+      label: '📢 INFORMATIE',
       channels: [
         { key: 'welkom',         name: '👋・welkom',          type: ChannelType.GuildText },
         { key: 'aankondigingen', name: '📣・aankondigingen',  type: ChannelType.GuildText },
@@ -421,7 +439,7 @@ async function handleSetupServer(interaction) {
       ],
     },
     {
-      type: 'separator', label: '🏎️ RACING',
+      label: '🏎️ RACING',
       channels: [
         { key: 'meldingen',       name: '🔔・meldingen',       type: ChannelType.GuildText },
         { key: 'uitslagen',       name: '🏆・uitslagen',       type: ChannelType.GuildText },
@@ -431,7 +449,7 @@ async function handleSetupServer(interaction) {
       ],
     },
     {
-      type: 'separator', label: '💬 COMMUNITY',
+      label: '💬 COMMUNITY',
       channels: [
         { key: 'algemeen',   name: '💬・algemeen',   type: ChannelType.GuildText },
         { key: 'setup_hulp', name: '🔧・setup-hulp', type: ChannelType.GuildText },
@@ -439,92 +457,75 @@ async function handleSetupServer(interaction) {
       ],
     },
     {
-      type: 'separator', label: '🔒 ADMIN',
+      label: '🔒 ADMIN',
+      adminOnly: true,
       channels: [
-        { key: 'admin_chat', name: '💼・admin-chat', type: ChannelType.GuildText, adminOnly: true },
-        { key: 'bot_logs',   name: '🤖・bot-logs',  type: ChannelType.GuildText, adminOnly: true },
+        { key: 'admin_chat', name: '💼・admin-chat', type: ChannelType.GuildText },
+        { key: 'bot_logs',   name: '🤖・bot-logs',  type: ChannelType.GuildText },
       ],
     },
   ];
 
-  const adminRoleId  = createdRoles.admin_role;
-  const everyoneId   = guild.roles.everyone.id;
-
   for (const section of STRUCTURE) {
-    // Scheidingscategorie (naam-only, geen echte Discord-categorie)
     const separatorName = `━━━━━━━| ${section.label} |━━━━━━━`;
-    const category = await guild.channels.create({
-      name: separatorName,
-      type: ChannelType.GuildCategory,
-      permissionOverwrites: section.channels.some(c => c.adminOnly)
-        ? [
-            { id: everyoneId,  deny: [PermissionFlagsBits.ViewChannel] },
-            { id: adminRoleId, allow: [PermissionFlagsBits.ViewChannel] },
-          ]
-        : [],
-    });
-    log(`Categorie: ${separatorName}`);
+    const catOverwrites = section.adminOnly
+      ? [{ id: everyoneId, deny: [PermissionFlagsBits.ViewChannel] }, { id: adminRoleId, allow: [PermissionFlagsBits.ViewChannel] }]
+      : [];
+
+    const category = await getOrCreateCategory(separatorName, catOverwrites);
 
     for (const chDef of section.channels) {
-      const overrides = chDef.adminOnly
-        ? [
-            { id: everyoneId,  deny: [PermissionFlagsBits.ViewChannel] },
-            { id: adminRoleId, allow: [PermissionFlagsBits.ViewChannel] },
-          ]
+      const overrides = section.adminOnly
+        ? [{ id: everyoneId, deny: [PermissionFlagsBits.ViewChannel] }, { id: adminRoleId, allow: [PermissionFlagsBits.ViewChannel] }]
         : [];
-
-      const ch = await guild.channels.create({
-        name: chDef.name,
-        type: chDef.type,
-        parent: category.id,
-        permissionOverwrites: overrides,
-        reason: '3SM setup',
-      });
-      createdChannels[chDef.key] = ch.id;
-      log(`Kanaal: ${chDef.name}`);
+      const ch = await getOrCreateChannel(chDef.name, chDef.type, category.id, overrides);
+      resolvedChannels[chDef.key] = ch.id;
     }
   }
 
   // Sla config op
   saveConfig({
     guild_id:              guild.id,
-    meldingen_channel_id:  createdChannels.meldingen,
-    kalender_channel_id:   createdChannels.kalender,
-    welkom_channel_id:     createdChannels.welkom,
-    bot_logs_channel_id:   createdChannels.bot_logs,
-    rijder_role_id:        createdRoles.rijder_role,
-    admin_role_id:         createdRoles.admin_role,
-    steward_role_id:       createdRoles.steward_role,
+    meldingen_channel_id:  resolvedChannels.meldingen,
+    kalender_channel_id:   resolvedChannels.kalender,
+    welkom_channel_id:     resolvedChannels.welkom,
+    bot_logs_channel_id:   resolvedChannels.bot_logs,
+    rijder_role_id:        resolvedRoles.rijder_role,
+    admin_role_id:         resolvedRoles.admin_role,
+    steward_role_id:       resolvedRoles.steward_role,
   });
 
-  // ── Welkom embed ──────────────────────────────────────────────────────────
-  const welkomCh = await client.channels.fetch(createdChannels.welkom).catch(() => null);
+  // ── Welkom embed (alleen sturen als kanaal leeg is) ───────────────────────
+  const welkomCh = await client.channels.fetch(resolvedChannels.welkom).catch(() => null);
   if (welkomCh) {
-    const siteUrl = process.env.SITE_URL || 'https://jouw-site.nl';
-    const welcomeEmbed = new EmbedBuilder()
-      .setColor(0x3b82f6)
-      .setTitle('👋  Welkom bij 3 Stripe Motorsport!')
-      .setDescription('Fijn dat je er bent! Hier vind je alles over onze iRacing league.')
-      .addFields(
-        { name: '🏎️ Races',      value: 'Bekijk aankomende races met `/races`', inline: true },
-        { name: '✅ Aanmelden',   value: 'Meld je aan voor races via `/aanmelden`', inline: true },
-        { name: '🔗 Account koppelen', value: `Koppel je Discord aan de site:\n1. Log in op [3SM](${siteUrl})\n2. Ga naar je profiel\n3. Klik op **Discord Koppelen**\nJe krijgt een link — open die en je bent klaar!`, inline: false },
-        { name: '👕 Teamrol',    value: 'Zodra je account gekoppeld is krijg je automatisch je teamrol bij het joinen.', inline: false },
-        { name: '📋 Reglement',  value: `Lees het reglement in <#${createdChannels.reglement}>`, inline: false },
-      )
-      .setFooter({ text: '3 Stripe Motorsport' })
-      .setTimestamp();
-    await welkomCh.send({ embeds: [welcomeEmbed] });
+    const messages = await welkomCh.messages.fetch({ limit: 1 });
+    if (messages.size === 0) {
+      const siteUrl = process.env.SITE_URL || 'https://3stripemotorsport.cc';
+      const welcomeEmbed = new EmbedBuilder()
+        .setColor(0x3b82f6)
+        .setTitle('👋  Welkom bij 3 Stripe Motorsport!')
+        .setDescription('Fijn dat je er bent! Hier vind je alles over onze iRacing league.')
+        .addFields(
+          { name: '🏎️ Races bekijken',    value: 'Typ `/races` om aankomende races te zien en je aan te melden.', inline: false },
+          { name: '🔗 Account koppelen',  value: `Om gebruik te maken van alle functies koppel je Discord aan je 3SM account:\n1. Log in op **[3stripemotorsport.cc](${siteUrl})**\n2. Ga naar je **Profiel**\n3. Klik op **Discord Koppelen**\n4. Open de link die je ontvangt\n\nDaarna krijg je automatisch je teamrol!`, inline: false },
+          { name: '📋 Reglement',         value: `Lees het reglement in <#${resolvedChannels.reglement}> voordat je meedoet.`, inline: false },
+          { name: '❓ Hulp nodig?',       value: `Stel je vraag in <#${resolvedChannels.setup_hulp}>.`, inline: false },
+        )
+        .setFooter({ text: '3 Stripe Motorsport' })
+        .setTimestamp();
+      await welkomCh.send({ embeds: [welcomeEmbed] });
+      log('Welkom embed geplaatst');
+    } else {
+      log('Welkom embed al aanwezig, overgeslagen');
+    }
   }
 
-  // ── Kalender embed initiëren ──────────────────────────────────────────────
+  // ── Kalender + team rollen ────────────────────────────────────────────────
   await updateCalendarEmbed();
-
-  // ── Team rollen aanmaken via sync ────────────────────────────────────────
   await syncTeamRoles();
 
   await interaction.editReply({
-    content: `✅ **Server opgezet!**\n\nKanalen, rollen en embeds zijn aangemaakt.\n\n**Volgende stap:** Geef jezelf de Admin rol en nodig de bot opnieuw uit als je dat nog niet hebt gedaan.\n\n> Let op: je moet de bot opnieuw uitnodigen met **Manage Channels** + **Manage Roles** permissies als de setup mislukt.`,
+    content: `✅ **Server opgezet!**\n\nKanalen en rollen zijn aangemaakt (bestaande zijn hergebruikt).\n\nJe kan \`/setup-server\` veilig opnieuw uitvoeren — er wordt nooit iets verwijderd.`,
   });
 }
 
