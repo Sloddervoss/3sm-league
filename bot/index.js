@@ -709,8 +709,9 @@ async function doRegistration(interaction, raceId, raceName, action) {
 // ── Bot ready ─────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`[3SM Bot] Online als ${client.user.tag}`);
-  const guild = client.guilds.cache.first();
-  if (guild) await registerCommands(guild.id);
+  for (const [, guild] of client.guilds.cache) {
+    await registerCommands(guild.id);
+  }
 
   // Elke minuut: race checks
   cron.schedule('* * * * *', checkRaces);
