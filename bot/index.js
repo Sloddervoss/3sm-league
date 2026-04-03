@@ -501,14 +501,13 @@ async function handleSetupServer(interaction) {
   if (welkomCh) {
     const messages = await welkomCh.messages.fetch({ limit: 1 });
     if (messages.size === 0) {
-      const siteUrl = process.env.SITE_URL || 'https://3stripemotorsport.cc';
       const welcomeEmbed = new EmbedBuilder()
         .setColor(0x3b82f6)
         .setTitle('👋  Welkom bij 3 Stripe Motorsport!')
         .setDescription('Fijn dat je er bent! Hier vind je alles over onze iRacing league.')
         .addFields(
           { name: '🏎️ Races bekijken',    value: 'Typ `/races` om aankomende races te zien en je aan te melden.', inline: false },
-          { name: '🔗 Account koppelen',  value: `Om gebruik te maken van alle functies koppel je Discord aan je 3SM account:\n1. Log in op **[3stripemotorsport.cc](${siteUrl})**\n2. Ga naar je **Profiel**\n3. Klik op **Discord Koppelen**\n4. Open de link die je ontvangt\n\nDaarna krijg je automatisch je teamrol!`, inline: false },
+          { name: '🔗 Account koppelen',  value: `Koppel je Discord aan je 3SM account:\n1. Typ \`/koppel\` in dit kanaal of ergens in de server\n2. De bot stuurt je een persoonlijke link\n3. Open de link (je moet ingelogd zijn op de site)\n\nDaarna krijg je automatisch je teamrol!`, inline: false },
           { name: '📋 Reglement',         value: `Lees het reglement in <#${resolvedChannels.reglement}> voordat je meedoet.`, inline: false },
           { name: '❓ Hulp nodig?',       value: `Stel je vraag in <#${resolvedChannels.setup_hulp}>.`, inline: false },
         )

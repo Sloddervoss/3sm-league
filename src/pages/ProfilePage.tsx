@@ -82,32 +82,6 @@ const ProfilePage = () => {
   // Avatar upload
   const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // Discord koppeling
-  const [discordCode, setDiscordCode] = useState<string | null>(null);
-  const [discordCodeExpiry, setDiscordCodeExpiry] = useState<Date | null>(null);
-  const [generatingCode, setGeneratingCode] = useState(false);
-
-  const generateDiscordCode = async () => {
-    if (!user) return;
-    setGeneratingCode(true);
-    try {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-      await supabase.from("discord_link_codes" as any).delete().eq("user_id", user.id);
-      const { error } = await supabase.from("discord_link_codes" as any).insert({
-        code,
-        user_id: user.id,
-        expires_at: expiresAt.toISOString(),
-      });
-      if (error) throw error;
-      setDiscordCode(code);
-      setDiscordCodeExpiry(expiresAt);
-    } catch (err: any) {
-      toast.error(err.message || "Code genereren mislukt");
-    } finally {
-      setGeneratingCode(false);
-    }
-  };
 
   const unlinkDiscord = async () => {
     if (!user) return;
@@ -473,38 +447,18 @@ const ProfilePage = () => {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div className="flex items-start gap-1.5 p-2.5 rounded-md bg-indigo-500/10 border border-indigo-500/20">
                     <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-indigo-300 leading-relaxed">
-                      Koppel je Discord aan je 3SM account om je aan te melden voor races via Discord. Genereer een code, ga naar Discord en typ <strong>/koppel &lt;code&gt;</strong>.
+                      Koppel je Discord aan je 3SM account om races aan te melden via Discord en automatisch je teamrol te ontvangen.
                     </p>
                   </div>
-
-                  {discordCode ? (
-                    <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">Typ dit in Discord:</p>
-                      <div className="flex items-center gap-3 p-3 rounded-md bg-secondary border border-border">
-                        <code className="font-mono text-lg font-black tracking-widest text-primary">/koppel {discordCode}</code>
-                        <button onClick={() => { navigator.clipboard.writeText(`/koppel ${discordCode}`); toast.success("Gekopieerd!"); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground border border-border rounded px-2 py-1">Kopieer</button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Code geldig tot {discordCodeExpiry?.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                      <button onClick={generateDiscordCode} disabled={generatingCode} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                        <RefreshCw className="w-3 h-3" /> Nieuwe code genereren
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={generateDiscordCode}
-                      disabled={generatingCode}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 font-heading font-bold text-sm hover:bg-indigo-500/20 disabled:opacity-50 transition-colors"
-                    >
-                      <Link className="w-4 h-4" />
-                      {generatingCode ? "Genereren..." : "Genereer koppelcode"}
-                    </button>
-                  )}
+                  <ol className="text-sm text-muted-foreground space-y-1 pl-1">
+                    <li><span className="text-foreground font-medium">1.</span> Ga naar de 3SM Discord server</li>
+                    <li><span className="text-foreground font-medium">2.</span> Typ <code className="bg-secondary px-1.5 py-0.5 rounded text-xs font-mono">/koppel</code> in een kanaal</li>
+                    <li><span className="text-foreground font-medium">3.</span> De bot stuurt je een persoonlijke link — open die en je bent klaar</li>
+                  </ol>
                 </div>
               )}
             </motion.div>
