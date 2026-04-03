@@ -316,14 +316,14 @@ async function syncTeamRoles() {
       // Zoek bestaande rol op naam om duplicaten te voorkomen
       const existing = guild.roles.cache.find(r => r.name === team.name);
       if (existing) {
-        await existing.edit({ colors: [colorInt], hoist: true }).catch(() => {});
+        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
         console.log(`[syncTeamRoles] Bestaande rol gevonden: ${team.name}`);
         continue;
       }
       try {
-        const role = await guild.roles.create({ name: team.name, colors: [colorInt], hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+        const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
         await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
         team.discord_role_id = role.id;
         console.log(`[syncTeamRoles] Rol aangemaakt: ${team.name}`);
@@ -335,7 +335,7 @@ async function syncTeamRoles() {
       // Update kleur/hoist van bestaande rol als die afwijkt
       const existing = guild.roles.cache.get(team.discord_role_id);
       if (existing) {
-        await existing.edit({ colors: [colorInt], hoist: true }).catch(() => {});
+        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
       }
     }
   }
@@ -615,12 +615,12 @@ async function handleSetupServer(interaction) {
   }
 
   // ── Kalender + team rollen ────────────────────────────────────────────────
-  await updateCalendarEmbed();
-  await syncTeamRoles();
+  await updateCalendarEmbed().catch(e => log('Kalender fout: ' + e.message));
+  await syncTeamRoles().catch(e => log('Sync fout: ' + e.message));
 
   await interaction.editReply({
     content: `✅ **Server opgezet!**\n\nKanalen en rollen zijn aangemaakt (bestaande zijn hergebruikt).\n\nJe kan \`/setup-server\` veilig opnieuw uitvoeren — er wordt nooit iets verwijderd.`,
-  });
+  }).catch(() => {});
 }
 
 // ── Slash commands ────────────────────────────────────────────────────────────
@@ -813,15 +813,15 @@ client.once('ready', async () => {
   }
 
   // Elke minuut: race checks
-  cron.schedule('* * * * *', checkRaces);
+  cron.schedule('* * * * *', () => checkRaces().catch(e => console.error('[cron:checkRaces]', e.message)));
   // Elke 5 minuten: team rol sync
-  cron.schedule('*/5 * * * *', syncTeamRoles);
+  cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => console.error('[cron:syncTeamRoles]', e.message)));
   // Elk uur: kalender update
-  cron.schedule('0 * * * *', updateCalendarEmbed);
+  cron.schedule('0 * * * *', () => updateCalendarEmbed().catch(e => console.error('[cron:kalender]', e.message)));
 
-  checkRaces();
-  updateCalendarEmbed();
-  syncTeamRoles();
+  checkRaces().catch(() => {});
+  updateCalendarEmbed().catch(() => {});
+  syncTeamRoles().catch(() => {});
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
