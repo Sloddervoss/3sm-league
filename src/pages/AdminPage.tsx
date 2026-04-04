@@ -731,6 +731,8 @@ const AdminPage = () => {
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamLogo, setEditingTeamLogo] = useState<string>("");
   const [editingTeamCurrentLogo, setEditingTeamCurrentLogo] = useState<string>("");
+  const [editingTeamNameId, setEditingTeamNameId] = useState<string | null>(null);
+  const [editingTeamName, setEditingTeamName] = useState<string>("");
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [iratingSyncing, setIratingSyncing] = useState(false);
   const [iratingSyncResult, setIratingSyncResult] = useState<{ updated?: number; error?: string } | null>(null);
@@ -1010,6 +1012,20 @@ const AdminPage = () => {
       queryClient.invalidateQueries({ queryKey: ["admin-teams"] });
       setEditingTeamId(null);
       setEditingTeamLogo("");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const updateTeamName = useMutation({
+    mutationFn: async ({ teamId, name }: { teamId: string; name: string }) => {
+      const { error } = await (supabase as any).from("teams").update({ name }).eq("id", teamId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Teamnaam bijgewerkt!");
+      queryClient.invalidateQueries({ queryKey: ["admin-teams"] });
+      setEditingTeamNameId(null);
+      setEditingTeamName("");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -1953,6 +1969,22 @@ const AdminPage = () => {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => {
+                              if (editingTeamNameId === team.id) {
+                                setEditingTeamNameId(null);
+                                setEditingTeamName("");
+                              } else {
+                                setEditingTeamNameId(team.id);
+                                setEditingTeamName(team.name);
+                                setEditingTeamId(null);
+                              }
+                            }}
+                            className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                            title="Naam wijzigen"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
                               if (editingTeamId === team.id) {
                                 setEditingTeamId(null);
                                 setEditingTeamLogo("");
@@ -1961,6 +1993,7 @@ const AdminPage = () => {
                                 setEditingTeamId(team.id);
                                 setEditingTeamLogo("");
                                 setEditingTeamCurrentLogo("");
+                                setEditingTeamNameId(null);
                                 supabase.from("teams").select("logo_url").eq("id", team.id).single()
                                   .then(({ data }) => setEditingTeamCurrentLogo((data as any)?.logo_url || ""));
                               }
@@ -1973,6 +2006,30 @@ const AdminPage = () => {
                           <button onClick={() => deleteTeam.mutate(team.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </div>
+
+                      {/* Inline naam editor */}
+                      {editingTeamNameId === team.id && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mb-3 p-3 rounded-md bg-secondary/40 border border-border space-y-2">
+                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Naam wijzigen</p>
+                          <input
+                            type="text"
+                            value={editingTeamName}
+                            onChange={(e) => setEditingTeamName(e.target.value)}
+                            className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary"
+                            placeholder="Teamnaam..."
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => updateTeamName.mutate({ teamId: team.id, name: editingTeamName.trim() })}
+                              disabled={!editingTeamName.trim() || editingTeamName.trim() === team.name || updateTeamName.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-gradient-racing text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+                            >
+                              <Save className="w-3 h-3" /> Opslaan
+                            </button>
+                            <button onClick={() => { setEditingTeamNameId(null); setEditingTeamName(""); }} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors">Annuleren</button>
+                          </div>
+                        </motion.div>
+                      )}
 
                       {/* Inline logo editor */}
                       {editingTeamId === team.id && (
