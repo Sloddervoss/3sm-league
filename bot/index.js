@@ -405,7 +405,10 @@ async function syncTeamRoles() {
 
     for (const chDef of teamChannels) {
       const exists = guild.channels.cache.find(c => c.name === chDef.name && c.parentId === categoryId);
-      if (!exists) {
+      if (exists) {
+        // Update permissies van bestaande kanalen
+        await exists.permissionOverwrites.set(permOverwrites).catch(() => {});
+      } else {
         await guild.channels.create({
           name: chDef.name,
           type: chDef.type,
