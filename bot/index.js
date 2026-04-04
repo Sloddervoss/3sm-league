@@ -376,7 +376,7 @@ async function syncTeamRoles() {
 
   const { data: adminRoles } = await supabase
     .from('user_roles').select('user_id, role')
-    .in('role', ['admin', 'super_admin']);
+    .in('role', ['admin', 'super_admin', 'moderator']);
 
   const syncCfg = loadConfig();
 
@@ -410,10 +410,18 @@ async function syncTeamRoles() {
 
       // Admin rol sync
       if (syncCfg.admin_role_id) {
-        const isAdmin = adminRoles?.some(r => r.user_id === profile.user_id);
+        const isAdmin = adminRoles?.some(r => r.user_id === profile.user_id && ['admin', 'super_admin'].includes(r.role));
         const hasAdminRole = member.roles.cache.has(syncCfg.admin_role_id);
         if (isAdmin && !hasAdminRole) await member.roles.add(syncCfg.admin_role_id).catch(() => {});
         if (!isAdmin && hasAdminRole) await member.roles.remove(syncCfg.admin_role_id).catch(() => {});
+      }
+
+      // Steward rol sync
+      if (syncCfg.steward_role_id) {
+        const isSteward = adminRoles?.some(r => r.user_id === profile.user_id && r.role === 'moderator');
+        const hasStewardRole = member.roles.cache.has(syncCfg.steward_role_id);
+        if (isSteward && !hasStewardRole) await member.roles.add(syncCfg.steward_role_id).catch(() => {});
+        if (!isSteward && hasStewardRole) await member.roles.remove(syncCfg.steward_role_id).catch(() => {});
       }
     } catch (e) {
       botLog('[syncTeamRoles] lid fout:', e.message);
