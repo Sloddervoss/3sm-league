@@ -876,8 +876,7 @@ client.once('ready', async () => {
     const { error } = await supabase.from('discord_link_tokens')
       .delete()
       .or(`used.eq.true,expires_at.lt.${new Date().toISOString()}`);
-    if (error) botLog(`[cron:tokenCleanup] ${error.message}`);
-    else botLog('[cron:tokenCleanup] Verlopen tokens opgeschoond');
+    if (error) botLog(`❌ Token cleanup fout: ${error.message}`);
   });
 
   checkRaces().catch(() => {});
