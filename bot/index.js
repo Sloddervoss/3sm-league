@@ -363,31 +363,34 @@ async function syncTeamRoles() {
 
     let categoryId = team.discord_category_id;
 
-    if (!categoryId) {
-      // Zoek bestaande categorie op naam (met of zonder separator stijl)
-      const existingCat = guild.channels.cache.find(c =>
-        c.type === ChannelType.GuildCategory &&
-        (c.name === team.name || c.name === `━━━━━━━| ${team.name} |━━━━━━━`)
-      );
-      if (existingCat) {
-        categoryId = existingCat.id;
-        // Update permissies en naam naar juiste stijl
-        await existingCat.edit({ name: `━━━━━━━| ${team.name} |━━━━━━━`, permissionOverwrites: permOverwrites }).catch(() => {});
-      } else {
-        try {
-          const cat = await guild.channels.create({
-            name: `━━━━━━━| ${team.name} |━━━━━━━`,
-            type: ChannelType.GuildCategory,
-            permissionOverwrites: permOverwrites,
-            reason: '3SM team sectie',
-          });
-          categoryId = cat.id;
-          botLog(`➕ Team sectie aangemaakt: **${team.name}**`);
-        } catch (e) {
-          botLog(`❌ Kon sectie niet aanmaken voor ${team.name}: ${e.message}`);
-          continue;
-        }
+    // Zoek altijd op ID of naam — update altijd naam + permissies
+    let existingCat = categoryId
+      ? guild.channels.cache.get(categoryId)
+      : guild.channels.cache.find(c =>
+          c.type === ChannelType.GuildCategory &&
+          (c.name === team.name || c.name === `━━━━━━━| ${team.name} |━━━━━━━`)
+        );
+
+    if (existingCat) {
+      categoryId = existingCat.id;
+      await existingCat.edit({ name: `━━━━━━━| ${team.name} |━━━━━━━`, permissionOverwrites: permOverwrites }).catch(() => {});
+    } else {
+      try {
+        const cat = await guild.channels.create({
+          name: `━━━━━━━| ${team.name} |━━━━━━━`,
+          type: ChannelType.GuildCategory,
+          permissionOverwrites: permOverwrites,
+          reason: '3SM team sectie',
+        });
+        categoryId = cat.id;
+        botLog(`➕ Team sectie aangemaakt: **${team.name}**`);
+      } catch (e) {
+        botLog(`❌ Kon sectie niet aanmaken voor ${team.name}: ${e.message}`);
+        continue;
       }
+    }
+
+    if (categoryId !== team.discord_category_id) {
       await supabase.from('teams').update({ discord_category_id: categoryId }).eq('id', team.id);
       team.discord_category_id = categoryId;
     }
