@@ -364,14 +364,19 @@ async function syncTeamRoles() {
     let categoryId = team.discord_category_id;
 
     if (!categoryId) {
-      // Zoek bestaande categorie op naam
-      const existingCat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === team.name);
+      // Zoek bestaande categorie op naam (met of zonder separator stijl)
+      const existingCat = guild.channels.cache.find(c =>
+        c.type === ChannelType.GuildCategory &&
+        (c.name === team.name || c.name === `━━━━━━━| ${team.name} |━━━━━━━`)
+      );
       if (existingCat) {
         categoryId = existingCat.id;
+        // Update permissies en naam naar juiste stijl
+        await existingCat.edit({ name: `━━━━━━━| ${team.name} |━━━━━━━`, permissionOverwrites: permOverwrites }).catch(() => {});
       } else {
         try {
           const cat = await guild.channels.create({
-            name: team.name,
+            name: `━━━━━━━| ${team.name} |━━━━━━━`,
             type: ChannelType.GuildCategory,
             permissionOverwrites: permOverwrites,
             reason: '3SM team sectie',
@@ -427,7 +432,7 @@ async function syncTeamRoles() {
   for (const [, ch] of guild.channels.cache) {
     if (ch.type === ChannelType.GuildCategory && !teamCategoryIds.includes(ch.id)) {
       const wasTeamCat = await supabase.from('teams').select('id').eq('discord_category_id', ch.id).maybeSingle();
-      if (wasTeamCat.data === null && !ch.name.includes('━━━')) {
+      if (wasTeamCat.data === null && ch.name.includes('━━━') && !ch.name.includes('INFORMATIE') && !ch.name.includes('RACING') && !ch.name.includes('COMMUNITY') && !ch.name.includes('SPRAAK') && !ch.name.includes('ADMIN')) {
         // Verwijder eerst alle kanalen in de categorie
         for (const [, child] of guild.channels.cache) {
           if (child.parentId === ch.id) await child.delete('3SM team verwijderd').catch(() => {});
