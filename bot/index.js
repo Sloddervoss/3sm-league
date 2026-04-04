@@ -577,12 +577,20 @@ async function handleSetupServer(interaction) {
     },
   ];
 
+  // Bot krijgt altijd toegang tot bot-logs
+  const botMember = await guild.members.fetchMe().catch(() => null);
+  const botRoleId = botMember?.roles.botRole?.id;
+
   for (const section of STRUCTURE) {
     const separatorName = `━━━━━━━| ${section.label} |━━━━━━━`;
     const category = await getOrCreateCategory(separatorName, []);
 
     for (const chDef of section.channels) {
-      const ch = await getOrCreateChannel(chDef.name, chDef.type, category.id, []);
+      // Bot-logs: bot heeft altijd schrijftoegang
+      const overwrites = (chDef.key === 'bot_logs' && botRoleId)
+        ? [{ id: botRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }]
+        : [];
+      const ch = await getOrCreateChannel(chDef.name, chDef.type, category.id, overwrites);
       resolvedChannels[chDef.key] = ch.id;
     }
   }
