@@ -353,9 +353,12 @@ async function syncTeamRoles() {
     // ── Categorie + kanalen ───────────────────────────────────────────────────
     if (!team.discord_role_id) continue;
 
+    const syncCfgTeam = loadConfig();
     const permOverwrites = [
-      { id: everyoneId,         deny:  [PermissionFlagsBits.ViewChannel] },
-      { id: team.discord_role_id, allow: [PermissionFlagsBits.ViewChannel] },
+      { id: everyoneId,             deny:  [PermissionFlagsBits.ViewChannel] },
+      { id: team.discord_role_id,   allow: [PermissionFlagsBits.ViewChannel] },
+      ...(syncCfgTeam.admin_role_id   ? [{ id: syncCfgTeam.admin_role_id,   allow: [PermissionFlagsBits.ViewChannel] }] : []),
+      ...(syncCfgTeam.steward_role_id ? [{ id: syncCfgTeam.steward_role_id, allow: [PermissionFlagsBits.ViewChannel] }] : []),
     ];
 
     let categoryId = team.discord_category_id;
