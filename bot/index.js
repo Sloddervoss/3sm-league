@@ -848,6 +848,7 @@ async function doRegistration(interaction, raceId, raceName, action) {
 // ── Bot ready ─────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`[3SM Bot] Online als ${client.user.tag}`);
+  setTimeout(() => botLog(`✅ Bot online als **${client.user.tag}**`), 3000);
   for (const [, guild] of client.guilds.cache) {
     await registerCommands(guild.id);
   }
