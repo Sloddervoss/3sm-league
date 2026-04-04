@@ -29,6 +29,17 @@ const client = new Client({
   ],
 });
 
+// ── Bot log helper ────────────────────────────────────────────────────────────
+async function botLog(message) {
+  console.log(`[botLog] ${message}`);
+  try {
+    const cfg = loadConfig();
+    if (!cfg.bot_logs_channel_id) return;
+    const ch = await client.channels.fetch(cfg.bot_logs_channel_id).catch(() => null);
+    if (ch) await ch.send(`\`${new Date().toISOString()}\` ${message}`).catch(() => {});
+  } catch {}
+}
+
 // ── Config (channel/role IDs na /setup-server) ────────────────────────────────
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
@@ -77,9 +88,9 @@ function rondeName(race) {
 async function getNotificationChannel() {
   const cfg = loadConfig();
   const channelId = cfg.meldingen_channel_id || process.env.DISCORD_CHANNEL_ID;
-  if (!channelId) { console.error('[bot] Geen meldingen channel geconfigureerd'); return null; }
+  if (!channelId) { botLog('[bot] Geen meldingen channel geconfigureerd'); return null; }
   const ch = await client.channels.fetch(channelId).catch(() => null);
-  if (!ch) console.error('[bot] Meldingen channel niet gevonden:', channelId);
+  if (!ch) botLog('[bot] Meldingen channel niet gevonden:', channelId);
   return ch;
 }
 
@@ -227,7 +238,7 @@ async function checkUpcoming() {
     .gte('race_date', now.toISOString())
     .lte('race_date', lookahead.toISOString());
 
-  if (error) { console.error('[checkUpcoming]', error.message); return; }
+  if (error) { botLog('[checkUpcoming]', error.message); return; }
   if (!races?.length) return;
 
   const channel = await getNotificationChannel();
@@ -248,7 +259,7 @@ async function checkUpcoming() {
       markSent(race.id, activeWindow.key);
       console.log(`[${new Date().toISOString()}] ✓ ${activeWindow.key}: ${race.name}`);
     } catch (err) {
-      console.error('[checkUpcoming]', err.message);
+      botLog('[checkUpcoming]', err.message);
     }
   }
 }
@@ -256,7 +267,7 @@ async function checkUpcoming() {
 // ── Cron: live ────────────────────────────────────────────────────────────────
 async function checkLive() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'live');
-  if (error) { console.error('[checkLive]', error.message); return; }
+  if (error) { botLog('[checkLive]', error.message); return; }
   if (!races?.length) return;
   const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
@@ -268,7 +279,7 @@ async function checkLive() {
 // ── Cron: cancelled ───────────────────────────────────────────────────────────
 async function checkCancelled() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'cancelled');
-  if (error) { console.error('[checkCancelled]', error.message); return; }
+  if (error) { botLog('[checkCancelled]', error.message); return; }
   if (!races?.length) return;
   const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
@@ -280,7 +291,7 @@ async function checkCancelled() {
 // ── Cron: completed / podium ──────────────────────────────────────────────────
 async function checkCompleted() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'completed');
-  if (error) { console.error('[checkCompleted]', error.message); return; }
+  if (error) { botLog('[checkCompleted]', error.message); return; }
   if (!races?.length) return;
   const channel = await getUitslagenChannel() || await getNotificationChannel();
   if (!channel) return;
@@ -405,7 +416,7 @@ async function syncTeamRoles() {
         if (!isAdmin && hasAdminRole) await member.roles.remove(syncCfg.admin_role_id).catch(() => {});
       }
     } catch (e) {
-      console.error('[syncTeamRoles] lid fout:', e.message);
+      botLog('[syncTeamRoles] lid fout:', e.message);
     }
   }
 }
@@ -424,7 +435,7 @@ client.on('guildMemberAdd', async (member) => {
       await member.kick(`Account te nieuw (${Math.floor(accountAgeDays)} dagen oud)`);
       console.log(`[guildMemberAdd] Gekickt: ${member.user.tag} — account ${Math.floor(accountAgeDays)} dagen oud`);
     } catch (e) {
-      console.error('[guildMemberAdd] Kick fout:', e.message);
+      botLog('[guildMemberAdd] Kick fout:', e.message);
     }
     return;
   }
@@ -434,7 +445,7 @@ client.on('guildMemberAdd', async (member) => {
   try {
     await member.roles.add(cfg.rijder_role_id);
   } catch (e) {
-    console.error('[guildMemberAdd] Rijder rol:', e.message);
+    botLog('[guildMemberAdd] Rijder rol:', e.message);
   }
 
   // Geef ook team-rollen als discord al gekoppeld is
@@ -669,7 +680,7 @@ async function registerCommands(guildId) {
   try {
     await rest.put(Routes.applicationGuildCommands(client.application.id, guildId), { body: COMMANDS });
     console.log('[3SM Bot] Slash commands geregistreerd');
-  } catch (e) { console.error('[3SM Bot] Commands registreren mislukt:', e.message); }
+  } catch (e) { botLog('[3SM Bot] Commands registreren mislukt:', e.message); }
 }
 
 // ── Interaction handler ───────────────────────────────────────────────────────
@@ -686,7 +697,7 @@ client.on('interactionCreate', async (interaction) => {
       if (action === 'aanmelden') await handleButtonReg(interaction, raceId, 'register');
       if (action === 'afmelden')  await handleButtonReg(interaction, raceId, 'unregister');
     }
-  } catch (e) { console.error('[interaction]', e.message); }
+  } catch (e) { botLog('[interaction]', e.message); }
 });
 
 // /koppel → magic link
@@ -834,11 +845,18 @@ client.once('ready', async () => {
   }
 
   // Elke minuut: race checks
-  cron.schedule('* * * * *', () => checkRaces().catch(e => console.error('[cron:checkRaces]', e.message)));
+  cron.schedule('* * * * *', () => checkRaces().catch(e => botLog(`[cron:checkRaces] ${e.message}`)));
   // Elke 5 minuten: team rol sync
-  cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => console.error('[cron:syncTeamRoles]', e.message)));
-  // Elk uur: kalender update
-  cron.schedule('0 * * * *', () => updateCalendarEmbed().catch(e => console.error('[cron:kalender]', e.message)));
+  cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => botLog(`[cron:syncTeamRoles] ${e.message}`)));
+  // Elk uur: kalender update + token cleanup
+  cron.schedule('0 * * * *', async () => {
+    await updateCalendarEmbed().catch(e => botLog(`[cron:kalender] ${e.message}`));
+    const { error } = await supabase.from('discord_link_tokens')
+      .delete()
+      .or(`used.eq.true,expires_at.lt.${new Date().toISOString()}`);
+    if (error) botLog(`[cron:tokenCleanup] ${error.message}`);
+    else botLog('[cron:tokenCleanup] Verlopen tokens opgeschoond');
+  });
 
   checkRaces().catch(() => {});
   updateCalendarEmbed().catch(() => {});
