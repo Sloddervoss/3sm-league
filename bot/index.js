@@ -257,7 +257,7 @@ async function checkUpcoming() {
       const embed = buildReminderEmbed(race, activeWindow.key);
       await channel.send({ embeds: [embed], components: [registrationRow(race.id)] });
       markSent(race.id, activeWindow.key);
-      console.log(`[${new Date().toISOString()}] ✓ ${activeWindow.key}: ${race.name}`);
+      botLog(`🔔 Race melding verstuurd (${activeWindow.key}): **${race.name}**`);
     } catch (err) {
       botLog('[checkUpcoming]', err.message);
     }
@@ -272,7 +272,7 @@ async function checkLive() {
   const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'live')) continue;
-    try { await channel.send({ embeds: [buildReminderEmbed(race, 'live')] }); markSent(race.id, 'live'); } catch (e) { console.error(e.message); }
+    try { await channel.send({ embeds: [buildReminderEmbed(race, 'live')] }); markSent(race.id, 'live'); botLog(`🟢 Race gestart melding verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Live melding fout: ${e.message}`); }
   }
 }
 
@@ -284,7 +284,7 @@ async function checkCancelled() {
   const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'cancelled')) continue;
-    try { await channel.send({ embeds: [buildReminderEmbed(race, 'cancelled')] }); markSent(race.id, 'cancelled'); } catch (e) { console.error(e.message); }
+    try { await channel.send({ embeds: [buildReminderEmbed(race, 'cancelled')] }); markSent(race.id, 'cancelled'); botLog(`❌ Race gecanceld melding verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Cancelled melding fout: ${e.message}`); }
   }
 }
 
@@ -301,7 +301,7 @@ async function checkCompleted() {
       .from('race_results').select('position, points, fastest_lap, dnf, gap_to_leader, profiles(display_name)')
       .eq('race_id', race.id).order('position', { ascending: true });
     if (re || !results?.length) continue;
-    try { await channel.send({ embeds: [buildPodiumEmbed(race, results)] }); markSent(race.id, 'podium'); console.log(`[${new Date().toISOString()}] ✓ Podium: ${race.name}`); } catch (e) { console.error(e.message); }
+    try { await channel.send({ embeds: [buildPodiumEmbed(race, results)] }); markSent(race.id, 'podium'); botLog(`🏆 Uitslag verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Podium fout: ${e.message}`); }
   }
 }
 
@@ -330,14 +330,14 @@ async function syncTeamRoles() {
         await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
-        console.log(`[syncTeamRoles] Bestaande rol gevonden: ${team.name}`);
+        botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
         continue;
       }
       try {
         const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
         await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
         team.discord_role_id = role.id;
-        console.log(`[syncTeamRoles] Rol aangemaakt: ${team.name}`);
+        botLog(`➕ Teamrol aangemaakt: **${team.name}**`);
       } catch (e) {
         console.error(`[syncTeamRoles] Kon rol niet aanmaken voor ${team.name}:`, e.message);
         continue;
@@ -359,7 +359,7 @@ async function syncTeamRoles() {
       const wasTeamRole = await supabase.from('teams').select('id').eq('discord_role_id', role.id).maybeSingle();
       if (!wasTeamRole.data) {
         await role.delete('3SM team verwijderd').catch(() => {});
-        console.log(`[syncTeamRoles] Rol verwijderd: ${role.name}`);
+        botLog(`🗑️ Teamrol verwijderd: **${role.name}** (team niet meer in database)`);
       }
     }
   }
@@ -441,7 +441,7 @@ client.on('guildMemberAdd', async (member) => {
     try {
       await member.send(`❌ Je Discord account is te nieuw om deze server te joinen. Accounts moeten minimaal **${MIN_ACCOUNT_AGE_DAYS} dagen** oud zijn.`).catch(() => {});
       await member.kick(`Account te nieuw (${Math.floor(accountAgeDays)} dagen oud)`);
-      console.log(`[guildMemberAdd] Gekickt: ${member.user.tag} — account ${Math.floor(accountAgeDays)} dagen oud`);
+      botLog(`🚫 Gekickt: **${member.user.tag}** — account slechts ${Math.floor(accountAgeDays)} dagen oud`);
     } catch (e) {
       botLog('[guildMemberAdd] Kick fout:', e.message);
     }
@@ -450,10 +450,12 @@ client.on('guildMemberAdd', async (member) => {
 
   if (!cfg.rijder_role_id) return;
 
+  botLog(`👋 Nieuw lid: **${member.user.tag}** (account ${Math.floor(accountAgeDays)} dagen oud)`);
+
   try {
     await member.roles.add(cfg.rijder_role_id);
   } catch (e) {
-    botLog('[guildMemberAdd] Rijder rol:', e.message);
+    botLog(`❌ Rijder rol fout voor ${member.user.tag}: ${e.message}`);
   }
 
   // Geef ook team-rollen als discord al gekoppeld is
@@ -666,6 +668,8 @@ async function handleSetupServer(interaction) {
   await updateCalendarEmbed().catch(e => log('Kalender fout: ' + e.message));
   await syncTeamRoles().catch(e => log('Sync fout: ' + e.message));
 
+  botLog(`🛠️ \`/setup-server\` uitgevoerd door **${interaction.user.tag}**`);
+
   await interaction.editReply({
     content: `✅ **Server opgezet!**\n\nKanalen en rollen zijn aangemaakt (bestaande zijn hergebruikt).\n\nJe kan \`/setup-server\` veilig opnieuw uitvoeren — er wordt nooit iets verwijderd.`,
   }).catch(() => {});
@@ -734,6 +738,7 @@ async function handleKoppel(interaction) {
   }
 
   const link = `${siteUrl}/koppel?token=${data.token}`;
+  botLog(`🔗 Koppellink aangevraagd door **${discordTag}**`);
 
   return interaction.reply({
     content: `🔗 **Koppel je account**\n\nKlik op onderstaande link om je Discord te koppelen aan je 3SM profiel. De link is **30 minuten** geldig.\n\n${link}\n\n> Je moet ingelogd zijn op de site om de koppeling te voltooien.`,
