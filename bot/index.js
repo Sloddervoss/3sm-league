@@ -317,49 +317,120 @@ async function syncTeamRoles() {
   const guild = await client.guilds.fetch(guildId).catch(() => null);
   if (!guild) return;
 
-  const { data: teams } = await supabase.from('teams').select('id, name, color, discord_role_id');
+  const { data: teams } = await supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id');
   if (!teams?.length) return;
 
-  // Maak ontbrekende team-rollen aan (controleer eerst op naam in Discord)
+  const everyoneId = guild.roles.everyone.id;
+
+  // Maak ontbrekende team-rollen + categorie + kanalen aan
   for (const team of teams) {
     const colorInt = team.color ? parseInt(team.color.replace('#', ''), 16) : 0xf97316;
+
+    // ── Rol ──────────────────────────────────────────────────────────────────
     if (!team.discord_role_id) {
-      // Zoek bestaande rol op naam om duplicaten te voorkomen
       const existing = guild.roles.cache.find(r => r.name === team.name);
       if (existing) {
         await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
         botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
-        continue;
-      }
-      try {
-        const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
-        await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
-        team.discord_role_id = role.id;
-        botLog(`➕ Teamrol aangemaakt: **${team.name}**`);
-      } catch (e) {
-        console.error(`[syncTeamRoles] Kon rol niet aanmaken voor ${team.name}:`, e.message);
-        continue;
+      } else {
+        try {
+          const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+          await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
+          team.discord_role_id = role.id;
+          botLog(`➕ Teamrol aangemaakt: **${team.name}**`);
+        } catch (e) {
+          botLog(`❌ Kon rol niet aanmaken voor ${team.name}: ${e.message}`);
+          continue;
+        }
       }
     } else {
-      // Update kleur/hoist van bestaande rol als die afwijkt
       const existing = guild.roles.cache.get(team.discord_role_id);
-      if (existing) {
-        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+      if (existing) await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+    }
+
+    // ── Categorie + kanalen ───────────────────────────────────────────────────
+    if (!team.discord_role_id) continue;
+
+    const permOverwrites = [
+      { id: everyoneId,         deny:  [PermissionFlagsBits.ViewChannel] },
+      { id: team.discord_role_id, allow: [PermissionFlagsBits.ViewChannel] },
+    ];
+
+    let categoryId = team.discord_category_id;
+
+    if (!categoryId) {
+      // Zoek bestaande categorie op naam
+      const existingCat = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === team.name);
+      if (existingCat) {
+        categoryId = existingCat.id;
+      } else {
+        try {
+          const cat = await guild.channels.create({
+            name: team.name,
+            type: ChannelType.GuildCategory,
+            permissionOverwrites: permOverwrites,
+            reason: '3SM team sectie',
+          });
+          categoryId = cat.id;
+          botLog(`➕ Team sectie aangemaakt: **${team.name}**`);
+        } catch (e) {
+          botLog(`❌ Kon sectie niet aanmaken voor ${team.name}: ${e.message}`);
+          continue;
+        }
+      }
+      await supabase.from('teams').update({ discord_category_id: categoryId }).eq('id', team.id);
+      team.discord_category_id = categoryId;
+    }
+
+    // Maak ontbrekende kanalen aan binnen de team-categorie
+    const teamChannels = [
+      { name: '💬・team-chat',        type: ChannelType.GuildText  },
+      { name: '🏁・race-lobby',        type: ChannelType.GuildVoice },
+      { name: '🏎️・endurance-lobby',  type: ChannelType.GuildVoice },
+      { name: '🔧・pit-wall',          type: ChannelType.GuildVoice },
+    ];
+
+    for (const chDef of teamChannels) {
+      const exists = guild.channels.cache.find(c => c.name === chDef.name && c.parentId === categoryId);
+      if (!exists) {
+        await guild.channels.create({
+          name: chDef.name,
+          type: chDef.type,
+          parent: categoryId,
+          permissionOverwrites: permOverwrites,
+          reason: '3SM team kanaal',
+        }).catch(e => botLog(`❌ Kanaal aanmaken fout (${chDef.name}): ${e.message}`));
       }
     }
   }
 
-  // Verwijder Discord rollen van teams die niet meer in Supabase staan
-  const teamRoleIds = teams.map(t => t.discord_role_id).filter(Boolean);
+  // Verwijder Discord rollen + categorie + kanalen van verwijderde teams
+  const teamRoleIds     = teams.map(t => t.discord_role_id).filter(Boolean);
+  const teamCategoryIds = teams.map(t => t.discord_category_id).filter(Boolean);
+  const protectedRoles  = ['Admin', 'Steward', 'Rijder'];
+
   for (const [, role] of guild.roles.cache) {
-    if (role.hoist && !['Admin', 'Steward', 'Rijder'].includes(role.name) && !teamRoleIds.includes(role.id)) {
-      // Controleer of dit ooit een teamrol was (staat niet meer in teams tabel)
+    if (role.hoist && !protectedRoles.includes(role.name) && !teamRoleIds.includes(role.id)) {
       const wasTeamRole = await supabase.from('teams').select('id').eq('discord_role_id', role.id).maybeSingle();
       if (!wasTeamRole.data) {
         await role.delete('3SM team verwijderd').catch(() => {});
-        botLog(`🗑️ Teamrol verwijderd: **${role.name}** (team niet meer in database)`);
+        botLog(`🗑️ Teamrol verwijderd: **${role.name}**`);
+      }
+    }
+  }
+
+  for (const [, ch] of guild.channels.cache) {
+    if (ch.type === ChannelType.GuildCategory && !teamCategoryIds.includes(ch.id)) {
+      const wasTeamCat = await supabase.from('teams').select('id').eq('discord_category_id', ch.id).maybeSingle();
+      if (wasTeamCat.data === null && !ch.name.includes('━━━')) {
+        // Verwijder eerst alle kanalen in de categorie
+        for (const [, child] of guild.channels.cache) {
+          if (child.parentId === ch.id) await child.delete('3SM team verwijderd').catch(() => {});
+        }
+        await ch.delete('3SM team verwijderd').catch(() => {});
+        botLog(`🗑️ Team sectie verwijderd: **${ch.name}**`);
       }
     }
   }
@@ -562,7 +633,7 @@ async function handleSetupServer(interaction) {
       ],
     },
     {
-      label: '🎙️ SPRAAK',
+      label: '🎙️ ALGEMEEN SPRAAK',
       channels: [
         { key: 'race_lobby',      name: '🏁・race-lobby',      type: ChannelType.GuildVoice },
         { key: 'endurance_lobby', name: '🏎️・endurance-lobby', type: ChannelType.GuildVoice },
