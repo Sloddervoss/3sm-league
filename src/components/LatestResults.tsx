@@ -106,14 +106,14 @@ const LatestResults = () => {
                 {result.fastest_lap && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold shrink-0">FL</span>}
               </div>
               <span className="text-center text-sm font-mono text-muted-foreground hidden md:block">{result.best_lap || "—"}</span>
-              <span className="text-center font-heading font-black text-lg flex items-center justify-center gap-1">
+              <span className="text-center font-heading font-black text-lg relative inline-block">
                 {result.points}
                 {(() => {
                   const pen = penalties?.find((p) => p.race_id === result.race_id && p.user_id === result.user_id);
                   if (!pen || pen.penalty_type === "warning") return null;
                   const label = pen.penalty_type === "disqualification" ? "DSQ — Steward beslissing" : `-${pen.points_deduction} punt${pen.points_deduction !== 1 ? "en" : ""} — Steward beslissing`;
                   return (
-                    <span className="group relative cursor-default">
+                    <span className="group absolute left-full top-1/2 -translate-y-1/2 ml-1 cursor-default">
                       <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
                       <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                         {label}
