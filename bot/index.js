@@ -513,7 +513,7 @@ async function syncTeamRoles() {
       if (nickname && member.displayName !== nickname) {
         const result = await member.setNickname(nickname).catch(e => e);
         if (result instanceof Error) {
-          console.error(`[syncTeamRoles] Nickname fout voor ${member.user.tag}: ${result.message}`);
+          if (result.message !== 'Missing Permissions') console.error(`[syncTeamRoles] Nickname fout voor ${member.user.tag}: ${result.message}`);
         } else {
           console.log(`[syncTeamRoles] Nickname gezet: ${member.user.tag} → ${nickname}`);
         }
