@@ -30,7 +30,8 @@ const client = new Client({
 });
 
 // ── Bot log helper ────────────────────────────────────────────────────────────
-async function botLog(message) {
+async function botLog(...args) {
+  const message = args.join(' ');
   console.log(`[botLog] ${message}`);
   try {
     const cfg = loadConfig();
