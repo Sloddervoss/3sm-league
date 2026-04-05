@@ -310,6 +310,42 @@ async function checkRaces() {
   await Promise.all([checkUpcoming(), checkLive(), checkCancelled(), checkCompleted()]);
 }
 
+// ── Cron: nieuwe race aanmeldingen ────────────────────────────────────────────
+async function checkNewRegistrations() {
+  const { data, error } = await supabase
+    .from('race_registrations')
+    .select('id, registered_at, profiles(display_name, iracing_name), races(name, race_date)')
+    .order('registered_at', { ascending: false })
+    .limit(20);
+  if (error) { botLog('[checkRegistrations]', error.message); return; }
+  if (!data?.length) return;
+  for (const reg of data) {
+    const key = `reg_${reg.id}`;
+    if (wasSent(key, 'notified')) continue;
+    markSent(key, 'notified');
+    const driver = reg.profiles?.iracing_name || reg.profiles?.display_name || 'Onbekend';
+    const race = reg.races?.name || 'Onbekende race';
+    botLog(`📋 Nieuwe aanmelding: **${driver}** → ${race}`);
+  }
+}
+
+// ── Cron: nieuwe Discord koppelingen ─────────────────────────────────────────
+async function checkNewLinks() {
+  const { data, error } = await supabase
+    .from('discord_link_tokens')
+    .select('discord_id, discord_tag, used')
+    .eq('used', true)
+    .gte('expires_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()); // token nog niet te oud
+  if (error) { botLog('[checkLinks]', error.message); return; }
+  if (!data?.length) return;
+  for (const token of data) {
+    const key = `link_${token.discord_id}`;
+    if (wasSent(key, 'notified')) continue;
+    markSent(key, 'notified');
+    botLog(`🔗 Discord gekoppeld: **${token.discord_tag || token.discord_id}**`);
+  }
+}
+
 // ── Cron: team rol sync ───────────────────────────────────────────────────────
 async function syncTeamRoles() {
   const cfg = loadConfig();
@@ -952,8 +988,10 @@ client.once('ready', async () => {
     await registerCommands(guild.id);
   }
 
-  // Elke minuut: race checks
+  // Elke minuut: race checks + aanmeldingen + koppelingen
   cron.schedule('* * * * *', () => checkRaces().catch(e => botLog(`[cron:checkRaces] ${e.message}`)));
+  cron.schedule('* * * * *', () => checkNewRegistrations().catch(e => botLog(`[cron:checkRegistrations] ${e.message}`)));
+  cron.schedule('* * * * *', () => checkNewLinks().catch(e => botLog(`[cron:checkLinks] ${e.message}`)));
   // Elke 5 minuten: team rol sync
   cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => botLog(`[cron:syncTeamRoles] ${e.message}`)));
   // Elk uur: kalender update + token cleanup
