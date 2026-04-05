@@ -217,20 +217,16 @@ const StewardPage = () => {
                   {canModerate ? "STEWARD PANEL" : "PROTEST INDIENEN"}
                 </h1>
                 <p className="text-muted-foreground mt-2">
-                  {canModerate
-                    ? "Bekijk en behandel ingediende protesten"
-                    : "Dien een protest in over een race-incident (binnen 48 uur na de race)"}
+                  Dien een protest in over een race-incident (binnen 48 uur na de race)
                 </p>
               </div>
-              {!canModerate && (
-                <button
-                  onClick={() => setShowForm(!showForm)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity"
-                >
-                  <Plus className="w-4 h-4" />
-                  Nieuw Protest
-                </button>
-              )}
+              <button
+                onClick={() => setShowForm(!showForm)}
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity"
+              >
+                <Plus className="w-4 h-4" />
+                Nieuw Protest
+              </button>
             </div>
           </div>
         </section>
@@ -376,7 +372,14 @@ const StewardPage = () => {
                           )}
 
                           {/* Steward acties */}
-                          {canModerate && protest.status !== "resolved" && protest.status !== "dismissed" && (
+                          {canModerate && protest.status !== "resolved" && protest.status !== "dismissed" && (protest.reporter_user_id === user?.id || protest.accused_user_id === user?.id) && (
+                            <div className="pt-2 border-t border-border">
+                              <p className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-md px-3 py-2">
+                                Je bent betrokken bij dit protest en kan het niet zelf behandelen.
+                              </p>
+                            </div>
+                          )}
+                          {canModerate && protest.status !== "resolved" && protest.status !== "dismissed" && protest.reporter_user_id !== user?.id && protest.accused_user_id !== user?.id && (
                             <div className="space-y-3 pt-2 border-t border-border">
                               <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Uitspraak doen</div>
 
