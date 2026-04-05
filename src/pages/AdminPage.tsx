@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Trophy, Calendar, Trash2, Settings, Users, Car, Shield, BarChart2, Upload, Save, FileText, X, Check, ImagePlus, Clock, Pencil, MapPin, Flag, CloudSun, Gauge, Timer } from "lucide-react";
+import { Plus, Trophy, Calendar, Trash2, Settings, Users, Car, Shield, BarChart2, Upload, Save, FileText, X, Check, ImagePlus, Clock, Pencil, MapPin, Flag, CloudSun, Gauge, Timer, ChevronDown } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -729,6 +729,7 @@ const AdminPage = () => {
   const [newSoloRace, setNewSoloRace] = useState({ name: "", track: "", date: "", time: "20:00", race_type: "Feature", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", start_type: "Standing", weather: "Fixed", setup: "Fixed" });
   const [editingSoloRaceId, setEditingSoloRaceId] = useState<string | null>(null);
   const [editingSoloRaceData, setEditingSoloRaceData] = useState<any>({});
+  const [showCompletedSoloRaces, setShowCompletedSoloRaces] = useState(false);
 
   const [newTeam, setNewTeam] = useState({ name: "", description: "", color: "#f97316", logo_url: "" });
   const [newTeamLogoPreview, setNewTeamLogoPreview] = useState<string>("");
@@ -1741,8 +1742,12 @@ const AdminPage = () => {
                     </motion.div>
                   )}
 
-                  <div className="space-y-3">
-                    {(allRaces || []).filter((r: any) => !r.league_id).map((race: any) => {
+                  {(() => {
+                    const soloRaces = (allRaces || []).filter((r: any) => !r.league_id);
+                    const upcomingRaces = soloRaces.filter((r: any) => r.status !== "completed");
+                    const completedRaces = soloRaces.filter((r: any) => r.status === "completed");
+
+                    const renderRace = (race: any) => {
                       const raceRegs = (raceRegistrations || []).filter((r: any) => r.race_id === race.id);
                       const isEditingSolo = editingSoloRaceId === race.id;
                       const srd = editingSoloRaceData;
@@ -1858,11 +1863,37 @@ const AdminPage = () => {
                           )}
                         </div>
                       );
-                    })}
-                    {!(allRaces || []).some((r: any) => !r.league_id) && (
-                      <div className="text-center py-10 text-muted-foreground text-sm">Geen losse races aangemaakt.</div>
-                    )}
-                  </div>
+                    };
+
+                    return (
+                      <>
+                        <div className="space-y-3">
+                          {upcomingRaces.map(renderRace)}
+                          {upcomingRaces.length === 0 && completedRaces.length === 0 && (
+                            <div className="text-center py-10 text-muted-foreground text-sm">Geen losse races aangemaakt.</div>
+                          )}
+                        </div>
+
+                        {completedRaces.length > 0 && (
+                          <div className="mt-4">
+                            <button
+                              onClick={() => setShowCompletedSoloRaces(v => !v)}
+                              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
+                            >
+                              <ChevronDown className={`w-4 h-4 transition-transform ${showCompletedSoloRaces ? "rotate-180" : ""}`} />
+                              {showCompletedSoloRaces ? "Verberg" : "Toon"} afgelopen races ({completedRaces.length})
+                            </button>
+                            {showCompletedSoloRaces && (
+                              <div className="space-y-3">
+                                {completedRaces.map(renderRace)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
                 </div>
               </div>
             )}
