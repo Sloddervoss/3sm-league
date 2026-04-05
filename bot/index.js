@@ -381,7 +381,7 @@ async function checkProtests() {
       if (stewardCh) {
         const btn = new ButtonBuilder()
           .setLabel('Bekijk protest')
-          .setURL('https://3sm.nl/stewards')
+          .setURL('https://3stripemotorsport.cc/stewards')
           .setStyle(ButtonStyle.Link);
         const row = new ActionRowBuilder().addComponents(btn);
         await stewardCh.send({ content: '⚖️ Er is een nieuw protest ingediend.', components: [row] }).catch(() => {});
