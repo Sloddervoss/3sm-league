@@ -171,7 +171,7 @@ const CalendarPage = () => {
 
               <div className="space-y-3">
                 {races.filter((race: any) =>
-                  race.status !== "completed" || !!race.leagues?.id
+                  race.status !== "completed"
                 ).map((race: any, i: number) => {
                   const leagueId = race.leagues?.id;
                   return (
