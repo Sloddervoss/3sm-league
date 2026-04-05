@@ -19,7 +19,11 @@ const TZ = "Europe/Amsterdam";
 
 /** Amsterdam lokale tijd string → UTC ISO string (voor opslaan in DB) */
 function amsToUTC(localStr: string): string {
+  if (!localStr) throw new Error("Datum & tijd is verplicht");
+  // Als het al een volledige UTC/ISO string is, gewoon teruggeven
+  if (localStr.length > 16) return new Date(localStr).toISOString();
   const temp = new Date(localStr + ":00.000Z");
+  if (isNaN(temp.getTime())) throw new Error("Ongeldige datum/tijd waarde");
   const parts = new Intl.DateTimeFormat("en", {
     timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hour12: false,
