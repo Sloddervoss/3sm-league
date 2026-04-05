@@ -615,11 +615,25 @@ const DriversList = () => {
     (userRoles || []).some((r: any) => r.user_id === userId && r.role === "admin");
   const isSuperAdmin = (userId: string) =>
     (userRoles || []).some((r: any) => r.user_id === userId && r.role === "super_admin");
+  const isStewardRole = (userId: string) =>
+    (userRoles || []).some((r: any) => r.user_id === userId && r.role === "moderator");
 
   const toggleAdmin = useMutation({
     mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
       const fn = grant ? "admin_grant_role" : "admin_revoke_role";
       const { error } = await (supabase as any).rpc(fn, { target_user_id: userId, target_role: "admin" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-user-roles"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const toggleSteward = useMutation({
+    mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
+      const fn = grant ? "admin_grant_role" : "admin_revoke_role";
+      const { error } = await (supabase as any).rpc(fn, { target_user_id: userId, target_role: "moderator" });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -644,20 +658,22 @@ const DriversList = () => {
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_3rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_6rem_3rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
         <span>Driver</span>
         <span>iRacing ID</span>
         <span>iRating</span>
         <span>Safety</span>
-        <span>Rol</span>
+        <span>Admin</span>
+        <span>Steward</span>
         <span></span>
       </div>
       {profiles?.map((p: any) => {
         const admin = isAdmin(p.user_id);
         const superAdmin = isSuperAdmin(p.user_id);
+        const steward = isStewardRole(p.user_id);
         const isMe = p.user_id === currentUser?.id;
         return (
-          <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_3rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
+          <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_6rem_3rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
             <div>
               <div className="font-heading font-bold text-sm flex items-center gap-2">
                 {p.display_name || p.iracing_name || "—"}
@@ -674,7 +690,7 @@ const DriversList = () => {
             <span className="text-xs font-mono text-muted-foreground">{p.iracing_id || "—"}</span>
             <span className="text-sm font-heading font-bold">{p.irating ? p.irating.toLocaleString() : "—"}</span>
             <span className="text-sm text-muted-foreground">{p.safety_rating || "—"}</span>
-            {/* Role toggle: only super_admin can change roles, super_admin row is locked */}
+            {/* Admin rol */}
             {superAdmin ? (
               <span className="text-xs px-2 py-1 rounded font-bold" style={{ background: "rgba(250,204,21,0.12)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)" }}>
                 Super Admin
@@ -690,6 +706,22 @@ const DriversList = () => {
             ) : (
               <span className={`text-xs px-2 py-1 rounded font-bold ${admin ? "bg-accent/20 text-accent border border-accent/30" : "text-muted-foreground"}`}>
                 {admin ? "Admin" : "—"}
+              </span>
+            )}
+            {/* Steward rol */}
+            {superAdmin || admin ? (
+              <span className="text-xs text-muted-foreground">—</span>
+            ) : currentIsSuperAdmin ? (
+              <button
+                onClick={() => toggleSteward.mutate({ userId: p.user_id, grant: !steward })}
+                disabled={toggleSteward.isPending}
+                className={`text-xs px-2 py-1 rounded font-bold transition-colors ${steward ? "bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30" : "bg-secondary text-muted-foreground border border-border hover:bg-blue-500/10 hover:text-blue-400"}`}
+              >
+                {steward ? "Steward" : "—"}
+              </button>
+            ) : (
+              <span className={`text-xs px-2 py-1 rounded font-bold ${steward ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "text-muted-foreground"}`}>
+                {steward ? "Steward" : "—"}
               </span>
             )}
             <button
