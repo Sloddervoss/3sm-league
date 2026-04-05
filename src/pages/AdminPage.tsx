@@ -2582,41 +2582,15 @@ const AdminPage = () => {
                       />
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Afbeelding (optioneel)</label>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-2 px-3 py-2 rounded-md border border-dashed border-border hover:border-primary/50 bg-secondary/50 cursor-pointer transition-colors text-xs text-muted-foreground">
-                          <ImagePlus className="w-3.5 h-3.5" />
-                          {annImage ? "Ander bestand" : "Kies afbeelding..."}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const img = new Image();
-                              const url = URL.createObjectURL(file);
-                              img.onload = () => {
-                                const canvas = document.createElement("canvas");
-                                const max = 800;
-                                const scale = Math.min(max / img.width, max / img.height, 1);
-                                canvas.width = Math.round(img.width * scale);
-                                canvas.height = Math.round(img.height * scale);
-                                canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                setAnnImage(canvas.toDataURL("image/png"));
-                                URL.revokeObjectURL(url);
-                              };
-                              img.src = url;
-                            }}
-                          />
-                        </label>
-                        {annImage && (
-                          <>
-                            <img src={annImage} alt="preview" className="w-16 h-16 object-contain rounded-md border border-border bg-secondary/50" />
-                            <button onClick={() => setAnnImage("")} className="text-xs text-muted-foreground hover:text-destructive transition-colors"><X className="w-4 h-4" /></button>
-                          </>
-                        )}
-                      </div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Afbeelding URL (optioneel)</label>
+                      <input
+                        type="url"
+                        value={annImage}
+                        onChange={e => setAnnImage(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary"
+                      />
+                      {annImage && <img src={annImage} alt="preview" className="mt-2 h-24 object-contain rounded-md border border-border bg-secondary/50" onError={() => setAnnImage("")} />}
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Tag / Mention</label>
