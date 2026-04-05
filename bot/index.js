@@ -130,8 +130,11 @@ function registrationRow(raceId) {
 // ── Reminder embed ────────────────────────────────────────────────────────────
 function buildReminderEmbed(race, key) {
   const ronde = rondeName(race);
+  const raceDay = new Date(race.race_date).toLocaleDateString('nl-NL', { weekday: 'long', timeZone: 'Europe/Amsterdam' });
+  const todayDay = new Date().toLocaleDateString('nl-NL', { weekday: 'long', timeZone: 'Europe/Amsterdam' });
+  const dagLabel = raceDay === todayDay ? 'vanavond' : 'morgen';
   const configs = {
-    '24h':      { color: 0x3b82f6, title: `🏁  Race morgen — ${race.name}`,         description: `**${ronde}** gaat morgen van start.\nZorg dat je klaarstaat en je setup klaar hebt!` },
+    '24h':      { color: 0x3b82f6, title: `🏁  Race ${dagLabel} — ${race.name}`,         description: `**${ronde}** gaat ${dagLabel} van start.\nZorg dat je klaarstaat en je setup klaar hebt!` },
     '1h':       { color: 0xf97316, title: `⏱️  Race over 1 uur — ${race.name}`,      description: `**${ronde}** begint over een uur.\nOpen iRacing en warm op!` },
     '15m':      { color: 0xef4444, title: `🚨  Race over 15 minuten — ${race.name}`, description: `**${ronde}** begint zo!\nGa naar de grid — succes allemaal!` },
     'live':     { color: 0x22c55e, title: `🟢  Race gestart — ${race.name}`,         description: `**${ronde}** is officieel van start gegaan!\nVeel succes op de baan! 🏎️` },
