@@ -7,6 +7,7 @@ interface AuthContextType {
   user: User | null;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  isSteward: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -16,6 +17,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   isAdmin: false,
   isSuperAdmin: false,
+  isSteward: false,
   loading: true,
   signOut: async () => {},
 });
@@ -27,6 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isSteward, setIsSteward] = useState(false);
 
   const applySession = (session: Session | null) => {
     setSession(session);
@@ -45,9 +48,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .then((r) => r.json())
         .then((data) => setIsSuperAdmin(!!data))
         .catch(() => setIsSuperAdmin(false));
+      fetch(base, { method: "POST", headers, body: JSON.stringify({ _user_id: session.user.id, _role: "moderator" }) })
+        .then((r) => r.json())
+        .then((data) => setIsSteward(!!data))
+        .catch(() => setIsSteward(false));
     } else {
       setIsAdmin(false);
       setIsSuperAdmin(false);
+      setIsSteward(false);
     }
   };
 
@@ -71,10 +79,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
     setIsAdmin(false);
     setIsSuperAdmin(false);
+    setIsSteward(false);
   };
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, isAdmin, isSuperAdmin, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, isAdmin, isSuperAdmin, isSteward, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

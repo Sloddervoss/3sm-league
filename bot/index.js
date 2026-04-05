@@ -355,6 +355,60 @@ async function checkNewLinks() {
   }
 }
 
+// ── Cron: nieuwe protesten ────────────────────────────────────────────────────
+async function checkProtests() {
+  const { data, error } = await supabase
+    .from('protests')
+    .select('id, status, created_at, decided_at, penalty_type, penalty_points, steward_notes, races(name, track), accused:profiles!protests_accused_user_id_fkey(display_name, iracing_name)')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) { botLog('[checkProtests]', error.message); return; }
+  if (!data?.length) return;
+
+  for (const protest of data) {
+    // Nieuw protest melding (naar bot-logs)
+    const newKey = `protest_new_${protest.id}`;
+    if (!wasSent(newKey, 'notified')) {
+      markSent(newKey, 'notified');
+      botLog(`⚖️ Nieuw protest ingediend: **${protest.races?.name}** (${protest.races?.track})`);
+    }
+
+    // Beslissing melding (naar aankondigingen kanaal, zonder namen van indiener)
+    if ((protest.status === 'resolved' || protest.status === 'dismissed') && !wasSent(`protest_decided_${protest.id}`, 'notified')) {
+      markSent(`protest_decided_${protest.id}`, 'notified');
+
+      const channel = await getAankondigingenChannel();
+      if (!channel) continue;
+
+      const accusedName = protest.accused?.iracing_name || protest.accused?.display_name || 'Onbekend';
+      const penaltyLabels = { warning: 'Waarschuwing', points_deduction: 'Puntenaftrek', disqualification: 'Diskwalificatie' };
+
+      let penaltyText = 'Geen straf';
+      if (protest.status === 'dismissed') {
+        penaltyText = 'Protest afgewezen';
+      } else if (protest.penalty_type) {
+        penaltyText = penaltyLabels[protest.penalty_type] || protest.penalty_type;
+        if (protest.penalty_type === 'points_deduction' && protest.penalty_points > 0) {
+          penaltyText += ` (-${protest.penalty_points} punten)`;
+        }
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(protest.status === 'dismissed' ? 0x6b7280 : 0xf97316)
+        .setTitle(`⚖️ Steward Beslissing — ${protest.races?.name}`)
+        .setDescription(`**${accusedName}** — ${penaltyText}`)
+        .addFields({ name: '🏎️ Circuit', value: protest.races?.track || '—', inline: true })
+        .setFooter({ text: '3 Stripe Motorsport · Stewards' })
+        .setTimestamp();
+
+      if (protest.steward_notes) embed.addFields({ name: '📋 Motivatie', value: protest.steward_notes, inline: false });
+
+      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Protest beslissing melding fout: ${e.message}`));
+      botLog(`⚖️ Steward beslissing verstuurd: **${protest.races?.name}** → ${accusedName} — ${penaltyText}`);
+    }
+  }
+}
+
 // ── Cron: aankondigingen ──────────────────────────────────────────────────────
 async function checkAnnouncements() {
   const { data, error } = await supabase
@@ -1050,6 +1104,7 @@ client.once('ready', async () => {
   cron.schedule('* * * * *', () => checkAnnouncements().catch(e => botLog(`[cron:announcements] ${e.message}`)));
   cron.schedule('* * * * *', () => checkNewRegistrations().catch(e => botLog(`[cron:checkRegistrations] ${e.message}`)));
   cron.schedule('* * * * *', () => checkNewLinks().catch(e => botLog(`[cron:checkLinks] ${e.message}`)));
+  cron.schedule('* * * * *', () => checkProtests().catch(e => botLog(`[cron:checkProtests] ${e.message}`)));
   // Elke 5 minuten: team rol sync
   cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => botLog(`[cron:syncTeamRoles] ${e.message}`)));
   // Elk uur: kalender update + token cleanup
