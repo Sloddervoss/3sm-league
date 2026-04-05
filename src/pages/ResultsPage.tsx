@@ -182,21 +182,24 @@ const ResultsPage = () => {
                                   </span>
                                 ) : "-"}
                               </span>
-                              <span className="text-center font-heading font-black relative inline-block">
-                                {result.points}
-                                {(() => {
-                                  const pen = getPenalty(result.race_id, result.user_id);
-                                  if (!pen || pen.penalty_type === "warning") return null;
-                                  const label = pen.penalty_type === "disqualification" ? "DSQ — Steward beslissing" : `-${pen.points_deduction} punt${pen.points_deduction !== 1 ? "en" : ""} — Steward beslissing`;
-                                  return (
-                                    <span className="group absolute left-full top-1/2 -translate-y-1/2 ml-1 cursor-default">
-                                      <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
-                                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                        {label}
+                              <span className="flex items-center justify-center gap-0">
+                                <span className="w-4 shrink-0" />
+                                <span className="font-heading font-black">{result.points}</span>
+                                <span className="w-4 shrink-0 flex items-center justify-center">
+                                  {(() => {
+                                    const pen = getPenalty(result.race_id, result.user_id);
+                                    if (!pen || pen.penalty_type === "warning") return null;
+                                    const label = pen.penalty_type === "disqualification" ? "DSQ — Steward" : `-${pen.points_deduction}pt — Steward`;
+                                    return (
+                                      <span className="group relative cursor-default">
+                                        <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
+                                        <span className="absolute bottom-full right-0 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                          {label}
+                                        </span>
                                       </span>
-                                    </span>
-                                  );
-                                })()}
+                                    );
+                                  })()}
+                                </span>
                               </span>
                             </div>
                           ))}
