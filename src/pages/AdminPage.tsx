@@ -10,7 +10,7 @@ import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import { Navigate } from "react-router-dom";
 
-type AdminTab = "overview" | "seasons" | "teams" | "results" | "points" | "drivers";
+type AdminTab = "overview" | "seasons" | "teams" | "results" | "points" | "drivers" | "announcements";
 
 const DEFAULT_POINTS = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
@@ -737,6 +737,11 @@ const AdminPage = () => {
   const [iratingSyncing, setIratingSyncing] = useState(false);
   const [iratingSyncResult, setIratingSyncResult] = useState<{ updated?: number; error?: string } | null>(null);
 
+  const [annTitle, setAnnTitle] = useState("");
+  const [annMessage, setAnnMessage] = useState("");
+  const [annImage, setAnnImage] = useState("");
+  const [annTag, setAnnTag] = useState("none");
+
   const [importRaceId, setImportRaceId] = useState("");
   const [importRows, setImportRows] = useState<
     { position: number; display_name: string; laps: number; best_lap: string; incidents: number; fastest_lap: boolean; iracing_cust_id?: string; new_irating?: number; new_license_level?: number; new_license_sub_level?: number; car_name?: string }[]
@@ -1030,6 +1035,24 @@ const AdminPage = () => {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const sendAnnouncement = useMutation({
+    mutationFn: async () => {
+      const { error } = await (supabase as any).from("announcements").insert({
+        title: annTitle.trim(),
+        message: annMessage.trim(),
+        image_url: annImage || null,
+        tag: annTag,
+        sent: false,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Aankondiging ingepland — bot verstuurt binnen 1 minuut!");
+      setAnnTitle(""); setAnnMessage(""); setAnnImage(""); setAnnTag("none");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const importResults = useMutation({
     mutationFn: async () => {
       if (!importRaceId) throw new Error("Selecteer een race");
@@ -1147,6 +1170,7 @@ const AdminPage = () => {
     { id: "drivers", label: "Drivers", icon: Users },
     { id: "results", label: "Resultaten", icon: Upload },
     { id: "points", label: "Punten", icon: Shield },
+    { id: "announcements", label: "Aankondigingen", icon: Flag },
   ];
 
   return (
@@ -2527,6 +2551,98 @@ const AdminPage = () => {
                       {DEFAULT_POINTS.map((p, i) => <span key={i} className="text-xs px-2 py-1 rounded bg-secondary">P{i + 1}: {p}</span>)}
                       <span className="text-xs px-2 py-1 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">Fastest Lap: +1</span>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "announcements" && (
+              <div>
+                <h2 className="font-heading text-2xl font-black mb-6">AANKONDIGINGEN</h2>
+                <div className="bg-card border border-border rounded-lg p-6 racing-stripe-left max-w-2xl">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Titel</label>
+                      <input
+                        type="text"
+                        value={annTitle}
+                        onChange={e => setAnnTitle(e.target.value)}
+                        placeholder="Bijv. Race update — ronde 3"
+                        className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Bericht</label>
+                      <textarea
+                        value={annMessage}
+                        onChange={e => setAnnMessage(e.target.value)}
+                        placeholder="Schrijf hier de aankondiging..."
+                        rows={5}
+                        className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Afbeelding (optioneel)</label>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 px-3 py-2 rounded-md border border-dashed border-border hover:border-primary/50 bg-secondary/50 cursor-pointer transition-colors text-xs text-muted-foreground">
+                          <ImagePlus className="w-3.5 h-3.5" />
+                          {annImage ? "Ander bestand" : "Kies afbeelding..."}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const img = new Image();
+                              const url = URL.createObjectURL(file);
+                              img.onload = () => {
+                                const canvas = document.createElement("canvas");
+                                const max = 800;
+                                const scale = Math.min(max / img.width, max / img.height, 1);
+                                canvas.width = Math.round(img.width * scale);
+                                canvas.height = Math.round(img.height * scale);
+                                canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                setAnnImage(canvas.toDataURL("image/png"));
+                                URL.revokeObjectURL(url);
+                              };
+                              img.src = url;
+                            }}
+                          />
+                        </label>
+                        {annImage && (
+                          <>
+                            <img src={annImage} alt="preview" className="w-16 h-16 object-contain rounded-md border border-border bg-secondary/50" />
+                            <button onClick={() => setAnnImage("")} className="text-xs text-muted-foreground hover:text-destructive transition-colors"><X className="w-4 h-4" /></button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Tag / Mention</label>
+                      <select
+                        value={annTag}
+                        onChange={e => setAnnTag(e.target.value)}
+                        className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary"
+                      >
+                        <option value="none">Geen tag</option>
+                        <option value="everyone">@everyone</option>
+                        <option value="here">@here</option>
+                        <optgroup label="Teams">
+                          {(teams as any[])?.map((t: any) => (
+                            <option key={t.id} value={`team_${t.id}`}>@{t.name}</option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => sendAnnouncement.mutate()}
+                      disabled={!annTitle.trim() || !annMessage.trim() || sendAnnouncement.isPending}
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 disabled:opacity-50 transition-opacity"
+                    >
+                      <Flag className="w-4 h-4" />
+                      {sendAnnouncement.isPending ? "Versturen..." : "Verstuur aankondiging"}
+                    </button>
                   </div>
                 </div>
               </div>
