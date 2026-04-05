@@ -149,19 +149,19 @@ const StewardPage = () => {
             .eq("user_id", protest.accused_user_id);
           if (error) throw error;
         } else if (penaltyType === "points_deduction" && penaltyPoints > 0) {
-          const { data: result } = await supabase.from("race_results")
+          const { data: result, error: selectError } = await supabase.from("race_results")
             .select("points")
             .eq("race_id", protest.race_id)
             .eq("user_id", protest.accused_user_id)
             .maybeSingle();
-          if (result) {
-            const newPoints = Math.max(0, (result.points || 0) - penaltyPoints);
-            const { error } = await supabase.from("race_results")
-              .update({ points: newPoints })
-              .eq("race_id", protest.race_id)
-              .eq("user_id", protest.accused_user_id);
-            if (error) throw error;
-          }
+          if (selectError) throw selectError;
+          if (!result) throw new Error("Geen race resultaat gevonden voor deze driver in deze race. Puntenaftrek niet toegepast.");
+          const newPoints = Math.max(0, (result.points || 0) - penaltyPoints);
+          const { error } = await supabase.from("race_results")
+            .update({ points: newPoints })
+            .eq("race_id", protest.race_id)
+            .eq("user_id", protest.accused_user_id);
+          if (error) throw error;
         }
 
         // Sla penalty op
