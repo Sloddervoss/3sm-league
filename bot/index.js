@@ -107,6 +107,13 @@ async function getAankondigingenChannel() {
   return client.channels.fetch(channelId).catch(() => null);
 }
 
+async function getStewardChannel() {
+  const cfg = loadConfig();
+  const channelId = cfg.steward_channel_id;
+  if (!channelId) return null;
+  return client.channels.fetch(channelId).catch(() => null);
+}
+
 async function getCalendarChannel() {
   const cfg = loadConfig();
   if (!cfg.kalender_channel_id) return null;
@@ -366,11 +373,20 @@ async function checkProtests() {
   if (!data?.length) return;
 
   for (const protest of data) {
-    // Nieuw protest melding (naar bot-logs)
+    // Nieuw protest melding (naar steward kanaal)
     const newKey = `protest_new_${protest.id}`;
     if (!wasSent(newKey, 'notified')) {
       markSent(newKey, 'notified');
-      botLog(`⚖️ Nieuw protest ingediend: **${protest.races?.name}** (${protest.races?.track})`);
+      const stewardCh = await getStewardChannel();
+      if (stewardCh) {
+        const btn = new ButtonBuilder()
+          .setLabel('Bekijk protest')
+          .setURL('https://3sm.nl/stewards')
+          .setStyle(ButtonStyle.Link);
+        const row = new ActionRowBuilder().addComponents(btn);
+        await stewardCh.send({ content: '⚖️ Er is een nieuw protest ingediend.', components: [row] }).catch(() => {});
+      }
+      botLog(`⚖️ Nieuw protest ingediend: **${protest.races?.name}**`);
     }
 
     // Beslissing melding (naar aankondigingen kanaal, zonder namen van indiener)
@@ -806,8 +822,9 @@ async function handleSetupServer(interaction) {
     {
       label: '🔒 ADMIN',
       channels: [
-        { key: 'admin_chat', name: '💼・admin-chat', type: ChannelType.GuildText },
-        { key: 'bot_logs',   name: '🤖・bot-logs',  type: ChannelType.GuildText },
+        { key: 'admin_chat',    name: '💼・admin-chat',    type: ChannelType.GuildText },
+        { key: 'steward_chat',  name: '⚖️・steward-chat',  type: ChannelType.GuildText },
+        { key: 'bot_logs',      name: '🤖・bot-logs',      type: ChannelType.GuildText },
       ],
     },
   ];
@@ -821,10 +838,18 @@ async function handleSetupServer(interaction) {
     const category = await getOrCreateCategory(separatorName, []);
 
     for (const chDef of section.channels) {
-      // Bot-logs: bot heeft altijd schrijftoegang
-      const overwrites = (chDef.key === 'bot_logs' && botRoleId)
-        ? [{ id: botRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }]
-        : [];
+      let overwrites = [];
+      if (chDef.key === 'bot_logs' && botRoleId) {
+        overwrites = [{ id: botRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }];
+      } else if (chDef.key === 'steward_chat') {
+        // Alleen admin + steward + bot
+        overwrites = [
+          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...(resolvedRoles.admin_role   ? [{ id: resolvedRoles.admin_role,   allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+          ...(resolvedRoles.steward_role ? [{ id: resolvedRoles.steward_role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+          ...(botRoleId                  ? [{ id: botRoleId,                  allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+        ];
+      }
       const ch = await getOrCreateChannel(chDef.name, chDef.type, category.id, overwrites);
       resolvedChannels[chDef.key] = ch.id;
     }
@@ -832,15 +857,16 @@ async function handleSetupServer(interaction) {
 
   // Sla config op
   saveConfig({
-    guild_id:              guild.id,
-    meldingen_channel_id:  resolvedChannels.meldingen,
-    uitslagen_channel_id:  resolvedChannels.uitslagen,
-    kalender_channel_id:   resolvedChannels.kalender,
-    welkom_channel_id:     resolvedChannels.welkom,
-    bot_logs_channel_id:   resolvedChannels.bot_logs,
-    rijder_role_id:        resolvedRoles.rijder_role,
-    admin_role_id:         resolvedRoles.admin_role,
-    steward_role_id:       resolvedRoles.steward_role,
+    guild_id:               guild.id,
+    meldingen_channel_id:   resolvedChannels.meldingen,
+    uitslagen_channel_id:   resolvedChannels.uitslagen,
+    kalender_channel_id:    resolvedChannels.kalender,
+    welkom_channel_id:      resolvedChannels.welkom,
+    bot_logs_channel_id:    resolvedChannels.bot_logs,
+    steward_channel_id:     resolvedChannels.steward_chat,
+    rijder_role_id:         resolvedRoles.rijder_role,
+    admin_role_id:          resolvedRoles.admin_role,
+    steward_role_id:        resolvedRoles.steward_role,
   });
 
   // ── Reglement embed (alleen sturen als kanaal leeg is) ───────────────────
