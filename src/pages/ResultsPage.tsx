@@ -187,12 +187,10 @@ const ResultsPage = () => {
                                 {(() => {
                                   const pen = getPenalty(result.race_id, result.user_id);
                                   if (!pen || pen.penalty_type === "warning") return null;
-                                  const label = pen.penalty_type === "disqualification" ? "DSQ Steward" : `-${pen.points_deduction} Steward`;
+                                  const label = pen.penalty_type === "disqualification" ? "DSQ — Steward beslissing" : `-${pen.points_deduction} punt${pen.points_deduction !== 1 ? "en" : ""} — Steward beslissing`;
                                   return (
-                                    <span title={label} className="group relative cursor-default">
-                                      <span className="text-[9px] px-1 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/40 font-bold leading-none">
-                                        {pen.penalty_type === "disqualification" ? "DSQ" : `-${pen.points_deduction}`}
-                                      </span>
+                                    <span className="group relative cursor-default">
+                                      <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
                                       <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                                         {label}
                                       </span>

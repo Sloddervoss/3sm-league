@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Flag, Trophy, Clock } from "lucide-react";
+import { Flag, Trophy, Clock, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
@@ -39,6 +39,19 @@ const LatestResults = () => {
         .limit(10);
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: penalties } = useQuery({
+    queryKey: ["latest-race-penalties", lastRace?.id],
+    enabled: !!lastRace?.id,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("penalties")
+        .select("race_id, user_id, penalty_type, points_deduction")
+        .eq("race_id", lastRace!.id);
+      if (error) return [];
+      return data as { race_id: string; user_id: string; penalty_type: string; points_deduction: number }[];
     },
   });
 
@@ -93,7 +106,22 @@ const LatestResults = () => {
                 {result.fastest_lap && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold shrink-0">FL</span>}
               </div>
               <span className="text-center text-sm font-mono text-muted-foreground hidden md:block">{result.best_lap || "—"}</span>
-              <span className="text-center font-heading font-black text-lg">{result.points}</span>
+              <span className="text-center font-heading font-black text-lg flex items-center justify-center gap-1">
+                {result.points}
+                {(() => {
+                  const pen = penalties?.find((p) => p.race_id === result.race_id && p.user_id === result.user_id);
+                  if (!pen || pen.penalty_type === "warning") return null;
+                  const label = pen.penalty_type === "disqualification" ? "DSQ — Steward beslissing" : `-${pen.points_deduction} punt${pen.points_deduction !== 1 ? "en" : ""} — Steward beslissing`;
+                  return (
+                    <span className="group relative cursor-default">
+                      <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                        {label}
+                      </span>
+                    </span>
+                  );
+                })()}
+              </span>
             </motion.div>
           ))}
         </div>
