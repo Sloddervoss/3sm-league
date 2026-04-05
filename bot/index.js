@@ -102,6 +102,11 @@ async function getUitslagenChannel() {
   return client.channels.fetch(channelId).catch(() => null);
 }
 
+async function getAankondigingenChannel() {
+  const channelId = '1489621381548081276';
+  return client.channels.fetch(channelId).catch(() => null);
+}
+
 async function getCalendarChannel() {
   const cfg = loadConfig();
   if (!cfg.kalender_channel_id) return null;
@@ -344,6 +349,50 @@ async function checkNewLinks() {
     if (wasSent(key, 'notified')) continue;
     markSent(key, 'notified');
     botLog(`🔗 Discord gekoppeld: **${token.discord_tag || token.discord_id}**`);
+  }
+}
+
+// ── Cron: aankondigingen ──────────────────────────────────────────────────────
+async function checkAnnouncements() {
+  const { data, error } = await supabase
+    .from('announcements')
+    .select('*')
+    .eq('sent', false)
+    .order('created_at', { ascending: true });
+  if (error) { botLog('[checkAnnouncements]', error.message); return; }
+  if (!data?.length) return;
+
+  const channel = await getAankondigingenChannel();
+  if (!channel) { botLog('[checkAnnouncements] Aankondigingen channel niet gevonden'); return; }
+
+  const { data: teams } = await supabase.from('teams').select('id, name, discord_role_id');
+
+  for (const ann of data) {
+    let mentionText = '';
+    if (ann.tag === 'everyone') mentionText = '@everyone';
+    else if (ann.tag === 'here') mentionText = '@here';
+    else if (ann.tag?.startsWith('team_')) {
+      const teamId = ann.tag.replace('team_', '');
+      const team = teams?.find(t => t.id === teamId);
+      if (team?.discord_role_id) mentionText = `<@&${team.discord_role_id}>`;
+    }
+
+    const embed = {
+      color: 0xf97316,
+      title: ann.title,
+      description: ann.message,
+      footer: { text: '3 Stripe Motorsport' },
+      timestamp: new Date().toISOString(),
+    };
+    if (ann.image_url) embed.image = { url: ann.image_url };
+
+    try {
+      await channel.send({ content: mentionText || undefined, embeds: [embed] });
+      await supabase.from('announcements').update({ sent: true }).eq('id', ann.id);
+      botLog(`📢 Aankondiging verstuurd: **${ann.title}**`);
+    } catch (e) {
+      botLog(`❌ Aankondiging fout: ${e.message}`);
+    }
   }
 }
 
@@ -991,6 +1040,7 @@ client.once('ready', async () => {
 
   // Elke minuut: race checks + aanmeldingen + koppelingen
   cron.schedule('* * * * *', () => checkRaces().catch(e => botLog(`[cron:checkRaces] ${e.message}`)));
+  cron.schedule('* * * * *', () => checkAnnouncements().catch(e => botLog(`[cron:announcements] ${e.message}`)));
   cron.schedule('* * * * *', () => checkNewRegistrations().catch(e => botLog(`[cron:checkRegistrations] ${e.message}`)));
   cron.schedule('* * * * *', () => checkNewLinks().catch(e => botLog(`[cron:checkLinks] ${e.message}`)));
   // Elke 5 minuten: team rol sync
