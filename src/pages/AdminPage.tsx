@@ -917,10 +917,14 @@ const AdminPage = () => {
 
   const updateRace = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      // Zorg dat race_date altijd als Amsterdam lokale string binnenkomt in amsToUTC
+      const normalizedDate = data.race_date
+        ? (data.race_date.length > 16 ? utcToAmsLocal(data.race_date) : data.race_date)
+        : null;
       const { error } = await (supabase as any).from("races").update({
         name: data.name,
         track: data.track,
-        race_date: amsToUTC(data.race_date),
+        race_date: normalizedDate ? amsToUTC(normalizedDate) : null,
         race_type: data.race_type || null,
         race_duration: data.race_duration || null,
         practice_duration: data.practice_duration || null,
