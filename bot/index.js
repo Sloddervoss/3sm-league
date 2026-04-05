@@ -314,8 +314,8 @@ async function checkRaces() {
 async function checkNewRegistrations() {
   const { data, error } = await supabase
     .from('race_registrations')
-    .select('id, registered_at, profiles(display_name, iracing_name), races(name, race_date)')
-    .order('registered_at', { ascending: false })
+    .select('id, user_id, races(name)')
+    .order('created_at', { ascending: false })
     .limit(20);
   if (error) { botLog('[checkRegistrations]', error.message); return; }
   if (!data?.length) return;
@@ -323,7 +323,8 @@ async function checkNewRegistrations() {
     const key = `reg_${reg.id}`;
     if (wasSent(key, 'notified')) continue;
     markSent(key, 'notified');
-    const driver = reg.profiles?.iracing_name || reg.profiles?.display_name || 'Onbekend';
+    const { data: profile } = await supabase.from('profiles').select('display_name, iracing_name').eq('user_id', reg.user_id).maybeSingle();
+    const driver = profile?.iracing_name || profile?.display_name || reg.user_id;
     const race = reg.races?.name || 'Onbekende race';
     botLog(`📋 Nieuwe aanmelding: **${driver}** → ${race}`);
   }
