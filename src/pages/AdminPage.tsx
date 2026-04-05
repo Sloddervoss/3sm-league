@@ -744,7 +744,7 @@ const AdminPage = () => {
   const [annTitle, setAnnTitle] = useState("");
   const [annMessage, setAnnMessage] = useState("");
   const [annImage, setAnnImage] = useState("");
-  const [annTag, setAnnTag] = useState("none");
+  const [annTags, setAnnTags] = useState<string[]>([]);
 
   const [importRaceId, setImportRaceId] = useState("");
   const [importRows, setImportRows] = useState<
@@ -1049,14 +1049,14 @@ const AdminPage = () => {
         title: annTitle.trim(),
         message: annMessage.trim(),
         image_url: annImage || null,
-        tag: annTag,
+        tag: annTags.length ? annTags.join(",") : "none",
         sent: false,
       });
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Aankondiging ingepland — bot verstuurt binnen 1 minuut!");
-      setAnnTitle(""); setAnnMessage(""); setAnnImage(""); setAnnTag("none");
+      setAnnTitle(""); setAnnMessage(""); setAnnImage(""); setAnnTags([]);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -2601,21 +2601,26 @@ const AdminPage = () => {
                       {annImage && <img src={annImage} alt="preview" className="mt-2 h-24 object-contain rounded-md border border-border bg-secondary/50" onError={() => setAnnImage("")} />}
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Tag / Mention</label>
-                      <select
-                        value={annTag}
-                        onChange={e => setAnnTag(e.target.value)}
-                        className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary"
-                      >
-                        <option value="none">Geen tag</option>
-                        <option value="everyone">@everyone</option>
-                        <option value="here">@here</option>
-                        <optgroup label="Teams">
-                          {(teams as any[])?.map((t: any) => (
-                            <option key={t.id} value={`team_${t.id}`}>@{t.name}</option>
-                          ))}
-                        </optgroup>
-                      </select>
+                      <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Tags / Mentions <span className="text-xs text-muted-foreground font-normal">(meerdere mogelijk)</span></label>
+                      <div className="space-y-2 p-3 rounded-md border border-border bg-secondary/30">
+                        {[
+                          { value: "everyone", label: "@everyone" },
+                          { value: "here", label: "@here" },
+                          ...((teams as any[])?.map((t: any) => ({ value: `team_${t.id}`, label: `@${t.name}` })) || []),
+                        ].map(opt => (
+                          <label key={opt.value} className="flex items-center gap-2 cursor-pointer text-sm">
+                            <input
+                              type="checkbox"
+                              checked={annTags.includes(opt.value)}
+                              onChange={e => setAnnTags(prev =>
+                                e.target.checked ? [...prev, opt.value] : prev.filter(t => t !== opt.value)
+                              )}
+                              className="rounded border-border"
+                            />
+                            {opt.label}
+                          </label>
+                        ))}
+                      </div>
                     </div>
                     <button
                       onClick={() => sendAnnouncement.mutate()}

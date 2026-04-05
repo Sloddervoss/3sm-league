@@ -371,14 +371,18 @@ async function checkAnnouncements() {
   const { data: teams } = await supabase.from('teams').select('id, name, discord_role_id');
 
   for (const ann of data) {
-    let mentionText = '';
-    if (ann.tag === 'everyone') mentionText = '@everyone';
-    else if (ann.tag === 'here') mentionText = '@here';
-    else if (ann.tag?.startsWith('team_')) {
-      const teamId = ann.tag.replace('team_', '');
-      const team = teams?.find(t => t.id === teamId);
-      if (team?.discord_role_id) mentionText = `<@&${team.discord_role_id}>`;
-    }
+    const tags = (ann.tag || 'none').split(',').map(t => t.trim()).filter(t => t && t !== 'none');
+    const mentions = tags.map(tag => {
+      if (tag === 'everyone') return '@everyone';
+      if (tag === 'here') return '@here';
+      if (tag.startsWith('team_')) {
+        const teamId = tag.replace('team_', '');
+        const team = teams?.find(t => t.id === teamId);
+        return team?.discord_role_id ? `<@&${team.discord_role_id}>` : null;
+      }
+      return null;
+    }).filter(Boolean);
+    const mentionText = mentions.join(' ');
 
     const embed = {
       color: 0xf97316,
