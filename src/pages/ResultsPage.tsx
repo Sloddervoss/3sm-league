@@ -41,6 +41,20 @@ const ResultsPage = () => {
     },
   });
 
+  const { data: penalties } = useQuery({
+    queryKey: ["all-penalties"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("penalties")
+        .select("race_id, user_id, penalty_type, points_deduction, reason");
+      if (error) throw error;
+      return data as { race_id: string; user_id: string; penalty_type: string; points_deduction: number; reason: string }[];
+    },
+  });
+
+  const getPenalty = (raceId: string, userId: string) =>
+    penalties?.find((p) => p.race_id === raceId && p.user_id === userId) || null;
+
   const getRaceResults = (raceId: string) =>
     (results || [])
       .filter((r: any) => r.race_id === raceId)
@@ -168,7 +182,24 @@ const ResultsPage = () => {
                                   </span>
                                 ) : "-"}
                               </span>
-                              <span className="text-center font-heading font-black">{result.points}</span>
+                              <span className="text-center font-heading font-black flex items-center justify-center gap-1">
+                                {result.points}
+                                {(() => {
+                                  const pen = getPenalty(result.race_id, result.user_id);
+                                  if (!pen || pen.penalty_type === "warning") return null;
+                                  const label = pen.penalty_type === "disqualification" ? "DSQ Steward" : `-${pen.points_deduction} Steward`;
+                                  return (
+                                    <span title={label} className="group relative cursor-default">
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/40 font-bold leading-none">
+                                        {pen.penalty_type === "disqualification" ? "DSQ" : `-${pen.points_deduction}`}
+                                      </span>
+                                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                        {label}
+                                      </span>
+                                    </span>
+                                  );
+                                })()}
+                              </span>
                             </div>
                           ))}
                           </div>
