@@ -429,7 +429,7 @@ async function checkProtests() {
 async function checkAbandonPenalties() {
   const { data, error } = await supabase
     .from('penalties')
-    .select('id, race_id, user_id, points_deduction, races(name), profiles(display_name, iracing_name, discord_id)')
+    .select('id, race_id, user_id, points_deduction, races(name)')
     .eq('source', 'abandon')
     .eq('notified', false);
   if (error) { botLog('[checkAbandonPenalties]', error.message); return; }
@@ -438,9 +438,17 @@ async function checkAbandonPenalties() {
   const channel = await getAankondigingenChannel();
 
   for (const penalty of data) {
-    const driverName = penalty.profiles?.display_name || penalty.profiles?.iracing_name || 'Onbekend';
     const raceName = penalty.races?.name || 'Onbekende race';
     const deduction = penalty.points_deduction || 0;
+
+    // Profiel apart ophalen (user_id → auth.users, geen directe FK naar profiles)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name, iracing_name, discord_id')
+      .eq('user_id', penalty.user_id)
+      .maybeSingle();
+
+    const driverName = profile?.display_name || profile?.iracing_name || 'Onbekend';
 
     const embed = new EmbedBuilder()
       .setColor(0xf97316)
@@ -455,13 +463,9 @@ async function checkAbandonPenalties() {
     }
 
     // Stuur ook een DM als de driver Discord heeft gekoppeld
-    if (penalty.profiles?.discord_id) {
-      try {
-        const member = await client.guilds.cache.first()?.members.fetch(penalty.profiles.discord_id).catch(() => null);
-        if (member) {
-          await member.send({ embeds: [embed] }).catch(() => {});
-        }
-      } catch {}
+    if (profile?.discord_id) {
+      const member = await client.guilds.cache.first()?.members.fetch(profile.discord_id).catch(() => null);
+      if (member) await member.send({ embeds: [embed] }).catch(() => {});
     }
 
     // Markeer als notified in DB
