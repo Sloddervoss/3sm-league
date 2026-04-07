@@ -912,6 +912,8 @@ const AdminPage = () => {
   });
 
   const [abandonPoints, setAbandonPoints] = useState<Record<string, number>>({});
+  const [showAllRaces, setShowAllRaces] = useState(false);
+  const [expandedManageRace, setExpandedManageRace] = useState<string | null>(null);
 
   const markAbandon = useMutation({
     mutationFn: async ({ result, raceName }: { result: any; raceName: string }) => {
@@ -2767,9 +2769,6 @@ const AdminPage = () => {
             )}
 
             {activeTab === "manage_results" && (() => {
-              const [showAllRaces, setShowAllRaces] = useState(false);
-              const [expandedManageRace, setExpandedManageRace] = useState<string | null>(null);
-
               const racesWithDnf = (completedRacesWithResults || []).map((race: any) => {
                 const raceResults = (allResultsForManage || []).filter((r: any) => r.race_id === race.id).sort((a: any, b: any) => a.position - b.position);
                 const maxLaps = Math.max(0, ...raceResults.map((r: any) => r.laps || 0));
