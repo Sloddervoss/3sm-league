@@ -2798,7 +2798,7 @@ const AdminPage = () => {
                                 ) : (
                                   <div className="flex items-center gap-2">
                                     <div className="flex items-center gap-1">
-                                      <span className="text-xs text-muted-foreground">-</span>
+                                      <span className="text-xs text-muted-foreground">straf:</span>
                                       <input
                                         type="number"
                                         min={1}
@@ -2807,7 +2807,10 @@ const AdminPage = () => {
                                         onChange={e => setAbandonPoints(prev => ({ ...prev, [result.id]: parseInt(e.target.value) || 5 }))}
                                         className="w-14 px-2 py-1 rounded border border-border bg-background text-sm text-center"
                                       />
-                                      <span className="text-xs text-muted-foreground">pts</span>
+                                      <span className="text-xs text-muted-foreground">→ wordt</span>
+                                      <span className="text-sm font-heading font-black text-orange-400">
+                                        {Math.max(0, (result.points || 0) - (abandonPoints[result.id] ?? 5))} pts
+                                      </span>
                                     </div>
                                     <button
                                       onClick={() => markAbandon.mutate({ result, raceName: race.name })}
