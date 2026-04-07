@@ -2861,7 +2861,7 @@ const AdminPage = () => {
                                           <button
                                             onClick={() => markNormalDnf.mutate({ result })}
                                             disabled={markNormalDnf.isPending}
-                                            className="px-3 py-1.5 rounded bg-secondary text-muted-foreground border border-border hover:text-foreground text-xs font-bold transition-colors"
+                                            className="px-3 py-1.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 text-xs font-bold transition-colors"
                                           >
                                             ✓ Normale DNF
                                           </button>
