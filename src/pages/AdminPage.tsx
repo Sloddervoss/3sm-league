@@ -897,7 +897,7 @@ const AdminPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("race_results")
-        .select("id, race_id, user_id, position, points, dnf, profiles(display_name, iracing_name)");
+        .select("id, race_id, user_id, position, points, dnf, laps, profiles(display_name, iracing_name)");
       if (error) throw error;
       return data || [];
     },
@@ -1175,7 +1175,7 @@ const AdminPage = () => {
         if (!profile) { toast.error(`Driver niet gevonden: ${row.display_name}`); continue; }
         const pts = (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0);
         const { error } = await supabase.from("race_results").upsert(
-          { race_id: importRaceId, user_id: profile.user_id, position: row.position, points: pts, fastest_lap: row.fastest_lap, laps: row.laps, best_lap: row.best_lap || null, incidents: row.incidents, dnf: false, irating_snapshot: (row as any).new_irating ?? null },
+          { race_id: importRaceId, user_id: profile.user_id, position: row.position, points: pts, fastest_lap: row.fastest_lap, laps: row.laps, best_lap: row.best_lap || null, incidents: row.incidents, dnf: (row as any).dnf ?? false, irating_snapshot: (row as any).new_irating ?? null },
           { onConflict: "race_id,user_id" }
         );
         if (error) throw error;
@@ -2487,6 +2487,7 @@ const AdminPage = () => {
                                     const fastestCustId = validLaps.length
                                       ? validLaps.reduce((a: any, b: any) => a.best_lap_time < b.best_lap_time ? a : b).cust_id
                                       : null;
+                                    const maxLaps = Math.max(...results.map((r: any) => r.laps_complete || 0));
                                     const parsed = results
                                       .sort((a: any, b: any) => a.finish_position - b.finish_position)
                                       .map((r: any) => ({
@@ -2501,6 +2502,7 @@ const AdminPage = () => {
                                         new_license_level: r.new_license_level ?? undefined,
                                         new_license_sub_level: r.new_sub_level ?? undefined,
                                         car_name: r.car_name || r.livery?.car_name || undefined,
+                                        dnf: (r.reason_out_id !== undefined && r.reason_out_id !== 0) || (r.reason_out && r.reason_out !== "Running") || ((r.laps_complete || 0) < maxLaps),
                                       }))
                                       .filter((r: any) => r.display_name);
                                     if (!parsed.length) {
@@ -2771,7 +2773,8 @@ const AdminPage = () => {
                 <div className="space-y-4">
                   {(completedRacesWithResults || []).map((race: any) => {
                     const raceResults = (allResultsForManage || []).filter((r: any) => r.race_id === race.id).sort((a: any, b: any) => a.position - b.position);
-                    const dnfResults = raceResults.filter((r: any) => r.dnf);
+                    const maxLaps = Math.max(...raceResults.map((r: any) => r.laps || 0));
+                    const dnfResults = raceResults.filter((r: any) => r.dnf || (maxLaps > 0 && (r.laps || 0) < maxLaps));
                     if (!dnfResults.length) return null;
                     return (
                       <div key={race.id} className="bg-card border border-border rounded-lg overflow-hidden">
@@ -2822,9 +2825,11 @@ const AdminPage = () => {
                       </div>
                     );
                   })}
-                  {(completedRacesWithResults || []).every((race: any) =>
-                    (allResultsForManage || []).filter((r: any) => r.race_id === race.id && r.dnf).length === 0
-                  ) && (
+                  {(completedRacesWithResults || []).every((race: any) => {
+                    const rr = (allResultsForManage || []).filter((r: any) => r.race_id === race.id);
+                    const ml = Math.max(...rr.map((r: any) => r.laps || 0));
+                    return rr.filter((r: any) => r.dnf || (ml > 0 && (r.laps || 0) < ml)).length === 0;
+                  }) && (
                     <div className="text-center py-16 text-muted-foreground">
                       <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-30" />
                       <p className="font-heading font-bold">GEEN DNF DRIVERS</p>
