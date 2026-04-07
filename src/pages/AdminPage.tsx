@@ -2766,82 +2766,115 @@ const AdminPage = () => {
               </div>
             )}
 
-            {activeTab === "manage_results" && (
-              <div>
-                <h2 className="font-heading text-2xl font-black mb-6">UITSLAG BEHEER</h2>
-                <p className="text-sm text-muted-foreground mb-6">Markeer DNF drivers als abandon om automatisch een straf + Discord melding te sturen.</p>
-                <div className="space-y-4">
-                  {(completedRacesWithResults || []).map((race: any) => {
-                    const raceResults = (allResultsForManage || []).filter((r: any) => r.race_id === race.id).sort((a: any, b: any) => a.position - b.position);
-                    const maxLaps = Math.max(...raceResults.map((r: any) => r.laps || 0));
-                    const dnfResults = raceResults.filter((r: any) => r.dnf || (maxLaps > 0 && (r.laps || 0) < maxLaps));
-                    if (!dnfResults.length) return null;
-                    return (
-                      <div key={race.id} className="bg-card border border-border rounded-lg overflow-hidden">
-                        <div className="px-5 py-3 bg-secondary/30 border-b border-border">
-                          <h3 className="font-heading font-bold">{race.name}</h3>
-                          <p className="text-xs text-muted-foreground">{race.track} · {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" })}</p>
-                        </div>
-                        <div className="divide-y divide-border/40">
-                          {dnfResults.map((result: any) => {
-                            const isAbandoned = (existingAbandonPenalties || []).some((p: any) => p.race_id === result.race_id && p.user_id === result.user_id);
-                            const driverName = result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
-                            return (
-                              <div key={result.id} className="px-5 py-3 flex items-center gap-4">
-                                <span className="font-heading font-black text-red-400 w-12">DNF</span>
-                                <span className="flex-1 font-heading font-bold text-sm">{driverName}</span>
-                                <span className="text-sm text-muted-foreground">{result.points} pts</span>
-                                {isAbandoned ? (
-                                  <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold flex items-center gap-1">
-                                    <AlertTriangle className="w-3 h-3" /> Abandon
-                                  </span>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-xs text-muted-foreground">straf:</span>
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={50}
-                                        value={abandonPoints[result.id] ?? 5}
-                                        onChange={e => setAbandonPoints(prev => ({ ...prev, [result.id]: parseInt(e.target.value) || 5 }))}
-                                        className="w-14 px-2 py-1 rounded border border-border bg-background text-sm text-center"
-                                      />
-                                      <span className="text-xs text-muted-foreground">→ wordt</span>
-                                      <span className="text-sm font-heading font-black text-orange-400">
-                                        {(result.points || 0) - (abandonPoints[result.id] ?? 5)} pts
-                                      </span>
-                                    </div>
-                                    <button
-                                      onClick={() => markAbandon.mutate({ result, raceName: race.name })}
-                                      disabled={markAbandon.isPending}
-                                      className="px-3 py-1.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 text-xs font-bold transition-colors flex items-center gap-1"
-                                    >
-                                      <AlertTriangle className="w-3 h-3" /> Abandon
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {(completedRacesWithResults || []).every((race: any) => {
-                    const rr = (allResultsForManage || []).filter((r: any) => r.race_id === race.id);
-                    const ml = Math.max(...rr.map((r: any) => r.laps || 0));
-                    return rr.filter((r: any) => r.dnf || (ml > 0 && (r.laps || 0) < ml)).length === 0;
-                  }) && (
+            {activeTab === "manage_results" && (() => {
+              const [showAllRaces, setShowAllRaces] = useState(false);
+              const [expandedManageRace, setExpandedManageRace] = useState<string | null>(null);
+
+              const racesWithDnf = (completedRacesWithResults || []).map((race: any) => {
+                const raceResults = (allResultsForManage || []).filter((r: any) => r.race_id === race.id).sort((a: any, b: any) => a.position - b.position);
+                const maxLaps = Math.max(0, ...raceResults.map((r: any) => r.laps || 0));
+                const dnfResults = raceResults.filter((r: any) => r.dnf || (maxLaps > 0 && (r.laps || 0) < maxLaps));
+                const openCount = dnfResults.filter((r: any) => !(existingAbandonPenalties || []).some((p: any) => p.race_id === r.race_id && p.user_id === r.user_id)).length;
+                return { race, dnfResults, openCount };
+              }).filter(({ dnfResults }) => dnfResults.length > 0);
+
+              const visibleRaces = showAllRaces ? racesWithDnf : racesWithDnf.filter(({ openCount }) => openCount > 0);
+
+              return (
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="font-heading text-2xl font-black">UITSLAG BEHEER</h2>
+                      <p className="text-sm text-muted-foreground mt-1">Markeer DNF drivers als abandon voor automatische straf + Discord melding.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowAllRaces(v => !v)}
+                      className="text-xs px-3 py-1.5 rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showAllRaces ? "Alleen open" : `Toon alles (${racesWithDnf.length})`}
+                    </button>
+                  </div>
+
+                  {visibleRaces.length === 0 ? (
                     <div className="text-center py-16 text-muted-foreground">
                       <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                      <p className="font-heading font-bold">GEEN DNF DRIVERS</p>
-                      <p className="text-sm mt-1">Er zijn geen DNF's in de voltooide races.</p>
+                      <p className="font-heading font-bold">ALLES AFGEHANDELD</p>
+                      <p className="text-sm mt-1">Geen openstaande DNF's om te beoordelen.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {visibleRaces.map(({ race, dnfResults, openCount }) => {
+                        const isExpanded = expandedManageRace === race.id;
+                        return (
+                          <div key={race.id} className="bg-card border border-border rounded-lg overflow-hidden">
+                            <button
+                              onClick={() => setExpandedManageRace(isExpanded ? null : race.id)}
+                              className="w-full px-5 py-3 flex items-center gap-3 hover:bg-secondary/30 transition-colors text-left"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <span className="font-heading font-bold">{race.name}</span>
+                                <span className="text-xs text-muted-foreground ml-3">{race.track} · {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" })}</span>
+                              </div>
+                              {openCount > 0
+                                ? <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold shrink-0">{openCount} open</span>
+                                : <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 font-bold shrink-0">✓ afgehandeld</span>
+                              }
+                              {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground rotate-180 transition-transform shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform shrink-0" />}
+                            </button>
+
+                            {isExpanded && (
+                              <div className="border-t border-border divide-y divide-border/40">
+                                {dnfResults.map((result: any) => {
+                                  const isAbandoned = (existingAbandonPenalties || []).some((p: any) => p.race_id === result.race_id && p.user_id === result.user_id);
+                                  const driverName = result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
+                                  return (
+                                    <div key={result.id} className="px-5 py-3 flex items-center gap-4 flex-wrap">
+                                      <span className="font-heading font-black text-red-400 w-12">DNF</span>
+                                      <span className="flex-1 font-heading font-bold text-sm">{driverName}</span>
+                                      <span className="text-sm text-muted-foreground">{result.points} pts · {result.laps} ronden</span>
+                                      {isAbandoned ? (
+                                        <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold flex items-center gap-1">
+                                          <AlertTriangle className="w-3 h-3" /> Abandon
+                                        </span>
+                                      ) : (
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs text-muted-foreground">straf:</span>
+                                            <input
+                                              type="number"
+                                              min={1}
+                                              max={50}
+                                              value={abandonPoints[result.id] ?? 5}
+                                              onChange={e => setAbandonPoints(prev => ({ ...prev, [result.id]: parseInt(e.target.value) || 5 }))}
+                                              className="w-14 px-2 py-1 rounded border border-border bg-background text-sm text-center"
+                                            />
+                                            <span className="text-xs text-muted-foreground">→ wordt</span>
+                                            <span className="text-sm font-heading font-black text-orange-400">
+                                              {(result.points || 0) - (abandonPoints[result.id] ?? 5)} pts
+                                            </span>
+                                          </div>
+                                          <button
+                                            onClick={() => markAbandon.mutate({ result, raceName: race.name })}
+                                            disabled={markAbandon.isPending}
+                                            className="px-3 py-1.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 text-xs font-bold transition-colors flex items-center gap-1"
+                                          >
+                                            <AlertTriangle className="w-3 h-3" /> Abandon
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
           </div>
         </section>
