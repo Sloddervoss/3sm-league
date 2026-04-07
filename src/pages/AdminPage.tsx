@@ -916,7 +916,7 @@ const AdminPage = () => {
   const markAbandon = useMutation({
     mutationFn: async ({ result, raceName }: { result: any; raceName: string }) => {
       const deduction = abandonPoints[result.id] ?? 5;
-      const newPoints = (result.points || 0) - deduction;
+      const newPoints = (result.points || 0) - deduction; // mag negatief zijn
 
       const { error: raceErr } = await supabase
         .from("race_results")
@@ -2809,7 +2809,7 @@ const AdminPage = () => {
                                       />
                                       <span className="text-xs text-muted-foreground">→ wordt</span>
                                       <span className="text-sm font-heading font-black text-orange-400">
-                                        {Math.max(0, (result.points || 0) - (abandonPoints[result.id] ?? 5))} pts
+                                        {(result.points || 0) - (abandonPoints[result.id] ?? 5)} pts
                                       </span>
                                     </div>
                                     <button
