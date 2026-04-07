@@ -3,14 +3,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Trophy, Calendar, Trash2, Settings, Users, Car, Shield, BarChart2, Upload, Save, FileText, X, Check, ImagePlus, Clock, Pencil, MapPin, Flag, CloudSun, Gauge, Timer, ChevronDown } from "lucide-react";
+import { Plus, Trophy, Calendar, Trash2, Settings, Users, Car, Shield, BarChart2, Upload, Save, FileText, X, Check, ImagePlus, Clock, Pencil, MapPin, Flag, CloudSun, Gauge, Timer, ChevronDown, AlertTriangle } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import { Navigate } from "react-router-dom";
 
-type AdminTab = "overview" | "seasons" | "teams" | "results" | "points" | "drivers" | "announcements";
+type AdminTab = "overview" | "seasons" | "teams" | "results" | "points" | "drivers" | "announcements" | "manage_results";
 
 const DEFAULT_POINTS = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
@@ -879,6 +879,72 @@ const AdminPage = () => {
     },
   });
 
+  const { data: completedRacesWithResults } = useQuery({
+    queryKey: ["completed-races-manage"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("races")
+        .select("id, name, track, race_date")
+        .eq("status", "completed")
+        .order("race_date", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: allResultsForManage } = useQuery({
+    queryKey: ["all-results-manage"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("race_results")
+        .select("id, race_id, user_id, position, points, dnf, profiles(display_name, iracing_name)");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: existingAbandonPenalties } = useQuery({
+    queryKey: ["abandon-penalties"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("penalties").select("race_id, user_id").eq("source", "abandon");
+      return (data || []) as { race_id: string; user_id: string }[];
+    },
+  });
+
+  const [abandonPoints, setAbandonPoints] = useState<Record<string, number>>({});
+
+  const markAbandon = useMutation({
+    mutationFn: async ({ result, raceName }: { result: any; raceName: string }) => {
+      const deduction = abandonPoints[result.id] ?? 5;
+      const newPoints = (result.points || 0) - deduction;
+
+      const { error: raceErr } = await supabase
+        .from("race_results")
+        .update({ points: newPoints })
+        .eq("id", result.id);
+      if (raceErr) throw raceErr;
+
+      const { error: penErr } = await (supabase as any).from("penalties").insert({
+        race_id: result.race_id,
+        user_id: result.user_id,
+        penalty_type: "points_deduction",
+        points_deduction: deduction,
+        reason: "Race vroegtijdig verlaten zonder geldige reden.",
+        applied_by: user!.id,
+        source: "abandon",
+        notified: false,
+      });
+      if (penErr) throw penErr;
+    },
+    onSuccess: () => {
+      toast.success("Abandon straf toegepast, Discord melding volgt.");
+      queryClient.invalidateQueries({ queryKey: ["all-results-manage"] });
+      queryClient.invalidateQueries({ queryKey: ["abandon-penalties"] });
+      queryClient.invalidateQueries({ queryKey: ["all-results-with-profiles"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const createLeague = useMutation({
     mutationFn: async () => {
       const { data: league, error } = await supabase
@@ -1212,6 +1278,7 @@ const AdminPage = () => {
     { id: "results", label: "Resultaten", icon: Upload },
     { id: "points", label: "Punten", icon: Shield },
     { id: "announcements", label: "Aankondigingen", icon: Flag },
+    { id: "manage_results", label: "Uitslag Beheer", icon: AlertTriangle },
   ];
 
   return (
@@ -2693,6 +2760,77 @@ const AdminPage = () => {
                       {sendAnnouncement.isPending ? "Versturen..." : "Verstuur aankondiging"}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "manage_results" && (
+              <div>
+                <h2 className="font-heading text-2xl font-black mb-6">UITSLAG BEHEER</h2>
+                <p className="text-sm text-muted-foreground mb-6">Markeer DNF drivers als abandon om automatisch een straf + Discord melding te sturen.</p>
+                <div className="space-y-4">
+                  {(completedRacesWithResults || []).map((race: any) => {
+                    const raceResults = (allResultsForManage || []).filter((r: any) => r.race_id === race.id).sort((a: any, b: any) => a.position - b.position);
+                    const dnfResults = raceResults.filter((r: any) => r.dnf);
+                    if (!dnfResults.length) return null;
+                    return (
+                      <div key={race.id} className="bg-card border border-border rounded-lg overflow-hidden">
+                        <div className="px-5 py-3 bg-secondary/30 border-b border-border">
+                          <h3 className="font-heading font-bold">{race.name}</h3>
+                          <p className="text-xs text-muted-foreground">{race.track} · {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" })}</p>
+                        </div>
+                        <div className="divide-y divide-border/40">
+                          {dnfResults.map((result: any) => {
+                            const isAbandoned = (existingAbandonPenalties || []).some((p: any) => p.race_id === result.race_id && p.user_id === result.user_id);
+                            const driverName = result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
+                            return (
+                              <div key={result.id} className="px-5 py-3 flex items-center gap-4">
+                                <span className="font-heading font-black text-red-400 w-12">DNF</span>
+                                <span className="flex-1 font-heading font-bold text-sm">{driverName}</span>
+                                <span className="text-sm text-muted-foreground">{result.points} pts</span>
+                                {isAbandoned ? (
+                                  <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" /> Abandon
+                                  </span>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs text-muted-foreground">-</span>
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={50}
+                                        value={abandonPoints[result.id] ?? 5}
+                                        onChange={e => setAbandonPoints(prev => ({ ...prev, [result.id]: parseInt(e.target.value) || 5 }))}
+                                        className="w-14 px-2 py-1 rounded border border-border bg-background text-sm text-center"
+                                      />
+                                      <span className="text-xs text-muted-foreground">pts</span>
+                                    </div>
+                                    <button
+                                      onClick={() => markAbandon.mutate({ result, raceName: race.name })}
+                                      disabled={markAbandon.isPending}
+                                      className="px-3 py-1.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 text-xs font-bold transition-colors flex items-center gap-1"
+                                    >
+                                      <AlertTriangle className="w-3 h-3" /> Abandon
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {(completedRacesWithResults || []).every((race: any) =>
+                    (allResultsForManage || []).filter((r: any) => r.race_id === race.id && r.dnf).length === 0
+                  ) && (
+                    <div className="text-center py-16 text-muted-foreground">
+                      <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="font-heading font-bold">GEEN DNF DRIVERS</p>
+                      <p className="text-sm mt-1">Er zijn geen DNF's in de voltooide races.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

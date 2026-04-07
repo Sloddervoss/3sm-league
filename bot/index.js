@@ -425,6 +425,51 @@ async function checkProtests() {
   }
 }
 
+// ── Cron: abandon penalties ───────────────────────────────────────────────────
+async function checkAbandonPenalties() {
+  const { data, error } = await supabase
+    .from('penalties')
+    .select('id, race_id, user_id, points_deduction, races(name), profiles(display_name, iracing_name, discord_id)')
+    .eq('source', 'abandon')
+    .eq('notified', false);
+  if (error) { botLog('[checkAbandonPenalties]', error.message); return; }
+  if (!data?.length) return;
+
+  const channel = await getAankondigingenChannel();
+
+  for (const penalty of data) {
+    const driverName = penalty.profiles?.display_name || penalty.profiles?.iracing_name || 'Onbekend';
+    const raceName = penalty.races?.name || 'Onbekende race';
+    const deduction = penalty.points_deduction || 0;
+
+    const embed = new EmbedBuilder()
+      .setColor(0xf97316)
+      .setTitle(`⚠️ Disciplinaire maatregel — ${raceName}`)
+      .setDescription(`**${driverName}**\n\nReden: Race vroegtijdig verlaten zonder geldige reden.\nStraf: -${deduction} punt${deduction !== 1 ? 'en' : ''}`)
+      .addFields({ name: '⚠️ Let op', value: 'Herhaald gedrag kan leiden tot zwaardere straffen.', inline: false })
+      .setFooter({ text: '3 Stripe Motorsport · Stewards' })
+      .setTimestamp();
+
+    if (channel) {
+      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Abandon melding fout: ${e.message}`));
+    }
+
+    // Stuur ook een DM als de driver Discord heeft gekoppeld
+    if (penalty.profiles?.discord_id) {
+      try {
+        const member = await client.guilds.cache.first()?.members.fetch(penalty.profiles.discord_id).catch(() => null);
+        if (member) {
+          await member.send({ embeds: [embed] }).catch(() => {});
+        }
+      } catch {}
+    }
+
+    // Markeer als notified in DB
+    await supabase.from('penalties').update({ notified: true }).eq('id', penalty.id);
+    botLog(`⚠️ Abandon melding verstuurd: **${driverName}** — ${raceName} (-${deduction}pts)`);
+  }
+}
+
 // ── Cron: aankondigingen ──────────────────────────────────────────────────────
 async function checkAnnouncements() {
   const { data, error } = await supabase
@@ -1131,6 +1176,7 @@ client.once('ready', async () => {
   cron.schedule('* * * * *', () => checkNewRegistrations().catch(e => botLog(`[cron:checkRegistrations] ${e.message}`)));
   cron.schedule('* * * * *', () => checkNewLinks().catch(e => botLog(`[cron:checkLinks] ${e.message}`)));
   cron.schedule('* * * * *', () => checkProtests().catch(e => botLog(`[cron:checkProtests] ${e.message}`)));
+  cron.schedule('* * * * *', () => checkAbandonPenalties().catch(e => botLog(`[cron:checkAbandon] ${e.message}`)));
   // Elke 5 minuten: team rol sync
   cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => botLog(`[cron:syncTeamRoles] ${e.message}`)));
   // Elk uur: kalender update + token cleanup
