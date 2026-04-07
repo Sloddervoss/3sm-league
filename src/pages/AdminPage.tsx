@@ -906,9 +906,30 @@ const AdminPage = () => {
   const { data: existingAbandonPenalties } = useQuery({
     queryKey: ["abandon-penalties"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("penalties").select("race_id, user_id").eq("source", "abandon");
-      return (data || []) as { race_id: string; user_id: string }[];
+      const { data } = await (supabase as any).from("penalties").select("race_id, user_id, source").in("source", ["abandon", "normal_dnf"]);
+      return (data || []) as { race_id: string; user_id: string; source: string }[];
     },
+  });
+
+  const markNormalDnf = useMutation({
+    mutationFn: async ({ result }: { result: any }) => {
+      const { error } = await (supabase as any).from("penalties").insert({
+        race_id: result.race_id,
+        user_id: result.user_id,
+        penalty_type: "warning",
+        points_deduction: 0,
+        reason: "Normale DNF — geen straf.",
+        applied_by: user!.id,
+        source: "normal_dnf",
+        notified: true,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("DNF gemarkeerd als normaal.");
+      queryClient.invalidateQueries({ queryKey: ["abandon-penalties"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const [abandonPoints, setAbandonPoints] = useState<Record<string, number>>({});
@@ -2824,19 +2845,26 @@ const AdminPage = () => {
                             {isExpanded && (
                               <div className="border-t border-border divide-y divide-border/40">
                                 {dnfResults.map((result: any) => {
-                                  const isAbandoned = (existingAbandonPenalties || []).some((p: any) => p.race_id === result.race_id && p.user_id === result.user_id);
+                                  const reviewed = (existingAbandonPenalties || []).find((p: any) => p.race_id === result.race_id && p.user_id === result.user_id);
                                   const driverName = result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
                                   return (
                                     <div key={result.id} className="px-5 py-3 flex items-center gap-4 flex-wrap">
                                       <span className="font-heading font-black text-red-400 w-12">DNF</span>
                                       <span className="flex-1 font-heading font-bold text-sm">{driverName}</span>
                                       <span className="text-sm text-muted-foreground">{result.points} pts · {result.laps} ronden</span>
-                                      {isAbandoned ? (
-                                        <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold flex items-center gap-1">
-                                          <AlertTriangle className="w-3 h-3" /> Abandon
-                                        </span>
+                                      {reviewed ? (
+                                        reviewed.source === "abandon"
+                                          ? <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Abandon</span>
+                                          : <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30 font-bold">✓ Normale DNF</span>
                                       ) : (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <button
+                                            onClick={() => markNormalDnf.mutate({ result })}
+                                            disabled={markNormalDnf.isPending}
+                                            className="px-3 py-1.5 rounded bg-secondary text-muted-foreground border border-border hover:text-foreground text-xs font-bold transition-colors"
+                                          >
+                                            ✓ Normale DNF
+                                          </button>
                                           <div className="flex items-center gap-1">
                                             <span className="text-xs text-muted-foreground">straf:</span>
                                             <input
