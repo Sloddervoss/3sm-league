@@ -1227,6 +1227,22 @@ const AdminPage = () => {
         }
       }
       await supabase.from("races").update({ status: "completed", counts_for_3sr: true }).eq("id", importRaceId);
+
+      // Re-apply existing points_deduction penalties so they aren't wiped by the upsert
+      const { data: existingPenalties } = await (supabase as any)
+        .from("penalties")
+        .select("user_id, points_deduction")
+        .eq("race_id", importRaceId)
+        .eq("penalty_type", "points_deduction");
+      if (existingPenalties?.length) {
+        for (const pen of existingPenalties) {
+          const { data: rr } = await supabase.from("race_results").select("points").eq("race_id", importRaceId).eq("user_id", pen.user_id).maybeSingle();
+          if (rr) {
+            await supabase.from("race_results").update({ points: rr.points - pen.points_deduction }).eq("race_id", importRaceId).eq("user_id", pen.user_id);
+          }
+        }
+      }
+
       await supabase.rpc("recalculate_3sr_for_race", { p_race_id: importRaceId });
       // Auto-fill car_choice in season_registrations (only if not locked)
       const raceForCar = (allRaces || []).find((r: any) => r.id === importRaceId);
