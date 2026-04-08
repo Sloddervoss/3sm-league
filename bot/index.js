@@ -366,7 +366,7 @@ async function checkNewLinks() {
 async function checkProtests() {
   const { data, error } = await supabase
     .from('protests')
-    .select('id, status, created_at, decided_at, penalty_type, penalty_points, steward_notes, races(name, track), accused:profiles!protests_accused_user_id_fkey(display_name, iracing_name)')
+    .select('id, status, notified, created_at, decided_at, penalty_type, penalty_points, steward_notes, races(name, track), accused:profiles!protests_accused_user_id_fkey(display_name, iracing_name)')
     .order('created_at', { ascending: false })
     .limit(20);
   if (error) { botLog('[checkProtests]', error.message); return; }
