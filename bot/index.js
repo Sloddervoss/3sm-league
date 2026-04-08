@@ -470,7 +470,8 @@ async function checkAbandonPenalties() {
     }
 
     // Markeer als notified in DB
-    await supabase.from('penalties').update({ notified: true }).eq('id', penalty.id);
+    const { error: updErr } = await supabase.from('penalties').update({ notified: true }).eq('id', penalty.id);
+    if (updErr) { botLog(`❌ Abandon notified update fout: ${updErr.message}`); continue; }
     botLog(`⚠️ Abandon melding verstuurd: **${driverName}** — ${raceName} (-${deduction}pts)`);
   }
 }
