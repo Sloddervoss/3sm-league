@@ -432,7 +432,8 @@ async function checkAbandonPenalties() {
     .from('penalties')
     .select('id, race_id, user_id, points_deduction, races(name)')
     .eq('source', 'abandon')
-    .eq('notified', false);
+    .eq('notified', false)
+    .eq('revoked', false); // nooit sturen als al ingetrokken vóór versturen
   if (error) { botLog('[checkAbandonPenalties]', error.message); return; }
   if (!data?.length) return;
 
@@ -459,8 +460,12 @@ async function checkAbandonPenalties() {
       .setFooter({ text: '3 Stripe Motorsport · Stewards' })
       .setTimestamp();
 
+    // Verstuur naar kanaal en sla message ID op
+    let messageId = null;
     if (channel) {
-      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Abandon melding fout: ${e.message}`));
+      const msg = await channel.send({ embeds: [embed] }).catch(e => { botLog(`❌ Abandon melding fout: ${e.message}`); return null; });
+      if (!msg) continue; // sturen mislukt, niet als notified markeren anders spam
+      messageId = msg.id;
     }
 
     // Stuur ook een DM als de driver Discord heeft gekoppeld
@@ -469,10 +474,58 @@ async function checkAbandonPenalties() {
       if (member) await member.send({ embeds: [embed] }).catch(() => {});
     }
 
-    // Markeer als notified in DB
-    const { error: updErr } = await supabase.from('penalties').update({ notified: true }).eq('id', penalty.id);
+    // Markeer als notified + sla message ID op voor eventuele correctie later
+    const { error: updErr } = await supabase.from('penalties')
+      .update({ notified: true, discord_message_id: messageId })
+      .eq('id', penalty.id);
     if (updErr) { botLog(`❌ Abandon notified update fout: ${updErr.message}`); continue; }
     botLog(`⚠️ Abandon melding verstuurd: **${driverName}** — ${raceName} (-${deduction}pts)`);
+  }
+}
+
+// ── Cron: abandon correcties (na misclick undo) ───────────────────────────────
+async function checkAbandonCorrections() {
+  const { data, error } = await supabase
+    .from('penalties')
+    .select('id, user_id, discord_message_id, races(name)')
+    .eq('source', 'abandon')
+    .eq('revoked', true)
+    .eq('notified', true)
+    .eq('correction_sent', false);
+  if (error) { botLog('[checkAbandonCorrections]', error.message); return; }
+  if (!data?.length) return;
+
+  const channel = await getAankondigingenChannel();
+
+  for (const penalty of data) {
+    const raceName = penalty.races?.name || 'Onbekende race';
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name, iracing_name')
+      .eq('user_id', penalty.user_id)
+      .maybeSingle();
+    const driverName = profile?.display_name || profile?.iracing_name || 'Onbekend';
+
+    // Verwijder origineel bericht als we het ID hebben
+    if (penalty.discord_message_id && channel) {
+      await channel.messages.delete(penalty.discord_message_id).catch(() => {});
+    }
+
+    // Stuur correctiebericht
+    if (channel) {
+      const embed = new EmbedBuilder()
+        .setColor(0x6b7280)
+        .setTitle(`✏️ Correctie — ${raceName}`)
+        .setDescription(`De eerder gemelde disciplinaire maatregel voor **${driverName}** is ingetrokken wegens een vergissing. Onze excuses.`)
+        .setFooter({ text: '3 Stripe Motorsport · Stewards' })
+        .setTimestamp();
+      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Correctie melding fout: ${e.message}`));
+    }
+
+    const { error: updErr } = await supabase.from('penalties').update({ correction_sent: true }).eq('id', penalty.id);
+    if (updErr) { botLog(`❌ Correctie update fout: ${updErr.message}`); continue; }
+    botLog(`✏️ Correctie verstuurd: **${driverName}** — ${raceName}`);
   }
 }
 
@@ -1183,6 +1236,7 @@ client.once('ready', async () => {
   cron.schedule('* * * * *', () => checkNewLinks().catch(e => botLog(`[cron:checkLinks] ${e.message}`)));
   cron.schedule('* * * * *', () => checkProtests().catch(e => botLog(`[cron:checkProtests] ${e.message}`)));
   cron.schedule('* * * * *', () => checkAbandonPenalties().catch(e => botLog(`[cron:checkAbandon] ${e.message}`)));
+  cron.schedule('* * * * *', () => checkAbandonCorrections().catch(e => botLog(`[cron:checkAbandonCorrections] ${e.message}`)));
   // Elke 5 minuten: team rol sync
   cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => botLog(`[cron:syncTeamRoles] ${e.message}`)));
   // Elk uur: kalender update + token cleanup
