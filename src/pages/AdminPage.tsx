@@ -2383,7 +2383,7 @@ const AdminPage = () => {
                     {existingImportResults && existingImportResults.length > 0 && (
                       <div className="mt-3 p-3 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-sm text-yellow-400">
                         <span className="font-bold">⚠ Deze race heeft al {existingImportResults.length} resultaten.</span>
-                        <span className="ml-1 opacity-80">Importeren overschrijft bestaande data. Handmatige penalties (abandon) blijven staan maar punten worden herberekend.</span>
+                        <span className="ml-1 opacity-80">Importeren overschrijft bestaande data. Bestaande straffen worden automatisch hertoegepast.</span>
                       </div>
                     )}
                   </div>
