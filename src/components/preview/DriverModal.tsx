@@ -73,6 +73,7 @@ const DriverModal = ({ driver }: Props) => {
 
   const { data: raceResults = [] } = useQuery({
     queryKey: ["driver-modal-results", driver.user_id],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from("race_results")

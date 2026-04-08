@@ -15,6 +15,7 @@ const DriversPage = () => {
 
   const { data: profiles = [], isLoading } = useQuery({
     queryKey: ["drivers"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase.from("confirmed_profiles").select("*");
       return data || [];
@@ -23,6 +24,7 @@ const DriversPage = () => {
 
   const { data: stats } = useQuery({
     queryKey: ["driver-stats"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from("race_results")
@@ -42,6 +44,7 @@ const DriversPage = () => {
 
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data } = await (supabase as any).from("teams").select("id, name, color");
       return data || [];
