@@ -949,6 +949,9 @@ const AdminPage = () => {
         .eq("id", result.id);
       if (raceErr) throw raceErr;
 
+      // Herbereken 3SR standings voor deze race
+      await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
+
       const { error: penErr } = await (supabase as any).from("penalties").insert({
         race_id: result.race_id,
         user_id: result.user_id,
@@ -2416,38 +2419,55 @@ const AdminPage = () => {
                       </div>
 
                       {/* Preview of parsed rows */}
-                      {importRows.length > 0 && importRows[0].display_name && (
-                        <div className="mb-5">
-                          <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} drivers geladen — preview:</div>
-                          <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
-                            <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
-                              <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span className="text-center">FL</span>
+                      {importRows.length > 0 && importRows[0].display_name && (() => {
+                        const unmatched = importRows.filter((row) => !profiles?.find((p: any) =>
+                          (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
+                          (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
+                        ));
+                        return (
+                          <div className="mb-5">
+                            <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} drivers geladen — preview:</div>
+                            <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
+                              <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
+                                <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span className="text-center">FL</span>
+                              </div>
+                              {importRows.slice(0, 10).map((row, i) => {
+                                const matched = profiles?.find((p: any) =>
+                                  (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
+                                  (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
+                                );
+                                return (
+                                  <div key={i} className={`grid grid-cols-[3rem_1fr_4rem_8rem_4rem_5rem] gap-2 px-3 py-2 items-center border-b border-border/30 text-sm ${matched ? "" : "opacity-60"}`}>
+                                    <span className="font-heading font-bold">{row.position}</span>
+                                    <div>
+                                      <span>{row.display_name}</span>
+                                      {matched ? <span className="ml-2 text-[10px] text-green-400 font-bold">✓ gevonden</span> : <span className="ml-2 text-[10px] text-red-400 font-bold">✗ niet gevonden</span>}
+                                    </div>
+                                    <span className="text-muted-foreground">{row.laps}</span>
+                                    <span className="font-mono text-muted-foreground text-xs">{row.best_lap || "—"}</span>
+                                    <span className="text-muted-foreground">{row.incidents}x</span>
+                                    <div className="flex items-center justify-center">
+                                      <input type="checkbox" checked={row.fastest_lap} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], fastest_lap: e.target.checked }; setImportRows(u); }} className="w-4 h-4 accent-primary cursor-pointer" />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {importRows.length > 10 && <div className="px-3 py-2 text-xs text-muted-foreground">...en {importRows.length - 10} meer</div>}
                             </div>
-                            {importRows.slice(0, 10).map((row, i) => {
-                              const matched = profiles?.find((p: any) =>
-                                (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
-                                (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
-                              );
-                              return (
-                                <div key={i} className={`grid grid-cols-[3rem_1fr_4rem_8rem_4rem_5rem] gap-2 px-3 py-2 items-center border-b border-border/30 text-sm ${matched ? "" : "opacity-60"}`}>
-                                  <span className="font-heading font-bold">{row.position}</span>
-                                  <div>
-                                    <span>{row.display_name}</span>
-                                    {matched ? <span className="ml-2 text-[10px] text-green-400 font-bold">✓ gevonden</span> : <span className="ml-2 text-[10px] text-red-400 font-bold">✗ niet gevonden</span>}
-                                  </div>
-                                  <span className="text-muted-foreground">{row.laps}</span>
-                                  <span className="font-mono text-muted-foreground text-xs">{row.best_lap || "—"}</span>
-                                  <span className="text-muted-foreground">{row.incidents}x</span>
-                                  <div className="flex items-center justify-center">
-                                    <input type="checkbox" checked={row.fastest_lap} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], fastest_lap: e.target.checked }; setImportRows(u); }} className="w-4 h-4 accent-primary cursor-pointer" />
-                                  </div>
+                            {unmatched.length > 0 && (
+                              <div className="mt-3 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-sm">
+                                <span className="font-bold text-red-400">⚠ {unmatched.length} driver{unmatched.length !== 1 ? "s" : ""} niet gevonden</span>
+                                <span className="text-muted-foreground ml-2">— worden overgeslagen bij import:</span>
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {unmatched.map((row, i) => (
+                                    <span key={i} className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/20">{row.display_name}</span>
+                                  ))}
                                 </div>
-                              );
-                            })}
-                            {importRows.length > 10 && <div className="px-3 py-2 text-xs text-muted-foreground">...en {importRows.length - 10} meer</div>}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -2553,40 +2573,58 @@ const AdminPage = () => {
                       </div>
 
                       {/* Preview of parsed rows */}
-                      {importRows.length > 0 && importRows[0].display_name && (
-                        <div className="mb-5">
-                          <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} drivers geladen — preview:</div>
-                          <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
-                            <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
-                              <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span>iRating</span><span className="text-center">FL</span>
+                      {importRows.length > 0 && importRows[0].display_name && (() => {
+                        const unmatched = importRows.filter((row) => !profiles?.find((p: any) =>
+                          (p.iracing_cust_id && (row as any).iracing_cust_id && String(p.iracing_cust_id) === String((row as any).iracing_cust_id)) ||
+                          (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
+                          (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
+                        ));
+                        return (
+                          <div className="mb-5">
+                            <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} drivers geladen — preview:</div>
+                            <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
+                              <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
+                                <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span>iRating</span><span className="text-center">FL</span>
+                              </div>
+                              {importRows.slice(0, 10).map((row, i) => {
+                                const matched = profiles?.find((p: any) =>
+                                  (p.iracing_cust_id && (row as any).iracing_cust_id && String(p.iracing_cust_id) === String((row as any).iracing_cust_id)) ||
+                                  (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
+                                  (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
+                                );
+                                return (
+                                  <div key={i} className={`grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 items-center border-b border-border/30 text-sm ${matched ? "" : "opacity-60"}`}>
+                                    <span className="font-heading font-bold">{row.position}</span>
+                                    <div>
+                                      <span>{row.display_name}</span>
+                                      {matched ? <span className="ml-2 text-[10px] text-green-400 font-bold">✓ gevonden</span> : <span className="ml-2 text-[10px] text-red-400 font-bold">✗ niet gevonden</span>}
+                                    </div>
+                                    <span className="text-muted-foreground">{row.laps}</span>
+                                    <span className="font-mono text-muted-foreground text-xs">{row.best_lap || "—"}</span>
+                                    <span className="text-muted-foreground">{row.incidents}x</span>
+                                    <span className="text-purple-400 font-bold text-xs">{(row as any).new_irating ?? "—"}</span>
+                                    <div className="flex items-center justify-center">
+                                      <input type="checkbox" checked={row.fastest_lap} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], fastest_lap: e.target.checked }; setImportRows(u); }} className="w-4 h-4 accent-primary cursor-pointer" />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {importRows.length > 10 && <div className="px-3 py-2 text-xs text-muted-foreground">...en {importRows.length - 10} meer</div>}
                             </div>
-                            {importRows.slice(0, 10).map((row, i) => {
-                              const matched = profiles?.find((p: any) =>
-                                (p.iracing_cust_id && row.iracing_cust_id && String(p.iracing_cust_id) === String(row.iracing_cust_id)) ||
-                                (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
-                                (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
-                              );
-                              return (
-                                <div key={i} className={`grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 items-center border-b border-border/30 text-sm ${matched ? "" : "opacity-60"}`}>
-                                  <span className="font-heading font-bold">{row.position}</span>
-                                  <div>
-                                    <span>{row.display_name}</span>
-                                    {matched ? <span className="ml-2 text-[10px] text-green-400 font-bold">✓ gevonden</span> : <span className="ml-2 text-[10px] text-red-400 font-bold">✗ niet gevonden</span>}
-                                  </div>
-                                  <span className="text-muted-foreground">{row.laps}</span>
-                                  <span className="font-mono text-muted-foreground text-xs">{row.best_lap || "—"}</span>
-                                  <span className="text-muted-foreground">{row.incidents}x</span>
-                                  <span className="text-purple-400 font-bold text-xs">{(row as any).new_irating ?? "—"}</span>
-                                  <div className="flex items-center justify-center">
-                                    <input type="checkbox" checked={row.fastest_lap} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], fastest_lap: e.target.checked }; setImportRows(u); }} className="w-4 h-4 accent-primary cursor-pointer" />
-                                  </div>
+                            {unmatched.length > 0 && (
+                              <div className="mt-3 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-sm">
+                                <span className="font-bold text-red-400">⚠ {unmatched.length} driver{unmatched.length !== 1 ? "s" : ""} niet gevonden</span>
+                                <span className="text-muted-foreground ml-2">— worden overgeslagen bij import:</span>
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {unmatched.map((row, i) => (
+                                    <span key={i} className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/20">{row.display_name}</span>
+                                  ))}
                                 </div>
-                              );
-                            })}
-                            {importRows.length > 10 && <div className="px-3 py-2 text-xs text-muted-foreground">...en {importRows.length - 10} meer</div>}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   )}
 

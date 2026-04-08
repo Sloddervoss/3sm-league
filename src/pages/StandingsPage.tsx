@@ -48,13 +48,15 @@ const StandingsPage = () => {
     queryFn: async () => {
       const { data: res } = await supabase
         .from("race_results")
-        .select("user_id, position, points, race_id, races(league_id)");
+        .select("user_id, position, points, fastest_lap, race_id, races(league_id)");
       const filtered = (res || []).filter((r: any) => r.races?.league_id === selectedId);
-      const map = new Map<string, { total_points: number; wins: number }>();
+      const map = new Map<string, { total_points: number; wins: number; podiums: number; fl: number }>();
       filtered.forEach((r: any) => {
-        const e = map.get(r.user_id) || { total_points: 0, wins: 0 };
+        const e = map.get(r.user_id) || { total_points: 0, wins: 0, podiums: 0, fl: 0 };
         e.total_points += r.points;
         if (r.position === 1) e.wins++;
+        if (r.position <= 3) e.podiums++;
+        if (r.fastest_lap) e.fl++;
         map.set(r.user_id, e);
       });
       const userIds = Array.from(map.keys());
@@ -72,9 +74,16 @@ const StandingsPage = () => {
           display_name: prof?.display_name || "Unknown",
           total_points: stats.total_points,
           wins: stats.wins,
+          podiums: stats.podiums,
+          fl: stats.fl,
           team: team ? { name: team.name, color: team.color } : undefined,
         };
-      }).sort((a: any, b: any) => b.total_points - a.total_points);
+      }).sort((a: any, b: any) =>
+        b.total_points - a.total_points ||
+        b.wins - a.wins ||
+        b.podiums - a.podiums ||
+        b.fl - a.fl
+      );
     },
   });
 

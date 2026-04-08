@@ -389,10 +389,8 @@ async function checkProtests() {
       botLog(`⚖️ Nieuw protest ingediend: **${protest.races?.name}**`);
     }
 
-    // Beslissing melding (naar aankondigingen kanaal, zonder namen van indiener)
-    if ((protest.status === 'resolved' || protest.status === 'dismissed') && !wasSent(`protest_decided_${protest.id}`, 'notified')) {
-      markSent(`protest_decided_${protest.id}`, 'notified');
-
+    // Beslissing melding (naar aankondigingen kanaal) — DB kolom als bron zodat bot herstart geen duplicaat stuurt
+    if ((protest.status === 'resolved' || protest.status === 'dismissed') && !protest.notified) {
       const channel = await getAankondigingenChannel();
       if (!channel) continue;
 
@@ -420,6 +418,9 @@ async function checkProtests() {
       if (protest.steward_notes) embed.addFields({ name: '📋 Motivatie', value: protest.steward_notes, inline: false });
 
       await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Protest beslissing melding fout: ${e.message}`));
+
+      // Markeer als notified in DB zodat herstart geen duplicaat stuurt
+      await supabase.from('protests').update({ notified: true }).eq('id', protest.id);
       botLog(`⚖️ Steward beslissing verstuurd: **${protest.races?.name}** → ${accusedName} — ${penaltyText}`);
     }
   }
