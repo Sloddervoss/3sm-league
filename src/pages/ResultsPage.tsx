@@ -2,7 +2,7 @@ import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
-import { List, Trophy, Clock, AlertTriangle, Flag, ChevronDown, ChevronUp } from "lucide-react";
+import { List, Trophy, AlertTriangle, Flag, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
@@ -13,11 +13,123 @@ const positionColors: Record<number, string> = {
   3: "text-amber-600",
 };
 
+const STALE = 5 * 60 * 1000;
+
+// Separate component so hooks run per expanded race, not for all races at once
+const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
+  const { data: results = [], isLoading } = useQuery({
+    queryKey: ["race-results-detail", raceId],
+    staleTime: STALE,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("race_results")
+        .select("*, profiles(display_name, iracing_name)")
+        .eq("race_id", raceId)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: penalties = [] } = useQuery({
+    queryKey: ["race-penalties-detail", raceId],
+    staleTime: STALE,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("penalties")
+        .select("user_id, penalty_type, points_deduction")
+        .eq("race_id", raceId);
+      return (data || []) as { user_id: string; penalty_type: string; points_deduction: number }[];
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="px-6 py-6 border-t border-border">
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-secondary/30 rounded animate-pulse" />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (!results.length) {
+    return (
+      <div className="px-6 py-8 text-center text-muted-foreground border-t border-border">
+        <p className="text-sm">Geen resultaten beschikbaar voor deze race.</p>
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      className="border-t border-border"
+    >
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2 bg-secondary/30 text-xs font-bold uppercase tracking-wider text-muted-foreground min-w-[500px]">
+          <span>Pos</span>
+          <span>Driver</span>
+          <span className="text-center">Laps</span>
+          <span className="text-center">Best Lap</span>
+          <span className="text-center hidden md:block">Inc.</span>
+          <span className="text-center">Pts</span>
+        </div>
+        {results.map((result: any) => {
+          const pen = penalties.find((p) => p.user_id === result.user_id && p.penalty_type !== "warning") || null;
+          return (
+            <div
+              key={result.id}
+              className={`grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/30 hover:bg-secondary/20 transition-colors min-w-[500px] ${result.position <= 3 ? "racing-stripe-left" : ""}`}
+            >
+              <span className={`font-heading font-black text-lg ${positionColors[result.position] || "text-muted-foreground"}`}>
+                {result.dnf ? "DNF" : result.position}
+              </span>
+              <div>
+                <span className="font-heading font-bold text-sm">
+                  {result.profiles?.display_name || result.profiles?.iracing_name || "Unknown"}
+                </span>
+                {result.fastest_lap && (
+                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold">FL</span>
+                )}
+              </div>
+              <span className="text-center text-sm text-muted-foreground">{result.laps || "-"}</span>
+              <span className="text-center text-sm font-mono text-muted-foreground">{result.best_lap || "-"}</span>
+              <span className="text-center text-sm text-muted-foreground hidden md:block">
+                {result.incidents != null ? (
+                  <span className={result.incidents > 4 ? "text-red-400" : ""}>{result.incidents}x</span>
+                ) : "-"}
+              </span>
+              <span className="flex items-center justify-center gap-0">
+                <span className="w-4 shrink-0" />
+                <span className="font-heading font-black">{result.points}</span>
+                <span className="w-4 shrink-0 flex items-center justify-center">
+                  {pen && (
+                    <span className="group relative cursor-default">
+                      <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
+                      <span className="absolute bottom-full right-0 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                        {pen.penalty_type === "disqualification" ? "DSQ — Steward" : `-${pen.points_deduction}pt — Steward`}
+                      </span>
+                    </span>
+                  )}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+};
+
 const ResultsPage = () => {
   const [expandedRace, setExpandedRace] = useState<string | null>(null);
 
   const { data: races, isLoading } = useQuery({
     queryKey: ["completed-races"],
+    staleTime: STALE,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("races")
@@ -30,42 +142,24 @@ const ResultsPage = () => {
     },
   });
 
-  const { data: results } = useQuery({
-    queryKey: ["all-results-with-profiles"],
+  // Lightweight: only winners for header display
+  const { data: winners } = useQuery({
+    queryKey: ["race-winners"],
+    staleTime: STALE,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("race_results")
-        .select("*, profiles(display_name, iracing_name)");
-      if (error) throw error;
-      return data;
+        .select("race_id, profiles(display_name, iracing_name)")
+        .eq("position", 1);
+      return (data || []) as { race_id: string; profiles: any }[];
     },
   });
-
-  const { data: penalties } = useQuery({
-    queryKey: ["all-penalties"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("penalties")
-        .select("race_id, user_id, penalty_type, points_deduction, reason");
-      if (error) throw error;
-      return data as { race_id: string; user_id: string; penalty_type: string; points_deduction: number; reason: string }[];
-    },
-  });
-
-  const getPenalty = (raceId: string, userId: string) =>
-    penalties?.find((p) => p.race_id === raceId && p.user_id === userId) || null;
-
-  const getRaceResults = (raceId: string) =>
-    (results || [])
-      .filter((r: any) => r.race_id === raceId)
-      .sort((a: any, b: any) => a.position - b.position);
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <StickyRaceBar />
       <main className="pt-[108px]">
-        {/* Header */}
         <section className="py-12 bg-gradient-to-b from-card/50 to-transparent border-b border-border">
           <div className="container mx-auto px-4">
             <div className="flex items-center gap-2 mb-2">
@@ -92,8 +186,7 @@ const ResultsPage = () => {
             ) : (
               <div className="space-y-4">
                 {races.map((race: any, i: number) => {
-                  const raceResults = getRaceResults(race.id);
-                  const winner = raceResults[0];
+                  const winner = winners?.find((w) => w.race_id === race.id);
                   const isExpanded = expandedRace === race.id;
 
                   return (
@@ -104,7 +197,6 @@ const ResultsPage = () => {
                       transition={{ delay: i * 0.04 }}
                       className="bg-card border border-border rounded-lg overflow-hidden"
                     >
-                      {/* Race header */}
                       <button
                         onClick={() => setExpandedRace(isExpanded ? null : race.id)}
                         className="w-full px-6 py-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors text-left"
@@ -116,9 +208,9 @@ const ResultsPage = () => {
                           <h3 className="font-heading font-bold text-lg">{race.name}</h3>
                           <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mt-0.5">
                             <span>{race.track}</span>
-                            {(race as any).leagues?.name && (
+                            {race.leagues?.name && (
                               <span className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">
-                                {(race as any).leagues.name}
+                                {race.leagues.name}
                               </span>
                             )}
                             <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" })}</span>
@@ -140,78 +232,7 @@ const ResultsPage = () => {
                         </div>
                       </button>
 
-                      {/* Expanded results table */}
-                      {isExpanded && raceResults.length > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="border-t border-border"
-                        >
-                          <div className="overflow-x-auto">
-                          <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2 bg-secondary/30 text-xs font-bold uppercase tracking-wider text-muted-foreground min-w-[500px]">
-                            <span>Pos</span>
-                            <span>Driver</span>
-                            <span className="text-center">Laps</span>
-                            <span className="text-center">Best Lap</span>
-                            <span className="text-center hidden md:block">Inc.</span>
-                            <span className="text-center">Pts</span>
-                          </div>
-                          {raceResults.map((result: any) => (
-                            <div
-                              key={result.id}
-                              className={`grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/30 hover:bg-secondary/20 transition-colors min-w-[500px] ${result.position <= 3 ? "racing-stripe-left" : ""}`}
-                            >
-                              <span className={`font-heading font-black text-lg ${positionColors[result.position] || "text-muted-foreground"}`}>
-                                {result.dnf ? "DNF" : result.position}
-                              </span>
-                              <div>
-                                <span className="font-heading font-bold text-sm">
-                                  {result.profiles?.display_name || result.profiles?.iracing_name || "Unknown"}
-                                </span>
-                                {result.fastest_lap && (
-                                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold">FL</span>
-                                )}
-                              </div>
-                              <span className="text-center text-sm text-muted-foreground">{result.laps || "-"}</span>
-                              <span className="text-center text-sm font-mono text-muted-foreground">{result.best_lap || "-"}</span>
-                              <span className="text-center text-sm text-muted-foreground hidden md:block">
-                                {result.incidents != null ? (
-                                  <span className={result.incidents > 4 ? "text-red-400" : ""}>
-                                    {result.incidents}x
-                                  </span>
-                                ) : "-"}
-                              </span>
-                              <span className="flex items-center justify-center gap-0">
-                                <span className="w-4 shrink-0" />
-                                <span className="font-heading font-black">{result.points}</span>
-                                <span className="w-4 shrink-0 flex items-center justify-center">
-                                  {(() => {
-                                    const pen = getPenalty(result.race_id, result.user_id);
-                                    if (!pen || pen.penalty_type === "warning") return null;
-                                    const label = pen.penalty_type === "disqualification" ? "DSQ — Steward" : `-${pen.points_deduction}pt — Steward`;
-                                    return (
-                                      <span className="group relative cursor-default">
-                                        <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
-                                        <span className="absolute bottom-full right-0 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                          {label}
-                                        </span>
-                                      </span>
-                                    );
-                                  })()}
-                                </span>
-                              </span>
-                            </div>
-                          ))}
-                          </div>
-                        </motion.div>
-                      )}
-
-                      {isExpanded && raceResults.length === 0 && (
-                        <div className="px-6 py-8 text-center text-muted-foreground border-t border-border">
-                          <p className="text-sm">Geen resultaten beschikbaar voor deze race.</p>
-                        </div>
-                      )}
+                      {isExpanded && <ExpandedRaceContent raceId={race.id} />}
                     </motion.div>
                   );
                 })}

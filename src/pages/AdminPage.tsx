@@ -894,6 +894,8 @@ const AdminPage = () => {
 
   const { data: allResultsForManage } = useQuery({
     queryKey: ["all-results-manage"],
+    enabled: activeTab === "manage_results",
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("race_results")

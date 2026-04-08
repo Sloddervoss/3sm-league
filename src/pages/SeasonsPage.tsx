@@ -22,10 +22,11 @@ const statusLabels: Record<string, string> = {
 const SeasonsPage = () => {
   const { data: leagues, isLoading } = useQuery({
     queryKey: ["all-leagues"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("leagues")
-        .select("*, races(*)")
+        .select("id, name, description, season, car_class, status, created_at, races(id, name, track, race_date, status, round)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -34,10 +35,11 @@ const SeasonsPage = () => {
 
   const { data: results } = useQuery({
     queryKey: ["all-results-for-seasons"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("race_results")
-        .select("user_id, points, position, race_id, races(league_id), profiles(display_name, iracing_name)");
+        .select("user_id, points, race_id, races(league_id), profiles(display_name, iracing_name)");
       if (error) throw error;
       return data;
     },
