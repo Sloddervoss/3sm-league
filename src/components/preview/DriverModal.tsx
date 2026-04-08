@@ -257,35 +257,40 @@ const DriverModal = ({ driver }: Props) => {
               <Flag className="w-4 h-4 text-orange-500" />
               <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Race Historie</span>
             </div>
-            <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="rounded-2xl overflow-hidden relative" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
               <div
                 className="grid gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600"
                 style={{ gridTemplateColumns: "3rem 1fr 4rem 4rem 4rem", background: "rgba(255,255,255,0.03)" }}
               >
                 <span>Pos</span><span>Race</span><span>Pts</span><span>FL</span><span>Inc</span>
               </div>
-              {raceResults.map((r: any, i: number) => {
-                const posColor = r.position <= 3 ? PODIUM_COLOR[r.position - 1] : "#6b7280";
-                return (
-                  <motion.div
-                    key={r.id || i}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.04 }}
-                    className="grid gap-2 px-5 py-3 items-center"
-                    style={{ gridTemplateColumns: "3rem 1fr 4rem 4rem 4rem", borderTop: "1px solid rgba(255,255,255,0.04)" }}
-                  >
-                    <div className="font-heading font-black text-sm" style={{ color: posColor }}>P{r.position}</div>
-                    <div>
-                      <div className="text-sm font-bold text-white truncate">{r.races?.name || "—"}</div>
-                      <div className="text-[10px] text-gray-600 truncate">{r.races?.track}</div>
-                    </div>
-                    <div className="font-heading font-bold text-sm text-orange-400">{r.points}</div>
-                    <div>{r.fastest_lap ? <span className="text-[10px] font-bold text-purple-400">⚡</span> : <span className="text-gray-700">—</span>}</div>
-                    <div className="text-xs text-gray-600">{r.incidents ?? 0}</div>
-                  </motion.div>
-                );
-              })}
+              <div className="overflow-y-auto" style={{ maxHeight: "14rem" }}>
+                {raceResults.map((r: any, i: number) => {
+                  const posColor = r.position <= 3 ? PODIUM_COLOR[r.position - 1] : "#6b7280";
+                  return (
+                    <motion.div
+                      key={r.id || i}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: i * 0.04 }}
+                      className="grid gap-2 px-5 py-3 items-center"
+                      style={{ gridTemplateColumns: "3rem 1fr 4rem 4rem 4rem", borderTop: "1px solid rgba(255,255,255,0.04)" }}
+                    >
+                      <div className="font-heading font-black text-sm" style={{ color: posColor }}>P{r.position}</div>
+                      <div>
+                        <div className="text-sm font-bold text-white truncate">{r.races?.name || "—"}</div>
+                        <div className="text-[10px] text-gray-600 truncate">{r.races?.track}</div>
+                      </div>
+                      <div className="font-heading font-bold text-sm text-orange-400">{r.points}</div>
+                      <div>{r.fastest_lap ? <span className="text-[10px] font-bold text-purple-400">⚡</span> : <span className="text-gray-700">—</span>}</div>
+                      <div className="text-xs text-gray-600">{r.incidents ?? 0}</div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+              {raceResults.length > 5 && (
+                <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none rounded-b-2xl" style={{ background: "linear-gradient(to bottom, transparent, #0e0e16)" }} />
+              )}
             </div>
           </div>
         )}

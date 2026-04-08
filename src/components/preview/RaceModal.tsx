@@ -334,7 +334,8 @@ const RaceModal = ({ race, registration }: Props) => {
             </div>
 
             {registrants.length > 0 ? (
-              <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="rounded-2xl overflow-hidden relative" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                <div className="overflow-y-auto" style={{ maxHeight: "20rem" }}>
                 {registrants.map((r: any, i: number) => {
                   const team = teams.find((t: any) => t.id === r.team_id);
                   return (
@@ -373,6 +374,10 @@ const RaceModal = ({ race, registration }: Props) => {
                     </motion.div>
                   );
                 })}
+                </div>
+                {registrants.length > 8 && (
+                  <div className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none rounded-b-2xl" style={{ background: "linear-gradient(to bottom, transparent, #0e0e16)" }} />
+                )}
               </div>
             ) : (
               <div className="text-center py-10 text-gray-700 text-sm">
