@@ -264,7 +264,7 @@ const DriverModal = ({ driver }: Props) => {
               >
                 <span>Pos</span><span>Race</span><span>Pts</span><span>FL</span><span>Inc</span>
               </div>
-              <div className="overflow-y-auto" style={{ maxHeight: "14rem" }}>
+              <div className="overflow-y-auto" style={{ maxHeight: "14rem", overscrollBehavior: "contain" }}>
                 {raceResults.map((r: any, i: number) => {
                   const posColor = r.position <= 3 ? PODIUM_COLOR[r.position - 1] : "#6b7280";
                   return (

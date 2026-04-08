@@ -335,7 +335,7 @@ const RaceModal = ({ race, registration }: Props) => {
 
             {registrants.length > 0 ? (
               <div className="rounded-2xl overflow-hidden relative" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
-                <div className="overflow-y-auto" style={{ maxHeight: "20rem" }}>
+                <div className="overflow-y-auto" style={{ maxHeight: "20rem", overscrollBehavior: "contain" }}>
                 {registrants.map((r: any, i: number) => {
                   const team = teams.find((t: any) => t.id === r.team_id);
                   return (
