@@ -917,8 +917,8 @@ const AdminPage = () => {
   const { data: existingAbandonPenalties } = useQuery({
     queryKey: ["abandon-penalties"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("penalties").select("race_id, user_id, source").in("source", ["abandon", "normal_dnf"]);
-      return (data || []) as { race_id: string; user_id: string; source: string }[];
+      const { data } = await (supabase as any).from("penalties").select("id, race_id, user_id, source, points_deduction").in("source", ["abandon", "normal_dnf"]);
+      return (data || []) as { id: string; race_id: string; user_id: string; source: string; points_deduction: number }[];
     },
   });
 
@@ -977,6 +977,29 @@ const AdminPage = () => {
       toast.success("Abandon straf toegepast, Discord melding volgt.");
       queryClient.invalidateQueries({ queryKey: ["all-results-manage"] });
       queryClient.invalidateQueries({ queryKey: ["abandon-penalties"] });
+      queryClient.invalidateQueries({ queryKey: ["all-results-with-profiles"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const removePenalty = useMutation({
+    mutationFn: async ({ result, penalty }: { result: any; penalty: any }) => {
+      // Herstel punten als het een abandon was (points_deduction)
+      if (penalty.source === "abandon" && penalty.points_deduction > 0) {
+        const { data: rr } = await supabase.from("race_results").select("points").eq("id", result.id).maybeSingle();
+        if (rr) {
+          const { error: rErr } = await supabase.from("race_results").update({ points: rr.points + penalty.points_deduction }).eq("id", result.id);
+          if (rErr) throw rErr;
+          await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
+        }
+      }
+      const { error } = await (supabase as any).from("penalties").delete().eq("id", penalty.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Penalty verwijderd.");
+      queryClient.invalidateQueries({ queryKey: ["abandon-penalties"] });
+      queryClient.invalidateQueries({ queryKey: ["all-results-manage"] });
       queryClient.invalidateQueries({ queryKey: ["all-results-with-profiles"] });
     },
     onError: (err: Error) => toast.error(err.message),
@@ -2924,9 +2947,20 @@ const AdminPage = () => {
                                       <span className="flex-1 font-heading font-bold text-sm">{driverName}</span>
                                       <span className="text-sm text-muted-foreground">{result.points} pts · {result.laps} ronden</span>
                                       {reviewed ? (
-                                        reviewed.source === "abandon"
-                                          ? <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Abandon</span>
-                                          : <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30 font-bold">✓ Normale DNF</span>
+                                        <div className="flex items-center gap-2">
+                                          {reviewed.source === "abandon"
+                                            ? <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Abandon</span>
+                                            : <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30 font-bold">✓ Normale DNF</span>
+                                          }
+                                          <button
+                                            onClick={() => removePenalty.mutate({ result, penalty: reviewed })}
+                                            disabled={removePenalty.isPending}
+                                            className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 font-bold transition-colors"
+                                            title="Ongedaan maken"
+                                          >
+                                            ✕ Ongedaan
+                                          </button>
+                                        </div>
                                       ) : (
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <button
