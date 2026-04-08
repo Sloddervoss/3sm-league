@@ -59,6 +59,7 @@ const PreviewModal = ({ open, onClose, children, maxWidth = "900px" }: Props) =>
                 maxWidth,
                 maxHeight: "90vh",
                 overflowY: "auto",
+                overscrollBehavior: "contain",
                 background: "#0e0e16",
                 border: "1px solid rgba(255,255,255,0.08)",
                 boxShadow: "0 -4px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)",
