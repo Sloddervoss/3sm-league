@@ -174,6 +174,9 @@ const StewardPage = () => {
           reason: decision.steward_notes || "",
           applied_by: user!.id,
         });
+
+        // Herbereken 3SR standings voor deze race
+        await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: protest.race_id });
       }
     },
     onSuccess: (_, { protest, decision }) => {
