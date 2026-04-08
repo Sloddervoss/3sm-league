@@ -18,7 +18,7 @@ const CONFIG_FILE = path.join(__dirname, 'config.json');
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
 );
 
 // ── Discord client ────────────────────────────────────────────────────────────
