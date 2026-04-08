@@ -8,6 +8,26 @@ html {
   overflow-x: hidden;
 }
 
+/* ── Custom scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(249, 115, 22, 0.25);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.5);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(249, 115, 22, 0.25) transparent;
+}
+
 
 @layer base {
   :root {
