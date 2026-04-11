@@ -107,6 +107,10 @@ async function getAankondigingenChannel() {
   return client.channels.fetch(channelId).catch(() => null);
 }
 
+async function getStewardDecisionsChannel() {
+  return client.channels.fetch('1492662115553771530').catch(() => null);
+}
+
 async function getStewardChannel() {
   const cfg = loadConfig();
   const channelId = cfg.steward_channel_id;
@@ -389,9 +393,9 @@ async function checkProtests() {
       botLog(`⚖️ Nieuw protest ingediend: **${protest.races?.name}**`);
     }
 
-    // Beslissing melding (naar aankondigingen kanaal) — DB kolom als bron zodat bot herstart geen duplicaat stuurt
+    // Beslissing melding (naar steward beslissingen kanaal) — DB kolom als bron zodat bot herstart geen duplicaat stuurt
     if ((protest.status === 'resolved' || protest.status === 'dismissed') && !protest.notified) {
-      const channel = await getAankondigingenChannel();
+      const channel = await getStewardDecisionsChannel();
       if (!channel) continue;
 
       const accusedName = protest.accused?.iracing_name || protest.accused?.display_name || 'Onbekend';
@@ -437,7 +441,7 @@ async function checkAbandonPenalties() {
   if (error) { botLog('[checkAbandonPenalties]', error.message); return; }
   if (!data?.length) return;
 
-  const channel = await getAankondigingenChannel();
+  const channel = await getStewardDecisionsChannel();
 
   for (const penalty of data) {
     const raceName = penalty.races?.name || 'Onbekende race';
@@ -495,7 +499,7 @@ async function checkAbandonCorrections() {
   if (error) { botLog('[checkAbandonCorrections]', error.message); return; }
   if (!data?.length) return;
 
-  const channel = await getAankondigingenChannel();
+  const channel = await getStewardDecisionsChannel();
 
   for (const penalty of data) {
     const raceName = penalty.races?.name || 'Onbekende race';
