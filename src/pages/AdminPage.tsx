@@ -2894,7 +2894,7 @@ const AdminPage = () => {
               const racesWithDnf = (completedRacesWithResults || []).map((race: any) => {
                 const raceResults = (allResultsForManage || []).filter((r: any) => r.race_id === race.id).sort((a: any, b: any) => a.position - b.position);
                 const maxLaps = Math.max(0, ...raceResults.map((r: any) => r.laps || 0));
-                const dnfResults = raceResults.filter((r: any) => r.dnf || (maxLaps > 0 && (r.laps || 0) < maxLaps));
+                const dnfResults = raceResults.filter((r: any) => r.dnf === true);
                 const openCount = dnfResults.filter((r: any) => !(existingAbandonPenalties || []).some((p: any) => p.race_id === r.race_id && p.user_id === r.user_id)).length;
                 return { race, dnfResults, openCount };
               }).filter(({ dnfResults }) => dnfResults.length > 0);
