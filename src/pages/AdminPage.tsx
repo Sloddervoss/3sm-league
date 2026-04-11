@@ -2840,9 +2840,10 @@ const AdminPage = () => {
                         value={annMessage}
                         onChange={e => setAnnMessage(e.target.value)}
                         placeholder="Schrijf hier de aankondiging..."
-                        rows={5}
+                        rows={8}
                         className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary resize-none"
                       />
+                      <p className="text-xs text-muted-foreground mt-1.5">Gebruik enters tussen alinea's voor de beste weergave in Discord.</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Afbeelding URL (optioneel)</label>
