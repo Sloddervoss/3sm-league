@@ -388,7 +388,7 @@ const StewardPage = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("penalties")
-        .select("id, user_id, race_id, league_id, penalty_sp, penalty_type, penalty_category, reason, created_at, races(id, name, race_date, league_id)")
+        .select("id, user_id, race_id, league_id, penalty_sp, penalty_type, penalty_category, reason, created_at, races(id, name, race_date, league_id, leagues(name, season))")
         .eq("revoked", false)
         .not("penalty_category", "is", null)
         .order("created_at", { ascending: false });
@@ -561,17 +561,19 @@ const StewardPage = () => {
     racesByContext.forEach(arr => arr.sort((a, b) => new Date(b.race_date).getTime() - new Date(a.race_date).getTime()));
 
     // Groepeer penalties per driver per context
-    const grouped = new Map<string, { userId: string; leagueId: string | null; penalties: any[]; profile: any }>();
+    const grouped = new Map<string, { userId: string; leagueId: string | null; leagueName: string | null; penalties: any[]; profile: any }>();
     for (const pen of spPenalties as any[]) {
       const leagueId = (pen.races as any)?.league_id ?? null;
+      const league = (pen.races as any)?.leagues;
+      const leagueName = league ? `${league.name}${league.season ? ` S${league.season}` : ""}` : null;
       const key = `${pen.user_id}__${leagueId}`;
-      if (!grouped.has(key)) grouped.set(key, { userId: pen.user_id, leagueId, penalties: [], profile: pen.profiles });
+      if (!grouped.has(key)) grouped.set(key, { userId: pen.user_id, leagueId, leagueName, penalties: [], profile: pen.profiles });
       grouped.get(key)!.penalties.push(pen);
     }
 
-    const result: { userId: string; leagueId: string | null; profile: any; totalSp: number; activePenalties: any[]; racesUntilExpiry: number }[] = [];
+    const result: { userId: string; leagueId: string | null; leagueName: string | null; profile: any; totalSp: number; activePenalties: any[]; racesUntilExpiry: number }[] = [];
 
-    for (const [key, { userId, leagueId, penalties, profile }] of grouped) {
+    for (const [key, { userId, leagueId, leagueName, penalties, profile }] of grouped) {
       const last6 = (racesByContext.get(key) || []).slice(0, 6);
       const contextRaceIds = last6.map(r => r.race_id);
       // Cutoff: als driver minder dan 6 races heeft, alle penalties actief
@@ -595,7 +597,7 @@ const StewardPage = () => {
       const oldestIndex = contextRaceIds.indexOf(oldestPenaltyRaceId);
       const racesUntilExpiry = oldestIndex >= 0 ? oldestIndex + 1 : 1;
 
-      result.push({ userId, leagueId, profile, totalSp, activePenalties: active, racesUntilExpiry });
+      result.push({ userId, leagueId, leagueName, profile, totalSp, activePenalties: active, racesUntilExpiry });
     }
 
     return result.sort((a, b) => b.totalSp - a.totalSp);
@@ -838,7 +840,7 @@ const StewardPage = () => {
                   </div>
                 ) : driverSpOverview.map((entry, i) => {
                   const name = entry.profile?.iracing_name || entry.profile?.display_name || "Onbekend";
-                  const context = entry.leagueId ? "Seizoen" : "Losse races";
+                  const context = entry.leagueName ?? "Losse races";
                   const isExpanded = expandedId === `driver_${entry.userId}_${entry.leagueId}`;
                   const spColor = entry.totalSp >= 15 ? "text-red-400 border-red-500/30 bg-red-500/10"
                     : entry.totalSp >= 10 ? "text-orange-400 border-orange-500/30 bg-orange-500/10"
