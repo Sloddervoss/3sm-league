@@ -385,12 +385,20 @@ const StewardPage = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("penalties")
-        .select("id, user_id, race_id, league_id, penalty_sp, penalty_type, penalty_category, reason, created_at, races(id, name, race_date, league_id), profiles:profiles!penalties_user_id_fkey(display_name, iracing_name)")
+        .select("id, user_id, race_id, league_id, penalty_sp, penalty_type, penalty_category, reason, created_at, races(id, name, race_date, league_id)")
         .eq("revoked", false)
         .not("penalty_category", "is", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      if (!data?.length) return [];
+      // Haal profielen apart op (penalties heeft geen directe FK naar profiles)
+      const userIds = [...new Set(data.map((p: any) => p.user_id))];
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, iracing_name")
+        .in("user_id", userIds);
+      const profileMap = Object.fromEntries((profileRows || []).map((p: any) => [p.user_id, p]));
+      return data.map((p: any) => ({ ...p, profiles: profileMap[p.user_id] ?? null }));
     },
   });
 
