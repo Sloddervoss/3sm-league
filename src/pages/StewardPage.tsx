@@ -387,7 +387,7 @@ const StewardPage = () => {
         .from("penalties")
         .select("id, user_id, race_id, league_id, penalty_sp, penalty_type, penalty_category, reason, created_at, races(id, name, race_date, league_id), profiles:profiles!penalties_user_id_fkey(display_name, iracing_name)")
         .eq("revoked", false)
-        .gt("penalty_sp", 0)
+        .not("penalty_category", "is", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
@@ -435,17 +435,28 @@ const StewardPage = () => {
     const result: { userId: string; leagueId: string | null; profile: any; totalSp: number; activePenalties: any[]; racesUntilExpiry: number }[] = [];
 
     for (const [key, { userId, leagueId, penalties, profile }] of grouped) {
-      const contextRaces = (racesByContext.get(key) || []).slice(0, 6).map(r => r.race_id);
-      // Alleen penalties binnen het 6-races venster
-      const active = penalties.filter((p: any) => contextRaces.includes(p.race_id));
+      const last6 = (racesByContext.get(key) || []).slice(0, 6);
+      const contextRaceIds = last6.map(r => r.race_id);
+      // Cutoff: als driver minder dan 6 races heeft, alle penalties actief
+      // Als driver >= 6 races heeft, alleen penalties waarvan race_id in last 6 zit
+      // OF waarvan we geen race-history kennen (race nog niet in results → geef benefit of doubt)
+      const active = penalties.filter((p: any) => {
+        if (contextRaceIds.length === 0) return true; // nog geen race history, altijd actief
+        if (contextRaceIds.includes(p.race_id)) return true;
+        // Penalty-race niet in race_results van driver → check op datum
+        const penDate = (p.races as any)?.race_date;
+        if (!penDate) return true; // geen datum info, neem mee
+        const cutoffDate = last6.length === 6 ? last6[5].race_date : null;
+        if (!cutoffDate) return true; // minder dan 6 races, altijd actief
+        return penDate >= cutoffDate;
+      });
       const totalSp = active.reduce((sum: number, p: any) => sum + (p.penalty_sp || 0), 0);
       if (totalSp <= 0) continue;
 
       // Hoeveel races tot oudste actieve SP vervalt
-      // = races die driver nog moet rijden voordat oudste penalty buiten het 6-venster valt
       const oldestPenaltyRaceId = active[active.length - 1]?.race_id;
-      const oldestIndex = contextRaces.indexOf(oldestPenaltyRaceId); // 0 = meest recent
-      const racesUntilExpiry = oldestIndex >= 0 ? oldestIndex + 1 : 1; // races nog nodig
+      const oldestIndex = contextRaceIds.indexOf(oldestPenaltyRaceId);
+      const racesUntilExpiry = oldestIndex >= 0 ? oldestIndex + 1 : 1;
 
       result.push({ userId, leagueId, profile, totalSp, activePenalties: active, racesUntilExpiry });
     }
