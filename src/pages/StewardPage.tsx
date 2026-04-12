@@ -117,7 +117,7 @@ const StewardPage = () => {
   const queryClient = useQueryClient();
   const canModerate = isAdmin || isSteward;
 
-  const [activeTab, setActiveTab] = useState<"protesten" | "rijders">("protesten");
+  const [activeTab, setActiveTab] = useState<"protesten" | "rijders" | "dnf_check">("protesten");
   const [showForm, setShowForm] = useState(false);
   const [showStewardForm, setShowStewardForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -125,6 +125,9 @@ const StewardPage = () => {
   const [form, setForm] = useState({ race_id: "", accused_user_id: "", lap_number: "", description: "", video_link: "" });
   const [decisions, setDecisions] = useState<Record<string, DecisionState>>({});
   const [stewardAction, setStewardAction] = useState<StewardActionState>(EMPTY_ACTION);
+  const [abandonPoints, setAbandonPoints] = useState<Record<string, number>>({});
+  const [showAllDnf, setShowAllDnf] = useState(false);
+  const [expandedDnfRace, setExpandedDnfRace] = useState<string | null>(null);
 
   const getDecision = (id: string): DecisionState => decisions[id] || { ...EMPTY_DECISION };
   const setDecision = <K extends keyof DecisionState>(id: string, field: K, val: DecisionState[K]) =>
@@ -416,6 +419,132 @@ const StewardPage = () => {
     },
   });
 
+  // ── DNF Check queries ────────────────────────────────────────────────────────
+
+  const { data: completedRacesForDnf } = useQuery({
+    queryKey: ["completed-races-dnf"],
+    enabled: canModerate && activeTab === "dnf_check",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("races")
+        .select("id, name, track, race_date")
+        .eq("status", "completed")
+        .order("race_date", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: allResultsForDnf } = useQuery({
+    queryKey: ["all-results-dnf"],
+    enabled: canModerate && activeTab === "dnf_check",
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("race_results")
+        .select("id, race_id, user_id, position, points, dnf, laps, profiles(display_name, iracing_name)");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: existingAbandonPenalties, refetch: refetchAbandon } = useQuery({
+    queryKey: ["abandon-penalties"],
+    enabled: canModerate,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("penalties")
+        .select("id, race_id, user_id, source, points_deduction, notified, revoked")
+        .in("source", ["abandon", "normal_dnf"]);
+      return (data || []) as { id: string; race_id: string; user_id: string; source: string; points_deduction: number; notified: boolean; revoked: boolean }[];
+    },
+  });
+
+  // ── DNF mutations ─────────────────────────────────────────────────────────────
+
+  const markNormalDnf = useMutation({
+    mutationFn: async ({ result }: { result: any }) => {
+      const { error } = await (supabase as any).from("penalties").insert({
+        race_id: result.race_id,
+        user_id: result.user_id,
+        penalty_type: "warning",
+        points_deduction: 0,
+        reason: "Normale DNF — geen straf.",
+        applied_by: user!.id,
+        source: "normal_dnf",
+        notified: true,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("DNF gemarkeerd als normaal.");
+      queryClient.invalidateQueries({ queryKey: ["abandon-penalties"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const markAbandon = useMutation({
+    mutationFn: async ({ result }: { result: any }) => {
+      const deduction = abandonPoints[result.id] ?? 5;
+      const newPoints = (result.points || 0) - deduction;
+      const { error: raceErr } = await supabase
+        .from("race_results")
+        .update({ points: newPoints })
+        .eq("id", result.id);
+      if (raceErr) throw raceErr;
+      await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
+      const raceInfo = (races as any[])?.find((r: any) => r.id === result.race_id);
+      const { error: penErr } = await (supabase as any).from("penalties").insert({
+        race_id: result.race_id,
+        user_id: result.user_id,
+        league_id: (raceInfo as any)?.league_id ?? null,
+        penalty_type: "points_deduction",
+        penalty_category: "B",
+        penalty_sp: 3,
+        points_deduction: deduction,
+        reason: "Race vroegtijdig verlaten zonder geldige reden.",
+        applied_by: user!.id,
+        source: "abandon",
+        notified: false,
+      });
+      if (penErr) throw penErr;
+    },
+    onSuccess: () => {
+      toast.success("Abandon straf toegepast, Discord melding volgt.");
+      queryClient.invalidateQueries({ queryKey: ["abandon-penalties"] });
+      queryClient.invalidateQueries({ queryKey: ["all-results-dnf"] });
+      queryClient.invalidateQueries({ queryKey: ["steward-sp-penalties"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const removeDnfPenalty = useMutation({
+    mutationFn: async ({ result, penalty }: { result: any; penalty: any }) => {
+      if (penalty.source === "abandon" && penalty.points_deduction > 0) {
+        const { data: rr } = await supabase.from("race_results").select("points").eq("id", result.id).maybeSingle();
+        if (rr) {
+          const { error: rErr } = await supabase.from("race_results").update({ points: rr.points + penalty.points_deduction }).eq("id", result.id);
+          if (rErr) throw rErr;
+          await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
+        }
+      }
+      if (penalty.notified) {
+        const { error } = await (supabase as any).from("penalties").update({ revoked: true }).eq("id", penalty.id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from("penalties").delete().eq("id", penalty.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_, { penalty }) => {
+      toast.success(penalty.notified ? "Penalty ingetrokken — correctiebericht volgt in Discord." : "Penalty verwijderd.");
+      queryClient.invalidateQueries({ queryKey: ["abandon-penalties"] });
+      queryClient.invalidateQueries({ queryKey: ["all-results-dnf"] });
+      queryClient.invalidateQueries({ queryKey: ["steward-sp-penalties"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   // Bereken SP overzicht per driver per context
   const driverSpOverview = (() => {
     if (!spPenalties?.length) return [];
@@ -661,8 +790,9 @@ const StewardPage = () => {
             <div className="container mx-auto px-4">
               <div className="flex gap-1 py-2">
                 {([
-                  { id: "protesten", label: "Protesten", icon: Shield },
-                  { id: "rijders",   label: "Rijders",   icon: Users },
+                  { id: "protesten",  label: "Protesten",  icon: Shield },
+                  { id: "rijders",    label: "Rijders",    icon: Users },
+                  { id: "dnf_check",  label: "DNF Check",  icon: AlertTriangle },
                 ] as const).map(tab => (
                   <button
                     key={tab.id}
@@ -678,6 +808,15 @@ const StewardPage = () => {
                         {driverSpOverview.length}
                       </span>
                     )}
+                    {tab.id === "dnf_check" && (() => {
+                      const open = (completedRacesForDnf || []).reduce((n, race: any) => {
+                        const dnfs = (allResultsForDnf || []).filter((r: any) => r.race_id === race.id && r.dnf);
+                        return n + dnfs.filter((r: any) => !(existingAbandonPenalties || []).some((p: any) => p.race_id === r.race_id && p.user_id === r.user_id)).length;
+                      }, 0);
+                      return open > 0 ? (
+                        <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-red-500/20 text-red-400 border border-red-500/30">{open}</span>
+                      ) : null;
+                    })()}
                   </button>
                 ))}
               </div>
@@ -1056,6 +1195,134 @@ const StewardPage = () => {
               )}
             </div>
             </>}
+
+            {/* DNF Check tab */}
+            {activeTab === "dnf_check" && canModerate && (() => {
+              const racesWithDnf = (completedRacesForDnf || []).map((race: any) => {
+                const raceResults = (allResultsForDnf || []).filter((r: any) => r.race_id === race.id).sort((a: any, b: any) => a.position - b.position);
+                const dnfResults = raceResults.filter((r: any) => r.dnf === true);
+                const openCount = dnfResults.filter((r: any) => !(existingAbandonPenalties || []).some((p: any) => p.race_id === r.race_id && p.user_id === r.user_id)).length;
+                return { race, dnfResults, openCount };
+              }).filter(({ dnfResults }) => dnfResults.length > 0);
+
+              const visibleRaces = showAllDnf ? racesWithDnf : racesWithDnf.filter(({ openCount }) => openCount > 0);
+
+              return (
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="font-heading text-2xl font-black">DNF CHECK</h2>
+                      <p className="text-sm text-muted-foreground mt-1">Markeer DNF drivers als abandon (cat. B · 3 SP) of normale DNF.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowAllDnf(v => !v)}
+                      className="text-xs px-3 py-1.5 rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showAllDnf ? "Alleen open" : `Toon alles (${racesWithDnf.length})`}
+                    </button>
+                  </div>
+
+                  {visibleRaces.length === 0 ? (
+                    <div className="text-center py-16 text-muted-foreground">
+                      <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="font-heading font-bold">ALLES AFGEHANDELD</p>
+                      <p className="text-sm mt-1">Geen openstaande DNF's om te beoordelen.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {visibleRaces.map(({ race, dnfResults, openCount }) => {
+                        const isExpanded = expandedDnfRace === race.id;
+                        return (
+                          <div key={race.id} className="bg-card border border-border rounded-lg overflow-hidden">
+                            <button
+                              onClick={() => setExpandedDnfRace(isExpanded ? null : race.id)}
+                              className="w-full px-5 py-3 flex items-center gap-3 hover:bg-secondary/30 transition-colors text-left"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <span className="font-heading font-bold">{race.name}</span>
+                                <span className="text-xs text-muted-foreground ml-3">{race.track} · {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" })}</span>
+                              </div>
+                              {openCount > 0
+                                ? <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold shrink-0">{openCount} open</span>
+                                : <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 font-bold shrink-0">✓ afgehandeld</span>
+                              }
+                              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${isExpanded ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {isExpanded && (
+                              <div className="border-t border-border divide-y divide-border/40">
+                                {dnfResults.map((result: any) => {
+                                  const reviewed = (existingAbandonPenalties || []).find((p: any) => p.race_id === result.race_id && p.user_id === result.user_id);
+                                  const driverName = result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
+                                  return (
+                                    <div key={result.id} className="px-5 py-3 flex items-center gap-4 flex-wrap">
+                                      <span className="font-heading font-black text-red-400 w-12">DNF</span>
+                                      <span className="flex-1 font-heading font-bold text-sm">{driverName}</span>
+                                      <span className="text-sm text-muted-foreground">{result.points} pts · {result.laps} ronden</span>
+                                      {reviewed ? (
+                                        <div className="flex items-center gap-2">
+                                          {reviewed.revoked
+                                            ? <span className="text-xs px-2 py-1 rounded bg-secondary text-muted-foreground border border-border font-bold">↩ Ingetrokken</span>
+                                            : reviewed.source === "abandon"
+                                              ? <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Abandon</span>
+                                              : <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30 font-bold">✓ Normale DNF</span>
+                                          }
+                                          {!reviewed.revoked && (
+                                            <button
+                                              onClick={() => removeDnfPenalty.mutate({ result, penalty: reviewed })}
+                                              disabled={removeDnfPenalty.isPending}
+                                              className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 font-bold transition-colors"
+                                            >
+                                              ✕ Ongedaan
+                                            </button>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <button
+                                            onClick={() => markNormalDnf.mutate({ result })}
+                                            disabled={markNormalDnf.isPending}
+                                            className="px-3 py-1.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 text-xs font-bold transition-colors"
+                                          >
+                                            ✓ Normale DNF
+                                          </button>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-xs text-muted-foreground">straf:</span>
+                                            <input
+                                              type="number"
+                                              min={1}
+                                              max={50}
+                                              value={abandonPoints[result.id] ?? 5}
+                                              onChange={e => setAbandonPoints(prev => ({ ...prev, [result.id]: parseInt(e.target.value) || 5 }))}
+                                              className="w-14 px-2 py-1 rounded border border-border bg-background text-sm text-center"
+                                            />
+                                            <span className="text-xs text-muted-foreground">→ wordt</span>
+                                            <span className="text-sm font-heading font-black text-orange-400">
+                                              {(result.points || 0) - (abandonPoints[result.id] ?? 5)} pts
+                                            </span>
+                                          </div>
+                                          <button
+                                            onClick={() => markAbandon.mutate({ result })}
+                                            disabled={markAbandon.isPending}
+                                            className="px-3 py-1.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 text-xs font-bold transition-colors flex items-center gap-1"
+                                          >
+                                            <AlertTriangle className="w-3 h-3" /> Abandon
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </section>
       </main>
