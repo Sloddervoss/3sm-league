@@ -2,7 +2,7 @@ import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
-import { Shield, AlertTriangle, Clock, CheckCircle, XCircle, Plus, FileText, ChevronDown, ChevronUp, Zap } from "lucide-react";
+import { Shield, AlertTriangle, Clock, CheckCircle, XCircle, Plus, FileText, ChevronDown, ChevronUp, Zap, Users } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +48,7 @@ const penaltyLabels: Record<string, string> = {
   time_penalty:     "Tijdstraf",
   grid_penalty:     "Gridstraf",
   race_ban:         "Race ban",
+  pit_lane_start:   "Pitlane start",
 };
 
 const PROTEST_DEADLINE_HOURS = 48;
@@ -116,6 +117,7 @@ const StewardPage = () => {
   const queryClient = useQueryClient();
   const canModerate = isAdmin || isSteward;
 
+  const [activeTab, setActiveTab] = useState<"protesten" | "rijders">("protesten");
   const [showForm, setShowForm] = useState(false);
   const [showStewardForm, setShowStewardForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -375,6 +377,82 @@ const StewardPage = () => {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // ── Rijders SP overzicht queries (alleen voor stewards) ─────────────────────
+
+  const { data: spPenalties } = useQuery({
+    queryKey: ["steward-sp-penalties"],
+    enabled: canModerate && activeTab === "rijders",
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("penalties")
+        .select("id, user_id, race_id, league_id, penalty_sp, penalty_type, penalty_category, reason, created_at, races(id, name, race_date, league_id), profiles:profiles!penalties_user_id_fkey(display_name, iracing_name)")
+        .eq("revoked", false)
+        .gt("penalty_sp", 0)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: spRaceHistory } = useQuery({
+    queryKey: ["steward-race-history"],
+    enabled: canModerate && activeTab === "rijders" && !!spPenalties?.length,
+    queryFn: async () => {
+      const userIds = [...new Set((spPenalties || []).map((p: any) => p.user_id))];
+      const { data, error } = await supabase
+        .from("race_results")
+        .select("user_id, race_id, races(id, race_date, league_id)")
+        .in("user_id", userIds);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Bereken SP overzicht per driver per context
+  const driverSpOverview = (() => {
+    if (!spPenalties?.length) return [];
+
+    // Bouw race history map: user_id → league_key → races gesorteerd op datum desc
+    const racesByContext = new Map<string, { race_id: string; race_date: string }[]>();
+    for (const rr of (spRaceHistory || []) as any[]) {
+      const leagueId = (rr.races as any)?.league_id ?? null;
+      const key = `${rr.user_id}__${leagueId}`;
+      if (!racesByContext.has(key)) racesByContext.set(key, []);
+      racesByContext.get(key)!.push({ race_id: rr.race_id, race_date: (rr.races as any)?.race_date });
+    }
+    // Sorteer per context op datum desc
+    racesByContext.forEach(arr => arr.sort((a, b) => new Date(b.race_date).getTime() - new Date(a.race_date).getTime()));
+
+    // Groepeer penalties per driver per context
+    const grouped = new Map<string, { userId: string; leagueId: string | null; penalties: any[]; profile: any }>();
+    for (const pen of spPenalties as any[]) {
+      const leagueId = (pen.races as any)?.league_id ?? null;
+      const key = `${pen.user_id}__${leagueId}`;
+      if (!grouped.has(key)) grouped.set(key, { userId: pen.user_id, leagueId, penalties: [], profile: pen.profiles });
+      grouped.get(key)!.penalties.push(pen);
+    }
+
+    const result: { userId: string; leagueId: string | null; profile: any; totalSp: number; activePenalties: any[]; racesUntilExpiry: number }[] = [];
+
+    for (const [key, { userId, leagueId, penalties, profile }] of grouped) {
+      const contextRaces = (racesByContext.get(key) || []).slice(0, 6).map(r => r.race_id);
+      // Alleen penalties binnen het 6-races venster
+      const active = penalties.filter((p: any) => contextRaces.includes(p.race_id));
+      const totalSp = active.reduce((sum: number, p: any) => sum + (p.penalty_sp || 0), 0);
+      if (totalSp <= 0) continue;
+
+      // Hoeveel races tot oudste actieve SP vervalt
+      // = races die driver nog moet rijden voordat oudste penalty buiten het 6-venster valt
+      const oldestPenaltyRaceId = active[active.length - 1]?.race_id;
+      const oldestIndex = contextRaces.indexOf(oldestPenaltyRaceId); // 0 = meest recent
+      const racesUntilExpiry = oldestIndex >= 0 ? oldestIndex + 1 : 1; // races nog nodig
+
+      result.push({ userId, leagueId, profile, totalSp, activePenalties: active, racesUntilExpiry });
+    }
+
+    return result.sort((a, b) => b.totalSp - a.totalSp);
+  })();
+
   if (loading) return null;
   if (!user) return <Navigate to="/auth" />;
 
@@ -423,6 +501,7 @@ const StewardPage = () => {
             <option value="time_penalty">Tijdstraf</option>
             <option value="grid_penalty">Gridstraf</option>
             <option value="race_ban">Race ban</option>
+            <option value="pit_lane_start">Pitlane start</option>
             <option value="points_deduction">Puntenaftrek (kampioenschapspunten)</option>
             <option value="disqualification">Diskwalificatie</option>
           </select>
@@ -536,7 +615,7 @@ const StewardPage = () => {
                 </p>
               </div>
               <div className="flex gap-2 flex-wrap">
-                {canModerate && (
+                {canModerate && activeTab === "protesten" && (
                   <button
                     onClick={() => { setShowStewardForm(!showStewardForm); setShowForm(false); }}
                     className="flex items-center gap-2 px-4 py-2 rounded-md bg-secondary border border-border text-foreground font-heading font-bold text-sm uppercase tracking-wider hover:bg-secondary/80 transition-colors"
@@ -545,7 +624,7 @@ const StewardPage = () => {
                     Steward Actie
                   </button>
                 )}
-                <button
+                {activeTab === "protesten" && <button
                   onClick={() => { setShowForm(!showForm); setShowStewardForm(false); }}
                   className="flex items-center gap-2 px-4 py-2 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity"
                 >
@@ -557,10 +636,120 @@ const StewardPage = () => {
           </div>
         </section>
 
+        {/* Tab bar — alleen voor stewards */}
+        {canModerate && (
+          <div className="border-b border-border bg-card/30 sticky top-16 z-40">
+            <div className="container mx-auto px-4">
+              <div className="flex gap-1 py-2">
+                {([
+                  { id: "protesten", label: "Protesten", icon: Shield },
+                  { id: "rijders",   label: "Rijders",   icon: Users },
+                ] as const).map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      activeTab === tab.id ? "bg-gradient-racing text-white" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    }`}
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    {tab.label}
+                    {tab.id === "rijders" && driverSpOverview.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                        {driverSpOverview.length}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         <section className="py-12">
           <div className="container mx-auto px-4">
 
+            {/* Rijders SP overzicht tab */}
+            {activeTab === "rijders" && canModerate && (
+              <div className="space-y-3">
+                {!driverSpOverview.length ? (
+                  <div className="text-center py-24 text-muted-foreground">
+                    <Users className="w-12 h-12 mx-auto mb-4 opacity-40" />
+                    <p className="text-lg font-heading font-bold">GEEN ACTIEVE STRAFFEN</p>
+                    <p className="text-sm mt-1">Alle drivers hebben 0 strafpunten.</p>
+                  </div>
+                ) : driverSpOverview.map((entry, i) => {
+                  const name = entry.profile?.iracing_name || entry.profile?.display_name || "Onbekend";
+                  const context = entry.leagueId ? "Seizoen" : "Losse races";
+                  const isExpanded = expandedId === `driver_${entry.userId}_${entry.leagueId}`;
+                  const spColor = entry.totalSp >= 15 ? "text-red-400 border-red-500/30 bg-red-500/10"
+                    : entry.totalSp >= 10 ? "text-orange-400 border-orange-500/30 bg-orange-500/10"
+                    : entry.totalSp >= 6  ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"
+                    : "text-muted-foreground border-border bg-secondary";
+                  const threshold = SP_THRESHOLDS.slice().reverse().find(t => entry.totalSp >= t.sp);
+
+                  return (
+                    <motion.div key={`${entry.userId}_${entry.leagueId}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className="bg-card border border-border rounded-lg overflow-hidden">
+                      <div
+                        className="flex items-center justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/20 transition-colors"
+                        onClick={() => setExpandedId(isExpanded ? null : `driver_${entry.userId}_${entry.leagueId}`)}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`px-2.5 py-1 rounded-md border text-sm font-black tabular-nums shrink-0 ${spColor}`}>
+                            {entry.totalSp} SP
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-heading font-bold truncate">{name}</div>
+                            <div className="text-xs text-muted-foreground">{context}</div>
+                          </div>
+                          {threshold && (
+                            <span className={`hidden sm:inline text-xs font-bold px-2 py-0.5 rounded border ${spColor}`}>
+                              {threshold.label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 shrink-0">
+                          <div className="text-right hidden sm:block">
+                            <div className="text-xs text-muted-foreground">Vervalt na</div>
+                            <div className="text-sm font-bold">{entry.racesUntilExpiry} race{entry.racesUntilExpiry !== 1 ? "s" : ""}</div>
+                          </div>
+                          <div className="text-right hidden sm:block">
+                            <div className="text-xs text-muted-foreground">Straffen</div>
+                            <div className="text-sm font-bold">{entry.activePenalties.length}x</div>
+                          </div>
+                          {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="border-t border-border/50 px-4 pb-4 pt-3 space-y-2">
+                          <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Actieve straffen</div>
+                          {entry.activePenalties.map((pen: any) => (
+                            <div key={pen.id} className="flex items-start justify-between gap-3 py-2 border-b border-border/30 last:border-0">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium">{pen.races?.name || "Onbekende race"}</div>
+                                <div className="text-xs text-muted-foreground mt-0.5">
+                                  {penaltyLabels[pen.penalty_type] || pen.penalty_type}
+                                  {pen.penalty_category && ` · Cat. ${pen.penalty_category}`}
+                                  {" · "}{new Date(pen.created_at).toLocaleDateString("nl-NL")}
+                                </div>
+                                {pen.reason && <div className="text-xs text-muted-foreground mt-0.5 italic">"{pen.reason}"</div>}
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <div className={`text-sm font-black ${pen.penalty_sp >= 5 ? "text-orange-400" : "text-muted-foreground"}`}>+{pen.penalty_sp} SP</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Protest formulier */}
+            {activeTab === "protesten" && <></>
             {showForm && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-6 mb-8 racing-stripe-left">
                 <h2 className="font-heading text-xl font-bold mb-6">PROTEST FORMULIER</h2>
@@ -847,6 +1036,7 @@ const StewardPage = () => {
                 })
               )}
             </div>
+            </>}
           </div>
         </section>
       </main>
