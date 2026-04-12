@@ -749,7 +749,7 @@ const StewardPage = () => {
             )}
 
             {/* Protest formulier */}
-            {activeTab === "protesten" && <></>
+            {activeTab === "protesten" && <>
             {showForm && (
               <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-6 mb-8 racing-stripe-left">
                 <h2 className="font-heading text-xl font-bold mb-6">PROTEST FORMULIER</h2>
