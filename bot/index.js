@@ -366,11 +366,38 @@ async function checkNewLinks() {
   }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const penaltyLabels = {
+  warning:          'Waarschuwing',
+  points_deduction: 'Puntenaftrek',
+  disqualification: 'Diskwalificatie',
+  time_penalty:     'Tijdstraf',
+  grid_penalty:     'Gridstraf',
+  race_ban:         'Race ban',
+};
+
+function buildPenaltyText(type, data = {}) {
+  if (!type) return 'Geen straf';
+  let text = penaltyLabels[type] || type;
+  if (type === 'time_penalty' && data.time_penalty_seconds) text += ` (+${data.time_penalty_seconds} sec)`;
+  if (type === 'grid_penalty' && data.grid_penalty_places)  text += ` (${data.grid_penalty_places} plaatsen)`;
+  if (type === 'points_deduction' && data.penalty_points > 0) text += ` (-${data.penalty_points} punten)`;
+  if (type === 'points_deduction' && data.points_deduction > 0) text += ` (-${data.points_deduction} punten)`;
+  if (data.race_ban_next) text += ' — volgende race gemist';
+  return text;
+}
+
+function buildCategoryBadge(category) {
+  const map = { A: '🔵 Cat. A — Licht', B: '🟡 Cat. B — Matig', C: '🟠 Cat. C — Ernstig', D: '🔴 Cat. D — Zwaar' };
+  return category ? map[category] || `Cat. ${category}` : null;
+}
+
 // ── Cron: nieuwe protesten ────────────────────────────────────────────────────
 async function checkProtests() {
   const { data, error } = await supabase
     .from('protests')
-    .select('id, status, notified, created_at, decided_at, penalty_type, penalty_points, steward_notes, races(name, track), accused:profiles!protests_accused_user_id_fkey(display_name, iracing_name)')
+    .select('id, status, notified, created_at, decided_at, penalty_type, penalty_points, penalty_category, time_penalty_seconds, grid_penalty_places, race_ban_next, steward_notes, races(name, track), accused:profiles!protests_accused_user_id_fkey(display_name, iracing_name)')
     .order('created_at', { ascending: false })
     .limit(20);
   if (error) { botLog('[checkProtests]', error.message); return; }
@@ -393,40 +420,131 @@ async function checkProtests() {
       botLog(`⚖️ Nieuw protest ingediend: **${protest.races?.name}**`);
     }
 
-    // Beslissing melding (naar steward beslissingen kanaal) — DB kolom als bron zodat bot herstart geen duplicaat stuurt
+    // Beslissing melding — DB kolom als bron zodat bot herstart geen duplicaat stuurt
     if ((protest.status === 'resolved' || protest.status === 'dismissed') && !protest.notified) {
       const channel = await getStewardDecisionsChannel();
       if (!channel) continue;
 
       const accusedName = protest.accused?.iracing_name || protest.accused?.display_name || 'Onbekend';
-      const penaltyLabels = { warning: 'Waarschuwing', points_deduction: 'Puntenaftrek', disqualification: 'Diskwalificatie' };
-
-      let penaltyText = 'Geen straf';
-      if (protest.status === 'dismissed') {
-        penaltyText = 'Protest afgewezen';
-      } else if (protest.penalty_type) {
-        penaltyText = penaltyLabels[protest.penalty_type] || protest.penalty_type;
-        if (protest.penalty_type === 'points_deduction' && protest.penalty_points > 0) {
-          penaltyText += ` (-${protest.penalty_points} punten)`;
-        }
-      }
+      const penaltyText = protest.status === 'dismissed'
+        ? 'Protest afgewezen'
+        : buildPenaltyText(protest.penalty_type, protest);
 
       const embed = new EmbedBuilder()
         .setColor(protest.status === 'dismissed' ? 0x6b7280 : 0xf97316)
         .setTitle(`⚖️ Steward Beslissing — ${protest.races?.name}`)
         .setDescription(`**${accusedName}** — ${penaltyText}`)
-        .addFields({ name: '🏎️ Circuit', value: protest.races?.track || '—', inline: true })
-        .setFooter({ text: '3 Stripe Motorsport · Stewards' })
-        .setTimestamp();
+        .addFields({ name: '🏎️ Circuit', value: protest.races?.track || '—', inline: true });
 
+      const catBadge = buildCategoryBadge(protest.penalty_category);
+      if (catBadge) embed.addFields({ name: '📊 Categorie', value: catBadge, inline: true });
       if (protest.steward_notes) embed.addFields({ name: '📋 Motivatie', value: protest.steward_notes, inline: false });
 
-      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Protest beslissing melding fout: ${e.message}`));
+      embed.setFooter({ text: '3 Stripe Motorsport · Stewards' }).setTimestamp();
 
-      // Markeer als notified in DB zodat herstart geen duplicaat stuurt
+      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Protest beslissing melding fout: ${e.message}`));
       await supabase.from('protests').update({ notified: true }).eq('id', protest.id);
       botLog(`⚖️ Steward beslissing verstuurd: **${protest.races?.name}** → ${accusedName} — ${penaltyText}`);
     }
+  }
+}
+
+// ── Cron: steward-initiated penalties (zonder protest) ────────────────────────
+async function checkStewardPenalties() {
+  const { data, error } = await supabase
+    .from('penalties')
+    .select('id, race_id, user_id, penalty_type, penalty_category, penalty_sp, time_penalty_seconds, grid_penalty_places, race_ban_next, points_deduction, steward_description, races(name, track)')
+    .eq('steward_initiated', true)
+    .eq('notified', false)
+    .eq('revoked', false);
+  if (error) { botLog('[checkStewardPenalties]', error.message); return; }
+  if (!data?.length) return;
+
+  const channel = await getStewardDecisionsChannel();
+
+  for (const penalty of data) {
+    const raceName = penalty.races?.name || 'Onbekende race';
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name, iracing_name, discord_id')
+      .eq('user_id', penalty.user_id)
+      .maybeSingle();
+
+    const driverName = profile?.display_name || profile?.iracing_name || 'Onbekend';
+    const penaltyText = buildPenaltyText(penalty.penalty_type, penalty);
+    const catBadge = buildCategoryBadge(penalty.penalty_category);
+
+    const embed = new EmbedBuilder()
+      .setColor(0xf97316)
+      .setTitle(`⚡ Steward Actie — ${raceName}`)
+      .setDescription(`**${driverName}** — ${penaltyText}`)
+      .addFields({ name: '🏎️ Circuit', value: penalty.races?.track || '—', inline: true });
+
+    if (catBadge) embed.addFields({ name: '📊 Categorie', value: catBadge, inline: true });
+    if (penalty.penalty_sp > 0) embed.addFields({ name: '⚠️ Strafpunten', value: `+${penalty.penalty_sp} SP`, inline: true });
+    if (penalty.steward_description) embed.addFields({ name: '📋 Motivatie', value: penalty.steward_description, inline: false });
+
+    embed.setFooter({ text: '3 Stripe Motorsport · Stewards (zonder protest)' }).setTimestamp();
+
+    let messageId = null;
+    if (channel) {
+      const msg = await channel.send({ embeds: [embed] }).catch(e => { botLog(`❌ Steward penalty melding fout: ${e.message}`); return null; });
+      if (!msg) continue;
+      messageId = msg.id;
+    }
+
+    // DM als driver Discord heeft gekoppeld
+    if (profile?.discord_id) {
+      const member = await client.guilds.cache.first()?.members.fetch(profile.discord_id).catch(() => null);
+      if (member) await member.send({ embeds: [embed] }).catch(() => {});
+    }
+
+    await supabase.from('penalties').update({ notified: true, discord_message_id: messageId }).eq('id', penalty.id);
+    botLog(`⚡ Steward actie verstuurd: **${driverName}** — ${raceName} (${penaltyText})`);
+  }
+}
+
+// ── Cron: steward penalty correcties (na intrekken) ───────────────────────────
+async function checkStewardCorrections() {
+  const { data, error } = await supabase
+    .from('penalties')
+    .select('id, user_id, discord_message_id, races(name)')
+    .eq('steward_initiated', true)
+    .eq('revoked', true)
+    .eq('notified', true)
+    .eq('correction_sent', false);
+  if (error) { botLog('[checkStewardCorrections]', error.message); return; }
+  if (!data?.length) return;
+
+  const channel = await getStewardDecisionsChannel();
+
+  for (const penalty of data) {
+    const raceName = penalty.races?.name || 'Onbekende race';
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name, iracing_name')
+      .eq('user_id', penalty.user_id)
+      .maybeSingle();
+    const driverName = profile?.display_name || profile?.iracing_name || 'Onbekend';
+
+    if (penalty.discord_message_id && channel) {
+      await channel.messages.delete(penalty.discord_message_id).catch(() => {});
+    }
+
+    if (channel) {
+      const embed = new EmbedBuilder()
+        .setColor(0x6b7280)
+        .setTitle(`✏️ Correctie — ${raceName}`)
+        .setDescription(`De eerder gemelde steward actie voor **${driverName}** is ingetrokken.`)
+        .setFooter({ text: '3 Stripe Motorsport · Stewards' })
+        .setTimestamp();
+      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Steward correctie fout: ${e.message}`));
+    }
+
+    await supabase.from('penalties').update({ correction_sent: true }).eq('id', penalty.id);
+    botLog(`✏️ Steward correctie verstuurd: **${driverName}** — ${raceName}`);
   }
 }
 
@@ -1241,6 +1359,8 @@ client.once('ready', async () => {
   cron.schedule('* * * * *', () => checkProtests().catch(e => botLog(`[cron:checkProtests] ${e.message}`)));
   cron.schedule('* * * * *', () => checkAbandonPenalties().catch(e => botLog(`[cron:checkAbandon] ${e.message}`)));
   cron.schedule('* * * * *', () => checkAbandonCorrections().catch(e => botLog(`[cron:checkAbandonCorrections] ${e.message}`)));
+  cron.schedule('* * * * *', () => checkStewardPenalties().catch(e => botLog(`[cron:checkStewardPenalties] ${e.message}`)));
+  cron.schedule('* * * * *', () => checkStewardCorrections().catch(e => botLog(`[cron:checkStewardCorrections] ${e.message}`)));
   // Elke 5 minuten: team rol sync
   cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => botLog(`[cron:syncTeamRoles] ${e.message}`)));
   // Elk uur: kalender update + token cleanup

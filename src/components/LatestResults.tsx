@@ -48,10 +48,11 @@ const LatestResults = () => {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("penalties")
-        .select("race_id, user_id, penalty_type, points_deduction")
-        .eq("race_id", lastRace!.id);
+        .select("race_id, user_id, penalty_type, points_deduction, time_penalty_seconds, grid_penalty_places, race_ban_next")
+        .eq("race_id", lastRace!.id)
+        .eq("revoked", false);
       if (error) return [];
-      return data as { race_id: string; user_id: string; penalty_type: string; points_deduction: number }[];
+      return data as { race_id: string; user_id: string; penalty_type: string; points_deduction: number; time_penalty_seconds: number; grid_penalty_places: number; race_ban_next: boolean }[];
     },
   });
 
@@ -113,7 +114,14 @@ const LatestResults = () => {
                   {(() => {
                     const pen = penalties?.find((p) => p.race_id === result.race_id && p.user_id === result.user_id);
                     if (!pen || pen.penalty_type === "warning") return null;
-                    const label = pen.penalty_type === "disqualification" ? "DSQ — Steward" : `-${pen.points_deduction}pt — Steward`;
+                    const labelMap: Record<string, string> = {
+                      disqualification: "DSQ",
+                      points_deduction: `-${pen.points_deduction}pt`,
+                      time_penalty:     `+${pen.time_penalty_seconds}sec`,
+                      grid_penalty:     `↓${pen.grid_penalty_places}p grid`,
+                      race_ban:         "Race ban",
+                    };
+                    const label = (labelMap[pen.penalty_type] || pen.penalty_type) + " — Steward";
                     return (
                       <span className="group relative cursor-default">
                         <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
