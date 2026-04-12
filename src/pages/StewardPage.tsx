@@ -630,7 +630,7 @@ const StewardPage = () => {
                 >
                   <Plus className="w-4 h-4" />
                   Nieuw Protest
-                </button>
+                </button>}
               </div>
             </div>
           </div>
