@@ -375,6 +375,7 @@ const penaltyLabels = {
   time_penalty:     'Tijdstraf',
   grid_penalty:     'Gridstraf',
   race_ban:         'Race ban',
+  pit_lane_start:   'Pitlane start',
 };
 
 function buildPenaltyText(type, data = {}) {
@@ -440,6 +441,30 @@ async function checkProtests() {
       if (catBadge) embed.addFields({ name: '📊 Categorie', value: catBadge, inline: true });
       if (protest.steward_notes) embed.addFields({ name: '📋 Motivatie', value: protest.steward_notes, inline: false });
 
+      if (protest.penalty_type === 'grid_penalty' && protest.grid_penalty_places > 0) {
+        embed.addFields({
+          name: '📍 Hoe uitvoeren',
+          value: `Driver start **${protest.grid_penalty_places} positie${protest.grid_penalty_places > 1 ? 's' : ''} verder naar achteren** op de startgrid dan de kwalificatiepositie. Nieuwe positie innemen **vóór de start**.\n\n⛔ Niet nakomen = automatische diskwalificatie.`,
+          inline: false,
+        });
+      }
+
+      if (protest.penalty_type === 'pit_lane_start') {
+        embed.addFields({
+          name: '📍 Hoe uitvoeren',
+          value: `Driver start vanuit de **pitlane**. Wachten totdat het volledige startveld voorbij is, daarna de baan op.\n\n⛔ Niet nakomen = automatische diskwalificatie.`,
+          inline: false,
+        });
+      }
+
+      if (protest.race_ban_next) {
+        embed.addFields({
+          name: '🚫 Race ban',
+          value: `Driver mag de **eerstvolgende race niet deelnemen**.\n\n⛔ Toch deelnemen = verdere maatregelen.`,
+          inline: false,
+        });
+      }
+
       embed.setFooter({ text: '3 Stripe Motorsport · Stewards' }).setTimestamp();
 
       await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Protest beslissing melding fout: ${e.message}`));
@@ -484,6 +509,31 @@ async function checkStewardPenalties() {
     if (catBadge) embed.addFields({ name: '📊 Categorie', value: catBadge, inline: true });
     if (penalty.penalty_sp > 0) embed.addFields({ name: '⚠️ Strafpunten', value: `+${penalty.penalty_sp} SP`, inline: true });
     if (penalty.steward_description) embed.addFields({ name: '📋 Motivatie', value: penalty.steward_description, inline: false });
+
+    // Handhavingsinstructies per straf type
+    if (penalty.penalty_type === 'grid_penalty' && penalty.grid_penalty_places > 0) {
+      embed.addFields({
+        name: '📍 Hoe uitvoeren',
+        value: `Je start **${penalty.grid_penalty_places} positie${penalty.grid_penalty_places > 1 ? 's' : ''} verder naar achteren** op de startgrid dan je kwalificatiepositie. Neem je nieuwe positie in **vóór de start van de race**.\n\n⛔ Niet nakomen = automatische diskwalificatie.`,
+        inline: false,
+      });
+    }
+
+    if (penalty.penalty_type === 'pit_lane_start') {
+      embed.addFields({
+        name: '📍 Hoe uitvoeren',
+        value: `Je start vanuit de **pitlane**. Blijf in de pitlane totdat het volledige startveld voorbij is gereden, daarna mag je de baan op.\n\n⛔ Niet nakomen = automatische diskwalificatie.`,
+        inline: false,
+      });
+    }
+
+    if (penalty.race_ban_next) {
+      embed.addFields({
+        name: '🚫 Race ban',
+        value: `Je mag de **eerstvolgende race niet deelnemen**. Neem geen contact op met de race organisatie hierover — de beslissing staat vast.\n\n⛔ Toch deelnemen = verdere maatregelen.`,
+        inline: false,
+      });
+    }
 
     embed.setFooter({ text: '3 Stripe Motorsport · Stewards (zonder protest)' }).setTimestamp();
 
