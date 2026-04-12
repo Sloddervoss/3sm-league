@@ -967,6 +967,8 @@ const AdminPage = () => {
         user_id: result.user_id,
         league_id: (abandonRace as any)?.league_id ?? null,
         penalty_type: "points_deduction",
+        penalty_category: "B",
+        penalty_sp: 3,
         points_deduction: deduction,
         reason: "Race vroegtijdig verlaten zonder geldige reden.",
         applied_by: user!.id,
