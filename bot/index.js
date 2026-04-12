@@ -444,7 +444,7 @@ async function checkProtests() {
       if (protest.penalty_type === 'grid_penalty' && protest.grid_penalty_places > 0) {
         embed.addFields({
           name: '📍 Hoe uitvoeren',
-          value: `Driver start **${protest.grid_penalty_places} positie${protest.grid_penalty_places > 1 ? 's' : ''} verder naar achteren** op de startgrid dan de kwalificatiepositie. Nieuwe positie innemen **vóór de start**.\n\n⛔ Niet nakomen = automatische diskwalificatie.`,
+          value: `Driver start op de normale kwalificatiepositie. Bij het groene licht moeten **${protest.grid_penalty_places} rijder${protest.grid_penalty_places > 1 ? 's' : ''} worden doorgelaten** voordat de driver mag racen.\n\n⛔ Niet nakomen = automatische diskwalificatie.`,
           inline: false,
         });
       }
@@ -514,7 +514,7 @@ async function checkStewardPenalties() {
     if (penalty.penalty_type === 'grid_penalty' && penalty.grid_penalty_places > 0) {
       embed.addFields({
         name: '📍 Hoe uitvoeren',
-        value: `Je start **${penalty.grid_penalty_places} positie${penalty.grid_penalty_places > 1 ? 's' : ''} verder naar achteren** op de startgrid dan je kwalificatiepositie. Neem je nieuwe positie in **vóór de start van de race**.\n\n⛔ Niet nakomen = automatische diskwalificatie.`,
+        value: `Je start op je normale kwalificatiepositie. Bij het groene licht laat je **${penalty.grid_penalty_places} rijder${penalty.grid_penalty_places > 1 ? 's' : ''}** passeren voordat je mag racen.\n\n⛔ Niet nakomen = automatische diskwalificatie.`,
         inline: false,
       });
     }
