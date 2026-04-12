@@ -961,9 +961,11 @@ const AdminPage = () => {
       // Herbereken 3SR standings voor deze race
       await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
 
+      const abandonRace = (allRaces || []).find((r: any) => r.id === result.race_id);
       const { error: penErr } = await (supabase as any).from("penalties").insert({
         race_id: result.race_id,
         user_id: result.user_id,
+        league_id: (abandonRace as any)?.league_id ?? null,
         penalty_type: "points_deduction",
         points_deduction: deduction,
         reason: "Race vroegtijdig verlaten zonder geldige reden.",
