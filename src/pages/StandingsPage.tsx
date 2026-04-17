@@ -6,6 +6,7 @@ import PreviewModal from "@/components/preview/PreviewModal";
 import DriverModal from "@/components/preview/DriverModal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useDrivers, useTeams, useLeagues } from "@/hooks/data/useSharedQueries";
 import { useState } from "react";
 import { Trophy } from "lucide-react";
 
@@ -13,32 +14,9 @@ const StandingsPage = () => {
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<any>(null);
 
-  const { data: leagues = [] } = useQuery({
-    queryKey: ["leagues-for-standings"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("leagues")
-        .select("id, name, season, car_class")
-        .order("created_at", { ascending: false });
-      return data || [];
-    },
-  });
-
-  const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("teams").select("id, name, color");
-      return data || [];
-    },
-  });
-
-  const { data: profiles = [] } = useQuery({
-    queryKey: ["drivers"],
-    queryFn: async () => {
-      const { data } = await supabase.from("confirmed_profiles").select("*");
-      return data || [];
-    },
-  });
+  const { data: leagues = [] } = useLeagues();
+  const { data: teams = [] } = useTeams();
+  const { data: profiles = [] } = useDrivers();
 
   const selectedId = activeLeagueId ?? leagues?.[0]?.id ?? null;
 

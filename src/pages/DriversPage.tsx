@@ -6,6 +6,7 @@ import PreviewModal from "@/components/preview/PreviewModal";
 import DriverModal from "@/components/preview/DriverModal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useDrivers, useTeams } from "@/hooks/data/useSharedQueries";
 import { useState } from "react";
 import { Users, Search } from "lucide-react";
 
@@ -13,18 +14,10 @@ const DriversPage = () => {
   const [search, setSearch] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<any>(null);
 
-  const { data: profiles = [], isLoading } = useQuery({
-    queryKey: ["drivers"],
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      const { data } = await supabase.from("confirmed_profiles").select("*");
-      return data || [];
-    },
-  });
+  const { data: profiles = [], isLoading } = useDrivers();
 
   const { data: stats } = useQuery({
     queryKey: ["driver-stats"],
-    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data } = await supabase
         .from("race_results")
@@ -42,14 +35,7 @@ const DriversPage = () => {
     },
   });
 
-  const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("teams").select("id, name, color");
-      return data || [];
-    },
-  });
+  const { data: teams = [] } = useTeams();
 
   const filtered = profiles.filter((p: any) =>
     !search || (p.display_name || p.iracing_name || "").toLowerCase().includes(search.toLowerCase())
