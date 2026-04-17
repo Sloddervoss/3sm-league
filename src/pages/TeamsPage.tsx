@@ -8,17 +8,12 @@ import PreviewModal from "@/components/preview/PreviewModal";
 import TeamModal from "@/components/preview/TeamModal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useTeams } from "@/hooks/data/useSharedQueries";
 import { Car, Trophy } from "lucide-react";
 
 const TeamsPage = () => {
   const [selectedTeam, setSelectedTeam] = useState<any>(null);
-  const { data: teams = [], isLoading } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("teams").select("*").order("name");
-      return data || [];
-    },
-  });
+  const { data: teams = [], isLoading } = useTeams();
 
   const { data: memberships = [] } = useQuery({
     queryKey: ["team-memberships-with-profiles"],
