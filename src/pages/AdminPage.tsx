@@ -232,7 +232,7 @@ const AdminPage = () => {
   const { data: teams } = useQuery({
     queryKey: ["admin-teams"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("teams").select("id, name, description, color, created_at, team_memberships(id, user_id, profiles(display_name, iracing_name))");
+      const { data, error } = await supabase.from("teams").select("id, name, description, color, logo_url, created_at, team_memberships(id, user_id, profiles(display_name, iracing_name))");
       if (error) throw error;
       return data;
     },
@@ -1527,8 +1527,12 @@ const AdminPage = () => {
                     <div key={team.id} className="bg-card border border-border rounded-lg p-5" style={{ borderTopColor: team.color, borderTopWidth: 3 }}>
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-md border border-border bg-secondary/50 flex items-center justify-center" style={{ backgroundColor: team.color + "33" }}>
-                            <Car className="w-5 h-5 text-muted-foreground/50" />
+                          <div className="w-10 h-10 rounded-md border border-border bg-secondary/50 flex items-center justify-center overflow-hidden" style={{ backgroundColor: team.color + "33" }}>
+                            {team.logo_url ? (
+                              <img src={team.logo_url} alt={team.name} className="w-full h-full object-contain" />
+                            ) : (
+                              <Car className="w-5 h-5 text-muted-foreground/50" />
+                            )}
                           </div>
                           <div>
                             <h3 className="font-heading font-bold text-lg">{team.name}</h3>
