@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -11,6 +11,29 @@ type LeagueOption = { id: string; name: string; season: string | null };
 const PointsAdmin = () => {
   const [selectedLeague, setSelectedLeague] = useState("");
   const [leaguePoints, setLeaguePoints] = useState<number[]>(DEFAULT_POINTS);
+
+  const { data: savedPoints } = useQuery({
+    queryKey: ["points-config", selectedLeague],
+    enabled: !!selectedLeague,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("points_config")
+        .select("position, points")
+        .eq("league_id", selectedLeague)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  useEffect(() => {
+    if (!selectedLeague) return;
+    if (savedPoints && savedPoints.length > 0) {
+      setLeaguePoints(savedPoints.map((r) => r.points));
+    } else if (savedPoints) {
+      setLeaguePoints(DEFAULT_POINTS);
+    }
+  }, [savedPoints, selectedLeague]);
 
   const { data: leagues = [] } = useQuery({
     queryKey: ["leagues-for-points"],
