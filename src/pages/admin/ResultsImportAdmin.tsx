@@ -14,6 +14,8 @@ import {
   matchProfileForImportRow,
 } from "@/lib/importHelpers";
 
+type JsonPreviewProfileRow = ProfileRow & { iracing_cust_id?: string | number | null };
+
 const DEFAULT_POINTS = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
 const EMPTY_ROW: ImportRow = { position: 1, display_name: "", laps: 0, best_lap: "", incidents: 0, fastest_lap: false };
@@ -396,7 +398,7 @@ const ResultsImportAdmin = () => {
             </div>
 
             {importRows.length > 0 && importRows[0].display_name && (() => {
-              const unmatched = importRows.filter((row) => !profiles?.find((p: any) =>
+              const unmatched = importRows.filter((row) => !profiles?.find((p: JsonPreviewProfileRow) =>
                 (p.iracing_cust_id && row.iracing_cust_id && String(p.iracing_cust_id) === String(row.iracing_cust_id)) ||
                 (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
                 (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
@@ -409,7 +411,7 @@ const ResultsImportAdmin = () => {
                       <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span>iRating</span><span className="text-center">FL</span>
                     </div>
                     {importRows.slice(0, 10).map((row, i) => {
-                      const matched = profiles?.find((p: any) =>
+                      const matched = profiles?.find((p: JsonPreviewProfileRow) =>
                         (p.iracing_cust_id && row.iracing_cust_id && String(p.iracing_cust_id) === String(row.iracing_cust_id)) ||
                         (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
                         (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
