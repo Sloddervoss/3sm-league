@@ -118,7 +118,7 @@ const NextRaceTeaser = () => {
                     className="text-[10px] font-bold px-2.5 py-1 rounded-full"
                     style={{ background: `${accentColor}1f`, color: accentColor }}
                   >
-                    Upcoming
+                    Binnenkort
                   </span>
                   {isStandalone ? (
                     <span

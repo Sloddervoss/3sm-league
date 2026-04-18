@@ -14,8 +14,8 @@ const Index = () => {
       <Navbar />
       <StickyRaceBar />
       <main className="pt-[108px]">
-        <HeroSection />
         <NextRaceTeaser />
+        <HeroSection />
         <ChampionshipLeader />
         <LatestResults />
         <TopDrivers />

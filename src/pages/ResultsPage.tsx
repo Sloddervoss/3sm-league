@@ -166,7 +166,7 @@ const ResultsPage = () => {
               <List className="w-5 h-5 text-accent" />
               <span className="text-sm font-medium text-accent uppercase tracking-[0.15em]">3SM</span>
             </div>
-            <h1 className="font-heading text-4xl md:text-5xl font-black">RACE RESULTS</h1>
+            <h1 className="font-heading text-4xl md:text-5xl font-black">UITSLAGEN</h1>
             <p className="text-muted-foreground mt-2">Alle race uitslagen en klassementen</p>
           </div>
         </section>

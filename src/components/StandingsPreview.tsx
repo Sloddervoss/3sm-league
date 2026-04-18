@@ -89,7 +89,7 @@ const StandingsPreview = ({ leagueId }: { leagueId?: string }) => {
               <Trophy className="w-4 h-4 text-orange-500" />
               <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Championship</span>
             </div>
-            <h2 className="font-heading font-black text-3xl md:text-4xl text-white leading-none">DRIVER STANDINGS</h2>
+            <h2 className="font-heading font-black text-3xl md:text-4xl text-white leading-none">COUREURS STAND</h2>
           </div>
           <Link to="/standings" className="flex items-center gap-1 text-xs font-bold text-gray-600 hover:text-orange-500 transition-colors">
             Volledig <ChevronRight className="w-3 h-3" />

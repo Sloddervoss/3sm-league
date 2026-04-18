@@ -64,10 +64,10 @@ const TopDrivers = () => {
               <Users className="w-4 h-4 text-orange-500" />
               <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Community</span>
             </div>
-            <h2 className="font-heading font-black text-3xl md:text-4xl text-white leading-none">TOP DRIVERS</h2>
+            <h2 className="font-heading font-black text-3xl md:text-4xl text-white leading-none">TOP COUREURS</h2>
           </div>
           <Link to="/drivers" className="flex items-center gap-1 text-xs font-bold text-gray-600 hover:text-orange-500 transition-colors">
-            Alle drivers <ChevronRight className="w-3 h-3" />
+            Alle coureurs <ChevronRight className="w-3 h-3" />
           </Link>
         </div>
 
