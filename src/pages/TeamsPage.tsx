@@ -109,7 +109,7 @@ const TeamsPage = () => {
             <div>
               <div className="flex items-center gap-2 mb-6">
                 <Trophy className="w-4 h-4 text-orange-500" />
-                <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Team Standings</span>
+                <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Team Klassement</span>
               </div>
               <NewStandingsTable standings={teamStandings} />
             </div>
