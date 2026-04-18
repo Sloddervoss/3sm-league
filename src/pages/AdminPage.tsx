@@ -23,7 +23,7 @@ const DriversList = () => {
   const { data: profiles, isLoading } = useQuery({
     queryKey: ["admin-all-profiles"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("admin_get_all_profiles");
+      const { data, error } = await supabase.rpc("admin_get_all_profiles");
       if (error) throw error;
       return data || [];
     },
@@ -32,7 +32,7 @@ const DriversList = () => {
   const { data: userRoles } = useQuery({
     queryKey: ["admin-user-roles"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("admin_get_user_roles");
+      const { data, error } = await supabase.rpc("admin_get_user_roles");
       if (error) throw error;
       return data || [];
     },
@@ -48,7 +48,7 @@ const DriversList = () => {
   const toggleAdmin = useMutation({
     mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
       const fn = grant ? "admin_grant_role" : "admin_revoke_role";
-      const { error } = await (supabase as any).rpc(fn, { target_user_id: userId, target_role: "admin" });
+      const { error } = await supabase.rpc(fn, { target_user_id: userId, target_role: "admin" });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -60,7 +60,7 @@ const DriversList = () => {
   const toggleSteward = useMutation({
     mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
       const fn = grant ? "admin_grant_role" : "admin_revoke_role";
-      const { error } = await (supabase as any).rpc(fn, { target_user_id: userId, target_role: "moderator" });
+      const { error } = await supabase.rpc(fn, { target_user_id: userId, target_role: "moderator" });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -71,7 +71,7 @@ const DriversList = () => {
 
   const deleteDriver = useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await (supabase as any).rpc("admin_delete_user", { target_user_id: userId });
+      const { error } = await supabase.rpc("admin_delete_user", { target_user_id: userId });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -267,7 +267,7 @@ const AdminPage = () => {
   const { data: seasonRegistrations } = useQuery({
     queryKey: ["admin-season-registrations"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("season_registrations")
         .select("league_id, user_id, status, created_at, car_choice, car_locked");
       if (error) throw error;
@@ -278,7 +278,7 @@ const AdminPage = () => {
   const { data: raceRegistrations } = useQuery({
     queryKey: ["admin-race-registrations"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("race_registrations")
         .select("race_id, user_id, status, created_at, car_choice, car_locked");
       if (error) throw error;
@@ -291,7 +291,7 @@ const AdminPage = () => {
     refetchOnMount: "always",
     staleTime: 0,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("team_creation_requests")
         .select("*, profiles(display_name, iracing_name)")
         .eq("status", "pending");
@@ -353,7 +353,7 @@ const AdminPage = () => {
 
   const createSoloRace = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase as any).from("races").insert({
+      const { error } = await supabase.from("races").insert({
         league_id: null,
         name: newSoloRace.name,
         track: newSoloRace.track,
@@ -392,7 +392,7 @@ const AdminPage = () => {
       const normalizedDate = data.race_date
         ? (data.race_date.length > 16 ? utcToAmsLocal(data.race_date) : data.race_date)
         : null;
-      const { error } = await (supabase as any).from("races").update({
+      const { error } = await supabase.from("races").update({
         name: data.name,
         track: data.track,
         race_date: normalizedDate ? amsToUTC(normalizedDate) : null,
@@ -463,9 +463,9 @@ const AdminPage = () => {
       // Set team_id on the requester's profile
       await supabase.from("profiles").update({ team_id: team.id } as any).eq("user_id", req.user_id);
       // Create team_membership
-      await (supabase as any).from("team_memberships").insert({ user_id: req.user_id, team_id: team.id, role: "driver" });
+      await supabase.from("team_memberships").insert({ user_id: req.user_id, team_id: team.id, role: "driver" });
       // Delete request
-      await (supabase as any).from("team_creation_requests").delete().eq("id", req.id);
+      await supabase.from("team_creation_requests").delete().eq("id", req.id);
     },
     onSuccess: () => {
       toast.success("Team aangemaakt en goedgekeurd!");
@@ -478,7 +478,7 @@ const AdminPage = () => {
 
   const denyCreationRequest = useMutation({
     mutationFn: async (reqId: string) => {
-      await (supabase as any).from("team_creation_requests").delete().eq("id", reqId);
+      await supabase.from("team_creation_requests").delete().eq("id", reqId);
     },
     onSuccess: () => {
       toast.success("Aanvraag afgewezen.");
@@ -520,11 +520,11 @@ const AdminPage = () => {
     try {
       const ext = file.name.split('.').pop();
       const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await (supabase as any).storage
+      const { error } = await supabase.storage
         .from('announcement-images')
         .upload(path, file, { upsert: false });
       if (error) throw error;
-      const { data: { publicUrl } } = (supabase as any).storage
+      const { data: { publicUrl } } = supabase.storage
         .from('announcement-images')
         .getPublicUrl(path);
       setAnnImage(publicUrl);
@@ -537,7 +537,7 @@ const AdminPage = () => {
 
   const sendAnnouncement = useMutation({
     mutationFn: async () => {
-      const { error } = await (supabase as any).from("announcements").insert({
+      const { error } = await supabase.from("announcements").insert({
         title: annTitle.trim(),
         message: annMessage.trim(),
         image_url: annImage || null,
@@ -585,7 +585,7 @@ const AdminPage = () => {
       await supabase.from("races").update({ status: "completed", counts_for_3sr: true }).eq("id", importRaceId);
 
       // Re-apply existing points_deduction penalties so they aren't wiped by the upsert
-      const { data: existingPenalties } = await (supabase as any)
+      const { data: existingPenalties } = await supabase
         .from("penalties")
         .select("user_id, points_deduction")
         .eq("race_id", importRaceId)
@@ -613,12 +613,12 @@ const AdminPage = () => {
             (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
           );
           if (!profile) continue;
-          await (supabase as any).from("season_registrations")
+          await supabase.from("season_registrations")
             .update({ car_choice: row.car_name })
             .eq("league_id", raceForCar.league_id)
             .eq("user_id", profile.user_id)
             .eq("car_locked", false);
-          await (supabase as any).from("race_registrations")
+          await supabase.from("race_registrations")
             .update({ car_choice: row.car_name })
             .eq("race_id", importRaceId)
             .eq("user_id", profile.user_id)
@@ -1093,7 +1093,7 @@ const AdminPage = () => {
                                             onBlur={async (e) => {
                                               const val = e.target.value.trim();
                                               if (val === (r.car_choice || "")) return;
-                                              await (supabase as any).from("season_registrations")
+                                              await supabase.from("season_registrations")
                                                 .update({ car_choice: val || null })
                                                 .eq("league_id", r.league_id).eq("user_id", r.user_id);
                                               queryClient.invalidateQueries({ queryKey: ["admin-season-registrations"] });
@@ -1102,7 +1102,7 @@ const AdminPage = () => {
                                           <button
                                             title={r.car_locked ? "Klik om te unlocken" : "Klik om te locken"}
                                             onClick={async () => {
-                                              await (supabase as any).from("season_registrations")
+                                              await supabase.from("season_registrations")
                                                 .update({ car_locked: !r.car_locked })
                                                 .eq("league_id", r.league_id).eq("user_id", r.user_id);
                                               queryClient.invalidateQueries({ queryKey: ["admin-season-registrations"] });
@@ -1148,7 +1148,7 @@ const AdminPage = () => {
                                               const val = e.target.value.trim();
                                               if (val === (firstReg?.car_choice || "")) return;
                                               for (const rid of raceIds) {
-                                                await (supabase as any).from("race_registrations")
+                                                await supabase.from("race_registrations")
                                                   .update({ car_choice: val || null })
                                                   .eq("race_id", rid).eq("user_id", userId).eq("car_locked", false);
                                               }
@@ -1159,7 +1159,7 @@ const AdminPage = () => {
                                             title={firstReg?.car_locked ? "Klik om te unlocken" : "Klik om te locken"}
                                             onClick={async () => {
                                               for (const rid of raceIds) {
-                                                await (supabase as any).from("race_registrations")
+                                                await supabase.from("race_registrations")
                                                   .update({ car_locked: !firstReg?.car_locked })
                                                   .eq("race_id", rid).eq("user_id", userId);
                                               }

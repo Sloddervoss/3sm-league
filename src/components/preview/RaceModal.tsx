@@ -65,7 +65,7 @@ const RaceModal = ({ race, registration }: Props) => {
     enabled: race.status !== "completed",
     queryFn: async () => {
       // Direct race registrants
-      const { data: raceRegs } = await (supabase as any)
+      const { data: raceRegs } = await supabase
         .from("race_registrations")
         .select("user_id")
         .eq("race_id", race.id);
@@ -74,7 +74,7 @@ const RaceModal = ({ race, registration }: Props) => {
       let seasonUserIds: string[] = [];
       const leagueId = (race as any).leagues?.id;
       if (leagueId) {
-        const { data } = await (supabase as any)
+        const { data } = await supabase
           .from("season_registrations")
           .select("user_id")
           .eq("league_id", leagueId);

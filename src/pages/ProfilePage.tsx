@@ -56,7 +56,7 @@ const ProfilePage = () => {
     enabled: !!user,
     refetchOnMount: "always",
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("team_creation_requests")
         .select("*")
         .eq("user_id", user!.id)
@@ -171,7 +171,7 @@ const ProfilePage = () => {
   const joinTeam = useMutation({
     mutationFn: async (teamId: string) => {
       await supabase.from("profiles").update({ team_id: teamId } as any).eq("user_id", user!.id);
-      await (supabase as any).from("team_memberships").insert({ user_id: user!.id, team_id: teamId, role: "driver" });
+      await supabase.from("team_memberships").insert({ user_id: user!.id, team_id: teamId, role: "driver" });
     },
     onSuccess: () => {
       toast.success("Team gejoint!");
@@ -185,7 +185,7 @@ const ProfilePage = () => {
   // Leave current team
   const leaveTeam = useMutation({
     mutationFn: async () => {
-      await (supabase as any).from("team_memberships").delete().eq("user_id", user!.id);
+      await supabase.from("team_memberships").delete().eq("user_id", user!.id);
       const { error } = await supabase.from("profiles").update({ team_id: null } as any).eq("user_id", user!.id);
       if (error) throw error;
     },
@@ -238,7 +238,7 @@ const ProfilePage = () => {
   // Cancel pending creation request
   const cancelCreationRequest = useMutation({
     mutationFn: async (reqId: string) => {
-      await (supabase as any).from("team_creation_requests").delete().eq("id", reqId);
+      await supabase.from("team_creation_requests").delete().eq("id", reqId);
     },
     onSuccess: () => {
       toast.success("Aanvraag ingetrokken.");

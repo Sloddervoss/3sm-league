@@ -62,7 +62,7 @@ const StewardPage = () => {
     setExpandedId(isExpanding ? protest.id : null);
     if (isExpanding && driverSpMap[protest.id] === undefined) {
       const leagueId = protest.races?.league_id ?? null;
-      const { data } = await (supabase as any).rpc("get_driver_sp", {
+      const { data } = await supabase.rpc("get_driver_sp", {
         p_user_id: protest.accused_user_id,
         p_league_id: leagueId,
       });
@@ -149,7 +149,7 @@ const StewardPage = () => {
       const leagueId = protest.races?.league_id ?? null;
 
       // Update protest
-      const { error: protestError } = await (supabase as any).from("protests").update({
+      const { error: protestError } = await supabase.from("protests").update({
         status: decision.status,
         steward_notes: decision.steward_notes || null,
         penalty_type: penaltyType,
@@ -189,7 +189,7 @@ const StewardPage = () => {
       }
 
       // Sla penalty op
-      const { error: penError } = await (supabase as any).from("penalties").insert({
+      const { error: penError } = await supabase.from("penalties").insert({
         protest_id: protest.id,
         race_id: protest.race_id,
         user_id: protest.accused_user_id,
@@ -260,7 +260,7 @@ const StewardPage = () => {
         await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: stewardAction.race_id });
       }
 
-      const { error } = await (supabase as any).from("penalties").insert({
+      const { error } = await supabase.from("penalties").insert({
         race_id: stewardAction.race_id,
         user_id: stewardAction.accused_user_id,
         league_id: leagueId,
@@ -295,7 +295,7 @@ const StewardPage = () => {
     queryKey: ["steward-sp-penalties"],
     enabled: canModerate && activeTab === "rijders",
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("penalties")
         .select("id, user_id, race_id, league_id, penalty_sp, penalty_type, penalty_category, reason, created_at, races(id, name, race_date, league_id, leagues(name, season))")
         .eq("revoked", false)
@@ -361,7 +361,7 @@ const StewardPage = () => {
     queryKey: ["abandon-penalties"],
     enabled: canModerate,
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("penalties")
         .select("id, race_id, user_id, source, points_deduction, notified, revoked")
         .in("source", ["abandon", "normal_dnf"]);
@@ -373,7 +373,7 @@ const StewardPage = () => {
 
   const markNormalDnf = useMutation({
     mutationFn: async ({ result }: { result: any }) => {
-      const { error } = await (supabase as any).from("penalties").insert({
+      const { error } = await supabase.from("penalties").insert({
         race_id: result.race_id,
         user_id: result.user_id,
         penalty_type: "warning",
@@ -403,7 +403,7 @@ const StewardPage = () => {
       if (raceErr) throw raceErr;
       await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
       const raceInfo = (races as any[])?.find((r: any) => r.id === result.race_id);
-      const { error: penErr } = await (supabase as any).from("penalties").insert({
+      const { error: penErr } = await supabase.from("penalties").insert({
         race_id: result.race_id,
         user_id: result.user_id,
         league_id: (raceInfo as any)?.league_id ?? null,
@@ -438,10 +438,10 @@ const StewardPage = () => {
         }
       }
       if (penalty.notified) {
-        const { error } = await (supabase as any).from("penalties").update({ revoked: true }).eq("id", penalty.id);
+        const { error } = await supabase.from("penalties").update({ revoked: true }).eq("id", penalty.id);
         if (error) throw error;
       } else {
-        const { error } = await (supabase as any).from("penalties").delete().eq("id", penalty.id);
+        const { error } = await supabase.from("penalties").delete().eq("id", penalty.id);
         if (error) throw error;
       }
     },

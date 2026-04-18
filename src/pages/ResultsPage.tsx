@@ -35,7 +35,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
     queryKey: ["race-penalties-detail", raceId],
     staleTime: STALE,
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("penalties")
         .select("user_id, penalty_type, points_deduction")
         .eq("race_id", raceId);
