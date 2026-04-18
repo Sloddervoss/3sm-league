@@ -32,7 +32,7 @@ type CreationRequest = {
 };
 
 const resizeImageToDataUrl = (file: File, max = 256): Promise<string> =>
-  new Promise((resolve) => {
+  new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
@@ -43,6 +43,10 @@ const resizeImageToDataUrl = (file: File, max = 256): Promise<string> =>
       canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Afbeelding kon niet geladen worden."));
     };
     img.src = url;
   });
@@ -126,9 +130,12 @@ const TeamsAdmin = () => {
         logo_url: req.logo_url || null,
       }).select().single();
       if (teamErr) throw teamErr;
-      await supabase.from("profiles").update({ team_id: team.id } as never).eq("user_id", req.user_id);
-      await supabase.from("team_memberships").insert({ user_id: req.user_id, team_id: team.id, role: "driver" });
-      await supabase.from("team_creation_requests").delete().eq("id", req.id);
+      const { error: profileErr } = await supabase.from("profiles").update({ team_id: team.id }).eq("user_id", req.user_id);
+      if (profileErr) throw profileErr;
+      const { error: memberErr } = await supabase.from("team_memberships").insert({ user_id: req.user_id, team_id: team.id, role: "driver" });
+      if (memberErr) throw memberErr;
+      const { error: deleteErr } = await supabase.from("team_creation_requests").delete().eq("id", req.id);
+      if (deleteErr) throw deleteErr;
     },
     onSuccess: () => {
       toast.success("Team aangemaakt en goedgekeurd!");
