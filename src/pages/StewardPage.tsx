@@ -21,6 +21,20 @@ import {
 } from "@/lib/stewardConstants";
 import type { Category, DecisionState, StewardActionState } from "@/lib/stewardConstants";
 
+type RaceForProtest = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string;
+  league_id: string | null;
+};
+
+type DriverForProtest = {
+  user_id: string;
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
 const StewardPage = () => {
   const { user, isAdmin, isSteward, loading } = useAuth();
   const queryClient = useQueryClient();
@@ -118,9 +132,9 @@ const StewardPage = () => {
 
   const submitProtest = useMutation({
     mutationFn: async () => {
-      const race = races?.find((r: any) => r.id === form.race_id);
+      const race = (races as RaceForProtest[] | undefined)?.find(r => r.id === form.race_id);
       if (race) {
-        const hoursSince = (Date.now() - new Date((race as any).race_date).getTime()) / (1000 * 60 * 60);
+        const hoursSince = (Date.now() - new Date(race.race_date).getTime()) / (1000 * 60 * 60);
         if (hoursSince > PROTEST_DEADLINE_HOURS)
           throw new Error(`Protest kan alleen binnen ${PROTEST_DEADLINE_HOURS} uur na de race worden ingediend.`);
       }
@@ -234,8 +248,8 @@ const StewardPage = () => {
       if (!stewardAction.penalty_type)
         throw new Error("Selecteer een categorie of straf type.");
 
-      const race = (races as any[])?.find((r: any) => r.id === stewardAction.race_id);
-      const leagueId = (race as any)?.league_id ?? null;
+      const race = (races as RaceForProtest[] | undefined)?.find(r => r.id === stewardAction.race_id);
+      const leagueId = race?.league_id ?? null;
 
       if (stewardAction.penalty_type === "disqualification") {
         const { error } = await supabase.from("race_results")
@@ -402,11 +416,11 @@ const StewardPage = () => {
         .eq("id", result.id);
       if (raceErr) throw raceErr;
       await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
-      const raceInfo = (races as any[])?.find((r: any) => r.id === result.race_id);
+      const raceInfo = (races as RaceForProtest[] | undefined)?.find(r => r.id === result.race_id);
       const { error: penErr } = await supabase.from("penalties").insert({
         race_id: result.race_id,
         user_id: result.user_id,
-        league_id: (raceInfo as any)?.league_id ?? null,
+        league_id: raceInfo?.league_id ?? null,
         penalty_type: "points_deduction",
         penalty_category: "B",
         penalty_sp: 3,
@@ -827,7 +841,7 @@ const StewardPage = () => {
                     <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Race *</label>
                     <select value={form.race_id} onChange={e => setForm({ ...form, race_id: e.target.value })} className="w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
                       <option value="">Selecteer race...</option>
-                      {(races as any[])?.map((race: any) => {
+                      {(races as RaceForProtest[])?.map((race: RaceForProtest) => {
                         const hoursSince = (Date.now() - new Date(race.race_date).getTime()) / (1000 * 60 * 60);
                         const expired = hoursSince > PROTEST_DEADLINE_HOURS;
                         return (
@@ -842,7 +856,7 @@ const StewardPage = () => {
                     <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Driver onder protest *</label>
                     <select value={form.accused_user_id} onChange={e => setForm({ ...form, accused_user_id: e.target.value })} className="w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
                       <option value="">Selecteer driver...</option>
-                      {(drivers as any[])?.filter((d: any) => d.user_id !== user.id).map((driver: any) => (
+                      {(drivers as DriverForProtest[])?.filter(d => d.user_id !== user.id).map((driver: DriverForProtest) => (
                         <option key={driver.user_id} value={driver.user_id}>{driver.iracing_name || driver.display_name}</option>
                       ))}
                     </select>
@@ -884,7 +898,7 @@ const StewardPage = () => {
                     <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Race *</label>
                     <select value={stewardAction.race_id} onChange={e => setStewardAction(prev => ({ ...prev, race_id: e.target.value }))} className="w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
                       <option value="">Selecteer race...</option>
-                      {(races as any[])?.map((race: any) => (
+                      {(races as RaceForProtest[])?.map((race: RaceForProtest) => (
                         <option key={race.id} value={race.id}>
                           {race.name} — {race.track} ({new Date(race.race_date).toLocaleDateString("nl-NL", { timeZone: "Europe/Amsterdam" })})
                         </option>
@@ -895,7 +909,7 @@ const StewardPage = () => {
                     <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Driver *</label>
                     <select value={stewardAction.accused_user_id} onChange={e => setStewardAction(prev => ({ ...prev, accused_user_id: e.target.value }))} className="w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
                       <option value="">Selecteer driver...</option>
-                      {(drivers as any[])?.map((driver: any) => (
+                      {(drivers as DriverForProtest[])?.map((driver: DriverForProtest) => (
                         <option key={driver.user_id} value={driver.user_id}>{driver.iracing_name || driver.display_name}</option>
                       ))}
                     </select>
