@@ -7,10 +7,8 @@ import {
   type ImportRow,
   type ProfileRow,
   type RaceOption,
-  type IRacingJsonSession,
-  type IRacingJsonResult,
-  parseLapMs,
-  formatIRacingLapTime,
+  parseCsvRows,
+  parseIRacingJsonRows,
   matchProfileForImportRow,
 } from "@/lib/importHelpers";
 
@@ -203,48 +201,10 @@ const ResultsImportAdmin = () => {
                       reader.onload = (ev) => {
                         const text = ev.target?.result as string;
                         if (!text) return;
-                        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-                        if (lines.length < 2) { toast.error("CSV lijkt leeg"); return; }
-
-                        let headerLineIdx = 0;
-                        for (let li = 0; li < Math.min(lines.length, 5); li++) {
-                          if (lines[li].toLowerCase().includes("fin pos") || lines[li].toLowerCase().includes("finpos") || lines[li].toLowerCase().startsWith('"fin pos"')) { headerLineIdx = li; break; }
-                        }
-                        const header = lines[headerLineIdx].split(",").map(h => h.trim().toLowerCase().replace(/"/g, ""));
-                        const finPosIdx      = header.findIndex(h => h === "fin pos" || h === "finpos" || h === "pos" || h === "finish");
-                        const custIdIdx      = header.findIndex(h => h === "cust id" || h.includes("custid") || h.includes("customerid"));
-                        const nameIdx        = header.findIndex(h => h === "name" || h.includes("display name") || h.includes("driver"));
-                        const lapsIdx        = header.findIndex(h => h === "laps comp" || h === "laps" || h === "laps completed");
-                        const bestLapIdx     = header.findIndex(h => h === "fastest lap time" || h.includes("best lap") || h.includes("bestlap") || h.includes("fastest lap"));
-                        const incIdx         = header.findIndex(h => h === "inc" || h.includes("incident"));
-                        const newIRatingIdx  = header.findIndex(h => h === "new irating");
-                        const newLicLevelIdx = header.findIndex(h => h === "new license level");
-                        const newLicSubIdx   = header.findIndex(h => h === "new license sub-level");
-
-                        const parsed = lines.slice(headerLineIdx + 1).map((line, i) => {
-                          const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
-                          if (cols.length < 3) return null;
-                          const pos       = finPosIdx >= 0  ? parseInt(cols[finPosIdx]) || i + 1 : i + 1;
-                          const name      = nameIdx >= 0    ? cols[nameIdx]   : `Driver ${i + 1}`;
-                          const laps      = lapsIdx >= 0    ? parseInt(cols[lapsIdx]) || 0 : 0;
-                          const bestLap   = bestLapIdx >= 0 ? cols[bestLapIdx] : "";
-                          const incidents = incIdx >= 0     ? parseInt(cols[incIdx]) || 0 : 0;
-                          const custId    = custIdIdx >= 0  ? cols[custIdIdx] : undefined;
-                          const newIR     = newIRatingIdx >= 0 && cols[newIRatingIdx]   ? parseInt(cols[newIRatingIdx])  : undefined;
-                          const newLL     = newLicLevelIdx >= 0 && cols[newLicLevelIdx] ? parseInt(cols[newLicLevelIdx]) : undefined;
-                          const newLS     = newLicSubIdx >= 0 && cols[newLicSubIdx] !== "" ? parseInt(cols[newLicSubIdx]) : undefined;
-                          return { position: pos, display_name: name, laps, best_lap: bestLap, incidents, fastest_lap: false, iracing_cust_id: custId, new_irating: newIR, new_license_level: newLL, new_license_sub_level: newLS };
-                        }).filter((r): r is NonNullable<typeof r> => !!r && !!r.display_name && !isNaN(r.position));
-
-                        const withLaps = parsed.filter(r => r.best_lap && parseLapMs(r.best_lap) < Infinity);
-                        if (withLaps.length) {
-                          const fastest = withLaps.reduce((a, b) => parseLapMs(a.best_lap) < parseLapMs(b.best_lap) ? a : b);
-                          fastest.fastest_lap = true;
-                        }
-
-                        if (parsed.length === 0) { toast.error("Geen geldige rijen gevonden in CSV"); return; }
-                        setImportRows(parsed);
-                        toast.success(`${parsed.length} drivers geladen uit CSV`);
+                        const result = parseCsvRows(text);
+                        if (result.error) { toast.error(result.error); return; }
+                        setImportRows(result.rows);
+                        toast.success(`${result.rows.length} drivers geladen uit CSV`);
                       };
                       reader.readAsText(file);
                     }}
@@ -335,55 +295,10 @@ const ResultsImportAdmin = () => {
                       setJsonFileName(file.name);
                       const reader = new FileReader();
                       reader.onload = (ev) => {
-                        try {
-                          const json = JSON.parse(ev.target?.result as string);
-                          const root = json.data ?? json;
-                          const sessions: IRacingJsonSession[] = root.session_results || [];
-                          const raceSession = sessions.find((s: IRacingJsonSession) =>
-                            s.simsession_type === 6 ||
-                            (s.simsession_type_name || "").toLowerCase().includes("race") ||
-                            s.simsession_number === 0
-                          ) ?? sessions.sort((a: IRacingJsonSession, b: IRacingJsonSession) => (b.results?.length ?? 0) - (a.results?.length ?? 0))[0];
-                          if (!raceSession) {
-                            toast.error("Geen Race sessie gevonden in JSON — controleer of het een iRacing event result JSON is");
-                            return;
-                          }
-                          const results: IRacingJsonResult[] = raceSession.results || [];
-                          if (!results.length) {
-                            toast.error("Geen resultaten gevonden in Race sessie");
-                            return;
-                          }
-                          const validLaps = results.filter((r: IRacingJsonResult) => r.best_lap_time > 0);
-                          const fastestCustId = validLaps.length
-                            ? validLaps.reduce((a: IRacingJsonResult, b: IRacingJsonResult) => a.best_lap_time < b.best_lap_time ? a : b).cust_id
-                            : null;
-                          const maxLaps = Math.max(...results.map((r: IRacingJsonResult) => r.laps_complete || 0));
-                          const parsed: ImportRow[] = results
-                            .sort((a: IRacingJsonResult, b: IRacingJsonResult) => a.finish_position - b.finish_position)
-                            .map((r: IRacingJsonResult) => ({
-                              position: r.finish_position + 1,
-                              display_name: r.display_name || "",
-                              laps: r.laps_complete || 0,
-                              best_lap: formatIRacingLapTime(r.best_lap_time),
-                              incidents: r.incidents || 0,
-                              fastest_lap: r.cust_id === fastestCustId,
-                              iracing_cust_id: String(r.cust_id),
-                              new_irating: r.newi_rating ?? undefined,
-                              new_license_level: r.new_license_level ?? undefined,
-                              new_license_sub_level: r.new_sub_level ?? undefined,
-                              car_name: r.car_name || r.livery?.car_name || undefined,
-                              dnf: (r.reason_out_id !== undefined && r.reason_out_id !== 0) || (r.reason_out && r.reason_out !== "Running") || ((r.laps_complete || 0) < maxLaps),
-                            }))
-                            .filter((r: ImportRow) => r.display_name);
-                          if (!parsed.length) {
-                            toast.error("Geen geldige drivers gevonden in JSON");
-                            return;
-                          }
-                          setImportRows(parsed);
-                          toast.success(`${parsed.length} drivers geladen uit JSON (inclusief iRating)`);
-                        } catch {
-                          toast.error("Ongeldig JSON bestand");
-                        }
+                        const result = parseIRacingJsonRows(ev.target?.result as string);
+                        if (result.error) { toast.error(result.error); return; }
+                        setImportRows(result.rows);
+                        toast.success(`${result.rows.length} drivers geladen uit JSON (inclusief iRating)`);
                       };
                       reader.readAsText(file);
                     }}
