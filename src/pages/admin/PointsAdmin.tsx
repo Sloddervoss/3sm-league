@@ -49,13 +49,14 @@ const PointsAdmin = () => {
   const savePointsConfig = useMutation({
     mutationFn: async () => {
       if (!selectedLeague) throw new Error("Selecteer een league");
-      const rows = leaguePoints.map((pts, i) => ({ league_id: selectedLeague, position: i + 1, points: pts }));
+      const leagueId = selectedLeague;
+      const rows = leaguePoints.map((pts, i) => ({ league_id: leagueId, position: i + 1, points: pts }));
       const { error } = await supabase.from("points_config").upsert(rows, { onConflict: "league_id,position" });
       if (error) throw error;
-      return rows.map(({ position, points }) => ({ position, points }));
+      return { leagueId, rows: rows.map(({ position, points }) => ({ position, points })) };
     },
-    onSuccess: (rows) => {
-      queryClient.setQueryData(["points-config", selectedLeague], rows);
+    onSuccess: ({ leagueId, rows }) => {
+      queryClient.setQueryData(["points-config", leagueId], rows);
       toast.success("Punten systeem opgeslagen!");
     },
     onError: (err: Error) => toast.error(err.message),
