@@ -32,7 +32,7 @@ const Navbar = () => {
         </Link>
 
         {/* Desktop */}
-        <div className="hidden lg:flex items-center gap-0">
+        <div className="hidden xl:flex items-center gap-0">
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
@@ -117,7 +117,7 @@ const Navbar = () => {
 
         {/* Mobile toggle */}
         <button
-          className="lg:hidden text-foreground"
+          className="xl:hidden text-foreground"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -129,7 +129,7 @@ const Navbar = () => {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:hidden bg-card border-b border-border px-4 pb-4"
+          className="xl:hidden bg-card border-b border-border px-4 pb-4"
         >
           {navItems.map((item) => {
             const active = location.pathname === item.path;
