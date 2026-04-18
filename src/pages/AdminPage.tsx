@@ -453,7 +453,7 @@ const AdminPage = () => {
   const approveCreationRequest = useMutation({
     mutationFn: async (req: any) => {
       // Create the new team
-      const { data: team, error: teamErr } = await (supabase as any).from("teams").insert({
+      const { data: team, error: teamErr } = await supabase.from("teams").insert({
         name: req.team_name,
         description: req.team_description || null,
         color: req.team_color || "#f97316",
@@ -488,7 +488,7 @@ const AdminPage = () => {
 
   const updateTeamLogo = useMutation({
     mutationFn: async ({ teamId, logoUrl }: { teamId: string; logoUrl: string }) => {
-      const { error } = await (supabase as any).from("teams").update({ logo_url: logoUrl || null }).eq("id", teamId);
+      const { error } = await supabase.from("teams").update({ logo_url: logoUrl || null }).eq("id", teamId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -502,7 +502,7 @@ const AdminPage = () => {
 
   const updateTeamName = useMutation({
     mutationFn: async ({ teamId, name }: { teamId: string; name: string }) => {
-      const { error } = await (supabase as any).from("teams").update({ name }).eq("id", teamId);
+      const { error } = await supabase.from("teams").update({ name }).eq("id", teamId);
       if (error) throw error;
     },
     onSuccess: () => {
