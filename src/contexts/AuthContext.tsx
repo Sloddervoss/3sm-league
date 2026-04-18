@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -30,33 +30,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isSteward, setIsSteward] = useState(false);
+  const roleRequestRef = useRef(0);
 
   const applySession = (session: Session | null) => {
     setSession(session);
-    if (session?.user) {
-      const headers = {
-        "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
-        "Authorization": `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-      };
-      const base = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/has_role`;
-      fetch(base, { method: "POST", headers, body: JSON.stringify({ _user_id: session.user.id, _role: "admin" }) })
-        .then((r) => r.json())
-        .then((data) => setIsAdmin(!!data))
-        .catch(() => setIsAdmin(false));
-      fetch(base, { method: "POST", headers, body: JSON.stringify({ _user_id: session.user.id, _role: "super_admin" }) })
-        .then((r) => r.json())
-        .then((data) => setIsSuperAdmin(!!data))
-        .catch(() => setIsSuperAdmin(false));
-      fetch(base, { method: "POST", headers, body: JSON.stringify({ _user_id: session.user.id, _role: "moderator" }) })
-        .then((r) => r.json())
-        .then((data) => setIsSteward(!!data))
-        .catch(() => setIsSteward(false));
-    } else {
+    const requestId = ++roleRequestRef.current;
+
+    if (!session?.user) {
       setIsAdmin(false);
       setIsSuperAdmin(false);
       setIsSteward(false);
+      return;
     }
+
+    const userId = session.user.id;
+    Promise.allSettled([
+      supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
+      supabase.rpc("has_role", { _user_id: userId, _role: "super_admin" }),
+      supabase.rpc("has_role", { _user_id: userId, _role: "moderator" }),
+    ]).then(([adminRes, superAdminRes, stewardRes]) => {
+      if (requestId !== roleRequestRef.current) return;
+      setIsAdmin(adminRes.status === "fulfilled" ? !!adminRes.value.data : false);
+      setIsSuperAdmin(superAdminRes.status === "fulfilled" ? !!superAdminRes.value.data : false);
+      setIsSteward(stewardRes.status === "fulfilled" ? !!stewardRes.value.data : false);
+    });
   };
 
   useEffect(() => {
