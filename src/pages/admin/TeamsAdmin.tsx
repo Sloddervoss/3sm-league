@@ -91,6 +91,7 @@ const TeamsAdmin = () => {
   const invalidateTeams = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-teams"] });
     queryClient.invalidateQueries({ queryKey: ["teams"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-team-count"] });
   };
 
   const createTeam = useMutation({
