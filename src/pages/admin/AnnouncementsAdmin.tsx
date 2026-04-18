@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useTeams } from "@/hooks/data/useSharedQueries";
+import { useTeams, type Team } from "@/hooks/data/useSharedQueries";
 import { toast } from "sonner";
 import { Flag } from "lucide-react";
 
@@ -29,8 +29,8 @@ const AnnouncementsAdmin = () => {
         .from('announcement-images')
         .getPublicUrl(path);
       setAnnImage(publicUrl);
-    } catch (e: any) {
-      setAnnImageError(e.message || "Upload mislukt.");
+    } catch (e: unknown) {
+      setAnnImageError(e instanceof Error ? e.message : "Upload mislukt.");
     } finally {
       setAnnImageUploading(false);
     }
@@ -120,7 +120,7 @@ const AnnouncementsAdmin = () => {
                 {[
                   { value: "everyone", label: "@everyone" },
                   { value: "here", label: "@here" },
-                  ...((teams as any[])?.map((t: any) => ({ value: `team_${t.id}`, label: `@${t.name}` })) || []),
+                  ...teams.map((t: Team) => ({ value: `team_${t.id}`, label: `@${t.name}` })),
                 ].map(opt => (
                   <label key={opt.value} className="flex items-center gap-2 cursor-pointer text-sm">
                     <input
@@ -156,7 +156,7 @@ const AnnouncementsAdmin = () => {
               <div className="px-4 pt-3 pb-1 flex flex-wrap gap-1">
                 {annTags.map(tag => (
                   <span key={tag} className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: "#5865f230", color: "#5865f2" }}>
-                    {tag === "everyone" ? "@everyone" : tag === "here" ? "@here" : `@${(teams as any[])?.find((t: any) => `team_${t.id}` === tag)?.name || tag}`}
+                    {tag === "everyone" ? "@everyone" : tag === "here" ? "@here" : `@${teams.find((t: Team) => `team_${t.id}` === tag)?.name || tag}`}
                   </span>
                 ))}
               </div>
