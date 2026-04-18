@@ -148,7 +148,8 @@ const TeamsAdmin = () => {
 
   const denyCreationRequest = useMutation({
     mutationFn: async (reqId: string) => {
-      await supabase.from("team_creation_requests").delete().eq("id", reqId);
+      const { error } = await supabase.from("team_creation_requests").delete().eq("id", reqId);
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Aanvraag afgewezen.");
@@ -267,7 +268,9 @@ const TeamsAdmin = () => {
                     className="hidden"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
-                      if (file) setNewTeamLogoPreview(await resizeImageToDataUrl(file));
+                      if (!file) return;
+                      try { setNewTeamLogoPreview(await resizeImageToDataUrl(file)); }
+                      catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Logo laden mislukt."); }
                     }}
                   />
                 </label>
@@ -379,7 +382,9 @@ const TeamsAdmin = () => {
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (file) setEditingTeamLogo(await resizeImageToDataUrl(file));
+                        if (!file) return;
+                        try { setEditingTeamLogo(await resizeImageToDataUrl(file)); }
+                        catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Logo laden mislukt."); }
                       }}
                     />
                   </label>
