@@ -19,6 +19,9 @@ const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, isAdmin, signOut } = useAuth();
 
+  const showDesktop = isAdmin ? "xl:flex" : "lg:flex";
+  const hideDesktop = isAdmin ? "xl:hidden" : "lg:hidden";
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
@@ -32,7 +35,7 @@ const Navbar = () => {
         </Link>
 
         {/* Desktop */}
-        <div className="hidden xl:flex items-center gap-0">
+        <div className={`hidden ${showDesktop} items-center gap-0`}>
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
@@ -117,7 +120,7 @@ const Navbar = () => {
 
         {/* Mobile toggle */}
         <button
-          className="xl:hidden text-foreground"
+          className={`${hideDesktop} text-foreground`}
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -129,7 +132,7 @@ const Navbar = () => {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="xl:hidden bg-card border-b border-border px-4 pb-4"
+          className={`${hideDesktop} bg-card border-b border-border px-4 pb-4`}
         >
           {navItems.map((item) => {
             const active = location.pathname === item.path;
