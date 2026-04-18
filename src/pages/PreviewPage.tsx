@@ -218,7 +218,7 @@ const PreviewPage = () => {
   const { data: raceRegs = [] } = useQuery({
     queryKey: ["race-registrations"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("race_registrations").select("race_id");
+      const { data } = await supabase.from("race_registrations").select("race_id");
       return data || [];
     },
   });
@@ -227,7 +227,7 @@ const PreviewPage = () => {
     queryKey: ["season-reg-count", leagues?.[0]?.id],
     enabled: !!leagues?.length,
     queryFn: async () => {
-      const { count } = await (supabase as any)
+      const { count } = await supabase
         .from("season_registrations")
         .select("id", { count: "exact" })
         .eq("league_id", leagues[0].id);

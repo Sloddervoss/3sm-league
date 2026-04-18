@@ -99,7 +99,7 @@ const CalendarPage = () => {
     queryKey: ["season-reg-count", leagues?.[0]?.id],
     enabled: !!leagues?.length,
     queryFn: async () => {
-      const { count } = await (supabase as any)
+      const { count } = await supabase
         .from("season_registrations")
         .select("id", { count: "exact" })
         .eq("league_id", leagues[0].id);

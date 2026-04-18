@@ -46,7 +46,7 @@ const LatestResults = () => {
     queryKey: ["latest-race-penalties", lastRace?.id],
     enabled: !!lastRace?.id,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("penalties")
         .select("race_id, user_id, penalty_type, points_deduction, time_penalty_seconds, grid_penalty_places, race_ban_next")
         .eq("race_id", lastRace!.id)

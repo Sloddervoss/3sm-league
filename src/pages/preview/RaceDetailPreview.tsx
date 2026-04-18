@@ -72,7 +72,7 @@ const RaceDetailPreview = () => {
     queryKey: ["race-reg-count", realRace?.id],
     enabled: !!realRace?.id && !mockMode,
     queryFn: async () => {
-      const { count } = await (supabase as any).from("race_registrations").select("id", { count: "exact" }).eq("race_id", realRace.id);
+      const { count } = await supabase.from("race_registrations").select("id", { count: "exact" }).eq("race_id", realRace.id);
       return count || 0;
     },
   });

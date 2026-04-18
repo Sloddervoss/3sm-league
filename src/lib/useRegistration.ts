@@ -64,7 +64,7 @@ export function useRegistration() {
   // ── Mutations ──────────────────────────────────────────────
   const registerForSeason = useMutation({
     mutationFn: async (leagueId: string) => {
-      const { error } = await (supabase as any).from("season_registrations").insert({
+      const { error } = await supabase.from("season_registrations").insert({
         league_id: leagueId, user_id: user!.id, status: "registered",
       });
       if (error) throw error;
@@ -78,7 +78,7 @@ export function useRegistration() {
 
   const unregisterFromSeason = useMutation({
     mutationFn: async (leagueId: string) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("season_registrations").delete()
         .eq("league_id", leagueId).eq("user_id", user!.id);
       if (error) throw error;
@@ -91,7 +91,7 @@ export function useRegistration() {
 
   const registerForRace = useMutation({
     mutationFn: async (raceId: string) => {
-      const { error } = await (supabase as any).from("race_registrations").insert({
+      const { error } = await supabase.from("race_registrations").insert({
         race_id: raceId, user_id: user!.id, status: "registered",
       });
       if (error) throw error;
@@ -105,7 +105,7 @@ export function useRegistration() {
 
   const unregisterFromRace = useMutation({
     mutationFn: async (raceId: string) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("race_registrations").delete()
         .eq("race_id", raceId).eq("user_id", user!.id);
       if (error) throw error;

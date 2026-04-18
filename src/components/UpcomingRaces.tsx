@@ -119,7 +119,7 @@ const UpcomingRaces = () => {
 
   const registerForRace = useMutation({
     mutationFn: async (raceId: string) => {
-      const { error } = await (supabase as any).from("race_registrations").insert({
+      const { error } = await supabase.from("race_registrations").insert({
         race_id: raceId,
         user_id: user!.id,
         status: "registered",
@@ -135,7 +135,7 @@ const UpcomingRaces = () => {
 
   const unregisterFromRace = useMutation({
     mutationFn: async (raceId: string) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("race_registrations")
         .delete()
         .eq("race_id", raceId)
@@ -159,7 +159,7 @@ const UpcomingRaces = () => {
 
   const registerForSeason = useMutation({
     mutationFn: async (leagueId: string) => {
-      const { error } = await (supabase as any).from("season_registrations").insert({
+      const { error } = await supabase.from("season_registrations").insert({
         league_id: leagueId,
         user_id: user!.id,
         status: "registered",
@@ -175,7 +175,7 @@ const UpcomingRaces = () => {
 
   const unregisterFromSeason = useMutation({
     mutationFn: async (leagueId: string) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("season_registrations")
         .delete()
         .eq("league_id", leagueId)
