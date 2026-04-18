@@ -100,13 +100,12 @@ describe("matchProfileForImportRow", () => {
     expect(matchProfileForImportRow(makeRow({ display_name: "Charlie" }), profiles)).toBeUndefined();
   });
 
-  it("custId match wins over a name-only match on a different profile", () => {
+  it("matches by custId when that matching profile is encountered first", () => {
     const byName: ProfileRow = makeProfile({ user_id: "uid-name", display_name: "Alice", iracing_id: null });
     const byCust: ProfileRow = makeProfile({ user_id: "uid-cust", display_name: "Other", iracing_id: 42 });
     const row = makeRow({ display_name: "Alice", iracing_cust_id: "42" });
-    // Find returns the first match — custId profile must appear first in the result
-    // matchProfileForImportRow checks custId || display_name || iracing_name in one find
-    // so whichever profile satisfies custId first in the array wins
+    // Single-pass find: whichever profile satisfies (custId || display_name || iracing_name)
+    // first in the array wins. No global custId priority — array order matters.
     expect(matchProfileForImportRow(row, [byCust, byName])?.user_id).toBe("uid-cust");
   });
 
