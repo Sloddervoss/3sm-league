@@ -41,7 +41,7 @@ const DriverProfilePreview = () => {
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("teams").select("id, name, color, logo_url");
+      const { data } = await supabase.from("teams").select("id, name, color, logo_url");
       return data || [];
     },
   });

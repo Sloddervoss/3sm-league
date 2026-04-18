@@ -23,7 +23,7 @@ const TeamProfilePreview = () => {
   const { data: teams = [], isLoading: teamsLoading } = useQuery({
     queryKey: ["teams"],
     queryFn: async () => {
-      const { data } = await (supabase as any).from("teams").select("*").order("name");
+      const { data } = await supabase.from("teams").select("*").order("name");
       return data || [];
     },
   });

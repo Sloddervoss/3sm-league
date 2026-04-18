@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+
+export type Team = Database["public"]["Tables"]["teams"]["Row"];
 
 /**
  * Shared data hooks for de meest gebruikte queries.
@@ -20,9 +23,9 @@ export function useDrivers() {
 export function useTeams() {
   return useQuery({
     queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await (supabase as any).from("teams").select("*").order("name");
-      return (data || []) as any[];
+    queryFn: async (): Promise<Team[]> => {
+      const { data } = await supabase.from("teams").select("*").order("name");
+      return data || [];
     },
   });
 }
