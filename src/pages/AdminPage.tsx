@@ -1918,18 +1918,14 @@ const AdminPage = () => {
                       setIratingSyncing(true);
                       setIratingSyncResult(null);
                       try {
-                        const { data: { session } } = await supabase.auth.getSession();
-                        const resp = await fetch(
-                          "https://cwwfriypwdluynajubhz.supabase.co/functions/v1/sync-irating",
-                          { method: "POST", headers: { Authorization: `Bearer ${session?.access_token}`, "Content-Type": "application/json" } },
-                        );
-                        const result = await resp.json();
+                        const { data: result, error } = await supabase.functions.invoke("sync-irating");
+                        if (error) throw error;
                         setIratingSyncResult(result);
-                        if (result.updated !== undefined) {
+                        if (result?.updated !== undefined) {
                           toast.success(`iRating gesynchroniseerd — ${result.updated} drivers bijgewerkt`);
                           queryClient.invalidateQueries({ queryKey: ["all-profiles"] });
                         } else {
-                          toast.error(result.error ?? "Sync mislukt");
+                          toast.error(result?.error ?? "Sync mislukt");
                         }
                       } catch (e: any) {
                         toast.error(e.message);
