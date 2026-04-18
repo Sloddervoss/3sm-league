@@ -5,7 +5,7 @@ import heroBg from "@/assets/hero-bg.jpg";
 
 const HeroSection = () => {
   return (
-    <section className="relative min-h-[85vh] flex items-center overflow-hidden">
+    <section className="relative min-h-[45vh] md:min-h-[55vh] flex items-center overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0">
         <img src={heroBg} alt="" className="w-full h-full object-cover" />
@@ -27,32 +27,32 @@ const HeroSection = () => {
             </span>
           </div>
 
-          <h1 className="font-heading text-5xl md:text-7xl font-black leading-[0.9] mb-6">
+          <h1 className="font-heading text-4xl md:text-6xl font-black leading-[0.9] mb-4">
             3 STRIPE
             <br />
             <span className="text-gradient-racing">MOTORSPORT</span>
           </h1>
 
-          <p className="text-lg text-muted-foreground mb-8 max-w-lg leading-relaxed">
-            De officiële sim racing league. Race mee in onze competities, 
+          <p className="text-base md:text-lg text-muted-foreground mb-6 max-w-lg leading-relaxed">
+            De officiële sim racing league. Race mee in onze competities,
             klim in het klassement en bewijs jezelf op de baan.
           </p>
 
           <div className="flex flex-wrap gap-3">
             <Link
               to="/calendar"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-md bg-gradient-racing text-primary-foreground font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-gradient-racing text-primary-foreground font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity"
             >
               <Calendar className="w-4 h-4" />
-              Race Kalender
+              Kalender
               <ChevronRight className="w-4 h-4" />
             </Link>
             <Link
               to="/standings"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-md border border-border bg-card/50 backdrop-blur text-foreground font-heading font-bold text-sm uppercase tracking-wider hover:border-primary/50 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md border border-border bg-card/50 backdrop-blur text-foreground font-heading font-bold text-sm uppercase tracking-wider hover:border-primary/50 transition-colors"
             >
               <Trophy className="w-4 h-4" />
-              Bekijk Standings
+              Bekijk stand
             </Link>
           </div>
         </motion.div>

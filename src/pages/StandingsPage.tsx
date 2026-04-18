@@ -80,7 +80,7 @@ const StandingsPage = () => {
               <Trophy className="w-4 h-4 text-orange-500" />
               <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Championship</span>
             </div>
-            <h1 className="font-heading font-black text-4xl md:text-5xl text-white leading-none">STANDINGS</h1>
+            <h1 className="font-heading font-black text-4xl md:text-5xl text-white leading-none">STAND</h1>
           </div>
 
           {/* League tabs */}

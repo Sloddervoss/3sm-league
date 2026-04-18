@@ -2063,7 +2063,7 @@ const AdminPage = () => {
             {activeTab === "drivers" && (
               <div>
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="font-heading text-2xl font-black">DRIVERS</h2>
+                  <h2 className="font-heading text-2xl font-black">COUREURS</h2>
                   <button
                     onClick={async () => {
                       setIratingSyncing(true);

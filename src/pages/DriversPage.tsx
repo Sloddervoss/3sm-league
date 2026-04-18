@@ -57,7 +57,7 @@ const DriversPage = () => {
                 <Users className="w-4 h-4 text-orange-500" />
                 <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Community</span>
               </div>
-              <h1 className="font-heading font-black text-4xl md:text-5xl text-white leading-none">DRIVERS</h1>
+              <h1 className="font-heading font-black text-4xl md:text-5xl text-white leading-none">COUREURS</h1>
             </div>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />

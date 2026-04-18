@@ -7,11 +7,11 @@ import { useAuth } from "@/contexts/AuthContext";
 const navItems = [
   { label: "Home", path: "/", icon: Flag },
   { label: "Kalender", path: "/calendar", icon: Calendar },
-  { label: "Standings", path: "/standings", icon: Trophy },
-  { label: "Drivers", path: "/drivers", icon: Users },
+  { label: "Stand", path: "/standings", icon: Trophy },
+  { label: "Coureurs", path: "/drivers", icon: Users },
   { label: "Teams", path: "/teams", icon: Car },
-  { label: "Results", path: "/results", icon: List },
-  { label: "Seasons", path: "/seasons", icon: Trophy },
+  { label: "Uitslagen", path: "/results", icon: List },
+  { label: "Seizoenen", path: "/seasons", icon: Trophy },
 ];
 
 const Navbar = () => {
@@ -32,7 +32,7 @@ const Navbar = () => {
         </Link>
 
         {/* Desktop */}
-        <div className="hidden xl:flex items-center gap-0.5">
+        <div className="hidden lg:flex items-center gap-0">
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
@@ -117,7 +117,7 @@ const Navbar = () => {
 
         {/* Mobile toggle */}
         <button
-          className="xl:hidden text-foreground"
+          className="lg:hidden text-foreground"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -129,7 +129,7 @@ const Navbar = () => {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="xl:hidden bg-card border-b border-border px-4 pb-4"
+          className="lg:hidden bg-card border-b border-border px-4 pb-4"
         >
           {navItems.map((item) => {
             const active = location.pathname === item.path;
