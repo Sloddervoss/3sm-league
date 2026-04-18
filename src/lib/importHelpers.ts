@@ -121,54 +121,52 @@ export function parseCsvRows(text: string): ParseImportResult {
 }
 
 export function parseIRacingJsonRows(jsonText: string): ParseImportResult {
-  let json: unknown;
   try {
-    json = JSON.parse(jsonText);
+    const json = JSON.parse(jsonText);
+    const root = ((json as { data?: unknown }).data ?? json) as { session_results?: IRacingJsonSession[] };
+    const sessions: IRacingJsonSession[] = root.session_results || [];
+    const raceSession =
+      sessions.find(s =>
+        s.simsession_type === 6 ||
+        (s.simsession_type_name || "").toLowerCase().includes("race") ||
+        s.simsession_number === 0
+      ) ??
+      sessions.sort((a, b) => (b.results?.length ?? 0) - (a.results?.length ?? 0))[0];
+    if (!raceSession) return { error: "Geen Race sessie gevonden in JSON — controleer of het een iRacing event result JSON is" };
+
+    const results: IRacingJsonResult[] = raceSession.results || [];
+    if (!results.length) return { error: "Geen resultaten gevonden in Race sessie" };
+
+    const validLaps = results.filter(r => r.best_lap_time > 0);
+    const fastestCustId = validLaps.length
+      ? validLaps.reduce((a, b) => a.best_lap_time < b.best_lap_time ? a : b).cust_id
+      : null;
+    const maxLaps = Math.max(...results.map(r => r.laps_complete || 0));
+    const rows: ImportRow[] = results
+      .sort((a, b) => a.finish_position - b.finish_position)
+      .map(r => ({
+        position:              r.finish_position + 1,
+        display_name:          r.display_name || "",
+        laps:                  r.laps_complete || 0,
+        best_lap:              formatIRacingLapTime(r.best_lap_time),
+        incidents:             r.incidents || 0,
+        fastest_lap:           r.cust_id === fastestCustId,
+        iracing_cust_id:       String(r.cust_id),
+        new_irating:           r.newi_rating ?? undefined,
+        new_license_level:     r.new_license_level ?? undefined,
+        new_license_sub_level: r.new_sub_level ?? undefined,
+        car_name:              r.car_name || r.livery?.car_name || undefined,
+        dnf: (r.reason_out_id !== undefined && r.reason_out_id !== 0) ||
+             (r.reason_out && r.reason_out !== "Running") ||
+             ((r.laps_complete || 0) < maxLaps),
+      }))
+      .filter(r => r.display_name);
+
+    if (!rows.length) return { error: "Geen geldige drivers gevonden in JSON" };
+    return { rows };
   } catch {
     return { error: "Ongeldig JSON bestand" };
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const root: any = (json as any).data ?? json;
-  const sessions: IRacingJsonSession[] = root.session_results || [];
-  const raceSession =
-    sessions.find(s =>
-      s.simsession_type === 6 ||
-      (s.simsession_type_name || "").toLowerCase().includes("race") ||
-      s.simsession_number === 0
-    ) ??
-    sessions.sort((a, b) => (b.results?.length ?? 0) - (a.results?.length ?? 0))[0];
-  if (!raceSession) return { error: "Geen Race sessie gevonden in JSON — controleer of het een iRacing event result JSON is" };
-
-  const results: IRacingJsonResult[] = raceSession.results || [];
-  if (!results.length) return { error: "Geen resultaten gevonden in Race sessie" };
-
-  const validLaps = results.filter(r => r.best_lap_time > 0);
-  const fastestCustId = validLaps.length
-    ? validLaps.reduce((a, b) => a.best_lap_time < b.best_lap_time ? a : b).cust_id
-    : null;
-  const maxLaps = Math.max(...results.map(r => r.laps_complete || 0));
-  const rows: ImportRow[] = results
-    .sort((a, b) => a.finish_position - b.finish_position)
-    .map(r => ({
-      position:              r.finish_position + 1,
-      display_name:          r.display_name || "",
-      laps:                  r.laps_complete || 0,
-      best_lap:              formatIRacingLapTime(r.best_lap_time),
-      incidents:             r.incidents || 0,
-      fastest_lap:           r.cust_id === fastestCustId,
-      iracing_cust_id:       String(r.cust_id),
-      new_irating:           r.newi_rating ?? undefined,
-      new_license_level:     r.new_license_level ?? undefined,
-      new_license_sub_level: r.new_sub_level ?? undefined,
-      car_name:              r.car_name || r.livery?.car_name || undefined,
-      dnf: (r.reason_out_id !== undefined && r.reason_out_id !== 0) ||
-           (r.reason_out && r.reason_out !== "Running") ||
-           ((r.laps_complete || 0) < maxLaps),
-    }))
-    .filter(r => r.display_name);
-
-  if (!rows.length) return { error: "Geen geldige drivers gevonden in JSON" };
-  return { rows };
 }
 
 export function matchProfileForImportRow(
