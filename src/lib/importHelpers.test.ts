@@ -231,6 +231,10 @@ describe("parseIRacingJsonRows", () => {
     expect(parseIRacingJsonRows("not json")).toEqual({ error: "Ongeldig JSON bestand" });
   });
 
+  it('returns error for JSON "null" — valid JSON but wrong shape', () => {
+    expect(parseIRacingJsonRows("null")).toEqual({ error: "Ongeldig JSON bestand" });
+  });
+
   it("returns error when session_results is empty", () => {
     expect(parseIRacingJsonRows(makeIRacingJson([]))).toEqual({
       error: "Geen Race sessie gevonden in JSON — controleer of het een iRacing event result JSON is",
