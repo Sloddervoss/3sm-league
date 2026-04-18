@@ -3,21 +3,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileText, BarChart2, Upload, X, Trash2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
-type ImportRow = {
-  position: number;
-  display_name: string;
-  laps: number;
-  best_lap: string;
-  incidents: number;
-  fastest_lap: boolean;
-  iracing_cust_id?: string;
-  new_irating?: number;
-  new_license_level?: number;
-  new_license_sub_level?: number;
-  car_name?: string;
-  dnf?: boolean;
-};
+import {
+  type ImportRow,
+  type ProfileRow,
+  type RaceOption,
+  type IRacingJsonSession,
+  type IRacingJsonResult,
+  parseLapMs,
+  formatIRacingLapTime,
+  matchProfileForImportRow,
+} from "@/lib/importHelpers";
 
 const DEFAULT_POINTS = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
@@ -74,11 +69,7 @@ const ResultsImportAdmin = () => {
       let iRatingUpdates = 0;
       for (const row of importRows) {
         if (!row.display_name.trim()) continue;
-        const profile = profiles?.find((p: any) =>
-          (row.iracing_cust_id && String((p as any).iracing_id) === String(row.iracing_cust_id)) ||
-          (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
-          (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
-        );
+        const profile = matchProfileForImportRow(row, (profiles ?? []) as ProfileRow[]);
         if (!profile) { toast.error(`Driver niet gevonden: ${row.display_name}`); continue; }
         const pts = (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0);
         const { error } = await supabase.from("race_results").upsert(
@@ -113,16 +104,12 @@ const ResultsImportAdmin = () => {
 
       await supabase.rpc("recalculate_3sr_for_race", { p_race_id: importRaceId });
 
-      const raceForCar = (allRaces || []).find((r: any) => r.id === importRaceId);
+      const raceForCar = (allRaces || []).find((r: RaceOption) => r.id === importRaceId);
       if (raceForCar?.league_id) {
         const { data: freshProfiles } = await supabase.from("profiles").select("user_id, iracing_id, display_name, iracing_name");
         for (const row of importRows) {
           if (!row.car_name) continue;
-          const profile = freshProfiles?.find((p: any) =>
-            (row.iracing_cust_id && String(p.iracing_id) === String(row.iracing_cust_id)) ||
-            (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
-            (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
-          );
+          const profile = matchProfileForImportRow(row, (freshProfiles ?? []) as ProfileRow[]);
           if (!profile) continue;
           await supabase.from("season_registrations")
             .update({ car_choice: row.car_name })
@@ -175,7 +162,7 @@ const ResultsImportAdmin = () => {
           <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Selecteer Race *</label>
           <select value={importRaceId} onChange={(e) => setImportRaceId(e.target.value)} className="w-full md:w-96 px-4 py-2.5 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
             <option value="">Kies een race...</option>
-            {allRaces?.map((race: any) => (
+            {allRaces?.map((race: RaceOption) => (
               <option key={race.id} value={race.id}>{race.name} — {race.track} ({new Date(race.race_date).toLocaleDateString("nl-NL")})</option>
             ))}
           </select>
@@ -247,11 +234,6 @@ const ResultsImportAdmin = () => {
                           return { position: pos, display_name: name, laps, best_lap: bestLap, incidents, fastest_lap: false, iracing_cust_id: custId, new_irating: newIR, new_license_level: newLL, new_license_sub_level: newLS };
                         }).filter((r): r is NonNullable<typeof r> => !!r && !!r.display_name && !isNaN(r.position));
 
-                        const parseLapMs = (s: string) => {
-                          const m = s.match(/^(\d+):(\d+)[.,](\d+)$/);
-                          if (!m) return Infinity;
-                          return parseInt(m[1]) * 60000 + parseInt(m[2]) * 1000 + parseInt(m[3].padEnd(3, "0").slice(0, 3));
-                        };
                         const withLaps = parsed.filter(r => r.best_lap && parseLapMs(r.best_lap) < Infinity);
                         if (withLaps.length) {
                           const fastest = withLaps.reduce((a, b) => parseLapMs(a.best_lap) < parseLapMs(b.best_lap) ? a : b);
@@ -275,7 +257,7 @@ const ResultsImportAdmin = () => {
             </div>
 
             {importRows.length > 0 && importRows[0].display_name && (() => {
-              const unmatched = importRows.filter((row) => !profiles?.find((p: any) =>
+              const unmatched = importRows.filter((row) => !profiles?.find((p: ProfileRow) =>
                 (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
                 (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
               ));
@@ -287,7 +269,7 @@ const ResultsImportAdmin = () => {
                       <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span className="text-center">FL</span>
                     </div>
                     {importRows.slice(0, 10).map((row, i) => {
-                      const matched = profiles?.find((p: any) =>
+                      const matched = profiles?.find((p: ProfileRow) =>
                         (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
                         (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
                       );
@@ -354,41 +336,33 @@ const ResultsImportAdmin = () => {
                         try {
                           const json = JSON.parse(ev.target?.result as string);
                           const root = json.data ?? json;
-                          const sessions: any[] = root.session_results || [];
-                          const raceSession = sessions.find((s: any) =>
+                          const sessions: IRacingJsonSession[] = root.session_results || [];
+                          const raceSession = sessions.find((s: IRacingJsonSession) =>
                             s.simsession_type === 6 ||
                             (s.simsession_type_name || "").toLowerCase().includes("race") ||
                             s.simsession_number === 0
-                          ) ?? sessions.sort((a: any, b: any) => (b.results?.length ?? 0) - (a.results?.length ?? 0))[0];
+                          ) ?? sessions.sort((a: IRacingJsonSession, b: IRacingJsonSession) => (b.results?.length ?? 0) - (a.results?.length ?? 0))[0];
                           if (!raceSession) {
                             toast.error("Geen Race sessie gevonden in JSON — controleer of het een iRacing event result JSON is");
                             return;
                           }
-                          const results: any[] = raceSession.results || [];
+                          const results: IRacingJsonResult[] = raceSession.results || [];
                           if (!results.length) {
                             toast.error("Geen resultaten gevonden in Race sessie");
                             return;
                           }
-                          const fmtLap = (us: number) => {
-                            if (!us || us < 0) return "";
-                            const totalMs = Math.round(us / 10);
-                            const mins = Math.floor(totalMs / 60000);
-                            const secs = Math.floor((totalMs % 60000) / 1000);
-                            const ms = totalMs % 1000;
-                            return `${mins}:${String(secs).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
-                          };
-                          const validLaps = results.filter((r: any) => r.best_lap_time > 0);
+                          const validLaps = results.filter((r: IRacingJsonResult) => r.best_lap_time > 0);
                           const fastestCustId = validLaps.length
-                            ? validLaps.reduce((a: any, b: any) => a.best_lap_time < b.best_lap_time ? a : b).cust_id
+                            ? validLaps.reduce((a: IRacingJsonResult, b: IRacingJsonResult) => a.best_lap_time < b.best_lap_time ? a : b).cust_id
                             : null;
-                          const maxLaps = Math.max(...results.map((r: any) => r.laps_complete || 0));
+                          const maxLaps = Math.max(...results.map((r: IRacingJsonResult) => r.laps_complete || 0));
                           const parsed: ImportRow[] = results
-                            .sort((a: any, b: any) => a.finish_position - b.finish_position)
-                            .map((r: any) => ({
+                            .sort((a: IRacingJsonResult, b: IRacingJsonResult) => a.finish_position - b.finish_position)
+                            .map((r: IRacingJsonResult) => ({
                               position: r.finish_position + 1,
                               display_name: r.display_name || "",
                               laps: r.laps_complete || 0,
-                              best_lap: fmtLap(r.best_lap_time),
+                              best_lap: formatIRacingLapTime(r.best_lap_time),
                               incidents: r.incidents || 0,
                               fastest_lap: r.cust_id === fastestCustId,
                               iracing_cust_id: String(r.cust_id),
@@ -496,7 +470,7 @@ const ResultsImportAdmin = () => {
                   </div>
                 ))}
                 <datalist id="driver-names-import">
-                  {profiles?.map((p: any) => <option key={p.user_id} value={p.display_name || p.iracing_name || ""} />)}
+                  {profiles?.map((p: ProfileRow) => <option key={p.user_id} value={p.display_name || p.iracing_name || ""} />)}
                 </datalist>
               </div>
             </div>
