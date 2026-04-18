@@ -683,7 +683,7 @@ const AdminPage = () => {
     { id: "overview", label: "Dashboard", icon: BarChart2 },
     { id: "seasons", label: "Seizoenen", icon: Trophy },
     { id: "teams", label: "Teams", icon: Car },
-    { id: "drivers", label: "Drivers", icon: Users },
+    { id: "drivers", label: "Coureurs", icon: Users },
     { id: "results", label: "Resultaten", icon: Upload },
     { id: "points", label: "Punten", icon: Shield },
     { id: "announcements", label: "Aankondigingen", icon: Flag },
@@ -729,7 +729,7 @@ const AdminPage = () => {
               <div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
                   {[
-                    { label: "Drivers", value: totalDrivers ?? 0, icon: Users, color: "text-blue-400" },
+                    { label: "Coureurs", value: totalDrivers ?? 0, icon: Users, color: "text-blue-400" },
                     { label: "Teams", value: teams?.length ?? 0, icon: Car, color: "text-green-400" },
                     { label: "Seizoenen", value: leagues?.length ?? 0, icon: Trophy, color: "text-yellow-400" },
                     { label: "Resultaten", value: totalResults ?? 0, icon: BarChart2, color: "text-accent" },

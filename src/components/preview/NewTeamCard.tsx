@@ -104,7 +104,7 @@ const NewTeamCard = ({ team, members, points, wins, rank, onSelect }: Props) => 
             <Trophy className="w-5 h-5 shrink-0" style={{ color: wins > 0 ? "#facc15" : "#374151" }} />
             <div>
               <div className="font-heading font-black text-xl text-white leading-none">{wins}</div>
-              <div className="text-[10px] text-gray-600 uppercase tracking-wide mt-0.5">Wins</div>
+              <div className="text-[10px] text-gray-600 uppercase tracking-wide mt-0.5">Overwinningen</div>
             </div>
           </div>
           <div
@@ -114,7 +114,7 @@ const NewTeamCard = ({ team, members, points, wins, rank, onSelect }: Props) => 
             <Users className="w-5 h-5 shrink-0 text-gray-600" />
             <div>
               <div className="font-heading font-black text-xl text-white leading-none">{members.length}</div>
-              <div className="text-[10px] text-gray-600 uppercase tracking-wide mt-0.5">Drivers</div>
+              <div className="text-[10px] text-gray-600 uppercase tracking-wide mt-0.5">Coureurs</div>
             </div>
           </div>
         </div>
