@@ -43,7 +43,7 @@ const TopDrivers = () => {
     queryKey: ["teams"],
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data } = await (supabase as any).from("teams").select("id, name, color");
+      const { data } = await (supabase as any).from("teams").select("id, name, color, logo_url");
       return data || [];
     },
   });
