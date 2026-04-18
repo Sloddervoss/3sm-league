@@ -275,6 +275,7 @@ const AdminPage = () => {
     onSuccess: () => {
       toast.success("Team aangemaakt!");
       queryClient.invalidateQueries({ queryKey: ["admin-teams"] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
       setShowTeamForm(false);
       setNewTeam({ name: "", description: "", color: "#f97316", logo_url: "" });
       setNewTeamLogoPreview("");
@@ -287,7 +288,7 @@ const AdminPage = () => {
       const { error } = await supabase.from("teams").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("Team verwijderd"); queryClient.invalidateQueries({ queryKey: ["admin-teams"] }); },
+    onSuccess: () => { toast.success("Team verwijderd"); queryClient.invalidateQueries({ queryKey: ["admin-teams"] }); queryClient.invalidateQueries({ queryKey: ["teams"] }); },
   });
 
   const approveCreationRequest = useMutation({
@@ -311,6 +312,7 @@ const AdminPage = () => {
       toast.success("Team aangemaakt en goedgekeurd!");
       queryClient.invalidateQueries({ queryKey: ["team-creation-requests"] });
       queryClient.invalidateQueries({ queryKey: ["admin-teams"] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["all-profiles"] });
     },
     onError: (err: Error) => toast.error(err.message),
@@ -334,6 +336,7 @@ const AdminPage = () => {
     onSuccess: () => {
       toast.success("Logo bijgewerkt!");
       queryClient.invalidateQueries({ queryKey: ["admin-teams"] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
       setEditingTeamId(null);
       setEditingTeamLogo("");
     },
@@ -348,6 +351,7 @@ const AdminPage = () => {
     onSuccess: () => {
       toast.success("Teamnaam bijgewerkt!");
       queryClient.invalidateQueries({ queryKey: ["admin-teams"] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
       setEditingTeamNameId(null);
       setEditingTeamName("");
     },
