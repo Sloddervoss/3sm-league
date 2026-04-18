@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Save } from "lucide-react";
@@ -44,16 +44,20 @@ const PointsAdmin = () => {
     },
   });
 
+  const queryClient = useQueryClient();
+
   const savePointsConfig = useMutation({
     mutationFn: async () => {
       if (!selectedLeague) throw new Error("Selecteer een league");
-      const { error } = await supabase.from("points_config").upsert(
-        leaguePoints.map((pts, i) => ({ league_id: selectedLeague, position: i + 1, points: pts })),
-        { onConflict: "league_id,position" }
-      );
+      const rows = leaguePoints.map((pts, i) => ({ league_id: selectedLeague, position: i + 1, points: pts }));
+      const { error } = await supabase.from("points_config").upsert(rows, { onConflict: "league_id,position" });
       if (error) throw error;
+      return rows.map(({ position, points }) => ({ position, points }));
     },
-    onSuccess: () => toast.success("Punten systeem opgeslagen!"),
+    onSuccess: (rows) => {
+      queryClient.setQueryData(["points-config", selectedLeague], rows);
+      toast.success("Punten systeem opgeslagen!");
+    },
     onError: (err: Error) => toast.error(err.message),
   });
 
