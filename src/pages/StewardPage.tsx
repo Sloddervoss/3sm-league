@@ -138,6 +138,18 @@ type DriverSpOverviewEntry = {
   racesUntilExpiry: number;
 };
 
+type PenaltyFieldValues = {
+  penalty_category: Category;
+  penalty_type: string;
+  penalty_sp: number;
+  time_penalty_seconds: number;
+  grid_penalty_places: number;
+  race_ban_next: boolean;
+  points_deduction: number;
+};
+
+type PenaltyFieldKey = keyof PenaltyFieldValues;
+
 type RaceForProtest = {
   id: string;
   name: string;
@@ -655,8 +667,8 @@ const StewardPage = () => {
   // ── Penalty velden UI (gedeeld door protest beslissing + steward actie) ──────
 
   const renderPenaltyFields = (
-    values: { penalty_category: Category; penalty_type: string; penalty_sp: number; time_penalty_seconds: number; grid_penalty_places: number; race_ban_next: boolean; points_deduction: number },
-    onChange: (field: string, val: any) => void,
+    values: PenaltyFieldValues,
+    onChange: <K extends PenaltyFieldKey>(field: K, val: PenaltyFieldValues[K]) => void,
     onCategorySelect: (cat: Category) => void,
     requireNotes: boolean = false,
   ) => (
@@ -1208,7 +1220,7 @@ const StewardPage = () => {
 
                               {dec.status === "resolved" && renderPenaltyFields(
                                 dec,
-                                (field, val) => setDecision(protest.id, field as keyof DecisionState, val),
+                                (field, val) => setDecision(protest.id, field, val),
                                 (cat) => applyCategory(protest.id, cat),
                                 true,
                               )}
