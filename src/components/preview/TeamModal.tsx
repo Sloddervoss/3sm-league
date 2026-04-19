@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { Users, Trophy, Shield, Flag, TrendingUp } from "lucide-react";
+import type { MembershipWithProfile, ResultWithRace } from "@/lib/modalTypes";
 
 interface Team {
   id: string;
@@ -21,45 +22,45 @@ const TeamModal = ({ team }: Props) => {
   const color = team.color || "#f97316";
 
   const { data: memberships = [] } = useQuery({
-    queryKey: ["team-memberships-with-profiles"],
-    queryFn: async () => {
+    queryKey: ["team-memberships-full"],
+    queryFn: async (): Promise<MembershipWithProfile[]> => {
       const { data } = await supabase
         .from("team_memberships")
         .select("*, profiles(user_id, display_name, iracing_name, irating, safety_rating)");
-      return data || [];
+      return (data || []) as MembershipWithProfile[];
     },
   });
 
   const { data: allResults = [] } = useQuery({
     queryKey: ["all-results-with-profiles"],
-    queryFn: async () => {
+    queryFn: async (): Promise<ResultWithRace[]> => {
       const { data } = await supabase
         .from("race_results")
         .select("*, races(name, track, race_date, leagues(name))");
-      return data || [];
+      return (data || []) as ResultWithRace[];
     },
   });
 
-  const members = memberships.filter((m: any) => m.team_id === team.id);
-  const memberIds = members.map((m: any) => m.user_id);
-  const teamResults = allResults.filter((r: any) => memberIds.includes(r.user_id));
+  const members = memberships.filter((m) => m.team_id === team.id);
+  const memberIds = members.map((m) => m.user_id);
+  const teamResults = allResults.filter((r) => memberIds.includes(r.user_id));
 
-  const totalPoints = teamResults.reduce((a: number, r: any) => a + (r.points || 0), 0);
-  const wins    = teamResults.filter((r: any) => r.position === 1).length;
-  const podiums = teamResults.filter((r: any) => r.position <= 3).length;
-  const races   = new Set(teamResults.map((r: any) => r.race_id)).size;
+  const totalPoints = teamResults.reduce((a, r) => a + (r.points || 0), 0);
+  const wins    = teamResults.filter((r) => r.position === 1).length;
+  const podiums = teamResults.filter((r) => r.position !== null && r.position <= 3).length;
+  const races   = new Set(teamResults.map((r) => r.race_id)).size;
 
-  const driverStats = members.map((m: any) => {
-    const dr = teamResults.filter((r: any) => r.user_id === m.user_id);
+  const driverStats = members.map((m) => {
+    const dr = teamResults.filter((r) => r.user_id === m.user_id);
     return {
       ...m,
-      points: dr.reduce((a: number, r: any) => a + (r.points || 0), 0),
-      wins:   dr.filter((r: any) => r.position === 1).length,
+      points: dr.reduce((a, r) => a + (r.points || 0), 0),
+      wins:   dr.filter((r) => r.position === 1).length,
     };
-  }).sort((a: any, b: any) => b.points - a.points);
+  }).sort((a, b) => b.points - a.points);
 
   const recentResults = [...teamResults]
-    .sort((a: any, b: any) => new Date(b.races?.race_date || 0).getTime() - new Date(a.races?.race_date || 0).getTime())
+    .sort((a, b) => new Date(b.races?.race_date || 0).getTime() - new Date(a.races?.race_date || 0).getTime())
     .slice(0, 8);
 
   const SAFETY_COLOR: Record<string, string> = { A: "#22c55e", B: "#eab308", C: "#f97316", D: "#ef4444" };
@@ -130,7 +131,7 @@ const TeamModal = ({ team }: Props) => {
               <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Drivers</span>
             </div>
             <div className="space-y-2">
-              {driverStats.map((m: any, i: number) => {
+              {driverStats.map((m, i) => {
                 const prof = m.profiles;
                 const safLetter = (prof?.safety_rating || "").split(" ")[0];
                 return (
@@ -191,9 +192,9 @@ const TeamModal = ({ team }: Props) => {
               >
                 <span>Pos</span><span>Race</span><span>Driver</span><span>Pts</span>
               </div>
-              {recentResults.map((r: any, i: number) => {
-                const posColor = r.position <= 3 ? PODIUM[r.position - 1] : "#6b7280";
-                const drMember = members.find((m: any) => m.user_id === r.user_id);
+              {recentResults.map((r, i) => {
+                const posColor = r.position !== null && r.position <= 3 ? PODIUM[r.position - 1] : "#6b7280";
+                const drMember = members.find((m) => m.user_id === r.user_id);
                 const drName = drMember?.profiles?.display_name || drMember?.profiles?.iracing_name || "—";
                 return (
                   <div

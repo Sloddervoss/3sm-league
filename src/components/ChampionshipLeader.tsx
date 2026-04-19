@@ -6,24 +6,43 @@ import { Link } from "react-router-dom";
 
 const PODIUM = ["#facc15", "#94a3b8", "#d97706"];
 
+type ChampionshipResult = {
+  user_id: string;
+  position: number | null;
+  points: number | null;
+  profiles: {
+    display_name: string | null;
+    iracing_name: string | null;
+    iracing_id: number | null;
+  } | null;
+};
+
+type ChampionshipStanding = {
+  name: string;
+  points: number;
+  wins: number;
+  races: number;
+  podiums: number;
+};
+
 const ChampionshipLeader = () => {
   const { data: standings } = useQuery({
     queryKey: ["championship-leader"],
-    queryFn: async () => {
+    queryFn: async (): Promise<ChampionshipStanding[]> => {
       const { data: results } = await supabase
         .from("race_results")
         .select("user_id, position, points, profiles(display_name, iracing_name, iracing_id), races!inner(league_id)")
         .not("races.league_id", "is", null);
 
       const map = new Map<string, { name: string; points: number; wins: number; races: number; podiums: number }>();
-      results?.forEach((r: any) => {
+      ((results || []) as ChampionshipResult[]).forEach((r) => {
         const e = map.get(r.user_id) || {
           name: r.profiles?.display_name || r.profiles?.iracing_name || "Unknown",
           points: 0, wins: 0, races: 0, podiums: 0,
         };
-        e.points += r.points; e.races++;
+        e.points += r.points || 0; e.races++;
         if (r.position === 1) e.wins++;
-        if (r.position <= 3) e.podiums++;
+        if (r.position !== null && r.position <= 3) e.podiums++;
         map.set(r.user_id, e);
       });
 

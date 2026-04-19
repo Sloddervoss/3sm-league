@@ -10,10 +10,33 @@ const positionColors: Record<number, string> = {
   3: "text-amber-600",
 };
 
+type LatestRace = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string;
+  leagues: { name: string } | null;
+};
+
+type LatestRaceResult = {
+  id: string;
+  race_id: string;
+  user_id: string;
+  position: number | null;
+  points: number | null;
+  dnf: boolean | null;
+  fastest_lap: boolean | null;
+  best_lap: string | null;
+  profiles: {
+    display_name: string | null;
+    iracing_name: string | null;
+  } | null;
+};
+
 const LatestResults = () => {
   const { data: lastRace } = useQuery({
     queryKey: ["latest-completed-race"],
-    queryFn: async () => {
+    queryFn: async (): Promise<LatestRace | null> => {
       const { data, error } = await supabase
         .from("races")
         .select("*, leagues(name)")
@@ -23,14 +46,14 @@ const LatestResults = () => {
         .limit(1)
         .maybeSingle();
       if (error) return null;
-      return data;
+      return data as LatestRace | null;
     },
   });
 
   const { data: results } = useQuery({
     queryKey: ["latest-race-results", lastRace?.id],
     enabled: !!lastRace?.id,
-    queryFn: async () => {
+    queryFn: async (): Promise<LatestRaceResult[]> => {
       const { data, error } = await supabase
         .from("race_results")
         .select("*, profiles(display_name, iracing_name)")
@@ -38,7 +61,7 @@ const LatestResults = () => {
         .order("position", { ascending: true })
         .limit(10);
       if (error) throw error;
-      return data;
+      return (data || []) as LatestRaceResult[];
     },
   });
 
@@ -80,7 +103,7 @@ const LatestResults = () => {
             <h3 className="font-heading font-black text-lg">{lastRace.name}</h3>
             <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mt-1">
               <span>{lastRace.track}</span>
-              {(lastRace as any).leagues?.name && <span className="text-xs px-2 py-0.5 rounded bg-secondary">{(lastRace as any).leagues.name}</span>}
+              {lastRace.leagues?.name && <span className="text-xs px-2 py-0.5 rounded bg-secondary">{lastRace.leagues.name}</span>}
               <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{new Date(lastRace.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" })}</span>
             </div>
           </div>
@@ -90,7 +113,7 @@ const LatestResults = () => {
             <span>Pos</span><span>Driver</span><span className="text-center hidden md:block">Best Lap</span><span className="text-center">Pts</span>
           </div>
 
-          {results.map((result: any, i: number) => (
+          {results.map((result, i) => (
             <motion.div
               key={result.id}
               initial={{ opacity: 0, x: -10 }}

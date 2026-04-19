@@ -7,6 +7,19 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getTrackInfo } from "@/lib/trackData";
+import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
+
+type UpcomingRace = RaceWithLeagueSummary;
+
+type UpcomingProfile = {
+  iracing_id: number | null;
+  iracing_name: string | null;
+};
+
+type SeasonReg = {
+  league_id: string;
+  user_id: string;
+};
 
 const statusStyles: Record<string, string> = {
   completed: "bg-muted text-muted-foreground",
@@ -70,35 +83,35 @@ const UpcomingRaces = () => {
 
   const { data: races, isLoading } = useQuery({
     queryKey: ["races-with-leagues"],
-    queryFn: async () => {
+    queryFn: async (): Promise<UpcomingRace[]> => {
       const { data, error } = await supabase
         .from("races")
-        .select("*, leagues(name, car_class, id)")
+        .select("*, leagues(name, car_class, id, season)")
         .order("race_date", { ascending: true });
       if (error) throw error;
-      return data;
+      return (data || []) as UpcomingRace[];
     },
   });
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user,
-    queryFn: async () => {
+    queryFn: async (): Promise<UpcomingProfile | null> => {
       const { data } = await supabase.from("profiles").select("iracing_id, iracing_name").eq("user_id", user!.id).maybeSingle();
-      return data;
+      return data as UpcomingProfile | null;
     },
   });
 
-  const profileComplete = !!(profile as any)?.iracing_id && !!(profile as any)?.iracing_name;
+  const profileComplete = !!profile?.iracing_id && !!profile?.iracing_name;
 
-  const leagueIds = [...new Set((races || []).map((r: any) => r.league_id))];
+  const leagueIds = [...new Set((races || []).map((r) => r.league_id))];
 
   const { data: seasonRegs } = useQuery({
     queryKey: ["season-registrations"],
-    queryFn: async () => {
+    queryFn: async (): Promise<SeasonReg[]> => {
       const { data, error } = await supabase.from("season_registrations").select("*");
       if (error) throw error;
-      return data || [];
+      return (data || []) as SeasonReg[];
     },
   });
 
@@ -112,10 +125,10 @@ const UpcomingRaces = () => {
   });
 
   const isRegisteredForRace = (raceId: string) =>
-    user && (raceRegs || []).some((r: any) => r.race_id === raceId && r.user_id === user.id);
+    user && (raceRegs || []).some((r) => r.race_id === raceId && r.user_id === user.id);
 
   const raceRegCount = (raceId: string) =>
-    (raceRegs || []).filter((r: any) => r.race_id === raceId).length;
+    (raceRegs || []).filter((r) => r.race_id === raceId).length;
 
   const registerForRace = useMutation({
     mutationFn: async (raceId: string) => {
@@ -149,13 +162,13 @@ const UpcomingRaces = () => {
   });
 
   const seasonStarted = (leagueId: string) =>
-    (races || []).some((r: any) => r.league_id === leagueId && r.status === "completed");
+    (races || []).some((r) => r.league_id === leagueId && r.status === "completed");
 
   const isRegisteredForSeason = (leagueId: string) =>
-    user && (seasonRegs || []).some((r: any) => r.league_id === leagueId && r.user_id === user.id);
+    user && (seasonRegs || []).some((r) => r.league_id === leagueId && r.user_id === user.id);
 
   const registrationCount = (leagueId: string) =>
-    (seasonRegs || []).filter((r: any) => r.league_id === leagueId).length;
+    (seasonRegs || []).filter((r) => r.league_id === leagueId).length;
 
   const registerForSeason = useMutation({
     mutationFn: async (leagueId: string) => {
@@ -220,14 +233,14 @@ const UpcomingRaces = () => {
 
   // Find the single next upcoming race across all leagues
   const nextRace = [...(races || [])]
-    .filter((r: any) => r.status !== "completed" && new Date(r.race_date) > now)
-    .sort((a: any, b: any) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as any | undefined;
+    .filter((r) => r.status !== "completed" && new Date(r.race_date) > now)
+    .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as UpcomingRace | undefined;
 
   const leagueGroups = leagueIds.map((lid) => ({
     leagueId: lid,
-    leagueName: (races.find((r: any) => r.league_id === lid) as any)?.leagues?.name || "Unknown",
-    carClass: (races.find((r: any) => r.league_id === lid) as any)?.leagues?.car_class,
-    races: races.filter((r: any) => r.league_id === lid),
+    leagueName: races.find((r) => r.league_id === lid)?.leagues?.name || "Unknown",
+    carClass: races.find((r) => r.league_id === lid)?.leagues?.car_class,
+    races: races.filter((r) => r.league_id === lid),
   }));
 
   return (
@@ -281,9 +294,9 @@ const UpcomingRaces = () => {
                         <Clock className="w-4 h-4" />
                         {new Date(nextRace.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" })}
                       </span>
-                      {(nextRace as any).leagues?.name && (
+                      {nextRace.leagues?.name && (
                         <span className="px-2 py-0.5 rounded bg-secondary text-xs font-bold">
-                          {(nextRace as any).leagues.name}
+                          {nextRace.leagues.name}
                         </span>
                       )}
                     </div>
@@ -438,7 +451,7 @@ const UpcomingRaces = () => {
 
                 {/* Race list */}
                 <div className="grid gap-3">
-                  {leagueRaces.map((race: any, i: number) => {
+                  {leagueRaces.map((race, i) => {
                     const trackInfo = getTrackInfo(race.track);
                     const isNext = nextRace?.id === race.id;
                     const countdown = race.status !== "completed" ? formatCountdown(race.race_date, now) : null;
@@ -625,13 +638,13 @@ const UpcomingRaces = () => {
                 </p>
 
                 <div className="space-y-2 mb-5">
-                  <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${(profile as any)?.iracing_id ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${(profile as any)?.iracing_id ? "bg-green-400" : "bg-red-400"}`} />
-                    iRacing Customer ID — {(profile as any)?.iracing_id ? "ingevuld ✓" : "nog niet ingevuld"}
+                  <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${profile?.iracing_id ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${profile?.iracing_id ? "bg-green-400" : "bg-red-400"}`} />
+                    iRacing Customer ID — {profile?.iracing_id ? "ingevuld ✓" : "nog niet ingevuld"}
                   </div>
-                  <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${(profile as any)?.iracing_name ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${(profile as any)?.iracing_name ? "bg-green-400" : "bg-red-400"}`} />
-                    iRacing Naam — {(profile as any)?.iracing_name ? `"${(profile as any).iracing_name}" ✓` : "nog niet ingevuld"}
+                  <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-md ${profile?.iracing_name ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${profile?.iracing_name ? "bg-green-400" : "bg-red-400"}`} />
+                    iRacing Naam — {profile?.iracing_name ? `"${profile.iracing_name}" ✓` : "nog niet ingevuld"}
                   </div>
                 </div>
 
