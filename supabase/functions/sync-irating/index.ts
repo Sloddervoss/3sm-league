@@ -6,6 +6,31 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+type ProfileRow = {
+  user_id: string;
+  iracing_id: number | string;
+};
+
+type IRacingLicense = {
+  category_id: number;
+  irating: number;
+  group_name?: string;
+  safety_rating: number | string;
+};
+
+type IRacingMember = {
+  cust_id: number | string;
+  licenses?: IRacingLicense[];
+};
+
+type IRacingLinkResponse = {
+  link: string;
+};
+
+type IRacingMemberResponse = {
+  members?: IRacingMember[];
+};
+
 async function hashPassword(password: string, email: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(password + email.toLowerCase());
@@ -70,7 +95,8 @@ serve(async (req) => {
       );
     }
 
-    const custIds = profiles.map((p: any) => p.iracing_id).join(",");
+    const typedProfiles = profiles as ProfileRow[];
+    const custIds = typedProfiles.map((p) => p.iracing_id).join(",");
 
     // 3. Fetch member data from iRacing (batched)
     const memberResp = await fetch(
@@ -83,9 +109,9 @@ serve(async (req) => {
       throw new Error(`iRacing member fetch mislukt (${memberResp.status}): ${body}`);
     }
 
-    const { link } = await memberResp.json();
+    const { link } = await memberResp.json() as IRacingLinkResponse;
     const dataResp = await fetch(link);
-    const { members } = await dataResp.json();
+    const { members } = await dataResp.json() as IRacingMemberResponse;
 
     if (!members?.length) {
       return new Response(
@@ -99,13 +125,13 @@ serve(async (req) => {
     const errors: string[] = [];
 
     for (const member of members) {
-      const profile = profiles.find(
-        (p: any) => String(p.iracing_id) === String(member.cust_id),
+      const profile = typedProfiles.find(
+        (p) => String(p.iracing_id) === String(member.cust_id),
       );
       if (!profile) continue;
 
       // Prefer road license (category_id 2), fall back to best available
-      const licenses: any[] = member.licenses ?? [];
+      const licenses = member.licenses ?? [];
       const roadLicense = licenses.find((l) => l.category_id === 2);
       const license = roadLicense ?? licenses[0];
       if (!license) continue;
@@ -116,7 +142,7 @@ serve(async (req) => {
 
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ irating, safety_rating: safetyRating } as any)
+        .update({ irating, safety_rating: safetyRating } as unknown as never)
         .eq("user_id", profile.user_id);
 
       if (updateError) {
