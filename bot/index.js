@@ -187,11 +187,33 @@ function buildPodiumEmbed(race, results) {
       { name: '🏅 Podium',  value: podiumLines || 'Geen resultaten',             inline: false },
     );
 
-  if (fastest) embed.addFields({ name: '⚡ Snelste ronde', value: `**${fastest.profiles?.display_name || 'Onbekend'}**`, inline: true });
+  if (fastest) {
+    const flTime = fastest.best_lap ? `  ${fastest.best_lap}` : '';
+    embed.addFields({ name: '⚡ Snelste ronde', value: `**${fastest.profiles?.display_name || 'Onbekend'}**${flTime}`, inline: true });
+  }
+
+  // Cleanste rijder — laagste incidents onder finishers; bij gelijkstand beste positie
+  const finishersWithInc = finishers.filter(r => r.incidents != null);
+  if (finishersWithInc.length) {
+    const cleanest = finishersWithInc.reduce((best, r) =>
+      r.incidents < best.incidents || (r.incidents === best.incidents && r.position < best.position) ? r : best
+    );
+    embed.addFields({ name: '🧊 Clean drive', value: `**${cleanest.profiles?.display_name || 'Onbekend'}**  ${cleanest.incidents} inc`, inline: true });
+  }
+
   const dnfCount = results.filter(r => r.dnf).length;
-  if (dnfCount) embed.addFields({ name: '🔴 DNF', value: `${dnfCount}`, inline: true });
-  embed.addFields({ name: '👥 Finishers', value: `${finishers.length}`, inline: true })
-    .setFooter({ text: '3 Stripe Motorsport' }).setTimestamp();
+  const totalInc = results.reduce((sum, r) => sum + (r.incidents ?? 0), 0);
+  const incResults = results.filter(r => r.incidents != null);
+
+  const statsLine = [
+    finishers.length ? `👥 ${finishers.length} finishers` : null,
+    dnfCount         ? `🔴 ${dnfCount} DNF`               : null,
+    incResults.length ? `⚠️ ${totalInc} inc totaal`       : null,
+  ].filter(Boolean).join('  ·  ');
+
+  if (statsLine) embed.addFields({ name: '\u200b', value: statsLine, inline: false });
+
+  embed.setFooter({ text: '3 Stripe Motorsport' }).setTimestamp();
 
   return embed;
 }
@@ -321,7 +343,7 @@ async function checkCompleted() {
   for (const race of races) {
     if (wasSent(race.id, 'podium')) continue;
     const { data: results, error: re } = await supabase
-      .from('race_results').select('position, points, fastest_lap, dnf, gap_to_leader, profiles(display_name)')
+      .from('race_results').select('position, points, fastest_lap, best_lap, dnf, gap_to_leader, incidents, laps, profiles(display_name)')
       .eq('race_id', race.id).order('position', { ascending: true });
     if (re || !results?.length) continue;
     try { await channel.send({ embeds: [buildPodiumEmbed(race, results)] }); markSent(race.id, 'podium'); botLog(`🏆 Uitslag verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Podium fout: ${e.message}`); }
