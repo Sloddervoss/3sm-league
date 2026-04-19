@@ -302,7 +302,7 @@ const StewardPage = () => {
           .eq("race_id", protest.race_id)
           .eq("user_id", protest.accused_user_id);
         if (error) throw error;
-        await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: protest.race_id });
+        await supabase.rpc("recalculate_3sr_for_race", { p_race_id: protest.race_id });
       } else if (penaltyType === "points_deduction" && decision.points_deduction > 0) {
         const { data: result, error: selectError } = await supabase.from("race_results")
           .select("points")
@@ -316,7 +316,7 @@ const StewardPage = () => {
           .eq("race_id", protest.race_id)
           .eq("user_id", protest.accused_user_id);
         if (error) throw error;
-        await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: protest.race_id });
+        await supabase.rpc("recalculate_3sr_for_race", { p_race_id: protest.race_id });
       }
 
       // Sla penalty op
@@ -375,7 +375,7 @@ const StewardPage = () => {
           .eq("race_id", stewardAction.race_id)
           .eq("user_id", stewardAction.accused_user_id);
         if (error) throw error;
-        await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: stewardAction.race_id });
+        await supabase.rpc("recalculate_3sr_for_race", { p_race_id: stewardAction.race_id });
       } else if (stewardAction.penalty_type === "points_deduction" && stewardAction.points_deduction > 0) {
         const { data: result, error: selectError } = await supabase.from("race_results")
           .select("points")
@@ -389,7 +389,7 @@ const StewardPage = () => {
           .eq("race_id", stewardAction.race_id)
           .eq("user_id", stewardAction.accused_user_id);
         if (error) throw error;
-        await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: stewardAction.race_id });
+        await supabase.rpc("recalculate_3sr_for_race", { p_race_id: stewardAction.race_id });
       }
 
       const { error } = await supabase.from("penalties").insert({
@@ -538,7 +538,7 @@ const StewardPage = () => {
         .update({ points: newPoints })
         .eq("id", result.id);
       if (raceErr) throw raceErr;
-      await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
+      await supabase.rpc("recalculate_3sr_for_race", { p_race_id: result.race_id });
       const raceInfo = races?.find(r => r.id === result.race_id);
       const { error: penErr } = await supabase.from("penalties").insert({
         race_id: result.race_id,
@@ -571,7 +571,7 @@ const StewardPage = () => {
         if (rr) {
           const { error: rErr } = await supabase.from("race_results").update({ points: rr.points + penalty.points_deduction }).eq("id", result.id);
           if (rErr) throw rErr;
-          await supabase.rpc("recalculate_3sr_for_race" as any, { p_race_id: result.race_id });
+          await supabase.rpc("recalculate_3sr_for_race", { p_race_id: result.race_id });
         }
       }
       if (penalty.notified) {
