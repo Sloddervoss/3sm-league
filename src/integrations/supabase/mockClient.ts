@@ -8,14 +8,14 @@ function loadStore(): Record<string, any[]> {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch { /* ignore parse error, fall through to initial store */ }
   const initial = getInitialStore();
   saveStore(initial);
   return initial;
 }
 
 function saveStore(store: Record<string, any[]>) {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch {}
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch { /* ignore write errors */ }
 }
 
 function getTable(table: string): any[] {
@@ -217,7 +217,7 @@ class QueryBuilder {
 
   then(resolve: (v: any) => void, reject?: (e: any) => void) {
     try { resolve(this._execute()); }
-    catch (e) { reject ? reject(e) : resolve({ data: null, error: e }); }
+    catch (e) { if (reject) reject(e); else resolve({ data: null, error: e }); }
   }
 
   private _execute(): any {
@@ -234,7 +234,7 @@ class QueryBuilder {
     // ── UPSERT ──
     if (this._upsertData !== null) {
       const rows = Array.isArray(this._upsertData) ? this._upsertData : [this._upsertData];
-      let table = getTable(this._table);
+      const table = getTable(this._table);
       const conflictKeys = this._upsertConflict ? this._upsertConflict.split(",").map((s) => s.trim()) : ["id"];
       rows.forEach((newRow) => {
         const idx = table.findIndex((existing) =>
