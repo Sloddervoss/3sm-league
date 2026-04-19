@@ -3,13 +3,12 @@ import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import NewTeamCard from "@/components/preview/NewTeamCard";
-import NewStandingsTable from "@/components/preview/NewStandingsTable";
 import PreviewModal from "@/components/preview/PreviewModal";
 import TeamModal from "@/components/preview/TeamModal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTeams } from "@/hooks/data/useSharedQueries";
-import { Car, Trophy } from "lucide-react";
+import { Car } from "lucide-react";
 import type { Team } from "@/hooks/data/useSharedQueries";
 
 type TeamMembership = {
@@ -72,15 +71,6 @@ const TeamsPage = () => {
     .map((t): TeamWithStats => ({ ...t, ...getTeamStats(t.id) }))
     .sort((a, b) => b.total - a.total);
 
-  // Team standings for NewStandingsTable format
-  const teamStandings = sortedTeams.map((t) => ({
-    user_id: t.id,
-    display_name: t.name,
-    total_points: t.total,
-    wins: t.wins,
-    team: { name: t.name, color: t.color },
-  }));
-
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>
       <Navbar />
@@ -97,46 +87,32 @@ const TeamsPage = () => {
             <h1 className="font-heading font-black text-4xl md:text-5xl text-white leading-none">TEAMS</h1>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-12">
-            {/* Team cards */}
-            <div>
-              {isLoading ? (
-                <div className="grid gap-6 sm:grid-cols-2">
-                  {[1,2,3,4].map((i) => (
-                    <div key={i} className="h-72 rounded-2xl animate-pulse" style={{ background: "rgba(255,255,255,0.03)" }} />
-                  ))}
-                </div>
-              ) : !sortedTeams.length ? (
-                <div className="text-center py-24 text-gray-700">
-                  <Car className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                  <p className="font-heading font-bold text-lg">Geen teams gevonden</p>
-                </div>
-              ) : (
-                <div className="grid gap-6 sm:grid-cols-2">
-                  {sortedTeams.map((team, i) => (
-                    <NewTeamCard
-                      key={team.id}
-                      team={team}
-                      members={getTeamMembers(team.id)}
-                      points={team.total}
-                      wins={team.wins}
-                      rank={i + 1}
-                      onSelect={() => setSelectedTeam(team)}
-                    />
-                  ))}
-                </div>
-              )}
+          {isLoading ? (
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {[1,2,3,4].map((i) => (
+                <div key={i} className="h-72 rounded-2xl animate-pulse" style={{ background: "rgba(255,255,255,0.03)" }} />
+              ))}
             </div>
-
-            {/* Team standings sidebar */}
-            <div>
-              <div className="flex items-center gap-2 mb-6">
-                <Trophy className="w-4 h-4 text-orange-500" />
-                <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Team Klassement</span>
-              </div>
-              <NewStandingsTable standings={teamStandings} />
+          ) : !sortedTeams.length ? (
+            <div className="text-center py-24 text-gray-700">
+              <Car className="w-12 h-12 mx-auto mb-4 opacity-30" />
+              <p className="font-heading font-bold text-lg">Geen teams gevonden</p>
             </div>
-          </div>
+          ) : (
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {sortedTeams.map((team, i) => (
+                <NewTeamCard
+                  key={team.id}
+                  team={team}
+                  members={getTeamMembers(team.id)}
+                  points={team.total}
+                  wins={team.wins}
+                  rank={i + 1}
+                  onSelect={() => setSelectedTeam(team)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </main>
       <Footer />
