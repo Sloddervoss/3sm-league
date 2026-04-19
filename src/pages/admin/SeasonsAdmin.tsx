@@ -204,7 +204,7 @@ const SeasonsAdmin = () => {
             race_type: r.race_type || null, race_duration: r.race_duration || null,
             practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null,
             start_type: r.start_type || null, weather: r.weather || null, setup: r.setup || null,
-          } as any))
+          })) as unknown as never[]
         );
         if (re) throw re;
       }

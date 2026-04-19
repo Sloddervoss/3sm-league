@@ -4,34 +4,48 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
+type AdminProfile = {
+  user_id: string;
+  display_name: string | null;
+  iracing_name: string | null;
+  iracing_id: number | null;
+  irating: number | null;
+  safety_rating: string | null;
+};
+
+type AdminUserRole = {
+  user_id: string;
+  role: string;
+};
+
 const DriversList = () => {
   const queryClient = useQueryClient();
   const { user: currentUser, isSuperAdmin: currentIsSuperAdmin } = useAuth();
 
   const { data: profiles, isLoading } = useQuery({
     queryKey: ["admin-all-profiles"],
-    queryFn: async () => {
+    queryFn: async (): Promise<AdminProfile[]> => {
       const { data, error } = await supabase.rpc("admin_get_all_profiles");
       if (error) throw error;
-      return data || [];
+      return (data || []) as AdminProfile[];
     },
   });
 
   const { data: userRoles } = useQuery({
     queryKey: ["admin-user-roles"],
-    queryFn: async () => {
+    queryFn: async (): Promise<AdminUserRole[]> => {
       const { data, error } = await supabase.rpc("admin_get_user_roles");
       if (error) throw error;
-      return data || [];
+      return (data || []) as AdminUserRole[];
     },
   });
 
   const isAdmin = (userId: string) =>
-    (userRoles || []).some((r: any) => r.user_id === userId && r.role === "admin");
+    (userRoles || []).some((r) => r.user_id === userId && r.role === "admin");
   const isSuperAdmin = (userId: string) =>
-    (userRoles || []).some((r: any) => r.user_id === userId && r.role === "super_admin");
+    (userRoles || []).some((r) => r.user_id === userId && r.role === "super_admin");
   const isStewardRole = (userId: string) =>
-    (userRoles || []).some((r: any) => r.user_id === userId && r.role === "moderator");
+    (userRoles || []).some((r) => r.user_id === userId && r.role === "moderator");
 
   const toggleAdmin = useMutation({
     mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
@@ -82,7 +96,7 @@ const DriversList = () => {
         <span>Steward</span>
         <span></span>
       </div>
-      {profiles?.map((p: any) => {
+      {profiles?.map((p) => {
         const admin = isAdmin(p.user_id);
         const superAdmin = isSuperAdmin(p.user_id);
         const steward = isStewardRole(p.user_id);

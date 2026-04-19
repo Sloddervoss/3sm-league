@@ -17,6 +17,31 @@ import ResultsImportAdmin from "./admin/ResultsImportAdmin";
 
 type AdminTab = "overview" | "seasons" | "teams" | "results" | "points" | "drivers" | "announcements";
 
+type AdminOverviewRace = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string;
+  league_id: string | null;
+  status: string | null;
+  practice_duration: string | null;
+  qualifying_duration: string | null;
+  race_duration: string | null;
+  start_type: string | null;
+  weather: string | null;
+  setup: string | null;
+  leagues: { name: string; season: string | null } | null;
+};
+
+type AdminOverviewLeague = {
+  id: string;
+  name: string;
+  season: string | null;
+  car_class: string | null;
+  status: string | null;
+  races: unknown[];
+};
+
 const AdminPage = () => {
   const { user, isAdmin, loading } = useAuth();
   const queryClient = useQueryClient();
@@ -28,19 +53,19 @@ const AdminPage = () => {
 
   const { data: leagues } = useQuery({
     queryKey: ["admin-leagues"],
-    queryFn: async () => {
+    queryFn: async (): Promise<AdminOverviewLeague[]> => {
       const { data, error } = await supabase.from("leagues").select("*, races(*)");
       if (error) throw error;
-      return data;
+      return (data || []) as AdminOverviewLeague[];
     },
   });
 
   const { data: allRaces } = useQuery({
     queryKey: ["all-races-admin"],
-    queryFn: async () => {
+    queryFn: async (): Promise<AdminOverviewRace[]> => {
       const { data, error } = await supabase.from("races").select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, season)").order("race_date", { ascending: true });
       if (error) throw error;
-      return data;
+      return (data || []) as AdminOverviewRace[];
     },
   });
 
@@ -90,8 +115,8 @@ const AdminPage = () => {
     );
   }
 
-  const nextRace = allRaces?.find((r: any) => r.status !== "completed");
-  const activeLeague = leagues?.find((l: any) => l.status === "active");
+  const nextRace = allRaces?.find((r) => r.status !== "completed");
+  const activeLeague = leagues?.find((l) => l.status === "active");
 
   const tabs: { id: AdminTab; label: string; icon: React.ElementType }[] = [
     { id: "overview", label: "Dashboard", icon: BarChart2 },
@@ -157,7 +182,7 @@ const AdminPage = () => {
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                   {nextRace && (() => {
-                    const nr = nextRace as any;
+                    const nr = nextRace;
                     const trackInfo = getTrackInfo(nr.track);
                     const diff = new Date(nr.race_date).getTime() - Date.now();
                     const d = Math.floor(diff / 86400000);
@@ -222,7 +247,7 @@ const AdminPage = () => {
                     <div className="bg-card border border-border rounded-lg p-5 racing-stripe-left">
                       <div className="text-sm font-medium text-accent uppercase tracking-[0.1em] flex items-center gap-2 mb-1"><Trophy className="w-4 h-4" />Actief Seizoen</div>
                       <h3 className="font-heading font-black text-xl">{activeLeague.name}</h3>
-                      <p className="text-muted-foreground text-sm mt-1">{activeLeague.season} {activeLeague.car_class && `• ${activeLeague.car_class}`} • {(activeLeague as any).races?.length || 0} races</p>
+                      <p className="text-muted-foreground text-sm mt-1">{activeLeague.season} {activeLeague.car_class && `• ${activeLeague.car_class}`} • {activeLeague.races?.length || 0} races</p>
                     </div>
                   )}
                 </div>
@@ -253,9 +278,10 @@ const AdminPage = () => {
                         } else {
                           toast.error(result?.error ?? "Sync mislukt");
                         }
-                      } catch (e: any) {
-                        toast.error(e.message);
-                        setIratingSyncResult({ error: e.message });
+                      } catch (e: unknown) {
+                        const message = e instanceof Error ? e.message : "Sync mislukt";
+                        toast.error(message);
+                        setIratingSyncResult({ error: message });
                       } finally {
                         setIratingSyncing(false);
                       }

@@ -19,38 +19,69 @@ const statusLabels: Record<string, string> = {
   upcoming: "Aankomend",
 };
 
+type SeasonRace = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string;
+  status: string | null;
+  round: number | null;
+};
+
+type SeasonLeague = {
+  id: string;
+  name: string;
+  description: string | null;
+  season: string | null;
+  car_class: string | null;
+  status: string | null;
+  created_at: string;
+  races: SeasonRace[];
+};
+
+type SeasonResult = {
+  user_id: string;
+  points: number | null;
+  race_id: string;
+  races: { league_id: string | null } | null;
+  profiles: {
+    display_name: string | null;
+    iracing_name: string | null;
+  } | null;
+};
+
 const SeasonsPage = () => {
   const { data: leagues, isLoading } = useQuery({
     queryKey: ["all-leagues"],
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
+    queryFn: async (): Promise<SeasonLeague[]> => {
       const { data, error } = await supabase
         .from("leagues")
         .select("id, name, description, season, car_class, status, created_at, races(id, name, track, race_date, status, round)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return (data || []) as SeasonLeague[];
     },
   });
 
   const { data: results } = useQuery({
     queryKey: ["all-results-for-seasons"],
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
+    queryFn: async (): Promise<SeasonResult[]> => {
       const { data, error } = await supabase
         .from("race_results")
         .select("user_id, points, race_id, races(league_id), profiles(display_name, iracing_name)");
       if (error) throw error;
-      return data;
+      return (data || []) as SeasonResult[];
     },
   });
 
   const getLeaderForLeague = (leagueId: string) => {
-    const leagueResults = (results || []).filter((r: any) => r.races?.league_id === leagueId);
+    const leagueResults = (results || []).filter((r) => r.races?.league_id === leagueId);
     const driverMap = new Map<string, { name: string; points: number }>();
-    leagueResults.forEach((r: any) => {
+    leagueResults.forEach((r) => {
       const existing = driverMap.get(r.user_id) || { name: r.profiles?.display_name || r.profiles?.iracing_name || "Unknown", points: 0 };
-      existing.points += r.points;
+      existing.points += r.points || 0;
       driverMap.set(r.user_id, existing);
     });
     const sorted = [...driverMap.values()].sort((a, b) => b.points - a.points);
@@ -88,15 +119,15 @@ const SeasonsPage = () => {
               </div>
             ) : (
               <div className="grid gap-6 md:grid-cols-2">
-                {leagues.map((league: any, i: number) => {
-                  const races = (league as any).races || [];
-                  const completedRaces = races.filter((r: any) => r.status === "completed").length;
+                {leagues.map((league, i) => {
+                  const races = league.races || [];
+                  const completedRaces = races.filter((r) => r.status === "completed").length;
                   const totalRaces = races.length;
                   const progress = totalRaces > 0 ? (completedRaces / totalRaces) * 100 : 0;
                   const leader = getLeaderForLeague(league.id);
                   const nextRace = races
-                    .filter((r: any) => r.status === "upcoming")
-                    .sort((a: any, b: any) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0];
+                    .filter((r) => r.status === "upcoming")
+                    .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0];
 
                   return (
                     <motion.div

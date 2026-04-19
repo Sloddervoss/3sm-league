@@ -13,21 +13,56 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { Calendar, Trophy } from "lucide-react";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
+import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
+
+type CalendarRace = RaceWithLeagueSummary;
+
+type StandingsRaceResult = {
+  user_id: string;
+  points: number | null;
+  position: number | null;
+  races: { league_id: string | null } | null;
+};
+
+type StandingsProfile = {
+  user_id: string;
+  display_name: string | null;
+  team_id: string | null;
+};
+
+type StandingsTeam = {
+  id: string;
+  name: string;
+  color: string | null;
+};
+
+type StandingRow = {
+  user_id: string;
+  display_name: string;
+  total_points: number;
+  wins: number;
+  team: { name: string; color: string | null } | undefined;
+};
+
+type ConfirmedProfile = {
+  user_id: string;
+  display_name: string | null;
+};
 
 const CalendarPage = () => {
   const now = useNow();
   const reg = useRegistration();
-  const [selectedRace, setSelectedRace] = useState<any>(null);
-  const [selectedDriver, setSelectedDriver] = useState<any>(null);
+  const [selectedRace, setSelectedRace] = useState<CalendarRace | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<ConfirmedProfile | null>(null);
 
   const { data: races = [] } = useQuery({
     queryKey: ["races-with-leagues"],
-    queryFn: async () => {
+    queryFn: async (): Promise<CalendarRace[]> => {
       const { data } = await supabase
         .from("races")
         .select("*, leagues(name, car_class, id, season)")
         .order("race_date", { ascending: true });
-      return data || [];
+      return (data || []) as CalendarRace[];
     },
   });
 
@@ -53,16 +88,17 @@ const CalendarPage = () => {
   const { data: standingsData = [] } = useQuery({
     queryKey: ["standings-preview", leagues?.[0]?.id],
     enabled: !!leagues?.length && !!teams?.length,
-    queryFn: async () => {
+    queryFn: async (): Promise<StandingRow[]> => {
       const leagueId = leagues[0].id;
       const { data: res } = await supabase
         .from("race_results")
         .select("user_id, position, points, race_id, races(league_id)");
-      const filtered = (res || []).filter((r: any) => r.races?.league_id === leagueId);
+      const typedResults = (res || []) as StandingsRaceResult[];
+      const filtered = typedResults.filter((r) => r.races?.league_id === leagueId);
       const map = new Map<string, { total_points: number; wins: number }>();
-      filtered.forEach((r: any) => {
+      filtered.forEach((r) => {
         const e = map.get(r.user_id) || { total_points: 0, wins: 0 };
-        e.total_points += r.points;
+        e.total_points += r.points ?? 0;
         if (r.position === 1) e.wins++;
         map.set(r.user_id, e);
       });
@@ -72,10 +108,12 @@ const CalendarPage = () => {
         .from("profiles")
         .select("user_id, display_name, team_id")
         .in("user_id", userIds);
+      const typedProfiles = (profs || []) as StandingsProfile[];
+      const typedTeams = teams as StandingsTeam[];
       return userIds.map((uid) => {
         const stats = map.get(uid)!;
-        const prof = (profs || []).find((p: any) => p.user_id === uid);
-        const team = teams.find((t: any) => t.id === prof?.team_id);
+        const prof = typedProfiles.find((p) => p.user_id === uid);
+        const team = typedTeams.find((t) => t.id === prof?.team_id);
         return {
           user_id: uid,
           display_name: prof?.display_name || "Unknown",
@@ -83,15 +121,15 @@ const CalendarPage = () => {
           wins: stats.wins,
           team: team ? { name: team.name, color: team.color } : undefined,
         };
-      }).sort((a: any, b: any) => b.total_points - a.total_points);
+      }).sort((a, b) => b.total_points - a.total_points);
     },
   });
 
   const { data: profiles = [] } = useQuery({
     queryKey: ["drivers"],
-    queryFn: async () => {
+    queryFn: async (): Promise<ConfirmedProfile[]> => {
       const { data } = await supabase.from("confirmed_profiles").select("*");
-      return data || [];
+      return (data || []) as ConfirmedProfile[];
     },
   });
 
@@ -107,12 +145,12 @@ const CalendarPage = () => {
     },
   });
 
-  const liveRace = races.find((r: any) =>
+  const liveRace = races.find((r) =>
     r.status !== "completed" && new Date(r.race_date) <= now
-  ) as any;
+  ) as CalendarRace | undefined;
   const upcomingRace = [...races]
-    .filter((r: any) => r.status !== "completed" && new Date(r.race_date) > now)
-    .sort((a: any, b: any) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as any;
+    .filter((r) => r.status !== "completed" && new Date(r.race_date) > now)
+    .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as CalendarRace | undefined;
   const nextRace = liveRace || upcomingRace;
 
   const activeLeague = leagues?.[0];
@@ -170,9 +208,9 @@ const CalendarPage = () => {
               )}
 
               <div className="space-y-3">
-                {races.filter((race: any) =>
+                {races.filter((race) =>
                   race.status !== "completed"
-                ).map((race: any, i: number) => {
+                ).map((race, i) => {
                   const leagueId = race.leagues?.id;
                   return (
                     <NewRaceCard
@@ -201,7 +239,7 @@ const CalendarPage = () => {
                 standings={standingsData}
                 leagueName={activeLeague?.name}
                 onSelectDriver={(uid) => {
-                  const driver = profiles.find((p: any) => p.user_id === uid);
+                  const driver = profiles.find((p) => p.user_id === uid);
                   if (driver) setSelectedDriver(driver);
                 }}
               />
