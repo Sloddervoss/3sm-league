@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { List, Trophy, AlertTriangle, Flag, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const positionColors: Record<number, string> = {
   1: "text-yellow-400",
@@ -169,6 +169,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
 
 const ResultsPage = () => {
   const [expandedRace, setExpandedRace] = useState<string | null>(null);
+  const latestRaceRowRef = useRef<HTMLDivElement>(null);
 
   const { data: races, isLoading } = useQuery({
     queryKey: ["completed-races"],
@@ -404,7 +405,12 @@ const ResultsPage = () => {
                     {/* CTA */}
                     <div className="px-6 py-4 border-t border-border">
                       <button
-                        onClick={() => setExpandedRace(latestRace.id)}
+                        onClick={() => {
+                          setExpandedRace(latestRace.id);
+                          requestAnimationFrame(() =>
+                            latestRaceRowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                          );
+                        }}
                         className="text-sm font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors flex items-center gap-1"
                       >
                         Bekijk volledige uitslag <ChevronDown className="w-4 h-4" />
@@ -443,10 +449,11 @@ const ResultsPage = () => {
                   return (
                     <motion.div
                       key={race.id}
+                      ref={i === 0 ? latestRaceRowRef : undefined}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.04 }}
-                      className="bg-card border border-border rounded-lg overflow-hidden"
+                      className={`bg-card border border-border rounded-lg overflow-hidden${i === 0 ? " scroll-mt-[120px]" : ""}`}
                     >
                       <button
                         onClick={() => setExpandedRace(isExpanded ? null : race.id)}
