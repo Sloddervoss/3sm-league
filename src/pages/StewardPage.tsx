@@ -55,6 +55,39 @@ type ProtestRow = {
   accused: ProtestProfile | null;
 };
 
+type CompletedRaceForDnf = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string;
+};
+
+type DnfResultProfile = {
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
+type DnfResultRow = {
+  id: string;
+  race_id: string;
+  user_id: string;
+  position: number;
+  points: number;
+  dnf: boolean | null;
+  laps: number | null;
+  profiles: DnfResultProfile | null;
+};
+
+type DnfPenaltyRow = {
+  id: string;
+  race_id: string;
+  user_id: string;
+  source: string;
+  points_deduction: number;
+  notified: boolean;
+  revoked: boolean;
+};
+
 type RaceForProtest = {
   id: string;
   name: string;
@@ -381,7 +414,7 @@ const StewardPage = () => {
   const { data: completedRacesForDnf } = useQuery({
     queryKey: ["completed-races-dnf"],
     enabled: canModerate && activeTab === "dnf_check",
-    queryFn: async () => {
+    queryFn: async (): Promise<CompletedRaceForDnf[]> => {
       const { data, error } = await supabase
         .from("races")
         .select("id, name, track, race_date")
@@ -396,31 +429,31 @@ const StewardPage = () => {
     queryKey: ["all-results-dnf"],
     enabled: canModerate && activeTab === "dnf_check",
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
+    queryFn: async (): Promise<DnfResultRow[]> => {
       const { data, error } = await supabase
         .from("race_results")
         .select("id, race_id, user_id, position, points, dnf, laps, profiles(display_name, iracing_name)");
       if (error) throw error;
-      return data || [];
+      return (data || []) as DnfResultRow[];
     },
   });
 
   const { data: existingAbandonPenalties, refetch: refetchAbandon } = useQuery({
     queryKey: ["abandon-penalties"],
     enabled: canModerate,
-    queryFn: async () => {
+    queryFn: async (): Promise<DnfPenaltyRow[]> => {
       const { data } = await supabase
         .from("penalties")
         .select("id, race_id, user_id, source, points_deduction, notified, revoked")
         .in("source", ["abandon", "normal_dnf"]);
-      return (data || []) as { id: string; race_id: string; user_id: string; source: string; points_deduction: number; notified: boolean; revoked: boolean }[];
+      return (data || []) as DnfPenaltyRow[];
     },
   });
 
   // ── DNF mutations ─────────────────────────────────────────────────────────────
 
   const markNormalDnf = useMutation({
-    mutationFn: async ({ result }: { result: any }) => {
+    mutationFn: async ({ result }: { result: DnfResultRow }) => {
       const { error } = await supabase.from("penalties").insert({
         race_id: result.race_id,
         user_id: result.user_id,
@@ -441,7 +474,7 @@ const StewardPage = () => {
   });
 
   const markAbandon = useMutation({
-    mutationFn: async ({ result }: { result: any }) => {
+    mutationFn: async ({ result }: { result: DnfResultRow }) => {
       const deduction = abandonPoints[result.id] ?? 5;
       const newPoints = (result.points || 0) - deduction;
       const { error: raceErr } = await supabase
@@ -476,7 +509,7 @@ const StewardPage = () => {
   });
 
   const removeDnfPenalty = useMutation({
-    mutationFn: async ({ result, penalty }: { result: any; penalty: any }) => {
+    mutationFn: async ({ result, penalty }: { result: DnfResultRow; penalty: DnfPenaltyRow }) => {
       if (penalty.source === "abandon" && penalty.points_deduction > 0) {
         const { data: rr } = await supabase.from("race_results").select("points").eq("id", result.id).maybeSingle();
         if (rr) {
@@ -768,9 +801,9 @@ const StewardPage = () => {
                       </span>
                     )}
                     {tab.id === "dnf_check" && (() => {
-                      const open = (completedRacesForDnf || []).reduce((n, race: any) => {
-                        const dnfs = (allResultsForDnf || []).filter((r: any) => r.race_id === race.id && r.dnf);
-                        return n + dnfs.filter((r: any) => !(existingAbandonPenalties || []).some((p: any) => p.race_id === r.race_id && p.user_id === r.user_id)).length;
+                      const open = (completedRacesForDnf || []).reduce((n, race) => {
+                        const dnfs = (allResultsForDnf || []).filter(r => r.race_id === race.id && r.dnf);
+                        return n + dnfs.filter(r => !(existingAbandonPenalties || []).some(p => p.race_id === r.race_id && p.user_id === r.user_id)).length;
                       }, 0);
                       return open > 0 ? (
                         <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-red-500/20 text-red-400 border border-red-500/30">{open}</span>
@@ -1157,10 +1190,10 @@ const StewardPage = () => {
 
             {/* DNF Check tab */}
             {activeTab === "dnf_check" && canModerate && (() => {
-              const racesWithDnf = (completedRacesForDnf || []).map((race: any) => {
-                const raceResults = (allResultsForDnf || []).filter((r: any) => r.race_id === race.id).sort((a: any, b: any) => a.position - b.position);
-                const dnfResults = raceResults.filter((r: any) => r.dnf === true);
-                const openCount = dnfResults.filter((r: any) => !(existingAbandonPenalties || []).some((p: any) => p.race_id === r.race_id && p.user_id === r.user_id)).length;
+              const racesWithDnf = (completedRacesForDnf || []).map(race => {
+                const raceResults = (allResultsForDnf || []).filter(r => r.race_id === race.id).sort((a, b) => a.position - b.position);
+                const dnfResults = raceResults.filter(r => r.dnf === true);
+                const openCount = dnfResults.filter(r => !(existingAbandonPenalties || []).some(p => p.race_id === r.race_id && p.user_id === r.user_id)).length;
                 return { race, dnfResults, openCount };
               }).filter(({ dnfResults }) => dnfResults.length > 0);
 
@@ -1210,8 +1243,8 @@ const StewardPage = () => {
 
                             {isExpanded && (
                               <div className="border-t border-border divide-y divide-border/40">
-                                {dnfResults.map((result: any) => {
-                                  const reviewed = (existingAbandonPenalties || []).find((p: any) => p.race_id === result.race_id && p.user_id === result.user_id);
+                                {dnfResults.map((result: DnfResultRow) => {
+                                  const reviewed = existingAbandonPenalties?.find(p => p.race_id === result.race_id && p.user_id === result.user_id);
                                   const driverName = result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
                                   return (
                                     <div key={result.id} className="px-5 py-3 flex items-center gap-4 flex-wrap">
