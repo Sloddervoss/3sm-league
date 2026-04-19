@@ -299,14 +299,14 @@ const SeasonsAdmin = () => {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-6 mb-6 racing-stripe-left">
           <h3 className="font-heading text-lg font-bold mb-4">NIEUW SEIZOEN</h3>
           <div className="grid gap-4 md:grid-cols-2 mb-4">
-            {[
+            {([
               { label: "Naam *", key: "name", placeholder: "GT3 Championship" },
               { label: "Seizoen", key: "season", placeholder: "2026 S1" },
               { label: "Auto Klasse", key: "car_class", placeholder: "GT3" },
-            ].map(({ label, key, placeholder }) => (
+            ] as const).map(({ label, key, placeholder }) => (
               <div key={key}>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{label}</label>
-                <input type="text" value={(newLeague as any)[key]} onChange={(e) => setNewLeague({ ...newLeague, [key]: e.target.value })} placeholder={placeholder} className="w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                <input type="text" value={newLeague[key]} onChange={(e) => setNewLeague({ ...newLeague, [key]: e.target.value })} placeholder={placeholder} className="w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
             ))}
             <div>
@@ -322,7 +322,7 @@ const SeasonsAdmin = () => {
           {races.length > 0 && (
             <div className="space-y-3 mb-4">
               {races.map((race, i) => {
-                const upd = (key: string, val: string) => { const u = [...races]; (u[i] as any)[key] = val; setRaces(u); };
+                const upd = (key: keyof RaceSlot, val: string) => { const u = [...races]; u[i] = { ...u[i], [key]: val }; setRaces(u); };
                 return (
                   <div key={i} className="p-3 bg-secondary/50 rounded-md border border-border/50 space-y-2">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -422,7 +422,7 @@ const SeasonsAdmin = () => {
                     {([["Naam", "name", "GT3 Championship"], ["Seizoen", "season", "2026 S1"], ["Auto klasse", "car_class", "GT3"], ["Beschrijving", "description", ""]] as const).map(([label, key, ph]) => (
                       <div key={key}>
                         <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">{label}</label>
-                        <input type="text" value={(editingLeagueData as any)[key]} onChange={(e) => setEditingLeagueData({ ...editingLeagueData, [key]: e.target.value })} placeholder={ph} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                        <input type="text" value={editingLeagueData[key]} onChange={(e) => setEditingLeagueData({ ...editingLeagueData, [key]: e.target.value })} placeholder={ph} className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                       </div>
                     ))}
                   </div>
