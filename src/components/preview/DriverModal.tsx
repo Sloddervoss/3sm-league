@@ -3,6 +3,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useTeams } from "@/hooks/data/useSharedQueries";
 import { motion } from "framer-motion";
 import { TrendingUp, Shield, Trophy, Flag, Zap } from "lucide-react";
 
@@ -39,12 +40,6 @@ interface Driver {
   avatar_url?: string | null;
 }
 
-type DriverTeam = {
-  id: string;
-  name: string;
-  color: string | null;
-  logo_url: string | null;
-};
 
 type Driver3sr = {
   current_score: number | null;
@@ -79,13 +74,7 @@ const StatBox = ({ label, value, accent }: { label: string; value: React.ReactNo
 );
 
 const DriverModal = ({ driver }: Props) => {
-  const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async (): Promise<DriverTeam[]> => {
-      const { data } = await supabase.from("teams").select("id, name, color, logo_url");
-      return (data || []) as DriverTeam[];
-    },
-  });
+  const { data: teams = [] } = useTeams();
 
   const { data: sr } = useQuery({
     queryKey: ["driver-3sr", driver.user_id],
