@@ -30,14 +30,42 @@ const iRatingTier = (ir?: number) => {
 
 interface Driver {
   user_id: string;
-  display_name?: string;
-  iracing_name?: string;
-  iracing_id?: number;
-  irating?: number;
-  safety_rating?: string;
-  team_id?: string;
-  avatar_url?: string;
+  display_name?: string | null;
+  iracing_name?: string | null;
+  iracing_id?: number | null;
+  irating?: number | null;
+  safety_rating?: string | null;
+  team_id?: string | null;
+  avatar_url?: string | null;
 }
+
+type DriverTeam = {
+  id: string;
+  name: string;
+  color: string | null;
+  logo_url: string | null;
+};
+
+type Driver3sr = {
+  current_score: number | null;
+  ranked_races: number | null;
+  is_ranked: boolean | null;
+  rank_label: string | null;
+};
+
+type DriverRaceResult = {
+  id: string;
+  position: number | null;
+  points: number | null;
+  incidents: number | null;
+  fastest_lap: boolean | null;
+  races: {
+    name: string;
+    track: string;
+    race_date: string;
+    leagues: { name: string } | null;
+  } | null;
+};
 
 interface Props {
   driver: Driver;
@@ -53,38 +81,38 @@ const StatBox = ({ label, value, accent }: { label: string; value: React.ReactNo
 const DriverModal = ({ driver }: Props) => {
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
-    queryFn: async () => {
+    queryFn: async (): Promise<DriverTeam[]> => {
       const { data } = await supabase.from("teams").select("id, name, color, logo_url");
-      return data || [];
+      return (data || []) as DriverTeam[];
     },
   });
 
   const { data: sr } = useQuery({
     queryKey: ["driver-3sr", driver.user_id],
-    queryFn: async () => {
+    queryFn: async (): Promise<Driver3sr | null> => {
       const { data } = await supabase
         .from("driver_3sr")
         .select("current_score, ranked_races, is_ranked, rank_label")
         .eq("user_id", driver.user_id)
         .maybeSingle();
-      return data;
+      return data as Driver3sr | null;
     },
   });
 
   const { data: raceResults = [] } = useQuery({
     queryKey: ["driver-modal-results", driver.user_id],
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
+    queryFn: async (): Promise<DriverRaceResult[]> => {
       const { data } = await supabase
         .from("race_results")
         .select("*, races(name, track, race_date, leagues(name))")
         .eq("user_id", driver.user_id)
         .order("races(race_date)", { ascending: false });
-      return data || [];
+      return (data || []) as DriverRaceResult[];
     },
   });
 
-  const team         = teams.find((t: any) => t.id === driver.team_id);
+  const team         = teams.find((t) => t.id === driver.team_id);
   const teamColor    = team?.color || "#f97316";
 
   const safetyLetter = (driver.safety_rating || "").split(" ")[0] || "?";
@@ -92,14 +120,17 @@ const DriverModal = ({ driver }: Props) => {
   const ir           = iRatingTier(driver.irating);
   const name         = driver.display_name || driver.iracing_name || "Unknown";
 
-  const wins       = raceResults.filter((r: any) => r.position === 1).length;
-  const podiums    = raceResults.filter((r: any) => r.position <= 3).length;
-  const totalPts   = raceResults.reduce((a: number, r: any) => a + (r.points || 0), 0);
+  const wins       = raceResults.filter((r) => r.position === 1).length;
+  const podiums    = raceResults.filter((r) => r.position !== null && r.position <= 3).length;
+  const totalPts   = raceResults.reduce((a, r) => a + (r.points || 0), 0);
   const avgInc     = raceResults.length > 0
-    ? (raceResults.reduce((a: number, r: any) => a + (r.incidents || 0), 0) / raceResults.length).toFixed(1)
+    ? (raceResults.reduce((a, r) => a + (r.incidents || 0), 0) / raceResults.length).toFixed(1)
     : "—";
-  const bestFinish = raceResults.length > 0 ? Math.min(...raceResults.map((r: any) => r.position)) : null;
-  const fastestLaps = raceResults.filter((r: any) => r.fastest_lap).length;
+  const finishes = raceResults
+    .map((r) => r.position)
+    .filter((position): position is number => position !== null);
+  const bestFinish = finishes.length > 0 ? Math.min(...finishes) : null;
+  const fastestLaps = raceResults.filter((r) => r.fastest_lap).length;
   const winRate    = raceResults.length > 0 ? Math.round((wins / raceResults.length) * 100) : 0;
 
   return (
@@ -265,8 +296,8 @@ const DriverModal = ({ driver }: Props) => {
                 <span>Pos</span><span>Race</span><span>Pts</span><span>FL</span><span>Inc</span>
               </div>
               <div className="overflow-y-auto" style={{ maxHeight: "14rem", overscrollBehavior: "contain" }}>
-                {raceResults.map((r: any, i: number) => {
-                  const posColor = r.position <= 3 ? PODIUM_COLOR[r.position - 1] : "#6b7280";
+                {raceResults.map((r, i) => {
+                  const posColor = r.position !== null && r.position <= 3 ? PODIUM_COLOR[r.position - 1] : "#6b7280";
                   return (
                     <motion.div
                       key={r.id || i}

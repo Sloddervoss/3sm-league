@@ -3,13 +3,13 @@ import { TrendingUp, Shield, Trophy, Zap } from "lucide-react";
 
 interface Driver {
   user_id: string;
-  display_name?: string;
-  iracing_name?: string;
-  iracing_id?: number;
-  irating?: number;
-  safety_rating?: string;
-  team_id?: string;
-  avatar_url?: string;
+  display_name?: string | null;
+  iracing_name?: string | null;
+  iracing_id?: number | null;
+  irating?: number | null;
+  safety_rating?: string | null;
+  team_id?: string | null;
+  avatar_url?: string | null;
 }
 
 interface DriverStats {
@@ -23,7 +23,7 @@ interface DriverStats {
 interface Team {
   id: string;
   name: string;
-  color: string;
+  color: string | null;
 }
 
 interface Props {

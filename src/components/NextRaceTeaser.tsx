@@ -11,6 +11,17 @@ import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
 import { useRegistration } from "@/lib/useRegistration";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
+import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
+
+type NextRace = RaceWithLeagueSummary;
+
+type Session = {
+  key: string;
+  label: string;
+  dur: string;
+  color: string;
+  bg: string;
+};
 
 const SOLO_COLOR = "#818cf8";
 
@@ -20,18 +31,18 @@ const NextRaceTeaser = () => {
 
   const { data: races = [] } = useQuery({
     queryKey: ["races-with-leagues"],
-    queryFn: async () => {
+    queryFn: async (): Promise<NextRace[]> => {
       const { data } = await supabase
         .from("races")
         .select("*, leagues(name, car_class, id, season)")
         .order("race_date", { ascending: true });
-      return data || [];
+      return (data || []) as NextRace[];
     },
   });
 
   const nextRace = [...races]
-    .filter((r: any) => r.status !== "completed" && new Date(r.race_date) > now)
-    .sort((a: any, b: any) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as any;
+    .filter((r) => r.status !== "completed" && new Date(r.race_date) > now)
+    .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as NextRace | undefined;
 
   if (!nextRace) return null;
 
@@ -48,11 +59,12 @@ const NextRaceTeaser = () => {
   const dateStr    = new Date(nextRace.race_date).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" });
   const timeStr    = new Date(nextRace.race_date).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
 
-  const sessions = [
+  const sessionItems: Array<Session | false> = [
     nextRace.practice_duration   && { key: "P", label: "Practice",   dur: nextRace.practice_duration,   color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
     nextRace.qualifying_duration && { key: "Q", label: "Qualifying",  dur: nextRace.qualifying_duration,  color: "#eab308", bg: "rgba(234,179,8,0.12)" },
     nextRace.race_duration       && { key: "R", label: "Race",        dur: nextRace.race_duration,        color: "#f97316", bg: "rgba(249,115,22,0.12)" },
-  ].filter(Boolean) as any[];
+  ];
+  const sessions = sessionItems.filter((s): s is Session => Boolean(s));
 
   return (
     <section className="py-16" style={{ background: "#08080f" }}>
@@ -164,7 +176,7 @@ const NextRaceTeaser = () => {
                 {/* Session pills */}
                 {sessions.length > 0 && (
                   <div className="flex gap-2 flex-wrap">
-                    {sessions.map((s: any) => (
+                    {sessions.map((s) => (
                       <span
                         key={s.key}
                         className="text-[11px] font-bold px-3 py-1 rounded-lg"

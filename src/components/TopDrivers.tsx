@@ -6,32 +6,55 @@ import { Users, ChevronRight } from "lucide-react";
 import NewDriverCard from "@/components/preview/NewDriverCard";
 import PreviewModal from "@/components/preview/PreviewModal";
 import DriverModal from "@/components/preview/DriverModal";
+import type { DriverModalProfile } from "@/lib/standingsTypes";
+
+type DriverStats = {
+  races: number;
+  wins: number;
+  podiums: number;
+  points: number;
+  incidents: number;
+};
+
+type DriverResult = {
+  user_id: string;
+  position: number | null;
+  points: number | null;
+  incidents: number | null;
+};
+
+type DriverTeam = {
+  id: string;
+  name: string;
+  color: string | null;
+  logo_url: string | null;
+};
 
 const TopDrivers = () => {
-  const [selectedDriver, setSelectedDriver] = useState<any>(null);
+  const [selectedDriver, setSelectedDriver] = useState<DriverModalProfile | null>(null);
 
   const { data: profiles = [] } = useQuery({
     queryKey: ["drivers"],
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
+    queryFn: async (): Promise<DriverModalProfile[]> => {
       const { data } = await supabase.from("confirmed_profiles").select("*");
-      return data || [];
+      return (data || []) as DriverModalProfile[];
     },
   });
 
   const { data: stats } = useQuery({
     queryKey: ["driver-stats"],
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
+    queryFn: async (): Promise<Map<string, DriverStats>> => {
       const { data } = await supabase
         .from("race_results")
         .select("user_id, position, points, incidents");
-      const map = new Map<string, { races: number; wins: number; podiums: number; points: number; incidents: number }>();
-      data?.forEach((r: any) => {
+      const map = new Map<string, DriverStats>();
+      ((data || []) as DriverResult[]).forEach((r) => {
         const e = map.get(r.user_id) || { races: 0, wins: 0, podiums: 0, points: 0, incidents: 0 };
-        e.races++; e.points += r.points;
+        e.races++; e.points += r.points || 0;
         if (r.position === 1) e.wins++;
-        if (r.position <= 3) e.podiums++;
+        if (r.position !== null && r.position <= 3) e.podiums++;
         e.incidents += r.incidents || 0;
         map.set(r.user_id, e);
       });
@@ -42,14 +65,14 @@ const TopDrivers = () => {
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
     staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
+    queryFn: async (): Promise<DriverTeam[]> => {
       const { data } = await supabase.from("teams").select("id, name, color, logo_url");
-      return data || [];
+      return (data || []) as DriverTeam[];
     },
   });
 
   const sorted = [...profiles]
-    .sort((a: any, b: any) => (stats?.get(b.user_id)?.points || 0) - (stats?.get(a.user_id)?.points || 0))
+    .sort((a, b) => (stats?.get(b.user_id)?.points || 0) - (stats?.get(a.user_id)?.points || 0))
     .slice(0, 6);
 
   if (!sorted.length) return null;
@@ -72,12 +95,12 @@ const TopDrivers = () => {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sorted.map((driver: any, i: number) => (
+          {sorted.map((driver, i) => (
             <NewDriverCard
               key={driver.user_id}
               driver={driver}
               stats={stats?.get(driver.user_id)}
-              team={teams.find((t: any) => t.id === driver.team_id)}
+              team={teams.find((t) => t.id === driver.team_id)}
               rank={i + 1}
               onSelect={() => setSelectedDriver(driver)}
             />

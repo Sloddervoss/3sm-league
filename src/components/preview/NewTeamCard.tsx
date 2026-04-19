@@ -13,7 +13,7 @@ interface Member {
   id: string;
   user_id: string;
   role: string;
-  profiles?: { display_name?: string; iracing_name?: string };
+  profiles?: { display_name?: string | null; iracing_name?: string | null } | null;
 }
 
 interface Props {

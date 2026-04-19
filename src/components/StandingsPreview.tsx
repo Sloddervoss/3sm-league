@@ -6,9 +6,10 @@ import { Trophy, ChevronRight } from "lucide-react";
 import NewStandingsTable from "@/components/preview/NewStandingsTable";
 import PreviewModal from "@/components/preview/PreviewModal";
 import DriverModal from "@/components/preview/DriverModal";
+import type { DriverModalProfile, StandingRow, StandingsProfile, StandingsRaceResult, StandingTeam } from "@/lib/standingsTypes";
 
 const StandingsPreview = ({ leagueId }: { leagueId?: string }) => {
-  const [selectedDriver, setSelectedDriver] = useState<any>(null);
+  const [selectedDriver, setSelectedDriver] = useState<DriverModalProfile | null>(null);
 
   const { data: leagues = [] } = useQuery({
     queryKey: ["leagues-for-standings"],
@@ -31,9 +32,9 @@ const StandingsPreview = ({ leagueId }: { leagueId?: string }) => {
 
   const { data: profiles = [] } = useQuery({
     queryKey: ["drivers"],
-    queryFn: async () => {
+    queryFn: async (): Promise<DriverModalProfile[]> => {
       const { data } = await supabase.from("confirmed_profiles").select("*");
-      return data || [];
+      return (data || []) as DriverModalProfile[];
     },
   });
 
@@ -42,15 +43,15 @@ const StandingsPreview = ({ leagueId }: { leagueId?: string }) => {
   const { data: standings = [] } = useQuery({
     queryKey: ["standings-preview", activeLeagueId],
     enabled: !!activeLeagueId && !!teams.length,
-    queryFn: async () => {
+    queryFn: async (): Promise<StandingRow[]> => {
       const { data: res } = await supabase
         .from("race_results")
         .select("user_id, position, points, race_id, races(league_id)");
-      const filtered = (res || []).filter((r: any) => r.races?.league_id === activeLeagueId);
+      const filtered = ((res || []) as StandingsRaceResult[]).filter((r) => r.races?.league_id === activeLeagueId);
       const map = new Map<string, { total_points: number; wins: number }>();
-      filtered.forEach((r: any) => {
+      filtered.forEach((r) => {
         const e = map.get(r.user_id) || { total_points: 0, wins: 0 };
-        e.total_points += r.points;
+        e.total_points += r.points || 0;
         if (r.position === 1) e.wins++;
         map.set(r.user_id, e);
       });
@@ -60,10 +61,12 @@ const StandingsPreview = ({ leagueId }: { leagueId?: string }) => {
         .from("profiles")
         .select("user_id, display_name, team_id")
         .in("user_id", userIds);
+      const profiles = (profs || []) as StandingsProfile[];
+      const standingTeams = teams as StandingTeam[];
       return userIds.map((uid) => {
         const stats = map.get(uid)!;
-        const prof = (profs || []).find((p: any) => p.user_id === uid);
-        const team = teams.find((t: any) => t.id === prof?.team_id);
+        const prof = profiles.find((p) => p.user_id === uid);
+        const team = standingTeams.find((t) => t.id === prof?.team_id);
         return {
           user_id: uid,
           display_name: prof?.display_name || "Unknown",
@@ -71,13 +74,13 @@ const StandingsPreview = ({ leagueId }: { leagueId?: string }) => {
           wins: stats.wins,
           team: team ? { name: team.name, color: team.color } : undefined,
         };
-      }).sort((a: any, b: any) => b.total_points - a.total_points);
+      }).sort((a, b) => b.total_points - a.total_points);
     },
   });
 
   if (!standings.length) return null;
 
-  const leagueName = leagues.find((l: any) => l.id === activeLeagueId)?.name;
+  const leagueName = leagues.find((l) => l.id === activeLeagueId)?.name;
 
   return (
     <section className="py-20" style={{ background: "#08080f" }}>
@@ -100,7 +103,7 @@ const StandingsPreview = ({ leagueId }: { leagueId?: string }) => {
           standings={standings}
           leagueName={leagueName}
           onSelectDriver={(uid) => {
-            const driver = profiles.find((p: any) => p.user_id === uid);
+            const driver = profiles.find((p) => p.user_id === uid);
             if (driver) setSelectedDriver(driver);
           }}
         />

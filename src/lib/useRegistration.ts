@@ -6,6 +6,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+type RegistrationProfile = {
+  iracing_id: number | null;
+  iracing_name: string | null;
+};
+
+type SeasonRegistration = {
+  league_id: string;
+  user_id: string;
+};
+
+type RaceRegistration = {
+  race_id: string;
+  user_id: string;
+};
+
 export function useRegistration() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -14,52 +29,52 @@ export function useRegistration() {
     queryKey: ["profile", user?.id],
     enabled: !!user,
     refetchOnMount: "always",
-    queryFn: async () => {
+    queryFn: async (): Promise<RegistrationProfile | null> => {
       const { data } = await supabase
         .from("profiles")
         .select("iracing_id, iracing_name")
         .eq("user_id", user!.id)
         .maybeSingle();
-      return data;
+      return data as RegistrationProfile | null;
     },
   });
 
-  const profileComplete = !!(profile as any)?.iracing_id && !!(profile as any)?.iracing_name;
+  const profileComplete = !!profile?.iracing_id && !!profile?.iracing_name;
 
   const { data: seasonRegs = [] } = useQuery({
     queryKey: ["season-registrations"],
-    queryFn: async () => {
+    queryFn: async (): Promise<SeasonRegistration[]> => {
       const { data } = await supabase.from("season_registrations").select("*");
-      return data || [];
+      return (data || []) as SeasonRegistration[];
     },
   });
 
   const { data: raceRegs = [] } = useQuery({
     queryKey: ["race-registrations"],
-    queryFn: async () => {
+    queryFn: async (): Promise<RaceRegistration[]> => {
       const { data } = await supabase.from("race_registrations").select("*");
-      return data || [];
+      return (data || []) as RaceRegistration[];
     },
   });
 
   // ── Helpers ────────────────────────────────────────────────
   const isRegisteredForSeason = (leagueId: string) =>
-    !!user && seasonRegs.some((r: any) => r.league_id === leagueId && r.user_id === user.id);
+    !!user && seasonRegs.some((r) => r.league_id === leagueId && r.user_id === user.id);
 
   const isRegisteredForRace = (raceId: string, leagueId?: string) => {
     if (!user) return false;
     if (leagueId && isRegisteredForSeason(leagueId)) return true;
-    return raceRegs.some((r: any) => r.race_id === raceId && r.user_id === user.id);
+    return raceRegs.some((r) => r.race_id === raceId && r.user_id === user.id);
   };
 
   const isRegisteredViaSeason = (leagueId?: string) =>
     !!leagueId && isRegisteredForSeason(leagueId);
 
   const seasonRegCount = (leagueId: string) =>
-    seasonRegs.filter((r: any) => r.league_id === leagueId).length;
+    seasonRegs.filter((r) => r.league_id === leagueId).length;
 
   const raceRegCount = (raceId: string) =>
-    raceRegs.filter((r: any) => r.race_id === raceId).length;
+    raceRegs.filter((r) => r.race_id === raceId).length;
 
   // ── Mutations ──────────────────────────────────────────────
   const registerForSeason = useMutation({

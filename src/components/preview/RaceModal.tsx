@@ -21,8 +21,56 @@ interface Race {
   practice_duration?: string;
   qualifying_duration?: string;
   race_duration?: string;
-  leagues?: { name: string; car_class?: string };
+  leagues?: { id?: string; name: string; car_class?: string | null };
 }
+
+type RaceResultProfile = {
+  display_name: string | null;
+  iracing_name: string | null;
+  team_id: string | null;
+};
+
+type RaceModalResult = {
+  id: string;
+  position: number | null;
+  points: number | null;
+  best_lap: string | null;
+  fastest_lap: boolean | null;
+  incidents: number | null;
+  dnf: boolean | null;
+  profiles: RaceResultProfile | null;
+};
+
+type RaceTeam = {
+  id: string;
+  name: string;
+  color: string | null;
+  logo_url: string | null;
+};
+
+type UserIdRow = {
+  user_id: string;
+};
+
+type RegistrantProfile = {
+  user_id: string;
+  display_name: string | null;
+  iracing_name: string | null;
+  team_id: string | null;
+};
+
+type RaceRegistrant = {
+  user_id: string;
+  display_name: string;
+  team_id: string | null;
+};
+
+type Session = {
+  label: string;
+  dur: string;
+  color: string;
+  bg: string;
+};
 
 interface RegistrationProps {
   isRegistered: boolean;
@@ -42,28 +90,28 @@ interface Props {
 const RaceModal = ({ race, registration }: Props) => {
   const { data: results = [] } = useQuery({
     queryKey: ["race-modal-results", race.id],
-    queryFn: async () => {
+    queryFn: async (): Promise<RaceModalResult[]> => {
       const { data } = await supabase
         .from("race_results")
         .select("*, profiles(display_name, iracing_name, team_id)")
         .eq("race_id", race.id)
         .order("position");
-      return data || [];
+      return (data || []) as RaceModalResult[];
     },
   });
 
   const { data: teams = [] } = useQuery({
     queryKey: ["teams"],
-    queryFn: async () => {
+    queryFn: async (): Promise<RaceTeam[]> => {
       const { data } = await supabase.from("teams").select("id, name, color, logo_url");
-      return data || [];
+      return (data || []) as RaceTeam[];
     },
   });
 
   const { data: registrants = [] } = useQuery({
-    queryKey: ["race-modal-registrants", race.id, (race as any).leagues?.id],
+    queryKey: ["race-modal-registrants", race.id, race.leagues?.id],
     enabled: race.status !== "completed",
-    queryFn: async () => {
+    queryFn: async (): Promise<RaceRegistrant[]> => {
       // Direct race registrants
       const { data: raceRegs } = await supabase
         .from("race_registrations")
@@ -72,18 +120,18 @@ const RaceModal = ({ race, registration }: Props) => {
 
       // Season registrants (if race belongs to a league)
       let seasonUserIds: string[] = [];
-      const leagueId = (race as any).leagues?.id;
+      const leagueId = race.leagues?.id;
       if (leagueId) {
         const { data } = await supabase
           .from("season_registrations")
           .select("user_id")
           .eq("league_id", leagueId);
-        seasonUserIds = (data || []).map((r: any) => r.user_id);
+        seasonUserIds = ((data || []) as UserIdRow[]).map((r) => r.user_id);
       }
 
       // Merge + deduplicate user_ids
       const seen = new Set<string>();
-      const raceUserIds = (raceRegs || []).map((r: any) => r.user_id);
+      const raceUserIds = ((raceRegs || []) as UserIdRow[]).map((r) => r.user_id);
       const allUserIds = [...raceUserIds, ...seasonUserIds].filter((uid) => {
         if (seen.has(uid)) return false;
         seen.add(uid);
@@ -98,12 +146,13 @@ const RaceModal = ({ race, registration }: Props) => {
         .select("user_id, display_name, iracing_name, team_id")
         .in("user_id", allUserIds);
 
+      const profiles = (profs || []) as RegistrantProfile[];
       return allUserIds.map((uid) => {
-        const prof = (profs || []).find((p: any) => p.user_id === uid);
+        const prof = profiles.find((p) => p.user_id === uid);
         return {
           user_id: uid,
           display_name: prof?.display_name || prof?.iracing_name || "Unknown",
-          team_id: prof?.team_id,
+          team_id: prof?.team_id ?? null,
         };
       });
     },
@@ -122,11 +171,11 @@ const RaceModal = ({ race, registration }: Props) => {
     race.practice_duration   && { label: "Practice",   dur: race.practice_duration,   color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
     race.qualifying_duration && { label: "Qualifying",  dur: race.qualifying_duration,  color: "#eab308", bg: "rgba(234,179,8,0.12)" },
     race.race_duration       && { label: "Race",        dur: race.race_duration,        color: "#f97316", bg: "rgba(249,115,22,0.12)" },
-  ].filter(Boolean) as any[];
+  ].filter((session): session is Session => Boolean(session));
 
   const winner     = results[0];
-  const fastestLap = results.find((r: any) => r.fastest_lap);
-  const dnfCount   = results.filter((r: any) => r.dnf).length;
+  const fastestLap = results.find((r) => r.fastest_lap);
+  const dnfCount   = results.filter((r) => r.dnf).length;
 
   const statusColor = race.status === "completed" ? "#6b7280" : race.status === "live" ? "#22c55e" : "#f97316";
   const statusBg    = race.status === "completed" ? "rgba(107,114,128,0.15)" : race.status === "live" ? "rgba(34,197,94,0.15)" : "rgba(249,115,22,0.15)";
@@ -187,7 +236,7 @@ const RaceModal = ({ race, registration }: Props) => {
 
           {sessions.length > 0 && (
             <div className="flex gap-2 flex-wrap">
-              {sessions.map((s: any) => (
+              {sessions.map((s) => (
                 <span key={s.label} className="text-xs font-bold px-3 py-1.5 rounded-lg" style={{ background: s.bg, color: s.color, border: `1px solid ${s.color}25` }}>
                   {s.label} · {s.dur}
                 </span>
@@ -280,9 +329,9 @@ const RaceModal = ({ race, registration }: Props) => {
               >
                 <span>Pos</span><span>Driver</span><span>Pts</span><span>Ronde</span><span>Inc</span>
               </div>
-              {results.map((r: any, i: number) => {
-                const posColor = r.position <= 3 ? PODIUM[r.position - 1] : (r.dnf ? "#ef4444" : "#6b7280");
-                const team = teams.find((t: any) => t.id === r.profiles?.team_id);
+              {results.map((r, i) => {
+                const posColor = r.position !== null && r.position <= 3 ? PODIUM[r.position - 1] : (r.dnf ? "#ef4444" : "#6b7280");
+                const team = teams.find((t) => t.id === r.profiles?.team_id);
                 return (
                   <motion.div
                     key={r.id || i}
@@ -336,8 +385,8 @@ const RaceModal = ({ race, registration }: Props) => {
             {registrants.length > 0 ? (
               <div className="rounded-2xl overflow-hidden relative" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="overflow-y-auto" style={{ maxHeight: "20rem", overscrollBehavior: "contain" }}>
-                {registrants.map((r: any, i: number) => {
-                  const team = teams.find((t: any) => t.id === r.team_id);
+                {registrants.map((r, i) => {
+                  const team = teams.find((t) => t.id === r.team_id);
                   return (
                     <motion.div
                       key={r.user_id}
