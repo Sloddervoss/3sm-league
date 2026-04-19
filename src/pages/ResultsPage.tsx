@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { List, Trophy, AlertTriangle, Flag, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const positionColors: Record<number, string> = {
   1: "text-yellow-400",
@@ -169,6 +169,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
 
 const ResultsPage = () => {
   const [expandedRace, setExpandedRace] = useState<string | null>(null);
+  const [scrollToLatest, setScrollToLatest] = useState(false);
   const latestRaceRowRef = useRef<HTMLDivElement>(null);
 
   const { data: races, isLoading } = useQuery({
@@ -199,6 +200,17 @@ const ResultsPage = () => {
   });
 
   const latestRace = races?.[0];
+
+  useEffect(() => {
+    if (!scrollToLatest || !latestRace || expandedRace !== latestRace.id) return;
+
+    const frame = requestAnimationFrame(() => {
+      latestRaceRowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setScrollToLatest(false);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [expandedRace, latestRace, scrollToLatest]);
 
   // Same queryKey as ExpandedRaceContent — cache shared when user expands this race
   const { data: latestResults = [], isLoading: latestLoading } = useQuery({
@@ -407,9 +419,7 @@ const ResultsPage = () => {
                       <button
                         onClick={() => {
                           setExpandedRace(latestRace.id);
-                          requestAnimationFrame(() =>
-                            latestRaceRowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-                          );
+                          setScrollToLatest(true);
                         }}
                         className="text-sm font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors flex items-center gap-1"
                       >
