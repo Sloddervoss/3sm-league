@@ -121,7 +121,7 @@ const SeasonsAdmin = () => {
   const [showSoloRaceForm, setShowSoloRaceForm] = useState(false);
   const [newSoloRace, setNewSoloRace] = useState<RaceSlot>({ ...SOLO_RACE_DEFAULTS });
   const [editingSoloRaceId, setEditingSoloRaceId] = useState<string | null>(null);
-  const [editingSoloRaceData, setEditingSoloRaceData] = useState<any>({});
+  const [editingSoloRaceData, setEditingSoloRaceData] = useState<Partial<RaceEditData>>({});
   const [showCompletedSoloRaces, setShowCompletedSoloRaces] = useState(false);
 
   const { data: leagues } = useQuery({
@@ -745,7 +745,7 @@ const SeasonsAdmin = () => {
             const raceRegs = (raceRegistrations || []).filter((r) => r.race_id === race.id);
             const isEditingSolo = editingSoloRaceId === race.id;
             const srd = editingSoloRaceData;
-            const setSrd = (field: string, val: string) => setEditingSoloRaceData((prev: any) => ({ ...prev, [field]: val }));
+            const setSrd = (field: keyof RaceEditData, val: string) => setEditingSoloRaceData(prev => ({ ...prev, [field]: val }));
             return (
               <div key={race.id} className="bg-card border border-border rounded-lg p-4">
                 <div className="flex items-center justify-between gap-4">
