@@ -103,12 +103,15 @@ async function getUitslagenChannel() {
 }
 
 async function getAankondigingenChannel() {
-  const channelId = '1489621381548081276';
+  const cfg = loadConfig();
+  const channelId = cfg.aankondigingen_channel_id || process.env.DISCORD_AANKONDIGINGEN_CHANNEL_ID || '1489621381548081276';
   return client.channels.fetch(channelId).catch(() => null);
 }
 
 async function getStewardDecisionsChannel() {
-  return client.channels.fetch('1492662115553771530').catch(() => null);
+  const cfg = loadConfig();
+  const channelId = cfg.steward_decisions_channel_id || process.env.DISCORD_STEWARD_DECISIONS_CHANNEL_ID || '1492662115553771530';
+  return client.channels.fetch(channelId).catch(() => null);
 }
 
 async function getStewardChannel() {
@@ -416,7 +419,7 @@ async function checkProtests() {
           .setURL('https://3stripemotorsport.cc/stewards')
           .setStyle(ButtonStyle.Link);
         const row = new ActionRowBuilder().addComponents(btn);
-        await stewardCh.send({ content: '⚖️ Er is een nieuw protest ingediend.', components: [row] }).catch(() => {});
+        await stewardCh.send({ content: '⚖️ Er is een nieuw protest ingediend.', components: [row] }).catch(e => botLog(`⚠️ Steward protest ping mislukt: ${e.message}`));
       }
       botLog(`⚖️ Nieuw protest ingediend: **${protest.races?.name}**`);
     }
