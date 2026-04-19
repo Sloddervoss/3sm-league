@@ -292,6 +292,7 @@ const StewardPage = () => {
       toast.success("Uitspraak gedaan en straf toegepast!");
       queryClient.invalidateQueries({ queryKey: ["my-protests"] });
       queryClient.invalidateQueries({ queryKey: ["race-results"] });
+      queryClient.invalidateQueries({ queryKey: ["steward-sp-penalties"] });
       setDecisions(prev => { const n = { ...prev }; delete n[protest.id]; return n; });
       setDriverSpMap(prev => { const n = { ...prev }; delete n[protest.id]; return n; });
       setExpandedId(null);
@@ -366,6 +367,9 @@ const StewardPage = () => {
       setStewardAction({ ...EMPTY_ACTION });
       setShowStewardForm(false);
       queryClient.invalidateQueries({ queryKey: ["my-protests"] });
+      queryClient.invalidateQueries({ queryKey: ["race-results"] });
+      queryClient.invalidateQueries({ queryKey: ["all-results-dnf"] });
+      queryClient.invalidateQueries({ queryKey: ["steward-sp-penalties"] });
     },
     onError: (err: Error) => toast.error(err.message),
   });
