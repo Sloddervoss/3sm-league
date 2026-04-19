@@ -88,6 +88,56 @@ type DnfPenaltyRow = {
   revoked: boolean;
 };
 
+type SpProfile = {
+  user_id: string;
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
+type SpLeague = {
+  name: string;
+  season: number | null;
+};
+
+type SpPenaltyRace = {
+  id: string;
+  name: string;
+  race_date: string;
+  league_id: string | null;
+  leagues: SpLeague | null;
+};
+
+type SpPenaltyRow = {
+  id: string;
+  user_id: string;
+  race_id: string;
+  league_id: string | null;
+  penalty_sp: number | null;
+  penalty_type: string | null;
+  penalty_category: string | null;
+  reason: string | null;
+  created_at: string;
+  races: SpPenaltyRace | null;
+};
+
+type SpPenaltyWithProfile = SpPenaltyRow & { profiles: SpProfile | null };
+
+type SpRaceHistoryRow = {
+  user_id: string;
+  race_id: string;
+  races: { id: string; race_date: string; league_id: string | null } | null;
+};
+
+type DriverSpOverviewEntry = {
+  userId: string;
+  leagueId: string | null;
+  leagueName: string | null;
+  profile: SpProfile | null;
+  totalSp: number;
+  activePenalties: SpPenaltyWithProfile[];
+  racesUntilExpiry: number;
+};
+
 type RaceForProtest = {
   id: string;
   name: string;
@@ -379,7 +429,7 @@ const StewardPage = () => {
   const { data: spPenalties } = useQuery({
     queryKey: ["steward-sp-penalties"],
     enabled: canModerate && activeTab === "rijders",
-    queryFn: async () => {
+    queryFn: async (): Promise<SpPenaltyWithProfile[]> => {
       const { data, error } = await supabase
         .from("penalties")
         .select("id, user_id, race_id, league_id, penalty_sp, penalty_type, penalty_category, reason, created_at, races(id, name, race_date, league_id, leagues(name, season))")
@@ -387,29 +437,31 @@ const StewardPage = () => {
         .not("penalty_category", "is", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      if (!data?.length) return [];
+      const penaltyRows = (data || []) as SpPenaltyRow[];
+      if (!penaltyRows.length) return [];
       // Haal profielen apart op (penalties heeft geen directe FK naar profiles)
-      const userIds = [...new Set(data.map((p: any) => p.user_id))];
+      const userIds = [...new Set(penaltyRows.map(p => p.user_id))];
       const { data: profileRows } = await supabase
         .from("profiles")
         .select("user_id, display_name, iracing_name")
         .in("user_id", userIds);
-      const profileMap = Object.fromEntries((profileRows || []).map((p: any) => [p.user_id, p]));
-      return data.map((p: any) => ({ ...p, profiles: profileMap[p.user_id] ?? null }));
+      const profileRowsTyped = (profileRows || []) as SpProfile[];
+      const profileMap = new Map<string, SpProfile>(profileRowsTyped.map(p => [p.user_id, p]));
+      return penaltyRows.map(p => ({ ...p, profiles: profileMap.get(p.user_id) ?? null }));
     },
   });
 
   const { data: spRaceHistory } = useQuery({
     queryKey: ["steward-race-history"],
     enabled: canModerate && activeTab === "rijders" && !!spPenalties?.length,
-    queryFn: async () => {
-      const userIds = [...new Set((spPenalties || []).map((p: any) => p.user_id))];
+    queryFn: async (): Promise<SpRaceHistoryRow[]> => {
+      const userIds = [...new Set((spPenalties || []).map(p => p.user_id))];
       const { data, error } = await supabase
         .from("race_results")
         .select("user_id, race_id, races(id, race_date, league_id)")
         .in("user_id", userIds);
       if (error) throw error;
-      return data || [];
+      return (data || []) as SpRaceHistoryRow[];
     },
   });
 
@@ -540,32 +592,32 @@ const StewardPage = () => {
   });
 
   // Bereken SP overzicht per driver per context
-  const driverSpOverview = (() => {
+  const driverSpOverview: DriverSpOverviewEntry[] = (() => {
     if (!spPenalties?.length) return [];
 
     // Bouw race history map: user_id → league_key → races gesorteerd op datum desc
     const racesByContext = new Map<string, { race_id: string; race_date: string }[]>();
-    for (const rr of (spRaceHistory || []) as any[]) {
-      const leagueId = (rr.races as any)?.league_id ?? null;
+    for (const rr of spRaceHistory || []) {
+      const leagueId = rr.races?.league_id ?? null;
       const key = `${rr.user_id}__${leagueId}`;
       if (!racesByContext.has(key)) racesByContext.set(key, []);
-      racesByContext.get(key)!.push({ race_id: rr.race_id, race_date: (rr.races as any)?.race_date });
+      racesByContext.get(key)!.push({ race_id: rr.race_id, race_date: rr.races?.race_date ?? "" });
     }
     // Sorteer per context op datum desc
     racesByContext.forEach(arr => arr.sort((a, b) => new Date(b.race_date).getTime() - new Date(a.race_date).getTime()));
 
     // Groepeer penalties per driver per context
-    const grouped = new Map<string, { userId: string; leagueId: string | null; leagueName: string | null; penalties: any[]; profile: any }>();
-    for (const pen of spPenalties as any[]) {
-      const leagueId = (pen.races as any)?.league_id ?? null;
-      const league = (pen.races as any)?.leagues;
+    const grouped = new Map<string, { userId: string; leagueId: string | null; leagueName: string | null; penalties: SpPenaltyWithProfile[]; profile: SpProfile | null }>();
+    for (const pen of spPenalties) {
+      const leagueId = pen.races?.league_id ?? null;
+      const league = pen.races?.leagues;
       const leagueName = league ? `${league.name}${league.season ? ` S${league.season}` : ""}` : null;
       const key = `${pen.user_id}__${leagueId}`;
       if (!grouped.has(key)) grouped.set(key, { userId: pen.user_id, leagueId, leagueName, penalties: [], profile: pen.profiles });
       grouped.get(key)!.penalties.push(pen);
     }
 
-    const result: { userId: string; leagueId: string | null; leagueName: string | null; profile: any; totalSp: number; activePenalties: any[]; racesUntilExpiry: number }[] = [];
+    const result: DriverSpOverviewEntry[] = [];
 
     for (const [key, { userId, leagueId, leagueName, penalties, profile }] of grouped) {
       const last6 = (racesByContext.get(key) || []).slice(0, 6);
@@ -573,17 +625,17 @@ const StewardPage = () => {
       // Cutoff: als driver minder dan 6 races heeft, alle penalties actief
       // Als driver >= 6 races heeft, alleen penalties waarvan race_id in last 6 zit
       // OF waarvan we geen race-history kennen (race nog niet in results → geef benefit of doubt)
-      const active = penalties.filter((p: any) => {
+      const active = penalties.filter(p => {
         if (contextRaceIds.length === 0) return true; // nog geen race history, altijd actief
         if (contextRaceIds.includes(p.race_id)) return true;
         // Penalty-race niet in race_results van driver → check op datum
-        const penDate = (p.races as any)?.race_date;
+        const penDate = p.races?.race_date;
         if (!penDate) return true; // geen datum info, neem mee
         const cutoffDate = last6.length === 6 ? last6[5].race_date : null;
         if (!cutoffDate) return true; // minder dan 6 races, altijd actief
         return penDate >= cutoffDate;
       });
-      const totalSp = active.reduce((sum: number, p: any) => sum + (p.penalty_sp || 0), 0);
+      const totalSp = active.reduce((sum, p) => sum + (p.penalty_sp || 0), 0);
       if (totalSp <= 0) continue;
 
       // Hoeveel races tot oudste actieve SP vervalt
@@ -878,7 +930,7 @@ const StewardPage = () => {
                       {isExpanded && (
                         <div className="border-t border-border/50 px-4 pb-4 pt-3 space-y-2">
                           <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Actieve straffen</div>
-                          {entry.activePenalties.map((pen: any) => (
+                          {entry.activePenalties.map((pen) => (
                             <div key={pen.id} className="flex items-start justify-between gap-3 py-2 border-b border-border/30 last:border-0">
                               <div className="min-w-0">
                                 <div className="text-sm font-medium">{pen.races?.name || "Onbekende race"}</div>
