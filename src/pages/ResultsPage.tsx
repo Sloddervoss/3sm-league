@@ -427,6 +427,14 @@ const ResultsPage = () => {
                 <p className="text-sm mt-1">Er zijn nog geen race resultaten beschikbaar.</p>
               </div>
             ) : (
+              <>
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <Flag className="w-4 h-4 text-orange-500" />
+                    <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Race Archief</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground ml-6">Alle afgeronde races</p>
+                </div>
               <div className="space-y-4">
                 {races.map((race, i) => {
                   const winner = winners?.find((w) => w.race_id === race.id);
@@ -444,8 +452,13 @@ const ResultsPage = () => {
                         onClick={() => setExpandedRace(isExpanded ? null : race.id)}
                         className="w-full px-6 py-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors text-left"
                       >
-                        <div className="font-heading font-black text-2xl text-muted-foreground w-10 shrink-0">
-                          {race.round != null ? `R${String(race.round).padStart(2, "0")}` : ""}
+                        <div className="w-10 shrink-0 flex flex-col items-center justify-center">
+                          {race.round != null && (
+                            <>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 leading-none mb-0.5">Ronde</span>
+                              <span className="font-heading font-black text-lg text-muted-foreground leading-none">{String(race.round).padStart(2, "0")}</span>
+                            </>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="font-heading font-bold text-lg">{race.name}</h3>
@@ -458,6 +471,14 @@ const ResultsPage = () => {
                             )}
                             <span>{new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Amsterdam" })}</span>
                           </div>
+                          {winner && (
+                            <div className="flex items-center gap-1 mt-1.5 md:hidden">
+                              <Trophy className="w-3 h-3 text-yellow-400 shrink-0" />
+                              <span className="font-heading font-bold text-sm text-yellow-400 truncate">
+                                {winner.profiles?.display_name || winner.profiles?.iracing_name || "Unknown"}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         {winner && (
                           <div className="hidden md:flex items-center gap-3 shrink-0">
@@ -480,6 +501,7 @@ const ResultsPage = () => {
                   );
                 })}
               </div>
+              </>
             )}
           </div>
         </section>
