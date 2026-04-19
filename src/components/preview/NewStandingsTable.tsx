@@ -14,6 +14,7 @@ interface Props {
   standings: Standing[];
   leagueName?: string;
   onSelectDriver?: (userId: string) => void;
+  variant?: "compact" | "page";
 }
 
 const PODIUM = [
@@ -22,7 +23,12 @@ const PODIUM = [
   { color: "#d97706", bg: "rgba(217,119,6,0.07)",   border: "rgba(217,119,6,0.15)",  shadow: "rgba(217,119,6,0.1)" },
 ];
 
-const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => {
+const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "compact" }: Props) => {
+  const isPage = variant === "page";
+  const tableColumns = isPage
+    ? "3rem minmax(0,1fr) minmax(8rem,12rem) 4rem 5rem"
+    : "2.5rem 1fr 4rem 4.5rem";
+
   if (!standings.length) {
     return (
       <div className="text-center py-16 text-gray-700">
@@ -48,7 +54,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => 
 
       {/* Podium */}
       {standings.length >= 2 && (
-        <div className="grid grid-cols-3 gap-3 mb-6 items-end">
+        <div className={`grid grid-cols-3 items-end ${isPage ? "gap-4 mb-8" : "gap-3 mb-6"}`}>
           {top3.map((driver, visualIdx) => {
             const rank = actualRanks[visualIdx];
             const p = PODIUM[rank - 1];
@@ -63,7 +69,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => 
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: visualIdx * 0.1 }}
-                className={`rounded-2xl p-4 text-center ${isCenter ? "pb-6 pt-6" : "pt-4 pb-4"}`}
+                className={`rounded-2xl text-center ${isPage ? "p-5" : "p-4"} ${isCenter ? (isPage ? "pb-8 pt-7" : "pb-6 pt-6") : "pt-4 pb-4"}`}
                 style={{
                   background: p.bg,
                   border: `1px solid ${p.border}`,
@@ -83,8 +89,14 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => 
                   {rank}
                 </div>
 
+                {isCenter && isPage && (
+                  <div className="mb-2 text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: p.color }}>
+                    Leider
+                  </div>
+                )}
+
                 <div
-                  className={`font-heading font-bold leading-tight text-white truncate ${isCenter ? "text-base" : "text-sm"}`}
+                  className={`font-heading font-bold leading-tight text-white truncate ${isCenter ? (isPage ? "text-lg" : "text-base") : (isPage ? "text-base" : "text-sm")}`}
                 >
                   {driver.display_name}
                 </div>
@@ -97,7 +109,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => 
                 )}
 
                 <div
-                  className={`font-heading font-black mt-2 leading-none ${isCenter ? "text-3xl" : "text-2xl"}`}
+                  className={`font-heading font-black mt-2 leading-none ${isCenter ? (isPage ? "text-4xl" : "text-3xl") : (isPage ? "text-3xl" : "text-2xl")}`}
                   style={{ color: p.color }}
                 >
                   {driver.total_points}
@@ -123,11 +135,15 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => 
           <div
             className="grid gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600"
             style={{
-              gridTemplateColumns: "2.5rem 1fr 4rem 4.5rem",
+              gridTemplateColumns: tableColumns,
               background: "rgba(255,255,255,0.03)",
             }}
           >
-            <span>Pos</span><span>Driver</span><span className="text-center">W</span><span className="text-center">PTS</span>
+            <span>Pos</span>
+            <span>Coureur</span>
+            {isPage && <span>Team</span>}
+            <span className="text-center">W</span>
+            <span className="text-center">Pts</span>
           </div>
 
           {standings.map((driver, i) => {
@@ -155,9 +171,9 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => 
                 )}
                 <button
                   onClick={() => onSelectDriver ? onSelectDriver(driver.user_id) : undefined}
-                  className="group grid gap-2 pl-5 pr-5 py-3.5 items-center w-full text-left"
+                  className={`group grid gap-2 pl-5 pr-5 items-center w-full text-left ${isPage ? "py-4" : "py-3.5"}`}
                   style={{
-                    gridTemplateColumns: "2.5rem 1fr 4rem 4.5rem",
+                    gridTemplateColumns: tableColumns,
                     background: teamColor
                       ? `linear-gradient(90deg, ${teamColor}08 0%, transparent 40%)`
                       : isFirst ? "rgba(249,115,22,0.04)" : "transparent",
@@ -181,15 +197,28 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver }: Props) => 
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       {isFirst && <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />}
-                      <span className="font-heading font-bold text-sm text-white truncate group-hover:text-orange-400 transition-colors">{driver.display_name}</span>
+                      <span className={`font-heading font-bold text-white truncate group-hover:text-orange-400 transition-colors ${isPage ? "text-base" : "text-sm"}`}>{driver.display_name}</span>
                     </div>
-                    {driver.team && (
+                    {driver.team && !isPage && (
                       <div className="flex items-center gap-1 mt-0.5">
                         <div className="w-1 h-1 rounded-full" style={{ backgroundColor: driver.team.color }} />
                         <span className="text-[10px] truncate" style={{ color: driver.team.color + "99" }}>{driver.team.name}</span>
                       </div>
                     )}
                   </div>
+
+                  {isPage && (
+                    <div className="flex items-center gap-2 min-w-0">
+                      {driver.team ? (
+                        <>
+                          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: driver.team.color }} />
+                          <span className="text-xs truncate" style={{ color: driver.team.color + "aa" }}>{driver.team.name}</span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-700">-</span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="text-center font-heading font-bold text-sm text-gray-500">{driver.wins}</div>
 
