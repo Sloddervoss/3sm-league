@@ -2,7 +2,7 @@ import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import HeroSection from "@/components/HeroSection";
 import NextRaceTeaser from "@/components/NextRaceTeaser";
-import LatestResults from "@/components/LatestResults";
+import RaceRecapPanel from "@/components/RaceRecapPanel";
 import ChampionshipLeader from "@/components/ChampionshipLeader";
 import TopDrivers from "@/components/TopDrivers";
 import StandingsStrip from "@/components/StandingsStrip";
@@ -16,8 +16,8 @@ const Index = () => {
       <main className="pt-[108px]">
         <HeroSection />
         <NextRaceTeaser />
+        <RaceRecapPanel />
         <ChampionshipLeader />
-        <LatestResults />
         <TopDrivers />
         <StandingsStrip />
       </main>
