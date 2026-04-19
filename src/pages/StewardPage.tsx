@@ -21,6 +21,40 @@ import {
 } from "@/lib/stewardConstants";
 import type { Category, DecisionState, StewardActionState } from "@/lib/stewardConstants";
 
+type ProtestProfile = {
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
+type ProtestRace = {
+  name: string;
+  track: string;
+  race_date: string;
+  league_id: string | null;
+};
+
+type ProtestRow = {
+  id: string;
+  race_id: string;
+  reporter_user_id: string;
+  accused_user_id: string;
+  status: string;
+  description: string;
+  video_link: string | null;
+  lap_number: number | null;
+  created_at: string;
+  steward_notes: string | null;
+  penalty_type: string | null;
+  penalty_points: number | null;
+  penalty_category: string | null;
+  time_penalty_seconds: number | null;
+  grid_penalty_places: number | null;
+  race_ban_next: boolean | null;
+  races: ProtestRace | null;
+  reporter: ProtestProfile | null;
+  accused: ProtestProfile | null;
+};
+
 type RaceForProtest = {
   id: string;
   name: string;
@@ -71,7 +105,7 @@ const StewardPage = () => {
     setStewardAction(prev => ({ ...prev, penalty_category: cat, ...preset, points_deduction: prev.points_deduction }));
   };
 
-  const handleExpand = async (protest: any) => {
+  const handleExpand = async (protest: ProtestRow) => {
     const isExpanding = expandedId !== protest.id;
     setExpandedId(isExpanding ? protest.id : null);
     if (isExpanding && driverSpMap[protest.id] === undefined) {
@@ -124,7 +158,7 @@ const StewardPage = () => {
       }
       const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return (data || []) as ProtestRow[];
     },
   });
 
@@ -158,7 +192,7 @@ const StewardPage = () => {
   });
 
   const resolveProtest = useMutation({
-    mutationFn: async ({ protest, decision }: { protest: any; decision: DecisionState }) => {
+    mutationFn: async ({ protest, decision }: { protest: ProtestRow; decision: DecisionState }) => {
       const penaltyType = decision.penalty_type || null;
       const leagueId = protest.races?.league_id ?? null;
 
@@ -964,7 +998,7 @@ const StewardPage = () => {
                   )}
                 </div>
               ) : (
-                (protests as any[]).map((protest: any, i: number) => {
+                protests.map((protest: ProtestRow, i: number) => {
                   const StatusIcon = statusStyles[protest.status]?.icon || Clock;
                   const isExpanded = expandedId === protest.id;
                   const dec = getDecision(protest.id);

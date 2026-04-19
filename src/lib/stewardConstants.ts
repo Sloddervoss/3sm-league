@@ -88,7 +88,16 @@ export const EMPTY_ACTION: StewardActionState = {
 
 // ── Helper: penalty samenvatting voor weergave ────────────────────────────────
 
-export function buildPenaltySummary(protest: any): string {
+export type PenaltySummaryInput = {
+  status: string;
+  penalty_type: string | null;
+  penalty_points: number | null;
+  time_penalty_seconds: number | null;
+  grid_penalty_places: number | null;
+  race_ban_next: boolean | null;
+};
+
+export function buildPenaltySummary(protest: PenaltySummaryInput): string {
   if (protest.status === "dismissed") return "Protest afgewezen";
   if (!protest.penalty_type) return "Geen straf";
   let text = penaltyLabels[protest.penalty_type] || protest.penalty_type;
