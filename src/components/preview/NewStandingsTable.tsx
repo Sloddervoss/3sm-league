@@ -25,9 +25,9 @@ const PODIUM = [
 
 const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "compact" }: Props) => {
   const isPage = variant === "page";
-  const tableColumns = isPage
-    ? "3rem minmax(0,1fr) minmax(8rem,12rem) 4rem 5rem"
-    : "2.5rem 1fr 4rem 4.5rem";
+  const tableGridClass = isPage
+    ? "grid-cols-[3rem_minmax(0,1fr)_4rem_5rem] md:grid-cols-[3rem_minmax(0,1fr)_minmax(8rem,12rem)_4rem_5rem]"
+    : "grid-cols-[2.5rem_1fr_4rem_4.5rem]";
 
   if (!standings.length) {
     return (
@@ -133,15 +133,12 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
         >
           {/* Header */}
           <div
-            className="grid gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600"
-            style={{
-              gridTemplateColumns: tableColumns,
-              background: "rgba(255,255,255,0.03)",
-            }}
+            className={`grid gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600 ${tableGridClass}`}
+            style={{ background: "rgba(255,255,255,0.03)" }}
           >
             <span>Pos</span>
             <span>Coureur</span>
-            {isPage && <span>Team</span>}
+            {isPage && <span className="hidden md:block">Team</span>}
             <span className="text-center">W</span>
             <span className="text-center">Pts</span>
           </div>
@@ -171,9 +168,8 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                 )}
                 <button
                   onClick={() => onSelectDriver ? onSelectDriver(driver.user_id) : undefined}
-                  className={`group grid gap-2 pl-5 pr-5 items-center w-full text-left ${isPage ? "py-4" : "py-3.5"}`}
+                  className={`group grid gap-2 pl-5 pr-5 items-center w-full text-left ${tableGridClass} ${isPage ? "py-4" : "py-3.5"}`}
                   style={{
-                    gridTemplateColumns: tableColumns,
                     background: teamColor
                       ? `linear-gradient(90deg, ${teamColor}08 0%, transparent 40%)`
                       : isFirst ? "rgba(249,115,22,0.04)" : "transparent",
@@ -199,8 +195,8 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                       {isFirst && <div className="w-1 h-4 rounded-full bg-orange-500 shrink-0" />}
                       <span className={`font-heading font-bold text-white truncate group-hover:text-orange-400 transition-colors ${isPage ? "text-base" : "text-sm"}`}>{driver.display_name}</span>
                     </div>
-                    {driver.team && !isPage && (
-                      <div className="flex items-center gap-1 mt-0.5">
+                    {driver.team && (
+                      <div className={`items-center gap-1 mt-0.5 ${isPage ? "flex md:hidden" : "flex"}`}>
                         <div className="w-1 h-1 rounded-full" style={{ backgroundColor: driver.team.color }} />
                         <span className="text-[10px] truncate" style={{ color: driver.team.color + "99" }}>{driver.team.name}</span>
                       </div>
@@ -208,7 +204,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                   </div>
 
                   {isPage && (
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="hidden md:flex items-center gap-2 min-w-0">
                       {driver.team ? (
                         <>
                           <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: driver.team.color }} />
