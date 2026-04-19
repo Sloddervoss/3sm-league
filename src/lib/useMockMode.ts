@@ -10,7 +10,7 @@ export function useMockMode() {
   const setMockMode = (val: boolean | ((prev: boolean) => boolean)) => {
     setMockModeState(prev => {
       const next = typeof val === "function" ? val(prev) : val;
-      try { localStorage.setItem(KEY, next ? "1" : "0"); } catch {}
+      try { localStorage.setItem(KEY, next ? "1" : "0"); } catch { /* ignore write errors */ }
       return next;
     });
   };
