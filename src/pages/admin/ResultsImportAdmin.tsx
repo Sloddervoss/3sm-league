@@ -131,6 +131,10 @@ const ResultsImportAdmin = () => {
       queryClient.invalidateQueries({ queryKey: ["all-races-admin"] });
       queryClient.invalidateQueries({ queryKey: ["completed-races"] });
       queryClient.invalidateQueries({ queryKey: ["admin-season-registrations"] });
+      queryClient.invalidateQueries({ queryKey: ["standings-full"] });
+      queryClient.invalidateQueries({ queryKey: ["standings-preview"] });
+      queryClient.invalidateQueries({ queryKey: ["latest-completed-race"] });
+      queryClient.invalidateQueries({ queryKey: ["latest-race-results"] });
       setImportRaceId("");
       setImportRows([{ ...EMPTY_ROW }]);
       setCsvFileName(null);

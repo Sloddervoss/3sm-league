@@ -228,6 +228,9 @@ const ProfilePage = () => {
     onSuccess: () => {
       toast.success("Team verlaten.");
       queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["team-memberships-with-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["team-memberships-full"] });
     },
     onError: (err: Error) => toast.error(err.message),
   });

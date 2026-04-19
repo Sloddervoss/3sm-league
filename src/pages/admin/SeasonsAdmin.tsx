@@ -226,6 +226,7 @@ const SeasonsAdmin = () => {
     onSuccess: () => {
       toast.success("Verwijderd");
       queryClient.invalidateQueries({ queryKey: ["admin-leagues"] });
+      queryClient.invalidateQueries({ queryKey: ["all-races-admin"] });
     },
   });
 
@@ -295,6 +296,8 @@ const SeasonsAdmin = () => {
     onSuccess: () => {
       toast.success("Race opgeslagen!");
       queryClient.invalidateQueries({ queryKey: ["admin-leagues"] });
+      queryClient.invalidateQueries({ queryKey: ["all-races-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["races-with-leagues"] });
     },
     onError: (err: Error) => toast.error(err.message),
   });
