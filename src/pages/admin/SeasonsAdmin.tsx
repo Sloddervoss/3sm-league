@@ -194,6 +194,9 @@ const SeasonsAdmin = () => {
         .select().single();
       if (error) throw error;
       if (races.length > 0) {
+        // Boundary cast: generated Supabase Insert type for races is stale and
+        // missing race_type/race_duration/practice_duration/qualifying_duration/start_type/weather/setup.
+        // Remove this after regenerating Supabase types.
         const { error: re } = await supabase.from("races").insert(
           races.map((r, i) => ({
             league_id: league.id, round: i + 1, name: r.name, track: r.track,
@@ -201,7 +204,6 @@ const SeasonsAdmin = () => {
             race_type: r.race_type || null, race_duration: r.race_duration || null,
             practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null,
             start_type: r.start_type || null, weather: r.weather || null, setup: r.setup || null,
-            // Boundary cast: generated Insert type missing race_type/duration/start_type/weather/setup columns
           } as any))
         );
         if (re) throw re;
