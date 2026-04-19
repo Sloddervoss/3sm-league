@@ -13,6 +13,12 @@ const positionColors: Record<number, string> = {
   3: "text-amber-600",
 };
 
+const PODIUM_COLORS = [
+  { text: "#facc15", bg: "rgba(250,204,21,0.10)", border: "rgba(250,204,21,0.25)" },
+  { text: "#94a3b8", bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.20)" },
+  { text: "#d97706", bg: "rgba(217,119,6,0.08)",   border: "rgba(217,119,6,0.20)"  },
+];
+
 const STALE = 5 * 60 * 1000;
 
 type RaceDetailResult = {
@@ -25,6 +31,7 @@ type RaceDetailResult = {
   fastest_lap: boolean | null;
   incidents: number | null;
   dnf: boolean | null;
+  gap_to_leader: string | null;
   profiles: {
     display_name: string | null;
     iracing_name: string | null;
@@ -120,7 +127,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
               key={result.id}
               className={`grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/30 hover:bg-secondary/20 transition-colors min-w-[500px] ${result.position !== null && result.position <= 3 ? "racing-stripe-left" : ""}`}
             >
-              <span className={`font-heading font-black text-lg ${positionColors[result.position] || "text-muted-foreground"}`}>
+              <span className={`font-heading font-black text-lg ${positionColors[result.position!] || "text-muted-foreground"}`}>
                 {result.dnf ? "DNF" : result.position}
               </span>
               <div>
@@ -178,7 +185,6 @@ const ResultsPage = () => {
     },
   });
 
-  // Lightweight: only winners for header display
   const { data: winners } = useQuery({
     queryKey: ["race-winners"],
     staleTime: STALE,
@@ -190,6 +196,43 @@ const ResultsPage = () => {
       return (data || []) as RaceWinner[];
     },
   });
+
+  const latestRace = races?.[0];
+
+  // Same queryKey as ExpandedRaceContent — cache shared when user expands this race
+  const { data: latestResults = [], isLoading: latestLoading } = useQuery({
+    queryKey: ["race-results-detail", latestRace?.id],
+    enabled: !!latestRace?.id,
+    staleTime: STALE,
+    queryFn: async (): Promise<RaceDetailResult[]> => {
+      const { data, error } = await supabase
+        .from("race_results")
+        .select("*, profiles(display_name, iracing_name)")
+        .eq("race_id", latestRace!.id)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return (data || []) as RaceDetailResult[];
+    },
+  });
+
+  // Spotlight computations
+  const spFinishers = latestResults.filter((r) => !r.dnf);
+  const spPodium = spFinishers.slice(0, 3);
+  const spFastest = latestResults.find((r) => r.fastest_lap);
+  const spDnfCount = latestResults.filter((r) => r.dnf).length;
+  const spFinishersWithInc = spFinishers.filter((r) => r.incidents != null);
+  const spCleanest = spFinishersWithInc.length
+    ? spFinishersWithInc.reduce((best, r) =>
+        (r.incidents ?? 0) < (best.incidents ?? 0) ||
+        ((r.incidents ?? 0) === (best.incidents ?? 0) && (r.position ?? 99) < (best.position ?? 99))
+          ? r : best
+      )
+    : null;
+  const spTotalInc = latestResults.reduce((sum, r) => sum + (r.incidents ?? 0), 0);
+  const spHasIncData = latestResults.some((r) => r.incidents != null);
+
+  const spDriverName = (r: RaceDetailResult) =>
+    r.profiles?.display_name || r.profiles?.iracing_name || "Onbekend";
 
   return (
     <div className="min-h-screen bg-background">
@@ -209,6 +252,170 @@ const ResultsPage = () => {
 
         <section className="py-12">
           <div className="container mx-auto px-4">
+
+            {/* Latest Result Spotlight */}
+            {!isLoading && latestRace && (
+              <div className="mb-10">
+                <div className="flex items-center gap-2 mb-4">
+                  <Flag className="w-4 h-4 text-orange-500" />
+                  <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Laatste Uitslag</span>
+                </div>
+
+                {latestLoading ? (
+                  <div className="h-48 bg-card rounded-lg animate-pulse border border-border" />
+                ) : latestResults.length === 0 ? (
+                  <div className="bg-card border border-border rounded-lg px-6 py-8 text-center text-muted-foreground text-sm">
+                    Nog geen detailresultaten beschikbaar.
+                  </div>
+                ) : (
+                  <div className="bg-card border border-orange-500/20 rounded-lg overflow-hidden">
+                    <div className="h-0.5" style={{ background: "linear-gradient(90deg, #f97316, transparent)" }} />
+
+                    {/* Race meta */}
+                    <div className="px-6 py-4 flex flex-wrap items-center gap-3 border-b border-border">
+                      <div className="flex items-center gap-2">
+                        {latestRace.round != null && (
+                          <span className="font-heading font-black text-sm text-muted-foreground">
+                            R{String(latestRace.round).padStart(2, "0")}
+                          </span>
+                        )}
+                        <h3 className="font-heading font-black text-lg">{latestRace.name}</h3>
+                      </div>
+                      {latestRace.leagues?.name && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">
+                          {latestRace.leagues.name}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
+                        <span>{latestRace.track}</span>
+                        <span>·</span>
+                        <span>
+                          {new Date(latestRace.race_date).toLocaleDateString("nl-NL", {
+                            day: "numeric", month: "long", timeZone: "Europe/Amsterdam",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Podium + highlights */}
+                    <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
+
+                      {/* Podium */}
+                      <div className="p-6">
+                        <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-4">Podium</div>
+                        <div className="space-y-2.5">
+                          {spPodium.map((r, i) => {
+                            const c = PODIUM_COLORS[i];
+                            return (
+                              <div
+                                key={r.user_id}
+                                className="flex items-center gap-3 rounded-lg px-4 py-3"
+                                style={{ background: c.bg, border: `1px solid ${c.border}` }}
+                              >
+                                <div
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm shrink-0"
+                                  style={{ background: `${c.text}20`, color: c.text }}
+                                >
+                                  {i + 1}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-heading font-bold text-sm truncate">{spDriverName(r)}</div>
+                                  {i > 0 && r.gap_to_leader && (
+                                    <div className="text-[10px] text-muted-foreground">+{r.gap_to_leader}</div>
+                                  )}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="font-heading font-black text-base" style={{ color: c.text }}>{r.points}</div>
+                                  <div className="text-[10px] text-muted-foreground">pts</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Highlights */}
+                      <div className="p-6">
+                        <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-4">Highlights</div>
+                        <div className="space-y-3">
+
+                          {spFastest && (
+                            <div
+                              className="flex items-start gap-3 rounded-lg px-4 py-3"
+                              style={{ background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.2)" }}
+                            >
+                              <span className="text-base shrink-0 leading-none mt-0.5">⚡</span>
+                              <div className="min-w-0">
+                                <div className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-0.5">Snelste ronde</div>
+                                <div className="font-heading font-bold text-sm truncate">{spDriverName(spFastest)}</div>
+                                {spFastest.best_lap && (
+                                  <div className="text-[11px] font-mono text-purple-300 mt-0.5">{spFastest.best_lap}</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {spCleanest && (
+                            <div
+                              className="flex items-start gap-3 rounded-lg px-4 py-3"
+                              style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)" }}
+                            >
+                              <span className="text-base shrink-0 leading-none mt-0.5">🧊</span>
+                              <div className="min-w-0">
+                                <div className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-0.5">Clean drive</div>
+                                <div className="font-heading font-bold text-sm truncate">{spDriverName(spCleanest)}</div>
+                                <div className="text-[11px] text-green-400 mt-0.5">{spCleanest.incidents} inc</div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div
+                            className="flex items-center gap-4 rounded-lg px-4 py-3"
+                            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                          >
+                            <div className="text-center">
+                              <div className="font-heading font-black text-lg leading-none">{spFinishers.length}</div>
+                              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Finishers</div>
+                            </div>
+                            {spDnfCount > 0 && (
+                              <>
+                                <div className="w-px h-8 bg-border" />
+                                <div className="text-center">
+                                  <div className="font-heading font-black text-lg text-red-400 leading-none">{spDnfCount}</div>
+                                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">DNF</div>
+                                </div>
+                              </>
+                            )}
+                            {spHasIncData && (
+                              <>
+                                <div className="w-px h-8 bg-border" />
+                                <div className="text-center">
+                                  <div className="font-heading font-black text-lg text-orange-400 leading-none">{spTotalInc}</div>
+                                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Incidents</div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CTA */}
+                    <div className="px-6 py-4 border-t border-border">
+                      <button
+                        onClick={() => setExpandedRace(latestRace.id)}
+                        className="text-sm font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors flex items-center gap-1"
+                      >
+                        Bekijk volledige uitslag <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Race archive */}
             {isLoading ? (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}
