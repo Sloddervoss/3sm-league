@@ -21,22 +21,6 @@ type ProfileRow = {
   team_id: string | null;
 };
 
-type ProfileMutationPayload = Partial<{
-  user_id: string;
-  display_name: string | null;
-  iracing_id: number | null;
-  iracing_name: string | null;
-  irating: number | null;
-  safety_rating: string | null;
-  avatar_url: string | null;
-  discord_id: string | null;
-  team_id: string | null;
-}>;
-
-// Boundary cast: generated Supabase profile types are stale and miss app columns.
-// Remove after regenerating Supabase types.
-const profilePayload = (payload: ProfileMutationPayload) =>
-  payload as unknown as never;
 
 type TeamOption = {
   id: string;
@@ -137,7 +121,7 @@ const ProfilePage = () => {
 
   const unlinkDiscord = async () => {
     if (!user) return;
-    const { error } = await supabase.from("profiles").update(profilePayload({ discord_id: null })).eq("user_id", user.id);
+    const { error } = await supabase.from("profiles").update(({ discord_id: null })).eq("user_id", user.id);
     if (error) { toast.error(error.message); return; }
     toast.success("Discord ontkoppeld");
     queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
@@ -175,7 +159,7 @@ const ProfilePage = () => {
 
       const { error: updateError } = await supabase
         .from("profiles")
-        .upsert(profilePayload({ user_id: user.id, avatar_url: avatarUrl }), { onConflict: "user_id" });
+        .upsert(({ user_id: user.id, avatar_url: avatarUrl }), { onConflict: "user_id" });
       if (updateError) throw updateError;
 
       toast.success("Profielfoto opgeslagen!");
@@ -202,7 +186,7 @@ const ProfilePage = () => {
     mutationFn: async () => {
       const { error } = await supabase
         .from("profiles")
-        .upsert(profilePayload({
+        .upsert(({
           user_id: user!.id,
           display_name: displayName,
           iracing_id: iracingId || null,
@@ -222,7 +206,7 @@ const ProfilePage = () => {
   // Instant join existing team (free choice, no approval)
   const joinTeam = useMutation({
     mutationFn: async (teamId: string) => {
-      await supabase.from("profiles").update(profilePayload({ team_id: teamId })).eq("user_id", user!.id);
+      await supabase.from("profiles").update(({ team_id: teamId })).eq("user_id", user!.id);
       await supabase.from("team_memberships").insert({ user_id: user!.id, team_id: teamId, role: "driver" });
     },
     onSuccess: () => {
@@ -238,7 +222,7 @@ const ProfilePage = () => {
   const leaveTeam = useMutation({
     mutationFn: async () => {
       await supabase.from("team_memberships").delete().eq("user_id", user!.id);
-      const { error } = await supabase.from("profiles").update(profilePayload({ team_id: null })).eq("user_id", user!.id);
+      const { error } = await supabase.from("profiles").update(({ team_id: null })).eq("user_id", user!.id);
       if (error) throw error;
     },
     onSuccess: () => {
