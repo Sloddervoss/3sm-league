@@ -2,10 +2,10 @@ import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import HeroSection from "@/components/HeroSection";
 import NextRaceTeaser from "@/components/NextRaceTeaser";
-import StandingsPreview from "@/components/StandingsPreview";
 import LatestResults from "@/components/LatestResults";
 import ChampionshipLeader from "@/components/ChampionshipLeader";
 import TopDrivers from "@/components/TopDrivers";
+import StandingsStrip from "@/components/StandingsStrip";
 import Footer from "@/components/Footer";
 
 const Index = () => {
@@ -19,7 +19,7 @@ const Index = () => {
         <ChampionshipLeader />
         <LatestResults />
         <TopDrivers />
-        <StandingsPreview />
+        <StandingsStrip />
       </main>
       <Footer />
     </div>
