@@ -9,6 +9,58 @@ import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import { Navigate } from "react-router-dom";
 
+type ProfileRow = {
+  user_id: string;
+  display_name: string | null;
+  iracing_id: number | null;
+  iracing_name: string | null;
+  irating: number | null;
+  safety_rating: string | null;
+  avatar_url: string | null;
+  discord_id: string | null;
+  team_id: string | null;
+};
+
+type ProfileMutationPayload = Partial<{
+  user_id: string;
+  display_name: string | null;
+  iracing_id: number | null;
+  iracing_name: string | null;
+  irating: number | null;
+  safety_rating: string | null;
+  avatar_url: string | null;
+  discord_id: string | null;
+  team_id: string | null;
+}>;
+
+// Boundary cast: generated Supabase profile types are stale and miss app columns.
+// Remove after regenerating Supabase types.
+const profilePayload = (payload: ProfileMutationPayload) =>
+  payload as unknown as never;
+
+type TeamOption = {
+  id: string;
+  name: string;
+  color: string | null;
+  logo_url: string | null;
+};
+
+type MyResult = {
+  id: string;
+  race_id: string;
+  user_id: string;
+  position: number | null;
+  points: number | null;
+  fastest_lap: boolean | null;
+  incidents: number | null;
+  dnf: boolean | null;
+  races: {
+    name: string;
+    track: string;
+    race_date: string;
+  } | null;
+};
+
 const ProfilePage = () => {
   const { user, session, loading } = useAuth();
   const queryClient = useQueryClient();
@@ -17,14 +69,14 @@ const ProfilePage = () => {
     queryKey: ["profile", user?.id],
     enabled: !!user,
     refetchOnMount: "always",
-    queryFn: async () => {
+    queryFn: async (): Promise<ProfileRow | null> => {
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("user_id", user!.id)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return data as ProfileRow | null;
     },
   });
 
@@ -32,22 +84,22 @@ const ProfilePage = () => {
     queryKey: ["my-results", user?.id],
     enabled: !!user,
     refetchOnMount: "always",
-    queryFn: async () => {
+    queryFn: async (): Promise<MyResult[]> => {
       const { data, error } = await supabase
         .from("race_results")
         .select("*, races(name, track, race_date)")
         .eq("user_id", user!.id);
       if (error) throw error;
-      return data || [];
+      return (data || []) as MyResult[];
     },
   });
 
   const { data: teams } = useQuery({
     queryKey: ["teams-list"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("teams").select("id, name, color");
+    queryFn: async (): Promise<TeamOption[]> => {
+      const { data, error } = await supabase.from("teams").select("id, name, color, logo_url");
       if (error) throw error;
-      return data || [];
+      return (data || []) as TeamOption[];
     },
   });
 
@@ -85,7 +137,7 @@ const ProfilePage = () => {
 
   const unlinkDiscord = async () => {
     if (!user) return;
-    const { error } = await supabase.from("profiles").update({ discord_id: null } as any).eq("user_id", user.id);
+    const { error } = await supabase.from("profiles").update(profilePayload({ discord_id: null })).eq("user_id", user.id);
     if (error) { toast.error(error.message); return; }
     toast.success("Discord ontkoppeld");
     queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
@@ -123,14 +175,14 @@ const ProfilePage = () => {
 
       const { error: updateError } = await supabase
         .from("profiles")
-        .upsert({ user_id: user.id, avatar_url: avatarUrl } as any, { onConflict: "user_id" });
+        .upsert(profilePayload({ user_id: user.id, avatar_url: avatarUrl }), { onConflict: "user_id" });
       if (updateError) throw updateError;
 
       toast.success("Profielfoto opgeslagen!");
       queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
       queryClient.invalidateQueries({ queryKey: ["drivers"] });
-    } catch (err: any) {
-      toast.error(err.message || "Upload mislukt");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Upload mislukt");
     } finally {
       setAvatarUploading(false);
     }
@@ -139,10 +191,10 @@ const ProfilePage = () => {
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name || "");
-      setIracingId((profile as any).iracing_id || "");
-      setIracingName((profile as any).iracing_name || "");
-      setIrating(String((profile as any).irating || ""));
-      setSafetyRating((profile as any).safety_rating || "");
+      setIracingId(profile.iracing_id?.toString() ?? "");
+      setIracingName(profile.iracing_name || "");
+      setIrating(String(profile.irating ?? ""));
+      setSafetyRating(profile.safety_rating || "");
     }
   }, [profile]);
 
@@ -150,14 +202,14 @@ const ProfilePage = () => {
     mutationFn: async () => {
       const { error } = await supabase
         .from("profiles")
-        .upsert({
+        .upsert(profilePayload({
           user_id: user!.id,
           display_name: displayName,
           iracing_id: iracingId || null,
           iracing_name: iracingName || null,
           irating: irating ? parseInt(irating) : null,
           safety_rating: safetyRating || null,
-        } as any, { onConflict: "user_id" });
+        }), { onConflict: "user_id" });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -170,7 +222,7 @@ const ProfilePage = () => {
   // Instant join existing team (free choice, no approval)
   const joinTeam = useMutation({
     mutationFn: async (teamId: string) => {
-      await supabase.from("profiles").update({ team_id: teamId } as any).eq("user_id", user!.id);
+      await supabase.from("profiles").update(profilePayload({ team_id: teamId })).eq("user_id", user!.id);
       await supabase.from("team_memberships").insert({ user_id: user!.id, team_id: teamId, role: "driver" });
     },
     onSuccess: () => {
@@ -186,7 +238,7 @@ const ProfilePage = () => {
   const leaveTeam = useMutation({
     mutationFn: async () => {
       await supabase.from("team_memberships").delete().eq("user_id", user!.id);
-      const { error } = await supabase.from("profiles").update({ team_id: null } as any).eq("user_id", user!.id);
+      const { error } = await supabase.from("profiles").update(profilePayload({ team_id: null })).eq("user_id", user!.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -249,17 +301,17 @@ const ProfilePage = () => {
   });
 
   // Stats from results
-  const wins = (myResults || []).filter((r: any) => r.position === 1).length;
-  const podiums = (myResults || []).filter((r: any) => r.position <= 3).length;
-  const totalPoints = (myResults || []).reduce((sum: number, r: any) => sum + (r.points || 0), 0);
+  const wins = (myResults || []).filter((r) => r.position === 1).length;
+  const podiums = (myResults || []).filter((r) => (r.position ?? 0) <= 3).length;
+  const totalPoints = (myResults || []).reduce((sum, r) => sum + (r.points || 0), 0);
   const avgFinish = myResults?.length
-    ? ((myResults as any[]).reduce((s: number, r: any) => s + r.position, 0) / myResults.length).toFixed(1)
+    ? ((myResults).reduce((s, r) => s + (r.position ?? 0), 0) / myResults.length).toFixed(1)
     : "—";
 
   if (loading) return null;
   if (!user) return <Navigate to="/auth" />;
 
-  const currentTeam = (teams || []).find((t: any) => t.id === (profile as any)?.team_id);
+  const currentTeam = (teams || []).find((t) => t.id === profile?.team_id);
 
   return (
     <div className="min-h-screen bg-background">
@@ -298,9 +350,9 @@ const ProfilePage = () => {
               <div className="flex items-center gap-5">
                 {/* Avatar preview */}
                 <div className="relative shrink-0">
-                  {(profile as any)?.avatar_url ? (
+                  {profile?.avatar_url ? (
                     <img
-                      src={(profile as any).avatar_url}
+                      src={profile.avatar_url}
                       alt="Avatar"
                       className="w-20 h-20 rounded-2xl object-cover border-2 border-border"
                     />
@@ -322,7 +374,7 @@ const ProfilePage = () => {
                   </p>
                   <label className="flex items-center gap-2 px-4 py-2 rounded-md border border-dashed border-border hover:border-primary/50 bg-secondary/50 cursor-pointer transition-colors text-sm font-medium text-muted-foreground hover:text-foreground w-fit">
                     <ImagePlus className="w-4 h-4" />
-                    {avatarUploading ? "Uploaden..." : (profile as any)?.avatar_url ? "Foto wijzigen" : "Foto kiezen"}
+                    {avatarUploading ? "Uploaden..." : profile?.avatar_url ? "Foto wijzigen" : "Foto kiezen"}
                     <input
                       type="file"
                       accept="image/*"
@@ -435,12 +487,12 @@ const ProfilePage = () => {
                 <MessageSquare className="w-4 h-4 text-indigo-400" /> Discord Koppeling
               </h2>
 
-              {(profile as any)?.discord_id ? (
+              {profile?.discord_id ? (
                 <div className="flex items-center justify-between p-3 rounded-md bg-green-500/10 border border-green-500/20">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-400" />
                     <span className="text-sm text-green-300">Discord gekoppeld</span>
-                    <span className="text-xs text-muted-foreground font-mono">ID: {(profile as any).discord_id}</span>
+                    <span className="text-xs text-muted-foreground font-mono">ID: {profile.discord_id}</span>
                   </div>
                   <button onClick={unlinkDiscord} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold border border-border text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors">
                     <X className="w-3 h-3" /> Ontkoppelen
@@ -529,7 +581,7 @@ const ProfilePage = () => {
                         className="flex-1 px-4 py-2.5 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                       >
                         <option value="">Kies een team...</option>
-                        {(teams || []).map((t: any) => (
+                        {(teams || []).map((t) => (
                           <option key={t.id} value={t.id}>{t.name}</option>
                         ))}
                       </select>
@@ -668,16 +720,16 @@ const ProfilePage = () => {
                   <div className="grid grid-cols-[3rem_1fr_4rem_4rem] gap-2 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     <span>Pos</span><span>Race</span><span className="text-center">Inc.</span><span className="text-center">Pts</span>
                   </div>
-                  {[...(myResults as any[])].sort((a, b) => new Date(b.races?.race_date || 0).getTime() - new Date(a.races?.race_date || 0).getTime()).map((r: any) => (
+                  {[...(myResults || [])].sort((a, b) => new Date(b.races?.race_date || 0).getTime() - new Date(a.races?.race_date || 0).getTime()).map((r) => (
                     <div key={r.id} className="grid grid-cols-[3rem_1fr_4rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
-                      <span className={`font-heading font-black text-lg ${r.position === 1 ? "text-yellow-400" : r.position <= 3 ? "text-primary" : "text-muted-foreground"}`}>
+                      <span className={`font-heading font-black text-lg ${r.position === 1 ? "text-yellow-400" : (r.position ?? 0) <= 3 ? "text-primary" : "text-muted-foreground"}`}>
                         {r.dnf ? "DNF" : r.position}
                       </span>
                       <div>
                         <div className="font-medium text-sm truncate">{r.races?.name || "Race"}</div>
                         <div className="text-xs text-muted-foreground">{r.races?.track} {r.races?.race_date && `· ${new Date(r.races.race_date).toLocaleDateString("nl-NL")}`}</div>
                       </div>
-                      <span className={`text-center text-sm ${r.incidents > 4 ? "text-red-400" : "text-muted-foreground"}`}>{r.incidents ?? "—"}x</span>
+                      <span className={`text-center text-sm ${(r.incidents ?? 0) > 4 ? "text-red-400" : "text-muted-foreground"}`}>{r.incidents ?? "—"}x</span>
                       <span className="text-center font-heading font-black">{r.points}</span>
                     </div>
                   ))}

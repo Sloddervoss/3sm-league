@@ -10,47 +10,70 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTeams } from "@/hooks/data/useSharedQueries";
 import { Car, Trophy } from "lucide-react";
+import type { Team } from "@/hooks/data/useSharedQueries";
+
+type TeamMembership = {
+  id: string;
+  team_id: string;
+  user_id: string;
+  role: string;
+  profiles: {
+    display_name: string | null;
+    iracing_name: string | null;
+  } | null;
+};
+
+type TeamResult = {
+  user_id: string;
+  position: number | null;
+  points: number | null;
+};
+
+type TeamWithStats = Team & {
+  total: number;
+  wins: number;
+};
 
 const TeamsPage = () => {
-  const [selectedTeam, setSelectedTeam] = useState<any>(null);
+  const [selectedTeam, setSelectedTeam] = useState<TeamWithStats | null>(null);
   const { data: teams = [], isLoading } = useTeams();
 
   const { data: memberships = [] } = useQuery({
     queryKey: ["team-memberships-with-profiles"],
-    queryFn: async () => {
+    queryFn: async (): Promise<TeamMembership[]> => {
       const { data } = await supabase
         .from("team_memberships")
         .select("*, profiles(display_name, iracing_name)");
-      return data || [];
+      return (data || []) as TeamMembership[];
     },
   });
 
   const { data: results = [] } = useQuery({
     queryKey: ["team-results"],
-    queryFn: async () => {
+    queryFn: async (): Promise<TeamResult[]> => {
       const { data } = await supabase.from("race_results").select("user_id, position, points");
-      return data || [];
+      return (data || []) as TeamResult[];
     },
   });
 
   const getTeamMembers = (teamId: string) =>
-    memberships.filter((m: any) => m.team_id === teamId);
+    memberships.filter((m) => m.team_id === teamId);
 
   const getTeamStats = (teamId: string) => {
-    const ids = getTeamMembers(teamId).map((m: any) => m.user_id);
+    const ids = getTeamMembers(teamId).map((m) => m.user_id);
     let total = 0, wins = 0;
-    results.forEach((r: any) => {
-      if (ids.includes(r.user_id)) { total += r.points; if (r.position === 1) wins++; }
+    results.forEach((r) => {
+      if (ids.includes(r.user_id)) { total += r.points || 0; if (r.position === 1) wins++; }
     });
     return { total, wins };
   };
 
   const sortedTeams = [...teams]
-    .map((t: any) => ({ ...t, ...getTeamStats(t.id) }))
-    .sort((a: any, b: any) => b.total - a.total);
+    .map((t): TeamWithStats => ({ ...t, ...getTeamStats(t.id) }))
+    .sort((a, b) => b.total - a.total);
 
   // Team standings for NewStandingsTable format
-  const teamStandings = sortedTeams.map((t: any) => ({
+  const teamStandings = sortedTeams.map((t) => ({
     user_id: t.id,
     display_name: t.name,
     total_points: t.total,
@@ -90,7 +113,7 @@ const TeamsPage = () => {
                 </div>
               ) : (
                 <div className="grid gap-6 sm:grid-cols-2">
-                  {sortedTeams.map((team: any, i: number) => (
+                  {sortedTeams.map((team, i) => (
                     <NewTeamCard
                       key={team.id}
                       team={team}

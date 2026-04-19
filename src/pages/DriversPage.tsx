@@ -9,25 +9,42 @@ import { supabase } from "@/integrations/supabase/client";
 import { useDrivers, useTeams } from "@/hooks/data/useSharedQueries";
 import { useState } from "react";
 import { Users, Search } from "lucide-react";
+import type { DriverModalProfile } from "@/lib/standingsTypes";
+import type { Team } from "@/hooks/data/useSharedQueries";
+
+type DriverStats = {
+  races: number;
+  wins: number;
+  podiums: number;
+  points: number;
+  incidents: number;
+};
+
+type DriverResult = {
+  user_id: string;
+  position: number | null;
+  points: number | null;
+  incidents: number | null;
+};
 
 const DriversPage = () => {
   const [search, setSearch] = useState("");
-  const [selectedDriver, setSelectedDriver] = useState<any>(null);
+  const [selectedDriver, setSelectedDriver] = useState<DriverModalProfile | null>(null);
 
   const { data: profiles = [], isLoading } = useDrivers();
 
   const { data: stats } = useQuery({
     queryKey: ["driver-stats"],
-    queryFn: async () => {
+    queryFn: async (): Promise<Map<string, DriverStats>> => {
       const { data } = await supabase
         .from("race_results")
         .select("user_id, position, points, incidents");
-      const map = new Map<string, { races: number; wins: number; podiums: number; points: number; incidents: number }>();
-      data?.forEach((r: any) => {
+      const map = new Map<string, DriverStats>();
+      ((data || []) as DriverResult[]).forEach((r) => {
         const e = map.get(r.user_id) || { races: 0, wins: 0, podiums: 0, points: 0, incidents: 0 };
-        e.races++; e.points += r.points;
+        e.races++; e.points += r.points || 0;
         if (r.position === 1) e.wins++;
-        if (r.position <= 3) e.podiums++;
+        if (r.position !== null && r.position <= 3) e.podiums++;
         e.incidents += r.incidents || 0;
         map.set(r.user_id, e);
       });
@@ -36,12 +53,14 @@ const DriversPage = () => {
   });
 
   const { data: teams = [] } = useTeams();
+  const drivers = profiles as DriverModalProfile[];
+  const typedTeams = teams as Team[];
 
-  const filtered = profiles.filter((p: any) =>
+  const filtered = drivers.filter((p) =>
     !search || (p.display_name || p.iracing_name || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const sorted = [...filtered].sort((a: any, b: any) =>
+  const sorted = [...filtered].sort((a, b) =>
     (stats?.get(b.user_id)?.points || 0) - (stats?.get(a.user_id)?.points || 0)
   );
 
@@ -85,12 +104,12 @@ const DriversPage = () => {
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {sorted.map((driver: any, i: number) => (
+              {sorted.map((driver, i) => (
                 <NewDriverCard
                   key={driver.user_id}
                   driver={driver}
                   stats={stats?.get(driver.user_id)}
-                  team={teams.find((t: any) => t.id === driver.team_id)}
+                  team={typedTeams.find((t) => t.id === driver.team_id)}
                   rank={i + 1}
                   onSelect={() => setSelectedDriver(driver)}
                 />

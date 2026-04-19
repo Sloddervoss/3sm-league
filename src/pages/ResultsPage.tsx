@@ -15,19 +15,55 @@ const positionColors: Record<number, string> = {
 
 const STALE = 5 * 60 * 1000;
 
+type RaceDetailResult = {
+  id: string;
+  user_id: string;
+  position: number | null;
+  points: number | null;
+  laps: number | null;
+  best_lap: string | null;
+  fastest_lap: boolean | null;
+  incidents: number | null;
+  dnf: boolean | null;
+  profiles: {
+    display_name: string | null;
+    iracing_name: string | null;
+  } | null;
+};
+
+type CompletedRace = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string;
+  round: number | null;
+  leagues: {
+    name: string;
+    car_class: string | null;
+  } | null;
+};
+
+type RaceWinner = {
+  race_id: string;
+  profiles: {
+    display_name: string | null;
+    iracing_name: string | null;
+  } | null;
+};
+
 // Separate component so hooks run per expanded race, not for all races at once
 const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
   const { data: results = [], isLoading } = useQuery({
     queryKey: ["race-results-detail", raceId],
     staleTime: STALE,
-    queryFn: async () => {
+    queryFn: async (): Promise<RaceDetailResult[]> => {
       const { data, error } = await supabase
         .from("race_results")
         .select("*, profiles(display_name, iracing_name)")
         .eq("race_id", raceId)
         .order("position", { ascending: true });
       if (error) throw error;
-      return data || [];
+      return (data || []) as RaceDetailResult[];
     },
   });
 
@@ -77,12 +113,12 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
           <span className="text-center hidden md:block">Inc.</span>
           <span className="text-center">Pts</span>
         </div>
-        {results.map((result: any) => {
+        {results.map((result) => {
           const pen = penalties.find((p) => p.user_id === result.user_id && p.penalty_type !== "warning") || null;
           return (
             <div
               key={result.id}
-              className={`grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/30 hover:bg-secondary/20 transition-colors min-w-[500px] ${result.position <= 3 ? "racing-stripe-left" : ""}`}
+              className={`grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/30 hover:bg-secondary/20 transition-colors min-w-[500px] ${result.position !== null && result.position <= 3 ? "racing-stripe-left" : ""}`}
             >
               <span className={`font-heading font-black text-lg ${positionColors[result.position] || "text-muted-foreground"}`}>
                 {result.dnf ? "DNF" : result.position}
@@ -130,7 +166,7 @@ const ResultsPage = () => {
   const { data: races, isLoading } = useQuery({
     queryKey: ["completed-races"],
     staleTime: STALE,
-    queryFn: async () => {
+    queryFn: async (): Promise<CompletedRace[]> => {
       const { data, error } = await supabase
         .from("races")
         .select("*, leagues(name, car_class)")
@@ -138,7 +174,7 @@ const ResultsPage = () => {
         .order("race_date", { ascending: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return (data || []) as CompletedRace[];
     },
   });
 
@@ -146,12 +182,12 @@ const ResultsPage = () => {
   const { data: winners } = useQuery({
     queryKey: ["race-winners"],
     staleTime: STALE,
-    queryFn: async () => {
+    queryFn: async (): Promise<RaceWinner[]> => {
       const { data } = await supabase
         .from("race_results")
         .select("race_id, profiles(display_name, iracing_name)")
         .eq("position", 1);
-      return (data || []) as { race_id: string; profiles: any }[];
+      return (data || []) as RaceWinner[];
     },
   });
 
@@ -185,7 +221,7 @@ const ResultsPage = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {races.map((race: any, i: number) => {
+                {races.map((race, i) => {
                   const winner = winners?.find((w) => w.race_id === race.id);
                   const isExpanded = expandedRace === race.id;
 
