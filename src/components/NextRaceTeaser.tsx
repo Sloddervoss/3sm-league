@@ -67,7 +67,7 @@ const NextRaceTeaser = () => {
   const sessions = sessionItems.filter((s): s is Session => Boolean(s));
 
   return (
-    <section className="py-20" style={{ background: "#08080f" }}>
+    <section className="py-12" style={{ background: "#08080f" }}>
       <div className="container mx-auto px-4 max-w-7xl">
 
         {/* Section label */}
