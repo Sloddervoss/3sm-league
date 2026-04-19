@@ -2,58 +2,23 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import NewHeroRace from "@/components/preview/NewHeroRace";
 import NewRaceCard from "@/components/preview/NewRaceCard";
-import NewStandingsTable from "@/components/preview/NewStandingsTable";
 import SeasonBanner from "@/components/preview/SeasonBanner";
 import PreviewModal from "@/components/preview/PreviewModal";
 import RaceModal from "@/components/preview/RaceModal";
-import DriverModal from "@/components/preview/DriverModal";
 import { useRegistration } from "@/lib/useRegistration";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
-import { Calendar, Trophy } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 
 type CalendarRace = RaceWithLeagueSummary;
 
-type StandingsRaceResult = {
-  user_id: string;
-  points: number | null;
-  position: number | null;
-  races: { league_id: string | null } | null;
-};
-
-type StandingsProfile = {
-  user_id: string;
-  display_name: string | null;
-  team_id: string | null;
-};
-
-type StandingsTeam = {
-  id: string;
-  name: string;
-  color: string | null;
-};
-
-type StandingRow = {
-  user_id: string;
-  display_name: string;
-  total_points: number;
-  wins: number;
-  team: { name: string; color: string | null } | undefined;
-};
-
-type ConfirmedProfile = {
-  user_id: string;
-  display_name: string | null;
-};
-
 const CalendarPage = () => {
   const now = useNow();
   const reg = useRegistration();
   const [selectedRace, setSelectedRace] = useState<CalendarRace | null>(null);
-  const [selectedDriver, setSelectedDriver] = useState<ConfirmedProfile | null>(null);
 
   const { data: races = [] } = useQuery({
     queryKey: ["races-with-leagues"],
@@ -74,62 +39,6 @@ const CalendarPage = () => {
         .select("id, name, season, car_class")
         .order("created_at", { ascending: false });
       return data || [];
-    },
-  });
-
-  const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async () => {
-      const { data } = await supabase.from("teams").select("*").order("name");
-      return data || [];
-    },
-  });
-
-  const { data: standingsData = [] } = useQuery({
-    queryKey: ["standings-preview", leagues?.[0]?.id],
-    enabled: !!leagues?.length && !!teams?.length,
-    queryFn: async (): Promise<StandingRow[]> => {
-      const leagueId = leagues[0].id;
-      const { data: res } = await supabase
-        .from("race_results")
-        .select("user_id, position, points, race_id, races(league_id)");
-      const typedResults = (res || []) as StandingsRaceResult[];
-      const filtered = typedResults.filter((r) => r.races?.league_id === leagueId);
-      const map = new Map<string, { total_points: number; wins: number }>();
-      filtered.forEach((r) => {
-        const e = map.get(r.user_id) || { total_points: 0, wins: 0 };
-        e.total_points += r.points ?? 0;
-        if (r.position === 1) e.wins++;
-        map.set(r.user_id, e);
-      });
-      const userIds = Array.from(map.keys());
-      if (!userIds.length) return [];
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("user_id, display_name, team_id")
-        .in("user_id", userIds);
-      const typedProfiles = (profs || []) as StandingsProfile[];
-      const typedTeams = teams as StandingsTeam[];
-      return userIds.map((uid) => {
-        const stats = map.get(uid)!;
-        const prof = typedProfiles.find((p) => p.user_id === uid);
-        const team = typedTeams.find((t) => t.id === prof?.team_id);
-        return {
-          user_id: uid,
-          display_name: prof?.display_name || "Unknown",
-          total_points: stats.total_points,
-          wins: stats.wins,
-          team: team ? { name: team.name, color: team.color } : undefined,
-        };
-      }).sort((a, b) => b.total_points - a.total_points);
-    },
-  });
-
-  const { data: profiles = [] } = useQuery({
-    queryKey: ["drivers"],
-    queryFn: async (): Promise<ConfirmedProfile[]> => {
-      const { data } = await supabase.from("confirmed_profiles").select("*");
-      return (data || []) as ConfirmedProfile[];
     },
   });
 
@@ -181,75 +90,51 @@ const CalendarPage = () => {
             </section>
           )}
 
-          {/* Calendar + Standings grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8">
-
-            {/* Calendar */}
-            <div>
-              <div className="flex items-center gap-2 mb-6">
-                <Calendar className="w-4 h-4 text-orange-500" />
-                <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Alle Races</span>
-              </div>
-
-              {/* Season banner */}
-              {activeLeague && (
-                <SeasonBanner
-                  leagueId={activeLeague.id}
-                  leagueName={activeLeague.name}
-                  season={activeLeague.season}
-                  carClass={activeLeague.car_class}
-                  registrantCount={seasonRegCount || 0}
-                  isRegistered={reg.isRegisteredForSeason(activeLeague.id)}
-                  profileComplete={reg.profileComplete}
-                  isLoading={reg.registerForSeason.isPending || reg.unregisterFromSeason.isPending}
-                  onRegister={() => reg.registerForSeason.mutate(activeLeague.id)}
-                  onUnregister={() => reg.unregisterFromSeason.mutate(activeLeague.id)}
-                />
-              )}
-
-              <div className="space-y-3">
-                {races.filter((race) =>
-                  race.status !== "completed"
-                ).map((race, i) => {
-                  const leagueId = race.leagues?.id;
-                  return (
-                    <NewRaceCard
-                      key={race.id}
-                      race={race}
-                      index={i}
-                      countdown={race.status !== "completed" ? formatCountdown(race.race_date, now) : null}
-                      isRegistered={reg.isRegisteredForRace(race.id, leagueId)}
-                      onSelect={() => setSelectedRace(race)}
-                    />
-                  );
-                })}
-                {!races.length && (
-                  <div className="text-center py-16 text-gray-700 text-sm">Geen races gevonden</div>
-                )}
-              </div>
+          {/* Race list — full width */}
+          <div>
+            <div className="flex items-center gap-2 mb-6">
+              <Calendar className="w-4 h-4 text-orange-500" />
+              <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Alle Races</span>
             </div>
 
-            {/* Standings sidebar */}
-            <div>
-              <div className="flex items-center gap-2 mb-6">
-                <Trophy className="w-4 h-4 text-orange-500" />
-                <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Championship</span>
-              </div>
-              <NewStandingsTable
-                standings={standingsData}
-                leagueName={activeLeague?.name}
-                onSelectDriver={(uid) => {
-                  const driver = profiles.find((p) => p.user_id === uid);
-                  if (driver) setSelectedDriver(driver);
-                }}
+            {activeLeague && (
+              <SeasonBanner
+                leagueId={activeLeague.id}
+                leagueName={activeLeague.name}
+                season={activeLeague.season}
+                carClass={activeLeague.car_class}
+                registrantCount={seasonRegCount || 0}
+                isRegistered={reg.isRegisteredForSeason(activeLeague.id)}
+                profileComplete={reg.profileComplete}
+                isLoading={reg.registerForSeason.isPending || reg.unregisterFromSeason.isPending}
+                onRegister={() => reg.registerForSeason.mutate(activeLeague.id)}
+                onUnregister={() => reg.unregisterFromSeason.mutate(activeLeague.id)}
               />
+            )}
+
+            <div className="space-y-3">
+              {races.filter((race) => race.status !== "completed").map((race, i) => {
+                const leagueId = race.leagues?.id;
+                return (
+                  <NewRaceCard
+                    key={race.id}
+                    race={race}
+                    index={i}
+                    countdown={race.status !== "completed" ? formatCountdown(race.race_date, now) : null}
+                    isRegistered={reg.isRegisteredForRace(race.id, leagueId)}
+                    onSelect={() => setSelectedRace(race)}
+                  />
+                );
+              })}
+              {!races.length && (
+                <div className="text-center py-16 text-gray-700 text-sm">Geen races gevonden</div>
+              )}
             </div>
           </div>
         </div>
       </main>
       <Footer />
 
-      {/* Race modal */}
       <PreviewModal open={!!selectedRace} onClose={() => setSelectedRace(null)}>
         {selectedRace && (
           <RaceModal
@@ -265,11 +150,6 @@ const CalendarPage = () => {
             }}
           />
         )}
-      </PreviewModal>
-
-      {/* Driver modal */}
-      <PreviewModal open={!!selectedDriver} onClose={() => setSelectedDriver(null)}>
-        {selectedDriver && <DriverModal driver={selectedDriver} />}
       </PreviewModal>
     </div>
   );
