@@ -201,6 +201,7 @@ const SeasonsAdmin = () => {
             race_type: r.race_type || null, race_duration: r.race_duration || null,
             practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null,
             start_type: r.start_type || null, weather: r.weather || null, setup: r.setup || null,
+            // Boundary cast: generated Insert type missing race_type/duration/start_type/weather/setup columns
           } as any))
         );
         if (re) throw re;
