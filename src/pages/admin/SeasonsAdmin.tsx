@@ -79,6 +79,22 @@ type AdminProfile = {
   iracing_id: number | null;
 };
 
+type RaceEditData = {
+  id?: string;
+  name?: string | null;
+  track?: string | null;
+  race_date?: string | null;
+  race_type?: string | null;
+  race_duration?: string | null;
+  practice_duration?: string | null;
+  qualifying_duration?: string | null;
+  start_type?: string | null;
+  weather?: string | null;
+  setup?: string | null;
+  status?: string | null;
+  round?: number | null;
+};
+
 type RaceSlot = {
   name: string; track: string; date: string; time: string;
   race_type: string; race_duration: string; practice_duration: string;
@@ -100,7 +116,7 @@ const SeasonsAdmin = () => {
   const [showLeagueForm, setShowLeagueForm] = useState(false);
   const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
   const [editingLeagueData, setEditingLeagueData] = useState({ name: "", description: "", season: "", car_class: "" });
-  const [editingRaces, setEditingRaces] = useState<Record<string, any>>({});
+  const [editingRaces, setEditingRaces] = useState<Record<string, RaceEditData>>({});
 
   const [showSoloRaceForm, setShowSoloRaceForm] = useState(false);
   const [newSoloRace, setNewSoloRace] = useState<RaceSlot>({ ...SOLO_RACE_DEFAULTS });
@@ -262,7 +278,7 @@ const SeasonsAdmin = () => {
   });
 
   const updateRace = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    mutationFn: async ({ id, data }: { id: string; data: RaceEditData }) => {
       const normalizedDate = data.race_date
         ? (data.race_date.length > 16 ? utcToAmsLocal(data.race_date) : data.race_date)
         : null;
@@ -403,7 +419,7 @@ const SeasonsAdmin = () => {
                       if (isEditing) { setEditingLeagueId(null); setEditingRaces({}); return; }
                       setEditingLeagueId(league.id);
                       setEditingLeagueData({ name: league.name, description: league.description || "", season: league.season || "", car_class: league.car_class || "" });
-                      const raceMap: Record<string, any> = {};
+                      const raceMap: Record<string, RaceEditData> = {};
                       league.races?.forEach((r) => { raceMap[r.id] = { ...r }; });
                       setEditingRaces(raceMap);
                     }}
@@ -438,7 +454,7 @@ const SeasonsAdmin = () => {
                       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Races bewerken</p>
                       {[...league.races].sort((a, b) => (a.round ?? 0) - (b.round ?? 0)).map((race) => {
                         const rd = editingRaces[race.id] || race;
-                        const setRd = (field: string, val: string) => setEditingRaces(prev => ({ ...prev, [race.id]: { ...prev[race.id], [field]: val } }));
+                        const setRd = (field: keyof RaceEditData, val: string) => setEditingRaces(prev => ({ ...prev, [race.id]: { ...prev[race.id], [field]: val } }));
                         return (
                           <div key={race.id} className="p-3 rounded-md bg-secondary/30 border border-border/50 space-y-2">
                             <div className="flex items-center gap-2 mb-1">
