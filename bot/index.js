@@ -742,13 +742,15 @@ async function checkAnnouncements() {
     };
     if (ann.image_url) embed.image = { url: ann.image_url };
 
-    try {
-      await channel.send({ content: mentionText || undefined, embeds: [embed] });
-      await supabase.from('announcements').update({ sent: true }).eq('id', ann.id);
-      botLog(`📢 Aankondiging verstuurd: **${ann.title}**`);
-    } catch (e) {
-      botLog(`❌ Aankondiging fout: ${e.message}`);
-    }
+    const msg = await channel.send({ content: mentionText || undefined, embeds: [embed] }).catch(e => {
+      botLog(`❌ Aankondiging send mislukt: ${e.message}`);
+      return null;
+    });
+    if (!msg) continue;
+
+    const { error: updErr } = await supabase.from('announcements').update({ sent: true }).eq('id', ann.id);
+    if (updErr) { botLog(`❌ Aankondiging update fout (sent): ${updErr.message}`); continue; }
+    botLog(`📢 Aankondiging verstuurd: **${ann.title}**`);
   }
 }
 
