@@ -8,6 +8,77 @@ import { toast } from "sonner";
 import { amsToUTC, utcToAmsLocal } from "@/lib/dateHelpers";
 import { TrackSelect } from "@/components/admin/TrackSelect";
 
+type AdminLeagueRace = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string | null;
+  round: number | null;
+  status: string | null;
+  race_type: string | null;
+  race_duration: string | null;
+  practice_duration: string | null;
+  qualifying_duration: string | null;
+  start_type: string | null;
+  weather: string | null;
+  setup: string | null;
+};
+
+type AdminLeague = {
+  id: string;
+  name: string;
+  description: string | null;
+  season: string | null;
+  car_class: string | null;
+  races: AdminLeagueRace[];
+};
+
+type AdminRaceLeague = {
+  name: string;
+  season: string | null;
+};
+
+type AdminRace = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string | null;
+  league_id: string | null;
+  status: string | null;
+  practice_duration: string | null;
+  qualifying_duration: string | null;
+  race_duration: string | null;
+  start_type: string | null;
+  weather: string | null;
+  setup: string | null;
+  leagues: AdminRaceLeague | null;
+};
+
+type SeasonReg = {
+  league_id: string;
+  user_id: string;
+  status: string | null;
+  created_at: string;
+  car_choice: string | null;
+  car_locked: boolean | null;
+};
+
+type RaceReg = {
+  race_id: string;
+  user_id: string;
+  status: string | null;
+  created_at: string;
+  car_choice: string | null;
+  car_locked: boolean | null;
+};
+
+type AdminProfile = {
+  user_id: string;
+  display_name: string | null;
+  iracing_name: string | null;
+  iracing_id: number | null;
+};
+
 type RaceSlot = {
   name: string; track: string; date: string; time: string;
   race_type: string; race_duration: string; practice_duration: string;
@@ -39,55 +110,55 @@ const SeasonsAdmin = () => {
 
   const { data: leagues } = useQuery({
     queryKey: ["admin-leagues"],
-    queryFn: async () => {
+    queryFn: async (): Promise<AdminLeague[]> => {
       const { data, error } = await supabase.from("leagues").select("*, races(*)");
       if (error) throw error;
-      return data;
+      return (data || []) as AdminLeague[];
     },
   });
 
   const { data: allRaces } = useQuery({
     queryKey: ["all-races-admin"],
-    queryFn: async () => {
+    queryFn: async (): Promise<AdminRace[]> => {
       const { data, error } = await supabase
         .from("races")
         .select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, season)")
         .order("race_date", { ascending: true });
       if (error) throw error;
-      return data;
+      return (data || []) as AdminRace[];
     },
   });
 
   const { data: seasonRegistrations } = useQuery({
     queryKey: ["admin-season-registrations"],
-    queryFn: async () => {
+    queryFn: async (): Promise<SeasonReg[]> => {
       const { data, error } = await supabase
         .from("season_registrations")
         .select("league_id, user_id, status, created_at, car_choice, car_locked");
       if (error) throw error;
-      return data || [];
+      return (data || []) as SeasonReg[];
     },
   });
 
   const { data: raceRegistrations } = useQuery({
     queryKey: ["admin-race-registrations"],
-    queryFn: async () => {
+    queryFn: async (): Promise<RaceReg[]> => {
       const { data, error } = await supabase
         .from("race_registrations")
         .select("race_id, user_id, status, created_at, car_choice, car_locked");
       if (error) throw error;
-      return data || [];
+      return (data || []) as RaceReg[];
     },
   });
 
   const { data: profiles } = useQuery({
     queryKey: ["all-profiles"],
-    queryFn: async () => {
+    queryFn: async (): Promise<AdminProfile[]> => {
       const { data, error } = await supabase
         .from("profiles")
         .select("user_id, display_name, iracing_name, iracing_id");
       if (error) throw error;
-      return data;
+      return (data || []) as AdminProfile[];
     },
   });
 
@@ -311,8 +382,8 @@ const SeasonsAdmin = () => {
       )}
 
       <div className="space-y-3">
-        {leagues?.map((league: any) => {
-          const regs = (seasonRegistrations || []).filter((r: any) => r.league_id === league.id);
+        {leagues?.map((league) => {
+          const regs = (seasonRegistrations || []).filter((r) => r.league_id === league.id);
           const isEditing = editingLeagueId === league.id;
           return (
             <div key={league.id} className="bg-card border border-border rounded-lg p-5 racing-stripe-left">
@@ -322,7 +393,7 @@ const SeasonsAdmin = () => {
                   <div className="flex gap-3 text-sm text-muted-foreground mt-1">
                     {league.season && <span>{league.season}</span>}
                     {league.car_class && <span>• {league.car_class}</span>}
-                    <span>• {(league as any).races?.length || 0} races</span>
+                    <span>• {league.races?.length || 0} races</span>
                     <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{regs.length} ingeschreven</span>
                   </div>
                 </div>
@@ -333,7 +404,7 @@ const SeasonsAdmin = () => {
                       setEditingLeagueId(league.id);
                       setEditingLeagueData({ name: league.name, description: league.description || "", season: league.season || "", car_class: league.car_class || "" });
                       const raceMap: Record<string, any> = {};
-                      (league as any).races?.forEach((r: any) => { raceMap[r.id] = { ...r }; });
+                      league.races?.forEach((r) => { raceMap[r.id] = { ...r }; });
                       setEditingRaces(raceMap);
                     }}
                     className="p-2 text-muted-foreground hover:text-primary transition-colors"
@@ -362,10 +433,10 @@ const SeasonsAdmin = () => {
                     <button onClick={() => { setEditingLeagueId(null); setEditingRaces({}); }} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground border border-border">Annuleren</button>
                   </div>
 
-                  {(league as any).races?.length > 0 && (
+                  {league.races?.length > 0 && (
                     <div className="pt-3 border-t border-border/50 space-y-3">
                       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Races bewerken</p>
-                      {[...(league as any).races].sort((a: any, b: any) => a.round - b.round).map((race: any) => {
+                      {[...league.races].sort((a, b) => (a.round ?? 0) - (b.round ?? 0)).map((race) => {
                         const rd = editingRaces[race.id] || race;
                         const setRd = (field: string, val: string) => setEditingRaces(prev => ({ ...prev, [race.id]: { ...prev[race.id], [field]: val } }));
                         return (
@@ -450,13 +521,13 @@ const SeasonsAdmin = () => {
 
               {(() => {
                 const seasonRegs = regs;
-                const seasonUserIds = new Set(seasonRegs.map((r: any) => r.user_id));
-                const leagueRaceIds = new Set(((league as any).races || []).map((r: any) => r.id));
+                const seasonUserIds = new Set(seasonRegs.map((r) => r.user_id));
+                const leagueRaceIds = new Set((league.races || []).map((r) => r.id));
                 const raceRegsForLeague = (raceRegistrations || []).filter(
-                  (r: any) => leagueRaceIds.has(r.race_id) && !seasonUserIds.has(r.user_id)
+                  (r) => leagueRaceIds.has(r.race_id) && !seasonUserIds.has(r.user_id)
                 );
                 const raceRegsByUser: Record<string, { userId: string; raceIds: string[] }> = {};
-                raceRegsForLeague.forEach((r: any) => {
+                raceRegsForLeague.forEach((r) => {
                   if (!raceRegsByUser[r.user_id]) raceRegsByUser[r.user_id] = { userId: r.user_id, raceIds: [] };
                   raceRegsByUser[r.user_id].raceIds.push(r.race_id);
                 });
@@ -473,8 +544,8 @@ const SeasonsAdmin = () => {
                           Heel seizoen ({seasonRegs.length})
                         </p>
                         <div className="space-y-1.5">
-                          {seasonRegs.map((r: any) => {
-                            const p = (profiles || []).find((p: any) => p.user_id === r.user_id);
+                          {seasonRegs.map((r) => {
+                            const p = (profiles || []).find((p) => p.user_id === r.user_id);
                             return (
                               <div key={r.user_id} className="flex items-center gap-2">
                                 <span className="w-28 shrink-0 px-2.5 py-1 rounded-full bg-accent/15 text-accent text-xs font-medium border border-accent/30 truncate">
@@ -521,12 +592,12 @@ const SeasonsAdmin = () => {
                         </p>
                         <div className="space-y-1.5">
                           {raceRegUsers.map(({ userId, raceIds }) => {
-                            const p = (profiles || []).find((p: any) => p.user_id === userId);
+                            const p = (profiles || []).find((p) => p.user_id === userId);
                             const raceNames = raceIds.map(rid => {
-                              const race = ((league as any).races || []).find((r: any) => r.id === rid);
+                              const race = (league.races || []).find((r) => r.id === rid);
                               return race ? `R${String(race.round).padStart(2, "0")}` : rid.slice(0, 6);
                             }).sort().join(", ");
-                            const firstReg = (raceRegistrations || []).find((r: any) => r.user_id === userId && raceIds.includes(r.race_id));
+                            const firstReg = (raceRegistrations || []).find((r) => r.user_id === userId && raceIds.includes(r.race_id));
                             return (
                               <div key={userId} className="flex items-center gap-2">
                                 <span className="w-28 shrink-0 px-2.5 py-1 rounded-full bg-secondary text-foreground text-xs font-medium border border-border truncate">
@@ -650,12 +721,12 @@ const SeasonsAdmin = () => {
         )}
 
         {(() => {
-          const soloRaces = (allRaces || []).filter((r: any) => !r.league_id);
-          const upcomingRaces = soloRaces.filter((r: any) => r.status !== "completed");
-          const completedRaces = soloRaces.filter((r: any) => r.status === "completed");
+          const soloRaces = (allRaces || []).filter((r) => !r.league_id);
+          const upcomingRaces = soloRaces.filter((r) => r.status !== "completed");
+          const completedRaces = soloRaces.filter((r) => r.status === "completed");
 
-          const renderRace = (race: any) => {
-            const raceRegs = (raceRegistrations || []).filter((r: any) => r.race_id === race.id);
+          const renderRace = (race: AdminRace) => {
+            const raceRegs = (raceRegistrations || []).filter((r) => r.race_id === race.id);
             const isEditingSolo = editingSoloRaceId === race.id;
             const srd = editingSoloRaceData;
             const setSrd = (field: string, val: string) => setEditingSoloRaceData((prev: any) => ({ ...prev, [field]: val }));
@@ -693,8 +764,8 @@ const SeasonsAdmin = () => {
                       Ingeschreven ({raceRegs.length})
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {raceRegs.map((reg: any) => {
-                        const p = (profiles || []).find((p: any) => p.user_id === reg.user_id);
+                      {raceRegs.map((reg) => {
+                        const p = (profiles || []).find((p) => p.user_id === reg.user_id);
                         return (
                           <span key={reg.user_id} className="px-2.5 py-1 rounded-full bg-violet-500/15 text-violet-400 text-xs font-medium border border-violet-500/30">
                             {p?.display_name || p?.iracing_name || reg.user_id.slice(0, 8)}
