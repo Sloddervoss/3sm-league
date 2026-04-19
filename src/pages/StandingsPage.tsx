@@ -75,7 +75,7 @@ const StandingsPage = () => {
       <Navbar />
       <StickyRaceBar />
       <main className="pt-[108px]">
-        <div className="container mx-auto px-4 max-w-4xl py-12">
+        <div className="container mx-auto px-4 max-w-5xl py-12">
 
           {/* Header */}
           <div className="mb-8">
@@ -110,6 +110,7 @@ const StandingsPage = () => {
           <NewStandingsTable
             standings={standings}
             leagueName={selectedLeague?.name}
+            variant="page"
             onSelectDriver={(uid) => {
               const driver = (profiles as DriverModalProfile[]).find((p) => p.user_id === uid);
               if (driver) setSelectedDriver(driver);
