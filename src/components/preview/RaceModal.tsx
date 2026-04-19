@@ -3,6 +3,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useTeams } from "@/hooks/data/useSharedQueries";
 import { motion } from "framer-motion";
 import { MapPin, Clock, CloudSun, Gauge, Users, Trophy, Flag, Zap, LogIn, LogOut, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
@@ -41,12 +42,6 @@ type RaceModalResult = {
   profiles: RaceResultProfile | null;
 };
 
-type RaceTeam = {
-  id: string;
-  name: string;
-  color: string | null;
-  logo_url: string | null;
-};
 
 type UserIdRow = {
   user_id: string;
@@ -100,13 +95,7 @@ const RaceModal = ({ race, registration }: Props) => {
     },
   });
 
-  const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    queryFn: async (): Promise<RaceTeam[]> => {
-      const { data } = await supabase.from("teams").select("id, name, color, logo_url");
-      return (data || []) as RaceTeam[];
-    },
-  });
+  const { data: teams = [] } = useTeams();
 
   const { data: registrants = [] } = useQuery({
     queryKey: ["race-modal-registrants", race.id, race.leagues?.id],

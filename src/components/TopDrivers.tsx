@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useTeams } from "@/hooks/data/useSharedQueries";
 import { Users, ChevronRight } from "lucide-react";
 import NewDriverCard from "@/components/preview/NewDriverCard";
 import PreviewModal from "@/components/preview/PreviewModal";
@@ -23,12 +24,6 @@ type DriverResult = {
   incidents: number | null;
 };
 
-type DriverTeam = {
-  id: string;
-  name: string;
-  color: string | null;
-  logo_url: string | null;
-};
 
 const TopDrivers = () => {
   const [selectedDriver, setSelectedDriver] = useState<DriverModalProfile | null>(null);
@@ -62,14 +57,7 @@ const TopDrivers = () => {
     },
   });
 
-  const { data: teams = [] } = useQuery({
-    queryKey: ["teams"],
-    staleTime: 5 * 60 * 1000,
-    queryFn: async (): Promise<DriverTeam[]> => {
-      const { data } = await supabase.from("teams").select("id, name, color, logo_url");
-      return (data || []) as DriverTeam[];
-    },
-  });
+  const { data: teams = [] } = useTeams();
 
   const sorted = [...profiles]
     .sort((a, b) => (stats?.get(b.user_id)?.points || 0) - (stats?.get(a.user_id)?.points || 0))
