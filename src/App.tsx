@@ -5,7 +5,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { isDemoMode } from "@/integrations/supabase/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index.tsx";
 
@@ -20,12 +19,7 @@ const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage.tsx"));
-const PreviewPage = lazy(() => import("./pages/PreviewPage.tsx"));
 const KoppelPage = lazy(() => import("./pages/KoppelPage.tsx"));
-const DriverProfilePreview = lazy(() => import("./pages/preview/DriverProfilePreview.tsx"));
-const RaceDetailPreview = lazy(() => import("./pages/preview/RaceDetailPreview.tsx"));
-const TeamProfilePreview = lazy(() => import("./pages/preview/TeamProfilePreview.tsx"));
-const StandingsFullPreview = lazy(() => import("./pages/preview/StandingsFullPreview.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient({
@@ -38,21 +32,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-const DemoBanner = () => (
-  <div className="fixed bottom-0 left-0 right-0 z-[100] bg-yellow-500/95 backdrop-blur text-black text-xs font-bold flex items-center justify-between px-4 py-2 border-t-2 border-yellow-400">
-    <span>⚡ DEMO MODUS — Nep testdata, auto-ingelogd als admin (Vincent de Vos)</span>
-    <button
-      onClick={async () => {
-        const { resetDemoData } = await import("@/integrations/supabase/mockClient");
-        resetDemoData();
-      }}
-      className="px-3 py-1 rounded bg-black/20 hover:bg-black/30 transition-colors text-black font-bold ml-4 shrink-0"
-    >
-      Reset data
-    </button>
-  </div>
-);
 
 const RouteFallback = () => (
   <div className="min-h-screen bg-background flex items-center justify-center">
@@ -70,8 +49,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          {isDemoMode && <DemoBanner />}
-          <ErrorBoundary>
+<ErrorBoundary>
             <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/" element={<Index />} />
@@ -86,11 +64,6 @@ const App = () => (
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/koppel" element={<KoppelPage />} />
-                <Route path="/preview" element={<PreviewPage />} />
-                <Route path="/preview/driver" element={<DriverProfilePreview />} />
-                <Route path="/preview/race" element={<RaceDetailPreview />} />
-                <Route path="/preview/team" element={<TeamProfilePreview />} />
-                <Route path="/preview/standings" element={<StandingsFullPreview />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
