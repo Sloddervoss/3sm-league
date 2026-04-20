@@ -127,3 +127,12 @@ html {
     transform: translateY(-2px);
   }
 }
+
+/* Prevent iOS Safari auto-zoom on input focus (font-size < 16px triggers zoom) */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
