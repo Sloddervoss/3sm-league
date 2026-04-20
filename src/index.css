@@ -128,11 +128,13 @@ html {
   }
 }
 
-/* Prevent iOS Safari auto-zoom on input focus (font-size < 16px triggers zoom) */
+/* Prevent iOS Safari auto-zoom on input focus (font-size < 16px triggers zoom).
+   !important needed: Tailwind outputs flat CSS (no native @layer), so class
+   selectors like .text-sm (0-1-0) beat element selectors (0-0-1) otherwise. */
 @media (max-width: 767px) {
   input,
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
