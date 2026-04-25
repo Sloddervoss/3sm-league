@@ -206,16 +206,16 @@ function buildPosterSvg(race, key) {
         ${hasRound ? `<text x="0" y="154" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800" fill="#cbd5e1" letter-spacing="2">${escapeXml(raceName)}</text>` : ''}
       </g>
 
-      <g transform="translate(112 595)">
-        <rect x="0" y="0" width="338" height="70" rx="6" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.1"/>
-        <text x="24" y="27" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" fill="#94a3b8" letter-spacing="3">DATE</text>
-        <text x="24" y="55" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="#ffffff">${escapeXml(date)}</text>
-        <rect x="360" y="0" width="284" height="70" rx="6" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.1"/>
-        <text x="384" y="27" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" fill="#94a3b8" letter-spacing="3">START</text>
-        <text x="384" y="55" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="#ffffff">${escapeXml(time)}</text>
+      <g transform="translate(112 585)">
+        <rect x="0" y="0" width="360" height="90" rx="6" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.1"/>
+        <text x="24" y="28" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" fill="#94a3b8" letter-spacing="3">DATE</text>
+        <text x="24" y="70" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="900" fill="#ffffff">${escapeXml(date)}</text>
+        <rect x="382" y="0" width="284" height="90" rx="6" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.1"/>
+        <text x="406" y="28" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" fill="#94a3b8" letter-spacing="3">START</text>
+        <text x="406" y="70" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="900" fill="#ffffff">${escapeXml(time)}</text>
       </g>
 
-      <g transform="translate(112 706)">
+      <g transform="translate(112 716)">
         <text x="0" y="0" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="900" fill="#ffffff" letter-spacing="2">${escapeXml(leagueName)}</text>
         <text x="0" y="36" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#94a3b8" letter-spacing="2">${escapeXml(carClass)}</text>
         <text x="0" y="78" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#e2e8f0">${escapeXml(formatLine)}</text>
