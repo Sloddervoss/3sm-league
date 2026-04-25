@@ -480,7 +480,6 @@ async function sendResultPoster(channel, race, results) {
     const poster = await createResultPosterAttachment(race, results);
     const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
     return channel.send({
-      content: '🏆 Uitslag is binnen. Voor volledige uitslag: bekijk de website.',
       files: [attachment],
     });
   } catch (e) {
