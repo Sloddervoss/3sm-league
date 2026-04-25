@@ -172,7 +172,11 @@ function buildPosterSvg(race, key) {
     race.race_duration ? `R ${race.race_duration}` : null,
   ].filter(Boolean);
   const formatLine = fitText(formatParts.join('  /  ') || 'RACE FORMAT TBA', 44).toUpperCase();
-  const conditions = fitText([race.start_type, race.weather, race.setup].filter(Boolean).join('  /  ') || 'SESSION DETAILS TBA', 44).toUpperCase();
+  const conditions = fitText([
+    race.start_type ? `START: ${race.start_type}` : null,
+    race.weather    ? `WEER: ${race.weather}`      : null,
+    race.setup      ? `SETUP: ${race.setup}`       : null,
+  ].filter(Boolean).join('  /  ') || 'SESSION DETAILS TBA', 60).toUpperCase();
 
   return Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
