@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import {
   Client, GatewayIntentBits, EmbedBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
@@ -15,10 +15,27 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SENT_FILE   = path.join(__dirname, 'sent_notifications.json');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config();
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value || value.trim() === '') {
+    throw new Error(`[config] Missing required environment variable: ${name}`);
+  }
+  return value.trim();
+}
+
+const SUPABASE_URL = requireEnv('SUPABASE_URL');
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
+if (!SUPABASE_KEY) throw new Error('[config] Missing required environment variable: SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY');
+const DISCORD_BOT_TOKEN = requireEnv('DISCORD_BOT_TOKEN');
+const SITE_URL = requireEnv('SITE_URL').replace(/\/$/, '');
+
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+  SUPABASE_URL,
+  SUPABASE_KEY
 );
 
 // ── Discord client ────────────────────────────────────────────────────────────
@@ -63,25 +80,102 @@ function describeError(error) {
   return parts.length ? parts.join(' | ') : String(error);
 }
 
+const runningJobs = new Set();
+const throttledLogs = new Map();
+const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function throttledBotLog(key, ...args) {
+  const now = Date.now();
+  const last = throttledLogs.get(key) || 0;
+  if (now - last < ERROR_LOG_THROTTLE_MS) return;
+  throttledLogs.set(key, now);
+  await botLog(...args);
+}
+
+async function retrySupabase(label, operation, attempts = 3) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await operation();
+      if (!result?.error) return true;
+      lastError = result.error;
+    } catch (e) {
+      lastError = e;
+    }
+
+    if (attempt < attempts) await delay(500 * attempt);
+  }
+
+  await throttledBotLog(`${label}:${describeError(lastError)}`, `${label}: ${describeError(lastError)}`);
+  return false;
+}
+
+async function deleteSentMessage(message, label) {
+  if (!message?.delete) return;
+  await message.delete().catch(e => throttledBotLog(`${label}:rollback:${describeError(e)}`, `${label} rollback delete fout: ${describeError(e)}`));
+}
+
+async function runGuarded(name, task) {
+  if (runningJobs.has(name)) {
+    await throttledBotLog(`cron:${name}:overlap`, `[cron:${name}] vorige run loopt nog, deze run overgeslagen`);
+    return;
+  }
+
+  runningJobs.add(name);
+  try {
+    await task();
+  } catch (e) {
+    await throttledBotLog(`cron:${name}:${describeError(e)}`, `[cron:${name}] ${describeError(e)}`);
+  } finally {
+    runningJobs.delete(name);
+  }
+}
+
+function scheduleGuarded(pattern, name, task) {
+  cron.schedule(pattern, () => runGuarded(name, task));
+}
+
 // ── Config (channel/role IDs na /setup-server) ────────────────────────────────
+function readJsonFile(file, fallback = {}) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      const badFile = `${file}.bad-${Date.now()}`;
+      try { fs.copyFileSync(file, badFile); } catch {}
+      console.warn(`[json] ${path.basename(file)} kon niet worden gelezen; fallback gebruikt`);
+    }
+    return fallback;
+  }
+}
+
+function writeJsonFile(file, data) {
+  const tmpFile = `${file}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2));
+  fs.renameSync(tmpFile, file);
+}
+
 function loadConfig() {
-  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
-  catch { return {}; }
+  return readJsonFile(CONFIG_FILE, {});
 }
 function saveConfig(data) {
   const current = loadConfig();
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...current, ...data }, null, 2));
+  writeJsonFile(CONFIG_FILE, { ...current, ...data });
 }
 
 // ── Sent-notification tracking ────────────────────────────────────────────────
 function loadSent() {
-  try { return JSON.parse(fs.readFileSync(SENT_FILE, 'utf8')); }
-  catch { return {}; }
+  return readJsonFile(SENT_FILE, {});
 }
 function markSent(raceId, type) {
   const sent = loadSent();
   sent[`${raceId}_${type}`] = new Date().toISOString();
-  fs.writeFileSync(SENT_FILE, JSON.stringify(sent, null, 2));
+  writeJsonFile(SENT_FILE, sent);
 }
 function wasSent(raceId, type) { return !!loadSent()[`${raceId}_${type}`]; }
 
@@ -147,6 +241,38 @@ async function getCalendarChannel() {
   const cfg = loadConfig();
   if (!cfg.kalender_channel_id) return null;
   return client.channels.fetch(cfg.kalender_channel_id).catch(() => null);
+}
+
+async function getConfiguredGuild() {
+  const cfg = loadConfig();
+  const guildId = cfg.guild_id;
+  if (!guildId) return null;
+  return client.guilds.fetch(guildId).catch(() => null);
+}
+
+async function fetchProfilesByUserIds(userIds, columns = 'user_id, display_name, iracing_name, discord_id') {
+  const ids = [...new Set((userIds || []).filter(Boolean))];
+  if (!ids.length) return new Map();
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select(columns)
+    .in('user_id', ids);
+
+  if (error) {
+    await throttledBotLog(`profiles:${describeError(error)}`, '[profiles]', describeError(error));
+    return new Map();
+  }
+
+  return new Map((data || []).map(profile => [profile.user_id, profile]));
+}
+
+function profileName(profile, fallback = 'Onbekend') {
+  return profile?.display_name || profile?.iracing_name || fallback;
+}
+
+function deleteReplyLater(interaction, ms) {
+  setTimeout(() => interaction.deleteReply().catch(() => {}), ms);
 }
 
 // ── Registration buttons ──────────────────────────────────────────────────────
@@ -242,12 +368,22 @@ function buildPodiumEmbed(race, results) {
 
 // ── Kalender embed ────────────────────────────────────────────────────────────
 async function buildCalendarEmbed() {
-  const { data: races } = await supabase
+  const { data: races, error } = await supabase
     .from('races')
     .select('id, name, track, round, race_date, status, leagues(name)')
     .in('status', ['upcoming', 'live'])
     .order('race_date', { ascending: true })
     .limit(15);
+
+  if (error) {
+    await throttledBotLog(`calendar:${describeError(error)}`, '[kalender]', describeError(error));
+    return new EmbedBuilder()
+      .setColor(0xef4444)
+      .setTitle('Racekalender')
+      .setDescription('Kalender kon niet worden opgehaald. Probeer het later opnieuw.')
+      .setFooter({ text: '3 Stripe Motorsport · automatisch bijgewerkt' })
+      .setTimestamp();
+  }
 
   if (!races?.length) {
     return new EmbedBuilder()
@@ -305,7 +441,7 @@ async function checkUpcoming() {
     .gte('race_date', now.toISOString())
     .lte('race_date', lookahead.toISOString());
 
-  if (error) { botLog('[checkUpcoming]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkUpcoming:${describeError(error)}`, '[checkUpcoming]', describeError(error)); return; }
   if (!races?.length) return;
 
   const channel = await getNotificationChannel();
@@ -334,7 +470,7 @@ async function checkUpcoming() {
 // ── Cron: live ────────────────────────────────────────────────────────────────
 async function checkLive() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'live');
-  if (error) { botLog('[checkLive]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkLive:${describeError(error)}`, '[checkLive]', describeError(error)); return; }
   if (!races?.length) return;
   const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
@@ -346,7 +482,7 @@ async function checkLive() {
 // ── Cron: cancelled ───────────────────────────────────────────────────────────
 async function checkCancelled() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'cancelled');
-  if (error) { botLog('[checkCancelled]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkCancelled:${describeError(error)}`, '[checkCancelled]', describeError(error)); return; }
   if (!races?.length) return;
   const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
@@ -358,7 +494,7 @@ async function checkCancelled() {
 // ── Cron: completed / podium ──────────────────────────────────────────────────
 async function checkCompleted() {
   const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'completed');
-  if (error) { botLog('[checkCompleted]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkCompleted:${describeError(error)}`, '[checkCompleted]', describeError(error)); return; }
   if (!races?.length) return;
   const channel = await getUitslagenChannel() || await getNotificationChannel();
   if (!channel) return;
@@ -373,7 +509,12 @@ async function checkCompleted() {
 }
 
 async function checkRaces() {
-  await Promise.all([checkUpcoming(), checkLive(), checkCancelled(), checkCompleted()]);
+  const results = await Promise.allSettled([checkUpcoming(), checkLive(), checkCancelled(), checkCompleted()]);
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      await throttledBotLog(`checkRaces:${describeError(result.reason)}`, '[checkRaces]', describeError(result.reason));
+    }
+  }
 }
 
 // ── Cron: nieuwe race aanmeldingen ────────────────────────────────────────────
@@ -383,13 +524,15 @@ async function checkNewRegistrations() {
     .select('id, user_id, races(name)')
     .order('created_at', { ascending: false })
     .limit(20);
-  if (error) { botLog('[checkRegistrations]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkRegistrations:${describeError(error)}`, '[checkRegistrations]', describeError(error)); return; }
   if (!data?.length) return;
+
+  const profilesByUserId = await fetchProfilesByUserIds(data.map(reg => reg.user_id), 'user_id, display_name, iracing_name');
   for (const reg of data) {
     const key = `reg_${reg.id}`;
     if (wasSent(key, 'notified')) continue;
     markSent(key, 'notified');
-    const { data: profile } = await supabase.from('profiles').select('display_name, iracing_name').eq('user_id', reg.user_id).maybeSingle();
+    const profile = profilesByUserId.get(reg.user_id);
     const driver = profile?.iracing_name || profile?.display_name || reg.user_id;
     const race = reg.races?.name || 'Onbekende race';
     botLog(`📋 Nieuwe aanmelding: **${driver}** → ${race}`);
@@ -403,7 +546,7 @@ async function checkNewLinks() {
     .select('discord_id, discord_tag, used')
     .eq('used', true)
     .gte('expires_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()); // token nog niet te oud
-  if (error) { botLog('[checkLinks]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkLinks:${describeError(error)}`, '[checkLinks]', describeError(error)); return; }
   if (!data?.length) return;
   for (const token of data) {
     const key = `link_${token.discord_id}`;
@@ -448,14 +591,13 @@ async function checkProtests() {
     .select('id, status, notified, created_at, decided_at, penalty_type, penalty_points, penalty_category, time_penalty_seconds, grid_penalty_places, race_ban_next, steward_notes, races(name, track), accused:profiles!protests_accused_user_id_fkey(display_name, iracing_name)')
     .order('created_at', { ascending: false })
     .limit(20);
-  if (error) { botLog('[checkProtests]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkProtests:${describeError(error)}`, '[checkProtests]', describeError(error)); return; }
   if (!data?.length) return;
 
   for (const protest of data) {
     // Nieuw protest melding (naar steward kanaal)
     const newKey = `protest_new_${protest.id}`;
     if (!wasSent(newKey, 'notified')) {
-      markSent(newKey, 'notified');
       const stewardCh = await getStewardChannel();
       if (stewardCh) {
         const btn = new ButtonBuilder()
@@ -463,7 +605,15 @@ async function checkProtests() {
           .setURL('https://3stripemotorsport.cc/stewards')
           .setStyle(ButtonStyle.Link);
         const row = new ActionRowBuilder().addComponents(btn);
-        await stewardCh.send({ content: '⚖️ Er is een nieuw protest ingediend.', components: [row] }).catch(e => botLog(`⚠️ Steward protest ping mislukt: ${describeError(e)}`));
+        const msg = await stewardCh.send({ content: '⚖️ Er is een nieuw protest ingediend.', components: [row] }).catch(e => {
+          throttledBotLog(`protest-new:${describeError(e)}`, `⚠️ Steward protest ping mislukt: ${describeError(e)}`);
+          return null;
+        });
+        if (!msg) continue;
+        markSent(newKey, 'notified');
+      } else {
+        await throttledBotLog('protest-new:no-channel', '[checkProtests] Steward kanaal niet gevonden');
+        continue;
       }
       botLog(`⚖️ Nieuw protest ingediend: **${protest.races?.name}**`);
     }
@@ -514,8 +664,19 @@ async function checkProtests() {
 
       embed.setFooter({ text: '3 Stripe Motorsport · Stewards' }).setTimestamp();
 
-      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Protest beslissing melding fout: ${describeError(e)}`));
-      await supabase.from('protests').update({ notified: true }).eq('id', protest.id);
+      const msg = await channel.send({ embeds: [embed] }).catch(e => {
+        botLog(`❌ Protest beslissing melding fout: ${describeError(e)}`);
+        return null;
+      });
+      if (!msg) continue;
+
+      const saved = await retrySupabase('[checkProtests] notified update fout', () =>
+        supabase.from('protests').update({ notified: true }).eq('id', protest.id).eq('notified', false)
+      );
+      if (!saved) {
+        await deleteSentMessage(msg, '[checkProtests]');
+        continue;
+      }
       botLog(`⚖️ Steward beslissing verstuurd: **${protest.races?.name}** → ${accusedName} — ${penaltyText}`);
     }
   }
@@ -533,24 +694,25 @@ async function checkStewardPenalties() {
       .eq('notified', false)
       .eq('revoked', false));
   } catch (e) {
-    botLog('[checkStewardPenalties]', describeError(e));
+    await throttledBotLog(`checkStewardPenalties:${describeError(e)}`, '[checkStewardPenalties]', describeError(e));
     return;
   }
-  if (error) { botLog('[checkStewardPenalties]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkStewardPenalties:${describeError(error)}`, '[checkStewardPenalties]', describeError(error)); return; }
   if (!data?.length) return;
 
   const channel = await getStewardDecisionsChannel();
+  if (!channel) {
+    await throttledBotLog('steward-penalties:no-channel', '[checkStewardPenalties] Steward decisions kanaal niet gevonden');
+    return;
+  }
 
+  const profilesByUserId = await fetchProfilesByUserIds(data.map(penalty => penalty.user_id));
+  const guild = await getConfiguredGuild();
   for (const penalty of data) {
     const raceName = penalty.races?.name || 'Onbekende race';
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name, iracing_name, discord_id')
-      .eq('user_id', penalty.user_id)
-      .maybeSingle();
-
-    const driverName = profile?.display_name || profile?.iracing_name || 'Onbekend';
+    const profile = profilesByUserId.get(penalty.user_id);
+    const driverName = profileName(profile);
     const penaltyText = buildPenaltyText(penalty.penalty_type, penalty);
     const catBadge = buildCategoryBadge(penalty.penalty_category);
 
@@ -591,20 +753,26 @@ async function checkStewardPenalties() {
 
     embed.setFooter({ text: '3 Stripe Motorsport · Stewards (zonder protest)' }).setTimestamp();
 
-    let messageId = null;
-    if (channel) {
-      const msg = await channel.send({ embeds: [embed] }).catch(e => { botLog(`❌ Steward penalty melding fout: ${describeError(e)}`); return null; });
-      if (!msg) continue;
-      messageId = msg.id;
+    const msg = await channel.send({ embeds: [embed] }).catch(e => { botLog(`❌ Steward penalty melding fout: ${describeError(e)}`); return null; });
+    if (!msg) continue;
+
+    const saved = await retrySupabase('[checkStewardPenalties] notified update fout', () =>
+      supabase.from('penalties')
+        .update({ notified: true, discord_message_id: msg.id })
+        .eq('id', penalty.id)
+        .eq('notified', false)
+    );
+    if (!saved) {
+      await deleteSentMessage(msg, '[checkStewardPenalties]');
+      continue;
     }
 
     // DM als driver Discord heeft gekoppeld
-    if (profile?.discord_id) {
-      const member = await client.guilds.cache.first()?.members.fetch(profile.discord_id).catch(() => null);
+    if (profile?.discord_id && guild) {
+      const member = await guild.members.fetch(profile.discord_id).catch(() => null);
       if (member) await member.send({ embeds: [embed] }).catch(() => {});
     }
 
-    await supabase.from('penalties').update({ notified: true, discord_message_id: messageId }).eq('id', penalty.id);
     botLog(`⚡ Steward actie verstuurd: **${driverName}** — ${raceName} (${penaltyText})`);
   }
 }
@@ -618,36 +786,46 @@ async function checkStewardCorrections() {
     .eq('revoked', true)
     .eq('notified', true)
     .eq('correction_sent', false);
-  if (error) { botLog('[checkStewardCorrections]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkStewardCorrections:${describeError(error)}`, '[checkStewardCorrections]', describeError(error)); return; }
   if (!data?.length) return;
 
   const channel = await getStewardDecisionsChannel();
+  if (!channel) {
+    await throttledBotLog('steward-corrections:no-channel', '[checkStewardCorrections] Steward decisions kanaal niet gevonden');
+    return;
+  }
 
+  const profilesByUserId = await fetchProfilesByUserIds(data.map(penalty => penalty.user_id), 'user_id, display_name, iracing_name');
   for (const penalty of data) {
     const raceName = penalty.races?.name || 'Onbekende race';
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name, iracing_name')
-      .eq('user_id', penalty.user_id)
-      .maybeSingle();
-    const driverName = profile?.display_name || profile?.iracing_name || 'Onbekend';
+    const profile = profilesByUserId.get(penalty.user_id);
+    const driverName = profileName(profile);
 
-    if (penalty.discord_message_id && channel) {
+    if (penalty.discord_message_id) {
       await channel.messages.delete(penalty.discord_message_id).catch(() => {});
     }
 
-    if (channel) {
-      const embed = new EmbedBuilder()
-        .setColor(0x6b7280)
-        .setTitle(`✏️ Correctie — ${raceName}`)
-        .setDescription(`De eerder gemelde steward actie voor **${driverName}** is ingetrokken.`)
-        .setFooter({ text: '3 Stripe Motorsport · Stewards' })
-        .setTimestamp();
-      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Steward correctie fout: ${describeError(e)}`));
+    const embed = new EmbedBuilder()
+      .setColor(0x6b7280)
+      .setTitle(`✏️ Correctie — ${raceName}`)
+      .setDescription(`De eerder gemelde steward actie voor **${driverName}** is ingetrokken.`)
+      .setFooter({ text: '3 Stripe Motorsport · Stewards' })
+      .setTimestamp();
+    const msg = await channel.send({ embeds: [embed] }).catch(e => {
+      botLog(`❌ Steward correctie fout: ${describeError(e)}`);
+      return null;
+    });
+    if (!msg) continue;
+
+    const saved = await retrySupabase('[checkStewardCorrections] correction update fout', () =>
+      supabase.from('penalties').update({ correction_sent: true }).eq('id', penalty.id).eq('correction_sent', false)
+    );
+    if (!saved) {
+      await deleteSentMessage(msg, '[checkStewardCorrections]');
+      continue;
     }
 
-    await supabase.from('penalties').update({ correction_sent: true }).eq('id', penalty.id);
     botLog(`✏️ Steward correctie verstuurd: **${driverName}** — ${raceName}`);
   }
 }
@@ -660,23 +838,23 @@ async function checkAbandonPenalties() {
     .eq('source', 'abandon')
     .eq('notified', false)
     .eq('revoked', false); // nooit sturen als al ingetrokken vóór versturen
-  if (error) { botLog('[checkAbandonPenalties]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkAbandonPenalties:${describeError(error)}`, '[checkAbandonPenalties]', describeError(error)); return; }
   if (!data?.length) return;
 
   const channel = await getStewardDecisionsChannel();
+  if (!channel) {
+    await throttledBotLog('abandon-penalties:no-channel', '[checkAbandonPenalties] Steward decisions kanaal niet gevonden');
+    return;
+  }
 
+  const profilesByUserId = await fetchProfilesByUserIds(data.map(penalty => penalty.user_id));
+  const guild = await getConfiguredGuild();
   for (const penalty of data) {
     const raceName = penalty.races?.name || 'Onbekende race';
     const deduction = penalty.points_deduction || 0;
 
-    // Profiel apart ophalen (user_id → auth.users, geen directe FK naar profiles)
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name, iracing_name, discord_id')
-      .eq('user_id', penalty.user_id)
-      .maybeSingle();
-
-    const driverName = profile?.display_name || profile?.iracing_name || 'Onbekend';
+    const profile = profilesByUserId.get(penalty.user_id);
+    const driverName = profileName(profile);
 
     const embed = new EmbedBuilder()
       .setColor(0xf97316)
@@ -686,25 +864,26 @@ async function checkAbandonPenalties() {
       .setFooter({ text: '3 Stripe Motorsport · Stewards' })
       .setTimestamp();
 
-    // Verstuur naar kanaal en sla message ID op
-    let messageId = null;
-    if (channel) {
-      const msg = await channel.send({ embeds: [embed] }).catch(e => { botLog(`❌ Abandon melding fout: ${describeError(e)}`); return null; });
-      if (!msg) continue; // sturen mislukt, niet als notified markeren anders spam
-      messageId = msg.id;
+    const msg = await channel.send({ embeds: [embed] }).catch(e => { botLog(`❌ Abandon melding fout: ${describeError(e)}`); return null; });
+    if (!msg) continue;
+
+    const saved = await retrySupabase('[checkAbandonPenalties] notified update fout', () =>
+      supabase.from('penalties')
+        .update({ notified: true, discord_message_id: msg.id })
+        .eq('id', penalty.id)
+        .eq('notified', false)
+    );
+    if (!saved) {
+      await deleteSentMessage(msg, '[checkAbandonPenalties]');
+      continue;
     }
 
     // Stuur ook een DM als de driver Discord heeft gekoppeld
-    if (profile?.discord_id) {
-      const member = await client.guilds.cache.first()?.members.fetch(profile.discord_id).catch(() => null);
+    if (profile?.discord_id && guild) {
+      const member = await guild.members.fetch(profile.discord_id).catch(() => null);
       if (member) await member.send({ embeds: [embed] }).catch(() => {});
     }
 
-    // Markeer als notified + sla message ID op voor eventuele correctie later
-    const { error: updErr } = await supabase.from('penalties')
-      .update({ notified: true, discord_message_id: messageId })
-      .eq('id', penalty.id);
-    if (updErr) { botLog(`❌ Abandon notified update fout: ${describeError(updErr)}`); continue; }
     botLog(`⚠️ Abandon melding verstuurd: **${driverName}** — ${raceName} (-${deduction}pts)`);
   }
 }
@@ -718,39 +897,47 @@ async function checkAbandonCorrections() {
     .eq('revoked', true)
     .eq('notified', true)
     .eq('correction_sent', false);
-  if (error) { botLog('[checkAbandonCorrections]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkAbandonCorrections:${describeError(error)}`, '[checkAbandonCorrections]', describeError(error)); return; }
   if (!data?.length) return;
 
   const channel = await getStewardDecisionsChannel();
+  if (!channel) {
+    await throttledBotLog('abandon-corrections:no-channel', '[checkAbandonCorrections] Steward decisions kanaal niet gevonden');
+    return;
+  }
 
+  const profilesByUserId = await fetchProfilesByUserIds(data.map(penalty => penalty.user_id), 'user_id, display_name, iracing_name');
   for (const penalty of data) {
     const raceName = penalty.races?.name || 'Onbekende race';
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('display_name, iracing_name')
-      .eq('user_id', penalty.user_id)
-      .maybeSingle();
-    const driverName = profile?.display_name || profile?.iracing_name || 'Onbekend';
+    const profile = profilesByUserId.get(penalty.user_id);
+    const driverName = profileName(profile);
 
     // Verwijder origineel bericht als we het ID hebben
-    if (penalty.discord_message_id && channel) {
+    if (penalty.discord_message_id) {
       await channel.messages.delete(penalty.discord_message_id).catch(() => {});
     }
 
-    // Stuur correctiebericht
-    if (channel) {
-      const embed = new EmbedBuilder()
-        .setColor(0x6b7280)
-        .setTitle(`✏️ Correctie — ${raceName}`)
-        .setDescription(`De eerder gemelde disciplinaire maatregel voor **${driverName}** is ingetrokken wegens een vergissing. Onze excuses.`)
-        .setFooter({ text: '3 Stripe Motorsport · Stewards' })
-        .setTimestamp();
-      await channel.send({ embeds: [embed] }).catch(e => botLog(`❌ Correctie melding fout: ${describeError(e)}`));
+    const embed = new EmbedBuilder()
+      .setColor(0x6b7280)
+      .setTitle(`✏️ Correctie — ${raceName}`)
+      .setDescription(`De eerder gemelde disciplinaire maatregel voor **${driverName}** is ingetrokken wegens een vergissing. Onze excuses.`)
+      .setFooter({ text: '3 Stripe Motorsport · Stewards' })
+      .setTimestamp();
+    const msg = await channel.send({ embeds: [embed] }).catch(e => {
+      botLog(`❌ Correctie melding fout: ${describeError(e)}`);
+      return null;
+    });
+    if (!msg) continue;
+
+    const saved = await retrySupabase('[checkAbandonCorrections] correction update fout', () =>
+      supabase.from('penalties').update({ correction_sent: true }).eq('id', penalty.id).eq('correction_sent', false)
+    );
+    if (!saved) {
+      await deleteSentMessage(msg, '[checkAbandonCorrections]');
+      continue;
     }
 
-    const { error: updErr } = await supabase.from('penalties').update({ correction_sent: true }).eq('id', penalty.id);
-    if (updErr) { botLog(`❌ Correctie update fout: ${describeError(updErr)}`); continue; }
     botLog(`✏️ Correctie verstuurd: **${driverName}** — ${raceName}`);
   }
 }
@@ -762,13 +949,16 @@ async function checkAnnouncements() {
     .select('*')
     .eq('sent', false)
     .order('created_at', { ascending: true });
-  if (error) { botLog('[checkAnnouncements]', describeError(error)); return; }
+  if (error) { await throttledBotLog(`checkAnnouncements:${describeError(error)}`, '[checkAnnouncements]', describeError(error)); return; }
   if (!data?.length) return;
 
   const channel = await getAankondigingenChannel();
   if (!channel) { botLog('[checkAnnouncements] Aankondigingen channel niet gevonden'); return; }
 
-  const { data: teams } = await supabase.from('teams').select('id, name, discord_role_id');
+  const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name, discord_role_id');
+  if (teamsError) {
+    await throttledBotLog(`checkAnnouncements:teams:${describeError(teamsError)}`, '[checkAnnouncements:teams]', describeError(teamsError));
+  }
 
   for (const ann of data) {
     const tags = (ann.tag || 'none').split(',').map(t => t.trim()).filter(t => t && t !== 'none');
@@ -799,8 +989,13 @@ async function checkAnnouncements() {
     });
     if (!msg) continue;
 
-    const { error: updErr } = await supabase.from('announcements').update({ sent: true }).eq('id', ann.id);
-    if (updErr) { botLog(`❌ Aankondiging update fout (sent): ${describeError(updErr)}`); continue; }
+    const saved = await retrySupabase('[checkAnnouncements] sent update fout', () =>
+      supabase.from('announcements').update({ sent: true }).eq('id', ann.id).eq('sent', false)
+    );
+    if (!saved) {
+      await deleteSentMessage(msg, '[checkAnnouncements]');
+      continue;
+    }
     botLog(`📢 Aankondiging verstuurd: **${ann.title}**`);
   }
 }
@@ -808,15 +1003,16 @@ async function checkAnnouncements() {
 // ── Cron: team rol sync ───────────────────────────────────────────────────────
 async function syncTeamRoles() {
   const cfg = loadConfig();
-  const guildId = cfg.guild_id || client.guilds.cache.first()?.id;
-  if (!guildId) return;
-  const guild = await client.guilds.fetch(guildId).catch(() => null);
+  const guild = await getConfiguredGuild();
   if (!guild) return;
 
-  const { data: teams } = await supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id');
+  const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id');
+  if (teamsError) { await throttledBotLog(`syncTeamRoles:teams:${describeError(teamsError)}`, '[syncTeamRoles] teams fout:', describeError(teamsError)); return; }
   if (!teams?.length) return;
 
   const everyoneId = guild.roles.everyone.id;
+  const managedRoleIds = new Set(cfg.managed_team_role_ids || []);
+  const managedCategoryIds = new Set(cfg.managed_team_category_ids || []);
 
   // Maak ontbrekende team-rollen + categorie + kanalen aan
   for (const team of teams) {
@@ -829,12 +1025,14 @@ async function syncTeamRoles() {
         await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
+        managedRoleIds.add(existing.id);
         botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
       } else {
         try {
           const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
           await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
           team.discord_role_id = role.id;
+          managedRoleIds.add(role.id);
           botLog(`➕ Teamrol aangemaakt: **${team.name}**`);
         } catch (e) {
           botLog(`❌ Kon rol niet aanmaken voor ${team.name}: ${describeError(e)}`);
@@ -844,6 +1042,7 @@ async function syncTeamRoles() {
     } else {
       const existing = guild.roles.cache.get(team.discord_role_id);
       if (existing) await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+      managedRoleIds.add(team.discord_role_id);
     }
 
     // ── Categorie + kanalen ───────────────────────────────────────────────────
@@ -879,6 +1078,7 @@ async function syncTeamRoles() {
           reason: '3SM team sectie',
         });
         categoryId = cat.id;
+        managedCategoryIds.add(cat.id);
         botLog(`➕ Team sectie aangemaakt: **${team.name}**`);
       } catch (e) {
         botLog(`❌ Kon sectie niet aanmaken voor ${team.name}: ${describeError(e)}`);
@@ -890,6 +1090,7 @@ async function syncTeamRoles() {
       await supabase.from('teams').update({ discord_category_id: categoryId }).eq('id', team.id);
       team.discord_category_id = categoryId;
     }
+    if (categoryId) managedCategoryIds.add(categoryId);
 
     // Maak ontbrekende kanalen aan binnen de team-categorie
     const teamChannels = [
@@ -919,47 +1120,76 @@ async function syncTeamRoles() {
   // Verwijder Discord rollen + categorie + kanalen van verwijderde teams
   const teamRoleIds     = teams.map(t => t.discord_role_id).filter(Boolean);
   const teamCategoryIds = teams.map(t => t.discord_category_id).filter(Boolean);
-  const protectedRoles  = ['Admin', 'Steward', 'Rijder'];
-
-  for (const [, role] of guild.roles.cache) {
-    if (role.hoist && !protectedRoles.includes(role.name) && !teamRoleIds.includes(role.id)) {
+  for (const [roleId, role] of guild.roles.cache) {
+    if (managedRoleIds.has(roleId) && !teamRoleIds.includes(role.id)) {
       const wasTeamRole = await supabase.from('teams').select('id').eq('discord_role_id', role.id).maybeSingle();
       if (!wasTeamRole.data) {
-        await role.delete('3SM team verwijderd').catch(() => {});
+        const deleted = await role.delete('3SM team verwijderd').then(() => true).catch(e => {
+          botLog(`❌ Teamrol verwijderen fout (${role.name}): ${describeError(e)}`);
+          return false;
+        });
+        if (!deleted) continue;
+        managedRoleIds.delete(role.id);
         botLog(`🗑️ Teamrol verwijderd: **${role.name}**`);
       }
     }
   }
 
-  for (const [, ch] of guild.channels.cache) {
-    if (ch.type === ChannelType.GuildCategory && !teamCategoryIds.includes(ch.id)) {
+  for (const [categoryId, ch] of guild.channels.cache) {
+    if (managedCategoryIds.has(categoryId) && ch.type === ChannelType.GuildCategory && !teamCategoryIds.includes(ch.id)) {
       const wasTeamCat = await supabase.from('teams').select('id').eq('discord_category_id', ch.id).maybeSingle();
       if (wasTeamCat.data === null && ch.name.includes('━━━') && !ch.name.includes('INFORMATIE') && !ch.name.includes('RACING') && !ch.name.includes('COMMUNITY') && !ch.name.includes('SPRAAK') && !ch.name.includes('ADMIN')) {
         // Verwijder eerst alle kanalen in de categorie
         for (const [, child] of guild.channels.cache) {
           if (child.parentId === ch.id) await child.delete('3SM team verwijderd').catch(() => {});
         }
-        await ch.delete('3SM team verwijderd').catch(() => {});
+        const deleted = await ch.delete('3SM team verwijderd').then(() => true).catch(e => {
+          botLog(`❌ Team sectie verwijderen fout (${ch.name}): ${describeError(e)}`);
+          return false;
+        });
+        if (!deleted) continue;
+        managedCategoryIds.delete(ch.id);
         botLog(`🗑️ Team sectie verwijderd: **${ch.name}**`);
       }
     }
   }
 
+  saveConfig({
+    managed_team_role_ids: [...managedRoleIds].filter(id => teamRoleIds.includes(id)),
+    managed_team_category_ids: [...managedCategoryIds].filter(id => teamCategoryIds.includes(id)),
+  });
+
   // Sync Discord-rollen voor alle gekoppelde leden
-  const { data: profiles } = await supabase
+  const { data: profiles, error: profilesError } = await supabase
     .from('profiles').select('user_id, discord_id, iracing_name, display_name')
     .not('discord_id', 'is', null);
+  if (profilesError) { await throttledBotLog(`syncTeamRoles:profiles:${describeError(profilesError)}`, '[syncTeamRoles] profiles fout:', describeError(profilesError)); return; }
 
   if (!profiles?.length) return;
 
-  const { data: memberships } = await supabase
+  const { data: memberships, error: membershipsError } = await supabase
     .from('team_memberships').select('user_id, team_id');
+  if (membershipsError) { await throttledBotLog(`syncTeamRoles:memberships:${describeError(membershipsError)}`, '[syncTeamRoles] memberships fout:', describeError(membershipsError)); return; }
 
-  const { data: adminRoles } = await supabase
+  const { data: adminRoles, error: adminRolesError } = await supabase
     .from('user_roles').select('user_id, role')
     .in('role', ['admin', 'super_admin', 'moderator']);
+  if (adminRolesError) { await throttledBotLog(`syncTeamRoles:roles:${describeError(adminRolesError)}`, '[syncTeamRoles] user_roles fout:', describeError(adminRolesError)); return; }
 
   const syncCfg = loadConfig();
+  const teamsById = new Map(teams.map(team => [team.id, team]));
+  const membershipsByUserId = new Map();
+  for (const membership of memberships || []) {
+    const current = membershipsByUserId.get(membership.user_id) || [];
+    current.push(membership);
+    membershipsByUserId.set(membership.user_id, current);
+  }
+  const rolesByUserId = new Map();
+  for (const role of adminRoles || []) {
+    const current = rolesByUserId.get(role.user_id) || [];
+    current.push(role.role);
+    rolesByUserId.set(role.user_id, current);
+  }
 
   for (const profile of profiles) {
     try {
@@ -978,8 +1208,8 @@ async function syncTeamRoles() {
       }
 
       // Team rollen
-      const userTeams = memberships?.filter(m => m.user_id === profile.user_id) || [];
-      const expectedRoleIds = userTeams.map(m => teams.find(t => t.id === m.team_id)?.discord_role_id).filter(Boolean);
+      const userTeams = membershipsByUserId.get(profile.user_id) || [];
+      const expectedRoleIds = userTeams.map(m => teamsById.get(m.team_id)?.discord_role_id).filter(Boolean);
 
       for (const team of teams) {
         if (!team.discord_role_id) continue;
@@ -991,7 +1221,8 @@ async function syncTeamRoles() {
 
       // Admin rol sync
       if (syncCfg.admin_role_id) {
-        const isAdmin = adminRoles?.some(r => r.user_id === profile.user_id && ['admin', 'super_admin'].includes(r.role));
+        const userRoles = rolesByUserId.get(profile.user_id) || [];
+        const isAdmin = userRoles.some(role => ['admin', 'super_admin'].includes(role));
         const hasAdminRole = member.roles.cache.has(syncCfg.admin_role_id);
         if (isAdmin && !hasAdminRole) await member.roles.add(syncCfg.admin_role_id).catch(() => {});
         if (!isAdmin && hasAdminRole) await member.roles.remove(syncCfg.admin_role_id).catch(() => {});
@@ -999,7 +1230,8 @@ async function syncTeamRoles() {
 
       // Steward rol sync
       if (syncCfg.steward_role_id) {
-        const isSteward = adminRoles?.some(r => r.user_id === profile.user_id && r.role === 'moderator');
+        const userRoles = rolesByUserId.get(profile.user_id) || [];
+        const isSteward = userRoles.includes('moderator');
         const hasStewardRole = member.roles.cache.has(syncCfg.steward_role_id);
         if (isSteward && !hasStewardRole) await member.roles.add(syncCfg.steward_role_id).catch(() => {});
         if (!isSteward && hasStewardRole) await member.roles.remove(syncCfg.steward_role_id).catch(() => {});
@@ -1291,7 +1523,7 @@ const COMMANDS = [
 ].map(c => c.toJSON());
 
 async function registerCommands(guildId) {
-  const rest = new REST().setToken(process.env.DISCORD_BOT_TOKEN);
+  const rest = new REST().setToken(DISCORD_BOT_TOKEN);
   try {
     await rest.put(Routes.applicationGuildCommands(client.application.id, guildId), { body: COMMANDS });
     console.log('[3SM Bot] Slash commands geregistreerd');
@@ -1302,15 +1534,27 @@ async function registerCommands(guildId) {
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'koppel')        await handleKoppel(interaction);
-      if (interaction.commandName === 'races')         await handleRaces(interaction);
-      if (interaction.commandName === 'aanmelden')     await handleRegister(interaction, 'register');
-      if (interaction.commandName === 'afmelden')      await handleRegister(interaction, 'unregister');
-      if (interaction.commandName === 'setup-server')  await handleSetupServer(interaction);
+      switch (interaction.commandName) {
+        case 'koppel':
+          await handleKoppel(interaction);
+          break;
+        case 'races':
+          await handleRaces(interaction);
+          break;
+        case 'aanmelden':
+          await handleRegister(interaction, 'register');
+          break;
+        case 'afmelden':
+          await handleRegister(interaction, 'unregister');
+          break;
+        case 'setup-server':
+          await handleSetupServer(interaction);
+          break;
+      }
     } else if (interaction.isButton()) {
       const [action, raceId] = interaction.customId.split('_');
       if (action === 'aanmelden') await handleButtonReg(interaction, raceId, 'register');
-      if (action === 'afmelden')  await handleButtonReg(interaction, raceId, 'unregister');
+      else if (action === 'afmelden')  await handleButtonReg(interaction, raceId, 'unregister');
     }
   } catch (e) { botLog('[interaction]', describeError(e)); }
 });
@@ -1319,7 +1563,6 @@ client.on('interactionCreate', async (interaction) => {
 async function handleKoppel(interaction) {
   const discordId  = interaction.user.id;
   const discordTag = interaction.user.tag;
-  const siteUrl    = process.env.SITE_URL || 'https://jouw-site.nl';
 
   // Maak een token aan in Supabase
   const { data, error } = await supabase
@@ -1329,10 +1572,11 @@ async function handleKoppel(interaction) {
     .single();
 
   if (error || !data?.token) {
+    if (error) await throttledBotLog(`koppel:${describeError(error)}`, '[koppel]', describeError(error));
     return interaction.reply({ content: '❌ Er ging iets mis bij het aanmaken van de koppellink. Probeer het opnieuw.', flags: 64 });
   }
 
-  const link = `${siteUrl}/koppel?token=${data.token}`;
+  const link = `${SITE_URL}/koppel?token=${data.token}`;
   botLog(`🔗 Koppellink aangevraagd door **${discordTag}**`);
 
   return interaction.reply({
@@ -1345,10 +1589,14 @@ async function handleKoppel(interaction) {
 async function handleRaces(interaction) {
   const discordId = interaction.user.id;
 
-  const { data: races } = await supabase
+  const { data: races, error: racesError } = await supabase
     .from('races').select('id, name, track, round, race_date')
     .eq('status', 'upcoming').gte('race_date', new Date().toISOString())
     .order('race_date', { ascending: true }).limit(5);
+  if (racesError) {
+    await throttledBotLog(`races-command:${describeError(racesError)}`, '[races]', describeError(racesError));
+    return interaction.reply({ content: '❌ Races konden niet worden opgehaald. Probeer het later opnieuw.', flags: 64 });
+  }
 
   if (!races?.length) {
     return interaction.reply({ content: 'Geen aankomende races gevonden.', flags: 64 });
@@ -1357,24 +1605,30 @@ async function handleRaces(interaction) {
   const next = races[0];
   const nextRonde = next.round != null ? `R${next.round} — ${next.name}` : next.name;
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles').select('user_id').eq('discord_id', discordId).maybeSingle();
+  if (profileError) {
+    await throttledBotLog(`races-profile:${describeError(profileError)}`, '[races:profile]', describeError(profileError));
+  }
 
   let isRegistered = false;
-  if (profile) {
-    const { data: raceReg } = await supabase
+  if (profile && !profileError) {
+    const { data: raceReg, error: raceRegError } = await supabase
       .from('race_registrations').select('id')
       .eq('race_id', next.id).eq('user_id', profile.user_id).maybeSingle();
+    if (raceRegError) await throttledBotLog(`races-registration:${describeError(raceRegError)}`, '[races:registration]', describeError(raceRegError));
 
     if (raceReg) {
       isRegistered = true;
-    } else {
-      const { data: race } = await supabase
+    } else if (!raceRegError) {
+      const { data: race, error: raceError } = await supabase
         .from('races').select('league_id').eq('id', next.id).maybeSingle();
-      if (race?.league_id) {
-        const { data: seasonReg } = await supabase
+      if (raceError) await throttledBotLog(`races-league:${describeError(raceError)}`, '[races:league]', describeError(raceError));
+      if (race?.league_id && !raceError) {
+        const { data: seasonReg, error: seasonRegError } = await supabase
           .from('season_registrations').select('id')
           .eq('league_id', race.league_id).eq('user_id', profile.user_id).maybeSingle();
+        if (seasonRegError) await throttledBotLog(`races-season:${describeError(seasonRegError)}`, '[races:season]', describeError(seasonRegError));
         isRegistered = !!seasonReg;
       }
     }
@@ -1409,23 +1663,28 @@ async function handleRaces(interaction) {
   );
 
   await interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-  setTimeout(() => interaction.deleteReply().catch(() => {}), 20_000);
+  deleteReplyLater(interaction, 20_000);
 }
 
 // /aanmelden of /afmelden
 async function handleRegister(interaction, action) {
-  const { data: race } = await supabase
+  const { data: race, error } = await supabase
     .from('races').select('id, name').eq('status', 'upcoming')
     .gte('race_date', new Date().toISOString())
     .order('race_date', { ascending: true }).limit(1).maybeSingle();
 
+  if (error) {
+    await throttledBotLog(`register-race:${describeError(error)}`, '[register:race]', describeError(error));
+    return interaction.reply({ content: '❌ Race kon niet worden opgehaald. Probeer het later opnieuw.', flags: 64 });
+  }
   if (!race) return interaction.reply({ content: 'Geen aankomende race gevonden.', flags: 64 });
   await doRegistration(interaction, race.id, race.name, action);
 }
 
 // Button aanmelden/afmelden
 async function handleButtonReg(interaction, raceId, action) {
-  const { data: race } = await supabase.from('races').select('name').eq('id', raceId).maybeSingle();
+  const { data: race, error } = await supabase.from('races').select('name').eq('id', raceId).maybeSingle();
+  if (error) await throttledBotLog(`button-race:${describeError(error)}`, '[button:race]', describeError(error));
   await doRegistration(interaction, raceId, race?.name || 'race', action);
 }
 
@@ -1436,7 +1695,10 @@ async function doRegistration(interaction, raceId, raceName, action) {
     p_action:     action,
   });
 
-  if (error) return interaction.reply({ content: '❌ Er ging iets mis.', flags: 64 });
+  if (error) {
+    await throttledBotLog(`registration-rpc:${describeError(error)}`, '[registration:rpc]', describeError(error));
+    return interaction.reply({ content: '❌ Er ging iets mis.', flags: 64 });
+  }
 
   if (data === 'not_linked') {
     return interaction.reply({
@@ -1450,7 +1712,7 @@ async function doRegistration(interaction, raceId, raceName, action) {
     : `✅ Je bent afgemeld voor **${raceName}**.`;
 
   await interaction.reply({ content: msg, flags: 64 });
-  setTimeout(() => interaction.deleteReply().catch(() => {}), 2_000);
+  deleteReplyLater(interaction, 2_000);
 }
 
 // ── Bot ready ─────────────────────────────────────────────────────────────────
@@ -1462,19 +1724,19 @@ client.once('ready', async () => {
   }
 
   // Elke minuut: race checks + aanmeldingen + koppelingen
-  cron.schedule('* * * * *', () => checkRaces().catch(e => botLog(`[cron:checkRaces] ${describeError(e)}`)));
-  cron.schedule('* * * * *', () => checkAnnouncements().catch(e => botLog(`[cron:announcements] ${describeError(e)}`)));
-  cron.schedule('* * * * *', () => checkNewRegistrations().catch(e => botLog(`[cron:checkRegistrations] ${describeError(e)}`)));
-  cron.schedule('* * * * *', () => checkNewLinks().catch(e => botLog(`[cron:checkLinks] ${describeError(e)}`)));
-  cron.schedule('* * * * *', () => checkProtests().catch(e => botLog(`[cron:checkProtests] ${describeError(e)}`)));
-  cron.schedule('* * * * *', () => checkAbandonPenalties().catch(e => botLog(`[cron:checkAbandon] ${describeError(e)}`)));
-  cron.schedule('* * * * *', () => checkAbandonCorrections().catch(e => botLog(`[cron:checkAbandonCorrections] ${describeError(e)}`)));
-  cron.schedule('* * * * *', () => checkStewardPenalties().catch(e => botLog(`[cron:checkStewardPenalties] ${describeError(e)}`)));
-  cron.schedule('* * * * *', () => checkStewardCorrections().catch(e => botLog(`[cron:checkStewardCorrections] ${describeError(e)}`)));
+  scheduleGuarded('* * * * *', 'checkRaces', checkRaces);
+  scheduleGuarded('* * * * *', 'announcements', checkAnnouncements);
+  scheduleGuarded('* * * * *', 'checkRegistrations', checkNewRegistrations);
+  scheduleGuarded('* * * * *', 'checkLinks', checkNewLinks);
+  scheduleGuarded('* * * * *', 'checkProtests', checkProtests);
+  scheduleGuarded('* * * * *', 'checkAbandon', checkAbandonPenalties);
+  scheduleGuarded('* * * * *', 'checkAbandonCorrections', checkAbandonCorrections);
+  scheduleGuarded('* * * * *', 'checkStewardPenalties', checkStewardPenalties);
+  scheduleGuarded('* * * * *', 'checkStewardCorrections', checkStewardCorrections);
   // Elke 5 minuten: team rol sync
-  cron.schedule('*/5 * * * *', () => syncTeamRoles().catch(e => botLog(`[cron:syncTeamRoles] ${describeError(e)}`)));
+  scheduleGuarded('*/5 * * * *', 'syncTeamRoles', syncTeamRoles);
   // Elk uur: kalender update + token cleanup
-  cron.schedule('0 * * * *', async () => {
+  scheduleGuarded('0 * * * *', 'hourlyMaintenance', async () => {
     await updateCalendarEmbed().catch(e => botLog(`[cron:kalender] ${describeError(e)}`));
     try {
       const { error } = await supabase.from('discord_link_tokens')
@@ -1486,9 +1748,9 @@ client.once('ready', async () => {
     }
   });
 
-  checkRaces().catch(() => {});
-  updateCalendarEmbed().catch(() => {});
-  syncTeamRoles().catch(() => {});
+  runGuarded('checkRaces', checkRaces);
+  runGuarded('startupCalendar', updateCalendarEmbed);
+  runGuarded('syncTeamRoles', syncTeamRoles);
 });
 
-client.login(process.env.DISCORD_BOT_TOKEN);
+client.login(DISCORD_BOT_TOKEN);
