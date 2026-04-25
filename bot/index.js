@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRacePosterAttachment } from './racePoster.js';
+import { createResultPosterAttachment } from './resultPoster.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SENT_FILE   = path.join(__dirname, 'sent_notifications.json');
@@ -34,6 +35,7 @@ if (!SUPABASE_KEY) throw new Error('[config] Missing required environment variab
 const DISCORD_BOT_TOKEN = requireEnv('DISCORD_BOT_TOKEN');
 const SITE_URL = requireEnv('SITE_URL').replace(/\/$/, '');
 const ENABLE_RACE_POSTERS = process.env.DISCORD_RACE_POSTERS === 'true';
+const ENABLE_RESULT_POSTERS = process.env.DISCORD_RESULT_POSTERS === 'true';
 const RACE_SELECT = 'id, name, track, round, race_date, status, race_type, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, car_class)';
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
@@ -467,6 +469,26 @@ function buildPodiumEmbed(race, results) {
   return embed;
 }
 
+async function sendResultPoster(channel, race, results) {
+  const embed = buildPodiumEmbed(race, results);
+
+  if (!ENABLE_RESULT_POSTERS) {
+    return channel.send({ embeds: [embed] });
+  }
+
+  try {
+    const poster = await createResultPosterAttachment(race, results);
+    const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
+    return channel.send({
+      content: '🏆 Uitslag is binnen. Voor volledige uitslag: bekijk de website.',
+      files: [attachment],
+    });
+  } catch (e) {
+    await throttledBotLog(`result-poster:${race.id}:${describeError(e)}`, '[resultPoster]', `${race.name}: ${describeError(e)}`);
+    return channel.send({ embeds: [embed] });
+  }
+}
+
 // ── Kalender embed ────────────────────────────────────────────────────────────
 async function buildCalendarEmbed() {
   const { data: races, error } = await supabase
@@ -593,7 +615,7 @@ async function checkCancelled() {
 
 // ── Cron: completed / podium ──────────────────────────────────────────────────
 async function checkCompleted() {
-  const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'completed');
+  const { data: races, error } = await supabase.from('races').select(RACE_SELECT).eq('status', 'completed');
   if (error) { await throttledBotLog(`checkCompleted:${describeError(error)}`, '[checkCompleted]', describeError(error)); return; }
   if (!races?.length) return;
   const channel = await getUitslagenChannel() || await getNotificationChannel();
@@ -604,7 +626,7 @@ async function checkCompleted() {
       .from('race_results').select('position, points, fastest_lap, best_lap, dnf, gap_to_leader, incidents, laps, profiles(display_name)')
       .eq('race_id', race.id).order('position', { ascending: true });
     if (re || !results?.length) continue;
-    try { await channel.send({ embeds: [buildPodiumEmbed(race, results)] }); markSent(race.id, 'podium'); botLog(`🏆 Uitslag verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Podium fout: ${describeError(e)}`); }
+    try { await sendResultPoster(channel, race, results); markSent(race.id, 'podium'); botLog(`🏆 Uitslag verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Podium fout: ${describeError(e)}`); }
   }
 }
 
