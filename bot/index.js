@@ -404,9 +404,10 @@ async function sendRaceReminder(channel, race, key, options = {}) {
 
   try {
     const poster = await createRacePosterAttachment(race, key);
-    embed.setImage(`attachment://${poster.fileName}`);
     const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
-    return channel.send({ ...payload, files: [attachment] });
+    const posterPayload = { files: [attachment] };
+    if (options.components) posterPayload.components = options.components;
+    return channel.send(posterPayload);
   } catch (e) {
     await throttledBotLog(`race-poster:${race.id}:${key}:${describeError(e)}`, '[racePoster]', `${race.name}: ${describeError(e)}`);
     return channel.send(payload);
