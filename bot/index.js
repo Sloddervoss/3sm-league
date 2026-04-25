@@ -82,6 +82,7 @@ function describeError(error) {
 
 const runningJobs = new Set();
 const throttledLogs = new Map();
+const missingSchemaWarnings = new Set();
 const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
 
 function delay(ms) {
@@ -643,6 +644,13 @@ async function processDiscordSyncQueue() {
     .limit(25);
 
   if (error) {
+    if (error.code === 'PGRST205' || /schema cache|discord_sync_queue/i.test(error.message || '')) {
+      if (!missingSchemaWarnings.has('discord_sync_queue')) {
+        missingSchemaWarnings.add('discord_sync_queue');
+        await botLog('[discordSyncQueue] Tabel ontbreekt nog in Supabase. Voer migration 20260425160000_discord_sync_queue.sql uit en herstart daarna de bot.');
+      }
+      return;
+    }
     await throttledBotLog(`discordSyncQueue:${describeError(error)}`, '[discordSyncQueue]', describeError(error));
     return;
   }
