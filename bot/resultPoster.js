@@ -145,6 +145,28 @@ function podiumCard({ x, y, width, height, result, place, color, primary = false
   `;
 }
 
+function trophyIcon({ x, y, scale = 1, color }) {
+  const cupW = 116 * scale;
+  const cupH = 82 * scale;
+  const stemW = 32 * scale;
+  const stemH = 36 * scale;
+  const baseW = 164 * scale;
+  const baseH = 18 * scale;
+  const cupX = x - cupW / 2;
+  const baseX = x - baseW / 2;
+
+  return `
+    <g transform="translate(0 0)">
+      <path d="M${cupX} ${y} H${cupX + cupW} L${cupX + cupW - 18 * scale} ${y + cupH} Q${x} ${y + cupH + 34 * scale} ${cupX + 18 * scale} ${y + cupH} Z" fill="${color}" fill-opacity="0.96"/>
+      <path d="M${cupX} ${y + 24 * scale} H${cupX - 42 * scale} Q${cupX - 40 * scale} ${y + cupH} ${cupX + 16 * scale} ${y + cupH + 2 * scale}" fill="none" stroke="${color}" stroke-width="${17 * scale}" stroke-linecap="round" stroke-opacity="0.82"/>
+      <path d="M${cupX + cupW} ${y + 24 * scale} H${cupX + cupW + 42 * scale} Q${cupX + cupW + 40 * scale} ${y + cupH} ${cupX + cupW - 16 * scale} ${y + cupH + 2 * scale}" fill="none" stroke="${color}" stroke-width="${17 * scale}" stroke-linecap="round" stroke-opacity="0.82"/>
+      <rect x="${x - stemW / 2}" y="${y + cupH + 12 * scale}" width="${stemW}" height="${stemH}" fill="${color}"/>
+      <rect x="${baseX + 26 * scale}" y="${y + cupH + stemH + 12 * scale}" width="${baseW - 52 * scale}" height="${baseH}" rx="${6 * scale}" fill="${color}"/>
+      <rect x="${baseX}" y="${y + cupH + stemH + 34 * scale}" width="${baseW}" height="${baseH}" rx="${6 * scale}" fill="${color}" fill-opacity="0.82"/>
+    </g>
+  `;
+}
+
 function statPanel({ x, y, title, name, value, color }) {
   return `
     <g transform="translate(${x} ${y})">
@@ -225,12 +247,9 @@ function buildResultPosterSvg(race, results) {
       </g>
 
       <g filter="url(#softShadow)">
-        <path d="M742 258 H858 L840 340 Q800 374 760 340 Z" fill="#f7c948" fill-opacity="0.96"/>
-        <path d="M742 282 H700 Q702 340 758 342" fill="none" stroke="#f7c948" stroke-width="17" stroke-linecap="round" stroke-opacity="0.86"/>
-        <path d="M858 282 H900 Q898 340 842 342" fill="none" stroke="#f7c948" stroke-width="17" stroke-linecap="round" stroke-opacity="0.86"/>
-        <rect x="784" y="352" width="32" height="36" fill="#f7c948"/>
-        <rect x="744" y="388" width="112" height="20" rx="6" fill="#f7c948"/>
-        <rect x="718" y="410" width="164" height="18" rx="6" fill="#f7c948" fill-opacity="0.82"/>
+        ${trophyIcon({ x: 800, y: 258, scale: 1, color: MEDAL_COLORS.p1 })}
+        ${trophyIcon({ x: 332, y: 374, scale: 0.46, color: MEDAL_COLORS.p2 })}
+        ${trophyIcon({ x: 1268, y: 374, scale: 0.46, color: MEDAL_COLORS.p3 })}
         ${podiumCard({ x: 585, y: 392, width: 430, height: 232, result: winner, place: 'P1', color: MEDAL_COLORS.p1, primary: true })}
         ${podiumCard({ x: 145, y: 456, width: 375, height: 190, result: second, place: 'P2', color: MEDAL_COLORS.p2 })}
         ${podiumCard({ x: 1080, y: 456, width: 375, height: 190, result: third, place: 'P3', color: MEDAL_COLORS.p3 })}
