@@ -87,6 +87,17 @@ function statusLabel(key, raceStatus) {
   return 'RACE NIGHT';
 }
 
+function posterSubtitle(key, raceDate) {
+  if (key === '15m') return 'OVER 15 MIN';
+  if (key === '1h') return 'OVER 1 UUR';
+  if (key === '24h') {
+    const raceDay = new Date(raceDate).toLocaleDateString('nl-NL', { weekday: 'long', timeZone: 'Europe/Amsterdam' });
+    const todayDay = new Date().toLocaleDateString('nl-NL', { weekday: 'long', timeZone: 'Europe/Amsterdam' });
+    return raceDay === todayDay ? 'RACE VANAVOND' : 'RACE MORGEN';
+  }
+  return '';
+}
+
 function posterAccent(key, raceStatus) {
   const status = key || raceStatus;
   if (status === '15m') return '#ef4444';
@@ -154,6 +165,7 @@ function buildPosterSvg(race, key) {
   const carClass = fitText(race.leagues?.car_class || race.race_type || 'LEAGUE EVENT', 28).toUpperCase();
   const { date, time } = formatPosterDate(race.race_date);
   const status = statusLabel(key, race.status);
+  const subtitle = posterSubtitle(key, race.race_date);
   const formatParts = [
     race.practice_duration ? `P ${race.practice_duration}` : null,
     race.qualifying_duration ? `Q ${race.qualifying_duration}` : null,
@@ -225,6 +237,7 @@ function buildPosterSvg(race, key) {
       <g transform="translate(1135 95)">
         <rect x="0" y="0" width="300" height="58" rx="6" fill="${accent}" fill-opacity="0.92"/>
         <text x="150" y="38" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900" fill="#09090b" letter-spacing="3">${escapeXml(status)}</text>
+        ${subtitle ? `<text x="150" y="82" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" fill="${accent}" letter-spacing="3">${escapeXml(subtitle)}</text>` : ''}
       </g>
 
       <g transform="translate(1125 740)">
