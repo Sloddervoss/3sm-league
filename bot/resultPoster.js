@@ -126,11 +126,11 @@ async function buildTrackLayer(trackName) {
 }
 
 function podiumCard({ x, y, width, height, result, place, color, primary = false }) {
-  const name = fitText(driverName(result), primary ? 22 : 20).toUpperCase();
+  const name = fitText(driverName(result), primary ? 18 : 17).toUpperCase();
   const points = result ? pointsLabel(result.points) : '-- PTS';
   const gap = result?.gap_to_leader ? `+${fitText(result.gap_to_leader, 14)}` : place === 'P1' ? 'WINNER' : '';
   const placeSize = primary ? 48 : 34;
-  const nameSize = primary ? 36 : 25;
+  const nameSize = primary ? (name.length > 16 ? 30 : 36) : (name.length > 15 ? 22 : 25);
   const pointsSize = primary ? 27 : 22;
 
   return `
@@ -192,8 +192,10 @@ function buildResultPosterSvg(race, results) {
   const dnfCount = results.filter(result => result.dnf).length;
   const totalInc = results.reduce((sum, result) => sum + (result.incidents ?? 0), 0);
   const incResults = results.filter(result => result.incidents != null);
-  const title = fitText(race.name || 'Race Results', 34).toUpperCase();
-  const track = fitText(race.track || 'Unknown Circuit', 32).toUpperCase();
+  const title = fitText(race.name || 'Race Results', 24).toUpperCase();
+  const track = fitText(race.track || 'Unknown Circuit', 27).toUpperCase();
+  const titleFontSize = title.length > 22 ? 40 : title.length > 18 ? 44 : 50;
+  const trackFontSize = track.length > 24 ? 22 : 24;
   const round = race.round != null ? `ROUND ${String(race.round).padStart(2, '0')}` : 'RACE RESULTS';
   const stats = [
     `${finishers.length} FINISHERS`,
@@ -241,8 +243,8 @@ function buildResultPosterSvg(race, results) {
 
       <g transform="translate(112 194)">
         <text x="0" y="0" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="40" font-weight="900" fill="#f97316" letter-spacing="2">${escapeXml(round)}</text>
-        <text x="0" y="56" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="50" font-weight="900" fill="#ffffff">${escapeXml(title)}</text>
-        <text x="0" y="94" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#cbd5e1" letter-spacing="2">${escapeXml(track)}</text>
+        <text x="0" y="56" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="${titleFontSize}" font-weight="900" fill="#ffffff">${escapeXml(title)}</text>
+        <text x="0" y="94" font-family="Arial, Helvetica, sans-serif" font-size="${trackFontSize}" font-weight="900" fill="#cbd5e1" letter-spacing="2">${escapeXml(track)}</text>
         <text x="0" y="128" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#94a3b8" letter-spacing="2">${escapeXml(formatDate(race.race_date))}</text>
       </g>
 
