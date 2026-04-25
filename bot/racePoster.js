@@ -145,7 +145,8 @@ async function buildTrackLayer(trackName) {
 
 function buildPosterSvg(race, key) {
   const accent = posterAccent(key, race.status);
-  const round = race.round != null ? `ROUND ${String(race.round).padStart(2, '0')}` : 'RACE NIGHT';
+  const hasRound = race.round != null;
+  const round = hasRound ? `ROUND ${String(race.round).padStart(2, '0')}` : fitText(race.name || 'Race', 36).toUpperCase();
   const track = fitText(race.track || 'Unknown Circuit', 34).toUpperCase();
   const raceName = fitText(race.name || 'Race', 36).toUpperCase();
   const trackFontSize = track.length > 28 ? 56 : track.length > 22 ? 64 : 78;
@@ -202,7 +203,7 @@ function buildPosterSvg(race, key) {
       <g filter="url(#softShadow)" transform="translate(112 265)">
         <text x="0" y="0" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="68" font-weight="900" fill="${accent}" letter-spacing="2">${escapeXml(round)}</text>
         <text x="0" y="94" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="${trackFontSize}" font-weight="900" fill="#ffffff">${escapeXml(track)}</text>
-        <text x="0" y="154" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800" fill="#cbd5e1" letter-spacing="2">${escapeXml(raceName)}</text>
+        ${hasRound ? `<text x="0" y="154" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800" fill="#cbd5e1" letter-spacing="2">${escapeXml(raceName)}</text>` : ''}
       </g>
 
       <g transform="translate(112 595)">
