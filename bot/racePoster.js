@@ -132,7 +132,7 @@ async function buildTrackLayer(trackName) {
     .ensureAlpha()
     .grayscale()
     .tint({ r: 255, g: 255, b: 255 })
-    .modulate({ brightness: 1.7 })
+    .modulate({ brightness: 2.4 })
     .png()
     .toBuffer();
 
@@ -142,7 +142,7 @@ async function buildTrackLayer(trackName) {
   const imageHref = `data:image/png;base64,${layoutBuffer.toString('base64')}`;
   const layerSvg = Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-      <image href="${imageHref}" x="${left}" y="${top}" width="${meta.width || 820}" height="${meta.height || 520}" opacity="0.24"/>
+      <image href="${imageHref}" x="${left}" y="${top}" width="${meta.width || 820}" height="${meta.height || 520}" opacity="0.45"/>
     </svg>
   `);
 
@@ -250,7 +250,6 @@ function buildPosterSvg(race, key) {
       </g>
 
       <text x="112" y="852" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="900" fill="#64748b" letter-spacing="4">3SM // RACE NIGHT</text>
-      <text x="1488" y="852" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="900" fill="#64748b" letter-spacing="4">DISCORD RACE POSTER</text>
     </svg>
   `);
 }
