@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import {
   Client, GatewayIntentBits, EmbedBuilder,
+  AttachmentBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
   REST, Routes, SlashCommandBuilder,
   ChannelType, PermissionFlagsBits,
@@ -10,6 +11,7 @@ import cron from 'node-cron';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRacePosterAttachment } from './racePoster.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SENT_FILE   = path.join(__dirname, 'sent_notifications.json');
@@ -31,6 +33,8 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY?.trim() || process.env.SUP
 if (!SUPABASE_KEY) throw new Error('[config] Missing required environment variable: SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY');
 const DISCORD_BOT_TOKEN = requireEnv('DISCORD_BOT_TOKEN');
 const SITE_URL = requireEnv('SITE_URL').replace(/\/$/, '');
+const ENABLE_RACE_POSTERS = process.env.DISCORD_RACE_POSTERS === 'true';
+const RACE_SELECT = 'id, name, track, round, race_date, status, race_type, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, car_class)';
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const supabase = createClient(
@@ -389,6 +393,26 @@ function buildReminderEmbed(race, key) {
     .setFooter({ text: '3 Stripe Motorsport' }).setTimestamp();
 }
 
+async function sendRaceReminder(channel, race, key, options = {}) {
+  const embed = buildReminderEmbed(race, key);
+  const payload = { embeds: [embed] };
+  if (options.components) payload.components = options.components;
+
+  if (!ENABLE_RACE_POSTERS) {
+    return channel.send(payload);
+  }
+
+  try {
+    const poster = await createRacePosterAttachment(race, key);
+    embed.setImage(`attachment://${poster.fileName}`);
+    const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
+    return channel.send({ ...payload, files: [attachment] });
+  } catch (e) {
+    await throttledBotLog(`race-poster:${race.id}:${key}:${describeError(e)}`, '[racePoster]', `${race.name}: ${describeError(e)}`);
+    return channel.send(payload);
+  }
+}
+
 // ── Podium embed ──────────────────────────────────────────────────────────────
 function buildPodiumEmbed(race, results) {
   const finishers = results.filter(r => !r.dnf);
@@ -512,7 +536,7 @@ async function checkUpcoming() {
   const lookahead = new Date(now.getTime() + 25 * 60 * 60 * 1000);
 
   const { data: races, error } = await supabase
-    .from('races').select('id, name, track, round, race_date')
+    .from('races').select(RACE_SELECT)
     .eq('status', 'upcoming')
     .gte('race_date', now.toISOString())
     .lte('race_date', lookahead.toISOString());
@@ -533,8 +557,7 @@ async function checkUpcoming() {
       }
     }
     try {
-      const embed = buildReminderEmbed(race, activeWindow.key);
-      await channel.send({ embeds: [embed], components: [registrationRow(race.id)] });
+      await sendRaceReminder(channel, race, activeWindow.key, { components: [registrationRow(race.id)] });
       markSent(race.id, activeWindow.key);
       botLog(`🔔 Race melding verstuurd (${activeWindow.key}): **${race.name}**`);
     } catch (err) {
@@ -545,25 +568,25 @@ async function checkUpcoming() {
 
 // ── Cron: live ────────────────────────────────────────────────────────────────
 async function checkLive() {
-  const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'live');
+  const { data: races, error } = await supabase.from('races').select(RACE_SELECT).eq('status', 'live');
   if (error) { await throttledBotLog(`checkLive:${describeError(error)}`, '[checkLive]', describeError(error)); return; }
   if (!races?.length) return;
   const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'live')) continue;
-    try { await channel.send({ embeds: [buildReminderEmbed(race, 'live')] }); markSent(race.id, 'live'); botLog(`🟢 Race gestart melding verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Live melding fout: ${describeError(e)}`); }
+    try { await sendRaceReminder(channel, race, 'live'); markSent(race.id, 'live'); botLog(`🟢 Race gestart melding verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Live melding fout: ${describeError(e)}`); }
   }
 }
 
 // ── Cron: cancelled ───────────────────────────────────────────────────────────
 async function checkCancelled() {
-  const { data: races, error } = await supabase.from('races').select('id, name, track, round, race_date').eq('status', 'cancelled');
+  const { data: races, error } = await supabase.from('races').select(RACE_SELECT).eq('status', 'cancelled');
   if (error) { await throttledBotLog(`checkCancelled:${describeError(error)}`, '[checkCancelled]', describeError(error)); return; }
   if (!races?.length) return;
   const channel = await getNotificationChannel(); if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'cancelled')) continue;
-    try { await channel.send({ embeds: [buildReminderEmbed(race, 'cancelled')] }); markSent(race.id, 'cancelled'); botLog(`❌ Race gecanceld melding verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Cancelled melding fout: ${describeError(e)}`); }
+    try { await sendRaceReminder(channel, race, 'cancelled'); markSent(race.id, 'cancelled'); botLog(`❌ Race gecanceld melding verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Cancelled melding fout: ${describeError(e)}`); }
   }
 }
 
