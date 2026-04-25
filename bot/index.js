@@ -275,6 +275,81 @@ function deleteReplyLater(interaction, ms) {
   setTimeout(() => interaction.deleteReply().catch(() => {}), ms);
 }
 
+async function syncDiscordUser(userId, guild = null, teams = null, syncCfg = null) {
+  const resolvedGuild = guild || await getConfiguredGuild();
+  if (!resolvedGuild) return { synced: false, reason: 'guild_not_configured' };
+
+  const cfg = syncCfg || loadConfig();
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('user_id, discord_id, iracing_name, display_name')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  if (!profile?.discord_id) return { synced: false, reason: 'discord_not_linked' };
+
+  const member = await resolvedGuild.members.fetch(profile.discord_id).catch(() => null);
+  if (!member) return { synced: false, reason: 'member_not_found' };
+
+  const { data: allTeams, error: teamsError } = teams
+    ? { data: teams, error: null }
+    : await supabase.from('teams').select('id, discord_role_id');
+  if (teamsError) throw teamsError;
+
+  const { data: memberships, error: membershipsError } = await supabase
+    .from('team_memberships')
+    .select('team_id')
+    .eq('user_id', userId);
+  if (membershipsError) throw membershipsError;
+
+  const { data: userRoles, error: userRolesError } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId)
+    .in('role', ['admin', 'super_admin', 'moderator']);
+  if (userRolesError) throw userRolesError;
+
+  if (cfg.rijder_role_id && !member.roles.cache.has(cfg.rijder_role_id)) {
+    await member.roles.add(cfg.rijder_role_id).catch(() => {});
+  }
+
+  const nickname = profile.iracing_name || profile.display_name;
+  if (nickname && member.displayName !== nickname) {
+    await member.setNickname(nickname).catch(() => {});
+  }
+
+  const teamIds = new Set((memberships || []).map(m => m.team_id));
+  const expectedTeamRoleIds = new Set((allTeams || [])
+    .filter(team => team.discord_role_id && teamIds.has(team.id))
+    .map(team => team.discord_role_id));
+
+  for (const team of allTeams || []) {
+    if (!team.discord_role_id) continue;
+    const hasRole = member.roles.cache.has(team.discord_role_id);
+    const shouldHave = expectedTeamRoleIds.has(team.discord_role_id);
+    if (shouldHave && !hasRole) await member.roles.add(team.discord_role_id).catch(() => {});
+    if (!shouldHave && hasRole) await member.roles.remove(team.discord_role_id).catch(() => {});
+  }
+
+  const roleNames = new Set((userRoles || []).map(r => r.role));
+  if (cfg.admin_role_id) {
+    const isAdmin = roleNames.has('admin') || roleNames.has('super_admin');
+    const hasAdminRole = member.roles.cache.has(cfg.admin_role_id);
+    if (isAdmin && !hasAdminRole) await member.roles.add(cfg.admin_role_id).catch(() => {});
+    if (!isAdmin && hasAdminRole) await member.roles.remove(cfg.admin_role_id).catch(() => {});
+  }
+
+  if (cfg.steward_role_id) {
+    const isSteward = roleNames.has('moderator');
+    const hasStewardRole = member.roles.cache.has(cfg.steward_role_id);
+    if (isSteward && !hasStewardRole) await member.roles.add(cfg.steward_role_id).catch(() => {});
+    if (!isSteward && hasStewardRole) await member.roles.remove(cfg.steward_role_id).catch(() => {});
+  }
+
+  return { synced: true, discordId: profile.discord_id };
+}
+
 // ── Registration buttons ──────────────────────────────────────────────────────
 function registrationRow(raceId) {
   return new ActionRowBuilder().addComponents(
@@ -557,6 +632,67 @@ async function checkNewLinks() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function processDiscordSyncQueue() {
+  const { data: items, error } = await supabase
+    .from('discord_sync_queue')
+    .select('id, user_id, reason, attempts')
+    .is('processed_at', null)
+    .lt('attempts', 5)
+    .order('created_at', { ascending: true })
+    .limit(25);
+
+  if (error) {
+    await throttledBotLog(`discordSyncQueue:${describeError(error)}`, '[discordSyncQueue]', describeError(error));
+    return;
+  }
+  if (!items?.length) return;
+
+  const guild = await getConfiguredGuild();
+  if (!guild) {
+    await throttledBotLog('discordSyncQueue:no-guild', '[discordSyncQueue] Guild niet geconfigureerd');
+    return;
+  }
+
+  const cfg = loadConfig();
+  const { data: teams, error: teamsError } = await supabase.from('teams').select('id, discord_role_id');
+  if (teamsError) {
+    await throttledBotLog(`discordSyncQueue:teams:${describeError(teamsError)}`, '[discordSyncQueue:teams]', describeError(teamsError));
+    return;
+  }
+
+  for (const item of items) {
+    const attempts = (item.attempts || 0) + 1;
+    await supabase.from('discord_sync_queue').update({ attempts }).eq('id', item.id);
+
+    try {
+      const result = await syncDiscordUser(item.user_id, guild, teams || [], cfg);
+      const { error: updateError } = await supabase
+        .from('discord_sync_queue')
+        .update({
+          processed_at: new Date().toISOString(),
+          attempts,
+          last_error: result.synced ? null : result.reason,
+        })
+        .eq('id', item.id);
+
+      if (updateError) {
+        await throttledBotLog(`discordSyncQueue:update:${describeError(updateError)}`, '[discordSyncQueue:update]', describeError(updateError));
+      }
+
+      if (result.synced) {
+        botLog(`🔁 Discord sync verwerkt: **${item.user_id}** (${item.reason})`);
+      }
+    } catch (e) {
+      const message = describeError(e);
+      await supabase
+        .from('discord_sync_queue')
+        .update({ attempts, last_error: message })
+        .eq('id', item.id);
+      await throttledBotLog(`discordSyncQueue:item:${item.user_id}:${message}`, `[discordSyncQueue] ${item.user_id}: ${message}`);
+    }
+  }
+}
 
 const penaltyLabels = {
   warning:          'Waarschuwing',
@@ -1728,6 +1864,7 @@ client.once('ready', async () => {
   scheduleGuarded('* * * * *', 'announcements', checkAnnouncements);
   scheduleGuarded('* * * * *', 'checkRegistrations', checkNewRegistrations);
   scheduleGuarded('* * * * *', 'checkLinks', checkNewLinks);
+  scheduleGuarded('* * * * *', 'discordSyncQueue', processDiscordSyncQueue);
   scheduleGuarded('* * * * *', 'checkProtests', checkProtests);
   scheduleGuarded('* * * * *', 'checkAbandon', checkAbandonPenalties);
   scheduleGuarded('* * * * *', 'checkAbandonCorrections', checkAbandonCorrections);
@@ -1749,6 +1886,7 @@ client.once('ready', async () => {
   });
 
   runGuarded('checkRaces', checkRaces);
+  runGuarded('discordSyncQueue', processDiscordSyncQueue);
   runGuarded('startupCalendar', updateCalendarEmbed);
   runGuarded('syncTeamRoles', syncTeamRoles);
 });
