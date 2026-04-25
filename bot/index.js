@@ -405,7 +405,7 @@ async function sendRaceReminder(channel, race, key, options = {}) {
   try {
     const poster = await createRacePosterAttachment(race, key);
     const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
-    const posterPayload = { content: embed.data.title, files: [attachment] };
+    const posterPayload = { files: [attachment] };
     if (options.components) posterPayload.components = options.components;
     return channel.send(posterPayload);
   } catch (e) {
