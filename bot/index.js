@@ -127,6 +127,11 @@ async function deleteSentMessage(message, label) {
   await message.delete().catch(e => throttledBotLog(`${label}:rollback:${describeError(e)}`, `${label} rollback delete fout: ${describeError(e)}`));
 }
 
+function cleanupPosterFile(filePath) {
+  if (!filePath) return;
+  fs.promises.unlink(filePath).catch(() => {});
+}
+
 async function runGuarded(name, task) {
   if (runningJobs.has(name)) {
     await throttledBotLog(`cron:${name}:overlap`, `[cron:${name}] vorige run loopt nog, deze run overgeslagen`);
@@ -415,10 +420,14 @@ async function sendRaceReminder(channel, race, key, options = {}) {
 
   try {
     const poster = await createRacePosterAttachment(race, key);
-    const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
-    const posterPayload = { files: [attachment] };
-    if (options.components) posterPayload.components = options.components;
-    return channel.send(posterPayload);
+    try {
+      const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
+      const posterPayload = { files: [attachment] };
+      if (options.components) posterPayload.components = options.components;
+      return await channel.send(posterPayload);
+    } finally {
+      cleanupPosterFile(poster.outputPath);
+    }
   } catch (e) {
     await throttledBotLog(`race-poster:${race.id}:${key}:${describeError(e)}`, '[racePoster]', `${race.name}: ${describeError(e)}`);
     return channel.send(payload);
@@ -492,10 +501,14 @@ async function sendResultPoster(channel, race, results) {
 
   try {
     const poster = await createResultPosterAttachment(race, results);
-    const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
-    return channel.send({
-      files: [attachment],
-    });
+    try {
+      const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
+      return await channel.send({
+        files: [attachment],
+      });
+    } finally {
+      cleanupPosterFile(poster.outputPath);
+    }
   } catch (e) {
     await throttledBotLog(`result-poster:${race.id}:${describeError(e)}`, '[resultPoster]', `${race.name}: ${describeError(e)}`);
     return channel.send({ embeds: [embed] });
@@ -546,8 +559,12 @@ async function refreshResultMessage(raceId, reason = 'steward') {
   if (ENABLE_RESULT_POSTERS) {
     try {
       const poster = await createResultPosterAttachment(race, results, { updated: true, reason });
-      const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
-      await message.edit({ content: null, embeds: [], attachments: [], files: [attachment] });
+      try {
+        const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
+        await message.edit({ content: null, embeds: [], attachments: [], files: [attachment] });
+      } finally {
+        cleanupPosterFile(poster.outputPath);
+      }
       markSent(raceId, 'podium', {
         ...sent,
         message_id: message.id,
