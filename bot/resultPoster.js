@@ -178,7 +178,7 @@ function statPanel({ x, y, title, name, value, color }) {
   `;
 }
 
-function buildResultPosterSvg(race, results) {
+function buildResultPosterSvg(race, results, options = {}) {
   const finishers = results.filter(result => !result.dnf);
   const podium = finishers.slice(0, 3);
   const winner = podium[0];
@@ -202,6 +202,10 @@ function buildResultPosterSvg(race, results) {
     `${dnfCount} DNF`,
     incResults.length ? `${totalInc} INC TOTAAL` : null,
   ].filter(Boolean).join('  /  ');
+  const updated = Boolean(options.updated);
+  const footerText = updated
+    ? 'Uitslag aangepast na steward beslissing'
+    : 'Voor volledige uitslag: bekijk de website';
 
   return Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
@@ -241,6 +245,13 @@ function buildResultPosterSvg(race, results) {
         <text x="0" y="44" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" fill="#f7c948" letter-spacing="6">OFFICIAL RESULTS</text>
       </g>
 
+      ${updated ? `
+        <g transform="translate(1130 92)">
+          <rect x="0" y="0" width="330" height="56" rx="7" fill="#f97316" fill-opacity="0.92"/>
+          <text x="165" y="36" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" fill="#09090b" letter-spacing="2">UITSLAG AANGEPAST</text>
+        </g>
+      ` : ''}
+
       <g transform="translate(112 194)">
         <text x="0" y="0" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="40" font-weight="900" fill="#f97316" letter-spacing="2">${escapeXml(round)}</text>
         <text x="0" y="56" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="${titleFontSize}" font-weight="900" fill="#ffffff">${escapeXml(title)}</text>
@@ -275,17 +286,18 @@ function buildResultPosterSvg(race, results) {
       })}
 
       <text x="800" y="835" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#94a3b8" letter-spacing="3">${escapeXml(stats)}</text>
-      <text x="800" y="868" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#f7c948" letter-spacing="2">Voor volledige uitslag: bekijk de website</text>
+      <text x="800" y="868" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#f7c948" letter-spacing="2">${escapeXml(footerText)}</text>
     </svg>
   `);
 }
 
-export async function createResultPosterAttachment(race, results) {
+export async function createResultPosterAttachment(race, results, options = {}) {
   fs.mkdirSync(POSTER_DIR, { recursive: true });
 
-  const fileName = `${slugify(race.name)}-${slugify(race.track)}-results.png`;
+  const suffix = options.updated ? 'results-updated' : 'results';
+  const fileName = `${slugify(race.name)}-${slugify(race.track)}-${suffix}.png`;
   const outputPath = path.join(POSTER_DIR, fileName);
-  const svg = buildResultPosterSvg(race, results);
+  const svg = buildResultPosterSvg(race, results, options);
   const composites = [];
   const trackLayer = await buildTrackLayer(race.track);
   if (trackLayer) composites.push(trackLayer);
