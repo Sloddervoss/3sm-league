@@ -179,12 +179,21 @@ function saveConfig(data) {
 function loadSent() {
   return readJsonFile(SENT_FILE, {});
 }
-function markSent(raceId, type) {
+function sentKey(raceId, type) {
+  return `${raceId}_${type}`;
+}
+function markSent(raceId, type, meta = null) {
   const sent = loadSent();
-  sent[`${raceId}_${type}`] = new Date().toISOString();
+  const sentAt = new Date().toISOString();
+  sent[sentKey(raceId, type)] = meta ? { sent_at: sentAt, ...meta } : sentAt;
   writeJsonFile(SENT_FILE, sent);
 }
-function wasSent(raceId, type) { return !!loadSent()[`${raceId}_${type}`]; }
+function getSent(raceId, type) { return loadSent()[sentKey(raceId, type)]; }
+function getSentMeta(raceId, type) {
+  const entry = getSent(raceId, type);
+  return entry && typeof entry === 'object' ? entry : null;
+}
+function wasSent(raceId, type) { return !!getSent(raceId, type); }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const WINDOWS = [
@@ -417,7 +426,7 @@ async function sendRaceReminder(channel, race, key, options = {}) {
 }
 
 // ── Podium embed ──────────────────────────────────────────────────────────────
-function buildPodiumEmbed(race, results) {
+function buildPodiumEmbed(race, results, options = {}) {
   const finishers = results.filter(r => !r.dnf);
   const podium    = finishers.slice(0, 3);
   const fastest   = results.find(r => r.fastest_lap);
@@ -432,7 +441,9 @@ function buildPodiumEmbed(race, results) {
   const embed = new EmbedBuilder()
     .setColor(0xf59e0b)
     .setTitle(`🏆  Race uitslag — ${race.name}`)
-    .setDescription(`**${rondeName(race)}** is afgelopen! Bekijk de volledige uitslag op de site.`)
+    .setDescription(options.updated
+      ? `**${rondeName(race)}** is aangepast na een steward beslissing. Bekijk de volledige uitslag op de site.`
+      : `**${rondeName(race)}** is afgelopen! Bekijk de volledige uitslag op de site.`)
     .addFields(
       { name: '🗓️ Circuit', value: `${race.track} · ${fmtDate(race.race_date)}`, inline: false },
       { name: '🏅 Podium',  value: podiumLines || 'Geen resultaten',             inline: false },
@@ -463,6 +474,9 @@ function buildPodiumEmbed(race, results) {
   ].filter(Boolean).join('  ·  ');
 
   if (statsLine) embed.addFields({ name: '\u200b', value: statsLine, inline: false });
+  if (options.updated) {
+    embed.addFields({ name: '⚖️ Update', value: 'Uitslag aangepast na steward beslissing.', inline: false });
+  }
 
   embed.setFooter({ text: '3 Stripe Motorsport' }).setTimestamp();
 
@@ -486,6 +500,82 @@ async function sendResultPoster(channel, race, results) {
     await throttledBotLog(`result-poster:${race.id}:${describeError(e)}`, '[resultPoster]', `${race.name}: ${describeError(e)}`);
     return channel.send({ embeds: [embed] });
   }
+}
+
+async function fetchRaceResults(raceId) {
+  return supabase
+    .from('race_results')
+    .select('position, points, fastest_lap, best_lap, dnf, gap_to_leader, incidents, laps, profiles(display_name)')
+    .eq('race_id', raceId)
+    .order('position', { ascending: true });
+}
+
+async function refreshResultMessage(raceId, reason = 'steward') {
+  if (!raceId) return false;
+  const sent = getSentMeta(raceId, 'podium');
+  if (!sent?.message_id || !sent?.channel_id) return false;
+
+  const { data: race, error: raceError } = await supabase
+    .from('races')
+    .select(RACE_SELECT)
+    .eq('id', raceId)
+    .maybeSingle();
+  if (raceError || !race) {
+    await throttledBotLog(`result-refresh:race:${raceId}:${describeError(raceError || 'not found')}`, '[resultRefresh]', describeError(raceError || 'Race niet gevonden'));
+    return false;
+  }
+
+  const { data: results, error: resultsError } = await fetchRaceResults(raceId);
+  if (resultsError || !results?.length) {
+    await throttledBotLog(`result-refresh:results:${raceId}:${describeError(resultsError || 'geen resultaten')}`, '[resultRefresh]', describeError(resultsError || 'Geen resultaten'));
+    return false;
+  }
+
+  const channel = await client.channels.fetch(sent.channel_id).catch(() => null);
+  if (!channel) {
+    await throttledBotLog(`result-refresh:channel:${sent.channel_id}`, '[resultRefresh] Uitslagenbericht kanaal niet gevonden');
+    return false;
+  }
+
+  const message = await channel.messages.fetch(sent.message_id).catch(() => null);
+  if (!message) {
+    await throttledBotLog(`result-refresh:message:${sent.message_id}`, '[resultRefresh] Uitslagenbericht niet gevonden');
+    return false;
+  }
+
+  if (ENABLE_RESULT_POSTERS) {
+    try {
+      const poster = await createResultPosterAttachment(race, results, { updated: true, reason });
+      const attachment = new AttachmentBuilder(poster.outputPath, { name: poster.fileName });
+      await message.edit({ content: null, embeds: [], attachments: [], files: [attachment] });
+      markSent(raceId, 'podium', {
+        ...sent,
+        message_id: message.id,
+        channel_id: channel.id,
+        mode: 'poster',
+        updated_at: new Date().toISOString(),
+        update_reason: reason,
+      });
+      botLog(`🏆 Uitslagposter bijgewerkt na steward beslissing: **${race.name}**`);
+      return true;
+    } catch (e) {
+      await throttledBotLog(`result-refresh-poster:${raceId}:${describeError(e)}`, '[resultRefresh]', describeError(e));
+    }
+  }
+
+  const embed = buildPodiumEmbed(race, results, { updated: true });
+  await message.edit({ content: null, embeds: [embed], attachments: [] }).catch(async e => {
+    await throttledBotLog(`result-refresh-embed:${raceId}:${describeError(e)}`, '[resultRefresh]', describeError(e));
+  });
+  markSent(raceId, 'podium', {
+    ...sent,
+    message_id: message.id,
+    channel_id: channel.id,
+    mode: 'embed',
+    updated_at: new Date().toISOString(),
+    update_reason: reason,
+  });
+  return true;
 }
 
 // ── Kalender embed ────────────────────────────────────────────────────────────
@@ -621,11 +711,17 @@ async function checkCompleted() {
   if (!channel) return;
   for (const race of races) {
     if (wasSent(race.id, 'podium')) continue;
-    const { data: results, error: re } = await supabase
-      .from('race_results').select('position, points, fastest_lap, best_lap, dnf, gap_to_leader, incidents, laps, profiles(display_name)')
-      .eq('race_id', race.id).order('position', { ascending: true });
+    const { data: results, error: re } = await fetchRaceResults(race.id);
     if (re || !results?.length) continue;
-    try { await sendResultPoster(channel, race, results); markSent(race.id, 'podium'); botLog(`🏆 Uitslag verstuurd: **${race.name}**`); } catch (e) { botLog(`❌ Podium fout: ${describeError(e)}`); }
+    try {
+      const msg = await sendResultPoster(channel, race, results);
+      markSent(race.id, 'podium', {
+        message_id: msg.id,
+        channel_id: channel.id,
+        mode: ENABLE_RESULT_POSTERS ? 'poster' : 'embed',
+      });
+      botLog(`🏆 Uitslag verstuurd: **${race.name}**`);
+    } catch (e) { botLog(`❌ Podium fout: ${describeError(e)}`); }
   }
 }
 
@@ -777,7 +873,7 @@ function buildCategoryBadge(category) {
 async function checkProtests() {
   const { data, error } = await supabase
     .from('protests')
-    .select('id, status, notified, created_at, decided_at, penalty_type, penalty_points, penalty_category, time_penalty_seconds, grid_penalty_places, race_ban_next, steward_notes, races(name, track), accused:profiles!protests_accused_user_id_fkey(display_name, iracing_name)')
+    .select('id, race_id, status, notified, created_at, decided_at, penalty_type, penalty_points, penalty_category, time_penalty_seconds, grid_penalty_places, race_ban_next, steward_notes, races(name, track), accused:profiles!protests_accused_user_id_fkey(display_name, iracing_name)')
     .order('created_at', { ascending: false })
     .limit(20);
   if (error) { await throttledBotLog(`checkProtests:${describeError(error)}`, '[checkProtests]', describeError(error)); return; }
@@ -867,6 +963,9 @@ async function checkProtests() {
         continue;
       }
       botLog(`⚖️ Steward beslissing verstuurd: **${protest.races?.name}** → ${accusedName} — ${penaltyText}`);
+      if (protest.status === 'resolved') {
+        await refreshResultMessage(protest.race_id, 'protest_resolved');
+      }
     }
   }
 }
@@ -963,6 +1062,7 @@ async function checkStewardPenalties() {
     }
 
     botLog(`⚡ Steward actie verstuurd: **${driverName}** — ${raceName} (${penaltyText})`);
+    await refreshResultMessage(penalty.race_id, 'steward_penalty');
   }
 }
 
@@ -970,7 +1070,7 @@ async function checkStewardPenalties() {
 async function checkStewardCorrections() {
   const { data, error } = await supabase
     .from('penalties')
-    .select('id, user_id, discord_message_id, races(name)')
+    .select('id, race_id, user_id, discord_message_id, races(name)')
     .eq('steward_initiated', true)
     .eq('revoked', true)
     .eq('notified', true)
@@ -1016,6 +1116,7 @@ async function checkStewardCorrections() {
     }
 
     botLog(`✏️ Steward correctie verstuurd: **${driverName}** — ${raceName}`);
+    await refreshResultMessage(penalty.race_id, 'steward_correction');
   }
 }
 
@@ -1074,6 +1175,7 @@ async function checkAbandonPenalties() {
     }
 
     botLog(`⚠️ Abandon melding verstuurd: **${driverName}** — ${raceName} (-${deduction}pts)`);
+    await refreshResultMessage(penalty.race_id, 'abandon_penalty');
   }
 }
 
@@ -1081,7 +1183,7 @@ async function checkAbandonPenalties() {
 async function checkAbandonCorrections() {
   const { data, error } = await supabase
     .from('penalties')
-    .select('id, user_id, discord_message_id, races(name)')
+    .select('id, race_id, user_id, discord_message_id, races(name)')
     .eq('source', 'abandon')
     .eq('revoked', true)
     .eq('notified', true)
@@ -1128,6 +1230,7 @@ async function checkAbandonCorrections() {
     }
 
     botLog(`✏️ Correctie verstuurd: **${driverName}** — ${raceName}`);
+    await refreshResultMessage(penalty.race_id, 'abandon_correction');
   }
 }
 
