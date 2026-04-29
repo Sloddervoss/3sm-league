@@ -88,6 +88,8 @@ type DnfPenaltyRow = {
   revoked: boolean;
 };
 
+const isActiveDnfReview = (penalty: DnfPenaltyRow) => !penalty.revoked;
+
 type SpProfile = {
   user_id: string;
   display_name: string | null;
@@ -578,6 +580,12 @@ const StewardPage = () => {
 
   const removeDnfPenalty = useMutation({
     mutationFn: async ({ result, penalty }: { result: DnfResultRow; penalty: DnfPenaltyRow }) => {
+      if (penalty.source === "normal_dnf") {
+        const { error } = await supabase.from("penalties").delete().eq("id", penalty.id);
+        if (error) throw error;
+        return;
+      }
+
       if (penalty.source === "abandon" && penalty.points_deduction > 0) {
         const { data: rr } = await supabase.from("race_results").select("points").eq("id", result.id).maybeSingle();
         if (rr) {
@@ -871,7 +879,7 @@ const StewardPage = () => {
                     {tab.id === "dnf_check" && (() => {
                       const open = (completedRacesForDnf || []).reduce((n, race) => {
                         const dnfs = (allResultsForDnf || []).filter(r => r.race_id === race.id && r.dnf);
-                        return n + dnfs.filter(r => !(existingAbandonPenalties || []).some(p => p.race_id === r.race_id && p.user_id === r.user_id)).length;
+                        return n + dnfs.filter(r => !(existingAbandonPenalties || []).some(p => isActiveDnfReview(p) && p.race_id === r.race_id && p.user_id === r.user_id)).length;
                       }, 0);
                       return open > 0 ? (
                         <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-red-500/20 text-red-400 border border-red-500/30">{open}</span>
@@ -1261,7 +1269,7 @@ const StewardPage = () => {
               const racesWithDnf = (completedRacesForDnf || []).map(race => {
                 const raceResults = (allResultsForDnf || []).filter(r => r.race_id === race.id).sort((a, b) => a.position - b.position);
                 const dnfResults = raceResults.filter(r => r.dnf === true);
-                const openCount = dnfResults.filter(r => !(existingAbandonPenalties || []).some(p => p.race_id === r.race_id && p.user_id === r.user_id)).length;
+                const openCount = dnfResults.filter(r => !(existingAbandonPenalties || []).some(p => isActiveDnfReview(p) && p.race_id === r.race_id && p.user_id === r.user_id)).length;
                 return { race, dnfResults, openCount };
               }).filter(({ dnfResults }) => dnfResults.length > 0);
 
@@ -1312,7 +1320,7 @@ const StewardPage = () => {
                             {isExpanded && (
                               <div className="border-t border-border divide-y divide-border/40">
                                 {dnfResults.map((result: DnfResultRow) => {
-                                  const reviewed = existingAbandonPenalties?.find(p => p.race_id === result.race_id && p.user_id === result.user_id);
+                                  const reviewed = existingAbandonPenalties?.find(p => isActiveDnfReview(p) && p.race_id === result.race_id && p.user_id === result.user_id);
                                   const driverName = result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
                                   return (
                                     <div key={result.id} className="px-5 py-3 flex items-center gap-4 flex-wrap">
