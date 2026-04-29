@@ -1820,6 +1820,9 @@ const COMMANDS = [
     .setName('races')
     .setDescription('Bekijk aankomende races en meld je aan'),
   new SlashCommandBuilder()
+    .setName('site')
+    .setDescription('Toon de link naar de 3SM website'),
+  new SlashCommandBuilder()
     .setName('aanmelden')
     .setDescription('Meld je aan voor de eerstvolgende race'),
   new SlashCommandBuilder()
@@ -1850,6 +1853,9 @@ client.on('interactionCreate', async (interaction) => {
         case 'races':
           await handleRaces(interaction);
           break;
+        case 'site':
+          await handleSite(interaction);
+          break;
         case 'aanmelden':
           await handleRegister(interaction, 'register');
           break;
@@ -1867,6 +1873,14 @@ client.on('interactionCreate', async (interaction) => {
     }
   } catch (e) { botLog('[interaction]', describeError(e)); }
 });
+
+// /site
+async function handleSite(interaction) {
+  const url = SITE_URL || 'https://3stripemotorsport.cc';
+  return interaction.reply({
+    content: `**3 Stripe Motorsport website**\n${url}/`,
+  });
+}
 
 // /koppel → magic link
 async function handleKoppel(interaction) {
