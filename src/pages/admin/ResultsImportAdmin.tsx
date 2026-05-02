@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FileText, BarChart2, Upload, X, Trash2, Plus } from "lucide-react";
+import { BarChart2, Upload, X, Trash2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   type ImportRow,
   type ProfileRow,
   type RaceOption,
-  parseCsvRows,
   parseIRacingJsonRows,
   matchProfileForImportRow,
 } from "@/lib/importHelpers";
@@ -24,9 +23,8 @@ const ResultsImportAdmin = () => {
   const [importRaceId, setImportRaceId] = useState("");
   const [importRows, setImportRows] = useState<ImportRow[]>([{ ...EMPTY_ROW }]);
   const [pointsConfig] = useState<number[]>(DEFAULT_POINTS);
-  const [csvFileName, setCsvFileName] = useState<string | null>(null);
   const [jsonFileName, setJsonFileName] = useState<string | null>(null);
-  const [importMode, setImportMode] = useState<"manual" | "csv" | "json">("csv");
+  const [importMode, setImportMode] = useState<"manual" | "json">("json");
 
   const { data: profiles } = useQuery({
     queryKey: ["all-profiles"],
@@ -137,7 +135,6 @@ const ResultsImportAdmin = () => {
       queryClient.invalidateQueries({ queryKey: ["latest-race-results"] });
       setImportRaceId("");
       setImportRows([{ ...EMPTY_ROW }]);
-      setCsvFileName(null);
       setJsonFileName(null);
     },
     onError: (err: Error) => toast.error(err.message),
@@ -149,9 +146,6 @@ const ResultsImportAdmin = () => {
 
       {/* Mode toggle */}
       <div className="flex gap-2 mb-6">
-        <button onClick={() => setImportMode("csv")} className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-colors ${importMode === "csv" ? "bg-gradient-racing text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
-          <FileText className="w-4 h-4" /> CSV Upload
-        </button>
         <button onClick={() => setImportMode("json")} className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-colors ${importMode === "json" ? "bg-gradient-racing text-white" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
           <BarChart2 className="w-4 h-4" /> JSON Export
         </button>
@@ -177,102 +171,6 @@ const ResultsImportAdmin = () => {
             </div>
           )}
         </div>
-
-        {/* ── CSV MODE ── */}
-        {importMode === "csv" && (
-          <div>
-            <div className="mb-5 p-4 rounded-md bg-blue-500/10 border border-blue-500/20 text-sm text-blue-300">
-              <div className="font-bold mb-1">📄 iRacing CSV Export</div>
-              <p className="text-xs leading-relaxed mb-2">Download de race resultaten als CSV van <strong>members.iracing.com</strong> → Race Results → Export. De CSV wordt automatisch ingelezen en gekoppeld aan drivers op basis van iRacing naam of Customer ID.</p>
-              <p className="text-xs text-blue-400 font-bold">Verwacht formaat: FinPos, CustID, Display Name, Laps, Best Lap Time, Incidents (iRacing standaard export)</p>
-            </div>
-
-            <div className="mb-5">
-              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">CSV Bestand</label>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-dashed border-border hover:border-primary/50 bg-secondary/50 cursor-pointer transition-colors">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">{csvFileName || "Kies CSV bestand..."}</span>
-                  <input
-                    type="file"
-                    accept=".csv,.txt"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setCsvFileName(file.name);
-                      const reader = new FileReader();
-                      reader.onload = (ev) => {
-                        const text = ev.target?.result as string;
-                        if (!text) return;
-                        const result = parseCsvRows(text);
-                        if (result.error) { toast.error(result.error); return; }
-                        setImportRows(result.rows);
-                        toast.success(`${result.rows.length} drivers geladen uit CSV`);
-                      };
-                      reader.readAsText(file);
-                    }}
-                  />
-                </label>
-                {csvFileName && (
-                  <button onClick={() => { setCsvFileName(null); setImportRows([{ ...EMPTY_ROW }]); }} className="p-2 text-muted-foreground hover:text-destructive transition-colors">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {importRows.length > 0 && importRows[0].display_name && (() => {
-              const unmatched = importRows.filter((row) => !profiles?.find((p: ProfileRow) =>
-                (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
-                (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
-              ));
-              return (
-                <div className="mb-5">
-                  <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} drivers geladen — preview:</div>
-                  <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
-                    <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
-                      <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span className="text-center">FL</span>
-                    </div>
-                    {importRows.slice(0, 10).map((row, i) => {
-                      const matched = profiles?.find((p: ProfileRow) =>
-                        (p.display_name || "").toLowerCase() === row.display_name.toLowerCase() ||
-                        (p.iracing_name || "").toLowerCase() === row.display_name.toLowerCase()
-                      );
-                      return (
-                        <div key={i} className={`grid grid-cols-[3rem_1fr_4rem_8rem_4rem_5rem] gap-2 px-3 py-2 items-center border-b border-border/30 text-sm ${matched ? "" : "opacity-60"}`}>
-                          <span className="font-heading font-bold">{row.position}</span>
-                          <div>
-                            <span>{row.display_name}</span>
-                            {matched ? <span className="ml-2 text-[10px] text-green-400 font-bold">✓ gevonden</span> : <span className="ml-2 text-[10px] text-red-400 font-bold">✗ niet gevonden</span>}
-                          </div>
-                          <span className="text-muted-foreground">{row.laps}</span>
-                          <span className="font-mono text-muted-foreground text-xs">{row.best_lap || "—"}</span>
-                          <span className="text-muted-foreground">{row.incidents}x</span>
-                          <div className="flex items-center justify-center">
-                            <input type="checkbox" checked={row.fastest_lap} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], fastest_lap: e.target.checked }; setImportRows(u); }} className="w-4 h-4 accent-primary cursor-pointer" />
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {importRows.length > 10 && <div className="px-3 py-2 text-xs text-muted-foreground">...en {importRows.length - 10} meer</div>}
-                  </div>
-                  {unmatched.length > 0 && (
-                    <div className="mt-3 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-sm">
-                      <span className="font-bold text-red-400">⚠ {unmatched.length} driver{unmatched.length !== 1 ? "s" : ""} niet gevonden</span>
-                      <span className="text-muted-foreground ml-2">— worden overgeslagen bij import:</span>
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {unmatched.map((row, i) => (
-                          <span key={i} className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/20">{row.display_name}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        )}
 
         {/* ── JSON MODE ── */}
         {importMode === "json" && (
