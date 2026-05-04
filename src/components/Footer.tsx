@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 const DISCORD_URL = "https://discord.gg/F6CM9kC2YY";
 const INSTAGRAM_URL = "https://www.instagram.com/3stripemotorsport";
+const FACEBOOK_URL = "https://www.facebook.com/people/3-Stripe-Motorsport/61589158685020/";
 
 const DiscordIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 245 240" aria-hidden="true" fill="currentColor" {...props}>
@@ -28,6 +29,12 @@ const InstagramIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const FacebookIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" {...props}>
+    <path d="M14.2 8.7V7.1c0-.7.5-.9.9-.9h2.2V2.4l-3-.1c-3.4 0-4.2 2.5-4.2 4.1v2.3H7.4v4.2h2.7v8.8h4.1v-8.8h3.1l.5-4.2h-3.6Z" />
+  </svg>
+);
+
 const socialLinks = [
   {
     label: "Discord",
@@ -40,6 +47,12 @@ const socialLinks = [
     href: INSTAGRAM_URL,
     icon: InstagramIcon,
     className: "hover:border-primary/70 hover:bg-primary/10 hover:text-primary",
+  },
+  {
+    label: "Facebook",
+    href: FACEBOOK_URL,
+    icon: FacebookIcon,
+    className: "hover:border-[#1877F2]/70 hover:bg-[#1877F2]/15 hover:text-[#8ab9ff]",
   },
 ];
 
