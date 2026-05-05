@@ -41,7 +41,7 @@ const Navbar = () => {
           }`}
           aria-pressed={language === lang}
         >
-          {lang === "nl" ? "NL" : "ENG"}
+          {lang === "nl" ? "NL" : "EN"}
         </button>
       ))}
     </div>
