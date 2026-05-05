@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LanguageProvider } from "@/i18n/LanguageContext";
 import Index from "./pages/Index.tsx";
 
 // Lazy-loaded routes (keep Index eager for fastest initial paint)
@@ -48,27 +49,29 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AuthProvider>
-<ErrorBoundary>
-            <Suspense fallback={<RouteFallback />}>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/calendar" element={<CalendarPage />} />
-                <Route path="/standings" element={<StandingsPage />} />
-                <Route path="/drivers" element={<DriversPage />} />
-                <Route path="/teams" element={<TeamsPage />} />
-                <Route path="/results" element={<ResultsPage />} />
-                <Route path="/seasons" element={<SeasonsPage />} />
-                <Route path="/stewards" element={<StewardPage />} />
-                <Route path="/auth" element={<AuthPage />} />
-                <Route path="/admin" element={<AdminPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/koppel" element={<KoppelPage />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </ErrorBoundary>
-        </AuthProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <ErrorBoundary>
+              <Suspense fallback={<RouteFallback />}>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/calendar" element={<CalendarPage />} />
+                  <Route path="/standings" element={<StandingsPage />} />
+                  <Route path="/drivers" element={<DriversPage />} />
+                  <Route path="/teams" element={<TeamsPage />} />
+                  <Route path="/results" element={<ResultsPage />} />
+                  <Route path="/seasons" element={<SeasonsPage />} />
+                  <Route path="/stewards" element={<StewardPage />} />
+                  <Route path="/auth" element={<AuthPage />} />
+                  <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/koppel" element={<KoppelPage />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </ErrorBoundary>
+          </AuthProvider>
+        </LanguageProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

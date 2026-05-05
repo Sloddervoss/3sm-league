@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 const navItems = [
   { label: "Home", path: "/", icon: Flag },
@@ -18,9 +19,33 @@ const Navbar = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, isAdmin, signOut } = useAuth();
+  const { language, setLanguage } = useLanguage();
 
   const showDesktop = isAdmin ? "xl:flex" : "lg:flex";
   const hideDesktop = isAdmin ? "xl:hidden" : "lg:hidden";
+  const LanguageSwitch = ({ className = "" }: { className?: string }) => (
+    <div
+      className={`inline-flex h-8 items-center rounded-md border border-border bg-card/40 p-0.5 ${className}`}
+      aria-label={language === "nl" ? "Taal kiezen" : "Choose language"}
+      data-no-translate
+    >
+      {(["nl", "en"] as const).map((lang) => (
+        <button
+          key={lang}
+          type="button"
+          onClick={() => setLanguage(lang)}
+          className={`h-7 min-w-9 rounded px-2 text-[11px] font-black uppercase tracking-wide transition-colors ${
+            language === lang
+              ? "bg-gradient-racing text-white shadow-sm shadow-primary/20"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          aria-pressed={language === lang}
+        >
+          {lang === "nl" ? "NL" : "ENG"}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
@@ -62,6 +87,7 @@ const Navbar = () => {
           })}
 
           <div className="w-px h-6 bg-border mx-2" />
+          <LanguageSwitch className="mr-2" />
 
           {user ? (
             <div className="flex items-center gap-1">
@@ -134,6 +160,10 @@ const Navbar = () => {
           animate={{ opacity: 1, y: 0 }}
           className={`${hideDesktop} bg-card border-b border-border px-4 pb-4`}
         >
+          <div className="flex items-center justify-between py-3">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">Taal</span>
+            <LanguageSwitch />
+          </div>
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
