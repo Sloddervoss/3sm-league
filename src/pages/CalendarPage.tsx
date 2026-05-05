@@ -42,18 +42,6 @@ const CalendarPage = () => {
     },
   });
 
-  const { data: seasonRegCount } = useQuery({
-    queryKey: ["season-reg-count", leagues?.[0]?.id],
-    enabled: !!leagues?.length,
-    queryFn: async () => {
-      const { count } = await supabase
-        .from("season_registrations")
-        .select("id", { count: "exact" })
-        .eq("league_id", leagues[0].id);
-      return count || 0;
-    },
-  });
-
   const liveRace = races.find((r) =>
     r.status !== "completed" && new Date(r.race_date) <= now
   ) as CalendarRace | undefined;
@@ -103,7 +91,7 @@ const CalendarPage = () => {
                 leagueName={activeLeague.name}
                 season={activeLeague.season}
                 carClass={activeLeague.car_class}
-                registrantCount={seasonRegCount || 0}
+                registrantCount={reg.seasonRegCount(activeLeague.id)}
                 isRegistered={reg.isRegisteredForSeason(activeLeague.id)}
                 profileComplete={reg.profileComplete}
                 isLoading={reg.registerForSeason.isPending || reg.unregisterFromSeason.isPending}
