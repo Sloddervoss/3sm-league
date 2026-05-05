@@ -23,6 +23,13 @@ const shouldSkipTextNode = (node: Text) => {
 const translateTextNode = (node: Text, language: Language) => {
   if (shouldSkipTextNode(node)) return;
   if (!textOriginals.has(node)) textOriginals.set(node, node.nodeValue ?? "");
+  const storedOriginal = textOriginals.get(node) ?? "";
+  const storedTranslation = translateText(storedOriginal, language);
+
+  if ((node.nodeValue ?? "") !== storedTranslation) {
+    textOriginals.set(node, node.nodeValue ?? "");
+  }
+
   const original = textOriginals.get(node) ?? "";
   const translated = translateText(original, language);
   if (node.nodeValue !== translated) node.nodeValue = translated;
@@ -37,6 +44,12 @@ const translateElementAttributes = (element: Element, language: Language) => {
 
     const originals = attrOriginals.get(element) ?? {};
     if (!originals[attr]) {
+      originals[attr] = current;
+      attrOriginals.set(element, originals);
+    }
+
+    const storedTranslation = translateText(originals[attr], language);
+    if (current !== storedTranslation) {
       originals[attr] = current;
       attrOriginals.set(element, originals);
     }
