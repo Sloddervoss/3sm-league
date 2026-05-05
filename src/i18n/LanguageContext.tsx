@@ -11,7 +11,9 @@ type LanguageContextType = {
 const LanguageContext = createContext<LanguageContextType | null>(null);
 
 const textOriginals = new WeakMap<Text, string>();
+const textTranslations = new WeakMap<Text, string>();
 const attrOriginals = new WeakMap<Element, Record<string, string>>();
+const attrTranslations = new WeakMap<Element, Record<string, string>>();
 const TRANSLATABLE_ATTRIBUTES = ["placeholder", "title", "aria-label"];
 
 const shouldSkipTextNode = (node: Text) => {
@@ -22,17 +24,17 @@ const shouldSkipTextNode = (node: Text) => {
 
 const translateTextNode = (node: Text, language: Language) => {
   if (shouldSkipTextNode(node)) return;
-  if (!textOriginals.has(node)) textOriginals.set(node, node.nodeValue ?? "");
-  const storedOriginal = textOriginals.get(node) ?? "";
-  const storedTranslation = translateText(storedOriginal, language);
+  const current = node.nodeValue ?? "";
+  const previousTranslation = textTranslations.get(node);
 
-  if ((node.nodeValue ?? "") !== storedTranslation) {
-    textOriginals.set(node, node.nodeValue ?? "");
+  if (!textOriginals.has(node) || (previousTranslation !== undefined && current !== previousTranslation)) {
+    textOriginals.set(node, current);
   }
 
   const original = textOriginals.get(node) ?? "";
   const translated = translateText(original, language);
   if (node.nodeValue !== translated) node.nodeValue = translated;
+  textTranslations.set(node, translated);
 };
 
 const translateElementAttributes = (element: Element, language: Language) => {
@@ -43,19 +45,18 @@ const translateElementAttributes = (element: Element, language: Language) => {
     if (!current) continue;
 
     const originals = attrOriginals.get(element) ?? {};
-    if (!originals[attr]) {
-      originals[attr] = current;
-      attrOriginals.set(element, originals);
-    }
+    const translations = attrTranslations.get(element) ?? {};
+    const previousTranslation = translations[attr];
 
-    const storedTranslation = translateText(originals[attr], language);
-    if (current !== storedTranslation) {
+    if (!originals[attr] || (previousTranslation !== undefined && current !== previousTranslation)) {
       originals[attr] = current;
       attrOriginals.set(element, originals);
     }
 
     const translated = translateText(originals[attr], language);
     if (current !== translated) element.setAttribute(attr, translated);
+    translations[attr] = translated;
+    attrTranslations.set(element, translations);
   }
 };
 
