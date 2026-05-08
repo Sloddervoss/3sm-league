@@ -92,9 +92,23 @@ const missingSchemaWarnings = new Set();
 const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
 const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
+const DISCORD_LOGIN_TIMEOUT_MS = 60 * 1000;
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function withTimeout(promise, ms, label) {
+  let timeoutId = null;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timeout na ${formatDuration(ms)}`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function isTransientNetworkErrorText(text) {
@@ -2180,14 +2194,32 @@ client.once('ready', async () => {
   runGuarded('syncTeamRoles', syncTeamRoles);
 });
 
+client.on('error', (e) => {
+  console.error(`[3SM Bot] Discord client error: ${describeError(e)}`);
+});
+
+client.on('warn', (message) => {
+  console.warn(`[3SM Bot] Discord warning: ${message}`);
+});
+
+client.on('shardError', (e, shardId) => {
+  console.error(`[3SM Bot] Discord shard ${shardId} error: ${describeError(e)}`);
+});
+
+client.on('shardDisconnect', (event, shardId) => {
+  console.warn(`[3SM Bot] Discord shard ${shardId} disconnected: ${event?.code || 'unknown'} ${event?.reason || ''}`.trim());
+});
+
 async function loginWithRetry(attempt = 1) {
   try {
-    await client.login(DISCORD_BOT_TOKEN);
+    console.log(`[3SM Bot] Discord login poging ${attempt}...`);
+    await withTimeout(client.login(DISCORD_BOT_TOKEN), DISCORD_LOGIN_TIMEOUT_MS, 'Discord login');
   } catch (e) {
     const status = e?.status;
-    const retryable = status === 429 || status >= 500 || isTransientNetworkErrorText(describeError(e));
+    const errorText = describeError(e);
+    const retryable = status === 429 || status >= 500 || isTransientNetworkErrorText(errorText) || /timeout/i.test(errorText);
     const delayMs = Math.min(5 * 60 * 1000, 10_000 * attempt);
-    const message = `[3SM Bot] Discord login fout: ${describeError(e)}${retryable ? `; nieuwe poging over ${formatDuration(delayMs)}` : ''}`;
+    const message = `[3SM Bot] Discord login fout: ${errorText}${retryable ? `; nieuwe poging over ${formatDuration(delayMs)}` : ''}`;
     console.error(message);
 
     if (!retryable) {
@@ -2195,6 +2227,7 @@ async function loginWithRetry(attempt = 1) {
       return;
     }
 
+    try { client.destroy(); } catch {}
     setTimeout(() => loginWithRetry(attempt + 1), delayMs);
   }
 }
