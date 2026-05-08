@@ -30,6 +30,7 @@ dist-ssr
 
 # Discord bot — credentials nooit in git
 bot/.env
+bot/config.json
 bot/sent_notifications.json
 bot/node_modules/
 bot/.cache/

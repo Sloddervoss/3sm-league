@@ -2180,4 +2180,23 @@ client.once('ready', async () => {
   runGuarded('syncTeamRoles', syncTeamRoles);
 });
 
-client.login(DISCORD_BOT_TOKEN);
+async function loginWithRetry(attempt = 1) {
+  try {
+    await client.login(DISCORD_BOT_TOKEN);
+  } catch (e) {
+    const status = e?.status;
+    const retryable = status === 429 || status >= 500 || isTransientNetworkErrorText(describeError(e));
+    const delayMs = Math.min(5 * 60 * 1000, 10_000 * attempt);
+    const message = `[3SM Bot] Discord login fout: ${describeError(e)}${retryable ? `; nieuwe poging over ${formatDuration(delayMs)}` : ''}`;
+    console.error(message);
+
+    if (!retryable) {
+      process.exitCode = 1;
+      return;
+    }
+
+    setTimeout(() => loginWithRetry(attempt + 1), delayMs);
+  }
+}
+
+loginWithRetry();
