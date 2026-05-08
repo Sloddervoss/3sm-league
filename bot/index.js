@@ -137,6 +137,14 @@ async function throttledBotLog(key, ...args) {
   await botLog(...args);
 }
 
+function throttledConsoleLog(key, message, throttleMs = ERROR_LOG_THROTTLE_MS) {
+  const now = Date.now();
+  const last = throttledLogs.get(key) || 0;
+  if (now - last < throttleMs) return;
+  throttledLogs.set(key, now);
+  console.warn(message);
+}
+
 function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -176,7 +184,7 @@ function cleanupPosterFile(filePath) {
 async function runGuarded(name, task) {
   const existingJob = runningJobs.get(name);
   if (existingJob) {
-    await throttledBotLog(
+    throttledConsoleLog(
       `cron:${name}:overlap`,
       `[cron:${name}] vorige run loopt nog sinds ${existingJob.startedAt.toISOString()} (${formatDuration(Date.now() - existingJob.startedAt.getTime())}); stap: ${existingJob.step}; deze run overgeslagen`
     );
@@ -189,10 +197,10 @@ async function runGuarded(name, task) {
     warningTimer: null,
   };
   jobState.warningTimer = setTimeout(() => {
-    throttledBotLog(
+    throttledConsoleLog(
       `cron:${name}:stuck:${jobState.step}`,
       `[cron:${name}] draait al ${formatDuration(Date.now() - jobState.startedAt.getTime())}; huidige stap: ${jobState.step}`
-    ).catch(() => {});
+    );
   }, JOB_STUCK_WARNING_MS);
 
   runningJobs.set(name, jobState);
