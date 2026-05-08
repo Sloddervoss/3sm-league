@@ -1660,10 +1660,11 @@ async function syncTeamRoles(ctx = {}) {
   }
 
   setStep('klaar');
-  if (stats.nicknamesUpdated || stats.rolesAdded || stats.rolesRemoved || stats.memberErrors || Date.now() - startedAt > 60_000) {
-    await botLog(
-      `[syncTeamRoles] klaar in ${formatDuration(Date.now() - startedAt)}: teams=${stats.teams}, profiles=${stats.profiles}, verwerkt=${stats.membersProcessed}, niet_gevonden=${stats.membersMissing}, nicknames=${stats.nicknamesUpdated}, rollen_plus=${stats.rolesAdded}, rollen_min=${stats.rolesRemoved}, fouten=${stats.memberErrors}`
-    );
+  const summary = `[syncTeamRoles] klaar in ${formatDuration(Date.now() - startedAt)}: teams=${stats.teams}, profiles=${stats.profiles}, verwerkt=${stats.membersProcessed}, niet_gevonden=${stats.membersMissing}, nicknames=${stats.nicknamesUpdated}, rollen_plus=${stats.rolesAdded}, rollen_min=${stats.rolesRemoved}, fouten=${stats.memberErrors}`;
+  if (stats.memberErrors) {
+    await botLog(summary);
+  } else if (stats.nicknamesUpdated || stats.rolesAdded || stats.rolesRemoved || Date.now() - startedAt > 60_000) {
+    console.log(summary);
   }
 }
 
