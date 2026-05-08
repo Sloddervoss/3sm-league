@@ -86,21 +86,48 @@ function describeError(error) {
   return parts.length ? parts.join(' | ') : String(error);
 }
 
-const runningJobs = new Set();
+const runningJobs = new Map();
 const throttledLogs = new Map();
 const missingSchemaWarnings = new Set();
 const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
+const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
+const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function isTransientNetworkErrorText(text) {
+  return /\b(TypeError: )?fetch failed\b/i.test(text)
+    || /\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT)\b/i.test(text);
+}
+
 async function throttledBotLog(key, ...args) {
   const now = Date.now();
-  const last = throttledLogs.get(key) || 0;
-  if (now - last < ERROR_LOG_THROTTLE_MS) return;
-  throttledLogs.set(key, now);
+  const text = args.join(' ') || key;
+  const normalizedKey = isTransientNetworkErrorText(`${key} ${text}`)
+    ? 'network:transient-fetch-failed'
+    : key;
+  const throttleMs = normalizedKey === 'network:transient-fetch-failed'
+    ? NETWORK_ERROR_LOG_THROTTLE_MS
+    : ERROR_LOG_THROTTLE_MS;
+  const last = throttledLogs.get(normalizedKey) || 0;
+  if (now - last < throttleMs) return;
+  throttledLogs.set(normalizedKey, now);
+
+  if (normalizedKey === 'network:transient-fetch-failed') {
+    await botLog('[network] Tijdelijke fetch/connectie-fout richting Supabase/extern endpoint; vergelijkbare cron-fouten worden 15 minuten onderdrukt.', text);
+    return;
+  }
+
   await botLog(...args);
+}
+
+function formatDuration(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
 async function retrySupabase(label, operation, attempts = 3) {
@@ -133,17 +160,38 @@ function cleanupPosterFile(filePath) {
 }
 
 async function runGuarded(name, task) {
-  if (runningJobs.has(name)) {
-    await throttledBotLog(`cron:${name}:overlap`, `[cron:${name}] vorige run loopt nog, deze run overgeslagen`);
+  const existingJob = runningJobs.get(name);
+  if (existingJob) {
+    await throttledBotLog(
+      `cron:${name}:overlap`,
+      `[cron:${name}] vorige run loopt nog sinds ${existingJob.startedAt.toISOString()} (${formatDuration(Date.now() - existingJob.startedAt.getTime())}); stap: ${existingJob.step}; deze run overgeslagen`
+    );
     return;
   }
 
-  runningJobs.add(name);
+  const jobState = {
+    startedAt: new Date(),
+    step: 'gestart',
+    warningTimer: null,
+  };
+  jobState.warningTimer = setTimeout(() => {
+    throttledBotLog(
+      `cron:${name}:stuck:${jobState.step}`,
+      `[cron:${name}] draait al ${formatDuration(Date.now() - jobState.startedAt.getTime())}; huidige stap: ${jobState.step}`
+    ).catch(() => {});
+  }, JOB_STUCK_WARNING_MS);
+
+  runningJobs.set(name, jobState);
   try {
-    await task();
+    await task({
+      setStep(step) {
+        jobState.step = step || jobState.step;
+      },
+    });
   } catch (e) {
     await throttledBotLog(`cron:${name}:${describeError(e)}`, `[cron:${name}] ${describeError(e)}`);
   } finally {
+    clearTimeout(jobState.warningTimer);
     runningJobs.delete(name);
   }
 }
@@ -1310,14 +1358,30 @@ async function checkAnnouncements() {
 }
 
 // ── Cron: team rol sync ───────────────────────────────────────────────────────
-async function syncTeamRoles() {
+async function syncTeamRoles(ctx = {}) {
+  const setStep = ctx.setStep || (() => {});
+  const startedAt = Date.now();
+  const stats = {
+    teams: 0,
+    profiles: 0,
+    membersProcessed: 0,
+    membersMissing: 0,
+    nicknamesUpdated: 0,
+    rolesAdded: 0,
+    rolesRemoved: 0,
+    memberErrors: 0,
+  };
+
+  setStep('config/guild laden');
   const cfg = loadConfig();
   const guild = await getConfiguredGuild();
   if (!guild) return;
 
+  setStep('teams ophalen uit Supabase');
   const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id');
   if (teamsError) { await throttledBotLog(`syncTeamRoles:teams:${describeError(teamsError)}`, '[syncTeamRoles] teams fout:', describeError(teamsError)); return; }
   if (!teams?.length) return;
+  stats.teams = teams.length;
 
   const everyoneId = guild.roles.everyone.id;
   const managedRoleIds = new Set(cfg.managed_team_role_ids || []);
@@ -1325,6 +1389,7 @@ async function syncTeamRoles() {
 
   // Maak ontbrekende team-rollen + categorie + kanalen aan
   for (const team of teams) {
+    setStep(`team setup: ${team.name}`);
     const colorInt = team.color ? parseInt(team.color.replace('#', ''), 16) : 0xf97316;
 
     // ── Rol ──────────────────────────────────────────────────────────────────
@@ -1427,6 +1492,7 @@ async function syncTeamRoles() {
   }
 
   // Verwijder Discord rollen + categorie + kanalen van verwijderde teams
+  setStep('oude teamrollen opruimen');
   const teamRoleIds     = teams.map(t => t.discord_role_id).filter(Boolean);
   const teamCategoryIds = teams.map(t => t.discord_category_id).filter(Boolean);
   for (const [roleId, role] of guild.roles.cache) {
@@ -1469,17 +1535,21 @@ async function syncTeamRoles() {
   });
 
   // Sync Discord-rollen voor alle gekoppelde leden
+  setStep('profiles ophalen uit Supabase');
   const { data: profiles, error: profilesError } = await supabase
     .from('profiles').select('user_id, discord_id, iracing_name, display_name')
     .not('discord_id', 'is', null);
   if (profilesError) { await throttledBotLog(`syncTeamRoles:profiles:${describeError(profilesError)}`, '[syncTeamRoles] profiles fout:', describeError(profilesError)); return; }
 
   if (!profiles?.length) return;
+  stats.profiles = profiles.length;
 
+  setStep('team memberships ophalen uit Supabase');
   const { data: memberships, error: membershipsError } = await supabase
     .from('team_memberships').select('user_id, team_id');
   if (membershipsError) { await throttledBotLog(`syncTeamRoles:memberships:${describeError(membershipsError)}`, '[syncTeamRoles] memberships fout:', describeError(membershipsError)); return; }
 
+  setStep('admin/steward rollen ophalen uit Supabase');
   const { data: adminRoles, error: adminRolesError } = await supabase
     .from('user_roles').select('user_id, role')
     .in('role', ['admin', 'super_admin', 'moderator']);
@@ -1502,8 +1572,13 @@ async function syncTeamRoles() {
 
   for (const profile of profiles) {
     try {
+      setStep(`Discord lid ophalen: ${profile.display_name || profile.iracing_name || profile.discord_id}`);
       const member = await guild.members.fetch(profile.discord_id).catch(() => null);
-      if (!member) continue;
+      if (!member) {
+        stats.membersMissing += 1;
+        continue;
+      }
+      stats.membersProcessed += 1;
 
       // Nickname instellen op iRacing naam (of display_name als fallback)
       const nickname = profile.iracing_name || profile.display_name;
@@ -1512,6 +1587,7 @@ async function syncTeamRoles() {
         if (result instanceof Error) {
           if (result.message !== 'Missing Permissions') console.error(`[syncTeamRoles] Nickname fout voor ${member.user.tag}: ${result.message}`);
         } else {
+          stats.nicknamesUpdated += 1;
           console.log(`[syncTeamRoles] Nickname gezet: ${member.user.tag} → ${nickname}`);
         }
       }
@@ -1524,8 +1600,14 @@ async function syncTeamRoles() {
         if (!team.discord_role_id) continue;
         const shouldHave = expectedRoleIds.includes(team.discord_role_id);
         const hasIt = member.roles.cache.has(team.discord_role_id);
-        if (shouldHave && !hasIt) await member.roles.add(team.discord_role_id).catch(() => {});
-        if (!shouldHave && hasIt) await member.roles.remove(team.discord_role_id).catch(() => {});
+        if (shouldHave && !hasIt) {
+          const updated = await member.roles.add(team.discord_role_id).then(() => true).catch(() => false);
+          if (updated) stats.rolesAdded += 1;
+        }
+        if (!shouldHave && hasIt) {
+          const updated = await member.roles.remove(team.discord_role_id).then(() => true).catch(() => false);
+          if (updated) stats.rolesRemoved += 1;
+        }
       }
 
       // Admin rol sync
@@ -1533,8 +1615,14 @@ async function syncTeamRoles() {
         const userRoles = rolesByUserId.get(profile.user_id) || [];
         const isAdmin = userRoles.some(role => ['admin', 'super_admin'].includes(role));
         const hasAdminRole = member.roles.cache.has(syncCfg.admin_role_id);
-        if (isAdmin && !hasAdminRole) await member.roles.add(syncCfg.admin_role_id).catch(() => {});
-        if (!isAdmin && hasAdminRole) await member.roles.remove(syncCfg.admin_role_id).catch(() => {});
+        if (isAdmin && !hasAdminRole) {
+          const updated = await member.roles.add(syncCfg.admin_role_id).then(() => true).catch(() => false);
+          if (updated) stats.rolesAdded += 1;
+        }
+        if (!isAdmin && hasAdminRole) {
+          const updated = await member.roles.remove(syncCfg.admin_role_id).then(() => true).catch(() => false);
+          if (updated) stats.rolesRemoved += 1;
+        }
       }
 
       // Steward rol sync
@@ -1542,12 +1630,26 @@ async function syncTeamRoles() {
         const userRoles = rolesByUserId.get(profile.user_id) || [];
         const isSteward = userRoles.includes('moderator');
         const hasStewardRole = member.roles.cache.has(syncCfg.steward_role_id);
-        if (isSteward && !hasStewardRole) await member.roles.add(syncCfg.steward_role_id).catch(() => {});
-        if (!isSteward && hasStewardRole) await member.roles.remove(syncCfg.steward_role_id).catch(() => {});
+        if (isSteward && !hasStewardRole) {
+          const updated = await member.roles.add(syncCfg.steward_role_id).then(() => true).catch(() => false);
+          if (updated) stats.rolesAdded += 1;
+        }
+        if (!isSteward && hasStewardRole) {
+          const updated = await member.roles.remove(syncCfg.steward_role_id).then(() => true).catch(() => false);
+          if (updated) stats.rolesRemoved += 1;
+        }
       }
     } catch (e) {
+      stats.memberErrors += 1;
       botLog('[syncTeamRoles] lid fout:', describeError(e));
     }
+  }
+
+  setStep('klaar');
+  if (stats.nicknamesUpdated || stats.rolesAdded || stats.rolesRemoved || stats.memberErrors || Date.now() - startedAt > 60_000) {
+    await botLog(
+      `[syncTeamRoles] klaar in ${formatDuration(Date.now() - startedAt)}: teams=${stats.teams}, profiles=${stats.profiles}, verwerkt=${stats.membersProcessed}, niet_gevonden=${stats.membersMissing}, nicknames=${stats.nicknamesUpdated}, rollen_plus=${stats.rolesAdded}, rollen_min=${stats.rolesRemoved}, fouten=${stats.memberErrors}`
+    );
   }
 }
 
@@ -2046,17 +2148,17 @@ client.once('ready', async () => {
     await registerCommands(guild.id);
   }
 
-  // Elke minuut: race checks + aanmeldingen + koppelingen
-  scheduleGuarded('* * * * *', 'checkRaces', checkRaces);
-  scheduleGuarded('* * * * *', 'announcements', checkAnnouncements);
-  scheduleGuarded('* * * * *', 'checkRegistrations', checkNewRegistrations);
-  scheduleGuarded('* * * * *', 'checkLinks', checkNewLinks);
-  scheduleGuarded('* * * * *', 'discordSyncQueue', processDiscordSyncQueue);
-  scheduleGuarded('* * * * *', 'checkProtests', checkProtests);
-  scheduleGuarded('* * * * *', 'checkAbandon', checkAbandonPenalties);
-  scheduleGuarded('* * * * *', 'checkAbandonCorrections', checkAbandonCorrections);
-  scheduleGuarded('* * * * *', 'checkStewardPenalties', checkStewardPenalties);
-  scheduleGuarded('* * * * *', 'checkStewardCorrections', checkStewardCorrections);
+  // Elke minuut, gespreid over de minuut: race checks + aanmeldingen + koppelingen
+  scheduleGuarded('0 * * * * *', 'checkRaces', checkRaces);
+  scheduleGuarded('6 * * * * *', 'announcements', checkAnnouncements);
+  scheduleGuarded('12 * * * * *', 'checkRegistrations', checkNewRegistrations);
+  scheduleGuarded('18 * * * * *', 'checkLinks', checkNewLinks);
+  scheduleGuarded('24 * * * * *', 'discordSyncQueue', processDiscordSyncQueue);
+  scheduleGuarded('30 * * * * *', 'checkProtests', checkProtests);
+  scheduleGuarded('36 * * * * *', 'checkAbandon', checkAbandonPenalties);
+  scheduleGuarded('42 * * * * *', 'checkAbandonCorrections', checkAbandonCorrections);
+  scheduleGuarded('48 * * * * *', 'checkStewardPenalties', checkStewardPenalties);
+  scheduleGuarded('54 * * * * *', 'checkStewardCorrections', checkStewardCorrections);
   // Elke 5 minuten: team rol sync
   scheduleGuarded('*/5 * * * *', 'syncTeamRoles', syncTeamRoles);
   // Elk uur: kalender update + token cleanup
