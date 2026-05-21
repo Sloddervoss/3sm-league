@@ -9,6 +9,19 @@ interface State {
   error: Error | null;
 }
 
+const CHUNK_RELOAD_KEY = "3sm:chunk-reload-attempted";
+const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
+
+const isChunkLoadError = (error: Error) => {
+  const message = error?.message || "";
+  return (
+    message.includes("Failed to fetch dynamically imported module") ||
+    message.includes("Importing a module script failed") ||
+    message.includes("Loading chunk") ||
+    message.includes("ChunkLoadError")
+  );
+};
+
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null };
 
@@ -17,12 +30,20 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    const lastChunkReload = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || 0);
+    if (isChunkLoadError(error) && Date.now() - lastChunkReload > CHUNK_RELOAD_COOLDOWN_MS) {
+      sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
+      window.location.reload();
+      return;
+    }
+
     if (import.meta.env.DEV) {
       console.error("ErrorBoundary caught:", error, info);
     }
   }
 
   reset = () => {
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY);
     this.setState({ hasError: false, error: null });
   };
 
