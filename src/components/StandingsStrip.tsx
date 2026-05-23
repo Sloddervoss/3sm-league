@@ -84,8 +84,28 @@ const StandingsStrip = () => {
               </h2>
             </div>
           </div>
-          {/* Skeleton placeholder — voorkomt CLS door altijd een vaste hoogte te reserveren */}
-          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)", minHeight: "200px" }} />
+          {/* Skeleton rows — zelfde hoogte als de echte top-5 lijst, voorkomt CLS door async Supabase data */}
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="relative flex items-center gap-4 px-5 py-3.5 min-h-[60px]"
+                style={{
+                  borderTop: i > 0 ? "1px solid rgba(255,255,255,0.04)" : undefined,
+                  background: i === 0 ? "rgba(249,115,22,0.04)" : "transparent",
+                }}
+                aria-hidden="true"
+              >
+                <div className="w-8 h-8 rounded-lg shrink-0 bg-white/5" />
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="h-3 w-36 max-w-full rounded bg-white/5" />
+                  <div className="h-2 w-24 max-w-full rounded bg-white/5" />
+                </div>
+                <div className="h-3 w-8 rounded bg-white/5 shrink-0" />
+                <div className="h-5 w-14 rounded bg-white/5 shrink-0" />
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     );
@@ -176,7 +196,7 @@ const StandingsStrip = () => {
                   )}
                 </div>
 
-                <div className="font-heading font-bold text-sm text-gray-500 shrink-0">
+                <div className="font-heading font-bold text-sm text-gray-300 shrink-0">
                   {driver.wins}W
                 </div>
 
@@ -187,7 +207,7 @@ const StandingsStrip = () => {
                   >
                     {driver.total_points}
                   </div>
-                  <div className="text-[10px] text-gray-700 uppercase">pts</div>
+                  <div className="text-[10px] text-gray-300 uppercase">pts</div>
                 </div>
               </div>
             );
