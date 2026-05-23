@@ -13,10 +13,22 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRacePosterAttachment } from './racePoster.js';
 import { createResultPosterAttachment } from './resultPoster.js';
+import {
+  buildLiveEmbedPayload,
+  buildStreamerSession,
+  deleteStreamerProfile,
+  fetchPlatformStatuses,
+  profileAutocompleteChoices,
+  readStreamerProfiles,
+  updateActiveNotifications,
+  upsertStreamerProfile,
+  writeStreamerProfiles,
+} from './streamers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SENT_FILE   = path.join(__dirname, 'sent_notifications.json');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
+const STREAMERS_FILE = path.join(__dirname, 'streamers.json');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config();
@@ -89,6 +101,7 @@ function describeError(error) {
 const runningJobs = new Map();
 const throttledLogs = new Map();
 const missingSchemaWarnings = new Set();
+const active_notifications = new Set();
 const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
 const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
@@ -300,6 +313,79 @@ async function getNotificationChannel() {
   const ch = await client.channels.fetch(channelId).catch(() => null);
   if (!ch) botLog('[bot] Meldingen channel niet gevonden:', channelId);
   return ch;
+}
+
+function getLiveChannelId(profile = null) {
+  const cfg = loadConfig();
+  return profile?.kanaal
+    || cfg.live_meldingen_channel_id
+    || process.env.DISCORD_LIVE_CHANNEL_ID;
+}
+
+async function getLiveChannel(profile = null) {
+  const channelId = getLiveChannelId(profile);
+  if (!channelId) { await throttledBotLog('live-channel:missing', '[streams] Geen live kanaal geconfigureerd'); return null; }
+  const ch = await client.channels.fetch(channelId).catch(() => null);
+  if (!ch) await throttledBotLog(`live-channel:${channelId}`, '[streams] Live kanaal niet gevonden:', channelId);
+  return ch;
+}
+
+async function ensureLiveChannelPermissions(guild = null, channelId = null) {
+  const channel = channelId
+    ? await client.channels.fetch(channelId).catch(() => null)
+    : await getLiveChannel();
+  if (!channel?.permissionOverwrites?.edit) return;
+
+  const resolvedGuild = guild || channel.guild || await getConfiguredGuild();
+  if (!resolvedGuild) return;
+
+  try {
+    const botMember = await resolvedGuild.members.fetchMe().catch(() => null);
+    const botRoleId = botMember?.roles?.botRole?.id;
+    const botUserId = botMember?.id;
+    const cfg = loadConfig();
+    const adminRole = cfg.admin_role_id ? await resolvedGuild.roles.fetch(cfg.admin_role_id).catch(() => null) : null;
+    const overwrites = [
+      { id: resolvedGuild.roles.everyone.id, type: 0, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+      ...(botRoleId ? [{ id: botRoleId, type: 0, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+      ...(!botRoleId && botUserId ? [{ id: botUserId, type: 1, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole.id, type: 0, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages] }] : []),
+    ];
+    await channel.permissionOverwrites.set(overwrites, '3SM live kanaal permissies');
+  } catch (e) {
+    await throttledBotLog(`live-channel-perms:${describeError(e)}`, '[streams] Live kanaal permissies instellen mislukt:', describeError(e));
+  }
+}
+
+function buildDiscordLiveEmbed(session) {
+  const payload = buildLiveEmbedPayload(session);
+  return new EmbedBuilder()
+    .setColor(payload.color)
+    .setTitle(payload.title)
+    .setDescription(payload.description)
+    .setFooter({ text: payload.footer })
+    .setTimestamp();
+}
+
+async function checkStreams() {
+  const profiles = readStreamerProfiles(STREAMERS_FILE);
+  if (!profiles.length) return;
+
+  for (const profile of profiles) {
+    try {
+      const statuses = await fetchPlatformStatuses(profile);
+      const session = buildStreamerSession(profile, statuses);
+      const action = updateActiveNotifications(active_notifications, session);
+      if (action !== 'notify') continue;
+
+      const channel = await getLiveChannel(profile);
+      if (!channel) continue;
+      await channel.send({ embeds: [buildDiscordLiveEmbed(session)] });
+      await botLog(`[streams] Live melding gestuurd voor ${profile.profiel_naam}: ${session.platforms.map(p => p.platform).join(', ')}`);
+    } catch (e) {
+      await throttledBotLog(`streams:${profile.profiel_naam}:${describeError(e)}`, `[streams] ${profile.profiel_naam}: ${describeError(e)}`);
+    }
+  }
 }
 
 async function getUitslagenChannel() {
@@ -1959,6 +2045,41 @@ const COMMANDS = [
     .setName('setup-server')
     .setDescription('Maak de volledige 3SM serverstructuur aan (alleen voor admins)')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
+    .setName('setprofile')
+    .setDescription('Maak of update een streamer-profiel voor live meldingen')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(option => option
+      .setName('profiel_naam')
+      .setDescription('Naam van het streamer-profiel')
+      .setRequired(true)
+      .setAutocomplete(true))
+    .addChannelOption(option => option
+      .setName('kanaal')
+      .setDescription('Discord kanaal voor live meldingen (standaard live-kanaal)')
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(false))
+    .addStringOption(option => option
+      .setName('twitch_naam')
+      .setDescription('Twitch gebruikersnaam')
+      .setRequired(false))
+    .addStringOption(option => option
+      .setName('kick_naam')
+      .setDescription('Kick gebruikersnaam')
+      .setRequired(false))
+    .addStringOption(option => option
+      .setName('youtube_id')
+      .setDescription('YouTube channel ID')
+      .setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('deleteprofile')
+    .setDescription('Verwijder een streamer-profiel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(option => option
+      .setName('profiel_naam')
+      .setDescription('Naam van het streamer-profiel')
+      .setRequired(true)
+      .setAutocomplete(true)),
 ].map(c => c.toJSON());
 
 async function registerCommands(guildId) {
@@ -1972,7 +2093,13 @@ async function registerCommands(guildId) {
 // ── Interaction handler ───────────────────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
   try {
-    if (interaction.isChatInputCommand()) {
+    if (interaction.isAutocomplete()) {
+      if (['setprofile', 'deleteprofile'].includes(interaction.commandName)) {
+        const focused = interaction.options.getFocused();
+        const profiles = readStreamerProfiles(STREAMERS_FILE);
+        await interaction.respond(profileAutocompleteChoices(profiles, focused));
+      }
+    } else if (interaction.isChatInputCommand()) {
       switch (interaction.commandName) {
         case 'koppel':
           await handleKoppel(interaction);
@@ -1992,6 +2119,12 @@ client.on('interactionCreate', async (interaction) => {
         case 'setup-server':
           await handleSetupServer(interaction);
           break;
+        case 'setprofile':
+          await handleSetProfile(interaction);
+          break;
+        case 'deleteprofile':
+          await handleDeleteProfile(interaction);
+          break;
       }
     } else if (interaction.isButton()) {
       const [action, raceId] = interaction.customId.split('_');
@@ -2000,6 +2133,52 @@ client.on('interactionCreate', async (interaction) => {
     }
   } catch (e) { botLog('[interaction]', describeError(e)); }
 });
+
+// /setprofile → streamer-profiel aanmaken/updaten
+async function handleSetProfile(interaction) {
+  const profiles = readStreamerProfiles(STREAMERS_FILE);
+  const channel = interaction.options.getChannel('kanaal');
+  const input = {
+    profiel_naam: interaction.options.getString('profiel_naam', true),
+    kanaal: channel?.id || undefined,
+    twitch_naam: interaction.options.getString('twitch_naam') || undefined,
+    kick_naam: interaction.options.getString('kick_naam') || undefined,
+    youtube_id: interaction.options.getString('youtube_id') || undefined,
+  };
+
+  try {
+    const result = upsertStreamerProfile(profiles, input);
+    writeStreamerProfiles(STREAMERS_FILE, result.profiles);
+    await ensureLiveChannelPermissions(interaction.guild, result.profile.kanaal).catch(() => {});
+
+    const platforms = [
+      result.profile.twitch_naam ? `Twitch: ${result.profile.twitch_naam}` : null,
+      result.profile.kick_naam ? `Kick: ${result.profile.kick_naam}` : null,
+      result.profile.youtube_id ? `YouTube: ${result.profile.youtube_id}` : null,
+    ].filter(Boolean).join('\n');
+
+    return interaction.reply({
+      content: `${result.created ? '✅ Profiel aangemaakt' : '✅ Profiel bijgewerkt'}: **${result.profile.profiel_naam}**\nKanaal: ${result.profile.kanaal ? `<#${result.profile.kanaal}>` : 'standaard live-kanaal'}\n${platforms}`,
+      flags: 64,
+    });
+  } catch (e) {
+    return interaction.reply({ content: `❌ ${describeError(e)}`, flags: 64 });
+  }
+}
+
+// /deleteprofile → streamer-profiel verwijderen
+async function handleDeleteProfile(interaction) {
+  const profiles = readStreamerProfiles(STREAMERS_FILE);
+  const profielNaam = interaction.options.getString('profiel_naam', true);
+  const result = deleteStreamerProfile(profiles, profielNaam);
+  if (!result.deleted) {
+    return interaction.reply({ content: `❌ Profiel **${profielNaam}** niet gevonden.`, flags: 64 });
+  }
+
+  writeStreamerProfiles(STREAMERS_FILE, result.profiles);
+  active_notifications.delete(profielNaam.trim().toLowerCase());
+  return interaction.reply({ content: `✅ Profiel **${profielNaam}** verwijderd.`, flags: 64 });
+}
 
 // /site
 async function handleSite(interaction) {
@@ -2171,6 +2350,7 @@ client.once('ready', async () => {
   setTimeout(() => botLog(`✅ Bot online als **${client.user.tag}**`), 3000);
   for (const [, guild] of client.guilds.cache) {
     await registerCommands(guild.id);
+    await ensureLiveChannelPermissions(guild);
   }
 
   // Elke minuut, gespreid over de minuut: race checks + aanmeldingen + koppelingen
@@ -2178,6 +2358,7 @@ client.once('ready', async () => {
   scheduleGuarded('6 * * * * *', 'announcements', checkAnnouncements);
   scheduleGuarded('12 * * * * *', 'checkRegistrations', checkNewRegistrations);
   scheduleGuarded('18 * * * * *', 'checkLinks', checkNewLinks);
+  scheduleGuarded('20 */2 * * * *', 'checkStreams', checkStreams);
   scheduleGuarded('24 * * * * *', 'discordSyncQueue', processDiscordSyncQueue);
   scheduleGuarded('30 * * * * *', 'checkProtests', checkProtests);
   scheduleGuarded('36 * * * * *', 'checkAbandon', checkAbandonPenalties);
@@ -2201,6 +2382,7 @@ client.once('ready', async () => {
 
   runGuarded('checkRaces', checkRaces);
   runGuarded('discordSyncQueue', processDiscordSyncQueue);
+  runGuarded('checkStreams', checkStreams);
   runGuarded('startupCalendar', updateCalendarEmbed);
   runGuarded('syncTeamRoles', syncTeamRoles);
 });
