@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
@@ -11,9 +11,22 @@ export default defineConfig({
     },
   },
   build: {
-    target: "esnext", // Enables top-level await support (Chrome 89+, Firefox 89+, Safari 15+)
+    target: "esnext",
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Non-render-blocking CSS: ~950ms besparing op mobiel
+    {
+      name: "non-blocking-css",
+      transformIndexHtml(html: string): string {
+        return html.replace(
+          /<link rel="stylesheet" crossorigin href="([^"]+\.css)">/g,
+          (_: string, href: string) =>
+            `<link rel="preload" as="style" href="${href}" onload="this.onload=null;this.rel='stylesheet'">\n    <link rel="stylesheet" href="${href}" media="print" onload="this.media='all'">\n    <noscript><link rel="stylesheet" href="${href}"></noscript>`,
+        );
+      },
+    } satisfies Plugin,
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
