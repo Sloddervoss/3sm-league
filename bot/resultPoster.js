@@ -35,6 +35,10 @@ const MEDAL_COLORS = {
   p3: '#d08b5b',
 };
 
+const TRACK_NAME_COMPACTIONS = {
+  'Daytona International Speedway': 'Daytona Intl. Speedway',
+};
+
 function escapeXml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -62,6 +66,17 @@ function fitText(text, maxChars) {
   const value = String(text || '').trim();
   if (value.length <= maxChars) return value;
   return `${value.slice(0, Math.max(0, maxChars - 1)).trim()}...`;
+}
+
+function fitTrackName(text, maxChars) {
+  const value = String(text || '').trim();
+  const compacted = TRACK_NAME_COMPACTIONS[value] || value
+    .replace(/\bInternational\b/g, 'Intl.')
+    .replace(/\bGrand Prix\b/g, 'GP')
+    .replace(/\bCircuit\b/g, 'Ctr.');
+
+  if (compacted.length <= maxChars) return compacted;
+  return fitText(compacted, maxChars);
 }
 
 function driverName(result) {
@@ -132,15 +147,22 @@ function podiumCard({ x, y, width, height, result, place, color, primary = false
   const placeSize = primary ? 48 : 34;
   const nameSize = primary ? (name.length > 16 ? 30 : 36) : (name.length > 15 ? 22 : 25);
   const pointsSize = primary ? 27 : 22;
+  const bottomBarHeight = primary ? 42 : 34;
+  const nonPrimaryNameY = 106;
+  const nonPrimaryPointsY = 136;
+  const nameY = primary ? 128 : nonPrimaryNameY;
+  const pointsY = primary ? 168 : nonPrimaryPointsY;
+  const gapY = height - (primary ? 16 : 11);
+  const gapSize = primary ? 17 : 15;
 
   return `
     <g transform="translate(${x} ${y})">
       <path d="M0 34 Q0 0 34 0 H${width - 34} Q${width} 0 ${width} 34 V${height} H0 Z" fill="#11151d" fill-opacity="0.88" stroke="${color}" stroke-opacity="0.7" stroke-width="2"/>
-      <path d="M0 ${height - 42} H${width} V${height} H0 Z" fill="${color}" fill-opacity="${primary ? '0.32' : '0.22'}"/>
+      <path d="M0 ${height - bottomBarHeight} H${width} V${height} H0 Z" fill="${color}" fill-opacity="${primary ? '0.32' : '0.22'}"/>
       <text x="${width / 2}" y="68" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="${placeSize}" font-weight="900" fill="${color}" letter-spacing="3">${place}</text>
-      <text x="${width / 2}" y="${primary ? 128 : 116}" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="${nameSize}" font-weight="900" fill="#ffffff">${escapeXml(name)}</text>
-      <text x="${width / 2}" y="${primary ? 168 : 154}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${pointsSize}" font-weight="900" fill="#e2e8f0" letter-spacing="2">${escapeXml(points)}</text>
-      ${gap ? `<text x="${width / 2}" y="${height - 16}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="900" fill="${color}" letter-spacing="2">${escapeXml(gap)}</text>` : ''}
+      <text x="${width / 2}" y="${nameY}" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="${nameSize}" font-weight="900" fill="#ffffff">${escapeXml(name)}</text>
+      <text x="${width / 2}" y="${pointsY}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${pointsSize}" font-weight="900" fill="#e2e8f0" letter-spacing="2">${escapeXml(points)}</text>
+      ${gap ? `<text x="${width / 2}" y="${gapY}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${gapSize}" font-weight="900" fill="${color}" letter-spacing="2">${escapeXml(gap)}</text>` : ''}
     </g>
   `;
 }
@@ -193,7 +215,7 @@ function buildResultPosterSvg(race, results, options = {}) {
   const totalInc = results.reduce((sum, result) => sum + (result.incidents ?? 0), 0);
   const incResults = results.filter(result => result.incidents != null);
   const title = fitText(race.name || 'Race Results', 24).toUpperCase();
-  const track = fitText(race.track || 'Unknown Circuit', 27).toUpperCase();
+  const track = fitTrackName(race.track || 'Unknown Circuit', 27).toUpperCase();
   const titleFontSize = title.length > 22 ? 40 : title.length > 18 ? 44 : 50;
   const trackFontSize = track.length > 24 ? 22 : 24;
   const round = race.round != null ? `ROUND ${String(race.round).padStart(2, '0')}` : 'RACE RESULTS';
@@ -260,7 +282,7 @@ function buildResultPosterSvg(race, results, options = {}) {
       </g>
 
       <g filter="url(#softShadow)">
-        ${trophyIcon({ x: 800, y: 258, scale: 1, color: MEDAL_COLORS.p1 })}
+        ${trophyIcon({ x: 800, y: 238, scale: 0.82, color: MEDAL_COLORS.p1 })}
         ${trophyIcon({ x: 332, y: 374, scale: 0.46, color: MEDAL_COLORS.p2 })}
         ${trophyIcon({ x: 1268, y: 374, scale: 0.46, color: MEDAL_COLORS.p3 })}
         ${podiumCard({ x: 585, y: 392, width: 430, height: 232, result: winner, place: 'P1', color: MEDAL_COLORS.p1, primary: true })}
@@ -279,7 +301,7 @@ function buildResultPosterSvg(race, results, options = {}) {
       ${statPanel({
         x: 835,
         y: 682,
-        title: 'CLEAN DRIVE',
+        title: 'CLEANEST DRIVE',
         name: cleanest ? driverName(cleanest) : 'Niet beschikbaar',
         value: cleanest ? `${cleanest.incidents} INC` : '--',
         color: '#38bdf8',
