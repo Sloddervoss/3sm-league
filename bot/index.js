@@ -43,8 +43,7 @@ function requireEnv(name) {
 }
 
 const SUPABASE_URL = requireEnv('SUPABASE_URL');
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim();
-if (!SUPABASE_KEY) throw new Error('[config] Missing required environment variable: SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY');
+const SUPABASE_KEY = requireEnv('SUPABASE_SERVICE_KEY');
 const DISCORD_BOT_TOKEN = requireEnv('DISCORD_BOT_TOKEN');
 const SITE_URL = requireEnv('SITE_URL').replace(/\/$/, '');
 const ENABLE_RACE_POSTERS = process.env.DISCORD_RACE_POSTERS === 'true';
