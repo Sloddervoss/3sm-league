@@ -2091,11 +2091,28 @@ async function registerCommands(guildId) {
   } catch (e) { botLog('[3SM Bot] Commands registreren mislukt:', describeError(e)); }
 }
 
+async function requireDiscordAdmin(interaction) {
+  if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
+
+  const response = { content: '❌ Alleen Discord admins kunnen dit commando gebruiken.', flags: 64 };
+  if (interaction.deferred || interaction.replied) {
+    await interaction.followUp(response).catch(() => {});
+  } else {
+    await interaction.reply(response).catch(() => {});
+  }
+  await botLog(`🚫 Admin-command geweigerd voor **${interaction.user?.tag || interaction.user?.id || 'onbekend'}**: ${interaction.commandName}`);
+  return false;
+}
+
 // ── Interaction handler ───────────────────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isAutocomplete()) {
       if (['setprofile', 'deleteprofile'].includes(interaction.commandName)) {
+        if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+          await interaction.respond([]).catch(() => {});
+          return;
+        }
         const focused = interaction.options.getFocused();
         const profiles = readStreamerProfiles(STREAMERS_FILE);
         await interaction.respond(profileAutocompleteChoices(profiles, focused));
@@ -2118,12 +2135,15 @@ client.on('interactionCreate', async (interaction) => {
           await handleRegister(interaction, 'unregister');
           break;
         case 'setup-server':
+          if (!(await requireDiscordAdmin(interaction))) break;
           await handleSetupServer(interaction);
           break;
         case 'setprofile':
+          if (!(await requireDiscordAdmin(interaction))) break;
           await handleSetProfile(interaction);
           break;
         case 'deleteprofile':
+          if (!(await requireDiscordAdmin(interaction))) break;
           await handleDeleteProfile(interaction);
           break;
       }
