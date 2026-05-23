@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRacePosterAttachment } from './racePoster.js';
 import { createResultPosterAttachment } from './resultPoster.js';
+import { redactSensitiveText } from './logging.js';
 import {
   buildLiveEmbedPayload,
   buildStreamerSession,
@@ -66,7 +67,7 @@ const client = new Client({
 
 // ── Bot log helper ────────────────────────────────────────────────────────────
 async function botLog(...args) {
-  const message = args.join(' ');
+  const message = redactSensitiveText(args.join(' '));
   console.log(`[botLog] ${message}`);
   try {
     const cfg = loadConfig();
@@ -95,7 +96,8 @@ function describeError(error) {
     if (causeParts.length) parts.push(`cause: ${causeParts.join(' ')}`);
   }
 
-  return parts.length ? parts.join(' | ') : String(error);
+  const message = parts.length ? parts.join(' | ') : String(error);
+  return redactSensitiveText(message);
 }
 
 const runningJobs = new Map();
