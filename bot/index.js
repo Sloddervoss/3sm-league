@@ -311,13 +311,15 @@ async function getUitslagenChannel() {
 
 async function getAankondigingenChannel() {
   const cfg = loadConfig();
-  const channelId = cfg.aankondigingen_channel_id || process.env.DISCORD_AANKONDIGINGEN_CHANNEL_ID || '1489621381548081276';
+  const channelId = cfg.aankondigingen_channel_id || process.env.DISCORD_AANKONDIGINGEN_CHANNEL_ID;
+  if (!channelId) { botLog('[bot] Geen aankondigingen channel geconfigureerd'); return null; }
   return client.channels.fetch(channelId).catch(() => null);
 }
 
 async function getStewardDecisionsChannel() {
   const cfg = loadConfig();
-  const channelId = cfg.steward_decisions_channel_id || process.env.DISCORD_STEWARD_DECISIONS_CHANNEL_ID || '1492662115553771530';
+  const channelId = cfg.steward_decisions_channel_id || process.env.DISCORD_STEWARD_DECISIONS_CHANNEL_ID;
+  if (!channelId) { botLog('[bot] Geen steward decisions channel geconfigureerd'); return null; }
   return client.channels.fetch(channelId).catch(() => null);
 }
 
