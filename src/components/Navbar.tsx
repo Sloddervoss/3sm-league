@@ -1,5 +1,4 @@
 import { Link, useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
 import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -72,11 +71,7 @@ const Navbar = () => {
                 }`}
               >
                 {active && (
-                  <motion.div
-                    layoutId="nav-active"
-                    className="absolute inset-0 bg-gradient-racing rounded-md"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
-                  />
+                  <div className="absolute inset-0 bg-gradient-racing rounded-md" />
                 )}
                 <span className="relative flex items-center gap-1.5">
                   <item.icon className="w-3.5 h-3.5" />
@@ -157,10 +152,8 @@ const Navbar = () => {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={`${hideDesktop} bg-card border-b border-border px-4 pb-4`}
+        <div
+          className={`${hideDesktop} bg-card border-b border-border px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-150`}
         >
           <div className="flex items-center justify-between py-3">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">Taal</span>
@@ -207,7 +200,7 @@ const Navbar = () => {
               <LogIn className="w-4 h-4" /> Inloggen
             </Link>
           )}
-        </motion.div>
+        </div>
       )}
     </nav>
   );
