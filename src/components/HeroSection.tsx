@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { ChevronRight, Calendar, Trophy } from "lucide-react";
 import { Link } from "react-router-dom";
 import heroBg from "@/assets/hero-bg.webp";
@@ -20,12 +19,7 @@ const HeroSection = () => {
       </div>
 
       <div className="container mx-auto px-4 max-w-7xl relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: "easeOut" }}
-          className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)] lg:items-end"
-        >
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)] lg:items-end">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 mb-4">
               <div className="h-px w-8 bg-gradient-racing" />
@@ -91,7 +85,7 @@ const HeroSection = () => {
               <ChevronRight className="ml-auto h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-[#9ea7ff]" />
             </div>
           </a>
-        </motion.div>
+        </div>
       </div>
 
       {/* Decorative racing stripe */}

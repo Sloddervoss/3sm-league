@@ -2,7 +2,6 @@
  * NextRaceTeaser — compacte "Volgende Race" sectie op de home pagina.
  * Toont alleen de eerstvolgende race + countdown + CTA naar /calendar.
  */
-import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -132,10 +131,7 @@ const NextRaceTeaser = () => {
         </div>
 
         {/* Race card */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
+        <div
           className="relative overflow-hidden rounded-2xl"
           style={{
             background: "linear-gradient(135deg, #111118 0%, #0d0d14 100%)",
@@ -274,7 +270,7 @@ const NextRaceTeaser = () => {
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );
