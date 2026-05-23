@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { ChevronRight, Calendar, Trophy } from "lucide-react";
 import { Link } from "react-router-dom";
 import heroBg from "@/assets/hero-bg.webp";
+import heroBgDesktop from "@/assets/hero-bg-desktop.webp";
 import heroBgMobile from "@/assets/hero-bg-mobile.webp";
 
 const HeroSection = () => {
@@ -11,7 +12,8 @@ const HeroSection = () => {
       <div className="absolute inset-0">
         <picture>
           <source srcSet={heroBgMobile} media="(max-width: 768px)" />
-          <img src={heroBg} alt="" className="w-full h-full object-cover" fetchPriority="high" />
+          <source srcSet={heroBgDesktop} media="(max-width: 1400px)" />
+          <img src={heroBg} alt="" className="w-full h-full object-cover" fetchPriority="high" width="1920" height="1080" />
         </picture>
         <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/40" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
