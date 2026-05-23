@@ -98,7 +98,7 @@ export const TRACK_DATA: Record<string, TrackInfo> = {
   "Sandown International Motor Raceway": { flag: "🇦🇺", country: "Australia", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Sandown_%28Australia%29_track_map.svg/330px-Sandown_%28Australia%29_track_map.svg.png" },
   "Winton Motor Raceway": { flag: "🇦🇺", country: "Australia", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Winton_Motor_Raceway_%28Australia%29_track_map_--_with_extension.svg/330px-Winton_Motor_Raceway_%28Australia%29_track_map_--_with_extension.svg.png" },
   "Shell V-Power Motorsport Park at The Bend": { flag: "🇦🇺", country: "Australia", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/The_Bend_Motorsport_Park_layout_%28International%29.svg/330px-The_Bend_Motorsport_Park_layout_%28International%29.svg.png" },
-  "Oran Park Raceway": { flag: "🇦🇺", country: "Australia", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Track_map_for_Oran_Park--Grand_Prix_circuit.svg/330px-Track_map_for_Oran_Park--Grand_Prix_circuit.svg.png" },
+  "Oran Park Raceway": { flag: "🇦🇺", country: "Australia", imageUrl: "/tracks/maps/oran-park-grand-prix.webp" },
   "Adelaide Street Circuit": { flag: "🇦🇺", country: "Australia", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Adelaide_%28short_route%29.svg/330px-Adelaide_%28short_route%29.svg.png" },
   // Portugal
   "Algarve International Circuit": { flag: "🇵🇹", country: "Portugal", imageUrl: `${WP}0/0a/Aut%C3%B3dromo_do_Algarve_F1_Sectors.svg/330px-Aut%C3%B3dromo_do_Algarve_F1_Sectors.svg.png` },

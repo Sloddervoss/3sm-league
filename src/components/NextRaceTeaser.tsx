@@ -44,7 +44,54 @@ const NextRaceTeaser = () => {
     .filter((r) => r.status !== "completed" && new Date(r.race_date) > now)
     .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as NextRace | undefined;
 
-  if (!nextRace) return null;
+  if (!nextRace) {
+    return (
+      <section className="py-12" style={{ background: "#08080f" }}>
+        <div className="container mx-auto px-4 max-w-7xl">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-orange-500" />
+              <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Volgende Race</span>
+            </div>
+            <div className="h-4 w-24 rounded bg-white/5" aria-hidden="true" />
+          </div>
+
+          {/* Skeleton card — reserveert dezelfde ruimte als de echte next-race card om CLS te voorkomen. */}
+          <div
+            className="relative overflow-hidden rounded-2xl"
+            style={{
+              background: "linear-gradient(135deg, #111118 0%, #0d0d14 100%)",
+              border: "1px solid rgba(249,115,22,0.2)",
+            }}
+            aria-hidden="true"
+          >
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-orange-500/40" />
+            <div className="flex flex-col md:flex-row items-stretch">
+              <div className="relative md:w-72 h-48 md:h-auto shrink-0 overflow-hidden bg-white/5" />
+              <div className="relative flex-1 p-6 md:p-8 flex flex-col justify-between overflow-hidden min-h-[318px] md:min-h-[260px]">
+                <div>
+                  <div className="flex items-center gap-3 mb-3 flex-wrap">
+                    <div className="h-5 w-20 rounded-full bg-white/5" />
+                    <div className="h-5 w-36 rounded bg-white/5" />
+                  </div>
+                  <div className="h-8 w-64 max-w-full rounded bg-white/5 mb-3" />
+                  <div className="h-4 w-56 max-w-full rounded bg-white/5 mb-4" />
+                  <div className="h-6 w-72 max-w-full rounded bg-white/5" />
+                </div>
+                <div className="flex items-end justify-between mt-6 pt-6 flex-wrap gap-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="space-y-2">
+                    <div className="h-3 w-16 rounded bg-white/5" />
+                    <div className="h-7 w-24 rounded bg-white/5" />
+                  </div>
+                  <div className="h-10 w-28 rounded-xl bg-white/5" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   const isStandalone = !nextRace.leagues;
   const accentColor = isStandalone ? SOLO_COLOR : "#f97316";
@@ -106,6 +153,9 @@ const NextRaceTeaser = () => {
                 alt={nextRace.track}
                 className="absolute inset-0 w-full h-full object-cover"
                 style={{ opacity: 0.5, filter: "saturate(0.6) brightness(0.7)" }}
+                width="288"
+                height="192"
+                loading="lazy"
               />
               <div className="absolute inset-0 md:hidden" style={{ background: "linear-gradient(to top, #0d0d14 0%, transparent 60%)" }} />
               <div className="absolute inset-0 hidden md:block" style={{ background: "linear-gradient(to right, transparent 60%, #0d0d14 100%)" }} />

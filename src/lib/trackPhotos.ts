@@ -112,7 +112,7 @@ const PHOTOS: Record<string, string> = {
   "Winton Motor Raceway":                             "/tracks/photos/winton-motor-raceway-included.jpg",
   "Phillip Island Circuit":                           "/tracks/photos/phillipisland-sm.jpg",
   "Mount Panorama Circuit":                           "/tracks/photos/update-mountpanoramacircuit.jpg",
-  "Oran Park Raceway":                                "/tracks/photos/included-oranparkraceway.jpg",
+  "Oran Park Raceway":                                "/tracks/photos/included-oranparkraceway.webp",
   // Brazil
   "Autodromo Jose Carlos Pace":                       "/tracks/photos/autodromojosecarlospace.jpg",
   "Autódromo José Carlos Pace":                       "/tracks/photos/autodromojosecarlospace.jpg",
