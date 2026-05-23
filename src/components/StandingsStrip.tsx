@@ -65,9 +65,33 @@ const StandingsStrip = () => {
     },
   });
 
-  if (!standings.length) return null;
-
   const leagueName = leagues.find((l) => l.id === activeLeagueId)?.name;
+
+  if (!standings.length) {
+    return (
+      <section className="py-12" style={{ background: "#08080f" }}>
+        <div className="container mx-auto px-4 max-w-7xl">
+          <div className="flex items-end justify-between mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Trophy className="w-4 h-4 text-orange-500" />
+                <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">
+                  Championship{leagueName ? ` · ${leagueName}` : ""}
+                </span>
+              </div>
+              <h2 className="font-heading font-black text-3xl md:text-4xl text-white leading-none">
+                COUREURS STAND
+              </h2>
+            </div>
+          </div>
+          {/* Skeleton placeholder — voorkomt CLS door altijd een vaste hoogte te reserveren */}
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)", minHeight: "200px" }} />
+        </div>
+      </section>
+    );
+  }
+
+  // leagueName already defined above
 
   return (
     <section className="py-12" style={{ background: "#08080f" }}>
