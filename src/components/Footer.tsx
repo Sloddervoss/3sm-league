@@ -76,7 +76,7 @@ const Footer = () => {
             </p>
           </div>
           <div>
-            <h4 className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Navigatie</h4>
+            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Navigatie</p>
             <div className="grid grid-cols-2 gap-1">
               {[
                 { label: "Home", path: "/" },
@@ -94,7 +94,7 @@ const Footer = () => {
             </div>
           </div>
           <div>
-            <h4 className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Platform</h4>
+            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Platform</p>
             <div className="space-y-1">
               <Link to="/auth" className="block text-xs text-muted-foreground hover:text-primary transition-colors py-0.5">Inloggen / Registreren</Link>
               <Link to="/profile" className="block text-xs text-muted-foreground hover:text-primary transition-colors py-0.5">Mijn Profiel</Link>
@@ -102,7 +102,7 @@ const Footer = () => {
             </div>
           </div>
           <div className="md:justify-self-end">
-            <h4 className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Socials</h4>
+            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Socials</p>
             <div className="flex gap-2">
               {socialLinks.map(({ label, href, icon: Icon, className }) => (
                 <a

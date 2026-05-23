@@ -21,7 +21,7 @@ html {
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(249, 115, 22, 0.5);
+  background: rgba(249, 115, 22, 0.7);
 }
 * {
   scrollbar-width: thin;
