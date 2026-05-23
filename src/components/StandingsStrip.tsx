@@ -144,7 +144,7 @@ const StandingsStrip = () => {
                       />
                       <span
                         className="text-[10px] truncate"
-                        style={{ color: (teamColor || "#6b7280") + "99" }}
+                        style={{ color: (teamColor || "#6b7280") + "cc" }}
                       >
                         {driver.team.name}
                       </span>

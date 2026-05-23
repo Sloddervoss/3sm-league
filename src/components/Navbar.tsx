@@ -129,6 +129,7 @@ const Navbar = () => {
               <button
                 onClick={signOut}
                 className="px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Uitloggen"
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
@@ -148,6 +149,7 @@ const Navbar = () => {
         <button
           className={`${hideDesktop} text-foreground`}
           onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? "Sluit menu" : "Open menu"}
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
