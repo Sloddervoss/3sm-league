@@ -237,8 +237,8 @@ function readJsonFile(file, fallback = {}) {
 }
 
 function writeJsonFile(file, data) {
-  const tmpFile = `${file}.tmp`;
-  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2));
+  const tmpFile = `${file}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), { mode: 0o600 });
   fs.renameSync(tmpFile, file);
 }
 
