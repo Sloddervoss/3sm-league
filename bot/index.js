@@ -243,7 +243,10 @@ function readJsonFile(file, fallback = {}) {
   } catch (e) {
     if (e.code !== 'ENOENT') {
       const badFile = `${file}.bad-${Date.now()}`;
-      try { fs.copyFileSync(file, badFile); } catch {}
+      try {
+        fs.copyFileSync(file, badFile);
+        fs.chmodSync(badFile, 0o600);
+      } catch {}
       console.warn(`[json] ${path.basename(file)} kon niet worden gelezen; fallback gebruikt`);
     }
     return fallback;
