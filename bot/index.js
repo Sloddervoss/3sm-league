@@ -2084,6 +2084,9 @@ const COMMANDS = [
       .setDescription('Naam van het streamer-profiel')
       .setRequired(true)
       .setAutocomplete(true)),
+  new SlashCommandBuilder()
+    .setName('invite')
+    .setDescription('Genereer een Discord invite link voor de 3SM server'),
 ].map(c => c.toJSON());
 
 async function registerCommands(guildId) {
@@ -2149,6 +2152,9 @@ client.on('interactionCreate', async (interaction) => {
           if (!(await requireDiscordAdmin(interaction))) break;
           await handleDeleteProfile(interaction);
           break;
+        case 'invite':
+          await handleInvite(interaction);
+          break;
       }
     } else if (interaction.isButton()) {
       const [action, raceId] = interaction.customId.split('_');
@@ -2210,6 +2216,39 @@ async function handleSite(interaction) {
   return interaction.reply({
     content: `**3 Stripe Motorsport website**\n${url}/`,
   });
+}
+
+// /invite → Discord invite link
+async function handleInvite(interaction) {
+  try {
+    const guild = interaction.guild;
+    if (!guild) {
+      return interaction.reply({ content: '❌ Dit commando werkt alleen in een server.', flags: 64 });
+    }
+
+    // Gebruik systemChannel (algemeen) als die bestaat, anders guild's standaardkanaal
+    const channel = guild.systemChannel || guild.channels.cache.find(
+      c => c.type === 0 && c.permissionsFor(client.user.id)?.has(PermissionFlagsBits.CreateInstantInvite)
+    );
+
+    if (!channel) {
+      return interaction.reply({ content: '❌ Geen geschikt kanaal gevonden om een invite voor te maken.', flags: 64 });
+    }
+
+    const invite = await channel.createInvite({
+      maxAge: 86400,      // 24 uur geldig
+      maxUses: 0,         // onbeperkt gebruik
+      reason: 'Aangemaakt via /invite commando',
+    });
+
+    botLog(`🔗 Invite link gegenereerd door **${interaction.user.tag}**: ${invite.url}`);
+    return interaction.reply({
+      content: `**3 Stripe Motorsport** — nodig vrienden uit!\n${invite.url}\n\n> Invite is 24 uur geldig, onbeperkt gebruik.`,
+    });
+  } catch (e) {
+    await throttledBotLog(`invite:${describeError(e)}`, '[invite]', describeError(e));
+    return interaction.reply({ content: `❌ Kon geen invite aanmaken. Check of de bot permissie heeft in het kanaal.`, flags: 64 });
+  }
 }
 
 // /koppel → magic link
