@@ -29,6 +29,21 @@ test('normalizeStreamerProfile requires at least one platform name or id', () =>
   });
 });
 
+test('normalizeStreamerProfile rejects unsafe platform identifiers before building live URLs', () => {
+  assert.throws(
+    () => normalizeStreamerProfile({ profiel_naam: 'Vincent', twitch_naam: 'slodder/voss' }),
+    /Ongeldige Twitch gebruikersnaam/i,
+  );
+  assert.throws(
+    () => normalizeStreamerProfile({ profiel_naam: 'Vincent', kick_naam: 'slodder?voss' }),
+    /Ongeldige Kick gebruikersnaam/i,
+  );
+  assert.throws(
+    () => normalizeStreamerProfile({ profiel_naam: 'Vincent', youtube_id: 'UC123) [klik](https://evil.example)' }),
+    /Ongeldige YouTube kanaal/i,
+  );
+});
+
 test('upsertStreamerProfile updates existing profile case-insensitively without duplicates', () => {
   const profiles = [normalizeStreamerProfile({ profiel_naam: 'Vincent', twitch_naam: 'old' })];
 
