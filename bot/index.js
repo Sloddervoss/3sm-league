@@ -2236,14 +2236,14 @@ async function handleInvite(interaction) {
     }
 
     const invite = await channel.createInvite({
-      maxAge: 86400,      // 24 uur geldig
+      maxAge: 0,          // nooit verlopend
       maxUses: 0,         // onbeperkt gebruik
       reason: 'Aangemaakt via /invite commando',
     });
 
     botLog(`🔗 Invite link gegenereerd door **${interaction.user.tag}**: ${invite.url}`);
     return interaction.reply({
-      content: `**3 Stripe Motorsport** — nodig vrienden uit!\n${invite.url}\n\n> Invite is 24 uur geldig, onbeperkt gebruik.`,
+      content: `**3 Stripe Motorsport** — nodig vrienden uit!\n${invite.url}\n\n> Invite is permanent geldig.`,
     });
   } catch (e) {
     await throttledBotLog(`invite:${describeError(e)}`, '[invite]', describeError(e));
