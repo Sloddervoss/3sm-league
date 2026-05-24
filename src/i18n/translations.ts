@@ -326,7 +326,7 @@ const exactTranslations: Record<string, string> = {
   "Een actief iRacing account": "An active iRacing account",
   "Een Discord account voor communicatie": "A Discord account for communication",
   "Een compleet 3SM profiel met iRacing naam en Customer ID": "A complete 3SM profile with iRacing name and Customer ID",
-  "Respect voor de regels, stewards en andere coureurs": "Respect for the rules, stewards and other drivers",
+  "Respect voor regels, stewards en andere coureurs": "Respect for rules, stewards and other drivers",
   "Een stabiele verbinding en voorbereiding op de raceavond": "A stable connection and preparation for race night",
   "Community eerst, competitie er bovenop.": "Community first, competition on top.",
   "Discord is de paddock van 3SM. Je stelt vragen, vindt updates, ziet wie er meerijdt en blijft betrokken bij alles rondom de league. De site houdt de officiële data netjes bij; Discord houdt de community levend.": "Discord is the 3SM paddock. You ask questions, find updates, see who is racing and stay involved with everything around the league. The site keeps the official data organized; Discord keeps the community alive.",
