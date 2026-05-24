@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List } from "lucide-react";
+import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -12,6 +12,7 @@ const navItems = [
   { label: "Teams", path: "/teams", icon: Car },
   { label: "Uitslagen", path: "/results", icon: List },
   { label: "Seizoenen", path: "/seasons", icon: Trophy },
+  { label: "Meedoen", path: "/meedoen", icon: UserPlus },
 ];
 
 const Navbar = () => {

@@ -86,6 +86,7 @@ const Footer = () => {
                 { label: "Teams", path: "/teams" },
                 { label: "Results", path: "/results" },
                 { label: "Seasons", path: "/seasons" },
+                { label: "Meedoen", path: "/meedoen" },
               ].map((link) => (
                 <Link key={link.path} to={link.path} className="text-xs text-muted-foreground hover:text-primary transition-colors py-0.5">
                   {link.label}
