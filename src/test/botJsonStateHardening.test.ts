@@ -11,4 +11,11 @@ describe("Discord bot JSON state hardening", () => {
     expect(source).toMatch(/const tmpFile = `\$\{file\}\.\$\{process\.pid\}\.\$\{Date\.now\(\)\}\.tmp`;/);
     expect(source).toMatch(/fs\.writeFileSync\(tmpFile, JSON\.stringify\(data, null, 2\), \{ mode: 0o600 \}\);/);
   });
+
+  it("stores unreadable JSON backups with private permissions", () => {
+    const source = readFileSync(botIndexPath, "utf8");
+
+    expect(source).toMatch(/fs\.copyFileSync\(file, badFile\);/);
+    expect(source).toMatch(/fs\.chmodSync\(badFile, 0o600\);/);
+  });
 });
