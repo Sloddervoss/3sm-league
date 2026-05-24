@@ -10,6 +10,14 @@ function normalizeKey(value) {
   return clean(value).toLowerCase();
 }
 
+function requireSafeIdentifier(value, label) {
+  if (!value) return value;
+  if (!/^[A-Za-z0-9_.@-]+$/.test(value)) {
+    throw new Error(`Ongeldige ${label}. Gebruik alleen letters, cijfers, _, ., @ of -.`);
+  }
+  return value;
+}
+
 export function titleContains3Stripe(title) {
   return clean(title).toLowerCase().includes(REQUIRED_TITLE_TEXT);
 }
@@ -21,9 +29,9 @@ export function normalizeStreamerProfile(input = {}, existing = null) {
   const profile = {
     profiel_naam: existing?.profiel_naam || profielNaam,
     kanaal: clean(input.kanaal ?? input.channel_id ?? existing?.kanaal),
-    twitch_naam: clean(input.twitch_naam ?? input.twitch ?? existing?.twitch_naam),
-    kick_naam: clean(input.kick_naam ?? input.kick ?? existing?.kick_naam),
-    youtube_id: clean(input.youtube_id ?? input.youtube ?? existing?.youtube_id),
+    twitch_naam: requireSafeIdentifier(clean(input.twitch_naam ?? input.twitch ?? existing?.twitch_naam), 'Twitch gebruikersnaam'),
+    kick_naam: requireSafeIdentifier(clean(input.kick_naam ?? input.kick ?? existing?.kick_naam), 'Kick gebruikersnaam'),
+    youtube_id: requireSafeIdentifier(clean(input.youtube_id ?? input.youtube ?? existing?.youtube_id), 'YouTube kanaal'),
   };
 
   if (!profile.twitch_naam && !profile.kick_naam && !profile.youtube_id) {
