@@ -1,7 +1,7 @@
 import type { SVGProps } from "react";
 import { Link } from "react-router-dom";
 
-const DISCORD_URL = "https://discord.gg/F6CM9kC2YY";
+const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 const INSTAGRAM_URL = "https://www.instagram.com/3stripemotorsport";
 const FACEBOOK_URL = "https://www.facebook.com/people/3-Stripe-Motorsport/61589158685020/";
 

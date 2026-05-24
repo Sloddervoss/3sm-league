@@ -25,7 +25,7 @@ import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 
-const DISCORD_URL = "https://discord.gg/F6CM9kC2YY";
+const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 
 const setMetaTag = (selector: string, attr: "content" | "href", value: string) => {
   const element = document.head.querySelector(selector);
