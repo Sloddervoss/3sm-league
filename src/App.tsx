@@ -16,6 +16,7 @@ const DriversPage = lazy(() => import("./pages/DriversPage.tsx"));
 const TeamsPage = lazy(() => import("./pages/TeamsPage.tsx"));
 const ResultsPage = lazy(() => import("./pages/ResultsPage.tsx"));
 const SeasonsPage = lazy(() => import("./pages/SeasonsPage.tsx"));
+const JoinPage = lazy(() => import("./pages/JoinPage.tsx"));
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx"));
@@ -61,6 +62,7 @@ const App = () => (
                   <Route path="/teams" element={<TeamsPage />} />
                   <Route path="/results" element={<ResultsPage />} />
                   <Route path="/seasons" element={<SeasonsPage />} />
+                  <Route path="/meedoen" element={<JoinPage />} />
                   <Route path="/stewards" element={<StewardPage />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/admin" element={<AdminPage />} />
