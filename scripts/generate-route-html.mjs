@@ -64,7 +64,7 @@ const escapeAttr = (value) =>
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-const absoluteUrl = (path) => `${SITE_URL}${path === '/' ? '/' : path}`;
+const absoluteUrl = (path) => `${SITE_URL}${path === '/' ? '/' : `${path}/`}`;
 
 const replaceOrInsertMeta = (html, selectorRegex, replacement) => {
   if (selectorRegex.test(html)) return html.replace(selectorRegex, replacement);
