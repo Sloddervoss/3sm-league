@@ -25,7 +25,7 @@ const routes = [
   },
   {
     path: '/meedoen',
-    title: 'Meedoen met 3SM - iRacing Community & League',
+    title: 'Meedoen met 3SM - iRacing League & Community',
     priority: '0.8',
     description:
       'Doe mee met 3 Stripe Motorsport: een iRacing community en league, begonnen in Nederland en open voor iedereen die clean, fair en met plezier wil racen.',
@@ -160,9 +160,19 @@ const joinFaq = [
       'De kalender op de site is je vaste startpunt voor races, circuits, tijden en inschrijven. Discord wordt gebruikt voor reminders, aankondigingen en praktische updates.',
   },
   {
+    question: 'Welke klasse rijden jullie?',
+    answer:
+      'Op dit moment focussen we op GT3 in iRacing. Als de community groeit, willen we later uitbreiden naar bijvoorbeeld multiclass of extra raceformats.',
+  },
+  {
+    question: 'Kan ik nog instappen?',
+    answer:
+      'Ja. De grid groeit en nieuwe coureurs kunnen nog aansluiten bij races, teams en seizoenen.',
+  },
+  {
     question: 'Kan ik met een team meedoen?',
     answer:
-      'Ja. Je kunt aansluiten bij een bestaand team of een nieuw team aanvragen. Teamrollen en zichtbaarheid worden daarna verwerkt op de site en Discord.',
+      'Ja. Je kunt aansluiten bij een bestaand team of een nieuw team aanvragen. Teams krijgen een eigen Discord-sectie voor teamleden.',
   },
 ];
 
