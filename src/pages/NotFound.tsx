@@ -6,6 +6,20 @@ const NotFound = () => {
 
   useEffect(() => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
+
+    const robotsId = "not-found-robots";
+    let robots = document.getElementById(robotsId) as HTMLMetaElement | null;
+    if (!robots) {
+      robots = document.createElement("meta");
+      robots.id = robotsId;
+      robots.name = "robots";
+      document.head.appendChild(robots);
+    }
+    robots.content = "noindex, nofollow";
+
+    return () => {
+      document.getElementById(robotsId)?.remove();
+    };
   }, [location.pathname]);
 
   return (

@@ -208,8 +208,8 @@ const JoinPage = () => {
     setMetaTag('meta[name="description"]', "content", "Doe mee met 3 Stripe Motorsport: een iRacing community en league, begonnen in Nederland en open voor iedereen die clean, fair en met plezier wil racen.");
     setMetaTag('meta[property="og:title"]', "content", "Meedoen met 3 Stripe Motorsport");
     setMetaTag('meta[property="og:description"]', "content", "Lees hoe je aansluit bij de 3SM iRacing community: Discord joinen, profiel aanmaken, account koppelen en inschrijven voor races.");
-    setMetaTag('meta[property="og:url"]', "content", "https://3stripemotorsport.cc/meedoen");
-    setMetaTag('link[rel="canonical"]', "href", "https://3stripemotorsport.cc/meedoen");
+    setMetaTag('meta[property="og:url"]', "content", "https://3stripemotorsport.cc/meedoen/");
+    setMetaTag('link[rel="canonical"]', "href", "https://3stripemotorsport.cc/meedoen/");
 
     const schemaId = "join-page-faq-schema";
     document.getElementById(schemaId)?.remove();

@@ -247,6 +247,60 @@ const ResultsPage = () => {
   const spDriverName = (r: RaceDetailResult) =>
     r.profiles?.display_name || r.profiles?.iracing_name || "Onbekend";
 
+  useEffect(() => {
+    if (!races?.length) return;
+
+    const siteUrl = "https://3stripemotorsport.cc";
+    const itemList = {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: "3 Stripe Motorsport race-uitslagen",
+      description: "Overzicht van gereden 3SM iRacing races met circuits, rondes, winnaars en resultaten.",
+      url: `${siteUrl}/results/`,
+      itemListElement: races.slice(0, 20).map((race, index) => {
+        const winner = winners?.find((w) => w.race_id === race.id);
+        const winnerName = winner?.profiles?.display_name || winner?.profiles?.iracing_name;
+
+        return {
+          "@type": "ListItem",
+          position: index + 1,
+          item: {
+            "@type": "SportsEvent",
+            name: race.name,
+            sport: "Sim racing",
+            startDate: race.race_date,
+            location: {
+              "@type": "VirtualLocation",
+              name: race.track,
+            },
+            organizer: {
+              "@type": "SportsOrganization",
+              name: "3 Stripe Motorsport",
+              url: siteUrl,
+            },
+            eventStatus: "https://schema.org/EventCompleted",
+            ...(race.leagues?.name ? { superEvent: { "@type": "SportsEvent", name: race.leagues.name } } : {}),
+            ...(winnerName ? { result: `Winner: ${winnerName}` } : {}),
+          },
+        };
+      }),
+    };
+
+    const scriptId = "results-itemlist-jsonld";
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement("script");
+      script.id = scriptId;
+      script.type = "application/ld+json";
+      document.head.appendChild(script);
+    }
+    script.textContent = JSON.stringify(itemList);
+
+    return () => {
+      document.getElementById(scriptId)?.remove();
+    };
+  }, [races, winners]);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
