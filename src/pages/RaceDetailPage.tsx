@@ -4,7 +4,7 @@ import StickyRaceBar from "@/components/StickyRaceBar";
 import { supabase } from "@/integrations/supabase/client";
 import { getRaceDetailStats, type RaceDetailStatsResult } from "@/lib/raceDetailStats";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, CalendarDays, Flag, List, Share2, Trophy, Zap } from "lucide-react";
+import { ArrowLeft, Car, CloudSun, Flag, List, Share2, Sparkles, Trophy, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -65,6 +65,38 @@ const medal = (position: number | null) => {
   return position ?? "-";
 };
 
+const deltaClass = (delta: number | null) => {
+  if (delta == null) return "border-muted/25 bg-muted/10 text-muted-foreground";
+  if (delta > 0) return "border-green-500/25 bg-green-500/10 text-green-400";
+  if (delta < 0) return "border-red-500/25 bg-red-500/10 text-red-400";
+  return "border-muted/25 bg-muted/10 text-muted-foreground";
+};
+
+const carCounts = (results: RaceResultRow[]): Record<string, number> => {
+  const counts: Record<string, number> = {};
+  for (const r of results) {
+    if (r.car_name) {
+      const label = r.car_name.replace(/ \(992\)/g, "").replace(/ 2020/g, "");
+      counts[label] = (counts[label] || 0) + 1;
+    }
+  }
+  return counts;
+};
+
+const distinctColors = ["bg-gradient-racing", "bg-sky-500", "bg-purple-500", "bg-emerald-500", "bg-amber-500", "bg-pink-500"];
+const parseWeatherParts = (weather: string | null): string[] => {
+  if (!weather) return [];
+  return weather.split(/ · /g).filter(Boolean);
+};
+
+const StatCard = ({ label, value, sub }: { label: string; value: string; sub: string }) => (
+  <div className="bg-card border border-border rounded-lg p-4 card-hover">
+    <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">{label}</div>
+    <div className="font-heading text-xl font-black leading-none">{value}</div>
+    {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
+  </div>
+);
+
 const RaceDetailPage = () => {
   const { raceId } = useParams<{ raceId: string }>();
 
@@ -114,6 +146,9 @@ const RaceDetailPage = () => {
 
   const stats = getRaceDetailStats(results);
   const loading = raceLoading || resultsLoading;
+  const cars = carCounts(results);
+  const carEntries = Object.entries(cars);
+  const weatherParts = parseWeatherParts(race?.weather ?? null);
 
   useEffect(() => {
     if (!race) return;
@@ -217,77 +252,88 @@ const RaceDetailPage = () => {
         {!loading && race && (
           <section className="py-10">
             <div className="container mx-auto px-4 space-y-8">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-card border border-border rounded-lg p-4 card-hover">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Podium</div>
-                  <div className="font-heading text-xl font-black">{stats.podium.length ? stats.podium.map((driver) => driver.name).join(" · ") : "Nog leeg"}</div>
-                </div>
-                <div className="bg-card border border-border rounded-lg p-4 card-hover">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Snelste ronde</div>
-                  <div className="font-heading text-xl font-black">{stats.fastest?.name || "-"}</div>
-                  {stats.fastest?.best_lap && <div className="text-xs font-mono text-purple-300 mt-1">{stats.fastest.best_lap}</div>}
-                </div>
-                <div className="bg-card border border-border rounded-lg p-4 card-hover">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Clean drive</div>
-                  <div className="font-heading text-xl font-black">{stats.cleanest?.name || "-"}</div>
-                  {stats.cleanest?.incidents != null && <div className="text-xs text-green-400 mt-1">{stats.cleanest.incidents} incidents</div>}
-                </div>
-                <div className="bg-card border border-border rounded-lg p-4 card-hover">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Race stats</div>
-                  <div className="font-heading text-xl font-black">{stats.finishers} finishers</div>
-                  <div className="text-xs text-muted-foreground mt-1">{stats.dnfCount} DNF · {stats.hasIncidentData ? `${stats.totalIncidents} incidents` : "incidents onbekend"}</div>
-                </div>
+              {/* Stats grid — styled like preview */}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                {stats.pole && (
+                  <StatCard label="Pole" value={stats.pole.name} sub={stats.pole.best_lap ? `${stats.pole.best_lap}` : "—"} />
+                )}
+                {stats.fastest && (
+                  <StatCard
+                    label="Snelste ronde"
+                    value={stats.fastest.name}
+                    sub={stats.fastest.best_lap ? `${stats.fastest.best_lap}${stats.fastest.best_lap_num ? ` — lap ${stats.fastest.best_lap_num}` : ""}` : "—"}
+                  />
+                )}
+                {stats.biggestMover && (
+                  <StatCard
+                    label="Grootste stijger"
+                    value={`+${stats.biggestMover.positionGain}`}
+                    sub={`${stats.biggestMover.name} P${stats.biggestMover.start_position} → P${stats.biggestMover.position}`}
+                  />
+                )}
+                {stats.cleanest && (
+                  <StatCard label="Cleanste" value={stats.cleanest.name} sub={`${stats.cleanest.incidents} incidents`} />
+                )}
+                {stats.mostLapsLed && (
+                  <StatCard
+                    label="Meeste laps led"
+                    value={stats.mostLapsLed.name}
+                    sub={`${stats.mostLapsLed.laps_led} van ${race.total_laps || "?"} laps`}
+                  />
+                )}
+                <StatCard label="Grid" value={`${results.length}`} sub={carEntries.length ? `${carEntries.length} ${carEntries.length === 1 ? "model" : "modellen"}` : ""} />
               </div>
 
-              {(stats.pole || stats.biggestMover || stats.mostLapsLed || race.sof || race.lead_changes != null || race.cautions != null || race.weather) && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
-                  {stats.pole && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Pole</div><div className="font-heading text-lg font-black">{stats.pole.name}</div></div>}
-                  {stats.biggestMover && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Grootste stijger</div><div className="font-heading text-lg font-black">{stats.biggestMover.name}</div><div className="text-xs text-green-400 mt-1">+{stats.biggestMover.positionGain} posities</div></div>}
-                  {stats.mostLapsLed && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Meeste laps led</div><div className="font-heading text-lg font-black">{stats.mostLapsLed.name}</div><div className="text-xs text-orange-400 mt-1">{stats.mostLapsLed.laps_led} laps</div></div>}
-                  {race.sof != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">SOF</div><div className="font-heading text-lg font-black">{race.sof}</div></div>}
-                  {race.lead_changes != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Lead changes</div><div className="font-heading text-lg font-black">{race.lead_changes}</div></div>}
-                  {race.cautions != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Cautions</div><div className="font-heading text-lg font-black">{race.cautions}</div>{race.caution_laps != null && <div className="text-xs text-muted-foreground mt-1">{race.caution_laps} laps</div>}</div>}
-                  {race.weather && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Weer</div><div className="text-xs font-heading font-bold leading-relaxed">{race.weather}</div></div>}
+              {(race.sof != null || race.lead_changes != null || race.cautions != null) && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {race.sof != null && <StatCard label="SOF" value={String(race.sof)} sub="Strength of field" />}
+                  {race.lead_changes != null && <StatCard label="Lead changes" value={String(race.lead_changes)} sub="" />}
+                  {race.cautions != null && <StatCard label="Cautions" value={String(race.cautions)} sub={race.caution_laps != null ? `${race.caution_laps} laps` : ""} />}
                 </div>
               )}
 
+              {/* Main content: table + sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="font-heading text-2xl font-black flex items-center gap-2"><List className="w-5 h-5 text-accent" /> Volledige uitslag</h2>
-                    <button
-                      type="button"
-                      onClick={() => navigator.clipboard?.writeText(window.location.href)}
-                      className="inline-flex items-center gap-2 rounded border border-border bg-secondary/40 px-3 py-2 text-xs font-heading font-bold hover:border-orange-500/40 transition-colors"
-                    >
-                      <Share2 className="w-3.5 h-3.5" /> Link kopiëren
-                    </button>
+                    <h2 className="font-heading text-2xl font-black flex items-center gap-2"><List className="w-5 h-5 text-accent" /> Race resultaat</h2>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="px-2 py-1 rounded bg-secondary border border-border">{results.length} coureurs</span>
+                      {race.total_laps != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{race.total_laps} laps</span>}
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard?.writeText(window.location.href)}
+                        className="inline-flex items-center gap-2 rounded border border-border bg-secondary/40 px-3 py-2 text-xs font-heading font-bold hover:border-orange-500/40 transition-colors"
+                      >
+                        <Share2 className="w-3.5 h-3.5" /> Link kopiëren
+                      </button>
+                    </div>
                   </div>
 
                   <div className="bg-card border border-border rounded-lg overflow-hidden">
-                    <div className="grid grid-cols-[3.5rem_3.5rem_1fr_4rem_4rem_6rem_4rem_4rem] gap-2 px-4 py-2 bg-secondary/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground min-w-[820px]">
-                      <span>Pos</span><span>Start</span><span>Coureur</span><span className="text-center">Δ</span><span className="text-center">Laps</span><span className="text-right">Best</span><span className="text-center">Inc</span><span className="text-center">Pts</span>
+                    <div className="grid grid-cols-[3.5rem_1fr_4rem_4rem_6rem_5rem_4rem_4rem] gap-2 px-4 py-2 bg-secondary/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground min-w-[820px]">
+                      <span>Pos</span><span>Coureur</span><span className="text-center">Laps</span><span className="text-center">Lead</span><span className="text-right">Best</span><span className="text-center">Grid</span><span className="text-center">Inc</span><span className="text-center">Pts</span>
                     </div>
                     <div className="overflow-x-auto">
                       {stats.sorted.map((driver) => {
                         const pen = penalties.find((p) => p.user_id === driver.user_id && p.penalty_type !== "warning");
                         const positionDelta = driver.start_position != null && driver.position != null ? driver.start_position - driver.position : null;
                         return (
-                          <div key={driver.user_id} className={`grid grid-cols-[3.5rem_3.5rem_1fr_4rem_4rem_6rem_4rem_4rem] gap-2 px-4 py-3 items-center border-t border-border/50 min-w-[820px] hover:bg-secondary/20 transition-colors ${driver.position != null && driver.position <= 3 ? "racing-stripe-left" : ""}`}>
+                          <div key={driver.user_id} className={`grid grid-cols-[3.5rem_1fr_4rem_4rem_6rem_5rem_4rem_4rem] gap-2 px-4 py-3 items-center border-t border-border/50 min-w-[820px] hover:bg-secondary/20 transition-colors ${driver.position != null && driver.position <= 3 ? "racing-stripe-left" : ""}`}>
                             <span className={`font-heading font-black text-lg ${positionColor(driver.position)}`}>{driver.dnf ? "DNF" : medal(driver.position)}</span>
-                            <span className="text-sm font-heading text-muted-foreground">{driver.start_position ?? "-"}</span>
                             <div className="min-w-0">
                               <div className="font-heading font-black truncate flex items-center gap-2">
                                 {driver.name}
                                 {driver.fastest_lap && <span className="text-[10px] px-1.5 py-0.5 rounded border border-purple-500/30 bg-purple-500/15 text-purple-300">FL</span>}
                                 {(driver.laps_led ?? 0) > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded border border-orange-500/30 bg-orange-500/15 text-orange-300">LED {driver.laps_led}</span>}
                               </div>
-                              {driver.gap_to_leader && <div className="text-xs text-muted-foreground truncate">+{driver.gap_to_leader}</div>}
+                              {driver.car_name && <div className="text-xs text-muted-foreground truncate">{driver.car_name}</div>}
                               {driver.reason_out && <div className="text-xs text-red-300 truncate">{driver.reason_out}</div>}
                             </div>
-                            <span className={`text-center text-sm font-heading ${positionDelta == null ? "text-muted-foreground" : positionDelta > 0 ? "text-green-400" : positionDelta < 0 ? "text-red-400" : "text-muted-foreground"}`}>{positionDelta == null ? "-" : positionDelta > 0 ? `+${positionDelta}` : positionDelta}</span>
                             <span className="text-center text-sm font-heading text-muted-foreground">{driver.laps ?? "-"}</span>
+                            <span className={`text-center text-sm font-heading ${(driver.laps_led ?? 0) > 0 ? "text-yellow-400 font-black" : "text-muted-foreground"}`}>{driver.laps_led ?? "-"}</span>
                             <span className="text-right text-sm font-mono text-muted-foreground">{driver.best_lap ?? "-"}{driver.best_lap_num ? <span className="block text-[10px] font-sans text-muted-foreground/70">lap {driver.best_lap_num}</span> : null}</span>
+                            <span className="text-center"><span className={`inline-flex min-w-12 justify-center rounded-full border px-2 py-0.5 text-xs font-heading font-black ${deltaClass(positionDelta)}`}>{positionDelta == null ? "-" : positionDelta > 0 ? `+${positionDelta}` : String(positionDelta)}</span></span>
                             <span className={`text-center text-sm font-heading ${driver.incidents === 0 ? "text-green-400 font-black" : (driver.incidents ?? 0) > 8 ? "text-red-400" : "text-muted-foreground"}`}>{driver.incidents != null ? `${driver.incidents}x` : "-"}</span>
                             <span className="text-center font-heading font-black">
                               {driver.points ?? "-"}
@@ -300,7 +346,21 @@ const RaceDetailPage = () => {
                   </div>
                 </div>
 
+                {/* Sidebar */}
                 <aside className="space-y-4">
+                  {weatherParts.length > 0 && (
+                    <div className="bg-card border border-border rounded-lg p-4">
+                      <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><CloudSun className="w-4 h-4 text-sky-400" /> Conditions</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {weatherParts.map((part) => (
+                          <div key={part} className="rounded bg-secondary/40 border border-border py-3 text-center">
+                            <div className="font-heading text-lg font-black">{part}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="bg-card border border-border rounded-lg p-4">
                     <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><Flag className="w-4 h-4 text-accent" /> Race overview</h3>
                     <div className="space-y-2.5 text-sm">
@@ -309,13 +369,27 @@ const RaceDetailPage = () => {
                       {race.round != null && <div className="flex justify-between"><span className="text-muted-foreground">Ronde</span><span className="font-heading font-bold">{race.round}</span></div>}
                       {race.total_laps != null && <div className="flex justify-between"><span className="text-muted-foreground">Geplande laps</span><span className="font-heading font-bold">{race.total_laps}</span></div>}
                       {race.race_duration && <div className="flex justify-between"><span className="text-muted-foreground">Race duur</span><span className="font-heading font-bold">{race.race_duration}</span></div>}
-                      {race.weather && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Weather</span><span className="font-heading font-bold text-right">{race.weather}</span></div>}
+                      {race.weather && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Weer</span><span className="font-heading font-bold text-right">{race.weather}</span></div>}
                       {race.sof != null && <div className="flex justify-between"><span className="text-muted-foreground">SOF</span><span className="font-heading font-bold">{race.sof}</span></div>}
                       {race.lead_changes != null && <div className="flex justify-between"><span className="text-muted-foreground">Lead changes</span><span className="font-heading font-bold">{race.lead_changes}</span></div>}
                       {race.cautions != null && <div className="flex justify-between"><span className="text-muted-foreground">Cautions</span><span className="font-heading font-bold">{race.cautions}{race.caution_laps != null ? ` / ${race.caution_laps} laps` : ""}</span></div>}
                       {race.car && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Auto</span><span className="font-heading font-bold text-right">{race.car}</span></div>}
                     </div>
                   </div>
+
+                  {carEntries.length > 0 && (
+                    <div className="bg-card border border-border rounded-lg p-4">
+                      <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><Car className="w-4 h-4 text-muted-foreground" /> Grid cars</h3>
+                      <div className="space-y-3">
+                        {carEntries.map(([car, count], index) => (
+                          <div key={car}>
+                            <div className="flex justify-between text-sm mb-1"><span className="font-heading font-bold truncate mr-2">{car}</span><span className="text-muted-foreground shrink-0">{count}</span></div>
+                            <div className="h-2 rounded-full bg-secondary overflow-hidden"><div className={`h-full rounded-full ${distinctColors[index % distinctColors.length]}`} style={{ width: `${(count / results.length) * 100}%` }} /></div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="bg-card border border-border rounded-lg p-4">
                     <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><Trophy className="w-4 h-4 text-yellow-400" /> Highlights</h3>
@@ -325,7 +399,6 @@ const RaceDetailPage = () => {
                       {stats.cleanest && <p>Cleanest drive: <strong className="text-foreground font-heading">{stats.cleanest.name}</strong> met {stats.cleanest.incidents}x.</p>}
                     </div>
                   </div>
-
                 </aside>
               </div>
             </div>
