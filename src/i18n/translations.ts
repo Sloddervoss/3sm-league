@@ -510,6 +510,10 @@ const exactTranslations: Record<string, string> = {
   "Nog geen detailresultaten beschikbaar.": "No detailed results available yet.",
   "Geen detailresultaten beschikbaar voor deze race.": "No detailed results available for this race.",
   "Bekijk hier de uitslag": "View the result here",
+  "Temperatuur": "Temperature",
+  "Luchtvochtigheid": "Humidity",
+  "Lucht": "Sky",
+  "Wind": "Wind",
 };
 
 const phraseTranslations: Array<[RegExp, string]> = [

@@ -85,9 +85,46 @@ const carCounts = (results: RaceResultRow[]): Record<string, number> => {
 };
 
 const distinctColors = ["bg-gradient-racing", "bg-sky-500", "bg-purple-500", "bg-emerald-500", "bg-amber-500", "bg-pink-500"];
-const parseWeatherParts = (weather: string | null): string[] => {
+type WeatherTile = {
+  key: string;
+  value: string;
+  label: string;
+};
+
+const parseWeatherTiles = (weather: string | null): WeatherTile[] => {
   if (!weather) return [];
-  return weather.split(/ · /g).filter(Boolean);
+
+  return weather
+    .split(/ · /g)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part, index): WeatherTile => {
+      const [rawLabel, ...rawValueParts] = part.split(":");
+      const valueFromLabel = rawValueParts.join(":").trim();
+      const lower = part.toLowerCase();
+
+      if (valueFromLabel) {
+        return {
+          key: `${index}-${part}`,
+          value: valueFromLabel,
+          label: rawLabel.trim() || "Weer",
+        };
+      }
+
+      if (/^-?\d+(\.\d+)?\s*°c$/i.test(part)) {
+        return { key: `${index}-${part}`, value: part, label: "Temperatuur" };
+      }
+
+      if (/^-?\d+(\.\d+)?\s*%$/i.test(part)) {
+        return { key: `${index}-${part}`, value: part, label: "Luchtvochtigheid" };
+      }
+
+      if (lower.includes("helder") || lower.includes("clear") || lower.includes("cloud") || lower.includes("bewolkt") || lower.includes("rain") || lower.includes("regen")) {
+        return { key: `${index}-${part}`, value: part, label: "Lucht" };
+      }
+
+      return { key: `${index}-${part}`, value: part, label: "Weer" };
+    });
 };
 
 const StatCard = ({ label, value, sub, icon }: { label: string; value: string; sub: string; icon?: string }) => (
@@ -154,7 +191,7 @@ const RaceDetailPage = () => {
   const loading = raceLoading || resultsLoading;
   const cars = carCounts(results);
   const carEntries = Object.entries(cars);
-  const weatherParts = parseWeatherParts(race?.weather ?? null);
+  const weatherTiles = parseWeatherTiles(race?.weather ?? null);
 
   useEffect(() => {
     if (!race) return;
@@ -363,13 +400,14 @@ const RaceDetailPage = () => {
                     </div>
                   </div>
 
-                  {weatherParts.length > 0 && (
+                  {weatherTiles.length > 0 && (
                     <div className="bg-card border border-border rounded-lg p-4">
                       <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><CloudSun className="w-4 h-4 text-sky-400" /> Condities</h3>
                       <div className="grid grid-cols-2 gap-3">
-                        {weatherParts.map((part) => (
-                          <div key={part} className="rounded bg-secondary/40 border border-border py-3 text-center">
-                            <div className="font-heading text-lg font-black">{part}</div>
+                        {weatherTiles.map((tile) => (
+                          <div key={tile.key} className="rounded bg-secondary/40 border border-border py-3 text-center min-h-[4.25rem] flex flex-col items-center justify-center">
+                            <div className="font-heading text-lg font-black leading-tight">{tile.value}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">{tile.label}</div>
                           </div>
                         ))}
                       </div>
