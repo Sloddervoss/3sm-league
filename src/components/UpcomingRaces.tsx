@@ -314,7 +314,7 @@ const UpcomingRaces = () => {
                         )}
                         {nextRace.weather && (
                           <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <CloudSun className="w-3 h-3" /> Weather: {nextRace.weather}
+                            <CloudSun className="w-3 h-3" /> Weer: {nextRace.weather}
                           </span>
                         )}
                         {nextRace.setup && (
@@ -528,7 +528,7 @@ const UpcomingRaces = () => {
                               )}
                               {race.weather && (
                                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                  <CloudSun className="w-3 h-3" /> Weather: {race.weather}
+                                  <CloudSun className="w-3 h-3" /> Weer: {race.weather}
                                 </span>
                               )}
                               {race.setup && (

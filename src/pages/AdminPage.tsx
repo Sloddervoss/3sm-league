@@ -224,7 +224,7 @@ const AdminPage = () => {
                             )}
                             <div className="flex items-center gap-3 flex-wrap">
                               {nr.start_type && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Flag className="w-3 h-3" /> {nr.start_type} start</span>}
-                              {nr.weather && <span className="flex items-center gap-1 text-xs text-muted-foreground"><CloudSun className="w-3 h-3" /> Weather: {nr.weather}</span>}
+                              {nr.weather && <span className="flex items-center gap-1 text-xs text-muted-foreground"><CloudSun className="w-3 h-3" /> Weer: {nr.weather}</span>}
                               {nr.setup && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Gauge className="w-3 h-3" /> Setup: {nr.setup}</span>}
                             </div>
                           </div>
