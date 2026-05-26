@@ -302,9 +302,6 @@ const RaceDetailPage = () => {
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-4 text-sm text-muted-foreground">
-                    <strong className="text-foreground">Automatisch:</strong> deze pagina komt uit de bestaande race en race_results data. Nieuwe completed races krijgen automatisch zo'n URL zodra de JSON-import de uitslag opslaat.
-                  </div>
                 </aside>
               </div>
             </div>
