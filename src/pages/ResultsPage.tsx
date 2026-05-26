@@ -6,6 +6,7 @@ import { List, Trophy, AlertTriangle, Flag, ChevronDown, ChevronUp } from "lucid
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 const positionColors: Record<number, string> = {
   1: "text-yellow-400",
@@ -469,15 +470,21 @@ const ResultsPage = () => {
                     </div>
 
                     {/* CTA */}
-                    <div className="px-6 py-4 border-t border-border">
+                    <div className="px-6 py-4 border-t border-border flex flex-wrap items-center gap-4">
+                      <Link
+                        to={`/results/${latestRace.id}`}
+                        className="text-sm font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors flex items-center gap-1"
+                      >
+                        Open racepagina
+                      </Link>
                       <button
                         onClick={() => {
                           setExpandedRace(latestRace.id);
                           setScrollToLatest(true);
                         }}
-                        className="text-sm font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors flex items-center gap-1"
+                        className="text-sm font-heading font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
                       >
-                        Bekijk volledige uitslag <ChevronDown className="w-4 h-4" />
+                        Bekijk hier de uitslag <ChevronDown className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -566,6 +573,15 @@ const ResultsPage = () => {
                           {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                         </div>
                       </button>
+
+                      <div className="px-6 pb-3 -mt-1">
+                        <Link
+                          to={`/results/${race.id}`}
+                          className="inline-flex items-center gap-1 text-xs font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors"
+                        >
+                          Open racepagina
+                        </Link>
+                      </div>
 
                       {isExpanded && <ExpandedRaceContent raceId={race.id} />}
                     </motion.div>
