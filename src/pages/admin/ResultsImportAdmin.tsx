@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   type ImportRow,
+  type IRacingRaceMetadata,
   type ProfileRow,
   type RaceOption,
   parseIRacingJsonRows,
@@ -24,6 +25,7 @@ const ResultsImportAdmin = () => {
   const [importRows, setImportRows] = useState<ImportRow[]>([{ ...EMPTY_ROW }]);
   const [pointsConfig] = useState<number[]>(DEFAULT_POINTS);
   const [jsonFileName, setJsonFileName] = useState<string | null>(null);
+  const [raceMetadata, setRaceMetadata] = useState<IRacingRaceMetadata | null>(null);
   const [importMode, setImportMode] = useState<"manual" | "json">("json");
 
   const { data: profiles } = useQuery({
@@ -71,7 +73,25 @@ const ResultsImportAdmin = () => {
         if (!profile) { toast.error(`Driver niet gevonden: ${row.display_name}`); continue; }
         const pts = (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0);
         const { error } = await supabase.from("race_results").upsert(
-          { race_id: importRaceId, user_id: profile.user_id, position: row.position, points: pts, fastest_lap: row.fastest_lap, laps: row.laps, best_lap: row.best_lap || null, incidents: row.incidents, dnf: row.dnf ?? false, irating_snapshot: row.new_irating ?? null },
+          {
+            race_id: importRaceId,
+            user_id: profile.user_id,
+            position: row.position,
+            start_position: row.start_position ?? null,
+            points: pts,
+            fastest_lap: row.fastest_lap,
+            laps: row.laps,
+            laps_led: row.laps_led ?? null,
+            best_lap: row.best_lap || null,
+            best_lap_num: row.best_lap_num ?? null,
+            avg_lap: row.avg_lap ?? null,
+            incidents: row.incidents,
+            dnf: row.dnf ?? false,
+            irating_snapshot: row.new_irating ?? null,
+            car_name: row.car_name ?? null,
+            club_name: row.club_name ?? null,
+            reason_out: row.reason_out ?? null,
+          } as never,
           { onConflict: "race_id,user_id" }
         );
         if (error) throw error;
@@ -84,7 +104,16 @@ const ResultsImportAdmin = () => {
           else iRatingUpdates++;
         }
       }
-      await supabase.from("races").update({ status: "completed", counts_for_3sr: true }).eq("id", importRaceId);
+      await supabase.from("races").update({
+        status: "completed",
+        counts_for_3sr: true,
+        ...(raceMetadata?.iracing_session_id ? { iracing_session_id: raceMetadata.iracing_session_id } : {}),
+        ...(raceMetadata?.sof != null ? { sof: raceMetadata.sof } : {}),
+        ...(raceMetadata?.cautions != null ? { cautions: raceMetadata.cautions } : {}),
+        ...(raceMetadata?.caution_laps != null ? { caution_laps: raceMetadata.caution_laps } : {}),
+        ...(raceMetadata?.lead_changes != null ? { lead_changes: raceMetadata.lead_changes } : {}),
+        ...(raceMetadata?.weather ? { weather: raceMetadata.weather } : {}),
+      } as never).eq("id", importRaceId);
 
       const { data: existingPenalties } = await supabase
         .from("penalties")
@@ -136,6 +165,7 @@ const ResultsImportAdmin = () => {
       setImportRaceId("");
       setImportRows([{ ...EMPTY_ROW }]);
       setJsonFileName(null);
+      setRaceMetadata(null);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -200,14 +230,15 @@ const ResultsImportAdmin = () => {
                         const result = parseIRacingJsonRows(ev.target?.result as string);
                         if (result.error) { toast.error(result.error); return; }
                         setImportRows(result.rows);
-                        toast.success(`${result.rows.length} drivers geladen uit JSON (inclusief iRating)`);
+                        setRaceMetadata(result.raceMetadata ?? null);
+                        toast.success(`${result.rows.length} drivers geladen uit JSON (inclusief extra race-info)`);
                       };
                       reader.readAsText(file);
                     }}
                   />
                 </label>
                 {jsonFileName && (
-                  <button onClick={() => { setJsonFileName(null); setImportRows([{ ...EMPTY_ROW }]); }} className="p-2 text-muted-foreground hover:text-destructive transition-colors">
+                  <button onClick={() => { setJsonFileName(null); setRaceMetadata(null); setImportRows([{ ...EMPTY_ROW }]); }} className="p-2 text-muted-foreground hover:text-destructive transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 )}
@@ -222,6 +253,14 @@ const ResultsImportAdmin = () => {
               ));
               return (
                 <div className="mb-5">
+                  {raceMetadata && (raceMetadata.sof || raceMetadata.lead_changes || raceMetadata.cautions || raceMetadata.iracing_session_id) && (
+                    <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      {raceMetadata.iracing_session_id && <span className="px-2 py-1 rounded bg-secondary border border-border">Sessie #{raceMetadata.iracing_session_id}</span>}
+                      {raceMetadata.sof != null && <span className="px-2 py-1 rounded bg-secondary border border-border">SOF {raceMetadata.sof}</span>}
+                      {raceMetadata.lead_changes != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{raceMetadata.lead_changes} lead changes</span>}
+                      {raceMetadata.cautions != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{raceMetadata.cautions} cautions</span>}
+                    </div>
+                  )}
                   <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} drivers geladen — preview:</div>
                   <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
                     <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
