@@ -1951,16 +1951,17 @@ async function handleSetupServer(interaction) {
 
   // Sla config op
   saveConfig({
-    guild_id:               guild.id,
-    meldingen_channel_id:   resolvedChannels.meldingen,
-    uitslagen_channel_id:   resolvedChannels.uitslagen,
-    kalender_channel_id:    resolvedChannels.kalender,
-    welkom_channel_id:      resolvedChannels.welkom,
-    bot_logs_channel_id:    resolvedChannels.bot_logs,
-    steward_channel_id:     resolvedChannels.steward_chat,
-    rijder_role_id:         resolvedRoles.rijder_role,
-    admin_role_id:          resolvedRoles.admin_role,
-    steward_role_id:        resolvedRoles.steward_role,
+    guild_id:                   guild.id,
+    meldingen_channel_id:       resolvedChannels.meldingen,
+    uitslagen_channel_id:       resolvedChannels.uitslagen,
+    kalender_channel_id:        resolvedChannels.kalender,
+    welkom_channel_id:          resolvedChannels.welkom,
+    aankondigingen_channel_id:   resolvedChannels.aankondigingen,
+    bot_logs_channel_id:        resolvedChannels.bot_logs,
+    steward_decisions_channel_id: resolvedChannels.steward_chat,
+    rijder_role_id:             resolvedRoles.rijder_role,
+    admin_role_id:              resolvedRoles.admin_role,
+    steward_role_id:            resolvedRoles.steward_role,
   });
 
   // ── Reglement embed (alleen sturen als kanaal leeg is) ───────────────────
