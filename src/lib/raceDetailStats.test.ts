@@ -4,8 +4,12 @@ import { getRaceDetailStats, type RaceDetailStatsResult } from "./raceDetailStat
 const result = (overrides: Partial<RaceDetailStatsResult>): RaceDetailStatsResult => ({
   user_id: crypto.randomUUID(),
   position: null,
+  start_position: null,
   laps: null,
+  laps_led: null,
   best_lap: null,
+  best_lap_num: null,
+  avg_lap: null,
   fastest_lap: false,
   incidents: null,
   dnf: false,
@@ -32,5 +36,19 @@ describe("getRaceDetailStats", () => {
     expect(stats.dnfCount).toBe(1);
     expect(stats.totalIncidents).toBe(22);
     expect(stats.totalLaps).toBe(83);
+  });
+
+  it("derives pole sitter, biggest mover and laps led leader from enriched iRacing fields", () => {
+    const stats = getRaceDetailStats([
+      result({ user_id: "winner", position: 1, start_position: 3, laps_led: 4, profiles: { display_name: "Winner", iracing_name: null } }),
+      result({ user_id: "pole", position: 4, start_position: 1, laps_led: 0, profiles: { display_name: "Pole Sitter", iracing_name: null } }),
+      result({ user_id: "mover", position: 2, start_position: 9, laps_led: 2, profiles: { display_name: "Big Mover", iracing_name: null } }),
+      result({ user_id: "leader", position: 3, start_position: 2, laps_led: 14, profiles: { display_name: "Lap Leader", iracing_name: null } }),
+    ]);
+
+    expect(stats.pole?.name).toBe("Pole Sitter");
+    expect(stats.biggestMover?.name).toBe("Big Mover");
+    expect(stats.biggestMover?.positionGain).toBe(7);
+    expect(stats.mostLapsLed?.name).toBe("Lap Leader");
   });
 });

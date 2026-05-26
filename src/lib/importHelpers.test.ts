@@ -212,6 +212,8 @@ function makeJsonResult(overrides: Partial<{
   laps_complete: number; best_lap_time: number; incidents: number;
   newi_rating: number; reason_out_id: number; reason_out: string;
   car_name: string; livery: { car_name: string };
+  starting_position: number; laps_lead: number; best_lap_num: number;
+  average_lap: number; club_name: string;
 }> = {}) {
   return {
     finish_position: 0,
@@ -299,16 +301,16 @@ describe("parseIRacingJsonRows", () => {
     expect(parseIRacingJsonRows(json).rows![0].dnf).toBe(true);
   });
 
-  it("flags DNF when laps < maxLaps", () => {
+  it("does not flag lapped finishers as DNF when iRacing says they were running", () => {
     const json = makeIRacingJson([{
       simsession_type: 6,
       results: [
-        makeJsonResult({ finish_position: 0, cust_id: 1, display_name: "Alice", laps_complete: 10 }),
-        makeJsonResult({ finish_position: 1, cust_id: 2, display_name: "Bob",   laps_complete: 7, reason_out_id: 0 }),
+        makeJsonResult({ finish_position: 0, cust_id: 1, display_name: "Alice", laps_complete: 10, reason_out_id: 0, reason_out: "Running" }),
+        makeJsonResult({ finish_position: 1, cust_id: 2, display_name: "Bob",   laps_complete: 7, reason_out_id: 0, reason_out: "Running" }),
       ],
     }]);
     const result = parseIRacingJsonRows(json);
-    expect(result.rows!.find(r => r.display_name === "Bob")?.dnf).toBe(true);
+    expect(result.rows!.find(r => r.display_name === "Bob")?.dnf).toBe(false);
     expect(result.rows!.find(r => r.display_name === "Alice")?.dnf).toBe(false);
   });
 
@@ -326,5 +328,48 @@ describe("parseIRacingJsonRows", () => {
       results: [makeJsonResult({ best_lap_time: 743210 })],
     }]);
     expect(parseIRacingJsonRows(json).rows![0].best_lap).toBe("1:14.321");
+  });
+
+  it("keeps richer iRacing driver fields for race detail enrichment", () => {
+    const json = makeIRacingJson([{
+      simsession_type: 6,
+      results: [makeJsonResult({
+        starting_position: 7,
+        laps_lead: 12,
+        best_lap_num: 18,
+        average_lap: 758880,
+        reason_out: "Disconnected",
+        club_name: "Benelux",
+      })],
+    }]);
+    expect(parseIRacingJsonRows(json).rows![0]).toMatchObject({
+      start_position: 8,
+      laps_led: 12,
+      best_lap_num: 18,
+      avg_lap: "1:15.888",
+      reason_out: "Disconnected",
+      club_name: "Benelux",
+    });
+  });
+
+  it("extracts race-level iRacing metadata for the selected race", () => {
+    const json = JSON.stringify({
+      subsession_id: 987654,
+      event_strength_of_field: 2420,
+      num_cautions: 2,
+      num_caution_laps: 5,
+      num_lead_changes: 6,
+      weather: { skies: "Partly Cloudy", temp_value: 22, rel_humidity: 51 },
+      session_results: [RACE_SESSION],
+    });
+    const result = parseIRacingJsonRows(json);
+    expect(result.raceMetadata).toMatchObject({
+      iracing_session_id: "987654",
+      sof: 2420,
+      cautions: 2,
+      caution_laps: 5,
+      lead_changes: 6,
+      weather: "Partly Cloudy · 22°C · 51% humidity",
+    });
   });
 });

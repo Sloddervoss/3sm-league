@@ -1,8 +1,12 @@
 export type ImportRow = {
   position: number;
+  start_position?: number;
   display_name: string;
   laps: number;
+  laps_led?: number;
   best_lap: string;
+  best_lap_num?: number;
+  avg_lap?: string;
   incidents: number;
   fastest_lap: boolean;
   iracing_cust_id?: string;
@@ -10,7 +14,18 @@ export type ImportRow = {
   new_license_level?: number;
   new_license_sub_level?: number;
   car_name?: string;
+  club_name?: string;
+  reason_out?: string;
   dnf?: boolean;
+};
+
+export type IRacingRaceMetadata = {
+  iracing_session_id?: string;
+  sof?: number;
+  cautions?: number;
+  caution_laps?: number;
+  lead_changes?: number;
+  weather?: string;
 };
 
 export type ProfileRow = {
@@ -30,16 +45,22 @@ export type RaceOption = {
 
 export type IRacingJsonResult = {
   finish_position: number;
+  starting_position?: number;
   display_name: string;
   cust_id: number;
   laps_complete: number;
+  laps_lead?: number;
+  laps_led?: number;
   best_lap_time: number;
+  best_lap_num?: number;
+  average_lap?: number;
   incidents: number;
   newi_rating?: number;
   new_license_level?: number;
   new_sub_level?: number;
   car_name?: string;
   livery?: { car_name?: string };
+  club_name?: string;
   reason_out_id?: number;
   reason_out?: string;
 };
@@ -67,8 +88,34 @@ export function formatIRacingLapTime(us: number): string {
 }
 
 export type ParseImportResult =
-  | { rows: ImportRow[]; error?: undefined }
+  | { rows: ImportRow[]; raceMetadata?: IRacingRaceMetadata; error?: undefined }
   | { rows?: undefined; error: string };
+
+const numberOrUndefined = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+const stringOrUndefined = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() ? value.trim() : undefined;
+
+const formatIRacingWeather = (weather: unknown): string | undefined => {
+  if (!weather || typeof weather !== "object") return undefined;
+  const w = weather as Record<string, unknown>;
+  const parts = [
+    stringOrUndefined(w.skies) || stringOrUndefined(w.sky),
+    typeof w.temp_value === "number" ? `${Math.round(w.temp_value)}°C` : undefined,
+    typeof w.rel_humidity === "number" ? `${Math.round(w.rel_humidity)}% humidity` : undefined,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : undefined;
+};
+
+const extractRaceMetadata = (root: Record<string, unknown>): IRacingRaceMetadata => ({
+  iracing_session_id: String(root.subsession_id ?? root.session_id ?? "").trim() || undefined,
+  sof: numberOrUndefined(root.event_strength_of_field) ?? numberOrUndefined(root.strength_of_field),
+  cautions: numberOrUndefined(root.num_cautions),
+  caution_laps: numberOrUndefined(root.num_caution_laps),
+  lead_changes: numberOrUndefined(root.num_lead_changes),
+  weather: stringOrUndefined(root.weather) || formatIRacingWeather(root.weather),
+});
 
 export function parseCsvRows(text: string): ParseImportResult {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
@@ -93,7 +140,7 @@ export function parseCsvRows(text: string): ParseImportResult {
   const newLicLevelIdx = header.findIndex(h => h === "new license level");
   const newLicSubIdx   = header.findIndex(h => h === "new license sub-level");
 
-  const rows = lines.slice(headerLineIdx + 1).map((line, i) => {
+  const rows = lines.slice(headerLineIdx + 1).map((line, i): ImportRow | null => {
     const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
     if (cols.length < 3) return null;
     return {
@@ -107,7 +154,7 @@ export function parseCsvRows(text: string): ParseImportResult {
       new_irating:         newIRatingIdx >= 0 && cols[newIRatingIdx]              ? parseInt(cols[newIRatingIdx])  : undefined,
       new_license_level:   newLicLevelIdx >= 0 && cols[newLicLevelIdx]            ? parseInt(cols[newLicLevelIdx]) : undefined,
       new_license_sub_level: newLicSubIdx >= 0 && cols[newLicSubIdx] !== ""       ? parseInt(cols[newLicSubIdx])   : undefined,
-    } satisfies ImportRow;
+    };
   }).filter((r): r is ImportRow => !!r && !!r.display_name && !isNaN(r.position));
 
   const withLaps = rows.filter(r => r.best_lap && parseLapMs(r.best_lap) < Infinity);
@@ -123,7 +170,8 @@ export function parseCsvRows(text: string): ParseImportResult {
 export function parseIRacingJsonRows(jsonText: string): ParseImportResult {
   try {
     const json = JSON.parse(jsonText);
-    const root = ((json as { data?: unknown }).data ?? json) as { session_results?: IRacingJsonSession[] };
+    const root = ((json as { data?: unknown }).data ?? json) as Record<string, unknown> & { session_results?: IRacingJsonSession[] };
+    const raceMetadata = extractRaceMetadata(root);
     const sessions: IRacingJsonSession[] = root.session_results || [];
     const raceSession =
       sessions.find(s =>
@@ -141,14 +189,17 @@ export function parseIRacingJsonRows(jsonText: string): ParseImportResult {
     const fastestCustId = validLaps.length
       ? validLaps.reduce((a, b) => a.best_lap_time < b.best_lap_time ? a : b).cust_id
       : null;
-    const maxLaps = Math.max(...results.map(r => r.laps_complete || 0));
     const rows: ImportRow[] = results
       .sort((a, b) => a.finish_position - b.finish_position)
       .map(r => ({
         position:              r.finish_position + 1,
+        start_position:        r.starting_position != null ? r.starting_position + 1 : undefined,
         display_name:          r.display_name || "",
         laps:                  r.laps_complete || 0,
+        laps_led:              r.laps_lead ?? r.laps_led ?? undefined,
         best_lap:              formatIRacingLapTime(r.best_lap_time),
+        best_lap_num:          r.best_lap_num ?? undefined,
+        avg_lap:               r.average_lap ? formatIRacingLapTime(r.average_lap) : undefined,
         incidents:             r.incidents || 0,
         fastest_lap:           r.cust_id === fastestCustId,
         iracing_cust_id:       String(r.cust_id),
@@ -156,14 +207,15 @@ export function parseIRacingJsonRows(jsonText: string): ParseImportResult {
         new_license_level:     r.new_license_level ?? undefined,
         new_license_sub_level: r.new_sub_level ?? undefined,
         car_name:              r.car_name || r.livery?.car_name || undefined,
+        club_name:             r.club_name || undefined,
+        reason_out:            r.reason_out && r.reason_out !== "Running" ? r.reason_out : undefined,
         dnf: (r.reason_out_id !== undefined && r.reason_out_id !== 0) ||
-             (r.reason_out && r.reason_out !== "Running") ||
-             ((r.laps_complete || 0) < maxLaps),
+             !!(r.reason_out && r.reason_out !== "Running"),
       }))
       .filter(r => r.display_name);
 
     if (!rows.length) return { error: "Geen geldige drivers gevonden in JSON" };
-    return { rows };
+    return { rows, raceMetadata };
   } catch {
     return { error: "Ongeldig JSON bestand" };
   }

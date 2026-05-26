@@ -21,6 +21,10 @@ type RaceDetailRace = {
   weather: string | null;
   car: string | null;
   iracing_session_id: string | null;
+  sof: number | null;
+  cautions: number | null;
+  caution_laps: number | null;
+  lead_changes: number | null;
   leagues: {
     name: string;
     car_class: string | null;
@@ -71,7 +75,7 @@ const RaceDetailPage = () => {
     queryFn: async (): Promise<RaceDetailRace | null> => {
       const { data, error } = await supabase
         .from("races")
-        .select("id, name, track, race_date, round, total_laps, race_duration, weather, car, iracing_session_id, leagues(name, car_class)")
+        .select("id, name, track, race_date, round, total_laps, race_duration, weather, car, iracing_session_id, sof, cautions, caution_laps, lead_changes, leagues(name, car_class)")
         .eq("id", raceId!)
         .eq("status", "completed")
         .maybeSingle();
@@ -87,7 +91,7 @@ const RaceDetailPage = () => {
     queryFn: async (): Promise<RaceResultRow[]> => {
       const { data, error } = await supabase
         .from("race_results")
-        .select("id, user_id, position, points, laps, best_lap, fastest_lap, incidents, dnf, gap_to_leader, profiles(display_name, iracing_name)")
+        .select("id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, club_name, reason_out, profiles(display_name, iracing_name)")
         .eq("race_id", raceId!)
         .order("position", { ascending: true });
       if (error) throw error;
@@ -235,6 +239,17 @@ const RaceDetailPage = () => {
                 </div>
               </div>
 
+              {(stats.pole || stats.biggestMover || stats.mostLapsLed || race.sof || race.lead_changes != null || race.cautions != null) && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {stats.pole && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Pole</div><div className="font-heading text-lg font-black">{stats.pole.name}</div></div>}
+                  {stats.biggestMover && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Grootste stijger</div><div className="font-heading text-lg font-black">{stats.biggestMover.name}</div><div className="text-xs text-green-400 mt-1">+{stats.biggestMover.positionGain} posities</div></div>}
+                  {stats.mostLapsLed && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Meeste laps led</div><div className="font-heading text-lg font-black">{stats.mostLapsLed.name}</div><div className="text-xs text-orange-400 mt-1">{stats.mostLapsLed.laps_led} laps</div></div>}
+                  {race.sof != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">SOF</div><div className="font-heading text-lg font-black">{race.sof}</div></div>}
+                  {race.lead_changes != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Lead changes</div><div className="font-heading text-lg font-black">{race.lead_changes}</div></div>}
+                  {race.cautions != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Cautions</div><div className="font-heading text-lg font-black">{race.cautions}</div>{race.caution_laps != null && <div className="text-xs text-muted-foreground mt-1">{race.caution_laps} laps</div>}</div>}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -249,24 +264,29 @@ const RaceDetailPage = () => {
                   </div>
 
                   <div className="bg-card border border-border rounded-lg overflow-hidden">
-                    <div className="grid grid-cols-[3.5rem_1fr_4rem_6rem_4rem_4rem] gap-2 px-4 py-2 bg-secondary/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground min-w-[620px]">
-                      <span>Pos</span><span>Coureur</span><span className="text-center">Laps</span><span className="text-right">Best</span><span className="text-center">Inc</span><span className="text-center">Pts</span>
+                    <div className="grid grid-cols-[3.5rem_3.5rem_1fr_4rem_4rem_6rem_4rem_4rem] gap-2 px-4 py-2 bg-secondary/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground min-w-[820px]">
+                      <span>Pos</span><span>Start</span><span>Coureur</span><span className="text-center">Δ</span><span className="text-center">Laps</span><span className="text-right">Best</span><span className="text-center">Inc</span><span className="text-center">Pts</span>
                     </div>
                     <div className="overflow-x-auto">
                       {stats.sorted.map((driver) => {
                         const pen = penalties.find((p) => p.user_id === driver.user_id && p.penalty_type !== "warning");
+                        const positionDelta = driver.start_position != null && driver.position != null ? driver.start_position - driver.position : null;
                         return (
-                          <div key={driver.user_id} className={`grid grid-cols-[3.5rem_1fr_4rem_6rem_4rem_4rem] gap-2 px-4 py-3 items-center border-t border-border/50 min-w-[620px] hover:bg-secondary/20 transition-colors ${driver.position != null && driver.position <= 3 ? "racing-stripe-left" : ""}`}>
+                          <div key={driver.user_id} className={`grid grid-cols-[3.5rem_3.5rem_1fr_4rem_4rem_6rem_4rem_4rem] gap-2 px-4 py-3 items-center border-t border-border/50 min-w-[820px] hover:bg-secondary/20 transition-colors ${driver.position != null && driver.position <= 3 ? "racing-stripe-left" : ""}`}>
                             <span className={`font-heading font-black text-lg ${positionColor(driver.position)}`}>{driver.dnf ? "DNF" : medal(driver.position)}</span>
+                            <span className="text-sm font-heading text-muted-foreground">{driver.start_position ?? "-"}</span>
                             <div className="min-w-0">
                               <div className="font-heading font-black truncate flex items-center gap-2">
                                 {driver.name}
                                 {driver.fastest_lap && <span className="text-[10px] px-1.5 py-0.5 rounded border border-purple-500/30 bg-purple-500/15 text-purple-300">FL</span>}
+                                {(driver.laps_led ?? 0) > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded border border-orange-500/30 bg-orange-500/15 text-orange-300">LED {driver.laps_led}</span>}
                               </div>
                               {driver.gap_to_leader && <div className="text-xs text-muted-foreground truncate">+{driver.gap_to_leader}</div>}
+                              {driver.reason_out && <div className="text-xs text-red-300 truncate">{driver.reason_out}</div>}
                             </div>
+                            <span className={`text-center text-sm font-heading ${positionDelta == null ? "text-muted-foreground" : positionDelta > 0 ? "text-green-400" : positionDelta < 0 ? "text-red-400" : "text-muted-foreground"}`}>{positionDelta == null ? "-" : positionDelta > 0 ? `+${positionDelta}` : positionDelta}</span>
                             <span className="text-center text-sm font-heading text-muted-foreground">{driver.laps ?? "-"}</span>
-                            <span className="text-right text-sm font-mono text-muted-foreground">{driver.best_lap ?? "-"}</span>
+                            <span className="text-right text-sm font-mono text-muted-foreground">{driver.best_lap ?? "-"}{driver.best_lap_num ? <span className="block text-[10px] font-sans text-muted-foreground/70">lap {driver.best_lap_num}</span> : null}</span>
                             <span className={`text-center text-sm font-heading ${driver.incidents === 0 ? "text-green-400 font-black" : (driver.incidents ?? 0) > 8 ? "text-red-400" : "text-muted-foreground"}`}>{driver.incidents != null ? `${driver.incidents}x` : "-"}</span>
                             <span className="text-center font-heading font-black">
                               {driver.points ?? "-"}
@@ -289,6 +309,9 @@ const RaceDetailPage = () => {
                       {race.total_laps != null && <div className="flex justify-between"><span className="text-muted-foreground">Geplande laps</span><span className="font-heading font-bold">{race.total_laps}</span></div>}
                       {race.race_duration && <div className="flex justify-between"><span className="text-muted-foreground">Race duur</span><span className="font-heading font-bold">{race.race_duration}</span></div>}
                       {race.weather && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Weather</span><span className="font-heading font-bold text-right">{race.weather}</span></div>}
+                      {race.sof != null && <div className="flex justify-between"><span className="text-muted-foreground">SOF</span><span className="font-heading font-bold">{race.sof}</span></div>}
+                      {race.lead_changes != null && <div className="flex justify-between"><span className="text-muted-foreground">Lead changes</span><span className="font-heading font-bold">{race.lead_changes}</span></div>}
+                      {race.cautions != null && <div className="flex justify-between"><span className="text-muted-foreground">Cautions</span><span className="font-heading font-bold">{race.cautions}{race.caution_laps != null ? ` / ${race.caution_laps} laps` : ""}</span></div>}
                       {race.car && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Auto</span><span className="font-heading font-bold text-right">{race.car}</span></div>}
                     </div>
                   </div>
