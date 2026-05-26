@@ -15,7 +15,7 @@ const StandingsPage = lazy(() => import("./pages/StandingsPage.tsx"));
 const DriversPage = lazy(() => import("./pages/DriversPage.tsx"));
 const TeamsPage = lazy(() => import("./pages/TeamsPage.tsx"));
 const ResultsPage = lazy(() => import("./pages/ResultsPage.tsx"));
-const RaceDetailPreviewPage = lazy(() => import("./pages/RaceDetailPreviewPage.tsx"));
+const RaceDetailPage = lazy(() => import("./pages/RaceDetailPage.tsx"));
 const SeasonsPage = lazy(() => import("./pages/SeasonsPage.tsx"));
 const JoinPage = lazy(() => import("./pages/JoinPage.tsx"));
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
@@ -62,7 +62,7 @@ const App = () => (
                   <Route path="/drivers" element={<DriversPage />} />
                   <Route path="/teams" element={<TeamsPage />} />
                   <Route path="/results" element={<ResultsPage />} />
-                  <Route path="/results/detail-preview" element={<RaceDetailPreviewPage />} />
+                  <Route path="/results/:raceId" element={<RaceDetailPage />} />
                   <Route path="/seasons" element={<SeasonsPage />} />
                   <Route path="/meedoen" element={<JoinPage />} />
                   <Route path="/stewards" element={<StewardPage />} />
