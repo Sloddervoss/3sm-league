@@ -313,9 +313,9 @@ function rondeName(race) {
 async function getNotificationChannel() {
   const cfg = loadConfig();
   const channelId = cfg.meldingen_channel_id || process.env.DISCORD_CHANNEL_ID;
-  if (!channelId) { botLog('[bot] Geen meldingen channel geconfigureerd'); return null; }
+  if (!channelId) { await throttledBotLog('notifications:no-channel', '[bot] Geen meldingen channel geconfigureerd'); return null; }
   const ch = await client.channels.fetch(channelId).catch(() => null);
-  if (!ch) botLog('[bot] Meldingen channel niet gevonden:', channelId);
+  if (!ch) { await throttledBotLog(`notifications:channel-missing:${channelId}`, '[bot] Meldingen channel niet gevonden:', channelId); return null; }
   return ch;
 }
 
@@ -402,14 +402,14 @@ async function getUitslagenChannel() {
 async function getAankondigingenChannel() {
   const cfg = loadConfig();
   const channelId = cfg.aankondigingen_channel_id || process.env.DISCORD_AANKONDIGINGEN_CHANNEL_ID;
-  if (!channelId) { botLog('[bot] Geen aankondigingen channel geconfigureerd'); return null; }
+  if (!channelId) { await throttledBotLog('announcements:no-channel', '[bot] Geen aankondigingen channel geconfigureerd'); return null; }
   return client.channels.fetch(channelId).catch(() => null);
 }
 
 async function getStewardDecisionsChannel() {
   const cfg = loadConfig();
   const channelId = cfg.steward_decisions_channel_id || process.env.DISCORD_STEWARD_DECISIONS_CHANNEL_ID;
-  if (!channelId) { botLog('[bot] Geen steward decisions channel geconfigureerd'); return null; }
+  if (!channelId) { await throttledBotLog('steward-decisions:no-channel', '[bot] Geen steward decisions channel geconfigureerd'); return null; }
   return client.channels.fetch(channelId).catch(() => null);
 }
 
@@ -1424,7 +1424,7 @@ async function checkAnnouncements() {
   if (!data?.length) return;
 
   const channel = await getAankondigingenChannel();
-  if (!channel) { botLog('[checkAnnouncements] Aankondigingen channel niet gevonden'); return; }
+  if (!channel) { await throttledBotLog('checkAnnouncements:no-channel', '[checkAnnouncements] Aankondigingen channel niet gevonden'); return; }
 
   const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name, discord_role_id');
   if (teamsError) {
