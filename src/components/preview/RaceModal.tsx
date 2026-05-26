@@ -180,6 +180,108 @@ const RaceModal = ({ race, registration }: Props) => {
   const statusBg    = race.status === "completed" ? "rgba(107,114,128,0.15)" : race.status === "live" ? "rgba(34,197,94,0.15)" : "rgba(249,115,22,0.15)";
   const statusLabel = race.status === "completed" ? "Afgelopen" : race.status === "live" ? "🔴 LIVE" : "Upcoming";
 
+  const hasLobbyInfo = Boolean(race.lobby_name && race.lobby_password);
+  const canViewLobby = Boolean(registration && (registration.isRegistered || registration.isRegisteredViaSeason));
+  const lobbyRevealMinutes = race.lobby_reveal_minutes ?? 15;
+  const raceTimeMs = raceDate.getTime();
+  const lobbyRevealTimeMs = raceTimeMs - lobbyRevealMinutes * 60 * 1000;
+  const isLobbyRevealed = now.getTime() >= lobbyRevealTimeMs;
+  const isBeforeRace = now.getTime() < raceTimeMs;
+  const lobbyRevealTimeStr = new Date(lobbyRevealTimeMs).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
+  const lobbyCountdown = lobbyRevealTimeMs > now.getTime() ? formatCountdown(new Date(lobbyRevealTimeMs).toISOString(), now) : null;
+
+  useEffect(() => {
+    lobbyToastShown.current = false;
+  }, [race.id]);
+
+  useEffect(() => {
+    if (!hasLobbyInfo || !canViewLobby || race.status === "completed" || !isLobbyRevealed || !isBeforeRace || lobbyToastShown.current) return;
+
+    lobbyToastShown.current = true;
+    const msUntilRaceEnd = raceTimeMs + 7200000 - now.getTime();
+
+    toast.custom((t) => (
+      <motion.div
+        initial={{ opacity: 0, y: -20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        className="pointer-events-auto rounded-2xl overflow-hidden w-[22rem] max-w-[calc(100vw-2rem)] shadow-2xl"
+        style={{ background: "linear-gradient(135deg, rgba(249,115,22,0.18), rgba(14,14,22,0.98))", border: "1px solid rgba(249,115,22,0.35)", backdropFilter: "blur(16px)" }}
+      >
+        <div className="px-5 pt-4 pb-3">
+          <div className="flex items-center gap-2 mb-2">
+            <KeyRound className="w-5 h-5 text-orange-500" />
+            <span className="text-sm font-black text-white uppercase tracking-wider">Lobby info beschikbaar</span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">{race.name}</p>
+          <div className="rounded-xl p-3 space-y-2" style={{ background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Lobby naam</span>
+              <span className="text-sm font-bold text-white font-mono text-right break-all">{race.lobby_name}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Wachtwoord</span>
+              <code className="text-sm font-mono font-bold text-orange-400 break-all">{race.lobby_password}</code>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => toast.dismiss(t)}
+          className="w-full py-2.5 text-xs font-bold text-orange-400 uppercase tracking-wider transition-colors hover:bg-orange-500/10"
+          style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+        >
+          Sluiten
+        </button>
+      </motion.div>
+    ), { duration: msUntilRaceEnd > 0 ? Math.min(msUntilRaceEnd, 3600000) : 60000 });
+  }, [canViewLobby, hasLobbyInfo, isBeforeRace, isLobbyRevealed, now, race.id, race.lobby_name, race.lobby_password, race.name, race.status, raceTimeMs]);
+
+  const renderLobbyCard = () => {
+    if (race.status === "completed" || !hasLobbyInfo || !canViewLobby) return null;
+
+    return (
+      <div className="w-full lg:w-[22rem] rounded-2xl p-4" style={{ background: isLobbyRevealed ? "rgba(249,115,22,0.08)" : "rgba(255,255,255,0.035)", border: isLobbyRevealed ? "1px solid rgba(249,115,22,0.22)" : "1px solid rgba(255,255,255,0.07)" }}>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-orange-500" />
+            <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Lobby info</span>
+          </div>
+          <span className="text-[10px] text-muted-foreground">🔒 Ingeschreven</span>
+        </div>
+
+        {isLobbyRevealed ? (
+          <div className="space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider pt-1">Lobby naam</span>
+              <span className="text-sm font-bold text-white font-mono text-right break-all">{race.lobby_name}</span>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider pt-1">Wachtwoord</span>
+              <div className="flex items-center gap-2 min-w-0">
+                <code className="text-sm font-mono font-bold text-orange-400 px-2.5 py-0.5 rounded-md break-all" style={{ background: "rgba(249,115,22,0.1)" }}>
+                  {showPassword ? race.lobby_password : "••••••••"}
+                </code>
+                <button
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-muted-foreground hover:text-white transition-colors p-1 shrink-0"
+                  title={showPassword ? "Verberg wachtwoord" : "Toon wachtwoord"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="text-[11px] text-muted-foreground mb-1">Beschikbaar om {lobbyRevealTimeStr}</div>
+            <div className="font-heading font-black text-xl text-white tabular-nums">
+              {lobbyCountdown || "00m 00s"}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       {/* Hero met track foto */}
@@ -243,9 +345,10 @@ const RaceModal = ({ race, registration }: Props) => {
             </div>
           )}
 
-          {/* Registration button — alle niet-afgeronde races */}
+          {/* Details / inschrijven / lobby */}
           {registration && race.status !== "completed" && (
-            <div className="mt-5 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+            <div className="mt-5 pt-5 flex flex-col lg:flex-row lg:items-start gap-4" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="flex-1 min-w-0">
               {!registration.profileComplete ? (
                 <div className="flex items-center gap-2 text-sm text-yellow-500/80 px-4 py-2.5 rounded-xl w-fit"
                   style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.15)" }}>
@@ -292,124 +395,12 @@ const RaceModal = ({ race, registration }: Props) => {
                   {registration.hasLeague ? "Schrijf in voor deze race" : "Schrijf in voor race"}
                 </button>
               )}
+              </div>
+              {renderLobbyCard()}
             </div>
           )}
         </div>
       </div>
-
-      {/* ── Lobby section ── */}
-      {race.status !== "completed" && race.lobby_name && registration && (registration.isRegistered || registration.isRegisteredViaSeason) && (
-        (() => {
-          const revealMin = race.lobby_reveal_minutes ?? 15;
-          const raceDate = new Date(race.race_date).getTime();
-          const revealTime = raceDate - (revealMin * 60 * 1000);
-          const isRevealed = now.getTime() >= revealTime;
-          const timeUntilReveal = revealTime - now.getTime();
-          const revealDate = new Date(raceDate - revealMin * 60000);
-          const revealTimeStr = revealDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
-
-          return (
-            <div className="px-8 pt-5 pb-2" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-              <div className="flex items-center gap-2 mb-3">
-                <KeyRound className="w-4 h-4 text-orange-500" />
-                <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Lobby</span>
-                <span className="text-[10px] text-muted-foreground ml-auto">🔒 Alleen voor ingeschreven deelnemers</span>
-              </div>
-
-              {isRevealed ? (
-                <div className="rounded-2xl p-4" style={{ background: "rgba(249,115,22,0.06)", border: "1px solid rgba(249,115,22,0.15)" }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-muted-foreground uppercase tracking-wider">Naam</span>
-                    <span className="text-sm font-bold text-white font-mono">{race.lobby_name}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground uppercase tracking-wider">Wachtwoord</span>
-                    <div className="flex items-center gap-2">
-                      <code className="text-sm font-mono font-bold text-orange-400 px-2.5 py-0.5 rounded-md" style={{ background: "rgba(249,115,22,0.1)" }}>
-                        {showPassword ? race.lobby_password : "••••••••"}
-                      </code>
-                      <button
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="text-muted-foreground hover:text-white transition-colors p-1"
-                        title={showPassword ? "Verberg wachtwoord" : "Toon wachtwoord"}
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl p-4 text-center" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="text-xs text-muted-foreground mb-2">
-                    Lobby informatie wordt onthuld over
-                  </div>
-                  <div className="font-heading font-black text-2xl text-white tabular-nums">
-                    {timeUntilReveal > 0 ? formatCountdown(new Date(revealTime).toISOString(), now) : "00m 00s"}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-2">
-                    Rond {revealTimeStr} beschikbaar
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()
-      )}
-
-      {/* Lobby toast — eenmalige popup bij reveal met naam + wachtwoord */}
-      {(() => {
-        // eslint-disable-next-line react-hooks/rules-of-hooks
-        useEffect(() => {
-          if (!race.lobby_name || !race.lobby_password || !registration) return;
-          if (!registration.isRegistered && !registration.isRegisteredViaSeason) return;
-          if (race.status === "completed") return;
-
-          const revealMin = race.lobby_reveal_minutes ?? 15;
-          const revealTime = new Date(race.race_date).getTime() - (revealMin * 60 * 1000);
-          const isRevealed = now.getTime() >= revealTime;
-          const isBeforeRace = now.getTime() < new Date(race.race_date).getTime();
-
-          if (!isRevealed || !isBeforeRace || lobbyToastShown.current) return;
-
-          lobbyToastShown.current = true;
-
-          const msUntilRaceEnd = new Date(race.race_date).getTime() + 7200000 - now.getTime(); // 2h after start
-          toast.custom((t) => (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="pointer-events-auto rounded-2xl overflow-hidden w-80"
-              style={{ background: "linear-gradient(135deg, rgba(249,115,22,0.15), rgba(249,115,22,0.05))", border: "1px solid rgba(249,115,22,0.2)", backdropFilter: "blur(16px)" }}
-            >
-              <div className="px-5 pt-4 pb-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <KeyRound className="w-5 h-5 text-orange-500" />
-                  <span className="text-sm font-black text-white uppercase tracking-wider">Lobby is open!</span>
-                </div>
-                <p className="text-xs text-muted-foreground mb-3">{race.name}</p>
-                <div className="rounded-xl p-3 space-y-2" style={{ background: "rgba(0,0,0,0.3)" }}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Naam</span>
-                    <span className="text-sm font-bold text-white font-mono">{race.lobby_name}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Wachtwoord</span>
-                    <code className="text-sm font-mono font-bold text-orange-400">{race.lobby_password}</code>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => toast.dismiss(t)}
-                className="w-full py-2.5 text-xs font-bold text-orange-400 uppercase tracking-wider transition-colors hover:bg-orange-500/10"
-                style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
-              >
-                Sluiten
-              </button>
-            </motion.div>
-          ), { duration: msUntilRaceEnd > 0 ? Math.min(msUntilRaceEnd, 3600000) : 60000 });
-        }, [race.id]);
-        return null;
-      })()}
 
       {/* Content */}
       <div className="px-8 pb-8">

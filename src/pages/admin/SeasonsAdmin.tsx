@@ -22,6 +22,9 @@ type AdminLeagueRace = {
   start_type: string | null;
   weather: string | null;
   setup: string | null;
+  lobby_name: string | null;
+  lobby_password: string | null;
+  lobby_reveal_minutes: number | null;
 };
 
 type AdminLeague = {
@@ -51,6 +54,9 @@ type AdminRace = {
   start_type: string | null;
   weather: string | null;
   setup: string | null;
+  lobby_name: string | null;
+  lobby_password: string | null;
+  lobby_reveal_minutes: number | null;
   leagues: AdminRaceLeague | null;
 };
 
@@ -143,7 +149,7 @@ const SeasonsAdmin = () => {
     queryFn: async (): Promise<AdminRace[]> => {
       const { data, error } = await supabase
         .from("races")
-        .select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, season)")
+        .select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, lobby_name, lobby_password, lobby_reveal_minutes, leagues(name, season)")
         .order("race_date", { ascending: true });
       if (error) throw error;
       return (data || []) as AdminRace[];
@@ -207,6 +213,8 @@ const SeasonsAdmin = () => {
             race_type: r.race_type || null, race_duration: r.race_duration || null,
             practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null,
             start_type: r.start_type || null, weather: r.weather || null, setup: r.setup || null,
+            lobby_name: r.lobby_name || null, lobby_password: r.lobby_password || null,
+            lobby_reveal_minutes: r.lobby_reveal_minutes ?? 15,
           }))
         );
         if (re) throw re;
@@ -467,7 +475,7 @@ const SeasonsAdmin = () => {
                       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Races bewerken</p>
                       {[...league.races].sort((a, b) => (a.round ?? 0) - (b.round ?? 0)).map((race) => {
                         const rd = editingRaces[race.id] || race;
-                        const setRd = (field: keyof RaceEditData, val: string) => setEditingRaces(prev => ({ ...prev, [race.id]: { ...prev[race.id], [field]: val } }));
+                        const setRd = (field: keyof RaceEditData, val: string | number) => setEditingRaces(prev => ({ ...prev, [race.id]: { ...prev[race.id], [field]: val } }));
                         return (
                           <div key={race.id} className="p-3 rounded-md bg-secondary/30 border border-border/50 space-y-2">
                             <div className="flex items-center gap-2 mb-1">
@@ -531,6 +539,18 @@ const SeasonsAdmin = () => {
                                 <select value={rd.status || "upcoming"} onChange={e => setRd("status", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
                                   {["upcoming", "live", "completed", "cancelled"].map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Lobby naam</label>
+                                <input type="text" value={rd.lobby_name || ""} onChange={e => setRd("lobby_name", e.target.value)} placeholder="bv. 3SM Race 1" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Wachtwoord</label>
+                                <input type="text" value={rd.lobby_password || ""} onChange={e => setRd("lobby_password", e.target.value)} placeholder="bv. 3SMracing" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Vrijgeven (min)</label>
+                                <input type="number" value={rd.lobby_reveal_minutes ?? 15} onChange={e => setRd("lobby_reveal_minutes", Number(e.target.value))} min={1} max={120} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
                               </div>
                             </div>
                             <button
@@ -800,7 +820,7 @@ const SeasonsAdmin = () => {
             const raceRegs = (raceRegistrations || []).filter((r) => r.race_id === race.id);
             const isEditingSolo = editingSoloRaceId === race.id;
             const srd = editingSoloRaceData;
-            const setSrd = (field: keyof RaceEditData, val: string) => setEditingSoloRaceData(prev => ({ ...prev, [field]: val }));
+            const setSrd = (field: keyof RaceEditData, val: string | number) => setEditingSoloRaceData(prev => ({ ...prev, [field]: val }));
             return (
               <div key={race.id} className="bg-card border border-border rounded-lg p-4">
                 <div className="flex items-center justify-between gap-4">
