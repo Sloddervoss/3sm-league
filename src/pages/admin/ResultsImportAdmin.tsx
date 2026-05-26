@@ -70,7 +70,7 @@ const ResultsImportAdmin = () => {
       for (const row of importRows) {
         if (!row.display_name.trim()) continue;
         const profile = matchProfileForImportRow(row, (profiles ?? []) as ProfileRow[]);
-        if (!profile) { toast.error(`Driver niet gevonden: ${row.display_name}`); continue; }
+        if (!profile) { toast.error(`Coureur niet gevonden: ${row.display_name}`); continue; }
         const pts = (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0);
         const { error } = await supabase.from("race_results").upsert(
           {
@@ -231,7 +231,7 @@ const ResultsImportAdmin = () => {
                         if (result.error) { toast.error(result.error); return; }
                         setImportRows(result.rows);
                         setRaceMetadata(result.raceMetadata ?? null);
-                        toast.success(`${result.rows.length} drivers geladen uit JSON (inclusief extra race-info)`);
+                        toast.success(`${result.rows.length} coureurs geladen uit JSON (inclusief extra race-info)`);
                       };
                       reader.readAsText(file);
                     }}
@@ -257,14 +257,14 @@ const ResultsImportAdmin = () => {
                     <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                       {raceMetadata.iracing_session_id && <span className="px-2 py-1 rounded bg-secondary border border-border">Sessie #{raceMetadata.iracing_session_id}</span>}
                       {raceMetadata.sof != null && <span className="px-2 py-1 rounded bg-secondary border border-border">SOF {raceMetadata.sof}</span>}
-                      {raceMetadata.lead_changes != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{raceMetadata.lead_changes} lead changes</span>}
-                      {raceMetadata.cautions != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{raceMetadata.cautions} cautions</span>}
+                      {raceMetadata.lead_changes != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{raceMetadata.lead_changes} kopwisselingen</span>}
+                      {raceMetadata.cautions != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{raceMetadata.cautions} cauties</span>}
                     </div>
                   )}
-                  <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} drivers geladen — preview:</div>
+                  <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} coureurs geladen — preview:</div>
                   <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
                     <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
-                      <span>Pos</span><span>Driver</span><span>Laps</span><span>Best Lap</span><span>Inc.</span><span>iRating</span><span className="text-center">FL</span>
+                      <span>Pos</span><span>Coureur</span><span>Ronden</span><span>Beste ronde</span><span>Inc.</span><span>iRating</span><span className="text-center">FL</span>
                     </div>
                     {importRows.slice(0, 10).map((row, i) => {
                       const matched = profiles?.find((p: JsonPreviewProfileRow) =>
@@ -314,12 +314,12 @@ const ResultsImportAdmin = () => {
             <div className="overflow-x-auto mb-4">
               <div className="min-w-[640px]">
                 <div className="grid grid-cols-[3rem_1fr_5rem_8rem_5rem_6rem_3rem] gap-2 mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">
-                  <span>Pos</span><span>Driver</span><span className="text-center">Laps</span><span className="text-center">Best Lap</span><span className="text-center">Inc.</span><span className="text-center">FL</span><span></span>
+                  <span>Pos</span><span>Coureur</span><span className="text-center">Ronden</span><span className="text-center">Beste ronde</span><span className="text-center">Inc.</span><span className="text-center">FL</span><span></span>
                 </div>
                 {importRows.map((row, i) => (
                   <div key={i} className="grid grid-cols-[3rem_1fr_5rem_8rem_5rem_6rem_3rem] gap-2 mb-2 items-center">
                     <div className="py-2 rounded-md bg-secondary border border-border text-center text-sm font-heading font-bold">{row.position}</div>
-                    <input type="text" value={row.display_name} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], display_name: e.target.value }; setImportRows(u); }} placeholder="Driver naam" list="driver-names-import" className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                    <input type="text" value={row.display_name} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], display_name: e.target.value }; setImportRows(u); }} placeholder="Coureur naam" list="driver-names-import" className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                     <input type="number" min={0} value={row.laps} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], laps: parseInt(e.target.value) || 0 }; setImportRows(u); }} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
                     <input type="text" value={row.best_lap} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], best_lap: e.target.value }; setImportRows(u); }} placeholder="1:23.456" className="px-3 py-2 rounded-md bg-secondary border border-border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50" />
                     <input type="number" min={0} value={row.incidents} onChange={(e) => { const u = [...importRows]; u[i] = { ...u[i], incidents: parseInt(e.target.value) || 0 }; setImportRows(u); }} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
@@ -333,7 +333,7 @@ const ResultsImportAdmin = () => {
               </div>
             </div>
             <button onClick={() => setImportRows([...importRows, { position: importRows.length + 1, display_name: "", laps: 0, best_lap: "", incidents: 0, fastest_lap: false }])} className="flex items-center gap-1 px-3 py-2 rounded-md border border-border text-sm font-medium text-muted-foreground hover:text-foreground transition-colors mb-4">
-              <Plus className="w-4 h-4" /> Driver toevoegen
+              <Plus className="w-4 h-4" /> Coureur toevoegen
             </button>
           </div>
         )}

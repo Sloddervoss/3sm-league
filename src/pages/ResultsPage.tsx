@@ -133,7 +133,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
               </span>
               <div>
                 <span className="font-heading font-bold text-sm">
-                  {result.profiles?.display_name || result.profiles?.iracing_name || "Unknown"}
+                  {result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend"}
                 </span>
                 {result.fastest_lap && (
                   <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold">FL</span>
@@ -430,7 +430,7 @@ const ResultsPage = () => {
                             >
                               <span className="text-base shrink-0 leading-none mt-0.5">🧊</span>
                               <div className="min-w-0">
-                                <div className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-0.5">Clean drive</div>
+                                <div className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-0.5">Cleanste rit</div>
                                 <div className="font-heading font-bold text-sm truncate">{spDriverName(spCleanest)}</div>
                                 <div className="text-[11px] text-green-400 mt-0.5">{spCleanest.incidents} inc</div>
                               </div>
@@ -443,7 +443,7 @@ const ResultsPage = () => {
                           >
                             <div className="text-center">
                               <div className="font-heading font-black text-lg leading-none">{spFinishers.length}</div>
-                              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Finishers</div>
+                              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Gefinisht</div>
                             </div>
                             {spDnfCount > 0 && (
                               <>
@@ -459,7 +459,7 @@ const ResultsPage = () => {
                                 <div className="w-px h-8 bg-border" />
                                 <div className="text-center">
                                   <div className="font-heading font-black text-lg text-orange-400 leading-none">{spTotalInc}</div>
-                                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Incidents</div>
+                                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Incidenten</div>
                                 </div>
                               </>
                             )}
@@ -553,7 +553,7 @@ const ResultsPage = () => {
                             <div className="flex items-center gap-1 mt-1.5 md:hidden">
                               <Trophy className="w-3 h-3 text-yellow-400 shrink-0" />
                               <span className="font-heading font-bold text-sm text-yellow-400 truncate">
-                                {winner.profiles?.display_name || winner.profiles?.iracing_name || "Unknown"}
+                                {winner.profiles?.display_name || winner.profiles?.iracing_name || "Onbekend"}
                               </span>
                             </div>
                           )}
@@ -561,9 +561,9 @@ const ResultsPage = () => {
                         {winner && (
                           <div className="hidden md:flex items-center gap-3 shrink-0">
                             <div className="text-right">
-                              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Winner</div>
+                              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Winnaar</div>
                               <div className="font-heading font-bold text-yellow-400">
-                                {winner.profiles?.display_name || winner.profiles?.iracing_name || "Unknown"}
+                                {winner.profiles?.display_name || winner.profiles?.iracing_name || "Onbekend"}
                               </div>
                             </div>
                             <Trophy className="w-5 h-5 text-yellow-400" />
