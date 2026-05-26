@@ -115,9 +115,9 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
       <div className="overflow-x-auto">
         <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2 bg-secondary/30 text-xs font-bold uppercase tracking-wider text-muted-foreground min-w-[500px]">
           <span>Pos</span>
-          <span>Driver</span>
-          <span className="text-center">Laps</span>
-          <span className="text-center">Best Lap</span>
+          <span>Coureur</span>
+          <span className="text-center">Ronden</span>
+          <span className="text-center">Beste ronde</span>
           <span className="text-center hidden md:block">Inc.</span>
           <span className="text-center">Pts</span>
         </div>

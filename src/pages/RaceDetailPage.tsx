@@ -238,8 +238,8 @@ const RaceDetailPage = () => {
                       <div className="font-heading text-2xl font-black">{stats.winner.name}</div>
                     </div>
                     <div className="ml-auto hidden sm:flex items-center gap-4 text-sm text-muted-foreground">
-                      {stats.winner.laps != null && <span><b className="text-orange-400">{stats.winner.laps}</b> laps</span>}
-                      {stats.winner.best_lap && <><span className="opacity-30">|</span><span><b className="text-orange-400">{stats.winner.best_lap}</b> best lap</span></>}
+                      {stats.winner.laps != null && <span><b className="text-orange-400">{stats.winner.laps}</b> ronden</span>}
+                      {stats.winner.best_lap && <><span className="opacity-30">|</span><span><b className="text-orange-400">{stats.winner.best_lap}</b> beste ronde</span></>}
                       {stats.winner.incidents != null && <><span className="opacity-30">|</span><span><b className="text-orange-400">{stats.winner.incidents}</b>x</span></>}
                     </div>
                   </div>
@@ -276,9 +276,9 @@ const RaceDetailPage = () => {
                 )}
                 {stats.mostLapsLed && (
                   <StatCard
-                    label="Meeste laps led"
+                    label="Meeste ronden op kop"
                     value={stats.mostLapsLed.name}
-                    sub={`${stats.mostLapsLed.laps_led} van ${race.total_laps || "?"} laps`}
+                    sub={`${stats.mostLapsLed.laps_led}/${race.total_laps || "?"} ronden`}
                   />
                 )}
                 <StatCard label="Grid" value={`${results.length}`} sub={carEntries.length ? `${carEntries.length} ${carEntries.length === 1 ? "model" : "modellen"}` : ""} />
@@ -287,8 +287,8 @@ const RaceDetailPage = () => {
               {(race.sof != null || race.lead_changes != null || race.cautions != null) && (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                   {race.sof != null && <StatCard label="SOF" value={String(race.sof)} sub="Strength of field" />}
-                  {race.lead_changes != null && <StatCard label="Lead changes" value={String(race.lead_changes)} sub="" />}
-                  {race.cautions != null && <StatCard label="Cautions" value={String(race.cautions)} sub={race.caution_laps != null ? `${race.caution_laps} laps` : ""} />}
+                  {race.lead_changes != null && <StatCard label="Kopwisselingen" value={String(race.lead_changes)} sub="" />}
+                  {race.cautions != null && <StatCard label="Cauties" value={String(race.cautions)} sub={race.caution_laps != null ? `${race.caution_laps} ronden` : ""} />}
                 </div>
               )}
 
@@ -299,7 +299,7 @@ const RaceDetailPage = () => {
                     <h2 className="font-heading text-2xl font-black flex items-center gap-2"><List className="w-5 h-5 text-accent" /> Race resultaat</h2>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="px-2 py-1 rounded bg-secondary border border-border">{results.length} coureurs</span>
-                      {race.total_laps != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{race.total_laps} laps</span>}
+                      {race.total_laps != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{race.total_laps} ronden</span>}
                       <button
                         type="button"
                         onClick={() => navigator.clipboard?.writeText(window.location.href)}
@@ -312,7 +312,7 @@ const RaceDetailPage = () => {
 
                   <div className="bg-card border border-border rounded-lg overflow-hidden">
                     <div className="grid grid-cols-[3.5rem_1fr_4rem_4rem_6rem_5rem_4rem_4rem] gap-2 px-4 py-2 bg-secondary/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground min-w-[820px]">
-                      <span>Pos</span><span>Coureur</span><span className="text-center">Laps</span><span className="text-center">Lead</span><span className="text-right">Best</span><span className="text-center">Grid</span><span className="text-center">Inc</span><span className="text-center">Pts</span>
+                      <span>Pos</span><span>Coureur</span><span className="text-center">Ronden</span><span className="text-center">Kop</span><span className="text-right">Best</span><span className="text-center">Grid</span><span className="text-center">Inc</span><span className="text-center">Pts</span>
                     </div>
                     <div className="overflow-x-auto">
                       {stats.sorted.map((driver) => {
@@ -367,7 +367,7 @@ const RaceDetailPage = () => {
                       <div className="flex justify-between gap-3"><span className="text-muted-foreground">Track</span><span className="font-heading font-bold text-right">{race.track}</span></div>
                       <div className="flex justify-between"><span className="text-muted-foreground">Datum</span><span className="font-heading font-bold">{formatRaceDate(race.race_date)}</span></div>
                       {race.round != null && <div className="flex justify-between"><span className="text-muted-foreground">Ronde</span><span className="font-heading font-bold">{race.round}</span></div>}
-                      {race.total_laps != null && <div className="flex justify-between"><span className="text-muted-foreground">Geplande laps</span><span className="font-heading font-bold">{race.total_laps}</span></div>}
+                      {race.total_laps != null && <div className="flex justify-between"><span className="text-muted-foreground">Geplande ronden</span><span className="font-heading font-bold">{race.total_laps}</span></div>}
                       {race.race_duration && <div className="flex justify-between"><span className="text-muted-foreground">Race duur</span><span className="font-heading font-bold">{race.race_duration}</span></div>}
                       {race.weather && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Weer</span><span className="font-heading font-bold text-right">{race.weather}</span></div>}
                       {race.sof != null && <div className="flex justify-between"><span className="text-muted-foreground">SOF</span><span className="font-heading font-bold">{race.sof}</span></div>}
