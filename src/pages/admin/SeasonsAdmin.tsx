@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Trophy, Trash2, Users, Save, Pencil, ChevronDown } from "lucide-react";
+import { Plus, Trophy, Trash2, Users, Save, Pencil, ChevronDown, KeyRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -93,18 +93,23 @@ type RaceEditData = {
   setup?: string | null;
   status?: string | null;
   round?: number | null;
+  lobby_name?: string | null;
+  lobby_password?: string | null;
+  lobby_reveal_minutes?: number | null;
 };
 
 type RaceSlot = {
   name: string; track: string; date: string; time: string;
   race_type: string; race_duration: string; practice_duration: string;
   qualifying_duration: string; start_type: string; weather: string; setup: string;
+  lobby_name: string; lobby_password: string; lobby_reveal_minutes: number;
 };
 
 const SOLO_RACE_DEFAULTS: RaceSlot = {
   name: "", track: "", date: "", time: "20:00", race_type: "Feature",
   race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min",
   start_type: "Standing", weather: "Fixed", setup: "Fixed",
+  lobby_name: "", lobby_password: "", lobby_reveal_minutes: 15,
 };
 
 const SeasonsAdmin = () => {
@@ -183,6 +188,7 @@ const SeasonsAdmin = () => {
       name: `Race ${i + 1}`, track: "", date: "", time: "20:00", race_type: "Feature",
       race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min",
       start_type: "Standing", weather: "Fixed", setup: "Fixed",
+      lobby_name: "", lobby_password: "", lobby_reveal_minutes: 15,
     })));
   };
 
@@ -255,6 +261,8 @@ const SeasonsAdmin = () => {
         race_type: newSoloRace.race_type || null, race_duration: newSoloRace.race_duration || null,
         practice_duration: newSoloRace.practice_duration || null, qualifying_duration: newSoloRace.qualifying_duration || null,
         start_type: newSoloRace.start_type || null, weather: newSoloRace.weather || null, setup: newSoloRace.setup || null,
+        lobby_name: newSoloRace.lobby_name || null, lobby_password: newSoloRace.lobby_password || null,
+        lobby_reveal_minutes: newSoloRace.lobby_reveal_minutes ?? 15,
       });
       if (error) throw error;
     },
@@ -290,6 +298,8 @@ const SeasonsAdmin = () => {
         practice_duration: data.practice_duration || null, qualifying_duration: data.qualifying_duration || null,
         start_type: data.start_type || null, weather: data.weather || null, setup: data.setup || null,
         status: data.status || "upcoming",
+        lobby_name: data.lobby_name || null, lobby_password: data.lobby_password || null,
+        lobby_reveal_minutes: data.lobby_reveal_minutes ?? 15,
       }).eq("id", id);
       if (error) throw error;
     },
@@ -731,6 +741,48 @@ const SeasonsAdmin = () => {
                   </select>
                 </div>
               </div>
+
+              {/* ── Lobby ── */}
+              <div className="pt-2">
+                <div className="flex items-center gap-2 mb-3">
+                  <KeyRound className="w-4 h-4 text-orange-500" />
+                  <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Lobby</span>
+                  <span className="text-[10px] text-muted-foreground">(alleen voor ingeschreven deelnemers)</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Lobby naam</label>
+                    <input
+                      type="text"
+                      value={newSoloRace.lobby_name}
+                      onChange={(e) => setNewSoloRace({ ...newSoloRace, lobby_name: e.target.value })}
+                      placeholder="bv. 3SM Race 1"
+                      className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Wachtwoord</label>
+                    <input
+                      type="text"
+                      value={newSoloRace.lobby_password}
+                      onChange={(e) => setNewSoloRace({ ...newSoloRace, lobby_password: e.target.value })}
+                      placeholder="bv. 3SMracing2024"
+                      className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Vrijgeven (min voor start)</label>
+                    <input
+                      type="number"
+                      value={newSoloRace.lobby_reveal_minutes}
+                      onChange={(e) => setNewSoloRace({ ...newSoloRace, lobby_reveal_minutes: Number(e.target.value) })}
+                      min={1}
+                      max={120}
+                      className="w-full px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 mt-4">
               <button onClick={() => createSoloRace.mutate()} disabled={!newSoloRace.name || !newSoloRace.track || !newSoloRace.date || createSoloRace.isPending} className="px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">{createSoloRace.isPending ? "Aanmaken..." : "Aanmaken"}</button>
@@ -842,6 +894,27 @@ const SeasonsAdmin = () => {
                         <select value={srd.status || ""} onChange={e => setSrd("status", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50">
                           {["upcoming", "live", "completed", "cancelled"].map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
+                      </div>
+                    </div>
+                    {/* ── Lobby (edit) ── */}
+                    <div className="pt-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        <KeyRound className="w-3.5 h-3.5 text-orange-500" />
+                        <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Lobby</span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Lobby naam</label>
+                          <input type="text" value={srd.lobby_name || ""} onChange={e => setSrd("lobby_name", e.target.value)} placeholder="bv. 3SM Race 1" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Wachtwoord</label>
+                          <input type="text" value={srd.lobby_password || ""} onChange={e => setSrd("lobby_password", e.target.value)} placeholder="bv. 3SMracing2024" className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Vrijgeven (min)</label>
+                          <input type="number" value={srd.lobby_reveal_minutes ?? 15} onChange={e => setSrd("lobby_reveal_minutes", Number(e.target.value))} min={1} max={120} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-2">

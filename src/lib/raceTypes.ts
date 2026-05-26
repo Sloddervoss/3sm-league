@@ -20,5 +20,8 @@ export type RaceWithLeagueSummary = {
   start_type: string | null;
   weather: string | null;
   setup: string | null;
+  lobby_name: string | null;
+  lobby_password: string | null;
+  lobby_reveal_minutes: number | null;
   leagues: RaceLeagueSummary | null;
 };

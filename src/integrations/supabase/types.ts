@@ -673,6 +673,9 @@ export type Database = {
           id: string
           iracing_session_id: string | null
           league_id: string | null
+          lobby_name: string | null
+          lobby_password: string | null
+          lobby_reveal_minutes: number
           name: string
           practice_duration: string | null
           qualifying_duration: string | null
@@ -695,6 +698,9 @@ export type Database = {
           id?: string
           iracing_session_id?: string | null
           league_id?: string | null
+          lobby_name?: string | null
+          lobby_password?: string | null
+          lobby_reveal_minutes?: number
           name: string
           practice_duration?: string | null
           qualifying_duration?: string | null
@@ -717,6 +723,9 @@ export type Database = {
           id?: string
           iracing_session_id?: string | null
           league_id?: string | null
+          lobby_name?: string | null
+          lobby_password?: string | null
+          lobby_reveal_minutes?: number
           name?: string
           practice_duration?: string | null
           qualifying_duration?: string | null
