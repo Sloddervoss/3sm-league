@@ -150,7 +150,7 @@ const RaceModal = ({ race, registration }: Props) => {
         const prof = profiles.find((p) => p.user_id === uid);
         return {
           user_id: uid,
-          display_name: prof?.display_name || prof?.iracing_name || "Unknown",
+          display_name: prof?.display_name || prof?.iracing_name || "Onbekend",
           team_id: prof?.team_id ?? null,
         };
       });
@@ -167,8 +167,8 @@ const RaceModal = ({ race, registration }: Props) => {
   const timeStr    = raceDate.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
 
   const sessions = [
-    race.practice_duration   && { label: "Practice",   dur: race.practice_duration,   color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
-    race.qualifying_duration && { label: "Qualifying",  dur: race.qualifying_duration,  color: "#eab308", bg: "rgba(234,179,8,0.12)" },
+    race.practice_duration   && { label: "Training",   dur: race.practice_duration,   color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
+    race.qualifying_duration && { label: "Kwalificatie",  dur: race.qualifying_duration,  color: "#eab308", bg: "rgba(234,179,8,0.12)" },
     race.race_duration       && { label: "Race",        dur: race.race_duration,        color: "#f97316", bg: "rgba(249,115,22,0.12)" },
   ].filter((session): session is Session => Boolean(session));
 
@@ -178,7 +178,7 @@ const RaceModal = ({ race, registration }: Props) => {
 
   const statusColor = race.status === "completed" ? "#6b7280" : race.status === "live" ? "#22c55e" : "#f97316";
   const statusBg    = race.status === "completed" ? "rgba(107,114,128,0.15)" : race.status === "live" ? "rgba(34,197,94,0.15)" : "rgba(249,115,22,0.15)";
-  const statusLabel = race.status === "completed" ? "Afgelopen" : race.status === "live" ? "🔴 LIVE" : "Upcoming";
+  const statusLabel = race.status === "completed" ? "Afgelopen" : race.status === "live" ? "🔴 LIVE" : "Aankomend";
 
   const hasLobbyInfo = Boolean(race.lobby_name && race.lobby_password);
   const canViewLobby = Boolean(registration && (registration.isRegistered || registration.isRegisteredViaSeason));
@@ -410,7 +410,7 @@ const RaceModal = ({ race, registration }: Props) => {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
               {[
-                { label: "Winner",        value: winner?.profiles?.display_name || "—",      accent: "#facc15", icon: <Trophy className="w-4 h-4" /> },
+                { label: "Winnaar",       value: winner?.profiles?.display_name || "—",      accent: "#facc15", icon: <Trophy className="w-4 h-4" /> },
                 { label: "Snelste ronde", value: fastestLap?.profiles?.display_name || "—",  accent: "#a855f7", icon: <Zap className="w-4 h-4" /> },
                 { label: "Starters",      value: results.length,                              accent: null,      icon: <Users className="w-4 h-4" /> },
                 { label: "DNF's",         value: dnfCount,                                    accent: dnfCount > 0 ? "#ef4444" : null, icon: <Flag className="w-4 h-4" /> },
@@ -431,7 +431,7 @@ const RaceModal = ({ race, registration }: Props) => {
                 className="grid gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600"
                 style={{ gridTemplateColumns: "3rem 1fr 4rem 4rem 4rem", background: "rgba(255,255,255,0.03)" }}
               >
-                <span>Pos</span><span>Driver</span><span>Pts</span><span>Ronde</span><span>Inc</span>
+                <span>Pos</span><span>Coureur</span><span>Pts</span><span>Ronde</span><span>Inc</span>
               </div>
               {results.map((r, i) => {
                 const posColor = r.position !== null && r.position <= 3 ? PODIUM[r.position - 1] : (r.dnf ? "#ef4444" : "#6b7280");
@@ -459,7 +459,7 @@ const RaceModal = ({ race, registration }: Props) => {
                         {r.dnf ? "DNF" : `P${r.position}`}
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-white truncate">{r.profiles?.display_name || r.profiles?.iracing_name || "Unknown"}</div>
+                        <div className="text-sm font-bold text-white truncate">{r.profiles?.display_name || r.profiles?.iracing_name || "Onbekend"}</div>
                         {team && <div className="text-[10px] mt-0.5" style={{ color: team.color + "99" }}>{team.name}</div>}
                       </div>
                       <div className="font-heading font-bold text-sm text-orange-400">{r.points}</div>
