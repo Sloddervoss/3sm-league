@@ -97,14 +97,34 @@ const numberOrUndefined = (value: unknown): number | undefined =>
 const stringOrUndefined = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim() : undefined;
 
+const SKIES_LABELS: Record<number, string> = {
+  0: "Bewolkt",
+  1: "Helder",
+  2: "Half bewolkt",
+  3: "Zwaar bewolkt",
+};
+
+const WIND_DIR_LABELS: Record<number, string> = {
+  0: "N", 1: "NO", 2: "O", 3: "ZO",
+  4: "Z", 5: "ZW", 6: "W", 7: "NW",
+};
+
+const WIND_UNIT_LABELS: Record<number, string> = {
+  0: "mph",
+  1: "m/s",
+};
+
 const formatIRacingWeather = (weather: unknown): string | undefined => {
   if (!weather || typeof weather !== "object") return undefined;
   const w = weather as Record<string, unknown>;
-  const parts = [
-    stringOrUndefined(w.skies) || stringOrUndefined(w.sky),
-    typeof w.temp_value === "number" ? `${Math.round(w.temp_value)}°C` : undefined,
-    typeof w.rel_humidity === "number" ? `${Math.round(w.rel_humidity)}% humidity` : undefined,
-  ].filter(Boolean);
+  const skiesLabel = typeof w.skies === "number" ? SKIES_LABELS[w.skies] : (stringOrUndefined(w.skies) || stringOrUndefined(w.sky));
+  const temp = typeof w.temp_value === "number" ? `${Math.round(w.temp_value)}°C` : undefined;
+  const humidity = typeof w.rel_humidity === "number" ? `${Math.round(w.rel_humidity)}%` : undefined;
+  const windSpeed = typeof w.wind_value === "number" ? w.wind_value : undefined;
+  const windDir = typeof w.wind_dir === "number" ? WIND_DIR_LABELS[w.wind_dir] : undefined;
+  const windUnit = typeof w.wind_units === "number" ? (WIND_UNIT_LABELS[w.wind_units] ?? "m/s") : undefined;
+  const wind = windSpeed != null ? `${windDir ?? ""} ${windSpeed} ${windUnit ?? ""}`.trim() : undefined;
+  const parts = [skiesLabel, temp, humidity, wind ? `Wind: ${wind}` : undefined].filter(Boolean);
   return parts.length ? parts.join(" · ") : undefined;
 };
 

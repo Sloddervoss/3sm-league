@@ -239,14 +239,15 @@ const RaceDetailPage = () => {
                 </div>
               </div>
 
-              {(stats.pole || stats.biggestMover || stats.mostLapsLed || race.sof || race.lead_changes != null || race.cautions != null) && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {(stats.pole || stats.biggestMover || stats.mostLapsLed || race.sof || race.lead_changes != null || race.cautions != null || race.weather) && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
                   {stats.pole && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Pole</div><div className="font-heading text-lg font-black">{stats.pole.name}</div></div>}
                   {stats.biggestMover && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Grootste stijger</div><div className="font-heading text-lg font-black">{stats.biggestMover.name}</div><div className="text-xs text-green-400 mt-1">+{stats.biggestMover.positionGain} posities</div></div>}
                   {stats.mostLapsLed && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Meeste laps led</div><div className="font-heading text-lg font-black">{stats.mostLapsLed.name}</div><div className="text-xs text-orange-400 mt-1">{stats.mostLapsLed.laps_led} laps</div></div>}
                   {race.sof != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">SOF</div><div className="font-heading text-lg font-black">{race.sof}</div></div>}
                   {race.lead_changes != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Lead changes</div><div className="font-heading text-lg font-black">{race.lead_changes}</div></div>}
                   {race.cautions != null && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Cautions</div><div className="font-heading text-lg font-black">{race.cautions}</div>{race.caution_laps != null && <div className="text-xs text-muted-foreground mt-1">{race.caution_laps} laps</div>}</div>}
+                  {race.weather && <div className="bg-card border border-border rounded-lg p-4"><div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-black mb-2">Weer</div><div className="text-xs font-heading font-bold leading-relaxed">{race.weather}</div></div>}
                 </div>
               )}
 
