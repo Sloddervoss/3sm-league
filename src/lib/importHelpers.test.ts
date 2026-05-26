@@ -369,7 +369,7 @@ describe("parseIRacingJsonRows", () => {
       cautions: 2,
       caution_laps: 5,
       lead_changes: 6,
-      weather: "Partly Cloudy · 22°C · 51% humidity",
+      weather: "Partly Cloudy · 22°C · 51%",
     });
   });
 });
