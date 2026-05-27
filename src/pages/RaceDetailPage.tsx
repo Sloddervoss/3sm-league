@@ -304,9 +304,17 @@ const RaceDetailPage = () => {
       <main className="pt-[108px]">
         <section className="py-8 md:py-12 bg-gradient-to-b from-card/60 to-transparent border-b border-border">
           <div className="container mx-auto px-4">
-            <Link to="/results" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-accent transition-colors mb-6">
-              <ArrowLeft className="w-4 h-4" /> Terug naar uitslagen
-            </Link>
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <Link
+                to={raceId ? `/results?race=${raceId}` : "/results"}
+                className="inline-flex items-center gap-2 rounded-md border border-orange-500/25 bg-orange-500/10 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-orange-400 hover:bg-orange-500/15 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" /> Terug naar archief
+              </Link>
+              <Link to="/results" className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:border-orange-500/40 transition-colors">
+                Alle uitslagen
+              </Link>
+            </div>
 
             {loading ? (
               <div className="space-y-4">
@@ -459,7 +467,7 @@ const RaceDetailPage = () => {
                 <aside className="space-y-4">
                   <div className="bg-card border border-border rounded-lg p-4">
                     <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3">Deze race</div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
                       <button
                         type="button"
                         onClick={() => navigator.clipboard?.writeText(window.location.href)}
@@ -467,7 +475,8 @@ const RaceDetailPage = () => {
                       >
                         <Share2 className="w-3 h-3" /> Link
                       </button>
-                      <Link to="/results" className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">Uitslag</Link>
+                      {raceId && <Link to={`/results?race=${raceId}`} className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">Terug naar archief</Link>}
+                      <Link to="/results" className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">Alle uitslagen</Link>
                     </div>
                   </div>
 

@@ -5,8 +5,8 @@ import { motion } from "framer-motion";
 import { List, Trophy, AlertTriangle, Flag, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 const positionColors: Record<number, string> = {
   1: "text-yellow-400",
@@ -170,8 +170,8 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
 
 const ResultsPage = () => {
   const [expandedRace, setExpandedRace] = useState<string | null>(null);
-  const [scrollToLatest, setScrollToLatest] = useState(false);
-  const latestRaceRowRef = useRef<HTMLDivElement>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedRaceId = searchParams.get("race");
 
   const { data: races, isLoading } = useQuery({
     queryKey: ["completed-races"],
@@ -203,15 +203,29 @@ const ResultsPage = () => {
   const latestRace = races?.[0];
 
   useEffect(() => {
-    if (!scrollToLatest || !latestRace || expandedRace !== latestRace.id) return;
+    if (!requestedRaceId || !races?.some((race) => race.id === requestedRaceId)) return;
 
+    setExpandedRace(requestedRaceId);
     const frame = requestAnimationFrame(() => {
-      latestRaceRowRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      setScrollToLatest(false);
+      document.getElementById(`race-${requestedRaceId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [expandedRace, latestRace, scrollToLatest]);
+  }, [requestedRaceId, races]);
+
+  const toggleArchiveRace = (raceId: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (expandedRace === raceId) {
+      setExpandedRace(null);
+      nextParams.delete("race");
+    } else {
+      setExpandedRace(raceId);
+      nextParams.set("race", raceId);
+    }
+
+    setSearchParams(nextParams, { replace: false });
+  };
 
   // Same queryKey as ExpandedRaceContent — cache shared when user expands this race
   const { data: latestResults = [], isLoading: latestLoading } = useQuery({
@@ -470,22 +484,25 @@ const ResultsPage = () => {
                     </div>
 
                     {/* CTA */}
-                    <div className="px-6 py-4 border-t border-border flex flex-wrap items-center gap-4">
-                      <Link
-                        to={`/results/${latestRace.id}`}
-                        className="text-sm font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors flex items-center gap-1"
-                      >
-                        Open racepagina
-                      </Link>
-                      <button
-                        onClick={() => {
-                          setExpandedRace(latestRace.id);
-                          setScrollToLatest(true);
-                        }}
-                        className="text-sm font-heading font-bold text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                      >
-                        Bekijk hier de uitslag <ChevronDown className="w-4 h-4" />
-                      </button>
+                    <div className="px-6 py-4 border-t border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-xs text-muted-foreground">
+                        Kies tussen de deelbare racepagina of de snelle archiefweergave op deze pagina.
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Link
+                          to={`/results/${latestRace.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-white hover:bg-orange-400 transition-colors"
+                        >
+                          Details & delen
+                        </Link>
+                        <button
+                          onClick={() => toggleArchiveRace(latestRace.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:border-orange-500/40 transition-colors"
+                        >
+                          {expandedRace === latestRace.id ? "Sluit snelle uitslag" : "Snelle uitslag"}
+                          {expandedRace === latestRace.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -520,14 +537,14 @@ const ResultsPage = () => {
                   return (
                     <motion.div
                       key={race.id}
-                      ref={i === 0 ? latestRaceRowRef : undefined}
+                      id={`race-${race.id}`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.04 }}
                       className={`bg-card border border-border rounded-lg overflow-hidden${i === 0 ? " scroll-mt-[120px]" : ""}`}
                     >
                       <button
-                        onClick={() => setExpandedRace(isExpanded ? null : race.id)}
+                        onClick={() => toggleArchiveRace(race.id)}
                         className="w-full px-6 py-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors text-left"
                       >
                         <div className="w-10 shrink-0 flex flex-col items-center justify-center">
@@ -575,12 +592,22 @@ const ResultsPage = () => {
                       </button>
 
                       <div className="px-6 pb-3 -mt-1">
-                        <Link
-                          to={`/results/${race.id}`}
-                          className="inline-flex items-center gap-1 text-xs font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors"
-                        >
-                          Open racepagina
-                        </Link>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Link
+                            to={`/results/${race.id}`}
+                            className="inline-flex items-center gap-1 text-xs font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors"
+                          >
+                            Details & delen
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => toggleArchiveRace(race.id)}
+                            className="inline-flex items-center gap-1 text-xs font-heading font-bold text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {isExpanded ? "Sluit snelle uitslag" : "Snelle uitslag"}
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       </div>
 
                       {isExpanded && <ExpandedRaceContent raceId={race.id} />}
