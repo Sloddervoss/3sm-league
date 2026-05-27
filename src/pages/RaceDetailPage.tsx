@@ -4,7 +4,7 @@ import StickyRaceBar from "@/components/StickyRaceBar";
 import { supabase } from "@/integrations/supabase/client";
 import { getRaceDetailStats, type RaceDetailStatsResult } from "@/lib/raceDetailStats";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Car, CloudSun, Flag, List, Share2, Trophy, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUp, Car, Cloud, CloudRain, CloudSun, Droplets, Flag, List, Share2, Sun, Thermometer, Trophy, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { Link, useParams } from "react-router-dom";
@@ -89,6 +89,46 @@ type WeatherTile = {
   key: string;
   value: string;
   label: string;
+  kind: "sky" | "temperature" | "humidity" | "wind" | "default";
+  windDirection?: string;
+};
+
+const WIND_DIRECTION_DEGREES: Record<string, number> = {
+  N: 0,
+  NO: 45,
+  NE: 45,
+  O: 90,
+  E: 90,
+  ZO: 135,
+  SE: 135,
+  Z: 180,
+  S: 180,
+  ZW: 225,
+  SW: 225,
+  W: 270,
+  NW: 315,
+};
+
+const WIND_DIRECTION_EN: Record<string, string> = {
+  N: "N",
+  NO: "NE",
+  O: "E",
+  ZO: "SE",
+  Z: "S",
+  ZW: "SW",
+  W: "W",
+  NW: "NW",
+};
+
+const getWindDirection = (value: string) => {
+  const firstToken = value.trim().split(/\s+/)[0]?.toUpperCase();
+  return firstToken && WIND_DIRECTION_DEGREES[firstToken] != null ? firstToken : undefined;
+};
+
+const formatWeatherValue = (tile: WeatherTile, language: "nl" | "en") => {
+  if (tile.kind !== "wind" || language !== "en" || !tile.windDirection) return tile.value;
+  const englishDirection = WIND_DIRECTION_EN[tile.windDirection] ?? tile.windDirection;
+  return tile.value.replace(new RegExp(`^${tile.windDirection}\\b`), englishDirection);
 };
 
 const parseWeatherTiles = (weather: string | null): WeatherTile[] => {
@@ -104,27 +144,58 @@ const parseWeatherTiles = (weather: string | null): WeatherTile[] => {
       const lower = part.toLowerCase();
 
       if (valueFromLabel) {
+        const isWind = rawLabel.trim().toLowerCase().includes("wind");
+        const windDirection = isWind ? getWindDirection(valueFromLabel) : undefined;
+
         return {
           key: `${index}-${part}`,
           value: valueFromLabel,
           label: rawLabel.trim() || "Weer",
+          kind: isWind ? "wind" : "default",
+          windDirection,
         };
       }
 
       if (/^-?\d+(\.\d+)?\s*°c$/i.test(part)) {
-        return { key: `${index}-${part}`, value: part, label: "Temperatuur" };
+        return { key: `${index}-${part}`, value: part, label: "Temperatuur", kind: "temperature" };
       }
 
       if (/^-?\d+(\.\d+)?\s*%$/i.test(part)) {
-        return { key: `${index}-${part}`, value: part, label: "Luchtvochtigheid" };
+        return { key: `${index}-${part}`, value: part, label: "Luchtvochtigheid", kind: "humidity" };
       }
 
       if (lower.includes("helder") || lower.includes("clear") || lower.includes("cloud") || lower.includes("bewolkt") || lower.includes("rain") || lower.includes("regen")) {
-        return { key: `${index}-${part}`, value: part, label: "Lucht" };
+        return { key: `${index}-${part}`, value: part, label: "Lucht", kind: "sky" };
       }
 
-      return { key: `${index}-${part}`, value: part, label: "Weer" };
+      return { key: `${index}-${part}`, value: part, label: "Weer", kind: "default" };
     });
+};
+
+const WeatherTileIcon = ({ tile }: { tile: WeatherTile }) => {
+  const iconClass = "w-5 h-5";
+
+  if (tile.kind === "temperature") return <Thermometer className={iconClass} />;
+  if (tile.kind === "humidity") return <Droplets className={iconClass} />;
+  if (tile.kind === "wind") {
+    const degrees = tile.windDirection ? WIND_DIRECTION_DEGREES[tile.windDirection] : 0;
+    return <ArrowUp className={iconClass} style={{ transform: `rotate(${degrees}deg)` }} />;
+  }
+
+  const lower = tile.value.toLowerCase();
+  if (lower.includes("rain") || lower.includes("regen")) return <CloudRain className={iconClass} />;
+  if (lower.includes("cloud") || lower.includes("bewolkt")) return <Cloud className={iconClass} />;
+  if (lower.includes("clear") || lower.includes("helder")) return <Sun className={iconClass} />;
+
+  return <CloudSun className={iconClass} />;
+};
+
+const weatherTileStyles = (kind: WeatherTile["kind"]) => {
+  if (kind === "temperature") return "border-orange-400/20 bg-orange-500/5 text-orange-300 shadow-[0_0_22px_rgba(249,115,22,0.08)]";
+  if (kind === "humidity") return "border-sky-400/20 bg-sky-500/5 text-sky-300 shadow-[0_0_22px_rgba(56,189,248,0.08)]";
+  if (kind === "wind") return "border-cyan-400/20 bg-cyan-500/5 text-cyan-300 shadow-[0_0_22px_rgba(34,211,238,0.08)]";
+  if (kind === "sky") return "border-blue-400/20 bg-blue-500/5 text-blue-300 shadow-[0_0_22px_rgba(96,165,250,0.08)]";
+  return "border-border bg-secondary/40 text-muted-foreground";
 };
 
 const StatCard = ({ label, value, sub, icon }: { label: string; value: string; sub: string; icon?: string }) => (
@@ -405,9 +476,20 @@ const RaceDetailPage = () => {
                       <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><CloudSun className="w-4 h-4 text-sky-400" /> Condities</h3>
                       <div className="grid grid-cols-2 gap-3">
                         {weatherTiles.map((tile) => (
-                          <div key={tile.key} className="rounded bg-secondary/40 border border-border py-3 text-center min-h-[4.25rem] flex flex-col items-center justify-center">
-                            <div className="font-heading text-lg font-black leading-tight">{tile.value}</div>
-                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">{tile.label}</div>
+                          <div
+                            key={tile.key}
+                            className={`group relative overflow-hidden rounded-xl border px-3 py-3 min-h-[5.5rem] flex items-center gap-3 transition-colors hover:border-orange-500/25 ${weatherTileStyles(tile.kind)}`}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.07] via-transparent to-transparent opacity-70" />
+                            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-current/15 bg-black/20 text-current">
+                              <WeatherTileIcon tile={tile} />
+                            </div>
+                            <div className="relative min-w-0 flex-1 text-left">
+                              <div className="font-heading text-lg font-black leading-tight truncate" title={formatWeatherValue(tile, language)}>
+                                {formatWeatherValue(tile, language)}
+                              </div>
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1 truncate">{tile.label}</div>
+                            </div>
                           </div>
                         ))}
                       </div>
