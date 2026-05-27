@@ -309,10 +309,10 @@ const RaceDetailPage = () => {
                 to={raceId ? `/results?race=${raceId}` : "/results"}
                 className="inline-flex items-center gap-2 rounded-md border border-orange-500/25 bg-orange-500/10 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-orange-400 hover:bg-orange-500/15 transition-colors"
               >
-                <ArrowLeft className="w-4 h-4" /> Terug naar archief
+                <ArrowLeft className="w-4 h-4" /> {t("Terug naar archief")}
               </Link>
               <Link to="/results" className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:border-orange-500/40 transition-colors">
-                Alle uitslagen
+                {t("Alle uitslagen")}
               </Link>
             </div>
 
@@ -324,10 +324,10 @@ const RaceDetailPage = () => {
             ) : !race ? (
               <div className="bg-card border border-border rounded-lg px-6 py-16 text-center">
                 <Flag className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                <h1 className="font-heading text-3xl font-black mb-2">Race niet gevonden</h1>
-                <p className="text-muted-foreground text-sm mb-6">Deze race is niet gepubliceerd of bestaat niet.</p>
+                <h1 className="font-heading text-3xl font-black mb-2">{t("Race niet gevonden")}</h1>
+                <p className="text-muted-foreground text-sm mb-6">{t("Deze race is niet gepubliceerd of bestaat niet.")}</p>
                 <Link to="/results" className="inline-flex items-center gap-2 text-orange-500 font-heading font-bold hover:text-orange-400">
-                  Bekijk alle uitslagen
+                  {t("Bekijk alle uitslagen")}
                 </Link>
               </div>
             ) : (
@@ -335,9 +335,9 @@ const RaceDetailPage = () => {
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-3 mb-2">
-                      <span className="text-xs uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">Race uitslag</span>
+                      <span className="text-xs uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">{t("Race uitslag")}</span>
                       {race.leagues?.name && <span className="text-xs uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">{race.leagues.name}</span>}
-                      {race.round != null && <span className="text-xs uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">Ronde {race.round}</span>}
+                      {race.round != null && <span className="text-xs uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">{t("Ronde")} {race.round}</span>}
                     </div>
                     <h1 className="font-heading text-4xl md:text-6xl font-black tracking-tight">
                       <span className="text-gradient-racing">{race.name}</span>
@@ -348,7 +348,7 @@ const RaceDetailPage = () => {
                   </div>
                   <div className="text-left lg:text-right text-muted-foreground">
                     <div className="font-heading text-2xl font-black">{race.iracing_session_id ? `#${race.iracing_session_id}` : race.total_laps ? `${race.total_laps} ${t("ronden")}` : "3SM"}</div>
-                    <div className="text-xs uppercase tracking-[0.2em]">{race.iracing_session_id ? "iRacing sessie" : "Racedetail"}</div>
+                    <div className="text-xs uppercase tracking-[0.2em]">{race.iracing_session_id ? t("iRacing sessie") : t("Racedetail")}</div>
                   </div>
                 </div>
 
@@ -356,7 +356,7 @@ const RaceDetailPage = () => {
                   <div className="mt-6 flex items-center gap-4 rounded-lg border border-orange-500/20 bg-gradient-to-r from-orange-500/10 via-card to-transparent p-4 border-glow">
                     <div className="w-1 h-12 rounded-full bg-gradient-racing" />
                     <div>
-                      <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black">Race winnaar</div>
+                      <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black">{t("Race winnaar")}</div>
                       <div className="font-heading text-2xl font-black">{stats.winner.name}</div>
                     </div>
                     <div className="ml-auto hidden sm:flex items-center gap-4 text-sm text-muted-foreground">
@@ -382,7 +382,7 @@ const RaceDetailPage = () => {
                 {stats.fastest && (
                   <StatCard
                     icon="⚡"
-                    label="Snelste ronde"
+                    label={t("Snelste ronde")}
                     value={stats.fastest.name}
                     sub={stats.fastest.best_lap ? `${stats.fastest.best_lap}${stats.fastest.best_lap_num ? ` — ${t("ronde")} ${stats.fastest.best_lap_num}` : ""}` : "—"}
                   />
@@ -390,46 +390,46 @@ const RaceDetailPage = () => {
                 {stats.biggestMover && (
                   <StatCard
                     icon="⬆️"
-                    label="Grootste stijger"
+                    label={t("Grootste stijger")}
                     value={`+${stats.biggestMover.positionGain}`}
                     sub={`${stats.biggestMover.name} P${stats.biggestMover.start_position} → P${stats.biggestMover.position}`}
                   />
                 )}
                 {stats.cleanest && (
-                  <StatCard icon="🧹" label="Cleanste" value={stats.cleanest.name} sub={`${stats.cleanest.incidents} ${t("incidenten")}`} />
+                  <StatCard icon="🧹" label={t("Cleanste")} value={stats.cleanest.name} sub={`${stats.cleanest.incidents} ${t("incidenten")}`} />
                 )}
                 {stats.mostLapsLed && (
                   <StatCard
                     icon="👑"
-                    label="Meeste ronden op kop"
+                    label={t("Meeste ronden op kop")}
                     value={stats.mostLapsLed.name}
                     sub={`${stats.mostLapsLed.laps_led}/${race.total_laps || stats.maxLaps || "?"} ${t("ronden")}`}
                   />
                 )}
-                <StatCard icon="🏎️" label="Grid" value={`${results.length}`} sub={carEntries.length ? `${carEntries.length} ${carEntries.length === 1 ? "model" : "modellen"}` : ""} />
+                <StatCard icon="🏎️" label="Grid" value={`${results.length}`} sub={carEntries.length ? `${carEntries.length} ${carEntries.length === 1 ? t("model") : t("modellen")}` : ""} />
               </div>
 
               {/* Main content: table + sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="font-heading text-2xl font-black flex items-center gap-2"><List className="w-5 h-5 text-accent" /> Race resultaat</h2>
+                    <h2 className="font-heading text-2xl font-black flex items-center gap-2"><List className="w-5 h-5 text-accent" /> {t("Race resultaat")}</h2>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="px-2 py-1 rounded bg-secondary border border-border">{results.length} coureurs</span>
+                      <span className="px-2 py-1 rounded bg-secondary border border-border">{results.length} {t("coureurs")}</span>
                       {race.total_laps != null && <span className="px-2 py-1 rounded bg-secondary border border-border">{race.total_laps} {t("ronden")}</span>}
                       <button
                         type="button"
                         onClick={() => navigator.clipboard?.writeText(window.location.href)}
                         className="inline-flex items-center gap-2 rounded border border-border bg-secondary/40 px-3 py-2 text-xs font-heading font-bold hover:border-orange-500/40 transition-colors"
                       >
-                        <Share2 className="w-3.5 h-3.5" /> Link kopiëren
+                        <Share2 className="w-3.5 h-3.5" /> {t("Link kopiëren")}
                       </button>
                     </div>
                   </div>
 
                   <div className="bg-card border border-border rounded-lg overflow-hidden">
                     <div className="grid grid-cols-[3.5rem_1fr_4rem_4rem_6rem_5rem_4rem_4rem] gap-2 px-4 py-2 bg-secondary/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground min-w-[820px]">
-                      <span>Pos</span><span>Coureur</span><span className="text-center">Ronden</span><span className="text-center">Kop</span><span className="text-right">Beste</span><span className="text-center">Grid</span><span className="text-center">Inc</span><span className="text-center">Pts</span>
+                      <span>{t("Pos")}</span><span>{t("Coureur")}</span><span className="text-center">{t("ronden")}</span><span className="text-center">{t("Kop")}</span><span className="text-right">{t("Beste")}</span><span className="text-center">{t("Grid")}</span><span className="text-center">{t("Inc")}</span><span className="text-center">{t("Pts")}</span>
                     </div>
                     <div className="overflow-x-auto">
                       {stats.sorted.map((driver) => {
@@ -466,23 +466,23 @@ const RaceDetailPage = () => {
                 {/* Sidebar */}
                 <aside className="space-y-4">
                   <div className="bg-card border border-border rounded-lg p-4">
-                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3">Deze race</div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3">{t("Deze race")}</div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1">
                       <button
                         type="button"
                         onClick={() => navigator.clipboard?.writeText(window.location.href)}
                         className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors flex items-center justify-center gap-1"
                       >
-                        <Share2 className="w-3 h-3" /> Link
+                        <Share2 className="w-3 h-3" /> {t("Link")}
                       </button>
-                      {raceId && <Link to={`/results?race=${raceId}`} className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">Terug naar archief</Link>}
-                      <Link to="/results" className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">Alle uitslagen</Link>
+                      {raceId && <Link to={`/results?race=${raceId}`} className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">{t("Terug naar archief")}</Link>}
+                      <Link to="/results" className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">{t("Alle uitslagen")}</Link>
                     </div>
                   </div>
 
                   {weatherTiles.length > 0 && (
                     <div className="bg-card border border-border rounded-lg p-4">
-                      <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><CloudSun className="w-4 h-4 text-sky-400" /> Condities</h3>
+                      <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><CloudSun className="w-4 h-4 text-sky-400" /> {t("Condities")}</h3>
                       <div className="grid grid-cols-2 gap-3">
                         {weatherTiles.map((tile) => (
                           <div
@@ -506,24 +506,24 @@ const RaceDetailPage = () => {
                   )}
 
                   <div className="bg-card border border-border rounded-lg p-4">
-                    <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><Flag className="w-4 h-4 text-accent" /> Race overzicht</h3>
+                    <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><Flag className="w-4 h-4 text-accent" /> {t("Race overzicht")}</h3>
                     <div className="space-y-2.5 text-sm">
-                      <div className="flex justify-between gap-3"><span className="text-muted-foreground">Circuit</span><span className="font-heading font-bold text-right">{race.track}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">Datum</span><span className="font-heading font-bold">{formatRaceDate(race.race_date, dateLocale)}</span></div>
-                      {race.round != null && <div className="flex justify-between"><span className="text-muted-foreground">Ronde</span><span className="font-heading font-bold">{race.round}</span></div>}
-                      {race.total_laps != null && <div className="flex justify-between"><span className="text-muted-foreground">Geplande ronden</span><span className="font-heading font-bold">{race.total_laps}</span></div>}
-                      {race.race_duration && <div className="flex justify-between"><span className="text-muted-foreground">Race duur</span><span className="font-heading font-bold">{race.race_duration}</span></div>}
-                      {race.weather && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Weer</span><span className="font-heading font-bold text-right">{race.weather}</span></div>}
+                      <div className="flex justify-between gap-3"><span className="text-muted-foreground">{t("Circuit")}</span><span className="font-heading font-bold text-right">{race.track}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">{t("Datum")}</span><span className="font-heading font-bold">{formatRaceDate(race.race_date, dateLocale)}</span></div>
+                      {race.round != null && <div className="flex justify-between"><span className="text-muted-foreground">{t("Ronde")}</span><span className="font-heading font-bold">{race.round}</span></div>}
+                      {race.total_laps != null && <div className="flex justify-between"><span className="text-muted-foreground">{t("Geplande ronden")}</span><span className="font-heading font-bold">{race.total_laps}</span></div>}
+                      {race.race_duration && <div className="flex justify-between"><span className="text-muted-foreground">{t("Race duur")}</span><span className="font-heading font-bold">{race.race_duration}</span></div>}
+                      {race.weather && <div className="flex justify-between gap-3"><span className="text-muted-foreground">{t("Weer")}</span><span className="font-heading font-bold text-right">{race.weather}</span></div>}
                       {race.sof != null && <div className="flex justify-between"><span className="text-muted-foreground">SOF</span><span className="font-heading font-bold">{race.sof}</span></div>}
-                      {race.lead_changes != null && <div className="flex justify-between"><span className="text-muted-foreground">Kopwisselingen</span><span className="font-heading font-bold">{race.lead_changes}</span></div>}
-                      {race.cautions != null && <div className="flex justify-between"><span className="text-muted-foreground">Cauties</span><span className="font-heading font-bold">{race.cautions}{race.caution_laps != null ? ` / ${race.caution_laps} ${t("ronden")}` : ""}</span></div>}
-                      {race.car && <div className="flex justify-between gap-3"><span className="text-muted-foreground">Auto</span><span className="font-heading font-bold text-right">{race.car}</span></div>}
+                      {race.lead_changes != null && <div className="flex justify-between"><span className="text-muted-foreground">{t("Kopwisselingen")}</span><span className="font-heading font-bold">{race.lead_changes}</span></div>}
+                      {race.cautions != null && <div className="flex justify-between"><span className="text-muted-foreground">{t("Cauties")}</span><span className="font-heading font-bold">{race.cautions}{race.caution_laps != null ? ` / ${race.caution_laps} ${t("ronden")}` : ""}</span></div>}
+                      {race.car && <div className="flex justify-between gap-3"><span className="text-muted-foreground">{t("Auto")}</span><span className="font-heading font-bold text-right">{race.car}</span></div>}
                     </div>
                   </div>
 
                   {carEntries.length > 0 && (
                     <div className="bg-card border border-border rounded-lg p-4">
-                      <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><Car className="w-4 h-4 text-muted-foreground" /> Grid auto's</h3>
+                      <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><Car className="w-4 h-4 text-muted-foreground" /> {t("Grid auto's")}</h3>
                       <div className="space-y-3">
                         {carEntries.map(([car, count], index) => (
                           <div key={car}>
@@ -539,8 +539,8 @@ const RaceDetailPage = () => {
                     <h3 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-black mb-3 flex items-center gap-2"><Trophy className="w-4 h-4 text-yellow-400" /> Highlights</h3>
                     <div className="space-y-3 text-sm text-muted-foreground">
                       {stats.winner && <p><strong className="text-foreground font-heading">{stats.winner.name}</strong> {t("won de race op")} {race.track}.</p>}
-                      {stats.fastest && <p><Zap className="w-3.5 h-3.5 inline mr-1 text-purple-400" /> Snelste ronde: <strong className="text-foreground font-heading">{stats.fastest.name}</strong>{stats.fastest.best_lap ? ` — ${stats.fastest.best_lap}` : ""}.</p>}
-                      {stats.cleanest && <p>Cleanste rit: <strong className="text-foreground font-heading">{stats.cleanest.name}</strong> {t("met")} {stats.cleanest.incidents}x.</p>}
+                      {stats.fastest && <p><Zap className="w-3.5 h-3.5 inline mr-1 text-purple-400" /> {t("Snelste ronde")}: <strong className="text-foreground font-heading">{stats.fastest.name}</strong>{stats.fastest.best_lap ? ` — ${stats.fastest.best_lap}` : ""}.</p>}
+                      {stats.cleanest && <p>{t("Cleanste rit")}: <strong className="text-foreground font-heading">{stats.cleanest.name}</strong> {t("met")} {stats.cleanest.incidents}x.</p>}
                     </div>
                   </div>
                 </aside>
