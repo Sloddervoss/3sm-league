@@ -514,6 +514,7 @@ const exactTranslations: Record<string, string> = {
   "Luchtvochtigheid": "Humidity",
   "Lucht": "Sky",
   "Wind": "Wind",
+  "Weer": "Weather",
   "Kies tussen de deelbare racepagina of de snelle archiefweergave op deze pagina.": "Choose between the shareable race page or the quick archive view on this page.",
   "Details & delen": "Details & share",
   "Sluit snelle uitslag": "Close quick result",

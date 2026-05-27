@@ -126,9 +126,38 @@ const getWindDirection = (value: string) => {
 };
 
 const formatWeatherValue = (tile: WeatherTile, language: "nl" | "en") => {
-  if (tile.kind !== "wind" || language !== "en" || !tile.windDirection) return tile.value;
-  const englishDirection = WIND_DIRECTION_EN[tile.windDirection] ?? tile.windDirection;
-  return tile.value.replace(new RegExp(`^${tile.windDirection}\\b`), englishDirection);
+  if (language === "nl") return tile.value;
+
+  if (tile.kind === "wind" && tile.windDirection) {
+    const englishDirection = WIND_DIRECTION_EN[tile.windDirection] ?? tile.windDirection;
+    return tile.value.replace(new RegExp(`^${tile.windDirection}\\b`), englishDirection);
+  }
+
+  if (tile.kind === "sky") {
+    const lower = tile.value.toLowerCase();
+    const SKY_NL_EN: Record<string, string> = {
+      helder: "Clear",
+      bewolkt: "Overcast",
+      "half bewolkt": "Partly cloudy",
+      "licht bewolkt": "Partly cloudy",
+      "zwaar bewolkt": "Overcast",
+      regen: "Rain",
+      "lichte regen": "Light rain",
+      "zware regen": "Heavy rain",
+      bui: "Shower",
+      "lichte bui": "Light shower",
+      "zware bui": "Heavy shower",
+      mist: "Fog",
+      nevel: "Haze",
+      onweer: "Thunderstorm",
+      sneeuw: "Snow",
+    };
+    for (const [nl, en] of Object.entries(SKY_NL_EN)) {
+      if (lower.includes(nl)) return tile.value.replace(new RegExp(nl, "i"), en);
+    }
+  }
+
+  return tile.value;
 };
 
 const parseWeatherTiles = (weather: string | null): WeatherTile[] => {
@@ -497,7 +526,7 @@ const RaceDetailPage = () => {
                               <div className="font-heading text-lg font-black leading-tight truncate" title={formatWeatherValue(tile, language)}>
                                 {formatWeatherValue(tile, language)}
                               </div>
-                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1 truncate">{tile.label}</div>
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1 truncate">{t(tile.label)}</div>
                             </div>
                           </div>
                         ))}
