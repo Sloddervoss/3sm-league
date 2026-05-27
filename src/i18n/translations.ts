@@ -514,6 +514,14 @@ const exactTranslations: Record<string, string> = {
   "Luchtvochtigheid": "Humidity",
   "Lucht": "Sky",
   "Wind": "Wind",
+  "Kies tussen de deelbare racepagina of de snelle archiefweergave op deze pagina.": "Choose between the shareable race page or the quick archive view on this page.",
+  "Details & delen": "Details & share",
+  "Sluit snelle uitslag": "Close quick result",
+  "Snelle uitslag": "Quick result",
+  "Terug": "Back",
+  "Snelle uitslag in archief": "Quick result in archive",
+  "Alle uitslagen": "All results",
+  "Terug naar archief": "Back to archive",
 };
 
 const phraseTranslations: Array<[RegExp, string]> = [
