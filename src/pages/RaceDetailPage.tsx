@@ -403,7 +403,7 @@ const RaceDetailPage = () => {
                     icon="👑"
                     label="Meeste ronden op kop"
                     value={stats.mostLapsLed.name}
-                    sub={`${stats.mostLapsLed.laps_led}/${race.total_laps || "?"} ${t("ronden")}`}
+                    sub={`${stats.mostLapsLed.laps_led}/${race.total_laps || stats.maxLaps || "?"} ${t("ronden")}`}
                   />
                 )}
                 <StatCard icon="🏎️" label="Grid" value={`${results.length}`} sub={carEntries.length ? `${carEntries.length} ${carEntries.length === 1 ? "model" : "modellen"}` : ""} />

@@ -81,5 +81,6 @@ export const getRaceDetailStats = (results: RaceDetailStatsResult[]) => {
     totalIncidents: incidentsKnown.reduce((sum, result) => sum + (result.incidents ?? 0), 0),
     hasIncidentData: incidentsKnown.length > 0,
     totalLaps: sorted.reduce((sum, result) => sum + (result.laps ?? 0), 0),
+    maxLaps: sorted.reduce((max, result) => Math.max(max, result.laps ?? 0), 0),
   };
 };
