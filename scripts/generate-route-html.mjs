@@ -265,19 +265,20 @@ const buildRichContent = (route, faq) => {
       </ol>
     </nav>`;
 
+  // Use generic tags (strong/span) instead of semantic FAQ tags (section/article/h3)
+  // to avoid Google detecting a duplicate FAQPage from HTML alongside JSON-LD
   const faqHtml = faq
-    ? `<section aria-label="Veelgestelde vragen">
-        <h2>Veelgestelde vragen</h2>
+    ? `<div>
 ${faq
           .map(
             ({ question, answer }) =>
-              `        <article>
-          <h3>${escapeHtml(question)}</h3>
-          <p>${escapeHtml(answer)}</p>
-        </article>`,
+              `        <div style="margin-bottom:1em">
+          <strong>${escapeHtml(question)}</strong><br>
+          <span>${escapeHtml(answer)}</span>
+        </div>`,
           )
           .join('\n')}
-      </section>`
+      </div>`
     : '';
 
   return `${breadcrumb}
@@ -317,7 +318,11 @@ const applyRouteMeta = (html, route) => {
     </main>
   </noscript>`;
   const richContent = buildRichContent(route, route.path === '/meedoen' ? joinFaq : null);
-  out = out.replace('<div id="root"></div>', `<div id="root">\n      ${richContent}\n    </div>\n  ${noscript}`);
+  // sr-only div: visible to Googlebot & screen readers, hidden from visual users
+  out = out.replace(
+    '<div id="root"></div>',
+    `<div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)">\n      ${richContent}\n    </div>\n  <div id="root"></div>\n  ${noscript}`,
+  );
   return out;
 }
 
