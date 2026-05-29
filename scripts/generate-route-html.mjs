@@ -260,6 +260,15 @@ const buildNoscriptFallback = (route, faq) => {
     .map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`)
     .join('');
 
+  const breadcrumb = route.path === '/'
+    ? ''
+    : `<nav aria-label="Breadcrumb">
+      <ol>
+        <li><a href="${SITE_URL}/">3 Stripe Motorsport</a></li>
+        <li aria-current="page">${escapeHtml(route.h1)}</li>
+      </ol>
+    </nav>\n      `;
+
   const faqHtml = faq
     ? `\n      <section aria-label="Veelgestelde vragen">\n        <h2>Veelgestelde vragen</h2>\n${faq
         .map(
@@ -271,7 +280,7 @@ const buildNoscriptFallback = (route, faq) => {
 
   return `<noscript>
     <main>
-      <h1>${escapeHtml(route.h1)}</h1>
+      ${breadcrumb}<h1>${escapeHtml(route.h1)}</h1>
       <p>${escapeHtml(route.intro)}</p>
       <nav aria-label="Belangrijke 3SM links">
         <ul>${links}</ul>
