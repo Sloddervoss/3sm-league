@@ -255,11 +255,7 @@ const buildJoinFaqJsonLd = () => ({
 const buildJsonLdScript = (id, data) =>
   `<script type="application/ld+json" id="${id}">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
 
-const buildNoscriptFallback = (route, faq) => {
-  const links = route.links
-    .map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`)
-    .join('');
-
+const buildRichContent = (route, faq) => {
   const breadcrumb = route.path === '/'
     ? ''
     : `<nav aria-label="Breadcrumb">
@@ -267,26 +263,25 @@ const buildNoscriptFallback = (route, faq) => {
         <li><a href="${SITE_URL}/">3 Stripe Motorsport</a></li>
         <li aria-current="page">${escapeHtml(route.h1)}</li>
       </ol>
-    </nav>\n      `;
+    </nav>`;
 
   const faqHtml = faq
-    ? `\n      <section aria-label="Veelgestelde vragen">\n        <h2>Veelgestelde vragen</h2>\n${faq
-        .map(
-          ({ question, answer }) =>
-            `        <article>\n          <h3>${escapeHtml(question)}</h3>\n          <p>${escapeHtml(answer)}</p>\n        </article>`,
-        )
-        .join('\n')}\n      </section>`
+    ? `<section aria-label="Veelgestelde vragen">
+        <h2>Veelgestelde vragen</h2>
+${faq
+          .map(
+            ({ question, answer }) =>
+              `        <article>
+          <h3>${escapeHtml(question)}</h3>
+          <p>${escapeHtml(answer)}</p>
+        </article>`,
+          )
+          .join('\n')}
+      </section>`
     : '';
 
-  return `<noscript>
-    <main>
-      ${breadcrumb}<h1>${escapeHtml(route.h1)}</h1>
-      <p>${escapeHtml(route.intro)}</p>
-      <nav aria-label="Belangrijke 3SM links">
-        <ul>${links}</ul>
-      </nav>${faqHtml}
-    </main>
-  </noscript>`;
+  return `${breadcrumb}
+      ${faqHtml}`;
 };
 
 const applyRouteMeta = (html, route) => {
@@ -312,9 +307,19 @@ const applyRouteMeta = (html, route) => {
     `    ${buildJsonLdScript('route-webpage', buildWebPageJsonLd(route))}\n    ${buildJsonLdScript('route-breadcrumb', buildBreadcrumbJsonLd(route))}${extraJsonLd}\n  </head>`,
   );
   out = out.replace(/<noscript>[\s\S]*?<\/noscript>\s*/g, '');
-  out = out.replace('<div id="root"></div>', `<div id="root"></div>\n  ${buildNoscriptFallback(route, route.path === '/meedoen' ? joinFaq : null)}`);
+  const noscript = `<noscript>
+    <main>
+      <h1>${escapeHtml(route.h1)}</h1>
+      <p>${escapeHtml(route.intro)}</p>
+      <nav aria-label="Belangrijke 3SM links">
+        <ul>${route.links.map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('')}</ul>
+      </nav>
+    </main>
+  </noscript>`;
+  const richContent = buildRichContent(route, route.path === '/meedoen' ? joinFaq : null);
+  out = out.replace('<div id="root"></div>', `<div id="root">\n      ${richContent}\n    </div>\n  ${noscript}`);
   return out;
-};
+}
 
 const applyNoindexMeta = (html, path) => {
   const canonical = escapeAttr(absoluteUrl(path));
