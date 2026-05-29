@@ -302,7 +302,7 @@ const applyRouteMeta = (html, route) => {
   out = out.replace(/<script type="application\/ld\+json" id="route-webpage"[\s\S]*?<\/script>\n?\s*/g, '');
   out = out.replace(/<script type="application\/ld\+json" id="route-breadcrumb"[\s\S]*?<\/script>\n?\s*/g, '');
   out = out.replace(/<script type="application\/ld\+json" id="route-faq"[\s\S]*?<\/script>\n?\s*/g, '');
-  const extraJsonLd = route.path === '/meedoen' ? `\n    ${buildJsonLdScript('route-faq', buildJoinFaqJsonLd())}` : '';
+  const extraJsonLd = ''; // FAQPage removed — sr-only workaround not accepted by Google
   out = out.replace(
     '</head>',
     `    ${buildJsonLdScript('route-webpage', buildWebPageJsonLd(route))}\n    ${buildJsonLdScript('route-breadcrumb', buildBreadcrumbJsonLd(route))}${extraJsonLd}\n  </head>`,
@@ -317,7 +317,7 @@ const applyRouteMeta = (html, route) => {
       </nav>
     </main>
   </noscript>`;
-  const richContent = buildRichContent(route, route.path === '/meedoen' ? joinFaq : null);
+  const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
   // sr-only div: visible to Googlebot & screen readers, hidden from visual users
   out = out.replace(
     '<div id="root"></div>',
