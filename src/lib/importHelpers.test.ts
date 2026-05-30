@@ -213,7 +213,7 @@ function makeJsonResult(overrides: Partial<{
   newi_rating: number; reason_out_id: number; reason_out: string;
   car_name: string; livery: { car_name: string };
   starting_position: number; laps_lead: number; best_lap_num: number;
-  average_lap: number; club_name: string;
+  average_lap: number; club_name: string; country_code: string;
 }> = {}) {
   return {
     finish_position: 0,
@@ -371,5 +371,56 @@ describe("parseIRacingJsonRows", () => {
       lead_changes: 6,
       weather: "Partly Cloudy · 22°C · 51%",
     });
+  });
+
+  it("extracts rain and fog from iRacing weather into Dutch source labels", () => {
+    const rainJson = JSON.stringify({
+      weather: { skies: 1, precip_mm_final_session: 0.4, temp_value: 18, rel_humidity: 78 },
+      session_results: [RACE_SESSION],
+    });
+    expect(parseIRacingJsonRows(rainJson).raceMetadata?.weather).toBe("Regen · 18°C · 78%");
+
+    const fogJson = JSON.stringify({
+      weather: { skies: 1, fog: 1, temp_value: 12, rel_humidity: 91 },
+      session_results: [RACE_SESSION],
+    });
+    expect(parseIRacingJsonRows(fogJson).raceMetadata?.weather).toBe("Mist · 12°C · 91%");
+  });
+
+  it("extracts practice and qualifying sessions separately for new JSON uploads", () => {
+    const json = makeIRacingJson([
+      {
+        simsession_type: 3,
+        simsession_type_name: "Practice",
+        simsession_number: 0,
+        results: [
+          makeJsonResult({ finish_position: 0, display_name: "Practice Winner", cust_id: 11, best_lap_time: 745000, laps_complete: 9, country_code: "NL" }),
+          makeJsonResult({ finish_position: 1, display_name: "Practice P2", cust_id: 12, best_lap_time: 746000, laps_complete: 8 }),
+        ],
+      },
+      {
+        simsession_type: 5,
+        simsession_type_name: "Qualifying",
+        simsession_number: 1,
+        results: [
+          makeJsonResult({ finish_position: 0, display_name: "Pole Driver", cust_id: 21, best_lap_time: 730000, laps_complete: 3, country_code: "BE" }),
+        ],
+      },
+      {
+        simsession_type: 6,
+        simsession_type_name: "Race",
+        simsession_number: 2,
+        results: [makeJsonResult({ display_name: "Race Winner", cust_id: 31, country_code: "DE" })],
+      },
+    ]);
+
+    const result = parseIRacingJsonRows(json);
+    expect(result.error).toBeUndefined();
+    expect(result.rows![0]).toMatchObject({ display_name: "Race Winner", country_code: "DE" });
+    expect(result.sessionResults).toEqual([
+      expect.objectContaining({ session_type: "practice", session_name: "Practice", session_number: 0, position: 1, display_name: "Practice Winner", laps: 9, best_lap: "1:14.500", country_code: "NL" }),
+      expect.objectContaining({ session_type: "practice", position: 2, display_name: "Practice P2" }),
+      expect.objectContaining({ session_type: "qualifying", session_name: "Qualifying", session_number: 1, position: 1, display_name: "Pole Driver", country_code: "BE" }),
+    ]);
   });
 });

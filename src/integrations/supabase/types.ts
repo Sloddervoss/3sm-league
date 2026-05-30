@@ -587,7 +587,12 @@ export type Database = {
       }
       race_results: {
         Row: {
+          avg_lap: string | null
           best_lap: string | null
+          best_lap_num: number | null
+          car_name: string | null
+          club_name: string | null
+          country_code: string | null
           created_at: string
           dnf: boolean
           fastest_lap: boolean
@@ -597,13 +602,21 @@ export type Database = {
           iracing_cust_id: string | null
           irating_snapshot: number | null
           laps: number | null
+          laps_led: number | null
           points: number
           position: number
           race_id: string
+          reason_out: string | null
+          start_position: number | null
           user_id: string
         }
         Insert: {
+          avg_lap?: string | null
           best_lap?: string | null
+          best_lap_num?: number | null
+          car_name?: string | null
+          club_name?: string | null
+          country_code?: string | null
           created_at?: string
           dnf?: boolean
           fastest_lap?: boolean
@@ -613,13 +626,21 @@ export type Database = {
           iracing_cust_id?: string | null
           irating_snapshot?: number | null
           laps?: number | null
+          laps_led?: number | null
           points?: number
           position: number
           race_id: string
+          reason_out?: string | null
+          start_position?: number | null
           user_id: string
         }
         Update: {
+          avg_lap?: string | null
           best_lap?: string | null
+          best_lap_num?: number | null
+          car_name?: string | null
+          club_name?: string | null
+          country_code?: string | null
           created_at?: string
           dnf?: boolean
           fastest_lap?: boolean
@@ -629,9 +650,12 @@ export type Database = {
           iracing_cust_id?: string | null
           irating_snapshot?: number | null
           laps?: number | null
+          laps_led?: number | null
           points?: number
           position?: number
           race_id?: string
+          reason_out?: string | null
+          start_position?: number | null
           user_id?: string
         }
         Relationships: [
@@ -665,6 +689,74 @@ export type Database = {
           },
         ]
       }
+      race_session_results: {
+        Row: {
+          avg_lap: string | null
+          best_lap: string | null
+          best_lap_num: number | null
+          car_name: string | null
+          club_name: string | null
+          country_code: string | null
+          created_at: string
+          display_name: string
+          id: string
+          incidents: number | null
+          iracing_cust_id: string | null
+          laps: number | null
+          position: number
+          race_id: string
+          session_name: string | null
+          session_number: number | null
+          session_type: string
+        }
+        Insert: {
+          avg_lap?: string | null
+          best_lap?: string | null
+          best_lap_num?: number | null
+          car_name?: string | null
+          club_name?: string | null
+          country_code?: string | null
+          created_at?: string
+          display_name: string
+          id?: string
+          incidents?: number | null
+          iracing_cust_id?: string | null
+          laps?: number | null
+          position: number
+          race_id: string
+          session_name?: string | null
+          session_number?: number | null
+          session_type: string
+        }
+        Update: {
+          avg_lap?: string | null
+          best_lap?: string | null
+          best_lap_num?: number | null
+          car_name?: string | null
+          club_name?: string | null
+          country_code?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          incidents?: number | null
+          iracing_cust_id?: string | null
+          laps?: number | null
+          position?: number
+          race_id?: string
+          session_name?: string | null
+          session_number?: number | null
+          session_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_session_results_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       races: {
         Row: {
           car: string | null
@@ -672,7 +764,10 @@ export type Database = {
           created_at: string
           id: string
           iracing_session_id: string | null
+          caution_laps: number | null
+          cautions: number | null
           league_id: string | null
+          lead_changes: number | null
           lobby_name: string | null
           lobby_password: string | null
           lobby_reveal_minutes: number
@@ -684,6 +779,7 @@ export type Database = {
           race_type: string | null
           round: number | null
           setup: string | null
+          sof: number | null
           start_type: string | null
           status: string
           total_laps: number | null
@@ -697,7 +793,10 @@ export type Database = {
           created_at?: string
           id?: string
           iracing_session_id?: string | null
+          caution_laps?: number | null
+          cautions?: number | null
           league_id?: string | null
+          lead_changes?: number | null
           lobby_name?: string | null
           lobby_password?: string | null
           lobby_reveal_minutes?: number
@@ -709,6 +808,7 @@ export type Database = {
           race_type?: string | null
           round?: number | null
           setup?: string | null
+          sof?: number | null
           start_type?: string | null
           status?: string
           total_laps?: number | null
@@ -722,7 +822,10 @@ export type Database = {
           created_at?: string
           id?: string
           iracing_session_id?: string | null
+          caution_laps?: number | null
+          cautions?: number | null
           league_id?: string | null
+          lead_changes?: number | null
           lobby_name?: string | null
           lobby_password?: string | null
           lobby_reveal_minutes?: number
@@ -734,6 +837,7 @@ export type Database = {
           race_type?: string | null
           round?: number | null
           setup?: string | null
+          sof?: number | null
           start_type?: string | null
           status?: string
           total_laps?: number | null

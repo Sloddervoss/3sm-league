@@ -14,6 +14,7 @@ export type RaceDetailStatsResult = {
   gap_to_leader?: string | null;
   car_name?: string | null;
   club_name?: string | null;
+  country_code?: string | null;
   reason_out?: string | null;
   profiles: {
     display_name: string | null;

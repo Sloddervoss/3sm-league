@@ -4,7 +4,7 @@ import StickyRaceBar from "@/components/StickyRaceBar";
 import { supabase } from "@/integrations/supabase/client";
 import { getRaceDetailStats, type RaceDetailStatsResult } from "@/lib/raceDetailStats";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowUp, Car, Cloud, CloudRain, CloudSun, Droplets, Flag, List, Share2, Sun, Thermometer, Trophy, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUp, Car, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, Flag, List, Share2, Sun, Thermometer, Trophy, Zap } from "lucide-react";
 import { useEffect } from "react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { Link, useParams } from "react-router-dom";
@@ -36,6 +36,23 @@ type RaceResultRow = RaceDetailStatsResult & {
   id: string;
   points: number | null;
   gap_to_leader: string | null;
+  country_code?: string | null;
+};
+
+type SessionResultRow = {
+  id: string;
+  session_type: "practice" | "qualifying";
+  session_name: string | null;
+  session_number: number | null;
+  position: number;
+  display_name: string;
+  laps: number | null;
+  best_lap: string | null;
+  best_lap_num: number | null;
+  incidents: number | null;
+  car_name: string | null;
+  club_name: string | null;
+  country_code: string | null;
 };
 
 type PenaltyRow = {
@@ -64,6 +81,28 @@ const medal = (position: number | null) => {
   if (position === 2) return "🥈";
   if (position === 3) return "🥉";
   return position ?? "-";
+};
+
+const normalizeCountryCodeForFlag = (code?: string | null) => {
+  const normalized = code?.trim().toLowerCase();
+  return normalized && /^[a-z]{2}$/.test(normalized) ? normalized : null;
+};
+
+const CountryFlag = ({ code }: { code?: string | null }) => {
+  const normalized = normalizeCountryCodeForFlag(code);
+  if (!normalized) return null;
+  return (
+    <img
+      src={`https://flagcdn.com/20x15/${normalized}.png`}
+      srcSet={`https://flagcdn.com/40x30/${normalized}.png 2x`}
+      width="20"
+      height="15"
+      alt={code?.toUpperCase() ?? ""}
+      title={code?.toUpperCase() ?? ""}
+      className="inline-block h-[15px] w-5 rounded-[2px] object-cover ring-1 ring-white/10"
+      loading="lazy"
+    />
+  );
 };
 
 const deltaClass = (delta: number | null) => {
@@ -136,17 +175,17 @@ const formatWeatherValue = (tile: WeatherTile, language: "nl" | "en") => {
   if (tile.kind === "sky") {
     const lower = tile.value.toLowerCase();
     const SKY_NL_EN: Record<string, string> = {
-      helder: "Clear",
-      bewolkt: "Overcast",
       "half bewolkt": "Partly cloudy",
       "licht bewolkt": "Partly cloudy",
       "zwaar bewolkt": "Overcast",
-      regen: "Rain",
       "lichte regen": "Light rain",
       "zware regen": "Heavy rain",
-      bui: "Shower",
       "lichte bui": "Light shower",
       "zware bui": "Heavy shower",
+      helder: "Clear",
+      bewolkt: "Overcast",
+      regen: "Rain",
+      bui: "Shower",
       mist: "Fog",
       nevel: "Haze",
       onweer: "Thunderstorm",
@@ -193,7 +232,7 @@ const parseWeatherTiles = (weather: string | null): WeatherTile[] => {
         return { key: `${index}-${part}`, value: part, label: "Luchtvochtigheid", kind: "humidity" };
       }
 
-      if (lower.includes("helder") || lower.includes("clear") || lower.includes("cloud") || lower.includes("bewolkt") || lower.includes("rain") || lower.includes("regen")) {
+      if (lower.includes("helder") || lower.includes("clear") || lower.includes("cloud") || lower.includes("bewolkt") || lower.includes("rain") || lower.includes("regen") || lower.includes("mist") || lower.includes("fog") || lower.includes("nevel") || lower.includes("haze") || lower.includes("onweer") || lower.includes("thunder") || lower.includes("sneeuw") || lower.includes("snow")) {
         return { key: `${index}-${part}`, value: part, label: "Lucht", kind: "sky" };
       }
 
@@ -212,7 +251,11 @@ const WeatherTileIcon = ({ tile }: { tile: WeatherTile }) => {
   }
 
   const lower = tile.value.toLowerCase();
-  if (lower.includes("rain") || lower.includes("regen")) return <CloudRain className={iconClass} />;
+  if (lower.includes("thunder") || lower.includes("onweer")) return <CloudLightning className={iconClass} />;
+  if (lower.includes("snow") || lower.includes("sneeuw")) return <CloudSnow className={iconClass} />;
+  if (lower.includes("fog") || lower.includes("mist") || lower.includes("haze") || lower.includes("nevel")) return <CloudFog className={iconClass} />;
+  if (lower.includes("rain") || lower.includes("regen") || lower.includes("bui")) return <CloudRain className={iconClass} />;
+  if (lower.includes("partly") || lower.includes("half") || lower.includes("licht bewolkt")) return <CloudSun className={iconClass} />;
   if (lower.includes("cloud") || lower.includes("bewolkt")) return <Cloud className={iconClass} />;
   if (lower.includes("clear") || lower.includes("helder")) return <Sun className={iconClass} />;
 
@@ -237,6 +280,38 @@ const StatCard = ({ label, value, sub, icon }: { label: string; value: string; s
     {sub && <div className="text-xs text-muted-foreground mt-1 truncate" title={sub}>{sub}</div>}
   </div>
 );
+
+const SessionResultsCard = ({ title, rows, t }: { title: string; rows: SessionResultRow[]; t: (value: string) => string }) => {
+  if (!rows.length) return null;
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border-border bg-secondary/30 flex items-center justify-between gap-3">
+        <h3 className="font-heading text-xl font-black">{title}</h3>
+        <span className="text-xs text-muted-foreground">{rows.length} {t("coureurs")}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[620px]">
+          <div className="grid grid-cols-[3.5rem_1fr_5rem_7rem_4rem] gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            <span>{t("Pos")}</span><span>{t("Coureur")}</span><span className="text-center">{t("ronden")}</span><span className="text-right">{t("Beste")}</span><span className="text-center">{t("Inc")}</span>
+          </div>
+          {rows.map((row) => (
+            <div key={row.id} className="grid grid-cols-[3.5rem_1fr_5rem_7rem_4rem] gap-2 px-4 py-2.5 border-t border-border/50 items-center text-sm hover:bg-secondary/20 transition-colors">
+              <span className={`font-heading font-black ${positionColor(row.position)}`}>{row.position}</span>
+              <div className="min-w-0">
+                <div className="font-heading font-bold truncate flex items-center gap-2"><CountryFlag code={row.country_code} />{row.display_name}</div>
+                {row.car_name && <div className="text-xs text-muted-foreground truncate">{row.car_name}</div>}
+              </div>
+              <span className="text-center text-muted-foreground">{row.laps ?? "-"}</span>
+              <span className="text-right font-mono text-muted-foreground">{row.best_lap ?? "-"}{row.best_lap_num ? <span className="block text-[10px] font-sans text-muted-foreground/70">{t("ronde")} {row.best_lap_num}</span> : null}</span>
+              <span className="text-center text-muted-foreground">{row.incidents != null ? `${row.incidents}x` : "-"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const RaceDetailPage = () => {
   const { raceId } = useParams<{ raceId: string }>();
@@ -264,13 +339,41 @@ const RaceDetailPage = () => {
     enabled: !!raceId,
     staleTime: STALE,
     queryFn: async (): Promise<RaceResultRow[]> => {
-      const { data, error } = await supabase
+      const selectWithCountry = "id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, country_code, club_name, reason_out, profiles(display_name, iracing_name)";
+      const selectLegacy = "id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, club_name, reason_out, profiles(display_name, iracing_name)";
+      let response = await supabase
         .from("race_results")
-        .select("id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, club_name, reason_out, profiles(display_name, iracing_name)")
+        .select(selectWithCountry)
         .eq("race_id", raceId!)
         .order("position", { ascending: true });
-      if (error) throw error;
-      return (data || []) as RaceResultRow[];
+      if (response.error && response.error.message.includes("country_code")) {
+        response = await supabase
+          .from("race_results")
+          .select(selectLegacy)
+          .eq("race_id", raceId!)
+          .order("position", { ascending: true });
+      }
+      if (response.error) throw response.error;
+      return (response.data || []) as RaceResultRow[];
+    },
+  });
+
+  const { data: sessionResults = [] } = useQuery({
+    queryKey: ["race-session-results-detail", raceId],
+    enabled: !!raceId,
+    staleTime: STALE,
+    queryFn: async (): Promise<SessionResultRow[]> => {
+      const { data, error } = await (supabase as any)
+        .from("race_session_results")
+        .select("id, session_type, session_name, session_number, position, display_name, laps, best_lap, best_lap_num, avg_lap, incidents, car_name, club_name, country_code")
+        .eq("race_id", raceId!)
+        .order("session_type", { ascending: true })
+        .order("position", { ascending: true });
+      if (error) {
+        if (error.message.includes("race_session_results")) return [];
+        throw error;
+      }
+      return (data || []) as SessionResultRow[];
     },
   });
 
@@ -292,6 +395,11 @@ const RaceDetailPage = () => {
   const cars = carCounts(results);
   const carEntries = Object.entries(cars);
   const weatherTiles = parseWeatherTiles(race?.weather ?? null);
+  const practiceResults = sessionResults.filter((row) => row.session_type === "practice");
+  const qualifyingResults = sessionResults.filter((row) => row.session_type === "qualifying");
+  const weatherSummary = weatherTiles.length
+    ? weatherTiles.map((tile) => `${t(tile.label)}: ${formatWeatherValue(tile, language)}`).join(" · ")
+    : race?.weather ?? null;
 
   useEffect(() => {
     if (!race) return;
@@ -441,6 +549,8 @@ const RaceDetailPage = () => {
               {/* Main content: table + sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-4">
+                  <SessionResultsCard title={t("Training")} rows={practiceResults} t={t} />
+                  <SessionResultsCard title={t("Kwalificatie")} rows={qualifyingResults} t={t} />
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="font-heading text-2xl font-black flex items-center gap-2"><List className="w-5 h-5 text-accent" /> {t("Race resultaat")}</h2>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -469,6 +579,7 @@ const RaceDetailPage = () => {
                             <span className={`font-heading font-black text-lg ${positionColor(driver.position)}`}>{driver.dnf ? "DNF" : medal(driver.position)}</span>
                             <div className="min-w-0">
                               <div className="font-heading font-black truncate flex items-center gap-2">
+                                <CountryFlag code={driver.country_code} />
                                 {driver.name}
                                 {driver.fastest_lap && <span className="text-[10px] px-1.5 py-0.5 rounded border border-purple-500/30 bg-purple-500/15 text-purple-300">FL</span>}
                                 {(driver.laps_led ?? 0) > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded border border-orange-500/30 bg-orange-500/15 text-orange-300">LED {driver.laps_led}</span>}
@@ -542,7 +653,7 @@ const RaceDetailPage = () => {
                       {race.round != null && <div className="flex justify-between"><span className="text-muted-foreground">{t("Ronde")}</span><span className="font-heading font-bold">{race.round}</span></div>}
                       {race.total_laps != null && <div className="flex justify-between"><span className="text-muted-foreground">{t("Geplande ronden")}</span><span className="font-heading font-bold">{race.total_laps}</span></div>}
                       {race.race_duration && <div className="flex justify-between"><span className="text-muted-foreground">{t("Race duur")}</span><span className="font-heading font-bold">{race.race_duration}</span></div>}
-                      {race.weather && <div className="flex justify-between gap-3"><span className="text-muted-foreground">{t("Weer")}</span><span className="font-heading font-bold text-right">{race.weather}</span></div>}
+                      {weatherSummary && <div className="flex justify-between gap-3"><span className="text-muted-foreground">{t("Weer")}</span><span className="font-heading font-bold text-right">{weatherSummary}</span></div>}
                       {race.sof != null && <div className="flex justify-between"><span className="text-muted-foreground">SOF</span><span className="font-heading font-bold">{race.sof}</span></div>}
                       {race.lead_changes != null && <div className="flex justify-between"><span className="text-muted-foreground">{t("Kopwisselingen")}</span><span className="font-heading font-bold">{race.lead_changes}</span></div>}
                       {race.cautions != null && <div className="flex justify-between"><span className="text-muted-foreground">{t("Cauties")}</span><span className="font-heading font-bold">{race.cautions}{race.caution_laps != null ? ` / ${race.caution_laps} ${t("ronden")}` : ""}</span></div>}

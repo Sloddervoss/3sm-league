@@ -15,8 +15,26 @@ export type ImportRow = {
   new_license_sub_level?: number;
   car_name?: string;
   club_name?: string;
+  country_code?: string;
   reason_out?: string;
   dnf?: boolean;
+};
+
+export type SessionImportRow = {
+  session_type: "practice" | "qualifying";
+  session_name: string;
+  session_number?: number;
+  position: number;
+  display_name: string;
+  iracing_cust_id?: string;
+  laps: number;
+  best_lap: string;
+  best_lap_num?: number;
+  avg_lap?: string;
+  incidents: number;
+  car_name?: string;
+  club_name?: string;
+  country_code?: string;
 };
 
 export type IRacingRaceMetadata = {
@@ -61,6 +79,7 @@ export type IRacingJsonResult = {
   car_name?: string;
   livery?: { car_name?: string };
   club_name?: string;
+  country_code?: string;
   reason_out_id?: number;
   reason_out?: string;
 };
@@ -88,8 +107,8 @@ export function formatIRacingLapTime(us: number): string {
 }
 
 export type ParseImportResult =
-  | { rows: ImportRow[]; raceMetadata?: IRacingRaceMetadata; error?: undefined }
-  | { rows?: undefined; error: string };
+  | { rows: ImportRow[]; sessionResults?: SessionImportRow[]; raceMetadata?: IRacingRaceMetadata; error?: undefined }
+  | { rows?: undefined; sessionResults?: undefined; error: string };
 
 const numberOrUndefined = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -117,7 +136,10 @@ const WIND_UNIT_LABELS: Record<number, string> = {
 const formatIRacingWeather = (weather: unknown): string | undefined => {
   if (!weather || typeof weather !== "object") return undefined;
   const w = weather as Record<string, unknown>;
-  const skiesLabel = typeof w.skies === "number" ? SKIES_LABELS[w.skies] : (stringOrUndefined(w.skies) || stringOrUndefined(w.sky));
+  const baseSkiesLabel = typeof w.skies === "number" ? SKIES_LABELS[w.skies] : (stringOrUndefined(w.skies) || stringOrUndefined(w.sky));
+  const fog = typeof w.fog === "number" ? w.fog : undefined;
+  const precipitation = typeof w.precip_mm_final_session === "number" ? w.precip_mm_final_session : undefined;
+  const skiesLabel = precipitation && precipitation > 0 ? "Regen" : fog && fog > 0 ? "Mist" : baseSkiesLabel;
   const temp = typeof w.temp_value === "number" ? `${Math.round(w.temp_value)}°C` : undefined;
   const humidity = typeof w.rel_humidity === "number" ? `${Math.round(w.rel_humidity)}%` : undefined;
   const windSpeed = typeof w.wind_value === "number" ? w.wind_value : undefined;
@@ -135,6 +157,33 @@ const extractRaceMetadata = (root: Record<string, unknown>): IRacingRaceMetadata
   caution_laps: numberOrUndefined(root.num_caution_laps),
   lead_changes: numberOrUndefined(root.num_lead_changes),
   weather: stringOrUndefined(root.weather) || formatIRacingWeather(root.weather),
+});
+
+const normalizeCountryCode = (value: unknown): string | undefined => {
+  const code = stringOrUndefined(value)?.toUpperCase();
+  return code && /^[A-Z]{2}$/.test(code) ? code : undefined;
+};
+
+const sessionKind = (session: IRacingJsonSession): "practice" | "qualifying" | "race" | undefined => {
+  const name = (session.simsession_type_name || "").toLowerCase();
+  if (session.simsession_type === 6 || name.includes("race")) return "race";
+  if (session.simsession_type === 5 || name.includes("qual")) return "qualifying";
+  if (session.simsession_type === 3 || session.simsession_type === 4 || name.includes("practice") || name.includes("training")) return "practice";
+  return undefined;
+};
+
+const mapSessionResult = (r: IRacingJsonResult) => ({
+  position:              r.finish_position + 1,
+  display_name:          r.display_name || "",
+  iracing_cust_id:       String(r.cust_id),
+  laps:                  r.laps_complete || 0,
+  best_lap:              formatIRacingLapTime(r.best_lap_time),
+  best_lap_num:          r.best_lap_num ?? undefined,
+  avg_lap:               r.average_lap ? formatIRacingLapTime(r.average_lap) : undefined,
+  incidents:             r.incidents || 0,
+  car_name:              r.car_name || r.livery?.car_name || undefined,
+  club_name:             r.club_name || undefined,
+  country_code:          normalizeCountryCode(r.country_code),
 });
 
 export function parseCsvRows(text: string): ParseImportResult {
@@ -194,12 +243,9 @@ export function parseIRacingJsonRows(jsonText: string): ParseImportResult {
     const raceMetadata = extractRaceMetadata(root);
     const sessions: IRacingJsonSession[] = root.session_results || [];
     const raceSession =
-      sessions.find(s =>
-        s.simsession_type === 6 ||
-        (s.simsession_type_name || "").toLowerCase().includes("race") ||
-        s.simsession_number === 0
-      ) ??
-      sessions.sort((a, b) => (b.results?.length ?? 0) - (a.results?.length ?? 0))[0];
+      sessions.find(s => sessionKind(s) === "race") ??
+      sessions.find(s => s.simsession_number === 0) ??
+      [...sessions].sort((a, b) => (b.results?.length ?? 0) - (a.results?.length ?? 0))[0];
     if (!raceSession) return { error: "Geen Race sessie gevonden in JSON — controleer of het een iRacing event result JSON is" };
 
     const results: IRacingJsonResult[] = raceSession.results || [];
@@ -212,30 +258,36 @@ export function parseIRacingJsonRows(jsonText: string): ParseImportResult {
     const rows: ImportRow[] = results
       .sort((a, b) => a.finish_position - b.finish_position)
       .map(r => ({
-        position:              r.finish_position + 1,
+        ...mapSessionResult(r),
         start_position:        r.starting_position != null ? r.starting_position + 1 : undefined,
-        display_name:          r.display_name || "",
-        laps:                  r.laps_complete || 0,
         laps_led:              r.laps_lead ?? r.laps_led ?? undefined,
-        best_lap:              formatIRacingLapTime(r.best_lap_time),
-        best_lap_num:          r.best_lap_num ?? undefined,
-        avg_lap:               r.average_lap ? formatIRacingLapTime(r.average_lap) : undefined,
-        incidents:             r.incidents || 0,
         fastest_lap:           r.cust_id === fastestCustId,
-        iracing_cust_id:       String(r.cust_id),
         new_irating:           r.newi_rating ?? undefined,
         new_license_level:     r.new_license_level ?? undefined,
         new_license_sub_level: r.new_sub_level ?? undefined,
-        car_name:              r.car_name || r.livery?.car_name || undefined,
-        club_name:             r.club_name || undefined,
         reason_out:            r.reason_out && r.reason_out !== "Running" ? r.reason_out : undefined,
         dnf: (r.reason_out_id !== undefined && r.reason_out_id !== 0) ||
              !!(r.reason_out && r.reason_out !== "Running"),
       }))
       .filter(r => r.display_name);
 
+    const sessionResults: SessionImportRow[] = sessions
+      .flatMap((session) => {
+        const kind = sessionKind(session);
+        if (kind !== "practice" && kind !== "qualifying") return [];
+        return (session.results || [])
+          .sort((a, b) => a.finish_position - b.finish_position)
+          .map((result): SessionImportRow => ({
+            session_type: kind,
+            session_name: session.simsession_type_name || (kind === "practice" ? "Practice" : "Qualifying"),
+            session_number: session.simsession_number,
+            ...mapSessionResult(result),
+          }))
+          .filter((row) => row.display_name);
+      });
+
     if (!rows.length) return { error: "Geen geldige drivers gevonden in JSON" };
-    return { rows, raceMetadata };
+    return { rows, sessionResults, raceMetadata };
   } catch {
     return { error: "Ongeldig JSON bestand" };
   }
