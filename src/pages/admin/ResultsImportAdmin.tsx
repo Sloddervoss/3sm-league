@@ -8,6 +8,7 @@ import {
   type IRacingRaceMetadata,
   type ProfileRow,
   type RaceOption,
+  type SessionImportRow,
   parseIRacingJsonRows,
   matchProfileForImportRow,
 } from "@/lib/importHelpers";
@@ -26,6 +27,7 @@ const ResultsImportAdmin = () => {
   const [pointsConfig] = useState<number[]>(DEFAULT_POINTS);
   const [jsonFileName, setJsonFileName] = useState<string | null>(null);
   const [raceMetadata, setRaceMetadata] = useState<IRacingRaceMetadata | null>(null);
+  const [sessionResults, setSessionResults] = useState<SessionImportRow[]>([]);
   const [importMode, setImportMode] = useState<"manual" | "json">("json");
 
   const { data: profiles } = useQuery({
@@ -89,6 +91,7 @@ const ResultsImportAdmin = () => {
             dnf: row.dnf ?? false,
             irating_snapshot: row.new_irating ?? null,
             car_name: row.car_name ?? null,
+            country_code: row.country_code ?? null,
             club_name: row.club_name ?? null,
             reason_out: row.reason_out ?? null,
           } as never,
@@ -114,6 +117,33 @@ const ResultsImportAdmin = () => {
         ...(raceMetadata?.lead_changes != null ? { lead_changes: raceMetadata.lead_changes } : {}),
         ...(raceMetadata?.weather ? { weather: raceMetadata.weather } : {}),
       } as never).eq("id", importRaceId);
+
+      if (importMode === "json") {
+        const sessionTable = (supabase as any).from("race_session_results");
+        const { error: deleteSessionError } = await sessionTable.delete().eq("race_id", importRaceId);
+        if (deleteSessionError) throw deleteSessionError;
+
+        if (sessionResults.length > 0) {
+          const { error: insertSessionError } = await sessionTable.insert(sessionResults.map((row) => ({
+            race_id: importRaceId,
+            session_type: row.session_type,
+            session_name: row.session_name,
+            session_number: row.session_number ?? null,
+            position: row.position,
+            display_name: row.display_name,
+            iracing_cust_id: row.iracing_cust_id ?? null,
+            laps: row.laps,
+            best_lap: row.best_lap || null,
+            best_lap_num: row.best_lap_num ?? null,
+            avg_lap: row.avg_lap ?? null,
+            incidents: row.incidents,
+            car_name: row.car_name ?? null,
+            club_name: row.club_name ?? null,
+            country_code: row.country_code ?? null,
+          })));
+          if (insertSessionError) throw insertSessionError;
+        }
+      }
 
       const { data: existingPenalties } = await supabase
         .from("penalties")
@@ -164,6 +194,7 @@ const ResultsImportAdmin = () => {
       queryClient.invalidateQueries({ queryKey: ["latest-race-results"] });
       setImportRaceId("");
       setImportRows([{ ...EMPTY_ROW }]);
+      setSessionResults([]);
       setJsonFileName(null);
       setRaceMetadata(null);
     },
@@ -230,15 +261,16 @@ const ResultsImportAdmin = () => {
                         const result = parseIRacingJsonRows(ev.target?.result as string);
                         if (result.error) { toast.error(result.error); return; }
                         setImportRows(result.rows);
+                        setSessionResults(result.sessionResults ?? []);
                         setRaceMetadata(result.raceMetadata ?? null);
-                        toast.success(`${result.rows.length} coureurs geladen uit JSON (inclusief extra race-info)`);
+                        toast.success(`${result.rows.length} coureurs geladen uit JSON${result.sessionResults?.length ? ` + ${result.sessionResults.length} training/kwalificatie regels` : ""} (inclusief extra race-info)`);
                       };
                       reader.readAsText(file);
                     }}
                   />
                 </label>
                 {jsonFileName && (
-                  <button onClick={() => { setJsonFileName(null); setRaceMetadata(null); setImportRows([{ ...EMPTY_ROW }]); }} className="p-2 text-muted-foreground hover:text-destructive transition-colors">
+                  <button onClick={() => { setJsonFileName(null); setRaceMetadata(null); setSessionResults([]); setImportRows([{ ...EMPTY_ROW }]); }} className="p-2 text-muted-foreground hover:text-destructive transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 )}
@@ -262,6 +294,12 @@ const ResultsImportAdmin = () => {
                     </div>
                   )}
                   <div className="text-sm font-medium text-muted-foreground mb-2">{importRows.length} coureurs geladen — preview:</div>
+                  {sessionResults.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      <span className="px-2 py-1 rounded bg-secondary border border-border font-bold text-purple-300">{sessionResults.filter((row) => row.session_type === "practice").length} training regels</span>
+                      <span className="px-2 py-1 rounded bg-secondary border border-border font-bold text-purple-300">{sessionResults.filter((row) => row.session_type === "qualifying").length} kwalificatie regels</span>
+                    </div>
+                  )}
                   <div className="bg-secondary/30 rounded-md border border-border overflow-hidden">
                     <div className="grid grid-cols-[3rem_1fr_4rem_8rem_4rem_6rem_5rem] gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
                       <span>Pos</span><span>Coureur</span><span>Ronden</span><span>Beste ronde</span><span>Inc.</span><span>iRating</span><span className="text-center">FL</span>
