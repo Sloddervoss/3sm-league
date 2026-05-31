@@ -22,10 +22,11 @@ describe("editor role workflow", () => {
     expect(authContext).toContain("setIsEditor");
   });
 
-  it("shows the news/editor profile section only for editors and admins", () => {
+  it("shows the news/editor profile section only for editors, admins, and super admins", () => {
     const profilePage = read("src/pages/ProfilePage.tsx");
 
-    expect(profilePage).toContain("const canEditNews = isAdmin || isEditor");
+    expect(profilePage).toContain("isSuperAdmin");
+    expect(profilePage).toContain("const canEditNews = isAdmin || isSuperAdmin || isEditor");
     expect(profilePage).toContain("Nieuws redactie");
     expect(profilePage).not.toContain("const canEditNews = isAdmin || isSteward");
   });
