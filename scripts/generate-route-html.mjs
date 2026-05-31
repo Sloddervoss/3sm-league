@@ -131,7 +131,7 @@ const routes = [
   },
 ];
 
-const privateRoutes = ['/auth', '/profile', '/admin', '/stewards', '/koppel'];
+const privateRoutes = ['/auth', '/profile', '/admin', '/news-editor', '/stewards', '/koppel'];
 
 const joinFaq = [
   {

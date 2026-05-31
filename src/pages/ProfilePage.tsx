@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, UserPlus, X, Clock, ImagePlus, Plus, Camera, Loader2, MessageSquare, Link, CheckCircle2, RefreshCw, Newspaper } from "lucide-react";
+import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, UserPlus, X, Clock, ImagePlus, Plus, Camera, Loader2, MessageSquare, Link, CheckCircle2, RefreshCw } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
@@ -46,7 +46,7 @@ type MyResult = {
 };
 
 const ProfilePage = () => {
-  const { user, session, loading, isAdmin, isSuperAdmin, isEditor } = useAuth();
+  const { user, session, loading } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: profile } = useQuery({
@@ -299,7 +299,6 @@ const ProfilePage = () => {
   if (!user) return <Navigate to="/auth" />;
 
   const currentTeam = (teams || []).find((t) => t.id === profile?.team_id);
-  const canEditNews = isAdmin || isSuperAdmin || isEditor;
 
   return (
     <div className="min-h-screen bg-background">
@@ -688,20 +687,6 @@ const ProfilePage = () => {
                 </div>
               )}
             </motion.div>
-
-            {canEditNews && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }} className="bg-card border border-border rounded-lg p-6 racing-stripe-left mt-6">
-                <h2 className="font-heading font-bold text-lg mb-4 flex items-center gap-2">
-                  <Newspaper className="w-4 h-4 text-purple-300" /> Nieuws redactie
-                </h2>
-                <div className="p-3 rounded-md bg-purple-500/10 border border-purple-500/20">
-                  <p className="text-sm text-purple-100 font-medium mb-1">Je hebt toegang tot de editor-omgeving.</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    Deze sectie is zichtbaar voor editors en admins. Stewards zonder editorrol zien dit niet. Hier komt de nieuws-editor met concepten, previews, afbeeldingen en publiceren.
-                  </p>
-                </div>
-              </motion.div>
-            )}
 
             <div className="mt-6">
               <button

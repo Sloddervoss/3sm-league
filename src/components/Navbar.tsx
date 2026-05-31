@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List, UserPlus } from "lucide-react";
+import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List, UserPlus, Newspaper } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
@@ -18,11 +18,14 @@ const navItems = [
 const Navbar = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, signOut } = useAuth();
   const { language, setLanguage } = useLanguage();
 
-  const showDesktop = isAdmin ? "xl:flex" : "lg:flex";
-  const hideDesktop = isAdmin ? "xl:hidden" : "lg:hidden";
+  const canEditNews = isAdmin || isSuperAdmin || isEditor;
+  const canUseStewards = isAdmin || isSuperAdmin || isSteward;
+  const showAdmin = isAdmin || isSuperAdmin;
+  const showDesktop = showAdmin ? "xl:flex" : "lg:flex";
+  const hideDesktop = showAdmin ? "xl:hidden" : "lg:hidden";
   const LanguageSwitch = ({ className = "" }: { className?: string }) => (
     <div
       className={`inline-flex h-8 items-center rounded-md border border-border bg-card/40 p-0.5 ${className}`}
@@ -87,31 +90,44 @@ const Navbar = () => {
 
           {user ? (
             <div className="flex items-center gap-1">
-              {isAdmin && (
-                <>
-                  <Link
-                    to="/admin"
-                    className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      location.pathname === "/admin" ? "text-accent" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <Settings className="w-3.5 h-3.5" />
-                      Admin
-                    </span>
-                  </Link>
-                  <Link
-                    to="/stewards"
-                    className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      location.pathname === "/stewards" ? "text-accent" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <Trophy className="w-3.5 h-3.5" />
-                      Stewards
-                    </span>
-                  </Link>
-                </>
+              {showAdmin && (
+                <Link
+                  to="/admin"
+                  className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    location.pathname === "/admin" ? "text-accent" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Settings className="w-3.5 h-3.5" />
+                    Admin
+                  </span>
+                </Link>
+              )}
+              {canEditNews && (
+                <Link
+                  to="/news-editor"
+                  className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    location.pathname === "/news-editor" ? "text-accent" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Newspaper className="w-3.5 h-3.5" />
+                    Nieuws redactie
+                  </span>
+                </Link>
+              )}
+              {canUseStewards && (
+                <Link
+                  to="/stewards"
+                  className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    location.pathname === "/stewards" ? "text-accent" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Trophy className="w-3.5 h-3.5" />
+                    Stewards
+                  </span>
+                </Link>
               )}
               <Link
                 to="/profile"
@@ -179,15 +195,20 @@ const Navbar = () => {
           <div className="h-px bg-border my-2" />
           {user ? (
             <>
-              {isAdmin && (
-                <>
-                  <Link to="/admin" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
-                    <Settings className="w-4 h-4" /> Admin
-                  </Link>
-                  <Link to="/stewards" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
-                    <Trophy className="w-4 h-4" /> Stewards
-                  </Link>
-                </>
+              {showAdmin && (
+                <Link to="/admin" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
+                  <Settings className="w-4 h-4" /> Admin
+                </Link>
+              )}
+              {canEditNews && (
+                <Link to="/news-editor" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
+                  <Newspaper className="w-4 h-4" /> Nieuws redactie
+                </Link>
+              )}
+              {canUseStewards && (
+                <Link to="/stewards" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
+                  <Trophy className="w-4 h-4" /> Stewards
+                </Link>
               )}
               <Link to="/profile" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
                 <User className="w-4 h-4" /> Profiel
