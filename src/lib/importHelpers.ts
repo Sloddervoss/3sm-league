@@ -16,6 +16,7 @@ export type ImportRow = {
   car_name?: string;
   club_name?: string;
   country_code?: string;
+  gap_to_leader?: string;
   reason_out?: string;
   dnf?: boolean;
 };
@@ -80,6 +81,8 @@ export type IRacingJsonResult = {
   livery?: { car_name?: string };
   club_name?: string;
   country_code?: string;
+  interval?: number;
+  class_interval?: number;
   reason_out_id?: number;
   reason_out?: string;
 };
@@ -104,6 +107,16 @@ export function formatIRacingLapTime(us: number): string {
   const secs = Math.floor((totalMs % 60000) / 1000);
   const ms = totalMs % 1000;
   return `${mins}:${String(secs).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+}
+
+export function formatIRacingGap(value: number | undefined): string | undefined {
+  if (value == null || value <= 0) return undefined;
+  const totalMs = Math.round(value / 10);
+  const mins = Math.floor(totalMs / 60000);
+  const secs = Math.floor((totalMs % 60000) / 1000);
+  const ms = totalMs % 1000;
+  if (mins > 0) return `${mins}:${String(secs).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+  return `${secs}.${String(ms).padStart(3, "0")}s`;
 }
 
 export type ParseImportResult =
@@ -265,6 +278,7 @@ export function parseIRacingJsonRows(jsonText: string): ParseImportResult {
         new_irating:           r.newi_rating ?? undefined,
         new_license_level:     r.new_license_level ?? undefined,
         new_license_sub_level: r.new_sub_level ?? undefined,
+        gap_to_leader:         formatIRacingGap(r.interval ?? r.class_interval),
         reason_out:            r.reason_out && r.reason_out !== "Running" ? r.reason_out : undefined,
         dnf: (r.reason_out_id !== undefined && r.reason_out_id !== 0) ||
              !!(r.reason_out && r.reason_out !== "Running"),

@@ -214,6 +214,7 @@ function makeJsonResult(overrides: Partial<{
   car_name: string; livery: { car_name: string };
   starting_position: number; laps_lead: number; best_lap_num: number;
   average_lap: number; club_name: string; country_code: string;
+  interval: number; class_interval: number;
 }> = {}) {
   return {
     finish_position: 0,
@@ -350,6 +351,23 @@ describe("parseIRacingJsonRows", () => {
       reason_out: "Disconnected",
       club_name: "Benelux",
     });
+  });
+
+  it("formats race interval as gap to leader and ignores unavailable -1 gaps", () => {
+    const json = makeIRacingJson([{
+      simsession_type: 6,
+      results: [
+        makeJsonResult({ finish_position: 0, display_name: "Winner", cust_id: 1, interval: 0 }),
+        makeJsonResult({ finish_position: 1, display_name: "Runner Up", cust_id: 2, interval: 148686 }),
+        makeJsonResult({ finish_position: 2, display_name: "Lapped", cust_id: 3, interval: -1 }),
+      ],
+    }]);
+
+    const result = parseIRacingJsonRows(json);
+
+    expect(result.rows!.find((row) => row.display_name === "Winner")?.gap_to_leader).toBeUndefined();
+    expect(result.rows!.find((row) => row.display_name === "Runner Up")?.gap_to_leader).toBe("14.869s");
+    expect(result.rows!.find((row) => row.display_name === "Lapped")?.gap_to_leader).toBeUndefined();
   });
 
   it("extracts race-level iRacing metadata for the selected race", () => {
