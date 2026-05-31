@@ -191,11 +191,12 @@ html {
   .news-editor-prose .news-image-figure,
   .news-editor-prose .resizable-image-node {
     position: relative;
-    display: block;
+    display: inline-block;
     width: fit-content;
     max-width: 100%;
     margin-top: 1.25rem;
     margin-bottom: 1.25rem;
+    vertical-align: top;
   }
 
   .news-editor-prose .news-image-figure[data-align="left"],
