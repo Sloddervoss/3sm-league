@@ -14,14 +14,18 @@ describe("editor role workflow", () => {
     expect(migration).toContain("news-images");
   });
 
-  it("loads editor capability separately from admin and steward roles", () => {
+  it("loads editor capability separately from admin and steward roles before route guards decide", () => {
     const authContext = read("src/contexts/AuthContext.tsx");
+    const newsEditorPage = read("src/pages/NewsEditorPage.tsx");
 
     expect(authContext).toContain("isEditor: boolean");
+    expect(authContext).toContain("rolesLoading: boolean");
     expect(authContext).toContain('.from("user_roles")');
     expect(authContext).toContain('roles.has("editor")');
     expect(authContext).toContain('roles.has("super_admin")');
     expect(authContext).toContain("setIsEditor");
+    expect(authContext).toContain("setRolesLoading(false)");
+    expect(newsEditorPage).toContain("loading || rolesLoading");
   });
 
   it("shows the news editor as a gated account-menu item, not as profile page content", () => {

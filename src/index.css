@@ -147,22 +147,83 @@ html {
     margin-bottom: 1.25rem;
   }
 
+  .editor-toolbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.65rem;
+    background: hsl(var(--background) / 0.55);
+    padding: 0.3rem;
+  }
+
+  .editor-toolbar-label {
+    padding: 0 0.35rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .editor-toolbar-button {
+    display: inline-flex;
+    min-height: 2rem;
+    min-width: 2rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    border-radius: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: hsl(var(--muted-foreground));
+    transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .editor-toolbar-button:hover,
+  .editor-toolbar-button.is-active {
+    background: hsl(var(--primary) / 0.16);
+    color: hsl(var(--foreground));
+    box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.35);
+  }
+
+  .news-editor-prose .news-image-figure,
+  .news-editor-prose .resizable-image-node {
+    position: relative;
+    display: block;
+    max-width: 100%;
+    margin-top: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .news-editor-prose .news-image-figure[data-align="left"],
   .news-editor-prose .resizable-image-node[data-align="left"] {
     margin-right: auto;
   }
 
+  .news-editor-prose .news-image-figure[data-align="center"],
   .news-editor-prose .resizable-image-node[data-align="center"] {
     margin-left: auto;
     margin-right: auto;
   }
 
+  .news-editor-prose .news-image-figure[data-align="right"],
   .news-editor-prose .resizable-image-node[data-align="right"] {
     margin-left: auto;
   }
 
+  .news-editor-prose .news-image-figure img,
   .news-editor-prose .resizable-image-node img {
     display: block;
     border-radius: 0.75rem;
+  }
+
+  .news-editor-prose figcaption {
+    margin-top: 0.5rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: hsl(var(--muted-foreground));
   }
 
   .news-editor-prose .resize-handle {
