@@ -12,7 +12,7 @@ import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 type UpcomingRace = RaceWithLeagueSummary;
 
 type UpcomingProfile = {
-  iracing_id: number | null;
+  iracing_id: string | number | null;
   iracing_name: string | null;
 };
 

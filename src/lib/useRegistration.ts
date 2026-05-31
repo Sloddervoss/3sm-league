@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 type RegistrationProfile = {
-  iracing_id: number | null;
+  iracing_id: string | number | null;
   iracing_name: string | null;
 };
 

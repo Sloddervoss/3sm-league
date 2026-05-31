@@ -120,7 +120,7 @@ const ResultsImportAdmin = () => {
       } as never).eq("id", importRaceId);
 
       if (importMode === "json") {
-        const sessionTable = (supabase as any).from("race_session_results");
+        const sessionTable = supabase.from("race_session_results" as never);
         const { error: deleteSessionError } = await sessionTable.delete().eq("race_id", importRaceId);
         if (deleteSessionError) throw deleteSessionError;
 
@@ -141,7 +141,7 @@ const ResultsImportAdmin = () => {
             car_name: row.car_name ?? null,
             club_name: row.club_name ?? null,
             country_code: row.country_code ?? null,
-          })));
+          })) as never[]);
           if (insertSessionError) throw insertSessionError;
         }
       }

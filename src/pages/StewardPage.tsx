@@ -98,7 +98,7 @@ type SpProfile = {
 
 type SpLeague = {
   name: string;
-  season: number | null;
+  season: string | number | null;
 };
 
 type SpPenaltyRace = {
@@ -186,6 +186,9 @@ const StewardPage = () => {
   const getDecision = (id: string): DecisionState => decisions[id] || { ...EMPTY_DECISION };
   const setDecision = <K extends keyof DecisionState>(id: string, field: K, val: DecisionState[K]) =>
     setDecisions(prev => ({ ...prev, [id]: { ...getDecision(id), [field]: val } }));
+
+  const setPenaltyDecision = <K extends PenaltyFieldKey>(id: string, field: K, val: PenaltyFieldValues[K]) =>
+    setDecision(id, field, val as DecisionState[K]);
 
   const applyCategory = (id: string, cat: Category) => {
     if (!cat) return;
@@ -1228,7 +1231,7 @@ const StewardPage = () => {
 
                               {dec.status === "resolved" && renderPenaltyFields(
                                 dec,
-                                (field, val) => setDecision(protest.id, field, val),
+                                (field, val) => setPenaltyDecision(protest.id, field, val),
                                 (cat) => applyCategory(protest.id, cat),
                                 true,
                               )}
