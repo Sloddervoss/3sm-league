@@ -39,6 +39,66 @@ export type Database = {
         }
         Relationships: []
       }
+      news_posts: {
+        Row: {
+          author_id: string | null
+          content_html: string
+          content_json: Json
+          created_at: string
+          excerpt: string | null
+          hero_image_alt: string | null
+          hero_image_url: string | null
+          id: string
+          language: string
+          og_image_url: string | null
+          published_at: string | null
+          seo_description: string | null
+          seo_title: string | null
+          slug: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          content_html?: string
+          content_json?: Json
+          created_at?: string
+          excerpt?: string | null
+          hero_image_alt?: string | null
+          hero_image_url?: string | null
+          id?: string
+          language?: string
+          og_image_url?: string | null
+          published_at?: string | null
+          seo_description?: string | null
+          seo_title?: string | null
+          slug: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          content_html?: string
+          content_json?: Json
+          created_at?: string
+          excerpt?: string | null
+          hero_image_alt?: string | null
+          hero_image_url?: string | null
+          id?: string
+          language?: string
+          og_image_url?: string | null
+          published_at?: string | null
+          seo_description?: string | null
+          seo_title?: string | null
+          slug?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       discord_link_codes: {
         Row: {
           code: string
