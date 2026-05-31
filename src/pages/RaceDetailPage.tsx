@@ -546,9 +546,8 @@ const RaceDetailPage = () => {
                 <StatCard icon="🏎️" label="Grid" value={`${results.length}`} sub={carEntries.length ? `${carEntries.length} ${carEntries.length === 1 ? t("model") : t("modellen")}` : ""} />
               </div>
 
-              {/* Main content: table + sidebar */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-4">
+              {/* Race result stays full-width on desktop; supporting detail cards sit below. */}
+              <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="font-heading text-2xl font-black flex items-center gap-2"><List className="w-5 h-5 text-accent" /> {t("Race resultaat")}</h2>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -606,6 +605,11 @@ const RaceDetailPage = () => {
                       </div>
                     </div>
                   </div>
+              </div>
+
+              {/* Supporting content: session results + sidebar */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-4">
                   <SessionResultsCard title={t("Training")} rows={practiceResults} t={t} />
                   <SessionResultsCard title={t("Kwalificatie")} rows={qualifyingResults} t={t} />
                 </div>
