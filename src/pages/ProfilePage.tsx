@@ -46,7 +46,7 @@ type MyResult = {
 };
 
 const ProfilePage = () => {
-  const { user, session, loading, isAdmin, isEditor } = useAuth();
+  const { user, session, loading, isAdmin, isSuperAdmin, isEditor } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: profile } = useQuery({
@@ -299,7 +299,7 @@ const ProfilePage = () => {
   if (!user) return <Navigate to="/auth" />;
 
   const currentTeam = (teams || []).find((t) => t.id === profile?.team_id);
-  const canEditNews = isAdmin || isEditor;
+  const canEditNews = isAdmin || isSuperAdmin || isEditor;
 
   return (
     <div className="min-h-screen bg-background">
