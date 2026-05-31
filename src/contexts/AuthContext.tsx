@@ -10,6 +10,7 @@ interface AuthContextType {
   isSteward: boolean;
   isEditor: boolean;
   loading: boolean;
+  rolesLoading: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   isSteward: false,
   isEditor: false,
   loading: true,
+  rolesLoading: true,
   signOut: async () => {},
 });
 
@@ -30,6 +32,7 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rolesLoading, setRolesLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isSteward, setIsSteward] = useState(false);
@@ -41,6 +44,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const requestId = ++roleRequestRef.current;
 
     if (!session?.user) {
+      setRolesLoading(false);
       setIsAdmin(false);
       setIsSuperAdmin(false);
       setIsSteward(false);
@@ -49,6 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const userId = session.user.id;
+    setRolesLoading(true);
     supabase
       .from("user_roles")
       .select("role")
@@ -62,6 +67,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setIsSuperAdmin(false);
           setIsSteward(false);
           setIsEditor(false);
+          setRolesLoading(false);
           return;
         }
 
@@ -70,6 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsSuperAdmin(roles.has("super_admin"));
         setIsSteward(roles.has("moderator"));
         setIsEditor(roles.has("editor"));
+        setRolesLoading(false);
       });
   };
 
@@ -95,11 +102,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsSuperAdmin(false);
     setIsSteward(false);
     setIsEditor(false);
+    setRolesLoading(false);
     await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, isAdmin, isSuperAdmin, isSteward, isEditor, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, isAdmin, isSuperAdmin, isSteward, isEditor, loading, rolesLoading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

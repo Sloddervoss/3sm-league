@@ -11,11 +11,11 @@ import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import HorizontalRule from "@tiptap/extension-horizontal-rule";
-import { TextStyle } from "@tiptap/extension-text-style";
+import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import { motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlignCenter, AlignLeft, AlignRight, Bold, Code2, Eye, FileText, Heading1, Heading2, Heading3, Heading4, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Loader2, Minus, Newspaper, Quote, Save, Send, Table2 } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Bold, Code2, Eraser, Eye, FileText, Heading1, Heading2, Heading3, Heading4, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Loader2, Minus, Newspaper, Quote, Save, Send, Table2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -58,11 +58,22 @@ const NEWS_CATEGORIES = [
 ] as const;
 
 const emptyEditorContent = "<p>Schrijf hier het nieuwsbericht...</p>";
+const titlePlaceholder = "Titel verschijnt hier automatisch als H1";
 
 const ResizableImageExtension = ImageExtension.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
+      title: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("title"),
+        renderHTML: (attributes) => attributes.title ? { title: attributes.title } : {},
+      },
+      caption: {
+        default: "",
+        parseHTML: (element) => element.closest("figure")?.querySelector("figcaption")?.textContent || "",
+        renderHTML: () => ({}),
+      },
       width: {
         default: "100%",
         parseHTML: (element) => element.getAttribute("width") || element.style.width || "100%",
@@ -78,27 +89,41 @@ const ResizableImageExtension = ImageExtension.extend({
   renderHTML({ HTMLAttributes }) {
     const align = HTMLAttributes["data-align"] || "center";
     const alignStyle = align === "left" ? "margin-right:auto;" : align === "right" ? "margin-left:auto;" : "margin-left:auto;margin-right:auto;";
-    return ["img", mergeAttributes(HTMLAttributes, { style: `${HTMLAttributes.style || ""}${alignStyle}` })];
+    const { caption, ...imageAttributes } = HTMLAttributes;
+    return [
+      "figure",
+      { class: "news-image-figure", "data-align": align },
+      ["img", mergeAttributes(imageAttributes, { style: `${imageAttributes.style || ""}${alignStyle}` })],
+      caption ? ["figcaption", {}, caption] : ["figcaption", { class: "sr-only" }, ""],
+    ];
   },
   addNodeView() {
     return ({ node, getPos, editor }) => {
-      const wrapper = document.createElement("div");
+      let currentAttrs = { ...node.attrs };
+      const wrapper = document.createElement("figure");
       wrapper.className = "resizable-image-node";
-      wrapper.setAttribute("data-align", node.attrs.align || "center");
+      wrapper.setAttribute("data-align", currentAttrs.align || "center");
       wrapper.contentEditable = "false";
 
       const img = document.createElement("img");
-      img.src = node.attrs.src;
-      img.alt = node.attrs.alt || "";
-      img.style.width = node.attrs.width || "100%";
+      img.src = currentAttrs.src;
+      img.alt = currentAttrs.alt || "";
+      img.title = currentAttrs.title || "";
+      img.style.width = currentAttrs.width || "100%";
       img.style.maxWidth = "100%";
       img.style.height = "auto";
       wrapper.appendChild(img);
 
-      const updateImageWidth = (width: string) => {
+      const caption = document.createElement("figcaption");
+      caption.textContent = currentAttrs.caption || "";
+      caption.className = currentAttrs.caption ? "" : "sr-only";
+      wrapper.appendChild(caption);
+
+      const updateImageAttrs = (attrs: Record<string, string>) => {
         const pos = typeof getPos === "function" ? getPos() : null;
         if (typeof pos !== "number") return;
-        editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, width }));
+        currentAttrs = { ...currentAttrs, ...attrs };
+        editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, currentAttrs));
       };
 
       ["nw", "ne", "sw", "se"].forEach((corner) => {
@@ -116,7 +141,7 @@ const ResizableImageExtension = ImageExtension.extend({
           const onUp = () => {
             document.removeEventListener("mousemove", onMove);
             document.removeEventListener("mouseup", onUp);
-            updateImageWidth(img.style.width);
+            updateImageAttrs({ width: img.style.width });
           };
           document.addEventListener("mousemove", onMove);
           document.addEventListener("mouseup", onUp);
@@ -128,10 +153,14 @@ const ResizableImageExtension = ImageExtension.extend({
         dom: wrapper,
         update: (updatedNode) => {
           if (updatedNode.type.name !== node.type.name) return false;
-          img.src = updatedNode.attrs.src;
-          img.alt = updatedNode.attrs.alt || "";
-          img.style.width = updatedNode.attrs.width || "100%";
-          wrapper.setAttribute("data-align", updatedNode.attrs.align || "center");
+          currentAttrs = { ...updatedNode.attrs };
+          img.src = currentAttrs.src;
+          img.alt = currentAttrs.alt || "";
+          img.title = currentAttrs.title || "";
+          img.style.width = currentAttrs.width || "100%";
+          caption.textContent = currentAttrs.caption || "";
+          caption.className = currentAttrs.caption ? "" : "sr-only";
+          wrapper.setAttribute("data-align", currentAttrs.align || "center");
           return true;
         },
       };
@@ -167,7 +196,7 @@ const statusDescription = (status: NewsStatus) => {
 };
 
 const NewsEditorPage = () => {
-  const { user, loading, isAdmin, isSuperAdmin, isEditor } = useAuth();
+  const { user, loading, rolesLoading, isAdmin, isSuperAdmin, isEditor } = useAuth();
   const queryClient = useQueryClient();
   const canEditNews = isAdmin || isSuperAdmin || isEditor;
 
@@ -183,6 +212,9 @@ const NewsEditorPage = () => {
   const [seoDescription, setSeoDescription] = useState("");
   const [language, setLanguage] = useState<"nl" | "en">("nl");
   const [status, setStatus] = useState<NewsStatus>("draft");
+  const [, setEditorTick] = useState(0);
+
+  const refreshEditorState = () => setEditorTick((tick) => tick + 1);
 
   const editor = useEditor({
     extensions: [
@@ -196,6 +228,7 @@ const NewsEditorPage = () => {
       TableCell,
       HorizontalRule,
       TextStyle,
+      FontSize,
       Color,
     ],
     content: emptyEditorContent,
@@ -204,6 +237,10 @@ const NewsEditorPage = () => {
         class: "news-editor-prose min-h-[720px] rounded-b-lg border-x border-b border-border bg-background/50 px-6 py-5 text-[18px] leading-[1.7] outline-none prose prose-invert max-w-none prose-headings:font-heading prose-a:text-primary prose-blockquote:border-primary prose-blockquote:bg-secondary/20 prose-blockquote:px-4 prose-blockquote:py-2 prose-img:rounded-lg prose-hr:border-border",
       },
     },
+    onUpdate: refreshEditorState,
+    onSelectionUpdate: refreshEditorState,
+    onFocus: refreshEditorState,
+    onBlur: refreshEditorState,
   });
 
   const { data: posts = [], isLoading: postsLoading } = useQuery({
@@ -256,7 +293,7 @@ const NewsEditorPage = () => {
     setSeoDescription(selectedPost.seo_description || "");
     setLanguage(selectedPost.language === "en" ? "en" : "nl");
     setStatus((selectedPost.status as NewsStatus) || "draft");
-    editor.commands.setContent(selectedPost.content_html || emptyEditorContent);
+    editor.commands.setContent((selectedPost.content_json || selectedPost.content_html || emptyEditorContent) as Parameters<typeof editor.commands.setContent>[0]);
   }, [editor, selectedPost, selectedPostId]);
 
   const normalizedSlug = slug.trim() || generateSlug(title);
@@ -317,7 +354,7 @@ const NewsEditorPage = () => {
     const { error } = await supabase.storage.from("news-images").upload(path, file, { upsert: false });
     if (error) throw error;
     const { data: { publicUrl } } = supabase.storage.from("news-images").getPublicUrl(path);
-    editor?.chain().focus().setImage({ src: publicUrl, alt: file.name, width: "100%", align: "center" }).run();
+    editor?.chain().focus().setImage({ src: publicUrl, alt: file.name, title: file.name, width: "100%", align: "center", caption: "" } as never).run();
     if (!heroImageUrl) {
       setHeroImageUrl(publicUrl);
       setHeroImageAlt(file.name);
@@ -337,16 +374,51 @@ const NewsEditorPage = () => {
     editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
   };
 
+  const selectedImageAttrs = editor?.isActive("image") ? editor.getAttributes("image") : null;
+
+  const isStyleActive = (style: "small" | "normal" | "large" | "orange" | "white") => {
+    if (!editor) return false;
+    if (style === "small") return editor.isActive("textStyle", { fontSize: "16px" });
+    if (style === "large") return editor.isActive("textStyle", { fontSize: "22px" });
+    if (style === "normal") return !editor.getAttributes("textStyle").fontSize || editor.isActive("textStyle", { fontSize: "18px" });
+    if (style === "orange") return editor.isActive("textStyle", { color: "#f97316" });
+    return editor.isActive("textStyle", { color: "#ffffff" });
+  };
+
   const setImageAlignment = (align: ImageAlignment) => {
     editor?.chain().focus().updateAttributes("image", { align }).run();
   };
 
-  const setTextSize = (size: TextSize) => {
-    const fontSize = size === "small" ? "16px" : size === "large" ? "22px" : "18px";
-    editor?.chain().focus().setMark("textStyle", { style: `font-size: ${fontSize}` }).run();
+  const setImageAltText = () => {
+    if (!editor?.isActive("image")) return;
+    const currentAlt = editor.getAttributes("image").alt as string | undefined;
+    const alt = window.prompt("Alt-tekst voor deze afbeelding", currentAlt || "");
+    if (alt === null) return;
+    editor.chain().focus().updateAttributes("image", { alt, title: alt }).run();
   };
 
-  if (loading) return null;
+  const setImageCaption = () => {
+    if (!editor?.isActive("image")) return;
+    const currentCaption = editor.getAttributes("image").caption as string | undefined;
+    const caption = window.prompt("Caption onder de afbeelding", currentCaption || "");
+    if (caption === null) return;
+    editor.chain().focus().updateAttributes("image", { caption }).run();
+  };
+
+  const setTextSize = (size: TextSize) => {
+    const fontSize = size === "small" ? "16px" : size === "large" ? "22px" : "18px";
+    editor?.chain().focus().setFontSize(fontSize).run();
+  };
+
+  const setTextColor = (color: "orange" | "white") => {
+    editor?.chain().focus().setColor(color === "orange" ? "#f97316" : "#ffffff").run();
+  };
+
+  const clearFormatting = () => {
+    editor?.chain().focus().unsetAllMarks().clearNodes().run();
+  };
+
+  if (loading || rolesLoading) return null;
   if (!user) return <Navigate to="/auth" />;
   if (!canEditNews) return <Navigate to="/profile" replace />;
 
@@ -443,51 +515,91 @@ const NewsEditorPage = () => {
                     </label>
                   </div>
 
-                  <div className="rounded-lg border border-border bg-background/60 overflow-hidden">
+                  <div className="rounded-lg border border-border bg-background/60 overflow-hidden shadow-xl shadow-black/20">
                     <header className="px-6 pt-6 pb-4 border-b border-border/70">
                       <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-3">{category}</div>
                       <h2 id="article-title-preview" className="article-title-preview font-heading text-4xl md:text-5xl font-black leading-tight">
-                        {title || "Titel verschijnt hier automatisch als H1"}
+                        {title ? title : <span aria-hidden="true" className="text-muted-foreground/40">{titlePlaceholder}</span>}
                       </h2>
                       <p className="mt-3 text-xs text-muted-foreground">Bodytekst: 18px · line-height 1.7 · ruimte voor lange raceverslagen, interviews en reviews.</p>
                     </header>
-                    <div className="border-b border-border bg-secondary/30 p-2 flex flex-wrap items-center gap-1">
-                      <button type="button" onClick={() => editor?.chain().focus().toggleBold().run()} className="p-2 rounded hover:bg-secondary" aria-label="Vet"><Bold className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleItalic().run()} className="p-2 rounded hover:bg-secondary" aria-label="Cursief"><Italic className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 1"><Heading1 className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 2"><Heading2 className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 3"><Heading3 className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 4 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 4"><Heading4 className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()} className="p-2 rounded hover:bg-secondary" aria-label="Lijst"><List className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} className="p-2 rounded hover:bg-secondary" aria-label="Genummerde lijst"><ListOrdered className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleBlockquote().run()} className="p-2 rounded hover:bg-secondary" aria-label="Quote"><Quote className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()} className="p-2 rounded hover:bg-secondary" aria-label="Scheidingslijn"><Minus className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Tabel"><Table2 className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} className="p-2 rounded hover:bg-secondary" aria-label="Code blok"><Code2 className="w-4 h-4" /></button>
-                      <button type="button" onClick={setLink} className="p-2 rounded hover:bg-secondary" aria-label="Link"><LinkIcon className="w-4 h-4" /></button>
-                      <span className="mx-1 h-6 w-px bg-border" />
-                      <button type="button" onClick={() => setTextSize("small")} className="px-2 py-1 rounded text-xs hover:bg-secondary">Klein</button>
-                      <button type="button" onClick={() => setTextSize("normal")} className="px-2 py-1 rounded text-xs hover:bg-secondary">Normaal</button>
-                      <button type="button" onClick={() => setTextSize("large")} className="px-2 py-1 rounded text-xs hover:bg-secondary">Groot</button>
-                      <button type="button" onClick={() => editor?.chain().focus().setColor("#f97316").run()} className="px-2 py-1 rounded text-xs text-orange-400 hover:bg-secondary">Oranje</button>
-                      <button type="button" onClick={() => editor?.chain().focus().setColor("#ffffff").run()} className="px-2 py-1 rounded text-xs hover:bg-secondary">Wit</button>
-                      <span className="mx-1 h-6 w-px bg-border" />
-                      <button type="button" onClick={() => setImageAlignment("left")} className="p-2 rounded hover:bg-secondary" aria-label="Afbeelding links"><AlignLeft className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => setImageAlignment("center")} className="p-2 rounded hover:bg-secondary" aria-label="Afbeelding midden"><AlignCenter className="w-4 h-4" /></button>
-                      <button type="button" onClick={() => setImageAlignment("right")} className="p-2 rounded hover:bg-secondary" aria-label="Afbeelding rechts"><AlignRight className="w-4 h-4" /></button>
-                      <label className="p-2 rounded hover:bg-secondary cursor-pointer" aria-label="Afbeelding uploaden">
-                        <ImagePlus className="w-4 h-4" />
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp,image/gif"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) uploadNewsImage(file).catch((error) => toast.error(error instanceof Error ? error.message : "Upload mislukt"));
-                            e.currentTarget.value = "";
-                          }}
-                        />
-                      </label>
+
+                    {editor && (
+                      <>
+                        {!editor.state.selection.empty && !editor.isActive("image") && (
+                          <div data-bubble-menu="text" className="flex items-center gap-1 rounded-lg border border-border bg-card/95 p-1 shadow-2xl backdrop-blur">
+                          <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={`editor-toolbar-button ${editor.isActive("bold") ? "is-active" : ""}`} aria-label="Vet"><Bold className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={`editor-toolbar-button ${editor.isActive("italic") ? "is-active" : ""}`} aria-label="Cursief"><Italic className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={`editor-toolbar-button ${editor.isActive("heading", { level: 2 }) ? "is-active" : ""}`}>H2</button>
+                          <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={`editor-toolbar-button ${editor.isActive("heading", { level: 3 }) ? "is-active" : ""}`}>H3</button>
+                          <button type="button" onClick={() => setTextSize("small")} className={`editor-toolbar-button ${isStyleActive("small") ? "is-active" : ""}`}>S</button>
+                          <button type="button" onClick={() => setTextSize("large")} className={`editor-toolbar-button ${isStyleActive("large") ? "is-active" : ""}`}>L</button>
+                          <button type="button" onClick={() => setTextColor("orange")} className={`editor-toolbar-button text-orange-400 ${isStyleActive("orange") ? "is-active" : ""}`}>Oranje</button>
+                          <button type="button" onClick={setLink} className="editor-toolbar-button" aria-label="Link"><LinkIcon className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={`editor-toolbar-button ${editor.isActive("blockquote") ? "is-active" : ""}`} aria-label="Quote"><Quote className="w-4 h-4" /></button>
+                          <button type="button" onClick={clearFormatting} className="editor-toolbar-button" aria-label="Opmaak wissen"><Eraser className="w-4 h-4" /></button>
+                          </div>
+                        )}
+
+                        {editor.isActive("image") && (
+                          <div data-bubble-menu="image" className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card/95 p-2 shadow-2xl backdrop-blur">
+                          <span className="mr-2 max-w-[10rem] truncate text-[11px] uppercase tracking-wider text-muted-foreground">Afbeelding {selectedImageAttrs?.width || "100%"}</span>
+                          <button type="button" onClick={() => setImageAlignment("left")} className={`editor-toolbar-button ${selectedImageAttrs?.align === "left" ? "is-active" : ""}`} aria-label="Afbeelding links"><AlignLeft className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => setImageAlignment("center")} className={`editor-toolbar-button ${!selectedImageAttrs?.align || selectedImageAttrs?.align === "center" ? "is-active" : ""}`} aria-label="Afbeelding midden"><AlignCenter className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => setImageAlignment("right")} className={`editor-toolbar-button ${selectedImageAttrs?.align === "right" ? "is-active" : ""}`} aria-label="Afbeelding rechts"><AlignRight className="w-4 h-4" /></button>
+                          <button type="button" onClick={setImageAltText} className="editor-toolbar-button">Alt</button>
+                          <button type="button" onClick={setImageCaption} className="editor-toolbar-button">Caption</button>
+                          <button type="button" onClick={() => editor.chain().focus().deleteSelection().run()} className="editor-toolbar-button text-destructive" aria-label="Afbeelding verwijderen"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div className="border-b border-border bg-secondary/20 px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="editor-toolbar-group" aria-label="Tekst">
+                          <span className="editor-toolbar-label">Tekst</span>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleBold().run()} className={`editor-toolbar-button ${editor?.isActive("bold") ? "is-active" : ""}`} aria-label="Vet"><Bold className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleItalic().run()} className={`editor-toolbar-button ${editor?.isActive("italic") ? "is-active" : ""}`} aria-label="Cursief"><Italic className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} className={`editor-toolbar-button ${editor?.isActive("heading", { level: 1 }) ? "is-active" : ""}`} aria-label="Kop 1"><Heading1 className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} className={`editor-toolbar-button ${editor?.isActive("heading", { level: 2 }) ? "is-active" : ""}`} aria-label="Kop 2"><Heading2 className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} className={`editor-toolbar-button ${editor?.isActive("heading", { level: 3 }) ? "is-active" : ""}`} aria-label="Kop 3"><Heading3 className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 4 }).run()} className={`editor-toolbar-button ${editor?.isActive("heading", { level: 4 }) ? "is-active" : ""}`} aria-label="Kop 4"><Heading4 className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleBlockquote().run()} className={`editor-toolbar-button ${editor?.isActive("blockquote") ? "is-active" : ""}`} aria-label="Quote"><Quote className="w-4 h-4" /></button>
+                        </div>
+
+                        <div className="editor-toolbar-group" aria-label="Lijsten">
+                          <span className="editor-toolbar-label">Lijsten</span>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()} className={`editor-toolbar-button ${editor?.isActive("bulletList") ? "is-active" : ""}`} aria-label="Lijst"><List className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={`editor-toolbar-button ${editor?.isActive("orderedList") ? "is-active" : ""}`} aria-label="Genummerde lijst"><ListOrdered className="w-4 h-4" /></button>
+                        </div>
+
+                        <div className="editor-toolbar-group" aria-label="Media">
+                          <span className="editor-toolbar-label">Media</span>
+                          <label className="editor-toolbar-button cursor-pointer" aria-label="Afbeelding uploaden">
+                            <ImagePlus className="w-4 h-4" />
+                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadNewsImage(file).catch((error) => toast.error(error instanceof Error ? error.message : "Upload mislukt")); e.currentTarget.value = ""; }} />
+                          </label>
+                          <button type="button" onClick={setLink} className="editor-toolbar-button" aria-label="Link"><LinkIcon className="w-4 h-4" /></button>
+                        </div>
+
+                        <div className="editor-toolbar-group" aria-label="Layout">
+                          <span className="editor-toolbar-label">Layout</span>
+                          <button type="button" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="editor-toolbar-button" aria-label="Tabel"><Table2 className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()} className="editor-toolbar-button" aria-label="Scheidingslijn"><Minus className="w-4 h-4" /></button>
+                          <button type="button" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} className={`editor-toolbar-button ${editor?.isActive("codeBlock") ? "is-active" : ""}`} aria-label="Code blok"><Code2 className="w-4 h-4" /></button>
+                        </div>
+
+                        <div className="editor-toolbar-group" aria-label="Stijl">
+                          <span className="editor-toolbar-label">Stijl</span>
+                          <button type="button" onClick={() => setTextSize("small")} className={`editor-toolbar-button ${isStyleActive("small") ? "is-active" : ""}`}>Klein</button>
+                          <button type="button" onClick={() => setTextSize("normal")} className={`editor-toolbar-button ${isStyleActive("normal") ? "is-active" : ""}`}>Normaal</button>
+                          <button type="button" onClick={() => setTextSize("large")} className={`editor-toolbar-button ${isStyleActive("large") ? "is-active" : ""}`}>Groot</button>
+                          <button type="button" onClick={() => setTextColor("orange")} className={`editor-toolbar-button text-orange-400 ${isStyleActive("orange") ? "is-active" : ""}`}>Oranje</button>
+                          <button type="button" onClick={() => setTextColor("white")} className={`editor-toolbar-button ${isStyleActive("white") ? "is-active" : ""}`}>Wit</button>
+                          <button type="button" onClick={clearFormatting} className="editor-toolbar-button" aria-label="Opmaak wissen"><Eraser className="w-4 h-4" /></button>
+                        </div>
+                      </div>
                     </div>
                     <EditorContent editor={editor} />
                   </div>

@@ -62,6 +62,14 @@ describe("news editor workflow", () => {
     expect(page).toContain("Metadata & SEO");
   });
 
+  it("keeps the editor placeholder out of saved article content", () => {
+    const page = read("src/pages/NewsEditorPage.tsx");
+
+    expect(page).toContain("titlePlaceholder");
+    expect(page).toContain("aria-hidden=\"true\"");
+    expect(page).not.toContain('title || "Titel verschijnt hier automatisch als H1"');
+  });
+
   it("supports professional formatting and resizable aligned images", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
     const pkg = read("package.json");
@@ -80,6 +88,14 @@ describe("news editor workflow", () => {
     expect(page).toContain("toggleHeading({ level: 3 })");
     expect(page).toContain("toggleHeading({ level: 4 })");
     expect(page).toContain("setTextSize");
+    expect(page).toContain("data-bubble-menu=\"text\"");
+    expect(page).toContain("editor-toolbar-group");
+    expect(page).toContain("isStyleActive");
+    expect(page).toContain("setFontSize");
+    expect(page).toContain("setImageAltText");
+    expect(page).toContain("setImageCaption");
+    expect(page).toContain("deleteSelection()");
+    expect(page).toContain("selectedImageAttrs");
   });
 
   it("supports news image uploads into the news-images bucket and insertion at the editor cursor", () => {

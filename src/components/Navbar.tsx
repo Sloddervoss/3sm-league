@@ -201,7 +201,7 @@ const Navbar = () => {
                 </Link>
               )}
               {canEditNews && (
-                <Link to="/news-editor" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
+                <Link to="/news-editor" onClick={() => setMobileOpen(false)} className={`flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium ${location.pathname === "/news-editor" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                   <Newspaper className="w-4 h-4" /> Nieuws redactie
                 </Link>
               )}
