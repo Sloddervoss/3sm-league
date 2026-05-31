@@ -6,7 +6,7 @@ import { formatRaceGapDisplay, getRaceDetailStats, type RaceDetailStatsResult } 
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUp, Car, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, Flag, List, Share2, Sun, Thermometer, Trophy, Zap } from "lucide-react";
 import { useEffect } from "react";
-import { useLanguage } from "@/i18n/LanguageContext";
+import { useLanguage } from "@/i18n/useLanguage";
 import { Link, useParams } from "react-router-dom";
 
 const STALE = 5 * 60 * 1000;
@@ -341,20 +341,24 @@ const RaceDetailPage = () => {
     queryFn: async (): Promise<RaceResultRow[]> => {
       const selectWithCountry = "id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, country_code, club_name, reason_out, profiles(display_name, iracing_name)";
       const selectLegacy = "id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, club_name, reason_out, profiles(display_name, iracing_name)";
-      let response = await supabase
+      const firstResponse = await supabase
         .from("race_results")
         .select(selectWithCountry)
         .eq("race_id", raceId!)
         .order("position", { ascending: true });
-      if (response.error && response.error.message.includes("country_code")) {
-        response = await supabase
+      let resultData: unknown = firstResponse.data;
+      let resultError = firstResponse.error;
+      if (resultError && resultError.message.includes("country_code")) {
+        const legacyResponse = await supabase
           .from("race_results")
           .select(selectLegacy)
           .eq("race_id", raceId!)
           .order("position", { ascending: true });
+        resultData = legacyResponse.data;
+        resultError = legacyResponse.error;
       }
-      if (response.error) throw response.error;
-      return (response.data || []) as RaceResultRow[];
+      if (resultError) throw resultError;
+      return (resultData || []) as RaceResultRow[];
     },
   });
 
@@ -363,8 +367,8 @@ const RaceDetailPage = () => {
     enabled: !!raceId,
     staleTime: STALE,
     queryFn: async (): Promise<SessionResultRow[]> => {
-      const { data, error } = await (supabase as any)
-        .from("race_session_results")
+      const { data, error } = await supabase
+        .from("race_session_results" as never)
         .select("id, session_type, session_name, session_number, position, display_name, laps, best_lap, best_lap_num, avg_lap, incidents, car_name, club_name, country_code")
         .eq("race_id", raceId!)
         .order("session_type", { ascending: true })

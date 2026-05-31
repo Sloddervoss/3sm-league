@@ -121,7 +121,7 @@ export function formatIRacingGap(value: number | undefined): string | undefined 
 
 export type ParseImportResult =
   | { rows: ImportRow[]; sessionResults?: SessionImportRow[]; raceMetadata?: IRacingRaceMetadata; error?: undefined }
-  | { rows?: undefined; sessionResults?: undefined; error: string };
+  | { rows?: undefined; sessionResults?: undefined; raceMetadata?: undefined; error: string };
 
 const numberOrUndefined = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;

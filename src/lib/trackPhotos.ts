@@ -90,7 +90,6 @@ const PHOTOS: Record<string, string> = {
   "Charlotte Motor Speedway":                         "/tracks/photos/charlottemotorspeedway.jpg",
   "EchoPark Speedway (Atlanta)":                      "/tracks/photos/echoparkspeedway.jpg",
   "New Jersey Motorsports Park":                      "/tracks/photos/newjerseymotorsportspark-sm.jpg",
-  "Auto Club Speedway":                               "/tracks/photos/autoclubspeedway-sm1.jpg",
   "World Wide Technology Raceway (Gateway)":          "/tracks/photos/worldwidetechnologyraceway.jpg",
   "Willow Springs Raceway":                           "/tracks/photos/willow-springs-raceway.jpg",
   "Willow Springs International Raceway":             "/tracks/photos/willow-springs-raceway.jpg",

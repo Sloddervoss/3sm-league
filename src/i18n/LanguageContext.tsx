@@ -1,14 +1,6 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { LANGUAGE_STORAGE_KEY, Language, translateText } from "./translations";
-
-type LanguageContextType = {
-  language: Language;
-  setLanguage: (language: Language) => void;
-  toggleLanguage: () => void;
-  t: (value: string) => string;
-};
-
-const LanguageContext = createContext<LanguageContextType | null>(null);
+import { LanguageContext, type LanguageContextType } from "./languageContextCore";
 
 const textOriginals = new WeakMap<Text, string>();
 const textTranslations = new WeakMap<Text, string>();
@@ -137,8 +129,3 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 };
 
-export const useLanguage = () => {
-  const context = useContext(LanguageContext);
-  if (!context) throw new Error("useLanguage must be used within LanguageProvider");
-  return context;
-};

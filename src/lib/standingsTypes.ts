@@ -33,7 +33,7 @@ export type DriverModalProfile = {
   user_id: string;
   display_name: string | null;
   iracing_name: string | null;
-  iracing_id: number | null;
+  iracing_id: string | number | null;
   irating: number | null;
   safety_rating: string | null;
   team_id: string | null;

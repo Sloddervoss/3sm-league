@@ -12,7 +12,7 @@ import { Navigate } from "react-router-dom";
 type ProfileRow = {
   user_id: string;
   display_name: string | null;
-  iracing_id: number | null;
+  iracing_id: string | number | null;
   iracing_name: string | null;
   irating: number | null;
   safety_rating: string | null;

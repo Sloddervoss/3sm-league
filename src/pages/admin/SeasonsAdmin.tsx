@@ -82,7 +82,7 @@ type AdminProfile = {
   user_id: string;
   display_name: string | null;
   iracing_name: string | null;
-  iracing_id: number | null;
+  iracing_id: string | number | null;
 };
 
 type RaceEditData = {
