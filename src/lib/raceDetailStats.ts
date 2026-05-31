@@ -27,6 +27,28 @@ export type RaceDetailDriver = RaceDetailStatsResult & {
   positionGain?: number;
 };
 
+export type RaceGapLabels = {
+  lap: string;
+  laps: string;
+};
+
+export const formatRaceGapDisplay = (
+  result: Pick<RaceDetailStatsResult, "position" | "laps" | "dnf" | "gap_to_leader">,
+  leaderLaps: number | null | undefined,
+  labels: RaceGapLabels,
+) => {
+  if (result.dnf) return "DNF";
+  if (result.position === 1) return "—";
+  if (result.gap_to_leader) return result.gap_to_leader.startsWith("+") ? result.gap_to_leader : `+${result.gap_to_leader}`;
+
+  if (leaderLaps != null && result.laps != null) {
+    const lapsBehind = leaderLaps - result.laps;
+    if (lapsBehind > 0) return `+${lapsBehind} ${lapsBehind === 1 ? labels.lap : labels.laps}`;
+  }
+
+  return "-";
+};
+
 const driverName = (result: RaceDetailStatsResult) =>
   result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
 

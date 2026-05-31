@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getRaceDetailStats, type RaceDetailStatsResult } from "./raceDetailStats";
+import { formatRaceGapDisplay, getRaceDetailStats, type RaceDetailStatsResult } from "./raceDetailStats";
 
 const result = (overrides: Partial<RaceDetailStatsResult>): RaceDetailStatsResult => ({
   user_id: crypto.randomUUID(),
@@ -50,5 +50,15 @@ describe("getRaceDetailStats", () => {
     expect(stats.biggestMover?.name).toBe("Big Mover");
     expect(stats.biggestMover?.positionGain).toBe(7);
     expect(stats.mostLapsLed?.name).toBe("Lap Leader");
+  });
+
+  it("formats gap display like race classification: time gap, then laps behind, then DNF", () => {
+    const labels = { lap: "ronde", laps: "ronden" };
+
+    expect(formatRaceGapDisplay(result({ position: 1, laps: 32 }), 32, labels)).toBe("—");
+    expect(formatRaceGapDisplay(result({ position: 2, laps: 32, gap_to_leader: "14.869s" }), 32, labels)).toBe("+14.869s");
+    expect(formatRaceGapDisplay(result({ position: 6, laps: 31 }), 32, labels)).toBe("+1 ronde");
+    expect(formatRaceGapDisplay(result({ position: 9, laps: 24 }), 32, labels)).toBe("+8 ronden");
+    expect(formatRaceGapDisplay(result({ position: 10, laps: 20, dnf: true }), 32, labels)).toBe("DNF");
   });
 });
