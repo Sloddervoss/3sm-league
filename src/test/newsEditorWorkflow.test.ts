@@ -98,6 +98,16 @@ describe("news editor workflow", () => {
     expect(page).toContain("selectedImageAttrs");
   });
 
+  it("keeps aligned images shrink-wrapped so left, center and right positions are visible", () => {
+    const css = read("src/index.css");
+
+    expect(css).toContain(".news-editor-prose .news-image-figure,");
+    expect(css).toContain("width: fit-content;");
+    expect(css).toContain("margin-left: 0;");
+    expect(css).toContain("margin-left: auto;");
+    expect(css).toContain("margin-right: auto;");
+  });
+
   it("supports news image uploads into the news-images bucket and insertion at the editor cursor", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
 
