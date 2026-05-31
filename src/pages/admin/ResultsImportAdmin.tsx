@@ -90,6 +90,7 @@ const ResultsImportAdmin = () => {
             incidents: row.incidents,
             dnf: row.dnf ?? false,
             irating_snapshot: row.new_irating ?? null,
+            gap_to_leader: row.gap_to_leader ?? null,
             car_name: row.car_name ?? null,
             country_code: row.country_code ?? null,
             club_name: row.club_name ?? null,
