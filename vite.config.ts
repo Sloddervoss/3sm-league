@@ -12,6 +12,26 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "react-vendor",
+              test: /node_modules\/(react|react-dom|react-router-dom)\//,
+            },
+            {
+              name: "data-vendor",
+              test: /node_modules\/(@tanstack|@supabase)\//,
+            },
+            {
+              name: "ui-vendor",
+              test: /node_modules\/(@radix-ui|lucide-react|sonner|cmdk|vaul)\//,
+            },
+          ],
+        },
+      },
+    },
   },
   plugins: [
     react(),
