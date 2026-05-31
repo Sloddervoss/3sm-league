@@ -108,6 +108,20 @@ describe("news editor workflow", () => {
     expect(css).toContain("margin-right: auto;");
   });
 
+  it("allows multiple resized images on one editor line with quick width presets", () => {
+    const page = read("src/pages/NewsEditorPage.tsx");
+    const css = read("src/index.css");
+
+    expect(css).toContain("display: inline-block;");
+    expect(css).toContain("vertical-align: top;");
+    expect(page).toContain("setImageWidth");
+    expect(page).toContain("33%");
+    expect(page).toContain("50%");
+    expect(page).toContain("100%");
+    expect(page).toContain("wrapper.style.width = currentAttrs.width || \"100%\"");
+    expect(page).toContain("img.style.width = \"100%\"");
+  });
+
   it("supports news image uploads into the news-images bucket and insertion at the editor cursor", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
 

@@ -88,12 +88,12 @@ const ResizableImageExtension = ImageExtension.extend({
   },
   renderHTML({ HTMLAttributes }) {
     const align = HTMLAttributes["data-align"] || "center";
-    const alignStyle = align === "left" ? "margin-right:auto;" : align === "right" ? "margin-left:auto;" : "margin-left:auto;margin-right:auto;";
-    const { caption, ...imageAttributes } = HTMLAttributes;
+    const width = HTMLAttributes.width || "100%";
+    const { caption, width: _width, style: _style, ...imageAttributes } = HTMLAttributes;
     return [
       "figure",
-      { class: "news-image-figure", "data-align": align },
-      ["img", mergeAttributes(imageAttributes, { style: `${imageAttributes.style || ""}${alignStyle}` })],
+      { class: "news-image-figure", "data-align": align, style: `width: ${width}; max-width: 100%;` },
+      ["img", mergeAttributes(imageAttributes, { style: "width: 100%; max-width: 100%; height: auto;" })],
       caption ? ["figcaption", {}, caption] : ["figcaption", { class: "sr-only" }, ""],
     ];
   },
@@ -103,13 +103,15 @@ const ResizableImageExtension = ImageExtension.extend({
       const wrapper = document.createElement("figure");
       wrapper.className = "resizable-image-node";
       wrapper.setAttribute("data-align", currentAttrs.align || "center");
+      wrapper.style.width = currentAttrs.width || "100%";
+      wrapper.style.maxWidth = "100%";
       wrapper.contentEditable = "false";
 
       const img = document.createElement("img");
       img.src = currentAttrs.src;
       img.alt = currentAttrs.alt || "";
       img.title = currentAttrs.title || "";
-      img.style.width = currentAttrs.width || "100%";
+      img.style.width = "100%";
       img.style.maxWidth = "100%";
       img.style.height = "auto";
       wrapper.appendChild(img);
@@ -136,12 +138,12 @@ const ResizableImageExtension = ImageExtension.extend({
           const onMove = (moveEvent: MouseEvent) => {
             const direction = corner.includes("w") ? -1 : 1;
             const nextWidth = Math.max(180, Math.min(960, startWidth + (moveEvent.clientX - startX) * direction));
-            img.style.width = `${Math.round(nextWidth)}px`;
+            wrapper.style.width = `${Math.round(nextWidth)}px`;
           };
           const onUp = () => {
             document.removeEventListener("mousemove", onMove);
             document.removeEventListener("mouseup", onUp);
-            updateImageAttrs({ width: img.style.width });
+            updateImageAttrs({ width: wrapper.style.width });
           };
           document.addEventListener("mousemove", onMove);
           document.addEventListener("mouseup", onUp);
@@ -157,7 +159,8 @@ const ResizableImageExtension = ImageExtension.extend({
           img.src = currentAttrs.src;
           img.alt = currentAttrs.alt || "";
           img.title = currentAttrs.title || "";
-          img.style.width = currentAttrs.width || "100%";
+          wrapper.style.width = currentAttrs.width || "100%";
+          img.style.width = "100%";
           caption.textContent = currentAttrs.caption || "";
           caption.className = currentAttrs.caption ? "" : "sr-only";
           wrapper.setAttribute("data-align", currentAttrs.align || "center");
@@ -389,6 +392,10 @@ const NewsEditorPage = () => {
     editor?.chain().focus().updateAttributes("image", { align }).run();
   };
 
+  const setImageWidth = (width: "33%" | "50%" | "100%") => {
+    editor?.chain().focus().updateAttributes("image", { width, align: width === "100%" ? "center" : "left" }).run();
+  };
+
   const setImageAltText = () => {
     if (!editor?.isActive("image")) return;
     const currentAlt = editor.getAttributes("image").alt as string | undefined;
@@ -547,6 +554,10 @@ const NewsEditorPage = () => {
                           <button type="button" onClick={() => setImageAlignment("left")} className={`editor-toolbar-button ${selectedImageAttrs?.align === "left" ? "is-active" : ""}`} aria-label="Afbeelding links"><AlignLeft className="w-4 h-4" /></button>
                           <button type="button" onClick={() => setImageAlignment("center")} className={`editor-toolbar-button ${!selectedImageAttrs?.align || selectedImageAttrs?.align === "center" ? "is-active" : ""}`} aria-label="Afbeelding midden"><AlignCenter className="w-4 h-4" /></button>
                           <button type="button" onClick={() => setImageAlignment("right")} className={`editor-toolbar-button ${selectedImageAttrs?.align === "right" ? "is-active" : ""}`} aria-label="Afbeelding rechts"><AlignRight className="w-4 h-4" /></button>
+                          <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+                          <button type="button" onClick={() => setImageWidth("33%")} className={`editor-toolbar-button ${selectedImageAttrs?.width === "33%" ? "is-active" : ""}`}>⅓</button>
+                          <button type="button" onClick={() => setImageWidth("50%")} className={`editor-toolbar-button ${selectedImageAttrs?.width === "50%" ? "is-active" : ""}`}>½</button>
+                          <button type="button" onClick={() => setImageWidth("100%")} className={`editor-toolbar-button ${selectedImageAttrs?.width === "100%" ? "is-active" : ""}`}>Vol</button>
                           <button type="button" onClick={setImageAltText} className="editor-toolbar-button">Alt</button>
                           <button type="button" onClick={setImageCaption} className="editor-toolbar-button">Caption</button>
                           <button type="button" onClick={() => editor.chain().focus().deleteSelection().run()} className="editor-toolbar-button text-destructive" aria-label="Afbeelding verwijderen"><Trash2 className="w-4 h-4" /></button>
