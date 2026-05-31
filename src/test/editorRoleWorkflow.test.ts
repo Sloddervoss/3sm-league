@@ -18,7 +18,9 @@ describe("editor role workflow", () => {
     const authContext = read("src/contexts/AuthContext.tsx");
 
     expect(authContext).toContain("isEditor: boolean");
-    expect(authContext).toContain('_role: "editor"');
+    expect(authContext).toContain('.from("user_roles")');
+    expect(authContext).toContain('roles.has("editor")');
+    expect(authContext).toContain('roles.has("super_admin")');
     expect(authContext).toContain("setIsEditor");
   });
 
