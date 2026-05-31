@@ -1,0 +1,41 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+
+const read = (path: string) => readFileSync(path, "utf8");
+
+describe("editor role workflow", () => {
+  it("adds editor as an independent Supabase role and allows admins to grant only that role", () => {
+    const migration = read("supabase/migrations/20260601090000_editor_role_and_news_access.sql").toLowerCase();
+
+    expect(migration).toContain("alter type public.app_role add value if not exists 'editor'");
+    expect(migration).toContain("target_role = 'editor'");
+    expect(migration).toContain("public.has_role(auth.uid(), 'admin')");
+    expect(migration).toContain("public.has_role(auth.uid(), 'super_admin')");
+    expect(migration).toContain("news-images");
+  });
+
+  it("loads editor capability separately from admin and steward roles", () => {
+    const authContext = read("src/contexts/AuthContext.tsx");
+
+    expect(authContext).toContain("isEditor: boolean");
+    expect(authContext).toContain('_role: "editor"');
+    expect(authContext).toContain("setIsEditor");
+  });
+
+  it("shows the news/editor profile section only for editors and admins", () => {
+    const profilePage = read("src/pages/ProfilePage.tsx");
+
+    expect(profilePage).toContain("const canEditNews = isAdmin || isEditor");
+    expect(profilePage).toContain("Nieuws redactie");
+    expect(profilePage).not.toContain("const canEditNews = isAdmin || isSteward");
+  });
+
+  it("lets admins manage editor separately from steward/admin in the drivers admin table", () => {
+    const driversList = read("src/pages/admin/DriversList.tsx");
+
+    expect(driversList).toContain("isEditorRole");
+    expect(driversList).toContain('target_role: "editor"');
+    expect(driversList).toContain("toggleEditor");
+    expect(driversList).toContain("Editor");
+  });
+});
