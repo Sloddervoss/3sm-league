@@ -488,6 +488,8 @@ const exactTranslations: Record<string, string> = {
   "Circuit": "Track",
   "Cauties": "Cautions",
   "Grid": "Grid",
+  "Start": "Start",
+  "Gem.": "Avg.",
   "Grid auto's": "Grid cars",
   "won de race op": "won the race at",
   "met": "with",

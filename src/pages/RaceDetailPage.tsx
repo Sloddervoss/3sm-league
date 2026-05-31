@@ -549,8 +549,6 @@ const RaceDetailPage = () => {
               {/* Main content: table + sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-4">
-                  <SessionResultsCard title={t("Training")} rows={practiceResults} t={t} />
-                  <SessionResultsCard title={t("Kwalificatie")} rows={qualifyingResults} t={t} />
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="font-heading text-2xl font-black flex items-center gap-2"><List className="w-5 h-5 text-accent" /> {t("Race resultaat")}</h2>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -567,40 +565,48 @@ const RaceDetailPage = () => {
                   </div>
 
                   <div className="bg-card border border-border rounded-lg overflow-hidden">
-                    <div className="grid grid-cols-[3.5rem_1fr_4rem_4rem_6rem_5rem_4rem_4rem] gap-2 px-4 py-2 bg-secondary/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground min-w-[820px]">
-                      <span>{t("Pos")}</span><span>{t("Coureur")}</span><span className="text-center">{t("ronden")}</span><span className="text-center">{t("Kop")}</span><span className="text-right">{t("Beste")}</span><span className="text-center">{t("Grid")}</span><span className="text-center">{t("Inc")}</span><span className="text-center">{t("Pts")}</span>
-                    </div>
                     <div className="overflow-x-auto">
-                      {stats.sorted.map((driver) => {
-                        const pen = penalties.find((p) => p.user_id === driver.user_id && p.penalty_type !== "warning");
-                        const positionDelta = driver.start_position != null && driver.position != null ? driver.start_position - driver.position : null;
-                        return (
-                          <div key={driver.user_id} className={`grid grid-cols-[3.5rem_1fr_4rem_4rem_6rem_5rem_4rem_4rem] gap-2 px-4 py-3 items-center border-t border-border/50 min-w-[820px] hover:bg-secondary/20 transition-colors ${driver.position != null && driver.position <= 3 ? "racing-stripe-left" : ""}`}>
-                            <span className={`font-heading font-black text-lg ${positionColor(driver.position)}`}>{driver.dnf ? "DNF" : medal(driver.position)}</span>
-                            <div className="min-w-0">
-                              <div className="font-heading font-black truncate flex items-center gap-2">
-                                <CountryFlag code={driver.country_code} />
-                                {driver.name}
-                                {driver.fastest_lap && <span className="text-[10px] px-1.5 py-0.5 rounded border border-purple-500/30 bg-purple-500/15 text-purple-300">FL</span>}
-                                {(driver.laps_led ?? 0) > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded border border-orange-500/30 bg-orange-500/15 text-orange-300">LED {driver.laps_led}</span>}
+                      <div className="min-w-[980px]">
+                        <div className="grid grid-cols-[3.5rem_1fr_4rem_4rem_4rem_5rem_6rem_6rem_4rem_4rem] gap-2 px-4 py-2 bg-secondary/40 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                          <span>{t("Pos")}</span><span>{t("Coureur")}</span><span className="text-center">{t("ronden")}</span><span className="text-center">{t("Kop")}</span><span className="text-center">{t("Start")}</span><span className="text-center">+/-</span><span className="text-right">{t("Beste")}</span><span className="text-right">{t("Gem.")}</span><span className="text-center">{t("Inc")}</span><span className="text-center">{t("Pts")}</span>
+                        </div>
+                        {stats.sorted.map((driver) => {
+                          const pen = penalties.find((p) => p.user_id === driver.user_id && p.penalty_type !== "warning");
+                          const positionDelta = driver.start_position != null && driver.position != null ? driver.start_position - driver.position : null;
+                          return (
+                            <div key={driver.user_id} className={`grid grid-cols-[3.5rem_1fr_4rem_4rem_4rem_5rem_6rem_6rem_4rem_4rem] gap-2 px-4 py-3 items-center border-t border-border/50 hover:bg-secondary/20 transition-colors ${driver.position != null && driver.position <= 3 ? "racing-stripe-left" : ""}`}>
+                              <span className={`font-heading font-black text-lg ${positionColor(driver.position)}`}>{driver.dnf ? "DNF" : medal(driver.position)}</span>
+                              <div className="min-w-0">
+                                <div className="font-heading font-black truncate flex items-center gap-2">
+                                  <CountryFlag code={driver.country_code} />
+                                  {driver.name}
+                                  {driver.fastest_lap && <span className="text-[10px] px-1.5 py-0.5 rounded border border-purple-500/30 bg-purple-500/15 text-purple-300">FL</span>}
+                                  {(driver.laps_led ?? 0) > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded border border-orange-500/30 bg-orange-500/15 text-orange-300">LED {driver.laps_led}</span>}
+                                </div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {[driver.car_name, driver.club_name].filter(Boolean).join(" · ")}
+                                </div>
+                                {driver.reason_out && <div className="text-xs text-red-300 truncate">{driver.reason_out}</div>}
                               </div>
-                              {driver.car_name && <div className="text-xs text-muted-foreground truncate">{driver.car_name}</div>}
-                              {driver.reason_out && <div className="text-xs text-red-300 truncate">{driver.reason_out}</div>}
+                              <span className="text-center text-sm font-heading text-muted-foreground">{driver.laps ?? "-"}</span>
+                              <span className={`text-center text-sm font-heading ${(driver.laps_led ?? 0) > 0 ? "text-yellow-400 font-black" : "text-muted-foreground"}`}>{driver.laps_led ?? "-"}</span>
+                              <span className="text-center text-sm font-heading text-muted-foreground">{driver.start_position != null ? `P${driver.start_position}` : "-"}</span>
+                              <span className="text-center"><span className={`inline-flex min-w-12 justify-center rounded-full border px-2 py-0.5 text-xs font-heading font-black ${deltaClass(positionDelta)}`}>{positionDelta == null ? "-" : positionDelta > 0 ? `+${positionDelta}` : String(positionDelta)}</span></span>
+                              <span className="text-right text-sm font-mono text-muted-foreground">{driver.best_lap ?? "-"}{driver.best_lap_num ? <span className="block text-[10px] font-sans text-muted-foreground/70">{t("ronde")} {driver.best_lap_num}</span> : null}</span>
+                              <span className="text-right text-sm font-mono text-muted-foreground">{driver.avg_lap ?? "-"}</span>
+                              <span className={`text-center text-sm font-heading ${driver.incidents === 0 ? "text-green-400 font-black" : (driver.incidents ?? 0) > 8 ? "text-red-400" : "text-muted-foreground"}`}>{driver.incidents != null ? `${driver.incidents}x` : "-"}</span>
+                              <span className="text-center font-heading font-black">
+                                {driver.points ?? "-"}
+                                {pen && <span className="ml-1 text-[10px] text-orange-400" title={pen.penalty_type === "disqualification" ? "DSQ — Steward" : `-${pen.points_deduction}pt — Steward`}>⚠</span>}
+                              </span>
                             </div>
-                            <span className="text-center text-sm font-heading text-muted-foreground">{driver.laps ?? "-"}</span>
-                            <span className={`text-center text-sm font-heading ${(driver.laps_led ?? 0) > 0 ? "text-yellow-400 font-black" : "text-muted-foreground"}`}>{driver.laps_led ?? "-"}</span>
-                            <span className="text-right text-sm font-mono text-muted-foreground">{driver.best_lap ?? "-"}{driver.best_lap_num ? <span className="block text-[10px] font-sans text-muted-foreground/70">{t("ronde")} {driver.best_lap_num}</span> : null}</span>
-                            <span className="text-center"><span className={`inline-flex min-w-12 justify-center rounded-full border px-2 py-0.5 text-xs font-heading font-black ${deltaClass(positionDelta)}`}>{positionDelta == null ? "-" : positionDelta > 0 ? `+${positionDelta}` : String(positionDelta)}</span></span>
-                            <span className={`text-center text-sm font-heading ${driver.incidents === 0 ? "text-green-400 font-black" : (driver.incidents ?? 0) > 8 ? "text-red-400" : "text-muted-foreground"}`}>{driver.incidents != null ? `${driver.incidents}x` : "-"}</span>
-                            <span className="text-center font-heading font-black">
-                              {driver.points ?? "-"}
-                              {pen && <span className="ml-1 text-[10px] text-orange-400" title={pen.penalty_type === "disqualification" ? "DSQ — Steward" : `-${pen.points_deduction}pt — Steward`}>⚠</span>}
-                            </span>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
+                  <SessionResultsCard title={t("Training")} rows={practiceResults} t={t} />
+                  <SessionResultsCard title={t("Kwalificatie")} rows={qualifyingResults} t={t} />
                 </div>
 
                 {/* Sidebar */}
