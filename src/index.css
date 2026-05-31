@@ -138,6 +138,70 @@ html {
     box-shadow: 0 0 20px -5px hsl(var(--racing-glow) / 0.2);
     transform: translateY(-2px);
   }
+
+  .news-editor-prose .resizable-image-node {
+    position: relative;
+    display: block;
+    max-width: 100%;
+    margin-top: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .news-editor-prose .resizable-image-node[data-align="left"] {
+    margin-right: auto;
+  }
+
+  .news-editor-prose .resizable-image-node[data-align="center"] {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .news-editor-prose .resizable-image-node[data-align="right"] {
+    margin-left: auto;
+  }
+
+  .news-editor-prose .resizable-image-node img {
+    display: block;
+    border-radius: 0.75rem;
+  }
+
+  .news-editor-prose .resize-handle {
+    position: absolute;
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid hsl(var(--primary));
+    border-radius: 9999px;
+    background: hsl(var(--background));
+    opacity: 0;
+    transition: opacity 150ms ease;
+    z-index: 5;
+  }
+
+  .news-editor-prose .resizable-image-node:hover .resize-handle {
+    opacity: 1;
+  }
+
+  .news-editor-prose .resize-handle-nw { top: -0.45rem; left: -0.45rem; cursor: nwse-resize; }
+  .news-editor-prose .resize-handle-ne { top: -0.45rem; right: -0.45rem; cursor: nesw-resize; }
+  .news-editor-prose .resize-handle-sw { bottom: -0.45rem; left: -0.45rem; cursor: nesw-resize; }
+  .news-editor-prose .resize-handle-se { bottom: -0.45rem; right: -0.45rem; cursor: nwse-resize; }
+
+  .news-editor-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow: hidden;
+    border-radius: 0.5rem;
+  }
+
+  .news-editor-prose th,
+  .news-editor-prose td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.65rem;
+  }
+
+  .news-editor-prose th {
+    background: hsl(var(--secondary));
+  }
 }
 
 /* Prevent iOS Safari auto-zoom on input focus (font-size < 16px triggers zoom).

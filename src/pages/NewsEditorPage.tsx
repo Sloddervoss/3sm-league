@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import ImageExtension from "@tiptap/extension-image";
 import LinkExtension from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
+import { Table } from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import HorizontalRule from "@tiptap/extension-horizontal-rule";
+import { TextStyle } from "@tiptap/extension-text-style";
+import Color from "@tiptap/extension-color";
 import { motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bold, Eye, FileText, Heading1, Heading2, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Loader2, Newspaper, Quote, Save, Search, Send } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Bold, Code2, Eye, FileText, Heading1, Heading2, Heading3, Heading4, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Loader2, Minus, Newspaper, Quote, Save, Send, Table2 } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -19,6 +27,7 @@ type NewsPost = {
   id: string;
   slug: string;
   title: string;
+  category: string;
   excerpt: string | null;
   content_json: Json;
   content_html: string;
@@ -32,9 +41,103 @@ type NewsPost = {
   updated_at: string;
 };
 
-type NewsStatus = "draft" | "review" | "published" | "archived";
+type NewsStatus = "draft" | "planned" | "published" | "archived";
+type NewsCategory = typeof NEWS_CATEGORIES[number];
+type ImageAlignment = "left" | "center" | "right";
+type TextSize = "small" | "normal" | "large";
 
-const emptyEditorContent = "<h2>Nieuwe update</h2><p>Schrijf hier het nieuwsbericht...</p>";
+const NEWS_CATEGORIES = [
+  "Raceverslagen",
+  "League Updates",
+  "Race Recaps",
+  "Interviews",
+  "Reviews",
+  "Community",
+  "iRacing Nieuws",
+  "Special Events",
+] as const;
+
+const emptyEditorContent = "<p>Schrijf hier het nieuwsbericht...</p>";
+
+const ResizableImageExtension = ImageExtension.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: "100%",
+        parseHTML: (element) => element.getAttribute("width") || element.style.width || "100%",
+        renderHTML: (attributes) => ({ width: attributes.width, style: `width: ${attributes.width}; max-width: 100%; height: auto;` }),
+      },
+      align: {
+        default: "center",
+        parseHTML: (element) => element.getAttribute("data-align") || "center",
+        renderHTML: (attributes) => ({ "data-align": attributes.align }),
+      },
+    };
+  },
+  renderHTML({ HTMLAttributes }) {
+    const align = HTMLAttributes["data-align"] || "center";
+    const alignStyle = align === "left" ? "margin-right:auto;" : align === "right" ? "margin-left:auto;" : "margin-left:auto;margin-right:auto;";
+    return ["img", mergeAttributes(HTMLAttributes, { style: `${HTMLAttributes.style || ""}${alignStyle}` })];
+  },
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "resizable-image-node";
+      wrapper.setAttribute("data-align", node.attrs.align || "center");
+      wrapper.contentEditable = "false";
+
+      const img = document.createElement("img");
+      img.src = node.attrs.src;
+      img.alt = node.attrs.alt || "";
+      img.style.width = node.attrs.width || "100%";
+      img.style.maxWidth = "100%";
+      img.style.height = "auto";
+      wrapper.appendChild(img);
+
+      const updateImageWidth = (width: string) => {
+        const pos = typeof getPos === "function" ? getPos() : null;
+        if (typeof pos !== "number") return;
+        editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, width }));
+      };
+
+      ["nw", "ne", "sw", "se"].forEach((corner) => {
+        const handle = document.createElement("span");
+        handle.className = `resize-handle resize-handle-${corner}`;
+        handle.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          const startX = event.clientX;
+          const startWidth = img.getBoundingClientRect().width;
+          const onMove = (moveEvent: MouseEvent) => {
+            const direction = corner.includes("w") ? -1 : 1;
+            const nextWidth = Math.max(180, Math.min(960, startWidth + (moveEvent.clientX - startX) * direction));
+            img.style.width = `${Math.round(nextWidth)}px`;
+          };
+          const onUp = () => {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            updateImageWidth(img.style.width);
+          };
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        });
+        wrapper.appendChild(handle);
+      });
+
+      return {
+        dom: wrapper,
+        update: (updatedNode) => {
+          if (updatedNode.type.name !== node.type.name) return false;
+          img.src = updatedNode.attrs.src;
+          img.alt = updatedNode.attrs.alt || "";
+          img.style.width = updatedNode.attrs.width || "100%";
+          wrapper.setAttribute("data-align", updatedNode.attrs.align || "center");
+          return true;
+        },
+      };
+    };
+  },
+});
 
 const generateSlug = (value: string) =>
   value
@@ -48,9 +151,18 @@ const generateSlug = (value: string) =>
 const statusLabel = (status: string) => {
   switch (status) {
     case "published": return "Gepubliceerd";
-    case "review": return "Review";
-    case "archived": return "Archief";
+    case "planned": return "Gepland";
+    case "archived": return "Gearchiveerd";
     default: return "Concept";
+  }
+};
+
+const statusDescription = (status: NewsStatus) => {
+  switch (status) {
+    case "published": return "Live zichtbaar op de website.";
+    case "planned": return "Klaar voor latere publicatie, nog niet zichtbaar.";
+    case "archived": return "Niet zichtbaar, maar blijft bewaard.";
+    default: return "Niet zichtbaar op de website.";
   }
 };
 
@@ -62,6 +174,8 @@ const NewsEditorPage = () => {
   const [selectedPostId, setSelectedPostId] = useState<string | "new">("new");
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
+  const [category, setCategory] = useState<NewsCategory>("League Updates");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | NewsCategory>("all");
   const [excerpt, setExcerpt] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [heroImageAlt, setHeroImageAlt] = useState("");
@@ -72,15 +186,22 @@ const NewsEditorPage = () => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
-      ImageExtension.configure({ inline: false, allowBase64: false }),
+      StarterKit.configure({ horizontalRule: false }),
+      ResizableImageExtension.configure({ inline: false, allowBase64: false }),
       LinkExtension.configure({ openOnClick: false, autolink: true, defaultProtocol: "https" }),
-      Placeholder.configure({ placeholder: "Schrijf het nieuwsbericht..." }),
+      Placeholder.configure({ placeholder: "Begin hier met schrijven. De titel hierboven wordt automatisch als H1 boven het artikel getoond." }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      HorizontalRule,
+      TextStyle,
+      Color,
     ],
     content: emptyEditorContent,
     editorProps: {
       attributes: {
-        class: "min-h-[320px] rounded-b-lg border-x border-b border-border bg-background/50 px-4 py-3 text-sm leading-relaxed outline-none prose prose-invert prose-sm max-w-none prose-headings:font-heading prose-a:text-primary prose-blockquote:border-primary",
+        class: "news-editor-prose min-h-[720px] rounded-b-lg border-x border-b border-border bg-background/50 px-6 py-5 text-[18px] leading-[1.7] outline-none prose prose-invert max-w-none prose-headings:font-heading prose-a:text-primary prose-blockquote:border-primary prose-blockquote:bg-secondary/20 prose-blockquote:px-4 prose-blockquote:py-2 prose-img:rounded-lg prose-hr:border-border",
       },
     },
   });
@@ -91,12 +212,17 @@ const NewsEditorPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("news_posts")
-        .select("id,slug,title,excerpt,content_json,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,status,language,published_at,updated_at")
+        .select("id,slug,title,category,excerpt,content_json,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,status,language,published_at,updated_at")
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data || []) as NewsPost[];
     },
   });
+
+  const filteredPosts = useMemo(
+    () => categoryFilter === "all" ? posts : posts.filter((post) => post.category === categoryFilter),
+    [categoryFilter, posts]
+  );
 
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId),
@@ -108,6 +234,7 @@ const NewsEditorPage = () => {
     if (!selectedPost || selectedPostId === "new") {
       setTitle("");
       setSlug("");
+      setCategory("League Updates");
       setExcerpt("");
       setHeroImageUrl("");
       setHeroImageAlt("");
@@ -121,6 +248,7 @@ const NewsEditorPage = () => {
 
     setTitle(selectedPost.title);
     setSlug(selectedPost.slug);
+    setCategory(NEWS_CATEGORIES.includes(selectedPost.category as NewsCategory) ? selectedPost.category as NewsCategory : "League Updates");
     setExcerpt(selectedPost.excerpt || "");
     setHeroImageUrl(selectedPost.hero_image_url || "");
     setHeroImageAlt(selectedPost.hero_image_alt || "");
@@ -136,11 +264,13 @@ const NewsEditorPage = () => {
   const buildPayload = (nextStatus: NewsStatus) => {
     if (!editor) throw new Error("Editor is nog niet geladen");
     if (!title.trim()) throw new Error("Titel is verplicht");
+    if (!category) throw new Error("Categorie is verplicht");
     if (!normalizedSlug) throw new Error("Slug is verplicht");
 
     return {
       slug: normalizedSlug,
       title: title.trim(),
+      category,
       excerpt: excerpt.trim() || null,
       content_json: editor.getJSON() as Json,
       content_html: editor.getHTML(),
@@ -152,7 +282,7 @@ const NewsEditorPage = () => {
       status: nextStatus,
       language,
       author_id: user?.id,
-      published_at: nextStatus === "published" ? new Date().toISOString() : selectedPost?.published_at ?? null,
+      published_at: nextStatus === "published" ? selectedPost?.published_at ?? new Date().toISOString() : null,
     };
   };
 
@@ -173,7 +303,7 @@ const NewsEditorPage = () => {
       setSlug(saved.slug);
       setStatus(saved.status as NewsStatus);
       queryClient.invalidateQueries({ queryKey: ["news-posts-editor"] });
-      toast.success(saved.status === "published" ? "Nieuwsbericht gepubliceerd" : "Concept opgeslagen");
+      toast.success(saved.status === "published" ? "Nieuwsbericht gepubliceerd" : "Nieuwsbericht opgeslagen");
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Opslaan mislukt"),
   });
@@ -187,7 +317,7 @@ const NewsEditorPage = () => {
     const { error } = await supabase.storage.from("news-images").upload(path, file, { upsert: false });
     if (error) throw error;
     const { data: { publicUrl } } = supabase.storage.from("news-images").getPublicUrl(path);
-    editor?.chain().focus().setImage({ src: publicUrl, alt: file.name }).run();
+    editor?.chain().focus().setImage({ src: publicUrl, alt: file.name, width: "100%", align: "center" }).run();
     if (!heroImageUrl) {
       setHeroImageUrl(publicUrl);
       setHeroImageAlt(file.name);
@@ -207,6 +337,15 @@ const NewsEditorPage = () => {
     editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
   };
 
+  const setImageAlignment = (align: ImageAlignment) => {
+    editor?.chain().focus().updateAttributes("image", { align }).run();
+  };
+
+  const setTextSize = (size: TextSize) => {
+    const fontSize = size === "small" ? "16px" : size === "large" ? "22px" : "18px";
+    editor?.chain().focus().setMark("textStyle", { style: `font-size: ${fontSize}` }).run();
+  };
+
   if (loading) return null;
   if (!user) return <Navigate to="/auth" />;
   if (!canEditNews) return <Navigate to="/profile" replace />;
@@ -215,16 +354,16 @@ const NewsEditorPage = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="pt-16">
-        <section className="py-12">
-          <div className="container mx-auto px-4 max-w-7xl">
+        <section className="py-10">
+          <div className="container mx-auto px-4 max-w-[1500px]">
             <div className="flex items-center gap-2 mb-1">
               <Newspaper className="w-5 h-5 text-primary" />
-              <span className="text-sm font-medium text-primary uppercase tracking-[0.15em]">Redactie</span>
+              <span className="text-sm font-medium text-primary uppercase tracking-[0.15em]">Professionele nieuwsredactie</span>
             </div>
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-8">
               <div>
                 <h1 className="font-heading text-4xl font-black">NIEUWS REDACTIE</h1>
-                <p className="text-sm text-muted-foreground mt-2">Maak concepten, voeg afbeeldingen in en publiceer nieuws voor 3SM.</p>
+                <p className="text-sm text-muted-foreground mt-2">Schrijven eerst. Afbeeldingen, categorie en SEO daarna.</p>
               </div>
               <button
                 onClick={() => setSelectedPostId("new")}
@@ -234,11 +373,22 @@ const NewsEditorPage = () => {
               </button>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[20rem_1fr]">
-              <aside className="bg-card border border-border rounded-lg overflow-hidden h-fit">
+            <div className="grid gap-6 xl:grid-cols-[19rem_minmax(0,1fr)]">
+              <aside className="bg-card border border-border rounded-lg overflow-hidden h-fit xl:sticky xl:top-24">
                 <div className="px-4 py-3 border-b border-border bg-secondary/30 flex items-center justify-between">
                   <span className="font-heading font-bold text-sm uppercase tracking-wider">Berichten</span>
                   {postsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                </div>
+                <div className="p-3 border-b border-border">
+                  <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Filter categorie</label>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value as "all" | NewsCategory)}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+                  >
+                    <option value="all">Toon alle categorieën</option>
+                    {NEWS_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
                 </div>
                 <button
                   onClick={() => setSelectedPostId("new")}
@@ -248,13 +398,14 @@ const NewsEditorPage = () => {
                   <span className="text-xs">Start met een leeg bericht</span>
                 </button>
                 <div className="max-h-[620px] overflow-y-auto">
-                  {posts.map((post) => (
+                  {filteredPosts.map((post) => (
                     <button
                       key={post.id}
                       onClick={() => setSelectedPostId(post.id)}
                       className={`w-full text-left px-4 py-3 border-b border-border/70 transition-colors ${selectedPostId === post.id ? "bg-primary/10 text-foreground" : "hover:bg-secondary/30 text-muted-foreground"}`}
                     >
-                      <span className="block text-sm font-bold line-clamp-1">{post.title}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary">{post.category}</span>
+                      <span className="block text-sm font-bold line-clamp-2">{post.title}</span>
                       <span className="mt-1 inline-flex items-center gap-2 text-[11px] uppercase tracking-wider">
                         <span className="rounded bg-secondary px-2 py-0.5">{statusLabel(post.status)}</span>
                         <span>{post.language.toUpperCase()}</span>
@@ -264,129 +415,181 @@ const NewsEditorPage = () => {
                 </div>
               </aside>
 
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card border border-border rounded-lg p-6 racing-stripe-left">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="block md:col-span-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Titel</span>
-                    <input
-                      value={title}
-                      onChange={(e) => {
-                        setTitle(e.target.value);
-                        if (!slug || slug === generateSlug(title)) setSlug(generateSlug(e.target.value));
-                      }}
-                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                      placeholder="Bijv. Raceverslag Snetterton"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Slug</span>
-                    <input
-                      value={slug}
-                      onChange={(e) => setSlug(generateSlug(e.target.value))}
-                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                      placeholder="raceverslag-snetterton"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</span>
-                    <select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value as NewsStatus)}
-                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                    >
-                      <option value="draft">Concept</option>
-                      <option value="review">Review</option>
-                      <option value="published">Gepubliceerd</option>
-                      <option value="archived">Archief</option>
-                    </select>
-                  </label>
-                  <label className="block md:col-span-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Korte intro / excerpt</span>
-                    <textarea
-                      value={excerpt}
-                      onChange={(e) => setExcerpt(e.target.value)}
-                      rows={3}
-                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                      placeholder="Korte samenvatting voor overzichten en SEO..."
-                    />
-                  </label>
-                </div>
-
-                <div className="mt-6">
-                  <div className="rounded-t-lg border border-border bg-secondary/30 p-2 flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => editor?.chain().focus().toggleBold().run()} className="p-2 rounded hover:bg-secondary" aria-label="Vet"><Bold className="w-4 h-4" /></button>
-                    <button type="button" onClick={() => editor?.chain().focus().toggleItalic().run()} className="p-2 rounded hover:bg-secondary" aria-label="Cursief"><Italic className="w-4 h-4" /></button>
-                    <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 1"><Heading1 className="w-4 h-4" /></button>
-                    <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 2"><Heading2 className="w-4 h-4" /></button>
-                    <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()} className="p-2 rounded hover:bg-secondary" aria-label="Lijst"><List className="w-4 h-4" /></button>
-                    <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} className="p-2 rounded hover:bg-secondary" aria-label="Genummerde lijst"><ListOrdered className="w-4 h-4" /></button>
-                    <button type="button" onClick={() => editor?.chain().focus().toggleBlockquote().run()} className="p-2 rounded hover:bg-secondary" aria-label="Quote"><Quote className="w-4 h-4" /></button>
-                    <button type="button" onClick={setLink} className="p-2 rounded hover:bg-secondary" aria-label="Link"><LinkIcon className="w-4 h-4" /></button>
-                    <label className="p-2 rounded hover:bg-secondary cursor-pointer" aria-label="Afbeelding uploaden">
-                      <ImagePlus className="w-4 h-4" />
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                <article className="bg-card border border-border rounded-lg p-4 md:p-6 racing-stripe-left">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem] mb-5">
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Titel</span>
                       <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/gif"
-                        className="hidden"
+                        value={title}
                         onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) uploadNewsImage(file).catch((error) => toast.error(error instanceof Error ? error.message : "Upload mislukt"));
-                          e.currentTarget.value = "";
+                          setTitle(e.target.value);
+                          if (!slug || slug === generateSlug(title)) setSlug(generateSlug(e.target.value));
                         }}
+                        className="mt-1 w-full rounded-md border border-border bg-background px-4 py-3 font-heading text-2xl font-black outline-none focus:border-primary"
+                        placeholder="Race Recap Spa 27 Mei 2026"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Categorie *</span>
+                      <select
+                        required
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value as NewsCategory)}
+                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary"
+                      >
+                        {NEWS_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-background/60 overflow-hidden">
+                    <header className="px-6 pt-6 pb-4 border-b border-border/70">
+                      <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary mb-3">{category}</div>
+                      <h2 id="article-title-preview" className="article-title-preview font-heading text-4xl md:text-5xl font-black leading-tight">
+                        {title || "Titel verschijnt hier automatisch als H1"}
+                      </h2>
+                      <p className="mt-3 text-xs text-muted-foreground">Bodytekst: 18px · line-height 1.7 · ruimte voor lange raceverslagen, interviews en reviews.</p>
+                    </header>
+                    <div className="border-b border-border bg-secondary/30 p-2 flex flex-wrap items-center gap-1">
+                      <button type="button" onClick={() => editor?.chain().focus().toggleBold().run()} className="p-2 rounded hover:bg-secondary" aria-label="Vet"><Bold className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleItalic().run()} className="p-2 rounded hover:bg-secondary" aria-label="Cursief"><Italic className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 1"><Heading1 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 2"><Heading2 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 3"><Heading3 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleHeading({ level: 4 }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Kop 4"><Heading4 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleBulletList().run()} className="p-2 rounded hover:bg-secondary" aria-label="Lijst"><List className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleOrderedList().run()} className="p-2 rounded hover:bg-secondary" aria-label="Genummerde lijst"><ListOrdered className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleBlockquote().run()} className="p-2 rounded hover:bg-secondary" aria-label="Quote"><Quote className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()} className="p-2 rounded hover:bg-secondary" aria-label="Scheidingslijn"><Minus className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-2 rounded hover:bg-secondary" aria-label="Tabel"><Table2 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} className="p-2 rounded hover:bg-secondary" aria-label="Code blok"><Code2 className="w-4 h-4" /></button>
+                      <button type="button" onClick={setLink} className="p-2 rounded hover:bg-secondary" aria-label="Link"><LinkIcon className="w-4 h-4" /></button>
+                      <span className="mx-1 h-6 w-px bg-border" />
+                      <button type="button" onClick={() => setTextSize("small")} className="px-2 py-1 rounded text-xs hover:bg-secondary">Klein</button>
+                      <button type="button" onClick={() => setTextSize("normal")} className="px-2 py-1 rounded text-xs hover:bg-secondary">Normaal</button>
+                      <button type="button" onClick={() => setTextSize("large")} className="px-2 py-1 rounded text-xs hover:bg-secondary">Groot</button>
+                      <button type="button" onClick={() => editor?.chain().focus().setColor("#f97316").run()} className="px-2 py-1 rounded text-xs text-orange-400 hover:bg-secondary">Oranje</button>
+                      <button type="button" onClick={() => editor?.chain().focus().setColor("#ffffff").run()} className="px-2 py-1 rounded text-xs hover:bg-secondary">Wit</button>
+                      <span className="mx-1 h-6 w-px bg-border" />
+                      <button type="button" onClick={() => setImageAlignment("left")} className="p-2 rounded hover:bg-secondary" aria-label="Afbeelding links"><AlignLeft className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => setImageAlignment("center")} className="p-2 rounded hover:bg-secondary" aria-label="Afbeelding midden"><AlignCenter className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => setImageAlignment("right")} className="p-2 rounded hover:bg-secondary" aria-label="Afbeelding rechts"><AlignRight className="w-4 h-4" /></button>
+                      <label className="p-2 rounded hover:bg-secondary cursor-pointer" aria-label="Afbeelding uploaden">
+                        <ImagePlus className="w-4 h-4" />
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) uploadNewsImage(file).catch((error) => toast.error(error instanceof Error ? error.message : "Upload mislukt"));
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <EditorContent editor={editor} />
+                  </div>
+                </article>
+
+                <section className="bg-card border border-border rounded-lg p-5">
+                  <h3 className="font-heading font-bold text-lg mb-1">Publicatie</h3>
+                  <p className="text-sm text-muted-foreground mb-4">Status is nu expliciet: concept en gepland zijn niet zichtbaar, gepubliceerd is live, gearchiveerd blijft bewaard.</p>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</span>
+                      <select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value as NewsStatus)}
+                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                      >
+                        <option value="draft">Concept</option>
+                        <option value="planned">Gepland</option>
+                        <option value="published">Gepubliceerd</option>
+                        <option value="archived">Gearchiveerd</option>
+                      </select>
+                      <span className="mt-1 block text-xs text-muted-foreground">{statusDescription(status)}</span>
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Korte intro / excerpt</span>
+                      <textarea
+                        value={excerpt}
+                        onChange={(e) => setExcerpt(e.target.value)}
+                        rows={3}
+                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                        placeholder="Korte samenvatting voor nieuwskaarten en SEO..."
                       />
                     </label>
                   </div>
-                  <EditorContent editor={editor} />
-                </div>
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <button
+                      onClick={() => upsertNewsPost.mutate("draft")}
+                      disabled={upsertNewsPost.isPending}
+                      className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/50 disabled:opacity-50 transition-colors"
+                    >
+                      {upsertNewsPost.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Opslaan als concept
+                    </button>
+                    <button
+                      onClick={() => upsertNewsPost.mutate(status)}
+                      disabled={upsertNewsPost.isPending}
+                      className="inline-flex items-center gap-2 rounded-md border border-primary/50 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors"
+                    >
+                      <Save className="w-4 h-4" /> Bijwerken
+                    </button>
+                    <button
+                      onClick={publishNewsPost}
+                      disabled={upsertNewsPost.isPending}
+                      className="inline-flex items-center gap-2 rounded-md bg-gradient-racing px-4 py-2 text-sm font-heading font-bold uppercase tracking-wider text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+                    >
+                      <Send className="w-4 h-4" /> Publiceren
+                    </button>
+                    {normalizedSlug && (
+                      <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                        <Eye className="w-4 h-4" /> /news/{normalizedSlug}
+                      </span>
+                    )}
+                  </div>
+                </section>
 
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Hero afbeelding URL</span>
-                    <input value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Hero afbeelding alt</span>
-                    <input value={heroImageAlt} onChange={(e) => setHeroImageAlt(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">SEO titel</span>
-                    <input value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} maxLength={70} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" placeholder="Valt terug op titel" />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Taal</span>
-                    <select value={language} onChange={(e) => setLanguage(e.target.value as "nl" | "en")} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary">
-                      <option value="nl">NL</option>
-                      <option value="en">EN</option>
-                    </select>
-                  </label>
-                  <label className="block md:col-span-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">SEO beschrijving</span>
-                    <textarea value={seoDescription} onChange={(e) => setSeoDescription(e.target.value)} maxLength={160} rows={2} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" placeholder="Valt terug op intro" />
-                  </label>
-                </div>
-
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <button
-                    onClick={() => upsertNewsPost.mutate(status === "published" ? "review" : status)}
-                    disabled={upsertNewsPost.isPending}
-                    className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/50 disabled:opacity-50 transition-colors"
-                  >
-                    {upsertNewsPost.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Concept opslaan
-                  </button>
-                  <button
-                    onClick={publishNewsPost}
-                    disabled={upsertNewsPost.isPending}
-                    className="inline-flex items-center gap-2 rounded-md bg-gradient-racing px-4 py-2 text-sm font-heading font-bold uppercase tracking-wider text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
-                  >
-                    <Send className="w-4 h-4" /> Publiceren
-                  </button>
-                  {normalizedSlug && (
-                    <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                      <Eye className="w-4 h-4" /> /news/{normalizedSlug}
-                    </span>
-                  )}
-                </div>
+                <section className="bg-card border border-border rounded-lg p-5">
+                  <h3 className="font-heading font-bold text-lg mb-4">Metadata & SEO</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Slug</span>
+                      <input
+                        value={slug}
+                        onChange={(e) => setSlug(generateSlug(e.target.value))}
+                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                        placeholder="race-recap-spa-27-mei-2026"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Taal</span>
+                      <select value={language} onChange={(e) => setLanguage(e.target.value as "nl" | "en")} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary">
+                        <option value="nl">NL</option>
+                        <option value="en">EN</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Hero afbeelding URL</span>
+                      <input value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Hero afbeelding alt</span>
+                      <input value={heroImageAlt} onChange={(e) => setHeroImageAlt(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">SEO titel</span>
+                      <input value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} maxLength={70} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" placeholder="Valt terug op titel" />
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">SEO beschrijving</span>
+                      <textarea value={seoDescription} onChange={(e) => setSeoDescription(e.target.value)} maxLength={160} rows={2} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary" placeholder="Valt terug op intro" />
+                    </label>
+                  </div>
+                </section>
               </motion.div>
             </div>
           </div>

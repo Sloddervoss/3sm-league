@@ -42,6 +42,7 @@ export type Database = {
       news_posts: {
         Row: {
           author_id: string | null
+          category: string
           content_html: string
           content_json: Json
           created_at: string
@@ -61,6 +62,7 @@ export type Database = {
         }
         Insert: {
           author_id?: string | null
+          category?: string
           content_html?: string
           content_json?: Json
           created_at?: string
@@ -80,6 +82,7 @@ export type Database = {
         }
         Update: {
           author_id?: string | null
+          category?: string
           content_html?: string
           content_json?: Json
           created_at?: string
