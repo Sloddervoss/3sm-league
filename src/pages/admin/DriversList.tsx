@@ -20,7 +20,7 @@ type AdminUserRole = {
 
 const DriversList = () => {
   const queryClient = useQueryClient();
-  const { user: currentUser, isSuperAdmin: currentIsSuperAdmin } = useAuth();
+  const { user: currentUser, isAdmin: currentIsAdmin, isSuperAdmin: currentIsSuperAdmin } = useAuth();
 
   const { data: profiles, isLoading } = useQuery({
     queryKey: ["admin-all-profiles"],
@@ -46,6 +46,10 @@ const DriversList = () => {
     (userRoles || []).some((r) => r.user_id === userId && r.role === "super_admin");
   const isStewardRole = (userId: string) =>
     (userRoles || []).some((r) => r.user_id === userId && r.role === "moderator");
+  const isEditorRole = (userId: string) =>
+    (userRoles || []).some((r) => r.user_id === userId && r.role === "editor");
+
+  const canManageEditor = currentIsAdmin || currentIsSuperAdmin;
 
   const toggleAdmin = useMutation({
     mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
@@ -71,6 +75,18 @@ const DriversList = () => {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const toggleEditor = useMutation({
+    mutationFn: async ({ userId, grant }: { userId: string; grant: boolean }) => {
+      const fn = grant ? "admin_grant_role" : "admin_revoke_role";
+      const { error } = await supabase.rpc(fn, { target_user_id: userId, target_role: "editor" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-user-roles"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const deleteDriver = useMutation({
     mutationFn: async (userId: string) => {
       const { error } = await supabase.rpc("admin_delete_user", { target_user_id: userId });
@@ -87,22 +103,24 @@ const DriversList = () => {
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_6rem_3rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+      <div className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_6rem_6rem_3rem] gap-3 px-4 py-2.5 bg-secondary/40 text-xs font-bold uppercase tracking-wider text-muted-foreground">
         <span>Driver</span>
         <span>iRacing ID</span>
         <span>iRating</span>
         <span>Safety</span>
         <span>Admin</span>
         <span>Steward</span>
+        <span>Editor</span>
         <span></span>
       </div>
       {profiles?.map((p) => {
         const admin = isAdmin(p.user_id);
         const superAdmin = isSuperAdmin(p.user_id);
         const steward = isStewardRole(p.user_id);
+        const editor = isEditorRole(p.user_id);
         const isMe = p.user_id === currentUser?.id;
         return (
-          <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_6rem_3rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
+          <div key={p.user_id} className="grid grid-cols-[1fr_8rem_6rem_5rem_6rem_6rem_6rem_3rem] gap-3 px-4 py-3 items-center border-b border-border/40 hover:bg-secondary/20 transition-colors">
             <div>
               <div className="font-heading font-bold text-sm flex items-center gap-2">
                 {p.display_name || p.iracing_name || "—"}
@@ -151,6 +169,22 @@ const DriversList = () => {
             ) : (
               <span className={`text-xs px-2 py-1 rounded font-bold ${steward ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" : "text-muted-foreground"}`}>
                 {steward ? "Steward" : "—"}
+              </span>
+            )}
+            {/* Editor rol - onafhankelijk van steward/admin; admins mogen deze beheren */}
+            {superAdmin ? (
+              <span className="text-xs text-muted-foreground">—</span>
+            ) : canManageEditor ? (
+              <button
+                onClick={() => toggleEditor.mutate({ userId: p.user_id, grant: !editor })}
+                disabled={toggleEditor.isPending}
+                className={`text-xs px-2 py-1 rounded font-bold transition-colors ${editor ? "bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30" : "bg-secondary text-muted-foreground border border-border hover:bg-purple-500/10 hover:text-purple-300"}`}
+              >
+                {editor ? "Editor" : "—"}
+              </button>
+            ) : (
+              <span className={`text-xs px-2 py-1 rounded font-bold ${editor ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" : "text-muted-foreground"}`}>
+                {editor ? "Editor" : "—"}
               </span>
             )}
             <button
