@@ -49,18 +49,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const userId = session.user.id;
-    Promise.allSettled([
-      supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
-      supabase.rpc("has_role", { _user_id: userId, _role: "super_admin" }),
-      supabase.rpc("has_role", { _user_id: userId, _role: "moderator" }),
-      supabase.rpc("has_role", { _user_id: userId, _role: "editor" }),
-    ]).then(([adminRes, superAdminRes, stewardRes, editorRes]) => {
-      if (requestId !== roleRequestRef.current) return;
-      setIsAdmin(adminRes.status === "fulfilled" ? !!adminRes.value.data : false);
-      setIsSuperAdmin(superAdminRes.status === "fulfilled" ? !!superAdminRes.value.data : false);
-      setIsSteward(stewardRes.status === "fulfilled" ? !!stewardRes.value.data : false);
-      setIsEditor(editorRes.status === "fulfilled" ? !!editorRes.value.data : false);
-    });
+    supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .then(({ data, error }) => {
+        if (requestId !== roleRequestRef.current) return;
+
+        if (error) {
+          console.error("Failed to load user roles", error);
+          setIsAdmin(false);
+          setIsSuperAdmin(false);
+          setIsSteward(false);
+          setIsEditor(false);
+          return;
+        }
+
+        const roles = new Set((data || []).map((row) => row.role));
+        setIsAdmin(roles.has("admin"));
+        setIsSuperAdmin(roles.has("super_admin"));
+        setIsSteward(roles.has("moderator"));
+        setIsEditor(roles.has("editor"));
+      });
   };
 
   useEffect(() => {
