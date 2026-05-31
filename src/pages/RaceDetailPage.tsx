@@ -2,7 +2,7 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import { supabase } from "@/integrations/supabase/client";
-import { getRaceDetailStats, type RaceDetailStatsResult } from "@/lib/raceDetailStats";
+import { formatRaceGapDisplay, getRaceDetailStats, type RaceDetailStatsResult } from "@/lib/raceDetailStats";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUp, Car, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, Flag, List, Share2, Sun, Thermometer, Trophy, Zap } from "lucide-react";
 import { useEffect } from "react";
@@ -391,6 +391,7 @@ const RaceDetailPage = () => {
   });
 
   const stats = getRaceDetailStats(results);
+  const leaderLaps = stats.winner?.laps ?? stats.maxLaps;
   const loading = raceLoading || resultsLoading;
   const cars = carCounts(results);
   const carEntries = Object.entries(cars);
@@ -593,7 +594,7 @@ const RaceDetailPage = () => {
                               <span className="text-center"><span className={`inline-flex min-w-12 justify-center rounded-full border px-2 py-0.5 text-xs font-heading font-black ${deltaClass(positionDelta)}`}>{positionDelta == null ? "-" : positionDelta > 0 ? `+${positionDelta}` : String(positionDelta)}</span></span>
                               <span className="text-right text-sm font-mono text-muted-foreground">{driver.best_lap ?? "-"}{driver.best_lap_num ? <span className="block text-[10px] font-sans text-muted-foreground/70">{t("ronde")} {driver.best_lap_num}</span> : null}</span>
                               <span className="text-right text-sm font-mono text-muted-foreground">{driver.avg_lap ?? "-"}</span>
-                              <span className="text-right text-sm font-mono text-muted-foreground">{driver.gap_to_leader ? `+${driver.gap_to_leader}` : driver.position === 1 ? "—" : "-"}</span>
+                              <span className={`text-right text-sm font-mono ${driver.dnf ? "text-red-300" : "text-muted-foreground"}`}>{formatRaceGapDisplay(driver, leaderLaps, { lap: t("ronde"), laps: t("ronden") })}</span>
                               <span className={`text-center text-sm font-heading ${driver.incidents === 0 ? "text-green-400 font-black" : (driver.incidents ?? 0) > 8 ? "text-red-400" : "text-muted-foreground"}`}>{driver.incidents != null ? `${driver.incidents}x` : "-"}</span>
                               <span className="text-center font-heading font-black">
                                 {driver.points ?? "-"}
