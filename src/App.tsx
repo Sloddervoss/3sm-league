@@ -19,6 +19,7 @@ const RaceDetailPage = lazy(() => import("./pages/RaceDetailPage.tsx"));
 const SeasonsPage = lazy(() => import("./pages/SeasonsPage.tsx"));
 const JoinPage = lazy(() => import("./pages/JoinPage.tsx"));
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
+const NewsEditorPage = lazy(() => import("./pages/NewsEditorPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage.tsx"));
@@ -66,6 +67,7 @@ const App = () => (
                   <Route path="/seasons" element={<SeasonsPage />} />
                   <Route path="/meedoen" element={<JoinPage />} />
                   <Route path="/stewards" element={<StewardPage />} />
+                  <Route path="/news-editor" element={<NewsEditorPage />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/admin" element={<AdminPage />} />
                   <Route path="/profile" element={<ProfilePage />} />

@@ -24,13 +24,22 @@ describe("editor role workflow", () => {
     expect(authContext).toContain("setIsEditor");
   });
 
-  it("shows the news/editor profile section only for editors, admins, and super admins", () => {
+  it("shows the news editor as a gated account-menu item, not as profile page content", () => {
+    const navbar = read("src/components/Navbar.tsx");
     const profilePage = read("src/pages/ProfilePage.tsx");
+    const newsEditorPage = read("src/pages/NewsEditorPage.tsx");
+    const app = read("src/App.tsx");
 
-    expect(profilePage).toContain("isSuperAdmin");
-    expect(profilePage).toContain("const canEditNews = isAdmin || isSuperAdmin || isEditor");
-    expect(profilePage).toContain("Nieuws redactie");
-    expect(profilePage).not.toContain("const canEditNews = isAdmin || isSteward");
+    const desktopAccountMenu = navbar.slice(navbar.indexOf("{showAdmin &&"), navbar.indexOf("<button", navbar.indexOf("{showAdmin &&")));
+
+    expect(navbar).toContain("const canEditNews = isAdmin || isSuperAdmin || isEditor");
+    expect(navbar).toContain('to="/news-editor"');
+    expect(desktopAccountMenu.indexOf("Admin")).toBeLessThan(desktopAccountMenu.indexOf("Nieuws redactie"));
+    expect(desktopAccountMenu.indexOf("Nieuws redactie")).toBeLessThan(desktopAccountMenu.indexOf("Stewards"));
+    expect(profilePage).not.toContain("Nieuws redactie");
+    expect(newsEditorPage).toContain("const canEditNews = isAdmin || isSuperAdmin || isEditor");
+    expect(newsEditorPage).not.toContain("isSteward");
+    expect(app).toContain('path="/news-editor"');
   });
 
   it("lets admins manage editor separately from steward/admin in the drivers admin table", () => {
