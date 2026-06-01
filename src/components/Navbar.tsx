@@ -112,7 +112,7 @@ const Navbar = () => {
                 >
                   <span className="flex items-center gap-1.5">
                     <Newspaper className="w-3.5 h-3.5" />
-                    Nieuws redactie
+                    Redactie
                   </span>
                 </Link>
               )}
@@ -202,7 +202,7 @@ const Navbar = () => {
               )}
               {canEditNews && (
                 <Link to="/news-editor" onClick={() => setMobileOpen(false)} className={`flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium ${location.pathname === "/news-editor" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                  <Newspaper className="w-4 h-4" /> Nieuws redactie
+                  <Newspaper className="w-4 h-4" /> Redactie
                 </Link>
               )}
               {canUseStewards && (

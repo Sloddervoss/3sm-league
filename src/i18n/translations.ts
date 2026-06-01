@@ -26,7 +26,7 @@ const exactTranslations: Record<string, string> = {
   Admin: "Admin",
   "Nieuws redactie": "News editor",
   "NIEUWS REDACTIE": "NEWS EDITOR",
-  Redactie: "Editorial",
+  Redactie: "Editor",
   "Nieuws-editor komt hier": "News editor goes here",
   "Deze pagina is alleen zichtbaar voor editors, admins en super-admins. Stewards zonder editorrol zien dit menu-item niet.": "This page is only visible to editors, admins and super admins. Stewards without the editor role do not see this menu item.",
   Concepten: "Drafts",

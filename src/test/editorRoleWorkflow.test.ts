@@ -38,8 +38,9 @@ describe("editor role workflow", () => {
 
     expect(navbar).toContain("const canEditNews = isAdmin || isSuperAdmin || isEditor");
     expect(navbar).toContain('to="/news-editor"');
-    expect(desktopAccountMenu.indexOf("Admin")).toBeLessThan(desktopAccountMenu.indexOf("Nieuws redactie"));
-    expect(desktopAccountMenu.indexOf("Nieuws redactie")).toBeLessThan(desktopAccountMenu.indexOf("Stewards"));
+    expect(desktopAccountMenu.indexOf("Admin")).toBeLessThan(desktopAccountMenu.indexOf("Redactie"));
+    expect(desktopAccountMenu.indexOf("Redactie")).toBeLessThan(desktopAccountMenu.indexOf("Stewards"));
+    expect(navbar).not.toContain("Nieuws redactie");
     expect(profilePage).not.toContain("Nieuws redactie");
     expect(newsEditorPage).toContain("const canEditNews = isAdmin || isSuperAdmin || isEditor");
     expect(newsEditorPage).not.toContain("isSteward");
