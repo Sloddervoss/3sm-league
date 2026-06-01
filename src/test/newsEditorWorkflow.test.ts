@@ -98,36 +98,40 @@ describe("news editor workflow", () => {
     expect(page).toContain("selectedImageAttrs");
   });
 
-  it("keeps aligned images shrink-wrapped so left, center and right positions are visible", () => {
-    const css = read("src/index.css");
-
-    expect(css).toContain(".news-editor-prose .news-image-figure,");
-    expect(css).toContain("width: fit-content;");
-    expect(css).toContain("margin-left: 0;");
-    expect(css).toContain("margin-left: auto;");
-    expect(css).toContain("margin-right: auto;");
-  });
-
-  it("allows multiple resized images on one editor line with quick width presets", () => {
+  it("renders resized images as isolated block figures so they cannot overlap", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
     const css = read("src/index.css");
 
-    expect(css).toContain("display: inline-block;");
-    expect(css).toContain("vertical-align: top;");
+    expect(page).toContain('class: "news-image-block"');
+    expect(page).toContain('wrapper.className = "resizable-image-node news-image-block"');
+    expect(css).toContain("display: block;");
+    expect(css).toContain("clear: both;");
+    expect(css).not.toContain("display: inline-block;");
+    expect(css).not.toContain("vertical-align: top;");
+    expect(css).not.toContain("width: fit-content;");
+  });
+
+  it("keeps width presets on the image itself while block alignment controls the row", () => {
+    const page = read("src/pages/NewsEditorPage.tsx");
+    const css = read("src/index.css");
+
     expect(page).toContain("setImageWidth");
     expect(page).toContain("33%");
     expect(page).toContain("50%");
     expect(page).toContain("100%");
-    expect(page).toContain("wrapper.style.width = currentAttrs.width || \"100%\"");
-    expect(page).toContain("img.style.width = \"100%\"");
+    expect(page).toContain('img.style.width = currentAttrs.width || "100%"');
+    expect(css).toContain(".news-editor-prose .news-image-block[data-align=\"left\"] img");
+    expect(css).toContain(".news-editor-prose .news-image-block[data-align=\"center\"] img");
+    expect(css).toContain(".news-editor-prose .news-image-block[data-align=\"right\"] img");
   });
 
-  it("supports news image uploads into the news-images bucket and insertion at the editor cursor", () => {
+  it("inserts a new uploaded image after a selected image instead of replacing it", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
 
-    expect(page).toContain("uploadNewsImage");
-    expect(page).toContain("news-images");
-    expect(page).toContain("setImage");
+    expect(page).toContain("insertNewsImage");
+    expect(page).toContain("NodeSelection");
+    expect(page).toContain("insertContentAt(insertPos");
+    expect(page).toContain("setNodeSelection(insertPos)");
     expect(page).toContain("hero_image_url");
   });
 });
