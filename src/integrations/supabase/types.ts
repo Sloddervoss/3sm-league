@@ -50,15 +50,19 @@ export type Database = {
           hero_image_alt: string | null
           hero_image_url: string | null
           id: string
+          is_featured: boolean
           language: string
+          last_viewed_at: string | null
           og_image_url: string | null
           published_at: string | null
+          season_id: string | null
           seo_description: string | null
           seo_title: string | null
           slug: string
           status: string
           title: string
           updated_at: string
+          view_count: number
         }
         Insert: {
           author_id?: string | null
@@ -70,15 +74,19 @@ export type Database = {
           hero_image_alt?: string | null
           hero_image_url?: string | null
           id?: string
+          is_featured?: boolean
           language?: string
+          last_viewed_at?: string | null
           og_image_url?: string | null
           published_at?: string | null
+          season_id?: string | null
           seo_description?: string | null
           seo_title?: string | null
           slug: string
           status?: string
           title: string
           updated_at?: string
+          view_count?: number
         }
         Update: {
           author_id?: string | null
@@ -90,15 +98,19 @@ export type Database = {
           hero_image_alt?: string | null
           hero_image_url?: string | null
           id?: string
+          is_featured?: boolean
           language?: string
+          last_viewed_at?: string | null
           og_image_url?: string | null
           published_at?: string | null
+          season_id?: string | null
           seo_description?: string | null
           seo_title?: string | null
           slug?: string
           status?: string
           title?: string
           updated_at?: string
+          view_count?: number
         }
         Relationships: []
       }
