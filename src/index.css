@@ -139,14 +139,6 @@ html {
     transform: translateY(-2px);
   }
 
-  .news-editor-prose .resizable-image-node {
-    position: relative;
-    display: block;
-    max-width: 100%;
-    margin-top: 1.25rem;
-    margin-bottom: 1.25rem;
-  }
-
   .editor-toolbar-group {
     display: inline-flex;
     align-items: center;
@@ -192,11 +184,30 @@ html {
   .news-editor-prose .news-image-figure,
   .news-editor-prose .resizable-image-node {
     position: relative;
-    display: block;
-    clear: both;
-    width: 100%;
+    display: inline-block;
     max-width: 100%;
-    margin: 1.5rem 0;
+    margin: 0 0.75rem 1.5rem 0;
+    vertical-align: top;
+  }
+
+  .news-editor-prose .news-image-block[data-width="33%"],
+  .news-editor-prose .news-image-figure[data-width="33%"],
+  .news-editor-prose .resizable-image-node[data-width="33%"] {
+    width: calc(33.333% - 0.75rem);
+  }
+
+  .news-editor-prose .news-image-block[data-width="50%"],
+  .news-editor-prose .news-image-figure[data-width="50%"],
+  .news-editor-prose .resizable-image-node[data-width="50%"] {
+    width: calc(50% - 0.75rem);
+  }
+
+  .news-editor-prose .news-image-block[data-width="100%"],
+  .news-editor-prose .news-image-figure[data-width="100%"],
+  .news-editor-prose .resizable-image-node[data-width="100%"] {
+    display: block;
+    width: 100%;
+    margin-right: 0;
   }
 
   .news-editor-prose .news-image-block[data-align="left"] img,
@@ -224,9 +235,31 @@ html {
   .news-editor-prose .news-image-figure img,
   .news-editor-prose .resizable-image-node img {
     display: block;
+    width: 100%;
     max-width: 100%;
     height: auto;
     border-radius: 0.75rem;
+  }
+
+  @media (max-width: 640px) {
+    .news-editor-prose .news-image-block[data-width="33%"],
+    .news-editor-prose .news-image-figure[data-width="33%"],
+    .news-editor-prose .resizable-image-node[data-width="33%"],
+    .news-editor-prose .news-image-block[data-width="50%"],
+    .news-editor-prose .news-image-figure[data-width="50%"],
+    .news-editor-prose .resizable-image-node[data-width="50%"] {
+      width: calc(50% - 0.75rem);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .news-editor-prose .news-image-block,
+    .news-editor-prose .news-image-figure,
+    .news-editor-prose .resizable-image-node {
+      display: block;
+      width: 100%;
+      margin-right: 0;
+    }
   }
 
   .news-editor-prose figcaption {

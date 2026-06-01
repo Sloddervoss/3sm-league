@@ -98,20 +98,21 @@ describe("news editor workflow", () => {
     expect(page).toContain("selectedImageAttrs");
   });
 
-  it("renders resized images as isolated block figures so they cannot overlap", () => {
+  it("renders resized images as gallery items whose wrapper controls the width", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
     const css = read("src/index.css");
 
     expect(page).toContain('class: "news-image-block"');
     expect(page).toContain('wrapper.className = "resizable-image-node news-image-block"');
-    expect(css).toContain("display: block;");
-    expect(css).toContain("clear: both;");
-    expect(css).not.toContain("display: inline-block;");
-    expect(css).not.toContain("vertical-align: top;");
+    expect(page).toContain('style: "width: 100%; max-width: 100%; height: auto;"');
+    expect(page).toContain("applyImageWidth");
+    expect(css).toContain("display: inline-block;");
+    expect(css).toContain("vertical-align: top;");
     expect(css).not.toContain("width: fit-content;");
+    expect(css).not.toContain("clear: both;");
   });
 
-  it("keeps width presets on the image itself while block alignment controls the row", () => {
+  it("supports automatic gallery rows for thirds, halves and full-width images", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
     const css = read("src/index.css");
 
@@ -119,10 +120,14 @@ describe("news editor workflow", () => {
     expect(page).toContain("33%");
     expect(page).toContain("50%");
     expect(page).toContain("100%");
-    expect(page).toContain('img.style.width = currentAttrs.width || "100%"');
-    expect(css).toContain(".news-editor-prose .news-image-block[data-align=\"left\"] img");
-    expect(css).toContain(".news-editor-prose .news-image-block[data-align=\"center\"] img");
-    expect(css).toContain(".news-editor-prose .news-image-block[data-align=\"right\"] img");
+    expect(css).toContain('.news-editor-prose .news-image-block[data-width="33%"]');
+    expect(css).toContain("width: calc(33.333% - 0.75rem);");
+    expect(css).toContain('.news-editor-prose .news-image-block[data-width="50%"]');
+    expect(css).toContain("width: calc(50% - 0.75rem);");
+    expect(css).toContain('.news-editor-prose .news-image-block[data-width="100%"]');
+    expect(css).toContain("display: block;");
+    expect(css).toContain("width: 100%;");
+    expect(css).toContain("@media (max-width: 640px)");
   });
 
   it("inserts a new uploaded image after a selected image instead of replacing it", () => {
