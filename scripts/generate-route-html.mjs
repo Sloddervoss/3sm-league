@@ -85,6 +85,22 @@ const routes = [
     ],
   },
   {
+    path: '/news',
+    title: 'Nieuws - 3 Stripe Motorsport',
+    priority: '0.8',
+    description:
+      'Lees het laatste nieuws van 3 Stripe Motorsport: verhalen uit de paddock, raceverslagen en updates van de iRacing league.',
+    h1: '3SM nieuws',
+    intro:
+      'Lees verhalen uit de paddock, raceverslagen en updates van 3 Stripe Motorsport.',
+    links: [
+      ['/calendar', 'Bekijk de racekalender'],
+      ['/results', 'Bekijk uitslagen'],
+      ['/standings', 'Volg de standings'],
+      ['/meedoen', 'Meedoen met 3SM'],
+    ],
+  },
+  {
     path: '/seasons',
     title: 'Seizoenen - 3 Stripe Motorsport',
     priority: '0.8',

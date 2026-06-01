@@ -11,6 +11,7 @@ const navItems = [
   { label: "Coureurs", path: "/drivers", icon: Users },
   { label: "Teams", path: "/teams", icon: Car },
   { label: "Uitslagen", path: "/results", icon: List },
+  { label: "Nieuws", path: "/news", icon: Newspaper },
   { label: "Seizoenen", path: "/seasons", icon: Trophy },
   { label: "Meedoen", path: "/meedoen", icon: UserPlus },
 ];
