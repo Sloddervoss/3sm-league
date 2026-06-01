@@ -38,6 +38,8 @@ type NewsPost = {
   seo_description: string | null;
   status: string;
   language: string;
+  season_id: string | null;
+  is_featured: boolean;
   published_at: string | null;
   updated_at: string;
 };
@@ -241,6 +243,8 @@ const NewsEditorPage = () => {
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
   const [language, setLanguage] = useState<"nl" | "en">("nl");
+  const [seasonId, setSeasonId] = useState("");
+  const [isFeatured, setIsFeatured] = useState(false);
   const [status, setStatus] = useState<NewsStatus>("draft");
   const [, setEditorTick] = useState(0);
 
@@ -279,10 +283,23 @@ const NewsEditorPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("news_posts")
-        .select("id,slug,title,category,excerpt,content_json,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,status,language,published_at,updated_at")
+        .select("id,slug,title,category,excerpt,content_json,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,status,language,season_id,is_featured,published_at,updated_at")
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data || []) as NewsPost[];
+    },
+  });
+
+  const { data: seasons = [] } = useQuery({
+    queryKey: ["news-editor-seasons"],
+    enabled: Boolean(user && canEditNews),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("leagues")
+        .select("id,name,season,status")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; name: string; season: string | null; status: string }>;
     },
   });
 
@@ -308,6 +325,8 @@ const NewsEditorPage = () => {
       setSeoTitle("");
       setSeoDescription("");
       setLanguage("nl");
+      setSeasonId("");
+      setIsFeatured(false);
       setStatus("draft");
       editor.commands.setContent(emptyEditorContent);
       return;
@@ -322,6 +341,8 @@ const NewsEditorPage = () => {
     setSeoTitle(selectedPost.seo_title || "");
     setSeoDescription(selectedPost.seo_description || "");
     setLanguage(selectedPost.language === "en" ? "en" : "nl");
+    setSeasonId(selectedPost.season_id || "");
+    setIsFeatured(Boolean(selectedPost.is_featured));
     setStatus((selectedPost.status as NewsStatus) || "draft");
     editor.commands.setContent((selectedPost.content_json || selectedPost.content_html || emptyEditorContent) as Parameters<typeof editor.commands.setContent>[0]);
   }, [editor, selectedPost, selectedPostId]);
@@ -348,6 +369,8 @@ const NewsEditorPage = () => {
       seo_description: seoDescription.trim() || excerpt.trim() || null,
       status: nextStatus,
       language,
+      season_id: seasonId || null,
+      is_featured: isFeatured,
       author_id: user?.id,
       published_at: nextStatus === "published" ? selectedPost?.published_at ?? new Date().toISOString() : null,
     };
@@ -680,7 +703,21 @@ const NewsEditorPage = () => {
                       </select>
                       <span className="mt-1 block text-xs text-muted-foreground">{statusDescription(status)}</span>
                     </label>
-                    <label className="block md:col-span-2">
+                    <label className="block rounded-lg border border-border bg-background/50 p-3">
+                      <span className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isFeatured}
+                          onChange={(e) => setIsFeatured(e.target.checked)}
+                          className="mt-1 h-4 w-4 accent-primary"
+                        />
+                        <span>
+                          <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Uitlichten op nieuwsoverzicht</span>
+                          <span className="mt-1 block text-xs text-muted-foreground">Editors kiezen hiermee welk artikel groot bovenaan verschijnt. Zonder keuze pakt de site het nieuwste artikel.</span>
+                        </span>
+                      </span>
+                    </label>
+                    <label className="block md:col-span-1">
                       <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Korte intro / excerpt</span>
                       <textarea
                         value={excerpt}
@@ -739,6 +776,13 @@ const NewsEditorPage = () => {
                       <select value={language} onChange={(e) => setLanguage(e.target.value as "nl" | "en")} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary">
                         <option value="nl">NL</option>
                         <option value="en">EN</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Seizoen</span>
+                      <select value={seasonId} onChange={(e) => setSeasonId(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary">
+                        <option value="">Geen seizoen gekoppeld</option>
+                        {seasons.map((season) => <option key={season.id} value={season.id}>{season.season ? `${season.name} ${season.season}` : season.name}</option>)}
                       </select>
                     </label>
                     <label className="block">
