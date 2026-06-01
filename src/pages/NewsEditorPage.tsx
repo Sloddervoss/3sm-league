@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { mergeAttributes } from "@tiptap/core";
+import { NodeSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import ImageExtension from "@tiptap/extension-image";
 import LinkExtension from "@tiptap/extension-link";
@@ -45,6 +46,14 @@ type NewsStatus = "draft" | "planned" | "published" | "archived";
 type NewsCategory = typeof NEWS_CATEGORIES[number];
 type ImageAlignment = "left" | "center" | "right";
 type TextSize = "small" | "normal" | "large";
+type NewsImageAttributes = {
+  src: string;
+  alt: string;
+  title: string;
+  width: "33%" | "50%" | "100%" | string;
+  align: ImageAlignment;
+  caption: string;
+};
 
 const NEWS_CATEGORIES = [
   "Raceverslagen",
@@ -76,13 +85,13 @@ const ResizableImageExtension = ImageExtension.extend({
       },
       width: {
         default: "100%",
-        parseHTML: (element) => element.getAttribute("width") || element.style.width || "100%",
-        renderHTML: (attributes) => ({ width: attributes.width, style: `width: ${attributes.width}; max-width: 100%; height: auto;` }),
+        parseHTML: (element) => element.getAttribute("width") || element.style.width || element.closest("figure")?.getAttribute("data-width") || "100%",
+        renderHTML: () => ({}),
       },
       align: {
         default: "center",
-        parseHTML: (element) => element.getAttribute("data-align") || "center",
-        renderHTML: (attributes) => ({ "data-align": attributes.align }),
+        parseHTML: (element) => element.getAttribute("data-align") || element.closest("figure")?.getAttribute("data-align") || "center",
+        renderHTML: () => ({}),
       },
     };
   },
@@ -92,8 +101,8 @@ const ResizableImageExtension = ImageExtension.extend({
     const { caption, width: _width, style: _style, ...imageAttributes } = HTMLAttributes;
     return [
       "figure",
-      { class: "news-image-figure", "data-align": align, style: `width: ${width}; max-width: 100%;` },
-      ["img", mergeAttributes(imageAttributes, { style: "width: 100%; max-width: 100%; height: auto;" })],
+      { class: "news-image-block", "data-align": align, "data-width": width },
+      ["img", mergeAttributes(imageAttributes, { style: `width: ${width}; max-width: 100%; height: auto;` })],
       caption ? ["figcaption", {}, caption] : ["figcaption", { class: "sr-only" }, ""],
     ];
   },
@@ -101,9 +110,9 @@ const ResizableImageExtension = ImageExtension.extend({
     return ({ node, getPos, editor }) => {
       let currentAttrs = { ...node.attrs };
       const wrapper = document.createElement("figure");
-      wrapper.className = "resizable-image-node";
+      wrapper.className = "resizable-image-node news-image-block";
       wrapper.setAttribute("data-align", currentAttrs.align || "center");
-      wrapper.style.width = currentAttrs.width || "100%";
+      wrapper.setAttribute("data-width", currentAttrs.width || "100%");
       wrapper.style.maxWidth = "100%";
       wrapper.contentEditable = "false";
 
@@ -111,7 +120,7 @@ const ResizableImageExtension = ImageExtension.extend({
       img.src = currentAttrs.src;
       img.alt = currentAttrs.alt || "";
       img.title = currentAttrs.title || "";
-      img.style.width = "100%";
+      img.style.width = currentAttrs.width || "100%";
       img.style.maxWidth = "100%";
       img.style.height = "auto";
       wrapper.appendChild(img);
@@ -138,12 +147,12 @@ const ResizableImageExtension = ImageExtension.extend({
           const onMove = (moveEvent: MouseEvent) => {
             const direction = corner.includes("w") ? -1 : 1;
             const nextWidth = Math.max(180, Math.min(960, startWidth + (moveEvent.clientX - startX) * direction));
-            wrapper.style.width = `${Math.round(nextWidth)}px`;
+            img.style.width = `${Math.round(nextWidth)}px`;
           };
           const onUp = () => {
             document.removeEventListener("mousemove", onMove);
             document.removeEventListener("mouseup", onUp);
-            updateImageAttrs({ width: wrapper.style.width });
+            updateImageAttrs({ width: img.style.width });
           };
           document.addEventListener("mousemove", onMove);
           document.addEventListener("mouseup", onUp);
@@ -159,11 +168,11 @@ const ResizableImageExtension = ImageExtension.extend({
           img.src = currentAttrs.src;
           img.alt = currentAttrs.alt || "";
           img.title = currentAttrs.title || "";
-          wrapper.style.width = currentAttrs.width || "100%";
-          img.style.width = "100%";
+          img.style.width = currentAttrs.width || "100%";
           caption.textContent = currentAttrs.caption || "";
           caption.className = currentAttrs.caption ? "" : "sr-only";
           wrapper.setAttribute("data-align", currentAttrs.align || "center");
+          wrapper.setAttribute("data-width", currentAttrs.width || "100%");
           return true;
         },
       };
@@ -350,6 +359,25 @@ const NewsEditorPage = () => {
 
   const publishNewsPost = () => upsertNewsPost.mutate("published");
 
+  const insertNewsImage = (attrs: NewsImageAttributes) => {
+    if (!editor) return;
+    const { selection } = editor.state;
+    const isImageSelection = selection instanceof NodeSelection && selection.node.type.name === "image";
+
+    if (isImageSelection) {
+      const insertPos = selection.from + selection.node.nodeSize;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(insertPos, { type: "image", attrs })
+        .setNodeSelection(insertPos)
+        .run();
+      return;
+    }
+
+    editor.chain().focus().setImage(attrs as never).run();
+  };
+
   const uploadNewsImage = async (file: File) => {
     if (!file) return;
     const safeName = file.name.toLowerCase().replace(/[^a-z0-9.]+/g, "-");
@@ -357,7 +385,7 @@ const NewsEditorPage = () => {
     const { error } = await supabase.storage.from("news-images").upload(path, file, { upsert: false });
     if (error) throw error;
     const { data: { publicUrl } } = supabase.storage.from("news-images").getPublicUrl(path);
-    editor?.chain().focus().setImage({ src: publicUrl, alt: file.name, title: file.name, width: "100%", align: "center", caption: "" } as never).run();
+    insertNewsImage({ src: publicUrl, alt: file.name, title: file.name, width: "100%", align: "center", caption: "" });
     if (!heroImageUrl) {
       setHeroImageUrl(publicUrl);
       setHeroImageAlt(file.name);
