@@ -119,6 +119,10 @@ const faq = [
     answer: "Join eerst de Discord, maak daarna een profiel aan op de site, vul je iRacing gegevens in, koppel Discord met /koppel en schrijf je via de kalender in voor een race of seizoen.",
   },
   {
+    question: "Kan ik meedoen met deze Nederlandse iRacing community als ik nieuw ben?",
+    answer: "Ja. Begin op Discord, maak een profiel aan en schrijf je in voor races zodra je weet welke klasse en kalender bij je past. Nieuwe coureurs zijn welkom zolang ze clean en fair racen.",
+  },
+  {
     question: "Is 3SM alleen voor Nederlandse coureurs?",
     answer: "Nee. 3SM is begonnen als Nederlandse community en een groot deel van de coureurs is Nederlands, maar iedereen is welkom zolang het doel hetzelfde is: leuk, fair en respectvol racen.",
   },
@@ -212,10 +216,10 @@ const CircuitArtwork = () => (
 
 const JoinPage = () => {
   useEffect(() => {
-    document.title = "Meedoen met 3SM - iRacing League & Community";
-    setMetaTag('meta[name="description"]', "content", "Doe mee met 3 Stripe Motorsport: een iRacing community en league, begonnen in Nederland en open voor iedereen die clean, fair en met plezier wil racen.");
-    setMetaTag('meta[property="og:title"]', "content", "Meedoen met 3 Stripe Motorsport");
-    setMetaTag('meta[property="og:description"]', "content", "Lees hoe je aansluit bij de 3SM iRacing community: Discord joinen, profiel aanmaken, account koppelen en inschrijven voor races.");
+    document.title = "Meedoen met 3SM - iRacing Nederland & Discord Community";
+    setMetaTag('meta[name="description"]', "content", "Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.");
+    setMetaTag('meta[property="og:title"]', "content", "Meedoen met de 3SM iRacing community");
+    setMetaTag('meta[property="og:description"]', "content", "Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league.");
     setMetaTag('meta[property="og:url"]', "content", "https://3stripemotorsport.cc/meedoen/");
     setMetaTag('link[rel="canonical"]', "href", "https://3stripemotorsport.cc/meedoen/");
 
@@ -250,7 +254,7 @@ const JoinPage = () => {
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65 }}>
               <div className="mb-5 flex items-center gap-3">
                 <div className="h-px w-10 bg-gradient-racing" />
-                <span className="text-sm font-black uppercase tracking-[0.24em] text-primary">Meedoen met 3SM</span>
+                <span className="text-sm font-black uppercase tracking-[0.24em] text-primary">Meedoen met de 3SM iRacing community</span>
               </div>
               <h1 className="font-heading text-4xl font-black leading-[0.88] md:text-6xl xl:text-7xl">
                 iRacing community voor
@@ -258,7 +262,7 @@ const JoinPage = () => {
                 <span className="text-gradient-racing">clean racing</span>
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
-                Wil je meedoen met 3 Stripe Motorsport? Hier zie je precies hoe je van nieuwe coureur naar startgrid gaat. 3SM is begonnen in Nederland, maar iedereen is welkom zolang het doel hetzelfde is: leuk, fair en respectvol racen.
+                Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league met kalender, standings en uitslagen.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <a

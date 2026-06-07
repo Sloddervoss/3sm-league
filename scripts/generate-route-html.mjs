@@ -9,15 +9,15 @@ const template = readFileSync(templatePath, 'utf8');
 const routes = [
   {
     path: '/',
-    title: '3 Stripe Motorsport - iRacing League',
+    title: '3 Stripe Motorsport - Nederlandse iRacing League & Community',
     priority: '1.0',
     description:
-      'De officiële 3 Stripe Motorsport sim racing league. Race mee in onze competities, bekijk de kalender, standen, teams, coureurs en uitslagen.',
+      '3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community. Race mee, sluit aan via Discord en bekijk kalender, standings en uitslagen.',
     h1: '3 Stripe Motorsport iRacing League',
     intro:
-      '3 Stripe Motorsport is een iRacing league en sim racing community, begonnen in Nederland en open voor coureurs die clean, fair en met plezier willen racen.',
+      '3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community voor coureurs die clean, fair en met plezier willen racen.',
     links: [
-      ['/meedoen', 'Meedoen met 3SM'],
+      ['/meedoen', 'Meedoen met onze iRacing community'],
       ['/calendar', 'Racekalender bekijken'],
       ['/standings', 'Standings volgen'],
       ['/results', 'Race-uitslagen bekijken'],
@@ -25,13 +25,13 @@ const routes = [
   },
   {
     path: '/meedoen',
-    title: 'Meedoen met 3SM - iRacing League & Community',
+    title: 'Meedoen met 3SM - iRacing Nederland & Discord Community',
     priority: '0.8',
     description:
-      'Doe mee met 3 Stripe Motorsport: een iRacing community en league, begonnen in Nederland en open voor iedereen die clean, fair en met plezier wil racen.',
-    h1: 'Meedoen met 3 Stripe Motorsport',
+      'Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.',
+    h1: 'Meedoen met de 3SM iRacing community',
     intro:
-      'Lees hoe je aansluit bij de 3SM iRacing community, wat je nodig hebt voor je eerste race en hoe Discord, profielkoppeling en race-inschrijvingen werken.',
+      'Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league met kalender, standings en uitslagen.',
     links: [
       ['/calendar', 'Bekijk aankomende races'],
       ['/standings', 'Bekijk het kampioenschap'],

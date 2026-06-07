@@ -35,8 +35,8 @@ const HeroSection = () => {
             </h1>
 
             <p className="text-base md:text-lg text-muted-foreground mb-6 max-w-lg leading-relaxed">
-              De officiele sim racing league. Race mee in onze competities,
-              klim in het klassement en bewijs jezelf op de baan.
+              3 Stripe Motorsport is een Nederlandse iRacing league en sim racing
+              community voor coureurs die clean, fair en met plezier willen racen.
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -70,7 +70,7 @@ const HeroSection = () => {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Meedoen</p>
-                <h2 className="font-heading text-xl font-black leading-tight text-foreground">Word onderdeel van de grid</h2>
+                <h2 className="font-heading text-xl font-black leading-tight text-foreground">Meedoen met onze iRacing community</h2>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                   Bekijk hoe je aansluit bij de iRacing community van 3SM.
                 </p>
