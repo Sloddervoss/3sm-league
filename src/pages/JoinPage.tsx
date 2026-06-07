@@ -24,6 +24,7 @@ import {
 import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
+import { useLanguage } from "@/i18n/useLanguage";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 
@@ -215,11 +216,27 @@ const CircuitArtwork = () => (
 );
 
 const JoinPage = () => {
+  const { language, t } = useLanguage();
+
   useEffect(() => {
-    document.title = "Meedoen met 3SM - iRacing Nederland & Discord Community";
-    setMetaTag('meta[name="description"]', "content", "Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.");
-    setMetaTag('meta[property="og:title"]', "content", "Meedoen met de 3SM iRacing community");
-    setMetaTag('meta[property="og:description"]', "content", "Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league.");
+    const meta = language === "en"
+      ? {
+          title: "Join 3SM - Dutch iRacing & Discord Community",
+          description: "Looking for an iRacing community in the Netherlands? Join 3 Stripe Motorsport: a Dutch iRacing league with Discord, calendar, standings and results.",
+          ogTitle: "Join the 3SM iRacing community",
+          ogDescription: "Looking for an iRacing community in the Netherlands or a Discord where you can race? At 3SM you join a Dutch iRacing league.",
+        }
+      : {
+          title: "Meedoen met 3SM - iRacing Nederland & Discord Community",
+          description: "Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.",
+          ogTitle: "Meedoen met de 3SM iRacing community",
+          ogDescription: "Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league.",
+        };
+
+    document.title = meta.title;
+    setMetaTag('meta[name="description"]', "content", meta.description);
+    setMetaTag('meta[property="og:title"]', "content", meta.ogTitle);
+    setMetaTag('meta[property="og:description"]', "content", meta.ogDescription);
     setMetaTag('meta[property="og:url"]', "content", "https://3stripemotorsport.cc/meedoen/");
     setMetaTag('link[rel="canonical"]', "href", "https://3stripemotorsport.cc/meedoen/");
 
@@ -233,14 +250,14 @@ const JoinPage = () => {
       "@type": "FAQPage",
       mainEntity: faq.map(({ question, answer }) => ({
         "@type": "Question",
-        name: question,
-        acceptedAnswer: { "@type": "Answer", text: answer },
+        name: t(question),
+        acceptedAnswer: { "@type": "Answer", text: t(answer) },
       })),
     });
     document.head.appendChild(script);
 
     return () => document.getElementById(schemaId)?.remove();
-  }, []);
+  }, [language, t]);
 
   return (
     <div className="min-h-screen bg-background">
