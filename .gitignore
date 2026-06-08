@@ -32,5 +32,6 @@ dist-ssr
 bot/.env
 bot/config.json
 bot/sent_notifications.json
+bot/streamers.json
 bot/node_modules/
 bot/.cache/
