@@ -264,8 +264,10 @@ const parseEnvFile = (file) => {
 
 const getSupabaseClient = () => {
   const env = {
-    ...parseEnvFile(new URL('../.env.production.local', import.meta.url).pathname),
+    ...parseEnvFile(new URL('../.env', import.meta.url).pathname),
     ...parseEnvFile(new URL('../.env.local', import.meta.url).pathname),
+    ...parseEnvFile(new URL('../.env.production', import.meta.url).pathname),
+    ...parseEnvFile(new URL('../.env.production.local', import.meta.url).pathname),
     ...process.env,
   };
   const url = env.VITE_SUPABASE_URL;
