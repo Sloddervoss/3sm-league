@@ -216,7 +216,11 @@ const escapeHtml = (value) =>
     .replace(/>/g, '&gt;');
 
 const absoluteUrl = (path) => `${SITE_URL}${path === '/' ? '/' : `${path}/`}`;
-const buildDate = new Date().toISOString().slice(0, 10);
+
+// Sitemap <lastmod> must reflect real page-content changes, not build time.
+// Static route entries intentionally omit lastmod unless that specific page's
+// crawler-facing content was edited. Dynamic routes below use row timestamps.
+const lastmodXml = (route) => route.lastmod ? `\n    <lastmod>${route.lastmod}</lastmod>` : '';
 
 const normalizeSlugInput = (value) =>
   String(value || '')
@@ -499,8 +503,7 @@ const generateSitemap = () => {
   const urls = sitemapRoutes
     .map(
       (route) => `  <url>
-    <loc>${absoluteUrl(route.path)}</loc>
-    <lastmod>${route.lastmod || buildDate}</lastmod>
+    <loc>${absoluteUrl(route.path)}</loc>${lastmodXml(route)}
     <changefreq>${route.changefreq || 'monthly'}</changefreq>
     <priority>${route.priority}</priority>
   </url>`,
