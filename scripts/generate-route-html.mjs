@@ -40,10 +40,10 @@ const routes = [
   },
   {
     path: '/calendar',
-    title: 'Racekalender - 3 Stripe Motorsport',
+    title: 'iRacing racekalender - 3 Stripe Motorsport',
     priority: '0.9',
     description:
-      'Bekijk de 3 Stripe Motorsport racekalender met aankomende iRacing races, circuits, tijden en inschrijfmogelijkheden.',
+      'Bekijk de 3SM iRacing racekalender met aankomende races, circuits, tijden en inschrijven voor 3 Stripe Motorsport.',
     h1: '3SM racekalender',
     intro:
       'De racekalender toont aankomende 3 Stripe Motorsport iRacing races met circuits, raceavonden, inschrijvingen en seizoensplanning.',
@@ -70,10 +70,10 @@ const routes = [
   },
   {
     path: '/results',
-    title: 'Race-uitslagen - 3 Stripe Motorsport',
+    title: 'iRacing race-uitslagen - 3 Stripe Motorsport',
     priority: '0.8',
     description:
-      'Bekijk race-uitslagen van 3 Stripe Motorsport met resultaten, rondes, klasseringen en terugblik op gereden iRacing races.',
+      'Bekijk 3SM race-uitslagen, podiums, klasseringen en terugblik op gereden iRacing races van 3 Stripe Motorsport.',
     h1: '3SM race-uitslagen',
     intro:
       'Bekijk de race-uitslagen van 3 Stripe Motorsport met gereden iRacing races, rondes, circuits, winnaars, podiums en kampioenschapspunten.',
