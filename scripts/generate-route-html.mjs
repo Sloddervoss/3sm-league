@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createClient } from '@supabase/supabase-js';
 
 const SITE_URL = 'https://3stripemotorsport.cc';
 const distDir = new URL('../dist/', import.meta.url).pathname;
@@ -11,6 +12,7 @@ const routes = [
     path: '/',
     title: '3 Stripe Motorsport - Nederlandse iRacing League & Community',
     priority: '1.0',
+    changefreq: 'weekly',
     description:
       '3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community. Race mee, sluit aan via Discord en bekijk kalender, standings en uitslagen.',
     h1: '3 Stripe Motorsport iRacing League',
@@ -27,6 +29,7 @@ const routes = [
     path: '/meedoen',
     title: 'Meedoen met 3SM - iRacing Nederland & Discord Community',
     priority: '0.8',
+    changefreq: 'monthly',
     description:
       'Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.',
     h1: 'Meedoen met de 3SM iRacing community',
@@ -42,6 +45,7 @@ const routes = [
     path: '/calendar',
     title: 'iRacing racekalender - 3 Stripe Motorsport',
     priority: '0.9',
+    changefreq: 'weekly',
     description:
       'Bekijk de 3SM iRacing racekalender met aankomende races, circuits, tijden en inschrijven voor 3 Stripe Motorsport.',
     h1: '3SM racekalender',
@@ -57,6 +61,7 @@ const routes = [
     path: '/standings',
     title: 'Standings - 3 Stripe Motorsport',
     priority: '0.9',
+    changefreq: 'weekly',
     description:
       'Volg de actuele 3 Stripe Motorsport standings, kampioenschapspunten en posities van coureurs in de iRacing competitie.',
     h1: '3SM standings en klassement',
@@ -72,6 +77,7 @@ const routes = [
     path: '/results',
     title: 'iRacing race-uitslagen - 3 Stripe Motorsport',
     priority: '0.8',
+    changefreq: 'weekly',
     description:
       'Bekijk 3SM race-uitslagen, podiums, klasseringen en terugblik op gereden iRacing races van 3 Stripe Motorsport.',
     h1: '3SM race-uitslagen',
@@ -88,6 +94,7 @@ const routes = [
     path: '/news',
     title: 'Nieuws - 3 Stripe Motorsport',
     priority: '0.8',
+    changefreq: 'weekly',
     description:
       'Lees het laatste nieuws van 3 Stripe Motorsport: verhalen uit de paddock, raceverslagen en updates van de iRacing league.',
     h1: '3SM nieuws',
@@ -104,6 +111,7 @@ const routes = [
     path: '/seasons',
     title: 'Seizoenen - 3 Stripe Motorsport',
     priority: '0.8',
+    changefreq: 'monthly',
     description:
       'Ontdek de seizoenen en competities van 3 Stripe Motorsport, inclusief raceplanning, klassen en kampioenschappen.',
     h1: '3SM seizoenen en competities',
@@ -119,6 +127,7 @@ const routes = [
     path: '/drivers',
     title: 'Coureurs - 3 Stripe Motorsport',
     priority: '0.7',
+    changefreq: 'monthly',
     description:
       'Bekijk de coureurs van 3 Stripe Motorsport, hun profielen, teams en prestaties binnen de iRacing league.',
     h1: '3SM coureurs',
@@ -134,6 +143,7 @@ const routes = [
     path: '/teams',
     title: 'Teams - 3 Stripe Motorsport',
     priority: '0.7',
+    changefreq: 'monthly',
     description:
       'Ontdek de teams binnen 3 Stripe Motorsport en zie hoe coureurs samen zichtbaar zijn in de iRacing community.',
     h1: '3SM teams',
@@ -207,6 +217,138 @@ const escapeHtml = (value) =>
 
 const absoluteUrl = (path) => `${SITE_URL}${path === '/' ? '/' : `${path}/`}`;
 const buildDate = new Date().toISOString().slice(0, 10);
+
+const normalizeSlugInput = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const categorySlugMap = new Map([
+  ['Raceverslagen', 'raceverslagen'],
+  ['Race Recaps', 'race-recaps'],
+  ['League Updates', 'league-updates'],
+  ['Interviews', 'interviews'],
+  ['Reviews', 'reviews'],
+  ['Community', 'community'],
+  ['iRacing Nieuws', 'iracing-nieuws'],
+  ['Special Events', 'special-events'],
+]);
+
+const categoryToSlug = (category) => categorySlugMap.get(category) || normalizeSlugInput(category);
+
+const stripHtml = (value) => String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+const truncate = (value, max = 155) => {
+  const clean = stripHtml(value);
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
+};
+
+const parseEnvFile = (file) => {
+  if (!existsSync(file)) return {};
+  return Object.fromEntries(
+    readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#') && line.includes('='))
+      .map((line) => {
+        const index = line.indexOf('=');
+        const key = line.slice(0, index).trim();
+        const value = line.slice(index + 1).trim().replace(/^['"]|['"]$/g, '');
+        return [key, value];
+      }),
+  );
+};
+
+const getSupabaseClient = () => {
+  const env = {
+    ...parseEnvFile(new URL('../.env.production.local', import.meta.url).pathname),
+    ...parseEnvFile(new URL('../.env.local', import.meta.url).pathname),
+    ...process.env,
+  };
+  const url = env.VITE_SUPABASE_URL;
+  const anonKey = env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return null;
+  return createClient(url, anonKey);
+};
+
+const dateOnly = (value) => value ? new Date(value).toISOString().slice(0, 10) : buildDate;
+
+const fetchDynamicRoutes = async () => {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    console.warn('Supabase env ontbreekt; dynamische sitemap-routes worden overgeslagen.');
+    return [];
+  }
+
+  const dynamicRoutes = [];
+
+  const { data: completedRaces, error: raceError } = await supabase
+    .from('races')
+    .select('id,name,track,race_date,updated_at,status,leagues(name,car_class)')
+    .eq('status', 'completed')
+    .order('race_date', { ascending: false })
+    .limit(250);
+
+  if (raceError) {
+    console.warn(`Kon race-detail routes niet ophalen voor sitemap: ${raceError.message}`);
+  } else {
+    for (const race of completedRaces || []) {
+      const raceDate = dateOnly(race.race_date);
+      const track = race.track ? ` op ${race.track}` : '';
+      const carClass = race.leagues?.car_class ? `${race.leagues.car_class} ` : '';
+      dynamicRoutes.push({
+        path: `/results/${race.id}`,
+        title: `${race.name} uitslag - 3 Stripe Motorsport`,
+        priority: '0.6',
+        changefreq: 'monthly',
+        lastmod: dateOnly(race.updated_at || race.race_date),
+        description: truncate(`Bekijk de ${carClass}iRacing race-uitslag van ${race.name}${track} op ${raceDate}: klasseringen, rondes, podium en racegegevens van 3SM.`),
+        h1: `${race.name} race-uitslag`,
+        intro: `Bekijk de race-uitslag van ${race.name}${track}, inclusief klasseringen, rondes en racegegevens.`,
+        links: [
+          ['/results', 'Terug naar race-uitslagen'],
+          ['/standings', 'Bekijk standings'],
+          ['/calendar', 'Bekijk racekalender'],
+        ],
+      });
+    }
+  }
+
+  const { data: publishedPosts, error: newsError } = await supabase
+    .from('news_posts')
+    .select('slug,category,title,excerpt,content_html,seo_title,seo_description,published_at,updated_at,status')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .limit(250);
+
+  if (newsError) {
+    console.warn(`Kon nieuws-routes niet ophalen voor sitemap: ${newsError.message}`);
+  } else {
+    for (const post of publishedPosts || []) {
+      const categorySlug = categoryToSlug(post.category);
+      dynamicRoutes.push({
+        path: `/news/${categorySlug}/${post.slug}`,
+        title: post.seo_title || `${post.title} - 3 Stripe Motorsport`,
+        priority: '0.6',
+        changefreq: 'monthly',
+        lastmod: dateOnly(post.updated_at || post.published_at),
+        description: truncate(post.seo_description || post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.'),
+        h1: post.title,
+        intro: truncate(post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.', 220),
+        links: [
+          ['/news', 'Terug naar nieuws'],
+          ['/calendar', 'Bekijk racekalender'],
+          ['/results', 'Bekijk uitslagen'],
+        ],
+      });
+    }
+  }
+
+  return dynamicRoutes;
+};
 
 const replaceOrInsertMeta = (html, selectorRegex, replacement) => {
   if (selectorRegex.test(html)) return html.replace(selectorRegex, replacement);
@@ -352,11 +494,12 @@ const applyNoindexMeta = (html, path) => {
 };
 
 const generateSitemap = () => {
-  const urls = routes
+  const urls = sitemapRoutes
     .map(
       (route) => `  <url>
     <loc>${absoluteUrl(route.path)}</loc>
-    <lastmod>${buildDate}</lastmod>
+    <lastmod>${route.lastmod || buildDate}</lastmod>
+    <changefreq>${route.changefreq || 'monthly'}</changefreq>
     <priority>${route.priority}</priority>
   </url>`,
     )
@@ -369,7 +512,10 @@ ${urls}
 `;
 };
 
-for (const route of routes) {
+const dynamicRoutes = await fetchDynamicRoutes();
+const sitemapRoutes = [...routes, ...dynamicRoutes];
+
+for (const route of sitemapRoutes) {
   const html = applyRouteMeta(template, route);
   if (route.path === '/') {
     writeFileSync(templatePath, html);
@@ -389,4 +535,4 @@ for (const privatePath of privateRoutes) {
 
 writeFileSync(join(distDir, 'sitemap.xml'), generateSitemap());
 
-console.log(`Generated route-specific HTML and sitemap for ${routes.length} public routes. Added noindex HTML for ${privateRoutes.length} utility routes.`);
+console.log(`Generated route-specific HTML and sitemap for ${sitemapRoutes.length} public routes (${routes.length} static, ${dynamicRoutes.length} dynamic). Added noindex HTML for ${privateRoutes.length} utility routes.`);
