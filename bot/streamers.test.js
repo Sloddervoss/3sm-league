@@ -8,6 +8,7 @@ import {
   titleContains3Stripe,
   buildStreamerSession,
   updateActiveNotifications,
+  buildLiveEmbedPayload,
 } from './streamers.js';
 
 test('normalizeStreamerProfile requires at least one platform name or id', () => {
@@ -111,6 +112,21 @@ test('buildStreamerSession combines multiple live platforms into one session onl
   assert.equal(session.shouldNotify, true);
   assert.deepEqual(session.platforms.map(p => p.platform), ['Twitch', 'Kick']);
   assert.equal(session.key, 'vincent');
+});
+
+test('buildLiveEmbedPayload adds a dynamic support message before platform links', () => {
+  const session = buildStreamerSession(
+    normalizeStreamerProfile({ profiel_naam: 'SmoothieBroers', twitch_naam: 'SmoothieBroers' }),
+    [{ platform: 'Twitch', live: true, title: 'GT3 race | 3stripe practice', url: 'https://twitch.tv/SmoothieBroers' }],
+  );
+
+  const payload = buildLiveEmbedPayload(session);
+
+  assert.equal(payload.title, '🔴 SmoothieBroers is live met 3Stripe!');
+  assert.equal(payload.footer, '3 Stripe Motorsport');
+  assert.match(payload.description, /SmoothieBroers rijdt live voor 3 Stripe Motorsport — kom even supporten in de chat 👊/);
+  assert.match(payload.description, /\*\*Twitch\*\* — \[Kijk live\]\(https:\/\/twitch\.tv\/SmoothieBroers\)/);
+  assert.match(payload.description, /GT3 race \| 3stripe practice/);
 });
 
 test('updateActiveNotifications sends once while live and resets after fully offline', () => {
