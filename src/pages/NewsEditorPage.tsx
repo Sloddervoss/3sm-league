@@ -16,7 +16,7 @@ import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import { motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlignCenter, AlignLeft, AlignRight, Bold, Code2, Eraser, Eye, FileText, Heading1, Heading2, Heading3, Heading4, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Loader2, Minus, Newspaper, Quote, Save, Send, Table2, Trash2 } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Bold, Code2, Eraser, Eye, FileText, Heading1, Heading2, Heading3, Heading4, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Loader2, Minus, Newspaper, Quote, Save, Table2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -227,6 +227,15 @@ const statusDescription = (status: NewsStatus) => {
   }
 };
 
+const statusSaveButtonLabel = (status: NewsStatus) => {
+  switch (status) {
+    case "published": return "Wijzigingen opslaan en live zetten";
+    case "planned": return "Wijzigingen opslaan als gepland";
+    case "archived": return "Wijzigingen opslaan als gearchiveerd";
+    default: return "Wijzigingen opslaan als concept";
+  }
+};
+
 const NewsEditorPage = () => {
   const { user, loading, rolesLoading, isAdmin, isSuperAdmin, isEditor } = useAuth();
   const queryClient = useQueryClient();
@@ -393,12 +402,13 @@ const NewsEditorPage = () => {
       setSlug(saved.slug);
       setStatus(saved.status as NewsStatus);
       queryClient.invalidateQueries({ queryKey: ["news-posts-editor"] });
+      queryClient.invalidateQueries({ queryKey: ["public-news-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["public-news-post"] });
+      queryClient.invalidateQueries({ queryKey: ["related-news-posts"] });
       toast.success(saved.status === "published" ? "Nieuwsbericht gepubliceerd" : "Nieuwsbericht opgeslagen");
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Opslaan mislukt"),
   });
-
-  const publishNewsPost = () => upsertNewsPost.mutate("published");
 
   const insertNewsImage = (attrs: NewsImageAttributes) => {
     if (!editor) return;
@@ -687,19 +697,19 @@ const NewsEditorPage = () => {
 
                 <section className="bg-card border border-border rounded-lg p-5">
                   <h3 className="font-heading font-bold text-lg mb-1">Publicatie</h3>
-                  <p className="text-sm text-muted-foreground mb-4">Status is nu expliciet: concept en gepland zijn niet zichtbaar, gepubliceerd is live, gearchiveerd blijft bewaard.</p>
+                  <p className="text-sm text-muted-foreground mb-4">Kies de gewenste status en sla op. Concept, gepland en gearchiveerd zijn niet zichtbaar; gepubliceerd staat live.</p>
                   <div className="grid gap-4 md:grid-cols-3">
                     <label className="block">
-                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Status na opslaan</span>
                       <select
                         value={status}
                         onChange={(e) => setStatus(e.target.value as NewsStatus)}
                         className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                       >
-                        <option value="draft">Concept</option>
-                        <option value="planned">Gepland</option>
-                        <option value="published">Gepubliceerd</option>
-                        <option value="archived">Gearchiveerd</option>
+                        <option value="draft">Concept — niet zichtbaar</option>
+                        <option value="planned">Gepland — niet zichtbaar</option>
+                        <option value="published">Gepubliceerd — live</option>
+                        <option value="archived">Gearchiveerd — niet zichtbaar</option>
                       </select>
                       <span className="mt-1 block text-xs text-muted-foreground">{statusDescription(status)}</span>
                     </label>
@@ -730,27 +740,16 @@ const NewsEditorPage = () => {
                   </div>
                   <div className="mt-5 flex flex-wrap items-center gap-3">
                     <button
-                      onClick={() => upsertNewsPost.mutate("draft")}
-                      disabled={upsertNewsPost.isPending}
-                      className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/50 disabled:opacity-50 transition-colors"
-                    >
-                      {upsertNewsPost.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      Opslaan als concept
-                    </button>
-                    <button
                       onClick={() => upsertNewsPost.mutate(status)}
-                      disabled={upsertNewsPost.isPending}
-                      className="inline-flex items-center gap-2 rounded-md border border-primary/50 px-4 py-2 text-sm font-bold text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors"
-                    >
-                      <Save className="w-4 h-4" /> Bijwerken
-                    </button>
-                    <button
-                      onClick={publishNewsPost}
                       disabled={upsertNewsPost.isPending}
                       className="inline-flex items-center gap-2 rounded-md bg-gradient-racing px-4 py-2 text-sm font-heading font-bold uppercase tracking-wider text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
                     >
-                      <Send className="w-4 h-4" /> Publiceren
+                      {upsertNewsPost.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      {statusSaveButtonLabel(status)}
                     </button>
+                    <span className={`rounded-full border px-3 py-1 text-xs font-bold ${status === "published" ? "border-orange-500/40 bg-orange-500/10 text-orange-300" : "border-border bg-secondary/40 text-muted-foreground"}`}>
+                      {status === "published" ? "Wordt live na opslaan" : "Blijft verborgen na opslaan"}
+                    </span>
                     {normalizedSlug && (
                       <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                         <Eye className="w-4 h-4" /> /news/{normalizedSlug}

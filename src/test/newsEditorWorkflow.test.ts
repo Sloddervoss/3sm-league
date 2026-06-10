@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { translateText } from "@/i18n/translations";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("news editor workflow", () => {
-  it("uses a Tiptap editor with title, slug, SEO fields, status, save and publish actions", () => {
+  it("uses a Tiptap editor with title, slug, SEO fields, one clear status save action", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
     const pkg = read("package.json");
 
@@ -19,13 +20,16 @@ describe("news editor workflow", () => {
     expect(page).toContain("LinkExtension");
     expect(page).toContain('from("news_posts")');
     expect(page).toContain("upsertNewsPost");
-    expect(page).toContain("publishNewsPost");
+    expect(page).toContain("statusSaveButtonLabel");
     expect(page).toContain("generateSlug");
     expect(page).toContain("SEO titel");
     expect(page).toContain("SEO beschrijving");
-    expect(page).toContain("Opslaan als concept");
-    expect(page).toContain("Publiceren");
-    expect(page).toContain("Bijwerken");
+    expect(page).toContain("Status na opslaan");
+    expect(page).toContain("Wijzigingen opslaan en live zetten");
+    expect(page).toContain("Wijzigingen opslaan als concept");
+    expect(page).not.toContain("publishNewsPost");
+    expect(page).not.toContain("Opslaan als concept");
+    expect(page).not.toContain("Bijwerken");
   });
 
   it("requires editorial categories and stores them for future filtering", () => {
@@ -138,5 +142,37 @@ describe("news editor workflow", () => {
     expect(page).toContain("insertContentAt(insertPos");
     expect(page).toContain("setNodeSelection(insertPos)");
     expect(page).toContain("hero_image_url");
+  });
+
+  it("invalidates public news caches after saving any selected status", () => {
+    const page = read("src/pages/NewsEditorPage.tsx");
+
+    expect(page).toContain('queryClient.invalidateQueries({ queryKey: ["news-posts-editor"] });');
+    expect(page).toContain('queryClient.invalidateQueries({ queryKey: ["public-news-posts"] });');
+    expect(page).toContain('queryClient.invalidateQueries({ queryKey: ["public-news-post"] });');
+    expect(page).toContain('queryClient.invalidateQueries({ queryKey: ["related-news-posts"] });');
+    expect(page).toContain('onClick={() => upsertNewsPost.mutate(status)}');
+    expect(page).toContain('status === "published" ? "Wordt live na opslaan" : "Blijft verborgen na opslaan"');
+  });
+
+  it("keeps simplified publication controls translated in English mode", () => {
+    const labels: Array<[string, string]> = [
+      ["Kies de gewenste status en sla op. Concept, gepland en gearchiveerd zijn niet zichtbaar; gepubliceerd staat live.", "Choose the desired status and save. Draft, scheduled and archived are hidden; published is live."],
+      ["Status na opslaan", "Status after saving"],
+      ["Concept — niet zichtbaar", "Draft — hidden"],
+      ["Gepland — niet zichtbaar", "Scheduled — hidden"],
+      ["Gepubliceerd — live", "Published — live"],
+      ["Gearchiveerd — niet zichtbaar", "Archived — hidden"],
+      ["Wijzigingen opslaan als concept", "Save changes as draft"],
+      ["Wijzigingen opslaan als gepland", "Save changes as scheduled"],
+      ["Wijzigingen opslaan en live zetten", "Save changes and publish"],
+      ["Wijzigingen opslaan als gearchiveerd", "Save changes as archived"],
+      ["Wordt live na opslaan", "Goes live after saving"],
+      ["Blijft verborgen na opslaan", "Stays hidden after saving"],
+    ];
+
+    labels.forEach(([nl, en]) => {
+      expect(translateText(nl, "en")).toBe(en);
+    });
   });
 });
