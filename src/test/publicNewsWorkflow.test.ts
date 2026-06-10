@@ -99,6 +99,20 @@ describe("public news workflow", () => {
     });
   });
 
+  it("can refresh dynamic news SEO routes without rebuilding hashed assets", () => {
+    const generator = read("scripts/generate-route-html.mjs");
+    const refreshScript = read("scripts/refresh-dynamic-seo.mjs");
+    const pkg = read("package.json");
+
+    expect(generator).toContain(".route-html-manifest.json");
+    expect(generator).toContain("cleanupStaleGeneratedRoutes");
+    expect(generator).toContain("dynamicRoutes: dynamicRoutes.map((route) => route.path)");
+    expect(refreshScript).toContain("generate-route-html.mjs");
+    expect(refreshScript).toContain("copyFileSync(join(distDir, 'sitemap.xml'), join(webroot, 'sitemap.xml'))");
+    expect(refreshScript).toContain("rmSync(routeDirectoryPath(stalePath, webroot)");
+    expect(pkg).toContain('"seo:refresh": "node scripts/refresh-dynamic-seo.mjs"');
+  });
+
   it("centralizes category taxonomy, author pages and season metadata for the expanded platform", () => {
     expect(existsSync("src/lib/newsTaxonomy.ts")).toBe(true);
     expect(existsSync("src/pages/NewsAuthorPage.tsx")).toBe(true);
