@@ -280,22 +280,23 @@ const ResultsPage = () => {
           "@type": "ListItem",
           position: index + 1,
           item: {
-            "@type": "SportsEvent",
-            name: race.name,
-            sport: "Sim racing",
-            startDate: race.race_date,
-            location: {
-              "@type": "VirtualLocation",
-              name: race.track,
-            },
-            organizer: {
-              "@type": "SportsOrganization",
+            "@type": "WebPage",
+            name: `${race.name} uitslag`,
+            description: winnerName
+              ? `${race.name} op ${race.track}: winnaar ${winnerName}.`
+              : `${race.name} op ${race.track}: iRacing race-uitslag van 3 Stripe Motorsport.`,
+            url: `${siteUrl}/results/${race.id}/`,
+            isPartOf: {
+              "@type": "WebSite",
               name: "3 Stripe Motorsport",
               url: siteUrl,
             },
-            eventStatus: "https://schema.org/EventCompleted",
-            ...(race.leagues?.name ? { superEvent: { "@type": "SportsEvent", name: race.leagues.name } } : {}),
-            ...(winnerName ? { result: `Winner: ${winnerName}` } : {}),
+            about: {
+              "@type": "SportsOrganization",
+              name: "3 Stripe Motorsport",
+              sport: "Sim racing",
+              url: siteUrl,
+            },
           },
         };
       }),

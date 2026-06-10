@@ -409,35 +409,7 @@ const RaceDetailPage = () => {
   useEffect(() => {
     if (!race) return;
     document.title = `${race.name} uitslag - 3 Stripe Motorsport`;
-
-    const siteUrl = "https://3stripemotorsport.cc";
-    const scriptId = "race-detail-jsonld";
-    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
-    if (!script) {
-      script = document.createElement("script");
-      script.id = scriptId;
-      script.type = "application/ld+json";
-      document.head.appendChild(script);
-    }
-
-    script.textContent = JSON.stringify({
-      "@context": "https://schema.org",
-      "@type": "SportsEvent",
-      name: race.name,
-      sport: "Sim racing",
-      startDate: race.race_date,
-      url: `${siteUrl}/results/${race.id}/`,
-      eventStatus: "https://schema.org/EventCompleted",
-      location: { "@type": "VirtualLocation", name: race.track },
-      organizer: { "@type": "SportsOrganization", name: "3 Stripe Motorsport", url: siteUrl },
-      ...(race.leagues?.name ? { superEvent: { "@type": "SportsEvent", name: race.leagues.name } } : {}),
-      ...(stats.winner?.name ? { result: `Winner: ${stats.winner.name}` } : {}),
-    });
-
-    return () => {
-      document.getElementById(scriptId)?.remove();
-    };
-  }, [race, stats.winner?.name]);
+  }, [race]);
 
   return (
     <div className="min-h-screen bg-background">
