@@ -210,13 +210,15 @@ export async function fetchPlatformStatuses(profile, options = {}) {
 }
 
 export function buildLiveEmbedPayload(session) {
-  const description = session.platforms
+  const platformDescription = session.platforms
     .map(platform => `**${platform.platform}** — [Kijk live](${platform.url})\n${platform.title}`)
     .join('\n\n');
+  const profileName = session.profile.profiel_naam;
+  const description = `${profileName} rijdt live voor 3 Stripe Motorsport — kom even supporten in de chat 👊\n\n${platformDescription}`;
 
   return {
     color: 0xef4444,
-    title: `🔴 ${session.profile.profiel_naam} is live met 3Stripe!`,
+    title: `🔴 ${profileName} is live met 3Stripe!`,
     description,
     footer: '3 Stripe Motorsport',
   };
