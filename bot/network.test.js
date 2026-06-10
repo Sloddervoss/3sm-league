@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import {
   createNetworkHealthTracker,
   createTimeoutFetch,
@@ -54,4 +55,11 @@ test('network health tracker logs first failure, throttles repeats, and logs rec
   assert.equal(logs.length, 3);
   assert.match(logs[0][0], /tijdelijk onbereikbaar/);
   assert.match(logs[2][0], /verbinding hersteld/);
+});
+
+test('bot network health logs stay out of Discord botLog channel', async () => {
+  const indexSource = await fs.readFile(new URL('./index.js', import.meta.url), 'utf8');
+  assert.match(indexSource, /function networkStatusLog\(/);
+  assert.match(indexSource, /log:\s*networkStatusLog/);
+  assert.doesNotMatch(indexSource, /createNetworkHealthTracker\(\{\s*log:\s*botLog/s);
 });
