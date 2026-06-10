@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 
 const SITE_URL = 'https://3stripemotorsport.cc';
 const distDir = new URL('../dist/', import.meta.url).pathname;
 const templatePath = join(distDir, 'index.html');
+const manifestPath = join(distDir, '.route-html-manifest.json');
 const template = readFileSync(templatePath, 'utf8');
 
 const routes = [
@@ -517,7 +518,30 @@ ${urls}
 `;
 };
 
+const routeIndexPath = (routePath, baseDir = distDir) => join(baseDir, routePath.replace(/^\//, ''), 'index.html');
+const routeDirectoryPath = (routePath, baseDir = distDir) => dirname(routeIndexPath(routePath, baseDir));
+
+const readPreviousManifest = () => {
+  if (!existsSync(manifestPath)) return null;
+  try {
+    return JSON.parse(readFileSync(manifestPath, 'utf8'));
+  } catch {
+    return null;
+  }
+};
+
+const cleanupStaleGeneratedRoutes = (previousManifest, nextDynamicRoutes) => {
+  const nextDynamicPaths = new Set(nextDynamicRoutes.map((route) => route.path));
+  for (const stalePath of previousManifest?.dynamicRoutes || []) {
+    if (nextDynamicPaths.has(stalePath)) continue;
+    if (!stalePath.startsWith('/news/') && !stalePath.startsWith('/results/')) continue;
+    rmSync(routeDirectoryPath(stalePath), { recursive: true, force: true });
+  }
+};
+
 const dynamicRoutes = await fetchDynamicRoutes();
+const previousManifest = readPreviousManifest();
+cleanupStaleGeneratedRoutes(previousManifest, dynamicRoutes);
 const sitemapRoutes = [...routes, ...dynamicRoutes];
 
 for (const route of sitemapRoutes) {
@@ -527,17 +551,24 @@ for (const route of sitemapRoutes) {
     continue;
   }
 
-  const routeIndex = join(distDir, route.path.replace(/^\//, ''), 'index.html');
+  const routeIndex = routeIndexPath(route.path);
   mkdirSync(dirname(routeIndex), { recursive: true });
   writeFileSync(routeIndex, html);
 }
 
 for (const privatePath of privateRoutes) {
-  const privateIndex = join(distDir, privatePath.replace(/^\//, ''), 'index.html');
+  const privateIndex = routeIndexPath(privatePath);
   mkdirSync(dirname(privateIndex), { recursive: true });
   writeFileSync(privateIndex, applyNoindexMeta(template, privatePath));
 }
 
 writeFileSync(join(distDir, 'sitemap.xml'), generateSitemap());
+writeFileSync(manifestPath, `${JSON.stringify({
+  generatedAt: new Date().toISOString(),
+  publicRoutes: sitemapRoutes.map((route) => route.path),
+  staticRoutes: routes.map((route) => route.path),
+  dynamicRoutes: dynamicRoutes.map((route) => route.path),
+  privateRoutes,
+}, null, 2)}\n`);
 
 console.log(`Generated route-specific HTML and sitemap for ${sitemapRoutes.length} public routes (${routes.length} static, ${dynamicRoutes.length} dynamic). Added noindex HTML for ${privateRoutes.length} utility routes.`);
