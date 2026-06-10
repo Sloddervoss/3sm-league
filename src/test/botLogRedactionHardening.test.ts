@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { redactSensitiveText } from "../../bot/logging.js";
+import { formatLogArg, redactSensitiveText } from "../../bot/logging.js";
 
 describe("Discord bot log redaction hardening", () => {
   it("redacts configured bot and Supabase secrets from log messages", () => {
@@ -26,5 +26,11 @@ describe("Discord bot log redaction hardening", () => {
       if (previousServiceKey === undefined) delete process.env.SUPABASE_SERVICE_KEY;
       else process.env.SUPABASE_SERVICE_KEY = previousServiceKey;
     }
+  });
+
+  it("formats object log arguments as JSON instead of [object Object]", () => {
+    expect(formatLogArg({ code: "PGRST200", message: "relationship not found" })).toBe(
+      '{"code":"PGRST200","message":"relationship not found"}',
+    );
   });
 });

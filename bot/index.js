@@ -13,7 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRacePosterAttachment } from './racePoster.js';
 import { createResultPosterAttachment } from './resultPoster.js';
-import { redactSensitiveText } from './logging.js';
+import { formatLogArg, redactSensitiveText } from './logging.js';
 import {
   createNetworkHealthTracker,
   createTimeoutFetch,
@@ -78,7 +78,7 @@ const client = new Client({
 
 // ── Bot log helper ────────────────────────────────────────────────────────────
 async function botLog(...args) {
-  const message = redactSensitiveText(args.join(' '));
+  const message = redactSensitiveText(args.map(formatLogArg).join(' '));
   console.log(`[botLog] ${message}`);
   try {
     const cfg = loadConfig();
@@ -95,6 +95,9 @@ function describeError(error) {
   const parts = [];
   if (error.name) parts.push(error.name);
   if (error.message) parts.push(error.message);
+  if (error.code) parts.push(`code: ${error.code}`);
+  if (error.details) parts.push(`details: ${error.details}`);
+  if (error.hint) parts.push(`hint: ${error.hint}`);
 
   const cause = error.cause;
   if (cause) {
@@ -107,7 +110,8 @@ function describeError(error) {
     if (causeParts.length) parts.push(`cause: ${causeParts.join(' ')}`);
   }
 
-  const message = parts.length ? parts.join(' | ') : String(error);
+  let message = parts.length ? parts.join(' | ') : formatLogArg(error);
+  if (message === '{}' || message === '[object Object]') message = Object.prototype.toString.call(error);
   return redactSensitiveText(message);
 }
 
@@ -1331,13 +1335,16 @@ async function checkStewardCorrections() {
 
 // ── Cron: abandon penalties ───────────────────────────────────────────────────
 async function checkAbandonPenalties() {
-  const { data, error } = await supabase
-    .from('penalties')
-    .select('id, race_id, user_id, points_deduction, races(name)')
-    .eq('source', 'abandon')
-    .eq('notified', false)
-    .eq('revoked', false); // nooit sturen als al ingetrokken vóór versturen
-  if (error) { await throttledBotLog(`checkAbandonPenalties:${describeError(error)}`, '[checkAbandonPenalties]', describeError(error)); return; }
+  const { data, error } = await supabaseStep(
+    '[checkAbandonPenalties]',
+    supabase
+      .from('penalties')
+      .select('id, race_id, user_id, points_deduction, races(name)')
+      .eq('source', 'abandon')
+      .eq('notified', false)
+      .eq('revoked', false) // nooit sturen als al ingetrokken vóór versturen
+  );
+  if (error) return;
   if (!data?.length) return;
 
   const channel = await getStewardDecisionsChannel();
@@ -1390,14 +1397,17 @@ async function checkAbandonPenalties() {
 
 // ── Cron: abandon correcties (na misclick undo) ───────────────────────────────
 async function checkAbandonCorrections() {
-  const { data, error } = await supabase
-    .from('penalties')
-    .select('id, race_id, user_id, discord_message_id, races(name)')
-    .eq('source', 'abandon')
-    .eq('revoked', true)
-    .eq('notified', true)
-    .eq('correction_sent', false);
-  if (error) { await throttledBotLog(`checkAbandonCorrections:${describeError(error)}`, '[checkAbandonCorrections]', describeError(error)); return; }
+  const { data, error } = await supabaseStep(
+    '[checkAbandonCorrections]',
+    supabase
+      .from('penalties')
+      .select('id, race_id, user_id, discord_message_id, races(name)')
+      .eq('source', 'abandon')
+      .eq('revoked', true)
+      .eq('notified', true)
+      .eq('correction_sent', false)
+  );
+  if (error) return;
   if (!data?.length) return;
 
   const channel = await getStewardDecisionsChannel();
@@ -1543,14 +1553,14 @@ async function syncTeamRoles(ctx = {}) {
     if (!team.discord_role_id) {
       const existing = guild.roles.cache.find(r => r.name === team.name);
       if (existing) {
-        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+        await existing.edit({ colors: { primaryColor: colorInt }, hoist: true }).catch(() => {});
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
         managedRoleIds.add(existing.id);
         botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
       } else {
         try {
-          const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+          const role = await guild.roles.create({ name: team.name, colors: { primaryColor: colorInt }, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
           await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
           team.discord_role_id = role.id;
           managedRoleIds.add(role.id);
@@ -1562,7 +1572,7 @@ async function syncTeamRoles(ctx = {}) {
       }
     } else {
       const existing = guild.roles.cache.get(team.discord_role_id);
-      if (existing) await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+      if (existing) await existing.edit({ colors: { primaryColor: colorInt }, hoist: true }).catch(() => {});
       managedRoleIds.add(team.discord_role_id);
     }
 
@@ -2450,7 +2460,7 @@ async function doRegistration(interaction, raceId, raceName, action) {
 }
 
 // ── Bot ready ─────────────────────────────────────────────────────────────────
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`[3SM Bot] Online als ${client.user.tag}`);
   setTimeout(() => botLog(`✅ Bot online als **${client.user.tag}**`), 3000);
   for (const [, guild] of client.guilds.cache) {

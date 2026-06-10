@@ -19,3 +19,19 @@ export function redactSensitiveText(input) {
 
   return output;
 }
+
+export function formatLogArg(value) {
+  if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`;
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return String(value);
+
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return Object.prototype.toString.call(value);
+    }
+  }
+
+  return String(value);
+}
