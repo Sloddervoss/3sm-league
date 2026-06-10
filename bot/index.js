@@ -124,8 +124,15 @@ const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
 const DISCORD_LOGIN_TIMEOUT_MS = 60 * 1000;
 
+function networkStatusLog(...args) {
+  const message = redactSensitiveText(args.map(formatLogArg).join(' '));
+  console.warn(`[network] ${message}`);
+}
+
 const networkHealth = createNetworkHealthTracker({
-  log: botLog,
+  // Transient Supabase/API outages are expected during short internet/DNS hiccups.
+  // Keep them in systemd logs for diagnostics, but do not spam the Discord bot-logs channel.
+  log: networkStatusLog,
   throttleMs: NETWORK_ERROR_LOG_THROTTLE_MS,
 });
 
