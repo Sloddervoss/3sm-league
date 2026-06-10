@@ -15,6 +15,12 @@ import { createRacePosterAttachment } from './racePoster.js';
 import { createResultPosterAttachment } from './resultPoster.js';
 import { redactSensitiveText } from './logging.js';
 import {
+  createNetworkHealthTracker,
+  createTimeoutFetch,
+  isTransientNetworkErrorText,
+  parseNetworkTimeoutMs,
+} from './network.js';
+import {
   buildLiveEmbedPayload,
   buildStreamerSession,
   deleteStreamerProfile,
@@ -48,12 +54,18 @@ const DISCORD_BOT_TOKEN = requireEnv('DISCORD_BOT_TOKEN');
 const SITE_URL = requireEnv('SITE_URL').replace(/\/$/, '');
 const ENABLE_RACE_POSTERS = process.env.DISCORD_RACE_POSTERS === 'true';
 const ENABLE_RESULT_POSTERS = process.env.DISCORD_RESULT_POSTERS === 'true';
+const SUPABASE_FETCH_TIMEOUT_MS = parseNetworkTimeoutMs(process.env.SUPABASE_FETCH_TIMEOUT_MS);
 const RACE_SELECT = 'id, name, track, round, race_date, status, race_type, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, car_class)';
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const supabase = createClient(
   SUPABASE_URL,
-  SUPABASE_KEY
+  SUPABASE_KEY,
+  {
+    global: {
+      fetch: createTimeoutFetch({ timeoutMs: SUPABASE_FETCH_TIMEOUT_MS }),
+    },
+  }
 );
 
 // ── Discord client ────────────────────────────────────────────────────────────
@@ -108,6 +120,11 @@ const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
 const DISCORD_LOGIN_TIMEOUT_MS = 60 * 1000;
 
+const networkHealth = createNetworkHealthTracker({
+  log: botLog,
+  throttleMs: NETWORK_ERROR_LOG_THROTTLE_MS,
+});
+
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -125,11 +142,6 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
-function isTransientNetworkErrorText(text) {
-  return /\b(TypeError: )?fetch failed\b/i.test(text)
-    || /\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT)\b/i.test(text);
-}
-
 async function throttledBotLog(key, ...args) {
   const now = Date.now();
   const text = args.join(' ') || key;
@@ -144,7 +156,7 @@ async function throttledBotLog(key, ...args) {
   throttledLogs.set(normalizedKey, now);
 
   if (normalizedKey === 'network:transient-fetch-failed') {
-    await botLog('[network] Tijdelijke fetch/connectie-fout richting Supabase/extern endpoint; vergelijkbare cron-fouten worden 15 minuten onderdrukt.', text);
+    await networkHealth.recordFailure('cron/network', text);
     return;
   }
 
@@ -172,7 +184,10 @@ async function retrySupabase(label, operation, attempts = 3) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const result = await operation();
-      if (!result?.error) return true;
+      if (!result?.error) {
+        await networkHealth.recordSuccess(label);
+        return true;
+      }
       lastError = result.error;
     } catch (e) {
       lastError = e;
@@ -183,6 +198,21 @@ async function retrySupabase(label, operation, attempts = 3) {
 
   await throttledBotLog(`${label}:${describeError(lastError)}`, `${label}: ${describeError(lastError)}`);
   return false;
+}
+
+async function supabaseStep(label, queryPromise) {
+  try {
+    const result = await queryPromise;
+    if (result?.error) {
+      await throttledBotLog(`${label}:${describeError(result.error)}`, `${label} fout:`, describeError(result.error));
+    } else {
+      await networkHealth.recordSuccess(label);
+    }
+    return result;
+  } catch (e) {
+    await throttledBotLog(`${label}:${describeError(e)}`, `${label} fout:`, describeError(e));
+    return { data: null, error: e };
+  }
 }
 
 async function deleteSentMessage(message, label) {
@@ -1492,8 +1522,11 @@ async function syncTeamRoles(ctx = {}) {
   if (!guild) return;
 
   setStep('teams ophalen uit Supabase');
-  const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id');
-  if (teamsError) { await throttledBotLog(`syncTeamRoles:teams:${describeError(teamsError)}`, '[syncTeamRoles] teams fout:', describeError(teamsError)); return; }
+  const { data: teams, error: teamsError } = await supabaseStep(
+    '[syncTeamRoles] teams',
+    supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id')
+  );
+  if (teamsError) return;
   if (!teams?.length) return;
   stats.teams = teams.length;
 
@@ -1650,24 +1683,32 @@ async function syncTeamRoles(ctx = {}) {
 
   // Sync Discord-rollen voor alle gekoppelde leden
   setStep('profiles ophalen uit Supabase');
-  const { data: profiles, error: profilesError } = await supabase
-    .from('profiles').select('user_id, discord_id, iracing_name, display_name')
-    .not('discord_id', 'is', null);
-  if (profilesError) { await throttledBotLog(`syncTeamRoles:profiles:${describeError(profilesError)}`, '[syncTeamRoles] profiles fout:', describeError(profilesError)); return; }
+  const { data: profiles, error: profilesError } = await supabaseStep(
+    '[syncTeamRoles] profiles',
+    supabase
+      .from('profiles').select('user_id, discord_id, iracing_name, display_name')
+      .not('discord_id', 'is', null)
+  );
+  if (profilesError) return;
 
   if (!profiles?.length) return;
   stats.profiles = profiles.length;
 
   setStep('team memberships ophalen uit Supabase');
-  const { data: memberships, error: membershipsError } = await supabase
-    .from('team_memberships').select('user_id, team_id');
-  if (membershipsError) { await throttledBotLog(`syncTeamRoles:memberships:${describeError(membershipsError)}`, '[syncTeamRoles] memberships fout:', describeError(membershipsError)); return; }
+  const { data: memberships, error: membershipsError } = await supabaseStep(
+    '[syncTeamRoles] memberships',
+    supabase.from('team_memberships').select('user_id, team_id')
+  );
+  if (membershipsError) return;
 
   setStep('admin/steward rollen ophalen uit Supabase');
-  const { data: adminRoles, error: adminRolesError } = await supabase
-    .from('user_roles').select('user_id, role')
-    .in('role', ['admin', 'super_admin', 'moderator']);
-  if (adminRolesError) { await throttledBotLog(`syncTeamRoles:roles:${describeError(adminRolesError)}`, '[syncTeamRoles] user_roles fout:', describeError(adminRolesError)); return; }
+  const { data: adminRoles, error: adminRolesError } = await supabaseStep(
+    '[syncTeamRoles] user_roles',
+    supabase
+      .from('user_roles').select('user_id, role')
+      .in('role', ['admin', 'super_admin', 'moderator'])
+  );
+  if (adminRolesError) return;
 
   const syncCfg = loadConfig();
   const teamsById = new Map(teams.map(team => [team.id, team]));
