@@ -269,6 +269,40 @@ html {
     color: hsl(var(--muted-foreground));
   }
 
+  .news-editor-prose p,
+  .news-article-prose p {
+    margin: 0 0 1.1rem;
+    white-space: pre-wrap;
+  }
+
+  .news-editor-prose p:empty,
+  .news-article-prose p:empty {
+    min-height: 1.1rem;
+  }
+
+  .news-editor-prose h2,
+  .news-editor-prose h3,
+  .news-editor-prose h4,
+  .news-article-prose h2,
+  .news-article-prose h3,
+  .news-article-prose h4 {
+    margin-top: 1.6rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .news-editor-prose ul,
+  .news-editor-prose ol,
+  .news-article-prose ul,
+  .news-article-prose ol {
+    margin: 0 0 1.1rem 1.25rem;
+    padding-left: 1rem;
+  }
+
+  .news-editor-prose li,
+  .news-article-prose li {
+    margin: 0.25rem 0;
+  }
+
   .news-editor-prose .resize-handle {
     position: absolute;
     width: 0.85rem;

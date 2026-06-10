@@ -46,6 +46,14 @@ const sanitizeNewsHtml = (html: string) =>
     .replace(/\son[a-z]+=("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
     .replace(/\s(href|src)=(['"])\s*javascript:[^'"]*\2/gi, ' $1="#"');
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const contentContainsImageSrc = (html: string, src: string | null) => {
+  if (!html || !src) return false;
+  const pattern = new RegExp(`<img\\b[^>]*\\ssrc=(['"])${escapeRegExp(src)}\\1`, "i");
+  return pattern.test(html);
+};
+
 const formatNewsDate = (value: string | null) => {
   if (!value) return "Nog niet gepubliceerd";
   return new Date(value).toLocaleDateString("nl-NL", {
@@ -142,6 +150,9 @@ const NewsDetailPage = () => {
       .slice(0, 3);
   }, [isMockPreview, post, relatedPosts]);
 
+  const sanitizedContentHtml = useMemo(() => sanitizeNewsHtml(post?.content_html || ""), [post?.content_html]);
+  const showHeroImage = Boolean(post?.hero_image_url && !contentContainsImageSrc(sanitizedContentHtml, post.hero_image_url));
+
   useEffect(() => {
     if (!post) return;
     const title = post.seo_title || `${post.title} - 3 Stripe Motorsport`;
@@ -197,13 +208,13 @@ const NewsDetailPage = () => {
               </div>
             </section>
 
-            {post.hero_image_url && (
+            {showHeroImage && post.hero_image_url && (
               <section className="py-8"><div className="container mx-auto px-4 max-w-6xl"><img src={post.hero_image_url} alt={post.hero_image_alt || post.title} className="max-h-[620px] w-full rounded-xl border border-border object-cover shadow-xl shadow-black/20" loading="eager" /></div></section>
             )}
 
             <article className="pb-10 pt-4">
               <div className="container mx-auto px-4 max-w-5xl">
-                <div className="news-article-prose prose prose-invert max-w-none rounded-xl border border-border bg-card/70 px-5 py-6 text-[18px] leading-[1.78] md:px-10 md:py-10" dangerouslySetInnerHTML={{ __html: sanitizeNewsHtml(post.content_html) }} />
+                <div className="news-article-prose prose prose-invert max-w-none rounded-xl border border-border bg-card/70 px-5 py-6 text-[18px] leading-[1.78] md:px-10 md:py-10" dangerouslySetInnerHTML={{ __html: sanitizedContentHtml }} />
               </div>
             </article>
 

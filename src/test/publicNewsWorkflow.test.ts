@@ -70,9 +70,15 @@ describe("public news workflow", () => {
     expect(page).toContain("dangerouslySetInnerHTML");
     expect(page).toContain('className="news-article-prose');
     expect(page).toContain("max-w-5xl");
+    expect(page).toContain("contentContainsImageSrc");
+    expect(page).toContain("showHeroImage");
+    expect(page).toContain("sanitizedContentHtml");
     expect(css).toContain(".news-article-prose .news-image-block");
     expect(css).toContain("data-width=\"33%\"");
     expect(css).toContain("width: calc(33.333% - 0.75rem);");
+    expect(css).toContain(".news-article-prose p");
+    expect(css).toContain("white-space: pre-wrap;");
+    expect(css).toContain("margin: 0 0 1.1rem;");
     expect(css).toContain(".news-article-prose table");
   });
 
