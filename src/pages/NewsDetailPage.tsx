@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ChevronLeft, Newspaper, UserRound } from "lucide-react";
+import { CalendarDays, ChevronLeft, Flag, Newspaper, UserRound } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
@@ -27,6 +27,8 @@ type PublicNewsPost = {
   authorAvatarUrl?: string | null;
   season_id?: string | null;
   seasonName?: string | null;
+  race_id?: string | null;
+  raceName?: string | null;
   view_count?: number | null;
   is_featured?: boolean | null;
   published_at: string | null;
@@ -74,6 +76,7 @@ const hydratePostMetadata = async (post: PublicNewsPost | null) => {
   let authorName: string | null = null;
   let authorAvatarUrl: string | null = null;
   let seasonName: string | null = null;
+  let raceName: string | null = null;
 
   if (post.author_id) {
     const { data: profile } = await supabase
@@ -92,7 +95,13 @@ const hydratePostMetadata = async (post: PublicNewsPost | null) => {
     seasonName = item ? (item.season ? `${item.name} ${item.season}` : item.name) : null;
   }
 
-  return { ...post, authorName, authorAvatarUrl, seasonName };
+  if (post.race_id) {
+    const { data: race } = await supabase.from("races").select("id,name,track").eq("id", post.race_id).maybeSingle();
+    const item = race as { name: string; track: string } | null;
+    raceName = item ? `${item.name} — ${item.track}` : null;
+  }
+
+  return { ...post, authorName, authorAvatarUrl, seasonName, raceName };
 };
 
 const NewsDetailPage = () => {
@@ -109,7 +118,7 @@ const NewsDetailPage = () => {
 
       const { data, error } = await supabase
         .from("news_posts")
-        .select("id,slug,title,category,excerpt,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,author_id,season_id,view_count,is_featured,published_at,updated_at")
+        .select("id,slug,title,category,excerpt,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,author_id,season_id,race_id,view_count,is_featured,published_at,updated_at")
         .eq("slug", slug)
         .eq("status", "published")
         .maybeSingle();
@@ -126,7 +135,7 @@ const NewsDetailPage = () => {
       if (!post) return [];
       const { data, error } = await supabase
         .from("news_posts")
-        .select("id,slug,title,category,excerpt,content_html,hero_image_url,hero_image_alt,author_id,season_id,view_count,is_featured,published_at,updated_at")
+        .select("id,slug,title,category,excerpt,content_html,hero_image_url,hero_image_alt,author_id,season_id,race_id,view_count,is_featured,published_at,updated_at")
         .eq("status", "published")
         .neq("id", post.id)
         .order("published_at", { ascending: false, nullsFirst: false })
@@ -215,6 +224,24 @@ const NewsDetailPage = () => {
             <article className="pb-10 pt-4">
               <div className="container mx-auto px-4 max-w-5xl">
                 <div className="news-article-prose prose prose-invert max-w-none rounded-xl border border-border bg-card/70 px-5 py-6 text-[18px] leading-[1.78] md:px-10 md:py-10" dangerouslySetInnerHTML={{ __html: sanitizedContentHtml }} />
+                {post.race_id && (
+                  <div className="mt-6 rounded-xl border border-orange-500/30 bg-gradient-to-r from-orange-500/10 via-card to-card p-5 shadow-lg shadow-black/10">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="mb-1 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">
+                          <Flag className="h-4 w-4" /> Race uitslag
+                        </div>
+                        {post.raceName && <p className="text-sm text-muted-foreground">{post.raceName}</p>}
+                      </div>
+                      <Link
+                        to={`/results/${post.race_id}`}
+                        className="inline-flex items-center justify-center rounded-md bg-orange-500 px-4 py-2 text-sm font-heading font-bold uppercase tracking-wider text-white transition-colors hover:bg-orange-400"
+                      >
+                        Bekijk hier de race uitslag
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
             </article>
 

@@ -39,9 +39,20 @@ type NewsPost = {
   status: string;
   language: string;
   season_id: string | null;
+  race_id: string | null;
   is_featured: boolean;
   published_at: string | null;
   updated_at: string;
+};
+
+type EditorRace = {
+  id: string;
+  name: string;
+  track: string;
+  race_date: string;
+  status: string;
+  league_id: string | null;
+  leagues?: { name: string; season: string | null } | null;
 };
 
 type NewsStatus = "draft" | "planned" | "published" | "archived";
@@ -253,6 +264,7 @@ const NewsEditorPage = () => {
   const [seoDescription, setSeoDescription] = useState("");
   const [language, setLanguage] = useState<"nl" | "en">("nl");
   const [seasonId, setSeasonId] = useState("");
+  const [raceId, setRaceId] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
   const [status, setStatus] = useState<NewsStatus>("draft");
   const [, setEditorTick] = useState(0);
@@ -292,7 +304,7 @@ const NewsEditorPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("news_posts")
-        .select("id,slug,title,category,excerpt,content_json,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,status,language,season_id,is_featured,published_at,updated_at")
+        .select("id,slug,title,category,excerpt,content_json,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,status,language,season_id,race_id,is_featured,published_at,updated_at")
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data || []) as NewsPost[];
@@ -309,6 +321,19 @@ const NewsEditorPage = () => {
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data || []) as Array<{ id: string; name: string; season: string | null; status: string }>;
+    },
+  });
+
+  const { data: races = [] } = useQuery({
+    queryKey: ["news-editor-races"],
+    enabled: Boolean(user && canEditNews),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("races")
+        .select("id,name,track,race_date,status,league_id,leagues(name,season)")
+        .order("race_date", { ascending: false });
+      if (error) throw error;
+      return (data || []) as EditorRace[];
     },
   });
 
@@ -335,6 +360,7 @@ const NewsEditorPage = () => {
       setSeoDescription("");
       setLanguage("nl");
       setSeasonId("");
+      setRaceId("");
       setIsFeatured(false);
       setStatus("draft");
       editor.commands.setContent(emptyEditorContent);
@@ -351,6 +377,7 @@ const NewsEditorPage = () => {
     setSeoDescription(selectedPost.seo_description || "");
     setLanguage(selectedPost.language === "en" ? "en" : "nl");
     setSeasonId(selectedPost.season_id || "");
+    setRaceId(selectedPost.race_id || "");
     setIsFeatured(Boolean(selectedPost.is_featured));
     setStatus((selectedPost.status as NewsStatus) || "draft");
     editor.commands.setContent((selectedPost.content_json || selectedPost.content_html || emptyEditorContent) as Parameters<typeof editor.commands.setContent>[0]);
@@ -379,6 +406,7 @@ const NewsEditorPage = () => {
       status: nextStatus,
       language,
       season_id: seasonId || null,
+      race_id: raceId || null,
       is_featured: isFeatured,
       author_id: user?.id,
       published_at: nextStatus === "published" ? selectedPost?.published_at ?? new Date().toISOString() : null,
@@ -783,6 +811,18 @@ const NewsEditorPage = () => {
                         <option value="">Geen seizoen gekoppeld</option>
                         {seasons.map((season) => <option key={season.id} value={season.id}>{season.season ? `${season.name} ${season.season}` : season.name}</option>)}
                       </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Race uitslag</span>
+                      <select value={raceId} onChange={(e) => setRaceId(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary">
+                        <option value="">Geen race gekoppeld</option>
+                        {races.map((race) => (
+                          <option key={race.id} value={race.id}>
+                            {race.name} — {race.track} — {new Date(race.race_date).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Amsterdam" })}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-xs text-muted-foreground">Alleen gekoppelde artikelen tonen onderaan een knop naar de uitgebreide racepagina.</span>
                     </label>
                     <label className="block">
                       <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Hero afbeelding URL</span>

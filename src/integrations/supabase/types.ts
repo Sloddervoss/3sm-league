@@ -55,6 +55,7 @@ export type Database = {
           last_viewed_at: string | null
           og_image_url: string | null
           published_at: string | null
+          race_id: string | null
           season_id: string | null
           seo_description: string | null
           seo_title: string | null
@@ -79,6 +80,7 @@ export type Database = {
           last_viewed_at?: string | null
           og_image_url?: string | null
           published_at?: string | null
+          race_id?: string | null
           season_id?: string | null
           seo_description?: string | null
           seo_title?: string | null
@@ -103,6 +105,7 @@ export type Database = {
           last_viewed_at?: string | null
           og_image_url?: string | null
           published_at?: string | null
+          race_id?: string | null
           season_id?: string | null
           seo_description?: string | null
           seo_title?: string | null
@@ -112,7 +115,22 @@ export type Database = {
           updated_at?: string
           view_count?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "news_posts_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "news_posts_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "leagues"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       discord_link_codes: {
         Row: {
