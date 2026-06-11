@@ -62,6 +62,9 @@ describe("public news workflow", () => {
     expect(page).toContain("authorName");
     expect(page).toContain("authorSlug");
     expect(page).toContain("season_id");
+    expect(page).toContain("race_id");
+    expect(page).toContain('to={`/results/${post.race_id}`}');
+    expect(page).toContain("Bekijk hier de race uitslag");
     expect(page).toContain("relatedPosts");
     expect(page).toContain("is_featured");
     expect(page).toContain("Gerelateerde artikelen");
@@ -93,6 +96,8 @@ describe("public news workflow", () => {
       'Terug naar nieuws',
       'Lees artikel',
       'Uitgelicht',
+      'Race uitslag',
+      'Bekijk hier de race uitslag',
       'Door',
     ].forEach((phrase) => {
       expect(translations).toContain(phrase);
@@ -130,14 +135,22 @@ describe("public news workflow", () => {
     expect(authorPage).toContain('to={`/news/${categoryToSlug(post.category)}/${post.slug}');
     expect(authorPage).toContain("Alle artikelen van deze auteur");
     expect(editor).toContain("season_id");
+    expect(editor).toContain("race_id");
     expect(editor).toContain("is_featured");
     expect(editor).toContain("Uitlichten op nieuwsoverzicht");
     expect(editor).toContain('from("leagues")');
+    expect(editor).toContain('from("races")');
     expect(editor).toContain("Seizoen");
+    expect(editor).toContain("Race uitslag");
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS season_id UUID");
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS view_count INTEGER");
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS is_featured BOOLEAN");
     expect(migration).toContain("idx_news_posts_is_featured");
     expect(migration).toContain("idx_news_posts_season_id");
+
+    const raceLinkMigration = read("supabase/migrations/20260611120000_news_race_link.sql");
+    expect(raceLinkMigration).toContain("ADD COLUMN IF NOT EXISTS race_id UUID");
+    expect(raceLinkMigration).toContain("REFERENCES public.races(id) ON DELETE SET NULL");
+    expect(raceLinkMigration).toContain("idx_news_posts_race_id");
   });
 });
