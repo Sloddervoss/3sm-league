@@ -362,27 +362,42 @@ const replaceOrInsertMeta = (html, selectorRegex, replacement) => {
   return html.replace('</head>', `    ${replacement}\n  </head>`);
 };
 
+const breadcrumbItem = (position, name, path) => ({
+  '@type': 'ListItem',
+  position,
+  name,
+  item: {
+    '@type': 'WebPage',
+    '@id': absoluteUrl(path),
+    url: absoluteUrl(path),
+    name,
+  },
+});
+
+const breadcrumbItemsForRoute = (route) => {
+  const items = [breadcrumbItem(1, '3 Stripe Motorsport', '/')];
+  if (route.path === '/') return items;
+
+  if (route.path.startsWith('/results/')) {
+    items.push(breadcrumbItem(2, 'Race-uitslagen', '/results'));
+    items.push(breadcrumbItem(3, route.h1, route.path));
+    return items;
+  }
+
+  if (route.path.startsWith('/news/') && route.path !== '/news') {
+    items.push(breadcrumbItem(2, 'Nieuws', '/news'));
+    items.push(breadcrumbItem(3, route.h1, route.path));
+    return items;
+  }
+
+  items.push(breadcrumbItem(2, route.h1, route.path));
+  return items;
+};
+
 const buildBreadcrumbJsonLd = (route) => ({
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
-  itemListElement: [
-    {
-      '@type': 'ListItem',
-      position: 1,
-      name: '3 Stripe Motorsport',
-      item: SITE_URL,
-    },
-    ...(route.path === '/'
-      ? []
-      : [
-          {
-            '@type': 'ListItem',
-            position: 2,
-            name: route.h1,
-            item: absoluteUrl(route.path),
-          },
-        ]),
-  ],
+  itemListElement: breadcrumbItemsForRoute(route),
 });
 
 const buildWebPageJsonLd = (route) => ({
