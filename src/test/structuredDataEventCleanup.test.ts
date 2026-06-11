@@ -28,4 +28,16 @@ describe("structured data event cleanup", () => {
     expect(resultsPage).toContain('"@type": "SportsOrganization"');
     expect(resultsPage).toContain('sport: "Sim racing"');
   });
+
+  it("generates explicit named breadcrumb WebPage items for crawler HTML", () => {
+    const generator = readSource("scripts/generate-route-html.mjs");
+
+    expect(generator).toContain("const breadcrumbItem = (position, name, path) => ({");
+    expect(generator).toContain("'@type': 'WebPage'");
+    expect(generator).toContain("'@id': absoluteUrl(path)");
+    expect(generator).toContain("url: absoluteUrl(path)");
+    expect(generator).toContain("name,");
+    expect(generator).toContain("breadcrumbItem(2, 'Race-uitslagen', '/results')");
+    expect(generator).toContain("breadcrumbItem(2, 'Nieuws', '/news')");
+  });
 });
