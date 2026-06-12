@@ -23,7 +23,8 @@ export function parseNetworkTimeoutMs(value, fallback = DEFAULT_TIMEOUT_MS) {
 export function isTransientNetworkErrorText(text) {
   return /\b(TypeError: )?fetch failed\b/i.test(text)
     || /\b(fetch timeout|TimeoutError|AbortError|aborted)\b/i.test(text)
-    || /\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT)\b/i.test(text);
+    || /\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT)\b/i.test(text)
+    || /\b(Supabase\/PostgREST empty error response|Bad Gateway|Error code 5\d\d|Cloudflare)\b/i.test(text);
 }
 
 export function createTimeoutFetch({ fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {

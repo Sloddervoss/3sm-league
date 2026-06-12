@@ -19,6 +19,8 @@ test('isTransientNetworkErrorText recognises timeout and fetch/network failures'
   assert.equal(isTransientNetworkErrorText('TypeError: fetch failed'), true);
   assert.equal(isTransientNetworkErrorText('TimeoutError: fetch timeout na 25s'), true);
   assert.equal(isTransientNetworkErrorText('cause: ETIMEDOUT api.example.test'), true);
+  assert.equal(isTransientNetworkErrorText('Supabase/PostgREST empty error response (likely upstream 5xx/empty response)'), true);
+  assert.equal(isTransientNetworkErrorText('Cloudflare Error code 502 Bad Gateway'), true);
   assert.equal(isTransientNetworkErrorText('validation failed'), false);
 });
 

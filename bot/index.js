@@ -13,7 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRacePosterAttachment } from './racePoster.js';
 import { createResultPosterAttachment } from './resultPoster.js';
-import { formatLogArg, redactSensitiveText } from './logging.js';
+import { describeError, formatLogArg, redactSensitiveText } from './logging.js';
 import {
   createNetworkHealthTracker,
   createTimeoutFetch,
@@ -86,33 +86,6 @@ async function botLog(...args) {
     const ch = await client.channels.fetch(cfg.bot_logs_channel_id).catch(() => null);
     if (ch) await ch.send(`\`${new Date().toISOString()}\` ${message}`).catch(() => {});
   } catch {}
-}
-
-function describeError(error) {
-  if (!error) return 'Unknown error';
-  if (typeof error === 'string') return error;
-
-  const parts = [];
-  if (error.name) parts.push(error.name);
-  if (error.message) parts.push(error.message);
-  if (error.code) parts.push(`code: ${error.code}`);
-  if (error.details) parts.push(`details: ${error.details}`);
-  if (error.hint) parts.push(`hint: ${error.hint}`);
-
-  const cause = error.cause;
-  if (cause) {
-    const causeParts = [];
-    if (cause.code) causeParts.push(cause.code);
-    if (cause.errno && cause.errno !== cause.code) causeParts.push(cause.errno);
-    if (cause.syscall) causeParts.push(cause.syscall);
-    if (cause.hostname) causeParts.push(cause.hostname);
-    if (cause.message) causeParts.push(cause.message);
-    if (causeParts.length) parts.push(`cause: ${causeParts.join(' ')}`);
-  }
-
-  let message = parts.length ? parts.join(' | ') : formatLogArg(error);
-  if (message === '{}' || message === '[object Object]') message = Object.prototype.toString.call(error);
-  return redactSensitiveText(message);
 }
 
 const runningJobs = new Map();

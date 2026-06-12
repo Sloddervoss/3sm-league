@@ -35,3 +35,34 @@ export function formatLogArg(value) {
 
   return String(value);
 }
+
+export function describeError(error) {
+  if (!error) return 'Unknown error';
+  if (typeof error === 'string') return error;
+
+  const parts = [];
+  if (error.name) parts.push(error.name);
+  if (error.message) parts.push(error.message);
+  if (error.code) parts.push(`code: ${error.code}`);
+  if (error.status) parts.push(`status: ${error.status}`);
+  if (error.statusText) parts.push(`statusText: ${error.statusText}`);
+  if (error.details) parts.push(`details: ${error.details}`);
+  if (error.hint) parts.push(`hint: ${error.hint}`);
+
+  const cause = error.cause;
+  if (cause) {
+    const causeParts = [];
+    if (cause.code) causeParts.push(cause.code);
+    if (cause.errno && cause.errno !== cause.code) causeParts.push(cause.errno);
+    if (cause.syscall) causeParts.push(cause.syscall);
+    if (cause.hostname) causeParts.push(cause.hostname);
+    if (cause.message) causeParts.push(cause.message);
+    if (causeParts.length) parts.push(`cause: ${causeParts.join(' ')}`);
+  }
+
+  let message = parts.length ? parts.join(' | ') : formatLogArg(error);
+  if (message === '{}' || message === '[object Object]' || message === '{"message":""}') {
+    message = 'Supabase/PostgREST empty error response (likely upstream 5xx/empty response)';
+  }
+  return redactSensitiveText(message);
+}
