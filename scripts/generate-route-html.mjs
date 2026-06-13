@@ -435,6 +435,21 @@ const buildJoinFaqJsonLd = () => ({
 const buildJsonLdScript = (id, data) =>
   `<script type="application/ld+json" id="${id}">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
 
+const buildCrawlerLinksHtml = (route) => {
+  if (!route.crawlerLinks?.length) return '';
+
+  const links = route.crawlerLinks
+    .map(([href, label]) => `          <li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`)
+    .join('\n');
+
+  return `<nav aria-label="Gerelateerde 3SM pagina's">
+        <strong>${escapeHtml(route.crawlerLinksLabel || 'Gerelateerde pagina\'s')}</strong>
+        <ul>
+${links}
+        </ul>
+      </nav>`;
+};
+
 const buildRichContent = (route, faq) => {
   const breadcrumb = route.path === '/'
     ? ''
@@ -488,16 +503,19 @@ const applyRouteMeta = (html, route) => {
     `    ${buildJsonLdScript('route-webpage', buildWebPageJsonLd(route))}\n    ${buildJsonLdScript('route-breadcrumb', buildBreadcrumbJsonLd(route))}${extraJsonLd}\n  </head>`,
   );
   out = out.replace(/<noscript>[\s\S]*?<\/noscript>\s*/g, '');
+  const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
+  const noscriptLinks = route.links || [];
+  const noscriptCrawlerLinks = route.crawlerLinks?.length ? buildCrawlerLinksHtml(route) : '';
   const noscript = `<noscript>
     <main>
       <h1>${escapeHtml(route.h1)}</h1>
       <p>${escapeHtml(route.intro)}</p>
       <nav aria-label="Belangrijke 3SM links">
-        <ul>${route.links.map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('')}</ul>
+        <ul>${noscriptLinks.map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('')}</ul>
       </nav>
+      ${noscriptCrawlerLinks}
     </main>
   </noscript>`;
-  const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
   // sr-only div: visible to Googlebot & screen readers, hidden from visual users
   out = out.replace(
     '<div id="root"></div>',
@@ -555,6 +573,51 @@ const cleanupStaleGeneratedRoutes = (previousManifest, nextDynamicRoutes) => {
 };
 
 const dynamicRoutes = await fetchDynamicRoutes();
+const resultDetailRoutes = dynamicRoutes.filter((route) => route.path.startsWith('/results/'));
+const newsDetailRoutes = dynamicRoutes.filter((route) => route.path.startsWith('/news/'));
+const toCrawlerLinks = (items, limit = 60, excludePath = '') => items
+  .filter((item) => item.path !== excludePath)
+  .slice(0, limit)
+  .map((item) => [item.path, item.h1 || item.title]);
+
+const resultsRoute = routes.find((route) => route.path === '/results');
+if (resultsRoute) {
+  resultsRoute.crawlerLinksLabel = 'Recente race-uitslagen';
+  resultsRoute.crawlerLinks = toCrawlerLinks(resultDetailRoutes, 80);
+}
+
+const newsRoute = routes.find((route) => route.path === '/news');
+if (newsRoute) {
+  newsRoute.crawlerLinksLabel = 'Laatste nieuwsartikelen';
+  newsRoute.crawlerLinks = toCrawlerLinks(newsDetailRoutes, 80);
+}
+
+const homeRoute = routes.find((route) => route.path === '/');
+if (homeRoute) {
+  homeRoute.crawlerLinksLabel = 'Laatste 3SM updates';
+  homeRoute.crawlerLinks = [
+    ...toCrawlerLinks(newsDetailRoutes, 5),
+    ...toCrawlerLinks(resultDetailRoutes, 8),
+  ];
+}
+
+for (const route of dynamicRoutes) {
+  if (route.path.startsWith('/results/')) {
+    route.crawlerLinksLabel = 'Andere recente race-uitslagen';
+    route.crawlerLinks = [
+      ['/results', 'Alle race-uitslagen'],
+      ...toCrawlerLinks(resultDetailRoutes, 10, route.path),
+    ];
+  }
+  if (route.path.startsWith('/news/')) {
+    route.crawlerLinksLabel = 'Meer 3SM nieuws';
+    route.crawlerLinks = [
+      ['/news', 'Alle nieuwsartikelen'],
+      ...toCrawlerLinks(newsDetailRoutes, 10, route.path),
+    ];
+  }
+}
+
 const previousManifest = readPreviousManifest();
 cleanupStaleGeneratedRoutes(previousManifest, dynamicRoutes);
 const sitemapRoutes = [...routes, ...dynamicRoutes];
