@@ -3,13 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
 </head>
 <body style="margin:0;padding:0;background:#0d0d0d;font-family:Arial,Helvetica,sans-serif;color:#ffffff">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0d0d0d;padding:40px 20px">
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;max-width:560px;width:100%">
         <tr>
-          <td style="background:#f97316;background:linear-gradient(135deg,#f97316,#fb923c);padding:32px;text-align:center">
+          <td bgcolor="#f97316" style="background-color:#f97316;padding:32px;text-align:center">
             <div style="display:inline-block;background:rgba(0,0,0,0.3);border-radius:8px;padding:8px 14px;margin-bottom:12px">
               <span style="font-size:16px;font-weight:900;color:#fff;letter-spacing:.5px">3SM</span>
             </div>
@@ -24,8 +26,8 @@
             <p style="margin:0 0 24px;color:#aaa;font-size:14px;line-height:1.65">
               Klik op de knop hieronder om in te loggen bij 3 Stripe Motorsport. Deze link is tijdelijk geldig en kan maar één keer gebruikt worden.
             </p>
-            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 22px"><tr><td>
-              <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#f97316;background:linear-gradient(135deg,#f97316,#fb923c);color:#fff;font-size:14px;font-weight:800;text-decoration:none;padding:14px 32px;border-radius:8px;letter-spacing:.4px">INLOGGEN BIJ 3SM</a>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 22px"><tr><td bgcolor="#f97316" style="background-color:#f97316;border-radius:8px">
+              <a href="{{ .ConfirmationURL }}" style="display:inline-block;background-color:#f97316;color:#fff;font-size:14px;font-weight:800;text-decoration:none;padding:14px 32px;border-radius:8px;letter-spacing:.4px">INLOGGEN BIJ 3SM</a>
             </td></tr></table>
             <p style="margin:0;color:#777;font-size:13px;line-height:1.6">
               Je verificatiecode is: <strong style="color:#fff;letter-spacing:1px">{{ .Token }}</strong>
