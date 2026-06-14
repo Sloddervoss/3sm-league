@@ -31,6 +31,7 @@ type UploadBody = {
   tracks?: TrackInput[];
   candidates?: { name: string; owned: boolean }[];
   iracing_cust_id?: string | null;
+  uploader_name?: string | null;
   page_url?: string | null;
   scanned_at?: string;
 };
@@ -52,6 +53,7 @@ Deno.serve(async (req) => {
 
     const tracks = body.tracks || [];
     const iracingCustId = cleanString(body.iracing_cust_id);
+    const uploaderName = cleanString(body.uploader_name);
 
     if (tracks.length === 0) {
       throw new Error("Geen tracks om te uploaden. Scan eerst een iRacing-pagina.");
@@ -76,7 +78,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    // If no member found by iRacing ID, try to match by name from candidates
+    // If no match by iRacing ID, try matching by uploader name
+    if (!memberUserId && uploaderName) {
+      const { data: profileByName, error: nameError } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, iracing_name, iracing_id")
+        .or(`display_name.ilike.%${uploaderName}%,iracing_name.ilike.%${uploaderName}%`)
+        .limit(1);
+
+      if (!nameError && profileByName?.length > 0) {
+        memberUserId = profileByName[0].user_id;
+        memberName = profileByName[0].display_name || profileByName[0].iracing_name || null;
+      }
+    }
+
+    // If no match by uploader name, try matching by candidates (legacy)
     if (!memberUserId && body.candidates?.length) {
       const { data: allProfiles } = await supabase
         .from("profiles")
