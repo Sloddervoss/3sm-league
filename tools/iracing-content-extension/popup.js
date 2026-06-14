@@ -126,6 +126,10 @@ function displayResult(result) {
   ownedCount.textContent = String(exp.ownedTracks?.length || 0);
   custIdDisplay.textContent = exp.iracingCustId || "—";
   userNameDisplay.textContent = exp.uploaderName || "—";
+  // Reset upload UI on fresh scan display
+  uploadStatus.hidden = true;
+  uploadResult.hidden = true;
+  uploadBtn.disabled = false;
 
   if (exp.ownedTracks?.length > 0) {
     showStep("result");
