@@ -338,7 +338,7 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
 
     for (const [index, profile] of linkedProfiles.entries()) {
-      if (index > 0) await sleep(Math.max(MEMBER_DELAY_MS, 1000));
+      if (index > 0) await sleep(MEMBER_DELAY_MS);
       try {
         const races = await getRecentRaces(String(profile.iracing_id), cookie);
         for (const race of races) createdRecords += await upsertRace(serviceClient, profile, race);
