@@ -80,6 +80,7 @@ const App = () => (
                   <Route path="/news-editor" element={<NewsEditorPage />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/admin/track-intelligence" element={<TrackIntelligenceTestPage />} />
                   <Route path="/admin/track-intelligence-test" element={<TrackIntelligenceTestPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/koppel" element={<KoppelPage />} />

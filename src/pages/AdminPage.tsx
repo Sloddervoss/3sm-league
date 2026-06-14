@@ -7,7 +7,7 @@ import { getTrackInfo } from "@/lib/trackData";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import DriversList from "./admin/DriversList";
 import AnnouncementsAdmin from "./admin/AnnouncementsAdmin";
 import PointsAdmin from "./admin/PointsAdmin";
@@ -45,6 +45,7 @@ type AdminOverviewLeague = {
 const AdminPage = () => {
   const { user, isAdmin, loading } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
 
   const [iratingSyncing, setIratingSyncing] = useState(false);
@@ -118,12 +119,13 @@ const AdminPage = () => {
   const nextRace = allRaces?.find((r) => r.status !== "completed");
   const activeLeague = leagues?.find((l) => l.status === "active");
 
-  const tabs: { id: AdminTab; label: string; icon: React.ElementType }[] = [
+  const tabs: { id: AdminTab | "track_intelligence"; label: string; icon: React.ElementType; href?: string }[] = [
     { id: "overview", label: "Dashboard", icon: BarChart2 },
     { id: "seasons", label: "Seizoenen", icon: Trophy },
     { id: "teams", label: "Teams", icon: Car },
     { id: "drivers", label: "Coureurs", icon: Users },
     { id: "results", label: "Resultaten", icon: Upload },
+    { id: "track_intelligence", label: "Track Intelligence", icon: MapPin, href: "/admin/track-intelligence" },
     { id: "points", label: "Punten", icon: Shield },
     { id: "announcements", label: "Aankondigingen", icon: Flag },
   ];
@@ -148,7 +150,13 @@ const AdminPage = () => {
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    if (tab.href) {
+                      navigate(tab.href);
+                      return;
+                    }
+                    setActiveTab(tab.id as AdminTab);
+                  }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
                     activeTab === tab.id ? "bg-gradient-racing text-white" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                   }`}
