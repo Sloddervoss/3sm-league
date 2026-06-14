@@ -301,6 +301,25 @@ const TrackIntelligenceTestPage = () => {
                 {startSync.isPending ? "Sync draait..." : "Start test-sync"}
               </button>
             </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a
+                href="/iracing-content-extension.zip"
+                download
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-border hover:border-accent text-sm transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Download iRacing Content Extension (ZIP)
+              </a>
+              <a
+                href="https://github.com/Sloddervoss/3sm-league/tree/main/tools/iracing-content-extension"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-border hover:border-accent text-sm transition-colors"
+              >
+                <FileJson className="w-4 h-4" />
+                Bekijk broncode op GitHub
+              </a>
+            </div>
             <div className="mt-5 border border-accent/25 bg-accent/5 rounded-lg px-4 py-3 text-sm text-muted-foreground flex gap-2">
               <ShieldCheck className="w-4 h-4 text-accent mt-0.5 shrink-0" />
               <p>Deze test gebruikt bestaande iRacing Customer IDs van members om gereden tracks te analyseren voor kalenderplanning. Er wordt geen wachtwoord van members gevraagd en er wordt geen exacte content ownership geclaimd.</p>
