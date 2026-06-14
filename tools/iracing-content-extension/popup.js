@@ -246,7 +246,7 @@ async function uploadScan() {
 
     uploadStatus.hidden = true;
     uploadResult.hidden = false;
-    uploadSummary.textContent = `${result.created_records} tracks opgeslagen voor ${result.member_name || "jouw profiel"}.`;
+    uploadSummary.textContent = `${result.saved_records ?? result.created_records} tracks opgeslagen/bijgewerkt voor ${result.member_name || "jouw profiel"}.`;
     setStatus("Upload gelukt! Data is toegevoegd aan de Track Intelligence test.", false);
   } catch (error) {
     uploadStatus.hidden = true;

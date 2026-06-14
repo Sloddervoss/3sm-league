@@ -52,12 +52,14 @@ button {
   border-radius: 6px;
   padding: 12px 14px;
   color: #ffffff;
+  background: linear-gradient(135deg, #f97316, #ef4444);
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   margin-bottom: 6px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
 }
 
 button:disabled {
