@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/generate-route-html.mjs",
+    "build": "vite build && node scripts/generate-route-html.mjs && node scripts/zip-extension.mjs",
     "build:dev": "vite build --mode development && node scripts/generate-route-html.mjs",
     "seo:refresh": "node scripts/refresh-dynamic-seo.mjs",
     "indexnow": "node scripts/submit-indexnow.mjs",
