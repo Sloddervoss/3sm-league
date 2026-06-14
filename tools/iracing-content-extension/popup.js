@@ -1,4 +1,4 @@
-const SUPABASE_URL = "https://3stripemotorsport.cc";
+const SUPABASE_URL = "https://api.3stripemotorsport.cc";
 const UPLOAD_FUNCTION = `${SUPABASE_URL}/functions/v1/track-intelligence-upload`;
 const EXTENSION_API_KEY = "RoEbEQBO0zMMbUiZyCsAgCnQ8hB9ad6rAMQgKAAArds";
 
@@ -8,6 +8,7 @@ const TRACKS_PAGE =
   "filter=all&match=any&sort=track_name&tags=purchased&view=table";
 
 const openTracksBtn = document.querySelector("#openTracks");
+const openStandaloneBtn = document.querySelector("#openStandalone");
 const scanCurrentBtn = document.querySelector("#scanCurrent");
 const uploadBtn = document.querySelector("#uploadBtn");
 const copyBtn = document.querySelector("#copyBtn");
@@ -54,9 +55,55 @@ function resetToNavigate() {
   setStatus("");
 }
 
+const isStandalone = new URLSearchParams(location.search).get("standalone") === "1";
+if (isStandalone) {
+  document.body.classList.add("standalone");
+  if (openStandaloneBtn) openStandaloneBtn.hidden = true;
+}
+
 async function getActiveTab() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   return tabs[0];
+}
+
+function isIracingUrl(url = "") {
+  return url.includes("iracing.com");
+}
+
+async function rememberTargetTab(tabId) {
+  if (!tabId) return;
+  try { await chrome.storage.local.set({ targetIracingTabId: tabId }); } catch {}
+}
+
+async function getTargetIracingTab() {
+  const active = await getActiveTab();
+  if (active?.id && isIracingUrl(active.url || "")) {
+    await rememberTargetTab(active.id);
+    return active;
+  }
+
+  try {
+    const { targetIracingTabId } = await chrome.storage.local.get("targetIracingTabId");
+    if (targetIracingTabId) {
+      const tab = await chrome.tabs.get(targetIracingTabId);
+      if (tab?.id && isIracingUrl(tab.url || "")) return tab;
+    }
+  } catch {}
+
+  const tabs = await chrome.tabs.query({
+    currentWindow: true,
+    url: [
+      "https://members-ng.iracing.com/*",
+      "https://members.iracing.com/*",
+      "https://www.iracing.com/*",
+    ],
+  });
+  if (tabs[0]?.id) {
+    await rememberTargetTab(tabs[0].id);
+    return tabs[0];
+  }
+
+  return null;
 }
 
 async function runScanOnTab(tabId) {
@@ -102,11 +149,11 @@ async function scanCurrentPage() {
   setStatus("Scannen...");
 
   try {
-    const tab = await getActiveTab();
-    if (!tab?.id) throw new Error("Geen actieve tab gevonden.");
+    const tab = await getTargetIracingTab();
+    if (!tab?.id) throw new Error("Geen iRacing-tab gevonden. Open eerst de iRacing tracks pagina.");
 
     const url = tab.url || "";
-    if (!url.includes("iracing.com")) {
+    if (!isIracingUrl(url)) {
       setStatus("Dit is geen iRacing-pagina.", true);
       return;
     }
@@ -128,19 +175,21 @@ async function openTracksPage() {
   setStatus("Tracks pagina openen...");
 
   try {
-    const tab = await getActiveTab();
-    if (tab?.id) {
-      await chrome.tabs.update(tab.id, { url: TRACKS_PAGE });
+    const existing = await getTargetIracingTab();
+    let targetTab;
+    if (existing?.id) {
+      targetTab = await chrome.tabs.update(existing.id, { url: TRACKS_PAGE, active: true });
     } else {
-      await chrome.tabs.create({ url: TRACKS_PAGE });
+      targetTab = await chrome.tabs.create({ url: TRACKS_PAGE, active: true });
     }
+    if (targetTab?.id) await rememberTargetTab(targetTab.id);
 
-    // Wacht 7 sec voor SPA laadtijd, scan dan automatisch
+    // Wacht 7 sec voor SPA laadtijd, scan dan automatisch. In vaste-tab modus blijft deze scanner-tab bestaan.
     setTimeout(async () => {
       try {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tabs[0]?.url?.includes("iracing.com")) {
-          const result = await runScanOnTab(tabs[0].id);
+        const target = targetTab?.id ? await chrome.tabs.get(targetTab.id) : await getTargetIracingTab();
+        if (target?.id && isIracingUrl(target.url || "")) {
+          const result = await runScanOnTab(target.id);
           displayResult(result);
           return;
         }
@@ -183,7 +232,13 @@ async function uploadScan() {
       body: JSON.stringify(payload),
     });
 
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      throw new Error(`Server gaf geen JSON terug (${response.status}). Endpoint: ${UPLOAD_FUNCTION}`);
+    }
 
     if (!response.ok || result.error) {
       throw new Error(result.error || `HTTP ${response.status}`);
@@ -241,8 +296,13 @@ async function checkStoredScan() {
   setStatus("Klik 'Open iRacing tracks pagina' om te beginnen.");
 }
 
+async function openStandaloneScanner() {
+  await chrome.tabs.create({ url: chrome.runtime.getURL("popup.html?standalone=1") });
+}
+
 // Event listeners
 openTracksBtn.addEventListener("click", openTracksPage);
+openStandaloneBtn?.addEventListener("click", openStandaloneScanner);
 scanCurrentBtn.addEventListener("click", scanCurrentPage);
 uploadBtn.addEventListener("click", uploadScan);
 copyBtn.addEventListener("click", copyExport);
