@@ -13,6 +13,13 @@
     "street course", "international", "oval", "grand prix",
     "nordschleife", "road course", "speedway",
   ];
+  const GENERIC_TRACK_NAMES = new Set([
+    "circuit", "circuit - medium", "circuit - short", "ev circuit",
+    "international", "national", "oval", "raceway", "roval",
+    "road course", "short", "medium", "long", "touring",
+    "classic", "historic", "full course", "grand prix",
+    "north", "south", "east", "west",
+  ]);
 
   function cleanText(value) {
     return String(value || "")
@@ -28,8 +35,11 @@
 
   function looksLikeTrackName(text) {
     const cleaned = cleanText(text);
-    if (cleaned.length < 4 || cleaned.length > 140) return false;
+    const normalized = cleaned.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+    if (cleaned.length < 8 || cleaned.length > 140) return false;
     if (/^\d+(\.\d+)?$/.test(cleaned)) return false;
+    if (GENERIC_TRACK_NAMES.has(normalized)) return false;
+    if (/^(?:circuit|road course|oval|raceway|roval)\s*-\s*(?:short|medium|long|classic|historic|national|international)$/i.test(cleaned)) return false;
     if (hasAny(cleaned, ["cookie", "privacy", "terms", "login", "password", "sign out", "checking credentials"])) return false;
     return hasAny(cleaned, TRACK_HINTS);
   }

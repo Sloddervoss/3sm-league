@@ -21,6 +21,42 @@ const cleanString = (value: unknown): string | null => {
   return trimmed || null;
 };
 
+const genericTrackNames = new Set([
+  "circuit",
+  "circuit - medium",
+  "circuit - short",
+  "ev circuit",
+  "international",
+  "national",
+  "oval",
+  "raceway",
+  "roval",
+  "road course",
+  "short",
+  "medium",
+  "long",
+  "touring",
+  "classic",
+  "historic",
+  "full course",
+  "grand prix",
+  "north",
+  "south",
+  "east",
+  "west",
+]);
+
+const isUsableTrackName = (value: unknown): boolean => {
+  const trackName = cleanString(value);
+  if (!trackName) return false;
+  const normalized = trackName.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+  if (normalized.length < 8 || normalized.length > 140) return false;
+  if (genericTrackNames.has(normalized)) return false;
+  if (/^\d+(\.\d+)?$/.test(normalized)) return false;
+  if (/^(?:circuit|road course|oval|raceway|roval)\s*-\s*(?:short|medium|long|classic|historic|national|international)$/i.test(trackName)) return false;
+  return true;
+};
+
 type TrackInput = {
   name: string;
   owned?: boolean;
@@ -138,11 +174,16 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString();
     let createdRecords = 0;
     let updatedRecords = 0;
+    let ignoredTracks = 0;
     const errors: string[] = [];
 
     for (const track of tracks) {
       const trackName = cleanString(track.name);
       if (!trackName) continue;
+      if (!isUsableTrackName(trackName)) {
+        ignoredTracks++;
+        continue;
+      }
 
       const normalizedTrackName = trackName.toLowerCase();
       const dedupeKey = `ext:${memberIracingId}:${normalizedTrackName}`;
@@ -216,6 +257,7 @@ Deno.serve(async (req) => {
         member_id: memberUserId,
         iracing_cust_id: memberIracingId,
         tracks_found: tracks.length,
+        ignored_tracks: ignoredTracks,
         created_records: createdRecords,
         updated_records: updatedRecords,
         saved_records: savedRecords,
