@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, FileJson, Flag, History, Lock, Play, Search, ShieldCheck, Timer, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarDays, Download, FileJson, Flag, History, Lock, Play, Search, ShieldCheck, Timer, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -150,6 +150,27 @@ const TrackIntelligenceTestPage = () => {
     return matchesSource && matchesSearch;
   }), [insights, search, sourceFilter]);
 
+  const recommendedSeason = useMemo(() => insights.slice(0, 13), [insights]);
+  const topTenTracks = useMemo(() => insights.slice(0, 10), [insights]);
+  const maxTrackMembers = topTenTracks[0]?.uniqueMemberCount || 1;
+  const highReliabilityCount = insights.filter((track) => track.reliability === "Hoog").length;
+  const mediumReliabilityCount = insights.filter((track) => track.reliability === "Middel").length;
+  const extensionScanRows = historyRows.filter((row) => row.source === "extension_scan").length;
+  const sourceCounts = useMemo(() => {
+    const counts: Record<TrackIntelligenceSource, number> = {
+      iracing_recent_races: 0,
+      site_result_json: 0,
+      extension_scan: 0,
+    };
+    historyRows.forEach((row) => {
+      counts[row.source] = (counts[row.source] || 0) + 1;
+    });
+    return counts;
+  }, [historyRows]);
+  const averageSeasonCoverage = recommendedSeason.length
+    ? Math.round((recommendedSeason.reduce((sum, track) => sum + track.percentage, 0) / recommendedSeason.length) * 10) / 10
+    : 0;
+
   const lastRun = runs[0];
   const lastRunErrors = lastRun?.members_failed ?? (lastRun?.error_summary ? 1 : 0);
   const scannedMembers = lastRun?.members_success ?? 0;
@@ -259,6 +280,28 @@ const TrackIntelligenceTestPage = () => {
     URL.revokeObjectURL(url);
   };
 
+  const exportSeasonCsv = () => {
+    const rows = [
+      ["Week", "Track", "Aantal members", "Percentage", "Betrouwbaarheid", "Bronnen"],
+      ...recommendedSeason.map((track, index) => [
+        String(index + 1),
+        track.trackName,
+        String(track.uniqueMemberCount),
+        `${track.percentage}%`,
+        track.reliability,
+        track.sources.map((source) => sourceLabels[source]).join(" + "),
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `3sm-13-week-track-shortlist-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) return null;
   if (!user) return <Navigate to="/auth" />;
   if (!isAdmin) {
@@ -304,7 +347,7 @@ const TrackIntelligenceTestPage = () => {
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
               <a
-                href="/iracing-content-extension.zip?v=0.4.0"
+                href="/iracing-content-extension.zip?v=0.5.0"
                 download
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-border hover:border-accent text-sm transition-colors"
               >
@@ -348,6 +391,115 @@ const TrackIntelligenceTestPage = () => {
               </div>
             ))}
           </div>
+
+          {historyRows.length > 0 && (
+            <div className="grid xl:grid-cols-[1.15fr_0.85fr] gap-6 mb-8">
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="p-5 border-b border-border flex flex-col md:flex-row md:items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-accent uppercase tracking-[0.16em] text-xs font-black mb-2">
+                      <CalendarDays className="w-4 h-4" /> 13 weken shortlist
+                    </div>
+                    <h2 className="font-heading text-2xl font-black uppercase">Seizoenadvies op basis van member-dekking</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Startpunt voor kalenderplanning: tracks met de meeste aantoonbaar rijdende members bovenaan. Claimt geen ownership.
+                    </p>
+                  </div>
+                  <button
+                    onClick={exportSeasonCsv}
+                    disabled={!recommendedSeason.length}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-accent/40 bg-accent/10 text-accent hover:bg-accent/15 text-sm disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" /> Export 13 weken
+                  </button>
+                </div>
+                <div className="p-5 grid sm:grid-cols-3 gap-3 border-b border-border bg-background/25">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Gem. dekking top 13</div>
+                    <div className="font-heading text-3xl font-black text-accent tabular-nums">{averageSeasonCoverage}%</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Hoog betrouwbaar</div>
+                    <div className="font-heading text-3xl font-black text-green-400 tabular-nums">{recommendedSeason.filter((track) => track.reliability === "Hoog").length}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Beschikbaar voor schema</div>
+                    <div className="font-heading text-3xl font-black tabular-nums">{recommendedSeason.length}/13</div>
+                  </div>
+                </div>
+                <div className="divide-y divide-border/70">
+                  {recommendedSeason.map((track, index) => (
+                    <div key={`${track.trackId || track.trackName}-season`} className="grid grid-cols-[3.5rem_1fr_5.5rem] gap-3 px-4 py-3 items-center hover:bg-secondary/20">
+                      <div className="w-9 h-9 rounded-full bg-accent/10 border border-accent/30 text-accent font-heading font-black flex items-center justify-center">W{index + 1}</div>
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate">{track.trackName}</div>
+                        <div className="mt-1 h-2 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-accent to-orange-300" style={{ width: `${Math.min(track.percentage, 100)}%` }} />
+                        </div>
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          {track.uniqueMemberCount} members · {track.percentage}% · {track.sources.map((source) => sourceLabels[source]).join(" + ")}
+                        </div>
+                      </div>
+                      <div className={track.reliability === "Hoog" ? "text-green-400 text-sm font-bold" : track.reliability === "Middel" ? "text-yellow-400 text-sm font-bold" : "text-muted-foreground text-sm font-bold"}>{track.reliability}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-card border border-border rounded-xl p-5">
+                  <div className="flex items-center gap-2 text-accent uppercase tracking-[0.16em] text-xs font-black mb-2">
+                    <BarChart3 className="w-4 h-4" /> Trackdekking top 10
+                  </div>
+                  <div className="space-y-3">
+                    {topTenTracks.map((track, index) => (
+                      <div key={`${track.trackId || track.trackName}-bar`}>
+                        <div className="flex justify-between gap-3 text-sm mb-1">
+                          <span className="truncate"><span className="text-muted-foreground tabular-nums mr-2">#{index + 1}</span>{track.trackName}</span>
+                          <span className="text-muted-foreground tabular-nums shrink-0">{track.uniqueMemberCount}/{linkedProfiles.length}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full bg-accent" style={{ width: `${Math.max(6, (track.uniqueMemberCount / maxTrackMembers) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-card border border-border rounded-xl p-5">
+                  <div className="flex items-center gap-2 text-accent uppercase tracking-[0.16em] text-xs font-black mb-3">
+                    <Trophy className="w-4 h-4" /> Datakwaliteit
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-border bg-background/40 p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Hoog / middel betrouwbaar</div>
+                      <div className="font-heading text-2xl font-black">{highReliabilityCount + mediumReliabilityCount}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background/40 p-3">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Extensie records</div>
+                      <div className="font-heading text-2xl font-black">{extensionScanRows}</div>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {(Object.keys(sourceCounts) as TrackIntelligenceSource[]).map((source) => {
+                      const totalRows = Math.max(historyRows.length, 1);
+                      const width = Math.round((sourceCounts[source] / totalRows) * 100);
+                      return (
+                        <div key={source}>
+                          <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                            <span>{sourceLabels[source]}</span><span>{sourceCounts[source]}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                            <div className="h-full bg-accent/80" style={{ width: `${width}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="p-4 border-b border-border flex flex-col lg:flex-row lg:items-center justify-between gap-3">
