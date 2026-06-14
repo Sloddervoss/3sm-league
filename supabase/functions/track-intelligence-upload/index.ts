@@ -32,6 +32,7 @@ const genericTrackNames = new Set([
   "raceway",
   "roval",
   "road course",
+  "rallycross",
   "short",
   "medium",
   "long",
@@ -54,6 +55,7 @@ const isUsableTrackName = (value: unknown): boolean => {
   if (genericTrackNames.has(normalized)) return false;
   if (/^\d+(\.\d+)?$/.test(normalized)) return false;
   if (/^(?:circuit|road course|oval|raceway|roval)\s*-\s*(?:short|medium|long|classic|historic|national|international)$/i.test(trackName)) return false;
+  if (/^(?:oval\s*-\s*(?:left turning|right turning|\d{4})|roval\s+\d{4})$/i.test(trackName)) return false;
   return true;
 };
 
