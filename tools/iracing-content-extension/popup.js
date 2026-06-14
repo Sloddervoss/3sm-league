@@ -23,6 +23,7 @@ const statusText = document.querySelector("#status");
 const exportText = document.querySelector("#exportText");
 const ownedCount = document.querySelector("#ownedCount");
 const custIdDisplay = document.querySelector("#custIdDisplay");
+const userNameDisplay = document.querySelector("#userNameDisplay");
 const uploadStatus = document.querySelector("#uploadStatus");
 const uploadMessage = document.querySelector("#uploadMessage");
 const uploadResult = document.querySelector("#uploadResult");
@@ -77,6 +78,7 @@ function displayResult(result) {
   exportText.value = JSON.stringify(exp, null, 2);
   ownedCount.textContent = String(exp.ownedTracks?.length || 0);
   custIdDisplay.textContent = exp.iracingCustId || "—";
+  userNameDisplay.textContent = exp.uploaderName || "—";
 
   if (exp.ownedTracks?.length > 0) {
     showStep("result");
@@ -170,6 +172,7 @@ async function uploadScan() {
       tracks: (exp.ownedTracks || []).map((name) => ({ name })),
       candidates: (exp.candidates || []).map((c) => ({ name: c.name, owned: c.owned })),
       iracing_cust_id: exp.iracingCustId || null,
+      uploader_name: exp.uploaderName || null,
       page_url: exp.pageUrl || null,
       scanned_at: exp.scannedAt || new Date().toISOString(),
     };

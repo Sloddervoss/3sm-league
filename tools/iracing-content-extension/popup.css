@@ -46,12 +46,12 @@ button {
   width: 100%;
   border: 0;
   border-radius: 6px;
-  padding: 10px 12px;
-  color: white;
+  padding: 12px 14px;
+  color: #ffffff;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   margin-bottom: 6px;
 }
@@ -65,13 +65,16 @@ button.primary {
 button.secondary {
   background: #27272a;
   color: #f8fafc;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
 }
 
 .result { margin-top: 14px; }
 
 .stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
   margin-bottom: 12px;
 }
