@@ -1,4 +1,4 @@
-export type TrackIntelligenceSource = "iracing_recent_races" | "site_result_json";
+export type TrackIntelligenceSource = "iracing_recent_races" | "site_result_json" | "extension_scan";
 export type TrackReliability = "Hoog" | "Middel" | "Laag";
 
 export type MemberTrackHistoryRow = {
@@ -53,7 +53,7 @@ export type NormalizedRecentRace = {
   seriesName: string | null;
 };
 
-const sourceOrder: TrackIntelligenceSource[] = ["iracing_recent_races", "site_result_json"];
+const sourceOrder: TrackIntelligenceSource[] = ["iracing_recent_races", "site_result_json", "extension_scan"];
 
 const cleanString = (value: unknown): string | null => {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);

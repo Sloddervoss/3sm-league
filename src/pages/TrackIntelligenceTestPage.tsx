@@ -56,6 +56,7 @@ type DbRace = {
 const sourceLabels: Record<TrackIntelligenceSource, string> = {
   iracing_recent_races: "iRacing recente races",
   site_result_json: "Site result JSON",
+  extension_scan: "Extensie scan",
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -363,6 +364,7 @@ const TrackIntelligenceTestPage = () => {
                   <option value="all">Alle bronnen</option>
                   <option value="iracing_recent_races">iRacing recente races</option>
                   <option value="site_result_json">Site result JSON</option>
+                  <option value="extension_scan">Extensie scan</option>
                 </select>
                 <button onClick={exportCsv} disabled={!filteredInsights.length} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-border hover:border-accent text-sm disabled:opacity-50">
                   <Download className="w-4 h-4" /> Export CSV
