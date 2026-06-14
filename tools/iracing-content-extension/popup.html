@@ -16,13 +16,13 @@
       <!-- Stap 1: Navigeer -->
       <section id="step-navigate">
         <p class="hint">
-          Open het iRacing dashboard om je tracks te scannen.
+          Open de iRacing tracks pagina om je tracks te scannen.
         </p>
-        <button id="openDashboard" type="button">
-          Open iRacing dashboard
+        <button id="openTracks" type="button">
+          Open iRacing tracks pagina
         </button>
         <p class="hint secondary" style="margin-top:8px">
-          Of scan de <strong>huidige pagina</strong> als je al op iRacing bent.
+          Of scan de <strong>huidige pagina</strong> als je al op de iRacing tracks pagina bent.
         </p>
         <button id="scanCurrent" type="button" class="secondary">
           Scan huidige pagina
@@ -62,6 +62,11 @@
             Kopieer export
           </button>
         </div>
+        <div class="actions" style="margin-top:4px">
+          <button id="rescanBtn" type="button" class="linklike">
+            ← Opnieuw scannen
+          </button>
+        </div>
 
         <details>
           <summary>Bekijk export data</summary>
@@ -74,9 +79,15 @@
         <div class="empty-state">
           <p class="hint">Geen tracks gevonden op deze pagina.</p>
           <p class="hint secondary">
-            Zorg dat je ingelogd bent op iRacing en het dashboard open hebt.
+            Navigeer naar de <strong>iRacing tracks pagina</strong> of klik hieronder.
           </p>
-          <button id="copyDebugBtn" type="button" class="secondary">
+          <button id="openTracksFromEmpty" type="button" class="primary" style="margin-top:6px">
+            Open iRacing tracks pagina
+          </button>
+          <button id="rescanFromEmpty" type="button" class="secondary" style="margin-top:4px">
+            Scan huidige pagina opnieuw
+          </button>
+          <button id="copyDebugBtn" type="button" class="secondary" style="margin-top:8px">
             Kopieer debug info
           </button>
         </div>
