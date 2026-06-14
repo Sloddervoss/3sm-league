@@ -178,7 +178,7 @@ const TrackIntelligenceTestPage = () => {
   const startSync = useMutation({
     mutationFn: async () => {
       const startedAt = new Date().toISOString();
-      setSyncMessage("Site-result JSON wordt geïmporteerd; daarna wordt de iRacing test-sync via de service function gestart.");
+      setSyncMessage("Site-result JSON wordt geïmporteerd; daarna wordt de iRacing synchronisatie gestart.");
 
       const { data: runData, error: runError } = await supabase
         .from("track_intelligence_runs" as never)
@@ -256,15 +256,15 @@ const TrackIntelligenceTestPage = () => {
         queryClient.invalidateQueries({ queryKey: ["track-intelligence-runs"] }),
       ]);
       if (result.warning) {
-        toast.warning("Test-sync afgerond met fouten; bekijk de sync log.");
+        toast.warning("Synchronisatie afgerond met fouten; bekijk de sync log.");
         setSyncMessage(`Sync afgerond met fouten: ${result.warning}`);
       } else {
-        toast.success(`Test-sync klaar — ${result.createdRecords} records verwerkt`);
-        setSyncMessage(`Test-sync klaar — ${result.createdRecords} records verwerkt.`);
+        toast.success(`Synchronisatie klaar — ${result.createdRecords} records verwerkt`);
+        setSyncMessage(`Synchronisatie klaar — ${result.createdRecords} records verwerkt.`);
       }
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : "Test-sync mislukt";
+      const message = error instanceof Error ? error.message : "Synchronisatie mislukt";
       toast.error(message);
       setSyncMessage(message);
     },
@@ -312,7 +312,7 @@ const TrackIntelligenceTestPage = () => {
           <div className="bg-card border border-border rounded-xl p-8 text-center max-w-xl mx-auto">
             <Lock className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <h1 className="font-heading text-2xl font-black mb-2">GEEN TOEGANG</h1>
-            <p className="text-muted-foreground">Je hebt admin rechten nodig om deze testpagina te bekijken.</p>
+            <p className="text-muted-foreground">Je hebt admin rechten nodig om deze pagina te bekijken.</p>
           </div>
         </main>
         <Footer />
@@ -329,11 +329,11 @@ const TrackIntelligenceTestPage = () => {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="max-w-3xl">
                 <div className="flex items-center gap-2 mb-2 text-accent uppercase tracking-[0.18em] text-xs font-black">
-                  <Flag className="w-4 h-4" /> Admin testmodule
+                  <Flag className="w-4 h-4" /> Admin tool
                 </div>
-                <h1 className="font-heading text-3xl md:text-5xl font-black uppercase">3 Stripe Track Intelligence — Test</h1>
+                <h1 className="font-heading text-3xl md:text-5xl font-black uppercase">3 Stripe Track Intelligence</h1>
                 <p className="text-muted-foreground mt-3 leading-relaxed">
-                  Deze test analyseert echte iRacing racehistorie van gekoppelde members om te zien welke tracks het meest voorkomen. Dit is nog geen live feature.
+                  Analyseert echte iRacing racehistorie en extensie-scans van gekoppelde members om te zien welke tracks het meest voorkomen voor kalenderplanning.
                 </p>
               </div>
               <button
@@ -342,7 +342,7 @@ const TrackIntelligenceTestPage = () => {
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-md bg-gradient-racing text-white font-heading font-bold uppercase tracking-wider text-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
                 {startSync.isPending ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Play className="w-4 h-4" />}
-                {startSync.isPending ? "Sync draait..." : "Start test-sync"}
+                {startSync.isPending ? "Sync draait..." : "Synchroniseren"}
               </button>
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
@@ -366,7 +366,7 @@ const TrackIntelligenceTestPage = () => {
             </div>
             <div className="mt-5 border border-accent/25 bg-accent/5 rounded-lg px-4 py-3 text-sm text-muted-foreground flex gap-2">
               <ShieldCheck className="w-4 h-4 text-accent mt-0.5 shrink-0" />
-              <p>Deze test gebruikt bestaande iRacing Customer IDs van members om gereden tracks te analyseren voor kalenderplanning. Er wordt geen wachtwoord van members gevraagd en er wordt geen exacte content ownership geclaimd.</p>
+              <p>Deze tool gebruikt bestaande iRacing Customer IDs van members om gereden tracks te analyseren voor kalenderplanning. Er wordt geen wachtwoord van members gevraagd en er wordt geen exacte content ownership geclaimd.</p>
             </div>
             {syncMessage && (
               <div className="mt-4 border border-border bg-card rounded-lg px-4 py-3 text-sm text-muted-foreground">{syncMessage}</div>
@@ -531,7 +531,7 @@ const TrackIntelligenceTestPage = () => {
               <div className="p-10 text-center">
                 <FileJson className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                 <p className="font-heading text-xl font-black mb-2">Er is nog geen trackdata opgehaald.</p>
-                <p className="text-muted-foreground">Start een test-sync om echte iRacing-data te verzamelen.</p>
+                <p className="text-muted-foreground">Synchroniseer iRacing-data of laat members de extensie-scan uploaden om de analyse te vullen.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
