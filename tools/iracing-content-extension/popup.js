@@ -2,11 +2,20 @@ const SUPABASE_URL = "https://3stripemotorsport.cc";
 const UPLOAD_FUNCTION = `${SUPABASE_URL}/functions/v1/track-intelligence-upload`;
 const EXTENSION_API_KEY = "RoEbEQBO0zMMbUiZyCsAgCnQ8hB9ad6rAMQgKAAArds";
 
-const openDashboardBtn = document.querySelector("#openDashboard");
+// The URL that shows purchased tracks in a table
+const TRACKS_PAGE =
+  "https://members-ng.iracing.com/web/racing/licensed-content/tracks?" +
+  "filter=all&match=any&sort=track_name&tags=purchased&view=table";
+
+const openTracksBtn = document.querySelector("#openTracks");
 const scanCurrentBtn = document.querySelector("#scanCurrent");
 const uploadBtn = document.querySelector("#uploadBtn");
 const copyBtn = document.querySelector("#copyBtn");
 const copyDebugBtn = document.querySelector("#copyDebugBtn");
+const rescanBtn = document.querySelector("#rescanBtn");
+const openTracksFromEmpty = document.querySelector("#openTracksFromEmpty");
+const rescanFromEmpty = document.querySelector("#rescanFromEmpty");
+
 const stepNavigate = document.querySelector("#step-navigate");
 const stepResult = document.querySelector("#step-result");
 const stepEmpty = document.querySelector("#step-empty");
@@ -30,6 +39,18 @@ function showStep(step) {
   stepNavigate.hidden = step !== "navigate";
   stepResult.hidden = step !== "result";
   stepEmpty.hidden = step !== "empty";
+  // Reset upload UI when switching away from result
+  if (step !== "result") {
+    uploadStatus.hidden = true;
+    uploadResult.hidden = true;
+    uploadBtn.disabled = false;
+  }
+}
+
+function resetToNavigate() {
+  lastScan = null;
+  showStep("navigate");
+  setStatus("");
 }
 
 async function getActiveTab() {
@@ -43,6 +64,7 @@ async function runScanOnTab(tabId) {
       target: { tabId },
       files: ["content.js"],
     });
+    if (!result) throw new Error("Content script gaf geen resultaat terug.");
     return result;
   } catch (error) {
     throw new Error(`Scan mislukt: ${error.message}`);
@@ -58,75 +80,77 @@ function displayResult(result) {
 
   if (exp.ownedTracks?.length > 0) {
     showStep("result");
-    setStatus(`${exp.ownedTracks.length} tracks gevonden. Klik Upload om naar 3 Stripe te sturen.`);
+    setStatus(
+      `${exp.ownedTracks.length} tracks gevonden. Upload naar 3 Stripe of scan opnieuw.`
+    );
   } else {
     showStep("empty");
-    setStatus("Geen tracks gevonden op deze pagina.", true);
+    setStatus(
+      exp.iracingCustId
+        ? `Geen tracks gevonden (iRacing ID: ${exp.iracingCustId}). Open de tracks pagina en probeer opnieuw.`
+        : "Geen tracks gevonden en geen iRacing ID kunnen ophalen. Zorg dat je ingelogd bent op iRacing.",
+      true
+    );
   }
 }
 
 async function scanCurrentPage() {
-  scanCurrentBtn.disabled = true;
-  openDashboardBtn.disabled = true;
+  const buttons = [scanCurrentBtn, openTracksBtn, openTracksFromEmpty, rescanFromEmpty];
+  buttons.forEach((b) => { if (b) b.disabled = true; });
   setStatus("Scannen...");
 
   try {
     const tab = await getActiveTab();
     if (!tab?.id) throw new Error("Geen actieve tab gevonden.");
 
-    // Check if we're on an iRacing page
     const url = tab.url || "";
     if (!url.includes("iracing.com")) {
-      setStatus("Dit is geen iRacing-pagina. Open eerst het iRacing dashboard.", true);
-      scanCurrentBtn.disabled = false;
-      openDashboardBtn.disabled = false;
+      setStatus("Dit is geen iRacing-pagina.", true);
       return;
     }
 
     const result = await runScanOnTab(tab.id);
     displayResult(result);
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : "Scan mislukt.", true);
+    const msg = error instanceof Error ? error.message : "Scan mislukt.";
+    setStatus(msg, true);
+    showStep("empty");
   } finally {
-    scanCurrentBtn.disabled = false;
-    openDashboardBtn.disabled = false;
+    buttons.forEach((b) => { if (b) b.disabled = false; });
   }
 }
 
-async function openDashboard() {
-  openDashboardBtn.disabled = true;
-  setStatus("Dashboard openen...");
+async function openTracksPage() {
+  openTracksBtn.disabled = true;
+  if (openTracksFromEmpty) openTracksFromEmpty.disabled = true;
+  setStatus("Tracks pagina openen...");
 
   try {
     const tab = await getActiveTab();
-    const dashboardUrl = "https://members-ng.iracing.com/web/racing/home/dashboard";
-
     if (tab?.id) {
-      await chrome.tabs.update(tab.id, { url: dashboardUrl });
+      await chrome.tabs.update(tab.id, { url: TRACKS_PAGE });
     } else {
-      await chrome.tabs.create({ url: dashboardUrl });
+      await chrome.tabs.create({ url: TRACKS_PAGE });
     }
 
-    // Wait for page to load, then scan
+    // Wacht 7 sec voor SPA laadtijd, scan dan automatisch
     setTimeout(async () => {
       try {
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tabs[0]?.url?.includes("iracing.com")) {
           const result = await runScanOnTab(tabs[0].id);
           displayResult(result);
-        } else {
-          setStatus("Navigatie gelukt. Klik op 'Scan huidige pagina' als je op het dashboard bent.", false);
-          showStep("navigate");
+          return;
         }
-      } catch {
-        setStatus("Dashboard geopend. Klik op 'Scan huidige pagina' als de pagina geladen is.", false);
-        showStep("navigate");
-      }
-    }, 5000); // 5 seconden wachten op SPA load
+      } catch {}
+      setStatus("Pagina geopend. Klik op 'Scan huidige pagina' als de tracks zichtbaar zijn.", false);
+      showStep("navigate");
+    }, 7000);
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "Navigatie mislukt.", true);
   } finally {
-    openDashboardBtn.disabled = false;
+    openTracksBtn.disabled = false;
+    if (openTracksFromEmpty) openTracksFromEmpty.disabled = false;
   }
 }
 
@@ -188,7 +212,7 @@ async function copyDebug() {
   setStatus("Debug info gekopieerd.");
 }
 
-// Check for stored scan result on popup open
+// Auto-check on popup open
 async function checkStoredScan() {
   try {
     const { lastScan: stored } = await chrome.storage.local.get("lastScan");
@@ -198,25 +222,31 @@ async function checkStoredScan() {
     }
   } catch {}
 
-  // Check current tab
   try {
     const tab = await getActiveTab();
     if (tab?.url?.includes("iracing.com")) {
-      const result = await runScanOnTab(tab.id);
-      displayResult(result);
-      return;
+      // Snel scan, geen loading state
+      try {
+        const result = await runScanOnTab(tab.id);
+        displayResult(result);
+        return;
+      } catch {}
     }
   } catch {}
 
   showStep("navigate");
+  setStatus("Klik 'Open iRacing tracks pagina' om te beginnen.");
 }
 
 // Event listeners
-openDashboardBtn.addEventListener("click", openDashboard);
+openTracksBtn.addEventListener("click", openTracksPage);
 scanCurrentBtn.addEventListener("click", scanCurrentPage);
 uploadBtn.addEventListener("click", uploadScan);
 copyBtn.addEventListener("click", copyExport);
 copyDebugBtn.addEventListener("click", copyDebug);
+rescanBtn?.addEventListener("click", resetToNavigate);
+openTracksFromEmpty?.addEventListener("click", openTracksPage);
+rescanFromEmpty?.addEventListener("click", scanCurrentPage);
 
 // Auto-check on open
 checkStoredScan();

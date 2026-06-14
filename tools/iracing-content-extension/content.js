@@ -11,7 +11,7 @@
     "circuit", "speedway", "raceway", "motorsport",
     "autodromo", "autodrome", "park", "ring",
     "street course", "international", "oval", "grand prix",
-    "nordschleife", "speedway", "road course",
+    "nordschleife", "road course", "speedway",
   ];
 
   function cleanText(value) {
@@ -30,71 +30,8 @@
     const cleaned = cleanText(text);
     if (cleaned.length < 4 || cleaned.length > 140) return false;
     if (/^\d+(\.\d+)?$/.test(cleaned)) return false;
-    if (hasAny(cleaned, ["cookie", "privacy", "terms", "login", "password"])) return false;
+    if (hasAny(cleaned, ["cookie", "privacy", "terms", "login", "password", "sign out", "checking credentials"])) return false;
     return hasAny(cleaned, TRACK_HINTS);
-  }
-
-  function getCandidateElements() {
-    const selectors = [
-      "article", "li", "tr", "[role='row']",
-      "[class*='card' i]", "[class*='content' i]",
-      "[class*='track' i]", "[class*='item' i]",
-      "a[href*='track' i]", "a[href*='cars-and-tracks' i]",
-    ];
-    return Array.from(document.querySelectorAll(selectors.join(",")));
-  }
-
-  function extractNameFromElement(element) {
-    const labels = [
-      element.getAttribute("aria-label"),
-      element.getAttribute("title"),
-      element.querySelector("h1,h2,h3,h4,h5,strong")?.textContent,
-      element.querySelector("a")?.textContent,
-    ].map(cleanText).filter(Boolean);
-
-    const namedLabel = labels.find(looksLikeTrackName);
-    if (namedLabel) return namedLabel;
-
-    const lines = cleanText(element.innerText)
-      .split(/(?=[A-Z][a-z]+(?:\s[A-Z][a-z]+)+)/)
-      .map(cleanText)
-      .filter(Boolean);
-
-    return lines.find(looksLikeTrackName) || "";
-  }
-
-  function classifyElement(element, pageIsOwnedFilter) {
-    const text = cleanText(element.innerText || element.textContent);
-    if (!text || text.length > 1800) return null;
-
-    const name = extractNameFromElement(element);
-    if (!name) return null;
-
-    const lower = text.toLowerCase();
-    const notOwned = NOT_OWNED_WORDS.some((word) => lower.includes(word));
-    const owned = !notOwned && (pageIsOwnedFilter || OWNED_WORDS.some((word) => lower.includes(word)));
-
-    return { name, owned, textSample: text.slice(0, 500) };
-  }
-
-  function uniqueByName(items) {
-    const seen = new Set();
-    const result = [];
-    for (const item of items) {
-      const key = item.name.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      result.push(item);
-    }
-    return result;
-  }
-
-  function extractVisibleTrackLines() {
-    return cleanText(document.body.innerText)
-      .split(/(?<=[a-z)])\s+(?=[A-Z])/)
-      .map(cleanText)
-      .filter(looksLikeTrackName)
-      .slice(0, 300);
   }
 
   function currentPageIsOwnedFilter() {
@@ -109,39 +46,91 @@
     );
   }
 
+  function extractNameFromElement(element) {
+    const labels = [
+      element.getAttribute("aria-label"),
+      element.getAttribute("title"),
+      element.querySelector("h1,h2,h3,h4,h5,strong")?.textContent,
+      element.querySelector("a")?.textContent,
+      element.getAttribute("data-track-name"),
+      element.querySelector("[class*='name' i]")?.textContent,
+      element.querySelector("[class*='title' i]")?.textContent,
+    ].map(cleanText).filter(Boolean);
+
+    const namedLabel = labels.find(looksLikeTrackName);
+    if (namedLabel) return namedLabel;
+
+    // Try to find track name inside element text by looking for track hints
+    const lines = cleanText(element.innerText)
+      .split(/(?<=[a-z)])\s+(?=[A-Z][a-z])/)
+      .map(cleanText)
+      .filter(Boolean);
+
+    return lines.find(looksLikeTrackName) || "";
+  }
+
+  // --- PAGE-SPECIFIC SCANNING ---
+
+  function scanTableRows() {
+    const results = [];
+    const tables = document.querySelectorAll("table, [role='grid'], [role='table']");
+    for (const table of tables) {
+      const rows = table.querySelectorAll("tr, [role='row']");
+      for (const row of rows) {
+        const cells = row.querySelectorAll("td, [role='cell'], th");
+        if (cells.length < 2) continue;
+        const rowText = cleanText(row.innerText || row.textContent);
+        if (!rowText || rowText.length < 4 || rowText.length > 2000) continue;
+
+        const name = extractNameFromElement(row);
+        if (!name) continue;
+
+        const lower = rowText.toLowerCase();
+        const notOwned = NOT_OWNED_WORDS.some((word) => lower.includes(word));
+        const owned = !notOwned && OWNED_WORDS.some((word) => lower.includes(word));
+        results.push({ name, owned });
+      }
+    }
+    return results;
+  }
+
+  function scanCards() {
+    const results = [];
+    const cards = document.querySelectorAll("[class*='card' i], [class*='item' i], article, li");
+    for (const card of cards) {
+      const text = cleanText(card.innerText || card.textContent);
+      if (!text || text.length < 4 || text.length > 1800) continue;
+      const name = extractNameFromElement(card);
+      if (!name) continue;
+
+      const lower = text.toLowerCase();
+      const notOwned = NOT_OWNED_WORDS.some((word) => lower.includes(word));
+      const owned = !notOwned && OWNED_WORDS.some((word) => lower.includes(word));
+      results.push({ name, owned });
+    }
+    return results;
+  }
+
+  function scanVisibleLines() {
+    return cleanText(document.body.innerText)
+      .split(/(?<=[a-z)])\s+(?=[A-Z])/)
+      .map(cleanText)
+      .filter(looksLikeTrackName)
+      .slice(0, 300);
+  }
+
+  // --- IRACING CUSTOMER ID ---
+
   function extractCustIdFromPage() {
-    // Try URL patterns
     const url = location.href;
     const custMatch = url.match(/[?&]cust_id[=/](\d+)/i);
     if (custMatch) return custMatch[1];
-
-    // Try common iRacing page patterns
-    const pathMatch = url.match(/\/member\/(?:cust_)?(\d+)/i);
+    const pathMatch = href.match(/(?:cust_)?(\d{4,})/);
     if (pathMatch) return pathMatch[1];
-
-    // Try meta tags
-    const meta = document.querySelector('meta[name="iracing-cust-id"], meta[property="iracing:cust_id"]');
-    if (meta) return meta.getAttribute("content");
-
-    // Try global JS variables
     try {
-      if (typeof window.__INITIAL_STATE__?.user?.cust_id === "number") {
-        return String(window.__INITIAL_STATE__.user.cust_id);
-      }
-      if (typeof window.__NEXT_DATA__?.props?.pageProps?.custId === "number") {
-        return String(window.__NEXT_DATA__.props.pageProps.custId);
-      }
+      if (typeof window.__INITIAL_STATE__?.user?.cust_id === "number") return String(window.__INITIAL_STATE__.user.cust_id);
+      if (typeof window.__NEXT_DATA__?.props?.pageProps?.custId === "number") return String(window.__NEXT_DATA__.props.pageProps.custId);
     } catch {}
-
-    // Try Redux store (members SPA)
-    try {
-      const reduxRoot = document.querySelector("#__redux-store");
-      if (reduxRoot?.textContent) {
-        const parsed = JSON.parse(reduxRoot.textContent);
-        if (parsed?.user?.cust_id) return String(parsed.user.cust_id);
-      }
-    } catch {}
-
     return null;
   }
 
@@ -167,45 +156,52 @@
     }
   }
 
-  async function fetchOwnedContentViaBFF(custId) {
-    try {
-      // Try the content endpoint
-      const res = await fetch(
-        `https://members-ng.iracing.com/bff/pub/proxy/data/member/info?cust_ids=${custId}`,
-        { credentials: "include", headers: { "Accept": "application/json" } }
-      );
-      if (!res.ok) return null;
-      const json = await res.json();
-      if (json?.link) {
-        const linked = await fetch(json.link, { headers: { "Accept": "application/json" } });
-        if (linked.ok) return await linked.json();
-      }
-      return json;
-    } catch {
-      return null;
-    }
-  }
-
-  // --- MAIN SCAN ---
+  // --- MAIN ---
   const pageIsOwnedFilter = currentPageIsOwnedFilter();
 
-  // 1. Try to get cust_id
+  // 1. Try BFF API for cust_id
   let custId = extractCustIdFromPage();
   if (!custId) custId = await fetchCustIdViaBFF();
 
-  // 2. DOM scan
-  const candidates = uniqueByName(
-    getCandidateElements()
-      .map((element) => classifyElement(element, pageIsOwnedFilter))
+  // 2. Scan DOM - try multiple strategies
+  const tableResults = scanTableRows();
+  const cardResults = scanCards();
+
+  // Merge: table results preferred (closer to actual data), deduplicate
+  const allCandidates = [...tableResults, ...cardResults];
+  const seen = new Set();
+  const candidates = [];
+  for (const item of allCandidates) {
+    const key = item.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push(item);
+  }
+
+  // Determine owned: if page has purchased filter or explicit owned keywords
+  let ownedTracks;
+  if (pageIsOwnedFilter) {
+    // On the tracks page with tags=purchased, ALL shown tracks are owned
+    ownedTracks = candidates.map((c) => c.name).sort((a, b) => a.localeCompare(b));
+  } else {
+    ownedTracks = candidates
+      .filter((item) => item.owned)
+      .map((item) => item.name)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  const visibleTrackLines = scanVisibleLines();
+
+  // If DOM found nothing but visible lines detected tracks, use those
+  if (ownedTracks.length === 0 && visibleTrackLines.length > 0) {
+    ownedTracks = [...new Set(visibleTrackLines.map((t) => t.toLowerCase()))]
+      .map((t) => {
+        const orig = visibleTrackLines.find((l) => l.toLowerCase() === t);
+        return orig;
+      })
       .filter(Boolean)
-  );
-
-  const ownedTracks = candidates
-    .filter((item) => item.owned)
-    .map((item) => item.name)
-    .sort((a, b) => a.localeCompare(b));
-
-  const visibleTrackLines = extractVisibleTrackLines();
+      .sort((a, b) => a.localeCompare(b));
+  }
 
   const result = {
     export: {
@@ -224,13 +220,14 @@
       pageIsOwnedFilter,
       iracingCustId: custId,
       candidateCount: candidates.length,
+      tableResults,
+      cardResults,
       candidates,
       visibleTrackLines,
       bodySample: cleanText(document.body.innerText).slice(0, 5000),
     },
   };
 
-  // Store for popup to read
   try {
     chrome.storage.local.set({ lastScan: result });
   } catch {}
