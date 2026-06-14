@@ -151,8 +151,9 @@ const TrackIntelligenceTestPage = () => {
   }), [insights, search, sourceFilter]);
 
   const recommendedSeason = useMemo(() => insights.slice(0, 13), [insights]);
-  const topTenTracks = useMemo(() => insights.slice(0, 10), [insights]);
-  const maxTrackMembers = topTenTracks[0]?.uniqueMemberCount || 1;
+  const trackCoverageLimit = 30;
+  const topCoverageTracks = useMemo(() => insights.slice(0, trackCoverageLimit), [insights]);
+  const maxTrackMembers = topCoverageTracks[0]?.uniqueMemberCount || 1;
   const highReliabilityCount = insights.filter((track) => track.reliability === "Hoog").length;
   const mediumReliabilityCount = insights.filter((track) => track.reliability === "Middel").length;
   const extensionScanRows = historyRows.filter((row) => row.source === "extension_scan").length;
@@ -448,17 +449,28 @@ const TrackIntelligenceTestPage = () => {
 
               <div className="space-y-6">
                 <div className="bg-card border border-border rounded-xl p-5">
-                  <div className="flex items-center gap-2 text-accent uppercase tracking-[0.16em] text-xs font-black mb-2">
-                    <BarChart3 className="w-4 h-4" /> Trackdekking top 10
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-accent uppercase tracking-[0.16em] text-xs font-black">
+                        <BarChart3 className="w-4 h-4" /> Trackdekking top {trackCoverageLimit}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Compact overzicht voor kalenderkeuze zonder naar de volledige analyse te scrollen.
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-heading text-2xl font-black tabular-nums">{topCoverageTracks.length}</div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">tracks</div>
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    {topTenTracks.map((track, index) => (
-                      <div key={`${track.trackId || track.trackName}-bar`}>
-                        <div className="flex justify-between gap-3 text-sm mb-1">
-                          <span className="truncate"><span className="text-muted-foreground tabular-nums mr-2">#{index + 1}</span>{track.trackName}</span>
+                  <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2.5">
+                    {topCoverageTracks.map((track, index) => (
+                      <div key={`${track.trackId || track.trackName}-bar`} className="rounded-md border border-border/50 bg-background/25 px-3 py-2">
+                        <div className="flex justify-between gap-3 text-xs mb-1">
+                          <span className="truncate font-medium"><span className="text-muted-foreground tabular-nums mr-2">#{index + 1}</span>{track.trackName}</span>
                           <span className="text-muted-foreground tabular-nums shrink-0">{track.uniqueMemberCount}/{linkedProfiles.length}</span>
                         </div>
-                        <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
                           <div className="h-full bg-accent" style={{ width: `${Math.max(6, (track.uniqueMemberCount / maxTrackMembers) * 100)}%` }} />
                         </div>
                       </div>
