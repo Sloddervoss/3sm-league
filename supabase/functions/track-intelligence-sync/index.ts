@@ -41,13 +41,29 @@ const cleanString = (value: unknown): string | null => {
   return trimmed || null;
 };
 
-const hashPassword = async (password: string, email: string) => {
-  const data = new TextEncoder().encode(password + email.toLowerCase());
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  const bytes = new Uint8Array(digest);
+const base64FromBytes = (bytes: Uint8Array) => {
   let binary = "";
   bytes.forEach((byte) => binary += String.fromCharCode(byte));
   return btoa(binary);
+};
+
+const base64UrlFromBytes = (bytes: Uint8Array) => base64FromBytes(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+const hashPassword = async (password: string, email: string) => {
+  const data = new TextEncoder().encode(password + email.toLowerCase());
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return base64FromBytes(new Uint8Array(digest));
+};
+
+const getCodeVerifier = () => {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return base64UrlFromBytes(bytes);
+};
+
+const getCodeChallenge = async (verifier: string) => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return base64UrlFromBytes(new Uint8Array(digest));
 };
 
 const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = 12_000) => {
@@ -60,31 +76,111 @@ const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs =
   }
 };
 
+type CookieJar = Map<string, string>;
+
+const mergeSetCookie = (jar: CookieJar, response: Response) => {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  const setCookies = headers.getSetCookie?.() ?? (response.headers.get("set-cookie") ? response.headers.get("set-cookie")!.split(/,(?=[^;]+?=)/) : []);
+  setCookies.forEach((cookie) => {
+    const pair = cookie.split(";")[0]?.trim();
+    if (!pair) return;
+    const [name, ...valueParts] = pair.split("=");
+    if (name) jar.set(name, valueParts.join("="));
+  });
+};
+
+const cookieHeader = (jar: CookieJar) => Array.from(jar.entries()).map(([name, value]) => `${name}=${value}`).join("; ");
+
+const requestWithCookies = async (url: string, jar: CookieJar, init: RequestInit = {}) => {
+  const headers = new Headers(init.headers ?? {});
+  const cookies = cookieHeader(jar);
+  if (cookies) headers.set("Cookie", cookies);
+  headers.set("User-Agent", "3SM Track Intelligence Test/1.0");
+  const response = await fetchWithTimeout(url, { ...init, headers, redirect: "manual" }, 20_000);
+  mergeSetCookie(jar, response);
+  return response;
+};
+
+const followGetRedirects = async (startUrl: string, jar: CookieJar, maxRedirects = 8) => {
+  let url = startUrl;
+  let response = await requestWithCookies(url, jar, { method: "GET" });
+  for (let i = 0; i < maxRedirects && response.status >= 300 && response.status < 400; i += 1) {
+    const location = response.headers.get("location");
+    if (!location) break;
+    url = new URL(location, url).toString();
+    response = await requestWithCookies(url, jar, { method: "GET" });
+  }
+  return { response, url };
+};
+
+const extractInitializedId = (url: string) => new URL(url).searchParams.get("initialized_id");
+
 const iracingLogin = async () => {
-  const response = await fetchWithTimeout("https://members-ng.iracing.com/auth", {
+  const jar: CookieJar = new Map();
+  const verifier = getCodeVerifier();
+  const challenge = await getCodeChallenge(verifier);
+  const domain = "members-ng.iracing.com";
+  const redirectUri = `https://members-ng.iracing.com/bff/pub/initialize?DOMAIN=${domain}`;
+  const authorizeUrl = new URL("https://oauth.iracing.com/oauth2/authorize");
+  authorizeUrl.search = new URLSearchParams({
+    client_id: "iracing_ui",
+    response_type: "code",
+    redirect_uri: redirectUri,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    scope: "iracing.auth",
+  }).toString();
+
+  const { response: startResponse } = await followGetRedirects(authorizeUrl.toString(), jar);
+  const loginHtml = await startResponse.text();
+  const action = loginHtml.match(/<form[^>]*action="([^"]+)"/)?.[1]?.replace(/&amp;/g, "&");
+  if (!action) throw new Error(`iRacing OAuth loginformulier niet gevonden: HTTP ${startResponse.status}`);
+
+  const loginBody = new URLSearchParams({
+    email: IRACING_EMAIL,
+    password: await hashPassword(IRACING_PASSWORD, IRACING_EMAIL),
+    rememberMe: "on",
+    offer_remember_me: "true",
+  });
+  let currentUrl = new URL(action, "https://oauth.iracing.com").toString();
+  let loginResponse = await requestWithCookies(currentUrl, jar, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": "3SM Track Intelligence Test/1.0",
-      "Accept": "application/json",
-      "Origin": "https://members.iracing.com",
-      "Referer": "https://members.iracing.com/",
-    },
-    body: JSON.stringify({ email: IRACING_EMAIL, password: await hashPassword(IRACING_PASSWORD, IRACING_EMAIL) }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: loginBody,
   });
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`iRacing auth mislukt: HTTP ${response.status}${body ? ` — ${body.slice(0, 160)}` : ""}`);
+  let initializedId: string | null = null;
+  for (let i = 0; i < 8 && loginResponse.status >= 300 && loginResponse.status < 400; i += 1) {
+    const location = loginResponse.headers.get("location");
+    if (!location) break;
+    currentUrl = new URL(location, currentUrl).toString();
+    initializedId = extractInitializedId(currentUrl) ?? initializedId;
+    loginResponse = await requestWithCookies(currentUrl, jar, { method: "GET" });
   }
-  const setCookie = response.headers.get("set-cookie") ?? "";
-  const cookie = setCookie.split(/,(?=[^;]+?=)/).map((part) => part.split(";")[0].trim()).filter(Boolean).join("; ");
-  if (!cookie) throw new Error("iRacing auth gaf geen sessie-cookie terug");
+  initializedId = initializedId ?? extractInitializedId(currentUrl);
+  if (!initializedId) {
+    const body = await loginResponse.text().catch(() => "");
+    throw new Error(`iRacing OAuth login gaf geen initialized_id: HTTP ${loginResponse.status}${body ? ` — ${body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").slice(0, 180)}` : ""}`);
+  }
+
+  const verifyResponse = await requestWithCookies("https://members-ng.iracing.com/bff/pub/verify", jar, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+    body: new URLSearchParams({ initialized_id: initializedId, redirect_uri: redirectUri, code_verifier: verifier, client_id: "iracing_ui" }),
+  });
+  if (!verifyResponse.ok) throw new Error(`iRacing OAuth verify mislukt: HTTP ${verifyResponse.status}`);
+  const verifyJson = await verifyResponse.json();
+  const verifiedId = cleanString(verifyJson?.verified_id);
+  if (!verifiedId) throw new Error(`iRacing OAuth verify gaf geen verified_id terug`);
+
+  await followGetRedirects(`https://members-ng.iracing.com/bff/pub/establish?verified_id=${encodeURIComponent(verifiedId)}`, jar);
+  const cookie = cookieHeader(jar);
+  if (!cookie) throw new Error("iRacing OAuth gaf geen sessie-cookie terug");
   return cookie;
 };
 
 const fetchIRacingData = async (path: string, cookie: string) => {
-  const response = await fetchWithTimeout(`https://members-ng.iracing.com${path}`, {
+  const response = await fetchWithTimeout(`https://members-ng.iracing.com/bff/pub/proxy${path}`, {
     headers: {
       "Cookie": cookie,
       "User-Agent": "3SM Track Intelligence Test/1.0",
