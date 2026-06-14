@@ -30,7 +30,7 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const IRACING_EMAIL = Deno.env.get("IRACING_EMAIL") ?? "";
 const IRACING_PASSWORD = Deno.env.get("IRACING_PASSWORD") ?? "";
-const MEMBER_DELAY_MS = Number(Deno.env.get("TRACK_INTELLIGENCE_MEMBER_DELAY_MS") ?? "2500");
+const MEMBER_DELAY_MS = Number(Deno.env.get("TRACK_INTELLIGENCE_MEMBER_DELAY_MS") ?? "1000");
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,8 +50,18 @@ const hashPassword = async (password: string, email: string) => {
   return btoa(binary);
 };
 
+const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = 12_000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 const iracingLogin = async () => {
-  const response = await fetch("https://members-ng.iracing.com/auth", {
+  const response = await fetchWithTimeout("https://members-ng.iracing.com/auth", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -63,7 +73,10 @@ const iracingLogin = async () => {
     body: JSON.stringify({ email: IRACING_EMAIL, password: await hashPassword(IRACING_PASSWORD, IRACING_EMAIL) }),
   });
 
-  if (!response.ok) throw new Error(`iRacing auth mislukt: ${response.status}`);
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`iRacing auth mislukt: HTTP ${response.status}${body ? ` — ${body.slice(0, 160)}` : ""}`);
+  }
   const setCookie = response.headers.get("set-cookie") ?? "";
   const cookie = setCookie.split(/,(?=[^;]+?=)/).map((part) => part.split(";")[0].trim()).filter(Boolean).join("; ");
   if (!cookie) throw new Error("iRacing auth gaf geen sessie-cookie terug");
@@ -71,7 +84,7 @@ const iracingLogin = async () => {
 };
 
 const fetchIRacingData = async (path: string, cookie: string) => {
-  const response = await fetch(`https://members-ng.iracing.com${path}`, {
+  const response = await fetchWithTimeout(`https://members-ng.iracing.com${path}`, {
     headers: {
       "Cookie": cookie,
       "User-Agent": "3SM Track Intelligence Test/1.0",
@@ -206,7 +219,23 @@ Deno.serve(async (req) => {
     if (profileError) throw profileError;
 
     const linkedProfiles = (profiles || []).filter((profile: Profile) => cleanString(profile.iracing_id));
-    const cookie = await iracingLogin();
+    let cookie: string;
+    try {
+      cookie = await iracingLogin();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const result = {
+        members_total: linkedProfiles.length,
+        members_success: 0,
+        members_failed: linkedProfiles.length,
+        created_records: 0,
+        error_summary: message,
+      };
+      if (runId) {
+        await serviceClient.from("track_intelligence_runs").update(result).eq("id", runId);
+      }
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     let membersSuccess = 0;
     let membersFailed = 0;
     let createdRecords = 0;
