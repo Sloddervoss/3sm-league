@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3 Stripe Track Scanner</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="kicker">3 Stripe Motorsport</span>
+        <h1>Track Scanner</h1>
+      </header>
+
+      <!-- Stap 1: Navigeer -->
+      <section id="step-navigate">
+        <p class="hint">
+          Open het iRacing dashboard om je tracks te scannen.
+        </p>
+        <button id="openDashboard" type="button">
+          Open iRacing dashboard
+        </button>
+        <p class="hint secondary" style="margin-top:8px">
+          Of scan de <strong>huidige pagina</strong> als je al op iRacing bent.
+        </p>
+        <button id="scanCurrent" type="button" class="secondary">
+          Scan huidige pagina
+        </button>
+      </section>
+
+      <!-- Stap 2: Scan resultaat -->
+      <section id="step-result" class="result" hidden>
+        <div class="stats">
+          <div>
+            <strong id="ownedCount">0</strong>
+            <span>tracks gevonden</span>
+          </div>
+          <div>
+            <strong id="custIdDisplay">—</strong>
+            <span>iRacing ID</span>
+          </div>
+        </div>
+
+        <div id="uploadStatus" class="upload-status" hidden>
+          <div class="spinner"></div>
+          <span id="uploadMessage">Bezig met uploaden...</span>
+        </div>
+
+        <div id="uploadResult" class="upload-result" hidden>
+          <div class="upload-success">
+            <span class="checkmark">✓</span>
+            <span id="uploadSummary"></span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="uploadBtn" type="button" class="primary">
+            Upload naar 3 Stripe
+          </button>
+          <button id="copyBtn" type="button" class="secondary">
+            Kopieer export
+          </button>
+        </div>
+
+        <details>
+          <summary>Bekijk export data</summary>
+          <textarea id="exportText" spellcheck="false" readonly></textarea>
+        </details>
+      </section>
+
+      <!-- Stap 3: Fout/lege state -->
+      <section id="step-empty" hidden>
+        <div class="empty-state">
+          <p class="hint">Geen tracks gevonden op deze pagina.</p>
+          <p class="hint secondary">
+            Zorg dat je ingelogd bent op iRacing en het dashboard open hebt.
+          </p>
+          <button id="copyDebugBtn" type="button" class="secondary">
+            Kopieer debug info
+          </button>
+        </div>
+      </section>
+
+      <p id="status" class="status"></p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
