@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "3 Stripe iRacing Content Scanner",
+  "version": "0.2.0",
+  "description": "Scans je iRacing content en uploadt tracks naar 3 Stripe Motorsport voor kalenderplanning.",
+  "permissions": ["activeTab", "scripting", "clipboardWrite", "storage"],
+  "host_permissions": [
+    "https://www.iracing.com/*",
+    "https://members.iracing.com/*",
+    "https://members-ng.iracing.com/*",
+    "https://oauth.iracing.com/*",
+    "https://3stripemotorsport.cc/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://members-ng.iracing.com/web/racing/*",
+        "https://www.iracing.com/cars-and-tracks*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "3 Stripe Track Scanner",
+    "default_popup": "popup.html"
+  }
+}
