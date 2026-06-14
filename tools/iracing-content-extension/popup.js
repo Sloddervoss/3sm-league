@@ -246,7 +246,8 @@ async function uploadScan() {
 
     uploadStatus.hidden = true;
     uploadResult.hidden = false;
-    uploadSummary.textContent = `${result.saved_records ?? result.created_records} tracks opgeslagen/bijgewerkt voor ${result.member_name || "jouw profiel"}.`;
+    const ignoredText = result.ignored_tracks ? ` (${result.ignored_tracks} vage namen genegeerd)` : "";
+    uploadSummary.textContent = `${result.saved_records ?? result.created_records} tracks opgeslagen/bijgewerkt voor ${result.member_name || "jouw profiel"}${ignoredText}.`;
     setStatus("Upload gelukt! Data is toegevoegd aan de Track Intelligence test.", false);
   } catch (error) {
     uploadStatus.hidden = true;

@@ -75,6 +75,42 @@ const trackKeyFor = (row: MemberTrackHistoryRow): string =>
 const latest = (a: string, b: string): string => (Date.parse(a) >= Date.parse(b) ? a : b);
 const earliest = (a: string, b: string): string => (Date.parse(a) <= Date.parse(b) ? a : b);
 
+const genericTrackNames = new Set([
+  "circuit",
+  "circuit - medium",
+  "circuit - short",
+  "ev circuit",
+  "international",
+  "national",
+  "oval",
+  "raceway",
+  "roval",
+  "road course",
+  "short",
+  "medium",
+  "long",
+  "touring",
+  "classic",
+  "historic",
+  "full course",
+  "grand prix",
+  "north",
+  "south",
+  "east",
+  "west",
+]);
+
+export function isUsableTrackName(value: unknown): boolean {
+  const trackName = cleanString(value);
+  if (!trackName) return false;
+  const normalized = trackName.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+  if (normalized.length < 8 || normalized.length > 140) return false;
+  if (genericTrackNames.has(normalized)) return false;
+  if (/^\d+(\.\d+)?$/.test(normalized)) return false;
+  if (/^(?:circuit|road course|oval|raceway|roval)\s*-\s*(?:short|medium|long|classic|historic|national|international)$/i.test(trackName)) return false;
+  return true;
+}
+
 export function getTrackReliability(
   input: { percentage: number; uniqueMemberCount: number; lastSeenAt: string },
   now = new Date(),
@@ -102,7 +138,7 @@ export function analyzeTrackHistory(
 
   for (const row of rows) {
     const trackName = row.track_name.trim();
-    if (!trackName || !row.member_id) continue;
+    if (!isUsableTrackName(trackName) || !row.member_id) continue;
     const key = trackKeyFor({ ...row, track_name: trackName });
     const current = grouped.get(key);
     if (!current) {
@@ -148,7 +184,7 @@ const raceDedupeKey = (row: MemberTrackHistoryRow): string => `${row.member_id}:
 export function dedupeTrackHistoryRows(rows: MemberTrackHistoryRow[]): MemberTrackHistoryRow[] {
   const deduped = new Map<string, MemberTrackHistoryRow>();
   for (const row of rows) {
-    if (!row.track_name.trim() || !row.member_id) continue;
+    if (!isUsableTrackName(row.track_name) || !row.member_id) continue;
     const key = raceDedupeKey(row);
     const existing = deduped.get(key);
     if (!existing) {
@@ -199,7 +235,7 @@ export function normalizeRecentRace(raw: Record<string, unknown>): NormalizedRec
   const track = raw.track && typeof raw.track === "object" ? raw.track as Record<string, unknown> : {};
   const trackId = cleanString(raw.track_id) ?? cleanString(track.track_id) ?? cleanString(track.id);
   const trackName = cleanString(raw.track_name) ?? cleanString(track.track_name) ?? cleanString(track.name);
-  if (!trackName) return null;
+  if (!isUsableTrackName(trackName)) return null;
 
   return {
     trackId,

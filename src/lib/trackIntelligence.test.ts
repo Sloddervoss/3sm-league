@@ -4,6 +4,7 @@ import {
   buildMemberTrackRowsFromSiteResults,
   dedupeTrackHistoryRows,
   getTrackReliability,
+  isUsableTrackName,
   normalizeRecentRace,
   type MemberTrackHistoryRow,
 } from "./trackIntelligence";
@@ -54,6 +55,25 @@ describe("track intelligence analysis", () => {
     });
   });
 
+  it("filters generic layout names while keeping real track names with circuit words", () => {
+    expect(isUsableTrackName("Circuit")).toBe(false);
+    expect(isUsableTrackName("Circuit - Medium")).toBe(false);
+    expect(isUsableTrackName("International")).toBe(false);
+    expect(isUsableTrackName("Roval")).toBe(false);
+    expect(isUsableTrackName("Watkins Glen International")).toBe(true);
+    expect(isUsableTrackName("Oulton Park Circuit - International")).toBe(true);
+    expect(isUsableTrackName("Charlotte Motor Speedway - Roval")).toBe(true);
+
+    const result = analyzeTrackHistory([
+      row({ member_id: "member-1", track_name: "Circuit", source: "extension_scan" }),
+      row({ member_id: "member-2", track_name: "International", source: "extension_scan" }),
+      row({ member_id: "member-3", track_name: "Circuit - Medium", source: "extension_scan" }),
+      row({ member_id: "member-4", track_name: "Watkins Glen International", source: "extension_scan" }),
+    ], 4);
+
+    expect(result.map((track) => track.trackName)).toEqual(["Watkins Glen International"]);
+  });
+
   it("marks reliability high when many linked members have demonstrably driven the track", () => {
     expect(getTrackReliability({ percentage: 76, uniqueMemberCount: 8, lastSeenAt: "2026-01-01T00:00:00.000Z" }, new Date("2026-06-01T00:00:00.000Z"))).toBe("Hoog");
   });
@@ -62,8 +82,8 @@ describe("track intelligence analysis", () => {
 describe("track intelligence import helpers", () => {
   it("deduplicates the same race by subsession id or customer-track-date combination", () => {
     const deduped = dedupeTrackHistoryRows([
-      row({ subsession_id: "abc", track_name: "Monza" }),
-      row({ subsession_id: "abc", track_name: "Monza", last_seen_at: "2026-06-02T20:00:00.000Z" }),
+      row({ subsession_id: "abc", track_name: "Autodromo Nazionale Monza" }),
+      row({ subsession_id: "abc", track_name: "Autodromo Nazionale Monza", last_seen_at: "2026-06-02T20:00:00.000Z" }),
       row({ subsession_id: null, iracing_customer_id: "1001", track_id: "42", race_date: "2026-06-01T19:00:00.000Z" }),
       row({ subsession_id: null, iracing_customer_id: "1001", track_id: "42", race_date: "2026-06-01T19:00:00.000Z" }),
     ]);
@@ -116,5 +136,6 @@ describe("track intelligence import helpers", () => {
       seriesName: "GT Sprint",
     });
     expect(normalizeRecentRace({ subsession_id: 124, start_time: "2026-06-10T20:00:00Z" })).toBeNull();
+    expect(normalizeRecentRace({ subsession_id: 125, track_name: "Circuit", start_time: "2026-06-10T20:00:00Z" })).toBeNull();
   });
 });
