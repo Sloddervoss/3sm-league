@@ -26,6 +26,7 @@ const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
 const NewsEditorPage = lazy(() => import("./pages/NewsEditorPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
 const AdminPage = lazy(() => import("./pages/AdminPage.tsx"));
+const TrackIntelligenceTestPage = lazy(() => import("./pages/TrackIntelligenceTestPage.tsx"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage.tsx"));
 const KoppelPage = lazy(() => import("./pages/KoppelPage.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
@@ -79,6 +80,7 @@ const App = () => (
                   <Route path="/news-editor" element={<NewsEditorPage />} />
                   <Route path="/auth" element={<AuthPage />} />
                   <Route path="/admin" element={<AdminPage />} />
+                  <Route path="/admin/track-intelligence-test" element={<TrackIntelligenceTestPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/koppel" element={<KoppelPage />} />
                   <Route path="*" element={<NotFound />} />
