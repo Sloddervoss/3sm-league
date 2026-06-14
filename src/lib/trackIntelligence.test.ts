@@ -60,6 +60,13 @@ describe("track intelligence analysis", () => {
     expect(isUsableTrackName("Circuit - Medium")).toBe(false);
     expect(isUsableTrackName("International")).toBe(false);
     expect(isUsableTrackName("Roval")).toBe(false);
+    expect(isUsableTrackName("Oval - Left turning")).toBe(false);
+    expect(isUsableTrackName("Oval - Right turning")).toBe(false);
+    expect(isUsableTrackName("Oval - 2008")).toBe(false);
+    expect(isUsableTrackName("Roval 2019")).toBe(false);
+    expect(isUsableTrackName("Roval 2025")).toBe(false);
+    expect(isUsableTrackName("Rallycross")).toBe(false);
+    expect(isUsableTrackName("Daytona Rallycross and Dirt Road")).toBe(true);
     expect(isUsableTrackName("Watkins Glen International")).toBe(true);
     expect(isUsableTrackName("Oulton Park Circuit - International")).toBe(true);
     expect(isUsableTrackName("Charlotte Motor Speedway - Roval")).toBe(true);

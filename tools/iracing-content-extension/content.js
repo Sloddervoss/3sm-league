@@ -9,14 +9,15 @@
   ];
   const TRACK_HINTS = [
     "circuit", "speedway", "raceway", "motorsport",
-    "autodromo", "autodrome", "park", "ring",
+    "autodromo", "autódromo", "autodrome", "park", "ring",
     "street course", "international", "oval", "grand prix",
-    "nordschleife", "road course", "speedway",
+    "nordschleife", "road course", "sports car course", "rallycross",
+    "motorland", "motorsenter", "road america", "road atlanta",
   ];
   const GENERIC_TRACK_NAMES = new Set([
     "circuit", "circuit - medium", "circuit - short", "ev circuit",
     "international", "national", "oval", "raceway", "roval",
-    "road course", "short", "medium", "long", "touring",
+    "road course", "rallycross", "short", "medium", "long", "touring",
     "classic", "historic", "full course", "grand prix",
     "north", "south", "east", "west",
   ]);
@@ -40,6 +41,7 @@
     if (/^\d+(\.\d+)?$/.test(cleaned)) return false;
     if (GENERIC_TRACK_NAMES.has(normalized)) return false;
     if (/^(?:circuit|road course|oval|raceway|roval)\s*-\s*(?:short|medium|long|classic|historic|national|international)$/i.test(cleaned)) return false;
+    if (/^(?:oval\s*-\s*(?:left turning|right turning|\d{4})|roval\s+\d{4})$/i.test(cleaned)) return false;
     if (hasAny(cleaned, ["cookie", "privacy", "terms", "login", "password", "sign out", "checking credentials"])) return false;
     return hasAny(cleaned, TRACK_HINTS);
   }
