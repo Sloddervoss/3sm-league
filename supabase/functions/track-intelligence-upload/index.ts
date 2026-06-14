@@ -132,17 +132,22 @@ Deno.serve(async (req) => {
     const memberIracingId = cleanString(memberProfile?.iracing_id) || iracingCustId || "unknown";
     const memberIracingName = memberProfile?.iracing_name || memberProfile?.display_name || memberName || "unknown";
 
-    // Upsert tracks into member_track_history
+    // Store tracks into member_track_history.
+    // Do this explicitly instead of relying on upsert(onConflict), because older DBs may not
+    // have the matching unique constraint yet. This keeps extension data usable for the test site.
     const now = new Date().toISOString();
     let createdRecords = 0;
+    let updatedRecords = 0;
+    const errors: string[] = [];
 
     for (const track of tracks) {
       const trackName = cleanString(track.name);
       if (!trackName) continue;
 
-      const dedupeKey = `ext:${memberIracingId}:${trackName.toLowerCase()}`;
+      const normalizedTrackName = trackName.toLowerCase();
+      const dedupeKey = `ext:${memberIracingId}:${normalizedTrackName}`;
 
-      const payload = {
+      const basePayload = {
         member_id: memberUserId,
         iracing_customer_id: memberIracingId,
         iracing_name: memberIracingName,
@@ -153,15 +158,55 @@ Deno.serve(async (req) => {
         series_name: null,
         source: "extension_scan",
         dedupe_key: dedupeKey,
-        first_seen_at: now,
         last_seen_at: now,
       };
 
-      const { error } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from("member_track_history")
-        .upsert(payload, { onConflict: "member_id,source,dedupe_key" });
+        .select("id")
+        .eq("member_id", memberUserId)
+        .eq("source", "extension_scan")
+        .eq("dedupe_key", dedupeKey)
+        .limit(1);
 
-      if (!error) createdRecords++;
+      if (existingError) {
+        errors.push(`${trackName}: bestaande record lookup faalde: ${existingError.message}`);
+        continue;
+      }
+
+      if (existing?.[0]?.id) {
+        const { error: updateError } = await supabase
+          .from("member_track_history")
+          .update(basePayload)
+          .eq("id", existing[0].id);
+
+        if (updateError) {
+          errors.push(`${trackName}: update faalde: ${updateError.message}`);
+        } else {
+          updatedRecords++;
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from("member_track_history")
+          .insert({
+            ...basePayload,
+            first_seen_at: now,
+          });
+
+        if (insertError) {
+          errors.push(`${trackName}: insert faalde: ${insertError.message}`);
+        } else {
+          createdRecords++;
+        }
+      }
+    }
+
+    const savedRecords = createdRecords + updatedRecords;
+    if (savedRecords === 0) {
+      throw new Error(
+        `Geen tracks opgeslagen voor ${memberIracingName}. ` +
+        (errors.length ? `Eerste fout: ${errors[0]}` : "Er zijn geen geldige tracknamen ontvangen.")
+      );
     }
 
     return new Response(
@@ -172,6 +217,9 @@ Deno.serve(async (req) => {
         iracing_cust_id: memberIracingId,
         tracks_found: tracks.length,
         created_records: createdRecords,
+        updated_records: updatedRecords,
+        saved_records: savedRecords,
+        errors,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
