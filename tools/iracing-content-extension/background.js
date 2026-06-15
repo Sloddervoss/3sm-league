@@ -27,8 +27,36 @@ async function openOrFocusScannerWindow() {
   });
 }
 
-chrome.action.onClicked.addListener(() => {
-  openOrFocusScannerWindow().catch((error) => {
-    console.error("Kon scanner-popup niet openen", error);
+async function openScannerSidePanel(tab) {
+  if (!chrome.sidePanel?.open) {
+    await openOrFocusScannerWindow();
+    return;
+  }
+
+  if (tab?.id) {
+    await chrome.sidePanel.setOptions({
+      tabId: tab.id,
+      path: "popup.html",
+      enabled: true,
+    });
+  }
+
+  if (tab?.windowId) {
+    await chrome.sidePanel.open({ windowId: tab.windowId });
+  } else {
+    await chrome.sidePanel.open({});
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => {});
+});
+
+chrome.action.onClicked.addListener((tab) => {
+  openScannerSidePanel(tab).catch((error) => {
+    console.error("Kon scanner-sidepanel niet openen", error);
+    openOrFocusScannerWindow().catch((fallbackError) => {
+      console.error("Kon scanner-popup niet openen", fallbackError);
+    });
   });
 });
