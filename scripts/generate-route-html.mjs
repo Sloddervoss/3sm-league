@@ -19,6 +19,10 @@ const routes = [
     h1: '3 Stripe Motorsport iRacing League',
     intro:
       '3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community voor coureurs die clean, fair en met plezier willen racen.',
+    details: [
+      'Op de site vind je de racekalender, uitslagen, standings, coureurs, teams en nieuws van de 3SM community.',
+      'Nieuwe en bestaande coureurs kunnen vanuit de homepage snel door naar meedoen, kalender, race-uitslagen en het actuele klassement.',
+    ],
     links: [
       ['/meedoen', 'Meedoen met onze iRacing community'],
       ['/calendar', 'Racekalender bekijken'],
@@ -36,6 +40,10 @@ const routes = [
     h1: 'Meedoen met de 3SM iRacing community',
     intro:
       'Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league met kalender, standings en uitslagen.',
+    details: [
+      'Meedoen begint bij de 3SM Discord en een profiel op de site. Daarna kun je je iRacing gegevens koppelen en inschrijven voor races of seizoenen.',
+      'Deze pagina legt uit voor wie de community bedoeld is, hoe inschrijven werkt en waar je de kalender, standings en uitslagen kunt volgen.',
+    ],
     links: [
       ['/calendar', 'Bekijk aankomende races'],
       ['/standings', 'Bekijk het kampioenschap'],
@@ -52,6 +60,10 @@ const routes = [
     h1: '3SM racekalender',
     intro:
       'De racekalender toont aankomende 3 Stripe Motorsport iRacing races met circuits, raceavonden, inschrijvingen en seizoensplanning.',
+    details: [
+      'Gebruik de kalender om te zien welke races eraan komen, op welk circuit er gereden wordt en hoe de planning van de league eruitziet.',
+      'Na afloop komen gereden races terug in de uitslagen en tellen ze mee voor standings wanneer resultaten zijn geïmporteerd.',
+    ],
     links: [
       ['/meedoen', 'Meedoen met 3SM'],
       ['/results', 'Bekijk gereden races'],
@@ -68,6 +80,10 @@ const routes = [
     h1: '3SM standings en klassement',
     intro:
       'Volg de actuele 3 Stripe Motorsport kampioenschapsstand, punten en posities van coureurs binnen de iRacing league.',
+    details: [
+      'De standings tonen hoe coureurs en teams presteren over de lopende competitie van 3 Stripe Motorsport.',
+      'Bekijk punten, posities en prestaties in samenhang met de gereden race-uitslagen en de kalender.',
+    ],
     links: [
       ['/results', 'Bekijk race-uitslagen'],
       ['/calendar', 'Bekijk de kalender'],
@@ -84,6 +100,10 @@ const routes = [
     h1: '3SM race-uitslagen',
     intro:
       'Bekijk de race-uitslagen van 3 Stripe Motorsport met gereden iRacing races, rondes, circuits, winnaars, podiums en kampioenschapspunten.',
+    details: [
+      'Elke race-uitslag heeft een eigen detailpagina met racegegevens, circuitinformatie, klasseringen en links naar andere recente uitslagen.',
+      'De uitslagenpagina is de centrale plek om gereden 3SM races terug te vinden en door te klikken naar detailpagina’s.',
+    ],
     links: [
       ['/standings', 'Bekijk de standings'],
       ['/calendar', 'Bekijk aankomende races'],
@@ -101,6 +121,10 @@ const routes = [
     h1: '3SM nieuws',
     intro:
       'Lees verhalen uit de paddock, raceverslagen en updates van 3 Stripe Motorsport.',
+    details: [
+      'Nieuwsartikelen en raceverslagen geven context bij de competitie, gereden races en ontwikkelingen binnen de 3SM community.',
+      'Vanaf deze nieuwshub kun je doorklikken naar gepubliceerde artikelen en daarna terug naar kalender, uitslagen en standings.',
+    ],
     links: [
       ['/calendar', 'Bekijk de racekalender'],
       ['/results', 'Bekijk uitslagen'],
@@ -118,6 +142,10 @@ const routes = [
     h1: '3SM seizoenen en competities',
     intro:
       'Ontdek de seizoenen van 3 Stripe Motorsport met competities, klassen, raceplanning, uitslagen en kampioenschappen.',
+    details: [
+      'Seizoenen bundelen de competities, klassen en raceplanning van 3 Stripe Motorsport.',
+      'Gebruik deze pagina als startpunt om seizoensinformatie te koppelen aan kalender, standings en race-uitslagen.',
+    ],
     links: [
       ['/calendar', 'Bekijk raceplanning'],
       ['/standings', 'Bekijk standings'],
@@ -134,6 +162,10 @@ const routes = [
     h1: '3SM coureurs',
     intro:
       'Bekijk de coureurs binnen 3 Stripe Motorsport, inclusief profielen, teams en prestaties in de iRacing league.',
+    details: [
+      'De coureurspagina helpt bezoekers ontdekken wie er actief meerijdt binnen 3SM en hoe prestaties terugkomen in standings en uitslagen.',
+      'Coureurs zijn gekoppeld aan teams, race-resultaten en profielen binnen de 3 Stripe Motorsport community.',
+    ],
     links: [
       ['/teams', 'Bekijk teams'],
       ['/standings', 'Bekijk standings'],
@@ -150,6 +182,10 @@ const routes = [
     h1: '3SM teams',
     intro:
       'Ontdek de teams binnen 3 Stripe Motorsport en zie hoe coureurs samen actief zijn in de iRacing community en league.',
+    details: [
+      'Teams maken zichtbaar hoe coureurs samenwerken binnen de 3SM league en community.',
+      'Teaminformatie sluit aan op coureurs, standings en race-uitslagen zodat prestaties beter te volgen zijn.',
+    ],
     links: [
       ['/drivers', 'Bekijk coureurs'],
       ['/standings', 'Bekijk standings'],
@@ -251,6 +287,54 @@ const truncate = (value, max = 155) => {
   return `${clean.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
 };
 
+const formatDateNl = (value) => {
+  if (!value) return null;
+  try {
+    return new Intl.DateTimeFormat('nl-NL', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(value));
+  } catch {
+    return dateOnly(value);
+  }
+};
+
+const driverName = (result) =>
+  result?.profiles?.display_name || result?.profiles?.iracing_name || 'Onbekende coureur';
+
+const buildRaceDetails = (race) => {
+  const raceDate = formatDateNl(race.race_date) || dateOnly(race.race_date);
+  const leagueName = race.leagues?.name;
+  const carClass = race.leagues?.car_class;
+  const results = [...(race.race_results || [])]
+    .filter((result) => result.position)
+    .sort((a, b) => (a.position || 999) - (b.position || 999));
+  const podium = results.slice(0, 3).map((result) => `${result.position}. ${driverName(result)}`);
+  const winner = results[0] ? driverName(results[0]) : null;
+  const fastestLap = results.find((result) => result.fastest_lap);
+  const facts = [
+    raceDate ? `Datum: ${raceDate}.` : null,
+    race.track ? `Circuit: ${race.track}.` : null,
+    leagueName ? `Competitie: ${leagueName}.` : null,
+    carClass ? `Klasse: ${carClass}.` : null,
+    results.length ? `Aantal geklasseerde coureurs: ${results.length}.` : null,
+    winner ? `Winnaar: ${winner}.` : null,
+    podium.length ? `Podium: ${podium.join(', ')}.` : null,
+    fastestLap ? `Snelste ronde: ${driverName(fastestLap)}.` : null,
+  ].filter(Boolean);
+
+  return {
+    facts,
+    summary: [
+      `Deze racepagina bundelt de officiële 3SM uitslag van ${race.name}${race.track ? ` op ${race.track}` : ''}${raceDate ? ` (${raceDate})` : ''}.`,
+      results.length
+        ? `De pagina bevat klasseringen, ronden, punten en racegegevens voor ${results.length} coureurs${winner ? `, met ${winner} als winnaar` : ''}.`
+        : 'De pagina is voorbereid als openbare uitslagpagina en verwijst door naar de volledige resultatenhub.',
+    ],
+  };
+};
+
 const parseEnvFile = (file) => {
   if (!existsSync(file)) return {};
   return Object.fromEntries(
@@ -294,7 +378,7 @@ const fetchDynamicRoutes = async () => {
 
   const { data: completedRaces, error: raceError } = await supabase
     .from('races')
-    .select('id,name,track,race_date,updated_at,status,leagues(name,car_class)')
+    .select('id,name,track,race_date,updated_at,status,leagues(name,car_class),race_results(position,laps,points,fastest_lap,profiles(display_name,iracing_name))')
     .eq('status', 'completed')
     .order('race_date', { ascending: false })
     .limit(250);
@@ -306,6 +390,7 @@ const fetchDynamicRoutes = async () => {
       const raceDate = dateOnly(race.race_date);
       const track = race.track ? ` op ${race.track}` : '';
       const carClass = race.leagues?.car_class ? `${race.leagues.car_class} ` : '';
+      const raceDetails = buildRaceDetails(race);
       dynamicRoutes.push({
         path: `/results/${race.id}`,
         title: `${race.name} uitslag - 3 Stripe Motorsport`,
@@ -315,6 +400,8 @@ const fetchDynamicRoutes = async () => {
         description: truncate(`Bekijk de ${carClass}iRacing race-uitslag van ${race.name}${track} op ${raceDate}: klasseringen, rondes, podium en racegegevens van 3SM.`),
         h1: `${race.name} race-uitslag`,
         intro: `Bekijk de race-uitslag van ${race.name}${track}, inclusief klasseringen, rondes en racegegevens.`,
+        details: raceDetails.summary,
+        facts: raceDetails.facts,
         links: [
           ['/results', 'Terug naar race-uitslagen'],
           ['/standings', 'Bekijk standings'],
@@ -336,6 +423,7 @@ const fetchDynamicRoutes = async () => {
   } else {
     for (const post of publishedPosts || []) {
       const categorySlug = categoryToSlug(post.category);
+      const articleSummary = truncate(post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.', 220);
       dynamicRoutes.push({
         path: `/news/${categorySlug}/${post.slug}`,
         title: post.seo_title || `${post.title} - 3 Stripe Motorsport`,
@@ -344,7 +432,11 @@ const fetchDynamicRoutes = async () => {
         lastmod: dateOnly(post.updated_at || post.published_at),
         description: truncate(post.seo_description || post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.'),
         h1: post.title,
-        intro: truncate(post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.', 220),
+        intro: articleSummary,
+        details: [
+          `Dit nieuwsartikel hoort bij de 3SM categorie ${post.category || 'Nieuws'} en is gepubliceerd als onderdeel van de 3 Stripe Motorsport community.`,
+          articleSummary,
+        ],
         links: [
           ['/news', 'Terug naar nieuws'],
           ['/calendar', 'Bekijk racekalender'],
@@ -450,6 +542,19 @@ ${links}
       </nav>`;
 };
 
+const buildRouteDetailsHtml = (route) => {
+  const detailParagraphs = (route.details || [])
+    .filter(Boolean)
+    .map((detail) => `        <p>${escapeHtml(detail)}</p>`)
+    .join('\n');
+  const facts = (route.facts || [])
+    .filter(Boolean)
+    .map((fact) => `          <li>${escapeHtml(fact)}</li>`)
+    .join('\n');
+
+  return `${detailParagraphs}${facts ? `\n        <ul>\n${facts}\n        </ul>` : ''}`;
+};
+
 const buildRichContent = (route, faq) => {
   const breadcrumb = route.path === '/'
     ? ''
@@ -477,6 +582,11 @@ ${faq
     : '';
 
   return `${breadcrumb}
+      <div aria-hidden="true" aria-label="3SM pagina-informatie">
+        <p><strong>${escapeHtml(route.h1)}</strong></p>
+        <p>${escapeHtml(route.intro)}</p>
+${buildRouteDetailsHtml(route)}
+      </div>
       ${faqHtml}`;
 };
 
@@ -510,6 +620,7 @@ const applyRouteMeta = (html, route) => {
     <main>
       <h1>${escapeHtml(route.h1)}</h1>
       <p>${escapeHtml(route.intro)}</p>
+${buildRouteDetailsHtml(route)}
       <nav aria-label="Belangrijke 3SM links">
         <ul>${noscriptLinks.map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('')}</ul>
       </nav>
