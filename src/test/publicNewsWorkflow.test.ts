@@ -118,6 +118,19 @@ describe("public news workflow", () => {
     expect(pkg).toContain('"seo:refresh": "node scripts/refresh-dynamic-seo.mjs"');
   });
 
+  it("keeps crawler metadata and internal links on trailing-slash canonical URLs", () => {
+    const generator = read("scripts/generate-route-html.mjs");
+
+    expect(generator).toContain("const canonicalPath = (path) =>");
+    expect(generator).toContain("const absoluteUrl = (path) => `${SITE_URL}${canonicalPath(path)}`;");
+    expect(generator).toContain("title: '3SM iRacing racekalender - 3 Stripe Motorsport'");
+    expect(generator).toContain("Bekijk de 3SM iRacing racekalender met aankomende races");
+    expect(generator).toContain("title: '3SM iRacing race-uitslagen en standings - 3 Stripe Motorsport'");
+    expect(generator).toContain("Volg 3SM iRacing race-uitslagen, podiums, klasseringen en standings");
+    expect(generator).toContain("<loc>${absoluteUrl(route.path)}</loc>");
+    expect(generator).toContain("<li><a href=\"${absoluteUrl(href)}\">");
+  });
+
   it("centralizes category taxonomy, author pages and season metadata for the expanded platform", () => {
     expect(existsSync("src/lib/newsTaxonomy.ts")).toBe(true);
     expect(existsSync("src/pages/NewsAuthorPage.tsx")).toBe(true);
