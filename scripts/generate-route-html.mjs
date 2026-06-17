@@ -7,6 +7,10 @@ const distDir = new URL('../dist/', import.meta.url).pathname;
 const templatePath = join(distDir, 'index.html');
 const manifestPath = join(distDir, '.route-html-manifest.json');
 const template = readFileSync(templatePath, 'utf8');
+const canonicalPath = (path) => {
+  if (path === '/') return '/';
+  return `/${String(path).replace(/^\/+|\/+$/g, '')}/`;
+};
 
 const routes = [
   {
@@ -52,11 +56,11 @@ const routes = [
   },
   {
     path: '/calendar',
-    title: 'iRacing racekalender - 3 Stripe Motorsport',
+    title: '3SM iRacing racekalender - 3 Stripe Motorsport',
     priority: '0.9',
     changefreq: 'weekly',
     description:
-      'Bekijk de 3SM iRacing racekalender met aankomende races, circuits, tijden en inschrijven voor 3 Stripe Motorsport.',
+      'Bekijk de 3SM iRacing racekalender met aankomende races, circuits, tijden en inschrijven bij 3 Stripe Motorsport.',
     h1: '3SM racekalender',
     intro:
       'De racekalender toont aankomende 3 Stripe Motorsport iRacing races met circuits, raceavonden, inschrijvingen en seizoensplanning.',
@@ -92,11 +96,11 @@ const routes = [
   },
   {
     path: '/results',
-    title: 'iRacing race-uitslagen - 3 Stripe Motorsport',
+    title: '3SM iRacing race-uitslagen en standings - 3 Stripe Motorsport',
     priority: '0.8',
     changefreq: 'weekly',
     description:
-      'Bekijk 3SM race-uitslagen, podiums, klasseringen en terugblik op gereden iRacing races van 3 Stripe Motorsport.',
+      'Volg 3SM iRacing race-uitslagen, podiums, klasseringen en standings van gereden races bij 3 Stripe Motorsport.',
     h1: '3SM race-uitslagen',
     intro:
       'Bekijk de race-uitslagen van 3 Stripe Motorsport met gereden iRacing races, rondes, circuits, winnaars, podiums en kampioenschapspunten.',
@@ -252,7 +256,7 @@ const escapeHtml = (value) =>
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-const absoluteUrl = (path) => `${SITE_URL}${path === '/' ? '/' : `${path}/`}`;
+const absoluteUrl = (path) => `${SITE_URL}${canonicalPath(path)}`;
 
 // Sitemap <lastmod> must reflect real page-content changes, not build time.
 // Static route entries intentionally omit lastmod unless that specific page's
