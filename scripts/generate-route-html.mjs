@@ -244,14 +244,14 @@ const joinFaq = [
 ];
 
 const escapeAttr = (value) =>
-  value
+  String(value)
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
 const escapeHtml = (value) =>
-  value
+  String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
@@ -304,8 +304,103 @@ const formatDateNl = (value) => {
   }
 };
 
+const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
 const driverName = (result) =>
-  result?.profiles?.display_name || result?.profiles?.iracing_name || 'Onbekende coureur';
+  cleanText(result?.profiles?.display_name || result?.profiles?.iracing_name) || 'Onbekende coureur';
+
+let resultsHubSummaries = [];
+
+const sortedRaceResults = (race) => [...(race.race_results || [])]
+  .filter((result) => result.position)
+  .sort((a, b) => (a.position || 999) - (b.position || 999));
+
+const summarizeRaceForHub = (race) => {
+  const results = sortedRaceResults(race);
+  const podium = results.slice(0, 3).map((result) => ({
+    position: result.position,
+    name: driverName(result),
+    points: result.points,
+    laps: result.laps,
+    fastestLap: Boolean(result.fastest_lap),
+  }));
+  const winner = podium[0]?.name || null;
+  const fastestLap = results.find((result) => result.fastest_lap);
+
+  return {
+    id: race.id,
+    path: `/results/${race.id}`,
+    name: cleanText(race.name),
+    track: cleanText(race.track),
+    raceDate: race.race_date,
+    formattedDate: formatDateNl(race.race_date) || dateOnly(race.race_date),
+    round: race.round,
+    leagueName: cleanText(race.leagues?.name) || null,
+    carClass: cleanText(race.leagues?.car_class) || null,
+    winner,
+    podium,
+    fastestLap: fastestLap ? driverName(fastestLap) : null,
+    classifiedCount: results.length,
+  };
+};
+
+const buildResultsHubCrawlerHtml = (summaries) => {
+  if (!summaries.length) return '';
+
+  const latest = summaries[0];
+  const podiumList = latest.podium.length
+    ? `\n          <ol>\n${latest.podium.map((entry) => `            <li>${escapeHtml(entry.position)}. ${escapeHtml(entry.name)}${entry.points != null ? ` (${escapeHtml(entry.points)} punten)` : ''}</li>`).join('\n')}\n          </ol>`
+    : '';
+
+  const archiveItems = summaries.slice(0, 80).map((race) => {
+    const meta = [race.track, race.formattedDate, race.leagueName].filter(Boolean).join(' · ');
+    const podium = race.podium.length
+      ? ` Podium: ${race.podium.map((entry) => `${entry.position}. ${entry.name}`).join(', ')}.`
+      : '';
+    const winner = race.winner ? ` Winnaar: ${race.winner}.` : '';
+    return `          <li><a href="${absoluteUrl(race.path)}">${escapeHtml(race.name)} race-uitslag</a>${meta ? ` — ${escapeHtml(meta)}.` : ''}${escapeHtml(winner + podium)}</li>`;
+  }).join('\n');
+
+  return `<section aria-label="Crawler-zichtbare race-uitslagen">
+        <h2>Laatste race-uitslag</h2>
+        <p><a href="${absoluteUrl(latest.path)}">${escapeHtml(latest.name)} race-uitslag</a>${latest.track ? ` op ${escapeHtml(latest.track)}` : ''}${latest.formattedDate ? ` (${escapeHtml(latest.formattedDate)})` : ''}${latest.winner ? `, winnaar ${escapeHtml(latest.winner)}` : ''}.</p>${podiumList}
+        <h2>Race archief</h2>
+        <ul>
+${archiveItems}
+        </ul>
+      </section>`;
+};
+
+const buildResultsHubItemListJsonLd = (summaries) => ({
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: '3 Stripe Motorsport race-uitslagen',
+  description: 'Overzicht van gereden 3SM iRacing races met circuits, rondes, winnaars en resultaten.',
+  url: absoluteUrl('/results'),
+  itemListElement: summaries.slice(0, 80).map((race, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    item: {
+      '@type': 'WebPage',
+      name: `${race.name} uitslag`,
+      description: race.winner
+        ? `${race.name}${race.track ? ` op ${race.track}` : ''}: winnaar ${race.winner}.`
+        : `${race.name}${race.track ? ` op ${race.track}` : ''}: iRacing race-uitslag van 3 Stripe Motorsport.`,
+      url: absoluteUrl(race.path),
+      isPartOf: {
+        '@type': 'WebSite',
+        name: '3 Stripe Motorsport',
+        url: SITE_URL,
+      },
+      about: {
+        '@type': 'SportsOrganization',
+        name: '3 Stripe Motorsport',
+        sport: 'Sim racing',
+        url: SITE_URL,
+      },
+    },
+  })),
+});
 
 const buildRaceDetails = (race) => {
   const raceDate = formatDateNl(race.race_date) || dateOnly(race.race_date);
@@ -382,7 +477,7 @@ const fetchDynamicRoutes = async () => {
 
   const { data: completedRaces, error: raceError } = await supabase
     .from('races')
-    .select('id,name,track,race_date,updated_at,status,leagues(name,car_class),race_results(position,laps,points,fastest_lap,profiles(display_name,iracing_name))')
+    .select('id,name,track,race_date,round,updated_at,status,leagues(name,car_class),race_results(position,laps,points,fastest_lap,profiles(display_name,iracing_name))')
     .eq('status', 'completed')
     .order('race_date', { ascending: false })
     .limit(250);
@@ -390,6 +485,8 @@ const fetchDynamicRoutes = async () => {
   if (raceError) {
     console.warn(`Kon race-detail routes niet ophalen voor sitemap: ${raceError.message}`);
   } else {
+    resultsHubSummaries = (completedRaces || []).map(summarizeRaceForHub);
+
     for (const race of completedRaces || []) {
       const raceDate = dateOnly(race.race_date);
       const track = race.track ? ` op ${race.track}` : '';
@@ -556,7 +653,7 @@ const buildRouteDetailsHtml = (route) => {
     .map((fact) => `          <li>${escapeHtml(fact)}</li>`)
     .join('\n');
 
-  return `${detailParagraphs}${facts ? `\n        <ul>\n${facts}\n        </ul>` : ''}`;
+  return `${detailParagraphs}${facts ? `\n        <ul>\n${facts}\n        </ul>` : ''}${route.crawlerHtml ? `\n${route.crawlerHtml}` : ''}`;
 };
 
 const buildRichContent = (route, faq) => {
@@ -611,10 +708,15 @@ const applyRouteMeta = (html, route) => {
   out = out.replace(/<script type="application\/ld\+json" id="route-webpage"[\s\S]*?<\/script>\n?\s*/g, '');
   out = out.replace(/<script type="application\/ld\+json" id="route-breadcrumb"[\s\S]*?<\/script>\n?\s*/g, '');
   out = out.replace(/<script type="application\/ld\+json" id="route-faq"[\s\S]*?<\/script>\n?\s*/g, '');
+  const routeJsonLd = [
+    buildJsonLdScript('route-webpage', buildWebPageJsonLd(route)),
+    buildJsonLdScript('route-breadcrumb', buildBreadcrumbJsonLd(route)),
+    ...(route.extraJsonLd || []).map(({ id, data }) => buildJsonLdScript(id, data)),
+  ].join('\n    ');
   const extraJsonLd = ''; // FAQPage removed — sr-only workaround not accepted by Google
   out = out.replace(
     '</head>',
-    `    ${buildJsonLdScript('route-webpage', buildWebPageJsonLd(route))}\n    ${buildJsonLdScript('route-breadcrumb', buildBreadcrumbJsonLd(route))}${extraJsonLd}\n  </head>`,
+    `    ${routeJsonLd}${extraJsonLd}\n  </head>`,
   );
   out = out.replace(/<noscript>[\s\S]*?<\/noscript>\s*/g, '');
   const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
@@ -699,6 +801,21 @@ const resultsRoute = routes.find((route) => route.path === '/results');
 if (resultsRoute) {
   resultsRoute.crawlerLinksLabel = 'Recente race-uitslagen';
   resultsRoute.crawlerLinks = toCrawlerLinks(resultDetailRoutes, 80);
+  if (resultsHubSummaries.length) {
+    const latest = resultsHubSummaries[0];
+    resultsRoute.details = [
+      `Laatste race: ${latest.name}${latest.track ? ` op ${latest.track}` : ''}${latest.formattedDate ? ` (${latest.formattedDate})` : ''}${latest.winner ? `, gewonnen door ${latest.winner}` : ''}.`,
+      `Het archief bevat ${resultsHubSummaries.length} afgeronde races met detailpagina's, winnaars, podiums en links naar de volledige uitslagen.`,
+    ];
+    resultsRoute.facts = resultsHubSummaries.slice(0, 10).map((race) => {
+      const podium = race.podium.length ? ` Podium: ${race.podium.map((entry) => `${entry.position}. ${entry.name}`).join(', ')}.` : '';
+      return `${race.name}${race.track ? ` — ${race.track}` : ''}${race.formattedDate ? ` — ${race.formattedDate}` : ''}.${race.winner ? ` Winnaar: ${race.winner}.` : ''}${podium}`;
+    });
+    resultsRoute.crawlerHtml = buildResultsHubCrawlerHtml(resultsHubSummaries);
+    resultsRoute.extraJsonLd = [
+      { id: 'results-itemlist-jsonld', data: buildResultsHubItemListJsonLd(resultsHubSummaries) },
+    ];
+  }
 }
 
 const newsRoute = routes.find((route) => route.path === '/news');
