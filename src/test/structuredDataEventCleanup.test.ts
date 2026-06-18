@@ -40,4 +40,15 @@ describe("structured data event cleanup", () => {
     expect(generator).toContain("breadcrumbItem(2, 'Race-uitslagen', '/results')");
     expect(generator).toContain("breadcrumbItem(2, 'Nieuws', '/news')");
   });
+
+  it("generates crawler-visible real results hub content and ItemList JSON-LD from completed race data", () => {
+    const generator = readSource("scripts/generate-route-html.mjs");
+
+    expect(generator).toContain("buildResultsHubCrawlerHtml");
+    expect(generator).toContain("Laatste race-uitslag");
+    expect(generator).toContain("Race archief");
+    expect(generator).toContain("buildResultsHubItemListJsonLd");
+    expect(generator).toContain("results-itemlist-jsonld");
+    expect(generator).toContain("resultsRoute.crawlerHtml = buildResultsHubCrawlerHtml(resultsHubSummaries)");
+  });
 });
