@@ -198,7 +198,7 @@ const routes = [
   },
 ];
 
-const privateRoutes = ['/auth', '/profile', '/admin', '/admin/track-intelligence-test', '/news-editor', '/stewards', '/koppel'];
+const privateRoutes = ['/auth', '/profile', '/admin', '/admin/track-intelligence', '/admin/track-intelligence-test', '/news-editor', '/stewards', '/koppel'];
 
 const joinFaq = [
   {
