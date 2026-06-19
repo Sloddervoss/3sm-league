@@ -2,12 +2,20 @@
 
 ## General workflow
 
+### Harde workflowregel
+
+- Geen push naar `main` zonder expliciete toestemming van Vincent.
+- Geen live deploy zonder expliciete toestemming van Vincent.
+- Standaard werken op een aparte branch.
+- Na codewijziging eerst diff, tests en risico's tonen.
+- Pas na akkoord mag er gepusht of gedeployed worden.
+
 1. Read the relevant docs in `docs/`.
 2. Inspect the exact files before editing; do not rely only on this guide.
 3. Make the smallest scoped change.
 4. Run targeted tests first, then full checks.
-5. Show diff/status before push/deploy when practical.
-6. Push/deploy only when explicitly requested.
+5. Show diff/status before push/deploy.
+6. Push/deploy only when explicitly requested and after approval.
 
 Recommended root checks:
 
