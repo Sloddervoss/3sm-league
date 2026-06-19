@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
+import { privateSeoRoutes } from './route-classification.mjs';
 
 const SITE_URL = 'https://3stripemotorsport.cc';
 const distDir = new URL('../dist/', import.meta.url).pathname;
@@ -198,7 +199,7 @@ const routes = [
   },
 ];
 
-const privateRoutes = ['/auth', '/profile', '/admin', '/admin/track-intelligence', '/admin/track-intelligence-test', '/news-editor', '/stewards', '/koppel'];
+const privateRoutes = privateSeoRoutes;
 
 const joinFaq = [
   {
