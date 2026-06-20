@@ -180,14 +180,20 @@ const iracingLogin = async () => {
 };
 
 const fetchIRacingData = async (path: string, cookie: string) => {
-  const response = await fetchWithTimeout(`https://members-ng.iracing.com/bff/pub/proxy${path}`, {
+  // iRacing's /data API accepts the established members-ng session cookie directly.
+  // Routing the same path through /bff/pub/proxy returns 401 for these stats endpoints
+  // even after OAuth succeeds, which made every Track Intelligence member sync fail.
+  const response = await fetchWithTimeout(`https://members-ng.iracing.com${path}`, {
     headers: {
       "Cookie": cookie,
       "User-Agent": "3SM Track Intelligence Test/1.0",
       "Accept": "application/json",
     },
   });
-  if (!response.ok) throw new Error(`iRacing request mislukt: ${response.status} ${path}`);
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`iRacing request mislukt: ${response.status} ${path}${body ? ` — ${body.replace(/\s+/g, " ").slice(0, 180)}` : ""}`);
+  }
   const json = await response.json();
   if (json?.link) {
     const linked = await fetch(json.link, { headers: { "Accept": "application/json" } });
