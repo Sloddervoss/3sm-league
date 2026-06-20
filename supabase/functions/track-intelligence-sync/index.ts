@@ -201,10 +201,10 @@ const iracingLogin = async (): Promise<string> => {
 };
 
 const fetchIRacingData = async (path: string, cookie: string) => {
-  // The iRacing /data API is accessed through the BFF at /bff/pub/data/...
-  // (as the website does). Direct /data/... calls return 401 even with a valid
-  // OAuth session cookie because they bypass the BFF validation layer.
-  const url = `https://members-ng.iracing.com/bff/pub${path}`;
+  // The iRacing /data API is accessed through the BFF proxy at
+  // /bff/pub/proxy/data/... — this validates the OAuth session and proxies
+  // to the internal data API. Direct /data/... or /bff/pub/data/... won't work.
+  const url = `https://members-ng.iracing.com/bff/pub/proxy${path}`;
   const response = await fetchWithTimeout(url, {
     headers: {
       "Cookie": cookie,
