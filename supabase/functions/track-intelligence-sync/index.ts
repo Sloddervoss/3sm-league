@@ -66,36 +66,43 @@ const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs =
 /**
  * iRacing OAuth PKCE login that returns a session cookie valid for
  * both the BFF and the /data API on members-ng.iracing.com.
- *
- * Uses a CookieJar (Map) to persist session cookies across redirects.
  */
 const iracingLogin = async (): Promise<string> => {
-  const jar = new Map<string, string>();
+  // Domain-aware cookie jar: {name -> {value, domain}}
+  const jar = new Map<string, {value: string; domain: string}>();
+  const MEMBERS_HOST = "members-ng.iracing.com";
 
-  // --- helper functions for OAuth redirect chain with cookie jar ---
-  const mergeSetCookie = (response: Response) => {
-    const setCookies: string[] =
+  const setCookie = (response: Response, urlStr: string) => {
+    const respDomain = new URL(urlStr).hostname;
+    const rawCookies: string[] =
       (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.()
         ?? (response.headers.get("set-cookie")?.split(/,(?=[^;]+?=)/) ?? []);
-    for (const raw of setCookies) {
+    for (const raw of rawCookies) {
       const pair = raw.split(";")[0]?.trim();
       if (!pair) continue;
       const eq = pair.indexOf("=");
       if (eq < 1) continue;
-      jar.set(pair.slice(0, eq), pair.slice(eq + 1));
+      const name = pair.slice(0, eq);
+      const value = pair.slice(eq + 1);
+      // Only keep cookies from the members-ng domain — OAuth domain
+      // cookies (oauth.iracing.com) contain single-use tokens that
+      // become invalid and cause "invalid_token" on subsequent requests.
+      if (respDomain === MEMBERS_HOST) {
+        jar.set(name, { value, domain: respDomain });
+      }
     }
   };
 
-  const dumpCookie = () =>
-    Array.from(jar.entries()).map(([n, v]) => `${n}=${v}`).join("; ");
+  const cookieHeader = () =>
+    Array.from(jar.values()).map((c) => `${c.value}`).join("; ");
 
   const oauthFetch = async (url: string, init: RequestInit = {}): Promise<Response> => {
     const headers = new Headers(init.headers ?? {});
     if (!headers.has("User-Agent")) headers.set("User-Agent", "3SM Track Intelligence Test/1.0");
-    const c = dumpCookie();
+    const c = cookieHeader();
     if (c) headers.set("Cookie", c);
     const resp = await fetchWithTimeout(url, { ...init, headers, redirect: "manual" }, 20_000);
-    mergeSetCookie(resp);
+    setCookie(resp, url);
     return resp;
   };
 
@@ -179,7 +186,7 @@ const iracingLogin = async (): Promise<string> => {
   // 5. Establish session — this also sets the session cookie that should
   //    be valid for /data API endpoints on members-ng.iracing.com.
   await followRedirects(`https://members-ng.iracing.com/bff/pub/establish?verified_id=${encodeURIComponent(verifiedId)}`);
-  const cookie = dumpCookie();
+  const cookie = cookieHeader();
   if (!cookie) throw new Error("iRacing OAuth gaf geen sessie-cookie terug");
   return cookie;
 };
