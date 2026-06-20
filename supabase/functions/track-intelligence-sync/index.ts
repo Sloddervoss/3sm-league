@@ -63,49 +63,142 @@ const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs =
   }
 };
 
-const iracingLogin = async () => {
-  // Legacy iRacing auth: POST to /auth, extract session cookie.
-  // OAuth PKCE flow produces a session cookie that is NOT recognized
-  // by the /data API endpoints (member_recent_races etc.), giving 401.
-  // This approach uses the same login mechanism as the official
-  // iracing-data-api npm package.
-  const password = await hashPassword(IRACING_PASSWORD, IRACING_EMAIL);
-  const response = await fetchWithTimeout("https://members-ng.iracing.com/auth", {
+/**
+ * iRacing OAuth PKCE login that returns a session cookie valid for
+ * both the BFF and the /data API on members-ng.iracing.com.
+ *
+ * Uses a CookieJar (Map) to persist session cookies across redirects.
+ */
+const iracingLogin = async (): Promise<string> => {
+  const jar = new Map<string, string>();
+
+  // --- helper functions for OAuth redirect chain with cookie jar ---
+  const mergeSetCookie = (response: Response) => {
+    const setCookies: string[] =
+      (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.()
+        ?? (response.headers.get("set-cookie")?.split(/,(?=[^;]+?=)/) ?? []);
+    for (const raw of setCookies) {
+      const pair = raw.split(";")[0]?.trim();
+      if (!pair) continue;
+      const eq = pair.indexOf("=");
+      if (eq < 1) continue;
+      jar.set(pair.slice(0, eq), pair.slice(eq + 1));
+    }
+  };
+
+  const dumpCookie = () =>
+    Array.from(jar.entries()).map(([n, v]) => `${n}=${v}`).join("; ");
+
+  const oauthFetch = async (url: string, init: RequestInit = {}): Promise<Response> => {
+    const headers = new Headers(init.headers ?? {});
+    if (!headers.has("User-Agent")) headers.set("User-Agent", "3SM Track Intelligence Test/1.0");
+    const c = dumpCookie();
+    if (c) headers.set("Cookie", c);
+    const resp = await fetchWithTimeout(url, { ...init, headers, redirect: "manual" }, 20_000);
+    mergeSetCookie(resp);
+    return resp;
+  };
+
+  const followRedirects = async (url: string, max = 8): Promise<Response> => {
+    let u = url;
+    let resp = await oauthFetch(u);
+    for (let i = 0; i < max && resp.status >= 300 && resp.status < 400; i++) {
+      const loc = resp.headers.get("location");
+      if (!loc) break;
+      u = new URL(loc, u).toString();
+      resp = await oauthFetch(u);
+    }
+    return resp;
+  };
+
+  const base64Url = (bytes: Uint8Array) => base64FromBytes(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const codeVerifier = () => { const b = new Uint8Array(32); crypto.getRandomValues(b); return base64Url(b); };
+  const makeChallenge = async (v: string) => base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v))));
+
+  // --- OAuth PKCE flow ---
+  const verifier = codeVerifier();
+  const challenge = await makeChallenge(verifier);
+  const domain = "members-ng.iracing.com";
+  const redirectUri = `https://members-ng.iracing.com/bff/pub/initialize?DOMAIN=${domain}`;
+  const authorizeUrl = new URL("https://oauth.iracing.com/oauth2/authorize");
+  authorizeUrl.search = new URLSearchParams({
+    client_id: "iracing_ui",
+    response_type: "code",
+    redirect_uri: redirectUri,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    scope: "iracing.auth",
+  }).toString();
+
+  // 1. Authorize redirect chain → login form
+  const startResp = await followRedirects(authorizeUrl.toString());
+  const loginHtml = await startResp.text();
+  const action = loginHtml.match(/<form[^>]*action="([^\"]+)"/)?.[1]?.replace(/&amp;/g, "&");
+  if (!action) throw new Error(`iRacing OAuth loginformulier niet gevonden: HTTP ${startResp.status}`);
+
+  // 2. Submit login form
+  const loginBody = new URLSearchParams({
+    email: IRACING_EMAIL,
+    password: await hashPassword(IRACING_PASSWORD, IRACING_EMAIL),
+    rememberMe: "on",
+    offer_remember_me: "true",
+  });
+  let currentUrl = new URL(action, "https://oauth.iracing.com").toString();
+  let loginResp = await oauthFetch(currentUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": "3SM Track Intelligence Test/1.0",
-      "Accept": "application/json",
-      "Origin": "https://members.iracing.com",
-      "Referer": "https://members.iracing.com/",
-    },
-    body: JSON.stringify({ email: IRACING_EMAIL, password }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: loginBody,
   });
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`iRacing auth mislukt: HTTP ${response.status}${body ? ` — ${body.slice(0, 160)}` : ""}`);
+  // 3. Follow redirects to get initialized_id
+  let initializedId: string | null = null;
+  for (let i = 0; i < 8 && loginResp.status >= 300 && loginResp.status < 400; i++) {
+    const loc = loginResp.headers.get("location");
+    if (!loc) break;
+    currentUrl = new URL(loc, currentUrl).toString();
+    initializedId = new URL(currentUrl).searchParams.get("initialized_id") ?? initializedId;
+    loginResp = await oauthFetch(currentUrl);
   }
-  const setCookieStr = response.headers.get("set-cookie") ?? "";
-  const cookie = (setCookieStr ? setCookieStr.split(/,(?=[^;]+?=)/) : [])
-    .map((part) => part.split(";")[0].trim())
-    .filter(Boolean)
-    .join("; ");
-  if (!cookie) throw new Error("iRacing auth gaf geen sessie-cookie terug");
+  initializedId = initializedId ?? new URL(currentUrl).searchParams.get("initialized_id");
+  if (!initializedId) {
+    const b = await loginResp.text().catch(() => "");
+    throw new Error(`iRacing OAuth login gaf geen initialized_id: HTTP ${loginResp.status}${b ? ` — ${b.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").slice(0, 180)}` : ""}`);
+  }
+
+  // 4. Verify the code
+  const verifyResp = await oauthFetch("https://members-ng.iracing.com/bff/pub/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+    body: new URLSearchParams({ initialized_id: initializedId, redirect_uri: redirectUri, code_verifier: verifier, client_id: "iracing_ui" }),
+  });
+  if (!verifyResp.ok) throw new Error(`iRacing OAuth verify mislukt: HTTP ${verifyResp.status}`);
+  const verifyJson = await verifyResp.json();
+  const verifiedId = cleanString(verifyJson?.verified_id);
+  if (!verifiedId) throw new Error(`iRacing OAuth verify gaf geen verified_id terug`);
+
+  // 5. Establish session — this also sets the session cookie that should
+  //    be valid for /data API endpoints on members-ng.iracing.com.
+  await followRedirects(`https://members-ng.iracing.com/bff/pub/establish?verified_id=${encodeURIComponent(verifiedId)}`);
+  const cookie = dumpCookie();
+  if (!cookie) throw new Error("iRacing OAuth gaf geen sessie-cookie terug");
   return cookie;
 };
 
 const fetchIRacingData = async (path: string, cookie: string) => {
-  // iRacing's /data API accepts the established members-ng session cookie directly.
-  // Routing the same path through /bff/pub/proxy returns 401 for these stats endpoints
-  // even after OAuth succeeds, which made every Track Intelligence member sync fail.
-  const response = await fetchWithTimeout(`https://members-ng.iracing.com${path}`, {
-    headers: {
-      "Cookie": cookie,
-      "User-Agent": "3SM Track Intelligence Test/1.0",
-      "Accept": "application/json",
-    },
-  });
+  // iRacing /data API — try direct first, fall back to /bff/pub/proxy
+  const tryUrl = (base: string) =>
+    fetchWithTimeout(`https://members-ng.iracing.com${base}${path}`, {
+      headers: {
+        "Cookie": cookie,
+        "User-Agent": "3SM Track Intelligence Test/1.0",
+        "Accept": "application/json",
+      },
+    });
+
+  let response = await tryUrl("");
+  if (!response.ok) {
+    response = await tryUrl("/bff/pub/proxy");
+  }
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(`iRacing request mislukt: ${response.status} ${path}${body ? ` — ${body.replace(/\s+/g, " ").slice(0, 180)}` : ""}`);
@@ -237,6 +330,7 @@ Deno.serve(async (req) => {
     if (profileError) throw profileError;
 
     const linkedProfiles = (profiles || []).filter((profile: Profile) => cleanString(profile.iracing_id));
+
     let cookie: string;
     try {
       cookie = await iracingLogin();
@@ -254,6 +348,7 @@ Deno.serve(async (req) => {
       }
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
     let membersSuccess = 0;
     let membersFailed = 0;
     let createdRecords = 0;
