@@ -1533,6 +1533,9 @@ async function syncTeamRoles(ctx = {}) {
   const managedRoleIds = new Set(cfg.managed_team_role_ids || []);
   const managedCategoryIds = new Set(cfg.managed_team_category_ids || []);
 
+  // Vind Rijder rol — teamrollen moeten erboven staan voor kleurprioriteit
+  const rijderRole = guild.roles.cache.find(r => r.name === 'Rijder');
+
   // Maak ontbrekende team-rollen + categorie + kanalen aan
   for (const team of teams) {
     setStep(`team setup: ${team.name}`);
@@ -1543,6 +1546,9 @@ async function syncTeamRoles(ctx = {}) {
       const existing = guild.roles.cache.find(r => r.name === team.name);
       if (existing) {
         await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+        if (rijderRole && existing.position < rijderRole.position) {
+          await existing.setPosition(rijderRole.position + 1).catch(() => {});
+        }
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
         managedRoleIds.add(existing.id);
@@ -1550,6 +1556,7 @@ async function syncTeamRoles(ctx = {}) {
       } else {
         try {
           const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+          if (rijderRole) await role.setPosition(rijderRole.position + 1).catch(() => {});
           await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
           team.discord_role_id = role.id;
           managedRoleIds.add(role.id);
@@ -1561,7 +1568,12 @@ async function syncTeamRoles(ctx = {}) {
       }
     } else {
       const existing = guild.roles.cache.get(team.discord_role_id);
-      if (existing) await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+      if (existing) {
+        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+        if (rijderRole && existing.position < rijderRole.position) {
+          await existing.setPosition(rijderRole.position + 1).catch(() => {});
+        }
+      }
       managedRoleIds.add(team.discord_role_id);
     }
 
