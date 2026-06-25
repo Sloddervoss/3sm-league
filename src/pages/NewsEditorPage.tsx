@@ -670,6 +670,25 @@ const NewsEditorPage = () => {
                           <button type="button" onClick={() => editor.chain().focus().deleteSelection().run()} className="editor-toolbar-button text-destructive" aria-label="Afbeelding verwijderen"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         )}
+
+                        {editor.isActive("table") && (
+                          <div data-bubble-menu="table" className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card/95 p-2 shadow-2xl backdrop-blur">
+                            <span className="mr-2 text-[11px] font-bold uppercase tracking-wider text-primary">TABEL</span>
+                            <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+                            <button type="button" onClick={() => editor.chain().focus().addRowBefore().run()} className="editor-toolbar-button" title="Rij boven toevoegen">↑ Rij</button>
+                            <button type="button" onClick={() => editor.chain().focus().addRowAfter().run()} className="editor-toolbar-button" title="Rij onder toevoegen">↓ Rij</button>
+                            <button type="button" onClick={() => editor.chain().focus().deleteRow().run()} className="editor-toolbar-button text-destructive" title="Rij verwijderen">Rij ×</button>
+                            <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+                            <button type="button" onClick={() => editor.chain().focus().addColumnBefore().run()} className="editor-toolbar-button" title="Kolom links toevoegen">← Kol</button>
+                            <button type="button" onClick={() => editor.chain().focus().addColumnAfter().run()} className="editor-toolbar-button" title="Kolom rechts toevoegen">Kol →</button>
+                            <button type="button" onClick={() => editor.chain().focus().deleteColumn().run()} className="editor-toolbar-button text-destructive" title="Kolom verwijderen">Kol ×</button>
+                            <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+                            <button type="button" onClick={() => editor.chain().focus().mergeCells().run()} className="editor-toolbar-button" title="Cellen samenvoegen">Samen</button>
+                            <button type="button" onClick={() => editor.chain().focus().splitCell().run()} className="editor-toolbar-button" title="Cellen splitsen">Split</button>
+                            <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+                            <button type="button" onClick={() => editor.chain().focus().deleteTable().run()} className="editor-toolbar-button text-destructive flex items-center gap-1" title="Tabel verwijderen"><Trash2 className="w-3.5 h-3.5" /> Tabel</button>
+                          </div>
+                        )}
                       </>
                     )}
 
