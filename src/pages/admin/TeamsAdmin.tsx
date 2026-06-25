@@ -62,6 +62,8 @@ const TeamsAdmin = () => {
   const [editingTeamCurrentLogo, setEditingTeamCurrentLogo] = useState("");
   const [editingTeamNameId, setEditingTeamNameId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState("");
+  const [editingTeamColor, setEditingTeamColor] = useState("#f97316");
+  const [editingTeamDescription, setEditingTeamDescription] = useState("");
 
   const { data: teams } = useQuery({
     queryKey: ["admin-teams"],
@@ -182,6 +184,26 @@ const TeamsAdmin = () => {
       invalidateTeams();
       setEditingTeamNameId(null);
       setEditingTeamName("");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const updateTeam = useMutation({
+    mutationFn: async ({ teamId, name, color, description }: { teamId: string; name: string; color: string; description: string }) => {
+      const { error } = await supabase.from("teams").update({
+        name,
+        color: color || "#f97316",
+        description: description || null,
+      }).eq("id", teamId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Team bijgewerkt!");
+      invalidateTeams();
+      setEditingTeamNameId(null);
+      setEditingTeamName("");
+      setEditingTeamColor("#f97316");
+      setEditingTeamDescription("");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -316,13 +338,13 @@ const TeamsAdmin = () => {
                 <button
                   onClick={() => {
                     if (editingTeamNameId === team.id) {
-                      setEditingTeamNameId(null); setEditingTeamName("");
+                      setEditingTeamNameId(null); setEditingTeamName(""); setEditingTeamColor("#f97316"); setEditingTeamDescription("");
                     } else {
-                      setEditingTeamNameId(team.id); setEditingTeamName(team.name); setEditingTeamId(null);
+                      setEditingTeamNameId(team.id); setEditingTeamName(team.name); setEditingTeamColor(team.color || "#f97316"); setEditingTeamDescription(team.description || ""); setEditingTeamId(null);
                     }
                   }}
                   className="p-2 text-muted-foreground hover:text-primary transition-colors"
-                  title="Naam wijzigen"
+                  title="Team bewerken"
                 >
                   <Pencil className="w-4 h-4" />
                 </button>
@@ -345,26 +367,69 @@ const TeamsAdmin = () => {
               </div>
             </div>
 
-            {/* Inline naam editor */}
+            {/* Inline team editor (naam + kleur + beschrijving) */}
             {editingTeamNameId === team.id && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mb-3 p-3 rounded-md bg-secondary/40 border border-border space-y-2">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Naam wijzigen</p>
-                <input
-                  type="text"
-                  value={editingTeamName}
-                  onChange={(e) => setEditingTeamName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary"
-                  placeholder="Teamnaam..."
-                />
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mb-3 p-3 rounded-md bg-secondary/40 border border-border space-y-3">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Team bewerken</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Naam</label>
+                    <input
+                      type="text"
+                      value={editingTeamName}
+                      onChange={(e) => setEditingTeamName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary"
+                      placeholder="Teamnaam..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Kleur</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={editingTeamColor}
+                        onChange={(e) => setEditingTeamColor(e.target.value)}
+                        className="w-10 h-8 rounded-md border border-border cursor-pointer bg-secondary"
+                      />
+                      <input
+                        type="text"
+                        value={editingTeamColor}
+                        onChange={(e) => setEditingTeamColor(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-muted-foreground mb-1 block">Beschrijving</label>
+                    <input
+                      type="text"
+                      value={editingTeamDescription}
+                      onChange={(e) => setEditingTeamDescription(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:border-primary"
+                      placeholder="Team beschrijving..."
+                    />
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => updateTeamName.mutate({ teamId: team.id, name: editingTeamName.trim() })}
-                    disabled={!editingTeamName.trim() || editingTeamName.trim() === team.name || updateTeamName.isPending}
+                    onClick={() => {
+                      const isNameChanged = editingTeamName.trim() !== team.name;
+                      const isColorChanged = editingTeamColor !== team.color;
+                      const isDescChanged = editingTeamDescription !== (team.description || "");
+                      if (!isNameChanged && !isColorChanged && !isDescChanged) return;
+                      updateTeam.mutate({
+                        teamId: team.id,
+                        name: editingTeamName.trim(),
+                        color: editingTeamColor,
+                        description: editingTeamDescription,
+                      });
+                    }}
+                    disabled={(!editingTeamName.trim() || !(editingTeamName.trim() !== team.name || editingTeamColor !== team.color || editingTeamDescription !== (team.description || ""))) || updateTeam.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-gradient-racing text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
                   >
                     <Save className="w-3 h-3" /> Opslaan
                   </button>
-                  <button onClick={() => { setEditingTeamNameId(null); setEditingTeamName(""); }} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors">Annuleren</button>
+                  <button onClick={() => { setEditingTeamNameId(null); setEditingTeamName(""); setEditingTeamColor("#f97316"); setEditingTeamDescription(""); }} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground transition-colors">Annuleren</button>
                 </div>
               </motion.div>
             )}
