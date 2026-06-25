@@ -1446,7 +1446,7 @@ async function checkAnnouncements() {
   const channel = await getAankondigingenChannel();
   if (!channel) { await throttledBotLog('checkAnnouncements:no-channel', '[checkAnnouncements] Aankondigingen channel niet gevonden'); return; }
 
-  const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name, discord_role_id');
+  const { data: teams, error: teamsError } = await supabase.from('teams').select('id, name, color, discord_role_id');
   if (teamsError) {
     await throttledBotLog(`checkAnnouncements:teams:${describeError(teamsError)}`, '[checkAnnouncements:teams]', describeError(teamsError));
   }
@@ -1465,8 +1465,17 @@ async function checkAnnouncements() {
     }).filter(Boolean);
     const mentionText = mentions.join(' ');
 
+    // Bepaal kleur: als team-tag, gebruik teamkleur; anders oranje (3SM brand)
+    let embedColor = 0xf97316;
+    const teamTag = (ann.tag || '').trim();
+    if (teamTag.startsWith('team_')) {
+      const teamId = teamTag.replace('team_', '');
+      const team = teams?.find(t => t.id === teamId);
+      if (team?.color) embedColor = parseInt(team.color.replace('#', ''), 16);
+    }
+
     const embed = {
-      color: 0xf97316,
+      color: embedColor,
       title: ann.title,
       description: ann.message,
       footer: { text: '3 Stripe Motorsport' },
@@ -1533,14 +1542,14 @@ async function syncTeamRoles(ctx = {}) {
     if (!team.discord_role_id) {
       const existing = guild.roles.cache.find(r => r.name === team.name);
       if (existing) {
-        await existing.edit({ colors: { primaryColor: colorInt }, hoist: true }).catch(() => {});
+        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
         await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
         team.discord_role_id = existing.id;
         managedRoleIds.add(existing.id);
         botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
       } else {
         try {
-          const role = await guild.roles.create({ name: team.name, colors: { primaryColor: colorInt }, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+          const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
           await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
           team.discord_role_id = role.id;
           managedRoleIds.add(role.id);
@@ -1552,7 +1561,7 @@ async function syncTeamRoles(ctx = {}) {
       }
     } else {
       const existing = guild.roles.cache.get(team.discord_role_id);
-      if (existing) await existing.edit({ colors: { primaryColor: colorInt }, hoist: true }).catch(() => {});
+      if (existing) await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
       managedRoleIds.add(team.discord_role_id);
     }
 
