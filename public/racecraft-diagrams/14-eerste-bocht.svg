@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs>
+<marker id="ag" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#22c55e"/></marker>
+<marker id="ar" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#ef4444"/></marker>
+<marker id="ab" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#38bdf8"/></marker>
+<pattern id="asph" width="90" height="90" patternUnits="userSpaceOnUse"><rect width="90" height="90" fill="#2b3037"/><circle cx="12" cy="20" r="1.8" fill="#525a66" opacity=".55"/><circle cx="50" cy="60" r="1.4" fill="#111827" opacity=".45"/><circle cx="78" cy="18" r="1.2" fill="#64748b" opacity=".35"/></pattern>
+<pattern id="kerb" width="64" height="26" patternUnits="userSpaceOnUse"><rect width="32" height="26" fill="#f8fafc"/><rect x="32" width="32" height="26" fill="#dc2626"/></pattern>
+</defs>
+<rect width="1600" height="900" fill="#0b1220"/>
+<rect x="0" y="0" width="800" height="900" fill="#0e2a18"/>
+<rect x="800" y="0" width="800" height="900" fill="#2a1414"/>
+<line x1="800" y1="40" x2="800" y2="860" stroke="#475569" stroke-width="4" stroke-dasharray="18 26"/>
+
+<text x="800" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="42" font-weight="950" fill="#fff">EERSTE BOCHT — marge vs te optimistisch</text>
+<rect x="60" y="95" width="680" height="64" rx="12" fill="#16a34a"/><text x="400" y="139" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="950" fill="#fff">CORRECT</text>
+<rect x="860" y="95" width="680" height="64" rx="12" fill="#dc2626"/><text x="1200" y="139" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="950" fill="#fff">FOUT</text>
+
+<!-- LEFT corner: cars take margin, single file, gap kept -->
+<path d="M80,740 C210,700 290,610 340,500 C372,425 372,355 340,300" fill="none" stroke="#111827" stroke-width="170" stroke-linecap="round"/>
+<path d="M80,740 C210,700 290,610 340,500 C372,425 372,355 340,300" fill="none" stroke="url(#asph)" stroke-width="146" stroke-linecap="round"/>
+<path d="M275,625 C340,510 370,435 370,360" fill="none" stroke="url(#kerb)" stroke-width="24" stroke-linecap="round"/>
+<g transform="translate(150 700) rotate(-14)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+
+</g>
+<g transform="translate(280 640) rotate(-24)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+
+</g>
+<g transform="translate(360 560) rotate(-40)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#22c55e" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+
+</g>
+<path d="M170,690 C260,620 330,560 372,470" stroke="#22c55e" stroke-width="9" fill="none" stroke-dasharray="22 14" marker-end="url(#ag)"/>
+<text x="80" y="200" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="200" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Extra marge</text>
+<text x="80" y="270" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="270" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Ruimte laten</text>
+<text x="80" y="340" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="340" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Incident voorkomen</text>
+
+<!-- RIGHT corner: 3-wide dive, no room, contact burst -->
+<path d="M880,740 C1010,700 1090,610 1140,500 C1172,425 1172,355 1140,300" fill="none" stroke="#111827" stroke-width="170" stroke-linecap="round"/>
+<path d="M880,740 C1010,700 1090,610 1140,500 C1172,425 1172,355 1140,300" fill="none" stroke="url(#asph)" stroke-width="146" stroke-linecap="round"/>
+<path d="M1075,625 C1140,510 1170,435 1170,360" fill="none" stroke="url(#kerb)" stroke-width="24" stroke-linecap="round"/>
+<g transform="translate(950 700) rotate(-10)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+
+</g>
+<g transform="translate(1010 660) rotate(-16)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+
+</g>
+<g transform="translate(1090 660) rotate(-20)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#ef4444" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+
+</g>
+<path d="M1230,520 C1170,470 1110,450 1050,470" stroke="#ef4444" stroke-width="9" fill="none" marker-end="url(#ar)"/>
+<g transform="translate(1075 645)"><path d="M0,-34 L9,-11 L33,-11 L13,4 L21,28 L0,13 L-21,28 L-13,4 L-33,-11 L-9,-11Z" fill="#fde047" stroke="#b45309" stroke-width="3"/></g>
+<text x="880" y="200" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="200" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Te optimistische aanval</text>
+<text x="880" y="270" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="270" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Onvoldoende ruimte</text>
+<text x="880" y="340" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="340" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Vermijdbaar contact</text>
+</svg>

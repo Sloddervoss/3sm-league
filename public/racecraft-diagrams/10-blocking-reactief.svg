@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <marker id="arrow-38bdf8" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#38bdf8"/></marker>
+    <marker id="arrow-f97316" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#f97316"/></marker>
+    <marker id="arrow-22c55e" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#22c55e"/></marker>
+    <marker id="arrow-ef4444" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#ef4444"/></marker>
+    <pattern id="asphalt" width="90" height="90" patternUnits="userSpaceOnUse"><rect width="90" height="90" fill="#2b3037"/><circle cx="12" cy="20" r="1.8" fill="#525a66" opacity=".55"/><circle cx="50" cy="60" r="1.4" fill="#111827" opacity=".45"/><circle cx="78" cy="18" r="1.2" fill="#64748b" opacity=".35"/><path d="M0 45H90" stroke="#3f4651" stroke-width="1" opacity=".25"/></pattern>
+    <pattern id="kerb" width="70" height="28" patternUnits="userSpaceOnUse" patternTransform="rotate(0)"><rect width="35" height="28" fill="#f8fafc"/><rect x="35" width="35" height="28" fill="#dc2626"/></pattern>
+    
+  </defs>
+  <rect width="1600" height="900" fill="#14351f"/>
+  <path d="M0,760 C260,690 430,740 600,800 C870,895 1160,850 1600,760 L1600,900 L0,900 Z" fill="#0f2a18" opacity="0.8"/>
+  <text x="60" y="68" font-family="Inter,Arial,sans-serif" font-size="42" font-weight="950" fill="#fff">10. Blocking: één lijn vs reactief bewegen</text>
+  <text x="62" y="112" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="700" fill="#cbd5e1">Links: vaste lijn voor de remzone. Rechts: reactief mee bewegen met de aanvaller.</text>
+<rect x="-40" y="225" width="1680" height="470" rx="65" fill="#111827"/><rect x="-40" y="250" width="1680" height="420" rx="52" fill="url(#asphalt)"/>
+<line x1="90" y1="460" x2="400" y2="460" stroke="#f8fafc" stroke-width="6" stroke-dasharray="38 30" opacity=".75"/>
+<line x1="1200" y1="460" x2="1510" y2="460" stroke="#f8fafc" stroke-width="6" stroke-dasharray="38 30" opacity=".75"/>
+<line x1="800" y1="250" x2="800" y2="670" stroke="#334155" stroke-width="5" stroke-dasharray="20 32"/>
+<text x="160" y="330" font-size="30" font-weight="950" font-family="Arial" fill="#22c55e">CORRECT</text><text x="1040" y="330" font-size="30" font-weight="950" font-family="Arial" fill="#ef4444">BLOKKEN</text>
+<g id="blue" transform="translate(400 360) rotate(0)">
+    <ellipse cx="0" cy="0" rx="74" ry="34" fill="#05070b" opacity="0.38" transform="translate(8 10)"/>
+    <rect x="-86" y="-37" width="172" height="74" rx="20" fill="#2563eb" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M-58,-28 L-20,-36 L42,-31 L72,-16 L80,0 L72,16 L42,31 L-20,36 L-58,28 L-80,12 L-84,0 L-80,-12 Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+    <rect x="-27" y="-25" width="58" height="50" rx="11" fill="#dbeafe" opacity="0.9" stroke="#1e293b" stroke-width="2"/>
+    <rect x="-77" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="-77" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <circle cx="-63" cy="-19" r="6" fill="#fde68a"/>
+    <circle cx="-63" cy="19" r="6" fill="#fde68a"/>
+    
+    <g transform="rotate(0) translate(0 76)">
+      <rect x="-62" y="-22" width="124" height="36" rx="9" fill="#020617" opacity="0.84" stroke="#ffffff" stroke-width="2"/>
+      <text x="0" y="3" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">VERDEDIGT</text>
+    </g>
+  </g> <g id="orange" transform="translate(180 520) rotate(0)">
+    <ellipse cx="0" cy="0" rx="74" ry="34" fill="#05070b" opacity="0.38" transform="translate(8 10)"/>
+    <rect x="-86" y="-37" width="172" height="74" rx="20" fill="#f97316" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M-58,-28 L-20,-36 L42,-31 L72,-16 L80,0 L72,16 L42,31 L-20,36 L-58,28 L-80,12 L-84,0 L-80,-12 Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+    <rect x="-27" y="-25" width="58" height="50" rx="11" fill="#dbeafe" opacity="0.9" stroke="#1e293b" stroke-width="2"/>
+    <rect x="-77" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="-77" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <circle cx="-63" cy="-19" r="6" fill="#fde68a"/>
+    <circle cx="-63" cy="19" r="6" fill="#fde68a"/>
+    
+    <g transform="rotate(0) translate(0 76)">
+      <rect x="-62" y="-22" width="124" height="36" rx="9" fill="#020617" opacity="0.84" stroke="#ffffff" stroke-width="2"/>
+      <text x="0" y="3" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">VALT AAN</text>
+    </g>
+  </g>
+<g id="orange" transform="translate(1080 380) rotate(0)">
+    <ellipse cx="0" cy="0" rx="74" ry="34" fill="#05070b" opacity="0.38" transform="translate(8 10)"/>
+    <rect x="-86" y="-37" width="172" height="74" rx="20" fill="#f97316" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M-58,-28 L-20,-36 L42,-31 L72,-16 L80,0 L72,16 L42,31 L-20,36 L-58,28 L-80,12 L-84,0 L-80,-12 Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+    <rect x="-27" y="-25" width="58" height="50" rx="11" fill="#dbeafe" opacity="0.9" stroke="#1e293b" stroke-width="2"/>
+    <rect x="-77" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="-77" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <circle cx="-63" cy="-19" r="6" fill="#fde68a"/>
+    <circle cx="-63" cy="19" r="6" fill="#fde68a"/>
+    
+    <g transform="rotate(0) translate(0 76)">
+      <rect x="-62" y="-22" width="124" height="36" rx="9" fill="#020617" opacity="0.84" stroke="#ffffff" stroke-width="2"/>
+      <text x="0" y="3" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">VALT AAN</text>
+    </g>
+  </g> <g id="blue" transform="translate(1040 360) rotate(0)">
+    <ellipse cx="0" cy="0" rx="74" ry="34" fill="#05070b" opacity="0.38" transform="translate(8 10)"/>
+    <rect x="-86" y="-37" width="172" height="74" rx="20" fill="#2563eb" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M-58,-28 L-20,-36 L42,-31 L72,-16 L80,0 L72,16 L42,31 L-20,36 L-58,28 L-80,12 L-84,0 L-80,-12 Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+    <rect x="-27" y="-25" width="58" height="50" rx="11" fill="#dbeafe" opacity="0.9" stroke="#1e293b" stroke-width="2"/>
+    <rect x="-77" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="-77" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <circle cx="-63" cy="-19" r="6" fill="#fde68a"/>
+    <circle cx="-63" cy="19" r="6" fill="#fde68a"/>
+    
+    <g transform="rotate(0) translate(0 76)">
+      <rect x="-62" y="-22" width="124" height="36" rx="9" fill="#020617" opacity="0.84" stroke="#ffffff" stroke-width="2"/>
+      <text x="0" y="3" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">BLOKKERT</text>
+    </g>
+  </g>
+<line x1="60" y1="360" x2="360" y2="360" stroke="#22c55e" stroke-width="8" stroke-linecap="round"  marker-end="url(#arrow-22c55e)"/> <line x1="60" y1="520" x2="340" y2="520" stroke="#f97316" stroke-width="8" stroke-linecap="round"  marker-end="url(#arrow-f97316)"/>
+<line x1="950" y1="380" x2="1060" y2="380" stroke="#f97316" stroke-width="8" stroke-linecap="round"  marker-end="url(#arrow-f97316)"/> <line x1="950" y1="520" x2="1360" y2="500" stroke="#f97316" stroke-width="8" stroke-linecap="round" stroke-dasharray="20 18" marker-end="url(#arrow-f97316)"/>
+<path d="M1060,380 C1120,430 1180,460 1250,500" stroke="#ef4444" stroke-width="12" fill="none" marker-end="url(#arrow-ef4444)"/>
+<text x="1160" y="420" font-size="26" font-weight="900" font-family="Arial" fill="#fecaca">mee</text><text x="1150" y="448" font-size="26" font-weight="900" font-family="Arial" fill="#fecaca">bewegen</text>
+<path d="M480,520 C500,560 540,580 600,600" stroke="#22c55e" stroke-width="12" fill="none" marker-end="url(#arrow-22c55e)"/>
+<text x="510" y="580" font-size="26" font-weight="900" font-family="Arial" fill="#bbf7d0">vaste lijn</text>
+<g transform="translate(100 670)">
+    <rect width="620" height="161" rx="18" fill="#0f172a" opacity="0.94" stroke="#f97316" stroke-width="4"/>
+    <text x="24" y="38" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="900" fill="#fff">Duidelijk</text>
+    <text x="24" y="78" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750" fill="#e2e8f0">Verdedigen = lijn kiezen voordat de</text><text x="24" y="109" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750" fill="#e2e8f0">aanvaller een kant kiest. Blokken =</text><text x="24" y="140" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750" fill="#e2e8f0">reageren op de aanvalslijn.</text>
+  </g></svg>
