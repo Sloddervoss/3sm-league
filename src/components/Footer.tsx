@@ -58,8 +58,11 @@ const socialLinks = [
 
 const Footer = () => {
   return (
-    <footer className="border-t border-border py-10 bg-racing-dark">
-      <div className="container mx-auto px-4">
+    <footer className="relative overflow-hidden border-t border-orange-500/12 bg-racing-dark py-10">
+      <div className="pointer-events-none absolute -top-24 left-[24%] h-64 w-[48rem] max-w-[92vw] -translate-x-1/2 rounded-full bg-orange-500/[0.08] blur-3xl" />
+      <div className="pointer-events-none absolute -top-14 left-[14%] h-32 w-[20rem] rounded-full bg-orange-300/[0.025] blur-2xl" />
+      <div className="pointer-events-none absolute top-0 left-[8%] h-px w-[30rem] max-w-[60vw] bg-gradient-to-r from-transparent via-orange-500/12 to-transparent" />
+      <div className="container relative mx-auto px-4">
         <div className="grid grid-cols-1 gap-8 mb-8 md:grid-cols-[1.6fr_1.2fr_1fr_auto]">
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -68,15 +71,15 @@ const Footer = () => {
               </div>
               <span className="font-heading font-bold text-base">3 Stripe Motorsport</span>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Driven by passion. Powered by community.
+            <p className="text-xs leading-relaxed text-gray-300">
+              Clean racing. Close battles. Community first.
             </p>
-            <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+            <p className="text-xs text-gray-300 leading-relaxed mt-1">
               Samen bouwen we aan de ultieme sim racing experience.
             </p>
           </div>
           <div>
-            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Navigatie</p>
+            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-gray-300">Navigatie</p>
             <div className="grid grid-cols-2 gap-1">
               {[
                 { label: "Home", path: "/" },
@@ -88,22 +91,22 @@ const Footer = () => {
                 { label: "Seasons", path: "/seasons" },
                 { label: "Meedoen", path: "/meedoen" },
               ].map((link) => (
-                <Link key={link.path} to={link.path} className="text-xs text-muted-foreground hover:text-primary transition-colors py-0.5">
+                <Link key={link.path} to={link.path} className="text-xs text-gray-300 hover:text-primary transition-colors py-0.5">
                   {link.label}
                 </Link>
               ))}
             </div>
           </div>
           <div>
-            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Platform</p>
+            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-gray-300">Platform</p>
             <div className="space-y-1">
-              <Link to="/auth" className="block text-xs text-muted-foreground hover:text-primary transition-colors py-0.5">Inloggen / Registreren</Link>
-              <Link to="/profile" className="block text-xs text-muted-foreground hover:text-primary transition-colors py-0.5">Mijn Profiel</Link>
-              <Link to="/stewards" className="block text-xs text-muted-foreground hover:text-primary transition-colors py-0.5">Protest Indienen</Link>
+              <Link to="/auth" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Inloggen / Registreren</Link>
+              <Link to="/profile" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Mijn Profiel</Link>
+              <Link to="/stewards" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Protest Indienen</Link>
             </div>
           </div>
           <div className="md:justify-self-end">
-            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-muted-foreground">Socials</p>
+            <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-gray-300">Socials</p>
             <div className="flex gap-2">
               {socialLinks.map(({ label, href, icon: Icon, className }) => (
                 <a
@@ -113,7 +116,7 @@ const Footer = () => {
                   rel="noreferrer"
                   aria-label={`Open 3 Stripe Motorsport op ${label}`}
                   title={label}
-                  className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card/25 text-muted-foreground transition-colors ${className}`}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-card/35 text-gray-300 transition-colors ${className}`}
                 >
                   <Icon className="h-4 w-4" />
                 </a>
@@ -121,11 +124,11 @@ const Footer = () => {
             </div>
           </div>
         </div>
-        <div className="border-t border-border pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
-          <span className="font-heading font-bold text-sm text-muted-foreground">
+        <div className="border-t border-white/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
+          <span className="font-heading font-bold text-sm text-gray-300">
             3 Stripe Motorsport © 2026
           </span>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-gray-300">
             Powered by Sloddervos — Niet geaffilieerd met iRacing.com
           </p>
         </div>
