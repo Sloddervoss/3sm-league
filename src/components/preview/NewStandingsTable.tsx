@@ -48,7 +48,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
       {leagueName && (
         <div className="flex items-center gap-2 mb-8">
           <Trophy className="w-4 h-4 text-orange-500" />
-          <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">{leagueName}</span>
+          <span className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-300">{leagueName}</span>
         </div>
       )}
 
@@ -104,7 +104,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                 {driver.team && (
                   <div className="flex items-center justify-center gap-1 mt-0.5 mb-2">
                     <div className="w-1 h-1 rounded-full" style={{ backgroundColor: driver.team.color }} />
-                    <span className="text-[10px] text-gray-600 truncate">{driver.team.name}</span>
+                    <span className="text-[10px] text-gray-400 truncate">{driver.team.name}</span>
                   </div>
                 )}
 
@@ -114,10 +114,10 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                 >
                   {driver.total_points}
                 </div>
-                <div className="text-[10px] text-gray-600 uppercase tracking-wide mt-0.5">pts</div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide mt-0.5">pts</div>
 
                 {delta > 0 && (
-                  <div className="text-[10px] text-gray-700 mt-1">-{delta}</div>
+                  <div className="text-[10px] text-gray-500 mt-1">-{delta}</div>
                 )}
               </motion.div>
             );
@@ -128,12 +128,12 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
       {/* Full table */}
       {rest.length > 0 && (
         <div
-          className="rounded-2xl overflow-x-auto"
-          style={{ border: "1px solid rgba(255,255,255,0.06)" }}
+          className="rounded-[1.65rem] overflow-x-auto shadow-2xl shadow-black/18 ring-1 ring-white/[0.055]"
+          style={{ background: "rgba(255,255,255,0.035)" }}
         >
           {/* Header */}
           <div
-            className={`grid gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600 ${tableGridClass}`}
+            className={`grid gap-2 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-400 ${tableGridClass}`}
             style={{ background: "rgba(255,255,255,0.03)" }}
           >
             <span>Pos</span>
@@ -144,7 +144,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
           </div>
 
           {standings.map((driver, i) => {
-            const delta = i > 0 ? driver.total_points - standings[i - 1].total_points : 0;
+            const gapToLeader = standings[0].total_points - driver.total_points;
             const isFirst = i === 0;
             const podiumColor = i < 3 ? PODIUM[i].color : null;
             const teamColor = driver.team?.color;
@@ -180,11 +180,11 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                   onMouseLeave={e => (e.currentTarget.style.background = teamColor ? `linear-gradient(90deg, ${teamColor}08 0%, transparent 40%)` : isFirst ? "rgba(249,115,22,0.04)" : "transparent")}
                 >
                   <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm border"
                     style={
                       podiumColor
-                        ? { background: `${podiumColor}15`, color: podiumColor }
-                        : { color: "#4b5563" }
+                        ? { background: `${podiumColor}15`, color: podiumColor, borderColor: `${podiumColor}24` }
+                        : { color: "#9ca3af", background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.10)" }
                     }
                   >
                     {i + 1}
@@ -208,22 +208,24 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                       {driver.team ? (
                         <>
                           <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: driver.team.color }} />
-                          <span className="text-xs truncate" style={{ color: driver.team.color + "aa" }}>{driver.team.name}</span>
+                          <span className="text-xs truncate text-gray-400" style={{ color: driver.team ? `${driver.team.color}cc` : undefined }}>{driver.team?.name || "-"}</span>
                         </>
                       ) : (
-                        <span className="text-xs text-gray-700">-</span>
+                        <span className="text-xs text-gray-500">-</span>
                       )}
                     </div>
                   )}
 
-                  <div className="text-center font-heading font-bold text-sm text-gray-500">{driver.wins}</div>
+                  <div className="text-center font-heading font-bold text-sm text-gray-400">{driver.wins}</div>
 
-                  <div className="text-center">
-                    <span className="font-heading font-black text-base" style={{ color: podiumColor || "#d1d5db" }}>
+                  <div className="text-center font-heading">
+                    <span className="font-heading font-black text-base text-white">
                       {driver.total_points}
                     </span>
-                    {delta < 0 && (
-                      <div className="text-[10px] text-gray-700">{delta}</div>
+                    {isFirst ? (
+                      <div className="text-[10px] font-bold text-orange-400/80">Leider</div>
+                    ) : (
+                      <div className="text-[10px] text-gray-500">-{gapToLeader}</div>
                     )}
                   </div>
                 </button>
