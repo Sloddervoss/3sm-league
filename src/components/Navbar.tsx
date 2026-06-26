@@ -64,24 +64,22 @@ const Navbar = () => {
         </Link>
 
         {/* Desktop */}
-        <div className={`hidden ${showDesktop} items-center gap-0`}>
+        <div className={`hidden ${showDesktop} items-center gap-1.5`}>
           {navItems.map((item) => {
             const active = location.pathname === item.path;
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  active ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                className={`relative px-3.5 py-2 rounded-md text-[15.5px] font-semibold transition-colors ${
+                  active ? "bg-white/[0.035] text-white" : "text-gray-300 hover:bg-white/[0.025] hover:text-white"
                 }`}
               >
-                {active && (
-                  <div className="absolute inset-0 bg-gradient-racing rounded-md" />
-                )}
-                <span className="relative flex items-center gap-1.5">
-                  <item.icon className="w-3.5 h-3.5" />
+                <span className="relative flex items-center gap-1.5 leading-none">
+                  <item.icon className="w-3.5 h-3.5 shrink-0" />
                   {item.label}
                 </span>
+                {active && <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full" />}
               </Link>
             );
           })}
@@ -150,7 +148,7 @@ const Navbar = () => {
           ) : (
             <Link
               to="/auth"
-              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-gradient-racing text-primary-foreground text-sm font-bold hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-gradient-racing text-primary-foreground text-sm font-bold shadow-lg shadow-orange-950/20 ring-1 ring-orange-300/20 hover:opacity-90 transition-opacity"
             >
               <LogIn className="w-4 h-4" />
               Inloggen
