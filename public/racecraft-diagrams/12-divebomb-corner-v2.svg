@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs>
+<marker id="ag" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#22c55e"/></marker>
+<marker id="ar" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#ef4444"/></marker>
+<marker id="ab" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#38bdf8"/></marker>
+<pattern id="asph" width="90" height="90" patternUnits="userSpaceOnUse"><rect width="90" height="90" fill="#2b3037"/><circle cx="12" cy="20" r="1.8" fill="#525a66" opacity=".55"/><circle cx="50" cy="60" r="1.4" fill="#111827" opacity=".45"/><circle cx="78" cy="18" r="1.2" fill="#64748b" opacity=".35"/></pattern>
+<pattern id="kerb" width="64" height="26" patternUnits="userSpaceOnUse"><rect width="32" height="26" fill="#f8fafc"/><rect x="32" width="32" height="26" fill="#dc2626"/></pattern>
+</defs>
+<rect width="1600" height="900" fill="#0b1220"/>
+<rect x="0" y="0" width="800" height="900" fill="#0e2a18"/>
+<rect x="800" y="0" width="800" height="900" fill="#2a1414"/>
+<line x1="800" y1="40" x2="800" y2="860" stroke="#475569" stroke-width="4" stroke-dasharray="18 26"/>
+
+<text x="800" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="42" font-weight="950" fill="#fff">DIVEBOMB — aanval in de bocht</text>
+<rect x="60" y="95" width="680" height="64" rx="12" fill="#16a34a"/><text x="400" y="139" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="950" fill="#fff">LEGITIEME AANVAL</text>
+<rect x="860" y="95" width="680" height="64" rx="12" fill="#dc2626"/><text x="1200" y="139" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="950" fill="#fff">DIVEBOMB</text>
+
+<!-- LEFT corner -->
+<path d="M80,740 C210,700 290,610 340,500 C372,425 372,355 340,300" fill="none" stroke="#111827" stroke-width="170" stroke-linecap="round"/>
+<path d="M80,740 C210,700 290,610 340,500 C372,425 372,355 340,300" fill="none" stroke="url(#asph)" stroke-width="146" stroke-linecap="round"/>
+<path d="M275,625 C340,510 370,435 370,360" fill="none" stroke="url(#kerb)" stroke-width="24" stroke-linecap="round"/>
+<circle cx="372" cy="395" r="15" fill="#fde047" stroke="#111827" stroke-width="4"/><text x="398" y="403" font-family="Arial,sans-serif" font-size="24" font-weight="900" fill="#fde047">APEX</text>
+<!-- turn-in point marker -->
+<circle cx="305" cy="615" r="11" fill="#38bdf8" stroke="#0f172a" stroke-width="3"/>
+<text x="322" y="638" font-family="Arial,sans-serif" font-size="22" font-weight="800" fill="#bae6fd">moment van insturen</text>
+<!-- overlap bracket between the two cars BEFORE turn-in -->
+<line x1="180" y1="735" x2="295" y2="690" stroke="#22c55e" stroke-width="6" stroke-linecap="round"/>
+<line x1="180" y1="735" x2="180" y2="715" stroke="#22c55e" stroke-width="6" stroke-linecap="round"/>
+<line x1="295" y1="690" x2="295" y2="670" stroke="#22c55e" stroke-width="6" stroke-linecap="round"/>
+<rect x="150" y="745" width="230" height="34" rx="8" fill="#052e16" stroke="#22c55e" stroke-width="2"/>
+<text x="165" y="769" font-family="Arial,sans-serif" font-size="21" font-weight="800" fill="#bbf7d0">overlap vóór turn-in</text>
+<g transform="translate(250 660) rotate(-28)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+<g transform="rotate(28) translate(0 68)"><rect x="-92" y="-23" width="184" height="40" rx="9" fill="#020617" opacity="0.9" stroke="#fff" stroke-width="2"/><text x="0" y="6" text-anchor="middle" font-family="Arial,sans-serif" font-size="27" font-weight="800" fill="#fff">AANVALLER</text></g>
+</g>
+<g transform="translate(120 720) rotate(-8)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+<g transform="rotate(8) translate(0 68)"><rect x="-92" y="-23" width="184" height="40" rx="9" fill="#020617" opacity="0.9" stroke="#fff" stroke-width="2"/><text x="0" y="6" text-anchor="middle" font-family="Arial,sans-serif" font-size="27" font-weight="800" fill="#fff">VERDEDIGER</text></g>
+</g>
+<text x="80" y="200" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="200" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Overlap vóór turn-in</text>
+<text x="80" y="270" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="270" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Controle</text>
+<text x="80" y="340" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="340" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Apex haalbaar</text>
+
+<!-- RIGHT corner -->
+<path d="M880,740 C1010,700 1090,610 1140,500 C1172,425 1172,355 1140,300" fill="none" stroke="#111827" stroke-width="170" stroke-linecap="round"/>
+<path d="M880,740 C1010,700 1090,610 1140,500 C1172,425 1172,355 1140,300" fill="none" stroke="url(#asph)" stroke-width="146" stroke-linecap="round"/>
+<path d="M1075,625 C1140,510 1170,435 1170,360" fill="none" stroke="url(#kerb)" stroke-width="24" stroke-linecap="round"/>
+<circle cx="1172" cy="395" r="15" fill="#fde047" stroke="#111827" stroke-width="4"/><text x="1198" y="403" font-family="Arial,sans-serif" font-size="24" font-weight="900" fill="#fde047">APEX</text>
+<!-- right: attacker still far back at turn-in → no overlap -->
+<circle cx="1095" cy="610" r="11" fill="#38bdf8" stroke="#0f172a" stroke-width="3"/>
+<text x="900" y="633" font-family="Arial,sans-serif" font-size="22" font-weight="800" fill="#bae6fd">geen overlap bij insturen</text>
+<g transform="translate(1180 470) rotate(28)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#ef4444" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+<g transform="rotate(-28) translate(0 68)"><rect x="-92" y="-23" width="184" height="40" rx="9" fill="#020617" opacity="0.9" stroke="#fff" stroke-width="2"/><text x="0" y="6" text-anchor="middle" font-family="Arial,sans-serif" font-size="27" font-weight="800" fill="#fff">AANVALLER</text></g>
+</g>
+<g transform="translate(990 700) rotate(-8)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+<g transform="rotate(8) translate(0 68)"><rect x="-92" y="-23" width="184" height="40" rx="9" fill="#020617" opacity="0.9" stroke="#fff" stroke-width="2"/><text x="0" y="6" text-anchor="middle" font-family="Arial,sans-serif" font-size="27" font-weight="800" fill="#fff">VERDEDIGER</text></g>
+</g>
+<path d="M1230,540 C1180,470 1120,430 1060,440" stroke="#ef4444" stroke-width="9" fill="none" marker-end="url(#ar)"/>
+<text x="880" y="200" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="200" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Te ver achter</text>
+<text x="880" y="270" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="270" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Mist apex</text>
+<text x="880" y="340" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="340" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Tegenstander als vangrail</text>
+</svg>

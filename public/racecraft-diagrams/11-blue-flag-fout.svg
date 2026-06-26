@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <marker id="arrow-38bdf8" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#38bdf8"/></marker>
+    <marker id="arrow-f97316" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#f97316"/></marker>
+    <marker id="arrow-22c55e" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#22c55e"/></marker>
+    <marker id="arrow-ef4444" markerWidth="14" markerHeight="14" refX="10" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#ef4444"/></marker>
+    <pattern id="asphalt" width="90" height="90" patternUnits="userSpaceOnUse"><rect width="90" height="90" fill="#2b3037"/><circle cx="12" cy="20" r="1.8" fill="#525a66" opacity=".55"/><circle cx="50" cy="60" r="1.4" fill="#111827" opacity=".45"/><circle cx="78" cy="18" r="1.2" fill="#64748b" opacity=".35"/><path d="M0 45H90" stroke="#3f4651" stroke-width="1" opacity=".25"/></pattern>
+    <pattern id="kerb" width="70" height="28" patternUnits="userSpaceOnUse" patternTransform="rotate(0)"><rect width="35" height="28" fill="#f8fafc"/><rect x="35" width="35" height="28" fill="#dc2626"/></pattern>
+    
+  </defs>
+  <rect width="1600" height="900" fill="#14351f"/>
+  <path d="M0,760 C260,690 430,740 600,800 C870,895 1160,850 1600,760 L1600,900 L0,900 Z" fill="#0f2a18" opacity="0.8"/>
+  <text x="60" y="68" font-family="Inter,Arial,sans-serif" font-size="42" font-weight="950" fill="#fff">11. Blauwe vlag: correct vs onveilig</text>
+  <text x="62" y="112" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="700" fill="#cbd5e1">Links: snellere passeert veilig, achterblijver voorspelbaar. Rechts: achterblijver verdedigt of reageert paniekerig.</text>
+<path d="M-60,620 C280,578 450,545 650,520 C900,490 1130,395 1660,380" fill="none" stroke="#111827" stroke-width="390" stroke-linecap="round"/>
+<path d="M-60,620 C280,578 450,545 650,520 C900,490 1130,395 1660,380" fill="none" stroke="url(#asphalt)" stroke-width="342" stroke-linecap="round"/>
+<line x1="100" y1="548" x2="1480" y2="412" stroke="#f8fafc" stroke-width="6" stroke-dasharray="34 28" opacity=".7"/>
+<line x1="800" y1="230" x2="800" y2="700" stroke="#334155" stroke-width="5" stroke-dasharray="20 32"/>
+<text x="150" y="305" font-size="34" font-weight="950" font-family="Arial" fill="#22c55e">CORRECT</text><text x="1070" y="305" font-size="34" font-weight="950" font-family="Arial" fill="#ef4444">FOUT</text>
+<g id="blue" transform="translate(400 530) rotate(-6)">
+    <ellipse cx="0" cy="0" rx="74" ry="34" fill="#05070b" opacity="0.38" transform="translate(8 10)"/>
+    <rect x="-86" y="-37" width="172" height="74" rx="20" fill="#2563eb" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M-58,-28 L-20,-36 L42,-31 L72,-16 L80,0 L72,16 L42,31 L-20,36 L-58,28 L-80,12 L-84,0 L-80,-12 Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+    <rect x="-27" y="-25" width="58" height="50" rx="11" fill="#dbeafe" opacity="0.9" stroke="#1e293b" stroke-width="2"/>
+    <rect x="-77" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="-77" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <circle cx="-63" cy="-19" r="6" fill="#fde68a"/>
+    <circle cx="-63" cy="19" r="6" fill="#fde68a"/>
+    
+    <g transform="rotate(6) translate(0 76)">
+      <rect x="-62" y="-22" width="124" height="36" rx="9" fill="#020617" opacity="0.84" stroke="#ffffff" stroke-width="2"/>
+      <text x="0" y="3" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">GELAPT</text>
+    </g>
+  </g> <g id="orange" transform="translate(210 390) rotate(-6)">
+    <ellipse cx="0" cy="0" rx="74" ry="34" fill="#05070b" opacity="0.38" transform="translate(8 10)"/>
+    <rect x="-86" y="-37" width="172" height="74" rx="20" fill="#f97316" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M-58,-28 L-20,-36 L42,-31 L72,-16 L80,0 L72,16 L42,31 L-20,36 L-58,28 L-80,12 L-84,0 L-80,-12 Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+    <rect x="-27" y="-25" width="58" height="50" rx="11" fill="#dbeafe" opacity="0.9" stroke="#1e293b" stroke-width="2"/>
+    <rect x="-77" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="-77" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <circle cx="-63" cy="-19" r="6" fill="#fde68a"/>
+    <circle cx="-63" cy="19" r="6" fill="#fde68a"/>
+    
+    <g transform="rotate(6) translate(0 76)">
+      <rect x="-62" y="-22" width="124" height="36" rx="9" fill="#020617" opacity="0.84" stroke="#ffffff" stroke-width="2"/>
+      <text x="0" y="3" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">SNELLER</text>
+    </g>
+  </g>
+<g id="orange" transform="translate(1290 390) rotate(0)">
+    <ellipse cx="0" cy="0" rx="74" ry="34" fill="#05070b" opacity="0.38" transform="translate(8 10)"/>
+    <rect x="-86" y="-37" width="172" height="74" rx="20" fill="#f97316" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M-58,-28 L-20,-36 L42,-31 L72,-16 L80,0 L72,16 L42,31 L-20,36 L-58,28 L-80,12 L-84,0 L-80,-12 Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+    <rect x="-27" y="-25" width="58" height="50" rx="11" fill="#dbeafe" opacity="0.9" stroke="#1e293b" stroke-width="2"/>
+    <rect x="-77" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="-77" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <circle cx="-63" cy="-19" r="6" fill="#fde68a"/>
+    <circle cx="-63" cy="19" r="6" fill="#fde68a"/>
+    
+    <g transform="rotate(0) translate(0 76)">
+      <rect x="-62" y="-22" width="124" height="36" rx="9" fill="#020617" opacity="0.84" stroke="#ffffff" stroke-width="2"/>
+      <text x="0" y="3" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">SNELLER</text>
+    </g>
+  </g> <g id="blue" transform="translate(1170 530) rotate(0)">
+    <ellipse cx="0" cy="0" rx="74" ry="34" fill="#05070b" opacity="0.38" transform="translate(8 10)"/>
+    <rect x="-86" y="-37" width="172" height="74" rx="20" fill="#2563eb" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M-58,-28 L-20,-36 L42,-31 L72,-16 L80,0 L72,16 L42,31 L-20,36 L-58,28 L-80,12 L-84,0 L-80,-12 Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+    <rect x="-27" y="-25" width="58" height="50" rx="11" fill="#dbeafe" opacity="0.9" stroke="#1e293b" stroke-width="2"/>
+    <rect x="-77" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="-42" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="-77" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <rect x="39" y="33" width="38" height="9" rx="4" fill="#0f172a"/>
+    <circle cx="-63" cy="-19" r="6" fill="#fde68a"/>
+    <circle cx="-63" cy="19" r="6" fill="#fde68a"/>
+    
+    <g transform="rotate(0) translate(0 76)">
+      <rect x="-62" y="-22" width="124" height="36" rx="9" fill="#020617" opacity="0.84" stroke="#ffffff" stroke-width="2"/>
+      <text x="0" y="3" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#fff">GELAPT</text>
+    </g>
+  </g>
+<line x1="40" y1="530" x2="380" y2="530" stroke="#38bdf8" stroke-width="8" stroke-linecap="round"  marker-end="url(#arrow-38bdf8)"/> <line x1="40" y1="390" x2="380" y2="390" stroke="#f97316" stroke-width="8" stroke-linecap="round"  marker-end="url(#arrow-f97316)"/>
+<line x1="1080" y1="530" x2="1150" y2="530" stroke="#38bdf8" stroke-width="8" stroke-linecap="round"  marker-end="url(#arrow-38bdf8)"/> <line x1="1080" y1="390" x2="1270" y2="390" stroke="#f97316" stroke-width="8" stroke-linecap="round"  marker-end="url(#arrow-f97316)"/>
+<path d="M1170,530 C1200,580 1240,610 1290,610" stroke="#ef4444" stroke-width="10" fill="none" stroke-dasharray="18 14" marker-end="url(#arrow-ef4444)"/>
+<text x="1220" y="600" font-size="26" font-weight="900" font-family="Arial" fill="#fecaca">blijft verdedigen</text>
+<g transform="translate(60 670)">
+    <rect width="560" height="192" rx="18" fill="#0f172a" opacity="0.94" stroke="#f97316" stroke-width="4"/>
+    <text x="24" y="38" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="900" fill="#fff">Wat voegt dit diagram toe?</text>
+    <text x="24" y="78" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750" fill="#e2e8f0">Blauwe vlag betekent niet dat je</text><text x="24" y="109" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750" fill="#e2e8f0">abrupt moet remmen, van de baan moet</text><text x="24" y="140" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750" fill="#e2e8f0">of moet verdedigen. Blijf</text><text x="24" y="171" font-family="Inter,Arial,sans-serif" font-size="25" font-weight="750" fill="#e2e8f0">voorspelbaar.</text>
+  </g></svg>

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900"><defs>
+<marker id="ag" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#22c55e"/></marker>
+<marker id="ar" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#ef4444"/></marker>
+<marker id="ab" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10Z" fill="#38bdf8"/></marker>
+<pattern id="asph" width="90" height="90" patternUnits="userSpaceOnUse"><rect width="90" height="90" fill="#2b3037"/><circle cx="12" cy="20" r="1.8" fill="#525a66" opacity=".55"/><circle cx="50" cy="60" r="1.4" fill="#111827" opacity=".45"/><circle cx="78" cy="18" r="1.2" fill="#64748b" opacity=".35"/></pattern>
+<pattern id="kerb" width="64" height="26" patternUnits="userSpaceOnUse"><rect width="32" height="26" fill="#f8fafc"/><rect x="32" width="32" height="26" fill="#dc2626"/></pattern>
+</defs>
+<rect width="1600" height="900" fill="#0b1220"/>
+<rect x="0" y="0" width="800" height="900" fill="#0e2a18"/>
+<rect x="800" y="0" width="800" height="900" fill="#2a1414"/>
+<line x1="800" y1="40" x2="800" y2="860" stroke="#475569" stroke-width="4" stroke-dasharray="18 26"/>
+
+<text x="800" y="60" text-anchor="middle" font-family="Arial,sans-serif" font-size="42" font-weight="950" fill="#fff">REJOIN — terugkeren naar de baan</text>
+<rect x="60" y="95" width="680" height="64" rx="12" fill="#16a34a"/><text x="400" y="139" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="950" fill="#fff">VEILIGE REJOIN</text>
+<rect x="860" y="95" width="680" height="64" rx="12" fill="#dc2626"/><text x="1200" y="139" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="950" fill="#fff">UNSAFE REJOIN</text>
+
+<!-- LEFT track + cars (placed low, out of text zone) -->
+<path d="M80,640 C260,610 460,580 700,540" fill="none" stroke="#111827" stroke-width="150" stroke-linecap="round"/>
+<path d="M80,640 C260,610 460,580 700,540" fill="none" stroke="url(#asph)" stroke-width="128" stroke-linecap="round"/>
+<rect x="60" y="690" width="700" height="150" fill="#b08a42" opacity="0.55"/>
+<g transform="translate(560 560) rotate(-4)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+<g transform="rotate(4) translate(0 68)"><rect x="-92" y="-23" width="184" height="40" rx="9" fill="#020617" opacity="0.9" stroke="#fff" stroke-width="2"/><text x="0" y="6" text-anchor="middle" font-family="Arial,sans-serif" font-size="27" font-weight="800" fill="#fff">VERKEER</text></g>
+</g>
+<g transform="translate(230 720) rotate(-18)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+<g transform="rotate(18) translate(0 68)"><rect x="-92" y="-23" width="184" height="40" rx="9" fill="#020617" opacity="0.9" stroke="#fff" stroke-width="2"/><text x="0" y="6" text-anchor="middle" font-family="Arial,sans-serif" font-size="27" font-weight="800" fill="#fff">JIJ</text></g>
+</g>
+<path d="M300,690 C380,640 460,600 540,575" stroke="#22c55e" stroke-width="9" fill="none" stroke-dasharray="22 14" marker-end="url(#ag)"/>
+<text x="80" y="180" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="180" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Snelheid controleren</text>
+<text x="80" y="240" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="240" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Verkeer controleren</text>
+<text x="80" y="300" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="300" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Parallel invoegen</text>
+<text x="80" y="360" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#22c55e">✓</text><text x="132" y="360" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#dcfce7">Verkeer behoudt voorrang</text>
+
+<!-- RIGHT track + cars -->
+<path d="M880,640 C1060,610 1260,580 1500,540" fill="none" stroke="#111827" stroke-width="150" stroke-linecap="round"/>
+<path d="M880,640 C1060,610 1260,580 1500,540" fill="none" stroke="url(#asph)" stroke-width="128" stroke-linecap="round"/>
+<rect x="860" y="690" width="700" height="150" fill="#b08a42" opacity="0.55"/>
+<g transform="translate(1320 555) rotate(-4)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#2563eb" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+<g transform="rotate(4) translate(0 68)"><rect x="-92" y="-23" width="184" height="40" rx="9" fill="#020617" opacity="0.9" stroke="#fff" stroke-width="2"/><text x="0" y="6" text-anchor="middle" font-family="Arial,sans-serif" font-size="27" font-weight="800" fill="#fff">VERKEER</text></g>
+</g>
+<g transform="translate(1080 760) rotate(-55)">
+<ellipse cx="0" cy="0" rx="66" ry="30" fill="#05070b" opacity="0.4" transform="translate(7 9)"/>
+<path d="M-54,-26 L-18,-33 L40,-29 L66,-15 L74,0 L66,15 L40,29 L-18,33 L-54,26 L-74,11 L-78,0 L-74,-11Z" fill="#f97316" stroke="#0f172a" stroke-width="3"/>
+<rect x="-25" y="-23" width="54" height="46" rx="10" fill="#dbeafe" opacity="0.92" stroke="#1e293b" stroke-width="2"/>
+<rect x="-70" y="-39" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="-39" width="34" height="8" rx="4" fill="#0f172a"/>
+<rect x="-70" y="31" width="34" height="8" rx="4" fill="#0f172a"/><rect x="36" y="31" width="34" height="8" rx="4" fill="#0f172a"/>
+<circle cx="-58" cy="-17" r="5" fill="#fde68a"/><circle cx="-58" cy="17" r="5" fill="#fde68a"/>
+<g transform="rotate(55) translate(0 68)"><rect x="-92" y="-23" width="184" height="40" rx="9" fill="#020617" opacity="0.9" stroke="#fff" stroke-width="2"/><text x="0" y="6" text-anchor="middle" font-family="Arial,sans-serif" font-size="27" font-weight="800" fill="#fff">JIJ</text></g>
+</g>
+<path d="M1060,720 C1110,650 1180,600 1290,565" stroke="#ef4444" stroke-width="10" fill="none" marker-end="url(#ar)"/>
+<text x="880" y="180" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="180" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Haaks de baan op</text>
+<text x="880" y="240" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="240" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Verkeer moet remmen</text>
+<text x="880" y="300" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="300" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Verkeer moet uitwijken</text>
+<text x="880" y="360" font-family="Arial,sans-serif" font-size="40" font-weight="900" fill="#ef4444">✗</text><text x="932" y="360" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#fee2e2">Veroorzaakt nieuw incident</text>
+</svg>
