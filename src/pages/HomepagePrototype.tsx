@@ -143,7 +143,7 @@ const NextRaceRefresh = () => {
               <img src={trackPhoto} alt={nextRace.track} className="absolute inset-0 h-full w-full object-cover object-left opacity-100 saturate-[95%] brightness-[1.35] contrast-130" loading="lazy" />
               <div className="absolute inset-0 bg-gradient-to-b from-card/12 via-transparent to-card/10" />
               <div className="absolute inset-0 bg-gradient-to-t from-card via-card/72 to-card/24 lg:bg-gradient-to-r lg:from-card/20 lg:via-card/8 lg:to-card/28" />
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_14%_0%,rgba(15,18,24,0.35),transparent_50%)]" />
+              <div className="absolute -inset-x-0 -inset-y-0 bg-[radial-gradient(ellipse_at_8%_0%,rgba(15,18,24,0.55),transparent_38%)]" />
               <div className="absolute bottom-3 left-4 right-4">
                 <div className="text-[10px] font-medium tracking-wide text-white/[0.08]">{nextRace.track}</div>
               </div>
