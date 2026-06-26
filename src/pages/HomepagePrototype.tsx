@@ -140,10 +140,10 @@ const NextRaceRefresh = () => {
           <div className="pointer-events-none absolute -top-28 left-1/2 h-80 w-[115%] -translate-x-1/2 rounded-full bg-orange-500/[0.045] blur-[72px]" />
           <div className="relative grid lg:grid-cols-[0.9fr_1.15fr_0.55fr]">
             <div className="relative min-h-[260px] overflow-hidden lg:min-h-full [clip-path:inset(0)]">
-              <img src={trackPhoto} alt={nextRace.track} className="absolute inset-0 h-full w-full object-cover object-[0%_85%] opacity-100 saturate-[95%] brightness-[1.35] contrast-130" loading="lazy" />
+              <img src={trackPhoto} alt={nextRace.track} className="absolute inset-0 h-full w-full object-cover object-left opacity-100 saturate-[95%] brightness-[1.35] contrast-130 scale-[1.04]" loading="lazy" />
               <div className="absolute inset-0 bg-gradient-to-b from-card/12 via-transparent to-card/10" />
               <div className="absolute inset-0 bg-gradient-to-t from-card via-card/72 to-card/24 lg:bg-gradient-to-r lg:from-card/20 lg:via-card/8 lg:to-card/28" />
-              <div className="absolute -inset-x-0 -inset-y-0 bg-[radial-gradient(ellipse_at_5%_0%,rgba(15,18,24,0.75),transparent_22%)]" />
+              <div className="absolute -left-2 -top-2 h-16 w-24 bg-gradient-to-br from-card/50 via-card/25 to-transparent" />
               <div className="absolute bottom-3 left-4 right-4">
                 <div className="text-[10px] font-medium tracking-wide text-white/[0.08]">{nextRace.track}</div>
               </div>
