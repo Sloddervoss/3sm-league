@@ -7,11 +7,25 @@ import DriverModal from "@/components/preview/DriverModal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useDrivers, useTeams, useLeagues } from "@/hooks/data/useSharedQueries";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Trophy } from "lucide-react";
 import type { DriverModalProfile, StandingRow, StandingsProfile, StandingsRaceResult, StandingTeam } from "@/lib/standingsTypes";
 
+const setMetaTag = (selector: string, attr: "content" | "href", value: string) => {
+  const el = document.head.querySelector(selector);
+  if (el) el.setAttribute(attr, value);
+};
+
 const StandingsPage = () => {
+  useEffect(() => {
+    document.title = "Stand - 3 Stripe Motorsport - iRacing League Stand";
+    setMetaTag('meta[name="description"]', "content", "Bekijk de coureurs stand van 3 Stripe Motorsport. Live standings van de GT Master Challenge Cup met punten, overwinningen en teamkleuren.");
+    setMetaTag('meta[property="og:title"]', "content", "Coureurs Stand - 3SM");
+    setMetaTag('meta[property="og:description"]', "content", "Live stand van de 3SM iRacing league met punten, podiumposities en teamkleuren.");
+    setMetaTag('meta[property="og:url"]', "content", "https://3stripemotorsport.cc/standings/");
+    setMetaTag('link[rel="canonical"]', "href", "https://3stripemotorsport.cc/standings/");
+  }, []);
+
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<DriverModalProfile | null>(null);
 
@@ -71,19 +85,16 @@ const StandingsPage = () => {
   const selectedLeague = leagues.find((l) => l.id === selectedId);
 
   return (
-    <div className="min-h-screen" style={{ background: "#08080f" }}>
+    <div className="min-h-screen bg-background">
       <Navbar />
       <StickyRaceBar />
-      <main className="pt-[108px]">
+      <main className="pt-[108px] bg-[radial-gradient(circle_at_50%_38%,rgba(249,115,22,0.045),transparent_28%),linear-gradient(180deg,hsl(220,20%,7%)_0%,hsl(220,20%,7%)_100%)]">
         <div className="container mx-auto px-4 max-w-5xl py-12">
 
           {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-1.5">
-              <Trophy className="w-4 h-4 text-orange-500" />
-              <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Championship</span>
-            </div>
-            <h1 className="font-heading font-black text-4xl md:text-5xl text-white leading-none">STAND</h1>
+          <div className="mb-5 md:mb-7">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.24em] text-orange-500"><Trophy className="h-4 w-4" /> Championship</div>
+            <h1 className="mt-2 font-heading text-3xl font-black uppercase leading-none text-white md:text-4xl">Coureurs stand</h1>
           </div>
 
           {/* League tabs */}
