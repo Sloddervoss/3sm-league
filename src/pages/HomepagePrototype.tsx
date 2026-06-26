@@ -186,7 +186,7 @@ const NextRaceRefresh = () => {
             <div className="relative hidden self-center place-items-center overflow-hidden p-8 lg:grid">
               <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-transparent via-white/[0.07] to-transparent" />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_50%,rgba(249,115,22,0.04),transparent_60%)]" />
-              {trackInfo?.imageUrl ? <img src={trackInfo.imageUrl} alt="" className="max-h-60 max-w-full object-contain opacity-85" /> : <Flag className="h-28 w-28 text-white/10" />}
+              {trackInfo?.imageUrl ? <img src={trackInfo.imageUrl} alt="" className="max-h-60 max-w-full object-contain opacity-75 invert" /> : <Flag className="h-28 w-28 text-white/10" />}
             </div>
           </div>
         </div>
