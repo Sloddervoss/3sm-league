@@ -588,6 +588,22 @@ const exactTranslations: Record<string, string> = {
   "Auto": "Car",
   "model": "model",
   "modellen": "models",
+  "Coureurs stand": "Standings",
+  "achter": "behind",
+  "Onbekend": "Unknown",
+  "Meedoen met onze iRacing community": "Join our iRacing community",
+  "Bekijk hoe je aansluit bij de iRacing community van 3SM.": "See how to join the 3SM iRacing community.",
+  "Binnenkort": "Coming soon",
+  "Tot start": "Until start",
+  "Ingeschreven via seizoen": "Registered via season",
+  "Laatste race": "Latest race",
+  "Alle uitslagen": "All results",
+  "⚡ Snelste ronde": "⚡ Fastest lap",
+  "3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community voor coureurs die clean, fair en met plezier willen racen.": "3 Stripe Motorsport is a Dutch iRacing league and sim racing community for drivers who want to race clean, fair and with pleasure.",
+  "Net geplaatst": "Just posted",
+  "Uit de paddock": "From the paddock",
+  "Alle nieuwsberichten": "All news articles",
+  "Updates, raceverslagen en verhalen uit de 3SM community.": "Updates, race reports and stories from the 3SM community.",
 };
 
 const phraseTranslations: Array<[RegExp, string]> = [
