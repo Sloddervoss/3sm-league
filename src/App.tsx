@@ -17,6 +17,7 @@ const TeamsPage = lazy(() => import("./pages/TeamsPage.tsx"));
 const ResultsPage = lazy(() => import("./pages/ResultsPage.tsx"));
 const RaceDetailPage = lazy(() => import("./pages/RaceDetailPage.tsx"));
 const NewsPage = lazy(() => import("./pages/NewsPage.tsx"));
+const HomepagePrototype = lazy(() => import("./pages/HomepagePrototype.tsx"));
 const NewsDetailPage = lazy(() => import("./pages/NewsDetailPage.tsx"));
 const NewsAuthorPage = lazy(() => import("./pages/NewsAuthorPage.tsx"));
 const NewsCategoryOrDetailPage = lazy(() => import("./pages/NewsCategoryOrDetailPage.tsx"));
@@ -63,6 +64,7 @@ const App = () => (
               <Suspense fallback={<RouteFallback />}>
                 <Routes>
                   <Route path="/" element={<Index />} />
+                  <Route path="/homepage-prototype" element={<HomepagePrototype />} />
                   <Route path="/calendar" element={<CalendarPage />} />
                   <Route path="/standings" element={<StandingsPage />} />
                   <Route path="/drivers" element={<DriversPage />} />

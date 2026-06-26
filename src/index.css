@@ -8,6 +8,11 @@ html {
   overflow-x: hidden;
 }
 
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
 /* ── Custom scrollbar ─────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 4px;
