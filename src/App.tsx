@@ -63,8 +63,8 @@ const App = () => (
             <ErrorBoundary>
               <Suspense fallback={<RouteFallback />}>
                 <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/homepage-prototype" element={<HomepagePrototype />} />
+                  <Route path="/" element={<HomepagePrototype />} />
+                  <Route path="/homepage-prototype" element={<Index />} />
                   <Route path="/calendar" element={<CalendarPage />} />
                   <Route path="/standings" element={<StandingsPage />} />
                   <Route path="/drivers" element={<DriversPage />} />
