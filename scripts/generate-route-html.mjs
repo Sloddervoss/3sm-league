@@ -97,7 +97,7 @@ const routes = [
   },
   {
     path: '/results',
-    title: '3SM iRacing race-uitslagen en standings - 3 Stripe Motorsport',
+    title: '3SM race-uitslagen - 3 Stripe Motorsport',
     priority: '0.8',
     changefreq: 'weekly',
     description:
@@ -528,7 +528,7 @@ const fetchDynamicRoutes = async () => {
       const articleSummary = truncate(post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.', 220);
       dynamicRoutes.push({
         path: `/news/${categorySlug}/${post.slug}`,
-        title: post.seo_title || `${post.title} - 3 Stripe Motorsport`,
+        title: truncate(post.seo_title || post.title, 58),
         priority: '0.6',
         changefreq: 'monthly',
         lastmod: dateOnly(post.updated_at || post.published_at),
