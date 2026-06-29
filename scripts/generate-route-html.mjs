@@ -33,6 +33,10 @@ const routes = [
       ['/calendar', 'Racekalender bekijken'],
       ['/standings', 'Standings volgen'],
       ['/results', 'Race-uitslagen bekijken'],
+      ['/news', '3SM nieuws lezen'],
+      ['/seasons', 'Seizoenen bekijken'],
+      ['/drivers', 'Coureurs bekijken'],
+      ['/teams', 'Teams bekijken'],
     ],
   },
   {
@@ -57,11 +61,11 @@ const routes = [
   },
   {
     path: '/calendar',
-    title: '3SM iRacing racekalender - 3 Stripe Motorsport',
+    title: 'iRacing racekalender Nederland | 3SM',
     priority: '0.9',
     changefreq: 'weekly',
     description:
-      'Bekijk de 3SM iRacing racekalender met aankomende races, circuits, tijden en inschrijven bij 3 Stripe Motorsport.',
+      'Bekijk de 3SM iRacing racekalender: aankomende races, circuits, tijden en inschrijven bij een Nederlandse sim racing community.',
     h1: '3SM racekalender',
     intro:
       'De racekalender toont aankomende 3 Stripe Motorsport iRacing races met circuits, raceavonden, inschrijvingen en seizoensplanning.',
@@ -97,11 +101,11 @@ const routes = [
   },
   {
     path: '/results',
-    title: '3SM race-uitslagen - 3 Stripe Motorsport',
+    title: 'iRacing uitslagen & standings | 3SM',
     priority: '0.8',
     changefreq: 'weekly',
     description:
-      'Volg 3SM iRacing race-uitslagen, podiums, klasseringen en standings van gereden races bij 3 Stripe Motorsport.',
+      'Bekijk 3SM iRacing uitslagen met winnaars, podiums, klasseringen, standings en race-details van de Nederlandse sim racing league.',
     h1: '3SM race-uitslagen',
     intro:
       'Bekijk de race-uitslagen van 3 Stripe Motorsport met gereden iRacing races, rondes, circuits, winnaars, podiums en kampioenschapspunten.',
