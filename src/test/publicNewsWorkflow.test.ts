@@ -123,10 +123,10 @@ describe("public news workflow", () => {
 
     expect(generator).toContain("const canonicalPath = (path) =>");
     expect(generator).toContain("const absoluteUrl = (path) => `${SITE_URL}${canonicalPath(path)}`;");
-    expect(generator).toContain("title: '3SM iRacing racekalender - 3 Stripe Motorsport'");
-    expect(generator).toContain("Bekijk de 3SM iRacing racekalender met aankomende races");
-    expect(generator).toContain("title: '3SM race-uitslagen - 3 Stripe Motorsport'");
-    expect(generator).toContain("Volg 3SM iRacing race-uitslagen, podiums, klasseringen en standings");
+    expect(generator).toContain("title: 'iRacing racekalender Nederland | 3SM'");
+    expect(generator).toContain("Bekijk de 3SM iRacing racekalender: aankomende races");
+    expect(generator).toContain("title: 'iRacing uitslagen & standings | 3SM'");
+    expect(generator).toContain("Bekijk 3SM iRacing uitslagen met winnaars, podiums");
     expect(generator).toContain("<loc>${absoluteUrl(route.path)}</loc>");
     expect(generator).toContain("<li><a href=\"${absoluteUrl(href)}\">");
   });
