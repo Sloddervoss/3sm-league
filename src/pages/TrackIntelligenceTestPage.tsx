@@ -59,6 +59,8 @@ const sourceLabels: Record<TrackIntelligenceSource, string> = {
   extension_scan: "Extensie scan",
 };
 
+const TRACK_SYNC_BATCH_SIZE = 3;
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
   return new Date(value).toLocaleString("nl-NL", {
@@ -220,15 +222,51 @@ const TrackIntelligenceTestPage = () => {
         })));
         createdRecords += await upsertHistoryRows(siteRows);
 
-        const { data: syncResult, error: syncError } = await supabase.functions.invoke("track-intelligence-sync", {
-          body: { run_id: runId, trigger_type: "manual" },
-        });
-        if (syncError) throw syncError;
-        if (syncResult?.error) throw new Error(syncResult.error);
-        if (typeof syncResult?.created_records === "number") createdRecords += syncResult.created_records;
-        if (typeof syncResult?.members_success === "number") membersSuccess = syncResult.members_success;
-        if (typeof syncResult?.members_failed === "number") membersFailed = syncResult.members_failed;
-        if (typeof syncResult?.error_summary === "string" && syncResult.error_summary.trim()) errorSummary = syncResult.error_summary;
+        const batches: LinkedProfile[][] = [];
+        for (let index = 0; index < linkedProfiles.length; index += TRACK_SYNC_BATCH_SIZE) {
+          batches.push(linkedProfiles.slice(index, index + TRACK_SYNC_BATCH_SIZE));
+        }
+
+        const batchErrors: string[] = [];
+        for (const [batchIndex, batch] of batches.entries()) {
+          setSyncMessage(`iRacing synchronisatie batch ${batchIndex + 1}/${batches.length} (${batch.length} members)…`);
+          try {
+            const { data: syncResult, error: syncError } = await supabase.functions.invoke("track-intelligence-sync", {
+              body: {
+                run_id: runId,
+                trigger_type: "manual",
+                member_ids: batch.map((profile) => profile.user_id),
+                max_members: TRACK_SYNC_BATCH_SIZE,
+                batch_index: batchIndex + 1,
+                batch_total: batches.length,
+              },
+            });
+            if (syncError) throw syncError;
+            if (syncResult?.error) throw new Error(syncResult.error);
+            if (typeof syncResult?.created_records === "number") createdRecords += syncResult.created_records;
+            if (typeof syncResult?.members_success === "number") membersSuccess += syncResult.members_success;
+            if (typeof syncResult?.members_failed === "number") membersFailed += syncResult.members_failed;
+            if (typeof syncResult?.error_summary === "string" && syncResult.error_summary.trim()) {
+              batchErrors.push(syncResult.error_summary.trim());
+            }
+
+            await supabase
+              .from("track_intelligence_runs" as never)
+              .update({
+                members_success: membersSuccess,
+                members_failed: membersFailed,
+                created_records: createdRecords,
+                error_summary: batchErrors.join("\n") || null,
+              } as never)
+              .eq("id", runId);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Onbekende batchfout";
+            membersFailed += batch.length;
+            batchErrors.push(`Batch ${batchIndex + 1}/${batches.length}: ${message}`);
+          }
+        }
+
+        errorSummary = batchErrors.join("\n") || null;
       } catch (error) {
         errorSummary = error instanceof Error ? error.message : "Onbekende syncfout";
       }

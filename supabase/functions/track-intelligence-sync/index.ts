@@ -335,6 +335,11 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const runId = cleanString(body.run_id);
+    const requestedMemberIds = Array.isArray(body.member_ids)
+      ? new Set(body.member_ids.map((id: unknown) => cleanString(id)).filter(Boolean) as string[])
+      : null;
+    const requestedLimit = Number(body.max_members ?? (requestedMemberIds ? requestedMemberIds.size : 3));
+    const maxMembers = Math.min(5, Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 3));
 
     const { data: profiles, error: profileError } = await serviceClient
       .from("profiles")
@@ -342,7 +347,23 @@ Deno.serve(async (req) => {
       .not("iracing_id", "is", null);
     if (profileError) throw profileError;
 
-    const linkedProfiles = (profiles || []).filter((profile: Profile) => cleanString(profile.iracing_id));
+    const linkedProfilesAll = (profiles || []).filter((profile: Profile) => cleanString(profile.iracing_id));
+    const linkedProfiles = (requestedMemberIds
+      ? linkedProfilesAll.filter((profile: Profile) => requestedMemberIds.has(profile.user_id))
+      : linkedProfilesAll.slice(0, maxMembers)
+    ).slice(0, maxMembers);
+
+    if (!linkedProfiles.length) {
+      const result = {
+        members_total: 0,
+        members_success: 0,
+        members_failed: 0,
+        created_records: 0,
+        error_summary: null,
+        members_total_available: linkedProfilesAll.length,
+      };
+      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     let cookie: string;
     try {
@@ -355,9 +376,16 @@ Deno.serve(async (req) => {
         members_failed: linkedProfiles.length,
         created_records: 0,
         error_summary: message,
+        members_total_available: linkedProfilesAll.length,
       };
       if (runId) {
-        await serviceClient.from("track_intelligence_runs").update(result).eq("id", runId);
+        await serviceClient.from("track_intelligence_runs").update({
+          members_total: result.members_total,
+          members_success: result.members_success,
+          members_failed: result.members_failed,
+          created_records: result.created_records,
+          error_summary: result.error_summary,
+        }).eq("id", runId);
       }
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -386,10 +414,17 @@ Deno.serve(async (req) => {
       members_failed: membersFailed,
       created_records: createdRecords,
       error_summary: errors.join("\n") || null,
+      members_total_available: linkedProfilesAll.length,
     };
 
     if (runId) {
-      await serviceClient.from("track_intelligence_runs").update(result).eq("id", runId);
+      await serviceClient.from("track_intelligence_runs").update({
+        members_total: result.members_total,
+        members_success: result.members_success,
+        members_failed: result.members_failed,
+        created_records: result.created_records,
+        error_summary: result.error_summary,
+      }).eq("id", runId);
     }
 
     return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
