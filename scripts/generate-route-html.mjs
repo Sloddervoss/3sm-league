@@ -315,6 +315,69 @@ const driverName = (result) =>
   cleanText(result?.profiles?.display_name || result?.profiles?.iracing_name) || 'Onbekende coureur';
 
 let resultsHubSummaries = [];
+let calendarHubSummaries = [];
+
+const summarizeCalendarRaceForHub = (race) => ({
+  id: race.id,
+  path: '/calendar',
+  name: cleanText(race.name),
+  track: cleanText(race.track),
+  raceDate: race.race_date,
+  formattedDate: formatDateNl(race.race_date) || dateOnly(race.race_date),
+  round: race.round,
+  leagueName: cleanText(race.leagues?.name) || null,
+  carClass: cleanText(race.leagues?.car_class) || null,
+});
+
+const buildCalendarHubCrawlerHtml = (summaries) => {
+  if (!summaries.length) return '';
+
+  const next = summaries[0];
+  const raceItems = summaries.slice(0, 40).map((race) => {
+    const meta = [race.track, race.formattedDate, race.carClass || race.leagueName].filter(Boolean).join(' · ');
+    return `          <li><a href="${absoluteUrl(race.path)}">${escapeHtml(race.name)}</a>${meta ? ` — ${escapeHtml(meta)}.` : ''}</li>`;
+  }).join('\n');
+
+  return `<section aria-label="Crawler-zichtbare racekalender">
+        <h2>Eerstvolgende 3SM race</h2>
+        <p><a href="${absoluteUrl(next.path)}">${escapeHtml(next.name)}</a>${next.track ? ` op ${escapeHtml(next.track)}` : ''}${next.formattedDate ? ` (${escapeHtml(next.formattedDate)})` : ''}${next.carClass ? ` in de ${escapeHtml(next.carClass)} klasse` : ''}.</p>
+        <h2>Aankomende races</h2>
+        <ul>
+${raceItems}
+        </ul>
+      </section>`;
+};
+
+const buildCalendarHubItemListJsonLd = (summaries) => ({
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: '3 Stripe Motorsport racekalender',
+  description: 'Overzicht van aankomende 3SM iRacing races met datum, circuit, klasse en competitie.',
+  url: absoluteUrl('/calendar'),
+  itemListElement: summaries.slice(0, 40).map((race, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    item: {
+      '@type': 'SportsEvent',
+      name: race.name,
+      startDate: race.raceDate,
+      url: absoluteUrl(race.path),
+      location: race.track ? {
+        '@type': 'Place',
+        name: race.track,
+      } : undefined,
+      organizer: {
+        '@type': 'SportsOrganization',
+        name: '3 Stripe Motorsport',
+        sport: 'Sim racing',
+        url: SITE_URL,
+      },
+      sport: 'Sim racing',
+      eventStatus: 'https://schema.org/EventScheduled',
+      description: `${race.name}${race.track ? ` op ${race.track}` : ''}${race.carClass ? ` met ${race.carClass}` : ''}: aankomende iRacing race van 3 Stripe Motorsport.`,
+    },
+  })),
+});
 
 const sortedRaceResults = (race) => [...(race.race_results || [])]
   .filter((result) => result.position)
@@ -479,6 +542,20 @@ const fetchDynamicRoutes = async () => {
   }
 
   const dynamicRoutes = [];
+
+  const { data: upcomingRaces, error: upcomingRaceError } = await supabase
+    .from('races')
+    .select('id,name,track,race_date,round,status,leagues(name,car_class)')
+    .neq('status', 'completed')
+    .gte('race_date', new Date().toISOString())
+    .order('race_date', { ascending: true })
+    .limit(80);
+
+  if (upcomingRaceError) {
+    console.warn(`Kon aankomende races niet ophalen voor calendar SEO: ${upcomingRaceError.message}`);
+  } else {
+    calendarHubSummaries = (upcomingRaces || []).map(summarizeCalendarRaceForHub);
+  }
 
   const { data: completedRaces, error: raceError } = await supabase
     .from('races')
@@ -801,6 +878,29 @@ const toCrawlerLinks = (items, limit = 60, excludePath = '') => items
   .filter((item) => item.path !== excludePath)
   .slice(0, limit)
   .map((item) => [item.path, item.h1 || item.title]);
+
+const calendarRoute = routes.find((route) => route.path === '/calendar');
+if (calendarRoute && calendarHubSummaries.length) {
+  const next = calendarHubSummaries[0];
+  calendarRoute.details = [
+    `Eerstvolgende race: ${next.name}${next.track ? ` op ${next.track}` : ''}${next.formattedDate ? ` (${next.formattedDate})` : ''}${next.carClass ? ` met ${next.carClass}` : ''}.`,
+    `De kalender bevat ${calendarHubSummaries.length} aankomende races met datum, circuit, klasse en competitie-informatie voor de 3SM iRacing league.`,
+  ];
+  calendarRoute.facts = calendarHubSummaries.slice(0, 10).map((race) => {
+    const parts = [
+      race.name,
+      race.track ? `Circuit: ${race.track}` : null,
+      race.formattedDate ? `Datum: ${race.formattedDate}` : null,
+      race.carClass ? `Klasse: ${race.carClass}` : null,
+      race.leagueName ? `Competitie: ${race.leagueName}` : null,
+    ].filter(Boolean);
+    return `${parts.join(' — ')}.`;
+  });
+  calendarRoute.crawlerHtml = buildCalendarHubCrawlerHtml(calendarHubSummaries);
+  calendarRoute.extraJsonLd = [
+    { id: 'calendar-itemlist-jsonld', data: buildCalendarHubItemListJsonLd(calendarHubSummaries) },
+  ];
+}
 
 const resultsRoute = routes.find((route) => route.path === '/results');
 if (resultsRoute) {
