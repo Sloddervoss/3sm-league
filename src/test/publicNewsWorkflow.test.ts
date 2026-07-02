@@ -125,6 +125,12 @@ describe("public news workflow", () => {
     expect(generator).toContain("const absoluteUrl = (path) => `${SITE_URL}${canonicalPath(path)}`;");
     expect(generator).toContain("title: 'iRacing racekalender Nederland | 3SM'");
     expect(generator).toContain("Bekijk de 3SM iRacing racekalender: aankomende races");
+    expect(generator).toContain("Waarom 3 Stripe Motorsport? Geen losse lobby");
+    expect(generator).toContain("Zo doe je mee: join de 3SM Discord");
+    expect(generator).toContain("Wat heb je nodig? Een actief iRacing account");
+    expect(generator).toContain("Wat kun je verwachten? Een toegankelijke iRacing league");
+    expect(generator).toContain("Begonnen in Nederland, maar open voor iedereen");
+    expect(generator).toContain("Hard racen. Slim racen. Respectvol racen.");
     expect(generator).toContain("buildCalendarHubCrawlerHtml");
     expect(generator).toContain("Eerstvolgende 3SM race");
     expect(generator).toContain("Aankomende races");
@@ -132,7 +138,8 @@ describe("public news workflow", () => {
     expect(generator).toContain("title: 'iRacing uitslagen & standings | 3SM'");
     expect(generator).toContain("Bekijk 3SM iRacing uitslagen met winnaars, podiums");
     expect(generator).toContain("buildResultsHubCrawlerHtml");
-    expect(generator).toContain("Laatste race-uitslag");
+    expect(generator).toContain("Laatste uitslag");
+    expect(generator).toContain("Details & delen");
     expect(generator).toContain("Race archief");
     expect(generator).toContain("<loc>${absoluteUrl(route.path)}</loc>");
     expect(generator).toContain("<li><a href=\"${absoluteUrl(href)}\">");
