@@ -50,8 +50,12 @@ const routes = [
     intro:
       'Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league met kalender, standings en uitslagen.',
     details: [
-      'Meedoen begint bij de 3SM Discord en een profiel op de site. Daarna kun je je iRacing gegevens koppelen en inschrijven voor races of seizoenen.',
-      'Deze pagina legt uit voor wie de community bedoeld is, hoe inschrijven werkt en waar je de kalender, standings en uitslagen kunt volgen.',
+      'Waarom 3 Stripe Motorsport? Geen losse lobby, maar een herkenbare competitie met geplande GT3-races, duidelijke communicatie, standings, teams en ruimte om door te groeien.',
+      'Zo doe je mee: join de 3SM Discord, maak je profiel compleet, koppel Discord met /koppel en schrijf je via de kalender in voor de race die je wilt rijden.',
+      'Wat heb je nodig? Een actief iRacing account, een Discord account, een compleet 3SM profiel met iRacing naam en Customer ID, respect voor regels en voorbereiding op de raceavond.',
+      'Wat kun je verwachten? Een toegankelijke iRacing league met kalender, briefing, training, raceavond, uitslagen en standings na afloop.',
+      'Begonnen in Nederland, maar open voor iedereen met dezelfde race-mentaliteit: leuk, fair en respectvol racen.',
+      'Hard racen. Slim racen. Respectvol racen.',
     ],
     links: [
       ['/calendar', 'Bekijk aankomende races'],
@@ -430,8 +434,9 @@ const buildResultsHubCrawlerHtml = (summaries) => {
   }).join('\n');
 
   return `<section aria-label="Crawler-zichtbare race-uitslagen">
-        <h2>Laatste race-uitslag</h2>
+        <h2>Laatste uitslag</h2>
         <p><a href="${absoluteUrl(latest.path)}">${escapeHtml(latest.name)} race-uitslag</a>${latest.track ? ` op ${escapeHtml(latest.track)}` : ''}${latest.formattedDate ? ` (${escapeHtml(latest.formattedDate)})` : ''}${latest.winner ? `, winnaar ${escapeHtml(latest.winner)}` : ''}.</p>${podiumList}
+        <p>Details & delen: open de racepagina voor de volledige uitslag, klasseringen, podium en deelbare race-informatie.</p>
         <h2>Race archief</h2>
         <ul>
 ${archiveItems}
