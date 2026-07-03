@@ -7,7 +7,7 @@ import { useLanguage } from "@/i18n/useLanguage";
 const navItems = [
   { label: "Home", path: "/", icon: Flag },
   { label: "Kalender", path: "/calendar", icon: Calendar },
-  { label: "Stand", path: "/standings", icon: Trophy },
+  { label: "Standings", path: "/standings", icon: Trophy },
   { label: "Coureurs", path: "/drivers", icon: Users },
   { label: "Teams", path: "/teams", icon: Car },
   { label: "Uitslagen", path: "/results", icon: List },
