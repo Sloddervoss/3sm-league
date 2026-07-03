@@ -85,11 +85,11 @@ const routes = [
   },
   {
     path: '/standings',
-    title: 'Standings - 3 Stripe Motorsport',
+    title: '3SM Standings & Klassement | 3 Stripe Motorsport',
     priority: '0.9',
     changefreq: 'weekly',
     description:
-      'Volg de actuele 3 Stripe Motorsport standings, kampioenschapspunten en posities van coureurs in de iRacing competitie.',
+      'Bekijk de actuele 3SM standings: kampioenschapspunten, posities, teams en prestaties van coureurs in de iRacing league.',
     h1: '3SM standings en klassement',
     intro:
       'Volg de actuele 3 Stripe Motorsport kampioenschapsstand, punten en posities van coureurs binnen de iRacing league.',
@@ -167,11 +167,11 @@ const routes = [
   },
   {
     path: '/drivers',
-    title: 'Coureurs - 3 Stripe Motorsport',
+    title: '3SM Coureurs | iRacing Drivers & Profielen',
     priority: '0.7',
     changefreq: 'monthly',
     description:
-      'Bekijk de coureurs van 3 Stripe Motorsport, hun profielen, teams en prestaties binnen de iRacing league.',
+      'Bekijk de coureurs van 3 Stripe Motorsport, hun profielen, teams en prestaties binnen de 3SM iRacing league.',
     h1: '3SM coureurs',
     intro:
       'Bekijk de coureurs binnen 3 Stripe Motorsport, inclusief profielen, teams en prestaties in de iRacing league.',
@@ -187,11 +187,11 @@ const routes = [
   },
   {
     path: '/teams',
-    title: 'Teams - 3 Stripe Motorsport',
+    title: '3SM Teams | iRacing Teams & Coureurs',
     priority: '0.7',
     changefreq: 'monthly',
     description:
-      'Ontdek de teams binnen 3 Stripe Motorsport en zie hoe coureurs samen zichtbaar zijn in de iRacing community.',
+      'Ontdek de teams binnen 3 Stripe Motorsport en bekijk hun coureurs, punten en overwinningen in de 3SM iRacing league.',
     h1: '3SM teams',
     intro:
       'Ontdek de teams binnen 3 Stripe Motorsport en zie hoe coureurs samen actief zijn in de iRacing community en league.',
@@ -699,6 +699,45 @@ const buildWebPageJsonLd = (route) => ({
   },
 });
 
+const buildWebSiteJsonLd = () => ({
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: '3 Stripe Motorsport',
+  alternateName: '3SM',
+  url: `${SITE_URL}/`,
+  inLanguage: 'nl-NL',
+  publisher: {
+    '@type': 'SportsOrganization',
+    name: '3 Stripe Motorsport',
+    sport: 'Sim racing',
+    url: `${SITE_URL}/`,
+  },
+});
+
+const mainNavigationItems = [
+  ['Home', '/'],
+  ['Racekalender', '/calendar'],
+  ['Standings', '/standings'],
+  ['Coureurs', '/drivers'],
+  ['Teams', '/teams'],
+  ['Uitslagen', '/results'],
+  ['Nieuws', '/news'],
+  ['Seizoenen', '/seasons'],
+  ['Meedoen', '/meedoen'],
+];
+
+const buildSiteNavigationJsonLd = () => ({
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: '3SM hoofdnavigatie',
+  itemListElement: mainNavigationItems.map(([name, path], index) => ({
+    '@type': 'SiteNavigationElement',
+    position: index + 1,
+    name,
+    url: absoluteUrl(path),
+  })),
+});
+
 const buildJoinFaqJsonLd = () => ({
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
@@ -794,8 +833,14 @@ const applyRouteMeta = (html, route) => {
   out = replaceOrInsertMeta(out, /<meta name="twitter:description" content="[^"]*"\s*\/>/, `<meta name="twitter:description" content="${description}" />`);
   out = out.replace(/<script type="application\/ld\+json" id="route-webpage"[\s\S]*?<\/script>\n?\s*/g, '');
   out = out.replace(/<script type="application\/ld\+json" id="route-breadcrumb"[\s\S]*?<\/script>\n?\s*/g, '');
+  out = out.replace(/<script type="application\/ld\+json" id="site-website"[\s\S]*?<\/script>\n?\s*/g, '');
+  out = out.replace(/<script type="application\/ld\+json" id="site-navigation"[\s\S]*?<\/script>\n?\s*/g, '');
   out = out.replace(/<script type="application\/ld\+json" id="route-faq"[\s\S]*?<\/script>\n?\s*/g, '');
   const routeJsonLd = [
+    ...(route.path === '/' ? [
+      buildJsonLdScript('site-website', buildWebSiteJsonLd()),
+      buildJsonLdScript('site-navigation', buildSiteNavigationJsonLd()),
+    ] : []),
     buildJsonLdScript('route-webpage', buildWebPageJsonLd(route)),
     buildJsonLdScript('route-breadcrumb', buildBreadcrumbJsonLd(route)),
     ...(route.extraJsonLd || []).map(({ id, data }) => buildJsonLdScript(id, data)),
