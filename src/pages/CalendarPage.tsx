@@ -8,14 +8,17 @@ import RaceModal from "@/components/preview/RaceModal";
 import { useRegistration } from "@/lib/useRegistration";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Calendar } from "lucide-react";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
+import { useLanguage } from "@/i18n/useLanguage";
+import { setSeoMeta } from "@/lib/seo";
 
 type CalendarRace = RaceWithLeagueSummary;
 
 const CalendarPage = () => {
+  const { language } = useLanguage();
   const now = useNow();
   const reg = useRegistration();
   const [selectedRace, setSelectedRace] = useState<CalendarRace | null>(null);
@@ -51,6 +54,24 @@ const CalendarPage = () => {
   const nextRace = liveRace || upcomingRace;
 
   const activeLeague = leagues?.[0];
+
+  useEffect(() => {
+    setSeoMeta(language === "en"
+      ? {
+          title: "iRacing Race Calendar Netherlands | 3SM",
+          description: "View the 3SM iRacing race calendar: upcoming races, circuits, times and registration with a Dutch sim racing community.",
+          canonicalUrl: "https://3stripemotorsport.cc/calendar/",
+          ogTitle: "3SM Race Calendar",
+          ogDescription: "Upcoming 3SM iRacing races, circuits, times and registration.",
+        }
+      : {
+          title: "iRacing racekalender Nederland | 3SM",
+          description: "Bekijk de 3SM iRacing racekalender: aankomende races, circuits, tijden en inschrijven bij een Nederlandse sim racing community.",
+          canonicalUrl: "https://3stripemotorsport.cc/calendar/",
+          ogTitle: "3SM racekalender",
+          ogDescription: "Aankomende 3SM iRacing races, circuits, tijden en inschrijven.",
+        });
+  }, [language]);
 
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>

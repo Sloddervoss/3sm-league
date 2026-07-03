@@ -7,10 +7,12 @@ import DriverModal from "@/components/preview/DriverModal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useDrivers, useTeams } from "@/hooks/data/useSharedQueries";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Users, Search } from "lucide-react";
 import type { DriverModalProfile } from "@/lib/standingsTypes";
 import type { Team } from "@/hooks/data/useSharedQueries";
+import { useLanguage } from "@/i18n/useLanguage";
+import { setSeoMeta } from "@/lib/seo";
 
 type DriverStats = {
   races: number;
@@ -28,6 +30,7 @@ type DriverResult = {
 };
 
 const DriversPage = () => {
+  const { language } = useLanguage();
   const [search, setSearch] = useState("");
   const [selectedDriver, setSelectedDriver] = useState<DriverModalProfile | null>(null);
 
@@ -63,6 +66,24 @@ const DriversPage = () => {
   const sorted = [...filtered].sort((a, b) =>
     (stats?.get(b.user_id)?.points || 0) - (stats?.get(a.user_id)?.points || 0)
   );
+
+  useEffect(() => {
+    setSeoMeta(language === "en"
+      ? {
+          title: "3SM Drivers | iRacing Driver Profiles",
+          description: "View 3 Stripe Motorsport drivers, profiles, teams and performance in the 3SM iRacing league.",
+          canonicalUrl: "https://3stripemotorsport.cc/drivers/",
+          ogTitle: "3SM Drivers",
+          ogDescription: "Drivers, profiles, teams and performance in the 3SM iRacing league.",
+        }
+      : {
+          title: "3SM Coureurs | iRacing Drivers & Profielen",
+          description: "Bekijk de coureurs van 3 Stripe Motorsport, hun profielen, teams en prestaties binnen de 3SM iRacing league.",
+          canonicalUrl: "https://3stripemotorsport.cc/drivers/",
+          ogTitle: "3SM Coureurs",
+          ogDescription: "Coureurs, profielen, teams en prestaties binnen de 3SM iRacing league.",
+        });
+  }, [language]);
 
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>

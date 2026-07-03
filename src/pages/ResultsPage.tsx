@@ -7,6 +7,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useLanguage } from "@/i18n/useLanguage";
+import { setSeoMeta } from "@/lib/seo";
 
 const positionColors: Record<number, string> = {
   1: "text-yellow-400",
@@ -169,6 +171,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
 };
 
 const ResultsPage = () => {
+  const { language } = useLanguage();
   const [expandedRace, setExpandedRace] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedRaceId = searchParams.get("race");
@@ -201,6 +204,24 @@ const ResultsPage = () => {
   });
 
   const latestRace = races?.[0];
+
+  useEffect(() => {
+    setSeoMeta(language === "en"
+      ? {
+          title: "iRacing Results & Standings | 3SM",
+          description: "View 3SM iRacing results with winners, podiums, classifications, standings and race details from the Dutch sim racing league.",
+          canonicalUrl: "https://3stripemotorsport.cc/results/",
+          ogTitle: "3SM Race Results",
+          ogDescription: "iRacing results, winners, podiums and race details from 3SM.",
+        }
+      : {
+          title: "iRacing uitslagen & standings | 3SM",
+          description: "Bekijk 3SM iRacing uitslagen met winnaars, podiums, klasseringen, standings en race-details van de Nederlandse sim racing league.",
+          canonicalUrl: "https://3stripemotorsport.cc/results/",
+          ogTitle: "3SM Race-uitslagen",
+          ogDescription: "iRacing uitslagen, winnaars, podiums en race-details van 3SM.",
+        });
+  }, [language]);
 
   useEffect(() => {
     if (!requestedRaceId || !races?.some((race) => race.id === requestedRaceId)) return;

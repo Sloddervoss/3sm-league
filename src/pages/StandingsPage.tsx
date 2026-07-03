@@ -10,21 +10,29 @@ import { useDrivers, useTeams, useLeagues } from "@/hooks/data/useSharedQueries"
 import { useState, useEffect } from "react";
 import { Trophy } from "lucide-react";
 import type { DriverModalProfile, StandingRow, StandingsProfile, StandingsRaceResult, StandingTeam } from "@/lib/standingsTypes";
-
-const setMetaTag = (selector: string, attr: "content" | "href", value: string) => {
-  const el = document.head.querySelector(selector);
-  if (el) el.setAttribute(attr, value);
-};
+import { useLanguage } from "@/i18n/useLanguage";
+import { setSeoMeta } from "@/lib/seo";
 
 const StandingsPage = () => {
+  const { language } = useLanguage();
+
   useEffect(() => {
-    document.title = "Stand - 3 Stripe Motorsport - iRacing League Stand";
-    setMetaTag('meta[name="description"]', "content", "Bekijk de coureurs stand van 3 Stripe Motorsport. Live standings van de GT Master Challenge Cup met punten, overwinningen en teamkleuren.");
-    setMetaTag('meta[property="og:title"]', "content", "Coureurs Stand - 3SM");
-    setMetaTag('meta[property="og:description"]', "content", "Live stand van de 3SM iRacing league met punten, podiumposities en teamkleuren.");
-    setMetaTag('meta[property="og:url"]', "content", "https://3stripemotorsport.cc/standings/");
-    setMetaTag('link[rel="canonical"]', "href", "https://3stripemotorsport.cc/standings/");
-  }, []);
+    setSeoMeta(language === "en"
+      ? {
+          title: "3SM Standings & Championship | 3 Stripe Motorsport",
+          description: "View the current 3SM standings: championship points, positions, teams and driver performance in the iRacing league.",
+          canonicalUrl: "https://3stripemotorsport.cc/standings/",
+          ogTitle: "3SM Standings",
+          ogDescription: "Current 3SM iRacing standings with points, positions, teams and drivers.",
+        }
+      : {
+          title: "3SM Standings & Klassement | 3 Stripe Motorsport",
+          description: "Bekijk de actuele 3SM standings: kampioenschapspunten, posities, teams en prestaties van coureurs in de iRacing league.",
+          canonicalUrl: "https://3stripemotorsport.cc/standings/",
+          ogTitle: "3SM Standings & Klassement",
+          ogDescription: "Actuele 3SM iRacing standings met punten, posities, teams en coureurs.",
+        });
+  }, [language]);
 
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<DriverModalProfile | null>(null);
