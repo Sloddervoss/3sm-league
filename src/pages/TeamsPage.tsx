@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
@@ -10,6 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTeams } from "@/hooks/data/useSharedQueries";
 import { Car } from "lucide-react";
 import type { Team } from "@/hooks/data/useSharedQueries";
+import { useLanguage } from "@/i18n/useLanguage";
+import { setSeoMeta } from "@/lib/seo";
 
 type TeamMembership = {
   id: string;
@@ -34,6 +36,7 @@ type TeamWithStats = Team & {
 };
 
 const TeamsPage = () => {
+  const { language } = useLanguage();
   const [selectedTeam, setSelectedTeam] = useState<TeamWithStats | null>(null);
   const { data: teams = [], isLoading } = useTeams();
 
@@ -70,6 +73,24 @@ const TeamsPage = () => {
   const sortedTeams = [...teams]
     .map((t): TeamWithStats => ({ ...t, ...getTeamStats(t.id) }))
     .sort((a, b) => b.total - a.total);
+
+  useEffect(() => {
+    setSeoMeta(language === "en"
+      ? {
+          title: "3SM Teams | iRacing Teams & Drivers",
+          description: "Discover the teams in 3 Stripe Motorsport and see their drivers, points and wins in the 3SM iRacing league.",
+          canonicalUrl: "https://3stripemotorsport.cc/teams/",
+          ogTitle: "3SM Teams",
+          ogDescription: "iRacing teams, drivers, points and wins in the 3SM league.",
+        }
+      : {
+          title: "3SM Teams | iRacing Teams & Coureurs",
+          description: "Ontdek de teams binnen 3 Stripe Motorsport en bekijk hun coureurs, punten en overwinningen in de 3SM iRacing league.",
+          canonicalUrl: "https://3stripemotorsport.cc/teams/",
+          ogTitle: "3SM Teams",
+          ogDescription: "iRacing teams, coureurs, punten en overwinningen in de 3SM league.",
+        });
+  }, [language]);
 
   return (
     <div className="min-h-screen" style={{ background: "#08080f" }}>
