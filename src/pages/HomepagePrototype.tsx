@@ -73,9 +73,16 @@ const HomeHeroRefresh = () => (
             <Calendar className="h-4 w-4" /> Kalender <ChevronRight className="h-4 w-4" />
           </Link>
           <Link to="/standings" className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/20 bg-card/75 px-5 font-heading text-sm font-black uppercase tracking-wider text-white transition hover:border-orange-500/50 hover:text-orange-300">
-            <Trophy className="h-4 w-4" /> Bekijk stand
+            <Trophy className="h-4 w-4" /> Bekijk standings
           </Link>
         </div>
+        <nav aria-label="Belangrijkste pagina's" className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold uppercase tracking-[0.18em] text-gray-400">
+          <span className="text-orange-400">Snel naar</span>
+          <Link to="/calendar" className="hover:text-orange-300">Racekalender</Link>
+          <Link to="/standings" className="hover:text-orange-300">Standings</Link>
+          <Link to="/results" className="hover:text-orange-300">Uitslagen</Link>
+          <Link to="/meedoen" className="hover:text-orange-300">Meedoen</Link>
+        </nav>
       </div>
 
       <Link to="/meedoen" className="group justify-self-start lg:justify-self-end lg:-translate-x-6">

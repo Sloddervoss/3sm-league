@@ -85,10 +85,10 @@ const Footer = () => {
                 { label: "Home", path: "/" },
                 { label: "Kalender", path: "/calendar" },
                 { label: "Standings", path: "/standings" },
-                { label: "Drivers", path: "/drivers" },
+                { label: "Coureurs", path: "/drivers" },
                 { label: "Teams", path: "/teams" },
-                { label: "Results", path: "/results" },
-                { label: "Seasons", path: "/seasons" },
+                { label: "Uitslagen", path: "/results" },
+                { label: "Seizoenen", path: "/seasons" },
                 { label: "Meedoen", path: "/meedoen" },
               ].map((link) => (
                 <Link key={link.path} to={link.path} className="text-xs text-gray-300 hover:text-primary transition-colors py-0.5">
