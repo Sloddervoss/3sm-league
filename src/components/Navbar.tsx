@@ -6,14 +6,14 @@ import { useLanguage } from "@/i18n/useLanguage";
 
 const navItems = [
   { label: "Home", path: "/", icon: Flag },
-  { label: "Kalender", path: "/calendar", icon: Calendar },
-  { label: "Standings", path: "/standings", icon: Trophy },
-  { label: "Coureurs", path: "/drivers", icon: Users },
-  { label: "Teams", path: "/teams", icon: Car },
-  { label: "Uitslagen", path: "/results", icon: List },
-  { label: "Nieuws", path: "/news", icon: Newspaper },
-  { label: "Seizoenen", path: "/seasons", icon: Trophy },
-  { label: "Meedoen", path: "/meedoen", icon: UserPlus },
+  { label: "Kalender", path: "/calendar/", icon: Calendar },
+  { label: "Standings", path: "/standings/", icon: Trophy },
+  { label: "Coureurs", path: "/drivers/", icon: Users },
+  { label: "Teams", path: "/teams/", icon: Car },
+  { label: "Uitslagen", path: "/results/", icon: List },
+  { label: "Nieuws", path: "/news/", icon: Newspaper },
+  { label: "Seizoenen", path: "/seasons/", icon: Trophy },
+  { label: "Meedoen", path: "/meedoen/", icon: UserPlus },
 ];
 
 const Navbar = () => {
@@ -66,7 +66,7 @@ const Navbar = () => {
         {/* Desktop */}
         <div className={`hidden ${showDesktop} items-center gap-1.5`}>
           {navItems.map((item) => {
-            const active = location.pathname === item.path;
+            const active = location.pathname === item.path || (item.path !== "/" && location.pathname === item.path.replace(/\/$/, ""));
             return (
               <Link
                 key={item.path}
@@ -91,9 +91,9 @@ const Navbar = () => {
             <div className="flex items-center gap-1">
               {showAdmin && (
                 <Link
-                  to="/admin"
+                  to="/admin/"
                   className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    location.pathname === "/admin" ? "text-accent" : "text-muted-foreground hover:text-foreground"
+                    location.pathname === "/admin" || location.pathname === "/admin/" ? "text-accent" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
@@ -104,9 +104,9 @@ const Navbar = () => {
               )}
               {canEditNews && (
                 <Link
-                  to="/news-editor"
+                  to="/news-editor/"
                   className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    location.pathname === "/news-editor" ? "text-accent" : "text-muted-foreground hover:text-foreground"
+                    location.pathname === "/news-editor" || location.pathname === "/news-editor/" ? "text-accent" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <span className="flex items-center gap-1.5">
@@ -117,7 +117,7 @@ const Navbar = () => {
               )}
               {canUseStewards && (
                 <Link
-                  to="/stewards"
+                  to="/stewards/"
                   className={`relative px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                     location.pathname === "/stewards" ? "text-accent" : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -129,7 +129,7 @@ const Navbar = () => {
                 </Link>
               )}
               <Link
-                to="/profile"
+                to="/profile/"
                 className="px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 <span className="flex items-center gap-1.5">
@@ -147,7 +147,7 @@ const Navbar = () => {
             </div>
           ) : (
             <Link
-              to="/auth"
+              to="/auth/"
               className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-gradient-racing text-primary-foreground text-sm font-bold shadow-lg shadow-orange-950/20 ring-1 ring-orange-300/20 hover:opacity-90 transition-opacity"
             >
               <LogIn className="w-4 h-4" />
@@ -176,7 +176,7 @@ const Navbar = () => {
             <LanguageSwitch />
           </div>
           {navItems.map((item) => {
-            const active = location.pathname === item.path;
+            const active = location.pathname === item.path || (item.path !== "/" && location.pathname === item.path.replace(/\/$/, ""));
             return (
               <Link
                 key={item.path}
@@ -195,21 +195,21 @@ const Navbar = () => {
           {user ? (
             <>
               {showAdmin && (
-                <Link to="/admin" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
+                <Link to="/admin/" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
                   <Settings className="w-4 h-4" /> Admin
                 </Link>
               )}
               {canEditNews && (
-                <Link to="/news-editor" onClick={() => setMobileOpen(false)} className={`flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium ${location.pathname === "/news-editor" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                <Link to="/news-editor/" onClick={() => setMobileOpen(false)} className={`flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium ${location.pathname === "/news-editor" || location.pathname === "/news-editor/" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                   <Newspaper className="w-4 h-4" /> Redactie
                 </Link>
               )}
               {canUseStewards && (
-                <Link to="/stewards" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
+                <Link to="/stewards/" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
                   <Trophy className="w-4 h-4" /> Stewards
                 </Link>
               )}
-              <Link to="/profile" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
+              <Link to="/profile/" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
                 <User className="w-4 h-4" /> Profiel
               </Link>
               <button onClick={() => { signOut(); setMobileOpen(false); }} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground w-full text-left">
@@ -217,7 +217,7 @@ const Navbar = () => {
               </button>
             </>
           ) : (
-            <Link to="/auth" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium bg-primary text-primary-foreground">
+            <Link to="/auth/" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium bg-primary text-primary-foreground">
               <LogIn className="w-4 h-4" /> Inloggen
             </Link>
           )}
