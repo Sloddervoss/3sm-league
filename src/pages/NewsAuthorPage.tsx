@@ -113,12 +113,12 @@ const NewsAuthorPage = () => {
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {visiblePosts.map((post) => (
                   <article key={post.id} className="overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-orange-500/50">
-                    <Link to={`/news/${categoryToSlug(post.category)}/${post.slug}${isMockPreview ? "?mock=1" : ""}`} className="block aspect-[16/9] overflow-hidden bg-secondary/30">
+                    <Link to={`/news/${categoryToSlug(post.category)}/${post.slug}/${isMockPreview ? "?mock=1" : ""}`} className="block aspect-[16/9] overflow-hidden bg-secondary/30">
                       {post.hero_image_url ? <img src={post.hero_image_url} alt={post.hero_image_alt || post.title} className="h-full w-full object-cover transition-transform duration-500 hover:scale-105" /> : <div className="flex h-full items-center justify-center"><Newspaper className="h-10 w-10 text-muted-foreground/30" /></div>}
                     </Link>
                     <div className="p-5">
                       <span className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">{post.category} · {formatNewsDate(post.published_at)}</span>
-                      <h2 className="mt-3 font-heading text-xl font-black leading-tight"><Link to={`/news/${categoryToSlug(post.category)}/${post.slug}${isMockPreview ? "?mock=1" : ""}`} className="hover:text-orange-400">{post.title}</Link></h2>
+                      <h2 className="mt-3 font-heading text-xl font-black leading-tight"><Link to={`/news/${categoryToSlug(post.category)}/${post.slug}/${isMockPreview ? "?mock=1" : ""}`} className="hover:text-orange-400">{post.title}</Link></h2>
                       {post.excerpt && <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-muted-foreground">{post.excerpt}</p>}
                     </div>
                   </article>

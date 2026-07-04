@@ -420,12 +420,12 @@ const RaceDetailPage = () => {
           <div className="container mx-auto px-4">
             <div className="mb-6 flex flex-wrap items-center gap-3">
               <Link
-                to={raceId ? `/results?race=${raceId}` : "/results"}
+                to="/results/"
                 className="inline-flex items-center gap-2 rounded-md border border-orange-500/25 bg-orange-500/10 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-orange-400 hover:bg-orange-500/15 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" /> {t("Terug naar archief")}
               </Link>
-              <Link to="/results" className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:border-orange-500/40 transition-colors">
+              <Link to="/results/" className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:border-orange-500/40 transition-colors">
                 {t("Alle uitslagen")}
               </Link>
             </div>
@@ -440,7 +440,7 @@ const RaceDetailPage = () => {
                 <Flag className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
                 <h1 className="font-heading text-3xl font-black mb-2">{t("Race niet gevonden")}</h1>
                 <p className="text-muted-foreground text-sm mb-6">{t("Deze race is niet gepubliceerd of bestaat niet.")}</p>
-                <Link to="/results" className="inline-flex items-center gap-2 text-orange-500 font-heading font-bold hover:text-orange-400">
+                <Link to="/results/" className="inline-flex items-center gap-2 text-orange-500 font-heading font-bold hover:text-orange-400">
                   {t("Bekijk alle uitslagen")}
                 </Link>
               </div>
@@ -603,8 +603,8 @@ const RaceDetailPage = () => {
                       >
                         <Share2 className="w-3 h-3" /> {t("Link")}
                       </button>
-                      {raceId && <Link to={`/results?race=${raceId}`} className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">{t("Terug naar archief")}</Link>}
-                      <Link to="/results" className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">{t("Alle uitslagen")}</Link>
+                      {raceId && <Link to="/results/" className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">{t("Terug naar archief")}</Link>}
+                      <Link to="/results/" className="rounded border border-border bg-secondary/40 py-2 text-xs font-heading hover:border-orange-500/40 transition-colors text-center">{t("Alle uitslagen")}</Link>
                     </div>
                   </div>
 

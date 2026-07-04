@@ -197,7 +197,7 @@ const NewsDetailPage = () => {
               <Newspaper className="mx-auto mb-4 h-12 w-12 text-muted-foreground/40" />
               <h1 className="font-heading text-3xl font-black">Nieuwsbericht niet gevonden</h1>
               <p className="mt-2 text-muted-foreground">Dit artikel is niet gepubliceerd of bestaat niet.</p>
-              <Link to="/news" className="mt-6 inline-flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-400 transition-colors"><ChevronLeft className="h-4 w-4" /> Terug naar nieuws</Link>
+              <Link to="/news/" className="mt-6 inline-flex items-center gap-2 rounded-md bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-400 transition-colors"><ChevronLeft className="h-4 w-4" /> Terug naar nieuws</Link>
             </div>
           </section>
         ) : (
@@ -234,7 +234,7 @@ const NewsDetailPage = () => {
                         {post.raceName && <p className="text-sm text-muted-foreground">{post.raceName}</p>}
                       </div>
                       <Link
-                        to={`/results/${post.race_id}`}
+                        to={`/results/${post.race_id}/`}
                         className="inline-flex items-center justify-center rounded-md bg-orange-500 px-4 py-2 text-sm font-heading font-bold uppercase tracking-wider text-white transition-colors hover:bg-orange-400"
                       >
                         Bekijk hier de race uitslag

@@ -512,7 +512,7 @@ const ResultsPage = () => {
                       </div>
                       <div className="flex flex-wrap items-center gap-3">
                         <Link
-                          to={`/results/${latestRace.id}`}
+                          to={`/results/${latestRace.id}/`}
                           className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-white hover:bg-orange-400 transition-colors"
                         >
                           Details & delen
@@ -616,7 +616,7 @@ const ResultsPage = () => {
                       <div className="px-6 pb-3 -mt-1">
                         <div className="flex flex-wrap items-center gap-3">
                           <Link
-                            to={`/results/${race.id}`}
+                            to={`/results/${race.id}/`}
                             className="inline-flex items-center gap-1 text-xs font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors"
                           >
                             Details & delen
