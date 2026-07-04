@@ -83,13 +83,13 @@ const Footer = () => {
             <div className="grid grid-cols-2 gap-1">
               {[
                 { label: "Home", path: "/" },
-                { label: "Kalender", path: "/calendar" },
-                { label: "Standings", path: "/standings" },
-                { label: "Coureurs", path: "/drivers" },
-                { label: "Teams", path: "/teams" },
-                { label: "Uitslagen", path: "/results" },
-                { label: "Seizoenen", path: "/seasons" },
-                { label: "Meedoen", path: "/meedoen" },
+                { label: "Kalender", path: "/calendar/" },
+                { label: "Standings", path: "/standings/" },
+                { label: "Coureurs", path: "/drivers/" },
+                { label: "Teams", path: "/teams/" },
+                { label: "Uitslagen", path: "/results/" },
+                { label: "Seizoenen", path: "/seasons/" },
+                { label: "Meedoen", path: "/meedoen/" },
               ].map((link) => (
                 <Link key={link.path} to={link.path} className="text-xs text-gray-300 hover:text-primary transition-colors py-0.5">
                   {link.label}
@@ -100,9 +100,9 @@ const Footer = () => {
           <div>
             <p className="font-heading font-bold text-sm uppercase tracking-wider mb-3 text-gray-300">Platform</p>
             <div className="space-y-1">
-              <Link to="/auth" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Inloggen / Registreren</Link>
-              <Link to="/profile" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Mijn Profiel</Link>
-              <Link to="/stewards" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Protest Indienen</Link>
+              <Link to="/auth/" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Inloggen / Registreren</Link>
+              <Link to="/profile/" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Mijn Profiel</Link>
+              <Link to="/stewards/" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Protest Indienen</Link>
             </div>
           </div>
           <div className="md:justify-self-end">
