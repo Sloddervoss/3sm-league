@@ -41,7 +41,7 @@ const HeroSection = () => {
 
             <div className="flex flex-wrap gap-3">
               <Link
-                to="/calendar"
+                to="/calendar/"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-gradient-racing text-primary-foreground font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity"
               >
                 <Calendar className="w-4 h-4" />
@@ -49,7 +49,7 @@ const HeroSection = () => {
                 <ChevronRight className="w-4 h-4" />
               </Link>
               <Link
-                to="/standings"
+                to="/standings/"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md border border-border bg-card/50 backdrop-blur text-foreground font-heading font-bold text-sm uppercase tracking-wider hover:border-primary/50 transition-colors"
               >
                 <Trophy className="w-4 h-4" />
@@ -59,7 +59,7 @@ const HeroSection = () => {
           </div>
 
           <Link
-            to="/meedoen"
+            to="/meedoen/"
             className="group relative z-20 mb-8 block overflow-hidden rounded-lg border border-primary/30 bg-card/45 p-4 backdrop-blur-md transition-all hover:border-primary/70 hover:bg-card/65 sm:p-5 lg:mb-0 lg:translate-y-10"
             aria-label="Lees hoe je meedoet met 3 Stripe Motorsport"
           >

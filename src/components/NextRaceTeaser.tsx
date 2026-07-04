@@ -123,7 +123,7 @@ const NextRaceTeaser = () => {
             <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Volgende Race</span>
           </div>
           <Link
-            to="/calendar"
+            to="/calendar/"
             className="flex items-center gap-1 text-xs font-bold text-gray-600 hover:text-orange-500 transition-colors"
           >
             Bekijk kalender <ChevronRight className="w-3 h-3" />
@@ -258,7 +258,7 @@ const NextRaceTeaser = () => {
                     </div>
                   )}
                   <Link
-                    to="/calendar"
+                    to="/calendar/"
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-heading font-bold text-sm transition-all"
                     style={{ background: `${accentColor}26`, border: `1px solid ${accentColor}4d`, color: accentColor }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = `${accentColor}40`; }}

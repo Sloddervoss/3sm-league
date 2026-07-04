@@ -69,23 +69,23 @@ const HomeHeroRefresh = () => (
           3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community voor coureurs die clean, fair en met plezier willen racen.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link to="/calendar" className="inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-racing px-5 font-heading text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-orange-950/25 transition hover:opacity-90">
+          <Link to="/calendar/" className="inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-racing px-5 font-heading text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-orange-950/25 transition hover:opacity-90">
             <Calendar className="h-4 w-4" /> Kalender <ChevronRight className="h-4 w-4" />
           </Link>
-          <Link to="/standings" className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/20 bg-card/75 px-5 font-heading text-sm font-black uppercase tracking-wider text-white transition hover:border-orange-500/50 hover:text-orange-300">
+          <Link to="/standings/" className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/20 bg-card/75 px-5 font-heading text-sm font-black uppercase tracking-wider text-white transition hover:border-orange-500/50 hover:text-orange-300">
             <Trophy className="h-4 w-4" /> Bekijk standings
           </Link>
         </div>
         <nav aria-label="Belangrijkste pagina's" className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold uppercase tracking-[0.18em] text-gray-400">
           <span className="text-orange-400">Snel naar</span>
-          <Link to="/calendar" className="hover:text-orange-300">Racekalender</Link>
-          <Link to="/standings" className="hover:text-orange-300">Standings</Link>
-          <Link to="/results" className="hover:text-orange-300">Uitslagen</Link>
-          <Link to="/meedoen" className="hover:text-orange-300">Meedoen</Link>
+          <Link to="/calendar/" className="hover:text-orange-300">Racekalender</Link>
+          <Link to="/standings/" className="hover:text-orange-300">Standings</Link>
+          <Link to="/results/" className="hover:text-orange-300">Uitslagen</Link>
+          <Link to="/meedoen/" className="hover:text-orange-300">Meedoen</Link>
         </nav>
       </div>
 
-      <Link to="/meedoen" className="group justify-self-start lg:justify-self-end lg:-translate-x-6">
+      <Link to="/meedoen/" className="group justify-self-start lg:justify-self-end lg:-translate-x-6">
         <div className="relative max-w-[440px] overflow-hidden rounded-[1.65rem] bg-card/36 p-6 shadow-2xl shadow-black/12 ring-1 ring-white/[0.06] backdrop-blur-sm transition duration-300 group-hover:-translate-y-0.5 group-hover:ring-orange-500/18">
           <div className="pointer-events-none absolute -right-16 -top-20 h-40 w-40 rounded-full bg-orange-500/[0.045] blur-3xl" />
           <div className="relative flex items-center gap-5">
@@ -140,7 +140,7 @@ const NextRaceRefresh = () => {
             <div className={smallKicker}><Calendar className="h-4 w-4" /> Volgende race</div>
             <h2 className="mt-2 font-heading text-3xl font-black uppercase leading-none text-white md:text-4xl">Race center</h2>
           </div>
-          <Link to="/calendar" className="hidden items-center gap-1 text-xs font-bold text-gray-400 transition hover:text-orange-400 sm:flex">Bekijk kalender <ChevronRight className="h-3 w-3" /></Link>
+          <Link to="/calendar/" className="hidden items-center gap-1 text-xs font-bold text-gray-400 transition hover:text-orange-400 sm:flex">Bekijk kalender <ChevronRight className="h-3 w-3" /></Link>
         </div>
 
         <div className={`${sectionShell} ${orangeGlow} ring-orange-500/[0.075] shadow-orange-950/12`}>
@@ -183,7 +183,7 @@ const NextRaceRefresh = () => {
                       {isRegisteredViaSeason ? "Ingeschreven via seizoen" : "Ingeschreven"}
                     </div>
                   )}
-                  <Link to="/calendar" className="inline-flex h-11 items-center gap-2 rounded-xl bg-orange-500 px-4 font-heading text-sm font-black text-white shadow-lg shadow-orange-500/25 ring-1 ring-orange-300/20 transition hover:bg-orange-400 hover:shadow-orange-500/35">
+                  <Link to="/calendar/" className="inline-flex h-11 items-center gap-2 rounded-xl bg-orange-500 px-4 font-heading text-sm font-black text-white shadow-lg shadow-orange-500/25 ring-1 ring-orange-300/20 transition hover:bg-orange-400 hover:shadow-orange-500/35">
                     {isRegistered || isRegisteredViaSeason ? "Bekijk kalender" : "Schrijf in"} <ChevronRight className="h-4 w-4" />
                   </Link>
                 </div>
@@ -235,7 +235,7 @@ const RaceRecapRefresh = () => {
       <div className={container}>
         <div className="mb-7 flex items-end justify-between gap-4">
           <div><div className={smallKicker}><Flag className="h-4 w-4" /> Laatste race</div><h2 className="mt-2 font-heading text-3xl font-black uppercase leading-none text-white md:text-4xl">Race recap</h2></div>
-          <Link to="/results" className="hidden items-center gap-1 text-xs font-bold text-gray-400 transition hover:text-orange-400 sm:flex">Alle uitslagen <ChevronRight className="h-3 w-3" /></Link>
+          <Link to="/results/" className="hidden items-center gap-1 text-xs font-bold text-gray-400 transition hover:text-orange-400 sm:flex">Alle uitslagen <ChevronRight className="h-3 w-3" /></Link>
         </div>
         <div className={`${sectionShell} ${orangeGlow} ring-orange-500/[0.08] shadow-orange-950/10`}>
           <div className="h-px bg-gradient-to-r from-transparent via-orange-500/35 to-transparent" />
@@ -279,7 +279,7 @@ const StandingsRefresh = () => {
   return (
     <section className="bg-background py-10 md:py-12">
       <div className={container}>
-        <div className="mb-7 flex items-end justify-between gap-4"><div><div className={smallKicker}><Trophy className="h-4 w-4" /> Championship{leagueName ? ` • ${leagueName}` : ""}</div><h2 className="mt-2 font-heading text-3xl font-black uppercase leading-none text-white md:text-4xl">Coureurs stand</h2></div><Link to="/standings" className="hidden items-center gap-1 text-xs font-bold text-gray-400 transition hover:text-orange-400 sm:flex">Volledig <ChevronRight className="h-3 w-3" /></Link></div>
+        <div className="mb-7 flex items-end justify-between gap-4"><div><div className={smallKicker}><Trophy className="h-4 w-4" /> Championship{leagueName ? ` • ${leagueName}` : ""}</div><h2 className="mt-2 font-heading text-3xl font-black uppercase leading-none text-white md:text-4xl">Coureurs stand</h2></div><Link to="/standings/" className="hidden items-center gap-1 text-xs font-bold text-gray-400 transition hover:text-orange-400 sm:flex">Volledig <ChevronRight className="h-3 w-3" /></Link></div>
         <div className={`${sectionShell} ${orangeGlow}`}>
           <div className="relative divide-y divide-white/10">
             {standings.map((driver, index) => {
@@ -287,7 +287,7 @@ const StandingsRefresh = () => {
               const color = isPodium ? podiumColors[index] : "#9ca3af";
               return (
                 <Link
-                  to="/standings"
+                  to="/standings/"
                   key={driver.user_id}
                   className="group grid grid-cols-[42px_1fr_56px_86px] items-center gap-3 px-5 py-3 transition hover:bg-white/[0.04]"
                   style={isPodium ? { background: `linear-gradient(90deg, ${color}12, transparent 42%)` } : undefined}

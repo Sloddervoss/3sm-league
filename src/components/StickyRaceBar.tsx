@@ -128,7 +128,7 @@ const StickyRaceBar = () => {
 
           {/* CTA */}
           <Link
-            to="/calendar"
+            to="/calendar/"
             className="shrink-0 flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all"
             style={{ background: `${accentColor}1f`, color: accentColor, border: `1px solid ${accentColor}33` }}
           >
