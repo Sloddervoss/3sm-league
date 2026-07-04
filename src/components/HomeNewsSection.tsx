@@ -95,7 +95,7 @@ const HomeNewsSection = () => {
               Updates, raceverslagen en verhalen uit de 3SM community.
             </p>
           </div>
-          <Link to="/news" className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-orange-400 transition-colors">
+          <Link to="/news/" className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-orange-400 transition-colors">
             Alle nieuwsberichten <ChevronRight className="w-3 h-3" />
           </Link>
         </div>
@@ -168,7 +168,7 @@ const HomeNewsSection = () => {
           </div>
         </div>
 
-        <Link to="/news" className="mt-5 flex sm:hidden items-center justify-center gap-1 rounded-xl bg-card/70 px-4 py-3 text-xs font-bold text-gray-300 hover:text-orange-400 transition-colors ring-1 ring-white/[0.06]">
+        <Link to="/news/" className="mt-5 flex sm:hidden items-center justify-center gap-1 rounded-xl bg-card/70 px-4 py-3 text-xs font-bold text-gray-300 hover:text-orange-400 transition-colors ring-1 ring-white/[0.06]">
           Alle nieuwsberichten <ChevronRight className="w-3 h-3" />
         </Link>
       </div>

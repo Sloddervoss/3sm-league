@@ -105,7 +105,7 @@ const RaceRecapPanel = () => {
             </h2>
           </div>
           <Link
-            to="/results"
+            to="/results/"
             className="flex items-center gap-1 text-xs font-bold text-gray-600 hover:text-orange-500 transition-colors"
           >
             Alle uitslagen <ChevronRight className="w-3 h-3" />

@@ -291,7 +291,7 @@ const JoinPage = () => {
                   <ChevronRight className="h-4 w-4" />
                 </a>
                 <Link
-                  to="/calendar"
+                  to="/calendar/"
                   className="inline-flex items-center gap-2 rounded-md border border-border bg-card/50 px-5 py-3 font-heading text-sm font-black uppercase tracking-wider text-foreground backdrop-blur transition-colors hover:border-primary/50"
                 >
                   <CalendarDays className="h-4 w-4" />
@@ -562,7 +562,7 @@ const JoinPage = () => {
                   Join de Discord
                   <ArrowRight className="h-4 w-4" />
                 </a>
-                <Link to="/calendar" className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background/60 px-5 py-3 font-heading text-sm font-black uppercase tracking-wider text-foreground hover:border-primary/50">
+                <Link to="/calendar/" className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-background/60 px-5 py-3 font-heading text-sm font-black uppercase tracking-wider text-foreground hover:border-primary/50">
                   Bekijk kalender
                   <Clock3 className="h-4 w-4" />
                 </Link>

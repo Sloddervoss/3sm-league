@@ -222,7 +222,7 @@ const SeasonsPage = () => {
                       </div>
 
                       <Link
-                        to="/standings"
+                        to="/standings/"
                         className="mt-4 flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
                       >
                         Bekijk standings <ChevronRight className="w-3.5 h-3.5" />
