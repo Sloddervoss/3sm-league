@@ -13,6 +13,7 @@ echo "→ Installing dependencies..."
 npm ci --legacy-peer-deps
 
 echo "→ Building..."
+rm -rf dist
 npm run build
 
 echo "→ Deploying to webroot..."

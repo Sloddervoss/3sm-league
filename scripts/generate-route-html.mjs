@@ -434,7 +434,7 @@ const buildResultsHubCrawlerHtml = (summaries) => {
   }).join('\n');
 
   return `<section aria-label="Crawler-zichtbare race-uitslagen">
-        <h2>Laatste uitslag</h2>
+        <h2>Laatste race-uitslag</h2>
         <p><a href="${absoluteUrl(latest.path)}">${escapeHtml(latest.name)} race-uitslag</a>${latest.track ? ` op ${escapeHtml(latest.track)}` : ''}${latest.formattedDate ? ` (${escapeHtml(latest.formattedDate)})` : ''}${latest.winner ? `, winnaar ${escapeHtml(latest.winner)}` : ''}.</p>${podiumList}
         <p>Details & delen: open de racepagina voor de volledige uitslag, klasseringen, podium en deelbare race-informatie.</p>
         <h2>Race archief</h2>
@@ -754,6 +754,20 @@ const buildJoinFaqJsonLd = () => ({
 const buildJsonLdScript = (id, data) =>
   `<script type="application/ld+json" id="${id}">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
 
+const routeSeoStart = '<!-- 3sm-route-seo:start -->';
+const routeSeoEnd = '<!-- 3sm-route-seo:end -->';
+const legacyRouteSeoStyle = '<div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)">';
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const stripGeneratedRouteSeo = (html) => html
+  // Current marked route SEO block. This makes repeated generator runs idempotent.
+  .replace(new RegExp(`\\s*${escapeRegex(routeSeoStart)}[\\s\\S]*?${escapeRegex(routeSeoEnd)}\\s*`, 'g'), '\n    ')
+  // Legacy unmarked block from older builds. Delete everything from the first hidden
+  // SEO div until the React root, because nested route content contains many </div>s.
+  .replace(new RegExp(`\\s*${escapeRegex(legacyRouteSeoStyle)}[\\s\\S]*?(?=<div id="root"><\\/div>)`, 'g'), '\n    ')
+  .replace(/<noscript>[\s\S]*?<\/noscript>\s*/g, '');
+
 const buildCrawlerLinksHtml = (route) => {
   if (!route.crawlerLinks?.length) return '';
 
@@ -831,11 +845,11 @@ const applyRouteMeta = (html, route) => {
   out = replaceOrInsertMeta(out, /<meta property="og:url" content="[^"]*"\s*\/>/, `<meta property="og:url" content="${url}" />`);
   out = replaceOrInsertMeta(out, /<meta name="twitter:title" content="[^"]*"\s*\/>/, `<meta name="twitter:title" content="${title}" />`);
   out = replaceOrInsertMeta(out, /<meta name="twitter:description" content="[^"]*"\s*\/>/, `<meta name="twitter:description" content="${description}" />`);
-  out = out.replace(/<script type="application\/ld\+json" id="route-webpage"[\s\S]*?<\/script>\n?\s*/g, '');
-  out = out.replace(/<script type="application\/ld\+json" id="route-breadcrumb"[\s\S]*?<\/script>\n?\s*/g, '');
-  out = out.replace(/<script type="application\/ld\+json" id="site-website"[\s\S]*?<\/script>\n?\s*/g, '');
-  out = out.replace(/<script type="application\/ld\+json" id="site-navigation"[\s\S]*?<\/script>\n?\s*/g, '');
-  out = out.replace(/<script type="application\/ld\+json" id="route-faq"[\s\S]*?<\/script>\n?\s*/g, '');
+  out = out.replace(/\s*<script type="application\/ld\+json" id="route-webpage"[\s\S]*?<\/script>\n?\s*/g, '\n');
+  out = out.replace(/\s*<script type="application\/ld\+json" id="route-breadcrumb"[\s\S]*?<\/script>\n?\s*/g, '\n');
+  out = out.replace(/\s*<script type="application\/ld\+json" id="site-website"[\s\S]*?<\/script>\n?\s*/g, '\n');
+  out = out.replace(/\s*<script type="application\/ld\+json" id="site-navigation"[\s\S]*?<\/script>\n?\s*/g, '\n');
+  out = out.replace(/\s*<script type="application\/ld\+json" id="route-faq"[\s\S]*?<\/script>\n?\s*/g, '\n');
   const routeJsonLd = [
     ...(route.path === '/' ? [
       buildJsonLdScript('site-website', buildWebSiteJsonLd()),
@@ -850,7 +864,7 @@ const applyRouteMeta = (html, route) => {
     '</head>',
     `    ${routeJsonLd}${extraJsonLd}\n  </head>`,
   );
-  out = out.replace(/<noscript>[\s\S]*?<\/noscript>\s*/g, '');
+  out = stripGeneratedRouteSeo(out);
   const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
   const noscriptLinks = route.links || [];
   const noscriptCrawlerLinks = route.crawlerLinks?.length ? buildCrawlerLinksHtml(route) : '';
@@ -865,10 +879,16 @@ ${buildRouteDetailsHtml(route)}
       ${noscriptCrawlerLinks}
     </main>
   </noscript>`;
+  const routeSeoBlock = `${routeSeoStart}
+  <div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)">
+      ${richContent}
+    </div>
+  ${noscript}
+  ${routeSeoEnd}`;
   // sr-only div: visible to Googlebot & screen readers, hidden from visual users
   out = out.replace(
     '<div id="root"></div>',
-    `<div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)">\n      ${richContent}\n    </div>\n  <div id="root"></div>\n  ${noscript}`,
+    `${routeSeoBlock}\n  <div id="root"></div>`,
   );
   return out;
 }
