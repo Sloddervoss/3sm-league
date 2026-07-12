@@ -36,6 +36,17 @@ describe("steward participant protest parity", () => {
     expect(participantWorkspace).toContain('queryClient.invalidateQueries({ queryKey: ["my-protests"] })');
   });
 
+  it("separates pending DNF reviews from handled decisions and keeps history collapsed", () => {
+    expect(staffWorkspace).toContain("const [showHandledDnfs, setShowHandledDnfs] = useState(false)");
+    expect(staffWorkspace).toContain("activePenaltyKeys.has");
+    expect(staffWorkspace).toContain("? handled : pending");
+    expect(staffWorkspace).toContain(">Te beoordelen<");
+    expect(staffWorkspace).toContain(">Afgehandeld<");
+    expect(staffWorkspace).toContain("aria-expanded={showHandledDnfs}");
+    expect(staffWorkspace).toContain("showHandledDnfs &&");
+    expect(staffWorkspace).toContain("!penalty.revoked");
+  });
+
   it("retains the existing independently guarded staff workspace and native mutation ownership", () => {
     expect(staffWorkspace).toContain("const canModerate = Boolean(user && (isAdmin || isSuperAdmin || isSteward));");
     expect(staffWorkspace).toContain("if (!canModerate) return");
