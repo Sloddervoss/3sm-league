@@ -564,7 +564,7 @@ const fetchDynamicRoutes = async () => {
 
   const { data: completedRaces, error: raceError } = await supabase
     .from('races')
-    .select('id,name,track,race_date,round,updated_at,status,leagues(name,car_class),race_results(position,laps,points,fastest_lap,profiles(display_name,iracing_name))')
+    .select('id,name,track,race_date,round,updated_at,status,leagues(name,car_class),race_results(position,laps,points,fastest_lap,user_id)')
     .eq('status', 'completed')
     .order('race_date', { ascending: false })
     .limit(250);
@@ -572,9 +572,33 @@ const fetchDynamicRoutes = async () => {
   if (raceError) {
     console.warn(`Kon race-detail routes niet ophalen voor sitemap: ${raceError.message}`);
   } else {
-    resultsHubSummaries = (completedRaces || []).map(summarizeRaceForHub);
+    const resultUserIds = [...new Set((completedRaces || []).flatMap((race) => (race.race_results || []).map((result) => result.user_id).filter(Boolean)))];
+    let publicProfileByUserId = new Map();
 
-    for (const race of completedRaces || []) {
+    if (resultUserIds.length) {
+      const { data: publicProfiles, error: publicProfilesError } = await supabase
+        .from('public_profiles')
+        .select('user_id,display_name,iracing_name')
+        .in('user_id', resultUserIds);
+
+      if (publicProfilesError) {
+        console.warn(`Kon publieke coureurnamen niet ophalen voor sitemap: ${publicProfilesError.message}`);
+      } else {
+        publicProfileByUserId = new Map((publicProfiles || []).map((profile) => [profile.user_id, profile]));
+      }
+    }
+
+    const completedRacesWithPublicProfiles = (completedRaces || []).map((race) => ({
+      ...race,
+      race_results: (race.race_results || []).map((result) => ({
+        ...result,
+        profiles: publicProfileByUserId.get(result.user_id) || null,
+      })),
+    }));
+
+    resultsHubSummaries = completedRacesWithPublicProfiles.map(summarizeRaceForHub);
+
+    for (const race of completedRacesWithPublicProfiles) {
       const raceDate = dateOnly(race.race_date);
       const track = race.track ? ` op ${race.track}` : '';
       const carClass = race.leagues?.car_class ? `${race.leagues.car_class} ` : '';
