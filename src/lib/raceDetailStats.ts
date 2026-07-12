@@ -50,7 +50,7 @@ export const formatRaceGapDisplay = (
 };
 
 const driverName = (result: RaceDetailStatsResult) =>
-  result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend";
+  result.profiles?.iracing_name || result.profiles?.display_name || "Onbekend";
 
 const byPosition = (a: RaceDetailStatsResult, b: RaceDetailStatsResult) =>
   (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER);

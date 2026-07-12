@@ -151,7 +151,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
               </span>
               <div>
                 <span className="font-heading font-bold text-sm">
-                  {result.profiles?.display_name || result.profiles?.iracing_name || "Onbekend"}
+                  {result.profiles?.iracing_name || result.profiles?.display_name || "Onbekend"}
                 </span>
                 {result.fastest_lap && (
                   <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold">FL</span>
@@ -283,7 +283,7 @@ const ResultsPage = () => {
   const spHasIncData = latestResults.some((r) => r.incidents != null);
 
   const spDriverName = (r: RaceDetailResult) =>
-    r.profiles?.display_name || r.profiles?.iracing_name || "Onbekend";
+    r.profiles?.iracing_name || r.profiles?.display_name || "Onbekend";
 
   useEffect(() => {
     if (!races?.length) return;
@@ -297,7 +297,7 @@ const ResultsPage = () => {
       url: `${siteUrl}/results/`,
       itemListElement: races.slice(0, 20).map((race, index) => {
         const winner = winners?.find((w) => w.race_id === race.id);
-        const winnerName = winner?.profiles?.display_name || winner?.profiles?.iracing_name;
+        const winnerName = winner?.profiles?.iracing_name || winner?.profiles?.display_name;
 
         return {
           "@type": "ListItem",
@@ -594,7 +594,7 @@ const ResultsPage = () => {
                             <div className="flex items-center gap-1 mt-1.5 md:hidden">
                               <Trophy className="w-3 h-3 text-yellow-400 shrink-0" />
                               <span className="font-heading font-bold text-sm text-yellow-400 truncate">
-                                {winner.profiles?.display_name || winner.profiles?.iracing_name || "Onbekend"}
+                                {winner.profiles?.iracing_name || winner.profiles?.display_name || "Onbekend"}
                               </span>
                             </div>
                           )}
@@ -604,7 +604,7 @@ const ResultsPage = () => {
                             <div className="text-right">
                               <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Winnaar</div>
                               <div className="font-heading font-bold text-yellow-400">
-                                {winner.profiles?.display_name || winner.profiles?.iracing_name || "Onbekend"}
+                                {winner.profiles?.iracing_name || winner.profiles?.display_name || "Onbekend"}
                               </div>
                             </div>
                             <Trophy className="w-5 h-5 text-yellow-400" />

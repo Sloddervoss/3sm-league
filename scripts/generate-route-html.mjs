@@ -316,7 +316,7 @@ const formatDateNl = (value) => {
 const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
 const driverName = (result) =>
-  cleanText(result?.profiles?.display_name || result?.profiles?.iracing_name) || 'Onbekende coureur';
+  cleanText(result?.profiles?.iracing_name || result?.profiles?.display_name) || 'Onbekende coureur';
 
 let resultsHubSummaries = [];
 let calendarHubSummaries = [];

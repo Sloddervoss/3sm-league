@@ -167,7 +167,7 @@ const RaceModal = ({ race, registration }: Props) => {
         const prof = profiles.find((p) => p.user_id === uid);
         return {
           user_id: uid,
-          display_name: prof?.display_name || prof?.iracing_name || "Onbekend",
+          display_name: prof?.iracing_name || prof?.display_name || "Onbekend",
           team_id: prof?.team_id ?? null,
         };
       });
@@ -433,8 +433,8 @@ const RaceModal = ({ race, registration }: Props) => {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
               {[
-                { label: "Winnaar",       value: winner?.profiles?.display_name || "—",      accent: "#facc15", icon: <Trophy className="w-4 h-4" /> },
-                { label: "Snelste ronde", value: fastestLap?.profiles?.display_name || "—",  accent: "#a855f7", icon: <Zap className="w-4 h-4" /> },
+                { label: "Winnaar",       value: winner?.profiles?.iracing_name || winner?.profiles?.display_name || "—",      accent: "#facc15", icon: <Trophy className="w-4 h-4" /> },
+                { label: "Snelste ronde", value: fastestLap?.profiles?.iracing_name || fastestLap?.profiles?.display_name || "—",  accent: "#a855f7", icon: <Zap className="w-4 h-4" /> },
                 { label: "Starters",      value: results.length,                              accent: null,      icon: <Users className="w-4 h-4" /> },
                 { label: "DNF's",         value: dnfCount,                                    accent: dnfCount > 0 ? "#ef4444" : null, icon: <Flag className="w-4 h-4" /> },
               ].map(({ label, value, accent, icon }) => (
@@ -482,7 +482,7 @@ const RaceModal = ({ race, registration }: Props) => {
                         {r.dnf ? "DNF" : `P${r.position}`}
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-white truncate">{r.profiles?.display_name || r.profiles?.iracing_name || "Onbekend"}</div>
+                        <div className="text-sm font-bold text-white truncate">{r.profiles?.iracing_name || r.profiles?.display_name || "Onbekend"}</div>
                         {team && <div className="text-[10px] mt-0.5" style={{ color: team.color + "99" }}>{team.name}</div>}
                       </div>
                       <div className="font-heading font-bold text-sm text-orange-400">{r.points}</div>
