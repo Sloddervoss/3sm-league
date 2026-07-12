@@ -260,8 +260,8 @@ export const SeasonRaceWorkspace = ({ onAction, initialTab = "overview", initial
     panel: actionPanel[action.id],
   });
   const actionButton = (label: string, action: SeasonWorkspaceActionDraft, className = "") => (
-    <button type="button" onClick={() => emit(action)} disabled={!onAction}
-      title={onAction ? label : "Live action integration is not connected yet"}
+    <button type="button" onClick={() => emit(action)} disabled={!onAction || (action.id === "race-create" && !action.context.seasonId)}
+      title={!onAction ? "Live action integration is not connected yet" : action.id === "race-create" && !action.context.seasonId ? "Selecteer eerst een seizoen" : label}
       className={`rounded-md border border-white/[0.10] px-3 py-1.5 text-xs font-bold text-gray-200 transition hover:border-orange-400/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-45 ${className}`}>
       {label}
     </button>

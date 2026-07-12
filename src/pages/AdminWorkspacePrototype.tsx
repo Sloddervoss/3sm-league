@@ -14,7 +14,7 @@ import { CommunityModule } from "@/features/control-room/community/CommunityModu
 import { CommunicationsModule } from "@/features/control-room/communications/CommunicationsModule";
 import { PointsManager } from "@/features/control-room/settings/PointsManager";
 import { SeasonCarLockManager } from "@/features/control-room/season/SeasonCarLockManager";
-import { SeasonEditor } from "@/features/control-room/season/SeasonEditor";
+import { SeasonRaceActionForm } from "@/features/control-room/season/SeasonRaceActionForm";
 import { TrackIntelligenceModule } from "@/features/control-room/track";
 import { EditorialWorkspace } from "@/features/control-room/editorial";
 import { OverviewModule, type OverviewNavigation } from "@/features/control-room/overview";
@@ -90,7 +90,6 @@ const AdminWorkspacePrototype = () => {
   const [seasonView, setSeasonView] = useState<"overview" | "calendar" | "registrations" | "cars" | "lobby">("overview");
   const [rolePreview, setRolePreview] = useState<Record<string, string[]>>({});
   const [roleSubject, setRoleSubject] = useState<AdminProfile | null>(null);
-  const [seasonEditorFocus, setSeasonEditorFocus] = useState<{ seasonId?: string; raceId?: string; action?: "create-season" | "create-race" | "edit-season" | "edit-race" | "edit-lobby" | "edit-solo-race" } | null>(null);
   const [seasonAction, setSeasonAction] = useState<SeasonWorkspaceAction | null>(null);
   const [carLockLeagueId, setCarLockLeagueId] = useState<string | undefined>();
   const { user, isAdmin, isSuperAdmin, loading, rolesLoading } = useAuth();
@@ -177,10 +176,8 @@ const AdminWorkspacePrototype = () => {
     const mapped: Record<SeasonWorkspaceAction["id"], ControlRoomActionId> = {
       "season-create": "season-create", "season-edit": "season-edit", "race-create": "race-create", "race-edit": "race-edit", "race-delete": "race-delete", "registration-manage": "season-registration", "car-lock": "car-lock", "lobby-edit": "lobby-edit", "solo-race-create": "solo-race-create", "solo-race-edit": "solo-race-edit", "solo-race-delete": "solo-race-delete",
     };
-    const focusAction = ({ "season-create": "create-season", "season-edit": "edit-season", "race-create": "create-race", "race-edit": "edit-race", "lobby-edit": "edit-lobby", "solo-race-create": "create-race", "solo-race-edit": "edit-solo-race" } as const)[action.id];
     setSeasonAction(action);
     if (action.id === "car-lock") setCarLockLeagueId(action.context.seasonId);
-    setSeasonEditorFocus(focusAction ? { seasonId: action.context.seasonId, raceId: action.context.raceId, action: focusAction } : null);
     openAction(mapped[action.id]);
   };
 
@@ -246,7 +243,7 @@ const AdminWorkspacePrototype = () => {
       case "season-delete-confirm":
       case "race-form":
       case "lobby-manager":
-      case "solo-race-form": return <SeasonEditor focus={seasonEditorFocus} />;
+      case "solo-race-form": return seasonAction ? <SeasonRaceActionForm action={seasonAction} onComplete={() => setActiveAction(null)} /> : null;
       case "registration-manager": return <SeasonRaceWorkspace initialTab="registrations" initialSeasonId={seasonAction?.context.seasonId} onAction={openSeasonAction} />;
       case "race-delete-confirm":
       case "solo-race-delete-confirm": return seasonAction?.context.raceId ? <RaceDeleteConfirmation target={{ raceId: seasonAction.context.raceId, name: typeof seasonAction.context.fields?.name === "string" ? seasonAction.context.fields.name : null, track: typeof seasonAction.context.fields?.track === "string" ? seasonAction.context.fields.track : null, race_date: typeof seasonAction.context.fields?.race_date === "string" ? seasonAction.context.fields.race_date : null, isSolo: seasonAction.id === "solo-race-delete" }} onCancel={() => setActiveAction(null)} onDeleted={() => setActiveAction(null)} /> : null;

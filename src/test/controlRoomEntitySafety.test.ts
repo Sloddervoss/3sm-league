@@ -7,12 +7,14 @@ describe("Control Room entity context and destructive safety", () => {
   const seasonWorkspace = read("src/features/control-room/season/SeasonRaceWorkspace.tsx");
   const deleteConfirmation = read("src/features/control-room/season/RaceDeleteConfirmation.tsx");
   const editor = read("src/features/control-room/season/SeasonEditor.tsx");
+  const actionForm = read("src/features/control-room/season/SeasonRaceActionForm.tsx");
   const carLocks = read("src/features/control-room/season/SeasonCarLockManager.tsx");
 
   it("keeps typed season action context through the router", () => {
     expect(workspace).toContain("const [seasonAction, setSeasonAction]");
     expect(workspace).toContain("const openSeasonAction = (action: SeasonWorkspaceAction)");
-    expect(workspace).toContain("seasonId: action.context.seasonId, raceId: action.context.raceId");
+    expect(workspace).toContain("setSeasonAction(action)");
+    expect(workspace).toContain("<SeasonRaceActionForm action={seasonAction}");
     expect(seasonWorkspace).toContain("initialSeasonId?: string");
     expect(workspace).toContain("initialSeasonId={seasonAction?.context.seasonId}");
   });
@@ -22,6 +24,26 @@ describe("Control Room entity context and destructive safety", () => {
     expect(workspace).toContain('case "race-delete-confirm":');
     expect(workspace).toContain("<RaceDeleteConfirmation target={{ raceId: seasonAction.context.raceId");
     expect(workspace).not.toContain('case "race-delete-confirm":\n      case "registration-manager":\n      case "lobby-manager":');
+  });
+
+  it("uses a native action-specific form instead of the legacy editor for season and race drawers", () => {
+    expect(workspace).toContain('import { SeasonRaceActionForm }');
+    expect(workspace).toContain("<SeasonRaceActionForm action={seasonAction}");
+    expect(workspace).not.toContain('import { SeasonEditor }');
+    expect(actionForm).toContain("const isSeasonCreate");
+    expect(actionForm).toContain("const isLobbyEdit");
+    expect(actionForm).toContain("if (isSeasonCreate) createSeason.mutate()");
+    expect(actionForm).toContain("slots.map((slot, index) => slotPayload(slot, league.id, index + 1))");
+    expect(actionForm).toContain("race_date: amsToUTC(`${slot.date}T${slot.time}`)");
+    expect(actionForm).toContain("const canWrite = Boolean(user && (isAdmin || isSuperAdmin))");
+    expect(actionForm).toContain("Alleen lobbygegevens");
+    expect(actionForm).toContain("Seizoensdefaults");
+    expect(actionForm).toContain("Pas toe op alle rondes");
+    expect(actionForm).toContain("Afwijkende sessie- of circuitcondities voor deze ronde");
+    expect(actionForm).toContain("weather");
+    expect(actionForm).toContain("setup");
+    expect(actionForm).toContain("Selecteer eerst een seizoen voor deze race.");
+    expect(seasonWorkspace).toContain('action.id === "race-create" && !action.context.seasonId');
   });
 
   it("requires an explicit, pending-protected delete confirmation and leaves cancel inert", () => {
