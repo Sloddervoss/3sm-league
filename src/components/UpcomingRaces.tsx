@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getTrackInfo } from "@/lib/trackData";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
+import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
 
 type UpcomingRace = RaceWithLeagueSummary;
 
@@ -19,6 +20,13 @@ type UpcomingProfile = {
 type SeasonReg = {
   league_id: string;
   user_id: string;
+  status: string;
+};
+
+type RaceReg = {
+  race_id: string;
+  user_id: string;
+  status: string;
 };
 
 const statusStyles: Record<string, string> = {
@@ -117,23 +125,23 @@ const UpcomingRaces = () => {
 
   const { data: raceRegs } = useQuery({
     queryKey: ["race-registrations"],
-    queryFn: async () => {
+    queryFn: async (): Promise<RaceReg[]> => {
       const { data, error } = await supabase.from("race_registrations").select("*");
       if (error) throw error;
-      return data || [];
+      return (data || []) as RaceReg[];
     },
   });
 
   const isRegisteredForRace = (raceId: string) =>
-    user && (raceRegs || []).some((r) => r.race_id === raceId && r.user_id === user.id);
+    user && (raceRegs || []).some((r) => r.race_id === raceId && r.user_id === user.id && r.status !== "withdrawn");
 
   const raceRegCount = (raceId: string) =>
-    (raceRegs || []).filter((r) => r.race_id === raceId).length;
+    (raceRegs || []).filter((r) => r.race_id === raceId && r.status !== "withdrawn").length;
 
   const registerForRace = useMutation({
-    mutationFn: async (raceId: string) => {
+    mutationFn: async (race: UpcomingRace) => {
       const { error } = await supabase.from("race_registrations").insert({
-        race_id: raceId,
+        race_id: race.id,
         user_id: user!.id,
         status: "registered",
       });
@@ -165,10 +173,10 @@ const UpcomingRaces = () => {
     (races || []).some((r) => r.league_id === leagueId && r.status === "completed");
 
   const isRegisteredForSeason = (leagueId: string) =>
-    user && (seasonRegs || []).some((r) => r.league_id === leagueId && r.user_id === user.id);
+    user && (seasonRegs || []).some((r) => r.league_id === leagueId && r.user_id === user.id && r.status !== "withdrawn");
 
   const registrationCount = (leagueId: string) =>
-    (seasonRegs || []).filter((r) => r.league_id === leagueId).length;
+    (seasonRegs || []).filter((r) => r.league_id === leagueId && r.status !== "withdrawn").length;
 
   const registerForSeason = useMutation({
     mutationFn: async (leagueId: string) => {
@@ -345,7 +353,7 @@ const UpcomingRaces = () => {
                         </p>
                       </div>
                     )}
-                    {user && (() => {
+                    {user && isRaceRegistrationOpen(nextRace, now) && (() => {
                       const nextSeasonReg = isRegisteredForSeason(nextRace.league_id);
                       const nextRaceReg = isRegisteredForRace(nextRace.id);
                       return (
@@ -366,7 +374,7 @@ const UpcomingRaces = () => {
                             <button
                               onClick={() => {
                                 if (!profileComplete) { setShowProfileWarning(true); return; }
-                                registerForRace.mutate(nextRace.id);
+                                registerForRace.mutate(nextRace);
                               }}
                               disabled={registerForRace.isPending}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-bold bg-gradient-racing text-white hover:opacity-90 transition-opacity"
@@ -560,7 +568,7 @@ const UpcomingRaces = () => {
                               <Timer className="w-3 h-3" /> {countdown}
                             </span>
                           )}
-                          {race.status !== "completed" && user && (() => {
+                          {isRaceRegistrationOpen(race, now) && user && (() => {
                             const seasonReg = isRegisteredForSeason(leagueId);
                             const raceReg = isRegisteredForRace(race.id);
                             return (
@@ -581,7 +589,7 @@ const UpcomingRaces = () => {
                                 <button
                                   onClick={() => {
                                     if (!profileComplete) { setShowProfileWarning(true); return; }
-                                    registerForRace.mutate(race.id);
+                                    registerForRace.mutate(race);
                                   }}
                                   disabled={registerForRace.isPending}
                                   className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-secondary border border-border hover:border-primary/50 hover:text-primary transition-colors"

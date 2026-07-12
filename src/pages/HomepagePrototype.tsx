@@ -13,6 +13,7 @@ import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
 import { formatCountdown, useNow } from "@/lib/useCountdown";
 import { useRegistration } from "@/lib/useRegistration";
+import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
 import { useTeams } from "@/hooks/data/useSharedQueries";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 import type { StandingsProfile, StandingsRaceResult, StandingRow } from "@/lib/standingsTypes";
@@ -29,6 +30,12 @@ type ResultRow = {
   incidents: number | null;
   gap_to_leader: string | null;
   profiles: { display_name: string | null; iracing_name: string | null } | null;
+};
+
+type PublicProfile = {
+  user_id: string | null;
+  display_name: string | null;
+  iracing_name: string | null;
 };
 
 type RecapRace = {
@@ -116,7 +123,7 @@ const NextRaceRefresh = () => {
     },
   });
 
-  const nextRace = [...races].filter((race) => race.status !== "completed" && new Date(race.race_date) > now).sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0];
+  const nextRace = [...races].filter((race) => isRaceRegistrationOpen(race, now)).sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0];
   if (!nextRace) return null;
 
   const trackInfo = getTrackInfo(nextRace.track);
@@ -215,9 +222,21 @@ const RaceRecapRefresh = () => {
     queryKey: ["latest-race-results", lastRace?.id],
     enabled: !!lastRace?.id,
     queryFn: async (): Promise<ResultRow[]> => {
-      const { data, error } = await supabase.from("race_results").select("*, profiles(display_name, iracing_name)").eq("race_id", lastRace!.id).order("position", { ascending: true });
+      const { data, error } = await supabase.from("race_results").select("*").eq("race_id", lastRace!.id).order("position", { ascending: true });
       if (error) throw error;
-      return (data || []) as ResultRow[];
+      const resultRows = (data || []) as Omit<ResultRow, "profiles">[];
+      const userIds = [...new Set(resultRows.map((row) => row.user_id).filter(Boolean))];
+      const { data: profileData, error: profileError } = await supabase
+        .from("public_profiles")
+        .select("user_id, display_name, iracing_name")
+        .in("user_id", userIds);
+      if (profileError) throw profileError;
+      const profiles = new Map(
+        ((profileData || []) as PublicProfile[])
+          .filter((profile): profile is PublicProfile & { user_id: string } => Boolean(profile.user_id))
+          .map((profile) => [profile.user_id, profile]),
+      );
+      return resultRows.map((row) => ({ ...row, profiles: profiles.get(row.user_id) || null }));
     },
   });
   if (!lastRace || !results.length) return null;
@@ -268,7 +287,7 @@ const StandingsRefresh = () => {
       filtered.forEach((r) => { const entry = map.get(r.user_id) || { total_points: 0, wins: 0 }; entry.total_points += r.points || 0; if (r.position === 1) entry.wins++; map.set(r.user_id, entry); });
       const userIds = Array.from(map.keys());
       if (!userIds.length) return [];
-      const { data: profs } = await supabase.from("profiles").select("user_id, display_name, team_id").in("user_id", userIds);
+      const { data: profs } = await supabase.from("public_profiles").select("user_id, display_name, team_id").in("user_id", userIds);
       const profiles = (profs || []) as StandingsProfile[];
       return userIds.map((uid) => { const stats = map.get(uid)!; const prof = profiles.find((p) => p.user_id === uid); const team = teams.find((t) => t.id === prof?.team_id); return { user_id: uid, display_name: prof?.display_name || "Unknown", total_points: stats.total_points, wins: stats.wins, team: team ? { name: team.name, color: team.color } : undefined }; }).sort((a, b) => b.total_points - a.total_points).slice(0, 5);
     },

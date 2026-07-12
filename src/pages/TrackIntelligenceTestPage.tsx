@@ -98,7 +98,8 @@ const upsertHistoryRows = async (rows: MemberTrackHistoryRow[]) => {
 };
 
 const TrackIntelligenceTestPage = () => {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, isSuperAdmin, loading, rolesLoading } = useAuth();
+  const canManageTrackIntelligence = Boolean(user && (isAdmin || isSuperAdmin));
   const queryClient = useQueryClient();
   const [sourceFilter, setSourceFilter] = useState<"all" | TrackIntelligenceSource>("all");
   const [search, setSearch] = useState("");
@@ -107,7 +108,7 @@ const TrackIntelligenceTestPage = () => {
 
   const { data: linkedProfiles = [] } = useQuery({
     queryKey: ["track-intelligence-linked-profiles"],
-    enabled: !!user && isAdmin,
+    enabled: canManageTrackIntelligence,
     queryFn: async (): Promise<LinkedProfile[]> => {
       const { data, error } = await supabase
         .from("profiles")
@@ -120,7 +121,7 @@ const TrackIntelligenceTestPage = () => {
 
   const { data: historyRows = [] } = useQuery({
     queryKey: ["track-intelligence-history"],
-    enabled: !!user && isAdmin,
+    enabled: canManageTrackIntelligence,
     queryFn: async (): Promise<MemberTrackHistoryRow[]> => {
       const { data, error } = await supabase
         .from("member_track_history" as never)
@@ -133,7 +134,7 @@ const TrackIntelligenceTestPage = () => {
 
   const { data: runs = [] } = useQuery({
     queryKey: ["track-intelligence-runs"],
-    enabled: !!user && isAdmin,
+    enabled: canManageTrackIntelligence,
     queryFn: async (): Promise<TrackRun[]> => {
       const { data, error } = await supabase
         .from("track_intelligence_runs" as never)
@@ -341,9 +342,9 @@ const TrackIntelligenceTestPage = () => {
     URL.revokeObjectURL(url);
   };
 
-  if (loading) return null;
+  if (loading || rolesLoading) return <div className="flex min-h-screen items-center justify-center bg-background" role="status"><span className="sr-only">Toegangsrechten laden…</span></div>;
   if (!user) return <Navigate to="/auth" />;
-  if (!isAdmin) {
+  if (!canManageTrackIntelligence) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />

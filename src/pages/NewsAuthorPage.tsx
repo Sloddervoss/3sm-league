@@ -57,7 +57,7 @@ const NewsAuthorPage = () => {
       const newsPosts = (data || []) as AuthorNewsPost[];
       const authorIds = Array.from(new Set(newsPosts.map((post) => post.author_id).filter(Boolean))) as string[];
       if (!authorIds.length) return newsPosts;
-      const { data: profiles } = await supabase.from("profiles").select("user_id,display_name,iracing_name,avatar_url").in("user_id", authorIds);
+      const { data: profiles } = await supabase.from("public_profiles").select("user_id,display_name,iracing_name,avatar_url").in("user_id", authorIds);
       const profileMap = new Map(((profiles || []) as AuthorProfile[]).map((profile) => [profile.user_id, profile]));
       return newsPosts.map((post) => {
         const profile = post.author_id ? profileMap.get(post.author_id) : null;

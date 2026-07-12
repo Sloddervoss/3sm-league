@@ -2,7 +2,7 @@ import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
-import { List, Trophy, AlertTriangle, Flag, ChevronDown, ChevronUp } from "lucide-react";
+import { List, Trophy, Flag, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
@@ -41,6 +41,12 @@ type RaceDetailResult = {
   } | null;
 };
 
+type PublicProfile = {
+  user_id: string | null;
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
 type CompletedRace = {
   id: string;
   name: string;
@@ -61,33 +67,44 @@ type RaceWinner = {
   } | null;
 };
 
+const loadPublicProfiles = async (userIds: string[]) => {
+  const ids = [...new Set(userIds.filter(Boolean))];
+  if (!ids.length) return new Map<string, PublicProfile>();
+
+  const { data, error } = await supabase
+    .from("public_profiles")
+    .select("user_id, display_name, iracing_name")
+    .in("user_id", ids);
+  if (error) throw error;
+
+  return new Map(
+    ((data || []) as PublicProfile[])
+      .filter((profile): profile is PublicProfile & { user_id: string } => Boolean(profile.user_id))
+      .map((profile) => [profile.user_id, profile]),
+  );
+};
+
+const loadRaceResults = async (raceId: string): Promise<RaceDetailResult[]> => {
+  const { data, error } = await supabase
+    .from("race_results")
+    .select("*")
+    .eq("race_id", raceId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+
+  const results = (data || []) as Omit<RaceDetailResult, "profiles">[];
+  const profiles = await loadPublicProfiles(results.map((result) => result.user_id));
+  return results.map((result) => ({ ...result, profiles: profiles.get(result.user_id) || null }));
+};
+
 // Separate component so hooks run per expanded race, not for all races at once
 const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
   const { data: results = [], isLoading } = useQuery({
     queryKey: ["race-results-detail", raceId],
     staleTime: STALE,
-    queryFn: async (): Promise<RaceDetailResult[]> => {
-      const { data, error } = await supabase
-        .from("race_results")
-        .select("*, profiles(display_name, iracing_name)")
-        .eq("race_id", raceId)
-        .order("position", { ascending: true });
-      if (error) throw error;
-      return (data || []) as RaceDetailResult[];
-    },
+    queryFn: () => loadRaceResults(raceId),
   });
 
-  const { data: penalties = [] } = useQuery({
-    queryKey: ["race-penalties-detail", raceId],
-    staleTime: STALE,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("penalties")
-        .select("user_id, penalty_type, points_deduction")
-        .eq("race_id", raceId);
-      return (data || []) as { user_id: string; penalty_type: string; points_deduction: number }[];
-    },
-  });
 
   if (isLoading) {
     return (
@@ -124,7 +141,6 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
           <span className="text-center">Pts</span>
         </div>
         {results.map((result) => {
-          const pen = penalties.find((p) => p.user_id === result.user_id && p.penalty_type !== "warning") || null;
           return (
             <div
               key={result.id}
@@ -148,20 +164,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
                   <span className={result.incidents > 4 ? "text-red-400" : ""}>{result.incidents}x</span>
                 ) : "-"}
               </span>
-              <span className="flex items-center justify-center gap-0">
-                <span className="w-4 shrink-0" />
-                <span className="font-heading font-black">{result.points}</span>
-                <span className="w-4 shrink-0 flex items-center justify-center">
-                  {pen && (
-                    <span className="group relative cursor-default">
-                      <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
-                      <span className="absolute bottom-full right-0 mb-1.5 px-2 py-1 rounded bg-popover border border-border text-xs text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                        {pen.penalty_type === "disqualification" ? "DSQ — Steward" : `-${pen.points_deduction}pt — Steward`}
-                      </span>
-                    </span>
-                  )}
-                </span>
-              </span>
+              <span className="text-center font-heading font-black">{result.points}</span>
             </div>
           );
         })}
@@ -195,11 +198,18 @@ const ResultsPage = () => {
     queryKey: ["race-winners"],
     staleTime: STALE,
     queryFn: async (): Promise<RaceWinner[]> => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("race_results")
-        .select("race_id, profiles(display_name, iracing_name)")
+        .select("race_id, user_id")
         .eq("position", 1);
-      return (data || []) as RaceWinner[];
+      if (error) throw error;
+
+      const winners = (data || []) as { race_id: string; user_id: string }[];
+      const profiles = await loadPublicProfiles(winners.map((winner) => winner.user_id));
+      return winners.map((winner) => ({
+        race_id: winner.race_id,
+        profiles: profiles.get(winner.user_id) || null,
+      }));
     },
   });
 
@@ -253,15 +263,7 @@ const ResultsPage = () => {
     queryKey: ["race-results-detail", latestRace?.id],
     enabled: !!latestRace?.id,
     staleTime: STALE,
-    queryFn: async (): Promise<RaceDetailResult[]> => {
-      const { data, error } = await supabase
-        .from("race_results")
-        .select("*, profiles(display_name, iracing_name)")
-        .eq("race_id", latestRace!.id)
-        .order("position", { ascending: true });
-      if (error) throw error;
-      return (data || []) as RaceDetailResult[];
-    },
+    queryFn: () => loadRaceResults(latestRace!.id),
   });
 
   // Spotlight computations

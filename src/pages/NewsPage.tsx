@@ -52,7 +52,7 @@ const fetchAuthorNames = async (authorIds: Array<string | null>) => {
   if (!ids.length) return new Map<string, { name: string; avatar: string | null }>();
 
   const { data, error } = await supabase
-    .from("profiles")
+    .from("public_profiles")
     .select("user_id,display_name,iracing_name,avatar_url")
     .in("user_id", ids);
   if (error) return new Map<string, { name: string; avatar: string | null }>();

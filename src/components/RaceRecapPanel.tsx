@@ -25,6 +25,12 @@ type RecapResult = {
   profiles: { display_name: string | null; iracing_name: string | null } | null;
 };
 
+type PublicProfile = {
+  user_id: string | null;
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
 const PODIUM_COLORS = [
   { text: "#facc15", bg: "rgba(250,204,21,0.10)", border: "rgba(250,204,21,0.25)" },
   { text: "#94a3b8", bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.20)" },
@@ -57,11 +63,23 @@ const RaceRecapPanel = () => {
     queryFn: async (): Promise<RecapResult[]> => {
       const { data, error } = await supabase
         .from("race_results")
-        .select("*, profiles(display_name, iracing_name)")
+        .select("*")
         .eq("race_id", lastRace!.id)
         .order("position", { ascending: true });
       if (error) throw error;
-      return (data || []) as RecapResult[];
+      const resultRows = (data || []) as Omit<RecapResult, "profiles">[];
+      const userIds = [...new Set(resultRows.map((row) => row.user_id).filter(Boolean))];
+      const { data: profileData, error: profileError } = await supabase
+        .from("public_profiles")
+        .select("user_id, display_name, iracing_name")
+        .in("user_id", userIds);
+      if (profileError) throw profileError;
+      const profiles = new Map(
+        ((profileData || []) as PublicProfile[])
+          .filter((profile): profile is PublicProfile & { user_id: string } => Boolean(profile.user_id))
+          .map((profile) => [profile.user_id, profile]),
+      );
+      return resultRows.map((row) => ({ ...row, profiles: profiles.get(row.user_id) || null }));
     },
   });
 

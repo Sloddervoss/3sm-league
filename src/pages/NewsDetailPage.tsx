@@ -80,7 +80,7 @@ const hydratePostMetadata = async (post: PublicNewsPost | null) => {
 
   if (post.author_id) {
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("user_id,display_name,iracing_name,avatar_url")
       .eq("user_id", post.author_id)
       .maybeSingle();

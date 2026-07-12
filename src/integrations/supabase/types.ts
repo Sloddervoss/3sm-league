@@ -451,6 +451,7 @@ export type Database = {
           penalty_category: string | null
           penalty_points: number | null
           penalty_type: string | null
+          public_decision: string | null
           race_ban_next: boolean
           race_id: string
           reporter_user_id: string
@@ -472,6 +473,7 @@ export type Database = {
           penalty_category?: string | null
           penalty_points?: number | null
           penalty_type?: string | null
+          public_decision?: string | null
           race_ban_next?: boolean
           race_id: string
           reporter_user_id: string
@@ -493,6 +495,7 @@ export type Database = {
           penalty_category?: string | null
           penalty_points?: number | null
           penalty_type?: string | null
+          public_decision?: string | null
           race_ban_next?: boolean
           race_id?: string
           reporter_user_id?: string
@@ -1139,6 +1142,26 @@ export type Database = {
       }
     }
     Views: {
+      public_profiles: {
+        Row: {
+          avatar_url: string | null
+          display_name: string | null
+          iracing_name: string | null
+          irating: number | null
+          safety_rating: string | null
+          team_id: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       confirmed_profiles: {
         Row: {
           avatar_url: string | null
@@ -1254,6 +1277,27 @@ export type Database = {
       get_driver_sp: {
         Args: { p_league_id?: string; p_user_id: string }
         Returns: number
+      }
+      get_my_visible_protests: {
+        Args: never
+        Returns: {
+          created_at: string
+          description: string | null
+          event_name: string
+          grid_penalty_places: number | null
+          id: string
+          lap_number: number | null
+          penalty_points: number | null
+          penalty_type: string | null
+          public_decision: string | null
+          race_ban_next: boolean | null
+          race_date: string
+          status: string
+          time_penalty_seconds: number | null
+          track: string
+          video_link: string | null
+          visibility: string
+        }[]
       }
       has_role: {
         Args: {

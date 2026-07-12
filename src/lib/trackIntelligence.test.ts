@@ -37,7 +37,7 @@ describe("track intelligence analysis", () => {
       row({ member_id: "member-1", iracing_customer_id: "1001", track_name: "Spa-Francorchamps", subsession_id: "sub-duplicate", last_seen_at: "2026-06-02T20:00:00.000Z" }),
       row({ member_id: "member-2", iracing_customer_id: "1002", track_name: "Spa-Francorchamps", source: "iracing_recent_races", last_seen_at: "2026-06-03T20:00:00.000Z" }),
       row({ member_id: "member-3", iracing_customer_id: "1003", track_name: "Road Atlanta", last_seen_at: "2026-05-30T20:00:00.000Z" }),
-    ], 4);
+    ], 4, new Date("2026-06-14T00:00:00.000Z"));
 
     expect(result[0]).toMatchObject({
       trackName: "Spa-Francorchamps",

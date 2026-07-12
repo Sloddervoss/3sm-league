@@ -37,7 +37,7 @@ describe("editor role workflow", () => {
     const desktopAccountMenu = navbar.slice(navbar.indexOf("{showAdmin &&"), navbar.indexOf("<button", navbar.indexOf("{showAdmin &&")));
 
     expect(navbar).toContain("const canEditNews = isAdmin || isSuperAdmin || isEditor");
-    expect(navbar).toContain('to="/news-editor"');
+    expect(navbar).toContain('to="/news-editor/"');
     expect(desktopAccountMenu.indexOf("Admin")).toBeLessThan(desktopAccountMenu.indexOf("Redactie"));
     expect(desktopAccountMenu.indexOf("Redactie")).toBeLessThan(desktopAccountMenu.indexOf("Stewards"));
     expect(navbar).not.toContain("Nieuws redactie");

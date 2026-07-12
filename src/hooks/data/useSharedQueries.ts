@@ -14,7 +14,7 @@ export function useDrivers() {
   return useQuery({
     queryKey: ["drivers"],
     queryFn: async () => {
-      const { data } = await supabase.from("confirmed_profiles").select("*");
+      const { data } = await supabase.from("public_profiles").select("*");
       return data || [];
     },
   });

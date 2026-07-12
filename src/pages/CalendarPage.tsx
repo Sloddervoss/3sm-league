@@ -14,6 +14,7 @@ import { useNow, formatCountdown } from "@/lib/useCountdown";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
+import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
 
 type CalendarRace = RaceWithLeagueSummary;
 
@@ -49,7 +50,7 @@ const CalendarPage = () => {
     r.status !== "completed" && new Date(r.race_date) <= now
   ) as CalendarRace | undefined;
   const upcomingRace = [...races]
-    .filter((r) => r.status !== "completed" && new Date(r.race_date) > now)
+    .filter((r) => isRaceRegistrationOpen(r, now))
     .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as CalendarRace | undefined;
   const nextRace = liveRace || upcomingRace;
 
@@ -148,15 +149,16 @@ const CalendarPage = () => {
         {selectedRace && (
           <RaceModal
             race={selectedRace}
-            registration={{
+            registration={isRaceRegistrationOpen(selectedRace, now) ? {
               isRegistered: reg.isRegisteredForRace(selectedRace.id, selectedRace.leagues?.id),
               isRegisteredViaSeason: reg.isRegisteredViaSeason(selectedRace.leagues?.id),
+              isAuthenticated: Boolean(reg.user),
               profileComplete: reg.profileComplete,
               isLoading: reg.registerForRace.isPending || reg.unregisterFromRace.isPending,
               hasLeague: !!selectedRace.leagues?.id,
-              onRegister: () => reg.registerForRace.mutate(selectedRace.id),
+              onRegister: () => reg.registerForRace.mutate({ raceId: selectedRace.id, leagueId: selectedRace.leagues?.id }),
               onUnregister: () => reg.unregisterFromRace.mutate(selectedRace.id),
-            }}
+            } : undefined}
           />
         )}
       </PreviewModal>

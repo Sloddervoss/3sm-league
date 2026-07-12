@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { isActiveRaceRegistration } from "@/lib/raceRegistration";
 
 type RegistrationProfile = {
   iracing_id: string | number | null;
@@ -19,6 +20,12 @@ type SeasonRegistration = {
 type RaceRegistration = {
   race_id: string;
   user_id: string;
+  status: string;
+};
+
+type RaceRegistrationInput = {
+  raceId: string;
+  leagueId?: string | null;
 };
 
 export function useRegistration() {
@@ -64,7 +71,11 @@ export function useRegistration() {
   const isRegisteredForRace = (raceId: string, leagueId?: string) => {
     if (!user) return false;
     if (leagueId && isRegisteredForSeason(leagueId)) return true;
-    return raceRegs.some((r) => r.race_id === raceId && r.user_id === user.id);
+    return raceRegs.some((r) =>
+      r.race_id === raceId
+      && r.user_id === user.id
+      && isActiveRaceRegistration(r.status),
+    );
   };
 
   const isRegisteredViaSeason = (leagueId?: string) =>
@@ -74,7 +85,7 @@ export function useRegistration() {
     seasonRegs.filter((r) => r.league_id === leagueId).length;
 
   const raceRegCount = (raceId: string) =>
-    raceRegs.filter((r) => r.race_id === raceId).length;
+    raceRegs.filter((r) => r.race_id === raceId && isActiveRaceRegistration(r.status)).length;
 
   // ── Mutations ──────────────────────────────────────────────
   const registerForSeason = useMutation({
@@ -105,10 +116,21 @@ export function useRegistration() {
   });
 
   const registerForRace = useMutation({
-    mutationFn: async (raceId: string) => {
-      const { error } = await supabase.from("race_registrations").insert({
-        race_id: raceId, user_id: user!.id, status: "registered",
-      });
+    mutationFn: async ({ raceId }: RaceRegistrationInput) => {
+      const existing = raceRegs.find((registration) =>
+        registration.race_id === raceId && registration.user_id === user!.id,
+      );
+      const { error } = existing?.status === "withdrawn"
+        ? await supabase
+          .from("race_registrations")
+          .update({ status: "registered" })
+          .eq("race_id", raceId)
+          .eq("user_id", user!.id)
+        // Locked car fields are deliberately omitted. The database trigger
+        // inherits an active lock only from registrations in the same league.
+        : await supabase.from("race_registrations").insert({
+          race_id: raceId, user_id: user!.id, status: "registered",
+        });
       if (error) throw error;
     },
     onSuccess: () => {

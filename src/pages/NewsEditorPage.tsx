@@ -532,7 +532,7 @@ const NewsEditorPage = () => {
     editor?.chain().focus().unsetAllMarks().clearNodes().run();
   };
 
-  if (loading || rolesLoading) return null;
+  if (loading || rolesLoading) return <div className="flex min-h-screen items-center justify-center bg-background" role="status"><span className="sr-only">Toegangsrechten laden…</span></div>;
   if (!user) return <Navigate to="/auth" />;
   if (!canEditNews) return <Navigate to="/profile" replace />;
 

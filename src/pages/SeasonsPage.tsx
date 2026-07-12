@@ -50,6 +50,12 @@ type SeasonResult = {
   } | null;
 };
 
+type PublicProfile = {
+  user_id: string | null;
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
 const SeasonsPage = () => {
   const { data: leagues, isLoading } = useQuery({
     queryKey: ["all-leagues"],
@@ -70,9 +76,21 @@ const SeasonsPage = () => {
     queryFn: async (): Promise<SeasonResult[]> => {
       const { data, error } = await supabase
         .from("race_results")
-        .select("user_id, points, race_id, races(league_id), profiles(display_name, iracing_name)");
+        .select("user_id, points, race_id, races(league_id)");
       if (error) throw error;
-      return (data || []) as SeasonResult[];
+      const resultRows = (data || []) as Omit<SeasonResult, "profiles">[];
+      const userIds = [...new Set(resultRows.map((row) => row.user_id).filter(Boolean))];
+      const { data: profileData, error: profileError } = await supabase
+        .from("public_profiles")
+        .select("user_id, display_name, iracing_name")
+        .in("user_id", userIds);
+      if (profileError) throw profileError;
+      const profiles = new Map(
+        ((profileData || []) as PublicProfile[])
+          .filter((profile): profile is PublicProfile & { user_id: string } => Boolean(profile.user_id))
+          .map((profile) => [profile.user_id, profile]),
+      );
+      return resultRows.map((row) => ({ ...row, profiles: profiles.get(row.user_id) || null }));
     },
   });
 

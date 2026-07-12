@@ -39,6 +39,12 @@ type RaceResultRow = RaceDetailStatsResult & {
   country_code?: string | null;
 };
 
+type PublicProfile = {
+  user_id: string | null;
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
 type SessionResultRow = {
   id: string;
   session_type: "practice" | "qualifying";
@@ -55,11 +61,6 @@ type SessionResultRow = {
   country_code: string | null;
 };
 
-type PenaltyRow = {
-  user_id: string;
-  penalty_type: string;
-  points_deduction: number;
-};
 
 const formatRaceDate = (value: string, locale: string) =>
   new Date(value).toLocaleDateString(locale, {
@@ -339,8 +340,8 @@ const RaceDetailPage = () => {
     enabled: !!raceId,
     staleTime: STALE,
     queryFn: async (): Promise<RaceResultRow[]> => {
-      const selectWithCountry = "id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, country_code, club_name, reason_out, profiles(display_name, iracing_name)";
-      const selectLegacy = "id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, club_name, reason_out, profiles(display_name, iracing_name)";
+      const selectWithCountry = "id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, country_code, club_name, reason_out";
+      const selectLegacy = "id, user_id, position, start_position, points, laps, laps_led, best_lap, best_lap_num, avg_lap, fastest_lap, incidents, dnf, gap_to_leader, car_name, club_name, reason_out";
       const firstResponse = await supabase
         .from("race_results")
         .select(selectWithCountry)
@@ -358,7 +359,19 @@ const RaceDetailPage = () => {
         resultError = legacyResponse.error;
       }
       if (resultError) throw resultError;
-      return (resultData || []) as RaceResultRow[];
+      const resultRows = (resultData || []) as Omit<RaceResultRow, "profiles">[];
+      const userIds = [...new Set(resultRows.map((row) => row.user_id).filter(Boolean))];
+      const { data: profileData, error: profileError } = await supabase
+        .from("public_profiles")
+        .select("user_id, display_name, iracing_name")
+        .in("user_id", userIds);
+      if (profileError) throw profileError;
+      const profiles = new Map(
+        ((profileData || []) as PublicProfile[])
+          .filter((profile): profile is PublicProfile & { user_id: string } => Boolean(profile.user_id))
+          .map((profile) => [profile.user_id, profile]),
+      );
+      return resultRows.map((row) => ({ ...row, profiles: profiles.get(row.user_id) || null }));
     },
   });
 
@@ -381,18 +394,6 @@ const RaceDetailPage = () => {
     },
   });
 
-  const { data: penalties = [] } = useQuery({
-    queryKey: ["race-penalties-detail", raceId],
-    enabled: !!raceId,
-    staleTime: STALE,
-    queryFn: async (): Promise<PenaltyRow[]> => {
-      const { data } = await supabase
-        .from("penalties")
-        .select("user_id, penalty_type, points_deduction")
-        .eq("race_id", raceId!);
-      return (data || []) as PenaltyRow[];
-    },
-  });
 
   const stats = getRaceDetailStats(results);
   const leaderLaps = stats.winner?.laps ?? stats.maxLaps;
@@ -547,7 +548,6 @@ const RaceDetailPage = () => {
                           <span>{t("Pos")}</span><span>{t("Coureur")}</span><span className="text-center">{t("ronden")}</span><span className="text-center">{t("Kop")}</span><span className="text-center">{t("Start")}</span><span className="text-center">+/-</span><span className="text-right">{t("Beste")}</span><span className="text-right">{t("Gem.")}</span><span className="text-right">{t("Achter")}</span><span className="text-center">{t("Inc")}</span><span className="text-center">{t("Pts")}</span>
                         </div>
                         {stats.sorted.map((driver) => {
-                          const pen = penalties.find((p) => p.user_id === driver.user_id && p.penalty_type !== "warning");
                           const positionDelta = driver.start_position != null && driver.position != null ? driver.start_position - driver.position : null;
                           return (
                             <div key={driver.user_id} className={`grid grid-cols-[3.5rem_1fr_4rem_4rem_4rem_5rem_6rem_6rem_6rem_4rem_4rem] gap-2 px-4 py-3 items-center border-t border-border/50 hover:bg-secondary/20 transition-colors ${driver.position != null && driver.position <= 3 ? "racing-stripe-left" : ""}`}>
@@ -572,10 +572,7 @@ const RaceDetailPage = () => {
                               <span className="text-right text-sm font-mono text-muted-foreground">{driver.avg_lap ?? "-"}</span>
                               <span className={`text-right text-sm font-mono ${driver.dnf ? "text-red-300" : "text-muted-foreground"}`}>{formatRaceGapDisplay(driver, leaderLaps, { lap: t("ronde"), laps: t("ronden") })}</span>
                               <span className={`text-center text-sm font-heading ${driver.incidents === 0 ? "text-green-400 font-black" : (driver.incidents ?? 0) > 8 ? "text-red-400" : "text-muted-foreground"}`}>{driver.incidents != null ? `${driver.incidents}x` : "-"}</span>
-                              <span className="text-center font-heading font-black">
-                                {driver.points ?? "-"}
-                                {pen && <span className="ml-1 text-[10px] text-orange-400" title={pen.penalty_type === "disqualification" ? "DSQ — Steward" : `-${pen.points_deduction}pt — Steward`}>⚠</span>}
-                              </span>
+                              <span className="text-center font-heading font-black">{driver.points ?? "-"}</span>
                             </div>
                           );
                         })}
