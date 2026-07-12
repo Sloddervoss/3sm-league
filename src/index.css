@@ -432,6 +432,18 @@ html {
   }
 }
 
+/* Native select menus otherwise inherit the browser's light system popup.
+   Keep the Control Room's opened option lists consistent with its dark fields. */
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background-color: #151820;
+  color: #f3f4f6;
+}
+
 /* Prevent iOS Safari auto-zoom on input focus (font-size < 16px triggers zoom).
    !important needed: Tailwind outputs flat CSS (no native @layer), so class
    selectors like .text-sm (0-1-0) beat element selectors (0-0-1) otherwise. */
