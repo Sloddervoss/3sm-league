@@ -52,7 +52,7 @@ const smallKicker = "flex items-center gap-2 text-xs font-black uppercase tracki
 const container = "container mx-auto px-4 max-w-7xl";
 const podiumColors = ["#facc15", "#94a3b8", "#d97706"];
 
-const driverName = (row: ResultRow) => row.profiles?.display_name || row.profiles?.iracing_name || "Onbekend";
+const driverName = (row: ResultRow) => row.profiles?.iracing_name || row.profiles?.display_name || "Onbekend";
 
 const HomeHeroRefresh = () => (
   <section className="relative isolate overflow-hidden bg-background">

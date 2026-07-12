@@ -38,7 +38,7 @@ const PODIUM_COLORS = [
 ];
 
 const driverName = (r: RecapResult) =>
-  r.profiles?.display_name || r.profiles?.iracing_name || "Onbekend";
+  r.profiles?.iracing_name || r.profiles?.display_name || "Onbekend";
 
 const RaceRecapPanel = () => {
   const { data: lastRace } = useQuery({

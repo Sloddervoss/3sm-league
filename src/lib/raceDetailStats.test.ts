@@ -52,6 +52,19 @@ describe("getRaceDetailStats", () => {
     expect(stats.mostLapsLed?.name).toBe("Lap Leader");
   });
 
+  it("uses the official iRacing name before a custom profile display name", () => {
+    const stats = getRaceDetailStats([
+      result({
+        user_id: "steven",
+        position: 1,
+        profiles: { display_name: "Steven", iracing_name: "Steven Janssen" },
+      }),
+    ]);
+
+    expect(stats.winner?.name).toBe("Steven Janssen");
+    expect(stats.sorted[0].name).toBe("Steven Janssen");
+  });
+
   it("formats gap display like race classification: time gap, then laps behind, then DNF", () => {
     const labels = { lap: "ronde", laps: "ronden" };
 
