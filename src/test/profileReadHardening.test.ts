@@ -86,6 +86,14 @@ describe("profile read hardening", () => {
     }
   });
 
+  it("keeps the sitemap generator on public profiles after raw profile hardening", () => {
+    const generator = source("scripts/generate-route-html.mjs");
+    expect(generator).toContain(".from('public_profiles')");
+    expect(generator).toContain(".select('user_id,display_name,iracing_name')");
+    expect(generator).toContain("race_results(position,laps,points,fastest_lap,user_id)");
+    expect(generator).not.toContain("race_results(position,laps,points,fastest_lap,profiles(");
+  });
+
   it("retains the editable self-profile path and audited admin raw path", () => {
     const profilePage = source("src/pages/ProfilePage.tsx");
     expect(profilePage).toContain('.from("profiles")');
