@@ -11,6 +11,7 @@ import { getTrackPhoto } from "@/lib/trackPhotos";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
+import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
 
 const PODIUM = ["#facc15", "#94a3b8", "#d97706"];
 
@@ -48,6 +49,10 @@ type RaceModalResult = {
   profiles: RaceResultProfile | null;
 };
 
+type PublicResultProfile = RaceResultProfile & {
+  user_id: string | null;
+};
+
 
 type UserIdRow = {
   user_id: string;
@@ -74,6 +79,7 @@ type Session = {
 };
 
 interface RegistrationProps {
+  isAuthenticated: boolean;
   isRegistered: boolean;
   isRegisteredViaSeason: boolean;
   profileComplete: boolean;
@@ -98,10 +104,21 @@ const RaceModal = ({ race, registration }: Props) => {
     queryFn: async (): Promise<RaceModalResult[]> => {
       const { data } = await supabase
         .from("race_results")
-        .select("*, profiles(display_name, iracing_name, team_id)")
+        .select("*")
         .eq("race_id", race.id)
         .order("position");
-      return (data || []) as RaceModalResult[];
+      const resultRows = (data || []) as (Omit<RaceModalResult, "profiles"> & UserIdRow)[];
+      const userIds = [...new Set(resultRows.map((row) => row.user_id).filter(Boolean))];
+      const { data: profileData } = await supabase
+        .from("public_profiles")
+        .select("user_id, display_name, iracing_name, team_id")
+        .in("user_id", userIds);
+      const profiles = new Map(
+        ((profileData || []) as PublicResultProfile[])
+          .filter((profile): profile is PublicResultProfile & { user_id: string } => Boolean(profile.user_id))
+          .map((profile) => [profile.user_id, profile]),
+      );
+      return resultRows.map((row) => ({ ...row, profiles: profiles.get(row.user_id) || null }));
     },
   });
 
@@ -141,7 +158,7 @@ const RaceModal = ({ race, registration }: Props) => {
 
       // Fetch profiles for all user_ids
       const { data: profs } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("user_id, display_name, iracing_name, team_id")
         .in("user_id", allUserIds);
 
@@ -346,10 +363,16 @@ const RaceModal = ({ race, registration }: Props) => {
           )}
 
           {/* Details / inschrijven / lobby */}
-          {registration && race.status !== "completed" && (
+          {registration && isRaceRegistrationOpen(race, now) && (
             <div className="mt-5 pt-5 flex flex-col lg:flex-row lg:items-start gap-4" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
               <div className="flex-1 min-w-0">
-              {!registration.profileComplete ? (
+              {!registration.isAuthenticated ? (
+                <div className="flex items-center gap-2 text-sm text-yellow-500/80 px-4 py-2.5 rounded-xl w-fit"
+                  style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.15)" }}>
+                  <AlertCircle className="w-4 h-4" />
+                  Log eerst in om je in te schrijven
+                </div>
+              ) : !registration.profileComplete ? (
                 <div className="flex items-center gap-2 text-sm text-yellow-500/80 px-4 py-2.5 rounded-xl w-fit"
                   style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.15)" }}>
                   <AlertCircle className="w-4 h-4" />

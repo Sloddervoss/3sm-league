@@ -26,7 +26,8 @@ const JoinPage = lazy(() => import("./pages/JoinPage.tsx"));
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
 const NewsEditorPage = lazy(() => import("./pages/NewsEditorPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
-const AdminPage = lazy(() => import("./pages/AdminPage.tsx"));
+// Local implementation test: the new Control Room temporarily owns /admin. Do not deploy until approved.
+const AdminWorkspacePrototype = lazy(() => import("./pages/AdminWorkspacePrototype.tsx"));
 const TrackIntelligenceTestPage = lazy(() => import("./pages/TrackIntelligenceTestPage.tsx"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage.tsx"));
 const KoppelPage = lazy(() => import("./pages/KoppelPage.tsx"));
@@ -81,7 +82,8 @@ const App = () => (
                   <Route path="/stewards" element={<StewardPage />} />
                   <Route path="/news-editor" element={<NewsEditorPage />} />
                   <Route path="/auth" element={<AuthPage />} />
-                  <Route path="/admin" element={<AdminPage />} />
+                  {/* Local integration test: new Control Room at the real admin URL; do not deploy without approval. */}
+                  <Route path="/admin" element={<AdminWorkspacePrototype />} />
                   <Route path="/admin/track-intelligence" element={<TrackIntelligenceTestPage />} />
                   <Route path="/admin/track-intelligence-test" element={<TrackIntelligenceTestPage />} />
                   <Route path="/profile" element={<ProfilePage />} />

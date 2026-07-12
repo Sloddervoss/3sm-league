@@ -600,7 +600,6 @@ const exactTranslations: Record<string, string> = {
   "Ingeschreven via seizoen": "Registered via season",
   "Laatste race": "Latest race",
   "⚡ Snelste ronde": "⚡ Fastest lap",
-  "3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community voor coureurs die clean, fair en met plezier willen racen.": "3 Stripe Motorsport is a Dutch iRacing league and sim racing community for drivers who want to race clean, fair and with pleasure.",
   "Net geplaatst": "Just posted",
   "Uit de paddock": "From the paddock",
   "Alle nieuwsberichten": "All news articles",

@@ -646,44 +646,15 @@ const SeasonsAdmin = () => {
                               const race = (league.races || []).find((r) => r.id === rid);
                               return race ? `R${String(race.round).padStart(2, "0")}` : rid.slice(0, 6);
                             }).sort().join(", ");
-                            const firstReg = (raceRegistrations || []).find((r) => r.user_id === userId && raceIds.includes(r.race_id));
                             return (
                               <div key={userId} className="flex items-center gap-2">
                                 <span className="w-28 shrink-0 px-2.5 py-1 rounded-full bg-secondary text-foreground text-xs font-medium border border-border truncate">
                                   {p?.display_name || p?.iracing_name || userId.slice(0, 8)}
                                 </span>
                                 <span className="text-muted-foreground text-xs w-12 shrink-0">{raceNames}</span>
-                                <input
-                                  type="text"
-                                  defaultValue={firstReg?.car_choice || ""}
-                                  disabled={firstReg?.car_locked}
-                                  placeholder="Auto..."
-                                  className="flex-1 px-2 py-1 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  onBlur={async (e) => {
-                                    const val = e.target.value.trim();
-                                    if (val === (firstReg?.car_choice || "")) return;
-                                    for (const rid of raceIds) {
-                                      await supabase.from("race_registrations")
-                                        .update({ car_choice: val || null })
-                                        .eq("race_id", rid).eq("user_id", userId).eq("car_locked", false);
-                                    }
-                                    queryClient.invalidateQueries({ queryKey: ["admin-race-registrations"] });
-                                  }}
-                                />
-                                <button
-                                  title={firstReg?.car_locked ? "Klik om te unlocken" : "Klik om te locken"}
-                                  onClick={async () => {
-                                    for (const rid of raceIds) {
-                                      await supabase.from("race_registrations")
-                                        .update({ car_locked: !firstReg?.car_locked })
-                                        .eq("race_id", rid).eq("user_id", userId);
-                                    }
-                                    queryClient.invalidateQueries({ queryKey: ["admin-race-registrations"] });
-                                  }}
-                                  className="text-base leading-none hover:scale-110 transition-transform"
-                                >
-                                  {firstReg?.car_locked ? "🔒" : "🔓"}
-                                </button>
+                                <span className="flex-1 text-xs text-muted-foreground">
+                                  Afzonderlijke race-inschrijving · auto-locks worden uitsluitend per seizoen beheerd
+                                </span>
                               </div>
                             );
                           })}

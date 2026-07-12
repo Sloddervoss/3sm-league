@@ -17,7 +17,7 @@ describe("public news workflow", () => {
     expect(app).toContain('path="/news/:categorySlug/:slug"');
     expect(app).toContain('path="/news/:categorySlug"');
     expect(app).toContain('path="/news/:slug"');
-    expect(navbar).toContain('{ label: "Nieuws", path: "/news", icon: Newspaper }');
+    expect(navbar).toContain('{ label: "Nieuws", path: "/news/", icon: Newspaper }');
     expect(navbar).not.toContain('label: "News"');
     expect(sitemapGenerator).toContain("path: '/news'");
   });
@@ -43,7 +43,7 @@ describe("public news workflow", () => {
     expect(page).toContain("Laatste nieuws");
     expect(page).toContain("author_id");
     expect(page).toContain("is_featured");
-    expect(page).toContain('from("profiles")');
+    expect(page).toContain('from("public_profiles")');
     expect(page).toContain("authorName");
     expect(page).toContain("Geen nieuwsberichten gevonden");
     expect(page).toContain("hero_image_url");
@@ -58,12 +58,12 @@ describe("public news workflow", () => {
     expect(page).toContain('categorySlug');
     expect(page).toContain('.eq("slug", slug)');
     expect(page).toContain('.eq("status", "published")');
-    expect(page).toContain('from("profiles")');
+    expect(page).toContain('from("public_profiles")');
     expect(page).toContain("authorName");
     expect(page).toContain("authorSlug");
     expect(page).toContain("season_id");
     expect(page).toContain("race_id");
-    expect(page).toContain('to={`/results/${post.race_id}`}');
+    expect(page).toContain('to={`/results/${post.race_id}/`}');
     expect(page).toContain("Bekijk hier de race uitslag");
     expect(page).toContain("relatedPosts");
     expect(page).toContain("is_featured");
@@ -138,7 +138,7 @@ describe("public news workflow", () => {
     expect(generator).toContain("title: 'iRacing uitslagen & standings | 3SM'");
     expect(generator).toContain("Bekijk 3SM iRacing uitslagen met winnaars, podiums");
     expect(generator).toContain("buildResultsHubCrawlerHtml");
-    expect(generator).toContain("Laatste uitslag");
+    expect(generator).toContain("Laatste race-uitslag");
     expect(generator).toContain("Details & delen");
     expect(generator).toContain("Race archief");
     expect(generator).toContain("<loc>${absoluteUrl(route.path)}</loc>");

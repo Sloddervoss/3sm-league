@@ -63,7 +63,7 @@ const StandingsPage = () => {
       const userIds = Array.from(map.keys());
       if (!userIds.length) return [];
       const { data: profs } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("user_id, display_name, team_id")
         .in("user_id", userIds);
       const profiles = (profs || []) as StandingsProfile[];

@@ -8,6 +8,7 @@ import { Timer, ChevronRight, CheckCircle2, MapPin } from "lucide-react";
 import { useRegistration } from "@/lib/useRegistration";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
+import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
 
 type StickyRace = RaceWithLeagueSummary;
 
@@ -29,7 +30,7 @@ const StickyRaceBar = () => {
   });
 
   const nextRace = [...races]
-    .filter((r) => r.status !== "completed" && new Date(r.race_date) > now)
+    .filter((r) => isRaceRegistrationOpen(r, now))
     .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as StickyRace | undefined;
 
   if (!nextRace) return null;

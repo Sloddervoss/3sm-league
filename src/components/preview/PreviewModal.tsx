@@ -3,7 +3,7 @@
  */
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface Props {
   open: boolean;
@@ -13,13 +13,47 @@ interface Props {
 }
 
 const PreviewModal = ({ open, onClose, children, maxWidth = "900px" }: Props) => {
-  // Sluit op Escape
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Sluit op Escape, houdt focus binnen de modal en herstelt die daarna.
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => !element.hasAttribute("hidden"));
+      if (!focusable.length) {
+        e.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+    const frame = requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("button")?.focus());
+    return () => {
+      window.removeEventListener("keydown", handler);
+      cancelAnimationFrame(frame);
+      previouslyFocusedRef.current?.focus();
+    };
+  }, [open]);
 
   // Blokkeer scroll
   useEffect(() => {
@@ -38,6 +72,7 @@ const PreviewModal = ({ open, onClose, children, maxWidth = "900px" }: Props) =>
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
+            aria-hidden="true"
             className="fixed inset-0 z-50"
             style={{ background: "rgba(4,4,10,0.85)", backdropFilter: "blur(8px)" }}
             onClick={onClose}
@@ -54,6 +89,11 @@ const PreviewModal = ({ open, onClose, children, maxWidth = "900px" }: Props) =>
             style={{ pointerEvents: "none" }}
           >
             <div
+              ref={dialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Voorbeeldvenster"
+              tabIndex={-1}
               className="relative w-full overflow-hidden rounded-t-3xl md:rounded-3xl"
               style={{
                 maxWidth,
@@ -69,6 +109,7 @@ const PreviewModal = ({ open, onClose, children, maxWidth = "900px" }: Props) =>
               {/* Sluit knop */}
               <button
                 onClick={onClose}
+                aria-label="Sluit venster"
                 className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
                 style={{ background: "rgba(255,255,255,0.07)", color: "#6b7280" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.12)"; (e.currentTarget as HTMLButtonElement).style.color = "#fff"; }}

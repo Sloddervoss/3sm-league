@@ -170,13 +170,8 @@ const ResultsImportAdmin = () => {
           const profile = matchProfileForImportRow(row, (freshProfiles ?? []) as ProfileRow[]);
           if (!profile) continue;
           await supabase.from("season_registrations")
-            .update({ car_choice: row.car_name })
+            .update({ car_choice: row.car_name, car_locked: true })
             .eq("league_id", raceForCar.league_id)
-            .eq("user_id", profile.user_id)
-            .eq("car_locked", false);
-          await supabase.from("race_registrations")
-            .update({ car_choice: row.car_name })
-            .eq("race_id", importRaceId)
             .eq("user_id", profile.user_id)
             .eq("car_locked", false);
         }

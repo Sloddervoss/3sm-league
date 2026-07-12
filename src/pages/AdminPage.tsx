@@ -43,7 +43,7 @@ type AdminOverviewLeague = {
 };
 
 const AdminPage = () => {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, isSuperAdmin, loading, rolesLoading } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
@@ -98,9 +98,9 @@ const AdminPage = () => {
 
 
 
-  if (loading) return null;
+  if (loading || rolesLoading) return <div className="flex min-h-screen items-center justify-center bg-background" role="status"><span className="sr-only">Toegangsrechten laden…</span></div>;
   if (!user) return <Navigate to="/auth" />;
-  if (!isAdmin) {
+  if (!isAdmin && !isSuperAdmin) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
