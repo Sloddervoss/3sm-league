@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, FileText, Loader2, Newspaper, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +42,7 @@ export function EditorialWorkspace(props: EditorialWorkspaceProps) {
   const [form, setForm] = useState<Form>(blank);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const hydratedSelectionRef = useRef<string | null>(null);
 
   const postsQuery = useQuery({ queryKey: ["control-room", "editorial", "news-posts"], enabled: canEditNews, queryFn: async (): Promise<NewsPost[]> => {
     const { data, error } = await supabase.from("news_posts").select("id,slug,title,category,excerpt,content_json,content_html,hero_image_url,hero_image_alt,seo_title,seo_description,status,language,season_id,race_id,is_featured,published_at,updated_at").order("updated_at", { ascending: false });
@@ -62,7 +63,14 @@ export function EditorialWorkspace(props: EditorialWorkspaceProps) {
   const posts = postsQuery.data;
   const selected = posts?.find((post) => post.id === selectedId);
   const filtered = useMemo(() => { const records = posts || []; return filter === "all" ? records : records.filter((post) => post.category === filter); }, [filter, posts]);
-  useEffect(() => { setForm(selected ? toForm(selected) : blank()); setFormError(null); setSuccessMessage(null); }, [selected, selectedId]);
+  useEffect(() => {
+    if (selectedId !== "new" && !selected) return;
+    if (hydratedSelectionRef.current === selectedId) return;
+    hydratedSelectionRef.current = selectedId;
+    setForm(selected ? toForm(selected) : blank());
+    setFormError(null);
+    setSuccessMessage(null);
+  }, [selected, selectedId]);
   const update = <K extends keyof Form>(key: K, value: Form[K]) => { setSuccessMessage(null); setForm((current) => ({ ...current, [key]: value })); };
 
   const saveNewsPost = useMutation({
@@ -94,6 +102,7 @@ export function EditorialWorkspace(props: EditorialWorkspaceProps) {
       return result.data as NewsPost;
     },
     onSuccess: async (saved) => {
+      hydratedSelectionRef.current = saved.id;
       setSelectedId(saved.id);
       setForm(toForm(saved));
       setFormError(null);

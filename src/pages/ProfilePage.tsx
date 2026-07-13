@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -114,6 +114,7 @@ const ProfilePage = () => {
   const [iracingName, setIracingName] = useState("");
   const [irating, setIrating] = useState("");
   const [safetyRating, setSafetyRating] = useState("");
+  const hydratedProfileRef = useRef<string | null>(null);
 
   // Avatar upload
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -173,13 +174,13 @@ const ProfilePage = () => {
   };
 
   useEffect(() => {
-    if (profile) {
-      setDisplayName(profile.display_name || "");
-      setIracingId(profile.iracing_id?.toString() ?? "");
-      setIracingName(profile.iracing_name || "");
-      setIrating(String(profile.irating ?? ""));
-      setSafetyRating(profile.safety_rating || "");
-    }
+    if (!profile || hydratedProfileRef.current === profile.user_id) return;
+    hydratedProfileRef.current = profile.user_id;
+    setDisplayName(profile.display_name || "");
+    setIracingId(profile.iracing_id?.toString() ?? "");
+    setIracingName(profile.iracing_name || "");
+    setIrating(String(profile.irating ?? ""));
+    setSafetyRating(profile.safety_rating || "");
   }, [profile]);
 
   const updateProfile = useMutation({

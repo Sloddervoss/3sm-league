@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, KeyRound, Save, Trophy } from "lucide-react";
 import { toast } from "sonner";
@@ -134,14 +134,19 @@ export const SeasonRaceActionForm = ({ action, onComplete }: SeasonRaceActionFor
   const isSoloCreate = action.id === "solo-race-create";
   const isSoloEdit = action.id === "solo-race-edit";
   const isLobbyEdit = action.id === "lobby-edit";
+  const hydratedLeagueRef = useRef<string | null>(null);
+  const hydratedRaceRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isSeasonEdit && targetLeague) setLeagueForm({ name: targetLeague.name, description: targetLeague.description || "", season: targetLeague.season || "", car_class: targetLeague.car_class || "", raceCount: 6 });
+    if (!isSeasonEdit || !targetLeague || hydratedLeagueRef.current === targetLeague.id) return;
+    hydratedLeagueRef.current = targetLeague.id;
+    setLeagueForm({ name: targetLeague.name, description: targetLeague.description || "", season: targetLeague.season || "", car_class: targetLeague.car_class || "", raceCount: 6 });
   }, [isSeasonEdit, targetLeague]);
   useEffect(() => {
-    if (targetRace && (isRaceEdit || isSoloEdit || isLobbyEdit)) setRaceForm(raceToForm(targetRace));
-    if (isRaceCreate || isSoloCreate) setRaceForm(defaultRaceForm());
-  }, [action.context.raceId, isLobbyEdit, isRaceCreate, isRaceEdit, isSoloCreate, isSoloEdit, targetRace]);
+    if (!targetRace || !(isRaceEdit || isSoloEdit || isLobbyEdit) || hydratedRaceRef.current === targetRace.id) return;
+    hydratedRaceRef.current = targetRace.id;
+    setRaceForm(raceToForm(targetRace));
+  }, [isLobbyEdit, isRaceEdit, isSoloEdit, targetRace]);
 
   const invalidate = () => {
     [["admin-leagues"], ["all-races-admin"], ["races-with-leagues"], ["workspace-prototype-leagues"], ["workspace-prototype-season-races"], ["control-room", "season", "leagues"], ["control-room", "season", "races"], ["control-room", "season", "action-form-leagues"], ["control-room", "season", "action-form-races"]]

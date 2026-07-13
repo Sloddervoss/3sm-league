@@ -9,6 +9,9 @@ describe("Control Room entity context and destructive safety", () => {
   const editor = read("src/features/control-room/season/SeasonEditor.tsx");
   const actionForm = read("src/features/control-room/season/SeasonRaceActionForm.tsx");
   const carLocks = read("src/features/control-room/season/SeasonCarLockManager.tsx");
+  const editorial = read("src/features/control-room/editorial/EditorialWorkspace.tsx");
+  const newsEditor = read("src/pages/NewsEditorPage.tsx");
+  const profile = read("src/pages/ProfilePage.tsx");
 
   it("keeps typed season action context through the router", () => {
     expect(workspace).toContain("const [seasonAction, setSeasonAction]");
@@ -62,5 +65,17 @@ describe("Control Room entity context and destructive safety", () => {
     expect(carLocks).toContain("Impact op losse-race inschrijvingen:");
     expect(carLocks).toContain('.in("id", affected.map((row) => row.id))');
     expect(carLocks).not.toContain("race_registrations are intentionally not read or written here");
+  });
+
+  it("preserves unsaved drawer forms across parent rerenders and query refetches", () => {
+    expect(workspace).toContain("{renderActionDrawer()}");
+    expect(workspace).toContain("{renderLiveActionContent()}");
+    expect(workspace).not.toContain("<ActionDrawer />");
+    expect(workspace).not.toContain("<LiveActionContent />");
+    expect(actionForm).toContain("hydratedLeagueRef");
+    expect(actionForm).toContain("hydratedRaceRef");
+    expect(editorial).toContain("hydratedSelectionRef");
+    expect(newsEditor).toContain("hydratedPostRef");
+    expect(profile).toContain("hydratedProfileRef");
   });
 });

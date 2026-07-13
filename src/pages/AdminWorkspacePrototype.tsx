@@ -230,7 +230,7 @@ const AdminWorkspacePrototype = () => {
     </nav>
   );
 
-  const LiveActionContent = () => {
+  const renderLiveActionContent = () => {
     switch (activeAction ? CONTROL_ROOM_ACTIONS[activeAction].panel : null) {
       case "editor-role-manager":
       case "privileged-role-manager":
@@ -243,7 +243,7 @@ const AdminWorkspacePrototype = () => {
       case "season-delete-confirm":
       case "race-form":
       case "lobby-manager":
-      case "solo-race-form": return seasonAction ? <SeasonRaceActionForm action={seasonAction} onComplete={() => setActiveAction(null)} /> : null;
+      case "solo-race-form": return seasonAction ? <SeasonRaceActionForm action={seasonAction} key={`${seasonAction.id}:${seasonAction.context.seasonId || ""}:${seasonAction.context.raceId || ""}`} onComplete={() => setActiveAction(null)} /> : null;
       case "registration-manager": return <SeasonRaceWorkspace initialTab="registrations" initialSeasonId={seasonAction?.context.seasonId} onAction={openSeasonAction} />;
       case "race-delete-confirm":
       case "solo-race-delete-confirm": return seasonAction?.context.raceId ? <RaceDeleteConfirmation target={{ raceId: seasonAction.context.raceId, name: typeof seasonAction.context.fields?.name === "string" ? seasonAction.context.fields.name : null, track: typeof seasonAction.context.fields?.track === "string" ? seasonAction.context.fields.track : null, race_date: typeof seasonAction.context.fields?.race_date === "string" ? seasonAction.context.fields.race_date : null, isSolo: seasonAction.id === "solo-race-delete" }} onCancel={() => setActiveAction(null)} onDeleted={() => setActiveAction(null)} /> : null;
@@ -259,7 +259,7 @@ const AdminWorkspacePrototype = () => {
     }
   };
 
-  const ActionDrawer = () => activeAction ? (
+  const renderActionDrawer = () => activeAction ? (
     <aside className="fixed inset-y-0 right-0 z-[70] w-full max-w-6xl border-l border-white/10 bg-[#11141d] shadow-2xl shadow-black/50">
       <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
         <div>
@@ -268,7 +268,7 @@ const AdminWorkspacePrototype = () => {
         </div>
         <button onClick={() => { setActiveAction(null); setRoleSubject(null); }} className="rounded-lg p-2 text-gray-400 hover:bg-white/5 hover:text-white" aria-label="Sluiten"><X className="h-5 w-5" /></button>
       </div>
-      <div className="h-[calc(100vh-4rem)] overflow-y-auto p-5 text-sm text-gray-300"><LiveActionContent /></div>
+      <div className="h-[calc(100vh-4rem)] overflow-y-auto p-5 text-sm text-gray-300">{renderLiveActionContent()}</div>
     </aside>
   ) : null;
 
@@ -404,7 +404,7 @@ const AdminWorkspacePrototype = () => {
       </div>
       <Footer />
       {mobileOpen && <div className="fixed inset-0 z-[60] bg-black/65 lg:hidden" onClick={() => setMobileOpen(false)}><aside className="h-full w-72 bg-[#10131b]" onClick={(event) => event.stopPropagation()}><div className="flex h-16 items-center justify-between border-b border-white/[0.07] px-4"><span className="font-heading font-black text-white">CONTROL ROOM</span><button onClick={() => setMobileOpen(false)} className="p-2 text-gray-400"><X className="h-5 w-5" /></button></div><Sidebar mobile /></aside></div>}
-      <ActionDrawer />
+      {renderActionDrawer()}
     </div>
   );
 };
