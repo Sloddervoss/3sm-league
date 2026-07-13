@@ -20,6 +20,18 @@ const assertReadableFile = (path, label) => {
   if (!existsSync(path)) throw new Error(`${label} ontbreekt: ${path}`);
 };
 
+const filesEqual = (left, right) =>
+  existsSync(left) && existsSync(right) && readFileSync(left).equals(readFileSync(right));
+
+let updatedFiles = 0;
+const copyFileIfChanged = (from, to) => {
+  if (filesEqual(from, to)) return false;
+  mkdirSync(dirname(to), { recursive: true });
+  copyFileSync(from, to);
+  updatedFiles += 1;
+  return true;
+};
+
 assertReadableFile(join(distDir, 'index.html'), 'Build artifact dist/index.html');
 assertReadableFile(generatorPath, 'Route HTML generator');
 
@@ -52,14 +64,13 @@ const copyHtmlRoute = (routePath) => {
   const from = routePath === '/' ? join(distDir, 'index.html') : routeIndexPath(routePath, distDir);
   const to = routePath === '/' ? join(webroot, 'index.html') : routeIndexPath(routePath, webroot);
   assertReadableFile(from, `Generated HTML voor ${routePath}`);
-  mkdirSync(dirname(to), { recursive: true });
-  copyFileSync(from, to);
+  copyFileIfChanged(from, to);
 };
 
 for (const routePath of nextManifest.publicRoutes || []) copyHtmlRoute(routePath);
 for (const routePath of nextManifest.privateRoutes || []) copyHtmlRoute(routePath);
 
-copyFileSync(join(distDir, 'sitemap.xml'), join(webroot, 'sitemap.xml'));
-copyFileSync(manifestPath, join(webroot, '.route-html-manifest.json'));
+copyFileIfChanged(join(distDir, 'sitemap.xml'), join(webroot, 'sitemap.xml'));
+copyFileIfChanged(manifestPath, join(webroot, '.route-html-manifest.json'));
 
-console.log(`Refreshed dynamic SEO HTML into ${webroot}: ${(nextManifest.publicRoutes || []).length} public routes, ${(nextManifest.dynamicRoutes || []).length} dynamic routes.`);
+console.log(`Refreshed dynamic SEO HTML into ${webroot}: ${updatedFiles} gewijzigde bestanden; ${(nextManifest.publicRoutes || []).length} public routes, ${(nextManifest.dynamicRoutes || []).length} dynamic routes.`);
