@@ -38,12 +38,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isSteward, setIsSteward] = useState(false);
   const [isEditor, setIsEditor] = useState(false);
   const roleRequestRef = useRef(0);
+  const resolvedRoleUserRef = useRef<string | null>(null);
 
   const applySession = (session: Session | null) => {
     setSession(session);
     const requestId = ++roleRequestRef.current;
 
     if (!session?.user) {
+      resolvedRoleUserRef.current = null;
       setRolesLoading(false);
       setIsAdmin(false);
       setIsSuperAdmin(false);
@@ -53,7 +55,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const userId = session.user.id;
-    setRolesLoading(true);
+    const hasResolvedRoles = resolvedRoleUserRef.current === userId;
+    if (!hasResolvedRoles) setRolesLoading(true);
     supabase
       .from("user_roles")
       .select("role")
@@ -63,10 +66,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (error) {
           console.error("Failed to load user roles", error);
-          setIsAdmin(false);
-          setIsSuperAdmin(false);
-          setIsSteward(false);
-          setIsEditor(false);
+          if (!hasResolvedRoles) {
+            setIsAdmin(false);
+            setIsSuperAdmin(false);
+            setIsSteward(false);
+            setIsEditor(false);
+          }
           setRolesLoading(false);
           return;
         }
@@ -76,6 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsSuperAdmin(roles.has("super_admin"));
         setIsSteward(roles.has("moderator"));
         setIsEditor(roles.has("editor"));
+        resolvedRoleUserRef.current = userId;
         setRolesLoading(false);
       });
   };
@@ -98,6 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     roleRequestRef.current++;
+    resolvedRoleUserRef.current = null;
     setIsAdmin(false);
     setIsSuperAdmin(false);
     setIsSteward(false);
