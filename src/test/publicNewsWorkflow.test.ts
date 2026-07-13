@@ -113,7 +113,9 @@ describe("public news workflow", () => {
     expect(generator).toContain("cleanupStaleGeneratedRoutes");
     expect(generator).toContain("dynamicRoutes: dynamicRoutes.map((route) => route.path)");
     expect(refreshScript).toContain("generate-route-html.mjs");
-    expect(refreshScript).toContain("copyFileSync(join(distDir, 'sitemap.xml'), join(webroot, 'sitemap.xml'))");
+    expect(refreshScript).toContain("const copyFileIfChanged");
+    expect(refreshScript).toContain("readFileSync(left).equals(readFileSync(right))");
+    expect(refreshScript).toContain("copyFileIfChanged(join(distDir, 'sitemap.xml'), join(webroot, 'sitemap.xml'))");
     expect(refreshScript).toContain("rmSync(routeDirectoryPath(stalePath, webroot)");
     expect(pkg).toContain('"seo:refresh": "node scripts/refresh-dynamic-seo.mjs"');
   });
