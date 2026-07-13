@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { mergeAttributes } from "@tiptap/core";
@@ -268,6 +268,7 @@ const NewsEditorPage = () => {
   const [isFeatured, setIsFeatured] = useState(false);
   const [status, setStatus] = useState<NewsStatus>("draft");
   const [, setEditorTick] = useState(0);
+  const hydratedPostRef = useRef<string | null>(null);
 
   const refreshEditorState = () => setEditorTick((tick) => tick + 1);
 
@@ -349,6 +350,9 @@ const NewsEditorPage = () => {
 
   useEffect(() => {
     if (!editor) return;
+    if (selectedPostId !== "new" && !selectedPost) return;
+    if (hydratedPostRef.current === selectedPostId) return;
+    hydratedPostRef.current = selectedPostId;
     if (!selectedPost || selectedPostId === "new") {
       setTitle("");
       setSlug("");
@@ -426,6 +430,7 @@ const NewsEditorPage = () => {
       return data as NewsPost;
     },
     onSuccess: (saved) => {
+      hydratedPostRef.current = saved.id;
       setSelectedPostId(saved.id);
       setSlug(saved.slug);
       setStatus(saved.status as NewsStatus);
