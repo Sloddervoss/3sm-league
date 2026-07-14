@@ -15,4 +15,17 @@ describe("Track Intelligence Control Room parity", () => {
     expect(controlRoom).toContain("maxTrackMembers");
     expect(controlRoom).toContain("topCoverageTracks.map");
   });
+
+  it("keeps scanner coverage behind one compact accessible dialog button", () => {
+    const controlRoom = read("src/features/control-room/track/TrackIntelligenceModule.tsx");
+    const dataHook = read("src/features/control-room/track/useTrackIntelligence.ts");
+
+    expect(controlRoom).toContain("Scannerdekking");
+    expect(controlRoom).toContain('aria-haspopup="dialog"');
+    expect(controlRoom).toContain('role="dialog"');
+    expect(controlRoom).toContain('aria-modal="true"');
+    expect(controlRoom).toContain("Nog niet gescand");
+    expect(controlRoom).toContain("xl:grid-cols-5");
+    expect(dataHook).toContain("buildTrackScannerCoverage(historyRows || [], linkedProfiles || [])");
+  });
 });

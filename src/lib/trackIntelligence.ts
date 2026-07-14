@@ -26,6 +26,20 @@ export type TrackInsight = {
   reliability: TrackReliability;
 };
 
+export type TrackScannerProfile = {
+  user_id: string;
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
+export type TrackScannerMemberCoverage = {
+  userId: string;
+  name: string;
+  scanned: boolean;
+  lastScannedAt: string | null;
+  uniqueTrackCount: number;
+};
+
 export type SiteRaceResult = {
   user_id: string;
   iracing_cust_id: string | null;
@@ -173,6 +187,43 @@ export function analyzeTrackHistory(
       };
     })
     .sort((a, b) => b.percentage - a.percentage || Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt) || a.trackName.localeCompare(b.trackName));
+}
+
+export function buildTrackScannerCoverage(
+  rows: MemberTrackHistoryRow[],
+  profiles: TrackScannerProfile[],
+): TrackScannerMemberCoverage[] {
+  const scannedByMember = new Map<string, { tracks: Set<string>; lastScannedAt: string }>();
+
+  for (const row of rows) {
+    if (row.source !== "extension_scan" || !row.member_id || !isUsableTrackName(row.track_name)) continue;
+    const seenAt = row.last_seen_at || row.first_seen_at;
+    const existing = scannedByMember.get(row.member_id);
+    if (!existing) {
+      scannedByMember.set(row.member_id, {
+        tracks: new Set([trackKeyFor(row)]),
+        lastScannedAt: seenAt,
+      });
+      continue;
+    }
+    existing.tracks.add(trackKeyFor(row));
+    existing.lastScannedAt = latest(existing.lastScannedAt, seenAt);
+  }
+
+  return profiles
+    .map((profile): TrackScannerMemberCoverage => {
+      const scan = scannedByMember.get(profile.user_id);
+      return {
+        userId: profile.user_id,
+        name: cleanString(profile.iracing_name) ?? cleanString(profile.display_name) ?? "Onbekend member",
+        scanned: Boolean(scan),
+        lastScannedAt: scan?.lastScannedAt ?? null,
+        uniqueTrackCount: scan?.tracks.size ?? 0,
+      };
+    })
+    .sort((a, b) => Number(b.scanned) - Number(a.scanned)
+      || Date.parse(b.lastScannedAt || "") - Date.parse(a.lastScannedAt || "")
+      || a.name.localeCompare(b.name, "nl"));
 }
 
 export const getMemberTrackDedupeKey = (row: Pick<MemberTrackHistoryRow, "subsession_id" | "iracing_customer_id" | "track_id" | "track_name" | "race_date">): string => {

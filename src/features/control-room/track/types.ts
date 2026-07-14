@@ -1,4 +1,4 @@
-import type { TrackInsight, TrackIntelligenceSource } from "@/lib/trackIntelligence";
+import type { TrackInsight, TrackIntelligenceSource, TrackScannerMemberCoverage } from "@/lib/trackIntelligence";
 import type { ControlRoomActionId, ControlRoomPanelId, ControlRoomRole } from "../actionModel";
 
 export type TrackRun = {
@@ -52,6 +52,7 @@ export type TrackFilter = "all" | TrackIntelligenceSource;
 
 export type TrackIntelligenceData = {
   linkedProfiles: LinkedTrackProfile[];
+  scannerMembers: TrackScannerMemberCoverage[];
   insights: TrackInsight[];
   runs: TrackRun[];
   loading: boolean;
