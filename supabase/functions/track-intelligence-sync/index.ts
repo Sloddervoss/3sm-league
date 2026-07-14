@@ -141,17 +141,24 @@ const iracingLogin = async (): Promise<string> => {
     scope: "iracing.auth",
   }).toString();
 
-  // 2. Authorize → login form
+  // 2. Authorize → login page. The current Remix OAuth UI renders no server-side
+  // <form>; POSTing to its final /u/start route is the official form action.
+  // Keep the legacy form-action parser as a backwards-compatible fallback.
   const startResp = await followRedirects(authorizeUrl.toString());
   const loginHtml = await startResp.text();
-  const action = loginHtml.match(/<form[^>]*action="([^"]+)"/)?.[1]?.replace(/&amp;/g, "&");
-  if (!action) throw new Error(`iRacing OAuth loginformulier niet gevonden: HTTP ${startResp.status}`);
+  const legacyAction = loginHtml.match(/<form[^>]*action=["']([^"']+)["']/i)?.[1]?.replace(/&amp;/g, "&");
+  const startUrl = new URL(startResp.url);
+  const remixAction = startUrl.hostname === "oauth.iracing.com" && startUrl.pathname === "/u/start"
+    ? startResp.url
+    : null;
+  const action = legacyAction ?? remixAction;
+  if (!action) throw new Error(`iRacing OAuth loginroute niet gevonden: HTTP ${startResp.status} ${startUrl.pathname}`);
 
   // 3. Submit login
   const loginBody = new URLSearchParams({
     email: IRACING_EMAIL,
     password: await hashPassword(IRACING_PASSWORD, IRACING_EMAIL),
-    rememberMe: "on",
+    rememberMe: "yes",
     offer_remember_me: "true",
   });
   let curUrl = new URL(action, "https://oauth.iracing.com").toString();
