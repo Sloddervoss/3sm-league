@@ -16,8 +16,13 @@ echo "→ Building..."
 rm -rf dist
 npm run build
 
-echo "→ Deploying to webroot..."
-rm -rf /var/www/3sm/*
-cp -r dist/* /var/www/3sm/
+echo "→ Deploying to webroot without an empty-site window..."
+mkdir -p /var/www/3sm/assets
+# Publish content-hashed JS/CSS first. Existing assets remain available for tabs
+# that loaded the previous HTML just before this deployment.
+rsync -a dist/assets/ /var/www/3sm/assets/
+# Publish HTML and all non-asset files only after their new assets exist.
+# Delete stale non-asset routes/files after transfer; protect assets from deletion.
+rsync -a --delete-after --exclude='assets/' dist/ /var/www/3sm/
 
 echo "✓ Deploy done!"
