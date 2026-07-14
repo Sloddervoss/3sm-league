@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, CalendarDays, Download, ExternalLink, FileWarning, History, Play, Search, ShieldCheck, Timer, Users, X } from "lucide-react";
-import { toCsv, type TrackInsight, type TrackIntelligenceSource } from "@/lib/trackIntelligence";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, BarChart3, CalendarDays, Download, ExternalLink, FileWarning, History, Play, ScanLine, Search, ShieldCheck, Timer, Users, X } from "lucide-react";
+import { toCsv, type TrackInsight, type TrackIntelligenceSource, type TrackScannerMemberCoverage } from "@/lib/trackIntelligence";
 import { useTrackIntelligence, useTrackIntelligenceSync } from "./useTrackIntelligence";
 import type { TrackExportAction, TrackFilter, TrackIntelligenceAction, TrackRun } from "./types";
 
@@ -36,11 +36,12 @@ export type TrackIntelligenceModuleProps = {
 };
 
 export function TrackIntelligenceModule({ onAction }: TrackIntelligenceModuleProps) {
-  const { linkedProfiles, insights, runs, loading, errors } = useTrackIntelligence();
+  const { linkedProfiles, scannerMembers, insights, runs, loading, errors } = useTrackIntelligence();
   const sync = useTrackIntelligenceSync(linkedProfiles);
   const [sourceFilter, setSourceFilter] = useState<TrackFilter>("all");
   const [search, setSearch] = useState("");
   const [showLog, setShowLog] = useState(false);
+  const [showScannerCoverage, setShowScannerCoverage] = useState(false);
   const [showSyncConfirmation, setShowSyncConfirmation] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
 
@@ -56,6 +57,7 @@ export function TrackIntelligenceModule({ onAction }: TrackIntelligenceModulePro
   const lastRun = runs[0] || null;
   const lastRunErrors = lastRun?.members_failed ?? (lastRun?.error_summary ? 1 : 0);
   const averageCoverage = shortlist.length ? Math.round(shortlist.reduce((total, track) => total + track.percentage, 0) / shortlist.length * 10) / 10 : 0;
+  const scannedMemberCount = scannerMembers.filter((member) => member.scanned).length;
 
   const dispatchExport = (scope: TrackExportAction["context"]["scope"], rowCount: number) => onAction?.({
     id: "track-export", impact: "read", allowedRoles: ["admin", "super_admin"], panel: "track-export", context: { scope, source: "csv", rowCount },
@@ -93,6 +95,9 @@ export function TrackIntelligenceModule({ onAction }: TrackIntelligenceModulePro
           </button>}
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
+          <button type="button" onClick={() => setShowScannerCoverage(true)} aria-haspopup="dialog" className="inline-flex items-center gap-2 rounded-md border border-orange-400/30 bg-orange-500/[0.08] px-3 py-2 text-xs font-bold text-orange-100 transition hover:border-orange-400/60 hover:bg-orange-500/[0.14]">
+            <ScanLine className="h-4 w-4" /> Scannerdekking <span className="rounded bg-black/20 px-1.5 py-0.5 font-black tabular-nums text-white">{scannedMemberCount}/{scannerMembers.length}</span>
+          </button>
           <a href="/iracing-content-extension.zip?v=0.5.10" download className="inline-flex items-center gap-2 rounded-md border border-white/[0.1] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-orange-400/40 hover:text-white"><Download className="h-4 w-4" /> Content Extension downloaden</a>
           <a href="https://github.com/Sloddervoss/3sm-league/tree/main/tools/iracing-content-extension" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-md border border-white/[0.1] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-orange-400/40 hover:text-white"><ExternalLink className="h-4 w-4" /> Extensie broncode</a>
         </div>
@@ -152,8 +157,97 @@ export function TrackIntelligenceModule({ onAction }: TrackIntelligenceModulePro
       </section>
 
       {showLog && <RunLog runs={runs} />}
+      <ScannerCoverageDialog open={showScannerCoverage} members={scannerMembers} onClose={() => setShowScannerCoverage(false)} />
     </section>
   );
+}
+
+function ScannerCoverageDialog({ open, members, onClose }: { open: boolean; members: TrackScannerMemberCoverage[]; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const scannedMembers = members.filter((member) => member.scanned);
+  const unscannedMembers = members.filter((member) => !member.scanned);
+  const percentage = members.length ? Math.round((scannedMembers.length / members.length) * 100) : 0;
+
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = [...panelRef.current.querySelectorAll<HTMLElement>("button, summary, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])")]
+        .filter((element) => !element.hasAttribute("disabled"));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="scanner-coverage-title" aria-describedby="scanner-coverage-description" className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/[0.1] bg-[#11141b] shadow-2xl shadow-black/60">
+      <header className="border-b border-white/[0.07] bg-[radial-gradient(circle_at_top_right,rgba(249,115,22,0.16),transparent_45%)] p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-orange-300">Content Extension</p>
+            <h2 id="scanner-coverage-title" className="mt-1 font-heading text-2xl font-black text-white">Track Scanner-dekking</h2>
+            <p id="scanner-coverage-description" className="mt-2 text-sm leading-relaxed text-gray-400"><strong className="text-white"><span>{scannedMembers.length}</span> <span>van</span> <span>{members.length}</span></strong> <span>gekoppelde members hebben trackdata gedeeld via de Track Scanner.</span></p>
+          </div>
+          <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Scannerdekking sluiten" className="shrink-0 rounded-md p-2 text-gray-400 transition hover:bg-white/[0.07] hover:text-white"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="mt-5 flex items-center gap-4">
+          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/[0.07]"><div className="h-full rounded-full bg-gradient-to-r from-orange-600 to-orange-400" style={{ width: `${percentage}%` }} /></div>
+          <span className="font-heading text-xl font-black tabular-nums text-white">{percentage}%</span>
+        </div>
+      </header>
+
+      <div className="overflow-y-auto p-5 sm:p-6">
+        <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-orange-300">Gescande members</p><h3 className="mt-1 font-heading text-lg font-black text-white">Ontvangen scannerdata</h3></div><span className="rounded-full border border-emerald-400/20 bg-emerald-500/[0.08] px-2.5 py-1 text-xs font-bold tabular-nums text-emerald-200">{scannedMembers.length}</span></div>
+
+        <div className="mt-4 divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.02]">
+          {scannedMembers.map((member) => <div key={member.userId} className="grid gap-1 px-4 py-3 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:gap-5">
+            <span className="min-w-0 truncate text-sm font-bold text-white">{member.name}</span>
+            <span className="text-xs tabular-nums text-gray-400"><span>{member.uniqueTrackCount}</span> <span>unieke tracks</span></span>
+            <span className="text-xs text-gray-500">{formatDateTime(member.lastScannedAt)}</span>
+          </div>)}
+          {!scannedMembers.length && <p className="p-5 text-center text-sm text-gray-500">Nog geen scanneruploads ontvangen.</p>}
+        </div>
+
+        <details className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.02] open:bg-white/[0.03]">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-bold text-gray-300 marker:hidden">Nog niet gescand <span className="ml-1 text-gray-500">({unscannedMembers.length})</span></summary>
+          <div className="flex flex-wrap gap-2 border-t border-white/[0.06] p-4">{unscannedMembers.map((member) => <span key={member.userId} className="rounded-md border border-white/[0.08] bg-black/10 px-2.5 py-1.5 text-xs text-gray-400">{member.name}</span>)}{!unscannedMembers.length && <span className="text-xs text-emerald-300">Alle gekoppelde members hebben gescand.</span>}</div>
+        </details>
+
+        <p className="mt-4 text-xs leading-relaxed text-gray-500">Alleen uploads met bron <strong className="text-gray-400">Extensie scan</strong> tellen mee. Gewone iRacing-syncs en site-resultaten verhogen deze teller niet.</p>
+      </div>
+    </div>
+  </div>;
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) { return <div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{label}</p><p className="mt-1 font-heading text-2xl font-black text-white">{value}</p></div>; }

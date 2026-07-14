@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeTrackHistory,
   buildMemberTrackRowsFromSiteResults,
+  buildTrackScannerCoverage,
   dedupeTrackHistoryRows,
   getTrackReliability,
   isUsableTrackName,
@@ -83,6 +84,43 @@ describe("track intelligence analysis", () => {
 
   it("marks reliability high when many linked members have demonstrably driven the track", () => {
     expect(getTrackReliability({ percentage: 76, uniqueMemberCount: 8, lastSeenAt: "2026-01-01T00:00:00.000Z" }, new Date("2026-06-01T00:00:00.000Z"))).toBe("Hoog");
+  });
+});
+
+describe("track scanner member coverage", () => {
+  const profiles = [
+    { user_id: "member-1", display_name: "Display One", iracing_name: "iRacing One" },
+    { user_id: "member-2", display_name: "Display Two", iracing_name: null },
+    { user_id: "member-3", display_name: "Display Three", iracing_name: "iRacing Three" },
+  ];
+
+  it("counts only unique members with extension scans and prefers their iRacing name", () => {
+    const coverage = buildTrackScannerCoverage([
+      row({ member_id: "member-1", source: "extension_scan", track_name: "Spa-Francorchamps", last_seen_at: "2026-07-01T20:00:00.000Z" }),
+      row({ member_id: "member-1", source: "extension_scan", track_name: "Spa-Francorchamps", last_seen_at: "2026-07-02T20:00:00.000Z" }),
+      row({ member_id: "member-1", source: "extension_scan", track_name: "Road Atlanta", last_seen_at: "2026-07-03T20:00:00.000Z" }),
+      row({ member_id: "member-2", source: "site_result_json", track_name: "Watkins Glen International" }),
+    ], profiles);
+
+    expect(coverage.filter((member) => member.scanned)).toHaveLength(1);
+    expect(coverage[0]).toEqual({
+      userId: "member-1",
+      name: "iRacing One",
+      scanned: true,
+      lastScannedAt: "2026-07-03T20:00:00.000Z",
+      uniqueTrackCount: 2,
+    });
+    expect(coverage.find((member) => member.userId === "member-2")).toMatchObject({ scanned: false, uniqueTrackCount: 0 });
+  });
+
+  it("keeps every linked member in the denominator and puts unscanned members last", () => {
+    const coverage = buildTrackScannerCoverage([
+      row({ member_id: "member-3", source: "extension_scan", track_name: "Watkins Glen International" }),
+    ], profiles);
+
+    expect(coverage).toHaveLength(3);
+    expect(coverage[0]).toMatchObject({ userId: "member-3", scanned: true });
+    expect(coverage.slice(1).every((member) => !member.scanned)).toBe(true);
   });
 });
 

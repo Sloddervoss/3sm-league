@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   analyzeTrackHistory,
   buildMemberTrackRowsFromSiteResults,
+  buildTrackScannerCoverage,
   getMemberTrackDedupeKey,
   type MemberTrackHistoryRow,
   type SiteRaceForTrackImport,
@@ -102,6 +103,10 @@ export function useTrackIntelligence(): TrackIntelligenceData {
     () => analyzeTrackHistory(historyRows || [], linkedProfiles?.length || 0),
     [historyRows, linkedProfiles?.length],
   );
+  const scannerMembers = useMemo(
+    () => buildTrackScannerCoverage(historyRows || [], linkedProfiles || []),
+    [historyRows, linkedProfiles],
+  );
   const errors = [
     linkedProfilesQuery.error && readError("Gekoppelde members konden niet worden geladen", linkedProfilesQuery.error),
     historyQuery.error && readError("Trackhistorie kon niet worden geladen", historyQuery.error),
@@ -110,6 +115,7 @@ export function useTrackIntelligence(): TrackIntelligenceData {
 
   return {
     linkedProfiles: linkedProfiles || [],
+    scannerMembers,
     insights,
     runs: runsQuery.data || [],
     loading: linkedProfilesQuery.isLoading || historyQuery.isLoading || runsQuery.isLoading,
