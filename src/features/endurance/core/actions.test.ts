@@ -40,6 +40,21 @@ describe("endurance reducer", () => {
     expect(restored.stints.find((stint) => stint.id === "stint-graphite")).toEqual(graphiteStint);
   });
 
+  it("moves a driver back to unassigned without deleting the registration and enforces team scope", () => {
+    const state = createEnduranceSeed();
+    const unassigned = reduceEnduranceState(state, { type: "remove_team_member", teamId: "team-orange-31", userId: "user-jaimy" });
+    expect(unassigned.teamMembers.some((member) => member.userId === "user-jaimy")).toBe(false);
+    expect(unassigned.registrations.some((registration) => registration.userId === "user-jaimy")).toBe(true);
+    expect(unassigned.auditLog[0].action).toBe("remove_team_member");
+
+    const managerState = reduceEnduranceState(state, { type: "set_active_persona", personaId: "user-ricky" });
+    const ownTeamRemoval = reduceEnduranceState(managerState, { type: "remove_team_member", teamId: "team-orange-31", userId: "user-sven" });
+    expect(ownTeamRemoval.teamMembers.some((member) => member.userId === "user-sven")).toBe(false);
+
+    const crossTeamState = { ...managerState, teamMembers: managerState.teamMembers.map((member) => member.userId === "user-jaimy" ? { ...member, teamId: "team-graphite-73" } : member) };
+    expect(reduceEnduranceState(crossTeamState, { type: "remove_team_member", teamId: "team-graphite-73", userId: "user-jaimy" })).toBe(crossTeamState);
+  });
+
   it("rejects driver and cross-team manager writes in the command layer", () => {
     const state = createEnduranceSeed();
     const driverState = reduceEnduranceState(state, { type: "set_active_persona", personaId: "user-jaimy" });

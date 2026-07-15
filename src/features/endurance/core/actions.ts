@@ -82,7 +82,7 @@ export const isEnduranceActionAllowed = (state: EnduranceState, action: Enduranc
     case "add_pace_entry": return action.entry.userId === actor.id || managesEvent(action.entry.eventId);
     case "create_team": return managesEvent(action.team.eventId);
     case "assign_team_member": return managesTeam(action.member.teamId);
-    case "remove_team_member": return managesTeam(action.teamId);
+    case "remove_team_member": return managesTeam(action.teamId) && state.teamMembers.some((member) => member.teamId === action.teamId && member.userId === action.userId);
     case "replace_team_members": return managesEvent(action.eventId) && action.members.every((member) => state.teams.some((team) => team.id === member.teamId && team.eventId === action.eventId));
     case "upsert_stint": return managesTeam(action.stint.teamId);
     case "delete_stint": {
