@@ -1,5 +1,5 @@
-export const ENDURANCE_SCHEMA_VERSION = 1;
-export const ENDURANCE_STORAGE_KEY = "3sm:endurance:dev:v1";
+export const ENDURANCE_SCHEMA_VERSION = 2;
+export const ENDURANCE_STORAGE_KEY = "3sm:endurance:dev:v2";
 
 export type EnduranceRole = "endurance_admin" | "race_manager" | "team_manager" | "driver" | "reserve";
 export type EventVisibility = "open" | "invite_only" | "hidden";
@@ -137,6 +137,7 @@ export interface StintConfirmation {
 export interface PlanningVersion {
   id: string;
   eventId: string;
+  teamId: string;
   label: string;
   createdAt: string;
   createdBy: string;
