@@ -28,8 +28,8 @@ const Navbar = () => {
   const canEditNews = isAdmin || isSuperAdmin || isEditor;
   const canUseStewards = isAdmin || isSuperAdmin || isSteward;
   const showAdmin = isAdmin || isSuperAdmin;
-  const showDesktop = showAdmin ? "2xl:flex" : "xl:flex";
-  const hideDesktop = showAdmin ? "2xl:hidden" : "xl:hidden";
+  const showDesktop = "2xl:flex";
+  const hideDesktop = "2xl:hidden";
   const LanguageSwitch = ({ className = "" }: { className?: string }) => (
     <div
       className={`inline-flex h-8 items-center rounded-md border border-border bg-card/40 p-0.5 ${className}`}

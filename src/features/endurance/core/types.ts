@@ -1,5 +1,7 @@
-export const ENDURANCE_SCHEMA_VERSION = 2;
-export const ENDURANCE_STORAGE_KEY = "3sm:endurance:dev:v2";
+import type { EnduranceClassId } from "./carCatalog";
+
+export const ENDURANCE_SCHEMA_VERSION = 3;
+export const ENDURANCE_STORAGE_KEY = "3sm:endurance:dev:v3";
 
 export type EnduranceRole = "endurance_admin" | "race_manager" | "team_manager" | "driver" | "reserve";
 export type EventVisibility = "open" | "invite_only" | "hidden";
@@ -17,7 +19,6 @@ export interface EndurancePersona {
 }
 
 export interface EventSlot { id: string; startAt: string; label: string }
-export interface EventCar { id: string; className: string; carName: string; maxDrivers: number }
 
 export interface EnduranceEvent {
   id: string;
@@ -31,7 +32,9 @@ export interface EnduranceEvent {
   expectedEndAt: string;
   registrationDeadline: string;
   slots: EventSlot[];
-  cars: EventCar[];
+  classIds: EnduranceClassId[];
+  selectedClassId: EnduranceClassId | null;
+  selectedCarId: string | null;
   maxDriversPerCar: number;
   visibility: EventVisibility;
   status: EventStatus;
@@ -47,9 +50,8 @@ export interface EnduranceRegistration {
   eventId: string;
   userId: string;
   status: RegistrationStatus;
-  classPreference: string;
-  availableCars: string[];
-  preferredCar: string;
+  classPreference: EnduranceClassId;
+  preferredCarId: string;
   slotId: string;
   maxStints: number;
   nightDriving: boolean;

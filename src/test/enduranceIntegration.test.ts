@@ -33,7 +33,7 @@ describe("endurance integration and isolation", () => {
     expect(app).toContain('path="/endurance/*"');
     expect(navbar).toContain("VITE_ENDURANCE_LOCAL_MVP");
     expect(footer).toContain("VITE_ENDURANCE_LOCAL_MVP");
-    expect(navbar).toContain('showAdmin ? "2xl:flex" : "xl:flex"');
+    expect(navbar).toContain('const showDesktop = "2xl:flex"');
   });
 
   it("contains mobile-safe overflow and stacked layout contracts", () => {
