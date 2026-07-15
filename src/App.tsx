@@ -23,6 +23,7 @@ const NewsAuthorPage = lazy(() => import("./pages/NewsAuthorPage.tsx"));
 const NewsCategoryOrDetailPage = lazy(() => import("./pages/NewsCategoryOrDetailPage.tsx"));
 const SeasonsPage = lazy(() => import("./pages/SeasonsPage.tsx"));
 const JoinPage = lazy(() => import("./pages/JoinPage.tsx"));
+const EndurancePage = lazy(() => import("./features/endurance/shell/EndurancePage.tsx"));
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
 const NewsEditorPage = lazy(() => import("./pages/NewsEditorPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
@@ -79,6 +80,7 @@ const App = () => (
                   <Route path="/news/:slug" element={<NewsDetailPage />} />
                   <Route path="/seasons" element={<SeasonsPage />} />
                   <Route path="/meedoen" element={<JoinPage />} />
+                  <Route path="/endurance/*" element={<EndurancePage />} />
                   <Route path="/stewards" element={<StewardPage />} />
                   <Route path="/news-editor" element={<NewsEditorPage />} />
                   <Route path="/auth" element={<AuthPage />} />

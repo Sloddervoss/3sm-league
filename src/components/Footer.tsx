@@ -90,6 +90,9 @@ const Footer = () => {
                 { label: "Uitslagen", path: "/results/" },
                 { label: "Seizoenen", path: "/seasons/" },
                 { label: "Meedoen", path: "/meedoen/" },
+                ...(import.meta.env.DEV && import.meta.env.VITE_ENDURANCE_LOCAL_MVP === "true"
+                  ? [{ label: "Endurance", path: "/endurance/" }]
+                  : []),
               ].map((link) => (
                 <Link key={link.path} to={link.path} className="text-xs text-gray-300 hover:text-primary transition-colors py-0.5">
                   {link.label}
