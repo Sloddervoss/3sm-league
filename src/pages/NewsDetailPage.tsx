@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ChevronLeft, Flag, Newspaper, UserRound } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Flag, Newspaper, UserPlus, UserRound } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
@@ -240,6 +240,28 @@ const NewsDetailPage = () => {
                         Bekijk hier de race uitslag
                       </Link>
                     </div>
+                  </div>
+                )}
+                {categoryToSlug(post.category) === "race-recaps" && (
+                  <div className="mt-6 flex flex-col gap-4 rounded-xl border border-white/10 bg-card/45 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-orange-400">
+                        <UserPlus className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h2 className="font-heading text-xl font-black">Zelf meerijden?</h2>
+                        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                          Wil je zelf meerijden in onze Nederlandse iRacing community? Bekijk hoe je aansluit en schrijf je in voor een race.
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      to="/meedoen/"
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-orange-500/35 bg-orange-500/10 px-4 py-2.5 font-heading text-sm font-bold text-orange-300 transition-colors hover:bg-orange-500 hover:text-white"
+                    >
+                      Bekijk hoe je meedoet
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
                   </div>
                 )}
               </div>
