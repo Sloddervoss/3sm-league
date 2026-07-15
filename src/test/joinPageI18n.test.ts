@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { translateText } from "@/i18n/translations";
+
+const read = (path: string) => readFileSync(path, "utf8");
 
 const recentlyChangedJoinCopy = [
   [
@@ -27,5 +30,20 @@ describe("join page i18n", () => {
     recentlyChangedJoinCopy.forEach(([nl, en]) => {
       expect(translateText(nl, "en")).toBe(en);
     });
+    expect(translateText("Bekijk racekalender", "en")).toBe("View race calendar");
+    expect(translateText("Zelf meerijden?", "en")).toBe("Want to race with us?");
+    expect(translateText("Bekijk hoe je meedoet", "en")).toBe("See how to join");
+  });
+
+  it("keeps the concise join title aligned between runtime and crawler HTML", () => {
+    const page = read("src/pages/JoinPage.tsx");
+    const generator = read("scripts/generate-route-html.mjs");
+    const homepage = read("src/pages/HomepagePrototype.tsx");
+    const title = "Meedoen met 3SM – Nederlandse iRacing League";
+
+    expect(page).toContain(`title: "${title}"`);
+    expect(generator).toContain(`title: '${title}'`);
+    expect(page).not.toContain("iRacing Nederland & Discord Community");
+    expect(homepage).toContain("Bekijk racekalender");
   });
 });

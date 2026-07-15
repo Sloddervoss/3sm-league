@@ -618,6 +618,10 @@ const exactTranslations: Record<string, string> = {
   "Uit de paddock": "From the paddock",
   "Alle nieuwsberichten": "All news articles",
   "Updates, raceverslagen en verhalen uit de 3SM community.": "Updates, race reports and stories from the 3SM community.",
+  "Bekijk racekalender": "View race calendar",
+  "Zelf meerijden?": "Want to race with us?",
+  "Wil je zelf meerijden in onze Nederlandse iRacing community? Bekijk hoe je aansluit en schrijf je in voor een race.": "Want to race in our Dutch iRacing community? See how to join and register for a race.",
+  "Bekijk hoe je meedoet": "See how to join",
 };
 
 const phraseTranslations: Array<[RegExp, string]> = [
