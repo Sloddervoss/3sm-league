@@ -3,6 +3,7 @@ import { useEnduranceStore } from "../core/EnduranceStore";
 import { canAccessWorkspace, canSeeEventCard, formatAmsterdam, getRegistration } from "../core/selectors";
 import type { EnduranceEvent } from "../core/types";
 import { Panel, PrimaryButton, SectionHeading, StatusPill } from "../shared/ui";
+import { getEnduranceCar } from "../core/carCatalog";
 
 const statusLabel = { draft: "Concept", registration_open: "Inschrijving open", registration_closed: "Inschrijving gesloten", planning: "Planning", live: "Live", completed: "Afgerond" };
 
@@ -28,7 +29,7 @@ export const UpcomingRaces = ({ onSelect }: { onSelect: (event: EnduranceEvent) 
                 <div className="my-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                   <div className="rounded-xl bg-black/20 p-3"><CalendarClock className="mb-2 h-4 w-4 text-orange-400" /><span className="block text-xs text-gray-500">Start</span><strong className="text-gray-200">{formatAmsterdam(event.startAt)}</strong></div>
                   <div className="rounded-xl bg-black/20 p-3"><Clock3 className="mb-2 h-4 w-4 text-orange-400" /><span className="block text-xs text-gray-500">Duur</span><strong className="text-gray-200">{durationHours} uur</strong></div>
-                  <div className="rounded-xl bg-black/20 p-3"><Car className="mb-2 h-4 w-4 text-orange-400" /><span className="block text-xs text-gray-500">Auto’s</span><strong className="text-gray-200">{event.cars.length}</strong></div>
+                  <div className="rounded-xl bg-black/20 p-3"><Car className="mb-2 h-4 w-4 text-orange-400" /><span className="block text-xs text-gray-500">Definitieve auto</span><strong className="text-gray-200">{getEnduranceCar(event.selectedCarId)?.name ?? "Stemming open"}</strong></div>
                   <div className="rounded-xl bg-black/20 p-3"><Users className="mb-2 h-4 w-4 text-orange-400" /><span className="block text-xs text-gray-500">Interesse</span><strong className="text-gray-200">{interested} coureurs</strong></div>
                 </div>
                 <div className="mb-5 text-xs text-gray-400"><span className="text-gray-500">Startslots:</span> {event.slots.map((slot) => slot.label).join(", ")} · <span className="text-gray-500">Deadline:</span> {formatAmsterdam(event.registrationDeadline)}</div>

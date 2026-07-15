@@ -12,6 +12,8 @@ import type {
   TeamMember,
 } from "./types";
 import { canManageEvent, canManageTeam } from "./selectors";
+import { enduranceCarsForClass, getEnduranceCar, type EnduranceClassId } from "./carCatalog";
+import { isWinningVehicleSelection } from "./vehicleVoting";
 
 export const makeId = (prefix: string) => `${prefix}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 
@@ -19,6 +21,7 @@ export type EnduranceAction =
   | { type: "set_active_persona"; personaId: string }
   | { type: "create_event"; event: EnduranceEvent }
   | { type: "update_event"; event: EnduranceEvent }
+  | { type: "select_event_vehicle"; eventId: string; classId: EnduranceClassId; carId: string }
   | { type: "upsert_registration"; registration: EnduranceRegistration }
   | { type: "remove_registration"; eventId: string; userId: string }
   | { type: "add_availability"; block: AvailabilityBlock }
@@ -55,8 +58,19 @@ export const isEnduranceActionAllowed = (state: EnduranceState, action: Enduranc
 
   switch (action.type) {
     case "set_active_persona": return state.personas.some((persona) => persona.id === action.personaId);
-    case "create_event": return actor.role === "endurance_admin" || actor.role === "race_manager";
-    case "update_event": return managesEvent(action.event.id);
+    case "create_event": return (actor.role === "endurance_admin" || actor.role === "race_manager")
+      && action.event.classIds.length > 0
+      && action.event.classIds.every((classId) => enduranceCarsForClass(classId).length > 0)
+      && (!action.event.selectedCarId || getEnduranceCar(action.event.selectedCarId)?.classId === action.event.selectedClassId);
+    case "update_event": {
+      const current = event(action.event.id);
+      return Boolean(current && managesEvent(action.event.id) && current.selectedClassId === action.event.selectedClassId && current.selectedCarId === action.event.selectedCarId);
+    }
+    case "select_event_vehicle": {
+      const target = event(action.eventId);
+      const selectedCar = getEnduranceCar(action.carId);
+      return Boolean(target && managesEvent(action.eventId) && target.classIds.includes(action.classId) && selectedCar?.classId === action.classId && isWinningVehicleSelection(state.registrations, action.eventId, action.classId, action.carId));
+    }
     case "upsert_registration": return action.registration.userId === actor.id || managesEvent(action.registration.eventId);
     case "remove_registration": return action.userId === actor.id || managesEvent(action.eventId);
     case "add_availability":
@@ -100,6 +114,11 @@ const coreReduce = (state: EnduranceState, action: EnduranceAction): EnduranceSt
     case "set_active_persona": return { ...state, activePersonaId: action.personaId };
     case "create_event": return { ...state, events: [...state.events, action.event] };
     case "update_event": return { ...state, events: state.events.map((event) => event.id === action.event.id ? action.event : event) };
+    case "select_event_vehicle": return {
+      ...state,
+      events: state.events.map((event) => event.id === action.eventId ? { ...event, selectedClassId: action.classId, selectedCarId: action.carId, updatedAt: new Date().toISOString() } : event),
+      teams: state.teams.map((team) => team.eventId === action.eventId ? { ...team, carId: action.carId } : team),
+    };
     case "upsert_registration": {
       const exists = state.registrations.some((registration) => registration.eventId === action.registration.eventId && registration.userId === action.registration.userId);
       return { ...state, registrations: exists ? state.registrations.map((registration) => registration.eventId === action.registration.eventId && registration.userId === action.registration.userId ? action.registration : registration) : [...state.registrations, action.registration] };

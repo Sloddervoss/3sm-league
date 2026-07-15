@@ -31,11 +31,9 @@ export const createEnduranceSeed = (): EnduranceState => ({
       { id: "slot-1300", startAt: "2026-07-25T11:00:00.000Z", label: "13:00" },
       { id: "slot-1800", startAt: "2026-07-25T16:00:00.000Z", label: "18:00" },
     ],
-    cars: [
-      { id: "car-gtp", className: "GTP", carName: "BMW M Hybrid V8", maxDrivers: 4 },
-      { id: "car-lmp2", className: "LMP2", carName: "Dallara P217", maxDrivers: 4 },
-      { id: "car-gt3", className: "GT3", carName: "Porsche 911 GT3 R (992)", maxDrivers: 4 },
-    ],
+    classIds: ["GTP", "LMP2", "GT3"],
+    selectedClassId: "GT3",
+    selectedCarId: "porsche-911-gt3-r-992",
     maxDriversPerCar: 4,
     visibility: "open",
     status: "planning",
@@ -46,10 +44,10 @@ export const createEnduranceSeed = (): EnduranceState => ({
     updatedAt: "2026-07-14T20:00:00.000Z",
   }],
   registrations: [
-    { id: "reg-jaimy", eventId, userId: "user-jaimy", status: "confirmed", classPreference: "GT3", availableCars: ["Porsche 911 GT3 R (992)"], preferredCar: "Porsche 911 GT3 R (992)", slotId: "slot-1300", maxStints: 3, nightDriving: true, willingToStart: true, willingToFinish: false, notes: "Kan de start nemen.", registeredAt: "2026-07-11T18:00:00.000Z" },
-    { id: "reg-ricky", eventId, userId: "user-ricky", status: "confirmed", classPreference: "GT3", availableCars: ["Porsche 911 GT3 R (992)"], preferredCar: "Porsche 911 GT3 R (992)", slotId: "slot-1300", maxStints: 3, nightDriving: true, willingToStart: false, willingToFinish: true, notes: "Teammanager auto 31.", registeredAt: "2026-07-11T19:00:00.000Z" },
-    { id: "reg-sven", eventId, userId: "user-sven", status: "confirmed", classPreference: "GT3", availableCars: ["Porsche 911 GT3 R (992)"], preferredCar: "Porsche 911 GT3 R (992)", slotId: "slot-1300", maxStints: 3, nightDriving: false, willingToStart: false, willingToFinish: true, notes: "Vanaf 14:30 beschikbaar.", registeredAt: "2026-07-12T10:00:00.000Z" },
-    { id: "reg-milan", eventId, userId: "user-milan", status: "reserve", classPreference: "GT3", availableCars: ["Porsche 911 GT3 R (992)"], preferredCar: "Porsche 911 GT3 R (992)", slotId: "slot-1300", maxStints: 2, nightDriving: true, willingToStart: true, willingToFinish: true, notes: "Stand-by als reserve.", registeredAt: "2026-07-12T12:00:00.000Z" },
+    { id: "reg-jaimy", eventId, userId: "user-jaimy", status: "confirmed", classPreference: "GT3", preferredCarId: "porsche-911-gt3-r-992", slotId: "slot-1300", maxStints: 3, nightDriving: true, willingToStart: true, willingToFinish: false, notes: "Kan de start nemen.", registeredAt: "2026-07-11T18:00:00.000Z" },
+    { id: "reg-ricky", eventId, userId: "user-ricky", status: "confirmed", classPreference: "GT3", preferredCarId: "bmw-m4-gt3-evo", slotId: "slot-1300", maxStints: 3, nightDriving: true, willingToStart: false, willingToFinish: true, notes: "Teammanager auto 31.", registeredAt: "2026-07-11T19:00:00.000Z" },
+    { id: "reg-sven", eventId, userId: "user-sven", status: "confirmed", classPreference: "GT3", preferredCarId: "porsche-911-gt3-r-992", slotId: "slot-1300", maxStints: 3, nightDriving: false, willingToStart: false, willingToFinish: true, notes: "Vanaf 14:30 beschikbaar.", registeredAt: "2026-07-12T10:00:00.000Z" },
+    { id: "reg-milan", eventId, userId: "user-milan", status: "reserve", classPreference: "GT3", preferredCarId: "ferrari-296-gt3", slotId: "slot-1300", maxStints: 2, nightDriving: true, willingToStart: true, willingToFinish: true, notes: "Stand-by als reserve.", registeredAt: "2026-07-12T12:00:00.000Z" },
   ],
   availability: [
     { id: "av-jaimy-1", eventId, userId: "user-jaimy", startAt: "2026-07-25T10:00:00.000Z", endAt: "2026-07-25T14:00:00.000Z", type: "preferred", note: "Graag eerste helft." },
@@ -64,8 +62,8 @@ export const createEnduranceSeed = (): EnduranceState => ({
     { id: "pace-sven", eventId, userId: "user-sven", circuit: "Road America", configuration: "Full Course", car: "Porsche 911 GT3 R (992)", conditions: "dry", averageLapSeconds: 130.11, medianLapSeconds: 129.96, bestLapSeconds: 129.2, bestFiveAverageSeconds: 129.54, consistencySeconds: 0.89, validLaps: 23, incidents: 4, averageStintMinutes: 44, recordedAt: "2026-07-11T20:00:00.000Z", source: "manual", notes: "Nog weinig data." },
   ],
   teams: [
-    { id: teamOrange, eventId, name: "3SM Orange", carId: "car-gt3", carNumber: "31", managerId: "user-ricky", livery: "3SM Endurance Orange" },
-    { id: teamGraphite, eventId, name: "3SM Graphite", carId: "car-gt3", carNumber: "73", managerId: "user-vincent", livery: "3SM Endurance Graphite" },
+    { id: teamOrange, eventId, name: "3SM Orange", carId: "porsche-911-gt3-r-992", carNumber: "31", managerId: "user-ricky", livery: "3SM Endurance Orange" },
+    { id: teamGraphite, eventId, name: "3SM Graphite", carId: "porsche-911-gt3-r-992", carNumber: "73", managerId: "user-vincent", livery: "3SM Endurance Graphite" },
   ],
   teamMembers: [
     { id: "tm-jaimy", teamId: teamOrange, userId: "user-jaimy", role: "driver" },
