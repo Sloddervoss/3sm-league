@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List, UserPlus, Newspaper } from "lucide-react";
+import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List, UserPlus, Newspaper, TimerReset } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
@@ -14,6 +14,9 @@ const navItems = [
   { label: "Nieuws", path: "/news/", icon: Newspaper },
   { label: "Seizoenen", path: "/seasons/", icon: Trophy },
   { label: "Meedoen", path: "/meedoen/", icon: UserPlus },
+  ...(import.meta.env.DEV && import.meta.env.VITE_ENDURANCE_LOCAL_MVP === "true"
+    ? [{ label: "Endurance", path: "/endurance/", icon: TimerReset }]
+    : []),
 ];
 
 const Navbar = () => {
@@ -25,8 +28,8 @@ const Navbar = () => {
   const canEditNews = isAdmin || isSuperAdmin || isEditor;
   const canUseStewards = isAdmin || isSuperAdmin || isSteward;
   const showAdmin = isAdmin || isSuperAdmin;
-  const showDesktop = showAdmin ? "xl:flex" : "lg:flex";
-  const hideDesktop = showAdmin ? "xl:hidden" : "lg:hidden";
+  const showDesktop = showAdmin ? "2xl:flex" : "xl:flex";
+  const hideDesktop = showAdmin ? "2xl:hidden" : "xl:hidden";
   const LanguageSwitch = ({ className = "" }: { className?: string }) => (
     <div
       className={`inline-flex h-8 items-center rounded-md border border-border bg-card/40 p-0.5 ${className}`}

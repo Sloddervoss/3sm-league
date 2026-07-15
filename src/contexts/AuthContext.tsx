@@ -39,6 +39,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isEditor, setIsEditor] = useState(false);
   const roleRequestRef = useRef(0);
   const resolvedRoleUserRef = useRef<string | null>(null);
+  const localEnduranceMvp = import.meta.env.DEV
+    && import.meta.env.VITE_ENDURANCE_LOCAL_MVP === "true"
+    && window.location.pathname.startsWith("/endurance");
 
   const applySession = (session: Session | null) => {
     setSession(session);
@@ -87,6 +90,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    if (localEnduranceMvp) {
+      setLoading(false);
+      setRolesLoading(false);
+      return;
+    }
+
     // Load initial session immediately so user is available on first render
     supabase.auth.getSession().then(({ data: { session } }) => {
       applySession(session);
