@@ -8,6 +8,7 @@ describe("endurance reducer", () => {
     const next = reduceEnduranceState(state, {
       type: "adjust_future_stints",
       eventId: state.events[0].id,
+      teamId: "team-orange-31",
       fromAt: state.events[0].startAt,
       deltaMinutes: 10,
     });
@@ -25,10 +26,30 @@ describe("endurance reducer", () => {
 
   it("restores an immutable planning snapshot", () => {
     const state = createEnduranceSeed();
-    const version = { id: "version-1", eventId: state.events[0].id, label: "Definitief", createdAt: new Date().toISOString(), createdBy: state.activePersonaId, published: true, stints: state.stints.map((stint) => ({ ...stint })) };
-    const published = reduceEnduranceState(state, { type: "publish_plan", version, confirmations: [], notifications: [] });
-    const shifted = reduceEnduranceState(published, { type: "adjust_future_stints", eventId: state.events[0].id, fromAt: state.events[0].startAt, deltaMinutes: 15 });
+    const graphiteStint = { ...state.stints[0], id: "stint-graphite", teamId: "team-graphite-73", status: "draft" as const };
+    const graphiteVersion = { id: "version-graphite", eventId: state.events[0].id, teamId: "team-graphite-73", label: "Graphite 1", createdAt: new Date().toISOString(), createdBy: state.activePersonaId, published: true, stints: [graphiteStint] };
+    const graphiteConfirmation = { id: "confirm-graphite", eventId: state.events[0].id, versionId: graphiteVersion.id, userId: "user-sven", status: "unseen" as const, note: "", updatedAt: new Date().toISOString() };
+    const withSecondTeam = { ...state, stints: [...state.stints, graphiteStint], planningVersions: [graphiteVersion], confirmations: [graphiteConfirmation] };
+    const version = { id: "version-1", eventId: state.events[0].id, teamId: "team-orange-31", label: "Definitief", createdAt: new Date().toISOString(), createdBy: state.activePersonaId, published: true, stints: state.stints.filter((stint) => stint.teamId === "team-orange-31").map((stint) => ({ ...stint })) };
+    const published = reduceEnduranceState(withSecondTeam, { type: "publish_plan", version, confirmations: [], notifications: [] });
+    expect(published.stints.find((stint) => stint.id === "stint-graphite")?.status).toBe("draft");
+    expect(published.confirmations).toContainEqual(graphiteConfirmation);
+    const shifted = reduceEnduranceState(published, { type: "adjust_future_stints", eventId: state.events[0].id, teamId: "team-orange-31", fromAt: state.events[0].startAt, deltaMinutes: 15 });
     const restored = reduceEnduranceState(shifted, { type: "restore_plan", versionId: version.id });
-    expect(restored.stints[0].actualStartAt).toBe(state.stints[0].actualStartAt);
+    expect(restored.stints.find((stint) => stint.id === "stint-1")?.actualStartAt).toBe(state.stints[0].actualStartAt);
+    expect(restored.stints.find((stint) => stint.id === "stint-graphite")).toEqual(graphiteStint);
+  });
+
+  it("rejects driver and cross-team manager writes in the command layer", () => {
+    const state = createEnduranceSeed();
+    const driverState = reduceEnduranceState(state, { type: "set_active_persona", personaId: "user-jaimy" });
+    const deniedDriverWrite = reduceEnduranceState(driverState, { type: "adjust_future_stints", eventId: state.events[0].id, teamId: "team-orange-31", fromAt: state.events[0].startAt, deltaMinutes: 10 });
+    expect(deniedDriverWrite).toBe(driverState);
+
+    const managerState = reduceEnduranceState(state, { type: "set_active_persona", personaId: "user-ricky" });
+    const deniedCrossTeamWrite = reduceEnduranceState(managerState, { type: "adjust_future_stints", eventId: state.events[0].id, teamId: "team-graphite-73", fromAt: state.events[0].startAt, deltaMinutes: 10 });
+    expect(deniedCrossTeamWrite).toBe(managerState);
+    const allowedOwnTeamWrite = reduceEnduranceState(managerState, { type: "adjust_future_stints", eventId: state.events[0].id, teamId: "team-orange-31", fromAt: state.events[0].startAt, deltaMinutes: 10 });
+    expect(allowedOwnTeamWrite).not.toBe(managerState);
   });
 });
