@@ -77,7 +77,7 @@ const HomeHeroRefresh = () => (
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link to="/calendar/" className="inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-racing px-5 font-heading text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-orange-950/25 transition hover:opacity-90">
-            <Calendar className="h-4 w-4" /> Kalender <ChevronRight className="h-4 w-4" />
+            <Calendar className="h-4 w-4" /> Bekijk racekalender <ChevronRight className="h-4 w-4" />
           </Link>
           <Link to="/standings/" className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/20 bg-card/75 px-5 font-heading text-sm font-black uppercase tracking-wider text-white transition hover:border-orange-500/50 hover:text-orange-300">
             <Trophy className="h-4 w-4" /> Bekijk standings

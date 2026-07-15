@@ -221,13 +221,13 @@ const JoinPage = () => {
   useEffect(() => {
     const meta = language === "en"
       ? {
-          title: "Join 3SM - Dutch iRacing & Discord Community",
+          title: "Join 3SM – Dutch iRacing League",
           description: "Looking for an iRacing community in the Netherlands? Join 3 Stripe Motorsport: a Dutch iRacing league with Discord, calendar, standings and results.",
           ogTitle: "Join the 3SM iRacing community",
           ogDescription: "Looking for an iRacing community in the Netherlands or a Discord where you can race? At 3SM you join a Dutch iRacing league.",
         }
       : {
-          title: "Meedoen met 3SM - iRacing Nederland & Discord Community",
+          title: "Meedoen met 3SM – Nederlandse iRacing League",
           description: "Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.",
           ogTitle: "Meedoen met de 3SM iRacing community",
           ogDescription: "Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league.",
