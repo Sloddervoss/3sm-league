@@ -69,6 +69,10 @@ describe("public news workflow", () => {
     expect(page).toContain("is_featured");
     expect(page).toContain("Gerelateerde artikelen");
     expect(page).toContain("Meer nieuws uit dit seizoen");
+    expect(page).toContain('categoryToSlug(post.category) === "race-recaps"');
+    expect(page).toContain('to="/meedoen/"');
+    expect(page).toContain("Zelf meerijden?");
+    expect(page).toContain("Bekijk hoe je meedoet");
     expect(page).toContain("sanitizeNewsHtml");
     expect(page).toContain("dangerouslySetInnerHTML");
     expect(page).toContain('className="news-article-prose');
@@ -133,6 +137,8 @@ describe("public news workflow", () => {
     expect(generator).toContain("Wat kun je verwachten? Een toegankelijke iRacing league");
     expect(generator).toContain("Begonnen in Nederland, maar open voor iedereen");
     expect(generator).toContain("Hard racen. Slim racen. Respectvol racen.");
+    expect(generator).toContain("const isRaceRecap = categorySlug === 'race-recaps'");
+    expect(generator).toContain("...(isRaceRecap ? [['/meedoen', 'Zelf meerijden? Bekijk hoe je meedoet']] : [])");
     expect(generator).toContain("buildCalendarHubCrawlerHtml");
     expect(generator).toContain("Eerstvolgende 3SM race");
     expect(generator).toContain("Aankomende races");

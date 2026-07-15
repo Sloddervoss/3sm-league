@@ -41,7 +41,7 @@ const routes = [
   },
   {
     path: '/meedoen',
-    title: 'Meedoen met 3SM - iRacing Nederland & Discord Community',
+    title: 'Meedoen met 3SM – Nederlandse iRacing League',
     priority: '0.8',
     changefreq: 'monthly',
     description:
@@ -635,6 +635,7 @@ const fetchDynamicRoutes = async () => {
   } else {
     for (const post of publishedPosts || []) {
       const categorySlug = categoryToSlug(post.category);
+      const isRaceRecap = categorySlug === 'race-recaps';
       const articleSummary = truncate(post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.', 220);
       dynamicRoutes.push({
         path: `/news/${categorySlug}/${post.slug}`,
@@ -651,6 +652,7 @@ const fetchDynamicRoutes = async () => {
         ],
         links: [
           ['/news', 'Terug naar nieuws'],
+          ...(isRaceRecap ? [['/meedoen', 'Zelf meerijden? Bekijk hoe je meedoet']] : []),
           ['/calendar', 'Bekijk racekalender'],
           ['/results', 'Bekijk uitslagen'],
         ],
