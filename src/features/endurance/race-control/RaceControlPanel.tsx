@@ -5,6 +5,7 @@ import { canManageEvent, canManageTeam, formatAmsterdam } from "../core/selector
 import { utcToZonedInput, zonedInputToUtc } from "../core/time";
 import type { EnduranceEvent } from "../core/types";
 import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, SectionHeading, StatusPill } from "../shared/ui";
+import { SimHubTelemetryPanel } from "./SimHubTelemetryPanel";
 
 export const RaceControlPanel = ({ event }: { event: EnduranceEvent }) => {
   const { state, activePersona, dispatch } = useEnduranceStore();
@@ -36,6 +37,7 @@ export const RaceControlPanel = ({ event }: { event: EnduranceEvent }) => {
       <div className="rounded-2xl bg-black/20 p-5 ring-1 ring-white/5"><h3 className="font-heading text-lg font-black text-white">Hierna</h3><div className="mt-3 space-y-3">{upcoming.map((stint, index) => <div key={stint.id} className="flex items-center justify-between rounded-xl bg-white/[0.035] p-3"><div><span className="text-[10px] uppercase tracking-wider text-gray-500">{index === 0 ? "Volgende" : `Daarna ${index}`}</span><strong className="block text-sm text-gray-200">{driver(stint.driverId)}</strong></div><span className="text-xs text-gray-500">{formatAmsterdam(stint.actualStartAt)}</span></div>)}</div></div>
     </div>
   </Panel>
+  <SimHubTelemetryPanel eventId={event.id} teamId={teamId} plannedDriverId={current?.driverId} />
   {editable && <Panel><SectionHeading title="Handmatige correcties" description="Pas toekomstige stints aan of vervang de huidige coureur. Iedere wijziging komt in het auditlog." /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Field label="Aangepaste vertraging"><div className="flex gap-2"><input type="number" min={-60} max={180} className={inputClass} value={customDelay} onChange={(e) => setCustomDelay(Number(e.target.value))} /><SecondaryButton onClick={() => delay(customDelay)}><Clock3 className="h-4 w-4" /> Toepassen</SecondaryButton></div></Field><Field label="Extra repairtijd"><div className="flex gap-2"><input type="number" min={0} max={180} className={inputClass} value={customDelay} onChange={(e) => setCustomDelay(Number(e.target.value))} /><SecondaryButton onClick={() => delay(customDelay)}><Wrench className="h-4 w-4" /> Toevoegen</SecondaryButton></div></Field><Field label="Coureur vervangen"><div className="flex gap-2"><select className={inputClass} value={replacement} onChange={(e) => setReplacement(e.target.value)}><option value="">Selecteer</option>{teamDrivers.map((persona) => persona && <option key={persona.id} value={persona.id}>{persona.name}</option>)}</select><SecondaryButton onClick={replace} disabled={!replacement}>Vervangen</SecondaryButton></div></Field></div>{feedback && <p role="status" className="mt-4 flex items-center gap-2 text-sm text-orange-200"><AlertTriangle className="h-4 w-4" />{feedback}</p>}</Panel>}
   </div>;
 };

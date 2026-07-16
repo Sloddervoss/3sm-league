@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://3stripemotorsport.local/contracts/simhub-telemetry.v1.schema.json",
+  "title": "3SM SimHub telemetry envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "sequence", "capturedAt", "source", "race", "telemetry"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connectorId", "simHubVersion", "game"],
+      "properties": {
+        "connectorId": { "type": "string", "minLength": 3, "maxLength": 100 },
+        "simHubVersion": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "game": { "const": "IRacing" }
+      }
+    },
+    "race": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "teamId", "sessionId", "driverId"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "driverId": { "type": ["string", "null"], "maxLength": 100 }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag"],
+      "properties": {
+        "connected": { "type": "boolean" },
+        "sessionTimeSeconds": { "type": "number", "minimum": 0 },
+        "lap": { "type": "integer", "minimum": 0 },
+        "completedLaps": { "type": "integer", "minimum": 0 },
+        "lapTimeSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "position": { "type": ["integer", "null"], "minimum": 1 },
+        "classPosition": { "type": ["integer", "null"], "minimum": 1 },
+        "speedKph": { "type": "number", "minimum": 0, "maximum": 500 },
+        "fuelLitres": { "type": "number", "minimum": 0, "maximum": 250 },
+        "fuelPerLapLitres": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 50 },
+        "estimatedLapsRemaining": { "type": ["number", "null"], "minimum": 0 },
+        "inPitLane": { "type": "boolean" },
+        "pitLimiter": { "type": "boolean" },
+        "stintElapsedSeconds": { "type": "number", "minimum": 0 },
+        "incidents": { "type": ["integer", "null"], "minimum": 0 },
+        "flag": { "enum": ["green", "yellow", "red", "white", "checkered", "unknown"] }
+      }
+    }
+  }
+}
