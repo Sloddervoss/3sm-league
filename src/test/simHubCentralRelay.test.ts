@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { centralRowToBridgeResponse } from "@/lib/centralSimHubRelay";
 
 const migration = readFileSync("supabase/migrations/20260716170000_simhub_central_relay.sql", "utf8");
+const rollback = readFileSync("supabase/rollback/20260716170000_simhub_central_relay.rollback.sql", "utf8");
 const shared = readFileSync("supabase/functions/_shared/simhub.ts", "utf8");
 const pairing = readFileSync("supabase/functions/simhub-pair/index.ts", "utf8");
 const ingest = readFileSync("supabase/functions/simhub-ingest/index.ts", "utf8");
@@ -75,6 +76,13 @@ describe("central SimHub relay", () => {
     expect(migration).toContain("race.race_date > now() - interval '36 hours'");
     expect(migration).not.toContain("GRANT SELECT ON public.simhub_devices TO authenticated");
     expect(migration).toContain("ALTER PUBLICATION supabase_realtime ADD TABLE public.simhub_telemetry_latest");
+  });
+
+  it("drops the telemetry policy owner before its helper functions during rollback", () => {
+    const dropLatest = rollback.indexOf("DROP TABLE IF EXISTS public.simhub_telemetry_latest");
+    const dropActiveHelper = rollback.indexOf("DROP FUNCTION IF EXISTS public.is_active_simhub_device(UUID)");
+    expect(dropLatest).toBeGreaterThan(-1);
+    expect(dropActiveHelper).toBeGreaterThan(dropLatest);
   });
 
   it("keeps exchange and ingest atomic, service-only, rate-limited and replay-safe", () => {
