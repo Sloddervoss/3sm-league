@@ -7,6 +7,15 @@ on:
       - release/simhub-superadmin-canary
     paths:
       - .github/workflows/build-simhub-plugin.yml
+      - contracts/simhub-telemetry.v1.schema.json
+      - src/lib/centralSimHubRelay.ts
+      - src/lib/localSimHubBridge.ts
+      - src/pages/SimHubPairingPage.tsx
+      - supabase/functions/_shared/simhub.ts
+      - supabase/functions/simhub-ingest/**
+      - supabase/functions/simhub-pair/**
+      - supabase/migrations/20260716170000_simhub_central_relay.sql
+      - supabase/rollback/20260716170000_simhub_central_relay.rollback.sql
       - tools/simhub-plugin/**
   workflow_dispatch:
 
