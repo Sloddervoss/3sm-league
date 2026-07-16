@@ -1,0 +1,101 @@
+name: Build SimHub endurance connector
+
+on:
+  push:
+    branches:
+      - feat/endurance-control-center
+    paths:
+      - .github/workflows/build-simhub-plugin.yml
+      - tools/simhub-plugin/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build against SimHub 9.11.21
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      SIMHUB_VERSION: 9.11.21
+      SIMHUB_INSTALL_PATH: C:\SimHubSDK\
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v5
+
+      - name: Download official SimHub release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "SimHub.$env:SIMHUB_VERSION.zip"
+          $url = "https://github.com/SHWotever/SimHub/releases/download/$env:SIMHUB_VERSION/SimHub.$env:SIMHUB_VERSION.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $env:RUNNER_TEMP "simhub-installer")
+          $setup = Get-ChildItem (Join-Path $env:RUNNER_TEMP "simhub-installer") -Filter "SimHubSetup_*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Officiële SimHub-installer ontbreekt in release-ZIP." }
+          "SIMHUB_SETUP=$($setup.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install SimHub silently on ephemeral runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $arguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/DIR=C:\SimHubSDK")
+          $process = Start-Process -FilePath $env:SIMHUB_SETUP -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "SimHub-installer eindigde met code $($process.ExitCode)." }
+          $required = @("SimHub.Plugins.dll", "GameReaderCommon.dll", "SimHub.Logging.dll", "log4net.dll")
+          foreach ($file in $required) {
+            $path = Join-Path $env:SIMHUB_INSTALL_PATH $file
+            if (-not (Test-Path $path)) { throw "Vereiste SimHub-SDK-reference ontbreekt: $path" }
+          }
+
+      - name: Compile connector against installed SimHub SDK
+        id: compile
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          $log = Join-Path $env:RUNNER_TEMP "simhub-plugin-msbuild.log"
+          & "tools\simhub-plugin\3SM.EnduranceConnector\build.ps1" -SimHubPath $env:SIMHUB_INSTALL_PATH *>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish MSBuild failure diagnostics
+        if: steps.compile.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP "simhub-plugin-msbuild.log"
+          $tail = if (Test-Path $log) { (Get-Content $log -Tail 80) -join "`n" } else { "MSBuild-log ontbreekt." }
+          $summary = @("## MSBuild failure", "~~~text", $tail, "~~~")
+          $summary | Add-Content $env:GITHUB_STEP_SUMMARY
+          exit 1
+
+      - name: Verify connector and record build evidence
+        if: steps.compile.outcome == 'success'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $output = "tools\simhub-plugin\3SM.EnduranceConnector\bin\Release\3SM.EnduranceConnector.dll"
+          if (-not (Test-Path $output)) { throw "Plugin-DLL ontbreekt na succesvolle build." }
+          $hash = (Get-FileHash $output -Algorithm SHA256).Hash.ToLowerInvariant()
+          $size = (Get-Item $output).Length
+          @(
+            "plugin=3SM.EnduranceConnector.dll"
+            "simhub=$env:SIMHUB_VERSION"
+            "commit=$env:GITHUB_SHA"
+            "bytes=$size"
+            "sha256=$hash"
+          ) | Set-Content "tools\simhub-plugin\3SM.EnduranceConnector\bin\Release\build-evidence.txt"
+          Get-Content "tools\simhub-plugin\3SM.EnduranceConnector\bin\Release\build-evidence.txt"
+
+      - name: Upload unsigned test DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3SM-EnduranceConnector-SimHub-${{ env.SIMHUB_VERSION }}-${{ github.sha }}
+          path: |
+            tools/simhub-plugin/3SM.EnduranceConnector/bin/Release/3SM.EnduranceConnector.dll
+            tools/simhub-plugin/3SM.EnduranceConnector/bin/Release/3SM.EnduranceConnector.pdb
+            tools/simhub-plugin/3SM.EnduranceConnector/bin/Release/build-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9

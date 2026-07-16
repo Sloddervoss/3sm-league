@@ -1,0 +1,25 @@
+{
+  "name": "3SM SimHub canary rate limit",
+  "description": "Distributed volumetric guard for the SimHub pairing and telemetry endpoints",
+  "kind": "zone",
+  "phase": "http_ratelimit",
+  "rules": [
+    {
+      "ref": "simhub_canary_rate_limit",
+      "description": "Block source IPs exceeding 300 SimHub API requests per 10 seconds",
+      "expression": "http.request.uri.path in {\"/functions/v1/simhub-pair\" \"/functions/v1/simhub-ingest\"}",
+      "action": "block",
+      "ratelimit": {
+        "characteristics": [
+          "cf.colo.id",
+          "ip.src"
+        ],
+        "period": 10,
+        "requests_per_period": 300,
+        "mitigation_timeout": 10,
+        "requests_to_origin": true
+      },
+      "enabled": true
+    }
+  ]
+}

@@ -31,6 +31,7 @@ const AdminWorkspacePrototype = lazy(() => import("./pages/AdminWorkspacePrototy
 const TrackIntelligenceTestPage = lazy(() => import("./pages/TrackIntelligenceTestPage.tsx"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage.tsx"));
 const KoppelPage = lazy(() => import("./pages/KoppelPage.tsx"));
+const SimHubPairingPage = lazy(() => import("./pages/SimHubPairingPage.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient({
@@ -88,6 +89,7 @@ const App = () => (
                   <Route path="/admin/track-intelligence-test" element={<TrackIntelligenceTestPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/koppel" element={<KoppelPage />} />
+                  <Route path="/simhub-koppelen" element={<SimHubPairingPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
