@@ -11,8 +11,6 @@ namespace ThreeSM.EnduranceConnector
         public string RelayBaseUrl = "https://api.3stripemotorsport.cc/functions/v1";
         public string DeviceTokenProtected = string.Empty;
         public string DeviceId = string.Empty;
-        public string BoundRaceId = string.Empty;
-        public string BoundTeamId = string.Empty;
         public string BoundOwnerUserId = string.Empty;
 
         // Geavanceerde lokale fallback voor ontwikkeling en offline simulatie.

@@ -32,7 +32,7 @@ namespace ThreeSM.EnduranceConnector
             panel.Children.Add(new TextBlock { Text = "Eenmalig koppelen", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 8, 0, 3) });
             panel.Children.Add(new TextBlock
             {
-                Text = "Maak op de 3SM-site een code voor de gewenste race en het team. Vul alleen die code hieronder in; URL, race en team worden daarna automatisch opgeslagen.",
+                Text = "Maak op de 3SM-site een tijdelijke code en vul alleen die code hieronder in. De installatie wordt aan je 3SM-account gekoppeld; race en endurance-team volgen later in de Endurance-tab.",
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 6),
             });
@@ -50,7 +50,7 @@ namespace ThreeSM.EnduranceConnector
             Action refreshBinding = () =>
             {
                 binding.Text = plugin.IsPaired
-                    ? "Gekoppeld · race " + settings.BoundRaceId + " · team " + settings.BoundTeamId
+                    ? "Gekoppeld aan 3SM-account · klaar voor connection-test"
                     : "Nog niet gekoppeld";
             };
             refreshBinding();

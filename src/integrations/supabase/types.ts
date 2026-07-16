@@ -1041,9 +1041,9 @@ export type Database = {
         ]
       }
       simhub_pairing_codes: {
-        Row: { code_hash: string; consumed_at: string | null; created_at: string; expires_at: string; id: string; owner_user_id: string; race_id: string; team_id: string }
-        Insert: { code_hash: string; consumed_at?: string | null; created_at?: string; expires_at: string; id?: string; owner_user_id: string; race_id: string; team_id: string }
-        Update: { code_hash?: string; consumed_at?: string | null; created_at?: string; expires_at?: string; id?: string; owner_user_id?: string; race_id?: string; team_id?: string }
+        Row: { code_hash: string; consumed_at: string | null; created_at: string; expires_at: string; id: string; owner_user_id: string; race_id: string | null; team_id: string | null }
+        Insert: { code_hash: string; consumed_at?: string | null; created_at?: string; expires_at: string; id?: string; owner_user_id: string; race_id?: string | null; team_id?: string | null }
+        Update: { code_hash?: string; consumed_at?: string | null; created_at?: string; expires_at?: string; id?: string; owner_user_id?: string; race_id?: string | null; team_id?: string | null }
         Relationships: []
       }
 
@@ -1051,51 +1051,51 @@ export type Database = {
         Row: {
           connector_id: string
           device_name: string
-          expires_at: string
+          expires_at: string | null
           id: string
           last_sequence: number
           last_seen_at: string | null
           last_session_id: string | null
           owner_user_id: string
           paired_at: string
-          race_id: string
+          race_id: string | null
           revoked_at: string | null
           revoked_by: string | null
-          team_id: string
+          team_id: string | null
           token_hash: string
           updated_at: string
         }
         Insert: {
           connector_id: string
           device_name: string
-          expires_at: string
+          expires_at?: string | null
           id?: string
           last_sequence?: number
           last_seen_at?: string | null
           last_session_id?: string | null
           owner_user_id: string
           paired_at?: string
-          race_id: string
+          race_id?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
-          team_id: string
+          team_id?: string | null
           token_hash: string
           updated_at?: string
         }
         Update: {
           connector_id?: string
           device_name?: string
-          expires_at?: string
+          expires_at?: string | null
           id?: string
           last_sequence?: number
           last_seen_at?: string | null
           last_session_id?: string | null
           owner_user_id?: string
           paired_at?: string
-          race_id?: string
+          race_id?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
-          team_id?: string
+          team_id?: string | null
           token_hash?: string
           updated_at?: string
         }
@@ -1129,12 +1129,12 @@ export type Database = {
           device_id: string
           game: string
           owner_user_id: string
-          race_id: string
+          race_id: string | null
           received_at: string
           sequence: number
           session_id: string
           simhub_version: string
-          team_id: string
+          team_id: string | null
           telemetry: Json
         }
         Insert: {
@@ -1143,12 +1143,12 @@ export type Database = {
           device_id: string
           game: string
           owner_user_id: string
-          race_id: string
+          race_id?: string | null
           received_at?: string
           sequence: number
           session_id: string
           simhub_version: string
-          team_id: string
+          team_id?: string | null
           telemetry: Json
         }
         Update: {
@@ -1157,12 +1157,12 @@ export type Database = {
           device_id?: string
           game?: string
           owner_user_id?: string
-          race_id?: string
+          race_id?: string | null
           received_at?: string
           sequence?: number
           session_id?: string
           simhub_version?: string
-          team_id?: string
+          team_id?: string | null
           telemetry?: Json
         }
         Relationships: [
@@ -1354,14 +1354,14 @@ export type Database = {
     Functions: {
       can_manage_simhub: { Args: never; Returns: boolean }
       is_active_simhub_device: { Args: { p_device_id: string }; Returns: boolean }
-      simhub_create_pairing_code: {
-        Args: { p_code_hash: string; p_expires_at: string; p_owner_user_id: string; p_race_id: string; p_team_id: string }
+      simhub_create_device_pairing_code: {
+        Args: { p_code_hash: string; p_expires_at: string; p_owner_user_id: string }
         Returns: boolean
       }
 
       simhub_exchange_pairing_code: {
         Args: { p_code_hash: string; p_connector_id: string; p_device_name: string; p_token_hash: string }
-        Returns: { device_id: string; owner_user_id: string; race_id: string; result: string; team_id: string }[]
+        Returns: { device_id: string; owner_user_id: string; race_id: string | null; result: string; team_id: string | null }[]
       }
       simhub_revoke_device: { Args: { p_device_id: string; p_revoked_by: string }; Returns: boolean }
       simhub_ingest_snapshot: {
