@@ -15,6 +15,7 @@ describe("local SimHub bridge client", () => {
   it("accepts the versioned telemetry response and rejects unknown fields", () => {
     expect(parseSimHubBridgeResponse(valid).payload.telemetry.fuelLitres).toBe(81);
     expect(() => parseSimHubBridgeResponse({ ...valid, productionToken: "nope" })).toThrow();
+    expect(() => parseSimHubBridgeResponse({ ...valid, payload: { ...valid.payload, race: { ...valid.payload.race, driverId: "   " } } })).toThrow();
   });
 
   it("distinguishes live, stale and offline heartbeat states", () => {

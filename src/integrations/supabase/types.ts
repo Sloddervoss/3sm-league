@@ -1040,6 +1040,155 @@ export type Database = {
           },
         ]
       }
+      simhub_pairing_codes: {
+        Row: { code_hash: string; consumed_at: string | null; created_at: string; expires_at: string; id: string; owner_user_id: string; race_id: string; team_id: string }
+        Insert: { code_hash: string; consumed_at?: string | null; created_at?: string; expires_at: string; id?: string; owner_user_id: string; race_id: string; team_id: string }
+        Update: { code_hash?: string; consumed_at?: string | null; created_at?: string; expires_at?: string; id?: string; owner_user_id?: string; race_id?: string; team_id?: string }
+        Relationships: []
+      }
+
+      simhub_devices: {
+        Row: {
+          connector_id: string
+          device_name: string
+          expires_at: string
+          id: string
+          last_sequence: number
+          last_seen_at: string | null
+          last_session_id: string | null
+          owner_user_id: string
+          paired_at: string
+          race_id: string
+          revoked_at: string | null
+          revoked_by: string | null
+          team_id: string
+          token_hash: string
+          updated_at: string
+        }
+        Insert: {
+          connector_id: string
+          device_name: string
+          expires_at: string
+          id?: string
+          last_sequence?: number
+          last_seen_at?: string | null
+          last_session_id?: string | null
+          owner_user_id: string
+          paired_at?: string
+          race_id: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          team_id: string
+          token_hash: string
+          updated_at?: string
+        }
+        Update: {
+          connector_id?: string
+          device_name?: string
+          expires_at?: string
+          id?: string
+          last_sequence?: number
+          last_seen_at?: string | null
+          last_session_id?: string | null
+          owner_user_id?: string
+          paired_at?: string
+          race_id?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          team_id?: string
+          token_hash?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "simhub_devices_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simhub_devices_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      simhub_device_sessions: {
+        Row: { device_id: string; first_seen_at: string; last_seen_at: string; last_sequence: number; session_id: string }
+        Insert: { device_id: string; first_seen_at?: string; last_seen_at?: string; last_sequence: number; session_id: string }
+        Update: { device_id?: string; first_seen_at?: string; last_seen_at?: string; last_sequence?: number; session_id?: string }
+        Relationships: [{ foreignKeyName: "simhub_device_sessions_device_id_fkey"; columns: ["device_id"]; isOneToOne: false; referencedRelation: "simhub_devices"; referencedColumns: ["id"] }]
+      }
+      simhub_telemetry_latest: {
+        Row: {
+          captured_at: string
+          connector_id: string
+          device_id: string
+          game: string
+          owner_user_id: string
+          race_id: string
+          received_at: string
+          sequence: number
+          session_id: string
+          simhub_version: string
+          team_id: string
+          telemetry: Json
+        }
+        Insert: {
+          captured_at: string
+          connector_id: string
+          device_id: string
+          game: string
+          owner_user_id: string
+          race_id: string
+          received_at?: string
+          sequence: number
+          session_id: string
+          simhub_version: string
+          team_id: string
+          telemetry: Json
+        }
+        Update: {
+          captured_at?: string
+          connector_id?: string
+          device_id?: string
+          game?: string
+          owner_user_id?: string
+          race_id?: string
+          received_at?: string
+          sequence?: number
+          session_id?: string
+          simhub_version?: string
+          team_id?: string
+          telemetry?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "simhub_telemetry_latest_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: true
+            referencedRelation: "simhub_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simhub_telemetry_latest_race_id_fkey"
+            columns: ["race_id"]
+            isOneToOne: false
+            referencedRelation: "races"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simhub_telemetry_latest_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_memberships: {
         Row: {
           created_at: string
@@ -1203,6 +1352,22 @@ export type Database = {
       }
     }
     Functions: {
+      can_manage_simhub: { Args: never; Returns: boolean }
+      is_active_simhub_device: { Args: { p_device_id: string }; Returns: boolean }
+      simhub_create_pairing_code: {
+        Args: { p_code_hash: string; p_expires_at: string; p_owner_user_id: string; p_race_id: string; p_team_id: string }
+        Returns: boolean
+      }
+
+      simhub_exchange_pairing_code: {
+        Args: { p_code_hash: string; p_connector_id: string; p_device_name: string; p_token_hash: string }
+        Returns: { device_id: string; owner_user_id: string; race_id: string; result: string; team_id: string }[]
+      }
+      simhub_revoke_device: { Args: { p_device_id: string; p_revoked_by: string }; Returns: boolean }
+      simhub_ingest_snapshot: {
+        Args: { p_captured_at: string; p_connector_id: string; p_game: string; p_sequence: number; p_session_id: string; p_simhub_version: string; p_telemetry: Json; p_token_hash: string }
+        Returns: { received_at: string | null; result: string }[]
+      }
       _3sr_rank_label: {
         Args: { p_race_count: number; p_score: number }
         Returns: string

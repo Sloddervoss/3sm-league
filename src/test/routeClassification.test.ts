@@ -10,6 +10,8 @@ describe("route classification for generated SEO HTML", () => {
     expect(isPrivateRoute("/admin/track-intelligence")).toBe(true);
     expect(isPrivateRoute("/admin/anything-new")).toBe(true);
     expect(isPrivateRoute("/admin/anything-new/deep-link")).toBe(true);
+    expect(isPrivateRoute("/simhub-koppelen")).toBe(true);
+    expect(isPrivateRoute("/simhub-koppelen/")).toBe(true);
   });
 
   it("keeps public SEO routes out of the private/noindex classifier", async () => {

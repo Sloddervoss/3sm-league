@@ -50,4 +50,25 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "incidents", Order = 15)] public int? Incidents { get; set; }
         [DataMember(Name = "flag", Order = 16)] public string Flag { get; set; }
     }
+
+    [DataContract]
+    public sealed class PairingRequest
+    {
+        [DataMember(Name = "action", Order = 1)] public string Action { get; set; }
+        [DataMember(Name = "code", Order = 2)] public string Code { get; set; }
+        [DataMember(Name = "connectorId", Order = 3)] public string ConnectorId { get; set; }
+        [DataMember(Name = "deviceName", Order = 4)] public string DeviceName { get; set; }
+    }
+
+    [DataContract]
+    public sealed class PairingResponse
+    {
+        [DataMember(Name = "paired", Order = 1)] public bool Paired { get; set; }
+        [DataMember(Name = "deviceToken", Order = 2)] public string DeviceToken { get; set; }
+        [DataMember(Name = "deviceId", Order = 3)] public string DeviceId { get; set; }
+        [DataMember(Name = "raceId", Order = 4)] public string RaceId { get; set; }
+        [DataMember(Name = "teamId", Order = 5)] public string TeamId { get; set; }
+        [DataMember(Name = "ownerUserId", Order = 6)] public string OwnerUserId { get; set; }
+        [DataMember(Name = "error", Order = 7)] public string Error { get; set; }
+    }
 }
