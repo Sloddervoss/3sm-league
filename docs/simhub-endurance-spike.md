@@ -28,8 +28,8 @@ De bestaande lokale bridge op `http://127.0.0.1:8787` blijft uitsluitend beschik
 
 ## Pairing zonder handmatige ID's
 
-1. Tijdens de gecontroleerde beta logt een admin, super-admin of moderator in op `https://3stripemotorsport.cc/simhub-koppelen`.
-2. Staff kiest een actieve/toekomstige 3SM-race en het team van de tester.
+1. Tijdens de eerste gecontroleerde productiecanary logt uitsluitend een super-admin in op `https://3stripemotorsport.cc/simhub-koppelen`.
+2. De super-admin kiest een actieve/toekomstige 3SM-race en het team van de tester.
 3. De site maakt transactioneel één willekeurige code van acht tekens, tien minuten geldig en eenmalig bruikbaar.
 4. De tester opent SimHub → Plugins → **3SM Endurance Connector**, vult alleen de ontvangen code in en klikt **Koppelen**; een websiteaccount op de sim-pc is niet nodig.
 5. De plugin wisselt de code via HTTPS om voor een willekeurig device-token en server-side race/team-binding.
@@ -45,11 +45,11 @@ URL, race-ID, team-ID, account-ID en token hoeven niet handmatig in de plugin te
   - intrekbare devices met gehashte tokens;
   - latest-only telemetry per device;
   - atomic exchange, per-device rate guard en replaycontrole;
-  - staff-only RLS zolang communityteamlidmaatschap zelf te kiezen is;
+  - super-admin-only RLS tijdens de eerste canary zolang communityteamlidmaatschap zelf te kiezen is;
   - Supabase Realtime-publicatie.
 - `supabase/functions/simhub-pair/index.ts`
   - website-JWT validatie voor create/list/revoke;
-  - staff-autorisatie voor create/list/revoke;
+  - super-admin-autorisatie voor create/list/revoke;
   - unauthenticated code-exchange met bounded Edge-isolatelimiter; distributed Cloudflare-rate limiting is een verplichte staging/prod-gate;
   - geeft het device-token exact één keer terug.
 - `supabase/functions/simhub-ingest/index.ts`
@@ -76,7 +76,7 @@ URL, race-ID, team-ID, account-ID en token hoeven niet handmatig in de plugin te
 - Service-role-RPC's zijn niet uitvoerbaar door `anon` of `authenticated`.
 - Telemetry is strict, bounded, maximaal circa 1 Hz en alleen `IRacing`.
 - De server onthoudt `last_sequence` per device én per eerder geziene `session_id`; terugschakelen naar een oude sessie reset de teller dus niet. Een nieuwe sessie start alleen met een lage sequence na minimaal vijf seconden stilte. Tijdstempels buiten de toegestane skew worden geweigerd.
-- Alleen admin/super-admin/moderator kan devices beheren en latest snapshots lezen. Zelfgekozen `team_memberships` zijn nadrukkelijk geen telemetry-autorisatiebewijs.
+- Tijdens de eerste canary kan uitsluitend super-admin devices beheren en latest snapshots lezen. Na geslaagde tests moet toegang bewust in frontend, Edge én SQL worden verbreed; alleen het menu aanpassen is onvoldoende. Zelfgekozen `team_memberships` zijn nadrukkelijk geen telemetry-autorisatiebewijs.
 - Er wordt geen ruwe iRacing-data of historie opgeslagen; alleen het laatste geldige snapshot per device.
 - Bij meerdere geldige devices voor dezelfde race/team toont Race Control de nieuwste geldige update. Ongewenste devices kunnen via de pairingpagina worden ingetrokken.
 - Logging bevat geen pairingcode, Authorization-header, device-token of ruwe payload.
@@ -154,7 +154,7 @@ Voor staging/live, in deze volgorde:
 5. `simhub-pair` en `simhub-ingest` deployen met gateway-JWT-validatie uit; beide functies voeren hun eigen respectievelijke website/device-auth uit.
 6. Pairingpagina en Race Control naar staging deployen.
 7. Nieuwe Windows-pluginartifact bouwen tegen echte SimHub 9.11.21-DLL's.
-8. Rolgebaseerde smokes: anoniem geweigerd, regulier/teamlid geweigerd, staff toegestaan, directe PostgREST-SELECT op `simhub_devices` geweigerd, rolverlies geweigerd, race-einde geweigerd en ingetrokken device geweigerd.
+8. Rolgebaseerde smokes: anoniem, regulier/teamlid, moderator en admin geweigerd; uitsluitend super-admin toegestaan; directe PostgREST-SELECT op `simhub_devices` geweigerd, rolverlies geweigerd, race-einde geweigerd en ingetrokken device geweigerd.
 9. Pas na expliciete GO productie promoten.
 
 Stop bij iedere afwijking. Bij rollback eerst Edge Functions uitschakelen en webroute terugzetten; laat tabellen intact totdat bevestigd is dat geen devices meer publiceren.
