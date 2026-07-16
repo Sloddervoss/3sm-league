@@ -16,6 +16,10 @@ dist
 dist-ssr
 *.local
 
+# Local SimHub/.NET build artifacts
+tools/simhub-plugin/**/bin/
+tools/simhub-plugin/**/obj/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -12,7 +12,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "simhub:bridge": "node tools/simhub-bridge/server.mjs",
+    "simhub:simulate": "node tools/simhub-bridge/simulate.mjs",
+    "simhub:self-test": "node tools/simhub-bridge/self-test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
