@@ -10,8 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  statuses: write
+  contents: write
 
 jobs:
   build:
@@ -64,20 +63,22 @@ jobs:
       - name: Publish MSBuild failure diagnostics
         if: steps.compile.outcome == 'failure'
         shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $log = Join-Path $env:RUNNER_TEMP "simhub-plugin-msbuild.log"
           $tail = if (Test-Path $log) { (Get-Content $log -Tail 80) -join "`n" } else { "MSBuild-log ontbreekt." }
           @("## MSBuild failure", "```text", $tail, "```") | Add-Content $env:GITHUB_STEP_SUMMARY
-          $match = if (Test-Path $log) { Get-Content $log | Select-String -Pattern "error (CS|MSB)[0-9]+" | Select-Object -First 1 } else { $null }
-          $description = if ($match) { $match.Line } else { ($tail -split "`n" | Select-Object -Last 1) }
-          $description = ($description -replace "\s+", " ").Trim()
-          if ($description.Length -gt 130) { $description = $description.Substring(0, 127) + "..." }
-          $headers = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = "application/vnd.github+json"; "X-GitHub-Api-Version" = "2022-11-28" }
-          $body = @{ state = "failure"; context = "simhub/compiler-diagnostic"; description = $description; target_url = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" } | ConvertTo-Json
-          Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -Headers $headers -Body $body -ContentType "application/json"
-          Write-Host "::error title=SimHub plugin MSBuild failure::$description"
+          New-Item -ItemType Directory -Force ".ci" | Out-Null
+          @(
+            "run=$env:GITHUB_RUN_ID"
+            "commit=$env:GITHUB_SHA"
+            ""
+            $tail
+          ) | Set-Content ".ci\simhub-compiler-diagnostic.txt"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ".ci/simhub-compiler-diagnostic.txt"
+          git commit -m "ci(endurance): record compiler diagnostic [skip ci]"
+          git push origin "HEAD:$env:GITHUB_REF_NAME"
           exit 1
 
       - name: Verify connector and record build evidence
