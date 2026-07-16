@@ -17,8 +17,10 @@ on:
       - supabase/functions/simhub-pair/**
       - supabase/migrations/20260716170000_simhub_central_relay.sql
       - supabase/migrations/20260716192852_simhub_device_only_pairing.sql
+      - supabase/migrations/20260716203000_simhub_pairing_compatibility.sql
       - supabase/rollback/20260716170000_simhub_central_relay.rollback.sql
       - supabase/rollback/20260716192852_simhub_device_only_pairing.rollback.sql
+      - supabase/rollback/20260716203000_simhub_pairing_compatibility.rollback.sql
       - tools/simhub-plugin/**
   workflow_dispatch:
 
