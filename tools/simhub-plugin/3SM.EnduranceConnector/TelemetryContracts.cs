@@ -66,9 +66,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "paired", Order = 1)] public bool Paired { get; set; }
         [DataMember(Name = "deviceToken", Order = 2)] public string DeviceToken { get; set; }
         [DataMember(Name = "deviceId", Order = 3)] public string DeviceId { get; set; }
-        [DataMember(Name = "raceId", Order = 4)] public string RaceId { get; set; }
-        [DataMember(Name = "teamId", Order = 5)] public string TeamId { get; set; }
-        [DataMember(Name = "ownerUserId", Order = 6)] public string OwnerUserId { get; set; }
-        [DataMember(Name = "error", Order = 7)] public string Error { get; set; }
+        [DataMember(Name = "ownerUserId", Order = 4)] public string OwnerUserId { get; set; }
+        [DataMember(Name = "error", Order = 5)] public string Error { get; set; }
     }
 }
