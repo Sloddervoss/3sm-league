@@ -66,7 +66,7 @@ jobs:
         run: |
           $log = Join-Path $env:RUNNER_TEMP "simhub-plugin-msbuild.log"
           $tail = if (Test-Path $log) { (Get-Content $log -Tail 80) -join "`n" } else { "MSBuild-log ontbreekt." }
-          $summary = @("## MSBuild failure", "```text", $tail, "```")
+          $summary = @("## MSBuild failure", "~~~text", $tail, "~~~")
           $summary | Add-Content $env:GITHUB_STEP_SUMMARY
           exit 1
 
