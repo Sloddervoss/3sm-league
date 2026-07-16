@@ -1358,7 +1358,10 @@ export type Database = {
         Args: { p_code_hash: string; p_expires_at: string; p_owner_user_id: string }
         Returns: boolean
       }
-
+      simhub_create_pairing_code: {
+        Args: { p_code_hash: string; p_expires_at: string; p_owner_user_id: string; p_race_id: string; p_team_id: string }
+        Returns: boolean
+      }
       simhub_exchange_pairing_code: {
         Args: { p_code_hash: string; p_connector_id: string; p_device_name: string; p_token_hash: string }
         Returns: { device_id: string; owner_user_id: string; race_id: string | null; result: string; team_id: string | null }[]

@@ -32,7 +32,7 @@ const SimHubPairingPage = () => {
 
   useEffect(() => {
     const available = devices.data ?? [];
-    if (selectedDeviceId && available.some((device) => device.id === selectedDeviceId)) return;
+    if (selectedDeviceId && available.some((device) => device.id === selectedDeviceId && !device.revoked_at)) return;
     setSelectedDeviceId(available.find((device) => !device.revoked_at)?.id ?? available[0]?.id ?? "");
   }, [devices.data, selectedDeviceId]);
 

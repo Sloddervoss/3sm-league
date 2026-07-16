@@ -76,6 +76,7 @@ Deno.serve(async (request) => {
         deviceToken,
         deviceId: result.device_id,
         ownerUserId: result.owner_user_id,
+        ...(result.race_id && result.team_id ? { raceId: result.race_id, teamId: result.team_id } : {}),
       });
     }
 
@@ -84,16 +85,31 @@ Deno.serve(async (request) => {
 
     if (action === "create") {
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const raceId = typeof body.raceId === "string" ? body.raceId.trim() : "";
+      const teamId = typeof body.teamId === "string" ? body.teamId.trim() : "";
+      const legacyBoundPairing = Boolean(raceId || teamId);
+      if (legacyBoundPairing && (!uuidPattern.test(raceId) || !uuidPattern.test(teamId))) {
+        return jsonResponse(request, { error: "invalid_binding" }, 400);
+      }
       let code = "";
       let insertError: unknown = null;
       let created = false;
       for (let attempt = 0; attempt < 4; attempt += 1) {
         code = randomPairCode();
-        const result = await service.rpc("simhub_create_device_pairing_code", {
-          p_code_hash: await sha256Hex(normalizePairCode(code)),
-          p_owner_user_id: user.id,
-          p_expires_at: expiresAt,
-        });
+        const codeHash = await sha256Hex(normalizePairCode(code));
+        const result = legacyBoundPairing
+          ? await service.rpc("simhub_create_pairing_code", {
+            p_code_hash: codeHash,
+            p_owner_user_id: user.id,
+            p_race_id: raceId,
+            p_team_id: teamId,
+            p_expires_at: expiresAt,
+          })
+          : await service.rpc("simhub_create_device_pairing_code", {
+            p_code_hash: codeHash,
+            p_owner_user_id: user.id,
+            p_expires_at: expiresAt,
+          });
         insertError = result.error;
         created = !insertError && result.data === true;
         if (created) break;
@@ -106,7 +122,7 @@ Deno.serve(async (request) => {
 
     if (action === "list") {
       const { data, error } = await service.from("simhub_devices")
-        .select("id,device_name,connector_id,paired_at,expires_at,last_seen_at,revoked_at")
+        .select("id,device_name,connector_id,race_id,team_id,paired_at,expires_at,last_seen_at,revoked_at,race:races(name),team:teams(name)")
         .order("paired_at", { ascending: false });
       if (error) throw error;
       return jsonResponse(request, { devices: data || [] });
