@@ -92,11 +92,7 @@ BEGIN
     SELECT 1
     FROM public.user_roles AS role_record
     WHERE role_record.user_id = auth.uid()
-      AND role_record.role IN (
-        'admin'::public.app_role,
-        'super_admin'::public.app_role,
-        'moderator'::public.app_role
-      )
+      AND role_record.role = 'super_admin'::public.app_role
   );
 END;
 $$;
@@ -120,7 +116,7 @@ AS $$
       AND EXISTS (
         SELECT 1 FROM public.user_roles AS role_record
         WHERE role_record.user_id = device.owner_user_id
-          AND role_record.role IN ('admin'::public.app_role, 'super_admin'::public.app_role, 'moderator'::public.app_role)
+          AND role_record.role = 'super_admin'::public.app_role
       )
   );
 $$;
@@ -159,7 +155,7 @@ BEGIN
   IF NOT EXISTS (
        SELECT 1 FROM public.user_roles AS role_record
        WHERE role_record.user_id = p_owner_user_id
-         AND role_record.role IN ('admin'::public.app_role, 'super_admin'::public.app_role, 'moderator'::public.app_role)
+         AND role_record.role = 'super_admin'::public.app_role
      )
      OR NOT EXISTS (
        SELECT 1 FROM public.races AS race
@@ -240,11 +236,7 @@ BEGIN
       SELECT 1
       FROM public.user_roles AS role_record
       WHERE role_record.user_id = v_pairing.owner_user_id
-        AND role_record.role IN (
-          'admin'::public.app_role,
-          'super_admin'::public.app_role,
-          'moderator'::public.app_role
-        )
+        AND role_record.role = 'super_admin'::public.app_role
     );
 
   IF v_expires_at IS NULL THEN
@@ -369,11 +361,7 @@ BEGIN
      OR NOT EXISTS (
        SELECT 1 FROM public.user_roles AS role_record
        WHERE role_record.user_id = v_device.owner_user_id
-         AND role_record.role IN (
-           'admin'::public.app_role,
-           'super_admin'::public.app_role,
-           'moderator'::public.app_role
-         )
+         AND role_record.role = 'super_admin'::public.app_role
      ) THEN
     IF v_device_found THEN
       UPDATE public.simhub_devices

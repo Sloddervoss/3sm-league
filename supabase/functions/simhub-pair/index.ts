@@ -34,10 +34,10 @@ const authenticatedUser = async (request: Request) => {
   return data.user;
 };
 
-const isStaff = async (userId: string): Promise<boolean> => {
+const isSuperAdmin = async (userId: string): Promise<boolean> => {
   const { data, error } = await service.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw error;
-  return (data || []).some((row: { role: string }) => ["admin", "super_admin", "moderator"].includes(row.role));
+  return (data || []).some((row: { role: string }) => row.role === "super_admin");
 };
 
 Deno.serve(async (request) => {
@@ -82,7 +82,7 @@ Deno.serve(async (request) => {
     }
 
     const user = await authenticatedUser(request);
-    if (!(await isStaff(user.id))) return jsonResponse(request, { error: "staff_required" }, 403);
+    if (!(await isSuperAdmin(user.id))) return jsonResponse(request, { error: "super_admin_required" }, 403);
 
     if (action === "create") {
       const raceId = typeof body.raceId === "string" ? body.raceId : "";

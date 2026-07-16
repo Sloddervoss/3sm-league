@@ -131,7 +131,7 @@ const Navbar = () => {
                   </span>
                 </Link>
               )}
-              {canUseStewards && (
+              {isSuperAdmin && (
                 <Link
                   to="/simhub-koppelen"
                   className="px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -223,7 +223,7 @@ const Navbar = () => {
                   <Trophy className="w-4 h-4" /> Stewards
                 </Link>
               )}
-              {canUseStewards && (
+              {isSuperAdmin && (
                 <Link to="/simhub-koppelen" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
                   <Cable className="w-4 h-4" /> SimHub
                 </Link>

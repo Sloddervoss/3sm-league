@@ -109,7 +109,11 @@ describe("central SimHub relay", () => {
     expect(pairing).toContain("30, 10 * 60 * 1000");
     expect(ingest).not.toContain("ingest-device:");
 
-    expect(pairing).toContain('error: "staff_required"');
+    expect(pairing).toContain('error: "super_admin_required"');
+    expect(pairing).toContain('row.role === "super_admin"');
+    expect(pairing).not.toContain('["admin", "super_admin", "moderator"]');
+    expect(migration).not.toContain("role_record.role IN (");
+    expect(migration.match(/role_record\.role = 'super_admin'::public\.app_role/g)).toHaveLength(5);
   });
 
   it("uses a short single-use website code and DPAPI-protected device token", () => {
@@ -136,6 +140,7 @@ describe("central SimHub relay", () => {
     expect(pairingPage).toContain('status === "SUBSCRIBED"');
     expect(pairingPage).toContain("if (!active) return");
     expect(centralRelay).toContain("error.context.clone().json()");
-    expect(navbar).toMatch(/canUseStewards\s*&&\s*\([\s\S]*?to="\/simhub-koppelen"/);
+    expect(pairingPage).toContain("const staff = isSuperAdmin");
+    expect(navbar).toMatch(/isSuperAdmin\s*&&\s*\([\s\S]*?to="\/simhub-koppelen"/);
   });
 });
