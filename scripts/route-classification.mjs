@@ -12,6 +12,7 @@ export const privateSeoRoutes = [
   '/news-editor',
   '/stewards',
   '/koppel',
+  '/simhub-koppelen',
 ];
 
 const privateRoutePrefixes = ['/admin'];

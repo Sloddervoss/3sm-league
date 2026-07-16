@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $project = Join-Path $PSScriptRoot "3SM.EnduranceConnector.csproj"
-$required = @("SimHub.Plugins.dll", "GameReaderCommon.dll", "SimHub.Logging.dll")
+$required = @("SimHub.Plugins.dll", "GameReaderCommon.dll", "SimHub.Logging.dll", "log4net.dll")
 foreach ($file in $required) {
     if (-not (Test-Path (Join-Path $SimHubPath $file))) { throw "Ontbreekt in SimHub-installatie: $file" }
 }

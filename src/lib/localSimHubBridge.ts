@@ -20,10 +20,10 @@ const exact = (value: Record<string, unknown>, expected: string[], path: string)
   const keys = Object.keys(value).sort(); const wanted = [...expected].sort();
   if (keys.length !== wanted.length || keys.some((key, index) => key !== wanted[index])) throw new Error(`${path} bevat onbekende of ontbrekende velden`);
 };
-const text = (value: unknown, path: string, nullable = false) => {
+const text = (value: unknown, path: string, nullable = false, max = 120) => {
   if (nullable && value === null) return null;
-  if (typeof value !== "string" || !value.length || value.length > 120) throw new Error(`${path} is ongeldig`);
-  return value;
+  if (typeof value !== "string" || !value.trim() || value.length > max) throw new Error(`${path} is ongeldig`);
+  return value.trim();
 };
 function numeric(value: unknown, path: string, options: { nullable: true; integer?: boolean; min?: number; max?: number }): number | null;
 function numeric(value: unknown, path: string, options?: { nullable?: false; integer?: boolean; min?: number; max?: number }): number;
@@ -51,13 +51,13 @@ export const parseSimHubBridgeResponse = (input: unknown): SimHubBridgeResponse 
     receivedAt,
     payload: {
       protocolVersion: 1, sequence: numeric(payload.sequence, "sequence", { integer: true }), capturedAt,
-      source: { connectorId: text(source.connectorId, "source.connectorId")!, simHubVersion: text(source.simHubVersion, "source.simHubVersion")!, game: "IRacing" },
+      source: { connectorId: text(source.connectorId, "source.connectorId")!, simHubVersion: text(source.simHubVersion, "source.simHubVersion", false, 60)!, game: "IRacing" },
       race: { eventId: text(race.eventId, "race.eventId")!, teamId: text(race.teamId, "race.teamId")!, sessionId: text(race.sessionId, "race.sessionId")!, driverId: text(race.driverId, "race.driverId", true) },
       telemetry: {
-        connected: bool(telemetry.connected, "telemetry.connected"), sessionTimeSeconds: numeric(telemetry.sessionTimeSeconds, "telemetry.sessionTimeSeconds"), lap: numeric(telemetry.lap, "telemetry.lap", { integer: true }), completedLaps: numeric(telemetry.completedLaps, "telemetry.completedLaps", { integer: true }),
-        lapTimeSeconds: numeric(telemetry.lapTimeSeconds, "telemetry.lapTimeSeconds", { nullable: true, min: Number.EPSILON }), position: numeric(telemetry.position, "telemetry.position", { nullable: true, integer: true, min: 1 }), classPosition: numeric(telemetry.classPosition, "telemetry.classPosition", { nullable: true, integer: true, min: 1 }),
-        speedKph: numeric(telemetry.speedKph, "telemetry.speedKph", { max: 500 }), fuelLitres: numeric(telemetry.fuelLitres, "telemetry.fuelLitres", { max: 250 }), fuelPerLapLitres: numeric(telemetry.fuelPerLapLitres, "telemetry.fuelPerLapLitres", { nullable: true, min: Number.EPSILON, max: 50 }), estimatedLapsRemaining: numeric(telemetry.estimatedLapsRemaining, "telemetry.estimatedLapsRemaining", { nullable: true }),
-        inPitLane: bool(telemetry.inPitLane, "telemetry.inPitLane"), pitLimiter: bool(telemetry.pitLimiter, "telemetry.pitLimiter"), stintElapsedSeconds: numeric(telemetry.stintElapsedSeconds, "telemetry.stintElapsedSeconds"), incidents: numeric(telemetry.incidents, "telemetry.incidents", { nullable: true, integer: true }), flag: telemetry.flag as SimHubFlag,
+        connected: bool(telemetry.connected, "telemetry.connected"), sessionTimeSeconds: numeric(telemetry.sessionTimeSeconds, "telemetry.sessionTimeSeconds", { max: 604800 }), lap: numeric(telemetry.lap, "telemetry.lap", { integer: true, max: 100000 }), completedLaps: numeric(telemetry.completedLaps, "telemetry.completedLaps", { integer: true, max: 100000 }),
+        lapTimeSeconds: numeric(telemetry.lapTimeSeconds, "telemetry.lapTimeSeconds", { nullable: true, min: Number.EPSILON, max: 86400 }), position: numeric(telemetry.position, "telemetry.position", { nullable: true, integer: true, min: 1, max: 1000 }), classPosition: numeric(telemetry.classPosition, "telemetry.classPosition", { nullable: true, integer: true, min: 1, max: 1000 }),
+        speedKph: numeric(telemetry.speedKph, "telemetry.speedKph", { max: 500 }), fuelLitres: numeric(telemetry.fuelLitres, "telemetry.fuelLitres", { max: 250 }), fuelPerLapLitres: numeric(telemetry.fuelPerLapLitres, "telemetry.fuelPerLapLitres", { nullable: true, min: Number.EPSILON, max: 50 }), estimatedLapsRemaining: numeric(telemetry.estimatedLapsRemaining, "telemetry.estimatedLapsRemaining", { nullable: true, max: 10000 }),
+        inPitLane: bool(telemetry.inPitLane, "telemetry.inPitLane"), pitLimiter: bool(telemetry.pitLimiter, "telemetry.pitLimiter"), stintElapsedSeconds: numeric(telemetry.stintElapsedSeconds, "telemetry.stintElapsedSeconds", { max: 604800 }), incidents: numeric(telemetry.incidents, "telemetry.incidents", { nullable: true, integer: true, max: 100000 }), flag: telemetry.flag as SimHubFlag,
       },
     },
   };
