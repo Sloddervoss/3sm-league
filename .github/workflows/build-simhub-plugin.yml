@@ -53,8 +53,25 @@ jobs:
       - name: Build connector against installed SimHub SDK
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Continue"
+          $log = Join-Path $env:RUNNER_TEMP "simhub-plugin-msbuild.log"
+          $exitCode = 0
+          try {
+            & "tools\simhub-plugin\3SM.EnduranceConnector\build.ps1" -SimHubPath $env:SIMHUB_INSTALL_PATH *>&1 | Tee-Object -FilePath $log
+            $exitCode = $LASTEXITCODE
+          } catch {
+            $_ | Out-String | Tee-Object -FilePath $log -Append
+            $exitCode = 1
+          }
+          if ($exitCode -ne 0) {
+            $tail = (Get-Content $log -Tail 80) -join "`n"
+            @("## MSBuild failure", "```text", $tail, "```") | Add-Content $env:GITHUB_STEP_SUMMARY
+            $annotation = $tail.Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
+            if ($annotation.Length -gt 6000) { $annotation = $annotation.Substring($annotation.Length - 6000) }
+            Write-Host "::error title=SimHub plugin MSBuild failure::$annotation"
+            exit $exitCode
+          }
           $ErrorActionPreference = "Stop"
-          & "tools\simhub-plugin\3SM.EnduranceConnector\build.ps1" -SimHubPath $env:SIMHUB_INSTALL_PATH
           $output = "tools\simhub-plugin\3SM.EnduranceConnector\bin\Release\3SM.EnduranceConnector.dll"
           if (-not (Test-Path $output)) { throw "Plugin-DLL ontbreekt na succesvolle build." }
           $hash = (Get-FileHash $output -Algorithm SHA256).Hash.ToLowerInvariant()
