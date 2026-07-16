@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/endurance-control-center
+      - release/simhub-superadmin-canary
     paths:
       - .github/workflows/build-simhub-plugin.yml
       - tools/simhub-plugin/**
