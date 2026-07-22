@@ -292,8 +292,11 @@ const ResultsPage = () => {
     const itemList = {
       "@context": "https://schema.org",
       "@type": "ItemList",
-      name: "3 Stripe Motorsport race-uitslagen",
-      description: "Overzicht van gereden 3SM iRacing races met circuits, rondes, winnaars en resultaten.",
+      name: language === "en" ? "3 Stripe Motorsport race results" : "3 Stripe Motorsport race-uitslagen",
+      description: language === "en"
+        ? "Overview of completed 3SM iRacing races with circuits, rounds, winners and results."
+        : "Overzicht van gereden 3SM iRacing races met circuits, rondes, winnaars en resultaten.",
+      inLanguage: language === "en" ? "en" : "nl",
       url: `${siteUrl}/results/`,
       itemListElement: races.slice(0, 20).map((race, index) => {
         const winner = winners?.find((w) => w.race_id === race.id);
@@ -304,10 +307,14 @@ const ResultsPage = () => {
           position: index + 1,
           item: {
             "@type": "WebPage",
-            name: `${race.name} uitslag`,
+            name: language === "en" ? `${race.name} result` : `${race.name} uitslag`,
             description: winnerName
-              ? `${race.name} op ${race.track}: winnaar ${winnerName}.`
-              : `${race.name} op ${race.track}: iRacing race-uitslag van 3 Stripe Motorsport.`,
+              ? (language === "en"
+                  ? `${race.name} at ${race.track}: winner ${winnerName}.`
+                  : `${race.name} op ${race.track}: winnaar ${winnerName}.`)
+              : (language === "en"
+                  ? `${race.name} at ${race.track}: iRacing race result from 3 Stripe Motorsport.`
+                  : `${race.name} op ${race.track}: iRacing race-uitslag van 3 Stripe Motorsport.`),
             url: `${siteUrl}/results/${race.id}/`,
             isPartOf: {
               "@type": "WebSite",
@@ -338,7 +345,7 @@ const ResultsPage = () => {
     return () => {
       document.getElementById(scriptId)?.remove();
     };
-  }, [races, winners]);
+  }, [language, races, winners]);
 
   return (
     <div className="min-h-screen bg-background">
