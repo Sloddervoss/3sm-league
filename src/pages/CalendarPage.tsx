@@ -115,6 +115,7 @@ const CalendarPage = () => {
                 carClass={activeLeague.car_class}
                 registrantCount={reg.seasonRegCount(activeLeague.id)}
                 isRegistered={reg.isRegisteredForSeason(activeLeague.id)}
+                isAuthenticated={Boolean(reg.user)}
                 profileComplete={reg.profileComplete}
                 isLoading={reg.registerForSeason.isPending || reg.unregisterFromSeason.isPending}
                 onRegister={() => reg.registerForSeason.mutate(activeLeague.id)}
