@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Calendar, CheckCircle2, ChevronRight, Clock, Flag, MapPin, Newspaper, Timer, Trophy, UserPlus, Zap } from "lucide-react";
@@ -17,6 +18,8 @@ import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
 import { useTeams } from "@/hooks/data/useSharedQueries";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 import type { StandingsProfile, StandingsRaceResult, StandingRow } from "@/lib/standingsTypes";
+import { useLanguage } from "@/i18n/useLanguage";
+import { setSeoMeta } from "@/lib/seo";
 
 type ResultRow = {
   id: string;
@@ -336,6 +339,22 @@ const StandingsRefresh = () => {
 };
 
 const HomepagePrototype = () => {
+  const { language } = useLanguage();
+
+  useEffect(() => {
+    setSeoMeta(language === "en"
+      ? {
+          title: "3 Stripe Motorsport - Dutch iRacing League & Community",
+          description: "3 Stripe Motorsport is a Dutch iRacing league and sim racing community. Race with us, join via Discord and view the calendar, standings and results.",
+          canonicalUrl: "https://3stripemotorsport.cc/",
+        }
+      : {
+          title: "3 Stripe Motorsport - Nederlandse iRacing League & Community",
+          description: "3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community. Race mee, sluit aan via Discord en bekijk kalender, standings en uitslagen.",
+          canonicalUrl: "https://3stripemotorsport.cc/",
+        });
+  }, [language]);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
