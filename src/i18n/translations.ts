@@ -225,6 +225,7 @@ const exactTranslations: Record<string, string> = {
   "Geen losse races aangemaakt.": "No standalone races created.",
 
   "Profiel incompleet": "Profile incomplete",
+  "Log in om je in te schrijven": "Log in to register",
   "Discord Koppeling": "Discord Link",
   "Discord gekoppeld": "Discord linked",
   "Discord ontkoppeld": "Discord unlinked",

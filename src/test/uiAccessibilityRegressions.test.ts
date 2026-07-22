@@ -6,12 +6,20 @@ const read = (path: string) => readFileSync(path, "utf8");
 describe("UI accessibility regressions", () => {
   it("distinguishes unauthenticated registration from an incomplete iRacing profile", () => {
     const modal = read("src/components/preview/RaceModal.tsx");
+    const seasonBanner = read("src/components/preview/SeasonBanner.tsx");
     const calendar = read("src/pages/CalendarPage.tsx");
 
     expect(modal).toContain("isAuthenticated: boolean");
     expect(modal).toContain("!registration.isAuthenticated");
     expect(modal).toContain("Log eerst in om je in te schrijven");
     expect(calendar).toContain("isAuthenticated: Boolean(reg.user)");
+    expect(seasonBanner).toContain("isAuthenticated: boolean");
+    expect(seasonBanner).toContain("!isAuthenticated");
+    expect(seasonBanner).toContain('to="/auth"');
+    expect(seasonBanner).toContain("Log in om je in te schrijven");
+    expect(seasonBanner).toContain('to="/profile"');
+    expect(seasonBanner).toContain("Maak je profiel compleet");
+    expect(calendar).toContain("isAuthenticated={Boolean(reg.user)}");
   });
 
   it("gives PreviewModal dialog semantics, an accessible close control, and focus management", () => {
