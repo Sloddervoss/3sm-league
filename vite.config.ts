@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     host: "::",
     port: 8080,
+    allowedHosts: [".trycloudflare.com"],
     hmr: {
       overlay: false,
     },
