@@ -53,7 +53,7 @@ export const CommunitySupportAccessGate = ({ children, management = false }: { c
   }, [management]);
 
   if (!management && COMMUNITY_SUPPORT_PUBLIC) return children;
-  if ((!user && loading) || (user && rolesLoading)) return <LoadingState />;
+  if (loading || rolesLoading) return <LoadingState />;
   if (!user) return <SignInState management={management} />;
   if (!allowed) return <Navigate to="/" replace />;
   return children;

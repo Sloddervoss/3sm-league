@@ -1,4 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { z } from "zod";
+import { useAuth } from "@/contexts/AuthContext";
 import type {
   CommunitySupportSettings,
   CommunitySupportState,
@@ -7,7 +9,9 @@ import type {
   SupportRecurringCost,
 } from "./types";
 
-const STORAGE_KEY = "3sm-community-support-v1";
+const STORAGE_PREFIX = "3sm-community-support-session-v2";
+const INCOME_CATEGORIES = new Set(["contribution", "merchandise_income", "referral_income", "other"]);
+const EXPENSE_CATEGORIES = new Set(["hosting", "server", "domain", "software", "development", "event", "payment_fee", "merchandise_purchase", "shipping", "other"]);
 
 const INITIAL_STATE: CommunitySupportState = {
   ledger: [],
@@ -21,21 +25,65 @@ const INITIAL_STATE: CommunitySupportState = {
   },
 };
 
+const categorySchema = z.enum([
+  "contribution", "merchandise_income", "referral_income", "hosting", "server", "domain", "software",
+  "development", "event", "payment_fee", "merchandise_purchase", "shipping", "other",
+]);
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const moneySchema = z.number().finite().min(0).max(1_000_000);
+const ledgerSchema = z.object({
+  id: z.string().min(1).max(100),
+  date: dateSchema,
+  direction: z.enum(["income", "expense"]),
+  category: categorySchema,
+  description: z.string().min(1).max(160),
+  amount: moneySchema,
+  isPublic: z.boolean(),
+  supporterName: z.string().max(100).optional(),
+  showSupporterName: z.boolean().optional(),
+  showAmount: z.boolean().optional(),
+}).superRefine((entry, context) => {
+  const valid = entry.direction === "income" ? INCOME_CATEGORIES.has(entry.category) : EXPENSE_CATEGORIES.has(entry.category);
+  if (!valid) context.addIssue({ code: z.ZodIssueCode.custom, message: "category does not match direction", path: ["category"] });
+});
+const recurringSchema = z.object({
+  id: z.string().min(1).max(100), startsOn: dateSchema,
+  category: z.enum(["hosting", "server", "domain", "software", "development", "other"]),
+  description: z.string().min(1).max(160), amount: moneySchema, isPublic: z.boolean(), active: z.boolean(),
+});
+const productSchema = z.object({
+  id: z.string().min(1).max(100), name: z.string().min(1).max(100), description: z.string().min(1).max(500),
+  price: moneySchema, purchasePrice: moneySchema, shippingCost: moneySchema,
+  stock: z.number().int().min(0).max(1_000_000), active: z.boolean(), concept: z.boolean(),
+  imageUrl: z.string().url().max(500).optional(),
+});
+const stateSchema = z.object({
+  ledger: z.array(ledgerSchema).max(5_000),
+  recurringCosts: z.array(recurringSchema).max(500),
+  products: z.array(productSchema).max(500),
+  settings: z.object({
+    reserve: moneySchema,
+    publicSupporterNamesByDefault: z.boolean(),
+    publicSupporterAmountsByDefault: z.boolean(),
+    paypalEnabled: z.boolean(),
+  }),
+});
+
 const safeAmount = (value: number) => Number.isFinite(value) ? Math.max(0, Math.round(value * 100) / 100) : 0;
 const withId = <T extends object>(value: T): T & { id: string } => ({ ...value, id: crypto.randomUUID() });
+const storageKeyFor = (userId: string) => `${STORAGE_PREFIX}:${userId}`;
 
-const loadState = (): CommunitySupportState => {
-  if (typeof window === "undefined") return INITIAL_STATE;
+const loadState = (storageKey: string): CommunitySupportState => {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) return INITIAL_STATE;
-    const parsed = JSON.parse(raw) as Partial<CommunitySupportState>;
-    return {
-      ledger: Array.isArray(parsed.ledger) ? parsed.ledger : [],
-      recurringCosts: Array.isArray(parsed.recurringCosts) ? parsed.recurringCosts : [],
-      products: Array.isArray(parsed.products) ? parsed.products : [],
-      settings: { ...INITIAL_STATE.settings, ...(parsed.settings || {}) },
-    };
+    const result = stateSchema.safeParse(JSON.parse(raw));
+    if (!result.success) {
+      window.sessionStorage.removeItem(storageKey);
+      console.warn("Community Support session data was invalid and has been cleared.");
+      return INITIAL_STATE;
+    }
+    return result.data as CommunitySupportState;
   } catch {
     return INITIAL_STATE;
   }
@@ -62,46 +110,59 @@ type CommunitySupportStore = {
 const CommunitySupportContext = createContext<CommunitySupportStore | null>(null);
 
 export const CommunitySupportProvider = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<CommunitySupportState>(loadState);
+  const { user, isSuperAdmin } = useAuth();
+  const storageKey = user && isSuperAdmin ? storageKeyFor(user.id) : null;
+  const [state, setState] = useState<CommunitySupportState>(INITIAL_STATE);
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+  const activeKeyRef = useRef<string | null>(null);
+  const skipNextPersistRef = useRef(false);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    const previousKey = activeKeyRef.current;
+    if (previousKey && previousKey !== storageKey) {
+      try { window.sessionStorage.removeItem(previousKey); } catch { /* memory state is still cleared below */ }
+    }
+    activeKeyRef.current = storageKey;
+    if (!storageKey) {
+      setState(INITIAL_STATE);
+      setHydratedKey(null);
+      return;
+    }
+    setState(loadState(storageKey));
+    setHydratedKey(storageKey);
+  }, [storageKey]);
 
-  const addLedgerEntry = useCallback((draft: SupportLedgerDraft) => {
-    setState((current) => ({
-      ...current,
-      ledger: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.ledger],
-    }));
-  }, []);
+  useEffect(() => {
+    if (!storageKey || hydratedKey !== storageKey) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(state));
+    } catch {
+      console.warn("Community Support session data could not be saved; changes remain in memory only.");
+    }
+  }, [state, storageKey, hydratedKey]);
+
+  const addLedgerEntry = useCallback((draft: SupportLedgerDraft) => setState((current) => ({ ...current, ledger: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.ledger] })), []);
   const removeLedgerEntry = useCallback((id: string) => setState((current) => ({ ...current, ledger: current.ledger.filter((entry) => entry.id !== id) })), []);
-  const addRecurringCost = useCallback((draft: SupportRecurringCostDraft) => {
-    setState((current) => ({ ...current, recurringCosts: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.recurringCosts] }));
-  }, []);
+  const addRecurringCost = useCallback((draft: SupportRecurringCostDraft) => setState((current) => ({ ...current, recurringCosts: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.recurringCosts] })), []);
   const toggleRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.map((cost) => cost.id === id ? { ...cost, active: !cost.active } : cost) })), []);
   const removeRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.filter((cost) => cost.id !== id) })), []);
-  const addProduct = useCallback((draft: SupportProductDraft) => {
-    setState((current) => ({ ...current, products: [{ ...withId(draft), price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: safeAmount(draft.shippingCost), stock: Math.max(0, Math.floor(draft.stock)) }, ...current.products] }));
-  }, []);
+  const addProduct = useCallback((draft: SupportProductDraft) => setState((current) => ({ ...current, products: [{ ...withId(draft), price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: safeAmount(draft.shippingCost), stock: Math.max(0, Math.floor(draft.stock)) }, ...current.products] })), []);
   const toggleProduct = useCallback((id: string) => setState((current) => ({ ...current, products: current.products.map((product) => product.id === id ? { ...product, active: !product.active } : product) })), []);
   const removeProduct = useCallback((id: string) => setState((current) => ({ ...current, products: current.products.filter((product) => product.id !== id) })), []);
   const updateSettings = useCallback((settings: Partial<CommunitySupportSettings>) => setState((current) => ({ ...current, settings: { ...current.settings, ...settings, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } })), []);
-  const clearLocalData = useCallback(() => setState(INITIAL_STATE), []);
+  const clearLocalData = useCallback(() => {
+    if (storageKey) {
+      try { window.sessionStorage.removeItem(storageKey); } catch { /* state is still cleared */ }
+    }
+    skipNextPersistRef.current = true;
+    setState(INITIAL_STATE);
+  }, [storageKey]);
 
-  const value = useMemo<CommunitySupportStore>(() => ({
-    state,
-    addLedgerEntry,
-    removeLedgerEntry,
-    addRecurringCost,
-    toggleRecurringCost,
-    removeRecurringCost,
-    addProduct,
-    toggleProduct,
-    removeProduct,
-    updateSettings,
-    clearLocalData,
-  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
-
+  const value = useMemo<CommunitySupportStore>(() => ({ state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
   return <CommunitySupportContext.Provider value={value}>{children}</CommunitySupportContext.Provider>;
 };
 

@@ -24,7 +24,7 @@ import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
 import { COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForMonth, supportMetrics } from "../model";
 import { useCommunitySupport } from "../store";
-import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory, type SupportLedgerEntry } from "../types";
+import { SUPPORT_CATEGORY_LABELS, type PublicSupportLedgerEntry, type SupportLedgerCategory } from "../types";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 
@@ -192,7 +192,7 @@ const EmptyState = ({ icon, title, hint }: { icon: ReactNode; title: string; hin
   </div>
 );
 
-const amountIsPrivate = (entry: SupportLedgerEntry) => entry.direction === "income" && entry.category === "contribution" && entry.showAmount !== true;
+const amountIsPrivate = (entry: PublicSupportLedgerEntry) => entry.amount === null;
 
 const MetricCard = ({ label, value, icon, accent = false }: { label: string; value: string; icon: ReactNode; accent?: boolean }) => (
   <div className={`rounded-2xl p-4 ring-1 ${accent ? "bg-orange-500/[0.08] ring-orange-400/20" : "bg-black/15 ring-white/[0.055]"}`}>
@@ -240,7 +240,7 @@ const CommunitySupportPage = () => {
 
   const spending = useMemo(() => {
     const totals = new Map<SupportLedgerCategory, number>();
-    publicLedger.filter((entry) => entry.direction === "expense").forEach((entry) => totals.set(entry.category, (totals.get(entry.category) || 0) + entry.amount));
+    publicLedger.filter((entry) => entry.direction === "expense").forEach((entry) => totals.set(entry.category, (totals.get(entry.category) || 0) + (entry.amount ?? 0)));
     return Array.from(totals.entries()).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
   }, [publicLedger]);
   const spendingTotal = spending.reduce((sum, item) => sum + item.amount, 0);
@@ -416,13 +416,13 @@ const CommunitySupportPage = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-bold text-gray-200">{entry.description}</p>
-                          {entry.direction === "income" && entry.category === "contribution" && entry.showSupporterName === true && entry.supporterName?.trim() && <p className="mt-1 truncate text-xs text-gray-500">{entry.supporterName}</p>}
+                          {entry.supporterName && <p className="mt-1 truncate text-xs text-gray-500">{entry.supporterName}</p>}
                         </div>
                         <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ring-1 ${entry.direction === "income" ? "bg-emerald-400/10 text-emerald-200 ring-emerald-300/20" : "bg-rose-400/10 text-rose-200 ring-rose-300/20"}`}>{entry.direction === "income" ? <ArrowDownRight className="h-3 w-3" aria-hidden="true" /> : <ArrowUpRight className="h-3 w-3" aria-hidden="true" />}{entry.direction === "income" ? copy.income : copy.expense}</span>
                       </div>
                       <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/[0.055] pt-3 text-xs">
                         <div><dt className="text-gray-600">{copy.date}</dt><dd className="mt-1 text-gray-400">{formatDate(entry.date, lang)}</dd></div>
-                        <div className="text-right"><dt className="text-gray-600">{copy.amount}</dt><dd className="mt-1 font-heading font-black text-white">{amountIsPrivate(entry) ? copy.protectedAmount : formatMoney(entry.amount, lang)}</dd></div>
+                        <div className="text-right"><dt className="text-gray-600">{copy.amount}</dt><dd className="mt-1 font-heading font-black text-white">{amountIsPrivate(entry) ? copy.protectedAmount : formatMoney(entry.amount ?? 0, lang)}</dd></div>
                         <div className="col-span-2"><dt className="text-gray-600">{copy.category}</dt><dd className="mt-1 text-gray-400">{SUPPORT_CATEGORY_LABELS[entry.category][lang]}</dd></div>
                       </dl>
                     </article>)}
@@ -438,11 +438,11 @@ const CommunitySupportPage = () => {
                           <td className="whitespace-nowrap px-5 py-4 text-gray-500">{formatDate(entry.date, lang)}</td>
                           <td className="px-5 py-4 font-bold text-gray-200">
                             {entry.description}
-                            {entry.direction === "income" && entry.category === "contribution" && entry.showSupporterName === true && entry.supporterName?.trim() && <span className="mt-1 block text-xs font-medium text-gray-500">{entry.supporterName}</span>}
+                            {entry.supporterName && <span className="mt-1 block text-xs font-medium text-gray-500">{entry.supporterName}</span>}
                           </td>
                           <td className="px-5 py-4 text-gray-400">{SUPPORT_CATEGORY_LABELS[entry.category][lang]}</td>
                           <td className="px-5 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ring-1 ${entry.direction === "income" ? "bg-emerald-400/10 text-emerald-200 ring-emerald-300/20" : "bg-rose-400/10 text-rose-200 ring-rose-300/20"}`}>{entry.direction === "income" ? <ArrowDownRight className="h-3 w-3" aria-hidden="true" /> : <ArrowUpRight className="h-3 w-3" aria-hidden="true" />}{entry.direction === "income" ? copy.income : copy.expense}</span></td>
-                          <td className="whitespace-nowrap px-5 py-4 text-right font-heading font-black tabular-nums text-white">{amountIsPrivate(entry) ? <span className="text-xs text-gray-500">{copy.protectedAmount}</span> : formatMoney(entry.amount, lang)}</td>
+                          <td className="whitespace-nowrap px-5 py-4 text-right font-heading font-black tabular-nums text-white">{amountIsPrivate(entry) ? <span className="text-xs text-gray-500">{copy.protectedAmount}</span> : formatMoney(entry.amount ?? 0, lang)}</td>
                         </tr>)}
                       </tbody>
                     </table>
@@ -456,10 +456,10 @@ const CommunitySupportPage = () => {
               {supporters.length === 0 ? <EmptyState icon={<Heart className="h-5 w-5" aria-hidden="true" />} title={copy.supportersEmpty} hint={copy.supportersEmptyHint} /> : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {supporters.map((entry) => {
-                    const publicName = entry.showSupporterName === true ? entry.supporterName?.trim() : "";
+                    const publicName = entry.supporterName || "";
                     return <Surface key={entry.id} className="flex items-center gap-4 p-4">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-orange-500/10 font-heading font-black text-orange-300 ring-1 ring-orange-400/20">{publicName ? publicName.charAt(0).toUpperCase() : <Heart className="h-4 w-4" aria-hidden="true" />}</div>
-                      <div className="min-w-0"><p className="truncate font-bold text-white">{publicName || copy.anonymous}</p><p className="mt-0.5 text-xs font-bold text-gray-500">{entry.showAmount === true ? formatMoney(entry.amount, lang) : copy.protectedAmount}</p></div>
+                      <div className="min-w-0"><p className="truncate font-bold text-white">{publicName || copy.anonymous}</p><p className="mt-0.5 text-xs font-bold text-gray-500">{entry.amount === null ? copy.protectedAmount : formatMoney(entry.amount, lang)}</p></div>
                     </Surface>;
                   })}
                 </div>

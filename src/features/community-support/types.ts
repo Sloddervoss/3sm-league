@@ -26,6 +26,12 @@ export type SupportLedgerEntry = {
   showAmount?: boolean;
 };
 
+export type PublicSupportLedgerEntry = Omit<SupportLedgerEntry, "amount" | "isPublic" | "supporterName" | "showSupporterName" | "showAmount"> & {
+  amount: number | null;
+  isPublic: true;
+  supporterName?: string;
+};
+
 export type SupportRecurringCost = {
   id: string;
   startsOn: string;

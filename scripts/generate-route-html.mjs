@@ -5,6 +5,11 @@ import { createPrivateSeoRoutes } from './route-classification.mjs';
 
 const SITE_URL = 'https://3stripemotorsport.cc';
 const communitySupportConfig = JSON.parse(readFileSync(new URL('../community-support.config.json', import.meta.url), 'utf8'));
+const communitySupportHasSharedData = communitySupportConfig.dataSource === 'supabase';
+if (communitySupportConfig.public && !communitySupportHasSharedData) {
+  throw new Error('Community Support cannot be public while dataSource is not supabase');
+}
+const communitySupportPublic = communitySupportConfig.public && communitySupportHasSharedData;
 const distDir = new URL('../dist/', import.meta.url).pathname;
 const templatePath = join(distDir, 'index.html');
 const manifestPath = join(distDir, '.route-html-manifest.json');
@@ -208,7 +213,7 @@ const routes = [
   },
 ];
 
-if (communitySupportConfig.public) {
+if (communitySupportPublic) {
   routes.push({
     path: '/support',
     title: 'Community Support | 3SM',
@@ -228,7 +233,7 @@ if (communitySupportConfig.public) {
   });
 }
 
-const privateRoutes = createPrivateSeoRoutes(communitySupportConfig.public);
+const privateRoutes = createPrivateSeoRoutes(communitySupportPublic);
 
 const joinFaq = [
   {

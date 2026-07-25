@@ -4,7 +4,7 @@
 
 **Goal:** Build a premium, transparent 3SM Community Support page and a separate support-management environment without turning the main site into a donation shop.
 
-**Architecture:** `/support/` and its footer link are controlled by one shared `community-support.config.json` public flag. While false, only Super-admins can view the page and both crawler HTML and sitemap treat it as private/noindex. `/support-beheer/` remains permanently Super-admin-only and is separate from Control Room. Phase 1 uses a typed local browser store; production payments and shared persistence are later backend phases.
+**Architecture:** `/support/` and its footer link are controlled by `community-support.config.json`. While `public` is false, only Super-admins can view the page and both crawler HTML and sitemap treat it as private/noindex. Public builds fail closed until `dataSource` is backed by the shared Supabase readmodel; after that backend phase, the `public` flag releases UI, footer, crawler HTML and sitemap together. `/support-beheer/` remains permanently Super-admin-only and is separate from Control Room. Phase 1 uses schema-validated, user-scoped session storage that is removed on logout/user switch.
 
 **Tech Stack:** React, TypeScript, Tailwind CSS, React Router, Supabase Auth roles, Vitest, Vite route HTML generator.
 
@@ -15,7 +15,7 @@
 - Public name and route: **Community Support**, `/support/`.
 - Discovery: subtle footer link only; never a main-menu item.
 - Current access: Super-admin-only, but no preview/test naming in routes or components.
-- Public release: change only `community-support.config.json` to `{"public": true}`; this must release UI, footer link, crawler HTML and sitemap together.
+- Public release: first replace the local-session datasource with the audited Supabase readmodel; after that, changing `"public": false` to `true` releases UI, footer link, crawler HTML and sitemap together. A build fails if `public=true` while the datasource is still local.
 - Management: `/support-beheer/`, separate from Control Room and permanently protected.
 - Languages: Dutch and English; mobile and desktop are equal acceptance targets.
 - Monthly costs derive dynamically from manual and recurring entries.
@@ -88,7 +88,8 @@
 - Navbar has no support link.
 - Footer uses the shared visibility rule.
 - With `public=false`, both routes generate noindex HTML and neither enters the sitemap.
-- With `public=true`, `/support/` gets crawler HTML and sitemap inclusion while `/support-beheer/` stays private.
+- With `public=true` and `dataSource=local-session`, the build fails closed.
+- With `public=true` after the shared Supabase datasource is implemented, `/support/` gets crawler HTML and sitemap inclusion while `/support-beheer/` stays private.
 
 ### Task 5: Integrated verification and remote review
 
