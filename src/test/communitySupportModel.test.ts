@@ -71,6 +71,34 @@ describe("Community Support financial model", () => {
 
     expect(publicLedgerForMonth(state, "2026-07").map((entry) => entry.description)).toEqual(["Openbaar", "Server"]);
   });
+
+  it("redacts supporter name and amount from the public read model", () => {
+    const state = emptyState();
+    state.ledger = [
+      { id: "hidden", date: "2026-07-10", direction: "income", category: "contribution", description: "Bijdrage", amount: 25, isPublic: true, supporterName: "Private Person", showSupporterName: false, showAmount: false },
+      { id: "named", date: "2026-07-11", direction: "income", category: "contribution", description: "Bijdrage", amount: 15, isPublic: true, supporterName: "Visible Name", showSupporterName: true, showAmount: false },
+    ];
+
+    const entries = publicLedgerForMonth(state, "2026-07");
+    expect(entries[0]).toMatchObject({ id: "named", supporterName: "Visible Name", amount: null });
+    expect(entries[1]).toMatchObject({ id: "hidden", amount: null });
+    expect(entries[1]).not.toHaveProperty("supporterName");
+    expect(entries[1]).not.toHaveProperty("showSupporterName");
+    expect(entries[1]).not.toHaveProperty("showAmount");
+  });
+
+  it("rounds accumulated money to cents", () => {
+    const state = emptyState();
+    state.ledger = [
+      { id: "a", date: "2026-07-01", direction: "income", category: "contribution", description: "A", amount: 0.1, isPublic: true },
+      { id: "b", date: "2026-07-01", direction: "income", category: "contribution", description: "B", amount: 0.2, isPublic: true },
+      { id: "cost", date: "2026-07-01", direction: "expense", category: "hosting", description: "Cost", amount: 0.3, isPublic: true },
+    ];
+    const metrics = supportMetrics(state, "2026-07");
+    expect(metrics.supportIncome).toBe(0.3);
+    expect(metrics.operationalExpenses).toBe(0.3);
+    expect(metrics.selfFunded).toBe(0);
+  });
 });
 
 describe("Community Support release boundary", () => {
@@ -99,7 +127,8 @@ describe("Community Support release boundary", () => {
     expect(routeClassification).toContain("createPrivateSeoRoutes");
     expect(routeClassification).toContain("...(!communitySupportPublic ? ['/support'] : [])");
     expect(routeClassification).toContain("'/support-beheer'");
-    expect(routeGenerator).toContain("createPrivateSeoRoutes(communitySupportConfig.public)");
+    expect(routeGenerator).toContain("createPrivateSeoRoutes(communitySupportPublic)");
+    expect(routeGenerator).toContain("Community Support cannot be public while dataSource is not supabase");
     expect(routeGenerator).toContain("path: '/support'");
   });
 });
