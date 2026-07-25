@@ -21,5 +21,8 @@ describe("route classification for generated SEO HTML", () => {
     expect(isPrivateRoute("/results")).toBe(false);
     expect(isPrivateRoute("/results/season-1-race-1")).toBe(false);
     expect(isPrivateRoute("/news/team-update")).toBe(false);
+    expect(isPrivateRoute("/support")).toBe(true);
+    expect(isPrivateRoute("/support", { communitySupportPublic: true })).toBe(false);
+    expect(isPrivateRoute("/support-beheer", { communitySupportPublic: true })).toBe(true);
   });
 });

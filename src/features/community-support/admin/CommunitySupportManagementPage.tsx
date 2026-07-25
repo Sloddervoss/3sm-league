@@ -1,0 +1,469 @@
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Box,
+  CalendarClock,
+  Check,
+  ChevronRight,
+  CircleDollarSign,
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+  PackageOpen,
+  Plus,
+  RotateCcw,
+  Settings,
+  ShieldAlert,
+  Trash2,
+  WalletCards,
+  X,
+} from "lucide-react";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import { useLanguage } from "@/i18n/useLanguage";
+import { setSeoMeta } from "@/lib/seo";
+import { ManagementBadge } from "../CommunitySupportAccessGate";
+import { monthKey, supportMetrics } from "../model";
+import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "../store";
+import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "../types";
+
+type Language = "nl" | "en";
+type SectionId = "dashboard" | "ledger" | "recurring" | "products" | "settings";
+
+type Copy = {
+  [key: string]: string;
+};
+
+const COPY: Record<Language, Copy> = {
+  nl: {
+    title: "Supportbeheer",
+    eyebrow: "Community Support",
+    intro: "Beheer bijdragen, kosten, producten en publieke voorkeuren vanuit één lokale omgeving.",
+    publicPage: "Open publieke supportpagina",
+    dashboard: "Overzicht",
+    ledger: "Transacties",
+    recurring: "Terugkerende kosten",
+    products: "Producten",
+    settings: "Instellingen",
+    month: "Maand",
+    income: "Inkomsten",
+    expenses: "Uitgaven",
+    result: "Maandresultaat",
+    coverage: "Dekking community",
+    reserve: "Reserve incl. overschot",
+    selfFunded: "Zelf gefinancierd",
+    newTransaction: "Nieuwe transactie",
+    transactionHelp: "Voeg een ontvangen bijdrage of betaalde kostenpost toe.",
+    direction: "Type",
+    expense: "Uitgave",
+    category: "Categorie",
+    date: "Datum",
+    description: "Omschrijving",
+    amount: "Bedrag",
+    public: "Zichtbaar op supportpagina",
+    supporterName: "Naam supporter (optioneel)",
+    showName: "Naam openbaar tonen",
+    showAmount: "Bedrag openbaar tonen",
+    addTransaction: "Transactie toevoegen",
+    noTransactions: "Geen transacties in deze maand.",
+    allTransactions: "Alle lokale transacties",
+    remove: "Verwijderen",
+    recurringHelp: "Actieve posten tellen vanaf hun startmaand mee in iedere maand.",
+    startsOn: "Startdatum",
+    active: "Actief",
+    inactive: "Gepauzeerd",
+    addRecurring: "Kostenpost toevoegen",
+    noRecurring: "Nog geen terugkerende kosten ingesteld.",
+    productsHelp: "Beheer voorraad, verkoopprijs en publicatiestatus van supportproducten.",
+    productName: "Productnaam",
+    productDescription: "Productomschrijving",
+    price: "Verkoopprijs",
+    purchasePrice: "Inkoopprijs",
+    shippingCost: "Verzendkosten",
+    stock: "Voorraad",
+    imageUrl: "Afbeeldings-URL (optioneel)",
+    concept: "Concept",
+    published: "Gepubliceerd",
+    addProduct: "Product toevoegen",
+    noProducts: "Nog geen producten toegevoegd.",
+    margin: "Marge per stuk",
+    settingsHelp: "Deze waarden worden lokaal opgeslagen en bepalen de standaardweergave.",
+    currentReserve: "Huidige reserve",
+    supporterDefaults: "Standaardvoorkeuren voor supporters",
+    namesDefault: "Supporternaam standaard openbaar",
+    amountsDefault: "Supportbedrag standaard openbaar",
+    paypal: "PayPal-optie inschakelen",
+    saveSettings: "Instellingen opslaan",
+    saved: "Instellingen opgeslagen",
+    localData: "Lokale gegevens wissen",
+    localDataHelp: "Wis alle transacties, kosten, producten en instellingen uit deze browser. Dit kan niet ongedaan worden gemaakt.",
+    clearData: "Alle lokale data wissen",
+    confirmTitle: "Lokale data definitief wissen?",
+    confirmHelp: "Typ WISSEN om te bevestigen. Alle Community Support-data in deze browser wordt verwijderd.",
+    confirmPlaceholder: "Typ WISSEN",
+    cancel: "Annuleren",
+    confirmClear: "Definitief wissen",
+    entryCount: "Transacties",
+    recurringTotal: "Actieve maandkosten",
+    productValue: "Voorraadwaarde verkoop",
+    operational: "Operationele kosten",
+    netSupport: "Netto communitysupport",
+  },
+  en: {
+    title: "Support management",
+    eyebrow: "Community Support",
+    intro: "Manage contributions, costs, products and public preferences in one local workspace.",
+    publicPage: "Open public support page",
+    dashboard: "Overview",
+    ledger: "Transactions",
+    recurring: "Recurring costs",
+    products: "Products",
+    settings: "Settings",
+    month: "Month",
+    income: "Income",
+    expenses: "Expenses",
+    result: "Monthly result",
+    coverage: "Community coverage",
+    reserve: "Reserve incl. surplus",
+    selfFunded: "Self-funded",
+    newTransaction: "New transaction",
+    transactionHelp: "Add a received contribution or paid expense.",
+    direction: "Type",
+    expense: "Expense",
+    category: "Category",
+    date: "Date",
+    description: "Description",
+    amount: "Amount",
+    public: "Visible on support page",
+    supporterName: "Supporter name (optional)",
+    showName: "Show name publicly",
+    showAmount: "Show amount publicly",
+    addTransaction: "Add transaction",
+    noTransactions: "No transactions in this month.",
+    allTransactions: "All local transactions",
+    remove: "Delete",
+    recurringHelp: "Active items count towards every month from their starting month onwards.",
+    startsOn: "Start date",
+    active: "Active",
+    inactive: "Paused",
+    addRecurring: "Add cost item",
+    noRecurring: "No recurring costs configured yet.",
+    productsHelp: "Manage stock, sale prices and publication status of support products.",
+    productName: "Product name",
+    productDescription: "Product description",
+    price: "Sale price",
+    purchasePrice: "Purchase price",
+    shippingCost: "Shipping costs",
+    stock: "Stock",
+    imageUrl: "Image URL (optional)",
+    concept: "Draft",
+    published: "Published",
+    addProduct: "Add product",
+    noProducts: "No products added yet.",
+    margin: "Margin per item",
+    settingsHelp: "These values are stored locally and determine the default display.",
+    currentReserve: "Current reserve",
+    supporterDefaults: "Default supporter preferences",
+    namesDefault: "Supporter name public by default",
+    amountsDefault: "Support amount public by default",
+    paypal: "Enable PayPal option",
+    saveSettings: "Save settings",
+    saved: "Settings saved",
+    localData: "Clear local data",
+    localDataHelp: "Clear all transactions, costs, products and settings from this browser. This cannot be undone.",
+    clearData: "Clear all local data",
+    confirmTitle: "Permanently clear local data?",
+    confirmHelp: "Type DELETE to confirm. All Community Support data in this browser will be removed.",
+    confirmPlaceholder: "Type DELETE",
+    cancel: "Cancel",
+    confirmClear: "Clear permanently",
+    entryCount: "Transactions",
+    recurringTotal: "Active monthly costs",
+    productValue: "Stock retail value",
+    operational: "Operational costs",
+    netSupport: "Net community support",
+  },
+};
+
+const today = () => new Date().toISOString().slice(0, 10);
+const parseAmount = (value: FormDataEntryValue | null) => Number(String(value ?? "").replace(",", "."));
+const formatCurrency = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-GB" : "nl-NL", { style: "currency", currency: "EUR" }).format(value);
+const INCOME_CATEGORIES: SupportLedgerCategory[] = ["contribution", "merchandise_income", "referral_income", "other"];
+const EXPENSE_CATEGORIES: SupportLedgerCategory[] = ["hosting", "server", "domain", "software", "development", "event", "payment_fee", "merchandise_purchase", "shipping", "other"];
+
+const cx = (...classes: Array<string | false | undefined>) => classes.filter(Boolean).join(" ");
+const card = "rounded-[1.65rem] bg-card/65 shadow-2xl shadow-black/20 ring-1 ring-white/[0.065]";
+const input = "mt-2 w-full rounded-xl bg-black/25 px-3.5 py-3 text-sm text-white outline-none ring-1 ring-white/10 transition placeholder:text-gray-600 focus:ring-2 focus:ring-orange-500/55";
+const label = "text-xs font-bold uppercase tracking-[0.14em] text-gray-400";
+const primaryButton = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-racing px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-950/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50";
+
+const SectionHeader = ({ title, help, action }: { title: string; help: string; action?: ReactNode }) => (
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div><h2 className="font-heading text-2xl font-black text-white">{title}</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">{help}</p></div>
+    {action}
+  </div>
+);
+
+const Field = ({ title, children, className }: { title: string; children: ReactNode; className?: string }) => (
+  <label className={cx("block", className)}><span className={label}>{title}</span>{children}</label>
+);
+
+const Toggle = ({ checked, onChange, label: text }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) => (
+  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl bg-white/[0.025] px-4 py-3 ring-1 ring-white/[0.07]">
+    <span className="text-sm font-semibold text-gray-200">{text}</span>
+    <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="peer sr-only" />
+    <span aria-hidden="true" className="relative h-6 w-11 shrink-0 rounded-full bg-gray-700 transition peer-checked:bg-orange-500 peer-focus-visible:ring-2 peer-focus-visible:ring-orange-300"><span className={cx("absolute top-1 h-4 w-4 rounded-full bg-white transition", checked ? "left-6" : "left-1")} /></span>
+  </label>
+);
+
+const EmptyState = ({ icon, text }: { icon: ReactNode; text: string }) => <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl bg-black/10 p-6 text-center ring-1 ring-white/[0.05]"><span className="text-gray-600">{icon}</span><p className="mt-3 text-sm text-gray-500">{text}</p></div>;
+
+const CommunitySupportManagementPage = () => {
+  const { language: currentLanguage } = useLanguage();
+  const language: Language = currentLanguage === "en" ? "en" : "nl";
+  const t = COPY[language];
+  const {
+    state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost,
+    removeRecurringCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
+  } = useCommunitySupport();
+  const [section, setSection] = useState<SectionId>("dashboard");
+  const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
+  const [ledgerDirection, setLedgerDirection] = useState<"income" | "expense">("income");
+  const [ledgerPublic, setLedgerPublic] = useState(true);
+  const [showSupporterName, setShowSupporterName] = useState(state.settings.publicSupporterNamesByDefault);
+  const [showSupporterAmount, setShowSupporterAmount] = useState(state.settings.publicSupporterAmountsByDefault);
+  const [recurringPublic, setRecurringPublic] = useState(true);
+  const [productActive, setProductActive] = useState(false);
+  const [productConcept, setProductConcept] = useState(true);
+  const [settingsDraft, setSettingsDraft] = useState(state.settings);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearPhrase, setClearPhrase] = useState("");
+  const ledgerFormRef = useRef<HTMLFormElement>(null);
+  const recurringFormRef = useRef<HTMLFormElement>(null);
+  const productFormRef = useRef<HTMLFormElement>(null);
+  const cancelClearRef = useRef<HTMLButtonElement>(null);
+  const clearDialogRef = useRef<HTMLDivElement>(null);
+
+  const metrics = useMemo(() => supportMetrics(state, selectedMonth), [state, selectedMonth]);
+  const visibleEntries = useMemo(() => state.ledger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [state.ledger, selectedMonth]);
+  const inventoryValue = useMemo(() => state.products.reduce((sum, product) => sum + product.price * product.stock, 0), [state.products]);
+  const confirmationWord = language === "en" ? "DELETE" : "WISSEN";
+
+  useEffect(() => {
+    setSeoMeta({
+      title: language === "en" ? "Support management | 3SM" : "Supportbeheer | 3SM",
+      description: language === "en" ? "Private local management for 3SM Community Support." : "Besloten lokaal beheer voor 3SM Community Support.",
+      canonicalUrl: "https://3stripemotorsport.cc/support-beheer/",
+    });
+  }, [language]);
+
+  useEffect(() => {
+    if (!clearOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    cancelClearRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setClearOpen(false);
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(clearDialogRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex='-1'])") ?? []);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); previousFocus?.focus(); };
+  }, [clearOpen]);
+
+  const categoryOptions = (allowed?: SupportLedgerCategory[]) => (allowed ?? Object.keys(SUPPORT_CATEGORY_LABELS) as SupportLedgerCategory[]).map((category) => (
+    <option key={category} value={category}>{SUPPORT_CATEGORY_LABELS[category][language]}</option>
+  ));
+
+  const submitLedger = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const amount = parseAmount(data.get("amount"));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const supporterName = String(data.get("supporterName") ?? "").trim();
+    const draft: SupportLedgerDraft = {
+      date: String(data.get("date")), direction: ledgerDirection,
+      category: String(data.get("category")) as SupportLedgerCategory,
+      description: String(data.get("description")).trim(), amount, isPublic: ledgerPublic,
+      ...(ledgerDirection === "income" && supporterName ? { supporterName, showSupporterName, showAmount: showSupporterAmount } : {}),
+    };
+    addLedgerEntry(draft);
+    form.reset();
+    const dateInput = form.elements.namedItem("date") as HTMLInputElement | null;
+    if (dateInput) dateInput.value = today();
+  };
+
+  const submitRecurring = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const amount = parseAmount(data.get("amount"));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const draft: SupportRecurringCostDraft = {
+      startsOn: String(data.get("startsOn")),
+      category: String(data.get("category")) as SupportRecurringCostDraft["category"],
+      description: String(data.get("description")).trim(), amount, isPublic: recurringPublic, active: true,
+    };
+    addRecurringCost(draft);
+    form.reset();
+    const dateInput = form.elements.namedItem("startsOn") as HTMLInputElement | null;
+    if (dateInput) dateInput.value = today();
+  };
+
+  const submitProduct = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const draft: SupportProductDraft = {
+      name: String(data.get("name")).trim(), description: String(data.get("description")).trim(),
+      price: parseAmount(data.get("price")), purchasePrice: parseAmount(data.get("purchasePrice")),
+      shippingCost: parseAmount(data.get("shippingCost")), stock: Number(data.get("stock")),
+      active: productActive, concept: productConcept,
+      imageUrl: String(data.get("imageUrl") ?? "").trim() || undefined,
+    };
+    if (![draft.price, draft.purchasePrice, draft.shippingCost, draft.stock].every(Number.isFinite) || draft.price < 0 || draft.purchasePrice < 0 || draft.shippingCost < 0 || draft.stock < 0) return;
+    addProduct(draft);
+    form.reset();
+    setProductActive(false);
+    setProductConcept(true);
+  };
+
+  const submitSettings = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    updateSettings(settingsDraft);
+    setSettingsSaved(true);
+    window.setTimeout(() => setSettingsSaved(false), 2500);
+  };
+
+  const sections: Array<{ id: SectionId; label: string; icon: ReactNode; count?: number }> = [
+    { id: "dashboard", label: t.dashboard, icon: <LayoutDashboard className="h-4 w-4" /> },
+    { id: "ledger", label: t.ledger, icon: <WalletCards className="h-4 w-4" />, count: state.ledger.length },
+    { id: "recurring", label: t.recurring, icon: <CalendarClock className="h-4 w-4" />, count: state.recurringCosts.length },
+    { id: "products", label: t.products, icon: <Box className="h-4 w-4" />, count: state.products.length },
+    { id: "settings", label: t.settings, icon: <Settings className="h-4 w-4" /> },
+  ];
+
+  return (
+    <div className="min-h-screen bg-background text-white">
+      <Navbar />
+      <main className="relative overflow-hidden px-4 pb-24 pt-24 sm:px-6 lg:px-8">
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-orange-500/[0.07] blur-[120px]" />
+        <div className="relative mx-auto max-w-7xl">
+          <header className="flex flex-col gap-6 border-b border-white/[0.07] pb-8 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-3"><span className="text-xs font-black uppercase tracking-[0.24em] text-orange-400">{t.eyebrow}</span><ManagementBadge /></div>
+              <h1 className="mt-4 font-heading text-4xl font-black tracking-tight sm:text-5xl">{t.title}</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-400 sm:text-base">{t.intro}</p>
+            </div>
+            <Link to="/support/" className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 transition hover:bg-white/[0.08] hover:text-white lg:self-auto">{t.publicPage}<ChevronRight className="h-4 w-4" /></Link>
+          </header>
+
+          <div className="mt-8 grid gap-8 lg:grid-cols-[230px_minmax(0,1fr)]">
+            <nav aria-label={language === "en" ? "Management sections" : "Beheersecties"} className="lg:sticky lg:top-24 lg:self-start">
+              <div role="tablist" aria-orientation="vertical" className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:rounded-2xl lg:bg-card/45 lg:p-2 lg:ring-1 lg:ring-white/[0.06]">
+                {sections.map((item) => <button key={item.id} role="tab" aria-selected={section === item.id} aria-controls={`panel-${item.id}`} onClick={() => setSection(item.id)} className={cx("flex min-h-11 shrink-0 items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400", section === item.id ? "bg-orange-500/12 text-orange-200 ring-1 ring-orange-400/20" : "text-gray-400 hover:bg-white/[0.04] hover:text-white")}>
+                  {item.icon}<span>{item.label}</span>{item.count !== undefined && <span className="ml-auto rounded-full bg-black/25 px-2 py-0.5 text-[10px] text-gray-400">{item.count}</span>}
+                </button>)}
+              </div>
+            </nav>
+
+            <div className="min-w-0">
+              {section === "dashboard" && <section id="panel-dashboard" role="tabpanel" className="space-y-6">
+                <SectionHeader title={t.dashboard} help={language === "en" ? "A live summary calculated from the selected month and your local store." : "Een live samenvatting, berekend uit de gekozen maand en je lokale store."} action={<Field title={t.month} className="w-full sm:w-44"><input type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className={input} /></Field>} />
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    [t.income, metrics.totalIncome, <ArrowUpRight className="h-5 w-5" />, "text-emerald-300 bg-emerald-500/10"],
+                    [t.expenses, metrics.totalExpenses, <ArrowDownRight className="h-5 w-5" />, "text-rose-300 bg-rose-500/10"],
+                    [t.result, metrics.totalIncome - metrics.totalExpenses, <CircleDollarSign className="h-5 w-5" />, "text-orange-300 bg-orange-500/10"],
+                    [t.reserve, metrics.reserve, <WalletCards className="h-5 w-5" />, "text-sky-300 bg-sky-500/10"],
+                  ].map(([metricLabel, value, icon, tone]) => <article key={String(metricLabel)} className={cx(card, "p-5")}><div className={cx("flex h-10 w-10 items-center justify-center rounded-xl", String(tone))}>{icon}</div><p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-gray-500">{metricLabel}</p><p className="mt-1 text-2xl font-black text-white">{formatCurrency(Number(value), language)}</p></article>)}
+                </div>
+                <div className={cx(card, "grid gap-6 p-6 md:grid-cols-[1fr_220px] md:p-8")}>
+                  <div><p className="text-xs font-black uppercase tracking-[0.18em] text-orange-400">{t.coverage}</p><p className="mt-3 text-4xl font-black">{metrics.coveragePercent}%</p><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-gradient-to-r from-orange-600 to-orange-300 transition-[width]" style={{ width: `${metrics.coveragePercent}%` }} /></div><p className="mt-3 text-sm text-gray-400">{formatCurrency(metrics.communityCovered, language)} / {formatCurrency(metrics.operationalExpenses, language)}</p></div>
+                  <dl className="grid gap-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.netSupport}</dt><dd className="font-bold">{formatCurrency(metrics.netCommunitySupport, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.operational}</dt><dd className="font-bold">{formatCurrency(metrics.operationalExpenses, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.selfFunded}</dt><dd className="font-bold">{formatCurrency(metrics.selfFunded, language)}</dd></div></dl>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {[[t.entryCount, visibleEntries.length], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
+                </div>
+              </section>}
+
+              {section === "ledger" && <section id="panel-ledger" role="tabpanel" className="space-y-6">
+                <SectionHeader title={t.ledger} help={t.transactionHelp} action={<Field title={t.month} className="w-full sm:w-44"><input type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className={input} /></Field>} />
+                <form ref={ledgerFormRef} onSubmit={submitLedger} className={cx(card, "grid gap-5 p-6 md:grid-cols-2 xl:grid-cols-4 md:p-8")}>
+                  <div className="md:col-span-2 xl:col-span-4"><h3 className="font-heading text-lg font-black">{t.newTransaction}</h3></div>
+                  <Field title={t.direction}><select value={ledgerDirection} onChange={(event) => setLedgerDirection(event.target.value as "income" | "expense")} className={input}><option value="income">{t.income}</option><option value="expense">{t.expense}</option></select></Field>
+                  <Field title={t.category}><select key={ledgerDirection} name="category" className={input}>{categoryOptions(ledgerDirection === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES)}</select></Field>
+                  <Field title={t.date}><input name="date" type="date" required defaultValue={today()} className={input} /></Field>
+                  <Field title={t.amount}><input name="amount" type="number" required min="0.01" step="0.01" inputMode="decimal" className={input} /></Field>
+                  <Field title={t.description} className="md:col-span-2"><input name="description" required maxLength={160} className={input} /></Field>
+                  {ledgerDirection === "income" && <Field title={t.supporterName} className="md:col-span-2"><input name="supporterName" maxLength={100} className={input} /></Field>}
+                  <div className="grid gap-3 md:col-span-2 xl:col-span-4 sm:grid-cols-3"><Toggle checked={ledgerPublic} onChange={setLedgerPublic} label={t.public} />{ledgerDirection === "income" && <><Toggle checked={showSupporterName} onChange={setShowSupporterName} label={t.showName} /><Toggle checked={showSupporterAmount} onChange={setShowSupporterAmount} label={t.showAmount} /></>}</div>
+                  <button type="submit" className={cx(primaryButton, "md:col-span-2 md:justify-self-start")}><Plus className="h-4 w-4" />{t.addTransaction}</button>
+                </form>
+                <div className={cx(card, "p-5 md:p-6")}><div className="mb-4 flex items-center justify-between"><h3 className="font-heading font-black">{t.allTransactions}</h3><span className="text-xs text-gray-500">{visibleEntries.length}</span></div>
+                  {visibleEntries.length === 0 ? <EmptyState icon={<WalletCards className="h-7 w-7" />} text={t.noTransactions} /> : <div className="space-y-2">{visibleEntries.map((entry) => <article key={entry.id} className="flex flex-col gap-4 rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055] sm:flex-row sm:items-center"><div className={cx("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", entry.direction === "income" ? "bg-emerald-500/10 text-emerald-300" : "bg-rose-500/10 text-rose-300")}>{entry.direction === "income" ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-gray-100">{entry.description}</p>{entry.isPublic ? <Eye className="h-3.5 w-3.5 text-gray-500" aria-label={t.public} /> : <EyeOff className="h-3.5 w-3.5 text-gray-600" />}</div><p className="mt-1 text-xs text-gray-500">{entry.date} · {SUPPORT_CATEGORY_LABELS[entry.category][language]}{entry.supporterName ? ` · ${entry.supporterName}` : ""}</p></div><p className={cx("font-black", entry.direction === "income" ? "text-emerald-300" : "text-rose-300")}>{entry.direction === "income" ? "+" : "−"}{formatCurrency(entry.amount, language)}</p><button type="button" onClick={() => removeLedgerEntry(entry.id)} aria-label={`${t.remove}: ${entry.description}`} className="inline-flex h-10 w-10 items-center justify-center self-end rounded-xl text-gray-500 transition hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400 sm:self-auto"><Trash2 className="h-4 w-4" /></button></article>)}</div>}
+                </div>
+              </section>}
+
+              {section === "recurring" && <section id="panel-recurring" role="tabpanel" className="space-y-6">
+                <SectionHeader title={t.recurring} help={t.recurringHelp} />
+                <form ref={recurringFormRef} onSubmit={submitRecurring} className={cx(card, "grid gap-5 p-6 md:grid-cols-2 lg:grid-cols-4 md:p-8")}>
+                  <Field title={t.startsOn}><input name="startsOn" type="date" required defaultValue={today()} className={input} /></Field><Field title={t.category}><select name="category" className={input}>{categoryOptions(["hosting", "server", "domain", "software", "development", "other"])}</select></Field><Field title={t.amount}><input name="amount" type="number" required min="0.01" step="0.01" className={input} /></Field><Field title={t.description}><input name="description" required maxLength={160} className={input} /></Field>
+                  <div className="md:col-span-2"><Toggle checked={recurringPublic} onChange={setRecurringPublic} label={t.public} /></div><button type="submit" className={cx(primaryButton, "md:col-span-2 md:justify-self-end")}><Plus className="h-4 w-4" />{t.addRecurring}</button>
+                </form>
+                {state.recurringCosts.length === 0 ? <EmptyState icon={<CalendarClock className="h-7 w-7" />} text={t.noRecurring} /> : <div className="grid gap-3">{state.recurringCosts.map((cost) => <article key={cost.id} className={cx(card, "flex flex-col gap-4 p-5 sm:flex-row sm:items-center")}><button type="button" role="switch" aria-checked={cost.active} onClick={() => toggleRecurringCost(cost.id)} className={cx("inline-flex min-h-10 items-center gap-2 self-start rounded-xl px-3 text-xs font-black ring-1 transition sm:self-auto", cost.active ? "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20" : "bg-white/[0.03] text-gray-500 ring-white/10")}><span className={cx("h-2 w-2 rounded-full", cost.active ? "bg-emerald-400" : "bg-gray-600")} />{cost.active ? t.active : t.inactive}</button><div className="min-w-0 flex-1"><p className="font-bold">{cost.description}</p><p className="mt-1 text-xs text-gray-500">{SUPPORT_CATEGORY_LABELS[cost.category][language]} · {t.startsOn}: {cost.startsOn} · {cost.isPublic ? t.public : language === "en" ? "Private" : "Privé"}</p></div><p className="font-black">{formatCurrency(cost.amount, language)}<span className="ml-1 text-xs font-medium text-gray-500">/mnd</span></p><button type="button" onClick={() => removeRecurringCost(cost.id)} aria-label={`${t.remove}: ${cost.description}`} className="inline-flex h-10 w-10 items-center justify-center self-end rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400 sm:self-auto"><Trash2 className="h-4 w-4" /></button></article>)}</div>}
+              </section>}
+
+              {section === "products" && <section id="panel-products" role="tabpanel" className="space-y-6">
+                <SectionHeader title={t.products} help={t.productsHelp} />
+                <form ref={productFormRef} onSubmit={submitProduct} className={cx(card, "grid gap-5 p-6 md:grid-cols-2 xl:grid-cols-4 md:p-8")}>
+                  <Field title={t.productName} className="md:col-span-2"><input name="name" required maxLength={100} className={input} /></Field><Field title={t.imageUrl} className="md:col-span-2"><input name="imageUrl" type="url" maxLength={500} placeholder="https://" className={input} /></Field><Field title={t.productDescription} className="md:col-span-2 xl:col-span-4"><textarea name="description" required maxLength={500} rows={3} className={input} /></Field><Field title={t.price}><input name="price" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.purchasePrice}><input name="purchasePrice" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.shippingCost}><input name="shippingCost" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.stock}><input name="stock" type="number" required min="0" step="1" className={input} /></Field>
+                  <div className="grid gap-3 md:col-span-2 sm:grid-cols-2"><Toggle checked={productConcept} onChange={setProductConcept} label={t.concept} /><Toggle checked={productActive} onChange={setProductActive} label={t.active} /></div><button type="submit" className={cx(primaryButton, "md:col-span-2 md:justify-self-end")}><Plus className="h-4 w-4" />{t.addProduct}</button>
+                </form>
+                {state.products.length === 0 ? <EmptyState icon={<PackageOpen className="h-7 w-7" />} text={t.noProducts} /> : <div className="grid gap-4 md:grid-cols-2">{state.products.map((product) => { const margin = product.price - product.purchasePrice - product.shippingCost; return <article key={product.id} className={cx(card, "overflow-hidden")}>
+                  {product.imageUrl && <div className="aspect-[16/7] overflow-hidden bg-black/20"><img src={product.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" /></div>}
+                  <div className="p-5"><div className="flex items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><span className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider", product.concept ? "bg-amber-500/10 text-amber-300" : "bg-sky-500/10 text-sky-300")}>{product.concept ? t.concept : t.published}</span><button type="button" role="switch" aria-checked={product.active} onClick={() => toggleProduct(product.id)} className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider", product.active ? "bg-emerald-500/10 text-emerald-300" : "bg-white/[0.04] text-gray-500")}>{product.active ? t.active : t.inactive}</button></div><h3 className="mt-3 font-heading text-lg font-black">{product.name}</h3></div><button type="button" onClick={() => removeProduct(product.id)} aria-label={`${t.remove}: ${product.name}`} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400"><Trash2 className="h-4 w-4" /></button></div><p className="mt-2 line-clamp-3 text-sm leading-relaxed text-gray-400">{product.description}</p><dl className="mt-5 grid grid-cols-3 gap-3 border-t border-white/[0.06] pt-4 text-xs"><div><dt className="text-gray-500">{t.price}</dt><dd className="mt-1 font-bold text-white">{formatCurrency(product.price, language)}</dd></div><div><dt className="text-gray-500">{t.stock}</dt><dd className="mt-1 font-bold text-white">{product.stock}</dd></div><div><dt className="text-gray-500">{t.margin}</dt><dd className={cx("mt-1 font-bold", margin >= 0 ? "text-emerald-300" : "text-rose-300")}>{formatCurrency(margin, language)}</dd></div></dl></div>
+                </article>; })}</div>}
+              </section>}
+
+              {section === "settings" && <section id="panel-settings" role="tabpanel" className="space-y-6">
+                <SectionHeader title={t.settings} help={t.settingsHelp} />
+                <form onSubmit={submitSettings} className={cx(card, "space-y-6 p-6 md:p-8")}>
+                  <Field title={t.currentReserve} className="max-w-sm"><input type="number" min="0" step="0.01" value={settingsDraft.reserve} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserve: Number(event.target.value) }))} className={input} /></Field>
+                  <div><h3 className="mb-3 text-sm font-black text-gray-200">{t.supporterDefaults}</h3><div className="grid gap-3 md:grid-cols-2"><Toggle checked={settingsDraft.publicSupporterNamesByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterNamesByDefault: checked }))} label={t.namesDefault} /><Toggle checked={settingsDraft.publicSupporterAmountsByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterAmountsByDefault: checked }))} label={t.amountsDefault} /><Toggle checked={settingsDraft.paypalEnabled} onChange={(checked) => setSettingsDraft((current) => ({ ...current, paypalEnabled: checked }))} label={t.paypal} /></div></div>
+                  <button type="submit" className={primaryButton}>{settingsSaved ? <Check className="h-4 w-4" /> : <Settings className="h-4 w-4" />}{settingsSaved ? t.saved : t.saveSettings}</button>
+                </form>
+                <div className="rounded-[1.65rem] bg-rose-500/[0.045] p-6 ring-1 ring-rose-400/15 md:p-8"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><div><h3 className="font-heading text-lg font-black">{t.localData}</h3><p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">{t.localDataHelp}</p></div></div><button type="button" onClick={() => { setClearPhrase(""); setClearOpen(true); }} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-black text-rose-200 ring-1 ring-rose-400/20 transition hover:bg-rose-500/20"><Trash2 className="h-4 w-4" />{t.clearData}</button></div></div>
+              </section>}
+            </div>
+          </div>
+        </div>
+      </main>
+      <Footer />
+
+      {clearOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setClearOpen(false); }}>
+        <div ref={clearDialogRef} role="dialog" aria-modal="true" aria-labelledby="clear-data-title" aria-describedby="clear-data-description" className="w-full max-w-lg rounded-[1.65rem] bg-card p-6 shadow-2xl shadow-black/60 ring-1 ring-rose-400/20 md:p-8">
+          <div className="flex items-start justify-between gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><button type="button" onClick={() => setClearOpen(false)} aria-label={t.cancel} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-white/[0.05] hover:text-white"><X className="h-5 w-5" /></button></div>
+          <h2 id="clear-data-title" className="mt-5 font-heading text-2xl font-black">{t.confirmTitle}</h2><p id="clear-data-description" className="mt-3 text-sm leading-relaxed text-gray-400">{t.confirmHelp}</p>
+          <input value={clearPhrase} onChange={(event) => setClearPhrase(event.target.value)} placeholder={t.confirmPlaceholder} autoComplete="off" className={cx(input, "mt-5")} />
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button ref={cancelClearRef} type="button" onClick={() => setClearOpen(false)} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 hover:bg-white/[0.08]">{t.cancel}</button><button type="button" disabled={clearPhrase !== confirmationWord} onClick={() => { clearLocalData(); setSettingsDraft({ reserve: 0, publicSupporterNamesByDefault: true, publicSupporterAmountsByDefault: false, paypalEnabled: false }); setClearOpen(false); setSection("dashboard"); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-4 w-4" />{t.confirmClear}</button></div>
+        </div>
+      </div>}
+    </div>
+  );
+};
+
+export default CommunitySupportManagementPage;

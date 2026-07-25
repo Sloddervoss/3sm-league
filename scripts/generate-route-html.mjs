@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
-import { privateSeoRoutes } from './route-classification.mjs';
+import { createPrivateSeoRoutes } from './route-classification.mjs';
 
 const SITE_URL = 'https://3stripemotorsport.cc';
+const communitySupportConfig = JSON.parse(readFileSync(new URL('../community-support.config.json', import.meta.url), 'utf8'));
 const distDir = new URL('../dist/', import.meta.url).pathname;
 const templatePath = join(distDir, 'index.html');
 const manifestPath = join(distDir, '.route-html-manifest.json');
@@ -207,7 +208,27 @@ const routes = [
   },
 ];
 
-const privateRoutes = privateSeoRoutes;
+if (communitySupportConfig.public) {
+  routes.push({
+    path: '/support',
+    title: 'Community Support | 3SM',
+    priority: '0.3',
+    changefreq: 'monthly',
+    description: 'Bekijk transparant hoe vrijwillige bijdragen de website, servers, software en communityactiviteiten van 3 Stripe Motorsport ondersteunen.',
+    h1: 'Community Support',
+    intro: '3 Stripe Motorsport wordt gebouwd, gehost en onderhouden door vrijwilligers. Wie wil, kan vrijwillig bijdragen aan de systemen, evenementen en toekomst van de community.',
+    details: [
+      'Bekijk de actuele maandkosten, het door de community gedragen deel en de beschikbare communityreserve.',
+      'De financiële transparantie toont openbare inkomsten en uitgaven zonder private betaal- of factuurgegevens te publiceren.',
+    ],
+    links: [
+      ['/', 'Terug naar 3 Stripe Motorsport'],
+      ['/meedoen', 'Meedoen met de community'],
+    ],
+  });
+}
+
+const privateRoutes = createPrivateSeoRoutes(communitySupportConfig.public);
 
 const joinFaq = [
   {

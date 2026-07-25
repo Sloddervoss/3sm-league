@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LanguageProvider } from "@/i18n/LanguageContext";
+import { CommunitySupportProvider } from "@/features/community-support/store";
+import { CommunitySupportAccessGate } from "@/features/community-support/CommunitySupportAccessGate";
 import Index from "./pages/Index.tsx";
 
 // Lazy-loaded routes (keep Index eager for fastest initial paint)
@@ -32,6 +34,8 @@ const TrackIntelligenceTestPage = lazy(() => import("./pages/TrackIntelligenceTe
 const ProfilePage = lazy(() => import("./pages/ProfilePage.tsx"));
 const KoppelPage = lazy(() => import("./pages/KoppelPage.tsx"));
 const SimHubPairingPage = lazy(() => import("./pages/SimHubPairingPage.tsx"));
+const CommunitySupportPage = lazy(() => import("./features/community-support/public/CommunitySupportPage.tsx"));
+const CommunitySupportManagementPage = lazy(() => import("./features/community-support/admin/CommunitySupportManagementPage.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient({
@@ -62,9 +66,10 @@ const App = () => (
       <BrowserRouter>
         <LanguageProvider>
           <AuthProvider>
-            <ErrorBoundary>
-              <Suspense fallback={<RouteFallback />}>
-                <Routes>
+            <CommunitySupportProvider>
+              <ErrorBoundary>
+                <Suspense fallback={<RouteFallback />}>
+                  <Routes>
                   <Route path="/" element={<HomepagePrototype />} />
                   <Route path="/homepage-prototype" element={<Index />} />
                   <Route path="/calendar" element={<CalendarPage />} />
@@ -90,10 +95,13 @@ const App = () => (
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/koppel" element={<KoppelPage />} />
                   <Route path="/simhub-koppelen" element={<SimHubPairingPage />} />
+                  <Route path="/support" element={<CommunitySupportAccessGate><CommunitySupportPage /></CommunitySupportAccessGate>} />
+                  <Route path="/support-beheer" element={<CommunitySupportAccessGate management><CommunitySupportManagementPage /></CommunitySupportAccessGate>} />
                   <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Suspense>
-            </ErrorBoundary>
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
+            </CommunitySupportProvider>
           </AuthProvider>
         </LanguageProvider>
       </BrowserRouter>
