@@ -33,7 +33,7 @@ type Language = "nl" | "en";
 const getCopy = (language: Language) => language === "en" ? {
   eyebrow: "Community Support · race season",
   title: "Together, we keep 3SM on track",
-  intro: "3SM keeps racing, with or without contributions. This page shows what we have funded ourselves this season and what the community has voluntarily carried. Want to join in? You can — never feel obliged.",
+  intro: "3SM keeps racing, with or without contributions. This page shows what we have funded ourselves this season and what the community has voluntarily carried. Would you like to help with the costs voluntarily? You can — never feel obliged.",
   transparency: "Open paddock, clear figures",
   transparencyText: "We show the season's public income and expenses openly. Contributions are optional and never determine whether 3SM continues.",
   monthOverview: "Season overview",
@@ -50,8 +50,9 @@ const getCopy = (language: Language) => language === "en" ? {
   noCostsStatus: "No operational costs have been recorded for this season yet.",
   progressLabel: "Distribution of season costs between the community and 3SM",
   noTarget: "This is a transparent cost overview, not a donation target.",
-  supportTitle: "Voluntarily ride along",
-  supportIntro: "3SM keeps going either way. If you would like to carry a small part of the season with us, choose what suits you — without obligation.",
+  supportTitle: "Contribute voluntarily",
+  supportCta: "See how you can contribute",
+  supportIntro: "3SM keeps going either way. If you would like to contribute voluntarily toward the season's costs, choose what suits you — without obligation.",
   paypalTitle: "Voluntary contribution",
   paypalText: "PayPal support is available. Request the current payment link through our Discord so you always use the verified 3SM destination.",
   paypalCta: "Request PayPal link",
@@ -92,12 +93,12 @@ const getCopy = (language: Language) => language === "en" ? {
   supportersEmptyHint: "Contributions can still be present in the totals when a supporter chooses privacy.",
   privacy: "Privacy respected",
   privacyText: "Names and contribution amounts are separate choices. We only show each detail when the supporter has explicitly enabled it.",
-  footerTitle: "3SM keeps racing — you may ride along",
-  footerText: "We carry the season regardless. Want to voluntarily help with a small part? Talk to the 3SM team on Discord.",
+  footerTitle: "3SM keeps racing, with or without contributions",
+  footerText: "We cover the season regardless. Would you like to contribute voluntarily? Talk to the 3SM team on Discord.",
 } : {
   eyebrow: "Community Support · raceseizoen",
   title: "Samen houden we 3SM op de baan",
-  intro: "3SM blijft racen, met of zonder bijdragen. Hier zie je wat we dit seizoen zelf hebben gedragen en wat de community vrijwillig heeft bijgedragen. Wil je een stukje meerijden? Dat kan — voel je nooit verplicht.",
+  intro: "3SM blijft racen, met of zonder bijdragen. Hier zie je wat we dit seizoen zelf hebben gedragen en wat de community vrijwillig heeft bijgedragen. Wil je ook vrijwillig helpen met de kosten? Dat kan — voel je nooit verplicht.",
   transparency: "Open paddock, heldere cijfers",
   transparencyText: "We laten de openbare inkomsten en uitgaven van het seizoen zien. Bijdragen zijn vrijwillig en bepalen nooit of 3SM doorgaat.",
   monthOverview: "Seizoensoverzicht",
@@ -114,8 +115,9 @@ const getCopy = (language: Language) => language === "en" ? {
   noCostsStatus: "Voor dit seizoen zijn nog geen operationele kosten geregistreerd.",
   progressLabel: "Verdeling van de seizoenskosten tussen de community en 3SM",
   noTarget: "Dit is een transparant kostenoverzicht, geen donatiedoel.",
-  supportTitle: "Vrijwillig een stukje meerijden",
-  supportIntro: "3SM gaat sowieso door. Wil je vrijwillig een klein deel van het seizoen met ons dragen, kies dan wat bij je past — zonder enige verplichting.",
+  supportTitle: "Vrijwillig bijdragen",
+  supportCta: "Bekijk hoe je kunt bijdragen",
+  supportIntro: "3SM gaat sowieso door. Wil je vrijwillig bijdragen aan de kosten van het seizoen, kies dan wat bij je past — zonder enige verplichting.",
   paypalTitle: "Vrijwillige bijdrage",
   paypalText: "Steunen via PayPal is beschikbaar. Vraag de actuele betaallink via onze Discord, zodat je altijd de gecontroleerde 3SM-bestemming gebruikt.",
   paypalCta: "Vraag PayPal-link",
@@ -156,8 +158,8 @@ const getCopy = (language: Language) => language === "en" ? {
   supportersEmptyHint: "Bijdragen kunnen wel in totalen meetellen wanneer een supporter voor privacy kiest.",
   privacy: "Privacy gerespecteerd",
   privacyText: "Naam en bijdragebedrag zijn losse keuzes. We tonen elk detail alleen wanneer de supporter dit expliciet heeft toegestaan.",
-  footerTitle: "3SM blijft racen — jij mag meerijden",
-  footerText: "Wij dragen het seizoen sowieso. Wil je vrijwillig een klein stukje meehelpen? Bespreek het met het 3SM-team op Discord.",
+  footerTitle: "3SM blijft racen, met of zonder bijdrage",
+  footerText: "Wij dragen de kosten sowieso. Wil je vrijwillig bijdragen? Bespreek het met het 3SM-team op Discord.",
 };
 
 const formatMoney = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-NL" : "nl-NL", {
@@ -283,13 +285,13 @@ const CommunitySupportPage = () => {
       description: "See what 3SM has carried this race season and what the community has voluntarily contributed, with transparent annual figures and optional monthly detail.",
       canonicalUrl: "https://3stripemotorsport.cc/support/",
       ogTitle: "Community Support · 3SM race season",
-      ogDescription: "3SM keeps racing. See the season costs and voluntarily ride along.",
+      ogDescription: "3SM keeps racing. See the season costs and how you can contribute voluntarily.",
     } : {
       title: "Community Support | 3 Stripe Motorsport",
       description: "Bekijk wat 3SM dit raceseizoen zelf heeft gedragen en wat de community vrijwillig heeft bijgedragen, met jaarcijfers en optioneel maanddetail.",
       canonicalUrl: "https://3stripemotorsport.cc/support/",
       ogTitle: "Community Support · 3SM-raceseizoen",
-      ogDescription: "3SM blijft racen. Bekijk de seizoenskosten en rijd vrijwillig een stukje mee.",
+      ogDescription: "3SM blijft racen. Bekijk de seizoenskosten en hoe je vrijwillig kunt bijdragen.",
     });
   }, [lang]);
 
@@ -316,7 +318,7 @@ const CommunitySupportPage = () => {
               <h1 className="mt-6 max-w-3xl font-heading text-4xl font-black uppercase leading-[0.98] text-white sm:text-5xl lg:text-6xl">{copy.title}</h1>
               <p className="mt-6 max-w-2xl text-base leading-7 text-gray-300 sm:text-lg">{copy.intro}</p>
               <a href="#support-options" className="mt-8 inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-racing px-5 font-heading text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-orange-950/30 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
-                {copy.supportTitle}<ChevronRight className="h-4 w-4" aria-hidden="true" />
+                {copy.supportCta}<ChevronRight className="h-4 w-4" aria-hidden="true" />
               </a>
             </div>
             <div className="rounded-[1.75rem] bg-black/20 p-6 shadow-2xl shadow-black/25 ring-1 ring-white/[0.08] backdrop-blur sm:p-7">
