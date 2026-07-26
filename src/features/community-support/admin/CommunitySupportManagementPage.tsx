@@ -371,9 +371,9 @@ const CommunitySupportManagementPage = () => {
             <Link to="/support/" className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 transition hover:bg-white/[0.08] hover:text-white lg:self-auto">{t.publicPage}<ChevronRight className="h-4 w-4" /></Link>
           </header>
 
-          <div className="mt-8 grid gap-8 lg:grid-cols-[230px_minmax(0,1fr)]">
-            <nav aria-label={language === "en" ? "Management sections" : "Beheersecties"} className="lg:sticky lg:top-24 lg:self-start">
-              <div role="tablist" aria-orientation="vertical" className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:rounded-2xl lg:bg-card/45 lg:p-2 lg:ring-1 lg:ring-white/[0.06]">
+          <div className="mt-8 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[230px_minmax(0,1fr)]">
+            <nav aria-label={language === "en" ? "Management sections" : "Beheersecties"} className="min-w-0 max-w-full lg:sticky lg:top-24 lg:self-start">
+              <div role="tablist" aria-orientation="vertical" className="flex w-full max-w-full gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:rounded-2xl lg:bg-card/45 lg:p-2 lg:ring-1 lg:ring-white/[0.06]">
                 {sections.map((item) => <button key={item.id} role="tab" aria-selected={section === item.id} aria-controls={`panel-${item.id}`} onClick={() => setSection(item.id)} className={cx("flex min-h-11 shrink-0 items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400", section === item.id ? "bg-orange-500/12 text-orange-200 ring-1 ring-orange-400/20" : "text-gray-400 hover:bg-white/[0.04] hover:text-white")}>
                   {item.icon}<span>{item.label}</span>{item.count !== undefined && <span className="ml-auto rounded-full bg-black/25 px-2 py-0.5 text-[10px] text-gray-400">{item.count}</span>}
                 </button>)}

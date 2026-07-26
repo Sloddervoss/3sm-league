@@ -42,6 +42,14 @@ describe("UI accessibility regressions", () => {
     expect(community).toContain('min-w-[560px] grid');
   });
 
+  it("keeps Community Support management forms within the mobile viewport", () => {
+    const supportManagement = read("src/features/community-support/admin/CommunitySupportManagementPage.tsx");
+
+    expect(supportManagement).toContain("grid-cols-[minmax(0,1fr)]");
+    expect(supportManagement).toContain('className="min-w-0 max-w-full lg:sticky');
+    expect(supportManagement).toContain("flex w-full max-w-full gap-2 overflow-x-auto");
+  });
+
   it("waits visibly for role resolution before evaluating protected routes", () => {
     for (const path of [
       "src/pages/AdminPage.tsx",
