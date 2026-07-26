@@ -22,7 +22,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
-import { COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForMonth, supportMetrics } from "../model";
+import { COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForMonth, publicLedgerForYear, supportMetricsForYear } from "../model";
 import { useCommunitySupport } from "../store";
 import { SUPPORT_CATEGORY_LABELS, type PublicSupportLedgerEntry, type SupportLedgerCategory } from "../types";
 
@@ -31,25 +31,27 @@ const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 type Language = "nl" | "en";
 
 const getCopy = (language: Language) => language === "en" ? {
-  eyebrow: "Powered by the community",
-  title: "Together, we keep 3SM running",
-  intro: "3 Stripe Motorsport is built for and by the community. Contributions help cover the real costs of our servers, website and community events — transparently and without obligation.",
-  transparency: "Transparent by design",
-  transparencyText: "Every public income and expense is shown per month. Private supporter preferences are always respected.",
-  monthOverview: "Monthly overview",
-  selectMonth: "Select month",
-  costs: "Community costs",
-  covered: "Covered by community",
-  selfFunded: "Funded by 3SM",
-  reserve: "Community reserve",
-  coveredStatus: "This month's community costs are fully covered.",
-  partialStatus: "The community is helping cover this month's costs.",
-  openStatus: "No community contributions have been recorded for these costs yet.",
-  noCostsStatus: "No operational costs have been recorded for this month.",
-  progressLabel: "Share of monthly community costs covered",
-  noTarget: "There is no monthly cost target for this period.",
-  supportTitle: "Ways to support",
-  supportIntro: "Choose what suits you. Supporting is always voluntary; participating in 3SM never depends on a contribution.",
+  eyebrow: "Community Support · race season",
+  title: "Together, we keep 3SM on track",
+  intro: "3SM keeps racing, with or without contributions. This page shows what we have funded ourselves this season and what the community has voluntarily carried. Want to join in? You can — never feel obliged.",
+  transparency: "Open paddock, clear figures",
+  transparencyText: "We show the season's public income and expenses openly. Contributions are optional and never determine whether 3SM continues.",
+  monthOverview: "Season overview",
+  selectMonth: "Transaction detail",
+  selectYear: "Select season",
+  allMonths: "Full season",
+  costs: "Season costs",
+  covered: "Carried by community",
+  selfFunded: "Carried by 3SM",
+  reserve: "Reserve for upcoming races",
+  coveredStatus: "The community has carried these season costs together with 3SM.",
+  partialStatus: "The community is voluntarily driving part of this season with us.",
+  openStatus: "3SM has carried the recorded season costs itself so far.",
+  noCostsStatus: "No operational costs have been recorded for this season yet.",
+  progressLabel: "Distribution of season costs between the community and 3SM",
+  noTarget: "This is a transparent cost overview, not a donation target.",
+  supportTitle: "Voluntarily ride along",
+  supportIntro: "3SM keeps going either way. If you would like to carry a small part of the season with us, choose what suits you — without obligation.",
   paypalTitle: "Voluntary contribution",
   paypalText: "PayPal support is available. Request the current payment link through our Discord so you always use the verified 3SM destination.",
   paypalCta: "Request PayPal link",
@@ -68,12 +70,12 @@ const getCopy = (language: Language) => language === "en" ? {
   stock: "in stock",
   merchandiseEmpty: "There are no community products available at the moment.",
   merchandiseEmptyHint: "New items will appear here after they have been added and made available by 3SM.",
-  spendingTitle: "Where support goes",
-  spendingIntro: "A category breakdown based on the public expenses recorded for the selected month.",
-  spendingEmpty: "No public expenses have been recorded for this month.",
+  spendingTitle: "Where the season costs sit",
+  spendingIntro: "A category breakdown of the public expenses recorded for the selected season.",
+  spendingEmpty: "No public expenses have been recorded for this season.",
   spendingEmptyHint: "When costs are published, their categories and totals will appear here.",
-  ledgerTitle: "Transparent monthly ledger",
-  ledgerIntro: "Public income and expenses for the selected month, including active recurring costs.",
+  ledgerTitle: "Season ledger",
+  ledgerIntro: "View the full season or select a month to inspect public income, expenses and active recurring costs.",
   date: "Date",
   description: "Description",
   category: "Category",
@@ -81,37 +83,39 @@ const getCopy = (language: Language) => language === "en" ? {
   income: "Income",
   expense: "Expense",
   protectedAmount: "Private",
-  ledgerEmpty: "No public ledger entries for this month.",
-  ledgerEmptyHint: "Choose another month or check back after entries have been published.",
-  supportersTitle: "Supporter wall",
-  supportersIntro: "Contributions recorded for the selected month, with each supporter's separate name and amount preferences applied.",
+  ledgerEmpty: "No public ledger entries for this period.",
+  ledgerEmptyHint: "Choose another month or view the full season.",
+  supportersTitle: "Season supporters",
+  supportersIntro: "Voluntary contributions recorded this season, with each supporter's separate name and amount preferences applied.",
   anonymous: "Anonymous supporter",
-  supportersEmpty: "No public contributions for this month.",
+  supportersEmpty: "No public contributions for this season.",
   supportersEmptyHint: "Contributions can still be present in the totals when a supporter chooses privacy.",
   privacy: "Privacy respected",
   privacyText: "Names and contribution amounts are separate choices. We only show each detail when the supporter has explicitly enabled it.",
-  footerTitle: "Every contribution strengthens the community",
-  footerText: "Questions about support, expenses or merchandise? Talk to the 3SM team on Discord.",
+  footerTitle: "3SM keeps racing — you may ride along",
+  footerText: "We carry the season regardless. Want to voluntarily help with a small part? Talk to the 3SM team on Discord.",
 } : {
-  eyebrow: "Gedragen door de community",
-  title: "Samen houden we 3SM draaiend",
-  intro: "3 Stripe Motorsport is gebouwd voor en door de community. Bijdragen helpen de echte kosten van onze servers, website en community-evenementen te dekken — transparant en zonder verplichting.",
-  transparency: "Transparant ingericht",
-  transparencyText: "Alle openbare inkomsten en uitgaven staan per maand inzichtelijk. Privékeuzes van supporters worden altijd gerespecteerd.",
-  monthOverview: "Maandoverzicht",
-  selectMonth: "Kies een maand",
-  costs: "Communitykosten",
-  covered: "Gedekt door community",
-  selfFunded: "Bijgelegd door 3SM",
-  reserve: "Communityreserve",
-  coveredStatus: "De communitykosten van deze maand zijn volledig gedekt.",
-  partialStatus: "De community helpt de kosten van deze maand te dragen.",
-  openStatus: "Voor deze kosten zijn deze maand nog geen bijdragen geregistreerd.",
-  noCostsStatus: "Voor deze maand zijn geen operationele kosten geregistreerd.",
-  progressLabel: "Aandeel van de maandelijkse communitykosten dat is gedekt",
-  noTarget: "Voor deze periode is geen maanddoel aan kosten vastgesteld.",
-  supportTitle: "Manieren om te steunen",
-  supportIntro: "Kies wat bij je past. Steunen is altijd vrijwillig; meedoen aan 3SM hangt nooit af van een bijdrage.",
+  eyebrow: "Community Support · raceseizoen",
+  title: "Samen houden we 3SM op de baan",
+  intro: "3SM blijft racen, met of zonder bijdragen. Hier zie je wat we dit seizoen zelf hebben gedragen en wat de community vrijwillig heeft bijgedragen. Wil je een stukje meerijden? Dat kan — voel je nooit verplicht.",
+  transparency: "Open paddock, heldere cijfers",
+  transparencyText: "We laten de openbare inkomsten en uitgaven van het seizoen zien. Bijdragen zijn vrijwillig en bepalen nooit of 3SM doorgaat.",
+  monthOverview: "Seizoensoverzicht",
+  selectMonth: "Transactiedetail",
+  selectYear: "Kies een seizoen",
+  allMonths: "Hele seizoen",
+  costs: "Kosten seizoen",
+  covered: "Gedragen door community",
+  selfFunded: "Gedragen door 3SM",
+  reserve: "Reserve voor komende races",
+  coveredStatus: "De community heeft deze seizoenskosten samen met 3SM gedragen.",
+  partialStatus: "De community rijdt vrijwillig een stukje van dit seizoen met ons mee.",
+  openStatus: "3SM heeft de geregistreerde seizoenskosten tot nu toe zelf gedragen.",
+  noCostsStatus: "Voor dit seizoen zijn nog geen operationele kosten geregistreerd.",
+  progressLabel: "Verdeling van de seizoenskosten tussen de community en 3SM",
+  noTarget: "Dit is een transparant kostenoverzicht, geen donatiedoel.",
+  supportTitle: "Vrijwillig een stukje meerijden",
+  supportIntro: "3SM gaat sowieso door. Wil je vrijwillig een klein deel van het seizoen met ons dragen, kies dan wat bij je past — zonder enige verplichting.",
   paypalTitle: "Vrijwillige bijdrage",
   paypalText: "Steunen via PayPal is beschikbaar. Vraag de actuele betaallink via onze Discord, zodat je altijd de gecontroleerde 3SM-bestemming gebruikt.",
   paypalCta: "Vraag PayPal-link",
@@ -130,12 +134,12 @@ const getCopy = (language: Language) => language === "en" ? {
   stock: "op voorraad",
   merchandiseEmpty: "Er zijn momenteel geen communityproducten beschikbaar.",
   merchandiseEmptyHint: "Nieuwe producten verschijnen hier zodra 3SM ze heeft toegevoegd en beschikbaar heeft gemaakt.",
-  spendingTitle: "Waar de steun naartoe gaat",
-  spendingIntro: "Een verdeling op basis van de openbaar geregistreerde uitgaven in de gekozen maand.",
-  spendingEmpty: "Voor deze maand zijn geen openbare uitgaven geregistreerd.",
+  spendingTitle: "Waar de seizoenskosten zitten",
+  spendingIntro: "Een verdeling van de openbaar geregistreerde uitgaven in het gekozen seizoen.",
+  spendingEmpty: "Voor dit seizoen zijn geen openbare uitgaven geregistreerd.",
   spendingEmptyHint: "Zodra kosten worden gepubliceerd, verschijnen de categorieën en totalen hier.",
-  ledgerTitle: "Transparant maandboek",
-  ledgerIntro: "Openbare inkomsten en uitgaven van de gekozen maand, inclusief actieve terugkerende kosten.",
+  ledgerTitle: "Seizoensboek",
+  ledgerIntro: "Bekijk het hele seizoen of kies een maand voor de openbare inkomsten, uitgaven en actieve terugkerende kosten.",
   date: "Datum",
   description: "Omschrijving",
   category: "Categorie",
@@ -143,17 +147,17 @@ const getCopy = (language: Language) => language === "en" ? {
   income: "Inkomst",
   expense: "Uitgave",
   protectedAmount: "Afgeschermd",
-  ledgerEmpty: "Geen openbare boekingen voor deze maand.",
-  ledgerEmptyHint: "Kies een andere maand of kijk opnieuw nadat boekingen zijn gepubliceerd.",
-  supportersTitle: "Supporterwall",
-  supportersIntro: "Bijdragen in de gekozen maand, met de losse voorkeuren voor naam en bedrag van iedere supporter toegepast.",
+  ledgerEmpty: "Geen openbare boekingen voor deze periode.",
+  ledgerEmptyHint: "Kies een andere maand of bekijk het hele seizoen.",
+  supportersTitle: "Supporters van dit seizoen",
+  supportersIntro: "Vrijwillige bijdragen in het gekozen seizoen, met de losse voorkeuren voor naam en bedrag van iedere supporter toegepast.",
   anonymous: "Anonieme supporter",
-  supportersEmpty: "Geen openbare bijdragen voor deze maand.",
+  supportersEmpty: "Geen openbare bijdragen voor dit seizoen.",
   supportersEmptyHint: "Bijdragen kunnen wel in totalen meetellen wanneer een supporter voor privacy kiest.",
   privacy: "Privacy gerespecteerd",
   privacyText: "Naam en bijdragebedrag zijn losse keuzes. We tonen elk detail alleen wanneer de supporter dit expliciet heeft toegestaan.",
-  footerTitle: "Iedere bijdrage maakt de community sterker",
-  footerText: "Vragen over steun, kosten of merchandise? Bespreek ze met het 3SM-team op Discord.",
+  footerTitle: "3SM blijft racen — jij mag meerijden",
+  footerText: "Wij dragen het seizoen sowieso. Wil je vrijwillig een klein stukje meehelpen? Bespreek het met het 3SM-team op Discord.",
 };
 
 const formatMoney = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-NL" : "nl-NL", {
@@ -176,11 +180,14 @@ const Surface = ({ children, className = "" }: { children: ReactNode; className?
   <section className={`rounded-[1.65rem] bg-white/[0.035] shadow-2xl shadow-black/20 ring-1 ring-white/[0.065] ${className}`}>{children}</section>
 );
 
-const SectionHeading = ({ icon, eyebrow, title, intro }: { icon: ReactNode; eyebrow: string; title: string; intro: string }) => (
-  <div className="mb-6 max-w-2xl">
-    <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-orange-400">{icon}{eyebrow}</div>
-    <h2 className="mt-2 font-heading text-2xl font-black uppercase leading-tight text-white sm:text-3xl">{title}</h2>
-    <p className="mt-3 text-sm leading-6 text-gray-400 sm:text-base">{intro}</p>
+const SectionHeading = ({ icon, eyebrow, title, intro, action }: { icon: ReactNode; eyebrow: string; title: string; intro: string; action?: ReactNode }) => (
+  <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="max-w-2xl">
+      <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-orange-400">{icon}{eyebrow}</div>
+      <h2 className="mt-2 font-heading text-2xl font-black uppercase leading-tight text-white sm:text-3xl">{title}</h2>
+      <p className="mt-3 text-sm leading-6 text-gray-400 sm:text-base">{intro}</p>
+    </div>
+    {action}
   </div>
 );
 
@@ -207,65 +214,86 @@ const CommunitySupportPage = () => {
   const lang: Language = language === "en" ? "en" : "nl";
   const copy = getCopy(lang);
   const currentMonth = monthKey(new Date());
+  const currentYear = currentMonth.slice(0, 4);
 
-  const availableMonths = useMemo(() => Array.from(new Set([
-    currentMonth,
-    ...state.ledger.map((entry) => entry.date.slice(0, 7)),
-    ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 7)),
-  ].filter((value) => /^\d{4}-\d{2}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentMonth, state.ledger, state.recurringCosts]);
+  const availableYears = useMemo(() => Array.from(new Set([
+    currentYear,
+    ...state.ledger.map((entry) => entry.date.slice(0, 4)),
+    ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, state.ledger, state.recurringCosts]);
 
-  const initialMonth = useMemo(() => {
+  const initialYear = useMemo(() => {
+    const queryYear = new URLSearchParams(window.location.search).get("year");
+    return queryYear && availableYears.includes(queryYear) ? queryYear : currentYear;
+  }, [availableYears, currentYear]);
+  const [selectedYear, setSelectedYear] = useState(initialYear);
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     const queryMonth = new URLSearchParams(window.location.search).get("month");
-    return queryMonth && availableMonths.includes(queryMonth) ? queryMonth : currentMonth;
-  }, [availableMonths, currentMonth]);
-  const [selectedMonth, setSelectedMonth] = useState(initialMonth);
+    return queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) && queryMonth.startsWith(initialYear) ? queryMonth : "all";
+  });
+
+  const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => `${selectedYear}-${String(index + 1).padStart(2, "0")}`), [selectedYear]);
 
   useEffect(() => {
-    if (!availableMonths.includes(selectedMonth)) setSelectedMonth(currentMonth);
-  }, [availableMonths, currentMonth, selectedMonth]);
+    if (!availableYears.includes(selectedYear)) setSelectedYear(currentYear);
+    if (selectedMonth !== "all" && !selectedMonth.startsWith(selectedYear)) setSelectedMonth("all");
+  }, [availableYears, currentYear, selectedMonth, selectedYear]);
 
-  const selectMonth = (nextMonth: string) => {
-    setSelectedMonth(nextMonth);
+  const updateUrlPeriod = (year: string, month: string) => {
     const url = new URL(window.location.href);
-    if (nextMonth === currentMonth) url.searchParams.delete("month");
-    else url.searchParams.set("month", nextMonth);
+    if (year === currentYear) url.searchParams.delete("year");
+    else url.searchParams.set("year", year);
+    if (month === "all") url.searchParams.delete("month");
+    else url.searchParams.set("month", month);
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
-  const metrics = useMemo(() => supportMetrics(state, selectedMonth), [state, selectedMonth]);
-  const publicLedger = useMemo(() => publicLedgerForMonth(state, selectedMonth), [state, selectedMonth]);
+  const selectYear = (nextYear: string) => {
+    setSelectedYear(nextYear);
+    setSelectedMonth("all");
+    updateUrlPeriod(nextYear, "all");
+  };
+
+  const selectMonth = (nextMonth: string) => {
+    setSelectedMonth(nextMonth);
+    updateUrlPeriod(selectedYear, nextMonth);
+  };
+
+  const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
+  const annualPublicLedger = useMemo(() => publicLedgerForYear(state, selectedYear), [state, selectedYear]);
+  const publicLedger = useMemo(() => selectedMonth === "all" ? annualPublicLedger : publicLedgerForMonth(state, selectedMonth), [annualPublicLedger, selectedMonth, state]);
   const products = useMemo(() => state.products.filter((product) => COMMUNITY_SUPPORT_PUBLIC
     ? product.active && !product.concept
     : product.active || product.concept), [state.products]);
 
   const spending = useMemo(() => {
     const totals = new Map<SupportLedgerCategory, number>();
-    publicLedger.filter((entry) => entry.direction === "expense").forEach((entry) => totals.set(entry.category, (totals.get(entry.category) || 0) + (entry.amount ?? 0)));
+    annualPublicLedger.filter((entry) => entry.direction === "expense").forEach((entry) => totals.set(entry.category, (totals.get(entry.category) || 0) + (entry.amount ?? 0)));
     return Array.from(totals.entries()).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
-  }, [publicLedger]);
+  }, [annualPublicLedger]);
   const spendingTotal = spending.reduce((sum, item) => sum + item.amount, 0);
 
-  const supporters = useMemo(() => publicLedger.filter((entry) =>
+  const supporters = useMemo(() => annualPublicLedger.filter((entry) =>
     entry.direction === "income" && entry.category === "contribution",
-  ), [publicLedger]);
+  ), [annualPublicLedger]);
 
   useEffect(() => {
     setSeoMeta(lang === "en" ? {
       title: "Community Support | 3 Stripe Motorsport",
-      description: "See how community support helps cover 3SM costs, with transparent monthly figures, public ledger entries and supporter privacy controls.",
+      description: "See what 3SM has carried this race season and what the community has voluntarily contributed, with transparent annual figures and optional monthly detail.",
       canonicalUrl: "https://3stripemotorsport.cc/support/",
-      ogTitle: "Support the 3SM community",
-      ogDescription: "Transparent community support for 3 Stripe Motorsport.",
+      ogTitle: "Community Support · 3SM race season",
+      ogDescription: "3SM keeps racing. See the season costs and voluntarily ride along.",
     } : {
       title: "Community Support | 3 Stripe Motorsport",
-      description: "Bekijk transparant hoe communitysteun de kosten van 3SM helpt dragen, met maandcijfers, openbare boekingen en respect voor supporterprivacy.",
+      description: "Bekijk wat 3SM dit raceseizoen zelf heeft gedragen en wat de community vrijwillig heeft bijgedragen, met jaarcijfers en optioneel maanddetail.",
       canonicalUrl: "https://3stripemotorsport.cc/support/",
-      ogTitle: "Steun de 3SM-community",
-      ogDescription: "Transparante communitysteun voor 3 Stripe Motorsport.",
+      ogTitle: "Community Support · 3SM-raceseizoen",
+      ogDescription: "3SM blijft racen. Bekijk de seizoenskosten en rijd vrijwillig een stukje mee.",
     });
   }, [lang]);
 
-  const monthStatus = metrics.operationalExpenses === 0
+  const seasonStatus = metrics.operationalExpenses === 0
     ? copy.noCostsStatus
     : metrics.coveragePercent >= 100
       ? copy.coveredStatus
@@ -283,7 +311,7 @@ const CommunitySupportPage = () => {
           <div className="relative mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1.25fr_0.75fr] lg:items-center lg:px-8 lg:py-24">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-orange-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-orange-300 ring-1 ring-orange-400/20">
-                <Heart className="h-3.5 w-3.5" aria-hidden="true" /> {copy.eyebrow}
+                <Heart className="h-3.5 w-3.5" aria-hidden="true" /> {copy.eyebrow} {selectedYear}
               </div>
               <h1 className="mt-6 max-w-3xl font-heading text-4xl font-black uppercase leading-[0.98] text-white sm:text-5xl lg:text-6xl">{copy.title}</h1>
               <p className="mt-6 max-w-2xl text-base leading-7 text-gray-300 sm:text-lg">{copy.intro}</p>
@@ -296,7 +324,7 @@ const CommunitySupportPage = () => {
               <h2 className="mt-5 font-heading text-xl font-black uppercase text-white">{copy.transparency}</h2>
               <p className="mt-3 text-sm leading-6 text-gray-400">{copy.transparencyText}</p>
               <div className="mt-6 flex items-center gap-3 border-t border-white/[0.07] pt-5 text-xs font-bold uppercase tracking-wider text-gray-500">
-                <CalendarDays className="h-4 w-4 text-orange-400" aria-hidden="true" /> {formatMonth(selectedMonth, lang)}
+                <CalendarDays className="h-4 w-4 text-orange-400" aria-hidden="true" /> {lang === "en" ? "Race season" : "Raceseizoen"} {selectedYear}
               </div>
             </div>
           </div>
@@ -308,12 +336,12 @@ const CommunitySupportPage = () => {
               <div className="flex flex-col gap-5 border-b border-white/[0.065] pb-6 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-orange-400"><CircleDollarSign className="h-4 w-4" aria-hidden="true" />{copy.monthOverview}</div>
-                  <h2 className="mt-2 font-heading text-2xl font-black uppercase text-white sm:text-3xl">{formatMonth(selectedMonth, lang)}</h2>
+                  <h2 className="mt-2 font-heading text-2xl font-black uppercase text-white sm:text-3xl">{lang === "en" ? "Race season" : "Raceseizoen"} {selectedYear}</h2>
                 </div>
                 <label className="block sm:min-w-56">
-                  <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-gray-500">{copy.selectMonth}</span>
-                  <select value={selectedMonth} onChange={(event) => selectMonth(event.target.value)} className="h-11 w-full rounded-xl border-0 bg-white/[0.055] px-3 text-sm font-bold text-white outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400">
-                    {availableMonths.map((month) => <option key={month} value={month} className="bg-[#151821]">{formatMonth(month, lang)}</option>)}
+                  <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-gray-500">{copy.selectYear}</span>
+                  <select value={selectedYear} onChange={(event) => selectYear(event.target.value)} className="h-11 w-full rounded-xl border-0 bg-white/[0.055] px-3 text-sm font-bold text-white outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400">
+                    {availableYears.map((year) => <option key={year} value={year} className="bg-[#151821]">{lang === "en" ? "Season" : "Seizoen"} {year}</option>)}
                   </select>
                 </label>
               </div>
@@ -326,17 +354,19 @@ const CommunitySupportPage = () => {
               </div>
 
               <div className="mt-6 rounded-2xl bg-black/15 p-5 ring-1 ring-white/[0.055]">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${metrics.coveragePercent >= 100 ? "text-emerald-400" : "text-orange-400"}`} aria-hidden="true" />
-                    <p className="text-sm font-bold text-gray-200">{monthStatus}</p>
-                  </div>
-                  <span className="font-heading text-lg font-black tabular-nums text-white">{metrics.coveragePercent}%</span>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-orange-400" aria-hidden="true" />
+                  <p className="text-sm font-bold text-gray-200">{seasonStatus}</p>
                 </div>
-                <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/[0.06]" role="progressbar" aria-label={copy.progressLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={metrics.coveragePercent} aria-valuetext={`${metrics.coveragePercent}%`}>
-                  <div className="h-full rounded-full bg-gradient-to-r from-orange-600 via-orange-500 to-amber-400 transition-[width] duration-500" style={{ width: `${metrics.coveragePercent}%` }} />
+                <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-white/[0.06]" role="img" aria-label={`${copy.progressLabel}: Community ${metrics.coveragePercent}%, 3SM ${Math.max(0, 100 - metrics.coveragePercent)}%`}>
+                  <div className="h-full bg-gradient-to-r from-orange-600 via-orange-500 to-amber-400 transition-[width] duration-500" style={{ width: `${metrics.coveragePercent}%` }} />
+                  <div className="h-full bg-white/[0.12] transition-[width] duration-500" style={{ width: `${Math.max(0, 100 - metrics.coveragePercent)}%` }} />
                 </div>
-                {metrics.operationalExpenses === 0 && <p className="mt-3 text-xs text-gray-500">{copy.noTarget}</p>}
+                <div className="mt-3 flex items-center justify-between gap-4 text-xs font-bold tabular-nums">
+                  <span className="text-orange-300">Community {metrics.coveragePercent}%</span>
+                  <span className="text-gray-400">3SM {Math.max(0, 100 - metrics.coveragePercent)}%</span>
+                </div>
+                <p className="mt-3 text-xs text-gray-500">{copy.noTarget}</p>
               </div>
             </Surface>
 
@@ -408,7 +438,19 @@ const CommunitySupportPage = () => {
             </section>
 
             <section>
-              <SectionHeading icon={<ReceiptText className="h-4 w-4" aria-hidden="true" />} eyebrow={copy.transparency} title={copy.ledgerTitle} intro={copy.ledgerIntro} />
+              <SectionHeading
+                icon={<ReceiptText className="h-4 w-4" aria-hidden="true" />}
+                eyebrow={copy.transparency}
+                title={copy.ledgerTitle}
+                intro={copy.ledgerIntro}
+                action={<label className="block w-full sm:w-56">
+                  <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-gray-500">{copy.selectMonth}</span>
+                  <select value={selectedMonth} onChange={(event) => selectMonth(event.target.value)} className="h-11 w-full rounded-xl border-0 bg-white/[0.055] px-3 text-sm font-bold text-white outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400">
+                    <option value="all" className="bg-[#151821]">{copy.allMonths} {selectedYear}</option>
+                    {availableMonths.map((month) => <option key={month} value={month} className="bg-[#151821]">{formatMonth(month, lang)}</option>)}
+                  </select>
+                </label>}
+              />
               {publicLedger.length === 0 ? <EmptyState icon={<CalendarDays className="h-5 w-5" aria-hidden="true" />} title={copy.ledgerEmpty} hint={copy.ledgerEmptyHint} /> : (
                 <Surface className="overflow-hidden">
                   <div className="space-y-3 p-4 md:hidden">
@@ -429,7 +471,7 @@ const CommunitySupportPage = () => {
                   </div>
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full min-w-[720px] border-collapse text-left">
-                      <caption className="sr-only">{copy.ledgerTitle} — {formatMonth(selectedMonth, lang)}</caption>
+                      <caption className="sr-only">{copy.ledgerTitle} — {selectedMonth === "all" ? `${copy.allMonths} ${selectedYear}` : formatMonth(selectedMonth, lang)}</caption>
                       <thead className="bg-white/[0.025] text-[10px] font-black uppercase tracking-[0.16em] text-gray-500">
                         <tr><th scope="col" className="px-5 py-4">{copy.date}</th><th scope="col" className="px-5 py-4">{copy.description}</th><th scope="col" className="px-5 py-4">{copy.category}</th><th scope="col" className="px-5 py-4">{copy.income} / {copy.expense}</th><th scope="col" className="px-5 py-4 text-right">{copy.amount}</th></tr>
                       </thead>
