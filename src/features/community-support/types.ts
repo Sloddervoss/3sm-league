@@ -57,6 +57,7 @@ export type SupportProduct = {
 
 export type CommunitySupportSettings = {
   reserve: number;
+  reserveStartYear?: string;
   publicSupporterNamesByDefault: boolean;
   publicSupporterAmountsByDefault: boolean;
   paypalEnabled: boolean;

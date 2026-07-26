@@ -19,6 +19,7 @@ const INITIAL_STATE: CommunitySupportState = {
   products: [],
   settings: {
     reserve: 0,
+    reserveStartYear: String(new Date().getFullYear()),
     publicSupporterNamesByDefault: true,
     publicSupporterAmountsByDefault: false,
     paypalEnabled: false,
@@ -63,6 +64,7 @@ const stateSchema = z.object({
   products: z.array(productSchema).max(500),
   settings: z.object({
     reserve: moneySchema,
+    reserveStartYear: z.string().regex(/^\d{4}$/).optional(),
     publicSupporterNamesByDefault: z.boolean(),
     publicSupporterAmountsByDefault: z.boolean(),
     paypalEnabled: z.boolean(),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -43,9 +43,12 @@ const getCopy = (language: Language) => language === "en" ? {
   costs: "Season costs",
   covered: "Carried by community",
   selfFunded: "Carried by 3SM",
-  reserve: "Reserve for upcoming races",
-  coveredStatus: "The community has carried these season costs together with 3SM.",
-  partialStatus: "The community is voluntarily driving part of this season with us.",
+  reserve: "Available reserve",
+  reserveCarryText: "Only the community money left after all recorded costs is automatically carried into the next season.",
+  openingReserve: "Carried in from earlier seasons",
+  reserveUsed: "Used from reserve this season",
+  coveredStatus: "The recorded season costs have been fully carried by community funds.",
+  partialStatus: "The community is voluntarily carrying part of this season's costs.",
   openStatus: "3SM has carried the recorded season costs itself so far.",
   noCostsStatus: "No operational costs have been recorded for this season yet.",
   progressLabel: "Distribution of season costs between the community and 3SM",
@@ -108,9 +111,12 @@ const getCopy = (language: Language) => language === "en" ? {
   costs: "Kosten seizoen",
   covered: "Gedragen door community",
   selfFunded: "Gedragen door 3SM",
-  reserve: "Reserve voor komende races",
-  coveredStatus: "De community heeft deze seizoenskosten samen met 3SM gedragen.",
-  partialStatus: "De community rijdt vrijwillig een stukje van dit seizoen met ons mee.",
+  reserve: "Beschikbare reserve",
+  reserveCarryText: "Alleen het communitygeld dat na alle geregistreerde kosten overblijft, schuift automatisch door naar het volgende seizoen.",
+  openingReserve: "Meegenomen uit eerdere seizoenen",
+  reserveUsed: "Dit seizoen uit reserve gebruikt",
+  coveredStatus: "De geregistreerde seizoenskosten zijn volledig door communitygeld gedragen.",
+  partialStatus: "De community draagt vrijwillig een deel van de kosten van dit seizoen.",
   openStatus: "3SM heeft de geregistreerde seizoenskosten tot nu toe zelf gedragen.",
   noCostsStatus: "Voor dit seizoen zijn nog geen operationele kosten geregistreerd.",
   progressLabel: "Verdeling van de seizoenskosten tussen de community en 3SM",
@@ -224,19 +230,33 @@ const CommunitySupportPage = () => {
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
   ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, state.ledger, state.recurringCosts]);
 
+  const requestedPeriodRef = useRef({
+    year: new URLSearchParams(window.location.search).get("year"),
+    month: new URLSearchParams(window.location.search).get("month"),
+  });
+  const queryPeriodAppliedRef = useRef(false);
   const initialYear = useMemo(() => {
-    const queryYear = new URLSearchParams(window.location.search).get("year");
+    const queryYear = requestedPeriodRef.current.year;
     return queryYear && availableYears.includes(queryYear) ? queryYear : currentYear;
   }, [availableYears, currentYear]);
   const [selectedYear, setSelectedYear] = useState(initialYear);
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const queryMonth = new URLSearchParams(window.location.search).get("month");
+    const queryMonth = requestedPeriodRef.current.month;
     return queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) && queryMonth.startsWith(initialYear) ? queryMonth : "all";
   });
 
   const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => `${selectedYear}-${String(index + 1).padStart(2, "0")}`), [selectedYear]);
 
   useEffect(() => {
+    const requestedYear = requestedPeriodRef.current.year;
+    if (!queryPeriodAppliedRef.current && requestedYear && availableYears.includes(requestedYear)) {
+      queryPeriodAppliedRef.current = true;
+      setSelectedYear(requestedYear);
+      const requestedMonth = requestedPeriodRef.current.month;
+      setSelectedMonth(requestedMonth && /^\d{4}-\d{2}$/.test(requestedMonth) && requestedMonth.startsWith(requestedYear) ? requestedMonth : "all");
+      return;
+    }
+    if (!requestedYear) queryPeriodAppliedRef.current = true;
     if (!availableYears.includes(selectedYear)) setSelectedYear(currentYear);
     if (selectedMonth !== "all" && !selectedMonth.startsWith(selectedYear)) setSelectedMonth("all");
   }, [availableYears, currentYear, selectedMonth, selectedYear]);
@@ -353,6 +373,17 @@ const CommunitySupportPage = () => {
                 <MetricCard label={copy.covered} value={formatMoney(metrics.communityCovered, lang)} icon={<Heart className="h-3.5 w-3.5" aria-hidden="true" />} accent />
                 <MetricCard label={copy.selfFunded} value={formatMoney(metrics.selfFunded, lang)} icon={<WalletCards className="h-3.5 w-3.5" aria-hidden="true" />} />
                 <MetricCard label={copy.reserve} value={formatMoney(metrics.reserve, lang)} icon={<ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />} />
+              </div>
+
+              <div className="mt-4 flex items-start gap-3 rounded-2xl bg-sky-400/[0.045] p-4 ring-1 ring-sky-300/10">
+                <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-sky-300" aria-hidden="true" />
+                <div className="min-w-0 text-xs leading-5 text-gray-400">
+                  <p>{copy.reserveCarryText}</p>
+                  {metrics.openingReserve > 0 && <dl className="mt-2 flex flex-col gap-1 font-bold sm:flex-row sm:flex-wrap sm:gap-x-5">
+                    <div className="flex justify-between gap-3 sm:justify-start"><dt>{copy.openingReserve}</dt><dd className="shrink-0 text-gray-200">{formatMoney(metrics.openingReserve, lang)}</dd></div>
+                    <div className="flex justify-between gap-3 sm:justify-start"><dt>{copy.reserveUsed}</dt><dd className="shrink-0 text-gray-200">{formatMoney(metrics.reserveUsed, lang)}</dd></div>
+                  </dl>}
+                </div>
               </div>
 
               <div className="mt-6 rounded-2xl bg-black/15 p-5 ring-1 ring-white/[0.055]">

@@ -24,15 +24,28 @@ export const recurringCostOccurrencesForYear = (costs: SupportRecurringCost[], s
   recurringCostsForMonth(costs, month).map((cost) => ({ ...cost, id: `${month}-${cost.id}`, startsOn: `${month}-01` })),
 );
 
-const calculateMetrics = (state: CommunitySupportState, entries: SupportLedgerEntry[], recurring: SupportRecurringCost[]) => {
+const calculateMetrics = (
+  state: CommunitySupportState,
+  entries: SupportLedgerEntry[],
+  recurring: SupportRecurringCost[],
+  openingReserve = state.settings.reserve,
+  useOpeningReserve = false,
+) => {
   const recurringTotal = sumAmounts(recurring);
   const operationalExpenses = roundMoney(sumAmounts(entries.filter((entry) => entry.direction === "expense" && !COMMERCIAL_COSTS.has(entry.category))) + recurringTotal);
   const supportIncome = sumAmounts(entries.filter((entry) => entry.direction === "income" && SUPPORT_INCOME.has(entry.category)));
   const commercialCosts = sumAmounts(entries.filter((entry) => entry.direction === "expense" && COMMERCIAL_COSTS.has(entry.category)));
   const netCommunitySupport = roundMoney(Math.max(0, supportIncome - commercialCosts));
-  const communityCovered = roundMoney(Math.min(operationalExpenses, netCommunitySupport));
-  const selfFunded = roundMoney(Math.max(0, operationalExpenses - netCommunitySupport));
+  const availableCommunityFunds = roundMoney(netCommunitySupport + (useOpeningReserve ? openingReserve : 0));
+  const communityCovered = roundMoney(Math.min(operationalExpenses, availableCommunityFunds));
+  const selfFunded = roundMoney(Math.max(0, operationalExpenses - availableCommunityFunds));
   const surplus = roundMoney(Math.max(0, netCommunitySupport - operationalExpenses));
+  const reserveUsed = useOpeningReserve
+    ? roundMoney(Math.min(openingReserve, Math.max(0, operationalExpenses - netCommunitySupport)))
+    : 0;
+  const closingReserve = useOpeningReserve
+    ? roundMoney(Math.max(0, openingReserve + netCommunitySupport - operationalExpenses))
+    : roundMoney(openingReserve + surplus);
   const coveragePercent = operationalExpenses > 0 ? Math.min(100, Math.round((communityCovered / operationalExpenses) * 100)) : 0;
   const totalIncome = sumAmounts(entries.filter((entry) => entry.direction === "income"));
   const totalExpenses = roundMoney(sumAmounts(entries.filter((entry) => entry.direction === "expense")) + recurringTotal);
@@ -50,7 +63,10 @@ const calculateMetrics = (state: CommunitySupportState, entries: SupportLedgerEn
     coveragePercent,
     totalIncome,
     totalExpenses,
-    reserve: roundMoney(state.settings.reserve + surplus),
+    openingReserve: roundMoney(openingReserve),
+    reserveUsed,
+    closingReserve,
+    reserve: closingReserve,
   };
 };
 
@@ -60,11 +76,33 @@ export const supportMetrics = (state: CommunitySupportState, selectedMonth: stri
   recurringCostsForMonth(state.recurringCosts, selectedMonth),
 );
 
-export const supportMetricsForYear = (state: CommunitySupportState, selectedYear: string) => calculateMetrics(
-  state,
-  state.ledger.filter((entry) => entryYear(entry.date) === selectedYear),
-  recurringCostOccurrencesForYear(state.recurringCosts, selectedYear),
-);
+const yearPeriod = (state: CommunitySupportState, selectedYear: string) => ({
+  entries: state.ledger.filter((entry) => entryYear(entry.date) === selectedYear),
+  recurring: recurringCostOccurrencesForYear(state.recurringCosts, selectedYear),
+});
+
+const reserveStartYear = (state: CommunitySupportState, selectedYear: string) => {
+  if (state.settings.reserveStartYear && /^\d{4}$/.test(state.settings.reserveStartYear)) return state.settings.reserveStartYear;
+  const activityYears = [
+    ...state.ledger.map((entry) => entryYear(entry.date)),
+    ...state.recurringCosts.map((cost) => entryYear(cost.startsOn)),
+  ].filter((year) => /^\d{4}$/.test(year));
+  return activityYears.sort()[0] ?? selectedYear;
+};
+
+export const supportMetricsForYear = (state: CommunitySupportState, selectedYear: string) => {
+  const selected = Number(selectedYear);
+  const startYear = Number(reserveStartYear(state, selectedYear));
+  let openingReserve = selected >= startYear ? roundMoney(state.settings.reserve) : 0;
+
+  for (let year = startYear; year < selected; year += 1) {
+    const period = yearPeriod(state, String(year));
+    openingReserve = calculateMetrics(state, period.entries, period.recurring, openingReserve, true).closingReserve;
+  }
+
+  const period = yearPeriod(state, selectedYear);
+  return calculateMetrics(state, period.entries, period.recurring, openingReserve, true);
+};
 
 const redactPublicEntry = (entry: SupportLedgerEntry): PublicSupportLedgerEntry => {
   const isContribution = entry.direction === "income" && entry.category === "contribution";
