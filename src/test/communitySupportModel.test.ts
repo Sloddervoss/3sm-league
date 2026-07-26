@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { COMMUNITY_SUPPORT_PUBLIC, canManageCommunitySupport, canViewCommunitySupport, publicLedgerForMonth, supportMetrics } from "@/features/community-support/model";
+import { COMMUNITY_SUPPORT_PUBLIC, canManageCommunitySupport, canViewCommunitySupport, publicLedgerForMonth, publicLedgerForYear, supportMetrics, supportMetricsForYear } from "@/features/community-support/model";
 import type { CommunitySupportState } from "@/features/community-support/types";
 
 const emptyState = (): CommunitySupportState => ({
@@ -57,6 +57,23 @@ describe("Community Support financial model", () => {
 
     expect(supportMetrics(state, "2026-07").operationalExpenses).toBe(20);
     expect(supportMetrics(state, "2026-08").operationalExpenses).toBe(32);
+  });
+
+  it("aggregates the season by year while keeping other years out", () => {
+    const state = emptyState();
+    state.ledger = [
+      { id: "cost", date: "2026-02-10", direction: "expense", category: "event", description: "Raceavond", amount: 30, isPublic: true },
+      { id: "support", date: "2026-11-10", direction: "income", category: "contribution", description: "Bijdrage", amount: 50, isPublic: true },
+      { id: "old", date: "2025-12-10", direction: "expense", category: "hosting", description: "Vorig jaar", amount: 999, isPublic: true },
+    ];
+    state.recurringCosts = [{ id: "server", startsOn: "2026-07-01", category: "server", description: "Raceserver", amount: 20, isPublic: true, active: true }];
+
+    const metrics = supportMetricsForYear(state, "2026");
+    expect(metrics.operationalExpenses).toBe(150);
+    expect(metrics.communityCovered).toBe(50);
+    expect(metrics.selfFunded).toBe(100);
+    expect(metrics.coveragePercent).toBe(33);
+    expect(publicLedgerForYear(state, "2026")).toHaveLength(8);
   });
 
   it("publishes only explicitly public ledger and recurring rows", () => {

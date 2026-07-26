@@ -15,12 +15,16 @@ const sumAmounts = <T extends { amount: number }>(values: T[]) => roundMoney(val
 
 export const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 export const entryMonth = (value: string) => value.slice(0, 7);
+export const entryYear = (value: string) => value.slice(0, 4);
+const monthsForYear = (year: string) => Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
 
 export const recurringCostsForMonth = (costs: SupportRecurringCost[], selectedMonth: string) => costs.filter((cost) => cost.active && cost.startsOn.slice(0, 7) <= selectedMonth);
 
-export const supportMetrics = (state: CommunitySupportState, selectedMonth: string) => {
-  const entries = state.ledger.filter((entry) => entryMonth(entry.date) === selectedMonth);
-  const recurring = recurringCostsForMonth(state.recurringCosts, selectedMonth);
+export const recurringCostOccurrencesForYear = (costs: SupportRecurringCost[], selectedYear: string): SupportRecurringCost[] => monthsForYear(selectedYear).flatMap((month) =>
+  recurringCostsForMonth(costs, month).map((cost) => ({ ...cost, id: `${month}-${cost.id}`, startsOn: `${month}-01` })),
+);
+
+const calculateMetrics = (state: CommunitySupportState, entries: SupportLedgerEntry[], recurring: SupportRecurringCost[]) => {
   const recurringTotal = sumAmounts(recurring);
   const operationalExpenses = roundMoney(sumAmounts(entries.filter((entry) => entry.direction === "expense" && !COMMERCIAL_COSTS.has(entry.category))) + recurringTotal);
   const supportIncome = sumAmounts(entries.filter((entry) => entry.direction === "income" && SUPPORT_INCOME.has(entry.category)));
@@ -50,6 +54,18 @@ export const supportMetrics = (state: CommunitySupportState, selectedMonth: stri
   };
 };
 
+export const supportMetrics = (state: CommunitySupportState, selectedMonth: string) => calculateMetrics(
+  state,
+  state.ledger.filter((entry) => entryMonth(entry.date) === selectedMonth),
+  recurringCostsForMonth(state.recurringCosts, selectedMonth),
+);
+
+export const supportMetricsForYear = (state: CommunitySupportState, selectedYear: string) => calculateMetrics(
+  state,
+  state.ledger.filter((entry) => entryYear(entry.date) === selectedYear),
+  recurringCostOccurrencesForYear(state.recurringCosts, selectedYear),
+);
+
 const redactPublicEntry = (entry: SupportLedgerEntry): PublicSupportLedgerEntry => {
   const isContribution = entry.direction === "income" && entry.category === "contribution";
   return {
@@ -66,20 +82,29 @@ const redactPublicEntry = (entry: SupportLedgerEntry): PublicSupportLedgerEntry 
   };
 };
 
+const publicRecurringEntriesForMonth = (state: CommunitySupportState, selectedMonth: string): PublicSupportLedgerEntry[] => recurringCostsForMonth(state.recurringCosts, selectedMonth)
+  .filter((cost) => cost.isPublic)
+  .map((cost) => ({
+    id: `recurring-${selectedMonth}-${cost.id}`,
+    date: `${selectedMonth}-01`,
+    direction: "expense",
+    category: cost.category,
+    description: cost.description,
+    amount: cost.amount,
+    isPublic: true,
+  }));
+
 export const publicLedgerForMonth = (state: CommunitySupportState, selectedMonth: string): PublicSupportLedgerEntry[] => {
   const manual = state.ledger
     .filter((entry) => entry.isPublic && entryMonth(entry.date) === selectedMonth)
     .map(redactPublicEntry);
-  const recurring = recurringCostsForMonth(state.recurringCosts, selectedMonth)
-    .filter((cost) => cost.isPublic)
-    .map<PublicSupportLedgerEntry>((cost) => ({
-      id: `recurring-${selectedMonth}-${cost.id}`,
-      date: `${selectedMonth}-01`,
-      direction: "expense",
-      category: cost.category,
-      description: cost.description,
-      amount: cost.amount,
-      isPublic: true,
-    }));
+  return [...manual, ...publicRecurringEntriesForMonth(state, selectedMonth)].sort((a, b) => b.date.localeCompare(a.date));
+};
+
+export const publicLedgerForYear = (state: CommunitySupportState, selectedYear: string): PublicSupportLedgerEntry[] => {
+  const manual = state.ledger
+    .filter((entry) => entry.isPublic && entryYear(entry.date) === selectedYear)
+    .map(redactPublicEntry);
+  const recurring = monthsForYear(selectedYear).flatMap((month) => publicRecurringEntriesForMonth(state, month));
   return [...manual, ...recurring].sort((a, b) => b.date.localeCompare(a.date));
 };

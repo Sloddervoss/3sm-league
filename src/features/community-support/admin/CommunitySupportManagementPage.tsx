@@ -25,7 +25,7 @@ import Footer from "@/components/Footer";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
 import { ManagementBadge } from "../CommunitySupportAccessGate";
-import { monthKey, supportMetrics } from "../model";
+import { monthKey, supportMetricsForYear } from "../model";
 import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "../store";
 import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "../types";
 
@@ -48,9 +48,10 @@ const COPY: Record<Language, Copy> = {
     products: "Producten",
     settings: "Instellingen",
     month: "Maand",
+    season: "Seizoen",
     income: "Inkomsten",
     expenses: "Uitgaven",
-    result: "Maandresultaat",
+    result: "Seizoensresultaat",
     coverage: "Dekking community",
     reserve: "Reserve incl. overschot",
     selfFunded: "Zelf gefinancierd",
@@ -106,7 +107,7 @@ const COPY: Record<Language, Copy> = {
     cancel: "Annuleren",
     confirmClear: "Definitief wissen",
     entryCount: "Transacties",
-    recurringTotal: "Actieve maandkosten",
+    recurringTotal: "Terugkerende kosten seizoen",
     productValue: "Voorraadwaarde verkoop",
     operational: "Operationele kosten",
     netSupport: "Netto communitysupport",
@@ -122,9 +123,10 @@ const COPY: Record<Language, Copy> = {
     products: "Products",
     settings: "Settings",
     month: "Month",
+    season: "Season",
     income: "Income",
     expenses: "Expenses",
-    result: "Monthly result",
+    result: "Season result",
     coverage: "Community coverage",
     reserve: "Reserve incl. surplus",
     selfFunded: "Self-funded",
@@ -180,7 +182,7 @@ const COPY: Record<Language, Copy> = {
     cancel: "Cancel",
     confirmClear: "Clear permanently",
     entryCount: "Transactions",
-    recurringTotal: "Active monthly costs",
+    recurringTotal: "Recurring season costs",
     productValue: "Stock retail value",
     operational: "Operational costs",
     netSupport: "Net community support",
@@ -230,6 +232,7 @@ const CommunitySupportManagementPage = () => {
   } = useCommunitySupport();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
+  const [selectedYear, setSelectedYear] = useState(() => String(new Date().getFullYear()));
   const [ledgerDirection, setLedgerDirection] = useState<"income" | "expense">("income");
   const [ledgerPublic, setLedgerPublic] = useState(true);
   const [showSupporterName, setShowSupporterName] = useState(state.settings.publicSupporterNamesByDefault);
@@ -247,7 +250,12 @@ const CommunitySupportManagementPage = () => {
   const cancelClearRef = useRef<HTMLButtonElement>(null);
   const clearDialogRef = useRef<HTMLDivElement>(null);
 
-  const metrics = useMemo(() => supportMetrics(state, selectedMonth), [state, selectedMonth]);
+  const availableYears = useMemo(() => Array.from(new Set([
+    String(new Date().getFullYear()),
+    ...state.ledger.map((entry) => entry.date.slice(0, 4)),
+    ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [state.ledger, state.recurringCosts]);
+  const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
   const visibleEntries = useMemo(() => state.ledger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [state.ledger, selectedMonth]);
   const inventoryValue = useMemo(() => state.products.reduce((sum, product) => sum + product.price * product.stock, 0), [state.products]);
   const confirmationWord = language === "en" ? "DELETE" : "WISSEN";
@@ -382,7 +390,7 @@ const CommunitySupportManagementPage = () => {
 
             <div className="min-w-0">
               {section === "dashboard" && <section id="panel-dashboard" role="tabpanel" className="space-y-6">
-                <SectionHeader title={t.dashboard} help={language === "en" ? "A live summary calculated from the selected month and your local store." : "Een live samenvatting, berekend uit de gekozen maand en je lokale store."} action={<Field title={t.month} className="w-full sm:w-44"><input type="month" value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className={input} /></Field>} />
+                <SectionHeader title={t.dashboard} help={language === "en" ? "A live season summary calculated from all recorded costs and contributions in the selected year." : "Een live seizoenssamenvatting van alle geregistreerde kosten en bijdragen in het gekozen jaar."} action={<Field title={t.season} className="w-full sm:w-44"><select value={selectedYear} onChange={(event) => setSelectedYear(event.target.value)} className={input}>{availableYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></Field>} />
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {[
                     [t.income, metrics.totalIncome, <ArrowUpRight className="h-5 w-5" />, "text-emerald-300 bg-emerald-500/10"],
@@ -396,7 +404,7 @@ const CommunitySupportManagementPage = () => {
                   <dl className="grid gap-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.netSupport}</dt><dd className="font-bold">{formatCurrency(metrics.netCommunitySupport, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.operational}</dt><dd className="font-bold">{formatCurrency(metrics.operationalExpenses, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.selfFunded}</dt><dd className="font-bold">{formatCurrency(metrics.selfFunded, language)}</dd></div></dl>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-3">
-                  {[[t.entryCount, visibleEntries.length], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
+                  {[[t.entryCount, metrics.entries.length], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
                 </div>
               </section>}
 
