@@ -53,7 +53,9 @@ const COPY: Record<Language, Copy> = {
     expenses: "Uitgaven",
     result: "Seizoensresultaat",
     coverage: "Dekking community",
-    reserve: "Reserve incl. overschot",
+    reserve: "Beschikbare eindreserve",
+    openingReserve: "Openingsreserve seizoen",
+    reserveUsed: "Uit reserve gebruikt",
     selfFunded: "Zelf gefinancierd",
     newTransaction: "Nieuwe transactie",
     transactionHelp: "Voeg een ontvangen bijdrage of betaalde kostenpost toe.",
@@ -90,8 +92,9 @@ const COPY: Record<Language, Copy> = {
     addProduct: "Product toevoegen",
     noProducts: "Nog geen producten toegevoegd.",
     margin: "Marge per stuk",
-    settingsHelp: "Deze waarden worden lokaal opgeslagen en bepalen de standaardweergave.",
-    currentReserve: "Huidige reserve",
+    settingsHelp: "Stel alleen een eventuele reserve in waarmee Community Support begint. Daarna schuift uitsluitend het echte restant automatisch door.",
+    currentReserve: "Startreserve",
+    reserveStartYear: "Startjaar reserve",
     supporterDefaults: "Standaardvoorkeuren voor supporters",
     namesDefault: "Supporternaam standaard openbaar",
     amountsDefault: "Supportbedrag standaard openbaar",
@@ -128,7 +131,9 @@ const COPY: Record<Language, Copy> = {
     expenses: "Expenses",
     result: "Season result",
     coverage: "Community coverage",
-    reserve: "Reserve incl. surplus",
+    reserve: "Available closing reserve",
+    openingReserve: "Season opening reserve",
+    reserveUsed: "Used from reserve",
     selfFunded: "Self-funded",
     newTransaction: "New transaction",
     transactionHelp: "Add a received contribution or paid expense.",
@@ -165,8 +170,9 @@ const COPY: Record<Language, Copy> = {
     addProduct: "Add product",
     noProducts: "No products added yet.",
     margin: "Margin per item",
-    settingsHelp: "These values are stored locally and determine the default display.",
-    currentReserve: "Current reserve",
+    settingsHelp: "Set only an optional reserve that Community Support starts with. After that, only the actual remainder is carried forward automatically.",
+    currentReserve: "Starting reserve",
+    reserveStartYear: "Reserve start year",
     supporterDefaults: "Default supporter preferences",
     namesDefault: "Supporter name public by default",
     amountsDefault: "Support amount public by default",
@@ -259,6 +265,10 @@ const CommunitySupportManagementPage = () => {
   const visibleEntries = useMemo(() => state.ledger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [state.ledger, selectedMonth]);
   const inventoryValue = useMemo(() => state.products.reduce((sum, product) => sum + product.price * product.stock, 0), [state.products]);
   const confirmationWord = language === "en" ? "DELETE" : "WISSEN";
+
+  useEffect(() => {
+    setSettingsDraft(state.settings);
+  }, [state.settings]);
 
   useEffect(() => {
     setSeoMeta({
@@ -401,7 +411,7 @@ const CommunitySupportManagementPage = () => {
                 </div>
                 <div className={cx(card, "grid gap-6 p-6 md:grid-cols-[1fr_220px] md:p-8")}>
                   <div><p className="text-xs font-black uppercase tracking-[0.18em] text-orange-400">{t.coverage}</p><p className="mt-3 text-4xl font-black">{metrics.coveragePercent}%</p><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-gradient-to-r from-orange-600 to-orange-300 transition-[width]" style={{ width: `${metrics.coveragePercent}%` }} /></div><p className="mt-3 text-sm text-gray-400">{formatCurrency(metrics.communityCovered, language)} / {formatCurrency(metrics.operationalExpenses, language)}</p></div>
-                  <dl className="grid gap-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.netSupport}</dt><dd className="font-bold">{formatCurrency(metrics.netCommunitySupport, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.operational}</dt><dd className="font-bold">{formatCurrency(metrics.operationalExpenses, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.selfFunded}</dt><dd className="font-bold">{formatCurrency(metrics.selfFunded, language)}</dd></div></dl>
+                  <dl className="grid gap-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.netSupport}</dt><dd className="font-bold">{formatCurrency(metrics.netCommunitySupport, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.openingReserve}</dt><dd className="font-bold">{formatCurrency(metrics.openingReserve, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.reserveUsed}</dt><dd className="font-bold">{formatCurrency(metrics.reserveUsed, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.operational}</dt><dd className="font-bold">{formatCurrency(metrics.operationalExpenses, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.selfFunded}</dt><dd className="font-bold">{formatCurrency(metrics.selfFunded, language)}</dd></div></dl>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-3">
                   {[[t.entryCount, metrics.entries.length], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
@@ -450,7 +460,7 @@ const CommunitySupportManagementPage = () => {
               {section === "settings" && <section id="panel-settings" role="tabpanel" className="space-y-6">
                 <SectionHeader title={t.settings} help={t.settingsHelp} />
                 <form onSubmit={submitSettings} className={cx(card, "space-y-6 p-6 md:p-8")}>
-                  <Field title={t.currentReserve} className="max-w-sm"><input type="number" min="0" step="0.01" value={settingsDraft.reserve} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserve: Number(event.target.value) }))} className={input} /></Field>
+                  <div className="grid max-w-2xl gap-5 sm:grid-cols-2"><Field title={t.currentReserve}><input type="number" min="0" step="0.01" value={settingsDraft.reserve} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserve: Number(event.target.value) }))} className={input} /></Field><Field title={t.reserveStartYear}><input type="number" min="2000" max="2100" step="1" value={settingsDraft.reserveStartYear ?? String(new Date().getFullYear())} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserveStartYear: event.target.value }))} className={input} /></Field></div>
                   <div><h3 className="mb-3 text-sm font-black text-gray-200">{t.supporterDefaults}</h3><div className="grid gap-3 md:grid-cols-2"><Toggle checked={settingsDraft.publicSupporterNamesByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterNamesByDefault: checked }))} label={t.namesDefault} /><Toggle checked={settingsDraft.publicSupporterAmountsByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterAmountsByDefault: checked }))} label={t.amountsDefault} /><Toggle checked={settingsDraft.paypalEnabled} onChange={(checked) => setSettingsDraft((current) => ({ ...current, paypalEnabled: checked }))} label={t.paypal} /></div></div>
                   <button type="submit" className={primaryButton}>{settingsSaved ? <Check className="h-4 w-4" /> : <Settings className="h-4 w-4" />}{settingsSaved ? t.saved : t.saveSettings}</button>
                 </form>
@@ -467,7 +477,7 @@ const CommunitySupportManagementPage = () => {
           <div className="flex items-start justify-between gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><button type="button" onClick={() => setClearOpen(false)} aria-label={t.cancel} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-white/[0.05] hover:text-white"><X className="h-5 w-5" /></button></div>
           <h2 id="clear-data-title" className="mt-5 font-heading text-2xl font-black">{t.confirmTitle}</h2><p id="clear-data-description" className="mt-3 text-sm leading-relaxed text-gray-400">{t.confirmHelp}</p>
           <input value={clearPhrase} onChange={(event) => setClearPhrase(event.target.value)} placeholder={t.confirmPlaceholder} autoComplete="off" className={cx(input, "mt-5")} />
-          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button ref={cancelClearRef} type="button" onClick={() => setClearOpen(false)} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 hover:bg-white/[0.08]">{t.cancel}</button><button type="button" disabled={clearPhrase !== confirmationWord} onClick={() => { clearLocalData(); setSettingsDraft({ reserve: 0, publicSupporterNamesByDefault: true, publicSupporterAmountsByDefault: false, paypalEnabled: false }); setClearOpen(false); setSection("dashboard"); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-4 w-4" />{t.confirmClear}</button></div>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button ref={cancelClearRef} type="button" onClick={() => setClearOpen(false)} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 hover:bg-white/[0.08]">{t.cancel}</button><button type="button" disabled={clearPhrase !== confirmationWord} onClick={() => { clearLocalData(); setSettingsDraft({ reserve: 0, reserveStartYear: String(new Date().getFullYear()), publicSupporterNamesByDefault: true, publicSupporterAmountsByDefault: false, paypalEnabled: false }); setClearOpen(false); setSection("dashboard"); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-4 w-4" />{t.confirmClear}</button></div>
         </div>
       </div>}
     </div>

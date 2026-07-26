@@ -76,6 +76,49 @@ describe("Community Support financial model", () => {
     expect(publicLedgerForYear(state, "2026")).toHaveLength(8);
   });
 
+  it("carries only the remaining community surplus into later seasons", () => {
+    const state = emptyState();
+    state.settings.reserveStartYear = "2026";
+    state.ledger = [
+      { id: "cost-2026", date: "2026-06-01", direction: "expense", category: "event", description: "Seizoen 2026", amount: 100, isPublic: true },
+      { id: "support-2026", date: "2026-07-01", direction: "income", category: "contribution", description: "Support 2026", amount: 130, isPublic: true },
+      { id: "cost-2027", date: "2027-06-01", direction: "expense", category: "event", description: "Seizoen 2027", amount: 20, isPublic: true },
+      { id: "cost-2028", date: "2028-06-01", direction: "expense", category: "event", description: "Seizoen 2028", amount: 20, isPublic: true },
+    ];
+
+    const season2026 = supportMetricsForYear(state, "2026");
+    expect(season2026.openingReserve).toBe(0);
+    expect(season2026.closingReserve).toBe(30);
+
+    const season2027 = supportMetricsForYear(state, "2027");
+    expect(season2027.openingReserve).toBe(30);
+    expect(season2027.reserveUsed).toBe(20);
+    expect(season2027.communityCovered).toBe(20);
+    expect(season2027.selfFunded).toBe(0);
+    expect(season2027.closingReserve).toBe(10);
+
+    const season2028 = supportMetricsForYear(state, "2028");
+    expect(season2028.openingReserve).toBe(10);
+    expect(season2028.reserveUsed).toBe(10);
+    expect(season2028.communityCovered).toBe(10);
+    expect(season2028.selfFunded).toBe(10);
+    expect(season2028.closingReserve).toBe(0);
+  });
+
+  it("does not carry a 3SM-funded deficit forward as community debt", () => {
+    const state = emptyState();
+    state.settings.reserveStartYear = "2025";
+    state.ledger = [
+      { id: "cost-2025", date: "2025-06-01", direction: "expense", category: "event", description: "Door 3SM gedragen", amount: 100, isPublic: true },
+      { id: "support-2026", date: "2026-06-01", direction: "income", category: "contribution", description: "Support 2026", amount: 50, isPublic: true },
+    ];
+
+    expect(supportMetricsForYear(state, "2025").closingReserve).toBe(0);
+    const season2026 = supportMetricsForYear(state, "2026");
+    expect(season2026.openingReserve).toBe(0);
+    expect(season2026.closingReserve).toBe(50);
+  });
+
   it("publishes only explicitly public ledger and recurring rows", () => {
     const state = emptyState();
     state.ledger = [
