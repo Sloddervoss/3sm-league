@@ -43,11 +43,13 @@ describe("UI accessibility regressions", () => {
   });
 
   it("keeps Community Support management forms within the mobile viewport", () => {
-    const supportManagement = read("src/features/community-support/admin/CommunitySupportManagementPage.tsx");
+    const supportManagement = read("src/features/control-room/support/CommunitySupportModule.tsx");
 
     expect(supportManagement).toContain("grid-cols-[minmax(0,1fr)]");
     expect(supportManagement).toContain('className="min-w-0 max-w-full lg:sticky');
     expect(supportManagement).toContain("flex w-full max-w-full gap-2 overflow-x-auto");
+    expect(supportManagement).not.toContain("<Navbar");
+    expect(supportManagement).not.toContain("<Footer");
   });
 
   it("waits visibly for role resolution before evaluating protected routes", () => {

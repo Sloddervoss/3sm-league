@@ -6,8 +6,10 @@ import type {
   CommunitySupportState,
   SupportLedgerEntry,
   SupportProduct,
+  SupportRaceCost,
   SupportRecurringCost,
 } from "./types";
+import { isSupportedCommunitySupportRace } from "./raceEligibility";
 
 const STORAGE_PREFIX = "3sm-community-support-session-v2";
 const INCOME_CATEGORIES = new Set(["contribution", "merchandise_income", "referral_income", "other"]);
@@ -16,6 +18,7 @@ const EXPENSE_CATEGORIES = new Set(["hosting", "server", "domain", "software", "
 const INITIAL_STATE: CommunitySupportState = {
   ledger: [],
   recurringCosts: [],
+  raceCosts: [],
   products: [],
   settings: {
     reserve: 0,
@@ -27,11 +30,12 @@ const INITIAL_STATE: CommunitySupportState = {
 };
 
 const categorySchema = z.enum([
-  "contribution", "merchandise_income", "referral_income", "hosting", "server", "domain", "software",
+  "contribution", "merchandise_income", "referral_income", "hosting", "server", "race_hosting", "domain", "software",
   "development", "event", "payment_fee", "merchandise_purchase", "shipping", "other",
 ]);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const moneySchema = z.number().finite().min(0).max(1_000_000);
+const positiveMoneySchema = z.number().finite().gt(0).max(1_000_000);
 const ledgerSchema = z.object({
   id: z.string().min(1).max(100),
   date: dateSchema,
@@ -52,6 +56,25 @@ const recurringSchema = z.object({
   category: z.enum(["hosting", "server", "domain", "software", "development", "other"]),
   description: z.string().min(1).max(160), amount: moneySchema, isPublic: z.boolean(), active: z.boolean(),
 });
+const raceCostSchema = z.object({
+  id: z.string().min(1).max(100),
+  raceId: z.string().min(1).max(100),
+  raceScope: z.enum(["season", "standalone"]),
+  leagueId: z.string().min(1).max(100).optional(),
+  leagueName: z.string().min(1).max(120).optional(),
+  season: z.string().min(1).max(40).optional(),
+  raceName: z.string().min(1).max(160),
+  track: z.string().min(1).max(160),
+  date: dateSchema,
+  raceFormat: z.string().max(80).optional(),
+  amount: positiveMoneySchema,
+  isPublic: z.boolean(),
+  note: z.string().max(240).optional(),
+}).superRefine((cost, context) => {
+  if (cost.raceScope === "season" && !cost.leagueId) context.addIssue({ code: z.ZodIssueCode.custom, message: "season race requires leagueId", path: ["leagueId"] });
+  if (cost.raceScope === "standalone" && cost.leagueId) context.addIssue({ code: z.ZodIssueCode.custom, message: "standalone race cannot have leagueId", path: ["leagueId"] });
+  if (!isSupportedCommunitySupportRace(cost)) context.addIssue({ code: z.ZodIssueCode.custom, message: "race format is outside this prototype", path: ["raceFormat"] });
+});
 const productSchema = z.object({
   id: z.string().min(1).max(100), name: z.string().min(1).max(100), description: z.string().min(1).max(500),
   price: moneySchema, purchasePrice: moneySchema, shippingCost: moneySchema,
@@ -61,6 +84,7 @@ const productSchema = z.object({
 const stateSchema = z.object({
   ledger: z.array(ledgerSchema).max(5_000),
   recurringCosts: z.array(recurringSchema).max(500),
+  raceCosts: z.array(raceCostSchema).max(1_000).default([]),
   products: z.array(productSchema).max(500),
   settings: z.object({
     reserve: moneySchema,
@@ -69,6 +93,12 @@ const stateSchema = z.object({
     publicSupporterAmountsByDefault: z.boolean(),
     paypalEnabled: z.boolean(),
   }),
+}).superRefine((state, context) => {
+  const seenRaceIds = new Set<string>();
+  state.raceCosts.forEach((cost, index) => {
+    if (seenRaceIds.has(cost.raceId)) context.addIssue({ code: z.ZodIssueCode.custom, message: "race cost must be unique per race", path: ["raceCosts", index, "raceId"] });
+    seenRaceIds.add(cost.raceId);
+  });
 });
 
 const safeAmount = (value: number) => Number.isFinite(value) ? Math.max(0, Math.round(value * 100) / 100) : 0;
@@ -93,6 +123,7 @@ const loadState = (storageKey: string): CommunitySupportState => {
 
 export type SupportLedgerDraft = Omit<SupportLedgerEntry, "id">;
 export type SupportRecurringCostDraft = Omit<SupportRecurringCost, "id">;
+export type SupportRaceCostDraft = Omit<SupportRaceCost, "id">;
 export type SupportProductDraft = Omit<SupportProduct, "id">;
 
 type CommunitySupportStore = {
@@ -102,6 +133,8 @@ type CommunitySupportStore = {
   addRecurringCost: (draft: SupportRecurringCostDraft) => void;
   toggleRecurringCost: (id: string) => void;
   removeRecurringCost: (id: string) => void;
+  saveRaceCost: (draft: SupportRaceCostDraft) => void;
+  removeRaceCost: (id: string) => void;
   addProduct: (draft: SupportProductDraft) => void;
   toggleProduct: (id: string) => void;
   removeProduct: (id: string) => void;
@@ -147,11 +180,34 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     }
   }, [state, storageKey, hydratedKey]);
 
-  const addLedgerEntry = useCallback((draft: SupportLedgerDraft) => setState((current) => ({ ...current, ledger: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.ledger] })), []);
+  const addLedgerEntry = useCallback((draft: SupportLedgerDraft) => setState((current) => {
+    if (draft.category === "race_hosting") return current;
+    return { ...current, ledger: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.ledger] };
+  }), []);
   const removeLedgerEntry = useCallback((id: string) => setState((current) => ({ ...current, ledger: current.ledger.filter((entry) => entry.id !== id) })), []);
   const addRecurringCost = useCallback((draft: SupportRecurringCostDraft) => setState((current) => ({ ...current, recurringCosts: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.recurringCosts] })), []);
   const toggleRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.map((cost) => cost.id === id ? { ...cost, active: !cost.active } : cost) })), []);
   const removeRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.filter((cost) => cost.id !== id) })), []);
+  const saveRaceCost = useCallback((draft: SupportRaceCostDraft) => setState((current) => {
+    if (!isSupportedCommunitySupportRace(draft)) return current;
+    if ((draft.raceScope === "season") !== Boolean(draft.leagueId)) return current;
+    const amount = safeAmount(draft.amount);
+    if (amount <= 0) return current;
+    const normalized = {
+      ...draft,
+      date: draft.date.slice(0, 10),
+      amount,
+      note: draft.note?.trim() || undefined,
+    };
+    const existing = current.raceCosts.find((cost) => cost.raceId === draft.raceId);
+    return {
+      ...current,
+      raceCosts: existing
+        ? current.raceCosts.map((cost) => cost.raceId === draft.raceId ? { ...normalized, id: cost.id } : cost)
+        : [{ ...withId(normalized) }, ...current.raceCosts],
+    };
+  }), []);
+  const removeRaceCost = useCallback((id: string) => setState((current) => ({ ...current, raceCosts: current.raceCosts.filter((cost) => cost.id !== id) })), []);
   const addProduct = useCallback((draft: SupportProductDraft) => setState((current) => ({ ...current, products: [{ ...withId(draft), price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: safeAmount(draft.shippingCost), stock: Math.max(0, Math.floor(draft.stock)) }, ...current.products] })), []);
   const toggleProduct = useCallback((id: string) => setState((current) => ({ ...current, products: current.products.map((product) => product.id === id ? { ...product, active: !product.active } : product) })), []);
   const removeProduct = useCallback((id: string) => setState((current) => ({ ...current, products: current.products.filter((product) => product.id !== id) })), []);
@@ -164,7 +220,21 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     setState(INITIAL_STATE);
   }, [storageKey]);
 
-  const value = useMemo<CommunitySupportStore>(() => ({ state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
+  const value = useMemo<CommunitySupportStore>(() => ({
+    state,
+    addLedgerEntry,
+    removeLedgerEntry,
+    addRecurringCost,
+    toggleRecurringCost,
+    removeRecurringCost,
+    saveRaceCost,
+    removeRaceCost,
+    addProduct,
+    toggleProduct,
+    removeProduct,
+    updateSettings,
+    clearLocalData,
+  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
   return <CommunitySupportContext.Provider value={value}>{children}</CommunitySupportContext.Provider>;
 };
 

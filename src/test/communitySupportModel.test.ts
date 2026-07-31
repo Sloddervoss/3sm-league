@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { COMMUNITY_SUPPORT_PUBLIC, canManageCommunitySupport, canViewCommunitySupport, publicLedgerForMonth, publicLedgerForYear, supportMetrics, supportMetricsForYear } from "@/features/community-support/model";
+import { COMMUNITY_SUPPORT_PUBLIC, canManageCommunitySupport, canViewCommunitySupport, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetrics, supportMetricsForYear } from "@/features/community-support/model";
 import type { CommunitySupportState } from "@/features/community-support/types";
 
 const emptyState = (): CommunitySupportState => ({
   ledger: [],
   recurringCosts: [],
+  raceCosts: [],
   products: [],
   settings: {
     reserve: 0,
@@ -147,6 +148,39 @@ describe("Community Support financial model", () => {
     expect(entries[1]).not.toHaveProperty("showAmount");
   });
 
+  it("counts each supported race once while keeping private and endurance details out of the public model", () => {
+    const state = emptyState();
+    state.settings.reserveStartYear = "2026";
+    state.ledger = [
+      { id: "support", date: "2026-07-01", direction: "income", category: "contribution", description: "Support", amount: 4, isPublic: true },
+    ];
+    state.raceCosts = [
+      { id: "public-race", raceId: "race-a", raceScope: "season", leagueId: "league-a", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", amount: 3.5, isPublic: true, note: "interne notitie" },
+      { id: "private-race", raceId: "race-b", raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", raceFormat: "Feature", amount: 2.25, isPublic: false, note: "niet openbaar" },
+      { id: "endurance-race", raceId: "race-c", raceScope: "standalone", raceName: "Endurance", track: "Le Mans", date: "2026-09-10", raceFormat: "Endurance", amount: 100, isPublic: true },
+      { id: "unknown-race", raceId: "race-d", raceScope: "standalone", raceName: "Future", track: "Unknown", date: "2026-09-11", raceFormat: "FutureFormat", amount: 100, isPublic: true },
+      { id: "named-endurance", raceId: "race-e", raceScope: "standalone", raceName: "Night Endurance", track: "Le Mans", date: "2026-09-12", raceFormat: "Feature", amount: 100, isPublic: true },
+    ];
+
+    const season = supportMetricsForYear(state, "2026");
+    expect(season.raceCostTotal).toBe(5.75);
+    expect(season.operationalExpenses).toBe(5.75);
+    expect(season.communityCovered).toBe(4);
+    expect(season.selfFunded).toBe(1.75);
+    expect(supportMetrics(state, "2026-07").raceCostTotal).toBe(3.5);
+    expect(supportMetrics(state, "2026-08").raceCostTotal).toBe(2.25);
+
+    const publicCosts = publicRaceCostsForYear(state, "2026");
+    expect(publicCosts).toEqual([
+      expect.objectContaining({ raceName: "Race 1", amount: 3.5, isPublic: true }),
+    ]);
+    expect(publicCosts[0]).not.toHaveProperty("id");
+    expect(publicCosts[0]).not.toHaveProperty("raceId");
+    expect(publicCosts[0]).not.toHaveProperty("note");
+    expect(publicCosts[0]).not.toHaveProperty("leagueId");
+    expect(publicLedgerForYear(state, "2026")).toContainEqual(expect.objectContaining({ category: "race_hosting", amount: 3.5 }));
+  });
+
   it("rounds accumulated money to cents", () => {
     const state = emptyState();
     state.ledger = [
@@ -170,23 +204,28 @@ describe("Community Support release boundary", () => {
     expect(canManageCommunitySupport(true)).toBe(true);
   });
 
-  it("wires real routes and a flag-controlled footer link without touching the main nav", () => {
+  it("keeps the public route in the footer and management inside the native Control Room", () => {
     const app = readFileSync("src/App.tsx", "utf8");
+    const controlRoom = readFileSync("src/pages/AdminWorkspacePrototype.tsx", "utf8");
+    const supportModule = readFileSync("src/features/control-room/support/CommunitySupportModule.tsx", "utf8");
     const footer = readFileSync("src/components/Footer.tsx", "utf8");
     const navbar = readFileSync("src/components/Navbar.tsx", "utf8");
     const accessGate = readFileSync("src/features/community-support/CommunitySupportAccessGate.tsx", "utf8");
     const routeClassification = readFileSync("scripts/route-classification.mjs", "utf8");
     const routeGenerator = readFileSync("scripts/generate-route-html.mjs", "utf8");
     expect(app).toContain('path="/support"');
-    expect(app).toContain('path="/support-beheer"');
-    expect(app).toContain("CommunitySupportAccessGate management");
+    expect(app).not.toContain('path="/support-beheer"');
+    expect(controlRoom).toContain('support: <CommunitySupportModule />');
+    expect(controlRoom).toContain('item.id !== "support" || isSuperAdmin');
+    expect(supportModule).not.toContain("<Navbar");
+    expect(supportModule).not.toContain("<Footer");
     expect(footer).toContain("canViewCommunitySupport(isSuperAdmin)");
     expect(footer).toContain('to="/support/"');
     expect(navbar).not.toContain('to="/support/"');
-    expect(accessGate).toContain("if (!management && COMMUNITY_SUPPORT_PUBLIC) return children");
+    expect(accessGate).toContain("if (COMMUNITY_SUPPORT_PUBLIC) return children");
     expect(routeClassification).toContain("createPrivateSeoRoutes");
     expect(routeClassification).toContain("...(!communitySupportPublic ? ['/support'] : [])");
-    expect(routeClassification).toContain("'/support-beheer'");
+    expect(routeClassification).not.toContain("'/support-beheer'");
     expect(routeGenerator).toContain("createPrivateSeoRoutes(communitySupportPublic)");
     expect(routeGenerator).toContain("Community Support cannot be public while dataSource is not supabase");
     expect(routeGenerator).toContain("path: '/support'");

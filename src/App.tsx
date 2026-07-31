@@ -35,7 +35,6 @@ const ProfilePage = lazy(() => import("./pages/ProfilePage.tsx"));
 const KoppelPage = lazy(() => import("./pages/KoppelPage.tsx"));
 const SimHubPairingPage = lazy(() => import("./pages/SimHubPairingPage.tsx"));
 const CommunitySupportPage = lazy(() => import("./features/community-support/public/CommunitySupportPage.tsx"));
-const CommunitySupportManagementPage = lazy(() => import("./features/community-support/admin/CommunitySupportManagementPage.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient({
@@ -96,7 +95,6 @@ const App = () => (
                   <Route path="/koppel" element={<KoppelPage />} />
                   <Route path="/simhub-koppelen" element={<SimHubPairingPage />} />
                   <Route path="/support" element={<CommunitySupportAccessGate><CommunitySupportPage /></CommunitySupportAccessGate>} />
-                  <Route path="/support-beheer" element={<CommunitySupportAccessGate management><CommunitySupportManagementPage /></CommunitySupportAccessGate>} />
                   <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>

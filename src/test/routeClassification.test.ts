@@ -23,6 +23,7 @@ describe("route classification for generated SEO HTML", () => {
     expect(isPrivateRoute("/news/team-update")).toBe(false);
     expect(isPrivateRoute("/support")).toBe(true);
     expect(isPrivateRoute("/support", { communitySupportPublic: true })).toBe(false);
-    expect(isPrivateRoute("/support-beheer", { communitySupportPublic: true })).toBe(true);
+    expect(isPrivateRoute("/admin", { communitySupportPublic: true })).toBe(true);
+    expect(isPrivateRoute("/admin/community-support", { communitySupportPublic: true })).toBe(true);
   });
 });

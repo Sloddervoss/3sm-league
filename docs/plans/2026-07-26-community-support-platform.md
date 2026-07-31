@@ -2,9 +2,9 @@
 
 > **For Hermes:** Use subagent-driven-development skill to continue this plan task-by-task.
 
-**Goal:** Build a premium, transparent 3SM Community Support page and a separate support-management environment without turning the main site into a donation shop.
+**Goal:** Build a premium, transparent 3SM Community Support page with management in the existing Control Room, without turning the main site into a donation shop.
 
-**Architecture:** `/support/` and its footer link are controlled by `community-support.config.json`. While `public` is false, only Super-admins can view the page and both crawler HTML and sitemap treat it as private/noindex. Public builds fail closed until `dataSource` is backed by the shared Supabase readmodel; after that backend phase, the `public` flag releases UI, footer, crawler HTML and sitemap together. `/support-beheer/` remains permanently Super-admin-only and is separate from Control Room. Phase 1 uses schema-validated, user-scoped session storage that is removed on logout/user switch.
+**Architecture:** `/support/` and its footer link are controlled by `community-support.config.json`. While `public` is false, only Super-admins can view the page and both crawler HTML and sitemap treat it as private/noindex. Public builds fail closed until `dataSource` is backed by the shared Supabase readmodel; after that backend phase, the `public` flag releases UI, footer, crawler HTML and sitemap together. Management is a Super-admin-only native module inside the existing `/admin/` Control Room. Phase 1 uses schema-validated, user-scoped session storage that is removed on logout/user switch.
 
 **Tech Stack:** React, TypeScript, Tailwind CSS, React Router, Supabase Auth roles, Vitest, Vite route HTML generator.
 
@@ -16,9 +16,12 @@
 - Discovery: subtle footer link only; never a main-menu item.
 - Current access: Super-admin-only, but no preview/test naming in routes or components.
 - Public release: first replace the local-session datasource with the audited Supabase readmodel; after that, changing `"public": false` to `true` releases UI, footer link, crawler HTML and sitemap together. A build fails if `public=true` while the datasource is still local.
-- Management: `/support-beheer/`, separate from Control Room and permanently protected.
+- Management: native `/admin/` Control Room module, visible only to Super-admin and permanently protected.
 - Languages: Dutch and English; mobile and desktop are equal acceptance targets.
 - Monthly costs derive dynamically from manual and recurring entries.
+- Race costs are dedicated records linked read-only to an existing race; they are never duplicated as manual ledger entries.
+- Supported race formats are Feature and Sprint. Legacy untyped races are accepted only when they are standalone; unknown formats and any endurance signal in format, league or race name fail closed.
+- Each race has at most one strictly positive rounded cost record. Public race-cost projections omit internal IDs, notes, league IDs and format metadata.
 - Coverage uses contributions + net merchandise proceeds + referral income. Merchandise fees, purchasing and shipping are deducted before support coverage.
 - Reserve is displayed separately and does not fill the monthly progress bar.
 - Public ledger shows only explicitly public rows; invoices and private details never reach the public model.
@@ -63,7 +66,7 @@
 ### Task 3: Separate support management
 
 **Files:**
-- Create: `src/features/community-support/admin/CommunitySupportManagementPage.tsx`
+- Create: `src/features/control-room/support/CommunitySupportModule.tsx`
 
 **Acceptance:**
 - Add/remove ledger rows.
@@ -84,12 +87,12 @@
 - Modify: `vite.config.ts`
 
 **Acceptance:**
-- `/support/` and `/support-beheer/` are lazy routes with central gates.
+- `/support/` is a gated public-facing route; support management is mounted natively inside `/admin/`.
 - Navbar has no support link.
 - Footer uses the shared visibility rule.
-- With `public=false`, both routes generate noindex HTML and neither enters the sitemap.
+- With `public=false`, `/support/` and `/admin/` generate noindex HTML and neither enters the sitemap.
 - With `public=true` and `dataSource=local-session`, the build fails closed.
-- With `public=true` after the shared Supabase datasource is implemented, `/support/` gets crawler HTML and sitemap inclusion while `/support-beheer/` stays private.
+- With `public=true` after the shared Supabase datasource is implemented, `/support/` gets crawler HTML and sitemap inclusion while `/admin/` stays private.
 
 ### Task 5: Integrated verification and remote review
 
@@ -105,8 +108,8 @@ git diff --check
 
 **Browser checks:**
 - Anonymous `/support/` receives the gated login state.
-- Non-Super-admin cannot view either route.
-- Super-admin can add data under `/support-beheer/` and immediately see it on `/support/`.
+- Non-Super-admin cannot view the gated support page or the Control Room support module.
+- Super-admin can add data in the `/admin/` Community Support module and immediately see it on `/support/`.
 - NL/EN changes visible copy and metadata.
 - Mobile layout has no horizontal clipping.
 - Footer link is visible only to Super-admin while `public=false`.

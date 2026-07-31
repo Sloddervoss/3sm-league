@@ -1,5 +1,13 @@
 import communitySupportConfig from "../../../community-support.config.json";
-import type { CommunitySupportState, PublicSupportLedgerEntry, SupportLedgerEntry, SupportRecurringCost } from "./types";
+import type {
+  CommunitySupportState,
+  PublicSupportLedgerEntry,
+  PublicSupportRaceCost,
+  SupportLedgerEntry,
+  SupportRaceCost,
+  SupportRecurringCost,
+} from "./types";
+import { isSupportedCommunitySupportRace } from "./raceEligibility";
 
 export const COMMUNITY_SUPPORT_HAS_SHARED_DATA = communitySupportConfig.dataSource === "supabase";
 // Fail closed: a local browser/session dataset can never be made public by a visibility toggle alone.
@@ -12,6 +20,7 @@ const COMMERCIAL_COSTS = new Set(["payment_fee", "merchandise_purchase", "shippi
 const SUPPORT_INCOME = new Set(["contribution", "merchandise_income", "referral_income"]);
 const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const sumAmounts = <T extends { amount: number }>(values: T[]) => roundMoney(values.reduce((sum, value) => sum + value.amount, 0));
+const supportedRaceCosts = (state: CommunitySupportState) => (state.raceCosts ?? []).filter(isSupportedCommunitySupportRace);
 
 export const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 export const entryMonth = (value: string) => value.slice(0, 7);
@@ -24,15 +33,27 @@ export const recurringCostOccurrencesForYear = (costs: SupportRecurringCost[], s
   recurringCostsForMonth(costs, month).map((cost) => ({ ...cost, id: `${month}-${cost.id}`, startsOn: `${month}-01` })),
 );
 
+export const raceCostsForMonth = (state: CommunitySupportState, selectedMonth: string) => supportedRaceCosts(state)
+  .filter((cost) => entryMonth(cost.date) === selectedMonth);
+
+export const raceCostsForYear = (state: CommunitySupportState, selectedYear: string) => supportedRaceCosts(state)
+  .filter((cost) => entryYear(cost.date) === selectedYear);
+
 const calculateMetrics = (
   state: CommunitySupportState,
   entries: SupportLedgerEntry[],
   recurring: SupportRecurringCost[],
+  raceCosts: SupportRaceCost[],
   openingReserve = state.settings.reserve,
   useOpeningReserve = false,
 ) => {
   const recurringTotal = sumAmounts(recurring);
-  const operationalExpenses = roundMoney(sumAmounts(entries.filter((entry) => entry.direction === "expense" && !COMMERCIAL_COSTS.has(entry.category))) + recurringTotal);
+  const raceCostTotal = sumAmounts(raceCosts);
+  const operationalExpenses = roundMoney(
+    sumAmounts(entries.filter((entry) => entry.direction === "expense" && !COMMERCIAL_COSTS.has(entry.category)))
+    + recurringTotal
+    + raceCostTotal,
+  );
   const supportIncome = sumAmounts(entries.filter((entry) => entry.direction === "income" && SUPPORT_INCOME.has(entry.category)));
   const commercialCosts = sumAmounts(entries.filter((entry) => entry.direction === "expense" && COMMERCIAL_COSTS.has(entry.category)));
   const netCommunitySupport = roundMoney(Math.max(0, supportIncome - commercialCosts));
@@ -48,11 +69,13 @@ const calculateMetrics = (
     : roundMoney(openingReserve + surplus);
   const coveragePercent = operationalExpenses > 0 ? Math.min(100, Math.round((communityCovered / operationalExpenses) * 100)) : 0;
   const totalIncome = sumAmounts(entries.filter((entry) => entry.direction === "income"));
-  const totalExpenses = roundMoney(sumAmounts(entries.filter((entry) => entry.direction === "expense")) + recurringTotal);
+  const totalExpenses = roundMoney(sumAmounts(entries.filter((entry) => entry.direction === "expense")) + recurringTotal + raceCostTotal);
 
   return {
     entries,
     recurring,
+    raceCosts,
+    raceCostTotal,
     operationalExpenses,
     supportIncome,
     commercialCosts,
@@ -74,11 +97,13 @@ export const supportMetrics = (state: CommunitySupportState, selectedMonth: stri
   state,
   state.ledger.filter((entry) => entryMonth(entry.date) === selectedMonth),
   recurringCostsForMonth(state.recurringCosts, selectedMonth),
+  raceCostsForMonth(state, selectedMonth),
 );
 
 const yearPeriod = (state: CommunitySupportState, selectedYear: string) => ({
   entries: state.ledger.filter((entry) => entryYear(entry.date) === selectedYear),
   recurring: recurringCostOccurrencesForYear(state.recurringCosts, selectedYear),
+  raceCosts: raceCostsForYear(state, selectedYear),
 });
 
 const reserveStartYear = (state: CommunitySupportState, selectedYear: string) => {
@@ -86,6 +111,7 @@ const reserveStartYear = (state: CommunitySupportState, selectedYear: string) =>
   const activityYears = [
     ...state.ledger.map((entry) => entryYear(entry.date)),
     ...state.recurringCosts.map((cost) => entryYear(cost.startsOn)),
+    ...supportedRaceCosts(state).map((cost) => entryYear(cost.date)),
   ].filter((year) => /^\d{4}$/.test(year));
   return activityYears.sort()[0] ?? selectedYear;
 };
@@ -97,11 +123,11 @@ export const supportMetricsForYear = (state: CommunitySupportState, selectedYear
 
   for (let year = startYear; year < selected; year += 1) {
     const period = yearPeriod(state, String(year));
-    openingReserve = calculateMetrics(state, period.entries, period.recurring, openingReserve, true).closingReserve;
+    openingReserve = calculateMetrics(state, period.entries, period.recurring, period.raceCosts, openingReserve, true).closingReserve;
   }
 
   const period = yearPeriod(state, selectedYear);
-  return calculateMetrics(state, period.entries, period.recurring, openingReserve, true);
+  return calculateMetrics(state, period.entries, period.recurring, period.raceCosts, openingReserve, true);
 };
 
 const redactPublicEntry = (entry: SupportLedgerEntry): PublicSupportLedgerEntry => {
@@ -132,11 +158,46 @@ const publicRecurringEntriesForMonth = (state: CommunitySupportState, selectedMo
     isPublic: true,
   }));
 
+const toPublicRaceCost = (cost: SupportRaceCost): PublicSupportRaceCost => ({
+  raceScope: cost.raceScope,
+  ...(cost.leagueName ? { leagueName: cost.leagueName } : {}),
+  ...(cost.season ? { season: cost.season } : {}),
+  raceName: cost.raceName,
+  track: cost.track,
+  date: cost.date,
+  amount: cost.amount,
+  isPublic: true,
+});
+
+export const publicRaceCostsForMonth = (state: CommunitySupportState, selectedMonth: string): PublicSupportRaceCost[] => raceCostsForMonth(state, selectedMonth)
+  .filter((cost) => cost.isPublic)
+  .map(toPublicRaceCost)
+  .sort((a, b) => b.date.localeCompare(a.date));
+
+export const publicRaceCostsForYear = (state: CommunitySupportState, selectedYear: string): PublicSupportRaceCost[] => raceCostsForYear(state, selectedYear)
+  .filter((cost) => cost.isPublic)
+  .map(toPublicRaceCost)
+  .sort((a, b) => b.date.localeCompare(a.date));
+
+const raceCostLedgerEntries = (costs: PublicSupportRaceCost[]): PublicSupportLedgerEntry[] => costs.map((cost, index) => ({
+  id: `race-cost-${cost.date}-${index}`,
+  date: cost.date,
+  direction: "expense",
+  category: "race_hosting",
+  description: `${cost.raceName} · ${cost.track}`,
+  amount: cost.amount,
+  isPublic: true,
+}));
+
 export const publicLedgerForMonth = (state: CommunitySupportState, selectedMonth: string): PublicSupportLedgerEntry[] => {
   const manual = state.ledger
     .filter((entry) => entry.isPublic && entryMonth(entry.date) === selectedMonth)
     .map(redactPublicEntry);
-  return [...manual, ...publicRecurringEntriesForMonth(state, selectedMonth)].sort((a, b) => b.date.localeCompare(a.date));
+  return [
+    ...manual,
+    ...publicRecurringEntriesForMonth(state, selectedMonth),
+    ...raceCostLedgerEntries(publicRaceCostsForMonth(state, selectedMonth)),
+  ].sort((a, b) => b.date.localeCompare(a.date));
 };
 
 export const publicLedgerForYear = (state: CommunitySupportState, selectedYear: string): PublicSupportLedgerEntry[] => {
@@ -144,5 +205,9 @@ export const publicLedgerForYear = (state: CommunitySupportState, selectedYear: 
     .filter((entry) => entry.isPublic && entryYear(entry.date) === selectedYear)
     .map(redactPublicEntry);
   const recurring = monthsForYear(selectedYear).flatMap((month) => publicRecurringEntriesForMonth(state, month));
-  return [...manual, ...recurring].sort((a, b) => b.date.localeCompare(a.date));
+  return [
+    ...manual,
+    ...recurring,
+    ...raceCostLedgerEntries(publicRaceCostsForYear(state, selectedYear)),
+  ].sort((a, b) => b.date.localeCompare(a.date));
 };
