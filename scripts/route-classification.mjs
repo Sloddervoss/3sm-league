@@ -13,7 +13,6 @@ const alwaysPrivateSeoRoutes = [
   '/stewards',
   '/koppel',
   '/simhub-koppelen',
-  '/support-beheer',
 ];
 
 const privateRoutePrefixes = ['/admin'];

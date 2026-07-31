@@ -4,6 +4,7 @@ export type SupportLedgerCategory =
   | "referral_income"
   | "hosting"
   | "server"
+  | "race_hosting"
   | "domain"
   | "software"
   | "development"
@@ -42,6 +43,26 @@ export type SupportRecurringCost = {
   active: boolean;
 };
 
+export type SupportRaceCost = {
+  id: string;
+  raceId: string;
+  raceScope: "season" | "standalone";
+  leagueId?: string;
+  leagueName?: string;
+  season?: string;
+  raceName: string;
+  track: string;
+  date: string;
+  raceFormat?: string;
+  amount: number;
+  isPublic: boolean;
+  note?: string;
+};
+
+export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "amount"> & {
+  isPublic: true;
+};
+
 export type SupportProduct = {
   id: string;
   name: string;
@@ -66,6 +87,7 @@ export type CommunitySupportSettings = {
 export type CommunitySupportState = {
   ledger: SupportLedgerEntry[];
   recurringCosts: SupportRecurringCost[];
+  raceCosts: SupportRaceCost[];
   products: SupportProduct[];
   settings: CommunitySupportSettings;
 };
@@ -76,6 +98,7 @@ export const SUPPORT_CATEGORY_LABELS: Record<SupportLedgerCategory, { nl: string
   referral_income: { nl: "iRacing-referral", en: "iRacing referral" },
   hosting: { nl: "Hosting", en: "Hosting" },
   server: { nl: "Servers", en: "Servers" },
+  race_hosting: { nl: "Racehosting", en: "Race hosting" },
   domain: { nl: "Domeinen", en: "Domains" },
   software: { nl: "Software", en: "Software" },
   development: { nl: "Websiteontwikkeling", en: "Website development" },

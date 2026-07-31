@@ -1,11 +1,11 @@
 import { useEffect, type ReactNode } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { LockKeyhole, ShieldCheck } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
-import { COMMUNITY_SUPPORT_PUBLIC, canManageCommunitySupport, canViewCommunitySupport } from "./model";
+import { COMMUNITY_SUPPORT_PUBLIC, canViewCommunitySupport } from "./model";
 
 const LoadingState = () => {
   const { language } = useLanguage();
@@ -22,7 +22,7 @@ const LoadingState = () => {
   );
 };
 
-const SignInState = ({ management }: { management: boolean }) => {
+const SignInState = () => {
   const { language } = useLanguage();
   return (
     <div className="min-h-screen bg-background">
@@ -32,7 +32,7 @@ const SignInState = ({ management }: { management: boolean }) => {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-300 ring-1 ring-orange-400/20"><LockKeyhole className="h-5 w-5" /></div>
           <h1 className="mt-5 font-heading text-2xl font-black">COMMUNITY SUPPORT</h1>
           <p className="mt-3 text-sm leading-relaxed text-gray-400">{language === "en" ? "This environment is currently available to Super-admins only." : "Deze omgeving is momenteel alleen beschikbaar voor Super-admins."}</p>
-          <Link to={`/auth/?redirect=${encodeURIComponent(management ? "/support-beheer/" : "/support/")}`} className="mt-6 inline-flex rounded-xl bg-gradient-racing px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-950/30">{language === "en" ? "Log in" : "Inloggen"}</Link>
+          <Link to={`/auth/?redirect=${encodeURIComponent("/support/")}`} className="mt-6 inline-flex rounded-xl bg-gradient-racing px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-950/30">{language === "en" ? "Log in" : "Inloggen"}</Link>
         </section>
       </main>
       <Footer />
@@ -40,27 +40,21 @@ const SignInState = ({ management }: { management: boolean }) => {
   );
 };
 
-export const CommunitySupportAccessGate = ({ children, management = false }: { children: ReactNode; management?: boolean }) => {
+export const CommunitySupportAccessGate = ({ children }: { children: ReactNode }) => {
   const { user, isSuperAdmin, loading, rolesLoading } = useAuth();
-  const allowed = management ? canManageCommunitySupport(isSuperAdmin) : canViewCommunitySupport(isSuperAdmin);
+  const allowed = canViewCommunitySupport(isSuperAdmin);
 
   useEffect(() => {
-    if (!management && COMMUNITY_SUPPORT_PUBLIC) return;
+    if (COMMUNITY_SUPPORT_PUBLIC) return;
     const robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
     const previous = robots?.content;
     if (robots) robots.content = "noindex, nofollow";
     return () => { if (robots && previous !== undefined) robots.content = previous; };
-  }, [management]);
+  }, []);
 
-  if (!management && COMMUNITY_SUPPORT_PUBLIC) return children;
+  if (COMMUNITY_SUPPORT_PUBLIC) return children;
   if (loading || rolesLoading) return <LoadingState />;
-  if (!user) return <SignInState management={management} />;
+  if (!user) return <SignInState />;
   if (!allowed) return <Navigate to="/" replace />;
   return children;
 };
-
-export const ManagementBadge = () => (
-  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-200 ring-1 ring-orange-400/20">
-    <ShieldCheck className="h-3.5 w-3.5" /> Super-admin
-  </span>
-);

@@ -10,6 +10,7 @@ import {
   CircleDollarSign,
   Eye,
   EyeOff,
+  Flag,
   LayoutDashboard,
   PackageOpen,
   Plus,
@@ -20,17 +21,15 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
-import { setSeoMeta } from "@/lib/seo";
-import { ManagementBadge } from "../CommunitySupportAccessGate";
-import { monthKey, supportMetricsForYear } from "../model";
-import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "../store";
-import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "../types";
+import { monthKey, supportMetricsForYear } from "@/features/community-support/model";
+import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "@/features/community-support/store";
+import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "@/features/community-support/types";
+import RaceCostsSection from "./RaceCostsSection";
 
 type Language = "nl" | "en";
-type SectionId = "dashboard" | "ledger" | "recurring" | "products" | "settings";
+type SectionId = "dashboard" | "ledger" | "race-costs" | "recurring" | "products" | "settings";
 
 type Copy = {
   [key: string]: string;
@@ -44,6 +43,7 @@ const COPY: Record<Language, Copy> = {
     publicPage: "Open publieke supportpagina",
     dashboard: "Overzicht",
     ledger: "Transacties",
+    raceCosts: "Racekosten",
     recurring: "Terugkerende kosten",
     products: "Producten",
     settings: "Instellingen",
@@ -122,6 +122,7 @@ const COPY: Record<Language, Copy> = {
     publicPage: "Open public support page",
     dashboard: "Overview",
     ledger: "Transactions",
+    raceCosts: "Race costs",
     recurring: "Recurring costs",
     products: "Products",
     settings: "Settings",
@@ -228,13 +229,14 @@ const Toggle = ({ checked, onChange, label: text }: { checked: boolean; onChange
 
 const EmptyState = ({ icon, text }: { icon: ReactNode; text: string }) => <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl bg-black/10 p-6 text-center ring-1 ring-white/[0.05]"><span className="text-gray-600">{icon}</span><p className="mt-3 text-sm text-gray-500">{text}</p></div>;
 
-const CommunitySupportManagementPage = () => {
+const CommunitySupportModule = () => {
+  const { isSuperAdmin } = useAuth();
   const { language: currentLanguage } = useLanguage();
   const language: Language = currentLanguage === "en" ? "en" : "nl";
   const t = COPY[language];
   const {
     state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost,
-    removeRecurringCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
+    removeRecurringCost, saveRaceCost, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
   } = useCommunitySupport();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
@@ -260,7 +262,8 @@ const CommunitySupportManagementPage = () => {
     String(new Date().getFullYear()),
     ...state.ledger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [state.ledger, state.recurringCosts]);
+    ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [state.ledger, state.raceCosts, state.recurringCosts]);
   const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
   const visibleEntries = useMemo(() => state.ledger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [state.ledger, selectedMonth]);
   const inventoryValue = useMemo(() => state.products.reduce((sum, product) => sum + product.price * product.stock, 0), [state.products]);
@@ -270,13 +273,6 @@ const CommunitySupportManagementPage = () => {
     setSettingsDraft(state.settings);
   }, [state.settings]);
 
-  useEffect(() => {
-    setSeoMeta({
-      title: language === "en" ? "Support management | 3SM" : "Supportbeheer | 3SM",
-      description: language === "en" ? "Private local management for 3SM Community Support." : "Besloten lokaal beheer voor 3SM Community Support.",
-      canonicalUrl: "https://3stripemotorsport.cc/support-beheer/",
-    });
-  }, [language]);
 
   useEffect(() => {
     if (!clearOpen) return;
@@ -369,20 +365,26 @@ const CommunitySupportManagementPage = () => {
   const sections: Array<{ id: SectionId; label: string; icon: ReactNode; count?: number }> = [
     { id: "dashboard", label: t.dashboard, icon: <LayoutDashboard className="h-4 w-4" /> },
     { id: "ledger", label: t.ledger, icon: <WalletCards className="h-4 w-4" />, count: state.ledger.length },
+    { id: "race-costs", label: t.raceCosts, icon: <Flag className="h-4 w-4" />, count: state.raceCosts.length },
     { id: "recurring", label: t.recurring, icon: <CalendarClock className="h-4 w-4" />, count: state.recurringCosts.length },
     { id: "products", label: t.products, icon: <Box className="h-4 w-4" />, count: state.products.length },
     { id: "settings", label: t.settings, icon: <Settings className="h-4 w-4" /> },
   ];
 
+  if (!isSuperAdmin) return (
+    <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.055] p-6 text-amber-100">
+      <h2 className="font-heading text-xl font-black">{language === "en" ? "Super-admin access required" : "Super-admintoegang vereist"}</h2>
+      <p className="mt-2 text-sm text-amber-100/70">{language === "en" ? "Community Support finances are only available to Super-admins." : "Community Support-financiën zijn alleen beschikbaar voor Super-admins."}</p>
+    </section>
+  );
+
   return (
-    <div className="min-h-screen bg-background text-white">
-      <Navbar />
-      <main className="relative overflow-hidden px-4 pb-24 pt-24 sm:px-6 lg:px-8">
+    <div className="relative min-w-0 overflow-hidden text-white">
         <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-orange-500/[0.07] blur-[120px]" />
-        <div className="relative mx-auto max-w-7xl">
+        <div className="relative">
           <header className="flex flex-col gap-6 border-b border-white/[0.07] pb-8 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-3"><span className="text-xs font-black uppercase tracking-[0.24em] text-orange-400">{t.eyebrow}</span><ManagementBadge /></div>
+              <div className="flex flex-wrap items-center gap-3"><span className="text-xs font-black uppercase tracking-[0.24em] text-orange-400">{t.eyebrow}</span><span className="inline-flex rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-200 ring-1 ring-orange-400/20">Super-admin · lokaal</span></div>
               <h1 className="mt-4 font-heading text-4xl font-black tracking-tight sm:text-5xl">{t.title}</h1>
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-400 sm:text-base">{t.intro}</p>
             </div>
@@ -413,8 +415,8 @@ const CommunitySupportManagementPage = () => {
                   <div><p className="text-xs font-black uppercase tracking-[0.18em] text-orange-400">{t.coverage}</p><p className="mt-3 text-4xl font-black">{metrics.coveragePercent}%</p><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-gradient-to-r from-orange-600 to-orange-300 transition-[width]" style={{ width: `${metrics.coveragePercent}%` }} /></div><p className="mt-3 text-sm text-gray-400">{formatCurrency(metrics.communityCovered, language)} / {formatCurrency(metrics.operationalExpenses, language)}</p></div>
                   <dl className="grid gap-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.netSupport}</dt><dd className="font-bold">{formatCurrency(metrics.netCommunitySupport, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.openingReserve}</dt><dd className="font-bold">{formatCurrency(metrics.openingReserve, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.reserveUsed}</dt><dd className="font-bold">{formatCurrency(metrics.reserveUsed, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.operational}</dt><dd className="font-bold">{formatCurrency(metrics.operationalExpenses, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.selfFunded}</dt><dd className="font-bold">{formatCurrency(metrics.selfFunded, language)}</dd></div></dl>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {[[t.entryCount, metrics.entries.length], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {[[t.entryCount, metrics.entries.length], [t.raceCosts, formatCurrency(metrics.raceCostTotal, language)], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
                 </div>
               </section>}
 
@@ -434,6 +436,18 @@ const CommunitySupportManagementPage = () => {
                 <div className={cx(card, "p-5 md:p-6")}><div className="mb-4 flex items-center justify-between"><h3 className="font-heading font-black">{t.allTransactions}</h3><span className="text-xs text-gray-500">{visibleEntries.length}</span></div>
                   {visibleEntries.length === 0 ? <EmptyState icon={<WalletCards className="h-7 w-7" />} text={t.noTransactions} /> : <div className="space-y-2">{visibleEntries.map((entry) => <article key={entry.id} className="flex flex-col gap-4 rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055] sm:flex-row sm:items-center"><div className={cx("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", entry.direction === "income" ? "bg-emerald-500/10 text-emerald-300" : "bg-rose-500/10 text-rose-300")}>{entry.direction === "income" ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-gray-100">{entry.description}</p>{entry.isPublic ? <Eye className="h-3.5 w-3.5 text-gray-500" aria-label={t.public} /> : <EyeOff className="h-3.5 w-3.5 text-gray-600" />}</div><p className="mt-1 text-xs text-gray-500">{entry.date} · {SUPPORT_CATEGORY_LABELS[entry.category][language]}{entry.supporterName ? ` · ${entry.supporterName}` : ""}</p></div><p className={cx("font-black", entry.direction === "income" ? "text-emerald-300" : "text-rose-300")}>{entry.direction === "income" ? "+" : "−"}{formatCurrency(entry.amount, language)}</p><button type="button" onClick={() => removeLedgerEntry(entry.id)} aria-label={`${t.remove}: ${entry.description}`} className="inline-flex h-10 w-10 items-center justify-center self-end rounded-xl text-gray-500 transition hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400 sm:self-auto"><Trash2 className="h-4 w-4" /></button></article>)}</div>}
                 </div>
+              </section>}
+
+              {section === "race-costs" && <section id="panel-race-costs" role="tabpanel">
+                <RaceCostsSection
+                  language={language}
+                  selectedYear={selectedYear}
+                  onSelectedYearChange={setSelectedYear}
+                  raceCosts={state.raceCosts}
+                  hasRecurringServerCost={state.recurringCosts.some((cost) => cost.category === "server")}
+                  onSave={saveRaceCost}
+                  onRemove={removeRaceCost}
+                />
               </section>}
 
               {section === "recurring" && <section id="panel-recurring" role="tabpanel" className="space-y-6">
@@ -469,9 +483,6 @@ const CommunitySupportManagementPage = () => {
             </div>
           </div>
         </div>
-      </main>
-      <Footer />
-
       {clearOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setClearOpen(false); }}>
         <div ref={clearDialogRef} role="dialog" aria-modal="true" aria-labelledby="clear-data-title" aria-describedby="clear-data-description" className="w-full max-w-lg rounded-[1.65rem] bg-card p-6 shadow-2xl shadow-black/60 ring-1 ring-rose-400/20 md:p-8">
           <div className="flex items-start justify-between gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><button type="button" onClick={() => setClearOpen(false)} aria-label={t.cancel} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-white/[0.05] hover:text-white"><X className="h-5 w-5" /></button></div>
@@ -484,4 +495,4 @@ const CommunitySupportManagementPage = () => {
   );
 };
 
-export default CommunitySupportManagementPage;
+export default CommunitySupportModule;

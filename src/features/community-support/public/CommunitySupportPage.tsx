@@ -22,9 +22,10 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
-import { COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForMonth, publicLedgerForYear, supportMetricsForYear } from "../model";
+import { COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
 import { useCommunitySupport } from "../store";
 import { SUPPORT_CATEGORY_LABELS, type PublicSupportLedgerEntry, type SupportLedgerCategory } from "../types";
+import RaceCostsOverview from "./RaceCostsOverview";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 
@@ -228,7 +229,8 @@ const CommunitySupportPage = () => {
     currentYear,
     ...state.ledger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, state.ledger, state.recurringCosts]);
+    ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, state.ledger, state.raceCosts, state.recurringCosts]);
 
   const requestedPeriodRef = useRef({
     year: new URLSearchParams(window.location.search).get("year"),
@@ -283,6 +285,7 @@ const CommunitySupportPage = () => {
 
   const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
   const annualPublicLedger = useMemo(() => publicLedgerForYear(state, selectedYear), [state, selectedYear]);
+  const annualPublicRaceCosts = useMemo(() => publicRaceCostsForYear(state, selectedYear), [state, selectedYear]);
   const publicLedger = useMemo(() => selectedMonth === "all" ? annualPublicLedger : publicLedgerForMonth(state, selectedMonth), [annualPublicLedger, selectedMonth, state]);
   const products = useMemo(() => state.products.filter((product) => COMMUNITY_SUPPORT_PUBLIC
     ? product.active && !product.concept
@@ -402,6 +405,8 @@ const CommunitySupportPage = () => {
                 <p className="mt-3 text-xs text-gray-500">{copy.noTarget}</p>
               </div>
             </Surface>
+
+            <RaceCostsOverview language={lang} selectedYear={selectedYear} costs={annualPublicRaceCosts} />
 
             <section id="support-options" className="scroll-mt-24">
               <SectionHeading icon={<Heart className="h-4 w-4" aria-hidden="true" />} eyebrow={copy.eyebrow} title={copy.supportTitle} intro={copy.supportIntro} />
