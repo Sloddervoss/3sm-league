@@ -165,6 +165,8 @@ const toPublicRaceCost = (cost: SupportRaceCost): PublicSupportRaceCost => ({
   raceName: cost.raceName,
   track: cost.track,
   date: cost.date,
+  hostedHours: cost.hostedHours,
+  discountApplied: cost.discountApplied,
   amount: cost.amount,
   isPublic: true,
 });

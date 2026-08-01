@@ -54,12 +54,14 @@ export type SupportRaceCost = {
   track: string;
   date: string;
   raceFormat?: string;
+  hostedHours: number;
+  discountApplied: boolean;
   amount: number;
   isPublic: boolean;
   note?: string;
 };
 
-export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "amount"> & {
+export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "hostedHours" | "discountApplied" | "amount"> & {
   isPublic: true;
 };
 
@@ -79,6 +81,7 @@ export type SupportProduct = {
 export type CommunitySupportSettings = {
   reserve: number;
   reserveStartYear?: string;
+  racePricingInitialized: boolean;
   publicSupporterNamesByDefault: boolean;
   publicSupporterAmountsByDefault: boolean;
   paypalEnabled: boolean;

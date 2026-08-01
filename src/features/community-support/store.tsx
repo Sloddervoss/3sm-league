@@ -10,6 +10,7 @@ import type {
   SupportRecurringCost,
 } from "./types";
 import { isSupportedCommunitySupportRace } from "./raceEligibility";
+import { calculateRaceHostingAmount, normalizeHostedHours } from "./raceHostingPricing";
 
 const STORAGE_PREFIX = "3sm-community-support-session-v2";
 const INCOME_CATEGORIES = new Set(["contribution", "merchandise_income", "referral_income", "other"]);
@@ -23,6 +24,7 @@ const INITIAL_STATE: CommunitySupportState = {
   settings: {
     reserve: 0,
     reserveStartYear: String(new Date().getFullYear()),
+    racePricingInitialized: false,
     publicSupporterNamesByDefault: true,
     publicSupporterAmountsByDefault: false,
     paypalEnabled: false,
@@ -67,6 +69,8 @@ const raceCostSchema = z.object({
   track: z.string().min(1).max(160),
   date: dateSchema,
   raceFormat: z.string().max(80).optional(),
+  hostedHours: z.number().int().min(1).max(24).default(1),
+  discountApplied: z.boolean().default(false),
   amount: positiveMoneySchema,
   isPublic: z.boolean(),
   note: z.string().max(240).optional(),
@@ -89,6 +93,7 @@ const stateSchema = z.object({
   settings: z.object({
     reserve: moneySchema,
     reserveStartYear: z.string().regex(/^\d{4}$/).optional(),
+    racePricingInitialized: z.boolean().default(false),
     publicSupporterNamesByDefault: z.boolean(),
     publicSupporterAmountsByDefault: z.boolean(),
     paypalEnabled: z.boolean(),
@@ -115,7 +120,13 @@ const loadState = (storageKey: string): CommunitySupportState => {
       console.warn("Community Support session data was invalid and has been cleared.");
       return INITIAL_STATE;
     }
-    return result.data as CommunitySupportState;
+    return {
+      ...result.data,
+      raceCosts: result.data.raceCosts.map((cost) => ({
+        ...cost,
+        amount: calculateRaceHostingAmount(cost.hostedHours, cost.discountApplied),
+      })),
+    } as CommunitySupportState;
   } catch {
     return INITIAL_STATE;
   }
@@ -123,8 +134,35 @@ const loadState = (storageKey: string): CommunitySupportState => {
 
 export type SupportLedgerDraft = Omit<SupportLedgerEntry, "id">;
 export type SupportRecurringCostDraft = Omit<SupportRecurringCost, "id">;
-export type SupportRaceCostDraft = Omit<SupportRaceCost, "id">;
+export type SupportRaceCostDraft = Omit<SupportRaceCost, "id" | "amount"> & { amount?: number };
 export type SupportProductDraft = Omit<SupportProduct, "id">;
+
+const normalizeRaceCostDraft = (draft: SupportRaceCostDraft): Omit<SupportRaceCost, "id"> | null => {
+  if (!isSupportedCommunitySupportRace(draft)) return null;
+  if ((draft.raceScope === "season") !== Boolean(draft.leagueId)) return null;
+  const hostedHours = normalizeHostedHours(draft.hostedHours);
+  if (hostedHours === null) return null;
+  return {
+    ...draft,
+    hostedHours,
+    discountApplied: Boolean(draft.discountApplied),
+    date: draft.date.slice(0, 10),
+    amount: calculateRaceHostingAmount(hostedHours, draft.discountApplied),
+    note: draft.note?.trim() || undefined,
+  };
+};
+
+const saveRaceCostDrafts = (current: CommunitySupportState, drafts: SupportRaceCostDraft[]): CommunitySupportState => {
+  const raceCosts = [...current.raceCosts];
+  drafts.forEach((draft) => {
+    const normalized = normalizeRaceCostDraft(draft);
+    if (!normalized) return;
+    const existingIndex = raceCosts.findIndex((cost) => cost.raceId === normalized.raceId);
+    if (existingIndex >= 0) raceCosts[existingIndex] = { ...normalized, id: raceCosts[existingIndex].id };
+    else raceCosts.unshift(withId(normalized));
+  });
+  return { ...current, raceCosts };
+};
 
 type CommunitySupportStore = {
   state: CommunitySupportState;
@@ -134,6 +172,8 @@ type CommunitySupportStore = {
   toggleRecurringCost: (id: string) => void;
   removeRecurringCost: (id: string) => void;
   saveRaceCost: (draft: SupportRaceCostDraft) => void;
+  saveRaceCosts: (drafts: SupportRaceCostDraft[]) => void;
+  initializeRaceCosts: (drafts: SupportRaceCostDraft[]) => void;
   removeRaceCost: (id: string) => void;
   addProduct: (draft: SupportProductDraft) => void;
   toggleProduct: (id: string) => void;
@@ -188,24 +228,16 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
   const addRecurringCost = useCallback((draft: SupportRecurringCostDraft) => setState((current) => ({ ...current, recurringCosts: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.recurringCosts] })), []);
   const toggleRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.map((cost) => cost.id === id ? { ...cost, active: !cost.active } : cost) })), []);
   const removeRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.filter((cost) => cost.id !== id) })), []);
-  const saveRaceCost = useCallback((draft: SupportRaceCostDraft) => setState((current) => {
-    if (!isSupportedCommunitySupportRace(draft)) return current;
-    if ((draft.raceScope === "season") !== Boolean(draft.leagueId)) return current;
-    const amount = safeAmount(draft.amount);
-    if (amount <= 0) return current;
-    const normalized = {
-      ...draft,
-      date: draft.date.slice(0, 10),
-      amount,
-      note: draft.note?.trim() || undefined,
-    };
-    const existing = current.raceCosts.find((cost) => cost.raceId === draft.raceId);
-    return {
-      ...current,
-      raceCosts: existing
-        ? current.raceCosts.map((cost) => cost.raceId === draft.raceId ? { ...normalized, id: cost.id } : cost)
-        : [{ ...withId(normalized) }, ...current.raceCosts],
-    };
+  const saveRaceCost = useCallback((draft: SupportRaceCostDraft) => setState((current) => saveRaceCostDrafts(current, [draft])), []);
+  const saveRaceCosts = useCallback((drafts: SupportRaceCostDraft[]) => setState((current) => saveRaceCostDrafts(current, drafts)), []);
+  const initializeRaceCosts = useCallback((drafts: SupportRaceCostDraft[]) => setState((current) => {
+    if (current.settings.racePricingInitialized) return current;
+    const existingByRaceId = new Map(current.raceCosts.map((cost) => [cost.raceId, cost]));
+    const initialized = saveRaceCostDrafts(current, drafts.map((draft) => {
+      const existing = existingByRaceId.get(draft.raceId);
+      return existing ? { ...draft, isPublic: existing.isPublic, note: existing.note } : draft;
+    }));
+    return { ...initialized, settings: { ...initialized.settings, racePricingInitialized: true } };
   }), []);
   const removeRaceCost = useCallback((id: string) => setState((current) => ({ ...current, raceCosts: current.raceCosts.filter((cost) => cost.id !== id) })), []);
   const addProduct = useCallback((draft: SupportProductDraft) => setState((current) => ({ ...current, products: [{ ...withId(draft), price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: safeAmount(draft.shippingCost), stock: Math.max(0, Math.floor(draft.stock)) }, ...current.products] })), []);
@@ -228,13 +260,15 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     toggleRecurringCost,
     removeRecurringCost,
     saveRaceCost,
+    saveRaceCosts,
+    initializeRaceCosts,
     removeRaceCost,
     addProduct,
     toggleProduct,
     removeProduct,
     updateSettings,
     clearLocalData,
-  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
+  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
   return <CommunitySupportContext.Provider value={value}>{children}</CommunitySupportContext.Provider>;
 };
 
