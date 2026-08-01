@@ -6,11 +6,14 @@ import type {
   CommunitySupportState,
   SupportLedgerEntry,
   SupportProduct,
+  SupportPaymentIntent,
+  SupportPaymentIntentDraft,
   SupportRaceCost,
   SupportRecurringCost,
 } from "./types";
 import { isSupportedCommunitySupportRace } from "./raceEligibility";
 import { calculateRaceHostingAmountUsd, convertUsdToEur, DEFAULT_USD_EUR_RATE, normalizeHostedHours, normalizeUsdEurRate } from "./raceHostingPricing";
+import { createPaymentIntent, DEFAULT_PAYPAL_AMOUNTS_EUR, normalizeDiscordUserId, normalizePayPalAmounts, normalizePayPalMeUrl, resolvePaymentIntent } from "./paymentFlow";
 
 const STORAGE_PREFIX = "3sm-community-support-session-v2";
 const INCOME_CATEGORIES = new Set(["contribution", "merchandise_income", "referral_income", "other"]);
@@ -21,6 +24,7 @@ const INITIAL_STATE: CommunitySupportState = {
   recurringCosts: [],
   raceCosts: [],
   products: [],
+  paymentIntents: [],
   settings: {
     reserve: 0,
     reserveStartYear: String(new Date().getFullYear()),
@@ -29,6 +33,9 @@ const INITIAL_STATE: CommunitySupportState = {
     publicSupporterNamesByDefault: true,
     publicSupporterAmountsByDefault: false,
     paypalEnabled: false,
+    paypalMeUrl: "",
+    paypalSuggestedAmounts: [...DEFAULT_PAYPAL_AMOUNTS_EUR],
+    paymentAdminDiscordId: "",
   },
 };
 
@@ -116,11 +123,25 @@ const productSchema = z.preprocess((value) => {
   stock: z.number().int().min(0).max(1_000_000), active: z.boolean(), concept: z.boolean(),
   imageUrls: z.array(productImageSchema).max(4).default([]),
 }));
+const paymentIntentSchema = z.object({
+  id: z.string().min(1).max(100),
+  requestedAmount: positiveMoneySchema,
+  payerName: z.string().min(1).max(100),
+  showSupporterName: z.boolean(),
+  showAmount: z.boolean(),
+  status: z.enum(["pending", "confirmed", "not_found"]),
+  createdAt: z.string().datetime(),
+  resolvedAt: z.string().datetime().optional(),
+  grossAmount: positiveMoneySchema.optional(),
+  feeAmount: moneySchema.optional(),
+  resolutionNote: z.string().min(1).max(500).optional(),
+});
 const stateSchema = z.object({
   ledger: z.array(ledgerSchema).max(5_000),
   recurringCosts: z.array(recurringSchema).max(500),
   raceCosts: z.array(raceCostSchema).max(1_000).default([]),
   products: z.array(productSchema).max(500),
+  paymentIntents: z.array(paymentIntentSchema).max(500).default([]),
   settings: z.object({
     reserve: moneySchema,
     reserveStartYear: z.string().regex(/^\d{4}$/).optional(),
@@ -129,6 +150,9 @@ const stateSchema = z.object({
     publicSupporterNamesByDefault: z.boolean(),
     publicSupporterAmountsByDefault: z.boolean(),
     paypalEnabled: z.boolean(),
+    paypalMeUrl: z.string().max(200).default(""),
+    paypalSuggestedAmounts: z.array(positiveMoneySchema).max(6).default([...DEFAULT_PAYPAL_AMOUNTS_EUR]),
+    paymentAdminDiscordId: z.string().max(20).default(""),
   }),
 }).superRefine((state, context) => {
   const seenRaceIds = new Set<string>();
@@ -223,6 +247,8 @@ type CommunitySupportStore = {
   toggleProduct: (id: string) => void;
   removeProduct: (id: string) => void;
   updateSettings: (settings: Partial<CommunitySupportSettings>) => void;
+  addPaymentIntent: (draft: SupportPaymentIntentDraft) => SupportPaymentIntent | null;
+  resolvePayment: (id: string, action: "confirm" | "not_found", grossAmount?: number, feeAmount?: number, resolutionNote?: string) => boolean;
   clearLocalData: () => void;
 };
 
@@ -291,8 +317,35 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
   const updateSettings = useCallback((settings: Partial<CommunitySupportSettings>) => setState((current) => {
     const usdEurRate = settings.usdEurRate === undefined ? current.settings.usdEurRate : normalizeUsdEurRate(settings.usdEurRate);
     if (usdEurRate === null) return current;
-    return { ...current, settings: { ...current.settings, ...settings, usdEurRate, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } };
+    const paypalMeUrl = settings.paypalMeUrl === undefined ? current.settings.paypalMeUrl : (normalizePayPalMeUrl(settings.paypalMeUrl) ?? "");
+    const paymentAdminDiscordId = settings.paymentAdminDiscordId === undefined ? current.settings.paymentAdminDiscordId : (normalizeDiscordUserId(settings.paymentAdminDiscordId) ?? "");
+    const paypalSuggestedAmounts = settings.paypalSuggestedAmounts === undefined ? current.settings.paypalSuggestedAmounts : normalizePayPalAmounts(settings.paypalSuggestedAmounts);
+    const paypalEnabled = settings.paypalEnabled === undefined ? current.settings.paypalEnabled : Boolean(settings.paypalEnabled && paypalMeUrl && paymentAdminDiscordId && paypalSuggestedAmounts.length > 0);
+    return { ...current, settings: { ...current.settings, ...settings, paypalEnabled, paypalMeUrl, paymentAdminDiscordId, paypalSuggestedAmounts, usdEurRate, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } };
   }), []);
+  const addPaymentIntent = useCallback((draft: SupportPaymentIntentDraft) => {
+    const intent = createPaymentIntent(draft, createLocalId());
+    if (!intent) return null;
+    setState((current) => ({ ...current, paymentIntents: [intent, ...current.paymentIntents] }));
+    return intent;
+  }, []);
+  const resolvePayment = useCallback((id: string, action: "confirm" | "not_found", grossAmount?: number, feeAmount?: number, resolutionNote?: string) => {
+    let resolved = false;
+    setState((current) => {
+      const existing = current.paymentIntents.find((intent) => intent.id === id);
+      if (!existing) return current;
+      const result = resolvePaymentIntent(existing, action, { grossAmount, feeAmount, resolutionNote });
+      if (!result) return current;
+      resolved = true;
+      const existingLedgerIds = new Set(current.ledger.map((entry) => entry.id));
+      return {
+        ...current,
+        paymentIntents: current.paymentIntents.map((intent) => intent.id === id ? result.intent : intent),
+        ledger: [...result.ledgerEntries.filter((entry) => !existingLedgerIds.has(entry.id)), ...current.ledger],
+      };
+    });
+    return resolved;
+  }, []);
   const clearLocalData = useCallback(() => {
     if (storageKey) {
       try { window.sessionStorage.removeItem(storageKey); } catch { /* state is still cleared */ }
@@ -316,8 +369,10 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     toggleProduct,
     removeProduct,
     updateSettings,
+    addPaymentIntent,
+    resolvePayment,
     clearLocalData,
-  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
+  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, addPaymentIntent, resolvePayment, clearLocalData]);
   return <CommunitySupportContext.Provider value={value}>{children}</CommunitySupportContext.Provider>;
 };
 

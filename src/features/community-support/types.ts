@@ -91,6 +91,28 @@ export type CommunitySupportSettings = {
   publicSupporterNamesByDefault: boolean;
   publicSupporterAmountsByDefault: boolean;
   paypalEnabled: boolean;
+  paypalMeUrl: string;
+  paypalSuggestedAmounts: number[];
+  paymentAdminDiscordId: string;
+};
+
+export type SupportPaymentIntentStatus = "pending" | "confirmed" | "not_found";
+
+export type SupportPaymentIntentDraft = {
+  requestedAmount: number;
+  payerName: string;
+  showSupporterName: boolean;
+  showAmount: boolean;
+};
+
+export type SupportPaymentIntent = SupportPaymentIntentDraft & {
+  id: string;
+  status: SupportPaymentIntentStatus;
+  createdAt: string;
+  resolvedAt?: string;
+  grossAmount?: number;
+  feeAmount?: number;
+  resolutionNote?: string;
 };
 
 export type CommunitySupportState = {
@@ -98,6 +120,7 @@ export type CommunitySupportState = {
   recurringCosts: SupportRecurringCost[];
   raceCosts: SupportRaceCost[];
   products: SupportProduct[];
+  paymentIntents: SupportPaymentIntent[];
   settings: CommunitySupportSettings;
 };
 

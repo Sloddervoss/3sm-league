@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   CheckCircle2,
@@ -20,11 +22,14 @@ import {
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import PreviewModal from "@/components/preview/PreviewModal";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
-import { COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
+import { COMMUNITY_SUPPORT_HAS_SHARED_DATA, COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
+import { fetchPublicPaymentConfig, fetchSharedPaymentLedger, submitPaymentIntent } from "../paymentApi";
 import { useCommunitySupport } from "../store";
 import SeasonLedgerModal from "./SeasonLedgerModal";
+import PayPalContributionModal from "./PayPalContributionModal";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 
@@ -64,8 +69,8 @@ const getCopy = (language: Language) => language === "en" ? {
   supportCta: "See how you can contribute",
   supportIntro: "3SM keeps going either way. If you would like to contribute voluntarily toward the season's costs, choose what suits you — without obligation.",
   paypalTitle: "Voluntary contribution",
-  paypalText: "PayPal support is available. Request the current payment link through our Discord so you always use the verified 3SM destination.",
-  paypalCta: "Request PayPal link",
+  paypalText: "Choose an amount in the 3SM window. PayPal.Me opens securely in a separate tab or app, while this page stays ready for your return.",
+  paypalCta: "Contribute through PayPal.Me",
   paypalOffTitle: "Financial support",
   paypalOffText: "Direct PayPal contributions are not currently enabled. You can still help in the other ways below.",
   merchandiseTitle: "Community merchandise",
@@ -140,8 +145,8 @@ const getCopy = (language: Language) => language === "en" ? {
   supportCta: "Bekijk hoe je kunt bijdragen",
   supportIntro: "3SM gaat sowieso door. Wil je vrijwillig bijdragen aan de kosten van het seizoen, kies dan wat bij je past — zonder enige verplichting.",
   paypalTitle: "Vrijwillige bijdrage",
-  paypalText: "Steunen via PayPal is beschikbaar. Vraag de actuele betaallink via onze Discord, zodat je altijd de gecontroleerde 3SM-bestemming gebruikt.",
-  paypalCta: "Vraag PayPal-link",
+  paypalText: "Kies een bedrag in het 3SM-venster. PayPal.Me opent veilig in een apart tabblad of de app, terwijl deze pagina klaar blijft voor je terugkomst.",
+  paypalCta: "Bijdragen via PayPal.Me",
   paypalOffTitle: "Financieel steunen",
   paypalOffText: "Rechtstreeks bijdragen via PayPal staat momenteel niet aan. Je kunt wel op de andere manieren hieronder helpen.",
   merchandiseTitle: "Communitymerchandise",
@@ -224,18 +229,28 @@ const MetricCard = ({ label, value, icon, accent = false }: { label: string; val
 
 const CommunitySupportPage = () => {
   const { language } = useLanguage();
-  const { state } = useCommunitySupport();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { state, addPaymentIntent } = useCommunitySupport();
   const lang: Language = language === "en" ? "en" : "nl";
   const copy = getCopy(lang);
   const currentMonth = monthKey(new Date());
   const currentYear = currentMonth.slice(0, 4);
+  const { data: sharedPaymentLedger } = useQuery({
+    queryKey: ["community-support", "payment-ledger", "public"],
+    queryFn: fetchSharedPaymentLedger,
+    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
+    staleTime: 60_000,
+  });
 
   const availableYears = useMemo(() => Array.from(new Set([
     currentYear,
     ...state.ledger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
     ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, state.ledger, state.raceCosts, state.recurringCosts]);
+    ...(sharedPaymentLedger?.entries ?? []).map((entry) => entry.date.slice(0, 4)),
+    ...(sharedPaymentLedger?.metricEntries ?? []).map((entry) => entry.date.slice(0, 4)),
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, sharedPaymentLedger, state.ledger, state.raceCosts, state.recurringCosts]);
 
   const requestedPeriodRef = useRef({
     year: new URLSearchParams(window.location.search).get("year"),
@@ -252,6 +267,25 @@ const CommunitySupportPage = () => {
     return queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) && queryMonth.startsWith(initialYear) ? queryMonth : "all";
   });
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const requirePaymentAuthentication = () => {
+    setPaymentOpen(false);
+    navigate("/auth?redirect=/support/");
+  };
+  const beginContribution = () => {
+    if (COMMUNITY_SUPPORT_HAS_SHARED_DATA && !user) {
+      requirePaymentAuthentication();
+      return;
+    }
+    setPaymentOpen(true);
+  };
+  const { data: sharedPaymentConfig } = useQuery({
+    queryKey: ["community-support", "payment-config", "public"],
+    queryFn: fetchPublicPaymentConfig,
+    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
+    staleTime: 60_000,
+  });
+  const paymentSettings = useMemo(() => sharedPaymentConfig ? { ...state.settings, ...sharedPaymentConfig } : state.settings, [sharedPaymentConfig, state.settings]);
 
   const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => `${selectedYear}-${String(index + 1).padStart(2, "0")}`), [selectedYear]);
 
@@ -289,10 +323,19 @@ const CommunitySupportPage = () => {
     updateUrlPeriod(selectedYear, nextMonth);
   };
 
-  const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
-  const annualPublicLedger = useMemo(() => publicLedgerForYear(state, selectedYear), [state, selectedYear]);
+  const stateWithoutLocalPayPal = useMemo(() => COMMUNITY_SUPPORT_HAS_SHARED_DATA
+    ? { ...state, ledger: state.ledger.filter((entry) => !entry.id.startsWith("paypal-contribution:") && !entry.id.startsWith("paypal-fee:")) }
+    : state, [state]);
+  const metricState = useMemo(() => sharedPaymentLedger
+    ? { ...stateWithoutLocalPayPal, ledger: [...stateWithoutLocalPayPal.ledger, ...sharedPaymentLedger.metricEntries] }
+    : stateWithoutLocalPayPal, [sharedPaymentLedger, stateWithoutLocalPayPal]);
+  const metrics = useMemo(() => supportMetricsForYear(metricState, selectedYear), [metricState, selectedYear]);
+  const annualPublicLedger = useMemo(() => [
+    ...publicLedgerForYear(stateWithoutLocalPayPal, selectedYear),
+    ...(sharedPaymentLedger?.entries ?? []).filter((entry) => entry.date.startsWith(selectedYear)),
+  ].sort((a, b) => b.date.localeCompare(a.date)), [selectedYear, sharedPaymentLedger, stateWithoutLocalPayPal]);
   const annualPublicRaceCosts = useMemo(() => publicRaceCostsForYear(state, selectedYear), [state, selectedYear]);
-  const publicLedger = useMemo(() => selectedMonth === "all" ? annualPublicLedger : publicLedgerForMonth(state, selectedMonth), [annualPublicLedger, selectedMonth, state]);
+  const publicLedger = useMemo(() => selectedMonth === "all" ? annualPublicLedger : annualPublicLedger.filter((entry) => entry.date.startsWith(selectedMonth)), [annualPublicLedger, selectedMonth]);
   const products = useMemo(() => state.products.filter((product) => COMMUNITY_SUPPORT_PUBLIC
     ? product.active && !product.concept
     : product.active || product.concept), [state.products]);
@@ -427,9 +470,9 @@ const CommunitySupportPage = () => {
               <div className="grid gap-4 lg:grid-cols-3">
                 <Surface className="flex flex-col p-6">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-300 ring-1 ring-orange-400/20"><CircleDollarSign className="h-5 w-5" aria-hidden="true" /></div>
-                  <h3 className="mt-5 font-heading text-lg font-black uppercase text-white">{state.settings.paypalEnabled ? copy.paypalTitle : copy.paypalOffTitle}</h3>
-                  <p className="mt-2 flex-1 text-sm leading-6 text-gray-400">{state.settings.paypalEnabled ? copy.paypalText : copy.paypalOffText}</p>
-                  {state.settings.paypalEnabled && <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-2 self-start rounded-xl bg-gradient-racing px-4 py-2.5 text-sm font-black text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">{copy.paypalCta}<ExternalLink className="h-4 w-4" aria-hidden="true" /></a>}
+                  <h3 className="mt-5 font-heading text-lg font-black uppercase text-white">{paymentSettings.paypalEnabled ? copy.paypalTitle : copy.paypalOffTitle}</h3>
+                  <p className="mt-2 flex-1 text-sm leading-6 text-gray-400">{paymentSettings.paypalEnabled ? copy.paypalText : copy.paypalOffText}</p>
+                  {paymentSettings.paypalEnabled && <button type="button" onClick={beginContribution} aria-haspopup="dialog" className="mt-5 inline-flex items-center gap-2 self-start rounded-xl bg-gradient-racing px-4 py-2.5 text-sm font-black text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">{copy.paypalCta}<ChevronRight className="h-4 w-4" aria-hidden="true" /></button>}
                 </Surface>
                 <Surface className="flex flex-col p-6">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.045] text-gray-200 ring-1 ring-white/[0.08]"><ShoppingBag className="h-5 w-5" aria-hidden="true" /></div>
@@ -526,6 +569,28 @@ const CommunitySupportPage = () => {
             communityCovered: metrics.communityCovered,
             selfFunded: metrics.selfFunded,
             reserve: metrics.reserve,
+          }}
+        />
+      </PreviewModal>
+      <PreviewModal
+        open={paymentOpen}
+        onClose={() => setPaymentOpen(false)}
+        maxWidth="720px"
+        ariaLabel={copy.paypalTitle}
+        closeLabel={lang === "en" ? "Close PayPal contribution" : "Sluit PayPal-bijdrage"}
+      >
+        <PayPalContributionModal
+          language={lang}
+          settings={paymentSettings}
+          localReview={!COMMUNITY_SUPPORT_HAS_SHARED_DATA}
+          canOpenPayPal={!COMMUNITY_SUPPORT_HAS_SHARED_DATA || Boolean(user)}
+          onAuthenticationRequired={requirePaymentAuthentication}
+          onSubmit={async (draft) => {
+            if (COMMUNITY_SUPPORT_HAS_SHARED_DATA) {
+              await submitPaymentIntent(draft);
+              return true;
+            }
+            return Boolean(addPaymentIntent(draft));
           }}
         />
       </PreviewModal>
