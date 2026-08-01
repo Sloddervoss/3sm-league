@@ -27,7 +27,11 @@ export const entryMonth = (value: string) => value.slice(0, 7);
 export const entryYear = (value: string) => value.slice(0, 4);
 const monthsForYear = (year: string) => Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
 
-export const recurringCostsForMonth = (costs: SupportRecurringCost[], selectedMonth: string) => costs.filter((cost) => cost.active && cost.startsOn.slice(0, 7) <= selectedMonth);
+export const recurringCostsForMonth = (costs: SupportRecurringCost[], selectedMonth: string) => costs.filter((cost) => {
+  const startMonth = cost.startsOn.slice(0, 7);
+  if (!cost.active || startMonth > selectedMonth) return false;
+  return cost.frequency !== "yearly" || startMonth.slice(5, 7) === selectedMonth.slice(5, 7);
+});
 
 export const recurringCostOccurrencesForYear = (costs: SupportRecurringCost[], selectedYear: string): SupportRecurringCost[] => monthsForYear(selectedYear).flatMap((month) =>
   recurringCostsForMonth(costs, month).map((cost) => ({ ...cost, id: `${month}-${cost.id}`, startsOn: `${month}-01` })),

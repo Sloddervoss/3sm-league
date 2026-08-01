@@ -38,7 +38,7 @@ describe("Community Support financial model", () => {
   it("keeps reserve separate from the monthly coverage bar", () => {
     const state = emptyState();
     state.settings.reserve = 100;
-    state.recurringCosts = [{ id: "server", startsOn: "2026-06-01", category: "server", description: "Server", amount: 80, isPublic: true, active: true }];
+    state.recurringCosts = [{ id: "server", startsOn: "2026-06-01", category: "server", description: "Server", amount: 80, frequency: "monthly", isPublic: true, active: true }];
 
     const metrics = supportMetrics(state, "2026-07");
     expect(metrics.operationalExpenses).toBe(80);
@@ -51,13 +51,25 @@ describe("Community Support financial model", () => {
   it("includes active recurring costs from their start month onward", () => {
     const state = emptyState();
     state.recurringCosts = [
-      { id: "active", startsOn: "2026-07-01", category: "hosting", description: "Hosting", amount: 20, isPublic: true, active: true },
-      { id: "future", startsOn: "2026-08-01", category: "domain", description: "Domein", amount: 12, isPublic: true, active: true },
-      { id: "inactive", startsOn: "2026-01-01", category: "software", description: "Software", amount: 9, isPublic: true, active: false },
+      { id: "active", startsOn: "2026-07-01", category: "hosting", description: "Hosting", amount: 20, frequency: "monthly", isPublic: true, active: true },
+      { id: "future", startsOn: "2026-08-01", category: "domain", description: "Domein", amount: 12, frequency: "monthly", isPublic: true, active: true },
+      { id: "inactive", startsOn: "2026-01-01", category: "software", description: "Software", amount: 9, frequency: "monthly", isPublic: true, active: false },
     ];
 
     expect(supportMetrics(state, "2026-07").operationalExpenses).toBe(20);
     expect(supportMetrics(state, "2026-08").operationalExpenses).toBe(32);
+  });
+
+  it("counts yearly recurring costs once per year in their start month", () => {
+    const state = emptyState();
+    state.recurringCosts = [{ id: "domain", startsOn: "2026-08-15", category: "domain", description: "Domein", amount: 120, frequency: "yearly", isPublic: true, active: true }];
+
+    expect(supportMetrics(state, "2026-07").operationalExpenses).toBe(0);
+    expect(supportMetrics(state, "2026-08").operationalExpenses).toBe(120);
+    expect(supportMetrics(state, "2026-09").operationalExpenses).toBe(0);
+    expect(supportMetrics(state, "2027-08").operationalExpenses).toBe(120);
+    expect(supportMetricsForYear(state, "2026").operationalExpenses).toBe(120);
+    expect(publicLedgerForYear(state, "2026")).toHaveLength(1);
   });
 
   it("aggregates the season by year while keeping other years out", () => {
@@ -67,7 +79,7 @@ describe("Community Support financial model", () => {
       { id: "support", date: "2026-11-10", direction: "income", category: "contribution", description: "Bijdrage", amount: 50, isPublic: true },
       { id: "old", date: "2025-12-10", direction: "expense", category: "hosting", description: "Vorig jaar", amount: 999, isPublic: true },
     ];
-    state.recurringCosts = [{ id: "server", startsOn: "2026-07-01", category: "server", description: "Raceserver", amount: 20, isPublic: true, active: true }];
+    state.recurringCosts = [{ id: "server", startsOn: "2026-07-01", category: "server", description: "Raceserver", amount: 20, frequency: "monthly", isPublic: true, active: true }];
 
     const metrics = supportMetricsForYear(state, "2026");
     expect(metrics.operationalExpenses).toBe(150);
@@ -127,7 +139,7 @@ describe("Community Support financial model", () => {
       { id: "private", date: "2026-07-11", direction: "expense", category: "other", description: "Privé", amount: 30, isPublic: false },
     ];
     state.recurringCosts = [
-      { id: "recurring", startsOn: "2026-07-01", category: "server", description: "Server", amount: 40, isPublic: true, active: true },
+      { id: "recurring", startsOn: "2026-07-01", category: "server", description: "Server", amount: 40, frequency: "monthly", isPublic: true, active: true },
     ];
 
     expect(publicLedgerForMonth(state, "2026-07").map((entry) => entry.description)).toEqual(["Openbaar", "Server"]);

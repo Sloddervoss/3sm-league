@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   Flag,
+  Images,
   LayoutDashboard,
   PackageOpen,
   Plus,
@@ -26,6 +27,7 @@ import { useLanguage } from "@/i18n/useLanguage";
 import { monthKey, supportMetricsForYear } from "@/features/community-support/model";
 import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "@/features/community-support/store";
 import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "@/features/community-support/types";
+import { MAX_PRODUCT_IMAGES, prepareProductImage } from "@/features/community-support/productImages";
 import RaceCostsSection from "./RaceCostsSection";
 
 type Language = "nl" | "en";
@@ -73,8 +75,11 @@ const COPY: Record<Language, Copy> = {
     noTransactions: "Geen transacties in deze maand.",
     allTransactions: "Alle lokale transacties",
     remove: "Verwijderen",
-    recurringHelp: "Actieve posten tellen vanaf hun startmaand mee in iedere maand.",
+    recurringHelp: "Kies of een actieve kostenpost iedere maand of eenmaal per jaar terugkomt.",
     startsOn: "Startdatum",
+    frequency: "Frequentie",
+    monthly: "Maandelijks",
+    yearly: "Jaarlijks",
     active: "Actief",
     inactive: "Gepauzeerd",
     addRecurring: "Kostenpost toevoegen",
@@ -86,7 +91,13 @@ const COPY: Record<Language, Copy> = {
     purchasePrice: "Inkoopprijs",
     shippingCost: "Verzendkosten",
     stock: "Voorraad",
-    imageUrl: "Afbeeldings-URL (optioneel)",
+    productImages: "Productfoto’s (optioneel)",
+    chooseImages: "Foto’s kiezen",
+    imageHelp: "Maximaal 4 foto’s. JPEG, PNG of WebP; bestanden worden automatisch verkleind en alleen lokaal bewaard.",
+    imageError: "Een of meer foto’s konden niet worden verwerkt. Gebruik JPEG, PNG of WebP van maximaal 12 MB.",
+    imageLimit: "Je kunt maximaal 4 productfoto’s toevoegen.",
+    removeImage: "Foto verwijderen",
+    mainImage: "Hoofdfoto",
     concept: "Concept",
     published: "Gepubliceerd",
     addProduct: "Product toevoegen",
@@ -152,8 +163,11 @@ const COPY: Record<Language, Copy> = {
     noTransactions: "No transactions in this month.",
     allTransactions: "All local transactions",
     remove: "Delete",
-    recurringHelp: "Active items count towards every month from their starting month onwards.",
+    recurringHelp: "Choose whether an active cost recurs every month or once per year.",
     startsOn: "Start date",
+    frequency: "Frequency",
+    monthly: "Monthly",
+    yearly: "Yearly",
     active: "Active",
     inactive: "Paused",
     addRecurring: "Add cost item",
@@ -165,7 +179,13 @@ const COPY: Record<Language, Copy> = {
     purchasePrice: "Purchase price",
     shippingCost: "Shipping costs",
     stock: "Stock",
-    imageUrl: "Image URL (optional)",
+    productImages: "Product photos (optional)",
+    chooseImages: "Choose photos",
+    imageHelp: "Up to 4 photos. JPEG, PNG or WebP; files are resized automatically and stored locally only.",
+    imageError: "One or more photos could not be processed. Use JPEG, PNG or WebP up to 12 MB.",
+    imageLimit: "You can add up to 4 product photos.",
+    removeImage: "Remove photo",
+    mainImage: "Main photo",
     concept: "Draft",
     published: "Published",
     addProduct: "Add product",
@@ -248,6 +268,9 @@ const CommunitySupportModule = () => {
   const [recurringPublic, setRecurringPublic] = useState(true);
   const [productActive, setProductActive] = useState(false);
   const [productConcept, setProductConcept] = useState(true);
+  const [productImages, setProductImages] = useState<string[]>([]);
+  const [productImagesBusy, setProductImagesBusy] = useState(false);
+  const [productImageError, setProductImageError] = useState<string | null>(null);
   const [settingsDraft, setSettingsDraft] = useState(state.settings);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
@@ -329,12 +352,35 @@ const CommunitySupportModule = () => {
     const draft: SupportRecurringCostDraft = {
       startsOn: String(data.get("startsOn")),
       category: String(data.get("category")) as SupportRecurringCostDraft["category"],
-      description: String(data.get("description")).trim(), amount, isPublic: recurringPublic, active: true,
+      description: String(data.get("description")).trim(), amount,
+      frequency: String(data.get("frequency")) as SupportRecurringCostDraft["frequency"],
+      isPublic: recurringPublic, active: true,
     };
     addRecurringCost(draft);
     form.reset();
     const dateInput = form.elements.namedItem("startsOn") as HTMLInputElement | null;
     if (dateInput) dateInput.value = today();
+  };
+
+  const addProductImages = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const slots = MAX_PRODUCT_IMAGES - productImages.length;
+    if (slots <= 0) {
+      setProductImageError(t.imageLimit);
+      return;
+    }
+    setProductImagesBusy(true);
+    setProductImageError(files.length > slots ? t.imageLimit : null);
+    const prepared: string[] = [];
+    for (const file of Array.from(files).slice(0, slots)) {
+      try {
+        prepared.push(await prepareProductImage(file));
+      } catch {
+        setProductImageError(t.imageError);
+      }
+    }
+    if (prepared.length > 0) setProductImages((current) => [...current, ...prepared].slice(0, MAX_PRODUCT_IMAGES));
+    setProductImagesBusy(false);
   };
 
   const submitProduct = (event: FormEvent<HTMLFormElement>) => {
@@ -346,13 +392,15 @@ const CommunitySupportModule = () => {
       price: parseAmount(data.get("price")), purchasePrice: parseAmount(data.get("purchasePrice")),
       shippingCost: parseAmount(data.get("shippingCost")), stock: Number(data.get("stock")),
       active: productActive, concept: productConcept,
-      imageUrl: String(data.get("imageUrl") ?? "").trim() || undefined,
+      imageUrls: productImages,
     };
     if (![draft.price, draft.purchasePrice, draft.shippingCost, draft.stock].every(Number.isFinite) || draft.price < 0 || draft.purchasePrice < 0 || draft.shippingCost < 0 || draft.stock < 0) return;
     addProduct(draft);
     form.reset();
     setProductActive(false);
     setProductConcept(true);
+    setProductImages([]);
+    setProductImageError(null);
   };
 
   const submitSettings = (event: FormEvent<HTMLFormElement>) => {
@@ -455,21 +503,30 @@ const CommunitySupportModule = () => {
 
               {section === "recurring" && <section id="panel-recurring" role="tabpanel" className="space-y-6">
                 <SectionHeader title={t.recurring} help={t.recurringHelp} />
-                <form ref={recurringFormRef} onSubmit={submitRecurring} className={cx(card, "grid gap-5 p-6 md:grid-cols-2 lg:grid-cols-4 md:p-8")}>
-                  <Field title={t.startsOn}><input name="startsOn" type="date" required defaultValue={today()} className={input} /></Field><Field title={t.category}><select name="category" className={input}>{categoryOptions(["hosting", "server", "domain", "software", "development", "other"])}</select></Field><Field title={t.amount}><input name="amount" type="number" required min="0.01" step="0.01" className={input} /></Field><Field title={t.description}><input name="description" required maxLength={160} className={input} /></Field>
+                <form ref={recurringFormRef} onSubmit={submitRecurring} className={cx(card, "grid gap-5 p-6 md:grid-cols-2 2xl:grid-cols-5 md:p-8")}>
+                  <Field title={t.startsOn}><input name="startsOn" type="date" required defaultValue={today()} className={input} /></Field>
+                  <Field title={t.frequency}><select name="frequency" defaultValue="monthly" className={input}><option value="monthly">{t.monthly}</option><option value="yearly">{t.yearly}</option></select></Field>
+                  <Field title={t.category}><select name="category" className={input}>{categoryOptions(["hosting", "server", "domain", "software", "development", "other"])}</select></Field>
+                  <Field title={t.amount}><input name="amount" type="number" required min="0.01" step="0.01" inputMode="decimal" className={input} /></Field>
+                  <Field title={t.description}><input name="description" required maxLength={160} className={input} /></Field>
                   <div className="md:col-span-2"><Toggle checked={recurringPublic} onChange={setRecurringPublic} label={t.public} /></div><button type="submit" className={cx(primaryButton, "md:col-span-2 md:justify-self-end")}><Plus className="h-4 w-4" />{t.addRecurring}</button>
                 </form>
-                {state.recurringCosts.length === 0 ? <EmptyState icon={<CalendarClock className="h-7 w-7" />} text={t.noRecurring} /> : <div className="grid gap-3">{state.recurringCosts.map((cost) => <article key={cost.id} className={cx(card, "flex flex-col gap-4 p-5 sm:flex-row sm:items-center")}><button type="button" role="switch" aria-checked={cost.active} onClick={() => toggleRecurringCost(cost.id)} className={cx("inline-flex min-h-10 items-center gap-2 self-start rounded-xl px-3 text-xs font-black ring-1 transition sm:self-auto", cost.active ? "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20" : "bg-white/[0.03] text-gray-500 ring-white/10")}><span className={cx("h-2 w-2 rounded-full", cost.active ? "bg-emerald-400" : "bg-gray-600")} />{cost.active ? t.active : t.inactive}</button><div className="min-w-0 flex-1"><p className="font-bold">{cost.description}</p><p className="mt-1 text-xs text-gray-500">{SUPPORT_CATEGORY_LABELS[cost.category][language]} · {t.startsOn}: {cost.startsOn} · {cost.isPublic ? t.public : language === "en" ? "Private" : "Privé"}</p></div><p className="font-black">{formatCurrency(cost.amount, language)}<span className="ml-1 text-xs font-medium text-gray-500">/mnd</span></p><button type="button" onClick={() => removeRecurringCost(cost.id)} aria-label={`${t.remove}: ${cost.description}`} className="inline-flex h-10 w-10 items-center justify-center self-end rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400 sm:self-auto"><Trash2 className="h-4 w-4" /></button></article>)}</div>}
+                {state.recurringCosts.length === 0 ? <EmptyState icon={<CalendarClock className="h-7 w-7" />} text={t.noRecurring} /> : <div className="grid gap-3">{state.recurringCosts.map((cost) => <article key={cost.id} className={cx(card, "flex flex-col gap-4 p-5 sm:flex-row sm:items-center")}><button type="button" role="switch" aria-checked={cost.active} onClick={() => toggleRecurringCost(cost.id)} className={cx("inline-flex min-h-10 items-center gap-2 self-start rounded-xl px-3 text-xs font-black ring-1 transition sm:self-auto", cost.active ? "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20" : "bg-white/[0.03] text-gray-500 ring-white/10")}><span className={cx("h-2 w-2 rounded-full", cost.active ? "bg-emerald-400" : "bg-gray-600")} />{cost.active ? t.active : t.inactive}</button><div className="min-w-0 flex-1"><p className="font-bold">{cost.description}</p><p className="mt-1 text-xs text-gray-500">{SUPPORT_CATEGORY_LABELS[cost.category][language]} · {cost.frequency === "yearly" ? t.yearly : t.monthly} · {t.startsOn}: {cost.startsOn} · {cost.isPublic ? t.public : language === "en" ? "Private" : "Privé"}</p></div><p className="font-black">{formatCurrency(cost.amount, language)}<span className="ml-1 text-xs font-medium text-gray-500">/{cost.frequency === "yearly" ? (language === "en" ? "yr" : "jr") : (language === "en" ? "mo" : "mnd")}</span></p><button type="button" onClick={() => removeRecurringCost(cost.id)} aria-label={`${t.remove}: ${cost.description}`} className="inline-flex h-10 w-10 items-center justify-center self-end rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400 sm:self-auto"><Trash2 className="h-4 w-4" /></button></article>)}</div>}
               </section>}
 
               {section === "products" && <section id="panel-products" role="tabpanel" className="space-y-6">
                 <SectionHeader title={t.products} help={t.productsHelp} />
                 <form ref={productFormRef} onSubmit={submitProduct} className={cx(card, "grid gap-5 p-6 md:grid-cols-2 xl:grid-cols-4 md:p-8")}>
-                  <Field title={t.productName} className="md:col-span-2"><input name="name" required maxLength={100} className={input} /></Field><Field title={t.imageUrl} className="md:col-span-2"><input name="imageUrl" type="url" maxLength={500} placeholder="https://" className={input} /></Field><Field title={t.productDescription} className="md:col-span-2 xl:col-span-4"><textarea name="description" required maxLength={500} rows={3} className={input} /></Field><Field title={t.price}><input name="price" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.purchasePrice}><input name="purchasePrice" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.shippingCost}><input name="shippingCost" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.stock}><input name="stock" type="number" required min="0" step="1" className={input} /></Field>
+                  <Field title={t.productName} className="md:col-span-2 xl:col-span-4"><input name="name" required maxLength={100} className={input} /></Field>
+                  <div className="min-w-0 md:col-span-2 xl:col-span-4"><p className={label}>{t.productImages}</p><div className="mt-2 rounded-2xl border border-dashed border-white/15 bg-black/15 p-4 sm:p-5"><div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="text-sm font-bold text-gray-200">{productImages.length}/{MAX_PRODUCT_IMAGES} {t.productImages.toLowerCase()}</p><p id="product-image-help" className="mt-1 max-w-2xl text-xs leading-relaxed text-gray-500">{t.imageHelp}</p></div><label className={cx(primaryButton, "shrink-0 cursor-pointer", (productImagesBusy || productImages.length >= MAX_PRODUCT_IMAGES) && "pointer-events-none opacity-50")}><Images className="h-4 w-4" />{productImagesBusy ? (language === "en" ? "Processing…" : "Verwerken…") : t.chooseImages}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={productImagesBusy || productImages.length >= MAX_PRODUCT_IMAGES} aria-describedby="product-image-help" className="sr-only" onChange={(event) => { const files = event.currentTarget.files; event.currentTarget.value = ""; void addProductImages(files); }} /></label></div>
+                    {productImages.length > 0 && <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{productImages.map((imageUrl, index) => <div key={`${imageUrl.slice(-24)}-${index}`} className="group relative aspect-square overflow-hidden rounded-xl bg-black/25 ring-1 ring-white/10"><img src={imageUrl} alt={`${t.productImages} ${index + 1}`} className="h-full w-full object-cover" />{index === 0 && <span className="absolute bottom-2 left-2 rounded-full bg-black/75 px-2 py-1 text-[10px] font-black text-white">{t.mainImage}</span>}<button type="button" onClick={() => setProductImages((current) => current.filter((_, imageIndex) => imageIndex !== index))} aria-label={`${t.removeImage} ${index + 1}`} className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-black/75 text-white ring-1 ring-white/15 hover:bg-rose-600"><X className="h-4 w-4" /></button></div>)}</div>}
+                    {productImageError && <p role="alert" className="mt-3 text-xs font-bold text-rose-300">{productImageError}</p>}
+                  </div></div>
+                  <Field title={t.productDescription} className="md:col-span-2 xl:col-span-4"><textarea name="description" required maxLength={500} rows={3} className={input} /></Field><Field title={t.price}><input name="price" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.purchasePrice}><input name="purchasePrice" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.shippingCost}><input name="shippingCost" type="number" required min="0" step="0.01" className={input} /></Field><Field title={t.stock}><input name="stock" type="number" required min="0" step="1" className={input} /></Field>
                   <div className="grid gap-3 md:col-span-2 sm:grid-cols-2"><Toggle checked={productConcept} onChange={setProductConcept} label={t.concept} /><Toggle checked={productActive} onChange={setProductActive} label={t.active} /></div><button type="submit" className={cx(primaryButton, "md:col-span-2 md:justify-self-end")}><Plus className="h-4 w-4" />{t.addProduct}</button>
                 </form>
                 {state.products.length === 0 ? <EmptyState icon={<PackageOpen className="h-7 w-7" />} text={t.noProducts} /> : <div className="grid gap-4 md:grid-cols-2">{state.products.map((product) => { const margin = product.price - product.purchasePrice - product.shippingCost; return <article key={product.id} className={cx(card, "overflow-hidden")}>
-                  {product.imageUrl && <div className="aspect-[16/7] overflow-hidden bg-black/20"><img src={product.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" /></div>}
+                  {product.imageUrls.length > 0 && <div className={cx("grid aspect-[16/7] gap-px overflow-hidden bg-black/30", product.imageUrls.length > 1 && "grid-cols-2")}>{product.imageUrls.map((imageUrl, index) => <img key={`${imageUrl.slice(-24)}-${index}`} src={imageUrl} alt={`${product.name} ${index + 1}`} loading="lazy" className="h-full min-h-0 w-full object-cover" />)}</div>}
                   <div className="p-5"><div className="flex items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><span className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider", product.concept ? "bg-amber-500/10 text-amber-300" : "bg-sky-500/10 text-sky-300")}>{product.concept ? t.concept : t.published}</span><button type="button" role="switch" aria-checked={product.active} onClick={() => toggleProduct(product.id)} className={cx("rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider", product.active ? "bg-emerald-500/10 text-emerald-300" : "bg-white/[0.04] text-gray-500")}>{product.active ? t.active : t.inactive}</button></div><h3 className="mt-3 font-heading text-lg font-black">{product.name}</h3></div><button type="button" onClick={() => removeProduct(product.id)} aria-label={`${t.remove}: ${product.name}`} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400"><Trash2 className="h-4 w-4" /></button></div><p className="mt-2 line-clamp-3 text-sm leading-relaxed text-gray-400">{product.description}</p><dl className="mt-5 grid grid-cols-3 gap-3 border-t border-white/[0.06] pt-4 text-xs"><div><dt className="text-gray-500">{t.price}</dt><dd className="mt-1 font-bold text-white">{formatCurrency(product.price, language)}</dd></div><div><dt className="text-gray-500">{t.stock}</dt><dd className="mt-1 font-bold text-white">{product.stock}</dd></div><div><dt className="text-gray-500">{t.margin}</dt><dd className={cx("mt-1 font-bold", margin >= 0 ? "text-emerald-300" : "text-rose-300")}>{formatCurrency(margin, language)}</dd></div></dl></div>
                 </article>; })}</div>}
               </section>}

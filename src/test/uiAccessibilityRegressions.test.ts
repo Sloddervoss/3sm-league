@@ -47,6 +47,12 @@ describe("UI accessibility regressions", () => {
     const raceCosts = read("src/features/control-room/support/RaceCostsSection.tsx");
 
     expect(supportManagement).toContain("grid-cols-[minmax(0,1fr)]");
+    expect(supportManagement).toContain('name="frequency"');
+    expect(supportManagement).toContain('<option value="monthly">');
+    expect(supportManagement).toContain('<option value="yearly">');
+    expect(supportManagement).toContain('type="file" accept="image/jpeg,image/png,image/webp" multiple');
+    expect(supportManagement).not.toContain('name="imageUrl"');
+    expect(supportManagement).not.toContain('type="url"');
     expect(supportManagement).toContain('className="min-w-0 max-w-full lg:sticky');
     expect(supportManagement).toContain("flex w-full max-w-full gap-2 overflow-x-auto");
     expect(supportManagement).not.toContain("<Navbar");
