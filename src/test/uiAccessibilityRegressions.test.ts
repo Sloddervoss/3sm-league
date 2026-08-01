@@ -27,7 +27,8 @@ describe("UI accessibility regressions", () => {
 
     expect(modal).toContain('role="dialog"');
     expect(modal).toContain('aria-modal="true"');
-    expect(modal).toContain('aria-label="Sluit venster"');
+    expect(modal).toContain('closeLabel = "Sluit venster"');
+    expect(modal).toContain("aria-label={closeLabel}");
     expect(modal).toContain("previouslyFocusedRef");
     expect(modal).toContain('e.key !== "Tab"');
   });

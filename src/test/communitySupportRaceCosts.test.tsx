@@ -2,9 +2,11 @@ import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import PreviewModal from "@/components/preview/PreviewModal";
 import RaceCostsOverview from "@/features/community-support/public/RaceCostsOverview";
+import SeasonLedgerModal from "@/features/community-support/public/SeasonLedgerModal";
 import RaceCostsSection from "@/features/control-room/support/RaceCostsSection";
-import type { PublicSupportRaceCost, SupportRaceCost } from "@/features/community-support/types";
+import type { PublicSupportLedgerEntry, PublicSupportRaceCost, SupportRaceCost } from "@/features/community-support/types";
 import { isSupportedCommunitySupportRace } from "@/features/community-support/raceEligibility";
 import { calculateRaceHostingAmountUsd, configuredRaceHours, convertUsdToEur } from "@/features/community-support/raceHostingPricing";
 
@@ -80,6 +82,47 @@ describe("Community Support race cost UI", () => {
     expect(view.container.querySelectorAll("details")).toHaveLength(35);
     expect(view.container.querySelectorAll("article")).toHaveLength(3);
     expect(screen.getByText("Race 35")).toBeInTheDocument();
+  });
+
+  it("keeps race transactions out of the default tab and reveals their details in the race tab", () => {
+    const ledger: PublicSupportLedgerEntry[] = [
+      { id: "contribution", date: "2026-07-12", direction: "income", category: "contribution", description: "Vrijwillige bijdrage", amount: 10, isPublic: true, supporterName: "Vincent" },
+      { id: "race-entry", date: "2026-07-10", direction: "expense", category: "race_hosting", description: "Race 1 hostingboeking", amount: 0.69, isPublic: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92 },
+    ];
+
+    render(<SeasonLedgerModal
+      language="nl"
+      selectedYear="2026"
+      selectedMonth="all"
+      availableMonths={["2026-07"]}
+      onSelectedMonthChange={vi.fn()}
+      annualLedger={ledger}
+      visibleLedger={ledger}
+      raceCosts={costs}
+      totalRaceCount={2}
+      raceCostTotalEur={1.15}
+      summary={{ operationalExpenses: 1.15, communityCovered: 1.15, selfFunded: 0, reserve: 8.85 }}
+    />);
+
+    expect(screen.getByRole("tab", { name: "Transacties" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Vrijwillige bijdrage")).toBeInTheDocument();
+    expect(screen.queryByText("Race 1 hostingboeking")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Racehosting (2)" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Racehosting (2)" }));
+    expect(screen.getByRole("heading", { name: "Racehosting in het open boek · 2026" })).toBeInTheDocument();
+    expect(screen.getByText("Race 1")).toBeInTheDocument();
+    expect(screen.getAllByText("1 USD = 0.9200 EUR")).toHaveLength(2);
+  });
+
+  it("uses the existing accessible modal shell for the season ledger", () => {
+    const onClose = vi.fn();
+    render(<PreviewModal open onClose={onClose} ariaLabel="Seizoensboek 2026" closeLabel="Sluit seizoensboek"><p>Boekinhoud</p></PreviewModal>);
+
+    expect(screen.getByRole("dialog", { name: "Seizoensboek 2026" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sluit seizoensboek" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("allows only Sprint, Feature and explicit legacy standalone races", () => {
@@ -184,6 +227,8 @@ describe("Community Support race cost UI", () => {
     expect(managementPage).toContain("<RaceCostsSection");
     expect(controlRoom).toContain("<CommunitySupportModule />");
     expect(app).not.toContain('path="/support-beheer"');
-    expect(publicPage).toContain("<RaceCostsOverview");
+    expect(publicPage).toContain('aria-haspopup="dialog"');
+    expect(publicPage).toContain("<SeasonLedgerModal");
+    expect(publicPage).not.toContain("<RaceCostsOverview");
   });
 });
