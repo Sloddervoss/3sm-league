@@ -38,7 +38,7 @@ type Language = "nl" | "en";
 const getCopy = (language: Language) => language === "en" ? {
   eyebrow: "Community Support · race season",
   title: "Together, we keep 3SM on track",
-  intro: "3SM keeps racing, with or without contributions. This page shows what we have funded ourselves this season and what the community has voluntarily carried. Would you like to help with the costs voluntarily? You can — never feel obliged.",
+  intro: "This page lists the income and expenses for this race season. It also shows how much was covered by 3SM and how much by the community.",
   transparency: "Open paddock, clear figures",
   transparencyText: "We show the season's public income and expenses openly. Contributions are optional and never determine whether 3SM continues.",
   monthOverview: "Season overview",
@@ -67,7 +67,7 @@ const getCopy = (language: Language) => language === "en" ? {
   openBookCta: "View full season ledger",
   supportTitle: "Contribute voluntarily",
   supportCta: "See how you can contribute",
-  supportIntro: "3SM keeps going either way. If you would like to contribute voluntarily toward the season's costs, choose what suits you — without obligation.",
+  supportIntro: "Would you like to help cover the race season costs? Choose an amount. Contributions are always voluntary.",
   paypalTitle: "Voluntary contribution",
   paypalText: "Choose an amount in the 3SM window. PayPal.Me opens securely in a separate tab or app, while this page stays ready for your return.",
   paypalCta: "Contribute through PayPal.Me",
@@ -78,6 +78,9 @@ const getCopy = (language: Language) => language === "en" ? {
   shareTitle: "Build the grid",
   shareText: "Invite respectful drivers, join events and help others on Discord. A strong community is our most valuable support.",
   discordCta: "Open Discord",
+  referralTitle: "New to iRacing?",
+  referralText: "Create your account through the 3SM referral link. We receive iRacing credit that we can use to host races, at no extra cost to you.",
+  referralCta: "Use the referral link",
   merchandiseSection: "Community merchandise",
   merchandiseIntro: "Products entered by 3SM are shown here with their current price and availability.",
   concept: "Concept",
@@ -114,7 +117,7 @@ const getCopy = (language: Language) => language === "en" ? {
 } : {
   eyebrow: "Community Support · raceseizoen",
   title: "Samen houden we 3SM op de baan",
-  intro: "3SM blijft racen, met of zonder bijdragen. Hier zie je wat we dit seizoen zelf hebben gedragen en wat de community vrijwillig heeft bijgedragen. Wil je ook vrijwillig helpen met de kosten? Dat kan — voel je nooit verplicht.",
+  intro: "Hier zie je de inkomsten en uitgaven van dit raceseizoen. Ook zie je welk deel door 3SM en welk deel door de community is betaald.",
   transparency: "Open paddock, heldere cijfers",
   transparencyText: "We laten de openbare inkomsten en uitgaven van het seizoen zien. Bijdragen zijn vrijwillig en bepalen nooit of 3SM doorgaat.",
   monthOverview: "Seizoensoverzicht",
@@ -143,7 +146,7 @@ const getCopy = (language: Language) => language === "en" ? {
   openBookCta: "Bekijk volledig seizoensboek",
   supportTitle: "Vrijwillig bijdragen",
   supportCta: "Bekijk hoe je kunt bijdragen",
-  supportIntro: "3SM gaat sowieso door. Wil je vrijwillig bijdragen aan de kosten van het seizoen, kies dan wat bij je past — zonder enige verplichting.",
+  supportIntro: "Wil je meehelpen met de kosten van het raceseizoen? Kies zelf een bedrag. Bijdragen is altijd vrijwillig.",
   paypalTitle: "Vrijwillige bijdrage",
   paypalText: "Kies een bedrag in het 3SM-venster. PayPal.Me opent veilig in een apart tabblad of de app, terwijl deze pagina klaar blijft voor je terugkomst.",
   paypalCta: "Bijdragen via PayPal.Me",
@@ -154,6 +157,9 @@ const getCopy = (language: Language) => language === "en" ? {
   shareTitle: "Bouw mee aan de grid",
   shareText: "Nodig sportieve coureurs uit, doe mee aan evenementen en help anderen op Discord. Een sterke community is onze waardevolste steun.",
   discordCta: "Open Discord",
+  referralTitle: "Nieuw bij iRacing?",
+  referralText: "Maak je account aan via de 3SM-referrallink. Wij krijgen dan iRacing-tegoed voor het hosten van races. Voor jou kost dat niets extra.",
+  referralCta: "Gebruik de referrallink",
   merchandiseSection: "Communitymerchandise",
   merchandiseIntro: "Door 3SM ingevoerde producten staan hier met hun actuele prijs en beschikbaarheid.",
   concept: "Concept",
@@ -487,6 +493,13 @@ const CommunitySupportPage = () => {
                   <a href={DISCORD_URL} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-2 self-start text-sm font-black text-orange-300 transition hover:text-orange-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">{copy.discordCta}<ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
                 </Surface>
               </div>
+              {paymentSettings.iracingReferralEnabled && paymentSettings.iracingReferralUrl && <Surface className="mt-4 flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.045] text-gray-200 ring-1 ring-white/[0.08]"><Flag className="h-4 w-4" aria-hidden="true" /></div>
+                  <div><h3 className="font-heading text-base font-black uppercase text-white">{copy.referralTitle}</h3><p className="mt-1 max-w-3xl text-sm leading-6 text-gray-400">{copy.referralText}</p></div>
+                </div>
+                <a href={paymentSettings.iracingReferralUrl} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-2 self-start text-sm font-black text-orange-300 transition hover:text-orange-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 sm:self-center">{copy.referralCta}<ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+              </Surface>}
             </section>
 
             <section id="merchandise" className="scroll-mt-24">

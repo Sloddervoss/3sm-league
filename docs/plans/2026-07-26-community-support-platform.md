@@ -33,7 +33,7 @@
 - Opening PayPal.Me is only intent. The visitor must separately choose **Ik heb betaald** before a pending payment check is created.
 - Exactly one configurable payment admin receives the private Discord bot DM. Only that Discord user may resolve it after manually checking PayPal.
 - Confirmation records gross contribution and actual PayPal fee separately and idempotently; pending, not-found and expired claims never affect financial totals.
-- iRacing referral stays hidden until a real link exists.
+- iRacing referral is a simple configurable public link, independent from PayPal claims or Discord DMs, and stays hidden until enabled with a valid official iRacing URL. Actually received credit is booked manually as referral income.
 - Concept merchandise is visible only while the public flag is false; public release hides concept products.
 - Products use up to four uploaded JPEG/PNG/WebP photos rather than externally entered image URLs. During local-session review the browser resizes these photos and stores them only in the active Super-admin session; a later shared datasource must move the binaries to audited object storage.
 
@@ -66,7 +66,7 @@
 - Hero, monthly status, coverage bar, ways to support, spending categories, public ledger and supporter wall.
 - Honest empty states with no invented amounts or supporters.
 - PayPal CTA exists only when enabled.
-- iRacing referral is absent.
+- iRacing referral appears as a compact secondary link below the support options only when configured; otherwise it is absent.
 - Concept products disappear automatically when public access is enabled.
 - NL/EN metadata and visible copy.
 
@@ -131,7 +131,7 @@ git diff --check
 3. Optionally replace the manual PayPal.Me verification flow with server-side PayPal Checkout, idempotent capture and verified webhooks; never trust a browser success redirect as payment evidence.
 4. Add merchandise orders, automatic stock reservation, refunds, fulfillment and NL/BE shipping.
 5. Complete legal, fiscal, privacy, returns and PayPal-account checks before accepting real money.
-6. Add the real iRacing referral card only when the approved link exists.
+6. Configure and enable the approved iRacing referral link; verify the compact NL/EN public block and manually book only credit actually received.
 
 ## Release boundary
 

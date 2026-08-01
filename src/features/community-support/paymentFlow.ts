@@ -18,6 +18,22 @@ export const normalizePayPalMeUrl = (value: string): string | null => {
   }
 };
 
+export const normalizeIracingReferralUrl = (value: string): string | null => {
+  try {
+    const url = new URL(value.trim());
+    const hostname = url.hostname.toLowerCase();
+    const validHostnameLabels = hostname.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+    if (url.protocol !== "https:") return null;
+    if (url.username || url.password || url.port) return null;
+    if (hostname !== "iracing.com" && !hostname.endsWith(".iracing.com")) return null;
+    if (!validHostnameLabels) return null;
+    if (url.toString().length > 500) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
 export const normalizeDiscordUserId = (value: string): string | null => {
   const normalized = value.trim();
   return /^\d{17,20}$/.test(normalized) ? normalized : null;

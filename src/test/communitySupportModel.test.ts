@@ -8,6 +8,7 @@ const emptyState = (): CommunitySupportState => ({
   recurringCosts: [],
   raceCosts: [],
   products: [],
+  paymentIntents: [],
   settings: {
     reserve: 0,
     racePricingInitialized: false,
@@ -15,6 +16,11 @@ const emptyState = (): CommunitySupportState => ({
     publicSupporterNamesByDefault: true,
     publicSupporterAmountsByDefault: false,
     paypalEnabled: false,
+    paypalMeUrl: "",
+    paypalSuggestedAmounts: [5, 10, 25],
+    paymentAdminDiscordId: "",
+    iracingReferralEnabled: false,
+    iracingReferralUrl: "",
   },
 });
 
@@ -171,9 +177,9 @@ describe("Community Support financial model", () => {
     state.raceCosts = [
       { id: "public-race", raceId: "race-a", raceScope: "season", leagueId: "league-a", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", hostedHours: 7, discountApplied: false, sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, amount: 3.5, isPublic: true, note: "interne notitie" },
       { id: "private-race", raceId: "race-b", raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", raceFormat: "Feature", hostedHours: 6, discountApplied: true, sourceAmountUsd: 2.25, exchangeRateUsdEur: 1, amount: 2.25, isPublic: false, note: "niet openbaar" },
-      { id: "endurance-race", raceId: "race-c", raceScope: "standalone", raceName: "Endurance", track: "Le Mans", date: "2026-09-10", raceFormat: "Endurance", hostedHours: 24, discountApplied: false, amount: 100, isPublic: true },
-      { id: "unknown-race", raceId: "race-d", raceScope: "standalone", raceName: "Future", track: "Unknown", date: "2026-09-11", raceFormat: "FutureFormat", hostedHours: 24, discountApplied: false, amount: 100, isPublic: true },
-      { id: "named-endurance", raceId: "race-e", raceScope: "standalone", raceName: "Night Endurance", track: "Le Mans", date: "2026-09-12", raceFormat: "Feature", hostedHours: 24, discountApplied: false, amount: 100, isPublic: true },
+      { id: "endurance-race", raceId: "race-c", raceScope: "standalone", raceName: "Endurance", track: "Le Mans", date: "2026-09-10", raceFormat: "Endurance", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, amount: 100, isPublic: true },
+      { id: "unknown-race", raceId: "race-d", raceScope: "standalone", raceName: "Future", track: "Unknown", date: "2026-09-11", raceFormat: "FutureFormat", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, amount: 100, isPublic: true },
+      { id: "named-endurance", raceId: "race-e", raceScope: "standalone", raceName: "Night Endurance", track: "Le Mans", date: "2026-09-12", raceFormat: "Feature", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, amount: 100, isPublic: true },
     ];
 
     const season = supportMetricsForYear(state, "2026");

@@ -308,6 +308,8 @@ const CommunitySupportModule = () => {
       paypalMeUrl: merged.paypalMeUrl,
       paypalSuggestedAmounts: merged.paypalSuggestedAmounts,
       paymentAdminDiscordId: merged.paymentAdminDiscordId,
+      iracingReferralEnabled: merged.iracingReferralEnabled,
+      iracingReferralUrl: merged.iracingReferralUrl,
     });
     await refetchPaymentConfig();
   };

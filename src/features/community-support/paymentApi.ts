@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { CommunitySupportSettings, PublicSupportLedgerEntry, SupportLedgerEntry, SupportPaymentIntentDraft } from "./types";
 
-export type PublicPaymentConfig = Pick<CommunitySupportSettings, "paypalEnabled" | "paypalMeUrl" | "paypalSuggestedAmounts">;
+export type PublicPaymentConfig = Pick<CommunitySupportSettings, "paypalEnabled" | "paypalMeUrl" | "paypalSuggestedAmounts" | "iracingReferralEnabled" | "iracingReferralUrl">;
 export type AdminPaymentConfig = PublicPaymentConfig & Pick<CommunitySupportSettings, "paymentAdminDiscordId">;
 export type SharedPaymentLedger = {
   entries: PublicSupportLedgerEntry[];
@@ -14,11 +14,13 @@ export const fetchPublicPaymentConfig = async (): Promise<PublicPaymentConfig> =
   const { data, error } = await supabase.rpc("get_community_support_payment_config");
   if (error) throw error;
   const row = firstRow(data);
-  if (!row) return { paypalEnabled: false, paypalMeUrl: "", paypalSuggestedAmounts: [] };
+  if (!row) return { paypalEnabled: false, paypalMeUrl: "", paypalSuggestedAmounts: [], iracingReferralEnabled: false, iracingReferralUrl: "" };
   return {
     paypalEnabled: row.paypal_enabled,
     paypalMeUrl: row.paypal_me_url,
     paypalSuggestedAmounts: row.suggested_amounts_eur.map(Number),
+    iracingReferralEnabled: row.iracing_referral_enabled,
+    iracingReferralUrl: row.iracing_referral_url,
   };
 };
 
@@ -77,6 +79,8 @@ export const fetchAdminPaymentConfig = async (): Promise<AdminPaymentConfig> => 
     paypalMeUrl: row.paypal_me_url,
     paypalSuggestedAmounts: row.suggested_amounts_eur.map(Number),
     paymentAdminDiscordId: row.payment_admin_discord_id,
+    iracingReferralEnabled: row.iracing_referral_enabled,
+    iracingReferralUrl: row.iracing_referral_url,
   };
 };
 
@@ -86,6 +90,8 @@ export const updateAdminPaymentConfig = async (settings: AdminPaymentConfig): Pr
     p_paypal_me_url: settings.paypalMeUrl,
     p_suggested_amounts_eur: settings.paypalSuggestedAmounts,
     p_payment_admin_discord_id: settings.paymentAdminDiscordId,
+    p_iracing_referral_enabled: settings.iracingReferralEnabled,
+    p_iracing_referral_url: settings.iracingReferralUrl,
   });
   if (error) throw error;
 };
