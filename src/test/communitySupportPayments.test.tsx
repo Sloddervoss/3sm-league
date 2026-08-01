@@ -7,6 +7,7 @@ import {
   buildPayPalMeUrl,
   createPaymentIntent,
   normalizeDiscordUserId,
+  normalizeIracingReferralUrl,
   normalizePayPalMeUrl,
   resolvePaymentIntent,
 } from "@/features/community-support/paymentFlow";
@@ -23,6 +24,8 @@ const settings: CommunitySupportSettings = {
   paypalMeUrl: "https://paypal.me/ExampleAccount",
   paypalSuggestedAmounts: [5, 10, 25],
   paymentAdminDiscordId: "123456789012345678",
+  iracingReferralEnabled: true,
+  iracingReferralUrl: "https://www.iracing.com/referral/?ref=3sm",
 };
 
 const pendingIntent: SupportPaymentIntent = {
@@ -51,6 +54,27 @@ describe("PayPal.Me contribution flow", () => {
     expect(buildPayPalMeUrl(settings.paypalMeUrl, 10)).toBe("https://paypal.me/ExampleAccount/10EUR");
     expect(buildPayPalMeUrl(settings.paypalMeUrl, 10.5)).toBe("https://paypal.me/ExampleAccount/10.50EUR");
     expect(buildPayPalMeUrl("https://evil.example/pay", 10)).toBeNull();
+  });
+
+  it("accepts only secure referral links on official iRacing domains", () => {
+    expect(normalizeIracingReferralUrl("https://www.iracing.com/referral/?ref=3sm")).toBe("https://www.iracing.com/referral/?ref=3sm");
+    expect(normalizeIracingReferralUrl("https://members.iracing.com/referral/3sm")).toBe("https://members.iracing.com/referral/3sm");
+    expect(normalizeIracingReferralUrl("http://www.iracing.com/referral/3sm")).toBeNull();
+    expect(normalizeIracingReferralUrl("https://iracing.com.evil.example/referral/3sm")).toBeNull();
+    expect(normalizeIracingReferralUrl("https://-bad.iracing.com/referral/3sm")).toBeNull();
+    expect(normalizeIracingReferralUrl("https://bad-.iracing.com/referral/3sm")).toBeNull();
+  });
+
+  it("saves the referral link separately without creating a payment claim", async () => {
+    const onUpdateSettings = vi.fn();
+    render(<PaymentReviewSection language="nl" settings={{ ...settings, iracingReferralEnabled: false, iracingReferralUrl: "" }} intents={[]} localReview onUpdateSettings={onUpdateSettings} onResolve={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^Officiële iRacing-referrallink/), { target: { value: "https://www.iracing.com/referral/?ref=3sm" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "iRacing-referral tonen op de supportpagina" }));
+    fireEvent.click(screen.getByRole("button", { name: "Betaalinstellingen opslaan" }));
+    await waitFor(() => expect(onUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      iracingReferralEnabled: true,
+      iracingReferralUrl: "https://www.iracing.com/referral/?ref=3sm",
+    })));
   });
 
   it("creates a pending intent and books gross income plus the actual fee only after confirmation", () => {
@@ -143,6 +167,12 @@ describe("PayPal.Me contribution flow", () => {
     expect(migration).toContain("CREATE OR REPLACE FUNCTION public.get_public_community_support_payment_ledger()");
     expect(migration).toContain("ledger.category = 'contribution' AND ledger.show_amount = false THEN NULL");
     expect(migration).toContain("CREATE OR REPLACE FUNCTION public.get_public_community_support_payment_totals()");
+    expect(migration).toContain("iracing_referral_enabled BOOLEAN NOT NULL DEFAULT false");
+    expect(migration).toContain("cfg.iracing_referral_enabled AND cfg.iracing_referral_url <> ''");
+    expect(migration).toContain("p_iracing_referral_enabled BOOLEAN");
+    const publicPage = readFileSync("src/features/community-support/public/CommunitySupportPage.tsx", "utf8");
+    expect(publicPage).toContain("paymentSettings.iracingReferralEnabled && paymentSettings.iracingReferralUrl");
+    expect(publicPage).toContain("Gebruik de referrallink");
     expect(migration).toContain("GRANT EXECUTE ON FUNCTION public.get_public_community_support_payment_ledger() TO anon, authenticated");
     expect(migration).not.toContain("GRANT SELECT ON public.community_support_payment_intents TO anon");
   });

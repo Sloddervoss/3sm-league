@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import { isSupportedCommunitySupportRace } from "./raceEligibility";
 import { calculateRaceHostingAmountUsd, convertUsdToEur, DEFAULT_USD_EUR_RATE, normalizeHostedHours, normalizeUsdEurRate } from "./raceHostingPricing";
-import { createPaymentIntent, DEFAULT_PAYPAL_AMOUNTS_EUR, normalizeDiscordUserId, normalizePayPalAmounts, normalizePayPalMeUrl, resolvePaymentIntent } from "./paymentFlow";
+import { createPaymentIntent, DEFAULT_PAYPAL_AMOUNTS_EUR, normalizeDiscordUserId, normalizeIracingReferralUrl, normalizePayPalAmounts, normalizePayPalMeUrl, resolvePaymentIntent } from "./paymentFlow";
 
 const STORAGE_PREFIX = "3sm-community-support-session-v2";
 const INCOME_CATEGORIES = new Set(["contribution", "merchandise_income", "referral_income", "other"]);
@@ -36,6 +36,8 @@ const INITIAL_STATE: CommunitySupportState = {
     paypalMeUrl: "",
     paypalSuggestedAmounts: [...DEFAULT_PAYPAL_AMOUNTS_EUR],
     paymentAdminDiscordId: "",
+    iracingReferralEnabled: false,
+    iracingReferralUrl: "",
   },
 };
 
@@ -153,6 +155,8 @@ const stateSchema = z.object({
     paypalMeUrl: z.string().max(200).default(""),
     paypalSuggestedAmounts: z.array(positiveMoneySchema).max(6).default([...DEFAULT_PAYPAL_AMOUNTS_EUR]),
     paymentAdminDiscordId: z.string().max(20).default(""),
+    iracingReferralEnabled: z.boolean().default(false),
+    iracingReferralUrl: z.string().max(500).refine((value) => value === "" || normalizeIracingReferralUrl(value) !== null, "invalid iRacing referral URL").default(""),
   }),
 }).superRefine((state, context) => {
   const seenRaceIds = new Set<string>();
@@ -321,7 +325,9 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     const paymentAdminDiscordId = settings.paymentAdminDiscordId === undefined ? current.settings.paymentAdminDiscordId : (normalizeDiscordUserId(settings.paymentAdminDiscordId) ?? "");
     const paypalSuggestedAmounts = settings.paypalSuggestedAmounts === undefined ? current.settings.paypalSuggestedAmounts : normalizePayPalAmounts(settings.paypalSuggestedAmounts);
     const paypalEnabled = settings.paypalEnabled === undefined ? current.settings.paypalEnabled : Boolean(settings.paypalEnabled && paypalMeUrl && paymentAdminDiscordId && paypalSuggestedAmounts.length > 0);
-    return { ...current, settings: { ...current.settings, ...settings, paypalEnabled, paypalMeUrl, paymentAdminDiscordId, paypalSuggestedAmounts, usdEurRate, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } };
+    const iracingReferralUrl = settings.iracingReferralUrl === undefined ? current.settings.iracingReferralUrl : (normalizeIracingReferralUrl(settings.iracingReferralUrl) ?? "");
+    const iracingReferralEnabled = settings.iracingReferralEnabled === undefined ? current.settings.iracingReferralEnabled : Boolean(settings.iracingReferralEnabled && iracingReferralUrl);
+    return { ...current, settings: { ...current.settings, ...settings, paypalEnabled, paypalMeUrl, paymentAdminDiscordId, paypalSuggestedAmounts, iracingReferralEnabled, iracingReferralUrl, usdEurRate, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } };
   }), []);
   const addPaymentIntent = useCallback((draft: SupportPaymentIntentDraft) => {
     const intent = createPaymentIntent(draft, createLocalId());

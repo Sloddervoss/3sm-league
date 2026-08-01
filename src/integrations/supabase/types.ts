@@ -1359,6 +1359,8 @@ export type Database = {
           paypal_me_url: string
           suggested_amounts_eur: number[]
           payment_admin_discord_id: string
+          iracing_referral_enabled: boolean
+          iracing_referral_url: string
         }[]
       }
       admin_update_community_support_payment_config: {
@@ -1367,6 +1369,8 @@ export type Database = {
           p_paypal_me_url: string
           p_suggested_amounts_eur: number[]
           p_payment_admin_discord_id: string
+          p_iracing_referral_enabled: boolean
+          p_iracing_referral_url: string
         }
         Returns: undefined
       }
@@ -1385,6 +1389,8 @@ export type Database = {
           paypal_enabled: boolean
           paypal_me_url: string
           suggested_amounts_eur: number[]
+          iracing_referral_enabled: boolean
+          iracing_referral_url: string
         }[]
       }
       get_public_community_support_payment_ledger: {

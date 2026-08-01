@@ -94,6 +94,8 @@ export type CommunitySupportSettings = {
   paypalMeUrl: string;
   paypalSuggestedAmounts: number[];
   paymentAdminDiscordId: string;
+  iracingReferralEnabled: boolean;
+  iracingReferralUrl: string;
 };
 
 export type SupportPaymentIntentStatus = "pending" | "confirmed" | "not_found";

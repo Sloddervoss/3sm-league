@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, CircleDollarSign, MessageCircle, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDollarSign, Flag, MessageCircle, ShieldCheck, XCircle } from "lucide-react";
 import type { CommunitySupportSettings, SupportPaymentIntent } from "@/features/community-support/types";
-import { normalizeDiscordUserId, normalizePayPalAmounts, normalizePayPalMeUrl } from "@/features/community-support/paymentFlow";
+import { normalizeDiscordUserId, normalizeIracingReferralUrl, normalizePayPalAmounts, normalizePayPalMeUrl } from "@/features/community-support/paymentFlow";
 
 type Language = "nl" | "en";
 type Props = {
@@ -55,6 +55,8 @@ const PaymentReviewSection = ({ language, settings, intents, localReview, onUpda
   const [draftAdminId, setDraftAdminId] = useState(settings.paymentAdminDiscordId);
   const [draftAmounts, setDraftAmounts] = useState(settings.paypalSuggestedAmounts.join(", "));
   const [draftEnabled, setDraftEnabled] = useState(settings.paypalEnabled);
+  const [draftReferralUrl, setDraftReferralUrl] = useState(settings.iracingReferralUrl);
+  const [draftReferralEnabled, setDraftReferralEnabled] = useState(settings.iracingReferralEnabled);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
@@ -63,12 +65,19 @@ const PaymentReviewSection = ({ language, settings, intents, localReview, onUpda
     setDraftAdminId(settings.paymentAdminDiscordId);
     setDraftAmounts(settings.paypalSuggestedAmounts.join(", "));
     setDraftEnabled(settings.paypalEnabled);
+    setDraftReferralUrl(settings.iracingReferralUrl);
+    setDraftReferralEnabled(settings.iracingReferralEnabled);
   }, [settings]);
 
   const normalizedUrl = normalizePayPalMeUrl(draftUrl);
   const normalizedAdminId = normalizeDiscordUserId(draftAdminId);
+  const normalizedReferralUrl = normalizeIracingReferralUrl(draftReferralUrl);
   const normalizedAmounts = useMemo(() => normalizePayPalAmounts(draftAmounts.split(/[;,\s]+/).filter(Boolean).map((value) => Number(value.replace(",", ".")))), [draftAmounts]);
-  const configurationValid = Boolean(normalizedUrl && normalizedAdminId && normalizedAmounts.length > 0);
+  const paypalConfigurationValid = draftEnabled
+    ? Boolean(normalizedUrl && normalizedAdminId && normalizedAmounts.length > 0)
+    : Boolean((!draftUrl || normalizedUrl) && (!draftAdminId || normalizedAdminId) && normalizedAmounts.length > 0);
+  const referralConfigurationValid = Boolean((!draftReferralUrl || normalizedReferralUrl) && (!draftReferralEnabled || normalizedReferralUrl));
+  const configurationValid = paypalConfigurationValid && referralConfigurationValid;
   const pending = intents.filter((intent) => intent.status === "pending");
   const handled = intents.filter((intent) => intent.status !== "pending");
 
@@ -82,6 +91,8 @@ const PaymentReviewSection = ({ language, settings, intents, localReview, onUpda
         paymentAdminDiscordId: normalizedAdminId ?? "",
         paypalSuggestedAmounts: normalizedAmounts,
         paypalEnabled: draftEnabled,
+        iracingReferralUrl: normalizedReferralUrl ?? "",
+        iracingReferralEnabled: draftReferralEnabled,
       });
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
@@ -91,16 +102,21 @@ const PaymentReviewSection = ({ language, settings, intents, localReview, onUpda
   };
 
   return <section id="panel-payments" role="tabpanel" className="space-y-6">
-    <div><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-orange-400"><CircleDollarSign className="h-4 w-4" />Community Support</div><h2 className="mt-2 font-heading text-2xl font-black text-white">{language === "en" ? "PayPal verification" : "PayPal-controle"}</h2><p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">{language === "en" ? "Configure the public PayPal.Me flow and review payment claims. Opening PayPal is never treated as proof of payment." : "Configureer de openbare PayPal.Me-flow en controleer betaalclaims. Alleen PayPal openen geldt nooit als betalingsbewijs."}</p></div>
+    <div><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-orange-400"><CircleDollarSign className="h-4 w-4" />Community Support</div><h2 className="mt-2 font-heading text-2xl font-black text-white">{language === "en" ? "Payments and referral" : "Betalingen en referral"}</h2><p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">{language === "en" ? "Configure the public PayPal.Me flow, payment checks and the separate iRacing referral link." : "Configureer de openbare PayPal.Me-flow, betaalcontroles en de losse iRacing-referrallink."}</p></div>
 
     <form onSubmit={(event) => void save(event)} className={`${card} space-y-6 p-6 md:p-8`}>
       <div className="flex items-start gap-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-300"><MessageCircle className="h-5 w-5" /></div><div><h3 className="font-heading text-lg font-black">{language === "en" ? "Payment destination and private admin" : "Betaalbestemming en privé-admin"}</h3><p className="mt-1 text-sm leading-6 text-gray-500">{language === "en" ? "The Discord ID identifies the single payment admin who will later receive the private bot DM." : "Het Discord-ID bepaalt welke ene betaaladmin later de privé-DM van de bot ontvangt."}</p></div></div>
       <div className="grid gap-5 md:grid-cols-2">
-        <label className={label}>PayPal.Me-link<input type="url" required placeholder="https://paypal.me/JouwAccount" value={draftUrl} onChange={(event) => setDraftUrl(event.target.value)} className={input} />{draftUrl && !normalizedUrl && <span role="alert" className="mt-2 block text-xs font-bold text-rose-300">{language === "en" ? "Use a base link on https://paypal.me without an amount or query string." : "Gebruik een basislink op https://paypal.me zonder bedrag of querystring."}</span>}</label>
-        <label className={label}>{language === "en" ? "Payment admin Discord user ID" : "Discord-user-ID betaaladmin"}<input inputMode="numeric" required maxLength={20} placeholder="123456789012345678" value={draftAdminId} onChange={(event) => setDraftAdminId(event.target.value)} className={input} />{draftAdminId && !normalizedAdminId && <span role="alert" className="mt-2 block text-xs font-bold text-rose-300">{language === "en" ? "Enter a valid 17–20 digit Discord user ID." : "Vul een geldig Discord-user-ID van 17–20 cijfers in."}</span>}</label>
+        <label className={label}>PayPal.Me-link<input type="url" required={draftEnabled} placeholder="https://paypal.me/JouwAccount" value={draftUrl} onChange={(event) => setDraftUrl(event.target.value)} className={input} />{draftUrl && !normalizedUrl && <span role="alert" className="mt-2 block text-xs font-bold text-rose-300">{language === "en" ? "Use a base link on https://paypal.me without an amount or query string." : "Gebruik een basislink op https://paypal.me zonder bedrag of querystring."}</span>}</label>
+        <label className={label}>{language === "en" ? "Payment admin Discord user ID" : "Discord-user-ID betaaladmin"}<input inputMode="numeric" required={draftEnabled} maxLength={20} placeholder="123456789012345678" value={draftAdminId} onChange={(event) => setDraftAdminId(event.target.value)} className={input} />{draftAdminId && !normalizedAdminId && <span role="alert" className="mt-2 block text-xs font-bold text-rose-300">{language === "en" ? "Enter a valid 17–20 digit Discord user ID." : "Vul een geldig Discord-user-ID van 17–20 cijfers in."}</span>}</label>
       </div>
       <label className={`${label} block max-w-2xl`}>{language === "en" ? "Suggested amounts in EUR" : "Voorgestelde bedragen in EUR"}<input required value={draftAmounts} onChange={(event) => setDraftAmounts(event.target.value)} placeholder="5, 10, 25" className={input} /><span className="mt-2 block text-xs font-normal normal-case leading-5 tracking-normal text-gray-500">{language === "en" ? "One to six amounts between €1 and €1,000." : "Eén tot zes bedragen tussen €1 en €1.000."}</span></label>
       <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl bg-white/[0.025] px-4 py-3 ring-1 ring-white/[0.07]"><span className="text-sm font-semibold text-gray-200">{language === "en" ? "Enable PayPal.Me on the support page" : "PayPal.Me inschakelen op de supportpagina"}</span><input type="checkbox" checked={draftEnabled} onChange={(event) => setDraftEnabled(event.target.checked)} className="h-5 w-5 accent-orange-500" /></label>
+      <div className="space-y-5 border-t border-white/[0.07] pt-6">
+        <div className="flex items-start gap-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.045] text-gray-200"><Flag className="h-5 w-5" /></div><div><h3 className="font-heading text-lg font-black">{language === "en" ? "iRacing referral" : "iRacing-referral"}</h3><p className="mt-1 text-sm leading-6 text-gray-500">{language === "en" ? "Show a simple referral link below the support options. No payment claim or bot DM is created." : "Toon een eenvoudige referrallink onder de supportopties. Er wordt geen betaalclaim of bot-DM aangemaakt."}</p></div></div>
+        <label className={`${label} block max-w-3xl`}>{language === "en" ? "Official iRacing referral link" : "Officiële iRacing-referrallink"}<input type="url" required={draftReferralEnabled} maxLength={500} placeholder="https://www.iracing.com/..." value={draftReferralUrl} onChange={(event) => setDraftReferralUrl(event.target.value)} className={input} />{draftReferralUrl && !normalizedReferralUrl && <span role="alert" className="mt-2 block text-xs font-bold text-rose-300">{language === "en" ? "Use a secure link on iracing.com or an official iRacing subdomain." : "Gebruik een beveiligde link op iracing.com of een officieel iRacing-subdomein."}</span>}<span className="mt-2 block text-xs font-normal normal-case leading-5 tracking-normal text-gray-500">{language === "en" ? "Book any credit actually received later as a manual iRacing referral entry in the season ledger." : "Boek werkelijk ontvangen tegoed later handmatig als iRacing-referral in het seizoensboek."}</span></label>
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl bg-white/[0.025] px-4 py-3 ring-1 ring-white/[0.07]"><span className="text-sm font-semibold text-gray-200">{language === "en" ? "Show iRacing referral on the support page" : "iRacing-referral tonen op de supportpagina"}</span><input type="checkbox" checked={draftReferralEnabled} onChange={(event) => setDraftReferralEnabled(event.target.checked)} className="h-5 w-5 accent-orange-500" /></label>
+      </div>
       <div className="flex flex-wrap items-center gap-3"><button type="submit" disabled={!configurationValid} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-racing px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"><ShieldCheck className="h-4 w-4" />{saved ? (language === "en" ? "Saved" : "Opgeslagen") : (language === "en" ? "Save payment settings" : "Betaalinstellingen opslaan")}</button><span className="rounded-full bg-sky-400/[0.06] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-sky-200 ring-1 ring-sky-300/15">{localReview ? (language === "en" ? "Local review · no real DM" : "Lokale review · geen echte DM") : (language === "en" ? "Shared backend · private bot DM" : "Gedeelde backend · privé bot-DM")}</span></div>
       {saveError && <p role="alert" className="text-sm font-bold text-rose-300">{language === "en" ? "The payment settings could not be saved." : "De betaalinstellingen konden niet worden opgeslagen."}</p>}
     </form>

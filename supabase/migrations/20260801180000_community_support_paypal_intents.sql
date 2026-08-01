@@ -9,10 +9,13 @@ CREATE TABLE public.community_support_payment_config (
   paypal_me_url TEXT NOT NULL DEFAULT '',
   suggested_amounts_eur NUMERIC(10,2)[] NOT NULL DEFAULT ARRAY[5.00, 10.00, 25.00]::NUMERIC(10,2)[],
   payment_admin_discord_id TEXT NOT NULL DEFAULT '',
+  iracing_referral_enabled BOOLEAN NOT NULL DEFAULT false,
+  iracing_referral_url TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   CHECK (paypal_me_url = '' OR paypal_me_url ~ '^https://(www\.)?paypal\.me/[A-Za-z0-9._-]{1,80}/?$'),
   CHECK (payment_admin_discord_id = '' OR payment_admin_discord_id ~ '^[0-9]{17,20}$'),
+  CHECK (iracing_referral_url = '' OR iracing_referral_url ~* '^https://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*iracing\.com(:443)?(/[^[:space:]]*)?$'),
   CHECK (cardinality(suggested_amounts_eur) BETWEEN 1 AND 6)
 );
 
@@ -79,7 +82,7 @@ GRANT ALL ON public.community_support_payment_intents TO service_role;
 GRANT ALL ON public.community_support_payment_ledger TO service_role;
 
 CREATE OR REPLACE FUNCTION public.get_community_support_payment_config()
-RETURNS TABLE(paypal_enabled BOOLEAN, paypal_me_url TEXT, suggested_amounts_eur NUMERIC[])
+RETURNS TABLE(paypal_enabled BOOLEAN, paypal_me_url TEXT, suggested_amounts_eur NUMERIC[], iracing_referral_enabled BOOLEAN, iracing_referral_url TEXT)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
@@ -98,13 +101,15 @@ AS $$
       WHEN cfg.paypal_enabled AND cfg.paypal_me_url <> '' AND cfg.payment_admin_discord_id <> ''
       THEN cfg.suggested_amounts_eur::NUMERIC[]
       ELSE ARRAY[]::NUMERIC[]
-    END
+    END,
+    cfg.iracing_referral_enabled AND cfg.iracing_referral_url <> '',
+    CASE WHEN cfg.iracing_referral_enabled AND cfg.iracing_referral_url <> '' THEN cfg.iracing_referral_url ELSE '' END
   FROM public.community_support_payment_config AS cfg
   WHERE cfg.singleton = true;
 $$;
 
 CREATE OR REPLACE FUNCTION public.admin_get_community_support_payment_config()
-RETURNS TABLE(paypal_enabled BOOLEAN, paypal_me_url TEXT, suggested_amounts_eur NUMERIC[], payment_admin_discord_id TEXT)
+RETURNS TABLE(paypal_enabled BOOLEAN, paypal_me_url TEXT, suggested_amounts_eur NUMERIC[], payment_admin_discord_id TEXT, iracing_referral_enabled BOOLEAN, iracing_referral_url TEXT)
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
@@ -115,7 +120,7 @@ BEGIN
     RAISE EXCEPTION 'Permission denied' USING ERRCODE = '42501';
   END IF;
   RETURN QUERY
-  SELECT cfg.paypal_enabled, cfg.paypal_me_url, cfg.suggested_amounts_eur::NUMERIC[], cfg.payment_admin_discord_id
+  SELECT cfg.paypal_enabled, cfg.paypal_me_url, cfg.suggested_amounts_eur::NUMERIC[], cfg.payment_admin_discord_id, cfg.iracing_referral_enabled, cfg.iracing_referral_url
   FROM public.community_support_payment_config AS cfg
   WHERE cfg.singleton = true;
 END;
@@ -125,7 +130,9 @@ CREATE OR REPLACE FUNCTION public.admin_update_community_support_payment_config(
   p_paypal_enabled BOOLEAN,
   p_paypal_me_url TEXT,
   p_suggested_amounts_eur NUMERIC[],
-  p_payment_admin_discord_id TEXT
+  p_payment_admin_discord_id TEXT,
+  p_iracing_referral_enabled BOOLEAN,
+  p_iracing_referral_url TEXT
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -133,18 +140,28 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public, auth, pg_temp
 AS $$
 DECLARE
-  v_url TEXT := regexp_replace(trim(p_paypal_me_url), '/$', '');
+  v_url TEXT := regexp_replace(trim(coalesce(p_paypal_me_url, '')), '/$', '');
+  v_referral_url TEXT := trim(coalesce(p_iracing_referral_url, ''));
   v_amount NUMERIC;
   v_previous_admin TEXT;
 BEGIN
   IF auth.uid() IS NULL OR NOT public.has_role(auth.uid(), 'super_admin'::public.app_role) THEN
     RAISE EXCEPTION 'Permission denied' USING ERRCODE = '42501';
   END IF;
-  IF v_url !~ '^https://(www\.)?paypal\.me/[A-Za-z0-9._-]{1,80}$' THEN
+  IF v_url <> '' AND v_url !~ '^https://(www\.)?paypal\.me/[A-Za-z0-9._-]{1,80}$' THEN
     RAISE EXCEPTION 'Invalid PayPal.Me URL' USING ERRCODE = '22023';
   END IF;
-  IF trim(p_payment_admin_discord_id) !~ '^[0-9]{17,20}$' THEN
+  IF trim(coalesce(p_payment_admin_discord_id, '')) <> '' AND trim(p_payment_admin_discord_id) !~ '^[0-9]{17,20}$' THEN
     RAISE EXCEPTION 'Invalid Discord user ID' USING ERRCODE = '22023';
+  END IF;
+  IF p_paypal_enabled AND (v_url = '' OR trim(coalesce(p_payment_admin_discord_id, '')) = '') THEN
+    RAISE EXCEPTION 'PayPal.Me URL and payment admin are required when PayPal is enabled' USING ERRCODE = '22023';
+  END IF;
+  IF v_referral_url <> '' AND v_referral_url !~* '^https://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*iracing\.com(:443)?(/[^[:space:]]*)?$' THEN
+    RAISE EXCEPTION 'Invalid iRacing referral URL' USING ERRCODE = '22023';
+  END IF;
+  IF p_iracing_referral_enabled AND v_referral_url = '' THEN
+    RAISE EXCEPTION 'iRacing referral URL is required when referral is enabled' USING ERRCODE = '22023';
   END IF;
   IF cardinality(p_suggested_amounts_eur) NOT BETWEEN 1 AND 6 THEN
     RAISE EXCEPTION 'Provide one to six suggested amounts' USING ERRCODE = '22023';
@@ -165,6 +182,8 @@ BEGIN
       paypal_me_url = v_url,
       suggested_amounts_eur = p_suggested_amounts_eur::NUMERIC(10,2)[],
       payment_admin_discord_id = trim(p_payment_admin_discord_id),
+      iracing_referral_enabled = p_iracing_referral_enabled,
+      iracing_referral_url = v_referral_url,
       updated_at = now(),
       updated_by = auth.uid()
   WHERE singleton = true;
@@ -472,7 +491,7 @@ REVOKE ALL ON FUNCTION public.get_community_support_payment_config() FROM PUBLIC
 REVOKE ALL ON FUNCTION public.get_public_community_support_payment_ledger() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_public_community_support_payment_totals() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.admin_get_community_support_payment_config() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.admin_update_community_support_payment_config(BOOLEAN, TEXT, NUMERIC[], TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_update_community_support_payment_config(BOOLEAN, TEXT, NUMERIC[], TEXT, BOOLEAN, TEXT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.create_community_support_payment_intent(NUMERIC, TEXT, BOOLEAN, BOOLEAN) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.discord_mark_community_support_payment_notified(UUID, UUID, TEXT, TEXT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.discord_resolve_community_support_payment_intent(UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT) FROM PUBLIC;
@@ -480,7 +499,7 @@ GRANT EXECUTE ON FUNCTION public.get_community_support_payment_config() TO anon,
 GRANT EXECUTE ON FUNCTION public.get_public_community_support_payment_ledger() TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_public_community_support_payment_totals() TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_get_community_support_payment_config() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_update_community_support_payment_config(BOOLEAN, TEXT, NUMERIC[], TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_update_community_support_payment_config(BOOLEAN, TEXT, NUMERIC[], TEXT, BOOLEAN, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_community_support_payment_intent(NUMERIC, TEXT, BOOLEAN, BOOLEAN) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.discord_mark_community_support_payment_notified(UUID, UUID, TEXT, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.discord_resolve_community_support_payment_intent(UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT) TO service_role;
