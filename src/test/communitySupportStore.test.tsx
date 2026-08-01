@@ -30,6 +30,9 @@ const Probe = () => {
     <span data-testid="race-public">{String(state.raceCosts[0]?.isPublic ?? false)}</span>
     <span data-testid="race-note">{state.raceCosts[0]?.note ?? ""}</span>
     <span data-testid="pricing-initialized">{String(state.settings.racePricingInitialized)}</span>
+    <span data-testid="recurring-frequency">{state.recurringCosts[0]?.frequency ?? ""}</span>
+    <span data-testid="product-image-count">{state.products[0]?.imageUrls.length ?? 0}</span>
+    <span data-testid="product-first-image">{state.products[0]?.imageUrls[0] ?? ""}</span>
     <button onClick={() => saveRaceCost(baseRace)}>save race</button>
     <button onClick={() => saveRaceCost({ ...baseRace, hostedHours: 2, discountApplied: true, note: "bijgewerkt" })}>update race</button>
     <button onClick={() => saveRaceCosts([baseRace, { ...baseRace, raceId: "race-b", raceScope: "standalone", leagueId: undefined, leagueName: undefined, raceName: "Losse race", raceFormat: "Feature" }])}>save batch</button>
@@ -111,6 +114,20 @@ describe("Community Support session storage", () => {
     expect(screen.getByTestId("race-public")).toHaveTextContent("false");
     expect(screen.getByTestId("race-note")).toHaveTextContent("bewaren");
     expect(screen.getByTestId("race-amount")).toHaveTextContent("0.5");
+  });
+
+  it("migrates legacy recurring frequency and product image URLs without clearing local data", async () => {
+    window.sessionStorage.setItem(storageKey, JSON.stringify({
+      ...validState,
+      recurringCosts: [{ id: "domain", startsOn: "2026-08-01", category: "domain", description: "Domein", amount: 12, isPublic: true, active: true }],
+      products: [{ id: "shirt", name: "Shirt", description: "3SM shirt", price: 25, purchasePrice: 12, shippingCost: 3, stock: 4, active: false, concept: true, imageUrl: "https://example.com/legacy-shirt.jpg" }],
+    }));
+    render(<Tree />);
+
+    await waitFor(() => expect(screen.getByTestId("recurring-frequency")).toHaveTextContent("monthly"));
+    expect(screen.getByTestId("ledger-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("product-image-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("product-first-image")).toHaveTextContent("https://example.com/legacy-shirt.jpg");
   });
 
   it("recalculates hydrated amounts from stored hours and discount", async () => {

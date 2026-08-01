@@ -56,7 +56,7 @@ const ledgerSchema = z.object({
 const recurringSchema = z.object({
   id: z.string().min(1).max(100), startsOn: dateSchema,
   category: z.enum(["hosting", "server", "domain", "software", "development", "other"]),
-  description: z.string().min(1).max(160), amount: moneySchema, isPublic: z.boolean(), active: z.boolean(),
+  description: z.string().min(1).max(160), amount: moneySchema, frequency: z.enum(["monthly", "yearly"]).default("monthly"), isPublic: z.boolean(), active: z.boolean(),
 });
 const raceCostSchema = z.object({
   id: z.string().min(1).max(100),
@@ -79,12 +79,23 @@ const raceCostSchema = z.object({
   if (cost.raceScope === "standalone" && cost.leagueId) context.addIssue({ code: z.ZodIssueCode.custom, message: "standalone race cannot have leagueId", path: ["leagueId"] });
   if (!isSupportedCommunitySupportRace(cost)) context.addIssue({ code: z.ZodIssueCode.custom, message: "race format is outside this prototype", path: ["raceFormat"] });
 });
-const productSchema = z.object({
+const productImageSchema = z.string().max(300_000).refine((value) => /^data:image\/(?:jpeg|png|webp);base64,/i.test(value) || /^https?:\/\//i.test(value), "unsupported product image");
+const productSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const { imageUrl, ...rest } = record;
+  return {
+    ...rest,
+    imageUrls: Array.isArray(record.imageUrls)
+      ? record.imageUrls
+      : typeof imageUrl === "string" && imageUrl.length > 0 ? [imageUrl] : [],
+  };
+}, z.object({
   id: z.string().min(1).max(100), name: z.string().min(1).max(100), description: z.string().min(1).max(500),
   price: moneySchema, purchasePrice: moneySchema, shippingCost: moneySchema,
   stock: z.number().int().min(0).max(1_000_000), active: z.boolean(), concept: z.boolean(),
-  imageUrl: z.string().url().max(500).optional(),
-});
+  imageUrls: z.array(productImageSchema).max(4).default([]),
+}));
 const stateSchema = z.object({
   ledger: z.array(ledgerSchema).max(5_000),
   recurringCosts: z.array(recurringSchema).max(500),

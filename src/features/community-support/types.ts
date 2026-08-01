@@ -39,6 +39,7 @@ export type SupportRecurringCost = {
   category: Extract<SupportLedgerCategory, "hosting" | "server" | "domain" | "software" | "development" | "other">;
   description: string;
   amount: number;
+  frequency: "monthly" | "yearly";
   isPublic: boolean;
   active: boolean;
 };
@@ -75,7 +76,7 @@ export type SupportProduct = {
   stock: number;
   active: boolean;
   concept: boolean;
-  imageUrl?: string;
+  imageUrls: string[];
 };
 
 export type CommunitySupportSettings = {

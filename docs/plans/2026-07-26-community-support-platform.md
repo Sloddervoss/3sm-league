@@ -18,7 +18,7 @@
 - Public release: first replace the local-session datasource with the audited Supabase readmodel; after that, changing `"public": false` to `true` releases UI, footer link, crawler HTML and sitemap together. A build fails if `public=true` while the datasource is still local.
 - Management: native `/admin/` Control Room module, visible only to Super-admin and permanently protected.
 - Languages: Dutch and English; mobile and desktop are equal acceptance targets.
-- Monthly costs derive dynamically from manual and recurring entries.
+- Monthly costs derive dynamically from manual entries and recurring entries. A recurring entry is explicitly monthly or yearly; yearly entries occur once per year in their configured start month.
 - Race costs are dedicated records linked read-only to an existing race; they are never duplicated as manual ledger entries.
 - Local-session review initialization upserts every eligible completed race exactly once at one hosted hour × €0.50, without writing to Supabase. The current real catalog produces 35 records (€17.50): 8 season races and 27 standalone races.
 - Hosting prices derive centrally from whole hosted hours × €0.50, with an optional 25% discount. The Control Room supports both individual race changes and one bulk hours/discount update for every recorded race in a selected season; standalone races remain individually editable.
@@ -31,6 +31,7 @@
 - PayPal starts with one-time payments only, but production integration waits for a suitable Business/developer setup.
 - iRacing referral stays hidden until a real link exists.
 - Concept merchandise is visible only while the public flag is false; public release hides concept products.
+- Products use up to four uploaded JPEG/PNG/WebP photos rather than externally entered image URLs. During local-session review the browser resizes these photos and stores them only in the active Super-admin session; a later shared datasource must move the binaries to audited object storage.
 
 ## Phase 1: gated production-shaped frontend
 
@@ -47,7 +48,7 @@
 **Verification:**
 - Net merchandise proceeds are calculated correctly.
 - Reserve remains separate from monthly coverage.
-- Recurring costs apply from their start month.
+- Monthly recurring costs apply from their start month; yearly costs apply once per year in the start month.
 - Private ledger rows never reach the public selector.
 - Management always requires Super-admin.
 
@@ -73,7 +74,7 @@
 **Acceptance:**
 - Add/remove ledger rows.
 - Add/toggle/remove recurring costs.
-- Add/toggle/remove products and concept state.
+- Add/toggle/remove products and concept state, including up to four locally uploaded photos with preview/removal.
 - Configure reserve and supporter defaults.
 - Working totals and navigation to `/support/`.
 - No Control Room imports or routes.
