@@ -1,17 +1,29 @@
-export const RACE_HOSTING_HOURLY_CREDIT_RATE_USD = 0.5;
+export const RACE_HOSTING_HOURLY_RATE_USD = 0.5;
 export const RACE_HOSTING_DISCOUNT_RATE = 0.25;
 export const DEFAULT_RACE_HOSTING_HOURS = 1;
+export const DEFAULT_USD_EUR_RATE = 0.92;
 
 export const normalizeHostedHours = (value: number) => {
   if (!Number.isFinite(value) || value <= 0) return null;
   return Math.min(24, Math.max(1, Math.round(value)));
 };
 
-export const calculateRaceHostingCreditCostUsd = (hostedHours: number, discountApplied: boolean) => {
+export const normalizeUsdEurRate = (value: number) => {
+  if (!Number.isFinite(value) || value <= 0 || value > 10) return null;
+  return Math.round((value + Number.EPSILON) * 10_000) / 10_000;
+};
+
+export const calculateRaceHostingAmountUsd = (hostedHours: number, discountApplied: boolean) => {
   const normalizedHours = normalizeHostedHours(hostedHours);
   if (normalizedHours === null) return 0;
   const multiplier = discountApplied ? 1 - RACE_HOSTING_DISCOUNT_RATE : 1;
-  return Math.round((normalizedHours * RACE_HOSTING_HOURLY_CREDIT_RATE_USD * multiplier + Number.EPSILON) * 100) / 100;
+  return Math.round((normalizedHours * RACE_HOSTING_HOURLY_RATE_USD * multiplier + Number.EPSILON) * 100) / 100;
+};
+
+export const convertUsdToEur = (amountUsd: number, usdEurRate: number) => {
+  const rate = normalizeUsdEurRate(usdEurRate);
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0 || rate === null) return 0;
+  return Math.round((amountUsd * rate + Number.EPSILON) * 100) / 100;
 };
 
 export const configuredRaceHours = (duration?: string | null) => {

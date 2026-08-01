@@ -31,8 +31,8 @@ export type PublicSupportLedgerEntry = Omit<SupportLedgerEntry, "amount" | "isPu
   amount: number | null;
   isPublic: true;
   supporterName?: string;
-  sourceAmount?: number;
-  sourceCurrency?: "USD";
+  sourceAmountUsd?: number;
+  exchangeRateUsdEur?: number;
 };
 
 export type SupportRecurringCost = {
@@ -44,20 +44,6 @@ export type SupportRecurringCost = {
   frequency: "monthly" | "yearly";
   isPublic: boolean;
   active: boolean;
-};
-
-export type SupportCreditPurchase = {
-  id: string;
-  date: string;
-  description: string;
-  creditsUsd: number;
-  amountEur: number;
-  isPublic: boolean;
-  note?: string;
-};
-
-export type PublicSupportCreditPurchase = Omit<SupportCreditPurchase, "id" | "note" | "isPublic"> & {
-  isPublic: true;
 };
 
 export type SupportRaceCost = {
@@ -73,13 +59,14 @@ export type SupportRaceCost = {
   raceFormat?: string;
   hostedHours: number;
   discountApplied: boolean;
-  creditCostUsd: number;
-  pricingSource: "calculated" | "legacy_amount";
+  sourceAmountUsd: number;
+  exchangeRateUsdEur: number;
+  amount: number;
   isPublic: boolean;
   note?: string;
 };
 
-export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "hostedHours" | "discountApplied" | "creditCostUsd"> & {
+export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "hostedHours" | "discountApplied" | "sourceAmountUsd" | "exchangeRateUsdEur" | "amount"> & {
   isPublic: true;
 };
 
@@ -100,6 +87,7 @@ export type CommunitySupportSettings = {
   reserve: number;
   reserveStartYear?: string;
   racePricingInitialized: boolean;
+  usdEurRate: number;
   publicSupporterNamesByDefault: boolean;
   publicSupporterAmountsByDefault: boolean;
   paypalEnabled: boolean;
@@ -108,7 +96,6 @@ export type CommunitySupportSettings = {
 export type CommunitySupportState = {
   ledger: SupportLedgerEntry[];
   recurringCosts: SupportRecurringCost[];
-  creditPurchases: SupportCreditPurchase[];
   raceCosts: SupportRaceCost[];
   products: SupportProduct[];
   settings: CommunitySupportSettings;
@@ -120,7 +107,7 @@ export const SUPPORT_CATEGORY_LABELS: Record<SupportLedgerCategory, { nl: string
   referral_income: { nl: "iRacing-referral", en: "iRacing referral" },
   hosting: { nl: "Hosting", en: "Hosting" },
   server: { nl: "Servers", en: "Servers" },
-  race_hosting: { nl: "iRacing Credits", en: "iRacing Credits" },
+  race_hosting: { nl: "Racehosting", en: "Race hosting" },
   domain: { nl: "Domeinen", en: "Domains" },
   software: { nl: "Software", en: "Software" },
   development: { nl: "Websiteontwikkeling", en: "Website development" },

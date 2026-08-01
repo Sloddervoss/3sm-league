@@ -28,7 +28,6 @@ import { monthKey, supportMetricsForYear } from "@/features/community-support/mo
 import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "@/features/community-support/store";
 import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "@/features/community-support/types";
 import { MAX_PRODUCT_IMAGES, prepareProductImage } from "@/features/community-support/productImages";
-import CreditPurchasesSection from "./CreditPurchasesSection";
 import RaceCostsSection from "./RaceCostsSection";
 
 type Language = "nl" | "en";
@@ -104,9 +103,11 @@ const COPY: Record<Language, Copy> = {
     addProduct: "Product toevoegen",
     noProducts: "Nog geen producten toegevoegd.",
     margin: "Marge per stuk",
-    settingsHelp: "Stel alleen een eventuele reserve in waarmee Community Support begint. Daarna schuift uitsluitend het echte restant automatisch door.",
+    settingsHelp: "Beheer de startreserve en de standaard USD/EUR-koers voor nieuwe raceboekingen. Bestaande racebedragen behouden altijd hun opgeslagen koers.",
     currentReserve: "Startreserve",
     reserveStartYear: "Startjaar reserve",
+    usdEurRate: "USD/EUR-koers voor nieuwe races",
+    usdEurRateHelp: "1 USD wordt omgerekend naar dit aantal EUR. Wijzigingen gelden niet met terugwerkende kracht.",
     supporterDefaults: "Standaardvoorkeuren voor supporters",
     namesDefault: "Supporternaam standaard openbaar",
     amountsDefault: "Supportbedrag standaard openbaar",
@@ -192,9 +193,11 @@ const COPY: Record<Language, Copy> = {
     addProduct: "Add product",
     noProducts: "No products added yet.",
     margin: "Margin per item",
-    settingsHelp: "Set only an optional reserve that Community Support starts with. After that, only the actual remainder is carried forward automatically.",
+    settingsHelp: "Manage the starting reserve and the default USD/EUR rate for new race entries. Existing race amounts always retain their stored rate.",
     currentReserve: "Starting reserve",
     reserveStartYear: "Reserve start year",
+    usdEurRate: "USD/EUR rate for new races",
+    usdEurRateHelp: "One USD is converted to this many EUR. Changes are never applied retroactively.",
     supporterDefaults: "Default supporter preferences",
     namesDefault: "Supporter name public by default",
     amountsDefault: "Support amount public by default",
@@ -220,7 +223,6 @@ const COPY: Record<Language, Copy> = {
 const today = () => new Date().toISOString().slice(0, 10);
 const parseAmount = (value: FormDataEntryValue | null) => Number(String(value ?? "").replace(",", "."));
 const formatCurrency = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-GB" : "nl-NL", { style: "currency", currency: "EUR" }).format(value);
-const formatUsd = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-US" : "nl-NL", { style: "currency", currency: "USD" }).format(value);
 const INCOME_CATEGORIES: SupportLedgerCategory[] = ["contribution", "merchandise_income", "referral_income", "other"];
 const EXPENSE_CATEGORIES: SupportLedgerCategory[] = ["hosting", "server", "domain", "software", "development", "event", "payment_fee", "merchandise_purchase", "shipping", "other"];
 
@@ -258,7 +260,7 @@ const CommunitySupportModule = () => {
   const t = COPY[language];
   const {
     state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost,
-    removeRecurringCost, addCreditPurchase, removeCreditPurchase, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
+    removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
   } = useCommunitySupport();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
@@ -287,9 +289,8 @@ const CommunitySupportModule = () => {
     String(new Date().getFullYear()),
     ...state.ledger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
-    ...state.creditPurchases.map((purchase) => purchase.date.slice(0, 4)),
     ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [state.creditPurchases, state.ledger, state.raceCosts, state.recurringCosts]);
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [state.ledger, state.raceCosts, state.recurringCosts]);
   const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
   const visibleEntries = useMemo(() => state.ledger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [state.ledger, selectedMonth]);
   const inventoryValue = useMemo(() => state.products.reduce((sum, product) => sum + product.price * product.stock, 0), [state.products]);
@@ -467,7 +468,7 @@ const CommunitySupportModule = () => {
                   <dl className="grid gap-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.netSupport}</dt><dd className="font-bold">{formatCurrency(metrics.netCommunitySupport, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.openingReserve}</dt><dd className="font-bold">{formatCurrency(metrics.openingReserve, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.reserveUsed}</dt><dd className="font-bold">{formatCurrency(metrics.reserveUsed, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.operational}</dt><dd className="font-bold">{formatCurrency(metrics.operationalExpenses, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.selfFunded}</dt><dd className="font-bold">{formatCurrency(metrics.selfFunded, language)}</dd></div></dl>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {[[t.entryCount, metrics.entries.length], [t.raceCosts, formatUsd(metrics.raceCreditCostTotalUsd, language)], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black text-white">{value}</p></div>)}
+                  {[[t.entryCount, metrics.entries.length], [t.raceCosts, formatCurrency(metrics.raceCostTotal, language)], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
                 </div>
               </section>}
 
@@ -489,25 +490,18 @@ const CommunitySupportModule = () => {
                 </div>
               </section>}
 
-              {section === "race-costs" && <section id="panel-race-costs" role="tabpanel" className="space-y-10">
-                <CreditPurchasesSection
-                  language={language}
-                  selectedYear={selectedYear}
-                  purchases={state.creditPurchases}
-                  raceCosts={state.raceCosts}
-                  onAdd={addCreditPurchase}
-                  onRemove={removeCreditPurchase}
-                />
+              {section === "race-costs" && <section id="panel-race-costs" role="tabpanel">
                 <RaceCostsSection
                   language={language}
                   selectedYear={selectedYear}
                   onSelectedYearChange={setSelectedYear}
                   raceCosts={state.raceCosts}
+                  defaultUsdEurRate={state.settings.usdEurRate}
                   hasRecurringServerCost={state.recurringCosts.some((cost) => cost.category === "server")}
                   onSave={saveRaceCost}
                   onSaveMany={saveRaceCosts}
                   onInitialize={initializeRaceCosts}
-                  pricingInitialized={state.settings.racePricingInitialized}
+
                   onRemove={removeRaceCost}
                 />
               </section>}
@@ -545,7 +539,7 @@ const CommunitySupportModule = () => {
               {section === "settings" && <section id="panel-settings" role="tabpanel" className="space-y-6">
                 <SectionHeader title={t.settings} help={t.settingsHelp} />
                 <form onSubmit={submitSettings} className={cx(card, "space-y-6 p-6 md:p-8")}>
-                  <div className="grid max-w-2xl gap-5 sm:grid-cols-2"><Field title={t.currentReserve}><input type="number" min="0" step="0.01" value={settingsDraft.reserve} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserve: Number(event.target.value) }))} className={input} /></Field><Field title={t.reserveStartYear}><input type="number" min="2000" max="2100" step="1" value={settingsDraft.reserveStartYear ?? String(new Date().getFullYear())} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserveStartYear: event.target.value }))} className={input} /></Field></div>
+                  <div className="grid max-w-3xl gap-5 sm:grid-cols-3"><Field title={t.currentReserve}><input type="number" min="0" step="0.01" value={settingsDraft.reserve} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserve: Number(event.target.value) }))} className={input} /></Field><Field title={t.reserveStartYear}><input type="number" min="2000" max="2100" step="1" value={settingsDraft.reserveStartYear ?? String(new Date().getFullYear())} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserveStartYear: event.target.value }))} className={input} /></Field><Field title={t.usdEurRate}><input aria-describedby="usd-eur-rate-help" type="number" min="0.01" max="10" step="0.0001" required value={settingsDraft.usdEurRate} onChange={(event) => setSettingsDraft((current) => ({ ...current, usdEurRate: Number(event.target.value) }))} className={input} /><span id="usd-eur-rate-help" className="mt-2 block text-xs leading-5 text-gray-500">{t.usdEurRateHelp}</span></Field></div>
                   <div><h3 className="mb-3 text-sm font-black text-gray-200">{t.supporterDefaults}</h3><div className="grid gap-3 md:grid-cols-2"><Toggle checked={settingsDraft.publicSupporterNamesByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterNamesByDefault: checked }))} label={t.namesDefault} /><Toggle checked={settingsDraft.publicSupporterAmountsByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterAmountsByDefault: checked }))} label={t.amountsDefault} /><Toggle checked={settingsDraft.paypalEnabled} onChange={(checked) => setSettingsDraft((current) => ({ ...current, paypalEnabled: checked }))} label={t.paypal} /></div></div>
                   <button type="submit" className={primaryButton}>{settingsSaved ? <Check className="h-4 w-4" /> : <Settings className="h-4 w-4" />}{settingsSaved ? t.saved : t.saveSettings}</button>
                 </form>
@@ -559,7 +553,7 @@ const CommunitySupportModule = () => {
           <div className="flex items-start justify-between gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><button type="button" onClick={() => setClearOpen(false)} aria-label={t.cancel} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-white/[0.05] hover:text-white"><X className="h-5 w-5" /></button></div>
           <h2 id="clear-data-title" className="mt-5 font-heading text-2xl font-black">{t.confirmTitle}</h2><p id="clear-data-description" className="mt-3 text-sm leading-relaxed text-gray-400">{t.confirmHelp}</p>
           <input value={clearPhrase} onChange={(event) => setClearPhrase(event.target.value)} placeholder={t.confirmPlaceholder} autoComplete="off" className={cx(input, "mt-5")} />
-          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button ref={cancelClearRef} type="button" onClick={() => setClearOpen(false)} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 hover:bg-white/[0.08]">{t.cancel}</button><button type="button" disabled={clearPhrase !== confirmationWord} onClick={() => { clearLocalData(); setSettingsDraft({ reserve: 0, reserveStartYear: String(new Date().getFullYear()), publicSupporterNamesByDefault: true, publicSupporterAmountsByDefault: false, paypalEnabled: false }); setClearOpen(false); setSection("dashboard"); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-4 w-4" />{t.confirmClear}</button></div>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button ref={cancelClearRef} type="button" onClick={() => setClearOpen(false)} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 hover:bg-white/[0.08]">{t.cancel}</button><button type="button" disabled={clearPhrase !== confirmationWord} onClick={() => { clearLocalData(); setClearOpen(false); setSection("dashboard"); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-4 w-4" />{t.confirmClear}</button></div>
         </div>
       </div>}
     </div>

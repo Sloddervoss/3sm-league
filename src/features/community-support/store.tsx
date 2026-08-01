@@ -4,14 +4,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import type {
   CommunitySupportSettings,
   CommunitySupportState,
-  SupportCreditPurchase,
   SupportLedgerEntry,
   SupportProduct,
   SupportRaceCost,
   SupportRecurringCost,
 } from "./types";
 import { isSupportedCommunitySupportRace } from "./raceEligibility";
-import { calculateRaceHostingCreditCostUsd, normalizeHostedHours } from "./raceHostingPricing";
+import { calculateRaceHostingAmountUsd, convertUsdToEur, DEFAULT_USD_EUR_RATE, normalizeHostedHours, normalizeUsdEurRate } from "./raceHostingPricing";
 
 const STORAGE_PREFIX = "3sm-community-support-session-v2";
 const INCOME_CATEGORIES = new Set(["contribution", "merchandise_income", "referral_income", "other"]);
@@ -20,13 +19,13 @@ const EXPENSE_CATEGORIES = new Set(["hosting", "server", "domain", "software", "
 const INITIAL_STATE: CommunitySupportState = {
   ledger: [],
   recurringCosts: [],
-  creditPurchases: [],
   raceCosts: [],
   products: [],
   settings: {
     reserve: 0,
     reserveStartYear: String(new Date().getFullYear()),
     racePricingInitialized: false,
+    usdEurRate: DEFAULT_USD_EUR_RATE,
     publicSupporterNamesByDefault: true,
     publicSupporterAmountsByDefault: false,
     paypalEnabled: false,
@@ -60,25 +59,23 @@ const recurringSchema = z.object({
   category: z.enum(["hosting", "server", "domain", "software", "development", "other"]),
   description: z.string().min(1).max(160), amount: moneySchema, frequency: z.enum(["monthly", "yearly"]).default("monthly"), isPublic: z.boolean(), active: z.boolean(),
 });
-const creditPurchaseSchema = z.object({
-  id: z.string().min(1).max(100),
-  date: dateSchema,
-  description: z.string().min(1).max(160),
-  creditsUsd: positiveMoneySchema,
-  amountEur: positiveMoneySchema,
-  isPublic: z.boolean(),
-  note: z.string().max(240).optional(),
-});
 const raceCostSchema = z.preprocess((value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const record = value as Record<string, unknown>;
-  const { amount, ...rest } = record;
-  const isLegacyAmount = record.creditCostUsd === undefined && amount !== undefined;
-  return {
-    ...rest,
-    creditCostUsd: record.creditCostUsd ?? amount,
-    pricingSource: isLegacyAmount ? "legacy_amount" : record.pricingSource,
-  };
+  const hostedHours = typeof record.hostedHours === "number" ? record.hostedHours : 1;
+  const discountApplied = record.discountApplied === true;
+  const sourceAmountUsd = typeof record.sourceAmountUsd === "number"
+    ? record.sourceAmountUsd
+    : calculateRaceHostingAmountUsd(hostedHours, discountApplied);
+  const exchangeRateUsdEur = typeof record.exchangeRateUsdEur === "number" ? record.exchangeRateUsdEur : DEFAULT_USD_EUR_RATE;
+  const amount = record.sourceAmountUsd !== undefined && typeof record.amount === "number"
+    ? record.amount
+    : convertUsdToEur(sourceAmountUsd, exchangeRateUsdEur);
+  const migrated = { ...record };
+  delete migrated.creditCostUsd;
+  delete migrated.pricingSource;
+  delete migrated.amountEur;
+  return { ...migrated, sourceAmountUsd, exchangeRateUsdEur, amount };
 }, z.object({
   id: z.string().min(1).max(100),
   raceId: z.string().min(1).max(100),
@@ -92,8 +89,9 @@ const raceCostSchema = z.preprocess((value) => {
   raceFormat: z.string().max(80).optional(),
   hostedHours: z.number().int().min(1).max(24).default(1),
   discountApplied: z.boolean().default(false),
-  creditCostUsd: positiveMoneySchema,
-  pricingSource: z.enum(["calculated", "legacy_amount"]).default("calculated"),
+  sourceAmountUsd: positiveMoneySchema,
+  exchangeRateUsdEur: z.number().finite().gt(0).max(10),
+  amount: positiveMoneySchema,
   isPublic: z.boolean(),
   note: z.string().max(240).optional(),
 }).superRefine((cost, context) => {
@@ -121,13 +119,13 @@ const productSchema = z.preprocess((value) => {
 const stateSchema = z.object({
   ledger: z.array(ledgerSchema).max(5_000),
   recurringCosts: z.array(recurringSchema).max(500),
-  creditPurchases: z.array(creditPurchaseSchema).max(500).default([]),
   raceCosts: z.array(raceCostSchema).max(1_000).default([]),
   products: z.array(productSchema).max(500),
   settings: z.object({
     reserve: moneySchema,
     reserveStartYear: z.string().regex(/^\d{4}$/).optional(),
     racePricingInitialized: z.boolean().default(false),
+    usdEurRate: z.number().finite().gt(0).max(10).default(DEFAULT_USD_EUR_RATE),
     publicSupporterNamesByDefault: z.boolean(),
     publicSupporterAmountsByDefault: z.boolean(),
     paypalEnabled: z.boolean(),
@@ -164,15 +162,7 @@ const loadState = (storageKey: string): CommunitySupportState => {
       console.warn("Community Support session data was invalid and has been cleared.");
       return INITIAL_STATE;
     }
-    return {
-      ...result.data,
-      raceCosts: result.data.raceCosts.map((cost) => ({
-        ...cost,
-        creditCostUsd: cost.pricingSource === "legacy_amount"
-          ? cost.creditCostUsd
-          : calculateRaceHostingCreditCostUsd(cost.hostedHours, cost.discountApplied),
-      })),
-    } as CommunitySupportState;
+    return result.data as CommunitySupportState;
   } catch {
     return INITIAL_STATE;
   }
@@ -180,22 +170,25 @@ const loadState = (storageKey: string): CommunitySupportState => {
 
 export type SupportLedgerDraft = Omit<SupportLedgerEntry, "id">;
 export type SupportRecurringCostDraft = Omit<SupportRecurringCost, "id">;
-export type SupportCreditPurchaseDraft = Omit<SupportCreditPurchase, "id">;
-export type SupportRaceCostDraft = Omit<SupportRaceCost, "id" | "creditCostUsd" | "pricingSource"> & { creditCostUsd?: number; pricingSource?: SupportRaceCost["pricingSource"] };
+export type SupportRaceCostDraft = Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur"> & { amount?: number; sourceAmountUsd?: number; exchangeRateUsdEur?: number };
 export type SupportProductDraft = Omit<SupportProduct, "id">;
 
-const normalizeRaceCostDraft = (draft: SupportRaceCostDraft): Omit<SupportRaceCost, "id"> | null => {
+const normalizeRaceCostDraft = (draft: SupportRaceCostDraft, defaultUsdEurRate: number): Omit<SupportRaceCost, "id"> | null => {
   if (!isSupportedCommunitySupportRace(draft)) return null;
   if ((draft.raceScope === "season") !== Boolean(draft.leagueId)) return null;
   const hostedHours = normalizeHostedHours(draft.hostedHours);
   if (hostedHours === null) return null;
+  const exchangeRateUsdEur = normalizeUsdEurRate(draft.exchangeRateUsdEur ?? defaultUsdEurRate);
+  if (exchangeRateUsdEur === null) return null;
+  const sourceAmountUsd = calculateRaceHostingAmountUsd(hostedHours, draft.discountApplied);
   return {
     ...draft,
     hostedHours,
     discountApplied: Boolean(draft.discountApplied),
     date: draft.date.slice(0, 10),
-    creditCostUsd: calculateRaceHostingCreditCostUsd(hostedHours, draft.discountApplied),
-    pricingSource: "calculated",
+    sourceAmountUsd,
+    exchangeRateUsdEur,
+    amount: convertUsdToEur(sourceAmountUsd, exchangeRateUsdEur),
     note: draft.note?.trim() || undefined,
   };
 };
@@ -203,9 +196,12 @@ const normalizeRaceCostDraft = (draft: SupportRaceCostDraft): Omit<SupportRaceCo
 const saveRaceCostDrafts = (current: CommunitySupportState, drafts: SupportRaceCostDraft[]): CommunitySupportState => {
   const raceCosts = [...current.raceCosts];
   drafts.forEach((draft) => {
-    const normalized = normalizeRaceCostDraft(draft);
+    const existingIndex = raceCosts.findIndex((cost) => cost.raceId === draft.raceId);
+    const normalized = normalizeRaceCostDraft({
+      ...draft,
+      ...(existingIndex >= 0 ? { exchangeRateUsdEur: raceCosts[existingIndex].exchangeRateUsdEur } : {}),
+    }, current.settings.usdEurRate);
     if (!normalized) return;
-    const existingIndex = raceCosts.findIndex((cost) => cost.raceId === normalized.raceId);
     if (existingIndex >= 0) raceCosts[existingIndex] = { ...normalized, id: raceCosts[existingIndex].id };
     else raceCosts.unshift(withId(normalized));
   });
@@ -219,8 +215,6 @@ type CommunitySupportStore = {
   addRecurringCost: (draft: SupportRecurringCostDraft) => void;
   toggleRecurringCost: (id: string) => void;
   removeRecurringCost: (id: string) => void;
-  addCreditPurchase: (draft: SupportCreditPurchaseDraft) => void;
-  removeCreditPurchase: (id: string) => void;
   saveRaceCost: (draft: SupportRaceCostDraft) => void;
   saveRaceCosts: (drafts: SupportRaceCostDraft[]) => void;
   initializeRaceCosts: (drafts: SupportRaceCostDraft[]) => void;
@@ -278,32 +272,27 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
   const addRecurringCost = useCallback((draft: SupportRecurringCostDraft) => setState((current) => ({ ...current, recurringCosts: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.recurringCosts] })), []);
   const toggleRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.map((cost) => cost.id === id ? { ...cost, active: !cost.active } : cost) })), []);
   const removeRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.filter((cost) => cost.id !== id) })), []);
-  const addCreditPurchase = useCallback((draft: SupportCreditPurchaseDraft) => setState((current) => {
-    const parsed = creditPurchaseSchema.omit({ id: true }).safeParse({
-      ...draft,
-      date: draft.date.slice(0, 10),
-      description: draft.description.trim(),
-      creditsUsd: safeAmount(draft.creditsUsd),
-      amountEur: safeAmount(draft.amountEur),
-      note: draft.note?.trim() || undefined,
-    });
-    if (!parsed.success) return current;
-    return { ...current, creditPurchases: [withId(parsed.data as SupportCreditPurchaseDraft), ...current.creditPurchases] };
-  }), []);
-  const removeCreditPurchase = useCallback((id: string) => setState((current) => ({ ...current, creditPurchases: current.creditPurchases.filter((purchase) => purchase.id !== id) })), []);
   const saveRaceCost = useCallback((draft: SupportRaceCostDraft) => setState((current) => saveRaceCostDrafts(current, [draft])), []);
   const saveRaceCosts = useCallback((drafts: SupportRaceCostDraft[]) => setState((current) => saveRaceCostDrafts(current, drafts)), []);
   const initializeRaceCosts = useCallback((drafts: SupportRaceCostDraft[]) => setState((current) => {
-    if (current.settings.racePricingInitialized) return current;
     const existingRaceIds = new Set(current.raceCosts.map((cost) => cost.raceId));
-    const initialized = saveRaceCostDrafts(current, drafts.filter((draft) => !existingRaceIds.has(draft.raceId)));
+    const missingDrafts = drafts.filter((draft) => !existingRaceIds.has(draft.raceId));
+    if (missingDrafts.length === 0) {
+      if (current.settings.racePricingInitialized) return current;
+      return { ...current, settings: { ...current.settings, racePricingInitialized: true } };
+    }
+    const initialized = saveRaceCostDrafts(current, missingDrafts);
     return { ...initialized, settings: { ...initialized.settings, racePricingInitialized: true } };
   }), []);
   const removeRaceCost = useCallback((id: string) => setState((current) => ({ ...current, raceCosts: current.raceCosts.filter((cost) => cost.id !== id) })), []);
   const addProduct = useCallback((draft: SupportProductDraft) => setState((current) => ({ ...current, products: [{ ...withId(draft), price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: safeAmount(draft.shippingCost), stock: Math.max(0, Math.floor(draft.stock)) }, ...current.products] })), []);
   const toggleProduct = useCallback((id: string) => setState((current) => ({ ...current, products: current.products.map((product) => product.id === id ? { ...product, active: !product.active } : product) })), []);
   const removeProduct = useCallback((id: string) => setState((current) => ({ ...current, products: current.products.filter((product) => product.id !== id) })), []);
-  const updateSettings = useCallback((settings: Partial<CommunitySupportSettings>) => setState((current) => ({ ...current, settings: { ...current.settings, ...settings, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } })), []);
+  const updateSettings = useCallback((settings: Partial<CommunitySupportSettings>) => setState((current) => {
+    const usdEurRate = settings.usdEurRate === undefined ? current.settings.usdEurRate : normalizeUsdEurRate(settings.usdEurRate);
+    if (usdEurRate === null) return current;
+    return { ...current, settings: { ...current.settings, ...settings, usdEurRate, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } };
+  }), []);
   const clearLocalData = useCallback(() => {
     if (storageKey) {
       try { window.sessionStorage.removeItem(storageKey); } catch { /* state is still cleared */ }
@@ -319,8 +308,6 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     addRecurringCost,
     toggleRecurringCost,
     removeRecurringCost,
-    addCreditPurchase,
-    removeCreditPurchase,
     saveRaceCost,
     saveRaceCosts,
     initializeRaceCosts,
@@ -330,7 +317,7 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     removeProduct,
     updateSettings,
     clearLocalData,
-  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, addCreditPurchase, removeCreditPurchase, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
+  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData]);
   return <CommunitySupportContext.Provider value={value}>{children}</CommunitySupportContext.Provider>;
 };
 

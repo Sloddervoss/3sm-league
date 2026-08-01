@@ -22,7 +22,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
-import { COMMUNITY_SUPPORT_PUBLIC, isValidSupportMonth, monthKey, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
+import { COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
 import { useCommunitySupport } from "../store";
 import { SUPPORT_CATEGORY_LABELS, type PublicSupportLedgerEntry, type SupportLedgerCategory } from "../types";
 import RaceCostsOverview from "./RaceCostsOverview";
@@ -81,6 +81,7 @@ const getCopy = (language: Language) => language === "en" ? {
   spendingEmptyHint: "When costs are published, their categories and totals will appear here.",
   ledgerTitle: "Season ledger",
   ledgerIntro: "View the full season or select a month to inspect public income, expenses and active recurring costs.",
+  raceConversion: "Original USD price and stored rate",
   date: "Date",
   description: "Description",
   category: "Category",
@@ -149,6 +150,7 @@ const getCopy = (language: Language) => language === "en" ? {
   spendingEmptyHint: "Zodra kosten worden gepubliceerd, verschijnen de categorieën en totalen hier.",
   ledgerTitle: "Seizoensboek",
   ledgerIntro: "Bekijk het hele seizoen of kies een maand voor de openbare inkomsten, uitgaven en actieve terugkerende kosten.",
+  raceConversion: "Oorspronkelijke USD-prijs en opgeslagen koers",
   date: "Datum",
   description: "Omschrijving",
   category: "Categorie",
@@ -230,9 +232,8 @@ const CommunitySupportPage = () => {
     currentYear,
     ...state.ledger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
-    ...state.creditPurchases.map((purchase) => purchase.date.slice(0, 4)),
     ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, state.creditPurchases, state.ledger, state.raceCosts, state.recurringCosts]);
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, state.ledger, state.raceCosts, state.recurringCosts]);
 
   const requestedPeriodRef = useRef({
     year: new URLSearchParams(window.location.search).get("year"),
@@ -246,7 +247,7 @@ const CommunitySupportPage = () => {
   const [selectedYear, setSelectedYear] = useState(initialYear);
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     const queryMonth = requestedPeriodRef.current.month;
-    return isValidSupportMonth(queryMonth, initialYear) ? queryMonth : "all";
+    return queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) && queryMonth.startsWith(initialYear) ? queryMonth : "all";
   });
 
   const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => `${selectedYear}-${String(index + 1).padStart(2, "0")}`), [selectedYear]);
@@ -257,7 +258,7 @@ const CommunitySupportPage = () => {
       queryPeriodAppliedRef.current = true;
       setSelectedYear(requestedYear);
       const requestedMonth = requestedPeriodRef.current.month;
-      setSelectedMonth(isValidSupportMonth(requestedMonth, requestedYear) ? requestedMonth : "all");
+      setSelectedMonth(requestedMonth && /^\d{4}-\d{2}$/.test(requestedMonth) && requestedMonth.startsWith(requestedYear) ? requestedMonth : "all");
       return;
     }
     if (!requestedYear) queryPeriodAppliedRef.current = true;
@@ -288,7 +289,6 @@ const CommunitySupportPage = () => {
   const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
   const annualPublicLedger = useMemo(() => publicLedgerForYear(state, selectedYear), [state, selectedYear]);
   const annualPublicRaceCosts = useMemo(() => publicRaceCostsForYear(state, selectedYear), [state, selectedYear]);
-
   const publicLedger = useMemo(() => selectedMonth === "all" ? annualPublicLedger : publicLedgerForMonth(state, selectedMonth), [annualPublicLedger, selectedMonth, state]);
   const products = useMemo(() => state.products.filter((product) => COMMUNITY_SUPPORT_PUBLIC
     ? product.active && !product.concept
@@ -409,12 +409,7 @@ const CommunitySupportPage = () => {
               </div>
             </Surface>
 
-            <RaceCostsOverview
-              language={lang}
-              selectedYear={selectedYear}
-              costs={annualPublicRaceCosts}
-              summary={{ raceCount: metrics.raceCosts.length, consumedUsd: metrics.raceCreditCostTotalUsd, purchasedUsd: metrics.creditPurchasedTotalUsd, paidEur: metrics.creditPurchaseTotalEur }}
-            />
+            <RaceCostsOverview language={lang} selectedYear={selectedYear} costs={annualPublicRaceCosts} totalCount={metrics.raceCosts.length} totalAmountEur={metrics.raceCostTotal} />
 
             <section id="support-options" className="scroll-mt-24">
               <SectionHeading icon={<Heart className="h-4 w-4" aria-hidden="true" />} eyebrow={copy.eyebrow} title={copy.supportTitle} intro={copy.supportIntro} />
@@ -505,12 +500,13 @@ const CommunitySupportPage = () => {
                         <div className="min-w-0">
                           <p className="font-bold text-gray-200">{entry.description}</p>
                           {entry.supporterName && <p className="mt-1 truncate text-xs text-gray-500">{entry.supporterName}</p>}
+                          {entry.sourceAmountUsd !== undefined && entry.exchangeRateUsdEur !== undefined && <p className="mt-1 text-xs text-gray-500">{copy.raceConversion}: {formatUsd(entry.sourceAmountUsd, lang)} × {entry.exchangeRateUsdEur.toFixed(4)}</p>}
                         </div>
                         <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ring-1 ${entry.direction === "income" ? "bg-emerald-400/10 text-emerald-200 ring-emerald-300/20" : "bg-rose-400/10 text-rose-200 ring-rose-300/20"}`}>{entry.direction === "income" ? <ArrowDownRight className="h-3 w-3" aria-hidden="true" /> : <ArrowUpRight className="h-3 w-3" aria-hidden="true" />}{entry.direction === "income" ? copy.income : copy.expense}</span>
                       </div>
                       <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/[0.055] pt-3 text-xs">
                         <div><dt className="text-gray-600">{copy.date}</dt><dd className="mt-1 text-gray-400">{formatDate(entry.date, lang)}</dd></div>
-                        <div className="text-right"><dt className="text-gray-600">{copy.amount}</dt><dd className="mt-1 font-heading font-black text-white">{amountIsPrivate(entry) ? copy.protectedAmount : formatMoney(entry.amount ?? 0, lang)}</dd>{entry.sourceCurrency === "USD" && entry.sourceAmount !== undefined && <dd className="mt-1 text-[11px] font-bold text-gray-500">{formatUsd(entry.sourceAmount, lang)} credits</dd>}</div>
+                        <div className="text-right"><dt className="text-gray-600">{copy.amount}</dt><dd className="mt-1 font-heading font-black text-white">{amountIsPrivate(entry) ? copy.protectedAmount : formatMoney(entry.amount ?? 0, lang)}</dd></div>
                         <div className="col-span-2"><dt className="text-gray-600">{copy.category}</dt><dd className="mt-1 text-gray-400">{SUPPORT_CATEGORY_LABELS[entry.category][lang]}</dd></div>
                       </dl>
                     </article>)}
@@ -527,7 +523,7 @@ const CommunitySupportPage = () => {
                           <td className="px-5 py-4 font-bold text-gray-200">
                             {entry.description}
                             {entry.supporterName && <span className="mt-1 block text-xs font-medium text-gray-500">{entry.supporterName}</span>}
-                            {entry.sourceCurrency === "USD" && entry.sourceAmount !== undefined && <span className="mt-1 block text-xs font-medium text-gray-500">{formatUsd(entry.sourceAmount, lang)} {lang === "en" ? "credits purchased" : "credits gekocht"}</span>}
+                            {entry.sourceAmountUsd !== undefined && entry.exchangeRateUsdEur !== undefined && <span className="mt-1 block text-xs font-medium text-gray-500">{copy.raceConversion}: {formatUsd(entry.sourceAmountUsd, lang)} × {entry.exchangeRateUsdEur.toFixed(4)}</span>}
                           </td>
                           <td className="px-5 py-4 text-gray-400">{SUPPORT_CATEGORY_LABELS[entry.category][lang]}</td>
                           <td className="px-5 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ring-1 ${entry.direction === "income" ? "bg-emerald-400/10 text-emerald-200 ring-emerald-300/20" : "bg-rose-400/10 text-rose-200 ring-rose-300/20"}`}>{entry.direction === "income" ? <ArrowDownRight className="h-3 w-3" aria-hidden="true" /> : <ArrowUpRight className="h-3 w-3" aria-hidden="true" />}{entry.direction === "income" ? copy.income : copy.expense}</span></td>
