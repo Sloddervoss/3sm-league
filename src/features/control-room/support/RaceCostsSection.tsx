@@ -6,7 +6,8 @@ import type { SupportRaceCost } from "@/features/community-support/types";
 import type { SupportRaceCostDraft } from "@/features/community-support/store";
 import { isSupportedCommunitySupportRace } from "@/features/community-support/raceEligibility";
 import {
-  calculateRaceHostingCreditCostUsd,
+  calculateRaceHostingAmountUsd,
+  convertUsdToEur,
   configuredRaceHours,
   DEFAULT_RACE_HOSTING_HOURS,
   normalizeHostedHours,
@@ -34,11 +35,12 @@ type Props = {
   selectedYear: string;
   onSelectedYearChange: (year: string) => void;
   raceCosts: SupportRaceCost[];
+  defaultUsdEurRate: number;
   hasRecurringServerCost: boolean;
   onSave: (draft: SupportRaceCostDraft) => void;
   onSaveMany: (drafts: SupportRaceCostDraft[]) => void;
   onInitialize: (drafts: SupportRaceCostDraft[]) => void;
-  pricingInitialized: boolean;
+
   onRemove: (id: string) => void;
 };
 
@@ -48,7 +50,7 @@ type SeasonGroup = { id: string; name: string; costs: SupportRaceCost[] };
 const COPY = {
   nl: {
     title: "Racekosten",
-    help: "Iedere afgeronde Sprint-, Feature- of losse race verbruikt lokaal USD-credits: standaard één gehost uur à $0,50. Credit-aankopen zijn de financiële EUR-uitgave; dit raceverbruik wordt niet nogmaals geboekt.",
+    help: "Iedere afgeronde Sprint-, Feature- of losse race wordt geboekt in euro. De bronprijs is $0,50 per gehost uur; uren, 25% korting en de opgeslagen USD/EUR-koers bepalen het definitieve EUR-bedrag.",
     season: "Seizoen",
     race: "Race",
     chooseRace: "Kies een race",
@@ -58,10 +60,12 @@ const COPY = {
     configuredDuration: "Ingestelde raceduur",
     useConfiguredDuration: "Neem raceduur over",
     discount: "25% korting toegepast",
-    calculatedAmount: "Berekend creditverbruik",
-    rate: "$0,50 USD-credits per gehost uur",
+    calculatedAmount: "Berekend EUR-bedrag",
+    rate: "$0,50 per gehost uur",
+    exchangeRate: "Opgeslagen koers",
+    sourceAmount: "Bronprijs",
     note: "Interne notitie (optioneel)",
-    public: "Race en USD-creditverbruik openbaar tonen",
+    public: "Race en bedrag openbaar tonen",
     save: "Racekosten opslaan",
     update: "Racekosten bijwerken",
     saved: "Racekosten lokaal opgeslagen",
@@ -83,8 +87,8 @@ const COPY = {
     cancel: "Annuleren",
     confirm: "Ja, verwijderen",
     duplicateWarningTitle: "Voorkom dubbele racehosting",
-    duplicateWarning: "Racehosting verbruikt hier USD-credits. Alleen de aankoop van Credits wordt als EUR-uitgave geboekt. Gebruik een terugkerende serverpost niet opnieuw voor dezelfde races.",
-    seeded: "afgeronde races lokaal ingevuld met $0,50 creditverbruik",
+    duplicateWarning: "Racehosting wordt hier rechtstreeks geboekt. Gebruik een terugkerende serverpost alleen voor vaste technische servers, niet opnieuw voor dezelfde races.",
+    seeded: "afgeronde races lokaal geboekt met de actuele USD/EUR-koers",
     bulkTitle: "Seizoenen in één keer aanpassen",
     bulkHelp: "Wijzig uren en korting voor alle ingevulde races binnen één seizoen. Losse races pas je per race aan.",
     races: "races",
@@ -92,11 +96,10 @@ const COPY = {
     seasonUpdated: "Seizoen lokaal bijgewerkt",
     discounted: "Korting",
     noDiscount: "Geen korting",
-    details: "Racedetails",
   },
   en: {
     title: "Race costs",
-    help: "Every completed Sprint, Feature or standalone race locally consumes USD credits: one hosted hour at $0.50 by default. Credit purchases are the EUR financial expense; race consumption is not booked again.",
+    help: "Every completed Sprint, Feature or standalone race is booked in euros. The source rate is $0.50 per hosted hour; hours, the 25% discount and the stored USD/EUR rate determine the final EUR amount.",
     season: "Season",
     race: "Race",
     chooseRace: "Choose a race",
@@ -106,10 +109,12 @@ const COPY = {
     configuredDuration: "Configured race duration",
     useConfiguredDuration: "Use race duration",
     discount: "25% discount applied",
-    calculatedAmount: "Calculated credit consumption",
-    rate: "$0.50 USD credits per hosted hour",
+    calculatedAmount: "Calculated EUR amount",
+    rate: "$0.50 per hosted hour",
+    exchangeRate: "Stored rate",
+    sourceAmount: "Source price",
     note: "Internal note (optional)",
-    public: "Show race and USD credit consumption publicly",
+    public: "Show race and amount publicly",
     save: "Save race costs",
     update: "Update race costs",
     saved: "Race costs saved locally",
@@ -131,8 +136,8 @@ const COPY = {
     cancel: "Cancel",
     confirm: "Yes, delete",
     duplicateWarningTitle: "Avoid duplicate race hosting",
-    duplicateWarning: "Race hosting consumes USD credits here. Only the Credit purchase is booked as a EUR expense. Do not use a recurring server item again for the same races.",
-    seeded: "completed races locally entered at $0.50 credit consumption",
+    duplicateWarning: "Race hosting is recorded here directly. Use a recurring server item only for fixed technical servers, not again for the same races.",
+    seeded: "completed races locally booked with the current USD/EUR rate",
     bulkTitle: "Update seasons at once",
     bulkHelp: "Change hours and discount for every recorded race in one season. Standalone races remain individually editable.",
     races: "races",
@@ -140,16 +145,15 @@ const COPY = {
     seasonUpdated: "Season updated locally",
     discounted: "Discount",
     noDiscount: "No discount",
-    details: "Race details",
   },
 } as const;
 
 const card = "rounded-[1.65rem] bg-card/65 shadow-2xl shadow-black/20 ring-1 ring-white/[0.065]";
 const input = "mt-2 w-full rounded-xl bg-black/25 px-3.5 py-3 text-sm text-white outline-none ring-1 ring-white/10 transition placeholder:text-gray-600 focus:ring-2 focus:ring-orange-500/55";
 const label = "text-xs font-bold uppercase tracking-[0.14em] text-gray-400";
-const money = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-US" : "nl-NL", { style: "currency", currency: "USD" }).format(value);
+const money = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-GB" : "nl-NL", { style: "currency", currency: "EUR" }).format(value);
+const moneyUsd = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-US" : "nl-NL", { style: "currency", currency: "USD" }).format(value);
 const dateLabel = (value: string, language: Language) => new Intl.DateTimeFormat(language === "en" ? "en-GB" : "nl-NL", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
-const monthLabel = (value: string, language: Language) => new Intl.DateTimeFormat(language === "en" ? "en-GB" : "nl-NL", { month: "long", year: "numeric" }).format(new Date(`${value}-01T12:00:00`));
 const raceYear = (race: RaceOption) => race.race_date.slice(0, 4);
 const isCompleted = (race: RaceOption) => race.status === "completed";
 
@@ -180,6 +184,7 @@ const storedCostDraft = (cost: SupportRaceCost, hostedHours = cost.hostedHours, 
   ...(cost.raceFormat ? { raceFormat: cost.raceFormat } : {}),
   hostedHours,
   discountApplied,
+  exchangeRateUsdEur: cost.exchangeRateUsdEur,
   isPublic: cost.isPublic,
   ...(cost.note ? { note: cost.note } : {}),
 });
@@ -190,17 +195,16 @@ const Toggle = ({ checked, onChange, text, disabled = false }: { checked: boolea
   <span aria-hidden="true" className="relative h-6 w-11 shrink-0 rounded-full bg-gray-700 transition peer-checked:bg-orange-500 peer-focus-visible:ring-2 peer-focus-visible:ring-orange-300"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${checked ? "left-6" : "left-1"}`} /></span>
 </label>;
 
-const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCosts, hasRecurringServerCost, onSave, onSaveMany, onInitialize, pricingInitialized, onRemove }: Props) => {
+const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCosts, defaultUsdEurRate, hasRecurringServerCost, onSave, onSaveMany, onInitialize, onRemove }: Props) => {
   const t = COPY[language];
   const formRef = useRef<HTMLFormElement>(null);
-  const initializedRef = useRef(false);
   const [selectedRaceId, setSelectedRaceId] = useState("");
   const [hostedHours, setHostedHours] = useState(String(DEFAULT_RACE_HOSTING_HOURS));
   const [discountApplied, setDiscountApplied] = useState(false);
   const [note, setNote] = useState("");
   const [isPublic, setIsPublic] = useState(true);
   const [saved, setSaved] = useState(false);
-  const [seededCount, setSeededCount] = useState(0);
+
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, BulkDraft>>({});
   const [updatedSeasonId, setUpdatedSeasonId] = useState<string | null>(null);
@@ -226,12 +230,10 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
   })), [racesQuery.data]);
 
   useEffect(() => {
-    if (!racesQuery.isSuccess || pricingInitialized || initializedRef.current) return;
-    initializedRef.current = true;
+    if (!racesQuery.isSuccess) return;
     const completed = supportedRaces.filter(isCompleted);
     onInitialize(completed.map((race) => raceDraft(race, DEFAULT_RACE_HOSTING_HOURS, false)));
-    setSeededCount(completed.length);
-  }, [onInitialize, pricingInitialized, racesQuery.isSuccess, supportedRaces]);
+  }, [onInitialize, racesQuery.isSuccess, supportedRaces]);
 
   const availableYears = useMemo(() => Array.from(new Set([
     selectedYear,
@@ -243,12 +245,14 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
   const seasonRaces = racesForYear.filter((race) => race.league_id);
   const standaloneRaces = racesForYear.filter((race) => !race.league_id);
   const costsForYear = useMemo(() => raceCosts.filter((cost) => cost.date.startsWith(selectedYear)).sort((a, b) => b.date.localeCompare(a.date)), [raceCosts, selectedYear]);
-  const total = costsForYear.reduce((sum, cost) => sum + cost.creditCostUsd, 0);
+  const total = costsForYear.reduce((sum, cost) => sum + cost.amount, 0);
   const missingCompleted = racesForYear.filter((race) => isCompleted(race) && !raceCosts.some((cost) => cost.raceId === race.id)).length;
   const selectedRace = racesForYear.find((race) => race.id === selectedRaceId) ?? null;
   const existingCost = selectedRace ? raceCosts.find((cost) => cost.raceId === selectedRace.id) : undefined;
   const normalizedHours = normalizeHostedHours(Number(hostedHours)) ?? DEFAULT_RACE_HOSTING_HOURS;
-  const calculatedAmount = calculateRaceHostingCreditCostUsd(normalizedHours, discountApplied);
+  const calculatedSourceAmountUsd = calculateRaceHostingAmountUsd(normalizedHours, discountApplied);
+  const calculatedExchangeRate = existingCost?.exchangeRateUsdEur ?? defaultUsdEurRate;
+  const calculatedAmount = convertUsdToEur(calculatedSourceAmountUsd, calculatedExchangeRate);
   const raceDurationHours = configuredRaceHours(selectedRace?.race_duration);
 
   const seasonGroups = useMemo<SeasonGroup[]>(() => {
@@ -261,15 +265,6 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
     });
     return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [costsForYear, t.season]);
-
-  const monthGroups = useMemo(() => {
-    const grouped = new Map<string, SupportRaceCost[]>();
-    costsForYear.forEach((cost) => {
-      const month = cost.date.slice(0, 7);
-      grouped.set(month, [...(grouped.get(month) ?? []), cost]);
-    });
-    return Array.from(grouped.entries()).map(([month, costs]) => ({ month, costs }));
-  }, [costsForYear]);
 
   useEffect(() => {
     if (!racesForYear.length) {
@@ -295,7 +290,7 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
     if (!selectedRace) return;
     const hours = normalizeHostedHours(Number(hostedHours));
     if (hours === null) return;
-    onSave({ ...raceDraft(selectedRace, hours, discountApplied), isPublic, ...(note.trim() ? { note: note.trim() } : {}) });
+    onSave({ ...raceDraft(selectedRace, hours, discountApplied), ...(existingCost ? { exchangeRateUsdEur: existingCost.exchangeRateUsdEur } : {}), isPublic, ...(note.trim() ? { note: note.trim() } : {}) });
     setSaved(true);
   };
 
@@ -329,7 +324,6 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
       <label className="block w-full sm:w-44"><span className={label}>{t.season}</span><select value={selectedYear} onChange={(event) => onSelectedYearChange(event.target.value)} className={input}>{availableYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
     </div>
 
-    {seededCount > 0 && <p role="status" className="rounded-2xl bg-emerald-400/[0.07] px-4 py-3 text-sm font-bold text-emerald-200 ring-1 ring-emerald-300/15">{seededCount} {t.seeded}</p>}
 
     {hasRecurringServerCost && <div className="flex gap-3 rounded-2xl bg-amber-400/[0.06] p-4 ring-1 ring-amber-300/15">
       <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
@@ -352,7 +346,8 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
         {seasonGroups.map((group) => {
           const draft = bulkDraftFor(group);
           const hours = normalizeHostedHours(Number(draft.hours)) ?? DEFAULT_RACE_HOSTING_HOURS;
-          const groupAmount = calculateRaceHostingCreditCostUsd(hours, draft.discountApplied) * group.costs.length;
+          const sourceAmountUsd = calculateRaceHostingAmountUsd(hours, draft.discountApplied);
+          const groupAmount = group.costs.reduce((sum, cost) => sum + convertUsdToEur(sourceAmountUsd, cost.exchangeRateUsdEur), 0);
           return <article key={group.id} className="grid min-w-0 max-w-full gap-4 rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055] md:grid-cols-2 md:items-end 2xl:grid-cols-[minmax(0,1fr)_8rem_minmax(13rem,17rem)_auto]">
             <div className="min-w-0 md:col-span-2 2xl:col-span-1"><p className="break-words font-bold leading-snug text-white">{group.name}</p><p className="mt-1 truncate text-xs text-gray-500">{group.costs.length} {t.races} · {money(groupAmount, language)}</p></div>
             <label className="block min-w-0"><span className={label}>{t.hours}</span><input value={draft.hours} onChange={(event) => updateBulkDraft(group, { hours: event.target.value })} type="number" min="1" max="24" step="1" inputMode="numeric" className={input} /></label>
@@ -384,7 +379,7 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
 
       <label className="block"><span className={label}>{t.hours}</span><input value={hostedHours} onChange={(event) => setHostedHours(event.target.value)} name="race-hosted-hours" type="number" inputMode="numeric" min="1" max="24" step="1" required disabled={!selectedRace} className={input} /></label>
       <div className="self-end"><Toggle checked={discountApplied} onChange={setDiscountApplied} text={t.discount} disabled={!selectedRace} /></div>
-      <div className="rounded-xl bg-orange-500/[0.07] px-4 py-3 ring-1 ring-orange-400/20"><p className={label}>{t.calculatedAmount}</p><p className="mt-1 font-heading text-xl font-black text-white">{money(calculatedAmount, language)}</p><p className="mt-1 text-[11px] text-gray-500">{t.rate}</p></div>
+      <div className="rounded-xl bg-orange-500/[0.07] px-4 py-3 ring-1 ring-orange-400/20"><p className={label}>{t.calculatedAmount}</p><p className="mt-1 font-heading text-xl font-black text-white">{money(calculatedAmount, language)}</p><p className="mt-1 text-[11px] text-gray-500">{t.sourceAmount}: {moneyUsd(calculatedSourceAmountUsd, language)} · {t.exchangeRate}: {calculatedExchangeRate.toFixed(4)} · {t.rate}</p></div>
       {raceDurationHours && raceDurationHours !== normalizedHours ? <button type="button" onClick={() => setHostedHours(String(raceDurationHours))} className="min-h-12 self-end rounded-xl bg-white/[0.04] px-4 text-sm font-bold text-gray-300 ring-1 ring-white/10 hover:bg-white/[0.08]">{t.useConfiguredDuration}: {raceDurationHours}u</button> : <div />}
       <label className="block md:col-span-1 xl:col-span-2"><span className={label}>{t.note}</span><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={240} disabled={!selectedRace} className={input} /></label>
       <div className="md:col-span-1 xl:col-span-2"><Toggle checked={isPublic} onChange={setIsPublic} text={t.public} disabled={!selectedRace} /></div>
@@ -392,27 +387,16 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
     </form>
 
     {costsForYear.length === 0 ? <div role="status" className="flex min-h-36 items-center justify-center rounded-2xl bg-black/10 p-6 text-center text-sm text-gray-500 ring-1 ring-white/[0.05]">{t.noCosts}</div> : <div className="grid min-w-0 gap-3">
-      {monthGroups.map(({ month, costs }) => {
-        const monthTotal = costs.reduce((sum, cost) => sum + cost.creditCostUsd, 0);
-        const monthHours = costs.reduce((sum, cost) => sum + cost.hostedHours, 0);
-        return <details key={month} className={`${card} group min-w-0 overflow-hidden`}>
-          <summary className="flex cursor-pointer list-none flex-col gap-2 p-5 marker:hidden sm:flex-row sm:items-center sm:justify-between">
-            <div><h3 className="font-heading text-lg font-black capitalize text-white">{monthLabel(month, language)}</h3><p className="mt-1 text-xs text-gray-500">{costs.length} {t.races} · {monthHours}u · {t.details}</p></div>
-            <p className="shrink-0 font-heading text-xl font-black text-white">{money(monthTotal, language)}</p>
-          </summary>
-          <div className="divide-y divide-white/[0.055] border-t border-white/[0.06]">
-            {costs.map((cost) => <article key={cost.id} className="p-4 sm:px-5">
-              <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
-                <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h4 className="font-bold text-white">{cost.raceName}</h4><span className="rounded-full bg-white/[0.04] px-2 py-1 text-[10px] font-black uppercase tracking-wider text-gray-400">{cost.raceScope === "season" ? cost.leagueName : t.standalone}</span>{!cost.isPublic && <span className="rounded-full bg-amber-400/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200">{t.private}</span>}</div><p className="mt-1 text-xs text-gray-500">{dateLabel(cost.date, language)} · {cost.track} · {cost.hostedHours}u · {cost.discountApplied ? t.discounted : t.noDiscount}{cost.note ? ` · ${cost.note}` : ""}</p></div>
-                <button type="button" role="switch" aria-checked={cost.discountApplied} onClick={() => onSave(storedCostDraft(cost, cost.hostedHours, !cost.discountApplied))} className={`inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-3 text-xs font-black ring-1 transition ${cost.discountApplied ? "bg-orange-500/10 text-orange-200 ring-orange-400/20" : "bg-white/[0.035] text-gray-400 ring-white/10"}`}><Percent className="h-3.5 w-3.5" />{cost.discountApplied ? t.discounted : t.noDiscount}</button>
-                <p className="shrink-0 font-heading text-lg font-black text-white">{money(cost.creditCostUsd, language)}</p>
-                <div className="flex gap-2"><button type="button" onClick={() => startEdit(cost)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/[0.04] px-3 text-xs font-bold text-gray-300 ring-1 ring-white/10 hover:bg-white/[0.08]"><Pencil className="h-3.5 w-3.5" />{t.edit}</button><button type="button" onClick={() => setDeleteId(cost.id)} aria-label={`${t.remove}: ${cost.raceName}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300"><Trash2 className="h-4 w-4" /></button></div>
-              </div>
-              {deleteId === cost.id && <div role="alert" className="mt-4 flex flex-col gap-3 rounded-xl bg-rose-500/[0.06] p-4 ring-1 ring-rose-400/15 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-bold text-rose-100">{t.confirmRemove}</p><div className="flex gap-2"><button type="button" onClick={() => setDeleteId(null)} className="min-h-10 rounded-xl bg-white/[0.04] px-3 text-xs font-bold text-gray-300">{t.cancel}</button><button type="button" onClick={() => { onRemove(cost.id); setDeleteId(null); }} className="min-h-10 rounded-xl bg-rose-600 px-3 text-xs font-black text-white">{t.confirm}</button></div></div>}
-            </article>)}
-          </div>
-        </details>;
-      })}
+      {costsForYear.map((cost) => <article key={cost.id} className={`${card} min-w-0 p-5`}>
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-300"><Flag className="h-4 w-4" /></div>
+          <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-white">{cost.raceName}</h3><span className="rounded-full bg-white/[0.04] px-2 py-1 text-[10px] font-black uppercase tracking-wider text-gray-400">{cost.raceScope === "season" ? cost.leagueName : t.standalone}</span>{!cost.isPublic && <span className="rounded-full bg-amber-400/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200">{t.private}</span>}</div><p className="mt-1 text-xs text-gray-500">{dateLabel(cost.date, language)} · {cost.track} · {cost.hostedHours}u · {cost.discountApplied ? t.discounted : t.noDiscount} · {moneyUsd(cost.sourceAmountUsd, language)} × {cost.exchangeRateUsdEur.toFixed(4)}{cost.note ? ` · ${cost.note}` : ""}</p></div>
+          <button type="button" role="switch" aria-checked={cost.discountApplied} onClick={() => onSave(storedCostDraft(cost, cost.hostedHours, !cost.discountApplied))} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-black ring-1 transition ${cost.discountApplied ? "bg-orange-500/10 text-orange-200 ring-orange-400/20" : "bg-white/[0.035] text-gray-400 ring-white/10"}`}><Percent className="h-3.5 w-3.5" />{cost.discountApplied ? t.discounted : t.noDiscount}</button>
+          <p className="shrink-0 font-heading text-xl font-black text-white">{money(cost.amount, language)}</p>
+          <div className="flex gap-2"><button type="button" onClick={() => startEdit(cost)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/[0.04] px-3 text-xs font-bold text-gray-300 ring-1 ring-white/10 hover:bg-white/[0.08]"><Pencil className="h-3.5 w-3.5" />{t.edit}</button><button type="button" onClick={() => setDeleteId(cost.id)} aria-label={`${t.remove}: ${cost.raceName}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300"><Trash2 className="h-4 w-4" /></button></div>
+        </div>
+        {deleteId === cost.id && <div role="alert" className="mt-4 flex flex-col gap-3 rounded-xl bg-rose-500/[0.06] p-4 ring-1 ring-rose-400/15 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-bold text-rose-100">{t.confirmRemove}</p><div className="flex gap-2"><button type="button" onClick={() => setDeleteId(null)} className="min-h-10 rounded-xl bg-white/[0.04] px-3 text-xs font-bold text-gray-300">{t.cancel}</button><button type="button" onClick={() => { onRemove(cost.id); setDeleteId(null); }} className="min-h-10 rounded-xl bg-rose-600 px-3 text-xs font-black text-white">{t.confirm}</button></div></div>}
+      </article>)}
     </div>}
   </section>;
 };

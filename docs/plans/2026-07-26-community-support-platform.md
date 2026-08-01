@@ -19,14 +19,12 @@
 - Management: native `/admin/` Control Room module, visible only to Super-admin and permanently protected.
 - Languages: Dutch and English; mobile and desktop are equal acceptance targets.
 - Monthly costs derive dynamically from manual entries and recurring entries. A recurring entry is explicitly monthly or yearly; yearly entries occur once per year in their configured start month.
-- Credit purchases are dedicated financial records: each purchase stores the USD value of Credits received and the actual EUR amount paid. The EUR amount counts once as an expense and can be shown once in the public ledger.
-- Race-hosting records are operational allocations linked read-only to an existing race. They consume USD Credits and are never duplicated as manual or recurring financial expenses.
-- Local-session review initialization upserts every eligible completed race exactly once at one hosted hour × $0.50 USD Credits, without writing to Supabase. The current real catalog produces 35 consumption records ($17.50): 8 season races and 27 standalone races.
-- Hosting consumption derives centrally from whole hosted hours × $0.50 USD Credits, with an optional 25% discount. The Control Room supports both individual race changes and one bulk hours/discount update for every recorded race in a selected season; standalone races remain individually editable.
-- EUR contributions, EUR website costs and EUR Credit-purchase payments are financially aggregated in EUR. USD Credit purchases and race consumption remain separately visible and are never naively added to EUR.
+- Race costs are dedicated records linked read-only to an existing race; they are never duplicated as manual ledger entries.
+- Local-session review initialization idempotently adds every missing eligible completed race at one hosted hour × $0.50, without writing to Supabase. The current real catalog contains 35 eligible races: 8 season races and 27 standalone races.
+- Hosting source prices derive centrally from whole hosted hours × $0.50, with an optional 25% discount. Each new race snapshots the then-configured USD/EUR rate and stores the resulting rounded EUR amount; later rate changes apply only to future race records and never rewrite existing entries.
+- The Control Room supports individual race changes and one bulk hours/discount update for every recorded race in a selected season; standalone races remain individually editable. Updating an existing race preserves its stored exchange rate.
 - Supported race formats are Feature and Sprint. Legacy untyped races are accepted only when they are standalone; unknown formats and any endurance signal in format, league or race name fail closed.
-- Each race has at most one strictly positive rounded USD-credit consumption record. Public projections omit internal IDs, notes, league IDs and format metadata while exposing hosted hours, applied discount and USD-credit consumption.
-- Public and Control Room race views are summary-first: year totals lead, months are compact and race details remain collapsed until requested.
+- Each race has at most one strictly positive rounded EUR cost record. EUR amounts are the only values included in income, expense and reserve totals. Public details may additionally expose hosted hours, discount, original USD amount and the stored rate, but omit internal IDs, notes, league IDs and format metadata.
 - Coverage uses contributions + net merchandise proceeds + referral income. Merchandise fees, purchasing and shipping are deducted before support coverage.
 - Reserve is displayed separately and does not fill the monthly progress bar.
 - Public ledger shows only explicitly public rows; invoices and private details never reach the public model.

@@ -1,16 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { COMMUNITY_SUPPORT_HAS_SHARED_DATA, COMMUNITY_SUPPORT_PUBLIC, canManageCommunitySupport, canViewCommunitySupport, isValidSupportMonth, monthKey, publicCreditPurchasesForYear, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetrics, supportMetricsForYear } from "@/features/community-support/model";
+import { COMMUNITY_SUPPORT_PUBLIC, canManageCommunitySupport, canViewCommunitySupport, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetrics, supportMetricsForYear } from "@/features/community-support/model";
 import type { CommunitySupportState } from "@/features/community-support/types";
 
 const emptyState = (): CommunitySupportState => ({
   ledger: [],
   recurringCosts: [],
-  creditPurchases: [],
   raceCosts: [],
   products: [],
   settings: {
     reserve: 0,
+    racePricingInitialized: false,
+    usdEurRate: 0.92,
     publicSupporterNamesByDefault: true,
     publicSupporterAmountsByDefault: false,
     paypalEnabled: false,
@@ -18,14 +19,6 @@ const emptyState = (): CommunitySupportState => ({
 });
 
 describe("Community Support financial model", () => {
-  it("accepts only real calendar months for the selected year", () => {
-    expect(isValidSupportMonth("2026-01", "2026")).toBe(true);
-    expect(isValidSupportMonth("2026-12", "2026")).toBe(true);
-    expect(isValidSupportMonth("2026-00", "2026")).toBe(false);
-    expect(isValidSupportMonth("2026-99", "2026")).toBe(false);
-    expect(isValidSupportMonth("2025-12", "2026")).toBe(false);
-  });
-
   it("counts merchandise net proceeds instead of gross turnover", () => {
     const state = emptyState();
     state.ledger = [
@@ -169,49 +162,37 @@ describe("Community Support financial model", () => {
     expect(entries[1]).not.toHaveProperty("showAmount");
   });
 
-  it("books Credit purchases once in EUR while races only consume USD credits", () => {
+  it("counts each supported race once while keeping private and endurance details out of the public model", () => {
     const state = emptyState();
     state.settings.reserveStartYear = "2026";
     state.ledger = [
       { id: "support", date: "2026-07-01", direction: "income", category: "contribution", description: "Support", amount: 4, isPublic: true },
     ];
-    state.creditPurchases = [
-      { id: "credits", date: "2026-07-02", description: "iRacing Credits", creditsUsd: 10, amountEur: 4.6, isPublic: true, note: "privé" },
-    ];
     state.raceCosts = [
-      { id: "public-race", raceId: "race-a", raceScope: "season", leagueId: "league-a", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", hostedHours: 7, discountApplied: false, creditCostUsd: 3.5, isPublic: true, note: "interne notitie" },
-      { id: "private-race", raceId: "race-b", raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", raceFormat: "Feature", hostedHours: 6, discountApplied: true, creditCostUsd: 2.25, isPublic: false, note: "niet openbaar" },
-      { id: "endurance-race", raceId: "race-c", raceScope: "standalone", raceName: "Endurance", track: "Le Mans", date: "2026-09-10", raceFormat: "Endurance", hostedHours: 24, discountApplied: false, creditCostUsd: 100, isPublic: true },
-      { id: "unknown-race", raceId: "race-d", raceScope: "standalone", raceName: "Future", track: "Unknown", date: "2026-09-11", raceFormat: "FutureFormat", hostedHours: 24, discountApplied: false, creditCostUsd: 100, isPublic: true },
-      { id: "named-endurance", raceId: "race-e", raceScope: "standalone", raceName: "Night Endurance", track: "Le Mans", date: "2026-09-12", raceFormat: "Feature", hostedHours: 24, discountApplied: false, creditCostUsd: 100, isPublic: true },
+      { id: "public-race", raceId: "race-a", raceScope: "season", leagueId: "league-a", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", hostedHours: 7, discountApplied: false, sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, amount: 3.5, isPublic: true, note: "interne notitie" },
+      { id: "private-race", raceId: "race-b", raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", raceFormat: "Feature", hostedHours: 6, discountApplied: true, sourceAmountUsd: 2.25, exchangeRateUsdEur: 1, amount: 2.25, isPublic: false, note: "niet openbaar" },
+      { id: "endurance-race", raceId: "race-c", raceScope: "standalone", raceName: "Endurance", track: "Le Mans", date: "2026-09-10", raceFormat: "Endurance", hostedHours: 24, discountApplied: false, amount: 100, isPublic: true },
+      { id: "unknown-race", raceId: "race-d", raceScope: "standalone", raceName: "Future", track: "Unknown", date: "2026-09-11", raceFormat: "FutureFormat", hostedHours: 24, discountApplied: false, amount: 100, isPublic: true },
+      { id: "named-endurance", raceId: "race-e", raceScope: "standalone", raceName: "Night Endurance", track: "Le Mans", date: "2026-09-12", raceFormat: "Feature", hostedHours: 24, discountApplied: false, amount: 100, isPublic: true },
     ];
 
     const season = supportMetricsForYear(state, "2026");
-    expect(season.raceCreditCostTotalUsd).toBe(5.75);
-    expect(season.creditPurchaseTotalEur).toBe(4.6);
-    expect(season.creditPurchasedTotalUsd).toBe(10);
-    expect(season.operationalExpenses).toBe(4.6);
+    expect(season.raceCostTotal).toBe(5.75);
+    expect(season.operationalExpenses).toBe(5.75);
     expect(season.communityCovered).toBe(4);
-    expect(season.selfFunded).toBe(0.6);
-    expect(supportMetrics(state, "2026-07").raceCreditCostTotalUsd).toBe(3.5);
-    expect(supportMetrics(state, "2026-08").raceCreditCostTotalUsd).toBe(2.25);
-    expect(supportMetrics(state, "2026-08").operationalExpenses).toBe(0);
+    expect(season.selfFunded).toBe(1.75);
+    expect(supportMetrics(state, "2026-07").raceCostTotal).toBe(3.5);
+    expect(supportMetrics(state, "2026-08").raceCostTotal).toBe(2.25);
 
     const publicCosts = publicRaceCostsForYear(state, "2026");
     expect(publicCosts).toEqual([
-      expect.objectContaining({ raceName: "Race 1", hostedHours: 7, discountApplied: false, creditCostUsd: 3.5, isPublic: true }),
+      expect.objectContaining({ raceName: "Race 1", hostedHours: 7, discountApplied: false, sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, amount: 3.5, isPublic: true }),
     ]);
     expect(publicCosts[0]).not.toHaveProperty("id");
     expect(publicCosts[0]).not.toHaveProperty("raceId");
     expect(publicCosts[0]).not.toHaveProperty("note");
     expect(publicCosts[0]).not.toHaveProperty("leagueId");
-    const publicPurchases = publicCreditPurchasesForYear(state, "2026");
-    expect(publicPurchases).toEqual([{ date: "2026-07-02", description: "iRacing Credits", creditsUsd: 10, amountEur: 4.6, isPublic: true }]);
-    expect(publicPurchases[0]).not.toHaveProperty("id");
-    expect(publicPurchases[0]).not.toHaveProperty("note");
-    const raceHostingEntries = publicLedgerForYear(state, "2026").filter((entry) => entry.category === "race_hosting");
-    expect(raceHostingEntries).toEqual([expect.objectContaining({ amount: 4.6, sourceAmount: 10, sourceCurrency: "USD" })]);
-    expect(raceHostingEntries[0].description).toBe("iRacing Credits");
+    expect(publicLedgerForYear(state, "2026")).toContainEqual(expect.objectContaining({ category: "race_hosting", sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, amount: 3.5 }));
   });
 
   it("rounds accumulated money to cents", () => {
