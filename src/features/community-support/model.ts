@@ -1,8 +1,10 @@
 import communitySupportConfig from "../../../community-support.config.json";
 import type {
   CommunitySupportState,
+  PublicSupportCreditPurchase,
   PublicSupportLedgerEntry,
   PublicSupportRaceCost,
+  SupportCreditPurchase,
   SupportLedgerEntry,
   SupportRaceCost,
   SupportRecurringCost,
@@ -20,9 +22,13 @@ const COMMERCIAL_COSTS = new Set(["payment_fee", "merchandise_purchase", "shippi
 const SUPPORT_INCOME = new Set(["contribution", "merchandise_income", "referral_income"]);
 const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const sumAmounts = <T extends { amount: number }>(values: T[]) => roundMoney(values.reduce((sum, value) => sum + value.amount, 0));
+const sumCreditCostsUsd = (values: SupportRaceCost[]) => roundMoney(values.reduce((sum, value) => sum + value.creditCostUsd, 0));
+const sumCreditPurchasesEur = (values: SupportCreditPurchase[]) => roundMoney(values.reduce((sum, value) => sum + value.amountEur, 0));
+const sumCreditsPurchasedUsd = (values: SupportCreditPurchase[]) => roundMoney(values.reduce((sum, value) => sum + value.creditsUsd, 0));
 const supportedRaceCosts = (state: CommunitySupportState) => (state.raceCosts ?? []).filter(isSupportedCommunitySupportRace);
 
 export const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+export const isValidSupportMonth = (value: string | null, year: string): value is string => Boolean(value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) && value.startsWith(`${year}-`));
 export const entryMonth = (value: string) => value.slice(0, 7);
 export const entryYear = (value: string) => value.slice(0, 4);
 const monthsForYear = (year: string) => Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
@@ -43,20 +49,29 @@ export const raceCostsForMonth = (state: CommunitySupportState, selectedMonth: s
 export const raceCostsForYear = (state: CommunitySupportState, selectedYear: string) => supportedRaceCosts(state)
   .filter((cost) => entryYear(cost.date) === selectedYear);
 
+export const creditPurchasesForMonth = (state: CommunitySupportState, selectedMonth: string) => (state.creditPurchases ?? [])
+  .filter((purchase) => entryMonth(purchase.date) === selectedMonth);
+
+export const creditPurchasesForYear = (state: CommunitySupportState, selectedYear: string) => (state.creditPurchases ?? [])
+  .filter((purchase) => entryYear(purchase.date) === selectedYear);
+
 const calculateMetrics = (
   state: CommunitySupportState,
   entries: SupportLedgerEntry[],
   recurring: SupportRecurringCost[],
+  creditPurchases: SupportCreditPurchase[],
   raceCosts: SupportRaceCost[],
   openingReserve = state.settings.reserve,
   useOpeningReserve = false,
 ) => {
   const recurringTotal = sumAmounts(recurring);
-  const raceCostTotal = sumAmounts(raceCosts);
+  const creditPurchaseTotalEur = sumCreditPurchasesEur(creditPurchases);
+  const creditPurchasedTotalUsd = sumCreditsPurchasedUsd(creditPurchases);
+  const raceCreditCostTotalUsd = sumCreditCostsUsd(raceCosts);
   const operationalExpenses = roundMoney(
     sumAmounts(entries.filter((entry) => entry.direction === "expense" && !COMMERCIAL_COSTS.has(entry.category)))
     + recurringTotal
-    + raceCostTotal,
+    + creditPurchaseTotalEur,
   );
   const supportIncome = sumAmounts(entries.filter((entry) => entry.direction === "income" && SUPPORT_INCOME.has(entry.category)));
   const commercialCosts = sumAmounts(entries.filter((entry) => entry.direction === "expense" && COMMERCIAL_COSTS.has(entry.category)));
@@ -73,13 +88,16 @@ const calculateMetrics = (
     : roundMoney(openingReserve + surplus);
   const coveragePercent = operationalExpenses > 0 ? Math.min(100, Math.round((communityCovered / operationalExpenses) * 100)) : 0;
   const totalIncome = sumAmounts(entries.filter((entry) => entry.direction === "income"));
-  const totalExpenses = roundMoney(sumAmounts(entries.filter((entry) => entry.direction === "expense")) + recurringTotal + raceCostTotal);
+  const totalExpenses = roundMoney(sumAmounts(entries.filter((entry) => entry.direction === "expense")) + recurringTotal + creditPurchaseTotalEur);
 
   return {
     entries,
     recurring,
+    creditPurchases,
     raceCosts,
-    raceCostTotal,
+    creditPurchaseTotalEur,
+    creditPurchasedTotalUsd,
+    raceCreditCostTotalUsd,
     operationalExpenses,
     supportIncome,
     commercialCosts,
@@ -101,12 +119,14 @@ export const supportMetrics = (state: CommunitySupportState, selectedMonth: stri
   state,
   state.ledger.filter((entry) => entryMonth(entry.date) === selectedMonth),
   recurringCostsForMonth(state.recurringCosts, selectedMonth),
+  creditPurchasesForMonth(state, selectedMonth),
   raceCostsForMonth(state, selectedMonth),
 );
 
 const yearPeriod = (state: CommunitySupportState, selectedYear: string) => ({
   entries: state.ledger.filter((entry) => entryYear(entry.date) === selectedYear),
   recurring: recurringCostOccurrencesForYear(state.recurringCosts, selectedYear),
+  creditPurchases: creditPurchasesForYear(state, selectedYear),
   raceCosts: raceCostsForYear(state, selectedYear),
 });
 
@@ -115,6 +135,7 @@ const reserveStartYear = (state: CommunitySupportState, selectedYear: string) =>
   const activityYears = [
     ...state.ledger.map((entry) => entryYear(entry.date)),
     ...state.recurringCosts.map((cost) => entryYear(cost.startsOn)),
+    ...(state.creditPurchases ?? []).map((purchase) => entryYear(purchase.date)),
     ...supportedRaceCosts(state).map((cost) => entryYear(cost.date)),
   ].filter((year) => /^\d{4}$/.test(year));
   return activityYears.sort()[0] ?? selectedYear;
@@ -127,11 +148,11 @@ export const supportMetricsForYear = (state: CommunitySupportState, selectedYear
 
   for (let year = startYear; year < selected; year += 1) {
     const period = yearPeriod(state, String(year));
-    openingReserve = calculateMetrics(state, period.entries, period.recurring, period.raceCosts, openingReserve, true).closingReserve;
+    openingReserve = calculateMetrics(state, period.entries, period.recurring, period.creditPurchases, period.raceCosts, openingReserve, true).closingReserve;
   }
 
   const period = yearPeriod(state, selectedYear);
-  return calculateMetrics(state, period.entries, period.recurring, period.raceCosts, openingReserve, true);
+  return calculateMetrics(state, period.entries, period.recurring, period.creditPurchases, period.raceCosts, openingReserve, true);
 };
 
 const redactPublicEntry = (entry: SupportLedgerEntry): PublicSupportLedgerEntry => {
@@ -162,6 +183,24 @@ const publicRecurringEntriesForMonth = (state: CommunitySupportState, selectedMo
     isPublic: true,
   }));
 
+const toPublicCreditPurchase = (purchase: SupportCreditPurchase): PublicSupportCreditPurchase => ({
+  date: purchase.date,
+  description: purchase.description,
+  creditsUsd: purchase.creditsUsd,
+  amountEur: purchase.amountEur,
+  isPublic: true,
+});
+
+export const publicCreditPurchasesForMonth = (state: CommunitySupportState, selectedMonth: string): PublicSupportCreditPurchase[] => creditPurchasesForMonth(state, selectedMonth)
+  .filter((purchase) => purchase.isPublic)
+  .map(toPublicCreditPurchase)
+  .sort((a, b) => b.date.localeCompare(a.date));
+
+export const publicCreditPurchasesForYear = (state: CommunitySupportState, selectedYear: string): PublicSupportCreditPurchase[] => creditPurchasesForYear(state, selectedYear)
+  .filter((purchase) => purchase.isPublic)
+  .map(toPublicCreditPurchase)
+  .sort((a, b) => b.date.localeCompare(a.date));
+
 const toPublicRaceCost = (cost: SupportRaceCost): PublicSupportRaceCost => ({
   raceScope: cost.raceScope,
   ...(cost.leagueName ? { leagueName: cost.leagueName } : {}),
@@ -171,7 +210,7 @@ const toPublicRaceCost = (cost: SupportRaceCost): PublicSupportRaceCost => ({
   date: cost.date,
   hostedHours: cost.hostedHours,
   discountApplied: cost.discountApplied,
-  amount: cost.amount,
+  creditCostUsd: cost.creditCostUsd,
   isPublic: true,
 });
 
@@ -185,13 +224,15 @@ export const publicRaceCostsForYear = (state: CommunitySupportState, selectedYea
   .map(toPublicRaceCost)
   .sort((a, b) => b.date.localeCompare(a.date));
 
-const raceCostLedgerEntries = (costs: PublicSupportRaceCost[]): PublicSupportLedgerEntry[] => costs.map((cost, index) => ({
-  id: `race-cost-${cost.date}-${index}`,
-  date: cost.date,
+const creditPurchaseLedgerEntries = (purchases: PublicSupportCreditPurchase[]): PublicSupportLedgerEntry[] => purchases.map((purchase, index) => ({
+  id: `credit-purchase-${purchase.date}-${index}`,
+  date: purchase.date,
   direction: "expense",
   category: "race_hosting",
-  description: `${cost.raceName} · ${cost.track}`,
-  amount: cost.amount,
+  description: purchase.description,
+  amount: purchase.amountEur,
+  sourceAmount: purchase.creditsUsd,
+  sourceCurrency: "USD",
   isPublic: true,
 }));
 
@@ -202,7 +243,7 @@ export const publicLedgerForMonth = (state: CommunitySupportState, selectedMonth
   return [
     ...manual,
     ...publicRecurringEntriesForMonth(state, selectedMonth),
-    ...raceCostLedgerEntries(publicRaceCostsForMonth(state, selectedMonth)),
+    ...creditPurchaseLedgerEntries(publicCreditPurchasesForMonth(state, selectedMonth)),
   ].sort((a, b) => b.date.localeCompare(a.date));
 };
 
@@ -214,6 +255,6 @@ export const publicLedgerForYear = (state: CommunitySupportState, selectedYear: 
   return [
     ...manual,
     ...recurring,
-    ...raceCostLedgerEntries(publicRaceCostsForYear(state, selectedYear)),
+    ...creditPurchaseLedgerEntries(publicCreditPurchasesForYear(state, selectedYear)),
   ].sort((a, b) => b.date.localeCompare(a.date));
 };

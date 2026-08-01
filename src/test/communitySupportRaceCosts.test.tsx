@@ -4,9 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import RaceCostsOverview from "@/features/community-support/public/RaceCostsOverview";
 import RaceCostsSection from "@/features/control-room/support/RaceCostsSection";
+import CreditPurchasesSection from "@/features/control-room/support/CreditPurchasesSection";
 import type { PublicSupportRaceCost, SupportRaceCost } from "@/features/community-support/types";
 import { isSupportedCommunitySupportRace } from "@/features/community-support/raceEligibility";
-import { calculateRaceHostingAmount, configuredRaceHours } from "@/features/community-support/raceHostingPricing";
+import { calculateRaceHostingCreditCostUsd, configuredRaceHours } from "@/features/community-support/raceHostingPricing";
 
 const raceRows = vi.hoisted(() => [
   { id: "season-a", league_id: "league-a", name: "Race 1", track: "Spa", race_date: "2026-07-10T18:00:00Z", race_type: "Sprint", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", round: 1, status: "completed", leagues: { name: "Sprint Cup", season: "2026" } },
@@ -20,35 +21,73 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const costs: PublicSupportRaceCost[] = [
-  { raceScope: "season", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", hostedHours: 2, discountApplied: true, amount: 0.75, isPublic: true },
-  { raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", hostedHours: 1, discountApplied: false, amount: 0.5, isPublic: true },
+  { raceScope: "season", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", hostedHours: 2, discountApplied: true, creditCostUsd: 0.75, isPublic: true },
+  { raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", hostedHours: 1, discountApplied: false, creditCostUsd: 0.5, isPublic: true },
 ];
+const summary = { raceCount: 3, consumedUsd: 1.75, purchasedUsd: 10, paidEur: 9.2 };
 
 describe("Community Support race cost UI", () => {
-  it("renders a year total, average and the actual public races", () => {
-    render(<RaceCostsOverview language="nl" selectedYear="2026" costs={costs} />);
+  it("renders compact monthly USD usage and actual EUR Credit purchases", () => {
+    render(<RaceCostsOverview language="nl" selectedYear="2026" costs={costs} summary={summary} />);
 
-    expect(screen.getByRole("heading", { name: "Wat kost een race? · 2026" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Credits gekocht en verbruikt · 2026" })).toBeInTheDocument();
     expect(screen.getByText("Race 1")).toBeInTheDocument();
-    expect(screen.getByText("Losse race", { selector: "h3" })).toBeInTheDocument();
-    expect(screen.getByText(/€\s*1,25/)).toBeInTheDocument();
-    expect(screen.getByText(/€\s*0,63/)).toBeInTheDocument();
-    expect(screen.getByText("25% korting", { selector: "dd" })).toBeInTheDocument();
+    expect(screen.getByText("Losse race", { selector: "h4" })).toBeInTheDocument();
+    expect(screen.getByText("3", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getAllByText(/US\$\s*1,75|\$\s*1,75/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Verborgen race")).not.toBeInTheDocument();
+    expect(screen.getByText(/€\s*9,20/)).toBeInTheDocument();
+    expect(screen.getByText("25% korting")).toBeInTheDocument();
+    expect(document.querySelectorAll("details")).toHaveLength(2);
+    expect(document.querySelectorAll("details[open]")).toHaveLength(0);
   });
 
-  it("calculates the €0.50 hourly baseline and 25% discount consistently", () => {
-    expect(calculateRaceHostingAmount(1, false)).toBe(0.5);
-    expect(calculateRaceHostingAmount(1, true)).toBe(0.38);
-    expect(calculateRaceHostingAmount(2, true)).toBe(0.75);
-    expect(calculateRaceHostingAmount(3, false)).toBe(1.5);
+  it("keeps a 35-race catalog collapsed into month summaries", () => {
+    const manyCosts: PublicSupportRaceCost[] = Array.from({ length: 35 }, (_, index) => ({
+      raceScope: "standalone",
+      raceName: `Catalogusrace ${index + 1}`,
+      track: "Spa",
+      date: `2026-${String((index % 12) + 1).padStart(2, "0")}-${String((index % 20) + 1).padStart(2, "0")}`,
+      hostedHours: 1,
+      discountApplied: false,
+      creditCostUsd: 0.5,
+      isPublic: true,
+    }));
+
+    render(<RaceCostsOverview language="nl" selectedYear="2026" costs={manyCosts} summary={{ ...summary, raceCount: 35, consumedUsd: 17.5 }} />);
+
+    expect(screen.getByText("35", { selector: "p" })).toBeInTheDocument();
+    expect(document.querySelectorAll("details")).toHaveLength(12);
+    expect(document.querySelectorAll("details[open]")).toHaveLength(0);
+    expect(document.querySelectorAll("section[aria-labelledby='race-costs-title'] > div.grid > article")).toHaveLength(4);
+  });
+
+  it("calculates the $0.50 hourly credit baseline and 25% discount consistently", () => {
+    expect(calculateRaceHostingCreditCostUsd(1, false)).toBe(0.5);
+    expect(calculateRaceHostingCreditCostUsd(1, true)).toBe(0.38);
+    expect(calculateRaceHostingCreditCostUsd(2, true)).toBe(0.75);
+    expect(calculateRaceHostingCreditCostUsd(3, false)).toBe(1.5);
     expect(configuredRaceHours("60 min")).toBe(1);
     expect(configuredRaceHours("2 hours")).toBe(2);
     expect(configuredRaceHours("180")).toBe(3);
   });
 
+  it("defaults a Credit purchase date inside the selected year", () => {
+    const onAdd = vi.fn();
+    const view = render(<CreditPurchasesSection language="nl" selectedYear="2030" purchases={[]} raceCosts={[]} onAdd={onAdd} onRemove={vi.fn()} />);
+    expect(screen.getByLabelText("Aankoopdatum")).toHaveValue("2030-01-01");
+    fireEvent.change(screen.getByLabelText("Gekochte USD-credits"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Werkelijk betaald in EUR"), { target: { value: "9.20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Credit-aankoop opslaan" }));
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ date: "2030-01-01", creditsUsd: 10, amountEur: 9.2 }));
+    expect(screen.getByLabelText("Aankoopdatum")).toHaveValue("2030-01-01");
+    view.rerender(<CreditPurchasesSection language="nl" selectedYear="2031" purchases={[]} raceCosts={[]} onAdd={onAdd} onRemove={vi.fn()} />);
+    expect(screen.getByLabelText("Aankoopdatum")).toHaveValue("2031-01-01");
+  });
+
   it("shows an honest empty state without sample races", () => {
-    render(<RaceCostsOverview language="en" selectedYear="2027" costs={[]} />);
-    expect(screen.getByRole("status")).toHaveTextContent("No public race costs for this season yet");
+    render(<RaceCostsOverview language="en" selectedYear="2027" costs={[]} summary={{ raceCount: 0, consumedUsd: 0, purchasedUsd: 0, paidEur: 0 }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("No public race hosting for this season yet");
     expect(screen.queryByText("Spa")).not.toBeInTheDocument();
   });
 
@@ -66,9 +105,12 @@ describe("Community Support race cost UI", () => {
     const onSaveMany = vi.fn();
     const onSave = vi.fn();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const renderSection = (raceCosts: SupportRaceCost[], pricingInitialized: boolean) => <QueryClientProvider client={queryClient}>
-      <RaceCostsSection language="nl" selectedYear="2026" onSelectedYearChange={vi.fn()} raceCosts={raceCosts} hasRecurringServerCost={false} onSave={onSave} onSaveMany={onSaveMany} onInitialize={onInitialize} pricingInitialized={pricingInitialized} onRemove={vi.fn()} />
+    const renderSection = (raceCosts: SupportRaceCost[], pricingInitialized: boolean, selectedYear = "2026") => <QueryClientProvider client={queryClient}>
+      <RaceCostsSection language="nl" selectedYear={selectedYear} onSelectedYearChange={vi.fn()} raceCosts={raceCosts} hasRecurringServerCost={false} onSave={onSave} onSaveMany={onSaveMany} onInitialize={onInitialize} pricingInitialized={pricingInitialized} onRemove={vi.fn()} />
     </QueryClientProvider>;
+    const purchaseOnlyYear = render(renderSection([], true, "2030"));
+    expect(screen.getByRole("combobox", { name: "Seizoen" })).toHaveValue("2030");
+    purchaseOnlyYear.unmount();
     const view = render(renderSection([], false));
 
     await waitFor(() => expect(onInitialize).toHaveBeenCalledTimes(1));
@@ -81,10 +123,10 @@ describe("Community Support race cost UI", () => {
     ]));
     expect(initializedDrafts).not.toEqual(expect.arrayContaining([expect.objectContaining({ raceId: "endurance" })]));
 
-    const storedCosts = initializedDrafts.map((draft: Omit<SupportRaceCost, "id" | "amount">, index: number): SupportRaceCost => ({
+    const storedCosts = initializedDrafts.map((draft: Omit<SupportRaceCost, "id" | "creditCostUsd">, index: number): SupportRaceCost => ({
       ...draft,
       id: `cost-${index}`,
-      amount: calculateRaceHostingAmount(draft.hostedHours, draft.discountApplied),
+      creditCostUsd: calculateRaceHostingCreditCostUsd(draft.hostedHours, draft.discountApplied),
     }));
     storedCosts[0] = { ...storedCosts[0], isPublic: false, note: "bewaren" };
     view.rerender(renderSection(storedCosts, true));
@@ -100,7 +142,7 @@ describe("Community Support race cost UI", () => {
       expect.objectContaining({ raceId: "season-a", discountApplied: true, hostedHours: 1, isPublic: false, note: "bewaren" }),
     ]);
 
-    const raceCard = screen.getByText("Race 1", { selector: "h3" }).closest("article");
+    const raceCard = screen.getByText("Race 1", { selector: "h4" }).closest("article");
     expect(raceCard).not.toBeNull();
     fireEvent.click(within(raceCard as HTMLElement).getByRole("switch", { name: "Geen korting" }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ raceId: "season-a", discountApplied: true, hostedHours: 1 }));
