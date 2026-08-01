@@ -1,4 +1,4 @@
-import { CalendarDays, Flag, Gauge, MapPin, ReceiptText } from "lucide-react";
+import { CalendarDays, Clock3, Flag, Gauge, MapPin, Percent, ReceiptText } from "lucide-react";
 import type { PublicSupportRaceCost } from "../types";
 
 type Language = "nl" | "en";
@@ -13,7 +13,7 @@ const COPY = {
   nl: {
     eyebrow: "Kosten op de kalender",
     title: "Wat kost een race?",
-    intro: "Per verreden race tonen we het afgeronde bedrag voor de gehoste sessies. Zo worden kleine losse bedragen samen een helder seizoensoverzicht.",
+    intro: "Per verreden race tonen we de gehoste uren, eventuele activiteitskorting en het berekende bedrag. Samen vormen die één helder seizoensoverzicht.",
     recorded: "Races met kosten",
     total: "Racekosten seizoen",
     average: "Gemiddeld per race",
@@ -23,11 +23,13 @@ const COPY = {
     standaloneRace: "Losse race",
     date: "Datum",
     circuit: "Circuit",
+    hours: "gehoste uren",
+    discounted: "25% korting",
   },
   en: {
     eyebrow: "Costs on the calendar",
     title: "What does a race cost?",
-    intro: "For each completed race we show the rounded amount for its hosted sessions. Small individual charges become a clear season overview together.",
+    intro: "For each completed race we show its hosted hours, any activity discount and the calculated amount. Together they form one clear season overview.",
     recorded: "Races with costs",
     total: "Season race costs",
     average: "Average per race",
@@ -37,6 +39,8 @@ const COPY = {
     standaloneRace: "Standalone race",
     date: "Date",
     circuit: "Circuit",
+    hours: "hosted hours",
+    discounted: "25% discount",
   },
 } as const;
 
@@ -77,6 +81,8 @@ const RaceCostsOverview = ({ language, selectedYear, costs }: Props) => {
         <dl className="relative mt-5 grid gap-3 border-t border-white/[0.06] pt-4 text-xs sm:grid-cols-2">
           <div><dt className="sr-only">{t.date}</dt><dd className="flex items-center gap-2 text-gray-400"><CalendarDays className="h-3.5 w-3.5 text-orange-400" aria-hidden="true" />{dateLabel(cost.date, language)}</dd></div>
           <div><dt className="sr-only">{t.circuit}</dt><dd className="flex items-center gap-2 text-gray-400 sm:justify-end"><MapPin className="h-3.5 w-3.5 text-orange-400" aria-hidden="true" /><span className="truncate">{cost.track}</span></dd></div>
+          <div><dt className="sr-only">{t.hours}</dt><dd className="flex items-center gap-2 text-gray-400"><Clock3 className="h-3.5 w-3.5 text-orange-400" aria-hidden="true" />{cost.hostedHours} {t.hours}</dd></div>
+          {cost.discountApplied && <div><dt className="sr-only">{t.discounted}</dt><dd className="flex items-center gap-2 text-orange-200 sm:justify-end"><Percent className="h-3.5 w-3.5 text-orange-400" aria-hidden="true" />{t.discounted}</dd></div>}
         </dl>
       </article>)}
     </div>}

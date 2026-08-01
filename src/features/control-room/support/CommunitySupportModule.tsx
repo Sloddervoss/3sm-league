@@ -236,7 +236,7 @@ const CommunitySupportModule = () => {
   const t = COPY[language];
   const {
     state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost,
-    removeRecurringCost, saveRaceCost, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
+    removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
   } = useCommunitySupport();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
@@ -446,6 +446,9 @@ const CommunitySupportModule = () => {
                   raceCosts={state.raceCosts}
                   hasRecurringServerCost={state.recurringCosts.some((cost) => cost.category === "server")}
                   onSave={saveRaceCost}
+                  onSaveMany={saveRaceCosts}
+                  onInitialize={initializeRaceCosts}
+                  pricingInitialized={state.settings.racePricingInitialized}
                   onRemove={removeRaceCost}
                 />
               </section>}

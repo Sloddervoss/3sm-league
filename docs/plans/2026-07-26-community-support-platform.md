@@ -20,8 +20,10 @@
 - Languages: Dutch and English; mobile and desktop are equal acceptance targets.
 - Monthly costs derive dynamically from manual and recurring entries.
 - Race costs are dedicated records linked read-only to an existing race; they are never duplicated as manual ledger entries.
+- Local-session review initialization upserts every eligible completed race exactly once at one hosted hour × €0.50, without writing to Supabase. The current real catalog produces 35 records (€17.50): 8 season races and 27 standalone races.
+- Hosting prices derive centrally from whole hosted hours × €0.50, with an optional 25% discount. The Control Room supports both individual race changes and one bulk hours/discount update for every recorded race in a selected season; standalone races remain individually editable.
 - Supported race formats are Feature and Sprint. Legacy untyped races are accepted only when they are standalone; unknown formats and any endurance signal in format, league or race name fail closed.
-- Each race has at most one strictly positive rounded cost record. Public race-cost projections omit internal IDs, notes, league IDs and format metadata.
+- Each race has at most one strictly positive rounded cost record. Public race-cost projections omit internal IDs, notes, league IDs and format metadata while exposing hosted hours and applied discount.
 - Coverage uses contributions + net merchandise proceeds + referral income. Merchandise fees, purchasing and shipping are deducted before support coverage.
 - Reserve is displayed separately and does not fill the monthly progress bar.
 - Public ledger shows only explicitly public rows; invoices and private details never reach the public model.
