@@ -52,7 +52,11 @@ describe("UI accessibility regressions", () => {
     expect(supportManagement).not.toContain("<Navbar");
     expect(supportManagement).not.toContain("<Footer");
     expect(raceCosts).toContain('<section className="min-w-0 space-y-6">');
-    expect(raceCosts).toContain("lg:grid-cols-[minmax(0,1fr)_8rem_minmax(13rem,17rem)_auto]");
+    expect(raceCosts).toContain('className={`${card} min-w-0 max-w-full');
+    expect(raceCosts).toContain("md:grid-cols-2 md:items-end");
+    expect(raceCosts).toContain("2xl:grid-cols-[minmax(0,1fr)_8rem_minmax(13rem,17rem)_auto]");
+    expect(raceCosts).not.toContain("lg:grid-cols-[minmax(0,1fr)_8rem_minmax(13rem,17rem)_auto]");
+    expect(raceCosts).toContain("max-w-full break-words font-heading");
     expect(raceCosts).toContain("grid min-w-0 gap-5");
     expect(raceCosts).toContain("min-h-12");
   });

@@ -335,18 +335,18 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
 
     {missingCompleted > 0 && <p role="status" className="text-sm font-bold text-orange-300">{missingCompleted} {t.completedMissing}</p>}
 
-    {seasonGroups.length > 0 && <section aria-labelledby="season-bulk-title" className={`${card} min-w-0 p-5 sm:p-6`}>
-      <div><h3 id="season-bulk-title" className="font-heading text-xl font-black text-white">{t.bulkTitle}</h3><p className="mt-2 text-sm leading-6 text-gray-400">{t.bulkHelp}</p></div>
+    {seasonGroups.length > 0 && <section aria-labelledby="season-bulk-title" className={`${card} min-w-0 max-w-full p-5 sm:p-6`}>
+      <div className="min-w-0 max-w-full"><h3 id="season-bulk-title" className="max-w-full break-words font-heading text-xl font-black leading-tight text-white">{t.bulkTitle}</h3><p className="mt-2 max-w-full break-words text-sm leading-6 text-gray-400">{t.bulkHelp}</p></div>
       <div className="mt-5 grid min-w-0 gap-4">
         {seasonGroups.map((group) => {
           const draft = bulkDraftFor(group);
           const hours = normalizeHostedHours(Number(draft.hours)) ?? DEFAULT_RACE_HOSTING_HOURS;
           const groupAmount = calculateRaceHostingAmount(hours, draft.discountApplied) * group.costs.length;
-          return <article key={group.id} className="grid min-w-0 gap-4 rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055] lg:grid-cols-[minmax(0,1fr)_8rem_minmax(13rem,17rem)_auto] lg:items-end">
-            <div className="min-w-0"><p className="truncate font-bold text-white">{group.name}</p><p className="mt-1 text-xs text-gray-500">{group.costs.length} {t.races} · {money(groupAmount, language)}</p></div>
-            <label className="block"><span className={label}>{t.hours}</span><input value={draft.hours} onChange={(event) => updateBulkDraft(group, { hours: event.target.value })} type="number" min="1" max="24" step="1" inputMode="numeric" className={input} /></label>
+          return <article key={group.id} className="grid min-w-0 max-w-full gap-4 rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055] md:grid-cols-2 md:items-end 2xl:grid-cols-[minmax(0,1fr)_8rem_minmax(13rem,17rem)_auto]">
+            <div className="min-w-0 md:col-span-2 2xl:col-span-1"><p className="break-words font-bold leading-snug text-white">{group.name}</p><p className="mt-1 truncate text-xs text-gray-500">{group.costs.length} {t.races} · {money(groupAmount, language)}</p></div>
+            <label className="block min-w-0"><span className={label}>{t.hours}</span><input value={draft.hours} onChange={(event) => updateBulkDraft(group, { hours: event.target.value })} type="number" min="1" max="24" step="1" inputMode="numeric" className={input} /></label>
             <Toggle checked={draft.discountApplied} onChange={(checked) => updateBulkDraft(group, { discountApplied: checked })} text={t.discount} />
-            <button type="button" onClick={() => applySeason(group)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white/[0.05] px-4 text-sm font-black text-white ring-1 ring-white/10 transition hover:bg-white/[0.09]"><Check className="h-4 w-4" />{updatedSeasonId === group.id ? t.seasonUpdated : t.applySeason}</button>
+            <button type="button" onClick={() => applySeason(group)} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white/[0.05] px-4 text-center text-sm font-black leading-snug text-white ring-1 ring-white/10 transition hover:bg-white/[0.09] md:col-span-2 md:w-auto md:justify-self-start 2xl:col-span-1 2xl:w-full 2xl:justify-self-stretch"><Check className="h-4 w-4 shrink-0" />{updatedSeasonId === group.id ? t.seasonUpdated : t.applySeason}</button>
           </article>;
         })}
       </div>
