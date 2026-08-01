@@ -107,7 +107,17 @@ const stateSchema = z.object({
 });
 
 const safeAmount = (value: number) => Number.isFinite(value) ? Math.max(0, Math.round(value * 100) / 100) : 0;
-const withId = <T extends object>(value: T): T & { id: string } => ({ ...value, id: crypto.randomUUID() });
+const createLocalId = () => {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === "function") globalThis.crypto.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+};
+const withId = <T extends object>(value: T): T & { id: string } => ({ ...value, id: createLocalId() });
 const storageKeyFor = (userId: string) => `${STORAGE_PREFIX}:${userId}`;
 
 const loadState = (storageKey: string): CommunitySupportState => {
