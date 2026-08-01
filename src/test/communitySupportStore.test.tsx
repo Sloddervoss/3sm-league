@@ -51,6 +51,27 @@ describe("Community Support session storage", () => {
     auth.current = { user: { id: "super-admin-a" }, isSuperAdmin: true };
   });
 
+  it("creates local records on an insecure LAN origin without crypto.randomUUID", async () => {
+    const originalCrypto = globalThis.crypto;
+    vi.stubGlobal("crypto", {
+      getRandomValues: (bytes: Uint8Array) => {
+        bytes.fill(7);
+        return bytes;
+      },
+    } as Crypto);
+
+    try {
+      render(<Tree />);
+      await waitFor(() => expect(screen.getByTestId("race-count")).toHaveTextContent("0"));
+      fireEvent.click(screen.getByRole("button", { name: "save race" }));
+      await waitFor(() => expect(screen.getByTestId("race-count")).toHaveTextContent("1"));
+      const persisted = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "{}");
+      expect(persisted.raceCosts[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    } finally {
+      vi.stubGlobal("crypto", originalCrypto);
+    }
+  });
+
   it("loads only the active Super-admin session and clears it on user change", async () => {
     window.sessionStorage.setItem(storageKey, JSON.stringify(validState));
     const view = render(<Tree />);
