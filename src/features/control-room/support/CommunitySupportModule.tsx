@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   ArrowDownRight,
@@ -13,6 +14,7 @@ import {
   Flag,
   Images,
   LayoutDashboard,
+  MessageCircle,
   PackageOpen,
   Plus,
   RotateCcw,
@@ -24,14 +26,16 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
-import { monthKey, supportMetricsForYear } from "@/features/community-support/model";
+import { COMMUNITY_SUPPORT_HAS_SHARED_DATA, monthKey, supportMetricsForYear } from "@/features/community-support/model";
+import { fetchAdminPaymentConfig, updateAdminPaymentConfig } from "@/features/community-support/paymentApi";
 import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "@/features/community-support/store";
 import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "@/features/community-support/types";
 import { MAX_PRODUCT_IMAGES, prepareProductImage } from "@/features/community-support/productImages";
 import RaceCostsSection from "./RaceCostsSection";
+import PaymentReviewSection from "./PaymentReviewSection";
 
 type Language = "nl" | "en";
-type SectionId = "dashboard" | "ledger" | "race-costs" | "recurring" | "products" | "settings";
+type SectionId = "dashboard" | "ledger" | "race-costs" | "recurring" | "products" | "payments" | "settings";
 
 type Copy = {
   [key: string]: string;
@@ -48,6 +52,7 @@ const COPY: Record<Language, Copy> = {
     raceCosts: "Racekosten",
     recurring: "Terugkerende kosten",
     products: "Producten",
+    payments: "PayPal-controle",
     settings: "Instellingen",
     month: "Maand",
     season: "Seizoen",
@@ -138,6 +143,7 @@ const COPY: Record<Language, Copy> = {
     raceCosts: "Race costs",
     recurring: "Recurring costs",
     products: "Products",
+    payments: "PayPal verification",
     settings: "Settings",
     month: "Month",
     season: "Season",
@@ -260,7 +266,7 @@ const CommunitySupportModule = () => {
   const t = COPY[language];
   const {
     state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost,
-    removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
+    removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, resolvePayment, clearLocalData,
   } = useCommunitySupport();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
@@ -284,6 +290,27 @@ const CommunitySupportModule = () => {
   const productFormRef = useRef<HTMLFormElement>(null);
   const cancelClearRef = useRef<HTMLButtonElement>(null);
   const clearDialogRef = useRef<HTMLDivElement>(null);
+  const { data: sharedPaymentConfig, refetch: refetchPaymentConfig } = useQuery({
+    queryKey: ["community-support", "payment-config", "admin"],
+    queryFn: fetchAdminPaymentConfig,
+    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA && isSuperAdmin,
+    staleTime: 30_000,
+  });
+  const paymentSettings = useMemo(() => sharedPaymentConfig ? { ...state.settings, ...sharedPaymentConfig } : state.settings, [sharedPaymentConfig, state.settings]);
+  const savePaymentSettings = async (next: Partial<typeof state.settings>) => {
+    if (!COMMUNITY_SUPPORT_HAS_SHARED_DATA) {
+      updateSettings(next);
+      return;
+    }
+    const merged = { ...paymentSettings, ...next };
+    await updateAdminPaymentConfig({
+      paypalEnabled: merged.paypalEnabled,
+      paypalMeUrl: merged.paypalMeUrl,
+      paypalSuggestedAmounts: merged.paypalSuggestedAmounts,
+      paymentAdminDiscordId: merged.paymentAdminDiscordId,
+    });
+    await refetchPaymentConfig();
+  };
 
   const availableYears = useMemo(() => Array.from(new Set([
     String(new Date().getFullYear()),
@@ -420,6 +447,7 @@ const CommunitySupportModule = () => {
     { id: "race-costs", label: t.raceCosts, icon: <Flag className="h-4 w-4" />, count: state.raceCosts.length },
     { id: "recurring", label: t.recurring, icon: <CalendarClock className="h-4 w-4" />, count: state.recurringCosts.length },
     { id: "products", label: t.products, icon: <Box className="h-4 w-4" />, count: state.products.length },
+    { id: "payments", label: t.payments, icon: <MessageCircle className="h-4 w-4" />, count: state.paymentIntents.filter((intent) => intent.status === "pending").length },
     { id: "settings", label: t.settings, icon: <Settings className="h-4 w-4" /> },
   ];
 
@@ -536,11 +564,20 @@ const CommunitySupportModule = () => {
                 </article>; })}</div>}
               </section>}
 
+              {section === "payments" && <PaymentReviewSection
+                language={language}
+                settings={paymentSettings}
+                intents={COMMUNITY_SUPPORT_HAS_SHARED_DATA ? [] : state.paymentIntents}
+                localReview={!COMMUNITY_SUPPORT_HAS_SHARED_DATA}
+                onUpdateSettings={savePaymentSettings}
+                onResolve={resolvePayment}
+              />}
+
               {section === "settings" && <section id="panel-settings" role="tabpanel" className="space-y-6">
                 <SectionHeader title={t.settings} help={t.settingsHelp} />
                 <form onSubmit={submitSettings} className={cx(card, "space-y-6 p-6 md:p-8")}>
                   <div className="grid max-w-3xl gap-5 sm:grid-cols-3"><Field title={t.currentReserve}><input type="number" min="0" step="0.01" value={settingsDraft.reserve} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserve: Number(event.target.value) }))} className={input} /></Field><Field title={t.reserveStartYear}><input type="number" min="2000" max="2100" step="1" value={settingsDraft.reserveStartYear ?? String(new Date().getFullYear())} onChange={(event) => setSettingsDraft((current) => ({ ...current, reserveStartYear: event.target.value }))} className={input} /></Field><Field title={t.usdEurRate}><input aria-describedby="usd-eur-rate-help" type="number" min="0.01" max="10" step="0.0001" required value={settingsDraft.usdEurRate} onChange={(event) => setSettingsDraft((current) => ({ ...current, usdEurRate: Number(event.target.value) }))} className={input} /><span id="usd-eur-rate-help" className="mt-2 block text-xs leading-5 text-gray-500">{t.usdEurRateHelp}</span></Field></div>
-                  <div><h3 className="mb-3 text-sm font-black text-gray-200">{t.supporterDefaults}</h3><div className="grid gap-3 md:grid-cols-2"><Toggle checked={settingsDraft.publicSupporterNamesByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterNamesByDefault: checked }))} label={t.namesDefault} /><Toggle checked={settingsDraft.publicSupporterAmountsByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterAmountsByDefault: checked }))} label={t.amountsDefault} /><Toggle checked={settingsDraft.paypalEnabled} onChange={(checked) => setSettingsDraft((current) => ({ ...current, paypalEnabled: checked }))} label={t.paypal} /></div></div>
+                  <div><h3 className="mb-3 text-sm font-black text-gray-200">{t.supporterDefaults}</h3><div className="grid gap-3 md:grid-cols-2"><Toggle checked={settingsDraft.publicSupporterNamesByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterNamesByDefault: checked }))} label={t.namesDefault} /><Toggle checked={settingsDraft.publicSupporterAmountsByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterAmountsByDefault: checked }))} label={t.amountsDefault} /></div></div>
                   <button type="submit" className={primaryButton}>{settingsSaved ? <Check className="h-4 w-4" /> : <Settings className="h-4 w-4" />}{settingsSaved ? t.saved : t.saveSettings}</button>
                 </form>
                 <div className="rounded-[1.65rem] bg-rose-500/[0.045] p-6 ring-1 ring-rose-400/15 md:p-8"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><div><h3 className="font-heading text-lg font-black">{t.localData}</h3><p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">{t.localDataHelp}</p></div></div><button type="button" onClick={() => { setClearPhrase(""); setClearOpen(true); }} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-black text-rose-200 ring-1 ring-rose-400/20 transition hover:bg-rose-500/20"><Trash2 className="h-4 w-4" />{t.clearData}</button></div></div>

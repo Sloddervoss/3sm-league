@@ -1352,6 +1352,61 @@ export type Database = {
       }
     }
     Functions: {
+      admin_get_community_support_payment_config: {
+        Args: never
+        Returns: {
+          paypal_enabled: boolean
+          paypal_me_url: string
+          suggested_amounts_eur: number[]
+          payment_admin_discord_id: string
+        }[]
+      }
+      admin_update_community_support_payment_config: {
+        Args: {
+          p_paypal_enabled: boolean
+          p_paypal_me_url: string
+          p_suggested_amounts_eur: number[]
+          p_payment_admin_discord_id: string
+        }
+        Returns: undefined
+      }
+      create_community_support_payment_intent: {
+        Args: {
+          p_requested_amount_eur: number
+          p_payer_name_private: string
+          p_show_supporter_name: boolean
+          p_show_amount: boolean
+        }
+        Returns: string
+      }
+      get_community_support_payment_config: {
+        Args: never
+        Returns: {
+          paypal_enabled: boolean
+          paypal_me_url: string
+          suggested_amounts_eur: number[]
+        }[]
+      }
+      get_public_community_support_payment_ledger: {
+        Args: never
+        Returns: {
+          id: string
+          date: string
+          direction: string
+          category: string
+          description: string
+          amount_eur: number | null
+          supporter_name: string | null
+        }[]
+      }
+      get_public_community_support_payment_totals: {
+        Args: never
+        Returns: {
+          month: string
+          contribution_total_eur: number
+          fee_total_eur: number
+        }[]
+      }
       can_manage_simhub: { Args: never; Returns: boolean }
       is_active_simhub_device: { Args: { p_device_id: string }; Returns: boolean }
       simhub_create_device_pairing_code: {

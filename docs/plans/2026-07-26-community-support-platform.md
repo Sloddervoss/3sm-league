@@ -29,7 +29,10 @@
 - Reserve is displayed separately and does not fill the monthly progress bar.
 - Public ledger shows only explicitly public rows; invoices and private details never reach the public model.
 - Supporter public name is self-entered; name and amount visibility are separate choices. No supporter messages.
-- PayPal starts with one-time payments only, but production integration waits for a suitable Business/developer setup.
+- PayPal starts with a PayPal.Me handoff from a 3SM-owned amount/privacy modal. PayPal opens externally in a new tab or app; it is never embedded or presented as verified Checkout.
+- Opening PayPal.Me is only intent. The visitor must separately choose **Ik heb betaald** before a pending payment check is created.
+- Exactly one configurable payment admin receives the private Discord bot DM. Only that Discord user may resolve it after manually checking PayPal.
+- Confirmation records gross contribution and actual PayPal fee separately and idempotently; pending, not-found and expired claims never affect financial totals.
 - iRacing referral stays hidden until a real link exists.
 - Concept merchandise is visible only while the public flag is false; public release hides concept products.
 - Products use up to four uploaded JPEG/PNG/WebP photos rather than externally entered image URLs. During local-session review the browser resizes these photos and stores them only in the active Super-admin session; a later shared datasource must move the binaries to audited object storage.
@@ -124,11 +127,12 @@ git diff --check
 ## Later production phases — not authorized yet
 
 1. Replace local browser store with Supabase tables, public aggregate views, private invoice Storage and audited RLS.
-2. Add server-side one-time PayPal Checkout with idempotent webhook verification; never trust the browser success redirect as payment evidence.
-3. Add merchandise orders, automatic stock reservation, refunds, fulfillment and NL/BE shipping.
-4. Complete legal, fiscal, privacy, returns and PayPal-account checks before accepting real money.
-5. Add the real iRacing referral card only when the approved link exists.
+2. Apply and audit the prepared PayPal.Me intent migration, release the bot DM handler backend-first, configure the real PayPal.Me destination/admin Discord ID, and only then switch the shared datasource flag. No real DM or payment is part of local review.
+3. Optionally replace the manual PayPal.Me verification flow with server-side PayPal Checkout, idempotent capture and verified webhooks; never trust a browser success redirect as payment evidence.
+4. Add merchandise orders, automatic stock reservation, refunds, fulfillment and NL/BE shipping.
+5. Complete legal, fiscal, privacy, returns and PayPal-account checks before accepting real money.
+6. Add the real iRacing referral card only when the approved link exists.
 
 ## Release boundary
 
-No Git push or production deploy without Vincent's explicit approval. Phase 1 remains in `feat/community-support-platform` until remote review is accepted.
+No Git push, database migration, bot restart, real Discord DM, PayPal transaction or production deploy without Vincent's explicit approval. Phase 1 remains in `feat/community-support-platform` until remote review is accepted. The checked-in configuration remains fail-closed on `public=false` and `dataSource=local-session`.
