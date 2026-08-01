@@ -20,12 +20,15 @@ const validState = {
 };
 
 const Probe = () => {
-  const { state, addLedgerEntry, saveRaceCost, saveRaceCosts, initializeRaceCosts } = useCommunitySupport();
+  const { state, addLedgerEntry, addCreditPurchase, saveRaceCost, saveRaceCosts, initializeRaceCosts } = useCommunitySupport();
   const baseRace = { raceId: "race-a", raceScope: "season" as const, leagueId: "league-a", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", hostedHours: 1, discountApplied: false, isPublic: true };
   return <>
     <span data-testid="ledger-count">{state.ledger.length}</span>
     <span data-testid="race-count">{state.raceCosts.length}</span>
-    <span data-testid="race-amount">{state.raceCosts[0]?.amount ?? 0}</span>
+    <span data-testid="race-amount">{state.raceCosts[0]?.creditCostUsd ?? 0}</span>
+    <span data-testid="credit-purchase-count">{state.creditPurchases.length}</span>
+    <span data-testid="credit-purchase-usd">{state.creditPurchases[0]?.creditsUsd ?? 0}</span>
+    <span data-testid="credit-purchase-eur">{state.creditPurchases[0]?.amountEur ?? 0}</span>
     <span data-testid="race-hours">{state.raceCosts[0]?.hostedHours ?? 0}</span>
     <span data-testid="race-public">{String(state.raceCosts[0]?.isPublic ?? false)}</span>
     <span data-testid="race-note">{state.raceCosts[0]?.note ?? ""}</span>
@@ -38,11 +41,14 @@ const Probe = () => {
     <button onClick={() => saveRaceCosts([baseRace, { ...baseRace, raceId: "race-b", raceScope: "standalone", leagueId: undefined, leagueName: undefined, raceName: "Losse race", raceFormat: "Feature" }])}>save batch</button>
     <button onClick={() => initializeRaceCosts([baseRace])}>initialize prices</button>
     <button onClick={() => initializeRaceCosts([{ ...baseRace, hostedHours: 3 }])}>initialize prices again</button>
-    <button onClick={() => saveRaceCost({ ...baseRace, raceId: "endurance", raceScope: "standalone", leagueId: undefined, raceFormat: "Endurance", amount: 100 })}>save endurance</button>
-    <button onClick={() => saveRaceCost({ ...baseRace, raceId: "named-endurance", raceScope: "standalone", leagueId: undefined, raceName: "Night Endurance", raceFormat: "Feature", amount: 100 })}>save named endurance</button>
-    <button onClick={() => saveRaceCost({ ...baseRace, raceId: "unknown", raceScope: "standalone", leagueId: undefined, raceFormat: "FutureFormat", amount: 100 })}>save unknown format</button>
+    <button onClick={() => saveRaceCost({ ...baseRace, raceId: "endurance", raceScope: "standalone", leagueId: undefined, raceFormat: "Endurance", creditCostUsd: 100 })}>save endurance</button>
+    <button onClick={() => saveRaceCost({ ...baseRace, raceId: "named-endurance", raceScope: "standalone", leagueId: undefined, raceName: "Night Endurance", raceFormat: "Feature", creditCostUsd: 100 })}>save named endurance</button>
+    <button onClick={() => saveRaceCost({ ...baseRace, raceId: "unknown", raceScope: "standalone", leagueId: undefined, raceFormat: "FutureFormat", creditCostUsd: 100 })}>save unknown format</button>
     <button onClick={() => saveRaceCost({ ...baseRace, raceId: "zero", hostedHours: 0 })}>save zero</button>
     <button onClick={() => addLedgerEntry({ date: "2026-07-10", direction: "expense", category: "race_hosting", description: "Duplicate", amount: 3.5, isPublic: true })}>save manual race hosting</button>
+    <button onClick={() => addCreditPurchase({ date: "2026-07-02", description: "iRacing Credits", creditsUsd: 50, amountEur: 46.2, isPublic: true, note: "factuur privé" })}>save credit purchase</button>
+    <button onClick={() => addCreditPurchase({ date: "ongeldig", description: "", creditsUsd: 0, amountEur: 0, isPublic: true })}>save invalid credit purchase</button>
+    <button onClick={() => addCreditPurchase({ date: "2026-07-02", description: "Te groot", creditsUsd: 1_000_001, amountEur: 1_000_001, isPublic: true })}>save oversized credit purchase</button>
   </>;
 };
 
@@ -102,18 +108,26 @@ describe("Community Support session storage", () => {
       ...validState,
       raceCosts: [{ id: "legacy", raceId: "race-a", raceScope: "season", leagueId: "league-a", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", amount: 3.5, isPublic: false, note: "bewaren" }],
     }));
-    render(<Tree />);
+    const view = render(<Tree />);
 
     await waitFor(() => expect(screen.getByTestId("race-count")).toHaveTextContent("1"));
     expect(screen.getByTestId("ledger-count")).toHaveTextContent("1");
     expect(screen.getByTestId("race-hours")).toHaveTextContent("1");
-    expect(screen.getByTestId("race-amount")).toHaveTextContent("0.5");
+    expect(screen.getByTestId("race-amount")).toHaveTextContent("3.5");
     expect(screen.getByTestId("pricing-initialized")).toHaveTextContent("false");
     fireEvent.click(screen.getByRole("button", { name: "initialize prices" }));
     await waitFor(() => expect(screen.getByTestId("pricing-initialized")).toHaveTextContent("true"));
     expect(screen.getByTestId("race-public")).toHaveTextContent("false");
     expect(screen.getByTestId("race-note")).toHaveTextContent("bewaren");
-    expect(screen.getByTestId("race-amount")).toHaveTextContent("0.5");
+    expect(screen.getByTestId("race-amount")).toHaveTextContent("3.5");
+    await waitFor(() => {
+      const persisted = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "{}");
+      expect(persisted.raceCosts[0]).toEqual(expect.objectContaining({ creditCostUsd: 3.5, pricingSource: "legacy_amount" }));
+      expect(persisted.raceCosts[0]).not.toHaveProperty("amount");
+    });
+    view.unmount();
+    render(<Tree />);
+    await waitFor(() => expect(screen.getByTestId("race-amount")).toHaveTextContent("3.5"));
   });
 
   it("migrates legacy recurring frequency and product image URLs without clearing local data", async () => {
@@ -130,11 +144,28 @@ describe("Community Support session storage", () => {
     expect(screen.getByTestId("product-first-image")).toHaveTextContent("https://example.com/legacy-shirt.jpg");
   });
 
-  it("recalculates hydrated amounts from stored hours and discount", async () => {
+  it("stores a Credit purchase as one validated EUR expense with USD credits", async () => {
+    render(<Tree />);
+    await waitFor(() => expect(screen.getByTestId("credit-purchase-count")).toHaveTextContent("0"));
+    fireEvent.click(screen.getByRole("button", { name: "save credit purchase" }));
+
+    await waitFor(() => expect(screen.getByTestId("credit-purchase-count")).toHaveTextContent("1"));
+    expect(screen.getByTestId("credit-purchase-usd")).toHaveTextContent("50");
+    expect(screen.getByTestId("credit-purchase-eur")).toHaveTextContent("46.2");
+    const persisted = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "{}");
+    expect(persisted.creditPurchases).toEqual([expect.objectContaining({ creditsUsd: 50, amountEur: 46.2, isPublic: true, note: "factuur privé" })]);
+    expect(persisted.ledger).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "save invalid credit purchase" }));
+    expect(screen.getByTestId("credit-purchase-count")).toHaveTextContent("1");
+    fireEvent.click(screen.getByRole("button", { name: "save oversized credit purchase" }));
+    expect(screen.getByTestId("credit-purchase-count")).toHaveTextContent("1");
+  });
+
+  it("recalculates hydrated USD credit costs from stored hours and discount", async () => {
     window.sessionStorage.setItem(storageKey, JSON.stringify({
       ...validState,
       settings: { ...validState.settings, racePricingInitialized: true },
-      raceCosts: [{ id: "priced", raceId: "race-a", raceScope: "season", leagueId: "league-a", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", hostedHours: 2, discountApplied: true, amount: 99, isPublic: true }],
+      raceCosts: [{ id: "priced", raceId: "race-a", raceScope: "season", leagueId: "league-a", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", hostedHours: 2, discountApplied: true, creditCostUsd: 99, pricingSource: "calculated", isPublic: true }],
     }));
     render(<Tree />);
 
@@ -184,7 +215,8 @@ describe("Community Support session storage", () => {
     await waitFor(() => {
       const persisted = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "{}");
       expect(persisted.raceCosts).toHaveLength(1);
-      expect(persisted.raceCosts[0]).toMatchObject({ raceId: "race-a", hostedHours: 2, discountApplied: true, amount: 0.75, note: "bijgewerkt" });
+      expect(persisted.raceCosts[0]).toMatchObject({ raceId: "race-a", hostedHours: 2, discountApplied: true, creditCostUsd: 0.75, note: "bijgewerkt" });
+      expect(persisted.raceCosts[0]).not.toHaveProperty("amount");
     });
   });
 
@@ -197,7 +229,7 @@ describe("Community Support session storage", () => {
     expect(screen.getByTestId("race-count")).toHaveTextContent("2");
   });
 
-  it("initializes the local €0.50 review prices only once", async () => {
+  it("initializes the local $0.50 credit usage only once", async () => {
     render(<Tree />);
     await waitFor(() => expect(screen.getByTestId("pricing-initialized")).toHaveTextContent("false"));
     fireEvent.click(screen.getByRole("button", { name: "initialize prices" }));

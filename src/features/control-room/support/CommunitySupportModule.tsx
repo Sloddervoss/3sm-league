@@ -28,6 +28,7 @@ import { monthKey, supportMetricsForYear } from "@/features/community-support/mo
 import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "@/features/community-support/store";
 import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "@/features/community-support/types";
 import { MAX_PRODUCT_IMAGES, prepareProductImage } from "@/features/community-support/productImages";
+import CreditPurchasesSection from "./CreditPurchasesSection";
 import RaceCostsSection from "./RaceCostsSection";
 
 type Language = "nl" | "en";
@@ -219,6 +220,7 @@ const COPY: Record<Language, Copy> = {
 const today = () => new Date().toISOString().slice(0, 10);
 const parseAmount = (value: FormDataEntryValue | null) => Number(String(value ?? "").replace(",", "."));
 const formatCurrency = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-GB" : "nl-NL", { style: "currency", currency: "EUR" }).format(value);
+const formatUsd = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-US" : "nl-NL", { style: "currency", currency: "USD" }).format(value);
 const INCOME_CATEGORIES: SupportLedgerCategory[] = ["contribution", "merchandise_income", "referral_income", "other"];
 const EXPENSE_CATEGORIES: SupportLedgerCategory[] = ["hosting", "server", "domain", "software", "development", "event", "payment_fee", "merchandise_purchase", "shipping", "other"];
 
@@ -256,7 +258,7 @@ const CommunitySupportModule = () => {
   const t = COPY[language];
   const {
     state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost,
-    removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
+    removeRecurringCost, addCreditPurchase, removeCreditPurchase, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, clearLocalData,
   } = useCommunitySupport();
   const [section, setSection] = useState<SectionId>("dashboard");
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
@@ -285,8 +287,9 @@ const CommunitySupportModule = () => {
     String(new Date().getFullYear()),
     ...state.ledger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
+    ...state.creditPurchases.map((purchase) => purchase.date.slice(0, 4)),
     ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [state.ledger, state.raceCosts, state.recurringCosts]);
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [state.creditPurchases, state.ledger, state.raceCosts, state.recurringCosts]);
   const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
   const visibleEntries = useMemo(() => state.ledger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [state.ledger, selectedMonth]);
   const inventoryValue = useMemo(() => state.products.reduce((sum, product) => sum + product.price * product.stock, 0), [state.products]);
@@ -464,7 +467,7 @@ const CommunitySupportModule = () => {
                   <dl className="grid gap-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.netSupport}</dt><dd className="font-bold">{formatCurrency(metrics.netCommunitySupport, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.openingReserve}</dt><dd className="font-bold">{formatCurrency(metrics.openingReserve, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.reserveUsed}</dt><dd className="font-bold">{formatCurrency(metrics.reserveUsed, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.operational}</dt><dd className="font-bold">{formatCurrency(metrics.operationalExpenses, language)}</dd></div><div className="flex justify-between gap-4"><dt className="text-gray-500">{t.selfFunded}</dt><dd className="font-bold">{formatCurrency(metrics.selfFunded, language)}</dd></div></dl>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {[[t.entryCount, metrics.entries.length], [t.raceCosts, formatCurrency(metrics.raceCostTotal, language)], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
+                  {[[t.entryCount, metrics.entries.length], [t.raceCosts, formatUsd(metrics.raceCreditCostTotalUsd, language)], [t.recurringTotal, formatCurrency(metrics.recurring.reduce((sum, cost) => sum + cost.amount, 0), language)], [t.productValue, formatCurrency(inventoryValue, language)]].map(([name, value]) => <div key={String(name)} className="rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.06]"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">{name}</p><p className="mt-2 text-xl font-black text-white">{value}</p></div>)}
                 </div>
               </section>}
 
@@ -486,7 +489,15 @@ const CommunitySupportModule = () => {
                 </div>
               </section>}
 
-              {section === "race-costs" && <section id="panel-race-costs" role="tabpanel">
+              {section === "race-costs" && <section id="panel-race-costs" role="tabpanel" className="space-y-10">
+                <CreditPurchasesSection
+                  language={language}
+                  selectedYear={selectedYear}
+                  purchases={state.creditPurchases}
+                  raceCosts={state.raceCosts}
+                  onAdd={addCreditPurchase}
+                  onRemove={removeCreditPurchase}
+                />
                 <RaceCostsSection
                   language={language}
                   selectedYear={selectedYear}

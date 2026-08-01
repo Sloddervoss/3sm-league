@@ -31,6 +31,8 @@ export type PublicSupportLedgerEntry = Omit<SupportLedgerEntry, "amount" | "isPu
   amount: number | null;
   isPublic: true;
   supporterName?: string;
+  sourceAmount?: number;
+  sourceCurrency?: "USD";
 };
 
 export type SupportRecurringCost = {
@@ -42,6 +44,20 @@ export type SupportRecurringCost = {
   frequency: "monthly" | "yearly";
   isPublic: boolean;
   active: boolean;
+};
+
+export type SupportCreditPurchase = {
+  id: string;
+  date: string;
+  description: string;
+  creditsUsd: number;
+  amountEur: number;
+  isPublic: boolean;
+  note?: string;
+};
+
+export type PublicSupportCreditPurchase = Omit<SupportCreditPurchase, "id" | "note" | "isPublic"> & {
+  isPublic: true;
 };
 
 export type SupportRaceCost = {
@@ -57,12 +73,13 @@ export type SupportRaceCost = {
   raceFormat?: string;
   hostedHours: number;
   discountApplied: boolean;
-  amount: number;
+  creditCostUsd: number;
+  pricingSource: "calculated" | "legacy_amount";
   isPublic: boolean;
   note?: string;
 };
 
-export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "hostedHours" | "discountApplied" | "amount"> & {
+export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "hostedHours" | "discountApplied" | "creditCostUsd"> & {
   isPublic: true;
 };
 
@@ -91,6 +108,7 @@ export type CommunitySupportSettings = {
 export type CommunitySupportState = {
   ledger: SupportLedgerEntry[];
   recurringCosts: SupportRecurringCost[];
+  creditPurchases: SupportCreditPurchase[];
   raceCosts: SupportRaceCost[];
   products: SupportProduct[];
   settings: CommunitySupportSettings;
@@ -102,7 +120,7 @@ export const SUPPORT_CATEGORY_LABELS: Record<SupportLedgerCategory, { nl: string
   referral_income: { nl: "iRacing-referral", en: "iRacing referral" },
   hosting: { nl: "Hosting", en: "Hosting" },
   server: { nl: "Servers", en: "Servers" },
-  race_hosting: { nl: "Racehosting", en: "Race hosting" },
+  race_hosting: { nl: "iRacing Credits", en: "iRacing Credits" },
   domain: { nl: "Domeinen", en: "Domains" },
   software: { nl: "Software", en: "Software" },
   development: { nl: "Websiteontwikkeling", en: "Website development" },
