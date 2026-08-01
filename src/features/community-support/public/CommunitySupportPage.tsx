@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
   CircleDollarSign,
   ExternalLink,
+  Flag,
   Heart,
   Info,
   Package,
   ReceiptText,
-  Server,
+
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -20,12 +19,12 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import PreviewModal from "@/components/preview/PreviewModal";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
 import { COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
 import { useCommunitySupport } from "../store";
-import { SUPPORT_CATEGORY_LABELS, type PublicSupportLedgerEntry, type SupportLedgerCategory } from "../types";
-import RaceCostsOverview from "./RaceCostsOverview";
+import SeasonLedgerModal from "./SeasonLedgerModal";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 
@@ -54,6 +53,13 @@ const getCopy = (language: Language) => language === "en" ? {
   noCostsStatus: "No operational costs have been recorded for this season yet.",
   progressLabel: "Distribution of season costs between the community and 3SM",
   noTarget: "This is a transparent cost overview, not a donation target.",
+  openBookEyebrow: "Full financial detail",
+  openBookTitle: "Open the season ledger",
+  openBookIntro: "Transactions and Hosted Session details are kept together in one clear season ledger, instead of filling the entire page.",
+  openBookTransactions: "Transactions",
+  openBookRaces: "Races",
+  openBookRaceCosts: "Race costs",
+  openBookCta: "View full season ledger",
   supportTitle: "Contribute voluntarily",
   supportCta: "See how you can contribute",
   supportIntro: "3SM keeps going either way. If you would like to contribute voluntarily toward the season's costs, choose what suits you — without obligation.",
@@ -123,6 +129,13 @@ const getCopy = (language: Language) => language === "en" ? {
   noCostsStatus: "Voor dit seizoen zijn nog geen operationele kosten geregistreerd.",
   progressLabel: "Verdeling van de seizoenskosten tussen de community en 3SM",
   noTarget: "Dit is een transparant kostenoverzicht, geen donatiedoel.",
+  openBookEyebrow: "Volledige financiële details",
+  openBookTitle: "Open het seizoensboek",
+  openBookIntro: "Transacties en Hosted Session-details staan samen in één overzichtelijk seizoensboek, in plaats van over de hele pagina.",
+  openBookTransactions: "Transacties",
+  openBookRaces: "Races",
+  openBookRaceCosts: "Racekosten",
+  openBookCta: "Bekijk volledig seizoensboek",
   supportTitle: "Vrijwillig bijdragen",
   supportCta: "Bekijk hoe je kunt bijdragen",
   supportIntro: "3SM gaat sowieso door. Wil je vrijwillig bijdragen aan de kosten van het seizoen, kies dan wat bij je past — zonder enige verplichting.",
@@ -176,17 +189,7 @@ const formatMoney = (value: number, language: Language) => new Intl.NumberFormat
   currency: "EUR",
   minimumFractionDigits: 2,
 }).format(value);
-const formatUsd = (value: number, language: Language) => new Intl.NumberFormat(language === "en" ? "en-US" : "nl-NL", { style: "currency", currency: "USD" }).format(value);
 
-const formatMonth = (value: string, language: Language) => {
-  const [year, month] = value.split("-").map(Number);
-  return new Intl.DateTimeFormat(language === "en" ? "en-GB" : "nl-NL", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
-};
-
-const formatDate = (value: string, language: Language) => {
-  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
-  return new Intl.DateTimeFormat(language === "en" ? "en-GB" : "nl-NL", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(year, month - 1, day));
-};
 
 const Surface = ({ children, className = "" }: { children: ReactNode; className?: string }) => (
   <section className={`rounded-[1.65rem] bg-white/[0.035] shadow-2xl shadow-black/20 ring-1 ring-white/[0.065] ${className}`}>{children}</section>
@@ -211,7 +214,6 @@ const EmptyState = ({ icon, title, hint }: { icon: ReactNode; title: string; hin
   </div>
 );
 
-const amountIsPrivate = (entry: PublicSupportLedgerEntry) => entry.amount === null;
 
 const MetricCard = ({ label, value, icon, accent = false }: { label: string; value: string; icon: ReactNode; accent?: boolean }) => (
   <div className={`rounded-2xl p-4 ring-1 ${accent ? "bg-orange-500/[0.08] ring-orange-400/20" : "bg-black/15 ring-white/[0.055]"}`}>
@@ -249,6 +251,7 @@ const CommunitySupportPage = () => {
     const queryMonth = requestedPeriodRef.current.month;
     return queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) && queryMonth.startsWith(initialYear) ? queryMonth : "all";
   });
+  const [ledgerOpen, setLedgerOpen] = useState(false);
 
   const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => `${selectedYear}-${String(index + 1).padStart(2, "0")}`), [selectedYear]);
 
@@ -293,13 +296,6 @@ const CommunitySupportPage = () => {
   const products = useMemo(() => state.products.filter((product) => COMMUNITY_SUPPORT_PUBLIC
     ? product.active && !product.concept
     : product.active || product.concept), [state.products]);
-
-  const spending = useMemo(() => {
-    const totals = new Map<SupportLedgerCategory, number>();
-    annualPublicLedger.filter((entry) => entry.direction === "expense").forEach((entry) => totals.set(entry.category, (totals.get(entry.category) || 0) + (entry.amount ?? 0)));
-    return Array.from(totals.entries()).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
-  }, [annualPublicLedger]);
-  const spendingTotal = spending.reduce((sum, item) => sum + item.amount, 0);
 
   const supporters = useMemo(() => annualPublicLedger.filter((entry) =>
     entry.direction === "income" && entry.category === "contribution",
@@ -409,7 +405,22 @@ const CommunitySupportPage = () => {
               </div>
             </Surface>
 
-            <RaceCostsOverview language={lang} selectedYear={selectedYear} costs={annualPublicRaceCosts} totalCount={metrics.raceCosts.length} totalAmountEur={metrics.raceCostTotal} />
+            <button type="button" onClick={() => setLedgerOpen(true)} aria-haspopup="dialog" className="group relative w-full overflow-hidden rounded-[1.65rem] bg-white/[0.035] p-5 text-left shadow-2xl shadow-black/20 ring-1 ring-white/[0.065] transition hover:bg-white/[0.05] hover:ring-orange-400/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 sm:p-7">
+              <div aria-hidden="true" className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-orange-500/[0.09] blur-3xl transition group-hover:bg-orange-500/[0.13]" />
+              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-2xl">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-orange-400"><ReceiptText className="h-4 w-4" aria-hidden="true" />{copy.openBookEyebrow}</div>
+                  <h2 className="mt-2 font-heading text-2xl font-black uppercase text-white sm:text-3xl">{copy.openBookTitle} · {selectedYear}</h2>
+                  <p className="mt-2 text-sm leading-6 text-gray-400">{copy.openBookIntro}</p>
+                </div>
+                <div className="grid shrink-0 grid-cols-3 gap-2 lg:w-[430px]">
+                  <div className="rounded-xl bg-black/15 p-3 ring-1 ring-white/[0.055]"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">{copy.openBookTransactions}</span><p className="mt-1 font-heading text-xl font-black text-white">{annualPublicLedger.filter((entry) => entry.category !== "race_hosting").length}</p></div>
+                  <div className="rounded-xl bg-black/15 p-3 ring-1 ring-white/[0.055]"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">{copy.openBookRaces}</span><p className="mt-1 font-heading text-xl font-black text-white">{metrics.raceCosts.length}</p></div>
+                  <div className="rounded-xl bg-orange-500/[0.08] p-3 ring-1 ring-orange-400/20"><span className="text-[9px] font-black uppercase tracking-wider text-orange-300">{copy.openBookRaceCosts}</span><p className="mt-1 font-heading text-xl font-black text-white">{formatMoney(metrics.raceCostTotal, lang)}</p></div>
+                </div>
+              </div>
+              <div className="relative mt-5 flex items-center gap-2 border-t border-white/[0.06] pt-4 text-sm font-black text-orange-300">{copy.openBookCta}<ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" /></div>
+            </button>
 
             <section id="support-options" className="scroll-mt-24">
               <SectionHeading icon={<Heart className="h-4 w-4" aria-hidden="true" />} eyebrow={copy.eyebrow} title={copy.supportTitle} intro={copy.supportIntro} />
@@ -459,84 +470,6 @@ const CommunitySupportPage = () => {
             </section>
 
             <section>
-              <SectionHeading icon={<Server className="h-4 w-4" aria-hidden="true" />} eyebrow={copy.monthOverview} title={copy.spendingTitle} intro={copy.spendingIntro} />
-              {spending.length === 0 ? <EmptyState icon={<ReceiptText className="h-5 w-5" aria-hidden="true" />} title={copy.spendingEmpty} hint={copy.spendingEmptyHint} /> : (
-                <Surface className="p-5 sm:p-7">
-                  <div className="space-y-5">
-                    {spending.map((item) => {
-                      const percent = spendingTotal > 0 ? Math.round((item.amount / spendingTotal) * 100) : 0;
-                      return <div key={item.category}>
-                        <div className="mb-2 flex items-center justify-between gap-4 text-sm">
-                          <span className="font-bold text-gray-200">{SUPPORT_CATEGORY_LABELS[item.category][lang]}</span>
-                          <span className="shrink-0 font-heading font-black tabular-nums text-white">{formatMoney(item.amount, lang)} <span className="ml-1 text-xs text-gray-500">{percent}%</span></span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-white/[0.055]"><div className="h-full rounded-full bg-gradient-to-r from-orange-600 to-orange-400" style={{ width: `${percent}%` }} /></div>
-                      </div>;
-                    })}
-                  </div>
-                </Surface>
-              )}
-            </section>
-
-            <section>
-              <SectionHeading
-                icon={<ReceiptText className="h-4 w-4" aria-hidden="true" />}
-                eyebrow={copy.transparency}
-                title={copy.ledgerTitle}
-                intro={copy.ledgerIntro}
-                action={<label className="block w-full sm:w-56">
-                  <span className="mb-2 block text-[11px] font-black uppercase tracking-[0.14em] text-gray-500">{copy.selectMonth}</span>
-                  <select value={selectedMonth} onChange={(event) => selectMonth(event.target.value)} className="h-11 w-full rounded-xl border-0 bg-white/[0.055] px-3 text-sm font-bold text-white outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-orange-400">
-                    <option value="all" className="bg-[#151821]">{copy.allMonths} {selectedYear}</option>
-                    {availableMonths.map((month) => <option key={month} value={month} className="bg-[#151821]">{formatMonth(month, lang)}</option>)}
-                  </select>
-                </label>}
-              />
-              {publicLedger.length === 0 ? <EmptyState icon={<CalendarDays className="h-5 w-5" aria-hidden="true" />} title={copy.ledgerEmpty} hint={copy.ledgerEmptyHint} /> : (
-                <Surface className="overflow-hidden">
-                  <div className="space-y-3 p-4 md:hidden">
-                    {publicLedger.map((entry) => <article key={entry.id} className="rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055]">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-bold text-gray-200">{entry.description}</p>
-                          {entry.supporterName && <p className="mt-1 truncate text-xs text-gray-500">{entry.supporterName}</p>}
-                          {entry.sourceAmountUsd !== undefined && entry.exchangeRateUsdEur !== undefined && <p className="mt-1 text-xs text-gray-500">{copy.raceConversion}: {formatUsd(entry.sourceAmountUsd, lang)} × {entry.exchangeRateUsdEur.toFixed(4)}</p>}
-                        </div>
-                        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ring-1 ${entry.direction === "income" ? "bg-emerald-400/10 text-emerald-200 ring-emerald-300/20" : "bg-rose-400/10 text-rose-200 ring-rose-300/20"}`}>{entry.direction === "income" ? <ArrowDownRight className="h-3 w-3" aria-hidden="true" /> : <ArrowUpRight className="h-3 w-3" aria-hidden="true" />}{entry.direction === "income" ? copy.income : copy.expense}</span>
-                      </div>
-                      <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/[0.055] pt-3 text-xs">
-                        <div><dt className="text-gray-600">{copy.date}</dt><dd className="mt-1 text-gray-400">{formatDate(entry.date, lang)}</dd></div>
-                        <div className="text-right"><dt className="text-gray-600">{copy.amount}</dt><dd className="mt-1 font-heading font-black text-white">{amountIsPrivate(entry) ? copy.protectedAmount : formatMoney(entry.amount ?? 0, lang)}</dd></div>
-                        <div className="col-span-2"><dt className="text-gray-600">{copy.category}</dt><dd className="mt-1 text-gray-400">{SUPPORT_CATEGORY_LABELS[entry.category][lang]}</dd></div>
-                      </dl>
-                    </article>)}
-                  </div>
-                  <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[720px] border-collapse text-left">
-                      <caption className="sr-only">{copy.ledgerTitle} — {selectedMonth === "all" ? `${copy.allMonths} ${selectedYear}` : formatMonth(selectedMonth, lang)}</caption>
-                      <thead className="bg-white/[0.025] text-[10px] font-black uppercase tracking-[0.16em] text-gray-500">
-                        <tr><th scope="col" className="px-5 py-4">{copy.date}</th><th scope="col" className="px-5 py-4">{copy.description}</th><th scope="col" className="px-5 py-4">{copy.category}</th><th scope="col" className="px-5 py-4">{copy.income} / {copy.expense}</th><th scope="col" className="px-5 py-4 text-right">{copy.amount}</th></tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/[0.055]">
-                        {publicLedger.map((entry) => <tr key={entry.id} className="text-sm transition hover:bg-white/[0.018]">
-                          <td className="whitespace-nowrap px-5 py-4 text-gray-500">{formatDate(entry.date, lang)}</td>
-                          <td className="px-5 py-4 font-bold text-gray-200">
-                            {entry.description}
-                            {entry.supporterName && <span className="mt-1 block text-xs font-medium text-gray-500">{entry.supporterName}</span>}
-                            {entry.sourceAmountUsd !== undefined && entry.exchangeRateUsdEur !== undefined && <span className="mt-1 block text-xs font-medium text-gray-500">{copy.raceConversion}: {formatUsd(entry.sourceAmountUsd, lang)} × {entry.exchangeRateUsdEur.toFixed(4)}</span>}
-                          </td>
-                          <td className="px-5 py-4 text-gray-400">{SUPPORT_CATEGORY_LABELS[entry.category][lang]}</td>
-                          <td className="px-5 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ring-1 ${entry.direction === "income" ? "bg-emerald-400/10 text-emerald-200 ring-emerald-300/20" : "bg-rose-400/10 text-rose-200 ring-rose-300/20"}`}>{entry.direction === "income" ? <ArrowDownRight className="h-3 w-3" aria-hidden="true" /> : <ArrowUpRight className="h-3 w-3" aria-hidden="true" />}{entry.direction === "income" ? copy.income : copy.expense}</span></td>
-                          <td className="whitespace-nowrap px-5 py-4 text-right font-heading font-black tabular-nums text-white">{amountIsPrivate(entry) ? <span className="text-xs text-gray-500">{copy.protectedAmount}</span> : formatMoney(entry.amount ?? 0, lang)}</td>
-                        </tr>)}
-                      </tbody>
-                    </table>
-                  </div>
-                </Surface>
-              )}
-            </section>
-
-            <section>
               <SectionHeading icon={<Users className="h-4 w-4" aria-hidden="true" />} eyebrow={copy.eyebrow} title={copy.supportersTitle} intro={copy.supportersIntro} />
               {supporters.length === 0 ? <EmptyState icon={<Heart className="h-5 w-5" aria-hidden="true" />} title={copy.supportersEmpty} hint={copy.supportersEmptyHint} /> : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -570,6 +503,32 @@ const CommunitySupportPage = () => {
         </div>
       </main>
       <Footer />
+      <PreviewModal
+        open={ledgerOpen}
+        onClose={() => setLedgerOpen(false)}
+        maxWidth="1100px"
+        ariaLabel={`${copy.ledgerTitle} ${selectedYear}`}
+        closeLabel={lang === "en" ? "Close season ledger" : "Sluit seizoensboek"}
+      >
+        <SeasonLedgerModal
+          language={lang}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          availableMonths={availableMonths}
+          onSelectedMonthChange={selectMonth}
+          annualLedger={annualPublicLedger}
+          visibleLedger={publicLedger}
+          raceCosts={annualPublicRaceCosts}
+          totalRaceCount={metrics.raceCosts.length}
+          raceCostTotalEur={metrics.raceCostTotal}
+          summary={{
+            operationalExpenses: metrics.operationalExpenses,
+            communityCovered: metrics.communityCovered,
+            selfFunded: metrics.selfFunded,
+            reserve: metrics.reserve,
+          }}
+        />
+      </PreviewModal>
     </div>
   );
 };
