@@ -59,8 +59,8 @@ const socialLinks = [
 ];
 
 const Footer = () => {
-  const { isSuperAdmin } = useAuth();
-  const showCommunitySupport = canViewCommunitySupport(isSuperAdmin);
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const showCommunitySupport = canViewCommunitySupport(isAdmin, isSuperAdmin);
 
   return (
     <footer className="relative overflow-hidden border-t border-orange-500/12 bg-racing-dark py-10">

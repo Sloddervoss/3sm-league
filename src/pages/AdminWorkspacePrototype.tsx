@@ -213,7 +213,7 @@ const AdminWorkspacePrototype = () => {
         </div>
       )}
       <div className="space-y-1">
-        {navigation.filter((item) => item.id !== "support" || isSuperAdmin).map((item) => {
+        {navigation.filter((item) => item.id !== "support" || isAdmin || isSuperAdmin).map((item) => {
           const Icon = item.icon;
           const active = item.id === workspace;
           return (

@@ -13,8 +13,8 @@ export const COMMUNITY_SUPPORT_HAS_SHARED_DATA = communitySupportConfig.dataSour
 // Fail closed: a local browser/session dataset can never be made public by a visibility toggle alone.
 export const COMMUNITY_SUPPORT_PUBLIC = communitySupportConfig.public && COMMUNITY_SUPPORT_HAS_SHARED_DATA;
 
-export const canViewCommunitySupport = (isSuperAdmin: boolean) => COMMUNITY_SUPPORT_PUBLIC || isSuperAdmin;
-export const canManageCommunitySupport = (isSuperAdmin: boolean) => isSuperAdmin;
+export const canViewCommunitySupport = (isAdmin: boolean, isSuperAdmin: boolean) => COMMUNITY_SUPPORT_PUBLIC || isAdmin || isSuperAdmin;
+export const canManageCommunitySupport = (isAdmin: boolean, isSuperAdmin: boolean) => isAdmin || isSuperAdmin;
 
 const COMMERCIAL_COSTS = new Set(["payment_fee", "merchandise_purchase", "shipping"]);
 const SUPPORT_INCOME = new Set(["contribution", "merchandise_income", "referral_income"]);

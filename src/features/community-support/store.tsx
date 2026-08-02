@@ -259,8 +259,8 @@ type CommunitySupportStore = {
 const CommunitySupportContext = createContext<CommunitySupportStore | null>(null);
 
 export const CommunitySupportProvider = ({ children }: { children: ReactNode }) => {
-  const { user, isSuperAdmin } = useAuth();
-  const storageKey = user && isSuperAdmin ? storageKeyFor(user.id) : null;
+  const { user, isAdmin, isSuperAdmin } = useAuth();
+  const storageKey = user && (isAdmin || isSuperAdmin) ? storageKeyFor(user.id) : null;
   const [state, setState] = useState<CommunitySupportState>(INITIAL_STATE);
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   const activeKeyRef = useRef<string | null>(null);

@@ -31,7 +31,7 @@ const SignInState = () => {
         <section className="w-full rounded-[1.75rem] bg-card/65 p-8 text-center shadow-2xl shadow-black/25 ring-1 ring-white/[0.07]">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-300 ring-1 ring-orange-400/20"><LockKeyhole className="h-5 w-5" /></div>
           <h1 className="mt-5 font-heading text-2xl font-black">COMMUNITY SUPPORT</h1>
-          <p className="mt-3 text-sm leading-relaxed text-gray-400">{language === "en" ? "This environment is currently available to Super-admins only." : "Deze omgeving is momenteel alleen beschikbaar voor Super-admins."}</p>
+          <p className="mt-3 text-sm leading-relaxed text-gray-400">{language === "en" ? "This environment is currently available to admins only." : "Deze omgeving is momenteel alleen beschikbaar voor admins."}</p>
           <Link to={`/auth/?redirect=${encodeURIComponent("/support/")}`} className="mt-6 inline-flex rounded-xl bg-gradient-racing px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-950/30">{language === "en" ? "Log in" : "Inloggen"}</Link>
         </section>
       </main>
@@ -41,8 +41,8 @@ const SignInState = () => {
 };
 
 export const CommunitySupportAccessGate = ({ children }: { children: ReactNode }) => {
-  const { user, isSuperAdmin, loading, rolesLoading } = useAuth();
-  const allowed = canViewCommunitySupport(isSuperAdmin);
+  const { user, isAdmin, isSuperAdmin, loading, rolesLoading } = useAuth();
+  const allowed = canViewCommunitySupport(isAdmin, isSuperAdmin);
 
   useEffect(() => {
     if (COMMUNITY_SUPPORT_PUBLIC) return;

@@ -4,7 +4,7 @@
 
 **Goal:** Build a premium, transparent 3SM Community Support page with management in the existing Control Room, without turning the main site into a donation shop.
 
-**Architecture:** `/support/` and its footer link are controlled by `community-support.config.json`. While `public` is false, only Super-admins can view the page and both crawler HTML and sitemap treat it as private/noindex. Public builds fail closed until `dataSource` is backed by the shared Supabase readmodel; after that backend phase, the `public` flag releases UI, footer, crawler HTML and sitemap together. Management is a Super-admin-only native module inside the existing `/admin/` Control Room. Phase 1 uses schema-validated, user-scoped session storage that is removed on logout/user switch.
+**Architecture:** `/support/` and its footer link are controlled by `community-support.config.json`. While `public` is false, admins and Super-admins can review the page and both crawler HTML and sitemap treat it as private/noindex. Public builds fail closed until `dataSource` is backed by the shared Supabase readmodel; after that backend phase, the `public` flag releases UI, footer, crawler HTML and sitemap together. Management is an admin-only native module inside the existing `/admin/` Control Room, available to both `admin` and `super_admin`. Phase 1 uses schema-validated, user-scoped session storage that is removed on logout/user switch.
 
 **Tech Stack:** React, TypeScript, Tailwind CSS, React Router, Supabase Auth roles, Vitest, Vite route HTML generator.
 
@@ -14,9 +14,9 @@
 
 - Public name and route: **Community Support**, `/support/`.
 - Discovery: subtle footer link only; never a main-menu item.
-- Current access: Super-admin-only, but no preview/test naming in routes or components.
+- Current access: admin and Super-admin only, but no preview/test naming in routes or components.
 - Public release: first replace the local-session datasource with the audited Supabase readmodel; after that, changing `"public": false` to `true` releases UI, footer link, crawler HTML and sitemap together. A build fails if `public=true` while the datasource is still local.
-- Management: native `/admin/` Control Room module, visible only to Super-admin and permanently protected.
+- Management: native `/admin/` Control Room module, visible to `admin` and `super_admin` and permanently protected from all other roles.
 - Languages: Dutch and English; mobile and desktop are equal acceptance targets.
 - Monthly costs derive dynamically from manual entries and recurring entries. A recurring entry is explicitly monthly or yearly; yearly entries occur once per year in their configured start month.
 - Race costs are dedicated records linked read-only to an existing race; they are never duplicated as manual ledger entries.
@@ -35,7 +35,7 @@
 - Confirmation records gross contribution and actual PayPal fee separately and idempotently; pending, not-found and expired claims never affect financial totals.
 - iRacing referral is a simple configurable public link, independent from PayPal claims or Discord DMs, and stays hidden until enabled with a valid official iRacing URL. Actually received credit is booked manually as referral income.
 - Concept merchandise is visible only while the public flag is false; public release hides concept products.
-- Products use up to four uploaded JPEG/PNG/WebP photos rather than externally entered image URLs. During local-session review the browser resizes these photos and stores them only in the active Super-admin session; a later shared datasource must move the binaries to audited object storage.
+- Products use up to four uploaded JPEG/PNG/WebP photos rather than externally entered image URLs. During local-session review the browser resizes these photos and stores them only in the active admin session; a later shared datasource must move the binaries to audited object storage.
 
 ## Phase 1: gated production-shaped frontend
 
@@ -54,7 +54,7 @@
 - Reserve remains separate from monthly coverage.
 - Monthly recurring costs apply from their start month; yearly costs apply once per year in the start month.
 - Private ledger rows never reach the public selector.
-- Management always requires Super-admin.
+- Management always requires `admin` or `super_admin`; editor, steward and ordinary member roles remain denied.
 
 ### Task 2: Public support page
 
@@ -107,22 +107,22 @@
 ```bash
 npx vitest run src/test/communitySupportModel.test.ts
 npm test
-npx tsc --noEmit --pretty false
-npm run lint -- --quiet
+npx tsc -p tsconfig.app.json --noEmit --pretty false
+npx eslint . --quiet
 npm run build
 git diff --check
 ```
 
 **Browser checks:**
 - Anonymous `/support/` receives the gated login state.
-- Non-Super-admin cannot view the gated support page or the Control Room support module.
-- Super-admin can add data in the `/admin/` Community Support module and immediately see it on `/support/`.
+- Editor, steward, ordinary member and anonymous users cannot view the gated support page or the Control Room support module.
+- Both `admin` and `super_admin` can add data in the `/admin/` Community Support module and immediately see it on `/support/`.
 - NL/EN changes visible copy and metadata.
 - Mobile layout has no horizontal clipping.
-- Footer link is visible only to Super-admin while `public=false`.
+- Footer link is visible to `admin` and `super_admin` while `public=false`.
 - Browser console has zero errors.
 
-**Remote access:** Run Vite from this isolated worktree and expose it through a temporary `trycloudflare.com` tunnel. The app's normal password login and Super-admin role remain the authorization boundary. Do not push or deploy.
+**Remote access:** Run Vite from this isolated worktree and expose it through a temporary `trycloudflare.com` tunnel. The app's normal password login plus an `admin` or `super_admin` role remain the authorization boundary. Do not push or deploy.
 
 ## Later production phases — not authorized yet
 

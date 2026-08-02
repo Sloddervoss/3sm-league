@@ -216,12 +216,14 @@ describe("Community Support financial model", () => {
 });
 
 describe("Community Support release boundary", () => {
-  it("keeps public visibility behind one flag while management stays Super-admin-only", () => {
+  it("keeps public visibility behind one flag while management allows admins and Super-admins", () => {
     expect(COMMUNITY_SUPPORT_PUBLIC).toBe(false);
-    expect(canViewCommunitySupport(false)).toBe(false);
-    expect(canViewCommunitySupport(true)).toBe(true);
-    expect(canManageCommunitySupport(false)).toBe(false);
-    expect(canManageCommunitySupport(true)).toBe(true);
+    expect(canViewCommunitySupport(false, false)).toBe(false);
+    expect(canViewCommunitySupport(true, false)).toBe(true);
+    expect(canViewCommunitySupport(false, true)).toBe(true);
+    expect(canManageCommunitySupport(false, false)).toBe(false);
+    expect(canManageCommunitySupport(true, false)).toBe(true);
+    expect(canManageCommunitySupport(false, true)).toBe(true);
   });
 
   it("keeps the public route in the footer and management inside the native Control Room", () => {
@@ -236,10 +238,10 @@ describe("Community Support release boundary", () => {
     expect(app).toContain('path="/support"');
     expect(app).not.toContain('path="/support-beheer"');
     expect(controlRoom).toContain('support: <CommunitySupportModule />');
-    expect(controlRoom).toContain('item.id !== "support" || isSuperAdmin');
+    expect(controlRoom).toContain('item.id !== "support" || isAdmin || isSuperAdmin');
     expect(supportModule).not.toContain("<Navbar");
     expect(supportModule).not.toContain("<Footer");
-    expect(footer).toContain("canViewCommunitySupport(isSuperAdmin)");
+    expect(footer).toContain("canViewCommunitySupport(isAdmin, isSuperAdmin)");
     expect(footer).toContain('to="/support/"');
     expect(navbar).not.toContain('to="/support/"');
     expect(accessGate).toContain("if (COMMUNITY_SUPPORT_PUBLIC) return children");
