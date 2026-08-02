@@ -116,7 +116,10 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public, auth, pg_temp
 AS $$
 BEGIN
-  IF auth.uid() IS NULL OR NOT public.has_role(auth.uid(), 'super_admin'::public.app_role) THEN
+  IF auth.uid() IS NULL OR NOT (
+    public.has_role(auth.uid(), 'admin'::public.app_role)
+    OR public.has_role(auth.uid(), 'super_admin'::public.app_role)
+  ) THEN
     RAISE EXCEPTION 'Permission denied' USING ERRCODE = '42501';
   END IF;
   RETURN QUERY
@@ -145,7 +148,10 @@ DECLARE
   v_amount NUMERIC;
   v_previous_admin TEXT;
 BEGIN
-  IF auth.uid() IS NULL OR NOT public.has_role(auth.uid(), 'super_admin'::public.app_role) THEN
+  IF auth.uid() IS NULL OR NOT (
+    public.has_role(auth.uid(), 'admin'::public.app_role)
+    OR public.has_role(auth.uid(), 'super_admin'::public.app_role)
+  ) THEN
     RAISE EXCEPTION 'Permission denied' USING ERRCODE = '42501';
   END IF;
   IF v_url <> '' AND v_url !~ '^https://(www\.)?paypal\.me/[A-Za-z0-9._-]{1,80}$' THEN

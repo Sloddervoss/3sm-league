@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({
-  current: { user: { id: "super-admin-a" } as { id: string } | null, isSuperAdmin: true },
+  current: { user: { id: "super-admin-a" } as { id: string } | null, isAdmin: false, isSuperAdmin: true },
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -60,7 +60,7 @@ const Tree = () => <CommunitySupportProvider><Probe /></CommunitySupportProvider
 describe("Community Support session storage", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
-    auth.current = { user: { id: "super-admin-a" }, isSuperAdmin: true };
+    auth.current = { user: { id: "super-admin-a" }, isAdmin: false, isSuperAdmin: true };
   });
 
   it("creates local records on an insecure LAN origin without crypto.randomUUID", async () => {
@@ -84,12 +84,20 @@ describe("Community Support session storage", () => {
     }
   });
 
-  it("loads only the active Super-admin session and clears it on user change", async () => {
+  it("persists a separate local review session for a regular admin", async () => {
+    auth.current = { user: { id: "regular-admin-a" }, isAdmin: true, isSuperAdmin: false };
+    render(<Tree />);
+    fireEvent.click(screen.getByRole("button", { name: "save race" }));
+    await waitFor(() => expect(screen.getByTestId("race-count")).toHaveTextContent("1"));
+    expect(window.sessionStorage.getItem("3sm-community-support-session-v2:regular-admin-a")).not.toBeNull();
+  });
+
+  it("loads only the active admin session and clears it on user change", async () => {
     window.sessionStorage.setItem(storageKey, JSON.stringify(validState));
     const view = render(<Tree />);
     await waitFor(() => expect(screen.getByTestId("ledger-count")).toHaveTextContent("1"));
 
-    act(() => { auth.current = { user: null, isSuperAdmin: false }; });
+    act(() => { auth.current = { user: null, isAdmin: false, isSuperAdmin: false }; });
     view.rerender(<Tree />);
 
     await waitFor(() => expect(screen.getByTestId("ledger-count")).toHaveTextContent("0"));

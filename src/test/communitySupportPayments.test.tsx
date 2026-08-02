@@ -170,6 +170,8 @@ describe("PayPal.Me contribution flow", () => {
     expect(migration).toContain("iracing_referral_enabled BOOLEAN NOT NULL DEFAULT false");
     expect(migration).toContain("cfg.iracing_referral_enabled AND cfg.iracing_referral_url <> ''");
     expect(migration).toContain("p_iracing_referral_enabled BOOLEAN");
+    const adminOrSuperAdminGuard = "public.has_role(auth.uid(), 'admin'::public.app_role)\n    OR public.has_role(auth.uid(), 'super_admin'::public.app_role)";
+    expect(migration.split(adminOrSuperAdminGuard)).toHaveLength(3);
     const publicPage = readFileSync("src/features/community-support/public/CommunitySupportPage.tsx", "utf8");
     expect(publicPage).toContain("paymentSettings.iracingReferralEnabled && paymentSettings.iracingReferralUrl");
     expect(publicPage).toContain("Gebruik de referrallink");

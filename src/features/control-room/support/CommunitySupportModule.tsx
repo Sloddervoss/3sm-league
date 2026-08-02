@@ -260,7 +260,8 @@ const Toggle = ({ checked, onChange, label: text }: { checked: boolean; onChange
 const EmptyState = ({ icon, text }: { icon: ReactNode; text: string }) => <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl bg-black/10 p-6 text-center ring-1 ring-white/[0.05]"><span className="text-gray-600">{icon}</span><p className="mt-3 text-sm text-gray-500">{text}</p></div>;
 
 const CommunitySupportModule = () => {
-  const { isSuperAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const canManage = isAdmin || isSuperAdmin;
   const { language: currentLanguage } = useLanguage();
   const language: Language = currentLanguage === "en" ? "en" : "nl";
   const t = COPY[language];
@@ -293,7 +294,7 @@ const CommunitySupportModule = () => {
   const { data: sharedPaymentConfig, refetch: refetchPaymentConfig } = useQuery({
     queryKey: ["community-support", "payment-config", "admin"],
     queryFn: fetchAdminPaymentConfig,
-    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA && isSuperAdmin,
+    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA && canManage,
     staleTime: 30_000,
   });
   const paymentSettings = useMemo(() => sharedPaymentConfig ? { ...state.settings, ...sharedPaymentConfig } : state.settings, [sharedPaymentConfig, state.settings]);
@@ -453,10 +454,10 @@ const CommunitySupportModule = () => {
     { id: "settings", label: t.settings, icon: <Settings className="h-4 w-4" /> },
   ];
 
-  if (!isSuperAdmin) return (
+  if (!canManage) return (
     <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.055] p-6 text-amber-100">
-      <h2 className="font-heading text-xl font-black">{language === "en" ? "Super-admin access required" : "Super-admintoegang vereist"}</h2>
-      <p className="mt-2 text-sm text-amber-100/70">{language === "en" ? "Community Support finances are only available to Super-admins." : "Community Support-financiën zijn alleen beschikbaar voor Super-admins."}</p>
+      <h2 className="font-heading text-xl font-black">{language === "en" ? "Admin access required" : "Admintoegang vereist"}</h2>
+      <p className="mt-2 text-sm text-amber-100/70">{language === "en" ? "Community Support finances are only available to admins." : "Community Support-financiën zijn alleen beschikbaar voor admins."}</p>
     </section>
   );
 
@@ -466,7 +467,7 @@ const CommunitySupportModule = () => {
         <div className="relative">
           <header className="flex flex-col gap-6 border-b border-white/[0.07] pb-8 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-3"><span className="text-xs font-black uppercase tracking-[0.24em] text-orange-400">{t.eyebrow}</span><span className="inline-flex rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-200 ring-1 ring-orange-400/20">Super-admin · lokaal</span></div>
+              <div className="flex flex-wrap items-center gap-3"><span className="text-xs font-black uppercase tracking-[0.24em] text-orange-400">{t.eyebrow}</span><span className="inline-flex rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-200 ring-1 ring-orange-400/20">{COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (language === "en" ? "Admin · shared" : "Admin · gedeeld") : (language === "en" ? "Admin · local" : "Admin · lokaal")}</span></div>
               <h1 className="mt-4 font-heading text-4xl font-black tracking-tight sm:text-5xl">{t.title}</h1>
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-400 sm:text-base">{t.intro}</p>
             </div>
