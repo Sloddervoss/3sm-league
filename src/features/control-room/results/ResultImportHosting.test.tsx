@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const support = vi.hoisted(() => ({
   initializeRaceCosts: vi.fn(),
+  saveRaceCost: vi.fn(),
   state: {
     raceCosts: [] as Array<Record<string, unknown>>,
     settings: { usdEurRate: 0.92 },
@@ -22,8 +23,28 @@ const race = {
   leagues: null,
 };
 
+const resultJson = JSON.stringify({
+  subsession_id: 123456,
+  session_results: [{
+    simsession_type: 6,
+    simsession_type_name: "Race",
+    results: [{
+      finish_position: 0,
+      display_name: "Driver A",
+      cust_id: 123,
+      laps_complete: 10,
+      best_lap_time: 743210,
+      incidents: 0,
+    }],
+  }],
+});
+
 vi.mock("@/features/community-support/store", () => ({
-  useCommunitySupport: () => ({ state: support.state, initializeRaceCosts: support.initializeRaceCosts }),
+  useCommunitySupport: () => ({
+    state: support.state,
+    initializeRaceCosts: support.initializeRaceCosts,
+    saveRaceCost: support.saveRaceCost,
+  }),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -37,6 +58,10 @@ vi.mock("@/integrations/supabase/client", () => ({
       if (table === "race_results") return {
         select: () => ({ eq: async () => ({ data: [], error: null }) }),
         upsert: async () => ({ error: null }),
+      };
+      if (table === "race_session_results") return {
+        delete: () => ({ eq: async () => ({ error: null }) }),
+        insert: async () => ({ error: null }),
       };
       if (table === "penalties") return { select: () => ({ eq: () => ({ eq: async () => ({ data: [], error: null }) }) }) };
       throw new Error(`Unexpected table in result-import hosting test: ${table}`);
@@ -52,97 +77,167 @@ const renderWorkspace = () => {
   return render(<QueryClientProvider client={queryClient}><ResultImportWorkspace /></QueryClientProvider>);
 };
 
-const openConfirmation = async () => {
-  renderWorkspace();
-  fireEvent.click(screen.getByRole("button", { name: "Handmatige correctie" }));
+const selectRace = async () => {
   await screen.findByRole("option", { name: /Fun Race · Spa/ });
-  const raceSelect = screen.getByLabelText("1. Kies de echte kalender-race");
-  fireEvent.change(raceSelect, { target: { value: "race-a" } });
-  expect(raceSelect).toHaveValue("race-a");
-  fireEvent.change(screen.getByPlaceholderText("Coureurnaam"), { target: { value: "Driver A" } });
-  const reviewButton = screen.getByRole("button", { name: "Bekijk definitieve live-impact" });
-  await waitFor(() => expect(document.getElementById("result-import-confirmation-blocker")).toHaveTextContent("Klaar voor de impactcontrole"));
-  expect(reviewButton).toBeEnabled();
-  fireEvent.click(reviewButton);
+  fireEvent.change(screen.getByLabelText("1. Kies de echte kalender-race"), { target: { value: "race-a" } });
+};
+
+const prepareJsonImport = async () => {
+  const view = renderWorkspace();
+  await selectRace();
+  const fileInput = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+  fireEvent.change(fileInput, { target: { files: [new File([resultJson], "result.json", { type: "application/json" })] } });
+  await screen.findByText(/result\.json · 1 race-regels/);
+  await waitFor(() => expect(screen.getByText("Klaar voor de impactcontrole. Er wordt nog niets geschreven totdat je in het volgende scherm bevestigt.")).toBeInTheDocument());
+};
+
+const openConfirmation = async () => {
+  fireEvent.click(screen.getByRole("button", { name: "Bekijk definitieve live-impact" }));
   return screen.findByRole("dialog", { name: "Controleer alle live wijzigingen" });
 };
 
-describe("result-import hosting confirmation", () => {
+describe("result-import racehosting op het uploadscherm", () => {
   beforeEach(() => {
     support.state.raceCosts = [];
     support.initializeRaceCosts.mockReset();
+    support.saveRaceCost.mockReset();
     writes.failRaceUpdate = false;
   });
 
-  it("shows hours, discount and a live USD/EUR preview in the final confirmation", async () => {
-    await openConfirmation();
+  it("toont na een JSON-upload direct bewerkbare uren, korting en de live kostenpreview", async () => {
+    await prepareJsonImport();
 
     const hours = screen.getByRole("spinbutton", { name: "Gehoste uren" });
-    const discount = screen.getByRole("checkbox", { name: "25% korting toegepast" });
-    const confirm = screen.getByRole("button", { name: "Resultaten opslaan en racekosten boeken" });
-
+    const discount = screen.getByRole("radio", { name: "Ja, 25%" });
+    expect(screen.getByText("3. Racehosting")).toBeInTheDocument();
+    expect(screen.getByText(/Voorstel voor Fun Race op Spa: 1 uur hosting/)).toBeInTheDocument();
+    expect(screen.getByText(/Het JSON-resultaat bevat geen betrouwbare factuurduur/)).toBeInTheDocument();
     expect(hours).toHaveValue(1);
     expect(discount).not.toBeChecked();
     expect(screen.getByText("$0.50")).toBeInTheDocument();
     expect(screen.getByText("€0.46")).toBeInTheDocument();
-    expect(screen.getByText("0.9200")).toBeInTheDocument();
+
+    fireEvent.change(hours, { target: { value: "25" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("1 t/m 24");
+    expect(screen.getByRole("button", { name: "Bekijk definitieve live-impact" })).toBeDisabled();
 
     fireEvent.change(hours, { target: { value: "2" } });
     fireEvent.click(discount);
     expect(screen.getByText("$0.75")).toBeInTheDocument();
     expect(screen.getByText("€0.69")).toBeInTheDocument();
 
-    fireEvent.change(hours, { target: { value: "1.5" } });
-    expect(screen.getByRole("alert", { name: "" })).toHaveTextContent("Vul een heel aantal uren van 1 t/m 24 in");
-    expect(confirm).toBeDisabled();
+    const dialog = await openConfirmation();
+    expect(within(dialog).queryByRole("spinbutton", { name: "Gehoste uren" })).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/2 uur · 25% korting · \$0\.75 · €0\.69/)).toBeInTheDocument();
   });
 
-  it("creates one snapshotted hosting draft only after the result import succeeds", async () => {
-    await openConfirmation();
+  it("boekt een nieuwe racekost pas nadat de JSON-resultimport slaagt", async () => {
+    await prepareJsonImport();
     fireEvent.change(screen.getByRole("spinbutton", { name: "Gehoste uren" }), { target: { value: "2" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "25% korting toegepast" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Ja, 25%" }));
+    await openConfirmation();
     fireEvent.click(screen.getByRole("button", { name: "Resultaten opslaan en racekosten boeken" }));
 
     await screen.findByText(/Resultaten geïmporteerd · racehosting lokaal geboekt voor 2 uur met 25% korting/);
-    expect(support.initializeRaceCosts).toHaveBeenCalledTimes(1);
     expect(support.initializeRaceCosts).toHaveBeenCalledWith([expect.objectContaining({
       raceId: "race-a",
       hostedHours: 2,
       discountApplied: true,
       exchangeRateUsdEur: 0.92,
     })]);
+    expect(support.saveRaceCost).not.toHaveBeenCalled();
   });
 
-  it("does not create race costs when the result import fails", async () => {
-    writes.failRaceUpdate = true;
-    await openConfirmation();
-    fireEvent.click(screen.getByRole("button", { name: "Resultaten opslaan en racekosten boeken" }));
-
-    await screen.findByText(/Import mislukt: race update failed/);
-    expect(support.initializeRaceCosts).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "Controleer alle live wijzigingen" })).toBeInTheDocument();
-  });
-
-  it("shows an existing immutable booking instead of editable fields on a re-import", async () => {
+  it("laat een bestaande standaardboeking op het uploadscherm bewust corrigeren met dezelfde koerssnapshot", async () => {
     support.state.raceCosts = [{
       id: "cost-a",
       raceId: "race-a",
-      hostedHours: 2,
-      discountApplied: true,
-      sourceAmountUsd: 0.75,
+      raceScope: "standalone",
+      raceName: "Fun Race",
+      track: "Spa",
+      date: "2026-08-02",
+      hostedHours: 1,
+      discountApplied: false,
+      sourceAmountUsd: 0.5,
       exchangeRateUsdEur: 0.91,
-      amount: 0.68,
+      amount: 0.46,
+      isPublic: false,
+      note: "Bestaande factuurnotitie",
     }];
+    await prepareJsonImport();
+
+    const hours = screen.getByRole("spinbutton", { name: "Gehoste uren" });
+    expect(hours).toHaveValue(1);
+    expect(screen.getByText(/Bestaande boeking geladen/)).toBeInTheDocument();
+    expect(screen.getByText("0.9100")).toBeInTheDocument();
+    fireEvent.change(hours, { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Ja, 25%" }));
+    expect(screen.getByText("€0.68")).toBeInTheDocument();
 
     await openConfirmation();
+    expect(screen.getByText(/Racehosting wordt aangepast/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Resultaten opslaan · racekosten aanpassen" }));
 
-    expect(screen.getByText("Racehosting is al geboekt en blijft ongewijzigd.")).toBeInTheDocument();
-    expect(screen.getByText(/2 uur · 25% korting · \$0\.75 · €0\.68 · koers 0\.9100/)).toBeInTheDocument();
-    expect(screen.queryByRole("spinbutton", { name: "Gehoste uren" })).not.toBeInTheDocument();
-    const confirm = screen.getByRole("button", { name: "Resultaten opslaan · racekosten behouden" });
-    expect(confirm).toBeEnabled();
-    fireEvent.click(confirm);
+    await screen.findByText(/Resultaten geïmporteerd · racehosting aangepast naar 2 uur met 25% korting/);
+    expect(support.saveRaceCost).toHaveBeenCalledWith(expect.objectContaining({
+      raceId: "race-a",
+      hostedHours: 2,
+      discountApplied: true,
+      exchangeRateUsdEur: 0.91,
+      isPublic: false,
+      note: "Bestaande factuurnotitie",
+    }));
+    expect(support.initializeRaceCosts).not.toHaveBeenCalled();
+  });
+
+  it("laat een bestaande ongewijzigde boeking ongemoeid", async () => {
+    support.state.raceCosts = [{
+      id: "cost-a",
+      raceId: "race-a",
+      raceScope: "standalone",
+      raceName: "Fun Race",
+      track: "Spa",
+      date: "2026-08-02",
+      hostedHours: 1,
+      discountApplied: false,
+      sourceAmountUsd: 0.5,
+      exchangeRateUsdEur: 0.91,
+      amount: 0.46,
+      isPublic: true,
+    }];
+    await prepareJsonImport();
+    await openConfirmation();
+    expect(screen.getByText(/Racehosting blijft gelijk/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Resultaten opslaan · racekosten behouden" }));
+
     await screen.findByText(/Resultaten geïmporteerd · bestaande racehosting ongewijzigd/);
     expect(support.initializeRaceCosts).not.toHaveBeenCalled();
+    expect(support.saveRaceCost).not.toHaveBeenCalled();
+  });
+
+  it("wijzigt geen racekosten wanneer de JSON-resultimport faalt", async () => {
+    support.state.raceCosts = [{
+      id: "cost-a",
+      raceId: "race-a",
+      raceScope: "standalone",
+      raceName: "Fun Race",
+      track: "Spa",
+      date: "2026-08-02",
+      hostedHours: 1,
+      discountApplied: false,
+      sourceAmountUsd: 0.5,
+      exchangeRateUsdEur: 0.91,
+      amount: 0.46,
+      isPublic: true,
+    }];
+    writes.failRaceUpdate = true;
+    await prepareJsonImport();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Gehoste uren" }), { target: { value: "2" } });
+    await openConfirmation();
+    fireEvent.click(screen.getByRole("button", { name: "Resultaten opslaan · racekosten aanpassen" }));
+
+    await screen.findByText(/Import mislukt: race update failed/);
+    expect(support.initializeRaceCosts).not.toHaveBeenCalled();
+    expect(support.saveRaceCost).not.toHaveBeenCalled();
   });
 });
