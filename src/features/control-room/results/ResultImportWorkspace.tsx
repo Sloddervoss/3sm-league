@@ -18,6 +18,15 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { isSupportedCommunitySupportRace } from "@/features/community-support/raceEligibility";
+import {
+  calculateRaceHostingAmountUsd,
+  convertUsdToEur,
+  DEFAULT_RACE_HOSTING_HOURS,
+  normalizeHostedHours,
+  normalizeUsdEurRate,
+} from "@/features/community-support/raceHostingPricing";
+import { useCommunitySupport, type SupportRaceCostDraft } from "@/features/community-support/store";
 import {
   matchProfileForImportRow,
   parseIRacingJsonRows,
@@ -33,6 +42,7 @@ export type ParticipantMatchStatus = "matched-id" | "matched-name" | "unmatched"
 
 export type ResultImportRace = RaceOption & {
   status?: string | null;
+  race_type?: string | null;
   leagues?: { name?: string | null; season?: string | null } | null;
 };
 
@@ -69,6 +79,8 @@ export type ResultImportConfirmation = {
   impact: ResultImportImpact;
   dqUserIds: string[];
   lockedCarMismatches: LockedCarMismatch[];
+  hostingCostDraft: SupportRaceCostDraft | null;
+  hostingCostAlreadyBooked: boolean;
 };
 
 export type ResultImportWorkspaceProps = {
@@ -84,7 +96,7 @@ const emptyRow = (position: number): ImportRow => ({ position, display_name: "",
 const queryRaces = async (): Promise<ResultImportRace[]> => {
   const { data, error } = await supabase
     .from("races")
-    .select("id, name, track, race_date, league_id, status, leagues(name, season)")
+    .select("id, name, track, race_date, league_id, status, race_type, leagues(name, season)")
     .order("race_date", { ascending: true });
   if (error) throw error;
   return (data || []) as ResultImportRace[];
@@ -145,12 +157,48 @@ const invalidateResultImportQueries = (queryClient: QueryClient) => {
     ["control-room", "overview", "race-registrations"], ["control-room", "season", "season-registrations"],
     ["control-room", "season", "race-registrations"], ["standings-full"], ["standings-preview"],
     ["latest-completed-race"], ["latest-race-results"], ["control-room-result-import-races"],
+    ["community-support", "race-cost-options"],
     ["control-room-result-import-profiles"], ["control-room-result-import-existing-results"],
     ["control-room-result-import-car-locks"],
   ].forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
 };
 
 const normalizedCar = (car: string) => car.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+
+export function buildResultImportHostingCostDraft(
+  race: ResultImportRace,
+  hostedHours: number,
+  discountApplied: boolean,
+  exchangeRateUsdEur: number,
+): SupportRaceCostDraft | null {
+  const normalizedHours = normalizeHostedHours(hostedHours);
+  const normalizedRate = normalizeUsdEurRate(exchangeRateUsdEur);
+  const raceScope = race.league_id ? "season" : "standalone";
+  if (normalizedHours === null || !isSupportedCommunitySupportRace({
+    raceScope,
+    leagueId: race.league_id,
+    leagueName: race.leagues?.name,
+    raceName: race.name,
+    raceFormat: race.race_type,
+  }) || normalizedRate === null) return null;
+
+  return {
+    raceId: race.id,
+    raceScope,
+    ...(race.league_id ? { leagueId: race.league_id } : {}),
+    ...(race.leagues?.name ? { leagueName: race.leagues.name } : {}),
+    ...(race.leagues?.season ? { season: race.leagues.season } : {}),
+    raceName: race.name,
+    track: race.track,
+    date: race.race_date.slice(0, 10),
+    ...(race.race_type ? { raceFormat: race.race_type } : {}),
+    hostedHours: normalizedHours,
+    discountApplied,
+    exchangeRateUsdEur: normalizedRate,
+    isPublic: true,
+    note: "Vastgelegd tijdens resultatenimport",
+  };
+}
 
 /**
  * Car policy is intentionally scoped to JSON imports of a league race. A whole-season
@@ -339,6 +387,7 @@ async function executeResultImport(confirmation: ResultImportConfirmation, point
 
 export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" }: ResultImportWorkspaceProps) {
   const queryClient = useQueryClient();
+  const { state: supportState, initializeRaceCosts } = useCommunitySupport();
   const [mode, setMode] = useState<ResultImportMode>("json");
   const [raceId, setRaceId] = useState("");
   const [rows, setRows] = useState<ImportRow[]>([emptyRow(1)]);
@@ -352,6 +401,8 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
   const [writeError, setWriteError] = useState<string | null>(null);
   const [writeSuccess, setWriteSuccess] = useState<string | null>(null);
   const [dqUserIds, setDqUserIds] = useState<string[]>([]);
+  const [hostingHours, setHostingHours] = useState(String(DEFAULT_RACE_HOSTING_HOURS));
+  const [hostingDiscountApplied, setHostingDiscountApplied] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const { data: races = [], isLoading: racesLoading, error: racesError } = useQuery({ queryKey: ["control-room-result-import-races"], queryFn: queryRaces });
@@ -363,6 +414,18 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
   });
 
   const selectedRace = races.find((race) => race.id === raceId);
+  const existingHostingCost = selectedRace ? supportState.raceCosts.find((cost) => cost.raceId === selectedRace.id) : undefined;
+  const hostingEligible = Boolean(selectedRace && isSupportedCommunitySupportRace({
+    raceScope: selectedRace.league_id ? "season" : "standalone",
+    leagueId: selectedRace.league_id,
+    leagueName: selectedRace.leagues?.name,
+    raceName: selectedRace.name,
+    raceFormat: selectedRace.race_type,
+  }));
+  const parsedHostingHours = Number(hostingHours);
+  const normalizedHostingHours = Number.isInteger(parsedHostingHours) ? normalizeHostedHours(parsedHostingHours) : null;
+  const hostingSourceAmountUsd = normalizedHostingHours === null ? 0 : calculateRaceHostingAmountUsd(normalizedHostingHours, hostingDiscountApplied);
+  const hostingAmountEur = convertUsdToEur(hostingSourceAmountUsd, supportState.settings.usdEurRate);
   const { data: carLocks, isLoading: carLocksLoading, error: carLocksError } = useQuery({
     queryKey: ["control-room-result-import-car-locks", selectedRace?.league_id],
     queryFn: () => queryCarLocks(selectedRace!.league_id!),
@@ -395,6 +458,7 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
     carChoiceCandidates: matched.filter((participant) => participant.row.car_name).length,
   };
   const sourceReady = mode === "manual" || Boolean(fileName);
+  const hostingReady = !hostingEligible || Boolean(existingHostingCost) || normalizedHostingHours !== null;
   const canConfirm = Boolean(selectedRace && sourceReady && participants.length && !unmatched.length && !racesLoading && !profilesLoading && !existingLoading && !carLocksLoading && !racesError && !profilesError && !carLocksError && !submitting);
   const confirmationBlocker = !selectedRace
     ? "Kies eerst de kalender-race waarvoor deze uitslag bedoeld is."
@@ -447,9 +511,13 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
 
   const importResults = useMutation({
     mutationFn: (confirmation: ResultImportConfirmation) => executeResultImport(confirmation, points, setWriteProgress),
-    onSuccess: ({ iRatingUpdates }) => {
+    onSuccess: ({ iRatingUpdates }, confirmation) => {
+      if (confirmation.hostingCostDraft) initializeRaceCosts([confirmation.hostingCostDraft]);
       invalidateResultImportQueries(queryClient);
-      setWriteSuccess(`Resultaten geïmporteerd${iRatingUpdates ? ` · iRating bijgewerkt voor ${iRatingUpdates} drivers` : ""}.`);
+      const hostingMessage = confirmation.hostingCostDraft
+        ? ` · racehosting lokaal geboekt voor ${confirmation.hostingCostDraft.hostedHours} uur${confirmation.hostingCostDraft.discountApplied ? " met 25% korting" : " zonder korting"}`
+        : confirmation.hostingCostAlreadyBooked ? " · bestaande racehosting ongewijzigd" : "";
+      setWriteSuccess(`Resultaten geïmporteerd${iRatingUpdates ? ` · iRating bijgewerkt voor ${iRatingUpdates} drivers` : ""}${hostingMessage}.`);
       setConfirming(false);
       setRaceId("");
       resetImport();
@@ -466,13 +534,35 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
     setWriteSuccess(null);
     if (canConfirm) {
       setDqUserIds([]);
+      const previousSeasonCost = selectedRace?.league_id
+        ? supportState.raceCosts
+          .filter((cost) => cost.leagueId === selectedRace.league_id && cost.raceId !== selectedRace.id && cost.date <= selectedRace.race_date.slice(0, 10))
+          .sort((a, b) => b.date.localeCompare(a.date))[0]
+        : undefined;
+      setHostingHours(String(existingHostingCost?.hostedHours ?? DEFAULT_RACE_HOSTING_HOURS));
+      setHostingDiscountApplied(existingHostingCost?.discountApplied ?? previousSeasonCost?.discountApplied ?? false);
       setConfirming(true);
     }
   };
 
   const confirm = async () => {
-    if (!selectedRace || !canConfirm) return;
-    const confirmation: ResultImportConfirmation = { race: selectedRace, mode, rows: populatedRows, sessionResults, raceMetadata, participants, impact, dqUserIds, lockedCarMismatches };
+    if (!selectedRace || !canConfirm || !hostingReady) return;
+    const hostingCostDraft = existingHostingCost || !hostingEligible || normalizedHostingHours === null
+      ? null
+      : buildResultImportHostingCostDraft(selectedRace, normalizedHostingHours, hostingDiscountApplied, supportState.settings.usdEurRate);
+    const confirmation: ResultImportConfirmation = {
+      race: selectedRace,
+      mode,
+      rows: populatedRows,
+      sessionResults,
+      raceMetadata,
+      participants,
+      impact,
+      dqUserIds,
+      lockedCarMismatches,
+      hostingCostDraft,
+      hostingCostAlreadyBooked: Boolean(existingHostingCost),
+    };
     setSubmitting(true);
     setWriteError(null);
     setWriteSuccess(null);
@@ -540,7 +630,38 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
         </aside>
       </div>
 
-      {confirming && selectedRace && <div className="fixed inset-0 z-[100] flex items-end bg-black/70 p-4 sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-labelledby="result-import-confirm-title"><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-amber-400/30 bg-[#151821] p-6 shadow-2xl"><div className="flex gap-3"><ShieldAlert className="h-6 w-6 shrink-0 text-amber-300" /><div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-200">Definitieve importbevestiging</p><h3 id="result-import-confirm-title" className="mt-1 font-heading text-xl font-black text-white">Controleer alle live wijzigingen</h3><p className="mt-1 text-sm text-gray-400">{selectedRace.name} · {impact.resultRows} resultaten · de productie-import start uitsluitend na deze bevestiging.</p></div></div>{writeError && <p role="alert" className="mt-4 rounded-lg border border-red-400/25 bg-red-400/[0.08] p-3 text-sm text-red-100">Import mislukt: {writeError}</p>}{lockedCarMismatches.length > 0 && <section className="mt-5 rounded-xl border border-amber-400/30 bg-amber-400/[0.08] p-4"><h4 className="flex items-center gap-2 font-bold text-amber-100"><AlertTriangle className="h-4 w-4 text-amber-300" />Vergrendelde auto komt niet overeen</h4><p className="mt-1 text-xs leading-relaxed text-amber-100/85">Kies per coureur expliciet voor diskwalificatie. Alleen dan verandert de classificatie en worden de niet-gediskwalificeerde coureurs opnieuw gepositioneerd en van punten voorzien. Zonder keuze wordt de JSON-import normaal verwerkt.</p><div className="mt-3 space-y-2">{lockedCarMismatches.map((mismatch) => { const selected = dqUserIds.includes(mismatch.userId); return <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300/15 bg-black/15 p-3 text-sm" key={mismatch.userId}><input type="checkbox" checked={selected} disabled={submitting} onChange={() => setDqUserIds((current) => selected ? current.filter((id) => id !== mismatch.userId) : [...current, mismatch.userId])} className="mt-0.5 h-4 w-4 accent-orange-500" /><span><strong className="text-white">{mismatch.driver}</strong><span className="block text-xs text-amber-100/80">Vergrendeld: {mismatch.lockedCar} · JSON: {mismatch.importedCar}</span><span className="mt-1 block text-xs font-bold text-orange-200">{selected ? "DQ geselecteerd: DNF, 0 punten en herclassificatie." : "Geen DQ geselecteerd: import blijft ongewijzigd."}</span></span></label>; })}</div></section>}<ul className="mt-5 space-y-3 text-sm text-gray-300"><li><b className="text-white">Resultaten:</b> {impact.resultRows} race_results worden geüpsert; {impact.existingResults ? `${impact.existingResults} bestaande uitslagen kunnen worden overschreven.` : "geen bestaande uitslagregels gevonden."}</li><li><b className="text-white">Profielen:</b> {impact.profileUpdates} SR/iRating-snapshots bevatten alle benodigde iRacing-waarden en worden bijgewerkt.</li><li><b className="text-white">Race-status:</b> race wordt <code>completed</code>, telt voor 3SR en JSON-metadata (sessie, SOF, cauties, kopwisselingen, weer) wordt opgeslagen indien aanwezig.</li>{mode === "json" && <li><b className="text-white">Sessies:</b> alle bestaande practice/qualifying sessieresultaten voor deze race worden verwijderd en vervangen door {impact.practiceRows + impact.qualifyingRows} JSON-regels.</li>}<li><b className="text-white">Straffen:</b> bestaande puntenaftrek-straffen voor deze race worden na de result-upsert opnieuw op de punten toegepast.</li><li><b className="text-white">3SR:</b> 3SR wordt opnieuw berekend via <code>recalculate_3sr_for_race</code>.</li><li><b className="text-white">Auto-keuzes:</b> voor maximaal {impact.carChoiceCandidates} gekoppelde coureurs met een auto in de import worden ontgrendelde season- en race-registratiekeuzes bijgewerkt.</li></ul><div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setConfirming(false)} disabled={submitting} className="rounded-lg border border-white/10 px-4 py-2.5 text-sm font-bold text-gray-300 hover:bg-white/5">Annuleren</button><button type="button" onClick={confirm} disabled={submitting} className="rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{submitting ? <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> : null}{submitting ? `Importeren: ${writeProgress || "voorbereiden"}…` : "Bevestig en importeer resultaten"}</button></div></div></div>}
+      {confirming && selectedRace && <div className="fixed inset-0 z-[100] flex items-end bg-black/70 p-4 sm:items-center sm:justify-center" role="dialog" aria-modal="true" aria-labelledby="result-import-confirm-title"><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-amber-400/30 bg-[#151821] p-6 shadow-2xl"><div className="flex gap-3"><ShieldAlert className="h-6 w-6 shrink-0 text-amber-300" /><div><p className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-200">Definitieve importbevestiging</p><h3 id="result-import-confirm-title" className="mt-1 font-heading text-xl font-black text-white">Controleer alle live wijzigingen</h3><p className="mt-1 text-sm text-gray-400">{selectedRace.name} · {impact.resultRows} resultaten · de productie-import start uitsluitend na deze bevestiging.</p></div></div>{writeError && <p role="alert" className="mt-4 rounded-lg border border-red-400/25 bg-red-400/[0.08] p-3 text-sm text-red-100">Import mislukt: {writeError}</p>}
+
+        <section className="mt-5 rounded-xl border border-orange-400/25 bg-orange-400/[0.06] p-4" aria-labelledby="result-import-hosting-title">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h4 id="result-import-hosting-title" className="font-bold text-orange-100">Racehosting</h4>
+              <p className="mt-1 text-xs leading-relaxed text-gray-400">Leg de iRacing-hostingkosten tegelijk met de uitslag vast. De USD/EUR-koers wordt bij de eerste boeking bevroren.</p>
+            </div>
+            <span className="shrink-0 rounded-full bg-black/20 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-orange-200">Community Support</span>
+          </div>
+
+          {!hostingEligible ? <p className="mt-4 rounded-lg border border-white/10 bg-black/15 p-3 text-sm text-gray-300">Dit raceformat valt buiten de huidige racekostenregeling. De resultaten kunnen wel normaal worden geïmporteerd.</p> : existingHostingCost ? <div className="mt-4 rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] p-3 text-sm text-emerald-100">
+            <p className="font-bold">Racehosting is al geboekt en blijft ongewijzigd.</p>
+            <p className="mt-1 text-xs text-emerald-100/80">{existingHostingCost.hostedHours} uur · {existingHostingCost.discountApplied ? "25% korting" : "geen korting"} · ${existingHostingCost.sourceAmountUsd.toFixed(2)} · €{existingHostingCost.amount.toFixed(2)} · koers {existingHostingCost.exchangeRateUsdEur.toFixed(4)}</p>
+          </div> : <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label className="block text-xs font-black uppercase tracking-wider text-gray-400">Gehoste uren
+              <input type="number" min="1" max="24" step="1" inputMode="numeric" value={hostingHours} disabled={submitting} onChange={(event) => setHostingHours(event.target.value)} className="mt-2 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-orange-400/50 disabled:opacity-50" />
+              {normalizedHostingHours === null && <span role="alert" className="mt-1 block normal-case tracking-normal text-red-300">Vul een heel aantal uren van 1 t/m 24 in.</span>}
+            </label>
+            <label className="flex min-h-[4.55rem] cursor-pointer items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/15 px-3 py-2.5 text-sm font-bold text-gray-200">
+              <span>25% korting toegepast</span>
+              <input type="checkbox" checked={hostingDiscountApplied} disabled={submitting} onChange={(event) => setHostingDiscountApplied(event.target.checked)} className="h-4 w-4 accent-orange-500" />
+            </label>
+            <div className="sm:col-span-2 grid gap-2 rounded-lg bg-black/20 p-3 text-xs sm:grid-cols-3">
+              <p className="text-gray-400">Bronbedrag<br /><strong className="text-white">${hostingSourceAmountUsd.toFixed(2)}</strong></p>
+              <p className="text-gray-400">Koerssnapshot<br /><strong className="text-white">{supportState.settings.usdEurRate.toFixed(4)}</strong></p>
+              <p className="text-gray-400">Te boeken uitgave<br /><strong className="text-lg text-orange-200">€{hostingAmountEur.toFixed(2)}</strong></p>
+            </div>
+          </div>}
+        </section>
+
+        {lockedCarMismatches.length > 0 && <section className="mt-5 rounded-xl border border-amber-400/30 bg-amber-400/[0.08] p-4"><h4 className="flex items-center gap-2 font-bold text-amber-100"><AlertTriangle className="h-4 w-4 text-amber-300" />Vergrendelde auto komt niet overeen</h4><p className="mt-1 text-xs leading-relaxed text-amber-100/85">Kies per coureur expliciet voor diskwalificatie. Alleen dan verandert de classificatie en worden de niet-gediskwalificeerde coureurs opnieuw gepositioneerd en van punten voorzien. Zonder keuze wordt de JSON-import normaal verwerkt.</p><div className="mt-3 space-y-2">{lockedCarMismatches.map((mismatch) => { const selected = dqUserIds.includes(mismatch.userId); return <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300/15 bg-black/15 p-3 text-sm" key={mismatch.userId}><input type="checkbox" checked={selected} disabled={submitting} onChange={() => setDqUserIds((current) => selected ? current.filter((id) => id !== mismatch.userId) : [...current, mismatch.userId])} className="mt-0.5 h-4 w-4 accent-orange-500" /><span><strong className="text-white">{mismatch.driver}</strong><span className="block text-xs text-amber-100/80">Vergrendeld: {mismatch.lockedCar} · JSON: {mismatch.importedCar}</span><span className="mt-1 block text-xs font-bold text-orange-200">{selected ? "DQ geselecteerd: DNF, 0 punten en herclassificatie." : "Geen DQ geselecteerd: import blijft ongewijzigd."}</span></span></label>; })}</div></section>}<ul className="mt-5 space-y-3 text-sm text-gray-300"><li><b className="text-white">Resultaten:</b> {impact.resultRows} race_results worden geüpsert; {impact.existingResults ? `${impact.existingResults} bestaande uitslagen kunnen worden overschreven.` : "geen bestaande uitslagregels gevonden."}</li><li><b className="text-white">Profielen:</b> {impact.profileUpdates} SR/iRating-snapshots bevatten alle benodigde iRacing-waarden en worden bijgewerkt.</li><li><b className="text-white">Race-status:</b> race wordt <code>completed</code>, telt voor 3SR en JSON-metadata (sessie, SOF, cauties, kopwisselingen, weer) wordt opgeslagen indien aanwezig.</li>{mode === "json" && <li><b className="text-white">Sessies:</b> alle bestaande practice/qualifying sessieresultaten voor deze race worden verwijderd en vervangen door {impact.practiceRows + impact.qualifyingRows} JSON-regels.</li>}<li><b className="text-white">Straffen:</b> bestaande puntenaftrek-straffen voor deze race worden na de result-upsert opnieuw op de punten toegepast.</li><li><b className="text-white">3SR:</b> 3SR wordt opnieuw berekend via <code>recalculate_3sr_for_race</code>.</li><li><b className="text-white">Auto-keuzes:</b> voor maximaal {impact.carChoiceCandidates} gekoppelde coureurs met een auto in de import worden ontgrendelde season- en race-registratiekeuzes bijgewerkt.</li></ul><div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setConfirming(false)} disabled={submitting} className="rounded-lg border border-white/10 px-4 py-2.5 text-sm font-bold text-gray-300 hover:bg-white/5">Annuleren</button><button type="button" onClick={confirm} disabled={submitting || !hostingReady} className="rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">{submitting ? <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> : null}{submitting ? `Importeren: ${writeProgress || "voorbereiden"}…` : existingHostingCost ? "Resultaten opslaan · racekosten behouden" : hostingEligible ? "Resultaten opslaan en racekosten boeken" : "Bevestig en importeer resultaten"}</button></div></div></div>}
     </section>
   );
 }
