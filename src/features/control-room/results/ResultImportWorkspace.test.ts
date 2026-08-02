@@ -1,10 +1,49 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildResultImportHostingCostDraft,
   classifyImportParticipants,
   findLockedCarMismatches,
   type CarLockData,
   type ResultImportParticipant,
 } from "./ResultImportWorkspace";
+
+describe("result-import racehosting", () => {
+  const sprintRace = {
+    id: "race-a",
+    name: "Race 1",
+    track: "Spa",
+    race_date: "2026-08-02T18:00:00.000Z",
+    league_id: "league-a",
+    race_type: "Sprint",
+    leagues: { name: "Sprint Cup", season: "2026" },
+  };
+
+  it("builds the first-booking draft from the selected race, hours and discount", () => {
+    expect(buildResultImportHostingCostDraft(sprintRace, 2, true, 0.92)).toEqual({
+      raceId: "race-a",
+      raceScope: "season",
+      leagueId: "league-a",
+      leagueName: "Sprint Cup",
+      season: "2026",
+      raceName: "Race 1",
+      track: "Spa",
+      date: "2026-08-02",
+      raceFormat: "Sprint",
+      hostedHours: 2,
+      discountApplied: true,
+      exchangeRateUsdEur: 0.92,
+      isPublic: true,
+      note: "Vastgelegd tijdens resultatenimport",
+    });
+  });
+
+  it("rejects invalid hours and fail-closed race formats without blocking result imports", () => {
+    expect(buildResultImportHostingCostDraft(sprintRace, 0, false, 0.92)).toBeNull();
+    expect(buildResultImportHostingCostDraft(sprintRace, 1, false, 0)).toBeNull();
+    expect(buildResultImportHostingCostDraft({ ...sprintRace, race_type: "FutureFormat" }, 1, false, 0.92)).toBeNull();
+    expect(buildResultImportHostingCostDraft({ ...sprintRace, league_id: null, name: "Night Endurance", race_type: "Feature", leagues: null }, 3, false, 0.92)).toBeNull();
+  });
+});
 
 const participant = (userId: string, position: number, bestLap: string, fastestLap = false, carName = "Ferrari 296 GT3"): ResultImportParticipant => ({
   row: {
