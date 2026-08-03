@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   fetchAdmin: vi.fn(),
   insertLedger: vi.fn(),
+  setProductVisibility: vi.fn(),
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -17,6 +18,7 @@ vi.mock("@/features/community-support/supportDataApi", async (importOriginal) =>
   ...(await importOriginal<typeof import("@/features/community-support/supportDataApi")>()),
   fetchAdminCommunitySupportState: api.fetchAdmin,
   insertLedgerEntry: api.insertLedger,
+  setProductVisibility: api.setProductVisibility,
 }));
 
 import { CommunitySupportProvider, useCommunitySupport } from "@/features/community-support/store";
@@ -34,14 +36,16 @@ const emptyState = (): CommunitySupportState => ({
 });
 
 const Harness = () => {
-  const { state, loading, persistenceError, addLedgerEntry } = useCommunitySupport();
+  const { state, loading, persistenceError, addLedgerEntry, toggleProductPublication } = useCommunitySupport();
   return <>
     <span>{loading ? "loading" : `ledger:${state.ledger.map((entry) => entry.id).join(",")}`}</span>
     {persistenceError && <span role="alert">{persistenceError}</span>}
+    <span>{state.products[0] ? `product:${state.products[0].active}:${state.products[0].concept}` : "product:none"}</span>
     <button onClick={() => void addLedgerEntry({
       date: "2026-08-03", direction: "income", category: "contribution", description: "Bijdrage",
       amount: 10, isPublic: true, showSupporterName: false, showAmount: false,
     })}>add</button>
+    <button onClick={() => state.products[0] && void toggleProductPublication(state.products[0].id)}>publish</button>
   </>;
 };
 
@@ -51,6 +55,7 @@ describe("Community Support shared store", () => {
   beforeEach(() => {
     api.fetchAdmin.mockReset();
     api.insertLedger.mockReset();
+    api.setProductVisibility.mockReset();
   });
 
   it("refetches canonical shared state after a successful optimistic mutation", async () => {
@@ -73,5 +78,24 @@ describe("Community Support shared store", () => {
     fireEvent.click(screen.getByRole("button", { name: "add" }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("write denied"));
     expect(screen.getByText("ledger:")).toBeInTheDocument();
+  });
+
+  it("publishes an existing concept product atomically as active and non-concept", async () => {
+    const concept = emptyState();
+    concept.products = [{
+      id: "product-a", name: "Test", description: "Testproduct", price: 20, purchasePrice: 0,
+      shippingCost: 0, fulfillmentMode: "digital", stock: 1, active: true, concept: true, imageUrls: [],
+    }];
+    const published = emptyState();
+    published.products = [{ ...concept.products[0], active: true, concept: false }];
+    api.fetchAdmin.mockResolvedValueOnce(concept).mockResolvedValueOnce(published);
+    api.setProductVisibility.mockResolvedValue(undefined);
+
+    renderHarness();
+    await screen.findByText("product:true:true");
+    fireEvent.click(screen.getByRole("button", { name: "publish" }));
+
+    await screen.findByText("product:true:false");
+    expect(api.setProductVisibility).toHaveBeenCalledWith("product-a", true, false);
   });
 });
