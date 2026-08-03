@@ -21,7 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isSupportedCommunitySupportRace } from "@/features/community-support/raceEligibility";
 import {
   calculateRaceHostingAmountUsd,
-  convertUsdToEur,
+  calculateRaceHostingEurBreakdown,
   DEFAULT_RACE_HOSTING_HOURS,
   normalizeHostedHours,
   normalizeUsdEurRate,
@@ -429,7 +429,8 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
     : null;
   const hostingExchangeRate = existingHostingCost?.exchangeRateUsdEur ?? supportState.settings.usdEurRate;
   const hostingSourceAmountUsd = normalizedHostingHours === null ? 0 : calculateRaceHostingAmountUsd(normalizedHostingHours, hostingDiscountApplied);
-  const hostingAmountEur = convertUsdToEur(hostingSourceAmountUsd, hostingExchangeRate);
+  const hostingBreakdown = calculateRaceHostingEurBreakdown(hostingSourceAmountUsd, hostingExchangeRate);
+  const hostingAmountEur = hostingBreakdown.amount;
   const hostingCostAction: HostingCostAction = !hostingEligible
     ? "none"
     : !existingHostingCost
@@ -679,10 +680,12 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
                     </label>
                   </div>
                 </fieldset>
-                <div className="grid gap-2 rounded-lg bg-black/20 p-3 text-xs sm:col-span-2 sm:grid-cols-3">
+                <div className="grid gap-2 rounded-lg bg-black/20 p-3 text-xs sm:col-span-2 sm:grid-cols-5">
                   <p className="text-gray-400">Bronbedrag<br /><strong className="text-white">${hostingSourceAmountUsd.toFixed(2)}</strong></p>
                   <p className="text-gray-400">Koerssnapshot<br /><strong className="text-white">{hostingExchangeRate.toFixed(4)}</strong></p>
-                  <p className="text-gray-400">Te boeken uitgave<br /><strong className="text-lg text-orange-200">€{hostingAmountEur.toFixed(2)}</strong></p>
+                  <p className="text-gray-400">Netto EUR<br /><strong className="text-white">€{hostingBreakdown.netAmount.toFixed(2)}</strong></p>
+                  <p className="text-gray-400">21% btw<br /><strong className="text-white">€{hostingBreakdown.vatAmount.toFixed(2)}</strong></p>
+                  <p className="text-gray-400">Uitgave incl. btw<br /><strong className="text-lg text-orange-200">€{hostingAmountEur.toFixed(2)}</strong></p>
                 </div>
               </div>
               <p className={`mt-3 text-xs font-bold ${hostingCostAction === "update" ? "text-amber-200" : hostingCostAction === "unchanged" ? "text-emerald-300" : "text-orange-200"}`}>
@@ -719,7 +722,7 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
 
           {!hostingEligible ? <p className="mt-4 rounded-lg border border-white/10 bg-black/15 p-3 text-sm text-gray-300">Dit raceformat valt buiten de huidige racekostenregeling. De resultaten kunnen wel normaal worden geïmporteerd.</p> : <div className={`mt-4 rounded-lg border p-3 text-sm ${hostingCostAction === "update" ? "border-amber-400/25 bg-amber-400/[0.07] text-amber-100" : hostingCostAction === "unchanged" ? "border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-100" : "border-orange-400/25 bg-orange-400/[0.07] text-orange-100"}`}>
             <p className="font-bold">{hostingCostAction === "update" ? "Racehosting wordt aangepast." : hostingCostAction === "unchanged" ? "Racehosting blijft gelijk." : "Racehosting wordt geboekt."}</p>
-            <p className="mt-1 text-xs opacity-80">{normalizedHostingHours} uur · {hostingDiscountApplied ? "25% korting" : "geen korting"} · ${hostingSourceAmountUsd.toFixed(2)} · €{hostingAmountEur.toFixed(2)} · koers {hostingExchangeRate.toFixed(4)}</p>
+            <p className="mt-1 text-xs opacity-80">{normalizedHostingHours} uur · {hostingDiscountApplied ? "25% korting" : "geen korting"} · ${hostingSourceAmountUsd.toFixed(2)} · netto €{hostingBreakdown.netAmount.toFixed(2)} + 21% btw €{hostingBreakdown.vatAmount.toFixed(2)} · totaal €{hostingAmountEur.toFixed(2)} · koers {hostingExchangeRate.toFixed(4)}</p>
             {hostingCostAction === "update" && existingHostingCost && <p className="mt-2 text-xs opacity-75">Was: {existingHostingCost.hostedHours} uur · {existingHostingCost.discountApplied ? "25% korting" : "geen korting"} · ${existingHostingCost.sourceAmountUsd.toFixed(2)} · €{existingHostingCost.amount.toFixed(2)}</p>}
           </div>}
         </section>

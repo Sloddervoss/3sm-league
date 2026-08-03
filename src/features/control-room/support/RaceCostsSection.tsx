@@ -7,7 +7,7 @@ import type { SupportRaceCostDraft } from "@/features/community-support/store";
 import { isSupportedCommunitySupportRace } from "@/features/community-support/raceEligibility";
 import {
   calculateRaceHostingAmountUsd,
-  convertUsdToEur,
+  calculateRaceHostingEurBreakdown,
   configuredRaceHours,
   DEFAULT_RACE_HOSTING_HOURS,
   normalizeHostedHours,
@@ -51,7 +51,7 @@ type SeasonGroup = { id: string; name: string; costs: SupportRaceCost[] };
 const COPY = {
   nl: {
     title: "Racekosten",
-    help: "Iedere afgeronde Sprint-, Feature- of losse race wordt geboekt in euro. De bronprijs is $0,50 per gehost uur; uren, 25% korting en de opgeslagen USD/EUR-koers bepalen het definitieve EUR-bedrag.",
+    help: "Iedere afgeronde Sprint-, Feature- of losse race wordt geboekt in euro inclusief 21% btw. De bronprijs is $0,50 per gehost uur; uren, eventuele 25% korting, de opgeslagen USD/EUR-koers en daarna 21% btw bepalen het definitieve EUR-bedrag.",
     season: "Seizoen",
     race: "Race",
     chooseRace: "Kies een race",
@@ -61,7 +61,7 @@ const COPY = {
     configuredDuration: "Ingestelde raceduur",
     useConfiguredDuration: "Neem raceduur over",
     discount: "25% korting toegepast",
-    calculatedAmount: "Berekend EUR-bedrag",
+    calculatedAmount: "Berekend EUR-bedrag incl. btw",
     rate: "$0,50 per gehost uur",
     exchangeRate: "Opgeslagen koers",
     sourceAmount: "Bronprijs",
@@ -75,7 +75,7 @@ const COPY = {
     noRaces: "Voor dit seizoen zijn geen ondersteunde afgeronde races beschikbaar.",
     noCosts: "Voor dit seizoen zijn nog geen racekosten ingevuld.",
     recorded: "Ingevulde races",
-    total: "Totale racekosten",
+    total: "Totale racekosten incl. btw",
     average: "Gemiddeld per race",
     completedMissing: "afgeronde races zonder kosten",
     completed: "Afgerond",
@@ -97,10 +97,12 @@ const COPY = {
     seasonUpdated: "Seizoen lokaal bijgewerkt",
     discounted: "Korting",
     noDiscount: "Geen korting",
+    vat: "21% btw",
+    net: "Netto",
   },
   en: {
     title: "Race costs",
-    help: "Every completed Sprint, Feature or standalone race is booked in euros. The source rate is $0.50 per hosted hour; hours, the 25% discount and the stored USD/EUR rate determine the final EUR amount.",
+    help: "Every completed Sprint, Feature or standalone race is booked in euros including 21% VAT. The $0.50 hosted-hour rate, any 25% discount and the stored USD/EUR rate determine the net amount; 21% VAT is then added.",
     season: "Season",
     race: "Race",
     chooseRace: "Choose a race",
@@ -110,7 +112,7 @@ const COPY = {
     configuredDuration: "Configured race duration",
     useConfiguredDuration: "Use race duration",
     discount: "25% discount applied",
-    calculatedAmount: "Calculated EUR amount",
+    calculatedAmount: "Calculated EUR amount incl. VAT",
     rate: "$0.50 per hosted hour",
     exchangeRate: "Stored rate",
     sourceAmount: "Source price",
@@ -124,7 +126,7 @@ const COPY = {
     noRaces: "No supported completed races are available for this season.",
     noCosts: "No race costs have been entered for this season yet.",
     recorded: "Recorded races",
-    total: "Total race costs",
+    total: "Total race costs incl. VAT",
     average: "Average per race",
     completedMissing: "completed races without costs",
     completed: "Completed",
@@ -146,6 +148,8 @@ const COPY = {
     seasonUpdated: "Season updated locally",
     discounted: "Discount",
     noDiscount: "No discount",
+    vat: "21% VAT",
+    net: "Net",
   },
 } as const;
 
@@ -253,7 +257,7 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
   const normalizedHours = normalizeHostedHours(Number(hostedHours)) ?? DEFAULT_RACE_HOSTING_HOURS;
   const calculatedSourceAmountUsd = calculateRaceHostingAmountUsd(normalizedHours, discountApplied);
   const calculatedExchangeRate = existingCost?.exchangeRateUsdEur ?? defaultUsdEurRate;
-  const calculatedAmount = convertUsdToEur(calculatedSourceAmountUsd, calculatedExchangeRate);
+  const calculatedBreakdown = calculateRaceHostingEurBreakdown(calculatedSourceAmountUsd, calculatedExchangeRate);
   const raceDurationHours = configuredRaceHours(selectedRace?.race_duration);
 
   const seasonGroups = useMemo<SeasonGroup[]>(() => {
@@ -353,7 +357,7 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
           const draft = bulkDraftFor(group);
           const hours = normalizeHostedHours(Number(draft.hours)) ?? DEFAULT_RACE_HOSTING_HOURS;
           const sourceAmountUsd = calculateRaceHostingAmountUsd(hours, draft.discountApplied);
-          const groupAmount = group.costs.reduce((sum, cost) => sum + convertUsdToEur(sourceAmountUsd, cost.exchangeRateUsdEur), 0);
+          const groupAmount = group.costs.reduce((sum, cost) => sum + calculateRaceHostingEurBreakdown(sourceAmountUsd, cost.exchangeRateUsdEur).amount, 0);
           return <article key={group.id} className="grid min-w-0 max-w-full gap-4 rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055] md:grid-cols-2 md:items-end 2xl:grid-cols-[minmax(0,1fr)_8rem_minmax(13rem,17rem)_auto]">
             <div className="min-w-0 md:col-span-2 2xl:col-span-1"><p className="break-words font-bold leading-snug text-white">{group.name}</p><p className="mt-1 truncate text-xs text-gray-500">{group.costs.length} {t.races} · {money(groupAmount, language)}</p></div>
             <label className="block min-w-0"><span className={label}>{t.hours}</span><input value={draft.hours} onChange={(event) => updateBulkDraft(group, { hours: event.target.value })} type="number" min="1" max="24" step="1" inputMode="numeric" className={input} /></label>
@@ -385,7 +389,7 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
 
       <label className="block"><span className={label}>{t.hours}</span><input value={hostedHours} onChange={(event) => setHostedHours(event.target.value)} name="race-hosted-hours" type="number" inputMode="numeric" min="1" max="24" step="1" required disabled={!selectedRace} className={input} /></label>
       <div className="self-end"><Toggle checked={discountApplied} onChange={setDiscountApplied} text={t.discount} disabled={!selectedRace} /></div>
-      <div className="rounded-xl bg-orange-500/[0.07] px-4 py-3 ring-1 ring-orange-400/20"><p className={label}>{t.calculatedAmount}</p><p className="mt-1 font-heading text-xl font-black text-white">{money(calculatedAmount, language)}</p><p className="mt-1 text-[11px] text-gray-500">{t.sourceAmount}: {moneyUsd(calculatedSourceAmountUsd, language)} · {t.exchangeRate}: {calculatedExchangeRate.toFixed(4)} · {t.rate}</p></div>
+      <div className="rounded-xl bg-orange-500/[0.07] px-4 py-3 ring-1 ring-orange-400/20"><p className={label}>{t.calculatedAmount}</p><p className="mt-1 font-heading text-xl font-black text-white">{money(calculatedBreakdown.amount, language)}</p><p className="mt-1 text-[11px] text-gray-500">{t.net}: {money(calculatedBreakdown.netAmount, language)} · {t.vat}: {money(calculatedBreakdown.vatAmount, language)}</p><p className="mt-1 text-[11px] text-gray-500">{t.sourceAmount}: {moneyUsd(calculatedSourceAmountUsd, language)} · {t.exchangeRate}: {calculatedExchangeRate.toFixed(4)} · {t.rate}</p></div>
       {raceDurationHours && raceDurationHours !== normalizedHours ? <button type="button" onClick={() => setHostedHours(String(raceDurationHours))} className="min-h-12 self-end rounded-xl bg-white/[0.04] px-4 text-sm font-bold text-gray-300 ring-1 ring-white/10 hover:bg-white/[0.08]">{t.useConfiguredDuration}: {raceDurationHours}u</button> : <div />}
       <label className="block md:col-span-1 xl:col-span-2"><span className={label}>{t.note}</span><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={240} disabled={!selectedRace} className={input} /></label>
       <div className="md:col-span-1 xl:col-span-2"><Toggle checked={isPublic} onChange={setIsPublic} text={t.public} disabled={!selectedRace} /></div>
@@ -396,7 +400,7 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
       {costsForYear.map((cost) => <article key={cost.id} className={`${card} min-w-0 p-5`}>
         <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-300"><Flag className="h-4 w-4" /></div>
-          <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-white">{cost.raceName}</h3><span className="rounded-full bg-white/[0.04] px-2 py-1 text-[10px] font-black uppercase tracking-wider text-gray-400">{cost.raceScope === "season" ? cost.leagueName : t.standalone}</span>{!cost.isPublic && <span className="rounded-full bg-amber-400/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200">{t.private}</span>}</div><p className="mt-1 text-xs text-gray-500">{dateLabel(cost.date, language)} · {cost.track} · {cost.hostedHours}u · {cost.discountApplied ? t.discounted : t.noDiscount} · {moneyUsd(cost.sourceAmountUsd, language)} × {cost.exchangeRateUsdEur.toFixed(4)}{cost.note ? ` · ${cost.note}` : ""}</p></div>
+          <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-white">{cost.raceName}</h3><span className="rounded-full bg-white/[0.04] px-2 py-1 text-[10px] font-black uppercase tracking-wider text-gray-400">{cost.raceScope === "season" ? cost.leagueName : t.standalone}</span><span className="rounded-full bg-sky-400/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-sky-200">{t.vat}</span>{!cost.isPublic && <span className="rounded-full bg-amber-400/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200">{t.private}</span>}</div><p className="mt-1 text-xs text-gray-500">{dateLabel(cost.date, language)} · {cost.track} · {cost.hostedHours}u · {cost.discountApplied ? t.discounted : t.noDiscount} · {moneyUsd(cost.sourceAmountUsd, language)} × {cost.exchangeRateUsdEur.toFixed(4)} · {t.net}: {money(cost.netAmount, language)}{cost.note ? ` · ${cost.note}` : ""}</p></div>
           <button type="button" role="switch" aria-checked={cost.discountApplied} onClick={() => void onSave(storedCostDraft(cost, cost.hostedHours, !cost.discountApplied))} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-black ring-1 transition ${cost.discountApplied ? "bg-orange-500/10 text-orange-200 ring-orange-400/20" : "bg-white/[0.035] text-gray-400 ring-white/10"}`}><Percent className="h-3.5 w-3.5" />{cost.discountApplied ? t.discounted : t.noDiscount}</button>
           <p className="shrink-0 font-heading text-xl font-black text-white">{money(cost.amount, language)}</p>
           <div className="flex gap-2"><button type="button" onClick={() => startEdit(cost)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/[0.04] px-3 text-xs font-bold text-gray-300 ring-1 ring-white/10 hover:bg-white/[0.08]"><Pencil className="h-3.5 w-3.5" />{t.edit}</button><button type="button" onClick={() => setDeleteId(cost.id)} aria-label={`${t.remove}: ${cost.raceName}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300"><Trash2 className="h-4 w-4" /></button></div>

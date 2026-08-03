@@ -39,7 +39,7 @@ type RaceRow = {
   id: string; race_id: string; race_scope: SupportRaceCost["raceScope"]; league_id: string | null;
   league_name: string | null; season: string | null; race_name: string; track: string; race_date: string;
   race_format: string | null; hosted_hours: number; discount_applied: boolean; source_amount_usd: number;
-  exchange_rate_usd_eur: number; amount_eur: number; is_public: boolean; note: string | null;
+  exchange_rate_usd_eur: number; vat_rate: number; net_amount_eur: number; vat_amount_eur: number; amount_eur: number; is_public: boolean; note: string | null;
   deleted_at: string | null; created_at: string; created_by: string | null; updated_at: string; updated_by: string | null;
 };
 type ProductRow = {
@@ -106,7 +106,8 @@ const raceFromRow = (row: RaceRow): SupportRaceCost => ({
   ...(row.season ? { season: row.season } : {}), raceName: row.race_name, track: row.track, date: row.race_date,
   ...(row.race_format ? { raceFormat: row.race_format } : {}), hostedHours: row.hosted_hours,
   discountApplied: row.discount_applied, sourceAmountUsd: Number(row.source_amount_usd),
-  exchangeRateUsdEur: Number(row.exchange_rate_usd_eur), amount: Number(row.amount_eur), isPublic: row.is_public,
+  exchangeRateUsdEur: Number(row.exchange_rate_usd_eur), vatRate: Number(row.vat_rate), netAmount: Number(row.net_amount_eur),
+  vatAmount: Number(row.vat_amount_eur), amount: Number(row.amount_eur), isPublic: row.is_public,
   ...(row.note ? { note: row.note } : {}),
 });
 const productFromRow = (row: ProductRow): SupportProduct => ({

@@ -12,7 +12,7 @@ import type {
   SupportRecurringCost,
 } from "./types";
 import { isSupportedCommunitySupportRace } from "./raceEligibility";
-import { calculateRaceHostingAmountUsd, convertUsdToEur, DEFAULT_USD_EUR_RATE, normalizeHostedHours, normalizeUsdEurRate } from "./raceHostingPricing";
+import { calculateRaceHostingAmountUsd, calculateRaceHostingEurBreakdown, DEFAULT_USD_EUR_RATE, normalizeHostedHours, normalizeUsdEurRate, RACE_HOSTING_VAT_RATE } from "./raceHostingPricing";
 import { createPaymentIntent, DEFAULT_PAYPAL_AMOUNTS_EUR, normalizeDiscordUserId, normalizeIracingReferralUrl, normalizePayPalAmounts, normalizePayPalMeUrl, resolvePaymentIntent } from "./paymentFlow";
 import { COMMUNITY_SUPPORT_HAS_SHARED_DATA } from "./model";
 import {
@@ -96,14 +96,16 @@ const raceCostSchema = z.preprocess((value) => {
     ? record.sourceAmountUsd
     : calculateRaceHostingAmountUsd(hostedHours, discountApplied);
   const exchangeRateUsdEur = typeof record.exchangeRateUsdEur === "number" ? record.exchangeRateUsdEur : DEFAULT_USD_EUR_RATE;
-  const amount = record.sourceAmountUsd !== undefined && typeof record.amount === "number"
-    ? record.amount
-    : convertUsdToEur(sourceAmountUsd, exchangeRateUsdEur);
+  const vatRate = typeof record.vatRate === "number" ? record.vatRate : RACE_HOSTING_VAT_RATE;
+  const breakdown = calculateRaceHostingEurBreakdown(sourceAmountUsd, exchangeRateUsdEur, vatRate);
+  const netAmount = typeof record.netAmount === "number" ? record.netAmount : breakdown.netAmount;
+  const vatAmount = typeof record.vatAmount === "number" ? record.vatAmount : breakdown.vatAmount;
+  const amount = typeof record.amount === "number" && record.vatRate !== undefined ? record.amount : breakdown.amount;
   const migrated = { ...record };
   delete migrated.creditCostUsd;
   delete migrated.pricingSource;
   delete migrated.amountEur;
-  return { ...migrated, sourceAmountUsd, exchangeRateUsdEur, amount };
+  return { ...migrated, sourceAmountUsd, exchangeRateUsdEur, vatRate, netAmount, vatAmount, amount };
 }, z.object({
   id: z.string().min(1).max(100),
   raceId: z.string().min(1).max(100),
@@ -119,6 +121,7 @@ const raceCostSchema = z.preprocess((value) => {
   discountApplied: z.boolean().default(false),
   sourceAmountUsd: positiveMoneySchema,
   exchangeRateUsdEur: z.number().finite().gt(0).max(10),
+  vatRate: z.number().finite().min(0).max(1), netAmount: positiveMoneySchema, vatAmount: moneySchema,
   amount: positiveMoneySchema,
   isPublic: z.boolean(),
   note: z.string().max(240).optional(),
@@ -220,7 +223,7 @@ const loadState = (storageKey: string): CommunitySupportState => {
 
 export type SupportLedgerDraft = Omit<SupportLedgerEntry, "id">;
 export type SupportRecurringCostDraft = Omit<SupportRecurringCost, "id">;
-export type SupportRaceCostDraft = Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur"> & { amount?: number; sourceAmountUsd?: number; exchangeRateUsdEur?: number };
+export type SupportRaceCostDraft = Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur" | "vatRate" | "netAmount" | "vatAmount"> & { exchangeRateUsdEur?: number };
 export type SupportProductDraft = Omit<SupportProduct, "id">;
 
 const normalizeRaceCostDraft = (draft: SupportRaceCostDraft, defaultUsdEurRate: number): Omit<SupportRaceCost, "id"> | null => {
@@ -231,6 +234,7 @@ const normalizeRaceCostDraft = (draft: SupportRaceCostDraft, defaultUsdEurRate: 
   const exchangeRateUsdEur = normalizeUsdEurRate(draft.exchangeRateUsdEur ?? defaultUsdEurRate);
   if (exchangeRateUsdEur === null) return null;
   const sourceAmountUsd = calculateRaceHostingAmountUsd(hostedHours, draft.discountApplied);
+  const breakdown = calculateRaceHostingEurBreakdown(sourceAmountUsd, exchangeRateUsdEur);
   return {
     ...draft,
     hostedHours,
@@ -238,7 +242,7 @@ const normalizeRaceCostDraft = (draft: SupportRaceCostDraft, defaultUsdEurRate: 
     date: draft.date.slice(0, 10),
     sourceAmountUsd,
     exchangeRateUsdEur,
-    amount: convertUsdToEur(sourceAmountUsd, exchangeRateUsdEur),
+    ...breakdown,
     note: draft.note?.trim() || undefined,
   };
 };
