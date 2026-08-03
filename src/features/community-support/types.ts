@@ -26,6 +26,7 @@ export type SupportLedgerEntry = {
   supporterName?: string;
   showSupporterName?: boolean;
   showAmount?: boolean;
+  automatic?: boolean;
 };
 
 export type PublicSupportLedgerEntry = Omit<SupportLedgerEntry, "amount" | "isPublic" | "supporterName" | "showSupporterName" | "showAmount"> & {
@@ -78,6 +79,7 @@ export type SupportProduct = {
   price: number;
   purchasePrice: number;
   shippingCost: number;
+  fulfillmentMode: "physical" | "digital";
   stock: number;
   active: boolean;
   concept: boolean;

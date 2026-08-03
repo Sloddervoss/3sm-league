@@ -187,3 +187,30 @@ export const capturePayPalCheckoutOrder = async (intentId: string): Promise<PayP
   }
   return result;
 };
+
+export type PayPalMerchOrderResult = { orderId: string; merchOrderId: string };
+export type PayPalMerchCaptureResult = { result: "confirmed" | "already_confirmed"; orderId: string; captureId: string; grossAmount: number };
+export type PayPalMerchRecoveryResult =
+  | PayPalMerchCaptureResult
+  | { result: "pending"; merchOrderId: string; orderId: string }
+  | { result: "none" | "cancelled" | "already_cancelled" | "awaiting_provider_expiry"; merchOrderId?: string };
+
+export const recoverPayPalMerchOrder = async (productId: string): Promise<PayPalMerchRecoveryResult> =>
+  invokePayPalCheckout<PayPalMerchRecoveryResult>({ action: "recover-merch-order", productId });
+
+export const createPayPalMerchOrder = async (productId: string): Promise<PayPalMerchOrderResult> => {
+  const result = await invokePayPalCheckout<PayPalMerchOrderResult>({ action: "create-merch-order", productId });
+  if (!result.orderId || !result.merchOrderId) throw new Error("Merchandise order was not created.");
+  return result;
+};
+
+export const capturePayPalMerchOrder = async (merchOrderId: string): Promise<PayPalMerchCaptureResult> => {
+  const result = await invokePayPalCheckout<PayPalMerchCaptureResult>({ action: "capture-merch-order", merchOrderId });
+  if (!result.captureId || !["confirmed", "already_confirmed"].includes(result.result)) throw new Error("Merchandise payment was not confirmed.");
+  return result;
+};
+
+export const cancelPayPalMerchOrder = async (merchOrderId: string): Promise<void> => {
+  const result = await invokePayPalCheckout<{ result: string }>({ action: "cancel-merch-order", merchOrderId });
+  if (!["cancelled", "already_cancelled", "awaiting_provider_expiry"].includes(result.result)) throw new Error("Merchandise order was not cancelled safely.");
+};

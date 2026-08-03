@@ -252,6 +252,25 @@ function scheduleGuarded(pattern, name, task) {
   cron.schedule(pattern, () => runGuarded(name, task));
 }
 
+async function reconcileCommunitySupportMerchOrders() {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/paypal-checkout/maintenance`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      apikey: SUPABASE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: '{}',
+    signal: AbortSignal.timeout(SUPABASE_FETCH_TIMEOUT_MS),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`Merchandise reconciliation failed (${response.status})`);
+  if (Number(result.failed || 0) > 0) throw new Error(`Merchandise reconciliation left ${result.failed} order(s) unresolved`);
+  if (Number(result.confirmed || 0) > 0 || Number(result.cancelled || 0) > 0) {
+    console.log(`[community-support] Merchandise reconciliation: ${result.confirmed || 0} confirmed, ${result.cancelled || 0} cancelled`);
+  }
+}
+
 // ── Config (channel/role IDs na /setup-server) ────────────────────────────────
 function readJsonFile(file, fallback = {}) {
   try {
@@ -2683,6 +2702,7 @@ client.once('clientReady', async () => {
   scheduleGuarded('54 * * * * *', 'checkStewardCorrections', checkStewardCorrections);
   // Elke 5 minuten: team rol sync
   scheduleGuarded('*/5 * * * *', 'syncTeamRoles', syncTeamRoles);
+  scheduleGuarded('15 */5 * * * *', 'reconcileMerchOrders', reconcileCommunitySupportMerchOrders);
   // Elk uur: kalender update + token cleanup
   scheduleGuarded('0 * * * *', 'hourlyMaintenance', async () => {
     await updateCalendarEmbed().catch(e => botLog(`[cron:kalender] ${describeError(e)}`));
@@ -2702,6 +2722,7 @@ client.once('clientReady', async () => {
   runGuarded('checkStreams', checkStreams);
   runGuarded('startupCalendar', updateCalendarEmbed);
   runGuarded('syncTeamRoles', syncTeamRoles);
+  runGuarded('reconcileMerchOrders', reconcileCommunitySupportMerchOrders);
 });
 
 client.on('error', (e) => {

@@ -5,8 +5,10 @@ export type PayPalOrderPayload = {
     custom_id: string;
     invoice_id: string;
     description: string;
-    amount: { currency_code: "EUR"; value: string };
+    amount: { currency_code: "EUR"; value: string; breakdown?: { item_total: { currency_code: "EUR"; value: string } } };
+    items?: Array<{ name: string; quantity: "1"; unit_amount: { currency_code: "EUR"; value: string } }>;
   }>;
+  application_context?: { shipping_preference: "GET_FROM_FILE" | "NO_SHIPPING"; user_action: "PAY_NOW" };
 };
 
 export type PayPalCaptureSnapshot = {
@@ -42,6 +44,47 @@ export const buildPayPalOrderPayload = (intentId: string, amountEur: number): Pa
       amount: { currency_code: "EUR", value: toEurValue(amountEur) },
     }],
   };
+};
+
+export const buildPayPalMerchOrderPayload = (orderId: string, productName: string, amountEur: number, fulfillmentMode: "physical" | "digital" = "physical"): PayPalOrderPayload => {
+  if (!UUID_RE.test(orderId)) throw new Error("Invalid merchandise order ID");
+  const name = productName.trim();
+  if (!name || name.length > 100) throw new Error("Invalid product name");
+  const value = toEurValue(amountEur);
+  return {
+    intent: "CAPTURE",
+    purchase_units: [{
+      reference_id: orderId,
+      custom_id: orderId,
+      invoice_id: `3SM-MERCH-${orderId}`,
+      description: `3SM merchandise: ${name}`.slice(0, 127),
+      amount: { currency_code: "EUR", value, breakdown: { item_total: { currency_code: "EUR", value } } },
+      items: [{ name, quantity: "1", unit_amount: { currency_code: "EUR", value } }],
+    }],
+    application_context: { shipping_preference: fulfillmentMode === "physical" ? "GET_FROM_FILE" : "NO_SHIPPING", user_action: "PAY_NOW" },
+  };
+};
+
+export const extractPayPalPayerEmail = (order: Record<string, unknown>): string => {
+  if (!order.payer || typeof order.payer !== "object" || Array.isArray(order.payer)) throw new Error("PayPal payer missing");
+  const email = String((order.payer as Record<string, unknown>).email_address ?? "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new Error("PayPal payer email missing");
+  return email;
+};
+
+export const extractPayPalShipping = (order: Record<string, unknown>) => {
+  const unit = Array.isArray(order.purchase_units) ? order.purchase_units[0] as Record<string, unknown> | undefined : undefined;
+  const shipping = unit?.shipping as Record<string, unknown> | undefined;
+  const name = shipping?.name as Record<string, unknown> | undefined;
+  const address = shipping?.address as Record<string, unknown> | undefined;
+  const fullName = String(name?.full_name ?? "").trim();
+  if (!fullName || !address || typeof address !== "object" || Array.isArray(address)) throw new Error("PayPal shipping address missing");
+  const allowed = ["address_line_1", "address_line_2", "admin_area_1", "admin_area_2", "postal_code", "country_code"];
+  const safeAddress = Object.fromEntries(allowed.flatMap((key) => typeof address[key] === "string" && String(address[key]).trim()
+    ? [[key, String(address[key]).trim().slice(0, 160)]]
+    : []));
+  if (!safeAddress.address_line_1 || !safeAddress.postal_code || !safeAddress.country_code) throw new Error("PayPal shipping address incomplete");
+  return { fullName: fullName.slice(0, 160), address: safeAddress };
 };
 
 const money = (value: unknown, label: string): number => {

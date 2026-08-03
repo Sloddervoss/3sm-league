@@ -26,9 +26,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
 import { COMMUNITY_SUPPORT_HAS_SHARED_DATA, COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
+import { fetchOwnedActiveMerchProductIds } from "../merchApi";
 import { fetchPublicPaymentConfig, fetchSharedPaymentLedger, submitPaymentIntent } from "../paymentApi";
 import { emptySharedSupportState, fetchPublicCommunitySupportData } from "../supportDataApi";
 import { useCommunitySupport } from "../store";
+import type { SupportProduct } from "../types";
+import MerchandiseCheckout from "./MerchandiseCheckout";
 import SeasonLedgerModal from "./SeasonLedgerModal";
 import PayPalContributionModal from "./PayPalContributionModal";
 
@@ -89,6 +92,9 @@ const getCopy = (language: Language) => language === "en" ? {
   active: "Available",
   soldOut: "Out of stock",
   stock: "in stock",
+  buy: "Buy with PayPal",
+  signInToBuy: "Sign in to order",
+  orderComplete: "Payment confirmed. Your order and shipping address are saved.",
   merchandiseEmpty: "There are no community products available at the moment.",
   merchandiseEmptyHint: "New items will appear here after they have been added and made available by 3SM.",
   spendingTitle: "Where the season costs sit",
@@ -169,6 +175,9 @@ const getCopy = (language: Language) => language === "en" ? {
   active: "Beschikbaar",
   soldOut: "Niet op voorraad",
   stock: "op voorraad",
+  buy: "Kopen met PayPal",
+  signInToBuy: "Log in om te bestellen",
+  orderComplete: "Betaling bevestigd. Je bestelling en verzendadres zijn opgeslagen.",
   merchandiseEmpty: "Er zijn momenteel geen communityproducten beschikbaar.",
   merchandiseEmptyHint: "Nieuwe producten verschijnen hier zodra 3SM ze heeft toegevoegd en beschikbaar heeft gemaakt.",
   spendingTitle: "Waar de seizoenskosten zitten",
@@ -258,6 +267,13 @@ const CommunitySupportPage = () => {
     enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
     staleTime: 0,
   });
+  const { data: activeMerchProductIds = [] } = useQuery({
+    queryKey: ["community-support", "merch-orders", "active", user?.id],
+    queryFn: fetchOwnedActiveMerchProductIds,
+    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA && Boolean(user),
+    staleTime: 0,
+  });
+  const activeMerchProducts = useMemo(() => new Set(activeMerchProductIds), [activeMerchProductIds]);
   const emptyPublicState = useMemo(emptySharedSupportState, []);
   const state = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (sharedSupportData?.displayState ?? emptyPublicState) : adminState;
 
@@ -287,6 +303,8 @@ const CommunitySupportPage = () => {
   });
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<SupportProduct | null>(null);
+  const [orderComplete, setOrderComplete] = useState(false);
   const requirePaymentAuthentication = () => {
     setPaymentOpen(false);
     navigate("/auth?redirect=/support/");
@@ -297,6 +315,14 @@ const CommunitySupportPage = () => {
       return;
     }
     setPaymentOpen(true);
+  };
+  const beginProductOrder = (product: SupportProduct) => {
+    if (!user) {
+      navigate("/auth?redirect=/support/%23merchandise");
+      return;
+    }
+    setOrderComplete(false);
+    setSelectedProduct(product);
   };
   const refreshPaymentLedger = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["community-support", "payment-ledger"] });
@@ -536,6 +562,7 @@ const CommunitySupportPage = () => {
                       <div className="flex flex-wrap items-center gap-2">
                         {!COMMUNITY_SUPPORT_PUBLIC && product.concept && <span className="rounded-full bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200 ring-1 ring-amber-300/20">{copy.concept}</span>}
                         {product.active && <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-200 ring-1 ring-emerald-300/20">{copy.active}</span>}
+                        <span className="rounded-full bg-violet-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-violet-200 ring-1 ring-violet-300/20">{product.fulfillmentMode === "digital" ? (lang === "en" ? "Digital delivery" : "Digitale levering") : (lang === "en" ? "Shipping" : "Wordt verzonden")}</span>
                       </div>
                       <h3 className="mt-4 font-heading text-xl font-black text-white">{product.name}</h3>
                       <p className="mt-2 min-h-12 text-sm leading-6 text-gray-400">{product.description}</p>
@@ -543,6 +570,7 @@ const CommunitySupportPage = () => {
                         <span className="font-heading text-xl font-black text-white">{formatMoney(product.price, lang)}</span>
                         <span className={`text-xs font-bold ${product.stock > 0 ? "text-gray-400" : "text-rose-300"}`}>{product.stock > 0 ? `${product.stock} ${copy.stock}` : copy.soldOut}</span>
                       </div>
+                      {(product.stock > 0 || activeMerchProducts.has(product.id)) && paymentSettings.paypalCheckoutEnabled && <button type="button" onClick={() => beginProductOrder(product)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"><ShoppingBag className="h-4 w-4" aria-hidden="true" />{activeMerchProducts.has(product.id) ? (lang === "en" ? "Resume order" : "Bestelling hervatten") : user ? copy.buy : copy.signInToBuy}</button>}
                     </div>
                   </Surface>)}
                 </div>
@@ -631,6 +659,23 @@ const CommunitySupportPage = () => {
             return Boolean(addPaymentIntent(draft));
           }}
         />
+      </PreviewModal>
+      <PreviewModal
+        open={Boolean(selectedProduct)}
+        onClose={() => setSelectedProduct(null)}
+        maxWidth="640px"
+        ariaLabel={lang === "en" ? "Merchandise checkout" : "Merchandise afrekenen"}
+        closeLabel={lang === "en" ? "Close merchandise checkout" : "Sluit merchandise checkout"}
+      >
+        {selectedProduct && (orderComplete ? <div role="status" className="rounded-2xl bg-emerald-500/10 p-6 text-emerald-100 ring-1 ring-emerald-400/20"><CheckCircle2 className="h-7 w-7" aria-hidden="true" /><p className="mt-4 font-heading text-xl font-black">{selectedProduct.fulfillmentMode === "digital" ? (lang === "en" ? "Payment confirmed. Your digital order is saved for email delivery." : "Betaling bevestigd. Je digitale bestelling is opgeslagen voor levering per e-mail.") : copy.orderComplete}</p><button type="button" onClick={() => setSelectedProduct(null)} className="mt-5 min-h-11 rounded-xl bg-white/10 px-5 text-sm font-black ring-1 ring-white/15">{lang === "en" ? "Close" : "Sluiten"}</button></div> : <MerchandiseCheckout product={selectedProduct} language={lang} onCancelled={() => {
+          setSelectedProduct(null);
+          void queryClient.invalidateQueries({ queryKey: ["community-support", "merch-orders", "active"] });
+        }} onCompleted={() => {
+          setOrderComplete(true);
+          void queryClient.invalidateQueries({ queryKey: ["community-support", "shared-data"] });
+          void queryClient.invalidateQueries({ queryKey: ["community-support", "payment-ledger"] });
+          void queryClient.invalidateQueries({ queryKey: ["community-support", "merch-orders", "active"] });
+        }} />)}
       </PreviewModal>
     </div>
   );

@@ -141,6 +141,7 @@ const productSchema = z.preprocess((value) => {
 }, z.object({
   id: z.string().min(1).max(100), name: z.string().min(1).max(100), description: z.string().min(1).max(500),
   price: moneySchema, purchasePrice: moneySchema, shippingCost: moneySchema,
+  fulfillmentMode: z.enum(["physical", "digital"]).default("physical"),
   stock: z.number().int().min(0).max(1_000_000), active: z.boolean(), concept: z.boolean(),
   imageUrls: z.array(productImageSchema).max(4).default([]),
 }));
@@ -425,7 +426,7 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(deleteRaceCost(id)) : true;
   }, [persist]);
   const addProduct = useCallback(async (draft: SupportProductDraft) => {
-    const normalized = withId({ ...draft, price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: safeAmount(draft.shippingCost), stock: Math.max(0, Math.floor(draft.stock)) });
+    const normalized = withId({ ...draft, price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: draft.fulfillmentMode === "physical" ? safeAmount(draft.shippingCost) : 0, stock: Math.max(0, Math.floor(draft.stock)) });
     setState((current) => ({ ...current, products: [normalized, ...current.products] }));
     return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(insertProduct(normalized)) : true;
   }, [persist]);
