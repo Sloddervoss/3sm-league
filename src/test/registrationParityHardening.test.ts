@@ -29,6 +29,7 @@ describe("public race-registration parity", () => {
     const calendar = source("src/pages/CalendarPage.tsx");
     const card = source("src/components/preview/NewRaceCard.tsx");
     expect(calendar).toContain("races.find((race) => isRaceLiveForDisplay(race, now))");
+    expect(calendar).toContain('race.status !== "completed" && race.status !== "cancelled"');
     expect(card).toContain('cancelled: { label: "Geannuleerd"');
   });
 

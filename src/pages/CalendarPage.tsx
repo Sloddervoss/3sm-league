@@ -122,7 +122,7 @@ const CalendarPage = () => {
             )}
 
             <div className="space-y-3">
-              {races.filter((race) => race.status !== "completed").map((race, i) => {
+              {races.filter((race) => race.status !== "completed" && race.status !== "cancelled").map((race, i) => {
                 const leagueId = race.leagues?.id;
                 return (
                   <NewRaceCard
