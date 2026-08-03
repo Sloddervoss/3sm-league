@@ -4,6 +4,7 @@ import {
   assertCaptureMatchesIntent,
   buildPayPalOrderPayload,
   extractPayPalCaptureSnapshot,
+  paypalCaptureIdFromCorrectionResource,
   paypalApiBase,
   toEurValue,
 } from "../../supabase/functions/_shared/paypal";
@@ -86,6 +87,18 @@ describe("PayPal Checkout server contract", () => {
     expect(() => paypalApiBase("staging")).toThrow(/environment/);
   });
 
+  it("resolves refund capture IDs from both PayPal correction payload shapes", () => {
+    expect(paypalCaptureIdFromCorrectionResource({
+      supplementary_data: { related_ids: { capture_id: "CAPTURE-FROM-RELATED" } },
+    })).toBe("CAPTURE-FROM-RELATED");
+    expect(paypalCaptureIdFromCorrectionResource({
+      links: [{ rel: "up", href: "https://api-m.sandbox.paypal.com/v2/payments/captures/CAPTURE-FROM-LINK" }],
+    })).toBe("CAPTURE-FROM-LINK");
+    expect(paypalCaptureIdFromCorrectionResource({
+      links: [{ rel: "up", href: "https://example.com/v2/payments/refunds/not-a-capture" }],
+    })).toBe("");
+  });
+
   it("keeps all secrets server-side and verifies auth, origin and webhook signatures", () => {
     const edge = readFileSync("supabase/functions/paypal-checkout/index.ts", "utf8");
     const config = readFileSync("supabase/config.toml", "utf8");
@@ -99,6 +112,7 @@ describe("PayPal Checkout server contract", () => {
     expect(edge).toContain('PAYMENT.CAPTURE.COMPLETED');
     expect(edge).toContain('PAYMENT.CAPTURE.REFUNDED');
     expect(edge).toContain('PAYMENT.CAPTURE.REVERSED');
+    expect(edge).toContain('.eq("paypal_environment", PAYPAL_ENV).eq("paypal_capture_id", resourceId)');
     expect(edge).toContain('currentOrder.status === "COMPLETED"');
     expect(config).toMatch(/\[functions\.paypal-checkout\]\nverify_jwt = false/);
   });
