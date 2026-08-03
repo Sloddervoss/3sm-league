@@ -388,7 +388,7 @@ async function executeResultImport(confirmation: ResultImportConfirmation, point
 
 export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" }: ResultImportWorkspaceProps) {
   const queryClient = useQueryClient();
-  const { state: supportState, initializeRaceCosts, saveRaceCost } = useCommunitySupport();
+  const { state: supportState, loading: supportDataLoading, persistenceError: supportDataError, initializeRaceCosts, saveRaceCost } = useCommunitySupport();
   const [mode, setMode] = useState<ResultImportMode>("json");
   const [raceId, setRaceId] = useState("");
   const [rows, setRows] = useState<ImportRow[]>([emptyRow(1)]);
@@ -470,16 +470,18 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
   };
   const sourceReady = mode === "manual" || Boolean(fileName);
   const hostingReady = !hostingEligible || normalizedHostingHours !== null;
-  const canConfirm = Boolean(selectedRace && sourceReady && participants.length && !unmatched.length && hostingReady && !racesLoading && !profilesLoading && !existingLoading && !carLocksLoading && !racesError && !profilesError && !carLocksError && !submitting);
+  const canConfirm = Boolean(selectedRace && sourceReady && participants.length && !unmatched.length && hostingReady && !supportDataLoading && !supportDataError && !racesLoading && !profilesLoading && !existingLoading && !carLocksLoading && !racesError && !profilesError && !carLocksError && !submitting);
   const confirmationBlocker = !selectedRace
     ? "Kies eerst de kalender-race waarvoor deze uitslag bedoeld is."
     : mode === "json" && !fileName
       ? "Upload daarna het iRacing result JSON voor deze race."
       : !participants.length
         ? "Voeg minstens één uitslagregel toe."
-        : profilesLoading || existingLoading || carLocksLoading
+        : supportDataLoading || profilesLoading || existingLoading || carLocksLoading
           ? "De live controlegegevens worden nog geladen."
-          : racesError || profilesError || carLocksError
+          : supportDataError
+            ? "Herlaad eerst de pagina: de gedeelde Community Support-data zijn niet beschikbaar."
+            : racesError || profilesError || carLocksError
             ? "Herstel eerst de fout bij het laden van live race-, profiel- of autolockgegevens."
             : unmatched.length
               ? "Los alle coureurmatches op voordat je verdergaat."
@@ -540,16 +542,18 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
 
   const importResults = useMutation({
     mutationFn: (confirmation: ResultImportConfirmation) => executeResultImport(confirmation, points, setWriteProgress),
-    onSuccess: ({ iRatingUpdates }, confirmation) => {
-      if (confirmation.hostingCostDraft && confirmation.hostingCostAction === "create") initializeRaceCosts([confirmation.hostingCostDraft]);
-      if (confirmation.hostingCostDraft && confirmation.hostingCostAction === "update") saveRaceCost(confirmation.hostingCostDraft);
+    onSuccess: async ({ iRatingUpdates }, confirmation) => {
+      let hostingStored = true;
+      if (confirmation.hostingCostDraft && confirmation.hostingCostAction === "create") hostingStored = await initializeRaceCosts([confirmation.hostingCostDraft]);
+      if (confirmation.hostingCostDraft && confirmation.hostingCostAction === "update") hostingStored = await saveRaceCost(confirmation.hostingCostDraft);
       invalidateResultImportQueries(queryClient);
       const hostingMessage = confirmation.hostingCostAction === "create" && confirmation.hostingCostDraft
-        ? ` · racehosting lokaal geboekt voor ${confirmation.hostingCostDraft.hostedHours} uur${confirmation.hostingCostDraft.discountApplied ? " met 25% korting" : " zonder korting"}`
+        ? ` · racehosting gedeeld geboekt voor ${confirmation.hostingCostDraft.hostedHours} uur${confirmation.hostingCostDraft.discountApplied ? " met 25% korting" : " zonder korting"}`
         : confirmation.hostingCostAction === "update" && confirmation.hostingCostDraft
           ? ` · racehosting aangepast naar ${confirmation.hostingCostDraft.hostedHours} uur${confirmation.hostingCostDraft.discountApplied ? " met 25% korting" : " zonder korting"}`
           : confirmation.hostingCostAction === "unchanged" ? " · bestaande racehosting ongewijzigd" : "";
-      setWriteSuccess(`Resultaten geïmporteerd${iRatingUpdates ? ` · iRating bijgewerkt voor ${iRatingUpdates} drivers` : ""}${hostingMessage}.`);
+      setWriteSuccess(`Resultaten geïmporteerd${iRatingUpdates ? ` · iRating bijgewerkt voor ${iRatingUpdates} drivers` : ""}${hostingStored ? hostingMessage : ""}.`);
+      if (!hostingStored) setWriteError("De resultaten staan live, maar de racehostingkosten konden niet worden opgeslagen. Controleer en boek deze race via Community Support > Racekosten.");
       setConfirming(false);
       setRaceId("");
       resetImport();
@@ -616,6 +620,7 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
       </header>
 
       {writeSuccess && <p role="status" className="rounded-xl border border-emerald-400/25 bg-emerald-400/[0.08] px-4 py-3 text-sm text-emerald-100"><CheckCircle2 className="mr-2 inline h-4 w-4 text-emerald-300" />{writeSuccess}</p>}
+      {writeError && !confirming && <p role="alert" className="rounded-xl border border-red-400/25 bg-red-400/[0.08] px-4 py-3 text-sm text-red-100">{writeError}</p>}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-5">
           <section className="rounded-2xl border border-white/[0.08] bg-[#151821] p-5">

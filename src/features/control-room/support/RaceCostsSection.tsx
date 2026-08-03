@@ -35,13 +35,14 @@ type Props = {
   selectedYear: string;
   onSelectedYearChange: (year: string) => void;
   raceCosts: SupportRaceCost[];
+  sharedDataLoading?: boolean;
   defaultUsdEurRate: number;
   hasRecurringServerCost: boolean;
-  onSave: (draft: SupportRaceCostDraft) => void;
-  onSaveMany: (drafts: SupportRaceCostDraft[]) => void;
-  onInitialize: (drafts: SupportRaceCostDraft[]) => void;
+  onSave: (draft: SupportRaceCostDraft) => Promise<boolean>;
+  onSaveMany: (drafts: SupportRaceCostDraft[]) => Promise<boolean>;
+  onInitialize: (drafts: SupportRaceCostDraft[]) => Promise<boolean>;
 
-  onRemove: (id: string) => void;
+  onRemove: (id: string) => Promise<boolean>;
 };
 
 type BulkDraft = { hours: string; discountApplied: boolean };
@@ -68,7 +69,7 @@ const COPY = {
     public: "Race en bedrag openbaar tonen",
     save: "Racekosten opslaan",
     update: "Racekosten bijwerken",
-    saved: "Racekosten lokaal opgeslagen",
+    saved: "Racekosten gedeeld opgeslagen",
     loading: "Races laden…",
     loadError: "De bestaande races konden niet worden geladen.",
     noRaces: "Voor dit seizoen zijn geen ondersteunde afgeronde races beschikbaar.",
@@ -117,7 +118,7 @@ const COPY = {
     public: "Show race and amount publicly",
     save: "Save race costs",
     update: "Update race costs",
-    saved: "Race costs saved locally",
+    saved: "Race costs saved to the shared backend",
     loading: "Loading races…",
     loadError: "The existing races could not be loaded.",
     noRaces: "No supported completed races are available for this season.",
@@ -195,7 +196,7 @@ const Toggle = ({ checked, onChange, text, disabled = false }: { checked: boolea
   <span aria-hidden="true" className="relative h-6 w-11 shrink-0 rounded-full bg-gray-700 transition peer-checked:bg-orange-500 peer-focus-visible:ring-2 peer-focus-visible:ring-orange-300"><span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${checked ? "left-6" : "left-1"}`} /></span>
 </label>;
 
-const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCosts, defaultUsdEurRate, hasRecurringServerCost, onSave, onSaveMany, onInitialize, onRemove }: Props) => {
+const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCosts, sharedDataLoading = false, defaultUsdEurRate, hasRecurringServerCost, onSave, onSaveMany, onInitialize, onRemove }: Props) => {
   const t = COPY[language];
   const formRef = useRef<HTMLFormElement>(null);
   const [selectedRaceId, setSelectedRaceId] = useState("");
@@ -230,10 +231,10 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
   })), [racesQuery.data]);
 
   useEffect(() => {
-    if (!racesQuery.isSuccess) return;
+    if (sharedDataLoading || !racesQuery.isSuccess) return;
     const completed = supportedRaces.filter(isCompleted);
-    onInitialize(completed.map((race) => raceDraft(race, DEFAULT_RACE_HOSTING_HOURS, false)));
-  }, [onInitialize, racesQuery.isSuccess, supportedRaces]);
+    void onInitialize(completed.map((race) => raceDraft(race, DEFAULT_RACE_HOSTING_HOURS, false)));
+  }, [onInitialize, racesQuery.isSuccess, sharedDataLoading, supportedRaces]);
 
   const availableYears = useMemo(() => Array.from(new Set([
     selectedYear,
@@ -285,12 +286,13 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
     setSaved(false);
   }, [raceCosts, selectedRace]);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedRace) return;
     const hours = normalizeHostedHours(Number(hostedHours));
     if (hours === null) return;
-    onSave({ ...raceDraft(selectedRace, hours, discountApplied), ...(existingCost ? { exchangeRateUsdEur: existingCost.exchangeRateUsdEur } : {}), isPublic, ...(note.trim() ? { note: note.trim() } : {}) });
+    const stored = await onSave({ ...raceDraft(selectedRace, hours, discountApplied), ...(existingCost ? { exchangeRateUsdEur: existingCost.exchangeRateUsdEur } : {}), isPublic, ...(note.trim() ? { note: note.trim() } : {}) });
+    if (!stored) return;
     setSaved(true);
   };
 
@@ -298,6 +300,10 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
     onSelectedYearChange(cost.date.slice(0, 4));
     setSelectedRaceId(cost.raceId);
     window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+  };
+
+  const remove = async (id: string) => {
+    if (await onRemove(id)) setDeleteId(null);
   };
 
   const bulkDraftFor = (group: SeasonGroup): BulkDraft => bulkDrafts[group.id] ?? {
@@ -310,11 +316,11 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
     setBulkDrafts((current) => ({ ...current, [group.id]: { ...bulkDraftFor(group), ...update } }));
   };
 
-  const applySeason = (group: SeasonGroup) => {
+  const applySeason = async (group: SeasonGroup) => {
     const draft = bulkDraftFor(group);
     const hours = normalizeHostedHours(Number(draft.hours));
     if (hours === null) return;
-    onSaveMany(group.costs.map((cost) => storedCostDraft(cost, hours, draft.discountApplied)));
+    if (!(await onSaveMany(group.costs.map((cost) => storedCostDraft(cost, hours, draft.discountApplied))))) return;
     setUpdatedSeasonId(group.id);
   };
 
@@ -352,7 +358,7 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
             <div className="min-w-0 md:col-span-2 2xl:col-span-1"><p className="break-words font-bold leading-snug text-white">{group.name}</p><p className="mt-1 truncate text-xs text-gray-500">{group.costs.length} {t.races} · {money(groupAmount, language)}</p></div>
             <label className="block min-w-0"><span className={label}>{t.hours}</span><input value={draft.hours} onChange={(event) => updateBulkDraft(group, { hours: event.target.value })} type="number" min="1" max="24" step="1" inputMode="numeric" className={input} /></label>
             <Toggle checked={draft.discountApplied} onChange={(checked) => updateBulkDraft(group, { discountApplied: checked })} text={t.discount} />
-            <button type="button" onClick={() => applySeason(group)} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white/[0.05] px-4 text-center text-sm font-black leading-snug text-white ring-1 ring-white/10 transition hover:bg-white/[0.09] md:col-span-2 md:w-auto md:justify-self-start 2xl:col-span-1 2xl:w-full 2xl:justify-self-stretch"><Check className="h-4 w-4 shrink-0" />{updatedSeasonId === group.id ? t.seasonUpdated : t.applySeason}</button>
+            <button type="button" onClick={() => void applySeason(group)} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white/[0.05] px-4 text-center text-sm font-black leading-snug text-white ring-1 ring-white/10 transition hover:bg-white/[0.09] md:col-span-2 md:w-auto md:justify-self-start 2xl:col-span-1 2xl:w-full 2xl:justify-self-stretch"><Check className="h-4 w-4 shrink-0" />{updatedSeasonId === group.id ? t.seasonUpdated : t.applySeason}</button>
           </article>;
         })}
       </div>
@@ -391,11 +397,11 @@ const RaceCostsSection = ({ language, selectedYear, onSelectedYearChange, raceCo
         <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-300"><Flag className="h-4 w-4" /></div>
           <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-white">{cost.raceName}</h3><span className="rounded-full bg-white/[0.04] px-2 py-1 text-[10px] font-black uppercase tracking-wider text-gray-400">{cost.raceScope === "season" ? cost.leagueName : t.standalone}</span>{!cost.isPublic && <span className="rounded-full bg-amber-400/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200">{t.private}</span>}</div><p className="mt-1 text-xs text-gray-500">{dateLabel(cost.date, language)} · {cost.track} · {cost.hostedHours}u · {cost.discountApplied ? t.discounted : t.noDiscount} · {moneyUsd(cost.sourceAmountUsd, language)} × {cost.exchangeRateUsdEur.toFixed(4)}{cost.note ? ` · ${cost.note}` : ""}</p></div>
-          <button type="button" role="switch" aria-checked={cost.discountApplied} onClick={() => onSave(storedCostDraft(cost, cost.hostedHours, !cost.discountApplied))} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-black ring-1 transition ${cost.discountApplied ? "bg-orange-500/10 text-orange-200 ring-orange-400/20" : "bg-white/[0.035] text-gray-400 ring-white/10"}`}><Percent className="h-3.5 w-3.5" />{cost.discountApplied ? t.discounted : t.noDiscount}</button>
+          <button type="button" role="switch" aria-checked={cost.discountApplied} onClick={() => void onSave(storedCostDraft(cost, cost.hostedHours, !cost.discountApplied))} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-black ring-1 transition ${cost.discountApplied ? "bg-orange-500/10 text-orange-200 ring-orange-400/20" : "bg-white/[0.035] text-gray-400 ring-white/10"}`}><Percent className="h-3.5 w-3.5" />{cost.discountApplied ? t.discounted : t.noDiscount}</button>
           <p className="shrink-0 font-heading text-xl font-black text-white">{money(cost.amount, language)}</p>
           <div className="flex gap-2"><button type="button" onClick={() => startEdit(cost)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/[0.04] px-3 text-xs font-bold text-gray-300 ring-1 ring-white/10 hover:bg-white/[0.08]"><Pencil className="h-3.5 w-3.5" />{t.edit}</button><button type="button" onClick={() => setDeleteId(cost.id)} aria-label={`${t.remove}: ${cost.raceName}`} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-rose-500/10 hover:text-rose-300"><Trash2 className="h-4 w-4" /></button></div>
         </div>
-        {deleteId === cost.id && <div role="alert" className="mt-4 flex flex-col gap-3 rounded-xl bg-rose-500/[0.06] p-4 ring-1 ring-rose-400/15 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-bold text-rose-100">{t.confirmRemove}</p><div className="flex gap-2"><button type="button" onClick={() => setDeleteId(null)} className="min-h-10 rounded-xl bg-white/[0.04] px-3 text-xs font-bold text-gray-300">{t.cancel}</button><button type="button" onClick={() => { onRemove(cost.id); setDeleteId(null); }} className="min-h-10 rounded-xl bg-rose-600 px-3 text-xs font-black text-white">{t.confirm}</button></div></div>}
+        {deleteId === cost.id && <div role="alert" className="mt-4 flex flex-col gap-3 rounded-xl bg-rose-500/[0.06] p-4 ring-1 ring-rose-400/15 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm font-bold text-rose-100">{t.confirmRemove}</p><div className="flex gap-2"><button type="button" onClick={() => setDeleteId(null)} className="min-h-10 rounded-xl bg-white/[0.04] px-3 text-xs font-bold text-gray-300">{t.cancel}</button><button type="button" onClick={() => void remove(cost.id)} className="min-h-10 rounded-xl bg-rose-600 px-3 text-xs font-black text-white">{t.confirm}</button></div></div>}
       </article>)}
     </div>}
   </section>;

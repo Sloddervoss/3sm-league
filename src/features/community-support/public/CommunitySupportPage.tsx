@@ -27,6 +27,7 @@ import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
 import { COMMUNITY_SUPPORT_HAS_SHARED_DATA, COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
 import { fetchPublicPaymentConfig, fetchSharedPaymentLedger, submitPaymentIntent } from "../paymentApi";
+import { emptySharedSupportState, fetchPublicCommunitySupportData } from "../supportDataApi";
 import { useCommunitySupport } from "../store";
 import SeasonLedgerModal from "./SeasonLedgerModal";
 import PayPalContributionModal from "./PayPalContributionModal";
@@ -240,7 +241,7 @@ const CommunitySupportPage = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { state, addPaymentIntent } = useCommunitySupport();
+  const { state: adminState, addPaymentIntent } = useCommunitySupport();
   const lang: Language = language === "en" ? "en" : "nl";
   const copy = getCopy(lang);
   const currentMonth = monthKey(new Date());
@@ -251,15 +252,24 @@ const CommunitySupportPage = () => {
     enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
     staleTime: 60_000,
   });
+  const { data: sharedSupportData, isError: sharedSupportDataError } = useQuery({
+    queryKey: ["community-support", "shared-data", "public"],
+    queryFn: fetchPublicCommunitySupportData,
+    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
+    staleTime: 0,
+  });
+  const emptyPublicState = useMemo(emptySharedSupportState, []);
+  const state = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (sharedSupportData?.displayState ?? emptyPublicState) : adminState;
 
   const availableYears = useMemo(() => Array.from(new Set([
     currentYear,
     ...state.ledger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
     ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
+    ...(sharedSupportData?.metricLedger ?? []).map((entry) => entry.date.slice(0, 4)),
     ...(sharedPaymentLedger?.entries ?? []).map((entry) => entry.date.slice(0, 4)),
     ...(sharedPaymentLedger?.metricEntries ?? []).map((entry) => entry.date.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, sharedPaymentLedger, state.ledger, state.raceCosts, state.recurringCosts]);
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, sharedPaymentLedger, sharedSupportData, state.ledger, state.raceCosts, state.recurringCosts]);
 
   const requestedPeriodRef = useRef({
     year: new URLSearchParams(window.location.search).get("year"),
@@ -339,9 +349,15 @@ const CommunitySupportPage = () => {
   const stateWithoutLocalPayPal = useMemo(() => COMMUNITY_SUPPORT_HAS_SHARED_DATA
     ? { ...state, ledger: state.ledger.filter((entry) => !entry.id.startsWith("paypal-contribution:") && !entry.id.startsWith("paypal-fee:")) }
     : state, [state]);
-  const metricState = useMemo(() => sharedPaymentLedger
-    ? { ...stateWithoutLocalPayPal, ledger: [...stateWithoutLocalPayPal.ledger, ...sharedPaymentLedger.metricEntries] }
-    : stateWithoutLocalPayPal, [sharedPaymentLedger, stateWithoutLocalPayPal]);
+  const metricState = useMemo(() => {
+    if (!COMMUNITY_SUPPORT_HAS_SHARED_DATA) return stateWithoutLocalPayPal;
+    return {
+      ...stateWithoutLocalPayPal,
+      ledger: [...(sharedSupportData?.metricLedger ?? []), ...(sharedPaymentLedger?.metricEntries ?? [])],
+      recurringCosts: [],
+      raceCosts: [],
+    };
+  }, [sharedPaymentLedger, sharedSupportData, stateWithoutLocalPayPal]);
   const metrics = useMemo(() => supportMetricsForYear(metricState, selectedYear), [metricState, selectedYear]);
   const annualPublicLedger = useMemo(() => [
     ...publicLedgerForYear(stateWithoutLocalPayPal, selectedYear),
@@ -385,6 +401,7 @@ const CommunitySupportPage = () => {
     <div className="min-h-screen bg-background text-gray-100">
       <Navbar />
       <main className="overflow-hidden pt-16">
+        {sharedSupportDataError && <div role="alert" className="mx-auto mt-6 max-w-7xl px-4 sm:px-6"><div className="rounded-2xl border border-rose-400/25 bg-rose-500/10 p-4 text-sm font-bold text-rose-100">{lang === "en" ? "The current Community Support data could not be loaded. Please try again." : "De actuele Community Support-gegevens konden niet worden geladen. Probeer de pagina opnieuw."}</div></div>}
         <header className="relative border-b border-white/[0.055]">
           <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(circle_at_70%_18%,rgba(249,115,22,0.14),transparent_31%),radial-gradient(circle_at_15%_80%,rgba(234,88,12,0.07),transparent_30%),linear-gradient(180deg,#11141c_0%,#0d1016_100%)]" />
           <div aria-hidden="true" className="absolute -right-24 top-10 h-72 w-72 rounded-full border border-orange-400/[0.08]" />

@@ -45,7 +45,7 @@ const COPY: Record<Language, Copy> = {
   nl: {
     title: "Supportbeheer",
     eyebrow: "Community Support",
-    intro: "Beheer bijdragen, kosten, producten en publieke voorkeuren vanuit één lokale omgeving.",
+    intro: "Beheer bijdragen, kosten, producten en publieke voorkeuren vanuit één gedeelde omgeving.",
     publicPage: "Open publieke supportpagina",
     dashboard: "Overzicht",
     ledger: "Transacties",
@@ -78,7 +78,7 @@ const COPY: Record<Language, Copy> = {
     showAmount: "Bedrag openbaar tonen",
     addTransaction: "Transactie toevoegen",
     noTransactions: "Geen transacties in deze maand.",
-    allTransactions: "Alle lokale transacties",
+    allTransactions: "Alle transacties",
     remove: "Verwijderen",
     recurringHelp: "Kies of een actieve kostenpost iedere maand of eenmaal per jaar terugkomt.",
     startsOn: "Startdatum",
@@ -98,7 +98,7 @@ const COPY: Record<Language, Copy> = {
     stock: "Voorraad",
     productImages: "Productfoto’s (optioneel)",
     chooseImages: "Foto’s kiezen",
-    imageHelp: "Maximaal 4 foto’s. JPEG, PNG of WebP; bestanden worden automatisch verkleind en alleen lokaal bewaard.",
+    imageHelp: "Maximaal 4 foto’s. JPEG, PNG of WebP; bestanden worden automatisch verkleind en in de gedeelde backend opgeslagen.",
     imageError: "Een of meer foto’s konden niet worden verwerkt. Gebruik JPEG, PNG of WebP van maximaal 12 MB.",
     imageLimit: "Je kunt maximaal 4 productfoto’s toevoegen.",
     removeImage: "Foto verwijderen",
@@ -136,7 +136,7 @@ const COPY: Record<Language, Copy> = {
   en: {
     title: "Support management",
     eyebrow: "Community Support",
-    intro: "Manage contributions, costs, products and public preferences in one local workspace.",
+    intro: "Manage contributions, costs, products and public preferences in one shared workspace.",
     publicPage: "Open public support page",
     dashboard: "Overview",
     ledger: "Transactions",
@@ -169,7 +169,7 @@ const COPY: Record<Language, Copy> = {
     showAmount: "Show amount publicly",
     addTransaction: "Add transaction",
     noTransactions: "No transactions in this month.",
-    allTransactions: "All local transactions",
+    allTransactions: "All transactions",
     remove: "Delete",
     recurringHelp: "Choose whether an active cost recurs every month or once per year.",
     startsOn: "Start date",
@@ -189,7 +189,7 @@ const COPY: Record<Language, Copy> = {
     stock: "Stock",
     productImages: "Product photos (optional)",
     chooseImages: "Choose photos",
-    imageHelp: "Up to 4 photos. JPEG, PNG or WebP; files are resized automatically and stored locally only.",
+    imageHelp: "Up to 4 photos. JPEG, PNG or WebP; files are resized automatically and stored in the shared backend.",
     imageError: "One or more photos could not be processed. Use JPEG, PNG or WebP up to 12 MB.",
     imageLimit: "You can add up to 4 product photos.",
     removeImage: "Remove photo",
@@ -266,7 +266,7 @@ const CommunitySupportModule = () => {
   const language: Language = currentLanguage === "en" ? "en" : "nl";
   const t = COPY[language];
   const {
-    state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost,
+    state, loading, persistenceError, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost,
     removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, resolvePayment, clearLocalData,
   } = useCommunitySupport();
   const [section, setSection] = useState<SectionId>("dashboard");
@@ -286,6 +286,7 @@ const CommunitySupportModule = () => {
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const [clearPhrase, setClearPhrase] = useState("");
+  const [clearing, setClearing] = useState(false);
   const ledgerFormRef = useRef<HTMLFormElement>(null);
   const recurringFormRef = useRef<HTMLFormElement>(null);
   const productFormRef = useRef<HTMLFormElement>(null);
@@ -327,6 +328,11 @@ const CommunitySupportModule = () => {
   const visibleEntries = useMemo(() => state.ledger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [state.ledger, selectedMonth]);
   const inventoryValue = useMemo(() => state.products.reduce((sum, product) => sum + product.price * product.stock, 0), [state.products]);
   const confirmationWord = language === "en" ? "DELETE" : "WISSEN";
+  const clearTitle = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (language === "en" ? "Clear shared production data" : "Gedeelde productiedata wissen") : t.localData;
+  const clearHelp = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (language === "en" ? "Permanently removes all non-payment Community Support transactions, costs, products and settings from Supabase." : "Verwijdert alle niet-betaalgerelateerde Community Support-transacties, kosten, producten en instellingen definitief uit Supabase.") : t.localDataHelp;
+  const clearButton = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (language === "en" ? "Clear shared data" : "Gedeelde data wissen") : t.clearData;
+  const clearConfirmTitle = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (language === "en" ? "Permanently clear shared production data?" : "Gedeelde productiedata definitief wissen?") : t.confirmTitle;
+  const clearConfirmHelp = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (language === "en" ? "Type DELETE to confirm. This affects every visitor and cannot be undone." : "Typ WISSEN om te bevestigen. Dit raakt iedere bezoeker en kan niet ongedaan worden gemaakt.") : t.confirmHelp;
 
   useEffect(() => {
     setSettingsDraft(state.settings);
@@ -360,7 +366,7 @@ const CommunitySupportModule = () => {
     <option key={category} value={category}>{SUPPORT_CATEGORY_LABELS[category][language]}</option>
   ));
 
-  const submitLedger = (event: FormEvent<HTMLFormElement>) => {
+  const submitLedger = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -373,13 +379,13 @@ const CommunitySupportModule = () => {
       description: String(data.get("description")).trim(), amount, isPublic: ledgerPublic,
       ...(ledgerDirection === "income" && supporterName ? { supporterName, showSupporterName, showAmount: showSupporterAmount } : {}),
     };
-    addLedgerEntry(draft);
+    if (!(await addLedgerEntry(draft))) return;
     form.reset();
     const dateInput = form.elements.namedItem("date") as HTMLInputElement | null;
     if (dateInput) dateInput.value = today();
   };
 
-  const submitRecurring = (event: FormEvent<HTMLFormElement>) => {
+  const submitRecurring = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -392,7 +398,7 @@ const CommunitySupportModule = () => {
       frequency: String(data.get("frequency")) as SupportRecurringCostDraft["frequency"],
       isPublic: recurringPublic, active: true,
     };
-    addRecurringCost(draft);
+    if (!(await addRecurringCost(draft))) return;
     form.reset();
     const dateInput = form.elements.namedItem("startsOn") as HTMLInputElement | null;
     if (dateInput) dateInput.value = today();
@@ -419,7 +425,7 @@ const CommunitySupportModule = () => {
     setProductImagesBusy(false);
   };
 
-  const submitProduct = (event: FormEvent<HTMLFormElement>) => {
+  const submitProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -431,7 +437,7 @@ const CommunitySupportModule = () => {
       imageUrls: productImages,
     };
     if (![draft.price, draft.purchasePrice, draft.shippingCost, draft.stock].every(Number.isFinite) || draft.price < 0 || draft.purchasePrice < 0 || draft.shippingCost < 0 || draft.stock < 0) return;
-    addProduct(draft);
+    if (!(await addProduct(draft))) return;
     form.reset();
     setProductActive(false);
     setProductConcept(true);
@@ -439,11 +445,20 @@ const CommunitySupportModule = () => {
     setProductImageError(null);
   };
 
-  const submitSettings = (event: FormEvent<HTMLFormElement>) => {
+  const submitSettings = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    updateSettings(settingsDraft);
+    if (!(await updateSettings(settingsDraft))) return;
     setSettingsSaved(true);
     window.setTimeout(() => setSettingsSaved(false), 2500);
+  };
+
+  const confirmClear = async () => {
+    setClearing(true);
+    const cleared = await clearLocalData();
+    setClearing(false);
+    if (!cleared) return;
+    setClearOpen(false);
+    setSection("dashboard");
   };
 
   const sections: Array<{ id: SectionId; label: string; icon: ReactNode; count?: number }> = [
@@ -463,6 +478,20 @@ const CommunitySupportModule = () => {
     </section>
   );
 
+  if (loading) return (
+    <section role="status" className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-gray-300">
+      {language === "en" ? "Loading shared Community Support data…" : "Gedeelde Community Support-data laden…"}
+    </section>
+  );
+
+  if (COMMUNITY_SUPPORT_HAS_SHARED_DATA && persistenceError) return (
+    <section role="alert" className="rounded-2xl border border-rose-400/25 bg-rose-500/10 p-6 text-sm text-rose-100">
+      <h2 className="font-heading text-lg font-black">{language === "en" ? "Shared data unavailable" : "Gedeelde data niet beschikbaar"}</h2>
+      <p className="mt-2">{language === "en" ? "Management is blocked to prevent overwriting incomplete data. Reload the page and try again." : "Beheer is geblokkeerd om te voorkomen dat onvolledige data wordt overschreven. Herlaad de pagina en probeer opnieuw."}</p>
+      <p className="mt-2 text-xs text-rose-100/70">{persistenceError}</p>
+    </section>
+  );
+
   return (
     <div className="relative min-w-0 overflow-hidden text-white">
         <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-orange-500/[0.07] blur-[120px]" />
@@ -475,6 +504,8 @@ const CommunitySupportModule = () => {
             </div>
             <Link to="/support/" className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 transition hover:bg-white/[0.08] hover:text-white lg:self-auto">{t.publicPage}<ChevronRight className="h-4 w-4" /></Link>
           </header>
+
+          {persistenceError && <div role="alert" className="mt-6 rounded-2xl border border-rose-400/25 bg-rose-500/10 p-4 text-sm font-bold text-rose-100">{language === "en" ? "Save failed" : "Opslaan mislukt"}: {persistenceError}</div>}
 
           <div className="mt-8 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[230px_minmax(0,1fr)]">
             <nav aria-label={language === "en" ? "Management sections" : "Beheersecties"} className="min-w-0 max-w-full lg:sticky lg:top-24 lg:self-start">
@@ -529,6 +560,7 @@ const CommunitySupportModule = () => {
                   selectedYear={selectedYear}
                   onSelectedYearChange={setSelectedYear}
                   raceCosts={state.raceCosts}
+                  sharedDataLoading={loading}
                   defaultUsdEurRate={state.settings.usdEurRate}
                   hasRecurringServerCost={state.recurringCosts.some((cost) => cost.category === "server")}
                   onSave={saveRaceCost}
@@ -586,17 +618,17 @@ const CommunitySupportModule = () => {
                   <div><h3 className="mb-3 text-sm font-black text-gray-200">{t.supporterDefaults}</h3><div className="grid gap-3 md:grid-cols-2"><Toggle checked={settingsDraft.publicSupporterNamesByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterNamesByDefault: checked }))} label={t.namesDefault} /><Toggle checked={settingsDraft.publicSupporterAmountsByDefault} onChange={(checked) => setSettingsDraft((current) => ({ ...current, publicSupporterAmountsByDefault: checked }))} label={t.amountsDefault} /></div></div>
                   <button type="submit" className={primaryButton}>{settingsSaved ? <Check className="h-4 w-4" /> : <Settings className="h-4 w-4" />}{settingsSaved ? t.saved : t.saveSettings}</button>
                 </form>
-                <div className="rounded-[1.65rem] bg-rose-500/[0.045] p-6 ring-1 ring-rose-400/15 md:p-8"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><div><h3 className="font-heading text-lg font-black">{t.localData}</h3><p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">{t.localDataHelp}</p></div></div><button type="button" onClick={() => { setClearPhrase(""); setClearOpen(true); }} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-black text-rose-200 ring-1 ring-rose-400/20 transition hover:bg-rose-500/20"><Trash2 className="h-4 w-4" />{t.clearData}</button></div></div>
+                {(!COMMUNITY_SUPPORT_HAS_SHARED_DATA || isSuperAdmin) && <div className="rounded-[1.65rem] bg-rose-500/[0.045] p-6 ring-1 ring-rose-400/15 md:p-8"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><div><h3 className="font-heading text-lg font-black">{clearTitle}</h3><p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">{clearHelp}</p></div></div><button type="button" onClick={() => { setClearPhrase(""); setClearOpen(true); }} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-black text-rose-200 ring-1 ring-rose-400/20 transition hover:bg-rose-500/20"><Trash2 className="h-4 w-4" />{clearButton}</button></div></div>}
               </section>}
             </div>
           </div>
         </div>
-      {clearOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setClearOpen(false); }}>
+      {clearOpen && (!COMMUNITY_SUPPORT_HAS_SHARED_DATA || isSuperAdmin) && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setClearOpen(false); }}>
         <div ref={clearDialogRef} role="dialog" aria-modal="true" aria-labelledby="clear-data-title" aria-describedby="clear-data-description" className="w-full max-w-lg rounded-[1.65rem] bg-card p-6 shadow-2xl shadow-black/60 ring-1 ring-rose-400/20 md:p-8">
           <div className="flex items-start justify-between gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300"><ShieldAlert className="h-5 w-5" /></div><button type="button" onClick={() => setClearOpen(false)} aria-label={t.cancel} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 hover:bg-white/[0.05] hover:text-white"><X className="h-5 w-5" /></button></div>
-          <h2 id="clear-data-title" className="mt-5 font-heading text-2xl font-black">{t.confirmTitle}</h2><p id="clear-data-description" className="mt-3 text-sm leading-relaxed text-gray-400">{t.confirmHelp}</p>
+          <h2 id="clear-data-title" className="mt-5 font-heading text-2xl font-black">{clearConfirmTitle}</h2><p id="clear-data-description" className="mt-3 text-sm leading-relaxed text-gray-400">{clearConfirmHelp}</p>
           <input value={clearPhrase} onChange={(event) => setClearPhrase(event.target.value)} placeholder={t.confirmPlaceholder} autoComplete="off" className={cx(input, "mt-5")} />
-          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button ref={cancelClearRef} type="button" onClick={() => setClearOpen(false)} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 hover:bg-white/[0.08]">{t.cancel}</button><button type="button" disabled={clearPhrase !== confirmationWord} onClick={() => { clearLocalData(); setClearOpen(false); setSection("dashboard"); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-4 w-4" />{t.confirmClear}</button></div>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button ref={cancelClearRef} type="button" disabled={clearing} onClick={() => setClearOpen(false)} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-200 ring-1 ring-white/10 hover:bg-white/[0.08] disabled:opacity-40">{t.cancel}</button><button type="button" disabled={clearing || clearPhrase !== confirmationWord} onClick={() => void confirmClear()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-4 w-4" />{t.confirmClear}</button></div>
         </div>
       </div>}
     </div>
