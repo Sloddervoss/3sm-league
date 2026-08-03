@@ -1,4 +1,4 @@
 {
   "public": false,
-  "dataSource": "local-session"
+  "dataSource": "supabase"
 }
