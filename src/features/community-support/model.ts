@@ -180,6 +180,9 @@ const toPublicRaceCost = (cost: SupportRaceCost): PublicSupportRaceCost => ({
   discountApplied: cost.discountApplied,
   sourceAmountUsd: cost.sourceAmountUsd,
   exchangeRateUsdEur: cost.exchangeRateUsdEur,
+  vatRate: cost.vatRate,
+  netAmount: cost.netAmount,
+  vatAmount: cost.vatAmount,
   amount: cost.amount,
   isPublic: true,
 });
@@ -203,6 +206,9 @@ const raceCostLedgerEntries = (costs: PublicSupportRaceCost[]): PublicSupportLed
   amount: cost.amount,
   sourceAmountUsd: cost.sourceAmountUsd,
   exchangeRateUsdEur: cost.exchangeRateUsdEur,
+  vatRate: cost.vatRate,
+  netAmount: cost.netAmount,
+  vatAmount: cost.vatAmount,
   isPublic: true,
 }));
 

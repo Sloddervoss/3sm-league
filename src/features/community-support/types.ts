@@ -35,6 +35,9 @@ export type PublicSupportLedgerEntry = Omit<SupportLedgerEntry, "amount" | "isPu
   supporterName?: string;
   sourceAmountUsd?: number;
   exchangeRateUsdEur?: number;
+  vatRate?: number;
+  netAmount?: number;
+  vatAmount?: number;
 };
 
 export type SupportRecurringCost = {
@@ -63,12 +66,15 @@ export type SupportRaceCost = {
   discountApplied: boolean;
   sourceAmountUsd: number;
   exchangeRateUsdEur: number;
+  vatRate: number;
+  netAmount: number;
+  vatAmount: number;
   amount: number;
   isPublic: boolean;
   note?: string;
 };
 
-export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "hostedHours" | "discountApplied" | "sourceAmountUsd" | "exchangeRateUsdEur" | "amount"> & {
+export type PublicSupportRaceCost = Pick<SupportRaceCost, "raceScope" | "leagueName" | "season" | "raceName" | "track" | "date" | "hostedHours" | "discountApplied" | "sourceAmountUsd" | "exchangeRateUsdEur" | "vatRate" | "netAmount" | "vatAmount" | "amount"> & {
   isPublic: true;
 };
 

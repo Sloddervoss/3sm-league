@@ -8,7 +8,7 @@ import SeasonLedgerModal from "@/features/community-support/public/SeasonLedgerM
 import RaceCostsSection from "@/features/control-room/support/RaceCostsSection";
 import type { PublicSupportLedgerEntry, PublicSupportRaceCost, SupportRaceCost } from "@/features/community-support/types";
 import { isSupportedCommunitySupportRace } from "@/features/community-support/raceEligibility";
-import { calculateRaceHostingAmountUsd, configuredRaceHours, convertUsdToEur } from "@/features/community-support/raceHostingPricing";
+import { calculateRaceHostingAmountUsd, calculateRaceHostingEurBreakdown, configuredRaceHours, convertUsdToEur } from "@/features/community-support/raceHostingPricing";
 
 const raceRows = vi.hoisted(() => [
   { id: "season-a", league_id: "league-a", name: "Race 1", track: "Spa", race_date: "2026-07-10T18:00:00Z", race_type: "Sprint", race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min", round: 1, status: "completed", leagues: { name: "Sprint Cup", season: "2026" } },
@@ -22,28 +22,28 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const costs: PublicSupportRaceCost[] = [
-  { raceScope: "season", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", hostedHours: 2, discountApplied: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, amount: 0.69, isPublic: true },
-  { raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", hostedHours: 1, discountApplied: false, sourceAmountUsd: 0.5, exchangeRateUsdEur: 0.92, amount: 0.46, isPublic: true },
+  { raceScope: "season", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", hostedHours: 2, discountApplied: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, vatRate: 0.21, netAmount: 0.69, vatAmount: 0.14, amount: 0.83, isPublic: true },
+  { raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", hostedHours: 1, discountApplied: false, sourceAmountUsd: 0.5, exchangeRateUsdEur: 0.92, vatRate: 0.21, netAmount: 0.46, vatAmount: 0.1, amount: 0.56, isPublic: true },
 ];
 
 describe("Community Support race cost UI", () => {
   it("renders a year total, average and the actual public races", () => {
-    render(<RaceCostsOverview language="nl" selectedYear="2026" costs={costs} totalCount={2} totalAmountEur={1.15} />);
+    render(<RaceCostsOverview language="nl" selectedYear="2026" costs={costs} totalCount={2} totalAmountEur={1.39} />);
 
     expect(screen.getByRole("heading", { name: "Racehosting in het open boek · 2026" })).toBeInTheDocument();
     expect(screen.getByText("Race 1")).toBeInTheDocument();
     expect(screen.getByText("Losse race", { selector: "h3" })).toBeInTheDocument();
-    expect(screen.getByText(/€\s*1,15/)).toBeInTheDocument();
-    expect(screen.getByText(/€\s*0,58/)).toBeInTheDocument();
+    expect(screen.getByText(/€\s*1,39/)).toBeInTheDocument();
+    expect(screen.getByText(/€\s*0,70/)).toBeInTheDocument();
     expect(screen.getByText("25% toegepast", { selector: "dd" })).toBeInTheDocument();
     expect(screen.getAllByText("1 USD = 0.9200 EUR")).toHaveLength(2);
   });
 
   it("keeps private race amounts in aggregate totals without rendering private details", () => {
-    render(<RaceCostsOverview language="nl" selectedYear="2026" costs={[costs[0]]} totalCount={2} totalAmountEur={1.15} />);
+    render(<RaceCostsOverview language="nl" selectedYear="2026" costs={[costs[0]]} totalCount={2} totalAmountEur={1.39} />);
     const recordedCard = screen.getByText("Races met kosten").closest("article");
     expect(recordedCard).toHaveTextContent("2");
-    expect(screen.getByText(/€\s*1,15/)).toBeInTheDocument();
+    expect(screen.getByText(/€\s*1,39/)).toBeInTheDocument();
     expect(screen.getByText("Race 1")).toBeInTheDocument();
     expect(screen.queryByText("Losse race")).not.toBeInTheDocument();
   });
@@ -54,6 +54,8 @@ describe("Community Support race cost UI", () => {
     expect(calculateRaceHostingAmountUsd(2, true)).toBe(0.75);
     expect(calculateRaceHostingAmountUsd(3, false)).toBe(1.5);
     expect(convertUsdToEur(0.75, 0.92)).toBe(0.69);
+    expect(calculateRaceHostingEurBreakdown(0.75, 0.92)).toEqual({ vatRate: 0.21, netAmount: 0.69, vatAmount: 0.14, amount: 0.83 });
+    expect(calculateRaceHostingEurBreakdown(2.5, 0.938)).toEqual({ vatRate: 0.21, netAmount: 2.35, vatAmount: 0.49, amount: 2.84 });
     expect(configuredRaceHours("60 min")).toBe(1);
     expect(configuredRaceHours("2 hours")).toBe(2);
     expect(configuredRaceHours("180")).toBe(3);
@@ -75,10 +77,13 @@ describe("Community Support race cost UI", () => {
       discountApplied: false,
       sourceAmountUsd: 0.5,
       exchangeRateUsdEur: 0.92,
-      amount: 0.46,
+      vatRate: 0.21,
+      netAmount: 0.46,
+      vatAmount: 0.1,
+      amount: 0.56,
       isPublic: true,
     }));
-    const view = render(<RaceCostsOverview language="nl" selectedYear="2026" costs={manyCosts} totalCount={35} totalAmountEur={16.1} />);
+    const view = render(<RaceCostsOverview language="nl" selectedYear="2026" costs={manyCosts} totalCount={35} totalAmountEur={19.6} />);
     expect(view.container.querySelectorAll("details")).toHaveLength(35);
     expect(view.container.querySelectorAll("article")).toHaveLength(3);
     expect(screen.getByText("Race 35")).toBeInTheDocument();
@@ -87,7 +92,7 @@ describe("Community Support race cost UI", () => {
   it("keeps race transactions out of the default tab and reveals their details in the race tab", () => {
     const ledger: PublicSupportLedgerEntry[] = [
       { id: "contribution", date: "2026-07-12", direction: "income", category: "contribution", description: "Vrijwillige bijdrage", amount: 10, isPublic: true, supporterName: "Vincent" },
-      { id: "race-entry", date: "2026-07-10", direction: "expense", category: "race_hosting", description: "Race 1 hostingboeking", amount: 0.69, isPublic: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92 },
+      { id: "race-entry", date: "2026-07-10", direction: "expense", category: "race_hosting", description: "Race 1 hostingboeking", amount: 0.83, isPublic: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, vatRate: 0.21, netAmount: 0.69, vatAmount: 0.14 },
     ];
 
     render(<SeasonLedgerModal
@@ -100,8 +105,8 @@ describe("Community Support race cost UI", () => {
       visibleLedger={ledger}
       raceCosts={costs}
       totalRaceCount={2}
-      raceCostTotalEur={1.15}
-      summary={{ operationalExpenses: 1.15, communityCovered: 1.15, selfFunded: 0, reserve: 8.85 }}
+      raceCostTotalEur={1.39}
+      summary={{ operationalExpenses: 1.39, communityCovered: 1.39, selfFunded: 0, reserve: 8.61 }}
     />);
 
     expect(screen.getByRole("tab", { name: "Transacties" })).toHaveAttribute("aria-selected", "true");
@@ -154,13 +159,10 @@ describe("Community Support race cost UI", () => {
     ]));
     expect(initializedDrafts).not.toEqual(expect.arrayContaining([expect.objectContaining({ raceId: "endurance" })]));
 
-    const storedCosts = initializedDrafts.map((draft: Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur">, index: number): SupportRaceCost => ({
-      ...draft,
-      id: `cost-${index}`,
-      sourceAmountUsd: calculateRaceHostingAmountUsd(draft.hostedHours, draft.discountApplied),
-      exchangeRateUsdEur: 0.92,
-      amount: convertUsdToEur(calculateRaceHostingAmountUsd(draft.hostedHours, draft.discountApplied), 0.92),
-    }));
+    const storedCosts = initializedDrafts.map((draft: Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur" | "vatRate" | "netAmount" | "vatAmount">, index: number): SupportRaceCost => {
+      const sourceAmountUsd = calculateRaceHostingAmountUsd(draft.hostedHours, draft.discountApplied);
+      return { ...draft, id: `cost-${index}`, sourceAmountUsd, exchangeRateUsdEur: 0.92, ...calculateRaceHostingEurBreakdown(sourceAmountUsd, 0.92) };
+    });
     storedCosts[0] = { ...storedCosts[0], isPublic: false, note: "bewaren" };
     view.rerender(renderSection(storedCosts));
 

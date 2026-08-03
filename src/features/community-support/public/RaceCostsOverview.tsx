@@ -15,9 +15,9 @@ const COPY = {
   nl: {
     eyebrow: "Kosten op de kalender",
     title: "Racehosting in het open boek",
-    intro: "Iedere Hosted Session is één EUR-kostenpost. Open een race voor de oorspronkelijke USD-prijs, gehoste uren, eventuele korting en de koers die bij deze boeking is vastgelegd.",
+    intro: "Iedere Hosted Session is één EUR-kostenpost inclusief 21% btw. Open een race voor de netto prijs, btw, oorspronkelijke USD-prijs, gehoste uren, eventuele korting en de vastgelegde koers.",
     recorded: "Races met kosten",
-    total: "Racekosten seizoen",
+    total: "Racekosten seizoen incl. btw",
     average: "Gemiddeld per race",
     empty: "Nog geen openbare racekosten voor dit seizoen",
     emptyHint: "Zodra een racebedrag is ingevuld en openbaar gemaakt, verschijnt de race hier.",
@@ -31,15 +31,17 @@ const COPY = {
     noDiscount: "Geen korting",
     sourceAmount: "Oorspronkelijke USD-prijs",
     exchangeRate: "Gebruikte USD/EUR-koers",
-    bookedAmount: "Geboekt EUR-bedrag",
+    netAmount: "Netto EUR-bedrag",
+    vatAmount: "Btw",
+    bookedAmount: "Geboekt EUR-bedrag incl. btw",
     details: "Details",
   },
   en: {
     eyebrow: "Costs on the calendar",
     title: "Race hosting in the open ledger",
-    intro: "Every Hosted Session is one EUR expense entry. Open a race to view its original USD price, hosted hours, any discount and the exchange rate stored with that entry.",
+    intro: "Every Hosted Session is one EUR expense entry including 21% VAT. Open a race to view the net price, VAT, original USD price, hosted hours, any discount and the stored exchange rate.",
     recorded: "Races with costs",
-    total: "Season race costs",
+    total: "Season race costs incl. VAT",
     average: "Average per race",
     empty: "No public race costs for this season yet",
     emptyHint: "Once a race amount is entered and made public, the race will appear here.",
@@ -53,7 +55,9 @@ const COPY = {
     noDiscount: "No discount",
     sourceAmount: "Original USD price",
     exchangeRate: "USD/EUR rate used",
-    bookedAmount: "Booked EUR amount",
+    netAmount: "Net EUR amount",
+    vatAmount: "VAT",
+    bookedAmount: "Booked EUR amount incl. VAT",
     details: "Details",
   },
 } as const;
@@ -99,6 +103,8 @@ const RaceCostsOverview = ({ language, selectedYear, costs, totalCount, totalAmo
           <div><dt className="text-gray-500">{t.discount}</dt><dd className="mt-1 flex items-center gap-2 font-bold text-gray-200"><Percent className="h-3.5 w-3.5 text-orange-400" />{cost.discountApplied ? t.discounted : t.noDiscount}</dd></div>
           <div><dt className="text-gray-500">{t.sourceAmount}</dt><dd className="mt-1 font-bold text-gray-200">{usd(cost.sourceAmountUsd, language)}</dd></div>
           <div><dt className="text-gray-500">{t.exchangeRate}</dt><dd className="mt-1 font-bold text-gray-200">1 USD = {cost.exchangeRateUsdEur.toFixed(4)} EUR</dd></div>
+          <div><dt className="text-gray-500">{t.netAmount}</dt><dd className="mt-1 font-bold text-gray-200">{eur(cost.netAmount, language)}</dd></div>
+          <div><dt className="text-gray-500">{t.vatAmount} ({Math.round(cost.vatRate * 100)}%)</dt><dd className="mt-1 font-bold text-gray-200">{eur(cost.vatAmount, language)}</dd></div>
           <div className="sm:col-span-2 lg:col-span-3"><dt className="text-gray-500">{t.bookedAmount}</dt><dd className="mt-1 font-heading text-lg font-black text-white">{eur(cost.amount, language)}</dd></div>
         </dl>
       </details>)}
