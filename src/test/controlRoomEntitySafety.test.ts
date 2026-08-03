@@ -49,6 +49,13 @@ describe("Control Room entity context and destructive safety", () => {
     expect(seasonWorkspace).toContain('action.id === "race-create" && !action.context.seasonId');
   });
 
+  it("keeps standalone race creation separate from the selected season", () => {
+    expect(seasonWorkspace).toContain('activeTab === "solo"');
+    expect(seasonWorkspace).toContain('actionButton("Nieuwe losse race", { id: "solo-race-create", impact: "write", context: { tab: "solo" } })');
+    expect(actionForm).toContain('const targetLeagueId = isSoloCreate ? null : action.context.seasonId || targetRace?.league_id || null');
+    expect(actionForm).toContain("slotPayload(slot, targetLeagueId");
+  });
+
   it("requires an explicit, pending-protected delete confirmation and leaves cancel inert", () => {
     expect(workspace).toContain("onCancel={() => setActiveAction(null)}");
     expect(deleteConfirmation).toContain("onClick={onCancel}");
