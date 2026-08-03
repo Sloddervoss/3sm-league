@@ -22,8 +22,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const costs: PublicSupportRaceCost[] = [
-  { raceScope: "season", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", hostedHours: 2, discountApplied: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, vatRate: 0.21, netAmount: 0.69, vatAmount: 0.14, amount: 0.83, isPublic: true },
-  { raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", hostedHours: 1, discountApplied: false, sourceAmountUsd: 0.5, exchangeRateUsdEur: 0.92, vatRate: 0.21, netAmount: 0.46, vatAmount: 0.1, amount: 0.56, isPublic: true },
+  { raceScope: "season", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", hostedHours: 2, discountApplied: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, vatRate: 0.21, vatAmountUsd: 0.16, grossAmountUsd: 0.91, netAmount: 0.69, vatAmount: 0.15, amount: 0.84, isPublic: true },
+  { raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", hostedHours: 1, discountApplied: false, sourceAmountUsd: 0.5, exchangeRateUsdEur: 0.92, vatRate: 0.21, vatAmountUsd: 0.11, grossAmountUsd: 0.61, netAmount: 0.46, vatAmount: 0.1, amount: 0.56, isPublic: true },
 ];
 
 describe("Community Support race cost UI", () => {
@@ -54,8 +54,8 @@ describe("Community Support race cost UI", () => {
     expect(calculateRaceHostingAmountUsd(2, true)).toBe(0.75);
     expect(calculateRaceHostingAmountUsd(3, false)).toBe(1.5);
     expect(convertUsdToEur(0.75, 0.92)).toBe(0.69);
-    expect(calculateRaceHostingEurBreakdown(0.75, 0.92)).toEqual({ vatRate: 0.21, netAmount: 0.69, vatAmount: 0.14, amount: 0.83 });
-    expect(calculateRaceHostingEurBreakdown(2.5, 0.938)).toEqual({ vatRate: 0.21, netAmount: 2.35, vatAmount: 0.49, amount: 2.84 });
+    expect(calculateRaceHostingEurBreakdown(0.75, 0.92)).toEqual({ vatRate: 0.21, vatAmountUsd: 0.16, grossAmountUsd: 0.91, netAmount: 0.69, vatAmount: 0.15, amount: 0.84 });
+    expect(calculateRaceHostingEurBreakdown(2.5, 0.938)).toEqual({ vatRate: 0.21, vatAmountUsd: 0.53, grossAmountUsd: 3.03, netAmount: 2.35, vatAmount: 0.49, amount: 2.84 });
     expect(configuredRaceHours("60 min")).toBe(1);
     expect(configuredRaceHours("2 hours")).toBe(2);
     expect(configuredRaceHours("180")).toBe(3);
@@ -78,6 +78,8 @@ describe("Community Support race cost UI", () => {
       sourceAmountUsd: 0.5,
       exchangeRateUsdEur: 0.92,
       vatRate: 0.21,
+      vatAmountUsd: 0.11,
+      grossAmountUsd: 0.61,
       netAmount: 0.46,
       vatAmount: 0.1,
       amount: 0.56,
@@ -92,7 +94,7 @@ describe("Community Support race cost UI", () => {
   it("keeps race transactions out of the default tab and reveals their details in the race tab", () => {
     const ledger: PublicSupportLedgerEntry[] = [
       { id: "contribution", date: "2026-07-12", direction: "income", category: "contribution", description: "Vrijwillige bijdrage", amount: 10, isPublic: true, supporterName: "Vincent" },
-      { id: "race-entry", date: "2026-07-10", direction: "expense", category: "race_hosting", description: "Race 1 hostingboeking", amount: 0.83, isPublic: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, vatRate: 0.21, netAmount: 0.69, vatAmount: 0.14 },
+      { id: "race-entry", date: "2026-07-10", direction: "expense", category: "race_hosting", description: "Race 1 hostingboeking", amount: 0.84, isPublic: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, vatRate: 0.21, vatAmountUsd: 0.16, grossAmountUsd: 0.91, netAmount: 0.69, vatAmount: 0.15 },
     ];
 
     render(<SeasonLedgerModal
@@ -159,7 +161,7 @@ describe("Community Support race cost UI", () => {
     ]));
     expect(initializedDrafts).not.toEqual(expect.arrayContaining([expect.objectContaining({ raceId: "endurance" })]));
 
-    const storedCosts = initializedDrafts.map((draft: Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur" | "vatRate" | "netAmount" | "vatAmount">, index: number): SupportRaceCost => {
+    const storedCosts = initializedDrafts.map((draft: Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur" | "vatRate" | "vatAmountUsd" | "grossAmountUsd" | "netAmount" | "vatAmount">, index: number): SupportRaceCost => {
       const sourceAmountUsd = calculateRaceHostingAmountUsd(draft.hostedHours, draft.discountApplied);
       return { ...draft, id: `cost-${index}`, sourceAmountUsd, exchangeRateUsdEur: 0.92, ...calculateRaceHostingEurBreakdown(sourceAmountUsd, 0.92) };
     });

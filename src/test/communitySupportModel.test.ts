@@ -226,11 +226,11 @@ describe("Community Support financial model", () => {
       { id: "support", date: "2026-07-01", direction: "income", category: "contribution", description: "Support", amount: 4, isPublic: true },
     ];
     state.raceCosts = [
-      { id: "public-race", raceId: "race-a", raceScope: "season", leagueId: "league-a", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", hostedHours: 7, discountApplied: false, sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, vatRate: 0.21, netAmount: 3.5, vatAmount: 0.74, amount: 4.24, isPublic: true, note: "interne notitie" },
-      { id: "private-race", raceId: "race-b", raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", raceFormat: "Feature", hostedHours: 6, discountApplied: true, sourceAmountUsd: 2.25, exchangeRateUsdEur: 1, vatRate: 0.21, netAmount: 2.25, vatAmount: 0.47, amount: 2.72, isPublic: false, note: "niet openbaar" },
-      { id: "endurance-race", raceId: "race-c", raceScope: "standalone", raceName: "Endurance", track: "Le Mans", date: "2026-09-10", raceFormat: "Endurance", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, vatRate: 0.21, netAmount: 100, vatAmount: 21, amount: 121, isPublic: true },
-      { id: "unknown-race", raceId: "race-d", raceScope: "standalone", raceName: "Future", track: "Unknown", date: "2026-09-11", raceFormat: "FutureFormat", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, vatRate: 0.21, netAmount: 100, vatAmount: 21, amount: 121, isPublic: true },
-      { id: "named-endurance", raceId: "race-e", raceScope: "standalone", raceName: "Night Endurance", track: "Le Mans", date: "2026-09-12", raceFormat: "Feature", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, vatRate: 0.21, netAmount: 100, vatAmount: 21, amount: 121, isPublic: true },
+      { id: "public-race", raceId: "race-a", raceScope: "season", leagueId: "league-a", leagueName: "Sprint Cup", season: "2026", raceName: "Race 1", track: "Spa", date: "2026-07-10", raceFormat: "Sprint", hostedHours: 7, discountApplied: false, sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, vatRate: 0.21, vatAmountUsd: 0.74, grossAmountUsd: 4.24, netAmount: 3.5, vatAmount: 0.74, amount: 4.24, isPublic: true, note: "interne notitie" },
+      { id: "private-race", raceId: "race-b", raceScope: "standalone", raceName: "Losse race", track: "Zandvoort", date: "2026-08-10", raceFormat: "Feature", hostedHours: 6, discountApplied: true, sourceAmountUsd: 2.25, exchangeRateUsdEur: 1, vatRate: 0.21, vatAmountUsd: 0.47, grossAmountUsd: 2.72, netAmount: 2.25, vatAmount: 0.47, amount: 2.72, isPublic: false, note: "niet openbaar" },
+      { id: "endurance-race", raceId: "race-c", raceScope: "standalone", raceName: "Endurance", track: "Le Mans", date: "2026-09-10", raceFormat: "Endurance", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, vatRate: 0.21, vatAmountUsd: 21, grossAmountUsd: 121, netAmount: 100, vatAmount: 21, amount: 121, isPublic: true },
+      { id: "unknown-race", raceId: "race-d", raceScope: "standalone", raceName: "Future", track: "Unknown", date: "2026-09-11", raceFormat: "FutureFormat", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, vatRate: 0.21, vatAmountUsd: 21, grossAmountUsd: 121, netAmount: 100, vatAmount: 21, amount: 121, isPublic: true },
+      { id: "named-endurance", raceId: "race-e", raceScope: "standalone", raceName: "Night Endurance", track: "Le Mans", date: "2026-09-12", raceFormat: "Feature", hostedHours: 24, discountApplied: false, sourceAmountUsd: 100, exchangeRateUsdEur: 1, vatRate: 0.21, vatAmountUsd: 21, grossAmountUsd: 121, netAmount: 100, vatAmount: 21, amount: 121, isPublic: true },
     ];
 
     const season = supportMetricsForYear(state, "2026");
@@ -243,13 +243,13 @@ describe("Community Support financial model", () => {
 
     const publicCosts = publicRaceCostsForYear(state, "2026");
     expect(publicCosts).toEqual([
-      expect.objectContaining({ raceName: "Race 1", hostedHours: 7, discountApplied: false, sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, vatRate: 0.21, netAmount: 3.5, vatAmount: 0.74, amount: 4.24, isPublic: true }),
+      expect.objectContaining({ raceName: "Race 1", hostedHours: 7, discountApplied: false, sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, vatRate: 0.21, vatAmountUsd: 0.74, grossAmountUsd: 4.24, netAmount: 3.5, vatAmount: 0.74, amount: 4.24, isPublic: true }),
     ]);
     expect(publicCosts[0]).not.toHaveProperty("id");
     expect(publicCosts[0]).not.toHaveProperty("raceId");
     expect(publicCosts[0]).not.toHaveProperty("note");
     expect(publicCosts[0]).not.toHaveProperty("leagueId");
-    expect(publicLedgerForYear(state, "2026")).toContainEqual(expect.objectContaining({ category: "race_hosting", sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, vatRate: 0.21, netAmount: 3.5, vatAmount: 0.74, amount: 4.24 }));
+    expect(publicLedgerForYear(state, "2026")).toContainEqual(expect.objectContaining({ category: "race_hosting", sourceAmountUsd: 3.5, exchangeRateUsdEur: 1, vatRate: 0.21, vatAmountUsd: 0.74, grossAmountUsd: 4.24, netAmount: 3.5, vatAmount: 0.74, amount: 4.24 }));
   });
 
   it("rounds accumulated money to cents", () => {

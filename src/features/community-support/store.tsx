@@ -98,6 +98,8 @@ const raceCostSchema = z.preprocess((value) => {
   const exchangeRateUsdEur = typeof record.exchangeRateUsdEur === "number" ? record.exchangeRateUsdEur : DEFAULT_USD_EUR_RATE;
   const vatRate = typeof record.vatRate === "number" ? record.vatRate : RACE_HOSTING_VAT_RATE;
   const breakdown = calculateRaceHostingEurBreakdown(sourceAmountUsd, exchangeRateUsdEur, vatRate);
+  const vatAmountUsd = typeof record.vatAmountUsd === "number" ? record.vatAmountUsd : breakdown.vatAmountUsd;
+  const grossAmountUsd = typeof record.grossAmountUsd === "number" ? record.grossAmountUsd : breakdown.grossAmountUsd;
   const netAmount = typeof record.netAmount === "number" ? record.netAmount : breakdown.netAmount;
   const vatAmount = typeof record.vatAmount === "number" ? record.vatAmount : breakdown.vatAmount;
   const amount = typeof record.amount === "number" && record.vatRate !== undefined ? record.amount : breakdown.amount;
@@ -105,7 +107,7 @@ const raceCostSchema = z.preprocess((value) => {
   delete migrated.creditCostUsd;
   delete migrated.pricingSource;
   delete migrated.amountEur;
-  return { ...migrated, sourceAmountUsd, exchangeRateUsdEur, vatRate, netAmount, vatAmount, amount };
+  return { ...migrated, sourceAmountUsd, exchangeRateUsdEur, vatRate, vatAmountUsd, grossAmountUsd, netAmount, vatAmount, amount };
 }, z.object({
   id: z.string().min(1).max(100),
   raceId: z.string().min(1).max(100),
@@ -121,7 +123,8 @@ const raceCostSchema = z.preprocess((value) => {
   discountApplied: z.boolean().default(false),
   sourceAmountUsd: positiveMoneySchema,
   exchangeRateUsdEur: z.number().finite().gt(0).max(10),
-  vatRate: z.number().finite().min(0).max(1), netAmount: positiveMoneySchema, vatAmount: moneySchema,
+  vatRate: z.number().finite().min(0).max(1), vatAmountUsd: moneySchema, grossAmountUsd: positiveMoneySchema,
+  netAmount: positiveMoneySchema, vatAmount: moneySchema,
   amount: positiveMoneySchema,
   isPublic: z.boolean(),
   note: z.string().max(240).optional(),
@@ -223,7 +226,7 @@ const loadState = (storageKey: string): CommunitySupportState => {
 
 export type SupportLedgerDraft = Omit<SupportLedgerEntry, "id">;
 export type SupportRecurringCostDraft = Omit<SupportRecurringCost, "id">;
-export type SupportRaceCostDraft = Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur" | "vatRate" | "netAmount" | "vatAmount"> & { exchangeRateUsdEur?: number };
+export type SupportRaceCostDraft = Omit<SupportRaceCost, "id" | "amount" | "sourceAmountUsd" | "exchangeRateUsdEur" | "vatRate" | "vatAmountUsd" | "grossAmountUsd" | "netAmount" | "vatAmount"> & { exchangeRateUsdEur?: number };
 export type SupportProductDraft = Omit<SupportProduct, "id">;
 
 const normalizeRaceCostDraft = (draft: SupportRaceCostDraft, defaultUsdEurRate: number): Omit<SupportRaceCost, "id"> | null => {

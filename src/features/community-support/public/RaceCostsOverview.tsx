@@ -15,7 +15,7 @@ const COPY = {
   nl: {
     eyebrow: "Kosten op de kalender",
     title: "Racehosting in het open boek",
-    intro: "Iedere Hosted Session is één EUR-kostenpost inclusief 21% btw. Open een race voor de netto prijs, btw, oorspronkelijke USD-prijs, gehoste uren, eventuele korting en de vastgelegde koers.",
+    intro: "Iedere Hosted Session is één EUR-kostenpost inclusief 21% btw. Eerst komt de eventuele 25% korting op de USD-prijs, daarna 21% btw in USD en pas daarna wordt het bruto USD-bedrag naar EUR omgerekend.",
     recorded: "Races met kosten",
     total: "Racekosten seizoen incl. btw",
     average: "Gemiddeld per race",
@@ -30,6 +30,8 @@ const COPY = {
     discounted: "25% toegepast",
     noDiscount: "Geen korting",
     sourceAmount: "Oorspronkelijke USD-prijs",
+    vatAmountUsd: "21% btw in USD",
+    grossAmountUsd: "USD incl. btw",
     exchangeRate: "Gebruikte USD/EUR-koers",
     netAmount: "Netto EUR-bedrag",
     vatAmount: "Btw",
@@ -39,7 +41,7 @@ const COPY = {
   en: {
     eyebrow: "Costs on the calendar",
     title: "Race hosting in the open ledger",
-    intro: "Every Hosted Session is one EUR expense entry including 21% VAT. Open a race to view the net price, VAT, original USD price, hosted hours, any discount and the stored exchange rate.",
+    intro: "Every Hosted Session is one EUR expense including 21% VAT. Any 25% discount is applied to the USD price first, then 21% VAT is calculated in USD, and only then is the gross USD amount converted to EUR.",
     recorded: "Races with costs",
     total: "Season race costs incl. VAT",
     average: "Average per race",
@@ -54,6 +56,8 @@ const COPY = {
     discounted: "25% applied",
     noDiscount: "No discount",
     sourceAmount: "Original USD price",
+    vatAmountUsd: "21% VAT in USD",
+    grossAmountUsd: "USD incl. VAT",
     exchangeRate: "USD/EUR rate used",
     netAmount: "Net EUR amount",
     vatAmount: "VAT",
@@ -102,6 +106,8 @@ const RaceCostsOverview = ({ language, selectedYear, costs, totalCount, totalAmo
           <div><dt className="text-gray-500">{t.hours}</dt><dd className="mt-1 flex items-center gap-2 font-bold text-gray-200"><Clock3 className="h-3.5 w-3.5 text-orange-400" />{cost.hostedHours}</dd></div>
           <div><dt className="text-gray-500">{t.discount}</dt><dd className="mt-1 flex items-center gap-2 font-bold text-gray-200"><Percent className="h-3.5 w-3.5 text-orange-400" />{cost.discountApplied ? t.discounted : t.noDiscount}</dd></div>
           <div><dt className="text-gray-500">{t.sourceAmount}</dt><dd className="mt-1 font-bold text-gray-200">{usd(cost.sourceAmountUsd, language)}</dd></div>
+          <div><dt className="text-gray-500">{t.vatAmountUsd}</dt><dd className="mt-1 font-bold text-gray-200">{usd(cost.vatAmountUsd, language)}</dd></div>
+          <div><dt className="text-gray-500">{t.grossAmountUsd}</dt><dd className="mt-1 font-bold text-gray-200">{usd(cost.grossAmountUsd, language)}</dd></div>
           <div><dt className="text-gray-500">{t.exchangeRate}</dt><dd className="mt-1 font-bold text-gray-200">1 USD = {cost.exchangeRateUsdEur.toFixed(4)} EUR</dd></div>
           <div><dt className="text-gray-500">{t.netAmount}</dt><dd className="mt-1 font-bold text-gray-200">{eur(cost.netAmount, language)}</dd></div>
           <div><dt className="text-gray-500">{t.vatAmount} ({Math.round(cost.vatRate * 100)}%)</dt><dd className="mt-1 font-bold text-gray-200">{eur(cost.vatAmount, language)}</dd></div>
