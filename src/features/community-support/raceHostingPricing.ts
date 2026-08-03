@@ -41,16 +41,21 @@ export const calculateRaceHostingEurBreakdown = (amountUsd: number, usdEurRate: 
   const normalizedVatRate = Number.isFinite(vatRate) && vatRate >= 0 && vatRate <= 1
     ? Math.round(vatRate * RATE_SCALE) / RATE_SCALE
     : RACE_HOSTING_VAT_RATE;
-  const netAmount = convertUsdToEur(amountUsd, usdEurRate);
-  const netAmountCents = Math.round(netAmount * CENTS_PER_UNIT);
+  const rate = normalizeUsdEurRate(usdEurRate);
+  const sourceAmountUsdCents = Math.round(amountUsd * CENTS_PER_UNIT);
   const vatRateScaled = Math.round(normalizedVatRate * RATE_SCALE);
-  const vatAmountCents = roundPositiveRatio(netAmountCents * vatRateScaled, RATE_SCALE);
-  const vatAmount = vatAmountCents / CENTS_PER_UNIT;
+  const vatAmountUsdCents = roundPositiveRatio(sourceAmountUsdCents * vatRateScaled, RATE_SCALE);
+  const grossAmountUsdCents = sourceAmountUsdCents + vatAmountUsdCents;
+  const rateScaled = Math.round((rate ?? 0) * RATE_SCALE);
+  const netAmountCents = rate === null ? 0 : roundPositiveRatio(sourceAmountUsdCents * rateScaled, RATE_SCALE);
+  const amountCents = rate === null ? 0 : roundPositiveRatio(grossAmountUsdCents * rateScaled, RATE_SCALE);
   return {
     vatRate: normalizedVatRate,
-    netAmount,
-    vatAmount,
-    amount: (netAmountCents + vatAmountCents) / CENTS_PER_UNIT,
+    vatAmountUsd: vatAmountUsdCents / CENTS_PER_UNIT,
+    grossAmountUsd: grossAmountUsdCents / CENTS_PER_UNIT,
+    netAmount: netAmountCents / CENTS_PER_UNIT,
+    vatAmount: (amountCents - netAmountCents) / CENTS_PER_UNIT,
+    amount: amountCents / CENTS_PER_UNIT,
   };
 };
 

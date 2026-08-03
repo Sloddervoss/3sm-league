@@ -126,13 +126,15 @@ describe("result-import racehosting op het uploadscherm", () => {
     fireEvent.change(hours, { target: { value: "2" } });
     fireEvent.click(discount);
     expect(screen.getByText("$0.75")).toBeInTheDocument();
+    expect(screen.getByText("$0.16")).toBeInTheDocument();
+    expect(screen.getByText("$0.91")).toBeInTheDocument();
     expect(screen.getByText("€0.69")).toBeInTheDocument();
-    expect(screen.getByText("€0.14")).toBeInTheDocument();
-    expect(screen.getByText("€0.83")).toBeInTheDocument();
+    expect(screen.getByText("€0.15")).toBeInTheDocument();
+    expect(screen.getByText("€0.84")).toBeInTheDocument();
 
     const dialog = await openConfirmation();
     expect(within(dialog).queryByRole("spinbutton", { name: "Gehoste uren" })).not.toBeInTheDocument();
-    expect(within(dialog).getByText(/2 uur · 25% korting · \$0\.75 · netto €0\.69 \+ 21% btw €0\.14 · totaal €0\.83/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/2 uur · 25% korting · \$0\.75 \+ 21% btw \$0\.16 = \$0\.91 · daarna koers 0\.9200 · totaal €0\.84/)).toBeInTheDocument();
   });
 
   it("boekt een nieuwe racekost pas nadat de JSON-resultimport slaagt", async () => {

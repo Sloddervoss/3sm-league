@@ -165,7 +165,7 @@ describe("Community Support session storage", () => {
     await waitFor(() => expect(screen.getByTestId("race-count")).toHaveTextContent("1"));
     expect(screen.getByTestId("race-hours")).toHaveTextContent("2");
     expect(screen.getByTestId("race-source-usd")).toHaveTextContent("0.75");
-    expect(screen.getByTestId("race-amount")).toHaveTextContent("0.83");
+    expect(screen.getByTestId("race-amount")).toHaveTextContent("0.84");
     expect(screen.getByTestId("pricing-initialized")).toHaveTextContent("true");
   });
 
@@ -196,7 +196,7 @@ describe("Community Support session storage", () => {
     fireEvent.click(screen.getByRole("button", { name: "save race" }));
     await waitFor(() => expect(screen.getByTestId("race-amount")).toHaveTextContent("0.56"));
     fireEvent.click(screen.getByRole("button", { name: "update race" }));
-    await waitFor(() => expect(screen.getByTestId("race-amount")).toHaveTextContent("0.83"));
+    await waitFor(() => expect(screen.getByTestId("race-amount")).toHaveTextContent("0.84"));
     expect(screen.getByTestId("race-count")).toHaveTextContent("1");
 
     fireEvent.click(screen.getByRole("button", { name: "save endurance" }));
@@ -209,7 +209,7 @@ describe("Community Support session storage", () => {
     await waitFor(() => {
       const persisted = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "{}");
       expect(persisted.raceCosts).toHaveLength(1);
-      expect(persisted.raceCosts[0]).toMatchObject({ raceId: "race-a", hostedHours: 2, discountApplied: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, vatRate: 0.21, netAmount: 0.69, vatAmount: 0.14, amount: 0.83, note: "bijgewerkt" });
+      expect(persisted.raceCosts[0]).toMatchObject({ raceId: "race-a", hostedHours: 2, discountApplied: true, sourceAmountUsd: 0.75, exchangeRateUsdEur: 0.92, vatRate: 0.21, vatAmountUsd: 0.16, grossAmountUsd: 0.91, netAmount: 0.69, vatAmount: 0.15, amount: 0.84, note: "bijgewerkt" });
     });
   });
 
@@ -227,13 +227,13 @@ describe("Community Support session storage", () => {
     expect(screen.getByTestId("race-a-rate")).toHaveTextContent("0.92");
 
     fireEvent.click(screen.getByRole("button", { name: "update race" }));
-    await waitFor(() => expect(screen.getByTestId("race-a-amount")).toHaveTextContent("0.83"));
+    await waitFor(() => expect(screen.getByTestId("race-a-amount")).toHaveTextContent("0.84"));
     expect(screen.getByTestId("race-a-rate")).toHaveTextContent("0.92");
 
     fireEvent.click(screen.getByRole("button", { name: "save future race" }));
-    await waitFor(() => expect(screen.getByTestId("race-b-amount")).toHaveTextContent("0.48"));
+    await waitFor(() => expect(screen.getByTestId("race-b-amount")).toHaveTextContent("0.49"));
     expect(screen.getByTestId("race-b-rate")).toHaveTextContent("0.8");
-    expect(screen.getByTestId("race-a-amount")).toHaveTextContent("0.83");
+    expect(screen.getByTestId("race-a-amount")).toHaveTextContent("0.84");
   });
 
   it("bulk-upserts races idempotently by race ID", async () => {
@@ -252,9 +252,9 @@ describe("Community Support session storage", () => {
     await waitFor(() => expect(screen.getByTestId("race-amount")).toHaveTextContent("0.56"));
     expect(screen.getByTestId("pricing-initialized")).toHaveTextContent("true");
     fireEvent.click(screen.getByRole("button", { name: "update race" }));
-    await waitFor(() => expect(screen.getByTestId("race-amount")).toHaveTextContent("0.83"));
+    await waitFor(() => expect(screen.getByTestId("race-amount")).toHaveTextContent("0.84"));
     fireEvent.click(screen.getByRole("button", { name: "initialize prices again" }));
-    expect(screen.getByTestId("race-amount")).toHaveTextContent("0.83");
+    expect(screen.getByTestId("race-amount")).toHaveTextContent("0.84");
   });
 
   it("rejects duplicate persisted race costs", async () => {

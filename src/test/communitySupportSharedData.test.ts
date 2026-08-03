@@ -53,7 +53,7 @@ describe("Community Support shared public data", () => {
       id: "local-id", raceId: "9dbf72ec-d1ca-4e38-bd72-6cb174cb8228", raceScope: "season",
       leagueId: "league", leagueName: "Cup", season: "2026", raceName: "Race 1", track: "Spa",
       date: "2026-08-03", raceFormat: "Sprint", hostedHours: 2, discountApplied: true,
-      sourceAmountUsd: 999, exchangeRateUsdEur: 9.99, vatRate: 0.21, netAmount: 9980.01, vatAmount: 2095.8, amount: 12075.81, isPublic: true, note: "snapshot",
+      sourceAmountUsd: 999, exchangeRateUsdEur: 9.99, vatRate: 0.21, vatAmountUsd: 209.79, grossAmountUsd: 1208.79, netAmount: 9980.01, vatAmount: 2095.8, amount: 12075.81, isPublic: true, note: "snapshot",
     }]);
     expect(rpc).toHaveBeenCalledWith("admin_upsert_community_support_race_costs", {
       p_items: [{ raceId: "9dbf72ec-d1ca-4e38-bd72-6cb174cb8228", hostedHours: 2, discountApplied: true, isPublic: true, note: "snapshot" }],

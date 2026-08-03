@@ -681,7 +681,9 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
                   </div>
                 </fieldset>
                 <div className="grid gap-2 rounded-lg bg-black/20 p-3 text-xs sm:col-span-2 sm:grid-cols-5">
-                  <p className="text-gray-400">Bronbedrag<br /><strong className="text-white">${hostingSourceAmountUsd.toFixed(2)}</strong></p>
+                  <p className="text-gray-400">USD na korting<br /><strong className="text-white">${hostingSourceAmountUsd.toFixed(2)}</strong></p>
+                  <p className="text-gray-400">21% btw in USD<br /><strong className="text-white">${hostingBreakdown.vatAmountUsd.toFixed(2)}</strong></p>
+                  <p className="text-gray-400">USD incl. btw<br /><strong className="text-white">${hostingBreakdown.grossAmountUsd.toFixed(2)}</strong></p>
                   <p className="text-gray-400">Koerssnapshot<br /><strong className="text-white">{hostingExchangeRate.toFixed(4)}</strong></p>
                   <p className="text-gray-400">Netto EUR<br /><strong className="text-white">€{hostingBreakdown.netAmount.toFixed(2)}</strong></p>
                   <p className="text-gray-400">21% btw<br /><strong className="text-white">€{hostingBreakdown.vatAmount.toFixed(2)}</strong></p>
@@ -722,7 +724,7 @@ export function ResultImportWorkspace({ points = DEFAULT_POINTS, className = "" 
 
           {!hostingEligible ? <p className="mt-4 rounded-lg border border-white/10 bg-black/15 p-3 text-sm text-gray-300">Dit raceformat valt buiten de huidige racekostenregeling. De resultaten kunnen wel normaal worden geïmporteerd.</p> : <div className={`mt-4 rounded-lg border p-3 text-sm ${hostingCostAction === "update" ? "border-amber-400/25 bg-amber-400/[0.07] text-amber-100" : hostingCostAction === "unchanged" ? "border-emerald-400/25 bg-emerald-400/[0.07] text-emerald-100" : "border-orange-400/25 bg-orange-400/[0.07] text-orange-100"}`}>
             <p className="font-bold">{hostingCostAction === "update" ? "Racehosting wordt aangepast." : hostingCostAction === "unchanged" ? "Racehosting blijft gelijk." : "Racehosting wordt geboekt."}</p>
-            <p className="mt-1 text-xs opacity-80">{normalizedHostingHours} uur · {hostingDiscountApplied ? "25% korting" : "geen korting"} · ${hostingSourceAmountUsd.toFixed(2)} · netto €{hostingBreakdown.netAmount.toFixed(2)} + 21% btw €{hostingBreakdown.vatAmount.toFixed(2)} · totaal €{hostingAmountEur.toFixed(2)} · koers {hostingExchangeRate.toFixed(4)}</p>
+            <p className="mt-1 text-xs opacity-80">{normalizedHostingHours} uur · {hostingDiscountApplied ? "25% korting" : "geen korting"} · ${hostingSourceAmountUsd.toFixed(2)} + 21% btw ${hostingBreakdown.vatAmountUsd.toFixed(2)} = ${hostingBreakdown.grossAmountUsd.toFixed(2)} · daarna koers {hostingExchangeRate.toFixed(4)} · totaal €{hostingAmountEur.toFixed(2)}</p>
             {hostingCostAction === "update" && existingHostingCost && <p className="mt-2 text-xs opacity-75">Was: {existingHostingCost.hostedHours} uur · {existingHostingCost.discountApplied ? "25% korting" : "geen korting"} · ${existingHostingCost.sourceAmountUsd.toFixed(2)} · €{existingHostingCost.amount.toFixed(2)}</p>}
           </div>}
         </section>
