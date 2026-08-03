@@ -14,7 +14,7 @@ import { useNow, formatCountdown } from "@/lib/useCountdown";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
-import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
+import { isRaceLiveForDisplay, isRaceRegistrationOpen } from "@/lib/raceRegistration";
 
 type CalendarRace = RaceWithLeagueSummary;
 
@@ -46,9 +46,7 @@ const CalendarPage = () => {
     },
   });
 
-  const liveRace = races.find((r) =>
-    r.status !== "completed" && new Date(r.race_date) <= now
-  ) as CalendarRace | undefined;
+  const liveRace = races.find((race) => isRaceLiveForDisplay(race, now)) as CalendarRace | undefined;
   const upcomingRace = [...races]
     .filter((r) => isRaceRegistrationOpen(r, now))
     .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as CalendarRace | undefined;
@@ -131,7 +129,7 @@ const CalendarPage = () => {
                     key={race.id}
                     race={race}
                     index={i}
-                    countdown={race.status !== "completed" ? formatCountdown(race.race_date, now) : null}
+                    countdown={isRaceRegistrationOpen(race, now) ? formatCountdown(race.race_date, now) : null}
                     isRegistered={reg.isRegisteredForRace(race.id, leagueId)}
                     onSelect={() => setSelectedRace(race)}
                   />
