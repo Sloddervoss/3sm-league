@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 const rpc = vi.hoisted(() => vi.fn());
 vi.mock("@/integrations/supabase/client", () => ({
@@ -67,5 +68,14 @@ describe("Community Support shared public data", () => {
       p_entity: "race_cost",
       p_id: "9dbf72ec-d1ca-4e38-bd72-6cb174cb8228",
     });
+  });
+
+  it("revokes Supabase default destructive table privileges from authenticated", () => {
+    const initial = readFileSync("supabase/migrations/20260803114500_community_support_shared_data.sql", "utf8");
+    const correction = readFileSync("supabase/migrations/20260803131500_community_support_shared_acl_correction.sql", "utf8");
+    expect(initial).toContain("FROM PUBLIC, anon, authenticated;");
+    expect(correction).toContain("REVOKE ALL ON");
+    expect(correction).toContain("FROM authenticated;");
+    expect(correction).not.toMatch(/GRANT[^;]*(?:DELETE|TRUNCATE|TRIGGER|REFERENCES)[^;]*TO authenticated/is);
   });
 });

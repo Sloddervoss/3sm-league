@@ -141,7 +141,7 @@ CREATE POLICY community_support_products_admin_update ON public.community_suppor
 USING (public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'super_admin'::public.app_role))
 WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role) OR public.has_role(auth.uid(), 'super_admin'::public.app_role));
 
-REVOKE ALL ON public.community_support_settings, public.community_support_ledger_entries, public.community_support_recurring_costs, public.community_support_race_costs, public.community_support_products FROM PUBLIC, anon;
+REVOKE ALL ON public.community_support_settings, public.community_support_ledger_entries, public.community_support_recurring_costs, public.community_support_race_costs, public.community_support_products FROM PUBLIC, anon, authenticated;
 GRANT SELECT, UPDATE ON public.community_support_settings TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.community_support_ledger_entries, public.community_support_recurring_costs, public.community_support_products TO authenticated;
 GRANT SELECT ON public.community_support_race_costs TO authenticated;
