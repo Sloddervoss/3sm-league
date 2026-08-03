@@ -221,7 +221,10 @@ export const insertProduct = async (product: SupportProduct) => {
   const { error } = await db.from("community_support_products").insert({ id: product.id, name: product.name, description: product.description, price_eur: product.price, purchase_price_eur: product.purchasePrice, shipping_cost_eur: product.fulfillmentMode === "physical" ? product.shippingCost : 0, fulfillment_mode: product.fulfillmentMode, stock: product.stock, active: product.active, concept: product.concept, image_urls: product.imageUrls });
   if (error) throw new Error(error.message);
 };
-export const setProductActive = async (id: string, active: boolean) => { const { error } = await db.from("community_support_products").update({ active }).eq("id", id); if (error) throw new Error(error.message); };
+export const setProductVisibility = async (id: string, active: boolean, concept: boolean) => {
+  const { error } = await db.from("community_support_products").update({ active, concept }).eq("id", id);
+  if (error) throw new Error(error.message);
+};
 export const deleteProduct = async (id: string) => deleteSharedItem("product", id);
 export const saveCommunitySupportSettings = async (settings: CommunitySupportSettings) => {
   const { error } = await db.from("community_support_settings").update({ reserve_eur: settings.reserve, reserve_start_year: Number(settings.reserveStartYear), race_pricing_initialized: settings.racePricingInitialized, usd_eur_rate: settings.usdEurRate, public_supporter_names_by_default: settings.publicSupporterNamesByDefault, public_supporter_amounts_by_default: settings.publicSupporterAmountsByDefault }).eq("singleton", true);

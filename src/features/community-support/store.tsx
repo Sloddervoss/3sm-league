@@ -27,7 +27,7 @@ import {
   insertProduct,
   insertRecurringCost,
   saveCommunitySupportSettings,
-  setProductActive,
+  setProductVisibility,
   setRecurringCostActive,
   upsertRaceCosts,
 } from "./supportDataApi";
@@ -273,6 +273,7 @@ type CommunitySupportStore = {
   removeRaceCost: (id: string) => Promise<boolean>;
   addProduct: (draft: SupportProductDraft) => Promise<boolean>;
   toggleProduct: (id: string) => Promise<boolean>;
+  toggleProductPublication: (id: string) => Promise<boolean>;
   removeProduct: (id: string) => Promise<boolean>;
   updateSettings: (settings: Partial<CommunitySupportSettings>) => Promise<boolean>;
   addPaymentIntent: (draft: SupportPaymentIntentDraft) => SupportPaymentIntent | null;
@@ -433,8 +434,18 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
   const toggleProduct = useCallback(async (id: string) => {
     const existing = state.products.find((product) => product.id === id);
     if (!existing) return true;
-    setState((current) => ({ ...current, products: current.products.map((product) => product.id === id ? { ...product, active: !product.active } : product) }));
-    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(setProductActive(id, !existing.active)) : true;
+    const active = !existing.active;
+    const concept = active ? false : existing.concept;
+    setState((current) => ({ ...current, products: current.products.map((product) => product.id === id ? { ...product, active, concept } : product) }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(setProductVisibility(id, active, concept)) : true;
+  }, [persist, state.products]);
+  const toggleProductPublication = useCallback(async (id: string) => {
+    const existing = state.products.find((product) => product.id === id);
+    if (!existing) return true;
+    const concept = !existing.concept;
+    const active = !concept;
+    setState((current) => ({ ...current, products: current.products.map((product) => product.id === id ? { ...product, active, concept } : product) }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(setProductVisibility(id, active, concept)) : true;
   }, [persist, state.products]);
   const removeProduct = useCallback(async (id: string) => {
     setState((current) => ({ ...current, products: current.products.filter((product) => product.id !== id) }));
@@ -507,12 +518,13 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     removeRaceCost,
     addProduct,
     toggleProduct,
+    toggleProductPublication,
     removeProduct,
     updateSettings,
     addPaymentIntent,
     resolvePayment,
     clearLocalData,
-  }), [state, loading, persistenceError, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, addPaymentIntent, resolvePayment, clearLocalData]);
+  }), [state, loading, persistenceError, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, toggleProductPublication, removeProduct, updateSettings, addPaymentIntent, resolvePayment, clearLocalData]);
   return <CommunitySupportContext.Provider value={value}>{children}</CommunitySupportContext.Provider>;
 };
 
