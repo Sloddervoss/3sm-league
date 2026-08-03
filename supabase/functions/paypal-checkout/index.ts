@@ -3,6 +3,7 @@ import {
   assertCaptureMatchesIntent,
   buildPayPalOrderPayload,
   extractPayPalCaptureSnapshot,
+  paypalCaptureIdFromCorrectionResource,
   paypalApiBase,
 } from "../_shared/paypal.ts";
 
@@ -204,24 +205,31 @@ const processWebhook = async (req: Request, origin: string) => {
   try {
     let status: "processed" | "ignored" = "ignored";
     if (eventType === "PAYMENT.CAPTURE.COMPLETED") {
-      const supplementary = resource.supplementary_data as Json | undefined;
-      const related = supplementary?.related_ids as Json | undefined;
-      const orderId = String(related?.order_id ?? "");
-      if (!orderId) throw new Error("Completed capture missing order ID");
-      const { data: intent, error } = await client.from("community_support_payment_intents")
-        .select("id,user_id,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
-        .eq("paypal_environment", PAYPAL_ENV).eq("paypal_order_id", orderId).maybeSingle();
-      if (error || !intent) throw error ?? new Error("Webhook order not linked to an intent");
-      await settleOrder(intent as PaymentIntentRow, await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(orderId)}`));
+      if (!resourceId) throw new Error("Completed capture missing capture ID");
+      const { data: settledIntent, error: settledError } = await client.from("community_support_payment_intents")
+        .select("id")
+        .eq("paypal_environment", PAYPAL_ENV).eq("paypal_capture_id", resourceId).maybeSingle();
+      if (settledError) throw settledError;
+      if (!settledIntent) {
+        const supplementary = resource.supplementary_data as Json | undefined;
+        const related = supplementary?.related_ids as Json | undefined;
+        const orderId = String(related?.order_id ?? "");
+        if (!orderId) throw new Error("Completed capture missing order ID");
+        const { data: intent, error } = await client.from("community_support_payment_intents")
+          .select("id,user_id,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
+          .eq("paypal_environment", PAYPAL_ENV).eq("paypal_order_id", orderId).maybeSingle();
+        if (error || !intent) throw error ?? new Error("Webhook order not linked to an intent");
+        await settleOrder(intent as PaymentIntentRow, await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(orderId)}`));
+      }
       status = "processed";
     } else if (eventType === "PAYMENT.CAPTURE.REFUNDED" || eventType === "PAYMENT.CAPTURE.REVERSED") {
-      const supplementary = resource.supplementary_data as Json | undefined;
-      const related = supplementary?.related_ids as Json | undefined;
       const amount = resource.amount as Json | undefined;
       const reversal = eventType === "PAYMENT.CAPTURE.REVERSED";
+      const captureId = reversal ? resourceId : paypalCaptureIdFromCorrectionResource(resource);
+      if (!captureId) throw new Error("PayPal correction missing capture ID");
       const { data, error } = await client.rpc("paypal_refund_community_support_capture", {
         p_environment: PAYPAL_ENV,
-        p_capture_id: reversal ? resourceId : String(related?.capture_id ?? ""),
+        p_capture_id: captureId,
         p_refund_id: reversal ? `reversal:${eventId}` : resourceId,
         p_currency: String(amount?.currency_code ?? ""),
         p_refund_amount_eur: Number(amount?.value),

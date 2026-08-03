@@ -98,6 +98,26 @@ export const assertCaptureMatchesIntent = (
   if (!snapshot.captureId || !snapshot.capturedAt) throw new Error("Incomplete PayPal capture");
 };
 
+export const paypalCaptureIdFromCorrectionResource = (resource: Record<string, unknown>): string => {
+  const supplementary = resource.supplementary_data as Record<string, unknown> | undefined;
+  const related = supplementary?.related_ids as Record<string, unknown> | undefined;
+  const relatedCaptureId = String(related?.capture_id ?? "").trim();
+  if (relatedCaptureId) return relatedCaptureId;
+
+  const links = Array.isArray(resource.links) ? resource.links : [];
+  for (const candidate of links) {
+    const link = candidate as Record<string, unknown>;
+    if (link.rel !== "up" || typeof link.href !== "string") continue;
+    try {
+      const match = new URL(link.href).pathname.match(/\/v2\/payments\/captures\/([^/]+)$/);
+      if (match?.[1]) return decodeURIComponent(match[1]);
+    } catch {
+      // Ignore malformed provider links and fail closed below.
+    }
+  }
+  return "";
+};
+
 export const paypalApiBase = (environment: string): string => {
   if (environment === "sandbox") return "https://api-m.sandbox.paypal.com";
   if (environment === "live") return "https://api-m.paypal.com";
