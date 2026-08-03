@@ -253,9 +253,9 @@ describe("Community Support financial model", () => {
 });
 
 describe("Community Support release boundary", () => {
-  it("keeps public visibility behind one flag while management allows admins and Super-admins", () => {
-    expect(COMMUNITY_SUPPORT_PUBLIC).toBe(false);
-    expect(canViewCommunitySupport(false, false)).toBe(false);
+  it("publishes visibility through one flag while management stays limited to admins and Super-admins", () => {
+    expect(COMMUNITY_SUPPORT_PUBLIC).toBe(true);
+    expect(canViewCommunitySupport(false, false)).toBe(true);
     expect(canViewCommunitySupport(true, false)).toBe(true);
     expect(canViewCommunitySupport(false, true)).toBe(true);
     expect(canManageCommunitySupport(false, false)).toBe(false);
