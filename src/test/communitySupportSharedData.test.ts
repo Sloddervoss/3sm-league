@@ -87,4 +87,16 @@ describe("Community Support shared public data", () => {
     const summaryEnd = page.indexOf("</button>", summaryStart);
     expect(page.slice(summaryStart, summaryEnd)).not.toContain("metrics.raceCosts");
   });
+
+  it("snapshots selected product photos before clearing the live file input", () => {
+    const module = readFileSync("src/features/control-room/support/CommunitySupportModule.tsx", "utf8");
+    const snapshot = module.indexOf("const files = Array.from(event.currentTarget.files ?? [])");
+    const reset = module.indexOf('event.currentTarget.value = ""', snapshot);
+    const process = module.indexOf("void addProductImages(files)", reset);
+
+    expect(module).toContain("addProductImages = async (files: readonly File[])");
+    expect(snapshot).toBeGreaterThan(-1);
+    expect(reset).toBeGreaterThan(snapshot);
+    expect(process).toBeGreaterThan(reset);
+  });
 });
