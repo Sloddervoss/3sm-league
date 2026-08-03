@@ -33,6 +33,8 @@ const INITIAL_STATE: CommunitySupportState = {
     publicSupporterNamesByDefault: true,
     publicSupporterAmountsByDefault: false,
     paypalEnabled: false,
+    paypalCheckoutEnabled: false,
+    paypalCheckoutEnvironment: "sandbox",
     paypalMeUrl: "",
     paypalSuggestedAmounts: [...DEFAULT_PAYPAL_AMOUNTS_EUR],
     paymentAdminDiscordId: "",
@@ -131,7 +133,7 @@ const paymentIntentSchema = z.object({
   payerName: z.string().min(1).max(100),
   showSupporterName: z.boolean(),
   showAmount: z.boolean(),
-  status: z.enum(["pending", "confirmed", "not_found"]),
+  status: z.enum(["pending", "approved", "confirmed", "partially_refunded", "refunded", "reversed", "not_found"]),
   createdAt: z.string().datetime(),
   resolvedAt: z.string().datetime().optional(),
   grossAmount: positiveMoneySchema.optional(),
@@ -152,6 +154,8 @@ const stateSchema = z.object({
     publicSupporterNamesByDefault: z.boolean(),
     publicSupporterAmountsByDefault: z.boolean(),
     paypalEnabled: z.boolean(),
+    paypalCheckoutEnabled: z.boolean().default(false),
+    paypalCheckoutEnvironment: z.enum(["sandbox", "live"]).default("sandbox"),
     paypalMeUrl: z.string().max(200).default(""),
     paypalSuggestedAmounts: z.array(positiveMoneySchema).max(6).default([...DEFAULT_PAYPAL_AMOUNTS_EUR]),
     paymentAdminDiscordId: z.string().max(20).default(""),
@@ -324,7 +328,9 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     const paypalMeUrl = settings.paypalMeUrl === undefined ? current.settings.paypalMeUrl : (normalizePayPalMeUrl(settings.paypalMeUrl) ?? "");
     const paymentAdminDiscordId = settings.paymentAdminDiscordId === undefined ? current.settings.paymentAdminDiscordId : (normalizeDiscordUserId(settings.paymentAdminDiscordId) ?? "");
     const paypalSuggestedAmounts = settings.paypalSuggestedAmounts === undefined ? current.settings.paypalSuggestedAmounts : normalizePayPalAmounts(settings.paypalSuggestedAmounts);
-    const paypalEnabled = settings.paypalEnabled === undefined ? current.settings.paypalEnabled : Boolean(settings.paypalEnabled && paypalMeUrl && paymentAdminDiscordId && paypalSuggestedAmounts.length > 0);
+    const paypalCheckoutEnabled = settings.paypalCheckoutEnabled === undefined ? current.settings.paypalCheckoutEnabled : Boolean(settings.paypalCheckoutEnabled);
+    const requestedPaypalEnabled = settings.paypalEnabled === undefined ? current.settings.paypalEnabled : settings.paypalEnabled;
+    const paypalEnabled = Boolean(requestedPaypalEnabled && !paypalCheckoutEnabled && paypalMeUrl && paymentAdminDiscordId && paypalSuggestedAmounts.length > 0);
     const iracingReferralUrl = settings.iracingReferralUrl === undefined ? current.settings.iracingReferralUrl : (normalizeIracingReferralUrl(settings.iracingReferralUrl) ?? "");
     const iracingReferralEnabled = settings.iracingReferralEnabled === undefined ? current.settings.iracingReferralEnabled : Boolean(settings.iracingReferralEnabled && iracingReferralUrl);
     return { ...current, settings: { ...current.settings, ...settings, paypalEnabled, paypalMeUrl, paymentAdminDiscordId, paypalSuggestedAmounts, iracingReferralEnabled, iracingReferralUrl, usdEurRate, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } };

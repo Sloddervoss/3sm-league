@@ -5,3 +5,8 @@ verify_jwt = false
 
 [functions.simhub-ingest]
 verify_jwt = false
+
+# PayPal webhooks have no Supabase JWT; the function verifies PayPal signatures itself
+# and performs explicit Supabase user authentication for config/order/capture actions.
+[functions.paypal-checkout]
+verify_jwt = false

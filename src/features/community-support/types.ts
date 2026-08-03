@@ -10,6 +10,7 @@ export type SupportLedgerCategory =
   | "development"
   | "event"
   | "payment_fee"
+  | "payment_refund"
   | "merchandise_purchase"
   | "shipping"
   | "other";
@@ -91,6 +92,8 @@ export type CommunitySupportSettings = {
   publicSupporterNamesByDefault: boolean;
   publicSupporterAmountsByDefault: boolean;
   paypalEnabled: boolean;
+  paypalCheckoutEnabled: boolean;
+  paypalCheckoutEnvironment: "sandbox" | "live";
   paypalMeUrl: string;
   paypalSuggestedAmounts: number[];
   paymentAdminDiscordId: string;
@@ -98,7 +101,7 @@ export type CommunitySupportSettings = {
   iracingReferralUrl: string;
 };
 
-export type SupportPaymentIntentStatus = "pending" | "confirmed" | "not_found";
+export type SupportPaymentIntentStatus = "pending" | "approved" | "confirmed" | "partially_refunded" | "refunded" | "reversed" | "not_found";
 
 export type SupportPaymentIntentDraft = {
   requestedAmount: number;
@@ -138,6 +141,7 @@ export const SUPPORT_CATEGORY_LABELS: Record<SupportLedgerCategory, { nl: string
   development: { nl: "Websiteontwikkeling", en: "Website development" },
   event: { nl: "Community-evenementen", en: "Community events" },
   payment_fee: { nl: "Betaalkosten", en: "Payment fees" },
+  payment_refund: { nl: "Terugbetaling", en: "Refund" },
   merchandise_purchase: { nl: "Merchandise-inkoop", en: "Merchandise purchasing" },
   shipping: { nl: "Verzendkosten", en: "Shipping costs" },
   other: { nl: "Overig", en: "Other" },

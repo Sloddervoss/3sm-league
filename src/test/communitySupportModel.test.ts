@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COMMUNITY_SUPPORT_PUBLIC, canManageCommunitySupport, canViewCommunitySupport, publicLedgerForMonth, publicLedgerForYear, publicRaceCostsForYear, supportMetrics, supportMetricsForYear } from "@/features/community-support/model";
+import { mapPaymentTotalsToMetricEntries } from "@/features/community-support/paymentApi";
 import type { CommunitySupportState } from "@/features/community-support/types";
 
 const emptyState = (): CommunitySupportState => ({
@@ -16,6 +17,8 @@ const emptyState = (): CommunitySupportState => ({
     publicSupporterNamesByDefault: true,
     publicSupporterAmountsByDefault: false,
     paypalEnabled: false,
+    paypalCheckoutEnabled: false,
+    paypalCheckoutEnvironment: "sandbox",
     paypalMeUrl: "",
     paypalSuggestedAmounts: [5, 10, 25],
     paymentAdminDiscordId: "",
@@ -41,6 +44,40 @@ describe("Community Support financial model", () => {
     expect(metrics.communityCovered).toBe(15);
     expect(metrics.selfFunded).toBe(35);
     expect(metrics.coveragePercent).toBe(30);
+  });
+
+  it("subtracts a later-month refund from season community funds instead of dropping it", () => {
+    const state = emptyState();
+    state.settings.reserveStartYear = "2026";
+    state.ledger = mapPaymentTotalsToMetricEntries([
+      { month: "2026-01", contribution_total_eur: 25, fee_total_eur: 0 },
+      { month: "2026-02", contribution_total_eur: -25, fee_total_eur: 0 },
+    ]);
+
+    const metrics = supportMetricsForYear(state, "2026");
+    expect(state.ledger).toContainEqual(expect.objectContaining({ date: "2026-02-01", direction: "expense", category: "payment_refund", amount: 25 }));
+    expect(metrics.supportIncome).toBe(25);
+    expect(metrics.commercialCosts).toBe(25);
+    expect(metrics.netCommunitySupport).toBe(0);
+    expect(metrics.closingReserve).toBe(0);
+  });
+
+  it("uses carried reserve when a contribution is refunded in the next year", () => {
+    const state = emptyState();
+    state.settings.reserveStartYear = "2026";
+    state.ledger = mapPaymentTotalsToMetricEntries([
+      { month: "2026-12", contribution_total_eur: 25, fee_total_eur: 0.69 },
+      { month: "2027-01", contribution_total_eur: -25, fee_total_eur: 0 },
+    ]);
+
+    const beforeRefund = supportMetricsForYear(state, "2026");
+    const afterRefund = supportMetricsForYear(state, "2027");
+    expect(beforeRefund.closingReserve).toBe(24.31);
+    expect(afterRefund.openingReserve).toBe(24.31);
+    expect(afterRefund.netCommunitySupport).toBe(-25);
+    expect(afterRefund.reserveUsed).toBe(24.31);
+    expect(afterRefund.selfFunded).toBe(0.69);
+    expect(afterRefund.closingReserve).toBe(0);
   });
 
   it("keeps reserve separate from the monthly coverage bar", () => {
