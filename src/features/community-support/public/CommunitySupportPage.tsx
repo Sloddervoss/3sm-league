@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
@@ -69,8 +69,9 @@ const getCopy = (language: Language) => language === "en" ? {
   supportCta: "See how you can contribute",
   supportIntro: "Would you like to help cover the race season costs? Choose an amount. Contributions are always voluntary.",
   paypalTitle: "Voluntary contribution",
-  paypalText: "Choose an amount in the 3SM window. PayPal.Me opens securely in a separate tab or app, while this page stays ready for your return.",
-  paypalCta: "Contribute through PayPal.Me",
+  paypalText: "Choose an amount and pay directly through secure PayPal Checkout. 3SM books the contribution only after server-side capture verification.",
+  paypalManualText: "Choose an amount and continue to PayPal.Me. The contribution is booked only after the 3SM payment admin has manually verified it.",
+  paypalCta: "Contribute through PayPal",
   paypalOffTitle: "Financial support",
   paypalOffText: "Direct PayPal contributions are not currently enabled. You can still help in the other ways below.",
   merchandiseTitle: "Community merchandise",
@@ -148,8 +149,9 @@ const getCopy = (language: Language) => language === "en" ? {
   supportCta: "Bekijk hoe je kunt bijdragen",
   supportIntro: "Wil je meehelpen met de kosten van het raceseizoen? Kies zelf een bedrag. Bijdragen is altijd vrijwillig.",
   paypalTitle: "Vrijwillige bijdrage",
-  paypalText: "Kies een bedrag in het 3SM-venster. PayPal.Me opent veilig in een apart tabblad of de app, terwijl deze pagina klaar blijft voor je terugkomst.",
-  paypalCta: "Bijdragen via PayPal.Me",
+  paypalText: "Kies een bedrag en reken direct af via beveiligde PayPal Checkout. 3SM boekt de bijdrage pas na server-side verificatie van de capture.",
+  paypalManualText: "Kies een bedrag en ga verder via PayPal.Me. 3SM boekt de bijdrage pas nadat de betaaladmin deze handmatig heeft gecontroleerd.",
+  paypalCta: "Bijdragen via PayPal",
   paypalOffTitle: "Financieel steunen",
   paypalOffText: "Rechtstreeks bijdragen via PayPal staat momenteel niet aan. Je kunt wel op de andere manieren hieronder helpen.",
   merchandiseTitle: "Communitymerchandise",
@@ -236,6 +238,7 @@ const MetricCard = ({ label, value, icon, accent = false }: { label: string; val
 const CommunitySupportPage = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { state, addPaymentIntent } = useCommunitySupport();
   const lang: Language = language === "en" ? "en" : "nl";
@@ -285,6 +288,9 @@ const CommunitySupportPage = () => {
     }
     setPaymentOpen(true);
   };
+  const refreshPaymentLedger = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["community-support", "payment-ledger"] });
+  }, [queryClient]);
   const { data: sharedPaymentConfig } = useQuery({
     queryKey: ["community-support", "payment-config", "public"],
     queryFn: fetchPublicPaymentConfig,
@@ -292,6 +298,7 @@ const CommunitySupportPage = () => {
     staleTime: 60_000,
   });
   const paymentSettings = useMemo(() => sharedPaymentConfig ? { ...state.settings, ...sharedPaymentConfig } : state.settings, [sharedPaymentConfig, state.settings]);
+  const paymentEnabled = paymentSettings.paypalCheckoutEnabled || paymentSettings.paypalEnabled;
 
   const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => `${selectedYear}-${String(index + 1).padStart(2, "0")}`), [selectedYear]);
 
@@ -476,9 +483,9 @@ const CommunitySupportPage = () => {
               <div className="grid gap-4 lg:grid-cols-3">
                 <Surface className="flex flex-col p-6">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-300 ring-1 ring-orange-400/20"><CircleDollarSign className="h-5 w-5" aria-hidden="true" /></div>
-                  <h3 className="mt-5 font-heading text-lg font-black uppercase text-white">{paymentSettings.paypalEnabled ? copy.paypalTitle : copy.paypalOffTitle}</h3>
-                  <p className="mt-2 flex-1 text-sm leading-6 text-gray-400">{paymentSettings.paypalEnabled ? copy.paypalText : copy.paypalOffText}</p>
-                  {paymentSettings.paypalEnabled && <button type="button" onClick={beginContribution} aria-haspopup="dialog" className="mt-5 inline-flex items-center gap-2 self-start rounded-xl bg-gradient-racing px-4 py-2.5 text-sm font-black text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">{copy.paypalCta}<ChevronRight className="h-4 w-4" aria-hidden="true" /></button>}
+                  <h3 className="mt-5 font-heading text-lg font-black uppercase text-white">{paymentEnabled ? copy.paypalTitle : copy.paypalOffTitle}</h3>
+                  <p className="mt-2 flex-1 text-sm leading-6 text-gray-400">{paymentEnabled ? (paymentSettings.paypalCheckoutEnabled ? copy.paypalText : copy.paypalManualText) : copy.paypalOffText}</p>
+                  {paymentEnabled && <button type="button" onClick={beginContribution} aria-haspopup="dialog" className="mt-5 inline-flex items-center gap-2 self-start rounded-xl bg-gradient-racing px-4 py-2.5 text-sm font-black text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">{copy.paypalCta}<ChevronRight className="h-4 w-4" aria-hidden="true" /></button>}
                 </Surface>
                 <Surface className="flex flex-col p-6">
                   <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.045] text-gray-200 ring-1 ring-white/[0.08]"><ShoppingBag className="h-5 w-5" aria-hidden="true" /></div>
@@ -598,6 +605,7 @@ const CommunitySupportPage = () => {
           localReview={!COMMUNITY_SUPPORT_HAS_SHARED_DATA}
           canOpenPayPal={!COMMUNITY_SUPPORT_HAS_SHARED_DATA || Boolean(user)}
           onAuthenticationRequired={requirePaymentAuthentication}
+          onCheckoutCompleted={refreshPaymentLedger}
           onSubmit={async (draft) => {
             if (COMMUNITY_SUPPORT_HAS_SHARED_DATA) {
               await submitPaymentIntent(draft);

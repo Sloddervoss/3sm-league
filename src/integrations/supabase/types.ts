@@ -1361,11 +1361,19 @@ export type Database = {
           payment_admin_discord_id: string
           iracing_referral_enabled: boolean
           iracing_referral_url: string
+          paypal_checkout_enabled: boolean
+          paypal_checkout_environment: string
         }[]
+      }
+      admin_set_community_support_paypal_checkout: {
+        Args: { p_enabled: boolean; p_environment: string }
+        Returns: undefined
       }
       admin_update_community_support_payment_config: {
         Args: {
           p_paypal_enabled: boolean
+          p_paypal_checkout_enabled: boolean
+          p_paypal_checkout_environment: string
           p_paypal_me_url: string
           p_suggested_amounts_eur: number[]
           p_payment_admin_discord_id: string
@@ -1383,6 +1391,19 @@ export type Database = {
         }
         Returns: string
       }
+      create_community_support_paypal_checkout_intent: {
+        Args: {
+          p_requested_amount_eur: number
+          p_payer_name_private: string
+          p_show_supporter_name: boolean
+          p_show_amount: boolean
+        }
+        Returns: string
+      }
+      cancel_community_support_paypal_checkout_intent: {
+        Args: { p_intent_id: string }
+        Returns: string
+      }
       get_community_support_payment_config: {
         Args: never
         Returns: {
@@ -1391,7 +1412,13 @@ export type Database = {
           suggested_amounts_eur: number[]
           iracing_referral_enabled: boolean
           iracing_referral_url: string
+          paypal_checkout_enabled: boolean
+          paypal_checkout_environment: string
         }[]
+      }
+      get_community_support_paypal_checkout_recovery_intent: {
+        Args: never
+        Returns: { intent_id: string; status: string }[]
       }
       get_public_community_support_payment_ledger: {
         Args: never

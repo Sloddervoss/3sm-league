@@ -306,6 +306,8 @@ const CommunitySupportModule = () => {
     const merged = { ...paymentSettings, ...next };
     await updateAdminPaymentConfig({
       paypalEnabled: merged.paypalEnabled,
+      paypalCheckoutEnabled: merged.paypalCheckoutEnabled,
+      paypalCheckoutEnvironment: merged.paypalCheckoutEnvironment,
       paypalMeUrl: merged.paypalMeUrl,
       paypalSuggestedAmounts: merged.paypalSuggestedAmounts,
       paymentAdminDiscordId: merged.paymentAdminDiscordId,
@@ -572,6 +574,7 @@ const CommunitySupportModule = () => {
                 settings={paymentSettings}
                 intents={COMMUNITY_SUPPORT_HAS_SHARED_DATA ? [] : state.paymentIntents}
                 localReview={!COMMUNITY_SUPPORT_HAS_SHARED_DATA}
+                isSuperAdmin={isSuperAdmin}
                 onUpdateSettings={savePaymentSettings}
                 onResolve={resolvePayment}
               />}

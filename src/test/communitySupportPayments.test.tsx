@@ -21,6 +21,8 @@ const settings: CommunitySupportSettings = {
   publicSupporterNamesByDefault: true,
   publicSupporterAmountsByDefault: false,
   paypalEnabled: true,
+  paypalCheckoutEnabled: false,
+  paypalCheckoutEnvironment: "sandbox",
   paypalMeUrl: "https://paypal.me/ExampleAccount",
   paypalSuggestedAmounts: [5, 10, 25],
   paymentAdminDiscordId: "123456789012345678",
@@ -38,7 +40,7 @@ const pendingIntent: SupportPaymentIntent = {
   createdAt: "2026-08-01T18:42:00.000Z",
 };
 
-describe("PayPal.Me contribution flow", () => {
+describe("PayPal contribution flows", () => {
   it("accepts only a clean PayPal.Me base URL and a Discord snowflake", () => {
     expect(normalizePayPalMeUrl("https://paypal.me/ExampleAccount/")).toBe("https://paypal.me/ExampleAccount");
     expect(normalizePayPalMeUrl("https://www.paypal.me/ExampleAccount")).toBe("https://paypal.me/ExampleAccount");
@@ -67,7 +69,7 @@ describe("PayPal.Me contribution flow", () => {
 
   it("saves the referral link separately without creating a payment claim", async () => {
     const onUpdateSettings = vi.fn();
-    render(<PaymentReviewSection language="nl" settings={{ ...settings, iracingReferralEnabled: false, iracingReferralUrl: "" }} intents={[]} localReview onUpdateSettings={onUpdateSettings} onResolve={vi.fn()} />);
+    render(<PaymentReviewSection language="nl" settings={{ ...settings, iracingReferralEnabled: false, iracingReferralUrl: "" }} intents={[]} localReview isSuperAdmin onUpdateSettings={onUpdateSettings} onResolve={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/^Officiële iRacing-referrallink/), { target: { value: "https://www.iracing.com/referral/?ref=3sm" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "iRacing-referral tonen op de supportpagina" }));
     fireEvent.click(screen.getByRole("button", { name: "Betaalinstellingen opslaan" }));
@@ -75,6 +77,28 @@ describe("PayPal.Me contribution flow", () => {
       iracingReferralEnabled: true,
       iracingReferralUrl: "https://www.iracing.com/referral/?ref=3sm",
     })));
+  });
+
+  it("manages Checkout independently and keeps live selection super-admin-only", async () => {
+    const onUpdateSettings = vi.fn();
+    render(<PaymentReviewSection language="nl" settings={settings} intents={[]} localReview isSuperAdmin={false} onUpdateSettings={onUpdateSettings} onResolve={vi.fn()} />);
+    expect(screen.getByRole("option", { name: "Live · Super-admin" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Directe PayPal Checkout inschakelen" }));
+    expect(screen.getByRole("checkbox", { name: "PayPal.Me inschakelen op de supportpagina" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Betaalinstellingen opslaan" }));
+    await waitFor(() => expect(onUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      paypalEnabled: false,
+      paypalCheckoutEnabled: true,
+      paypalCheckoutEnvironment: "sandbox",
+    })));
+  });
+
+  it("describes shared Checkout as automatic server verification", () => {
+    render(<PaymentReviewSection language="nl" settings={{ ...settings, paypalEnabled: false, paypalCheckoutEnabled: true }} intents={[]} localReview={false} isSuperAdmin onUpdateSettings={vi.fn()} onResolve={vi.fn()} />);
+    expect(screen.getByRole("heading", { name: "Automatische serververificatie" })).toBeInTheDocument();
+    expect(screen.getByText("Gedeelde backend · servercapture")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Controle via de privé-DM van de bot" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bevestig of wijs ze in die DM af/)).not.toBeInTheDocument();
   });
 
   it("creates a pending intent and books gross income plus the actual fee only after confirmation", () => {
@@ -98,7 +122,7 @@ describe("PayPal.Me contribution flow", () => {
     render(<PayPalContributionModal language="nl" settings={settings} localReview canOpenPayPal onAuthenticationRequired={vi.fn()} onSubmit={onSubmit} />);
 
     fireEvent.change(screen.getByLabelText(/^Naam zichtbaar in PayPal/), { target: { value: "Vincent de Vos" } });
-    fireEvent.click(screen.getByRole("button", { name: "Ga veilig verder naar PayPal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open PayPal.Me" }));
     expect(open).toHaveBeenCalledWith("https://paypal.me/ExampleAccount/5EUR", "_blank", "noopener,noreferrer");
     expect(onSubmit).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole("heading", { name: "Rond de betaling af in PayPal" })).toHaveFocus());
@@ -110,12 +134,18 @@ describe("PayPal.Me contribution flow", () => {
     open.mockRestore();
   });
 
+  it("uses server-verification help text in Checkout mode", () => {
+    render(<PayPalContributionModal language="nl" settings={{ ...settings, paypalEnabled: false, paypalCheckoutEnabled: true }} localReview={false} canOpenPayPal onAuthenticationRequired={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.getByText(/Checkout-poging aan je ingelogde 3SM-account en PayPal-bevestiging/)).toBeInTheDocument();
+    expect(screen.queryByText(/betaaladmin om je betaling te herkennen/)).not.toBeInTheDocument();
+  });
+
   it("never opens PayPal before shared-mode authentication", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
     const onAuthenticationRequired = vi.fn();
     render(<PayPalContributionModal language="nl" settings={settings} localReview={false} canOpenPayPal={false} onAuthenticationRequired={onAuthenticationRequired} onSubmit={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/^Naam zichtbaar in PayPal/), { target: { value: "Bezoeker" } });
-    fireEvent.click(screen.getByRole("button", { name: "Ga veilig verder naar PayPal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open PayPal.Me" }));
     expect(onAuthenticationRequired).toHaveBeenCalledOnce();
     expect(open).not.toHaveBeenCalled();
     expect(screen.queryByRole("heading", { name: "Rond de betaling af in PayPal" })).not.toBeInTheDocument();
@@ -124,7 +154,7 @@ describe("PayPal.Me contribution flow", () => {
 
   it("keeps processing disabled until the payment admin confirms a balance check", () => {
     const onResolve = vi.fn(() => true);
-    render(<PaymentReviewSection language="nl" settings={settings} intents={[pendingIntent]} localReview onUpdateSettings={vi.fn()} onResolve={onResolve} />);
+    render(<PaymentReviewSection language="nl" settings={settings} intents={[pendingIntent]} localReview isSuperAdmin onUpdateSettings={vi.fn()} onResolve={onResolve} />);
     const process = screen.getByRole("button", { name: "Na controle verwerken" });
     expect(process).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: /PayPal-saldo gecontroleerd/ }));
@@ -137,7 +167,7 @@ describe("PayPal.Me contribution flow", () => {
   });
 
   it("keeps shared verification exclusive to the configured payment-admin DM", () => {
-    render(<PaymentReviewSection language="nl" settings={settings} intents={[]} localReview={false} onUpdateSettings={vi.fn()} onResolve={vi.fn()} />);
+    render(<PaymentReviewSection language="nl" settings={settings} intents={[]} localReview={false} isSuperAdmin onUpdateSettings={vi.fn()} onResolve={vi.fn()} />);
     expect(screen.getByRole("heading", { name: "Controle via de privé-DM van de bot" })).toBeInTheDocument();
     expect(screen.getByText(/geen tweede verwerkingspad/)).toBeInTheDocument();
     expect(screen.queryByText("Geen openstaande betaalcontroles.")).not.toBeInTheDocument();

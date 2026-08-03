@@ -16,7 +16,7 @@ export const COMMUNITY_SUPPORT_PUBLIC = communitySupportConfig.public && COMMUNI
 export const canViewCommunitySupport = (isAdmin: boolean, isSuperAdmin: boolean) => COMMUNITY_SUPPORT_PUBLIC || isAdmin || isSuperAdmin;
 export const canManageCommunitySupport = (isAdmin: boolean, isSuperAdmin: boolean) => isAdmin || isSuperAdmin;
 
-const COMMERCIAL_COSTS = new Set(["payment_fee", "merchandise_purchase", "shipping"]);
+const COMMERCIAL_COSTS = new Set(["payment_fee", "payment_refund", "merchandise_purchase", "shipping"]);
 const SUPPORT_INCOME = new Set(["contribution", "merchandise_income", "referral_income"]);
 const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const sumAmounts = <T extends { amount: number }>(values: T[]) => roundMoney(values.reduce((sum, value) => sum + value.amount, 0));
@@ -60,10 +60,17 @@ const calculateMetrics = (
   );
   const supportIncome = sumAmounts(entries.filter((entry) => entry.direction === "income" && SUPPORT_INCOME.has(entry.category)));
   const commercialCosts = sumAmounts(entries.filter((entry) => entry.direction === "expense" && COMMERCIAL_COSTS.has(entry.category)));
-  const netCommunitySupport = roundMoney(Math.max(0, supportIncome - commercialCosts));
-  const availableCommunityFunds = roundMoney(netCommunitySupport + (useOpeningReserve ? openingReserve : 0));
+  // Keep corrections negative across accounting periods so a later refund can
+  // consume reserve carried from the original contribution year.
+  const netCommunitySupport = roundMoney(supportIncome - commercialCosts);
+  const availableCommunityFunds = roundMoney(Math.max(0, netCommunitySupport + (useOpeningReserve ? openingReserve : 0)));
   const communityCovered = roundMoney(Math.min(operationalExpenses, availableCommunityFunds));
-  const selfFunded = roundMoney(Math.max(0, operationalExpenses - availableCommunityFunds));
+  // Surface a correction/fee deficit as 3SM-funded instead of silently
+  // clipping it when community funds and carried reserve reach zero.
+  const selfFunded = roundMoney(Math.max(
+    0,
+    operationalExpenses - netCommunitySupport - (useOpeningReserve ? openingReserve : 0),
+  ));
   const surplus = roundMoney(Math.max(0, netCommunitySupport - operationalExpenses));
   const reserveUsed = useOpeningReserve
     ? roundMoney(Math.min(openingReserve, Math.max(0, operationalExpenses - netCommunitySupport)))
