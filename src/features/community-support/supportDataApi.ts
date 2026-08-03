@@ -28,7 +28,7 @@ type SettingsRow = {
 type LedgerRow = {
   id: string; entry_date: string; direction: "income" | "expense"; category: SupportLedgerEntry["category"];
   description: string; amount_eur: number; is_public: boolean; supporter_name: string | null;
-  show_supporter_name: boolean; show_amount: boolean; created_at: string; created_by: string | null;
+  show_supporter_name: boolean; show_amount: boolean; source_type: "manual" | "merch_order" | "merch_refund"; created_at: string; created_by: string | null;
 };
 type RecurringRow = {
   id: string; starts_on: string; category: SupportRecurringCost["category"]; description: string; amount_eur: number;
@@ -44,7 +44,7 @@ type RaceRow = {
 };
 type ProductRow = {
   id: string; name: string; description: string; price_eur: number; purchase_price_eur: number;
-  shipping_cost_eur: number; stock: number; active: boolean; concept: boolean; image_urls: string[];
+  shipping_cost_eur: number; fulfillment_mode: "physical" | "digital"; stock: number; active: boolean; concept: boolean; image_urls: string[];
   created_at: string; created_by: string | null; updated_at: string; updated_by: string | null;
 };
 type SupportDatabase = {
@@ -94,6 +94,7 @@ const ledgerFromRow = (row: LedgerRow): SupportLedgerEntry => ({
   description: row.description, amount: Number(row.amount_eur), isPublic: row.is_public,
   ...(row.supporter_name ? { supporterName: row.supporter_name } : {}),
   showSupporterName: row.show_supporter_name, showAmount: row.show_amount,
+  automatic: Boolean(row.source_type && row.source_type !== "manual"),
 });
 const recurringFromRow = (row: RecurringRow): SupportRecurringCost => ({
   id: row.id, startsOn: row.starts_on, category: row.category, description: row.description,
@@ -110,7 +111,7 @@ const raceFromRow = (row: RaceRow): SupportRaceCost => ({
 });
 const productFromRow = (row: ProductRow): SupportProduct => ({
   id: row.id, name: row.name, description: row.description, price: Number(row.price_eur),
-  purchasePrice: Number(row.purchase_price_eur), shippingCost: Number(row.shipping_cost_eur),
+  purchasePrice: Number(row.purchase_price_eur), shippingCost: Number(row.shipping_cost_eur), fulfillmentMode: row.fulfillment_mode ?? "physical",
   stock: row.stock, active: row.active, concept: row.concept, imageUrls: row.image_urls,
 });
 const settingsFromRow = (row: SettingsRow): CommunitySupportSettings => ({
@@ -168,7 +169,7 @@ export const fetchPublicCommunitySupportData = async (): Promise<PublicCommunity
   }));
   displayState.recurringCosts = payload.recurringCosts ?? [];
   displayState.raceCosts = payload.raceCosts ?? [];
-  displayState.products = (payload.products ?? []).map((product) => ({ ...product, purchasePrice: 0, shippingCost: 0 }));
+  displayState.products = (payload.products ?? []).map((product) => ({ ...product, purchasePrice: 0, shippingCost: 0, fulfillmentMode: product.fulfillmentMode ?? "physical" }));
   const metricLedger = (payload.ledgerTotals ?? []).map((entry) => ({
     id: `manual-total:${entry.month}:${entry.direction}:${entry.category}`,
     date: `${entry.month}-01`, direction: entry.direction, category: entry.category,
@@ -217,7 +218,7 @@ export const upsertRaceCosts = async (costs: SupportRaceCost[], ignoreDuplicates
 };
 export const deleteRaceCost = async (id: string) => deleteSharedItem("race_cost", id);
 export const insertProduct = async (product: SupportProduct) => {
-  const { error } = await db.from("community_support_products").insert({ id: product.id, name: product.name, description: product.description, price_eur: product.price, purchase_price_eur: product.purchasePrice, shipping_cost_eur: product.shippingCost, stock: product.stock, active: product.active, concept: product.concept, image_urls: product.imageUrls });
+  const { error } = await db.from("community_support_products").insert({ id: product.id, name: product.name, description: product.description, price_eur: product.price, purchase_price_eur: product.purchasePrice, shipping_cost_eur: product.fulfillmentMode === "physical" ? product.shippingCost : 0, fulfillment_mode: product.fulfillmentMode, stock: product.stock, active: product.active, concept: product.concept, image_urls: product.imageUrls });
   if (error) throw new Error(error.message);
 };
 export const setProductActive = async (id: string, active: boolean) => { const { error } = await db.from("community_support_products").update({ active }).eq("id", id); if (error) throw new Error(error.message); };

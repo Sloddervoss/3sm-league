@@ -2,8 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   assertCaptureMatchesIntent,
+  buildPayPalMerchOrderPayload,
   buildPayPalOrderPayload,
   extractPayPalCaptureSnapshot,
+  extractPayPalPayerEmail,
+  extractPayPalShipping,
   paypalCaptureIdFromCorrectionResource,
   paypalApiBase,
   toEurValue,
@@ -47,6 +50,29 @@ describe("PayPal Checkout server contract", () => {
     expect(() => toEurValue(10.005)).toThrow(/amount/);
     expect(() => toEurValue(0)).toThrow(/amount/);
     expect(() => toEurValue(1_001)).toThrow(/amount/);
+  });
+
+  it("builds merchandise orders with one immutable item and PayPal shipping address collection", () => {
+    const payload = buildPayPalMerchOrderPayload(intentId, "3SM cap", 25);
+    expect(payload).toMatchObject({
+      intent: "CAPTURE",
+      application_context: { shipping_preference: "GET_FROM_FILE", user_action: "PAY_NOW" },
+      purchase_units: [{
+        reference_id: intentId,
+        custom_id: intentId,
+        invoice_id: `3SM-MERCH-${intentId}`,
+        amount: { currency_code: "EUR", value: "25.00" },
+        items: [{ name: "3SM cap", quantity: "1", unit_amount: { currency_code: "EUR", value: "25.00" } }],
+      }],
+    });
+    expect(extractPayPalShipping({ purchase_units: [{ shipping: { name: { full_name: "Vincent de Vos" }, address: { address_line_1: "Gridstraat 3", postal_code: "1234AB", admin_area_2: "Assen", country_code: "NL", unsafe: "drop" } } }] })).toEqual({
+      fullName: "Vincent de Vos",
+      address: { address_line_1: "Gridstraat 3", postal_code: "1234AB", admin_area_2: "Assen", country_code: "NL" },
+    });
+    expect(() => extractPayPalShipping({ purchase_units: [{}] })).toThrow(/shipping/);
+    expect(buildPayPalMerchOrderPayload(intentId, "Digitale pas", 5, "digital").application_context?.shipping_preference).toBe("NO_SHIPPING");
+    expect(extractPayPalPayerEmail({ payer: { email_address: "Member@Example.COM" } })).toBe("member@example.com");
+    expect(() => extractPayPalPayerEmail({ payer: {} })).toThrow(/email/);
   });
 
   it("extracts PayPal gross, fee and net snapshots and verifies every financial binding", () => {
@@ -112,6 +138,7 @@ describe("PayPal Checkout server contract", () => {
     expect(edge).toContain('PAYMENT.CAPTURE.COMPLETED');
     expect(edge).toContain('PAYMENT.CAPTURE.REFUNDED');
     expect(edge).toContain('PAYMENT.CAPTURE.REVERSED');
+    expect(edge).toContain('CHECKOUT.ORDER.APPROVED');
     expect(edge).toContain('.eq("paypal_environment", PAYPAL_ENV).eq("paypal_capture_id", resourceId)');
     expect(edge).toContain('currentOrder.status === "COMPLETED"');
     expect(config).toMatch(/\[functions\.paypal-checkout\]\nverify_jwt = false/);
@@ -141,5 +168,26 @@ describe("PayPal Checkout server contract", () => {
     expect(migration).toContain("community_support_paypal_webhook_events.status = 'failed'");
     expect(migration.match(/IF auth\.role\(\) <> 'service_role'/g)).toHaveLength(8);
     expect(migration).toContain("REVOKE ALL ON public.community_support_paypal_webhook_events FROM PUBLIC, anon, authenticated");
+  });
+
+  it("keeps merchandise reservations recoverable and reconciles them server-side", () => {
+    const edge = readFileSync("supabase/functions/paypal-checkout/index.ts", "utf8");
+    const migration = readFileSync("supabase/migrations/20260803150000_community_support_merch_checkout.sql", "utf8");
+    const bot = readFileSync("bot/index.js", "utf8");
+    const merchApi = readFileSync("src/features/community-support/merchApi.ts", "utf8");
+    expect(migration).toContain("PayPal Checkout is disabled");
+    expect(migration).toContain("PayPal Checkout is disabled or the environment does not match");
+    expect(migration).toContain("interval '73 hours'");
+    expect(migration).toContain("awaiting_provider_expiry");
+    expect(migration).toContain("get_owned_active_community_support_merch_product_ids");
+    expect(migration).not.toContain("GRANT SELECT ON public.community_support_merch_orders TO authenticated");
+    expect(migration).not.toContain("current_user NOT IN ('service_role','supabase_admin')");
+    expect(migration.match(/coalesce\(auth\.role\(\), ''\) <> 'service_role'/g)).toHaveLength(6);
+    expect(migration.indexOf("SELECT id INTO v_refund_id FROM public.community_support_merch_refunds")).toBeLessThan(migration.indexOf("v_order.refunded_amount_eur+p_refund_amount_eur>v_order.unit_price_eur"));
+    expect(merchApi).not.toContain('.from("community_support_merch_orders")');
+    expect(edge).toContain('pathname.endsWith("/maintenance")');
+    expect(edge).toContain('req.headers.get("Authorization") !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`');
+    expect(edge).toContain('.in("status", ["pending", "approved"])');
+    expect(bot).toContain("reconcileMerchOrders");
   });
 });
