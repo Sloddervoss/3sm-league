@@ -27,7 +27,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
 import { COMMUNITY_SUPPORT_HAS_SHARED_DATA, monthKey, supportMetricsForYear } from "@/features/community-support/model";
-import { fetchAdminPaymentConfig, updateAdminPaymentConfig } from "@/features/community-support/paymentApi";
+import { fetchAdminPaymentConfig, fetchSharedPaymentLedger, updateAdminPaymentConfig } from "@/features/community-support/paymentApi";
 import { useCommunitySupport, type SupportLedgerDraft, type SupportProductDraft, type SupportRecurringCostDraft } from "@/features/community-support/store";
 import { SUPPORT_CATEGORY_LABELS, type SupportLedgerCategory } from "@/features/community-support/types";
 import { MAX_PRODUCT_IMAGES, prepareProductImage } from "@/features/community-support/productImages";
@@ -298,6 +298,16 @@ const CommunitySupportModule = () => {
     enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA && canManage,
     staleTime: 30_000,
   });
+  const {
+    data: sharedPaymentLedger,
+    isLoading: paymentLedgerLoading,
+    error: paymentLedgerError,
+  } = useQuery({
+    queryKey: ["community-support", "payment-ledger", "admin"],
+    queryFn: fetchSharedPaymentLedger,
+    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA && canManage,
+    staleTime: 0,
+  });
   const paymentSettings = useMemo(() => sharedPaymentConfig ? { ...state.settings, ...sharedPaymentConfig } : state.settings, [sharedPaymentConfig, state.settings]);
   const savePaymentSettings = async (next: Partial<typeof state.settings>) => {
     if (!COMMUNITY_SUPPORT_HAS_SHARED_DATA) {
@@ -318,14 +328,18 @@ const CommunitySupportModule = () => {
     await refetchPaymentConfig();
   };
 
+  const adminLedger = useMemo(() => COMMUNITY_SUPPORT_HAS_SHARED_DATA
+    ? [...state.ledger, ...(sharedPaymentLedger?.metricEntries ?? [])]
+    : state.ledger, [sharedPaymentLedger, state.ledger]);
+  const adminFinancialState = useMemo(() => ({ ...state, ledger: adminLedger }), [adminLedger, state]);
   const availableYears = useMemo(() => Array.from(new Set([
     String(new Date().getFullYear()),
-    ...state.ledger.map((entry) => entry.date.slice(0, 4)),
+    ...adminLedger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
     ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [state.ledger, state.raceCosts, state.recurringCosts]);
-  const metrics = useMemo(() => supportMetricsForYear(state, selectedYear), [state, selectedYear]);
-  const visibleEntries = useMemo(() => state.ledger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [state.ledger, selectedMonth]);
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [adminLedger, state.raceCosts, state.recurringCosts]);
+  const metrics = useMemo(() => supportMetricsForYear(adminFinancialState, selectedYear), [adminFinancialState, selectedYear]);
+  const visibleEntries = useMemo(() => adminLedger.filter((entry) => entry.date.startsWith(selectedMonth)).sort((a, b) => b.date.localeCompare(a.date)), [adminLedger, selectedMonth]);
   const inventoryValue = useMemo(() => state.products.reduce((sum, product) => sum + product.price * product.stock, 0), [state.products]);
   const confirmationWord = language === "en" ? "DELETE" : "WISSEN";
   const clearTitle = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (language === "en" ? "Clear shared production data" : "Gedeelde productiedata wissen") : t.localData;
@@ -463,7 +477,7 @@ const CommunitySupportModule = () => {
 
   const sections: Array<{ id: SectionId; label: string; icon: ReactNode; count?: number }> = [
     { id: "dashboard", label: t.dashboard, icon: <LayoutDashboard className="h-4 w-4" /> },
-    { id: "ledger", label: t.ledger, icon: <WalletCards className="h-4 w-4" />, count: state.ledger.length },
+    { id: "ledger", label: t.ledger, icon: <WalletCards className="h-4 w-4" />, count: adminLedger.length },
     { id: "race-costs", label: t.raceCosts, icon: <Flag className="h-4 w-4" />, count: state.raceCosts.length },
     { id: "recurring", label: t.recurring, icon: <CalendarClock className="h-4 w-4" />, count: state.recurringCosts.length },
     { id: "products", label: t.products, icon: <Box className="h-4 w-4" />, count: state.products.length },
@@ -478,7 +492,7 @@ const CommunitySupportModule = () => {
     </section>
   );
 
-  if (loading) return (
+  if (loading || paymentLedgerLoading) return (
     <section role="status" className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-gray-300">
       {language === "en" ? "Loading shared Community Support data…" : "Gedeelde Community Support-data laden…"}
     </section>
@@ -489,6 +503,13 @@ const CommunitySupportModule = () => {
       <h2 className="font-heading text-lg font-black">{language === "en" ? "Shared data unavailable" : "Gedeelde data niet beschikbaar"}</h2>
       <p className="mt-2">{language === "en" ? "Management is blocked to prevent overwriting incomplete data. Reload the page and try again." : "Beheer is geblokkeerd om te voorkomen dat onvolledige data wordt overschreven. Herlaad de pagina en probeer opnieuw."}</p>
       <p className="mt-2 text-xs text-rose-100/70">{persistenceError}</p>
+    </section>
+  );
+
+  if (COMMUNITY_SUPPORT_HAS_SHARED_DATA && paymentLedgerError) return (
+    <section role="alert" className="rounded-2xl border border-rose-400/25 bg-rose-500/10 p-6 text-sm text-rose-100">
+      <h2 className="font-heading text-lg font-black">{language === "en" ? "Payment data unavailable" : "Betaaldata niet beschikbaar"}</h2>
+      <p className="mt-2">{language === "en" ? "Management is blocked to prevent showing incomplete financial totals. Reload the page and try again." : "Beheer is geblokkeerd om onvolledige financiële totalen te voorkomen. Herlaad de pagina en probeer opnieuw."}</p>
     </section>
   );
 
@@ -550,7 +571,7 @@ const CommunitySupportModule = () => {
                   <button type="submit" className={cx(primaryButton, "md:col-span-2 md:justify-self-start")}><Plus className="h-4 w-4" />{t.addTransaction}</button>
                 </form>
                 <div className={cx(card, "p-5 md:p-6")}><div className="mb-4 flex items-center justify-between"><h3 className="font-heading font-black">{t.allTransactions}</h3><span className="text-xs text-gray-500">{visibleEntries.length}</span></div>
-                  {visibleEntries.length === 0 ? <EmptyState icon={<WalletCards className="h-7 w-7" />} text={t.noTransactions} /> : <div className="space-y-2">{visibleEntries.map((entry) => <article key={entry.id} className="flex flex-col gap-4 rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055] sm:flex-row sm:items-center"><div className={cx("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", entry.direction === "income" ? "bg-emerald-500/10 text-emerald-300" : "bg-rose-500/10 text-rose-300")}>{entry.direction === "income" ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-gray-100">{entry.description}</p>{entry.isPublic ? <Eye className="h-3.5 w-3.5 text-gray-500" aria-label={t.public} /> : <EyeOff className="h-3.5 w-3.5 text-gray-600" />}</div><p className="mt-1 text-xs text-gray-500">{entry.date} · {SUPPORT_CATEGORY_LABELS[entry.category][language]}{entry.supporterName ? ` · ${entry.supporterName}` : ""}</p></div><p className={cx("font-black", entry.direction === "income" ? "text-emerald-300" : "text-rose-300")}>{entry.direction === "income" ? "+" : "−"}{formatCurrency(entry.amount, language)}</p><button type="button" onClick={() => removeLedgerEntry(entry.id)} aria-label={`${t.remove}: ${entry.description}`} className="inline-flex h-10 w-10 items-center justify-center self-end rounded-xl text-gray-500 transition hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400 sm:self-auto"><Trash2 className="h-4 w-4" /></button></article>)}</div>}
+                  {visibleEntries.length === 0 ? <EmptyState icon={<WalletCards className="h-7 w-7" />} text={t.noTransactions} /> : <div className="space-y-2">{visibleEntries.map((entry) => <article key={entry.id} className="flex flex-col gap-4 rounded-2xl bg-black/15 p-4 ring-1 ring-white/[0.055] sm:flex-row sm:items-center"><div className={cx("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", entry.direction === "income" ? "bg-emerald-500/10 text-emerald-300" : "bg-rose-500/10 text-rose-300")}>{entry.direction === "income" ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-gray-100">{entry.description}</p>{entry.id.startsWith("paypal-total-") ? <span className="rounded-full bg-sky-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-sky-200 ring-1 ring-sky-300/15">{language === "en" ? "Automatic PayPal" : "Automatisch PayPal"}</span> : entry.isPublic ? <Eye className="h-3.5 w-3.5 text-gray-500" aria-label={t.public} /> : <EyeOff className="h-3.5 w-3.5 text-gray-600" />}</div><p className="mt-1 text-xs text-gray-500">{entry.date} · {SUPPORT_CATEGORY_LABELS[entry.category][language]}{entry.supporterName ? ` · ${entry.supporterName}` : ""}</p></div><p className={cx("font-black", entry.direction === "income" ? "text-emerald-300" : "text-rose-300")}>{entry.direction === "income" ? "+" : "−"}{formatCurrency(entry.amount, language)}</p>{!entry.id.startsWith("paypal-total-") && <button type="button" onClick={() => removeLedgerEntry(entry.id)} aria-label={`${t.remove}: ${entry.description}`} className="inline-flex h-10 w-10 items-center justify-center self-end rounded-xl text-gray-500 transition hover:bg-rose-500/10 hover:text-rose-300 focus-visible:ring-2 focus-visible:ring-rose-400 sm:self-auto"><Trash2 className="h-4 w-4" /></button>}</article>)}</div>}
                 </div>
               </section>}
 
