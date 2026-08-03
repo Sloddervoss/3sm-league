@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isActiveRaceRegistration, isRaceRegistrationOpen } from "@/lib/raceRegistration";
+import { isActiveRaceRegistration, isRaceLiveForDisplay, isRaceRegistrationOpen } from "@/lib/raceRegistration";
 
 const root = process.cwd();
 const source = (path: string) => readFileSync(join(root, path), "utf8");
@@ -16,6 +16,20 @@ describe("public race-registration parity", () => {
     expect(isRaceRegistrationOpen({ status: "live", race_date: "2026-07-11T12:01:00.000Z" }, now)).toBe(false);
     expect(isRaceRegistrationOpen({ status: "upcoming", race_date: "2026-07-11T11:59:00.000Z" }, now)).toBe(false);
     expect(isRaceRegistrationOpen({ status: "completed", race_date: "2026-07-12T12:00:00.000Z" }, now)).toBe(false);
+  });
+
+  it("never promotes a cancelled race to live based on its start time", () => {
+    const now = new Date("2026-07-11T12:00:00.000Z");
+
+    expect(isRaceLiveForDisplay({ status: "upcoming", race_date: "2026-07-11T11:59:00.000Z" }, now)).toBe(true);
+    expect(isRaceLiveForDisplay({ status: "live", race_date: "2026-07-11T12:01:00.000Z" }, now)).toBe(true);
+    expect(isRaceLiveForDisplay({ status: "cancelled", race_date: "2026-07-11T11:59:00.000Z" }, now)).toBe(false);
+    expect(isRaceLiveForDisplay({ status: "completed", race_date: "2026-07-11T11:59:00.000Z" }, now)).toBe(false);
+
+    const calendar = source("src/pages/CalendarPage.tsx");
+    const card = source("src/components/preview/NewRaceCard.tsx");
+    expect(calendar).toContain("races.find((race) => isRaceLiveForDisplay(race, now))");
+    expect(card).toContain('cancelled: { label: "Geannuleerd"');
   });
 
   it("uses the canonical predicate in every live public registration surface", () => {
