@@ -14,6 +14,23 @@ import type {
 import { isSupportedCommunitySupportRace } from "./raceEligibility";
 import { calculateRaceHostingAmountUsd, convertUsdToEur, DEFAULT_USD_EUR_RATE, normalizeHostedHours, normalizeUsdEurRate } from "./raceHostingPricing";
 import { createPaymentIntent, DEFAULT_PAYPAL_AMOUNTS_EUR, normalizeDiscordUserId, normalizeIracingReferralUrl, normalizePayPalAmounts, normalizePayPalMeUrl, resolvePaymentIntent } from "./paymentFlow";
+import { COMMUNITY_SUPPORT_HAS_SHARED_DATA } from "./model";
+import {
+  clearSharedCommunitySupportData,
+  deleteLedgerEntry,
+  deleteProduct,
+  deleteRaceCost,
+  deleteRecurringCost,
+  emptySharedSupportState,
+  fetchAdminCommunitySupportState,
+  insertLedgerEntry,
+  insertProduct,
+  insertRecurringCost,
+  saveCommunitySupportSettings,
+  setProductActive,
+  setRecurringCostActive,
+  upsertRaceCosts,
+} from "./supportDataApi";
 
 const STORAGE_PREFIX = "3sm-community-support-session-v2";
 const INCOME_CATEGORIES = new Set(["contribution", "merchandise_income", "referral_income", "other"]);
@@ -242,35 +259,78 @@ const saveRaceCostDrafts = (current: CommunitySupportState, drafts: SupportRaceC
 
 type CommunitySupportStore = {
   state: CommunitySupportState;
-  addLedgerEntry: (draft: SupportLedgerDraft) => void;
-  removeLedgerEntry: (id: string) => void;
-  addRecurringCost: (draft: SupportRecurringCostDraft) => void;
-  toggleRecurringCost: (id: string) => void;
-  removeRecurringCost: (id: string) => void;
-  saveRaceCost: (draft: SupportRaceCostDraft) => void;
-  saveRaceCosts: (drafts: SupportRaceCostDraft[]) => void;
-  initializeRaceCosts: (drafts: SupportRaceCostDraft[]) => void;
-  removeRaceCost: (id: string) => void;
-  addProduct: (draft: SupportProductDraft) => void;
-  toggleProduct: (id: string) => void;
-  removeProduct: (id: string) => void;
-  updateSettings: (settings: Partial<CommunitySupportSettings>) => void;
+  loading: boolean;
+  persistenceError: string | null;
+  addLedgerEntry: (draft: SupportLedgerDraft) => Promise<boolean>;
+  removeLedgerEntry: (id: string) => Promise<boolean>;
+  addRecurringCost: (draft: SupportRecurringCostDraft) => Promise<boolean>;
+  toggleRecurringCost: (id: string) => Promise<boolean>;
+  removeRecurringCost: (id: string) => Promise<boolean>;
+  saveRaceCost: (draft: SupportRaceCostDraft) => Promise<boolean>;
+  saveRaceCosts: (drafts: SupportRaceCostDraft[]) => Promise<boolean>;
+  initializeRaceCosts: (drafts: SupportRaceCostDraft[]) => Promise<boolean>;
+  removeRaceCost: (id: string) => Promise<boolean>;
+  addProduct: (draft: SupportProductDraft) => Promise<boolean>;
+  toggleProduct: (id: string) => Promise<boolean>;
+  removeProduct: (id: string) => Promise<boolean>;
+  updateSettings: (settings: Partial<CommunitySupportSettings>) => Promise<boolean>;
   addPaymentIntent: (draft: SupportPaymentIntentDraft) => SupportPaymentIntent | null;
   resolvePayment: (id: string, action: "confirm" | "not_found", grossAmount?: number, feeAmount?: number, resolutionNote?: string) => boolean;
-  clearLocalData: () => void;
+  clearLocalData: () => Promise<boolean>;
 };
 
 const CommunitySupportContext = createContext<CommunitySupportStore | null>(null);
 
 export const CommunitySupportProvider = ({ children }: { children: ReactNode }) => {
   const { user, isAdmin, isSuperAdmin } = useAuth();
-  const storageKey = user && (isAdmin || isSuperAdmin) ? storageKeyFor(user.id) : null;
-  const [state, setState] = useState<CommunitySupportState>(INITIAL_STATE);
+  const canManage = Boolean(user && (isAdmin || isSuperAdmin));
+  const storageKey = !COMMUNITY_SUPPORT_HAS_SHARED_DATA && canManage && user ? storageKeyFor(user.id) : null;
+  const [state, setState] = useState<CommunitySupportState>(() => COMMUNITY_SUPPORT_HAS_SHARED_DATA ? emptySharedSupportState() : INITIAL_STATE);
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(COMMUNITY_SUPPORT_HAS_SHARED_DATA && canManage);
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const activeKeyRef = useRef<string | null>(null);
   const skipNextPersistRef = useRef(false);
 
+  const persist = useCallback(async (operation: Promise<void>) => {
+    setPersistenceError(null);
+    try {
+      await operation;
+      setState(await fetchAdminCommunitySupportState());
+      return true;
+    } catch (error) {
+      setPersistenceError(error instanceof Error ? error.message : "Community Support-wijziging kon niet worden opgeslagen.");
+      try {
+        setState(await fetchAdminCommunitySupportState());
+      } catch {
+        setState(emptySharedSupportState());
+      }
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
+    if (!COMMUNITY_SUPPORT_HAS_SHARED_DATA) return;
+    if (!canManage) {
+      setState(emptySharedSupportState());
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    void fetchAdminCommunitySupportState().then((sharedState) => {
+      if (!cancelled) {
+        setState(sharedState);
+        setPersistenceError(null);
+      }
+    }).catch((error) => {
+      if (!cancelled) setPersistenceError(error instanceof Error ? error.message : "Community Support-data kon niet worden geladen.");
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [canManage]);
+
+  useEffect(() => {
+    if (COMMUNITY_SUPPORT_HAS_SHARED_DATA) return;
     const previousKey = activeKeyRef.current;
     if (previousKey && previousKey !== storageKey) {
       try { window.sessionStorage.removeItem(previousKey); } catch { /* memory state is still cleared below */ }
@@ -286,6 +346,7 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
   }, [storageKey]);
 
   useEffect(() => {
+    if (COMMUNITY_SUPPORT_HAS_SHARED_DATA) return;
     if (!storageKey || hydratedKey !== storageKey) return;
     if (skipNextPersistRef.current) {
       skipNextPersistRef.current = false;
@@ -298,33 +359,90 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     }
   }, [state, storageKey, hydratedKey]);
 
-  const addLedgerEntry = useCallback((draft: SupportLedgerDraft) => setState((current) => {
-    if (draft.category === "race_hosting") return current;
-    return { ...current, ledger: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.ledger] };
-  }), []);
-  const removeLedgerEntry = useCallback((id: string) => setState((current) => ({ ...current, ledger: current.ledger.filter((entry) => entry.id !== id) })), []);
-  const addRecurringCost = useCallback((draft: SupportRecurringCostDraft) => setState((current) => ({ ...current, recurringCosts: [{ ...withId(draft), amount: safeAmount(draft.amount) }, ...current.recurringCosts] })), []);
-  const toggleRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.map((cost) => cost.id === id ? { ...cost, active: !cost.active } : cost) })), []);
-  const removeRecurringCost = useCallback((id: string) => setState((current) => ({ ...current, recurringCosts: current.recurringCosts.filter((cost) => cost.id !== id) })), []);
-  const saveRaceCost = useCallback((draft: SupportRaceCostDraft) => setState((current) => saveRaceCostDrafts(current, [draft])), []);
-  const saveRaceCosts = useCallback((drafts: SupportRaceCostDraft[]) => setState((current) => saveRaceCostDrafts(current, drafts)), []);
-  const initializeRaceCosts = useCallback((drafts: SupportRaceCostDraft[]) => setState((current) => {
-    const existingRaceIds = new Set(current.raceCosts.map((cost) => cost.raceId));
+  const addLedgerEntry = useCallback(async (draft: SupportLedgerDraft) => {
+    if (draft.category === "race_hosting") return true;
+    const normalized = withId({ ...draft, amount: safeAmount(draft.amount) });
+    setState((current) => ({ ...current, ledger: [normalized, ...current.ledger] }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(insertLedgerEntry(normalized)) : true;
+  }, [persist]);
+  const removeLedgerEntry = useCallback(async (id: string) => {
+    setState((current) => ({ ...current, ledger: current.ledger.filter((entry) => entry.id !== id) }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(deleteLedgerEntry(id)) : true;
+  }, [persist]);
+  const addRecurringCost = useCallback(async (draft: SupportRecurringCostDraft) => {
+    const normalized = withId({ ...draft, amount: safeAmount(draft.amount) });
+    setState((current) => ({ ...current, recurringCosts: [normalized, ...current.recurringCosts] }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(insertRecurringCost(normalized)) : true;
+  }, [persist]);
+  const toggleRecurringCost = useCallback(async (id: string) => {
+    const existing = state.recurringCosts.find((cost) => cost.id === id);
+    if (!existing) return true;
+    setState((current) => ({ ...current, recurringCosts: current.recurringCosts.map((cost) => cost.id === id ? { ...cost, active: !cost.active } : cost) }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(setRecurringCostActive(id, !existing.active)) : true;
+  }, [persist, state.recurringCosts]);
+  const removeRecurringCost = useCallback(async (id: string) => {
+    setState((current) => ({ ...current, recurringCosts: current.recurringCosts.filter((cost) => cost.id !== id) }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(deleteRecurringCost(id)) : true;
+  }, [persist]);
+  const saveRaceCost = useCallback(async (draft: SupportRaceCostDraft) => {
+    const next = saveRaceCostDrafts(state, [draft]);
+    const saved = next.raceCosts.find((cost) => cost.raceId === draft.raceId);
+    setState(next);
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA && saved ? persist(upsertRaceCosts([saved])) : true;
+  }, [persist, state]);
+  const saveRaceCosts = useCallback(async (drafts: SupportRaceCostDraft[]) => {
+    const next = saveRaceCostDrafts(state, drafts);
+    const raceIds = new Set(drafts.map((draft) => draft.raceId));
+    const saved = next.raceCosts.filter((cost) => raceIds.has(cost.raceId));
+    setState(next);
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(upsertRaceCosts(saved)) : true;
+  }, [persist, state]);
+  const initializeRaceCosts = useCallback(async (drafts: SupportRaceCostDraft[]) => {
+    const existingRaceIds = new Set(state.raceCosts.map((cost) => cost.raceId));
     const missingDrafts = drafts.filter((draft) => !existingRaceIds.has(draft.raceId));
     if (missingDrafts.length === 0) {
-      if (current.settings.racePricingInitialized) return current;
-      return { ...current, settings: { ...current.settings, racePricingInitialized: true } };
+      if (!state.settings.racePricingInitialized) {
+        const settings = { ...state.settings, racePricingInitialized: true };
+        setState({ ...state, settings });
+        return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(saveCommunitySupportSettings(settings)) : true;
+      }
+      return true;
     }
-    const initialized = saveRaceCostDrafts(current, missingDrafts);
-    return { ...initialized, settings: { ...initialized.settings, racePricingInitialized: true } };
-  }), []);
-  const removeRaceCost = useCallback((id: string) => setState((current) => ({ ...current, raceCosts: current.raceCosts.filter((cost) => cost.id !== id) })), []);
-  const addProduct = useCallback((draft: SupportProductDraft) => setState((current) => ({ ...current, products: [{ ...withId(draft), price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: safeAmount(draft.shippingCost), stock: Math.max(0, Math.floor(draft.stock)) }, ...current.products] })), []);
-  const toggleProduct = useCallback((id: string) => setState((current) => ({ ...current, products: current.products.map((product) => product.id === id ? { ...product, active: !product.active } : product) })), []);
-  const removeProduct = useCallback((id: string) => setState((current) => ({ ...current, products: current.products.filter((product) => product.id !== id) })), []);
-  const updateSettings = useCallback((settings: Partial<CommunitySupportSettings>) => setState((current) => {
+    const initialized = saveRaceCostDrafts(state, missingDrafts);
+    const next = { ...initialized, settings: { ...initialized.settings, racePricingInitialized: true } };
+    const newRaceIds = new Set(missingDrafts.map((draft) => draft.raceId));
+    setState(next);
+    if (COMMUNITY_SUPPORT_HAS_SHARED_DATA) {
+      return persist(Promise.all([
+        upsertRaceCosts(next.raceCosts.filter((cost) => newRaceIds.has(cost.raceId)), true),
+        saveCommunitySupportSettings(next.settings),
+      ]).then(() => undefined));
+    }
+    return true;
+  }, [persist, state]);
+  const removeRaceCost = useCallback(async (id: string) => {
+    setState((current) => ({ ...current, raceCosts: current.raceCosts.filter((cost) => cost.id !== id) }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(deleteRaceCost(id)) : true;
+  }, [persist]);
+  const addProduct = useCallback(async (draft: SupportProductDraft) => {
+    const normalized = withId({ ...draft, price: safeAmount(draft.price), purchasePrice: safeAmount(draft.purchasePrice), shippingCost: safeAmount(draft.shippingCost), stock: Math.max(0, Math.floor(draft.stock)) });
+    setState((current) => ({ ...current, products: [normalized, ...current.products] }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(insertProduct(normalized)) : true;
+  }, [persist]);
+  const toggleProduct = useCallback(async (id: string) => {
+    const existing = state.products.find((product) => product.id === id);
+    if (!existing) return true;
+    setState((current) => ({ ...current, products: current.products.map((product) => product.id === id ? { ...product, active: !product.active } : product) }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(setProductActive(id, !existing.active)) : true;
+  }, [persist, state.products]);
+  const removeProduct = useCallback(async (id: string) => {
+    setState((current) => ({ ...current, products: current.products.filter((product) => product.id !== id) }));
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(deleteProduct(id)) : true;
+  }, [persist]);
+  const updateSettings = useCallback(async (settings: Partial<CommunitySupportSettings>) => {
+    const current = state;
     const usdEurRate = settings.usdEurRate === undefined ? current.settings.usdEurRate : normalizeUsdEurRate(settings.usdEurRate);
-    if (usdEurRate === null) return current;
+    if (usdEurRate === null) return false;
     const paypalMeUrl = settings.paypalMeUrl === undefined ? current.settings.paypalMeUrl : (normalizePayPalMeUrl(settings.paypalMeUrl) ?? "");
     const paymentAdminDiscordId = settings.paymentAdminDiscordId === undefined ? current.settings.paymentAdminDiscordId : (normalizeDiscordUserId(settings.paymentAdminDiscordId) ?? "");
     const paypalSuggestedAmounts = settings.paypalSuggestedAmounts === undefined ? current.settings.paypalSuggestedAmounts : normalizePayPalAmounts(settings.paypalSuggestedAmounts);
@@ -333,8 +451,10 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     const paypalEnabled = Boolean(requestedPaypalEnabled && !paypalCheckoutEnabled && paypalMeUrl && paymentAdminDiscordId && paypalSuggestedAmounts.length > 0);
     const iracingReferralUrl = settings.iracingReferralUrl === undefined ? current.settings.iracingReferralUrl : (normalizeIracingReferralUrl(settings.iracingReferralUrl) ?? "");
     const iracingReferralEnabled = settings.iracingReferralEnabled === undefined ? current.settings.iracingReferralEnabled : Boolean(settings.iracingReferralEnabled && iracingReferralUrl);
-    return { ...current, settings: { ...current.settings, ...settings, paypalEnabled, paypalMeUrl, paymentAdminDiscordId, paypalSuggestedAmounts, iracingReferralEnabled, iracingReferralUrl, usdEurRate, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) } };
-  }), []);
+    const nextSettings = { ...current.settings, ...settings, paypalEnabled, paypalMeUrl, paymentAdminDiscordId, paypalSuggestedAmounts, iracingReferralEnabled, iracingReferralUrl, usdEurRate, reserve: settings.reserve === undefined ? current.settings.reserve : safeAmount(settings.reserve) };
+    setState({ ...current, settings: nextSettings });
+    return COMMUNITY_SUPPORT_HAS_SHARED_DATA ? persist(saveCommunitySupportSettings(nextSettings)) : true;
+  }, [persist, state]);
   const addPaymentIntent = useCallback((draft: SupportPaymentIntentDraft) => {
     const intent = createPaymentIntent(draft, createLocalId());
     if (!intent) return null;
@@ -358,16 +478,23 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     });
     return resolved;
   }, []);
-  const clearLocalData = useCallback(() => {
+  const clearLocalData = useCallback(async () => {
+    if (COMMUNITY_SUPPORT_HAS_SHARED_DATA) {
+      setState(emptySharedSupportState());
+      return persist(clearSharedCommunitySupportData());
+    }
     if (storageKey) {
       try { window.sessionStorage.removeItem(storageKey); } catch { /* state is still cleared */ }
     }
     skipNextPersistRef.current = true;
     setState(INITIAL_STATE);
-  }, [storageKey]);
+    return true;
+  }, [persist, storageKey]);
 
   const value = useMemo<CommunitySupportStore>(() => ({
     state,
+    loading,
+    persistenceError,
     addLedgerEntry,
     removeLedgerEntry,
     addRecurringCost,
@@ -384,7 +511,7 @@ export const CommunitySupportProvider = ({ children }: { children: ReactNode }) 
     addPaymentIntent,
     resolvePayment,
     clearLocalData,
-  }), [state, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, addPaymentIntent, resolvePayment, clearLocalData]);
+  }), [state, loading, persistenceError, addLedgerEntry, removeLedgerEntry, addRecurringCost, toggleRecurringCost, removeRecurringCost, saveRaceCost, saveRaceCosts, initializeRaceCosts, removeRaceCost, addProduct, toggleProduct, removeProduct, updateSettings, addPaymentIntent, resolvePayment, clearLocalData]);
   return <CommunitySupportContext.Provider value={value}>{children}</CommunitySupportContext.Provider>;
 };
 

@@ -99,8 +99,8 @@ const openConfirmation = async () => {
 describe("result-import racehosting op het uploadscherm", () => {
   beforeEach(() => {
     support.state.raceCosts = [];
-    support.initializeRaceCosts.mockReset();
-    support.saveRaceCost.mockReset();
+    support.initializeRaceCosts.mockReset().mockResolvedValue(true);
+    support.saveRaceCost.mockReset().mockResolvedValue(true);
     writes.failRaceUpdate = false;
   });
 
@@ -138,7 +138,7 @@ describe("result-import racehosting op het uploadscherm", () => {
     await openConfirmation();
     fireEvent.click(screen.getByRole("button", { name: "Resultaten opslaan en racekosten boeken" }));
 
-    await screen.findByText(/Resultaten geïmporteerd · racehosting lokaal geboekt voor 2 uur met 25% korting/);
+    await screen.findByText(/Resultaten geïmporteerd · racehosting gedeeld geboekt voor 2 uur met 25% korting/);
     expect(support.initializeRaceCosts).toHaveBeenCalledWith([expect.objectContaining({
       raceId: "race-a",
       hostedHours: 2,
@@ -146,6 +146,16 @@ describe("result-import racehosting op het uploadscherm", () => {
       exchangeRateUsdEur: 0.92,
     })]);
     expect(support.saveRaceCost).not.toHaveBeenCalled();
+  });
+
+  it("meldt expliciet wanneer resultaten live staan maar het opslaan van racehosting faalt", async () => {
+    support.initializeRaceCosts.mockResolvedValue(false);
+    await prepareJsonImport();
+    await openConfirmation();
+    fireEvent.click(screen.getByRole("button", { name: "Resultaten opslaan en racekosten boeken" }));
+
+    await screen.findByText("Resultaten geïmporteerd.");
+    expect(screen.getByRole("alert")).toHaveTextContent("De resultaten staan live, maar de racehostingkosten konden niet worden opgeslagen");
   });
 
   it("laat een bestaande standaardboeking op het uploadscherm bewust corrigeren met dezelfde koerssnapshot", async () => {

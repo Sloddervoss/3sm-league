@@ -9,6 +9,11 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => auth.current,
 }));
 
+vi.mock("@/features/community-support/model", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/community-support/model")>()),
+  COMMUNITY_SUPPORT_HAS_SHARED_DATA: false,
+}));
+
 import { CommunitySupportProvider, useCommunitySupport } from "@/features/community-support/store";
 
 const storageKey = "3sm-community-support-session-v2:super-admin-a";
