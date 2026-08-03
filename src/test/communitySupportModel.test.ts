@@ -46,6 +46,20 @@ describe("Community Support financial model", () => {
     expect(metrics.coveragePercent).toBe(30);
   });
 
+  it("shows a confirmed PayPal capture net of fees in admin financial metrics", () => {
+    const state = emptyState();
+    state.settings.reserveStartYear = "2026";
+    state.ledger = mapPaymentTotalsToMetricEntries([
+      { month: "2026-08", contribution_total_eur: 1, fee_total_eur: 0.38 },
+    ]);
+
+    const metrics = supportMetricsForYear(state, "2026");
+    expect(metrics.totalIncome).toBe(1);
+    expect(metrics.totalExpenses).toBe(0.38);
+    expect(metrics.netCommunitySupport).toBe(0.62);
+    expect(metrics.closingReserve).toBe(0.62);
+  });
+
   it("subtracts a later-month refund from season community funds instead of dropping it", () => {
     const state = emptyState();
     state.settings.reserveStartYear = "2026";
@@ -288,5 +302,14 @@ describe("Community Support release boundary", () => {
     expect(routeGenerator).toContain("createPrivateSeoRoutes(communitySupportPublic)");
     expect(routeGenerator).toContain("Community Support cannot be public while dataSource is not supabase");
     expect(routeGenerator).toContain("path: '/support'");
+  });
+
+  it("merges confirmed PayPal totals into the admin dashboard and read-only transaction list", () => {
+    const supportModule = readFileSync("src/features/control-room/support/CommunitySupportModule.tsx", "utf8");
+    expect(supportModule).toContain("queryFn: fetchSharedPaymentLedger");
+    expect(supportModule).toContain("...(sharedPaymentLedger?.metricEntries ?? [])");
+    expect(supportModule).toContain("supportMetricsForYear(adminFinancialState, selectedYear)");
+    expect(supportModule).toContain('entry.id.startsWith("paypal-total-")');
+    expect(supportModule).toContain("Betaaldata niet beschikbaar");
   });
 });
