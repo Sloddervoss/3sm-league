@@ -78,4 +78,13 @@ describe("Community Support shared public data", () => {
     expect(correction).toContain("FROM authenticated;");
     expect(correction).not.toMatch(/GRANT[^;]*(?:DELETE|TRUNCATE|TRIGGER|REFERENCES)[^;]*TO authenticated/is);
   });
+
+  it("shows the public race count and total from the public race projection", () => {
+    const page = readFileSync("src/features/community-support/public/CommunitySupportPage.tsx", "utf8");
+    expect(page).toContain("{annualPublicRaceCosts.length}");
+    expect(page).toContain("annualPublicRaceCosts.reduce((total, cost) => total + cost.amount, 0)");
+    const summaryStart = page.indexOf("grid shrink-0 grid-cols-3");
+    const summaryEnd = page.indexOf("</button>", summaryStart);
+    expect(page.slice(summaryStart, summaryEnd)).not.toContain("metrics.raceCosts");
+  });
 });

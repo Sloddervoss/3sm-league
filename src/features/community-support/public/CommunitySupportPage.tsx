@@ -488,8 +488,8 @@ const CommunitySupportPage = () => {
                 </div>
                 <div className="grid shrink-0 grid-cols-3 gap-2 lg:w-[430px]">
                   <div className="rounded-xl bg-black/15 p-3 ring-1 ring-white/[0.055]"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">{copy.openBookTransactions}</span><p className="mt-1 font-heading text-xl font-black text-white">{annualPublicLedger.filter((entry) => entry.category !== "race_hosting").length}</p></div>
-                  <div className="rounded-xl bg-black/15 p-3 ring-1 ring-white/[0.055]"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">{copy.openBookRaces}</span><p className="mt-1 font-heading text-xl font-black text-white">{metrics.raceCosts.length}</p></div>
-                  <div className="rounded-xl bg-orange-500/[0.08] p-3 ring-1 ring-orange-400/20"><span className="text-[9px] font-black uppercase tracking-wider text-orange-300">{copy.openBookRaceCosts}</span><p className="mt-1 font-heading text-xl font-black text-white">{formatMoney(metrics.raceCostTotal, lang)}</p></div>
+                  <div className="rounded-xl bg-black/15 p-3 ring-1 ring-white/[0.055]"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">{copy.openBookRaces}</span><p className="mt-1 font-heading text-xl font-black text-white">{annualPublicRaceCosts.length}</p></div>
+                  <div className="rounded-xl bg-orange-500/[0.08] p-3 ring-1 ring-orange-400/20"><span className="text-[9px] font-black uppercase tracking-wider text-orange-300">{copy.openBookRaceCosts}</span><p className="mt-1 font-heading text-xl font-black text-white">{formatMoney(annualPublicRaceCosts.reduce((total, cost) => total + cost.amount, 0), lang)}</p></div>
                 </div>
               </div>
               <div className="relative mt-5 flex items-center gap-2 border-t border-white/[0.06] pt-4 text-sm font-black text-orange-300">{copy.openBookCta}<ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" /></div>
