@@ -83,6 +83,10 @@ describe("Community Support shared public data", () => {
     const page = readFileSync("src/features/community-support/public/CommunitySupportPage.tsx", "utf8");
     expect(page).toContain("{annualPublicRaceCosts.length}");
     expect(page).toContain("annualPublicRaceCosts.reduce((total, cost) => total + cost.amount, 0)");
+    expect(page).toContain("totalRaceCount={annualPublicRaceCosts.length}");
+    expect(page).toContain("raceCostTotalEur={annualPublicRaceCosts.reduce((total, cost) => total + cost.amount, 0)}");
+    expect(page).not.toContain("totalRaceCount={metrics.raceCosts.length}");
+    expect(page).not.toContain("raceCostTotalEur={metrics.raceCostTotal}");
     const summaryStart = page.indexOf("grid shrink-0 grid-cols-3");
     const summaryEnd = page.indexOf("</button>", summaryStart);
     expect(page.slice(summaryStart, summaryEnd)).not.toContain("metrics.raceCosts");

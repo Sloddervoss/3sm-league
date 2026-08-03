@@ -627,8 +627,8 @@ const CommunitySupportPage = () => {
           annualLedger={annualPublicLedger}
           visibleLedger={publicLedger}
           raceCosts={annualPublicRaceCosts}
-          totalRaceCount={metrics.raceCosts.length}
-          raceCostTotalEur={metrics.raceCostTotal}
+          totalRaceCount={annualPublicRaceCosts.length}
+          raceCostTotalEur={annualPublicRaceCosts.reduce((total, cost) => total + cost.amount, 0)}
           summary={{
             operationalExpenses: metrics.operationalExpenses,
             communityCovered: metrics.communityCovered,
