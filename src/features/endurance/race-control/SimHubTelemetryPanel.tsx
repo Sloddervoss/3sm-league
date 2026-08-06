@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Cable, Crown, Fuel, Gauge, Loader2, Radio, RefreshCw, Timer } from "lucide-react";
-import { centralRowToBridgeResponse, listCentralSimHubDevices, readCentralSimHubTelemetry, type CentralSimHubLatestRow } from "@/lib/centralSimHubRelay";
+import { centralRowToBridgeResponse, listCentralSimHubDevices, listCentralSimHubDevicesForTeam, readCentralSimHubTelemetry, type CentralSimHubDevice, type CentralSimHubLatestRow } from "@/lib/centralSimHubRelay";
 import { getSimHubTelemetryState, type SimHubBridgeResponse } from "@/lib/localSimHubBridge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,7 +18,7 @@ export const SimHubTelemetryPanel = ({ eventId, teamId, plannedDriverId }: { eve
   const { user, isSuperAdmin, loading } = useAuth();
   // Centrale relay: leest een gekoppeld SimHub-device (proof of work), alleen super-admin tijdens de canary.
   const staff = Boolean(user && isSuperAdmin);
-  const [devices, setDevices] = useState<{ id: string; device_name: string; connector_id: string; revoked_at: string | null }[]>([]);
+  const [devices, setDevices] = useState<CentralSimHubDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -30,14 +30,16 @@ export const SimHubTelemetryPanel = ({ eventId, teamId, plannedDriverId }: { eve
   const loadDevices = async () => {
     if (!staff) { setDevices([]); setEnabled(false); return; }
     try {
-      const list = await listCentralSimHubDevices();
-      setDevices(list.filter((device) => !device.revoked_at));
+      const teamBound = teamId ? await listCentralSimHubDevicesForTeam(eventId, teamId) : [];
+      const fallback = teamBound.length ? teamBound : (await listCentralSimHubDevices()).filter((device) => !device.revoked_at);
+      setDevices(fallback);
+      if (teamBound.length) { setSelectedDeviceId(teamBound[0].id); }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Gekoppelde SimHub-apparaten konden niet worden geladen.");
     }
   };
 
-  useEffect(() => { void loadDevices(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [staff, user?.id]);
+  useEffect(() => { void loadDevices(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [staff, user?.id, eventId, teamId]);
 
   useEffect(() => {
     if (devices.length && !devices.some((device) => device.id === selectedDeviceId)) setSelectedDeviceId(devices[0].id);
@@ -76,13 +78,18 @@ export const SimHubTelemetryPanel = ({ eventId, teamId, plannedDriverId }: { eve
   const refreshDeviceList = async () => { setRefreshing(true); try { await loadDevices(); } finally { setRefreshing(false); } };
 
   const telemetry = latest?.payload.telemetry;
-  const reportedDriver = latest?.payload.race.driverId ? displayName(latest.payload.race.driverId) : undefined;
+  const reportedDriver = latest?.payload.race.currentDriverName?.trim()
+    ? latest.payload.race.currentDriverName.trim()
+    : latest?.payload.race.currentDriverId ? `iRacing #${latest.payload.race.currentDriverId}` : undefined;
   const plannedDriver = plannedDriverId ? displayName(plannedDriverId) : undefined;
+  const carLabel = [latest?.payload.race.carName, latest?.payload.race.trackName].filter(Boolean).join(" · ");
   const ageSeconds = latest ? Math.max(0, Math.round((checkedAt - Date.parse(latest.receivedAt)) / 1_000)) : null;
   const telemetryState = latest ? getSimHubTelemetryState(latest.receivedAt, checkedAt) : null;
   const fresh = telemetryState === "live";
   const pitWindowMinutes = useMemo(() => telemetry?.estimatedLapsRemaining && telemetry.lapTimeSeconds ? telemetry.estimatedLapsRemaining * telemetry.lapTimeSeconds / 60 : null, [telemetry]);
-  const mismatch = Boolean(latest?.payload.race.driverId && plannedDriverId && latest.payload.race.driverId !== plannedDriverId);
+  // Adviserend (kan nooit de planning aanpassen): alleen flaggen als de gemelde
+  // coureur wezenlijk afwijkt van de geplande coureur én we hem kunt identificeren.
+  const mismatch = Boolean(reportedDriver && plannedDriver && reportedDriver.toLowerCase() !== plannedDriver.toLowerCase() && !reportedDriver.toLowerCase().includes(plannedDriver.toLowerCase()));
 
   return <Panel>
     <SectionHeading eyebrow="Bewezen centrale relay" title="SimHub live telemetry" description="Leest adviserend vanaf de gekoppelde SimHub-installatie via de centrale 3SM-relay. Handmatige Race Control blijft beschikbaar en telemetry wijzigt de planning niet automatisch." action={<StatusPill tone={telemetryState === "live" ? "green" : telemetryState === "offline" ? "red" : enabled ? "orange" : "neutral"}>{telemetryState === "live" ? "Live" : telemetryState === "stale" ? "Telemetry verouderd" : telemetryState === "offline" ? "Offline" : status}</StatusPill>} />
@@ -101,8 +108,8 @@ export const SimHubTelemetryPanel = ({ eventId, teamId, plannedDriverId }: { eve
         <Metric icon={Timer} label="Actuele stint" primary={formatDuration(telemetry.stintElapsedSeconds)} secondary={telemetry.inPitLane ? `Pitlane${telemetry.pitLimiter ? " · limiter" : ""}` : `${telemetry.incidents ?? "—"} incidenten · ${telemetry.flag}`} />
       </div>
       <div className={`mt-4 rounded-xl p-4 ring-1 ${mismatch ? "bg-amber-500/10 text-amber-100 ring-amber-500/25" : "bg-emerald-500/[0.07] text-emerald-100 ring-emerald-500/20"}`}>
-        <strong className="text-sm">Gemelde coureur: {reportedDriver ?? latest.payload.race.driverId ?? "Onbekend"}</strong>
-        <p className="mt-1 text-xs opacity-75">Gepland: {plannedDriver ?? "Geen actuele stint"}{mismatch ? " · Afwijking gedetecteerd; Race Control moet dit handmatig beoordelen." : " · Komt overeen met de planning."}</p>
+        <strong className="text-sm">Gemelde coureur: {reportedDriver ?? "Onbekend"}{carLabel ? <span className="ml-2 font-normal text-gray-400">{carLabel}</span> : null}</strong>
+        <p className="mt-1 text-xs opacity-75">Gepland: {plannedDriver ?? "Geen actuele stint"}{mismatch ? " · Mogelijke afwijking; Race Control moet dit handmatig beoordelen." : reportedDriver ? " · Geen afwijking gemeld." : " · Telemetry meldt (nog) geen coureur."}</p>
       </div>
     </>}
   </Panel>;
