@@ -1616,6 +1616,8 @@ export type Database = {
         Row: {
           connector_id: string
           device_name: string
+          endurance_event_id: string | null
+          endurance_team_id: string | null
           expires_at: string | null
           id: string
           last_sequence: number
@@ -1633,6 +1635,8 @@ export type Database = {
         Insert: {
           connector_id: string
           device_name: string
+          endurance_event_id?: string | null
+          endurance_team_id?: string | null
           expires_at?: string | null
           id?: string
           last_sequence?: number
@@ -1650,6 +1654,8 @@ export type Database = {
         Update: {
           connector_id?: string
           device_name?: string
+          endurance_event_id?: string | null
+          endurance_team_id?: string | null
           expires_at?: string | null
           id?: string
           last_sequence?: number
@@ -1690,8 +1696,15 @@ export type Database = {
       simhub_telemetry_latest: {
         Row: {
           captured_at: string
+          car_id: string | null
+          car_name: string | null
           connector_id: string
+          current_driver_id: string | null
+          current_driver_name: string | null
           device_id: string
+          driver_id: string | null
+          endurance_event_id: string | null
+          endurance_team_id: string | null
           game: string
           owner_user_id: string
           race_id: string | null
@@ -1701,11 +1714,20 @@ export type Database = {
           simhub_version: string
           team_id: string | null
           telemetry: Json
+          track_config: string | null
+          track_name: string | null
         }
         Insert: {
           captured_at: string
+          car_id?: string | null
+          car_name?: string | null
           connector_id: string
+          current_driver_id?: string | null
+          current_driver_name?: string | null
           device_id: string
+          driver_id?: string | null
+          endurance_event_id?: string | null
+          endurance_team_id?: string | null
           game: string
           owner_user_id: string
           race_id?: string | null
@@ -1715,11 +1737,20 @@ export type Database = {
           simhub_version: string
           team_id?: string | null
           telemetry: Json
+          track_config?: string | null
+          track_name?: string | null
         }
         Update: {
           captured_at?: string
+          car_id?: string | null
+          car_name?: string | null
           connector_id?: string
+          current_driver_id?: string | null
+          current_driver_name?: string | null
           device_id?: string
+          driver_id?: string | null
+          endurance_event_id?: string | null
+          endurance_team_id?: string | null
           game?: string
           owner_user_id?: string
           race_id?: string | null
@@ -1729,6 +1760,8 @@ export type Database = {
           simhub_version?: string
           team_id?: string | null
           telemetry?: Json
+          track_config?: string | null
+          track_name?: string | null
         }
         Relationships: [
           {

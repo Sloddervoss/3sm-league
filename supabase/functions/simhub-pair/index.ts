@@ -122,7 +122,7 @@ Deno.serve(async (request) => {
 
     if (action === "list") {
       const { data, error } = await service.from("simhub_devices")
-        .select("id,device_name,connector_id,race_id,team_id,paired_at,expires_at,last_seen_at,revoked_at,race:races(name),team:teams(name)")
+        .select("id,device_name,connector_id,race_id,team_id,endurance_event_id,endurance_team_id,paired_at,expires_at,last_seen_at,revoked_at,race:races(name),team:teams(name)")
         .order("paired_at", { ascending: false });
       if (error) throw error;
       return jsonResponse(request, { devices: data || [] });

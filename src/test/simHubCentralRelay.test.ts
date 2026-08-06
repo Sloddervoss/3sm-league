@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { centralRowToBridgeResponse } from "@/lib/centralSimHubRelay";
+import { centralRowToBridgeResponse, type CentralSimHubLatestRow } from "@/lib/centralSimHubRelay";
 
 const migration = readFileSync("supabase/migrations/20260716170000_simhub_central_relay.sql", "utf8");
 const devicePairingMigration = readFileSync("supabase/migrations/20260716192852_simhub_device_only_pairing.sql", "utf8");
@@ -36,11 +36,20 @@ const telemetry = {
   flag: "green",
 };
 
-const latestRow = {
+const latestRow: CentralSimHubLatestRow = {
   device_id: "11111111-1111-4111-8111-111111111111",
   owner_user_id: "22222222-2222-4222-8222-222222222222",
   race_id: "33333333-3333-4333-8333-333333333333",
   team_id: "44444444-4444-4444-8444-444444444444",
+  endurance_event_id: null,
+  endurance_team_id: null,
+  driver_id: null,
+  current_driver_id: null,
+  current_driver_name: null,
+  car_id: null,
+  car_name: null,
+  track_name: null,
+  track_config: null,
   session_id: "simhub-session-one",
   sequence: 42,
   captured_at: "2026-07-16T16:00:00.000Z",
@@ -65,6 +74,31 @@ describe("central SimHub relay", () => {
     const response = centralRowToBridgeResponse({ ...latestRow, race_id: null, team_id: null });
     expect(response.payload.race.eventId).toBe("connection-test");
     expect(response.payload.race.teamId).toBe("unassigned");
+  });
+
+  it("maps v2 endurance identity (current driver + car + track) onto the browser contract", () => {
+    const v2Row = {
+      ...latestRow,
+      race_id: null,
+      team_id: null,
+      endurance_event_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      endurance_team_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      driver_id: null,
+      current_driver_id: "302911",
+      current_driver_name: "Vincent De Vos",
+      car_id: "911",
+      car_name: "Porsche 911 GT3 R",
+      track_name: "Zandvoort",
+      track_config: "GP",
+      telemetry: { ...telemetry, isInCar: true },
+    };
+    const response = centralRowToBridgeResponse(v2Row);
+    expect(response.payload.protocolVersion).toBe(2);
+    expect(response.payload.race.eventId).toBe("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+    expect(response.payload.race.currentDriverId).toBe("302911");
+    expect(response.payload.race.currentDriverName).toBe("Vincent De Vos");
+    expect(response.payload.race.carName).toBe("Porsche 911 GT3 R");
+    expect(response.payload.telemetry.isInCar).toBe(true);
   });
 
   it("rejects unknown telemetry fields received through realtime", () => {
