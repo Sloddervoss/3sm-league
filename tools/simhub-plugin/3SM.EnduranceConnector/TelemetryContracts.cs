@@ -28,6 +28,12 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "teamId", Order = 2)] public string TeamId { get; set; }
         [DataMember(Name = "sessionId", Order = 3)] public string SessionId { get; set; }
         [DataMember(Name = "driverId", Order = 4)] public string DriverId { get; set; }
+        [DataMember(Name = "currentDriverId", Order = 5)] public string CurrentDriverId { get; set; }
+        [DataMember(Name = "currentDriverName", Order = 6)] public string CurrentDriverName { get; set; }
+        [DataMember(Name = "carId", Order = 7)] public string CarId { get; set; }
+        [DataMember(Name = "carName", Order = 8)] public string CarName { get; set; }
+        [DataMember(Name = "trackName", Order = 9)] public string TrackName { get; set; }
+        [DataMember(Name = "trackConfig", Order = 10)] public string TrackConfig { get; set; }
     }
 
     [DataContract]
@@ -49,6 +55,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "stintElapsedSeconds", Order = 14)] public double StintElapsedSeconds { get; set; }
         [DataMember(Name = "incidents", Order = 15)] public int? Incidents { get; set; }
         [DataMember(Name = "flag", Order = 16)] public string Flag { get; set; }
+        [DataMember(Name = "isInCar", Order = 17)] public bool IsInCar { get; set; }
     }
 
     [DataContract]

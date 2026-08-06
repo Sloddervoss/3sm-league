@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://3stripemotorsport.local/contracts/simhub-telemetry.v2.schema.json",
+  "title": "3SM SimHub telemetry envelope v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "sequence", "capturedAt", "source", "race", "telemetry"],
+  "properties": {
+    "protocolVersion": { "enum": [1, 2] },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connectorId", "simHubVersion", "game"],
+      "properties": {
+        "connectorId": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "simHubVersion": { "type": "string", "minLength": 1, "maxLength": 60, "pattern": "\\S" },
+        "game": { "const": "IRacing" }
+      }
+    },
+    "race": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "teamId", "sessionId", "driverId", "currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "driverId": { "type": ["string", "null"], "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "currentDriverId": { "type": ["string", "null"], "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "currentDriverName": { "type": ["string", "null"], "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "carId": { "type": ["string", "null"], "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "carName": { "type": ["string", "null"], "minLength": 1, "maxLength": 160, "pattern": "\\S" },
+        "trackName": { "type": ["string", "null"], "minLength": 1, "maxLength": 160, "pattern": "\\S" },
+        "trackConfig": { "type": ["string", "null"], "minLength": 1, "maxLength": 160, "pattern": "\\S" }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag", "isInCar"],
+      "properties": {
+        "connected": { "type": "boolean" },
+        "sessionTimeSeconds": { "type": "number", "minimum": 0, "maximum": 604800 },
+        "lap": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "completedLaps": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "lapTimeSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 86400 },
+        "position": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000 },
+        "classPosition": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000 },
+        "speedKph": { "type": "number", "minimum": 0, "maximum": 500 },
+        "fuelLitres": { "type": "number", "minimum": 0, "maximum": 250 },
+        "fuelPerLapLitres": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 50 },
+        "estimatedLapsRemaining": { "type": ["number", "null"], "minimum": 0, "maximum": 10000 },
+        "inPitLane": { "type": "boolean" },
+        "pitLimiter": { "type": "boolean" },
+        "stintElapsedSeconds": { "type": "number", "minimum": 0, "maximum": 604800 },
+        "incidents": { "type": ["integer", "null"], "minimum": 0, "maximum": 100000 },
+        "flag": { "enum": ["green", "yellow", "red", "white", "checkered", "unknown"] },
+        "isInCar": { "type": "boolean" }
+      }
+    }
+  }
+}

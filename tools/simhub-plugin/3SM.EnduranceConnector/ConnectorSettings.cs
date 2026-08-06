@@ -40,5 +40,14 @@ namespace ThreeSM.EnduranceConnector
         public string IncidentsProperty = "DataCorePlugin.GameData.NewData.Incidents";
         public string FlagProperty = "DataCorePlugin.GameData.NewData.Flag";
         public string SessionTimeProperty = "DataCorePlugin.GameData.NewData.SessionTime";
+
+        // Envelope v2: huidige coureur, auto en circuit (fail-closed naar null als de
+        // property ontbreekt; pad is per SimHub-profiel configureerbaar).
+        public string CurrentDriverIdProperty = "DataCorePlugin.GameData.NewData.DriverId";
+        public string CurrentDriverNameProperty = "DataCorePlugin.GameData.NewData.CurrentDriverName";
+        public string CarIdProperty = "DataCorePlugin.GameData.NewData.CarId";
+        public string CarNameProperty = "DataCorePlugin.GameData.NewData.CarName";
+        public string TrackNameProperty = "DataCorePlugin.GameData.NewData.TrackName";
+        public string TrackConfigProperty = "DataCorePlugin.GameData.NewData.TrackConfig";
     }
 }

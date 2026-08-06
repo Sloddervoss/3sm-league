@@ -1,11 +1,15 @@
 export type SimHubFlag = "green" | "yellow" | "red" | "white" | "checkered" | "unknown";
 
 export type SimHubTelemetryEnvelope = {
-  protocolVersion: 1;
+  protocolVersion: 1 | 2;
   sequence: number;
   capturedAt: string;
   source: { connectorId: string; simHubVersion: string; game: "IRacing" };
-  race: { eventId: string; teamId: string; sessionId: string; driverId: string | null };
+  race: {
+    eventId: string; teamId: string; sessionId: string; driverId: string | null;
+    currentDriverId: string | null; currentDriverName: string | null;
+    carId: string | null; carName: string | null; trackName: string | null; trackConfig: string | null;
+  };
   telemetry: {
     connected: boolean;
     sessionTimeSeconds: number;
@@ -23,6 +27,7 @@ export type SimHubTelemetryEnvelope = {
     stintElapsedSeconds: number;
     incidents: number | null;
     flag: SimHubFlag;
+    isInCar: boolean;
   };
 };
 
@@ -69,7 +74,8 @@ const booleanValue = (value: unknown, path: string): boolean => {
 export const parseTelemetryEnvelope = (input: unknown): SimHubTelemetryEnvelope => {
   const root = asRecord(input, "payload");
   exactKeys(root, ["protocolVersion", "sequence", "capturedAt", "source", "race", "telemetry"], "payload");
-  if (root.protocolVersion !== 1) throw new Error("unsupported protocolVersion");
+  const version = root.protocolVersion;
+  if (version !== 1 && version !== 2) throw new Error("unsupported protocolVersion");
   const sequence = numberValue(root.sequence, "sequence", { integer: true }) as number;
   const capturedAt = text(root.capturedAt, "capturedAt", 40);
   if (!Number.isFinite(Date.parse(capturedAt))) throw new Error("capturedAt is invalid");
@@ -79,14 +85,20 @@ export const parseTelemetryEnvelope = (input: unknown): SimHubTelemetryEnvelope 
   if (source.game !== "IRacing") throw new Error("only IRacing is supported");
 
   const race = asRecord(root.race, "race");
-  exactKeys(race, ["eventId", "teamId", "sessionId", "driverId"], "race");
+  const raceKeys = version === 2
+    ? ["eventId", "teamId", "sessionId", "driverId", "currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"]
+    : ["eventId", "teamId", "sessionId", "driverId"];
+  exactKeys(race, raceKeys, "race");
 
   const telemetry = asRecord(root.telemetry, "telemetry");
-  exactKeys(telemetry, ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag"], "telemetry");
+  const telemetryKeys = version === 2
+    ? ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag", "isInCar"]
+    : ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag"];
+  exactKeys(telemetry, telemetryKeys, "telemetry");
   if (typeof telemetry.flag !== "string" || !flagValues.has(telemetry.flag as SimHubFlag)) throw new Error("telemetry.flag is invalid");
 
   return {
-    protocolVersion: 1,
+    protocolVersion: version,
     sequence,
     capturedAt,
     source: {
@@ -99,6 +111,12 @@ export const parseTelemetryEnvelope = (input: unknown): SimHubTelemetryEnvelope 
       teamId: text(race.teamId, "race.teamId"),
       sessionId: text(race.sessionId, "race.sessionId"),
       driverId: nullableText(race.driverId, "race.driverId"),
+      currentDriverId: version === 2 ? nullableText(race.currentDriverId, "race.currentDriverId") : null,
+      currentDriverName: version === 2 ? nullableText(race.currentDriverName, "race.currentDriverName") : null,
+      carId: version === 2 ? nullableText(race.carId, "race.carId") : null,
+      carName: version === 2 ? nullableText(race.carName, "race.carName") : null,
+      trackName: version === 2 ? nullableText(race.trackName, "race.trackName") : null,
+      trackConfig: version === 2 ? nullableText(race.trackConfig, "race.trackConfig") : null,
     },
     telemetry: {
       connected: booleanValue(telemetry.connected, "telemetry.connected"),
@@ -117,6 +135,7 @@ export const parseTelemetryEnvelope = (input: unknown): SimHubTelemetryEnvelope 
       stintElapsedSeconds: numberValue(telemetry.stintElapsedSeconds, "telemetry.stintElapsedSeconds", { max: 604800 }) as number,
       incidents: numberValue(telemetry.incidents, "telemetry.incidents", { nullable: true, integer: true, max: 100000 }),
       flag: telemetry.flag as SimHubFlag,
+      isInCar: version === 2 ? booleanValue(telemetry.isInCar, "telemetry.isInCar") : true,
     },
   };
 };

@@ -7,7 +7,7 @@ const contracts = readFileSync(`${pluginRoot}/TelemetryContracts.cs`, "utf8");
 const settings = readFileSync(`${pluginRoot}/ConnectorSettings.cs`, "utf8");
 const project = readFileSync(`${pluginRoot}/3SM.EnduranceConnector.csproj`, "utf8");
 const bridge = readFileSync("tools/simhub-bridge/server.mjs", "utf8");
-const schema = JSON.parse(readFileSync("contracts/simhub-telemetry.v1.schema.json", "utf8"));
+const schema = JSON.parse(readFileSync("contracts/simhub-telemetry.v2.schema.json", "utf8"));
 
 describe("3SM SimHub connector spike contract", () => {
   it("targets the documented SimHub plugin shape on .NET Framework 4.8", () => {
@@ -60,7 +60,7 @@ describe("3SM SimHub connector spike contract", () => {
       ...schema.properties.telemetry.required,
     ];
     expect(new Set(names)).toEqual(new Set(expected));
-    expect(schema.properties.protocolVersion.const).toBe(1);
+    expect(schema.properties.protocolVersion.enum).toContain(2);
     expect(schema.properties.source.properties.connectorId.maxLength).toBe(120);
     expect(schema.properties.source.properties.simHubVersion.maxLength).toBe(60);
     expect(schema.properties.telemetry.properties.sessionTimeSeconds.maximum).toBe(604800);
