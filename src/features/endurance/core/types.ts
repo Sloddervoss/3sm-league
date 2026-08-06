@@ -54,6 +54,10 @@ export interface EnduranceRegistration {
   preferredCarId: string;
   slotId: string;
   maxStints: number;
+  /** Langste stint (minuten) die deze coureur kan/mag rijden — optionele per-coureur limiet. */
+  maxStintMinutes: number | null;
+  /** Maximale totale rijtijd (minuten) voor deze coureur — optioneel. */
+  maxTotalMinutes: number | null;
   nightDriving: boolean;
   willingToStart: boolean;
   willingToFinish: boolean;
@@ -88,7 +92,7 @@ export interface PaceEntry {
   incidents: number;
   averageStintMinutes: number;
   recordedAt: string;
-  source: "manual" | "csv" | "result_import";
+  source: "manual" | "csv" | "result_import" | "practice";
   notes: string;
 }
 

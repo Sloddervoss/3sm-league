@@ -1,57 +1,134 @@
 import { useState } from "react";
-import { Copy, Plus } from "lucide-react";
-import { useEnduranceStore } from "../core/EnduranceStore";
+import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  useEnduranceEvents,
+  useUpsertEnduranceEvent,
+  useDeleteEnduranceEvent,
+} from "../repository/eventsRepository";
 import { makeId } from "../core/actions";
-import type { EnduranceEvent, EventVisibility } from "../core/types";
-import { getEnduranceCar, IRACING_ENDURANCE_CLASSES, type EnduranceClassId } from "../core/carCatalog";
+import { IRACING_ENDURANCE_CLASSES, getEnduranceCar, type EnduranceClassId } from "../core/carCatalog";
+import { ENDURANCE_CIRCUIT_OPTIONS, ENDURANCE_CONFIGURATION_OPTIONS, ENDURANCE_CONFIGURATION_FOR_CIRCUIT } from "../core/enduranceTracks";
 import { formatAmsterdam } from "../core/selectors";
 import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, SectionHeading, StatusPill } from "../shared/ui";
+import type { EnduranceEventRow } from "../repository/eventsRepository";
 
 const toIso = (value: string) => new Date(value).toISOString();
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 
+/**
+ * Racebeheer — Fase 3.
+ * Leest/schrijft ECHTE endurance-events via de repository (super-admin-only
+ * RLS). Ondersteunt aanmaken, bewerken en verwijderen; kopiëren is secundair.
+ * Een formulier wordt gedeeld tussen "nieuwe race" en "bestaande race bewerken"
+ * (bij bewerken krijgt het veld `id` mee → updateEnduranceEvent).
+ */
 export const EventManager = () => {
-  const { state, activePersona, dispatch } = useEnduranceStore();
+  const { data: dbEvents = [], isLoading, isError, error } = useEnduranceEvents();
+  const upsert = useUpsertEnduranceEvent();
+  const remove = useDeleteEnduranceEvent();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Formuliervelden
   const [name, setName] = useState("");
   const [circuit, setCircuit] = useState("");
   const [configuration, setConfiguration] = useState("Full Course");
   const [startAt, setStartAt] = useState("2026-08-15T13:00");
   const [duration, setDuration] = useState(6);
   const [deadline, setDeadline] = useState("2026-08-10T23:59");
-  const [visibility, setVisibility] = useState<EventVisibility>("open");
-  const [classIds, setClassIds] = useState<EnduranceClassId[]>([...IRACING_ENDURANCE_CLASSES]);
-  const canManage = activePersona.role === "endurance_admin" || activePersona.role === "race_manager";
+  const [visibility, setVisibility] = useState<"open" | "invite_only" | "hidden">("open");
+  const [classIds, setClassIds] = useState<EnduranceClassId[]>(() => [...IRACING_ENDURANCE_CLASSES]);
 
-  const save = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!classIds.length) return;
-    const id = makeId("event");
+  const openNew = () => {
+    setEditingId(null);
+    setName(""); setCircuit(""); setConfiguration("Full Course");
+    setStartAt("2026-08-15T13:00"); setDuration(6); setDeadline("2026-08-10T23:59");
+    setVisibility("open"); setClassIds([...IRACING_ENDURANCE_CLASSES]);
+    setOpen(true);
+  };
+
+  const openEdit = (event: EnduranceEventRow) => {
+    setEditingId(event.id);
+    setName(event.name); setCircuit(event.circuit); setConfiguration(event.configuration ?? "Full Course");
+    setStartAt(toLocalInput(event.start_at));
+    setDuration(Math.max(1, Math.round((new Date(event.end_at).getTime() - new Date(event.start_at).getTime()) / 3_600_000)));
+    setDeadline(toLocalInput(event.registration_deadline) || "2026-08-10T23:59");
+    setVisibility(event.visibility as "open" | "invite_only" | "hidden");
+    setClassIds((event.class_ids.length ? event.class_ids : [...IRACING_ENDURANCE_CLASSES]) as EnduranceClassId[]);
+    setOpen(true);
+    setConfirmDeleteId(null);
+  };
+
+  const save = (formEvent: React.FormEvent) => {
+    formEvent.preventDefault();
+    if (!classIds.length || upsert.isPending) return;
     const start = toIso(startAt);
     const end = new Date(new Date(start).getTime() + duration * 3_600_000).toISOString();
-    const now = new Date().toISOString();
-    dispatch({ type: "create_event", event: { id, name, circuit, configuration, startAt: start, endAt: end, briefingStartAt: new Date(new Date(start).getTime() - 3_600_000).toISOString(), expectedEndAt: new Date(new Date(end).getTime() + 30 * 60_000).toISOString(), registrationDeadline: toIso(deadline), slots: [{ id: makeId("slot"), startAt: start, label: new Intl.DateTimeFormat("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" }).format(new Date(start)) }], classIds, selectedClassId: null, selectedCarId: null, maxDriversPerCar: 4, visibility, status: "registration_open", source: "manual", invitedUserIds: [], managerIds: [activePersona.id], createdAt: now, updatedAt: now } });
-    setName(""); setCircuit(""); setOpen(false);
+    void upsert.mutateAsync({
+      ...(editingId ? { id: editingId } : {}),
+      name,
+      circuit,
+      configuration,
+      start_at: start,
+      end_at: end,
+      briefing_start_at: new Date(new Date(start).getTime() - 3_600_000).toISOString(),
+      expected_end_at: new Date(new Date(end).getTime() + 30 * 60_000).toISOString(),
+      registration_deadline: toIso(deadline),
+      slots: [{ id: makeId("slot"), startAt: start, label: new Intl.DateTimeFormat("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" }).format(new Date(start)) }],
+      class_ids: classIds,
+      selected_class_id: null,
+      selected_car_id: null,
+      max_drivers_per_car: 4,
+      visibility,
+      status: "registration_open",
+      source: "manual",
+      invited_user_ids: [],
+      manager_ids: [],
+    });
+    setName(""); setCircuit(""); setOpen(false); setEditingId(null);
   };
 
-  const copyEvent = (source: EnduranceEvent) => {
-    const id = makeId("event"); const now = new Date().toISOString();
-    dispatch({ type: "create_event", event: { ...source, id, name: `${source.name} – kopie`, source: "copied", status: "draft", slots: source.slots.map((slot) => ({ ...slot, id: makeId("slot") })), selectedClassId: null, selectedCarId: null, invitedUserIds: [], managerIds: [activePersona.id], createdAt: now, updatedAt: now } });
+  const copyEvent = (source: EnduranceEventRow) => {
+    if (upsert.isPending) return;
+    void upsert.mutateAsync({
+      name: `${source.name} – kopie`,
+      circuit: source.circuit,
+      configuration: source.configuration,
+      start_at: source.start_at,
+      end_at: source.end_at,
+      class_ids: source.class_ids as EnduranceClassId[],
+      visibility: source.visibility as "open" | "invite_only" | "hidden",
+      status: "draft",
+      source: "copied",
+    });
   };
 
-  if (!canManage) return <Panel><p className="text-sm text-gray-400">Racebeheer is alleen beschikbaar voor endurance- en racemanagers.</p></Panel>;
+  const doDelete = (id: string) => {
+    if (confirmDeleteId !== id) { setConfirmDeleteId(id); return; }
+    void remove.mutateAsync(id);
+    setConfirmDeleteId(null);
+  };
 
-  return <div><SectionHeading eyebrow="Manager" title="Racebeheer" description="Maak evenementen handmatig aan of kopieer een bestaande race. Kalenderimport komt via dezelfde adapter, maar is niet nodig voor deze MVP." action={<PrimaryButton onClick={() => setOpen((value) => !value)}><Plus className="h-4 w-4" /> Nieuwe race</PrimaryButton>} />
+  return <div><SectionHeading eyebrow="Manager" title="Racebeheer" description="Maak evenementen aan in de databank, bewerk of verwijder ze. Alleen een super-admin kan dit: de RLS weigert elke andere rol." action={<PrimaryButton onClick={openNew}><Plus className="h-4 w-4" /> Nieuwe race</PrimaryButton>} />
     {open && <Panel className="mb-5"><form onSubmit={save} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       <Field label="Naam"><input required className={inputClass} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label="Circuit"><input required className={inputClass} value={circuit} onChange={(e) => setCircuit(e.target.value)} /></Field>
-      <Field label="Configuratie"><input required className={inputClass} value={configuration} onChange={(e) => setConfiguration(e.target.value)} /></Field>
+      <Field label="Circuit"><input required className={inputClass} value={circuit} list="endurance-circuit-options" onChange={(e) => { setCircuit(e.target.value); if (ENDURANCE_CONFIGURATION_FOR_CIRCUIT[e.target.value]) setConfiguration(ENDURANCE_CONFIGURATION_FOR_CIRCUIT[e.target.value]); }} /><datalist id="endurance-circuit-options">{ENDURANCE_CIRCUIT_OPTIONS.map((value) => <option key={value} value={value} />)}</datalist></Field>
+      <Field label="Configuratie"><input required className={inputClass} value={configuration} list="endurance-config-options" onChange={(e) => setConfiguration(e.target.value)} /><datalist id="endurance-config-options">{ENDURANCE_CONFIGURATION_OPTIONS.map((value) => <option key={value} value={value} />)}</datalist></Field>
       <Field label="Start (lokale tijd)"><input required type="datetime-local" className={inputClass} value={startAt} onChange={(e) => setStartAt(e.target.value)} /></Field>
       <Field label="Duur in uren"><input required type="number" min={1} max={30} className={inputClass} value={duration} onChange={(e) => setDuration(Number(e.target.value))} /></Field>
       <Field label="Aanmelddeadline"><input required type="datetime-local" className={inputClass} value={deadline} onChange={(e) => setDeadline(e.target.value)} /></Field>
-      <Field label="Zichtbaarheid"><select className={inputClass} value={visibility} onChange={(e) => setVisibility(e.target.value as EventVisibility)}><option value="open">Open voor alle leden</option><option value="invite_only">Alleen op uitnodiging</option><option value="hidden">Verborgen</option></select></Field>
+      <Field label="Zichtbaarheid"><select className={inputClass} value={visibility} onChange={(e) => setVisibility(e.target.value as "open" | "invite_only" | "hidden")}><option value="open">Open voor alle leden</option><option value="invite_only">Alleen op uitnodiging</option><option value="hidden">Verborgen</option></select></Field>
       <div className="sm:col-span-2 lg:col-span-3"><span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Klassen voor de stemming</span><div className="flex flex-wrap gap-2">{IRACING_ENDURANCE_CLASSES.map((value) => <label key={value} className="flex items-center gap-2 rounded-xl bg-black/20 px-4 py-3 text-sm text-gray-200 ring-1 ring-white/5"><input type="checkbox" checked={classIds.includes(value)} onChange={(e) => setClassIds((current) => e.target.checked ? [...current, value] : current.filter((item) => item !== value))} className="accent-orange-500" />{value}</label>)}</div></div>
-      <div className="sm:col-span-2 lg:col-span-3"><PrimaryButton type="submit" disabled={!classIds.length}>Race opslaan</PrimaryButton></div>
+      <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-2"><PrimaryButton type="submit" disabled={!classIds.length || upsert.isPending}>{upsert.isPending ? "Opslaan…" : editingId ? "Wijzigingen opslaan" : "Race opslaan"}</PrimaryButton><SecondaryButton type="button" onClick={() => { setOpen(false); setEditingId(null); }}>Annuleren</SecondaryButton></div>
     </form></Panel>}
-    <div className="grid gap-4 lg:grid-cols-2">{state.events.map((event) => <Panel key={event.id}><div className="flex items-start justify-between gap-4"><div><StatusPill tone={event.status === "draft" ? "neutral" : "orange"}>{event.status}</StatusPill><h3 className="mt-3 font-heading text-lg font-black text-white">{event.name}</h3><p className="mt-1 text-sm text-gray-400">{event.circuit} · {formatAmsterdam(event.startAt)}</p><p className="mt-2 text-xs text-gray-500">Stemming: {event.classIds.join(" · ")} · Definitief: {event.selectedClassId && getEnduranceCar(event.selectedCarId) ? `${event.selectedClassId} · ${getEnduranceCar(event.selectedCarId)?.name}` : "nog niet gekozen"}</p></div><SecondaryButton onClick={() => copyEvent(event)} className="shrink-0 px-3"><Copy className="h-4 w-4" /> Kopiëren</SecondaryButton></div></Panel>)}</div>
+    {isError ? <Panel><p className="text-sm text-red-400">Kon evenementen niet laden: {(error as Error)?.message}</p></Panel> : null}
+    <div className="grid gap-4 lg:grid-cols-2">{isLoading ? <Panel><p className="text-sm text-gray-400">Laden…</p></Panel> : dbEvents.map((event) => <Panel key={event.id}><div className="flex items-start justify-between gap-4"><div><StatusPill tone={event.status === "draft" ? "neutral" : "orange"}>{event.status}</StatusPill><h3 className="mt-3 font-heading text-lg font-black text-white">{event.name}</h3><p className="mt-1 text-sm text-gray-400">{event.circuit} · {formatAmsterdam(event.start_at)}</p><p className="mt-2 text-xs text-gray-500">Stemming: {event.class_ids.join(" · ") || "—"} · Definitief: {event.selected_class_id && getEnduranceCar(event.selected_car_id) ? `${event.selected_class_id} · ${getEnduranceCar(event.selected_car_id)?.name}` : "nog niet gekozen"}</p></div><div className="flex shrink-0 flex-wrap justify-end gap-2"><SecondaryButton onClick={() => openEdit(event)} className="px-3"><Pencil className="h-4 w-4" /></SecondaryButton><SecondaryButton onClick={() => copyEvent(event)} className="px-3" aria-label="Kopiëren"><Copy className="h-4 w-4" /></SecondaryButton><PrimaryButton onClick={() => doDelete(event.id)} className={`px-3 ${confirmDeleteId === event.id ? "bg-red-600 text-white hover:bg-red-500" : ""}`}>{confirmDeleteId === event.id ? "Zeker?" : <Trash2 className="h-4 w-4" />}</PrimaryButton></div></div></Panel>)}</div>
   </div>;
 };

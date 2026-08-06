@@ -1,22 +1,49 @@
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, CheckCircle2, Vote } from "lucide-react";
-import { useEnduranceStore } from "../core/EnduranceStore";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEnduranceRegistrations } from "../repository/registrationsRepository";
+import { useUpsertEnduranceEvent } from "../repository/eventsRepository";
 import type { EnduranceEvent } from "../core/types";
 import { enduranceCarsForClass, getEnduranceCar, type EnduranceClassId } from "../core/carCatalog";
 import { getEventVehicleVotes, recommendedVehicle, winningCarIdsForClass, winningClassIds } from "../core/vehicleVoting";
-import { canManageEvent } from "../core/selectors";
 import { Field, inputClass, Panel, PrimaryButton, SectionHeading, StatusPill } from "../shared/ui";
 
+/**
+ * Stemuitslag & definitieve auto — Fase 3.
+ * Stemmen komen nu uit de ECHTE DB-registraties (preferred_car_id /
+ * class_preference). De bevestiging van de definitieve auto is alleen voor de
+ * super-admin (de enige met RLS-toegang in deze canary).
+ */
 export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
-  const { state, activePersona, dispatch } = useEnduranceStore();
-  const votes = useMemo(() => getEventVehicleVotes(state.registrations, event.id), [state.registrations, event.id]);
-  const recommendation = useMemo(() => recommendedVehicle(state.registrations, event.id), [state.registrations, event.id]);
-  const manager = canManageEvent(event, activePersona);
-  const classWinners = useMemo(() => winningClassIds(state.registrations, event.id), [state.registrations, event.id]);
+  const { isSuperAdmin } = useAuth();
+  const { data: registrations = [] } = useEnduranceRegistrations(event.id);
+  const upsert = useUpsertEnduranceEvent();
+
+  // Map DB-rows → het stemming-model (cpu-mock-type shape).
+  const voteRegistrations = useMemo(() => registrations.map((r) => ({
+    id: r.id,
+    eventId: r.event_id,
+    userId: r.user_id,
+    status: r.status,
+    classPreference: (r.class_preference ?? "GT3") as EnduranceClassId,
+    preferredCarId: r.preferred_car_id ?? "",
+    slotId: r.slot_id ?? "",
+    maxStints: r.max_stints ?? 1,
+    nightDriving: r.night_driving,
+    willingToStart: r.willing_to_start,
+    willingToFinish: r.willing_to_finish,
+    notes: r.notes ?? "",
+    registeredAt: r.registered_at,
+  })), [registrations]);
+
+  const votes = useMemo(() => getEventVehicleVotes(voteRegistrations, event.id), [voteRegistrations, event.id]);
+  const recommendation = useMemo(() => recommendedVehicle(voteRegistrations, event.id), [voteRegistrations, event.id]);
+  const manager = Boolean(isSuperAdmin);
+  const classWinners = useMemo(() => winningClassIds(voteRegistrations, event.id), [voteRegistrations, event.id]);
   const selectableClasses = classWinners.length ? event.classIds.filter((classId) => classWinners.includes(classId)) : event.classIds;
   const initialClass = recommendation.classId ?? selectableClasses[0] ?? event.selectedClassId ?? "GT3";
   const [classId, setClassId] = useState<EnduranceClassId>(initialClass);
-  const carWinnerIds = useMemo(() => winningCarIdsForClass(state.registrations, event.id, classId), [state.registrations, event.id, classId]);
+  const carWinnerIds = useMemo(() => winningCarIdsForClass(voteRegistrations, event.id, classId), [voteRegistrations, event.id, classId]);
   const cars = useMemo(() => {
     const classCars = enduranceCarsForClass(classId);
     return carWinnerIds.length ? classCars.filter((car) => carWinnerIds.includes(car.id)) : classCars;
@@ -32,11 +59,14 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
 
   const changeClass = (next: EnduranceClassId) => {
     setClassId(next);
-    const winners = winningCarIdsForClass(state.registrations, event.id, next);
+    const winners = winningCarIdsForClass(voteRegistrations, event.id, next);
     const options = enduranceCarsForClass(next).filter((car) => !winners.length || winners.includes(car.id));
     setCarId(recommendation.classId === next && recommendation.carId ? recommendation.carId : options[0]?.id ?? "");
   };
-  const confirm = () => carId && dispatch({ type: "select_event_vehicle", eventId: event.id, classId, carId });
+  const confirm = () => {
+    if (!carId || upsert.isPending) return;
+    void upsert.mutateAsync({ id: event.id, selected_class_id: classId, selected_car_id: carId });
+  };
   const carVotes = votes.carVotes.filter((vote) => getEnduranceCar(vote.id)?.classId === classId);
 
   return <Panel>
@@ -50,7 +80,7 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
         {manager && <div className="space-y-3 border-t border-white/5 pt-4">
           <Field label="Definitieve klasse"><select className={inputClass} value={classId} onChange={(e) => changeClass(e.target.value as EnduranceClassId)}>{selectableClasses.map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Definitieve auto"><select className={inputClass} value={carId} onChange={(e) => setCarId(e.target.value)}>{cars.map((car) => <option key={car.id} value={car.id}>{car.name}</option>)}</select></Field>
-          <PrimaryButton onClick={confirm} disabled={!carId}><CheckCircle2 className="h-4 w-4" /> Meerderheidskeuze bevestigen</PrimaryButton>
+          <PrimaryButton onClick={confirm} disabled={!carId || upsert.isPending}>{upsert.isPending ? "Opslaan…" : "Meerderheidskeuze bevestigen"}</PrimaryButton>
         </div>}
       </div>
     </div>

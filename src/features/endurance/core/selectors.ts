@@ -61,13 +61,17 @@ export const formatLapTime = (seconds: number) => {
   return `${minutes}:${rest.toFixed(3).padStart(6, "0")}`;
 };
 
-export const formatAmsterdam = (iso: string, options: Intl.DateTimeFormatOptions = {}) =>
-  new Intl.DateTimeFormat("nl-NL", {
+export const formatAmsterdam = (iso: string, options: Intl.DateTimeFormatOptions = {}) => {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("nl-NL", {
     timeZone: "Europe/Amsterdam",
     dateStyle: "medium",
     timeStyle: "short",
     ...options,
-  }).format(new Date(iso));
+  }).format(date);
+}
 
 export const rangesOverlap = (aStart: string, aEnd: string, bStart: string, bEnd: string) =>
   new Date(aStart).getTime() < new Date(bEnd).getTime() && new Date(bStart).getTime() < new Date(aEnd).getTime();

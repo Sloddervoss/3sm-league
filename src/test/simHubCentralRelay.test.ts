@@ -3,10 +3,15 @@ import { describe, expect, it } from "vitest";
 import { centralRowToBridgeResponse } from "@/lib/centralSimHubRelay";
 
 const migration = readFileSync("supabase/migrations/20260716170000_simhub_central_relay.sql", "utf8");
+const devicePairingMigration = readFileSync("supabase/migrations/20260716192852_simhub_device_only_pairing.sql", "utf8");
+const devicePairingRollback = readFileSync("supabase/rollback/20260716192852_simhub_device_only_pairing.rollback.sql", "utf8");
+const compatibilityMigration = readFileSync("supabase/migrations/20260716203000_simhub_pairing_compatibility.sql", "utf8");
+const rollback = readFileSync("supabase/rollback/20260716170000_simhub_central_relay.rollback.sql", "utf8");
 const shared = readFileSync("supabase/functions/_shared/simhub.ts", "utf8");
 const pairing = readFileSync("supabase/functions/simhub-pair/index.ts", "utf8");
 const ingest = readFileSync("supabase/functions/simhub-ingest/index.ts", "utf8");
 const plugin = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector/EnduranceConnectorPlugin.cs", "utf8");
+const connectorSettings = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector/ConnectorSettings.cs", "utf8");
 const app = readFileSync("src/App.tsx", "utf8");
 const pairingPage = readFileSync("src/pages/SimHubPairingPage.tsx", "utf8");
 const centralRelay = readFileSync("src/lib/centralSimHubRelay.ts", "utf8");
@@ -56,6 +61,12 @@ describe("central SimHub relay", () => {
     expect(response.payload.telemetry.fuelLitres).toBe(44.8);
   });
 
+  it("maps an unassigned device snapshot onto a neutral connection-test context", () => {
+    const response = centralRowToBridgeResponse({ ...latestRow, race_id: null, team_id: null });
+    expect(response.payload.race.eventId).toBe("connection-test");
+    expect(response.payload.race.teamId).toBe("unassigned");
+  });
+
   it("rejects unknown telemetry fields received through realtime", () => {
     expect(() => centralRowToBridgeResponse({ ...latestRow, telemetry: { ...telemetry, rawIracingData: "forbidden" } })).toThrow(/onbekende|ontbrekende/);
   });
@@ -75,6 +86,13 @@ describe("central SimHub relay", () => {
     expect(migration).toContain("race.race_date > now() - interval '36 hours'");
     expect(migration).not.toContain("GRANT SELECT ON public.simhub_devices TO authenticated");
     expect(migration).toContain("ALTER PUBLICATION supabase_realtime ADD TABLE public.simhub_telemetry_latest");
+  });
+
+  it("drops the telemetry policy owner before its helper functions during rollback", () => {
+    const dropLatest = rollback.indexOf("DROP TABLE IF EXISTS public.simhub_telemetry_latest");
+    const dropActiveHelper = rollback.indexOf("DROP FUNCTION IF EXISTS public.is_active_simhub_device(UUID)");
+    expect(dropLatest).toBeGreaterThan(-1);
+    expect(dropActiveHelper).toBeGreaterThan(dropLatest);
   });
 
   it("keeps exchange and ingest atomic, service-only, rate-limited and replay-safe", () => {
@@ -125,6 +143,36 @@ describe("central SimHub relay", () => {
     expect(plugin).toContain("DataProtectionScope.CurrentUser");
     expect(plugin).toContain('BuildRelayEndpoint("simhub-pair")');
     expect(plugin).toContain('BuildRelayEndpoint("simhub-ingest")');
+  });
+
+  it("pairs a persistent device without requiring a race or fixed team", () => {
+    expect(devicePairingMigration).toContain("ALTER COLUMN race_id DROP NOT NULL");
+    expect(devicePairingMigration).toContain("ALTER COLUMN team_id DROP NOT NULL");
+    expect(devicePairingMigration).toContain("ALTER COLUMN expires_at DROP NOT NULL");
+    expect(devicePairingMigration).toContain("simhub_create_device_pairing_code");
+    expect(devicePairingMigration).not.toContain("DROP FUNCTION IF EXISTS public.simhub_create_pairing_code");
+    expect(devicePairingMigration).toContain("IF v_pairing.race_id IS NOT NULL THEN");
+    expect(devicePairingRollback).toContain("DELETE FROM public.simhub_devices");
+    expect(devicePairingRollback).toContain("simhub_create_device_pairing_code");
+    expect(devicePairingRollback).not.toContain("ALTER COLUMN race_id SET NOT NULL");
+    expect(pairing).toContain('action === "create"');
+    expect(pairing).toContain("simhub_create_device_pairing_code");
+    expect(pairing).toContain("simhub_create_pairing_code");
+    expect(pairing).toContain("body.raceId");
+    expect(pairing).toContain("body.teamId");
+    expect(pairing).toContain("raceId: result.race_id");
+    expect(pairing).toContain("race_id,team_id");
+    expect(connectorSettings).toContain("public string BoundRaceId");
+    expect(connectorSettings).toContain("public string BoundTeamId");
+    expect(plugin).toContain("Settings.BoundRaceId = string.Empty");
+    expect(plugin).toContain("Settings.BoundTeamId = string.Empty");
+    expect(compatibilityMigration).toContain("simhub_devices_context_shape");
+    expect(pairingPage).not.toContain('from("races")');
+    expect(pairingPage).not.toContain('from("teams")');
+    expect(pairingPage).toContain("Koppeling testen");
+    expect(centralRelay).toContain('body: { action: "create" }');
+    expect(plugin).toContain('central ? "connection-test"');
+    expect(plugin).toContain('central ? "unassigned"');
   });
 
   it("exposes pairing and RLS telemetry without opening the Endurance MVP", () => {

@@ -1,5 +1,6 @@
 import type { SVGProps } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 const INSTAGRAM_URL = "https://www.instagram.com/3stripemotorsport";
@@ -57,6 +58,7 @@ const socialLinks = [
 ];
 
 const Footer = () => {
+  const { isSuperAdmin } = useAuth();
   return (
     <footer className="relative overflow-hidden border-t border-orange-500/12 bg-racing-dark py-10">
       <div className="pointer-events-none absolute -top-24 left-[24%] h-64 w-[48rem] max-w-[92vw] -translate-x-1/2 rounded-full bg-orange-500/[0.08] blur-3xl" />
@@ -90,9 +92,7 @@ const Footer = () => {
                 { label: "Uitslagen", path: "/results/" },
                 { label: "Seizoenen", path: "/seasons/" },
                 { label: "Meedoen", path: "/meedoen/" },
-                ...(import.meta.env.DEV && import.meta.env.VITE_ENDURANCE_LOCAL_MVP === "true"
-                  ? [{ label: "Endurance", path: "/endurance/" }]
-                  : []),
+                ...(isSuperAdmin ? [{ label: "Endurance", path: "/endurance/" }] : []),
               ].map((link) => (
                 <Link key={link.path} to={link.path} className="text-xs text-gray-300 hover:text-primary transition-colors py-0.5">
                   {link.label}

@@ -7,33 +7,55 @@ const walk = (directory: string): string[] => readdirSync(directory).flatMap((na
   const path = join(directory, name);
   return statSync(path).isDirectory() ? walk(path) : [path];
 });
-const enduranceSource = walk(enduranceRoot).filter((path) => /\.[jt]sx?$/.test(path)).map((path) => readFileSync(path, "utf8")).join("\n");
+const allEnduranceFiles = walk(enduranceRoot).filter((path) => /\.[jt]sx?$/.test(path));
+const enduranceSource = allEnduranceFiles.map((path) => readFileSync(path, "utf8")).join("\n");
 
-describe("endurance integration and isolation", () => {
-  it("has a fail-closed local route and no network/data-platform escape hatch", () => {
-    expect(enduranceSource).toContain('VITE_ENDURANCE_LOCAL_MVP === "true"');
-    expect(enduranceSource).toContain('"3stripemotorsport.cc"');
-    for (const forbidden of ["@/integrations/supabase", "@supabase/supabase-js", "supabase.from(", "supabase.functions", "fetch(", "XMLHttpRequest", "new WebSocket", "sendBeacon("]) {
-      expect(enduranceSource).not.toContain(forbidden);
+// De centrale relay-integratie is bewust het enige Supabase-touchpoint van het
+// lokale Race Control-pad (device-based). Daarnaast is de data-laag (repository/)
+// expliciet de geëxpliciteerde Supabase-toegang van Fase 3: die IMPORTER supaabase
+// by design. De planning-kern (core/, alles behalve relay + repository) blijft
+// falende-closed geïsoleerd en mag geen data-platform-ontsnapping zijn.
+const relayFile = "src/features/endurance/race-control/SimHubTelemetryPanel.tsx";
+const dataAccessRoot = "src/features/endurance/repository";
+const coreSource = allEnduranceFiles
+  .filter((path) => path !== relayFile && !path.startsWith(dataAccessRoot))
+  .map((path) => readFileSync(path, "utf8"))
+  .join("\n");
+
+describe("endurance integration and isolation (super-admin-only canary)", () => {
+  it("is a super-admin-only project: gate op route, menu en footer", () => {
+    const page = readFileSync("src/features/endurance/shell/EndurancePage.tsx", "utf8");
+    const navbar = readFileSync("src/components/Navbar.tsx", "utf8");
+    const footer = readFileSync("src/components/Footer.tsx", "utf8");
+    const app = readFileSync("src/App.tsx", "utf8");
+    // Route-guard: alleen super-admin renders de content; anders redirect/weigering.
+    expect(page).toContain("isSuperAdmin");
+    expect(page).toContain('Navigate to="/auth?redirect=/endurance"');
+    // Menu/footer-link uitsluitend voor super-admin, niet op een DEV-vlag.
+    expect(navbar).toContain("isSuperAdmin");
+    expect(navbar).toContain("Endurance");
+    expect(footer).toContain("isSuperAdmin");
+    expect(app).toContain('path="/endurance/*"');
+    // Geen dev-only vlag meer als toegangsmechanisme voor livegang.
+    expect(enduranceSource).not.toContain("localEnduranceMvp");
+    expect(navbar).not.toMatch(/VITE_ENDURANCE_LOCAL_MVP/);
+    expect(footer).not.toMatch(/VITE_ENDURANCE_LOCAL_MVP/);
+  });
+
+  it("keeps the planning core free of data-platform escape hatches", () => {
+    // Kernel/planning mag nooit netwerk of het Supabase-datapatform aanraken buiten de relay-panel.
+    for (const forbidden of ["@/integrations/supabase", "@supabase/supabase-js", "supabase.from(", "supabase.functions", "supabase.channel", "fetch(", "XMLHttpRequest", "new WebSocket", "sendBeacon("]) {
+      expect(coreSource).not.toContain(forbidden);
     }
   });
 
-  it("skips global Supabase auth reads on the explicit local Endurance route", () => {
-    const auth = readFileSync("src/contexts/AuthContext.tsx", "utf8");
-    const localGuard = auth.indexOf("if (localEnduranceMvp)");
-    const sessionRead = auth.indexOf("supabase.auth.getSession()");
-    expect(localGuard).toBeGreaterThan(-1);
-    expect(sessionRead).toBeGreaterThan(localGuard);
-  });
-
-  it("keeps the route and shell entry points dev-flagged", () => {
-    const app = readFileSync("src/App.tsx", "utf8");
-    const navbar = readFileSync("src/components/Navbar.tsx", "utf8");
-    const footer = readFileSync("src/components/Footer.tsx", "utf8");
-    expect(app).toContain('path="/endurance/*"');
-    expect(navbar).toContain("VITE_ENDURANCE_LOCAL_MVP");
-    expect(footer).toContain("VITE_ENDURANCE_LOCAL_MVP");
-    expect(navbar).toContain('const showDesktop = "2xl:flex"');
+  it("scopes the central SimHub relay to the telemetry panel only", () => {
+    const relay = readFileSync(relayFile, "utf8");
+    expect(relay).toContain('listCentralSimHubDevices');
+    expect(relay).toContain('readCentralSimHubTelemetry');
+    // Intrekken/pairing blijft op de gecentraliseerde pairingpagina (super-admin canary),
+    // niet op het Race-Control-pad.
+    expect(relay).not.toContain("revokeCentralSimHubDevice");
   });
 
   it("contains mobile-safe overflow and stacked layout contracts", () => {

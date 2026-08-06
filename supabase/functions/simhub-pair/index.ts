@@ -75,9 +75,8 @@ Deno.serve(async (request) => {
         paired: true,
         deviceToken,
         deviceId: result.device_id,
-        raceId: result.race_id,
-        teamId: result.team_id,
         ownerUserId: result.owner_user_id,
+        ...(result.race_id && result.team_id ? { raceId: result.race_id, teamId: result.team_id } : {}),
       });
     }
 
@@ -85,41 +84,40 @@ Deno.serve(async (request) => {
     if (!(await isSuperAdmin(user.id))) return jsonResponse(request, { error: "super_admin_required" }, 403);
 
     if (action === "create") {
-      const raceId = typeof body.raceId === "string" ? body.raceId : "";
-      const teamId = typeof body.teamId === "string" ? body.teamId : "";
-      if (!uuidPattern.test(raceId) || !uuidPattern.test(teamId)) return jsonResponse(request, { error: "invalid_binding" }, 400);
-
-      const [{ data: race, error: raceError }, { data: team, error: teamError }] = await Promise.all([
-        service.from("races").select("id,status,race_date").eq("id", raceId).maybeSingle(),
-        service.from("teams").select("id,name").eq("id", teamId).maybeSingle(),
-      ]);
-      if (raceError || teamError) throw raceError || teamError;
-      const raceDate = race ? Date.parse(race.race_date) : Number.NaN;
-      if (!race || !team || !["upcoming", "live"].includes(race.status) || !Number.isFinite(raceDate) || raceDate <= Date.now() - 36 * 60 * 60 * 1000) {
-        return jsonResponse(request, { error: "binding_not_allowed" }, 403);
-      }
-
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      const raceId = typeof body.raceId === "string" ? body.raceId.trim() : "";
+      const teamId = typeof body.teamId === "string" ? body.teamId.trim() : "";
+      const legacyBoundPairing = Boolean(raceId || teamId);
+      if (legacyBoundPairing && (!uuidPattern.test(raceId) || !uuidPattern.test(teamId))) {
+        return jsonResponse(request, { error: "invalid_binding" }, 400);
+      }
       let code = "";
       let insertError: unknown = null;
       let created = false;
       for (let attempt = 0; attempt < 4; attempt += 1) {
         code = randomPairCode();
-        const result = await service.rpc("simhub_create_pairing_code", {
-          p_code_hash: await sha256Hex(normalizePairCode(code)),
-          p_owner_user_id: user.id,
-          p_race_id: raceId,
-          p_team_id: teamId,
-          p_expires_at: expiresAt,
-        });
+        const codeHash = await sha256Hex(normalizePairCode(code));
+        const result = legacyBoundPairing
+          ? await service.rpc("simhub_create_pairing_code", {
+            p_code_hash: codeHash,
+            p_owner_user_id: user.id,
+            p_race_id: raceId,
+            p_team_id: teamId,
+            p_expires_at: expiresAt,
+          })
+          : await service.rpc("simhub_create_device_pairing_code", {
+            p_code_hash: codeHash,
+            p_owner_user_id: user.id,
+            p_expires_at: expiresAt,
+          });
         insertError = result.error;
         created = !insertError && result.data === true;
         if (created) break;
       }
       if (insertError) throw insertError;
-      if (!created) return jsonResponse(request, { error: "binding_not_allowed" }, 403);
+      if (!created) return jsonResponse(request, { error: "pairing_not_allowed" }, 403);
       await service.from("simhub_pairing_codes").delete().lt("expires_at", new Date(Date.now() - 86400000).toISOString());
-      return jsonResponse(request, { code, expiresAt, raceId, teamId, teamName: team.name });
+      return jsonResponse(request, { code, expiresAt });
     }
 
     if (action === "list") {
