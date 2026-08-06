@@ -107,6 +107,12 @@ namespace ThreeSM.EnduranceConnector
             AddText(mappings, "Incidenten", settings.IncidentsProperty, value => plugin.UpdateSettings(s => s.IncidentsProperty = value));
             AddText(mappings, "Vlag", settings.FlagProperty, value => plugin.UpdateSettings(s => s.FlagProperty = value));
             AddText(mappings, "Sessietijd", settings.SessionTimeProperty, value => plugin.UpdateSettings(s => s.SessionTimeProperty = value));
+            AddText(mappings, "Huidige coureur-ID", settings.CurrentDriverIdProperty, value => plugin.UpdateSettings(s => s.CurrentDriverIdProperty = value));
+            AddText(mappings, "Huidige coureurnaam", settings.CurrentDriverNameProperty, value => plugin.UpdateSettings(s => s.CurrentDriverNameProperty = value));
+            AddText(mappings, "Auto-ID", settings.CarIdProperty, value => plugin.UpdateSettings(s => s.CarIdProperty = value));
+            AddText(mappings, "Autonaam", settings.CarNameProperty, value => plugin.UpdateSettings(s => s.CarNameProperty = value));
+            AddText(mappings, "Circuitnaam", settings.TrackNameProperty, value => plugin.UpdateSettings(s => s.TrackNameProperty = value));
+            AddText(mappings, "Circuitconfiguratie", settings.TrackConfigProperty, value => plugin.UpdateSettings(s => s.TrackConfigProperty = value));
             panel.Children.Add(new Expander { Header = "Geavanceerde SimHub-propertymapping", Content = mappings, Margin = new Thickness(0, 10, 0, 0) });
 
             panel.Children.Add(new TextBlock { Text = "Status", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 18, 0, 3) });

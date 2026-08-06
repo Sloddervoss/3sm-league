@@ -1,12 +1,16 @@
 export type SimHubFlag = "green" | "yellow" | "red" | "white" | "checkered" | "unknown";
 export interface SimHubTelemetryEnvelope {
-  protocolVersion: 1; sequence: number; capturedAt: string;
+  protocolVersion: 1 | 2; sequence: number; capturedAt: string;
   source: { connectorId: string; simHubVersion: string; game: "IRacing" };
-  race: { eventId: string; teamId: string; sessionId: string; driverId: string | null };
+  race: {
+    eventId: string; teamId: string; sessionId: string; driverId: string | null;
+    currentDriverId: string | null; currentDriverName: string | null;
+    carId: string | null; carName: string | null; trackName: string | null; trackConfig: string | null;
+  };
   telemetry: {
     connected: boolean; sessionTimeSeconds: number; lap: number; completedLaps: number; lapTimeSeconds: number | null;
     position: number | null; classPosition: number | null; speedKph: number; fuelLitres: number; fuelPerLapLitres: number | null;
-    estimatedLapsRemaining: number | null; inPitLane: boolean; pitLimiter: boolean; stintElapsedSeconds: number; incidents: number | null; flag: SimHubFlag;
+    estimatedLapsRemaining: number | null; inPitLane: boolean; pitLimiter: boolean; stintElapsedSeconds: number; incidents: number | null; flag: SimHubFlag; isInCar: boolean;
   };
 }
 export interface SimHubBridgeResponse { payload: SimHubTelemetryEnvelope; receivedAt: string }
@@ -39,25 +43,40 @@ export const parseSimHubBridgeResponse = (input: unknown): SimHubBridgeResponse 
   const root = record(input, "response"); exact(root, ["payload", "receivedAt"], "response");
   const receivedAt = text(root.receivedAt, "receivedAt")!; if (!Number.isFinite(Date.parse(receivedAt))) throw new Error("receivedAt is geen ISO-datum");
   const payload = record(root.payload, "payload"); exact(payload, ["protocolVersion", "sequence", "capturedAt", "source", "race", "telemetry"], "payload");
-  if (payload.protocolVersion !== 1) throw new Error("protocolVersion wordt niet ondersteund");
+  const version = payload.protocolVersion;
+  if (version !== 1 && version !== 2) throw new Error("protocolVersion wordt niet ondersteund");
   const capturedAt = text(payload.capturedAt, "capturedAt")!; if (!Number.isFinite(Date.parse(capturedAt))) throw new Error("capturedAt is geen ISO-datum");
   const source = record(payload.source, "source"); exact(source, ["connectorId", "simHubVersion", "game"], "source");
   if (source.game !== "IRacing") throw new Error("alleen iRacing wordt ondersteund");
-  const race = record(payload.race, "race"); exact(race, ["eventId", "teamId", "sessionId", "driverId"], "race");
+  const race = record(payload.race, "race");
+  exact(race, version === 2
+    ? ["eventId", "teamId", "sessionId", "driverId", "currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"]
+    : ["eventId", "teamId", "sessionId", "driverId"], "race");
   const telemetry = record(payload.telemetry, "telemetry");
-  exact(telemetry, ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag"], "telemetry");
+  exact(telemetry, version === 2
+    ? ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag", "isInCar"]
+    : ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag"], "telemetry");
   if (typeof telemetry.flag !== "string" || !flags.has(telemetry.flag as SimHubFlag)) throw new Error("telemetry.flag is ongeldig");
   return {
     receivedAt,
     payload: {
-      protocolVersion: 1, sequence: numeric(payload.sequence, "sequence", { integer: true }), capturedAt,
+      protocolVersion: version, sequence: numeric(payload.sequence, "sequence", { integer: true }), capturedAt,
       source: { connectorId: text(source.connectorId, "source.connectorId")!, simHubVersion: text(source.simHubVersion, "source.simHubVersion", false, 60)!, game: "IRacing" },
-      race: { eventId: text(race.eventId, "race.eventId")!, teamId: text(race.teamId, "race.teamId")!, sessionId: text(race.sessionId, "race.sessionId")!, driverId: text(race.driverId, "race.driverId", true) },
+      race: {
+        eventId: text(race.eventId, "race.eventId")!, teamId: text(race.teamId, "race.teamId")!, sessionId: text(race.sessionId, "race.sessionId")!, driverId: text(race.driverId, "race.driverId", true),
+        currentDriverId: version === 2 ? text(race.currentDriverId, "race.currentDriverId", true) : null,
+        currentDriverName: version === 2 ? text(race.currentDriverName, "race.currentDriverName", true) : null,
+        carId: version === 2 ? text(race.carId, "race.carId", true) : null,
+        carName: version === 2 ? text(race.carName, "race.carName", true) : null,
+        trackName: version === 2 ? text(race.trackName, "race.trackName", true) : null,
+        trackConfig: version === 2 ? text(race.trackConfig, "race.trackConfig", true) : null,
+      },
       telemetry: {
         connected: bool(telemetry.connected, "telemetry.connected"), sessionTimeSeconds: numeric(telemetry.sessionTimeSeconds, "telemetry.sessionTimeSeconds", { max: 604800 }), lap: numeric(telemetry.lap, "telemetry.lap", { integer: true, max: 100000 }), completedLaps: numeric(telemetry.completedLaps, "telemetry.completedLaps", { integer: true, max: 100000 }),
         lapTimeSeconds: numeric(telemetry.lapTimeSeconds, "telemetry.lapTimeSeconds", { nullable: true, min: Number.EPSILON, max: 86400 }), position: numeric(telemetry.position, "telemetry.position", { nullable: true, integer: true, min: 1, max: 1000 }), classPosition: numeric(telemetry.classPosition, "telemetry.classPosition", { nullable: true, integer: true, min: 1, max: 1000 }),
         speedKph: numeric(telemetry.speedKph, "telemetry.speedKph", { max: 500 }), fuelLitres: numeric(telemetry.fuelLitres, "telemetry.fuelLitres", { max: 250 }), fuelPerLapLitres: numeric(telemetry.fuelPerLapLitres, "telemetry.fuelPerLapLitres", { nullable: true, min: Number.EPSILON, max: 50 }), estimatedLapsRemaining: numeric(telemetry.estimatedLapsRemaining, "telemetry.estimatedLapsRemaining", { nullable: true, max: 10000 }),
         inPitLane: bool(telemetry.inPitLane, "telemetry.inPitLane"), pitLimiter: bool(telemetry.pitLimiter, "telemetry.pitLimiter"), stintElapsedSeconds: numeric(telemetry.stintElapsedSeconds, "telemetry.stintElapsedSeconds", { max: 604800 }), incidents: numeric(telemetry.incidents, "telemetry.incidents", { nullable: true, integer: true, max: 100000 }), flag: telemetry.flag as SimHubFlag,
+        isInCar: version === 2 ? bool(telemetry.isInCar, "telemetry.isInCar") : true,
       },
     },
   };

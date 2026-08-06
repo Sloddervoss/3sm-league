@@ -9,6 +9,7 @@ on:
     paths:
       - .github/workflows/build-simhub-plugin.yml
       - contracts/simhub-telemetry.v1.schema.json
+      - contracts/simhub-telemetry.v2.schema.json
       - src/lib/centralSimHubRelay.ts
       - src/lib/localSimHubBridge.ts
       - src/pages/SimHubPairingPage.tsx

@@ -331,7 +331,7 @@ namespace ThreeSM.EnduranceConnector
             if (!estimatedLaps.HasValue && fuelPerLap.HasValue && fuelPerLap.Value > 0) estimatedLaps = fuel / fuelPerLap.Value;
             return new TelemetryEnvelope
             {
-                ProtocolVersion = 1,
+                ProtocolVersion = 2,
                 Sequence = Interlocked.Increment(ref _sequence),
                 CapturedAt = DateTime.UtcNow.ToString("o"),
                 Source = new TelemetrySource { ConnectorId = NonEmpty(Settings.ConnectorId, Environment.MachineName), SimHubVersion = typeof(PluginManager).Assembly.GetName().Version.ToString(), Game = "IRacing" },
@@ -341,6 +341,12 @@ namespace ThreeSM.EnduranceConnector
                     TeamId = central ? "unassigned" : Settings.TeamId,
                     SessionId = _sessionId,
                     DriverId = central ? null : (string.IsNullOrWhiteSpace(Settings.DriverId) ? null : Settings.DriverId),
+                    CurrentDriverId = GetNullableString(manager, Settings.CurrentDriverIdProperty),
+                    CurrentDriverName = GetNullableString(manager, Settings.CurrentDriverNameProperty),
+                    CarId = GetNullableString(manager, Settings.CarIdProperty),
+                    CarName = GetNullableString(manager, Settings.CarNameProperty),
+                    TrackName = GetNullableString(manager, Settings.TrackNameProperty),
+                    TrackConfig = GetNullableString(manager, Settings.TrackConfigProperty),
                 },
                 Telemetry = new TelemetryValues
                 {
@@ -360,6 +366,7 @@ namespace ThreeSM.EnduranceConnector
                     StintElapsedSeconds = _stintClock.Elapsed.TotalSeconds,
                     Incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty)),
                     Flag = NormalizeFlag(GetRaw(manager, Settings.FlagProperty)),
+                    IsInCar = true,
                 }
             };
         }
@@ -452,6 +459,7 @@ namespace ThreeSM.EnduranceConnector
         }
 
         private static object GetRaw(PluginManager manager, string property) { if (manager == null || string.IsNullOrWhiteSpace(property)) return null; try { return manager.GetPropertyValue(property); } catch { return null; } }
+        private static string GetNullableString(PluginManager manager, string property) { var value = GetRaw(manager, property); if (value == null) return null; var text = value.ToString().Trim(); return string.IsNullOrWhiteSpace(text) || string.Equals(text, "unknown", StringComparison.OrdinalIgnoreCase) ? null : text; }
         private static double GetDouble(PluginManager manager, string property, double fallback) { var value = GetRaw(manager, property); if (value is TimeSpan) return ((TimeSpan)value).TotalSeconds; double parsed; return value != null && double.TryParse(value.ToString(), out parsed) && !double.IsNaN(parsed) && !double.IsInfinity(parsed) ? parsed : fallback; }
         private static double? GetNullableDouble(PluginManager manager, string property, bool positive) { var value = GetRaw(manager, property); double parsed; if (value == null || !double.TryParse(value.ToString(), out parsed) || double.IsNaN(parsed) || double.IsInfinity(parsed) || (positive && parsed <= 0) || (!positive && parsed < 0)) return null; return parsed; }
         private static double? GetNullableSeconds(PluginManager manager, string property) { var value = GetRaw(manager, property); if (value is TimeSpan) { var seconds = ((TimeSpan)value).TotalSeconds; return seconds > 0 ? (double?)seconds : null; } return GetNullableDouble(manager, property, true); }
