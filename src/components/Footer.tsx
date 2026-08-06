@@ -58,7 +58,8 @@ const socialLinks = [
 ];
 
 const Footer = () => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const canUseEndurance = Boolean(isSuperAdmin || isEnduranceManager || isTester);
   return (
     <footer className="relative overflow-hidden border-t border-orange-500/12 bg-racing-dark py-10">
       <div className="pointer-events-none absolute -top-24 left-[24%] h-64 w-[48rem] max-w-[92vw] -translate-x-1/2 rounded-full bg-orange-500/[0.08] blur-3xl" />
@@ -92,7 +93,7 @@ const Footer = () => {
                 { label: "Uitslagen", path: "/results/" },
                 { label: "Seizoenen", path: "/seasons/" },
                 { label: "Meedoen", path: "/meedoen/" },
-                ...(isSuperAdmin ? [{ label: "Endurance", path: "/endurance/" }] : []),
+                ...(canUseEndurance ? [{ label: "Endurance", path: "/endurance/" }] : []),
               ].map((link) => (
                 <Link key={link.path} to={link.path} className="text-xs text-gray-300 hover:text-primary transition-colors py-0.5">
                   {link.label}

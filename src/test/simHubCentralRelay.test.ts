@@ -222,7 +222,8 @@ describe("central SimHub relay", () => {
     expect(pairingPage).toContain('status === "SUBSCRIBED"');
     expect(pairingPage).toContain("if (!active) return");
     expect(centralRelay).toContain("error.context.clone().json()");
-    expect(pairingPage).toContain("const staff = isSuperAdmin");
-    expect(navbar).toMatch(/isSuperAdmin\s*&&\s*\([\s\S]*?to="\/simhub-koppelen"/);
+    expect(pairingPage).toContain("const staff = Boolean(isSuperAdmin || isEnduranceManager || isTester)");
+    expect(navbar).toMatch(/canUseEndurance\s*= Boolean\(isSuperAdmin \|\| isEnduranceManager \|\| isTester\)/);
+    expect(navbar).toMatch(/canUseEndurance\s*&&\s*\([\s\S]*?to="\/simhub-koppelen"/);
   });
 });

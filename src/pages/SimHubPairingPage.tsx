@@ -10,8 +10,8 @@ import { centralRowToBridgeResponse, createCentralSimHubPairingCode, listCentral
 import { getSimHubTelemetryState, type SimHubBridgeResponse } from "@/lib/localSimHubBridge";
 
 const SimHubPairingPage = () => {
-  const { user, loading, rolesLoading, isSuperAdmin } = useAuth();
-  const staff = isSuperAdmin;
+  const { user, loading, rolesLoading, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const staff = Boolean(isSuperAdmin || isEnduranceManager || isTester);
   const [pairing, setPairing] = useState<SimHubPairingCode | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -129,7 +129,7 @@ const SimHubPairingPage = () => {
           <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">Verbind deze sim-pc éénmalig met je 3SM-account. Een race of team wordt pas later in de Endurance-tab toegewezen; deze pagina test alleen of de beveiligde verbinding werkt.</p>
         </div>
 
-        {(loading || rolesLoading) ? <div className="rounded-2xl border border-border bg-card p-8 text-center"><Loader2 className="mx-auto h-7 w-7 animate-spin text-orange-400" /><p className="mt-3 text-sm text-muted-foreground">Account laden…</p></div> : !user ? <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.07] p-8 text-center"><Cable className="mx-auto h-10 w-10 text-orange-400" /><h2 className="mt-4 text-xl font-bold text-white">Log eerst in</h2><p className="mt-2 text-sm text-gray-400">Pairingcodes zijn kort geldig en tijdens de testfase alleen beschikbaar voor Super-admin.</p><Link to="/auth?redirect=/simhub-koppelen" className="mt-6 inline-flex rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-bold text-black hover:bg-orange-400">Inloggen</Link></div> : !staff ? <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-8 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-amber-300" /><h2 className="mt-4 text-xl font-bold text-white">Super-admin vereist</h2><p className="mt-2 text-sm text-gray-400">Deze centrale SimHub-koppeling is tijdens de gecontroleerde testfase uitsluitend voor Super-admin zichtbaar en bruikbaar.</p></div> : <div className="space-y-5">
+        {(loading || rolesLoading) ? <div className="rounded-2xl border border-border bg-card p-8 text-center"><Loader2 className="mx-auto h-7 w-7 animate-spin text-orange-400" /><p className="mt-3 text-sm text-muted-foreground">Account laden…</p></div> : !user ? <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.07] p-8 text-center"><Cable className="mx-auto h-10 w-10 text-orange-400" /><h2 className="mt-4 text-xl font-bold text-white">Log eerst in</h2><p className="mt-2 text-sm text-gray-400">Pairingcodes zijn kort geldig en tijdens de testfase alleen beschikbaar voor Super-admin.</p><Link to="/auth?redirect=/simhub-koppelen" className="mt-6 inline-flex rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-bold text-black hover:bg-orange-400">Inloggen</Link></div> : !staff ? <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-8 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-amber-300" /><h2 className="mt-4 text-xl font-bold text-white">Besloten omgeving</h2><p className="mt-2 text-sm text-gray-400">Deze SimHub-koppeling is een besloten toepassing en staat uitsluitend open voor de betrokken rollen.</p></div> : <div className="space-y-5">
           {devices.error && <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">Gekoppelde installaties konden niet worden geladen: {devices.error instanceof Error ? devices.error.message : "onbekende fout"}</p>}
 
           <section className="rounded-2xl border border-border bg-card p-6 shadow-lg">
