@@ -15,6 +15,7 @@ on:
       - src/pages/SimHubPairingPage.tsx
       - supabase/functions/_shared/simhub.ts
       - supabase/functions/simhub-ingest/**
+      - supabase/functions/simhub-version/**
       - supabase/functions/simhub-pair/**
       - supabase/migrations/20260716170000_simhub_central_relay.sql
       - supabase/migrations/20260716192852_simhub_device_only_pairing.sql

@@ -140,6 +140,36 @@ Deno.serve(async (request) => {
       return jsonResponse(request, { revoked: true, deviceId });
     }
 
+    if (action === "assign") {
+      const deviceId = typeof body.deviceId === "string" ? body.deviceId : "";
+      const eventId = typeof body.eventId === "string" ? body.eventId : "";
+      const teamId = typeof body.teamId === "string" ? body.teamId : "";
+      if (!uuidPattern.test(deviceId) || !uuidPattern.test(eventId) || !uuidPattern.test(teamId)) {
+        return jsonResponse(request, { error: "invalid_binding" }, 400);
+      }
+      const { data, error } = await service.rpc("simhub_assign_device_to_entry", {
+        p_device_id: deviceId,
+        p_endurance_event_id: eventId,
+        p_endurance_team_id: teamId,
+        p_assigned_by: user.id,
+      });
+      if (error) throw error;
+      if (!data) return jsonResponse(request, { error: "assignment_failed" }, 400);
+      return jsonResponse(request, { assigned: true, deviceId, eventId, teamId });
+    }
+
+    if (action === "clear") {
+      const deviceId = typeof body.deviceId === "string" ? body.deviceId : "";
+      if (!uuidPattern.test(deviceId)) return jsonResponse(request, { error: "invalid_device" }, 400);
+      const { data, error } = await service.rpc("simhub_clear_device_entry", {
+        p_device_id: deviceId,
+        p_assigned_by: user.id,
+      });
+      if (error) throw error;
+      if (!data) return jsonResponse(request, { error: "device_not_found" }, 404);
+      return jsonResponse(request, { cleared: true, deviceId });
+    }
+
     return jsonResponse(request, { error: "unknown_action" }, 400);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";

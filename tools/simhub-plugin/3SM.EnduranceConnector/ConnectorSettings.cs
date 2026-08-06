@@ -49,5 +49,11 @@ namespace ThreeSM.EnduranceConnector
         public string CarNameProperty = "DataCorePlugin.GameData.NewData.CarName";
         public string TrackNameProperty = "DataCorePlugin.GameData.NewData.TrackName";
         public string TrackConfigProperty = "DataCorePlugin.GameData.NewData.TrackConfig";
+
+        // Veilige versie-check: alleen een "nieuwe versie beschikbaar"-melding.
+        // De plugin vervangt nooit zelf de DLL en stuurt geen credentials.
+        public string LastKnownRemoteVersion = string.Empty;
+        public string LastKnownRemoteDllUrl = string.Empty;
+        public DateTime? LastVersionCheckUtc;
     }
 }

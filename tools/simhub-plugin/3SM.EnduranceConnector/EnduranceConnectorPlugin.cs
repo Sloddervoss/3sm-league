@@ -77,6 +77,55 @@ namespace ThreeSM.EnduranceConnector
                 ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
                 : "Lokale fallback · wacht op iRacing";
             SimHub.Logging.Current.Info("3SM Endurance Connector gestart");
+            // Veilige, laagfrequente versie-check (max 1x per 24u); faalt stil.
+            if (Settings.UseCentralRelay && !Volatile.Read(ref _ending).Equals(1))
+            {
+                try { Task.Run(async () => await CheckForUpdateAsync(_shutdown.Token).ConfigureAwait(false)); }
+                catch { /* fire-and-forget; versie-check mag de plugin nooit breken */ }
+            }
+        }
+
+        private async Task CheckForUpdateAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Niet vaker dan 1x per 24 uur naar de endpoint.
+                DateTime? lastCheck;
+                lock (_settingsGate) lastCheck = Settings.LastVersionCheckUtc;
+                if (lastCheck.HasValue && DateTime.UtcNow - lastCheck.Value < TimeSpan.FromHours(24)) return;
+
+                var localVersion = this.GetType().Assembly.GetName().Version;
+                var endpoint = BuildRelayEndpoint("simhub-version");
+                using (var request = new HttpRequestMessage(HttpMethod.Get, endpoint))
+                using (var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
+                {
+                    if (!response.IsSuccessStatusCode) return;
+                    var body = await ReadBoundedResponseAsync(response.Content, 8192, cancellationToken).ConfigureAwait(false);
+                    var info = Deserialize<VersionResponse>(body);
+                    if (info == null || string.IsNullOrWhiteSpace(info.Version)) return;
+                    lock (_settingsGate)
+                    {
+                        Settings.LastKnownRemoteVersion = info.Version.Trim();
+                        Settings.LastKnownRemoteDllUrl = info.DllUrl?.Trim() ?? string.Empty;
+                        Settings.LastVersionCheckUtc = DateTime.UtcNow;
+                        this.SaveCommonSettings("ConnectorSettings", Settings);
+                    }
+                    // Vergelijk alleen de assembly-versie; bump de DLL-assembly bij elke release.
+                    var remote = Version.TryParse(info.Version.Trim(), out var parsed) ? parsed : null;
+                    if (remote != null && localVersion != null && remote > localVersion)
+                    {
+                        if (Volatile.Read(ref _ending) == 0) Status = "Nieuwe versie beschikbaar · vervang de DLL en herstart";
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Normale shutdown; versie-check wordt gestaakt.
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM Endurance: versie-check mislukt (niet-blokkerend): " + error.Message);
+            }
         }
 
         public void DataUpdate(PluginManager pluginManager, ref GameData data)
