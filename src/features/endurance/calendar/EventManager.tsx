@@ -44,13 +44,14 @@ export const EventManager = () => {
   const [duration, setDuration] = useState(6);
   const [deadline, setDeadline] = useState("2026-08-10T23:59");
   const [visibility, setVisibility] = useState<"open" | "invite_only" | "hidden">("open");
+  const [maxDrivers, setMaxDrivers] = useState(4);
   const [classIds, setClassIds] = useState<EnduranceClassId[]>(() => [...IRACING_ENDURANCE_CLASSES]);
 
   const openNew = () => {
     setEditingId(null);
     setName(""); setCircuit(""); setConfiguration("Full Course");
     setStartAt("2026-08-15T13:00"); setDuration(6); setDeadline("2026-08-10T23:59");
-    setVisibility("open"); setClassIds([...IRACING_ENDURANCE_CLASSES]);
+    setVisibility("open"); setMaxDrivers(4); setClassIds([...IRACING_ENDURANCE_CLASSES]);
     setOpen(true);
   };
 
@@ -61,6 +62,7 @@ export const EventManager = () => {
     setDuration(Math.max(1, Math.round((new Date(event.end_at).getTime() - new Date(event.start_at).getTime()) / 3_600_000)));
     setDeadline(toLocalInput(event.registration_deadline) || "2026-08-10T23:59");
     setVisibility(event.visibility as "open" | "invite_only" | "hidden");
+    setMaxDrivers(event.max_drivers_per_car);
     setClassIds((event.class_ids.length ? event.class_ids : [...IRACING_ENDURANCE_CLASSES]) as EnduranceClassId[]);
     setOpen(true);
     setConfirmDeleteId(null);
@@ -85,7 +87,7 @@ export const EventManager = () => {
       class_ids: classIds,
       selected_class_id: null,
       selected_car_id: null,
-      max_drivers_per_car: 4,
+      max_drivers_per_car: maxDrivers,
       visibility,
       status: "registration_open",
       source: "manual",
@@ -124,6 +126,7 @@ export const EventManager = () => {
       <Field label="Start (lokale tijd)"><input required type="datetime-local" className={inputClass} value={startAt} onChange={(e) => setStartAt(e.target.value)} /></Field>
       <Field label="Duur in uren"><input required type="number" min={1} max={30} className={inputClass} value={duration} onChange={(e) => setDuration(Number(e.target.value))} /></Field>
       <Field label="Aanmelddeadline"><input required type="datetime-local" className={inputClass} value={deadline} onChange={(e) => setDeadline(e.target.value)} /></Field>
+      <Field label="Max. coureurs per auto" hint="Bovengrens, niet verplicht vol. Sta gerust hoger in voor teams met 6+ rijders."><input required type="number" min={1} max={30} className={inputClass} value={maxDrivers} onChange={(e) => setMaxDrivers(Math.max(1, Math.min(30, Number(e.target.value) || 1)))} /></Field>
       <Field label="Zichtbaarheid"><select className={inputClass} value={visibility} onChange={(e) => setVisibility(e.target.value as "open" | "invite_only" | "hidden")}><option value="open">Open voor alle leden</option><option value="invite_only">Alleen op uitnodiging</option><option value="hidden">Verborgen</option></select></Field>
       <div className="sm:col-span-2 lg:col-span-3"><span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Klassen voor de stemming</span><div className="flex flex-wrap gap-2">{IRACING_ENDURANCE_CLASSES.map((value) => <label key={value} className="flex items-center gap-2 rounded-xl bg-black/20 px-4 py-3 text-sm text-gray-200 ring-1 ring-white/5"><input type="checkbox" checked={classIds.includes(value)} onChange={(e) => setClassIds((current) => e.target.checked ? [...current, value] : current.filter((item) => item !== value))} className="accent-orange-500" />{value}</label>)}</div></div>
       <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-2"><PrimaryButton type="submit" disabled={!classIds.length || upsert.isPending}>{upsert.isPending ? "Opslaan…" : editingId ? "Wijzigingen opslaan" : "Race opslaan"}</PrimaryButton><SecondaryButton type="button" onClick={() => { setOpen(false); setEditingId(null); }}>Annuleren</SecondaryButton></div>
