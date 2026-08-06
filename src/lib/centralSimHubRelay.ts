@@ -55,6 +55,20 @@ export const revokeCentralSimHubDevice = async (deviceId: string) => {
   if (error || !data?.revoked) throw new Error(data?.error || await functionError(error, "SimHub-apparaat kon niet worden ingetrokken."));
 };
 
+export const assignCentralSimHubDevice = async (deviceId: string, eventId: string, teamId: string) => {
+  const { data, error } = await supabase.functions.invoke<{ assigned?: boolean; error?: string }>("simhub-pair", {
+    body: { action: "assign", deviceId, eventId, teamId },
+  });
+  if (error || !data?.assigned) throw new Error(data?.error || await functionError(error, "Device kon niet aan het event worden gekoppeld."));
+};
+
+export const clearCentralSimHubDeviceAssignment = async (deviceId: string) => {
+  const { data, error } = await supabase.functions.invoke<{ cleared?: boolean; error?: string }>("simhub-pair", {
+    body: { action: "clear", deviceId },
+  });
+  if (error || !data?.cleared) throw new Error(data?.error || await functionError(error, "Device-koppeling kon niet worden opgeheven."));
+};
+
 export const centralRowToBridgeResponse = (row: CentralSimHubLatestRow): SimHubBridgeResponse => {
   const isV2 = Boolean(row.telemetry && typeof row.telemetry === "object" && "isInCar" in row.telemetry);
   return parseSimHubBridgeResponse({

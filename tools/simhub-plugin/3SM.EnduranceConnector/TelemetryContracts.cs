@@ -76,4 +76,13 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "ownerUserId", Order = 4)] public string OwnerUserId { get; set; }
         [DataMember(Name = "error", Order = 5)] public string Error { get; set; }
     }
+
+    [DataContract]
+    public sealed class VersionResponse
+    {
+        [DataMember(Name = "name", Order = 1)] public string Name { get; set; }
+        [DataMember(Name = "version", Order = 2)] public string Version { get; set; }
+        [DataMember(Name = "dllUrl", Order = 3)] public string DllUrl { get; set; }
+        [DataMember(Name = "checkedAt", Order = 4)] public string CheckedAt { get; set; }
+    }
 }
