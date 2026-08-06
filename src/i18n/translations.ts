@@ -225,6 +225,7 @@ const exactTranslations: Record<string, string> = {
   "Geen losse races aangemaakt.": "No standalone races created.",
 
   "Profiel incompleet": "Profile incomplete",
+  "Log in om je in te schrijven": "Log in to register",
   "Discord Koppeling": "Discord Link",
   "Discord gekoppeld": "Discord linked",
   "Discord ontkoppeld": "Discord unlinked",
@@ -607,8 +608,7 @@ const exactTranslations: Record<string, string> = {
   "modellen": "models",
   "Coureurs stand": "Standings",
   "achter": "behind",
-  "Meedoen met onze iRacing community": "Join our iRacing community",
-  "Bekijk hoe je aansluit bij de iRacing community van 3SM.": "See how to join the 3SM iRacing community.",
+
   "Binnenkort": "Coming soon",
   "Tot start": "Until start",
   "Ingeschreven via seizoen": "Registered via season",

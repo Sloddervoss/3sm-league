@@ -1,6 +1,7 @@
 import type { SVGProps } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { canViewCommunitySupport } from "@/features/community-support/model";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 const INSTAGRAM_URL = "https://www.instagram.com/3stripemotorsport";
@@ -58,8 +59,10 @@ const socialLinks = [
 ];
 
 const Footer = () => {
-  const { isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const { isAdmin, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const showCommunitySupport = canViewCommunitySupport(isAdmin, isSuperAdmin);
   const canUseEndurance = Boolean(isSuperAdmin || isEnduranceManager || isTester);
+
   return (
     <footer className="relative overflow-hidden border-t border-orange-500/12 bg-racing-dark py-10">
       <div className="pointer-events-none absolute -top-24 left-[24%] h-64 w-[48rem] max-w-[92vw] -translate-x-1/2 rounded-full bg-orange-500/[0.08] blur-3xl" />
@@ -107,6 +110,9 @@ const Footer = () => {
               <Link to="/auth/" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Inloggen / Registreren</Link>
               <Link to="/profile/" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Mijn Profiel</Link>
               <Link to="/stewards/" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Protest Indienen</Link>
+              {showCommunitySupport && (
+                <Link to="/support/" className="block text-xs text-gray-300 hover:text-primary transition-colors py-0.5">Community support</Link>
+              )}
             </div>
           </div>
           <div className="md:justify-self-end">

@@ -20,6 +20,7 @@ import { EditorialWorkspace } from "@/features/control-room/editorial";
 import { OverviewModule, type OverviewNavigation } from "@/features/control-room/overview";
 import { RolesRightsModule } from "@/features/control-room/roles/RolesRightsModule";
 import { StewardingWorkspace } from "@/features/control-room/stewarding";
+import { CommunitySupportModule } from "@/features/control-room/support";
 import {
   Activity,
   ArrowRight,
@@ -37,6 +38,7 @@ import {
   Flag,
   FolderKanban,
   Gauge,
+  HandHeart,
   LayoutDashboard,
   Menu,
   Plus,
@@ -50,7 +52,7 @@ import {
   X,
 } from "lucide-react";
 
-type Workspace = "overview" | "race" | "season" | "community" | "intelligence" | "announcements" | "settings";
+type Workspace = "overview" | "race" | "season" | "community" | "support" | "intelligence" | "announcements" | "settings";
 type Audience = "none" | "everyone" | "team";
 
 type AdminProfile = { user_id: string; display_name: string | null; iracing_name: string | null; iracing_id: string | number | null; irating: number | null; safety_rating: string | null };
@@ -63,6 +65,7 @@ const navigation: { id: Workspace; label: string; icon: typeof LayoutDashboard }
   { id: "race", label: "Resultaten", icon: Flag },
   { id: "season", label: "Races", icon: Trophy },
   { id: "community", label: "Community", icon: Users },
+  { id: "support", label: "Community Support", icon: HandHeart },
   { id: "intelligence", label: "Track Intelligence", icon: BrainCircuit },
   { id: "announcements", label: "Communicatie", icon: Bell },
   { id: "settings", label: "Instellingen", icon: Settings },
@@ -210,7 +213,7 @@ const AdminWorkspacePrototype = () => {
         </div>
       )}
       <div className="space-y-1">
-        {navigation.map((item) => {
+        {navigation.filter((item) => item.id !== "support" || isAdmin || isSuperAdmin).map((item) => {
           const Icon = item.icon;
           const active = item.id === workspace;
           return (
@@ -381,6 +384,7 @@ const AdminWorkspacePrototype = () => {
     race: <ResultImportWorkspace />,
     season: <SeasonRaceWorkspace onAction={openSeasonAction} />,
     community: <CommunityModule />,
+    support: <CommunitySupportModule />,
     intelligence: <TrackIntelligenceModule onAction={openTrackAction} />,
     announcements: <CommunicationsModule />,
     settings: <SettingsView />,

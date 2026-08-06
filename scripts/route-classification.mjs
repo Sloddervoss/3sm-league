@@ -3,7 +3,7 @@ const normalizeRoutePath = (path) => {
   return trimmed ? `/${trimmed}` : '/';
 };
 
-export const privateSeoRoutes = [
+const alwaysPrivateSeoRoutes = [
   '/auth',
   '/profile',
   '/admin',
@@ -17,10 +17,19 @@ export const privateSeoRoutes = [
 
 const privateRoutePrefixes = ['/admin'];
 
-export const isPrivateRoute = (path) => {
-  const normalized = normalizeRoutePath(path);
+export const createPrivateSeoRoutes = (communitySupportPublic = false) => [
+  ...alwaysPrivateSeoRoutes,
+  ...(!communitySupportPublic ? ['/support'] : []),
+];
 
-  return privateSeoRoutes.includes(normalized) || privateRoutePrefixes.some((prefix) => (
+// Default reflects the current gated release state and keeps existing consumers backwards compatible.
+export const privateSeoRoutes = createPrivateSeoRoutes(false);
+
+export const isPrivateRoute = (path, { communitySupportPublic = false } = {}) => {
+  const normalized = normalizeRoutePath(path);
+  const routes = createPrivateSeoRoutes(communitySupportPublic);
+
+  return routes.includes(normalized) || privateRoutePrefixes.some((prefix) => (
     normalized === prefix || normalized.startsWith(`${prefix}/`)
   ));
 };

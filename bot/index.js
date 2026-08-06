@@ -3,6 +3,7 @@ import {
   Client, GatewayIntentBits, EmbedBuilder,
   AttachmentBuilder,
   ButtonBuilder, ButtonStyle, ActionRowBuilder,
+  ModalBuilder, TextInputBuilder, TextInputStyle,
   REST, Routes, SlashCommandBuilder,
   ChannelType, PermissionFlagsBits,
 } from 'discord.js';
@@ -31,6 +32,7 @@ import {
   upsertStreamerProfile,
   writeStreamerProfiles,
 } from './streamers.js';
+import { buildPaymentDmData, parseEuroAmount, parsePaymentActionId, paymentActionId } from './payments.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SENT_FILE   = path.join(__dirname, 'sent_notifications.json');
@@ -248,6 +250,25 @@ async function runGuarded(name, task) {
 
 function scheduleGuarded(pattern, name, task) {
   cron.schedule(pattern, () => runGuarded(name, task));
+}
+
+async function reconcileCommunitySupportMerchOrders() {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/paypal-checkout/maintenance`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      apikey: SUPABASE_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: '{}',
+    signal: AbortSignal.timeout(SUPABASE_FETCH_TIMEOUT_MS),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`Merchandise reconciliation failed (${response.status})`);
+  if (Number(result.failed || 0) > 0) throw new Error(`Merchandise reconciliation left ${result.failed} order(s) unresolved`);
+  if (Number(result.confirmed || 0) > 0 || Number(result.cancelled || 0) > 0) {
+    console.log(`[community-support] Merchandise reconciliation: ${result.confirmed || 0} confirmed, ${result.cancelled || 0} cancelled`);
+  }
 }
 
 // ── Config (channel/role IDs na /setup-server) ────────────────────────────────
@@ -1434,6 +1455,195 @@ async function checkAbandonCorrections() {
 }
 
 // ── Cron: aankondigingen ──────────────────────────────────────────────────────
+async function getPaymentConfiguration() {
+  const { data, error } = await supabase
+    .from('community_support_payment_config')
+    .select('paypal_enabled, payment_admin_discord_id')
+    .eq('singleton', true)
+    .maybeSingle();
+  if (error) {
+    await throttledBotLog(`supportPayments:config:${describeError(error)}`, '[supportPayments:config]', describeError(error));
+    return null;
+  }
+  return data;
+}
+
+async function checkSupportPaymentIntents() {
+  const config = await getPaymentConfiguration();
+  if (!config) return;
+
+  const now = new Date().toISOString();
+  const { error: expireError } = await supabase
+    .from('community_support_payment_intents')
+    .update({ status: 'expired', resolved_at: now })
+    .eq('status', 'pending')
+    .lt('expires_at', now);
+  if (expireError) await throttledBotLog(`supportPayments:expire:${describeError(expireError)}`, '[supportPayments:expire]', describeError(expireError));
+
+  if (!config.paypal_enabled || !/^\d{17,20}$/.test(config.payment_admin_discord_id || '')) return;
+
+  const { data: intents, error } = await supabase.rpc('discord_claim_community_support_payment_intents', {
+    p_limit: 10,
+  });
+  if (error) {
+    await throttledBotLog(`supportPayments:queue:${describeError(error)}`, '[supportPayments:queue]', describeError(error));
+    return;
+  }
+  if (!intents?.length) return;
+
+  for (const intent of intents) {
+    let sentMessage = null;
+    let messageId = null;
+    let notificationError = null;
+    try {
+      const paymentAdmin = await client.users.fetch(intent.payment_admin_discord_id).catch(() => null);
+      if (!paymentAdmin) throw new Error('Ingestelde betaaladmin kon niet worden opgehaald');
+      const dmData = buildPaymentDmData(intent);
+      const reviewId = paymentActionId('review', intent.id);
+      const missingId = paymentActionId('missing', intent.id);
+      if (!reviewId || !missingId) throw new Error('Ongeldig payment intent ID');
+      sentMessage = await paymentAdmin.send({
+        embeds: [new EmbedBuilder()
+          .setColor(0xf97316)
+          .setTitle(dmData.title)
+          .setDescription(dmData.description)
+          .addFields(dmData.fields)
+          .setFooter({ text: dmData.footer })
+          .setTimestamp()],
+        components: [new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(reviewId).setLabel('Controleren en verwerken').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(missingId).setLabel('Niet ontvangen').setStyle(ButtonStyle.Secondary),
+        )],
+      });
+      messageId = sentMessage.id;
+    } catch (sendError) {
+      notificationError = describeError(sendError);
+      await throttledBotLog(`supportPayments:dm:${intent.id}:${notificationError}`, '[supportPayments:dm]', notificationError);
+    }
+    const { data: markAcknowledged, error: markError } = await supabase.rpc('discord_mark_community_support_payment_notified', {
+      p_intent_id: intent.id,
+      p_claim_token: intent.notification_claim_token,
+      p_discord_message_id: messageId,
+      p_error: notificationError,
+    });
+    if (markError || markAcknowledged !== true) {
+      const markReason = markError ? describeError(markError) : 'claim token stale or intent no longer pending';
+      await throttledBotLog(`supportPayments:mark:${intent.id}:${markReason}`, '[supportPayments:mark]', markReason);
+      if (sentMessage) {
+        await sentMessage.delete().catch(async (deleteError) => {
+          await throttledBotLog(`supportPayments:rollback-dm:${intent.id}:${describeError(deleteError)}`, '[supportPayments:rollback-dm]', describeError(deleteError));
+        });
+      }
+    }
+  }
+}
+
+async function requirePaymentAdmin(interaction) {
+  const config = await getPaymentConfiguration();
+  if (/^\d{17,20}$/.test(config?.payment_admin_discord_id || '') && interaction.user?.id === config.payment_admin_discord_id) return true;
+  const response = { content: '❌ Alleen de ingestelde betaaladmin kan deze betaling verwerken.', flags: 64 };
+  if (interaction.deferred) await interaction.editReply({ content: response.content, embeds: [], components: [] }).catch(() => {});
+  else if (interaction.replied) await interaction.followUp(response).catch(() => {});
+  else await interaction.reply(response).catch(() => {});
+  return false;
+}
+
+async function handleSupportPaymentButton(interaction, actionData) {
+  if (actionData.action === 'review') {
+    const modalId = paymentActionId('confirm', actionData.intentId);
+    if (!modalId) return interaction.reply({ content: 'Ongeldige betaalcontrole.', flags: 64 });
+    const modal = new ModalBuilder().setCustomId(modalId).setTitle('PayPal-betaling verwerken');
+    const gross = new TextInputBuilder()
+      .setCustomId('gross_amount')
+      .setLabel('Werkelijk bruto ontvangen (EUR)')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setPlaceholder('Bijvoorbeeld 10.00');
+    const fee = new TextInputBuilder()
+      .setCustomId('fee_amount')
+      .setLabel('Werkelijke PayPal-kosten (EUR)')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setValue('0.00');
+    const note = new TextInputBuilder()
+      .setCustomId('resolution_note')
+      .setLabel('Interne controlenotitie')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(500)
+      .setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(gross), new ActionRowBuilder().addComponents(fee), new ActionRowBuilder().addComponents(note));
+    return interaction.showModal(modal);
+  }
+  if (actionData.action === 'missing') {
+    const modalId = paymentActionId('not_found', actionData.intentId);
+    if (!modalId) return interaction.reply({ content: 'Ongeldige betaalcontrole.', flags: 64 });
+    const modal = new ModalBuilder().setCustomId(modalId).setTitle('Betaling niet ontvangen');
+    const confirmation = new TextInputBuilder()
+      .setCustomId('not_found_confirmation')
+      .setLabel('Typ NIET ONTVANGEN ter bevestiging')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+    const note = new TextInputBuilder()
+      .setCustomId('resolution_note')
+      .setLabel('Waarom niet gevonden?')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(500)
+      .setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(confirmation), new ActionRowBuilder().addComponents(note));
+    return interaction.showModal(modal);
+  }
+}
+
+async function handleSupportPaymentModal(interaction, actionData) {
+  await interaction.deferUpdate();
+  if (!(await requirePaymentAdmin(interaction))) return;
+  const resolutionNote = interaction.fields.getTextInputValue('resolution_note').trim();
+  if (!resolutionNote || resolutionNote.length > 500) {
+    return interaction.followUp({ content: '❌ Vul een interne controlenotitie van maximaal 500 tekens in.', flags: 64 });
+  }
+  if (actionData.action === 'not_found') {
+    const confirmation = interaction.fields.getTextInputValue('not_found_confirmation').trim().toUpperCase();
+    if (confirmation !== 'NIET ONTVANGEN') {
+      return interaction.followUp({ content: '❌ Niet verwerkt. Typ exact NIET ONTVANGEN ter bevestiging.', flags: 64 });
+    }
+    const { data, error } = await supabase.rpc('discord_resolve_community_support_payment_intent', {
+      p_intent_id: actionData.intentId,
+      p_admin_discord_id: interaction.user.id,
+      p_action: 'not_found',
+      p_gross_amount_eur: null,
+      p_fee_amount_eur: 0,
+      p_resolution_note: resolutionNote,
+    });
+    if (error) return interaction.followUp({ content: `❌ Niet verwerkt: ${describeError(error)}`, flags: 64 });
+    if (data === 'not_found_marked' || data === 'already_not_found') {
+      return interaction.editReply({ content: '❌ Niet ontvangen in PayPal · administratief niet geboekt.', embeds: [], components: [] });
+    }
+    if (data === 'already_confirmed') {
+      return interaction.editReply({ content: '✅ Deze betaling was al bevestigd en geboekt.', embeds: [], components: [] });
+    }
+    return interaction.followUp({ content: `❌ Niet verwerkt: ${data}`, flags: 64 });
+  }
+  const grossAmount = parseEuroAmount(interaction.fields.getTextInputValue('gross_amount'));
+  const feeAmount = parseEuroAmount(interaction.fields.getTextInputValue('fee_amount'), { allowZero: true });
+  if (grossAmount === null || feeAmount === null || feeAmount >= grossAmount) {
+    return interaction.followUp({ content: '❌ Vul geldige EUR-bedragen in. De fee moet lager zijn dan het brutobedrag.', flags: 64 });
+  }
+  const { data, error } = await supabase.rpc('discord_resolve_community_support_payment_intent', {
+    p_intent_id: actionData.intentId,
+    p_admin_discord_id: interaction.user.id,
+    p_action: 'confirm',
+    p_gross_amount_eur: grossAmount,
+    p_fee_amount_eur: feeAmount,
+    p_resolution_note: resolutionNote,
+  });
+  if (error) return interaction.followUp({ content: `❌ Niet verwerkt: ${describeError(error)}`, flags: 64 });
+  if (data === 'already_not_found') return interaction.editReply({ content: '❌ Deze betaling was al als niet ontvangen afgehandeld.', embeds: [], components: [] });
+  if (data === 'already_confirmed') return interaction.editReply({ content: '✅ Deze betaling was al bevestigd en geboekt.', embeds: [], components: [] });
+  if (data !== 'confirmed') return interaction.followUp({ content: `❌ Niet verwerkt: ${data}`, flags: 64 });
+  const content = `✅ Handmatig gecontroleerd en verwerkt\nBruto bijdrage: **€ ${grossAmount.toFixed(2)}**\nPayPal-kosten: **€ ${feeAmount.toFixed(2)}**`;
+  return interaction.editReply({ content, embeds: [], components: [] });
+}
+
 async function checkAnnouncements() {
   const { data, error } = await supabase
     .from('announcements')
@@ -2210,9 +2420,17 @@ client.on('interactionCreate', async (interaction) => {
           break;
       }
     } else if (interaction.isButton()) {
+      const paymentAction = parsePaymentActionId(interaction.customId);
+      if (paymentAction) {
+        await handleSupportPaymentButton(interaction, paymentAction);
+        return;
+      }
       const [action, raceId] = interaction.customId.split('_');
       if (action === 'aanmelden') await handleButtonReg(interaction, raceId, 'register');
       else if (action === 'afmelden')  await handleButtonReg(interaction, raceId, 'unregister');
+    } else if (interaction.isModalSubmit()) {
+      const paymentAction = parsePaymentActionId(interaction.customId);
+      if (paymentAction?.action === 'confirm' || paymentAction?.action === 'not_found') await handleSupportPaymentModal(interaction, paymentAction);
     }
   } catch (e) { botLog('[interaction]', describeError(e)); }
 });
@@ -2472,6 +2690,7 @@ client.once('clientReady', async () => {
   // Elke minuut, gespreid over de minuut: race checks + aanmeldingen + koppelingen
   scheduleGuarded('0 * * * * *', 'checkRaces', checkRaces);
   scheduleGuarded('6 * * * * *', 'announcements', checkAnnouncements);
+  scheduleGuarded('9 * * * * *', 'supportPaymentIntents', checkSupportPaymentIntents);
   scheduleGuarded('12 * * * * *', 'checkRegistrations', checkNewRegistrations);
   scheduleGuarded('18 * * * * *', 'checkLinks', checkNewLinks);
   scheduleGuarded('20 */2 * * * *', 'checkStreams', checkStreams);
@@ -2483,6 +2702,7 @@ client.once('clientReady', async () => {
   scheduleGuarded('54 * * * * *', 'checkStewardCorrections', checkStewardCorrections);
   // Elke 5 minuten: team rol sync
   scheduleGuarded('*/5 * * * *', 'syncTeamRoles', syncTeamRoles);
+  scheduleGuarded('15 */5 * * * *', 'reconcileMerchOrders', reconcileCommunitySupportMerchOrders);
   // Elk uur: kalender update + token cleanup
   scheduleGuarded('0 * * * *', 'hourlyMaintenance', async () => {
     await updateCalendarEmbed().catch(e => botLog(`[cron:kalender] ${describeError(e)}`));
@@ -2497,10 +2717,12 @@ client.once('clientReady', async () => {
   });
 
   runGuarded('checkRaces', checkRaces);
+  runGuarded('supportPaymentIntents', checkSupportPaymentIntents);
   runGuarded('discordSyncQueue', processDiscordSyncQueue);
   runGuarded('checkStreams', checkStreams);
   runGuarded('startupCalendar', updateCalendarEmbed);
   runGuarded('syncTeamRoles', syncTeamRoles);
+  runGuarded('reconcileMerchOrders', reconcileCommunitySupportMerchOrders);
 });
 
 client.on('error', (e) => {

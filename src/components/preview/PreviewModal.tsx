@@ -10,9 +10,11 @@ interface Props {
   onClose: () => void;
   children: React.ReactNode;
   maxWidth?: string;
+  ariaLabel?: string;
+  closeLabel?: string;
 }
 
-const PreviewModal = ({ open, onClose, children, maxWidth = "900px" }: Props) => {
+const PreviewModal = ({ open, onClose, children, maxWidth = "900px", ariaLabel = "Voorbeeldvenster", closeLabel = "Sluit venster" }: Props) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -92,7 +94,7 @@ const PreviewModal = ({ open, onClose, children, maxWidth = "900px" }: Props) =>
               ref={dialogRef}
               role="dialog"
               aria-modal="true"
-              aria-label="Voorbeeldvenster"
+              aria-label={ariaLabel}
               tabIndex={-1}
               className="relative w-full overflow-hidden rounded-t-3xl md:rounded-3xl"
               style={{
@@ -109,7 +111,7 @@ const PreviewModal = ({ open, onClose, children, maxWidth = "900px" }: Props) =>
               {/* Sluit knop */}
               <button
                 onClick={onClose}
-                aria-label="Sluit venster"
+                aria-label={closeLabel}
                 className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
                 style={{ background: "rgba(255,255,255,0.07)", color: "#6b7280" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.12)"; (e.currentTarget as HTMLButtonElement).style.color = "#fff"; }}

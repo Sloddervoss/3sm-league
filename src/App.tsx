@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LanguageProvider } from "@/i18n/LanguageContext";
+import { CommunitySupportProvider } from "@/features/community-support/store";
+import { CommunitySupportAccessGate } from "@/features/community-support/CommunitySupportAccessGate";
 import Index from "./pages/Index.tsx";
 
 // Lazy-loaded routes (keep Index eager for fastest initial paint)
@@ -27,6 +29,7 @@ const EndurancePage = lazy(() => import("./features/endurance/shell/EndurancePag
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
 const NewsEditorPage = lazy(() => import("./pages/NewsEditorPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
+const CommunitySupportPage = lazy(() => import("./features/community-support/public/CommunitySupportPage.tsx"));
 // Local implementation test: the new Control Room temporarily owns /admin. Do not deploy until approved.
 const AdminWorkspacePrototype = lazy(() => import("./pages/AdminWorkspacePrototype.tsx"));
 const TrackIntelligenceTestPage = lazy(() => import("./pages/TrackIntelligenceTestPage.tsx"));
@@ -63,39 +66,42 @@ const App = () => (
       <BrowserRouter>
         <LanguageProvider>
           <AuthProvider>
-            <ErrorBoundary>
-              <Suspense fallback={<RouteFallback />}>
-                <Routes>
-                  <Route path="/" element={<HomepagePrototype />} />
-                  <Route path="/homepage-prototype" element={<Index />} />
-                  <Route path="/calendar" element={<CalendarPage />} />
-                  <Route path="/standings" element={<StandingsPage />} />
-                  <Route path="/drivers" element={<DriversPage />} />
-                  <Route path="/teams" element={<TeamsPage />} />
-                  <Route path="/results" element={<ResultsPage />} />
-                  <Route path="/results/:raceId" element={<RaceDetailPage />} />
-                  <Route path="/news" element={<NewsPage />} />
-                  <Route path="/news/author/:authorSlug" element={<NewsAuthorPage />} />
-                  <Route path="/news/:categorySlug/:slug" element={<NewsDetailPage />} />
-                  <Route path="/news/:categorySlug" element={<NewsCategoryOrDetailPage />} />
-                  <Route path="/news/:slug" element={<NewsDetailPage />} />
-                  <Route path="/seasons" element={<SeasonsPage />} />
-                  <Route path="/meedoen" element={<JoinPage />} />
-                  <Route path="/endurance/*" element={<EndurancePage />} />
-                  <Route path="/stewards" element={<StewardPage />} />
-                  <Route path="/news-editor" element={<NewsEditorPage />} />
-                  <Route path="/auth" element={<AuthPage />} />
-                  {/* Local integration test: new Control Room at the real admin URL; do not deploy without approval. */}
-                  <Route path="/admin" element={<AdminWorkspacePrototype />} />
-                  <Route path="/admin/track-intelligence" element={<TrackIntelligenceTestPage />} />
-                  <Route path="/admin/track-intelligence-test" element={<TrackIntelligenceTestPage />} />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/koppel" element={<KoppelPage />} />
-                  <Route path="/simhub-koppelen" element={<SimHubPairingPage />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </Suspense>
-            </ErrorBoundary>
+            <CommunitySupportProvider>
+              <ErrorBoundary>
+                <Suspense fallback={<RouteFallback />}>
+                  <Routes>
+                    <Route path="/" element={<HomepagePrototype />} />
+                    <Route path="/homepage-prototype" element={<Index />} />
+                    <Route path="/calendar" element={<CalendarPage />} />
+                    <Route path="/standings" element={<StandingsPage />} />
+                    <Route path="/drivers" element={<DriversPage />} />
+                    <Route path="/teams" element={<TeamsPage />} />
+                    <Route path="/results" element={<ResultsPage />} />
+                    <Route path="/results/:raceId" element={<RaceDetailPage />} />
+                    <Route path="/news" element={<NewsPage />} />
+                    <Route path="/news/author/:authorSlug" element={<NewsAuthorPage />} />
+                    <Route path="/news/:categorySlug/:slug" element={<NewsDetailPage />} />
+                    <Route path="/news/:categorySlug" element={<NewsCategoryOrDetailPage />} />
+                    <Route path="/news/:slug" element={<NewsDetailPage />} />
+                    <Route path="/seasons" element={<SeasonsPage />} />
+                    <Route path="/meedoen" element={<JoinPage />} />
+                    <Route path="/endurance/*" element={<EndurancePage />} />
+                    <Route path="/stewards" element={<StewardPage />} />
+                    <Route path="/news-editor" element={<NewsEditorPage />} />
+                    <Route path="/auth" element={<AuthPage />} />
+                    <Route path="/support" element={<CommunitySupportAccessGate><CommunitySupportPage /></CommunitySupportAccessGate>} />
+                    {/* Local integration test: new Control Room at the real admin URL; do not deploy without approval. */}
+                    <Route path="/admin" element={<AdminWorkspacePrototype />} />
+                    <Route path="/admin/track-intelligence" element={<TrackIntelligenceTestPage />} />
+                    <Route path="/admin/track-intelligence-test" element={<TrackIntelligenceTestPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/koppel" element={<KoppelPage />} />
+                    <Route path="/simhub-koppelen" element={<SimHubPairingPage />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
+            </CommunitySupportProvider>
           </AuthProvider>
         </LanguageProvider>
       </BrowserRouter>

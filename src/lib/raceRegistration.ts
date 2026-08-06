@@ -14,6 +14,19 @@ export function isRaceRegistrationOpen(
   return race.status === "upcoming" && new Date(race.race_date).getTime() > now.getTime();
 }
 
+/**
+ * Display a race as live only when the backend says so, or during the short
+ * interval where an upcoming race has started but its status has not updated.
+ * Terminal states such as cancelled must never become live from time alone.
+ */
+export function isRaceLiveForDisplay(
+  race: RegistrationWindowRace,
+  now: Date = new Date(),
+): boolean {
+  return race.status === "live"
+    || (race.status === "upcoming" && new Date(race.race_date).getTime() <= now.getTime());
+}
+
 export function isActiveRaceRegistration(status: string | null | undefined): boolean {
   return status !== "withdrawn";
 }
