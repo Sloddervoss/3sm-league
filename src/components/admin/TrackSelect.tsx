@@ -56,9 +56,10 @@ export const TrackSelect = ({
 
   const handleCircuit = (c: string) => {
     setCircuit(c);
-    const valid = (CONFIGS_FOR[c] ?? []).includes(config) ? config : (CONFIGS_FOR[c]?.[0] ?? "");
-    setConfig(valid);
-    emit(c, valid || null);
+    // géén layout automatisch invullen: anders verbergt een datalist de rest
+    // (alleen prefix-matches). Leeg laten zodat álle layouts zichtbaar zijn.
+    setConfig("");
+    emit(c, null);
   };
   const handleConfig = (cfg: string) => {
     setConfig(cfg);
