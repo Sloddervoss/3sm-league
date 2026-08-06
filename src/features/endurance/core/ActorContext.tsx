@@ -28,7 +28,7 @@ export function EnduranceActorProvider({ selfId, children }: { selfId: string; c
 
   const displayName = useCallback(
     (id: string) => {
-      if (id === selfId) return "Ik (super-admin)";
+      if (id === selfId) return "Ik (jij)";
       return ENDURANCE_TEST_ACTORS.find((actor) => actor.id === id)?.label ?? id.slice(0, 8);
     },
     [selfId]
