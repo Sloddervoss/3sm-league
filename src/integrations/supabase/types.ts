@@ -216,6 +216,571 @@ export type Database = {
           },
         ]
       }
+      endurance_audit_log: {
+        Row: {
+          id: string
+          event_id: string | null
+          actor_id: string | null
+          action: string
+          entity_type: string
+          entity_id: string | null
+          before_data: Json | null
+          after_data: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string | null
+          actor_id: string | null
+          action: string
+          entity_type: string
+          entity_id: string | null
+          before_data: Json | null
+          after_data: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string | null
+          actor_id?: string | null
+          action?: string
+          entity_type?: string
+          entity_id?: string | null
+          before_data?: Json | null
+          after_data?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+
+      endurance_availability: {
+        Row: {
+          id: string
+          event_id: string
+          user_id: string
+          start_at: string
+          end_at: string
+          type: Database["public"]["Enums"]["endurance_availability_type"]
+          note: string | null
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          user_id: string
+          start_at: string
+          end_at: string
+          type: Database["public"]["Enums"]["endurance_availability_type"]
+          note: string | null
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          user_id?: string
+          start_at?: string
+          end_at?: string
+          type?: Database["public"]["Enums"]["endurance_availability_type"]
+          note?: string | null
+        }
+        Relationships: []
+      }
+
+      endurance_confirmations: {
+        Row: {
+          id: string
+          event_id: string
+          version_id: string
+          user_id: string
+          status: Database["public"]["Enums"]["endurance_confirmation_status"]
+          note: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          version_id: string
+          user_id: string
+          status: Database["public"]["Enums"]["endurance_confirmation_status"]
+          note: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          version_id?: string
+          user_id?: string
+          status?: Database["public"]["Enums"]["endurance_confirmation_status"]
+          note?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+
+      endurance_events: {
+        Row: {
+          id: string
+          name: string
+          circuit: string
+          configuration: string
+          image_url: string | null
+          start_at: string
+          end_at: string
+          briefing_start_at: string | null
+          expected_end_at: string | null
+          registration_deadline: string | null
+          slots: Json
+          class_ids: string[]
+          selected_class_id: string | null
+          selected_car_id: string | null
+          max_drivers_per_car: number
+          visibility: Database["public"]["Enums"]["endurance_event_visibility"]
+          status: Database["public"]["Enums"]["endurance_event_status"]
+          source: string
+          invited_user_ids: string[]
+          manager_ids: string[]
+          race_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          circuit: string
+          configuration: string
+          image_url: string | null
+          start_at: string
+          end_at: string
+          briefing_start_at: string | null
+          expected_end_at: string | null
+          registration_deadline: string | null
+          slots: Json
+          class_ids: string[]
+          selected_class_id: string | null
+          selected_car_id: string | null
+          max_drivers_per_car: number
+          visibility: Database["public"]["Enums"]["endurance_event_visibility"]
+          status: Database["public"]["Enums"]["endurance_event_status"]
+          source: string
+          invited_user_ids: string[]
+          manager_ids: string[]
+          race_id: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          circuit?: string
+          configuration?: string
+          image_url?: string | null
+          start_at?: string
+          end_at?: string
+          briefing_start_at?: string | null
+          expected_end_at?: string | null
+          registration_deadline?: string | null
+          slots?: Json
+          class_ids?: string[]
+          selected_class_id?: string | null
+          selected_car_id?: string | null
+          max_drivers_per_car?: number
+          visibility?: Database["public"]["Enums"]["endurance_event_visibility"]
+          status?: Database["public"]["Enums"]["endurance_event_status"]
+          source?: string
+          invited_user_ids?: string[]
+          manager_ids?: string[]
+          race_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+
+      endurance_notifications: {
+        Row: {
+          id: string
+          user_id: string
+          event_id: string | null
+          type: Database["public"]["Enums"]["endurance_notification_type"]
+          title: string
+          message: string | null
+          private_path: string | null
+          read: boolean
+          discord_status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          event_id: string | null
+          type: Database["public"]["Enums"]["endurance_notification_type"]
+          title: string
+          message: string | null
+          private_path: string | null
+          read: boolean
+          discord_status: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          event_id?: string | null
+          type?: Database["public"]["Enums"]["endurance_notification_type"]
+          title?: string
+          message?: string | null
+          private_path?: string | null
+          read?: boolean
+          discord_status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+
+      endurance_pace_entries: {
+        Row: {
+          id: string
+          event_id: string | null
+          user_id: string
+          circuit: string
+          configuration: string
+          car: string
+          conditions: string
+          average_lap_seconds: number | null
+          median_lap_seconds: number | null
+          best_lap_seconds: number | null
+          best_five_average_seconds: number | null
+          consistency_seconds: number | null
+          valid_laps: number | null
+          incidents: number | null
+          average_stint_minutes: number | null
+          recorded_at: string
+          source: string
+          notes: string | null
+        }
+        Insert: {
+          id?: string
+          event_id: string | null
+          user_id: string
+          circuit: string
+          configuration: string
+          car: string
+          conditions: string
+          average_lap_seconds: number | null
+          median_lap_seconds: number | null
+          best_lap_seconds: number | null
+          best_five_average_seconds: number | null
+          consistency_seconds: number | null
+          valid_laps: number | null
+          incidents: number | null
+          average_stint_minutes: number | null
+          recorded_at?: string
+          source: string
+          notes: string | null
+        }
+        Update: {
+          id?: string
+          event_id?: string | null
+          user_id?: string
+          circuit?: string
+          configuration?: string
+          car?: string
+          conditions?: string
+          average_lap_seconds?: number | null
+          median_lap_seconds?: number | null
+          best_lap_seconds?: number | null
+          best_five_average_seconds?: number | null
+          consistency_seconds?: number | null
+          valid_laps?: number | null
+          incidents?: number | null
+          average_stint_minutes?: number | null
+          recorded_at?: string
+          source?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
+
+      endurance_planning_versions: {
+        Row: {
+          id: string
+          event_id: string
+          team_id: string
+          label: string
+          created_by: string | null
+          published: boolean
+          created_at: string
+          stints: Json
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          team_id: string
+          label: string
+          created_by: string | null
+          published: boolean
+          created_at?: string
+          stints: Json
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          team_id?: string
+          label?: string
+          created_by?: string | null
+          published?: boolean
+          created_at?: string
+          stints?: Json
+        }
+        Relationships: []
+      }
+
+      endurance_registrations: {
+        Row: {
+          id: string
+          event_id: string
+          user_id: string
+          status: Database["public"]["Enums"]["endurance_registration_status"]
+          class_preference: string | null
+          preferred_car_id: string | null
+          slot_id: string | null
+          max_stints: number | null
+          night_driving: boolean
+          willing_to_start: boolean
+          willing_to_finish: boolean
+          notes: string | null
+          registered_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          user_id: string
+          status: Database["public"]["Enums"]["endurance_registration_status"]
+          class_preference: string | null
+          preferred_car_id: string | null
+          slot_id: string | null
+          max_stints: number | null
+          night_driving: boolean
+          willing_to_start: boolean
+          willing_to_finish: boolean
+          notes: string | null
+          registered_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          user_id?: string
+          status?: Database["public"]["Enums"]["endurance_registration_status"]
+          class_preference?: string | null
+          preferred_car_id?: string | null
+          slot_id?: string | null
+          max_stints?: number | null
+          night_driving?: boolean
+          willing_to_start?: boolean
+          willing_to_finish?: boolean
+          notes?: string | null
+          registered_at?: string
+        }
+        Relationships: []
+      }
+
+      endurance_stints: {
+        Row: {
+          id: string
+          event_id: string
+          team_id: string
+          driver_id: string | null
+          original_start_at: string
+          original_end_at: string
+          actual_start_at: string | null
+          actual_end_at: string | null
+          expected_laps: number | null
+          fuel_litres: number | null
+          tyre_change: boolean
+          double_stint: boolean
+          notes: string | null
+          status: Database["public"]["Enums"]["endurance_stint_status"]
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          team_id: string
+          driver_id: string | null
+          original_start_at: string
+          original_end_at: string
+          actual_start_at: string | null
+          actual_end_at: string | null
+          expected_laps: number | null
+          fuel_litres: number | null
+          tyre_change: boolean
+          double_stint: boolean
+          notes: string | null
+          status: Database["public"]["Enums"]["endurance_stint_status"]
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          team_id?: string
+          driver_id?: string | null
+          original_start_at?: string
+          original_end_at?: string
+          actual_start_at?: string | null
+          actual_end_at?: string | null
+          expected_laps?: number | null
+          fuel_litres?: number | null
+          tyre_change?: boolean
+          double_stint?: boolean
+          notes?: string | null
+          status?: Database["public"]["Enums"]["endurance_stint_status"]
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+
+      endurance_practice_laps: {
+        Row: {
+          id: string
+          session_id: string
+          event_id: string
+          user_id: string | null
+          car_id: string | null
+          circuit: string | null
+          lap_seconds: number
+          fuel_used_litres: number | null
+          fuel_per_lap_litres: number | null
+          incident_count: number
+          recorded_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          event_id: string
+          user_id?: string | null
+          car_id?: string | null
+          circuit?: string | null
+          lap_seconds: number
+          fuel_used_litres?: number | null
+          fuel_per_lap_litres?: number | null
+          incident_count?: number
+          recorded_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          event_id?: string
+          user_id?: string | null
+          car_id?: string | null
+          circuit?: string | null
+          lap_seconds?: number
+          fuel_used_litres?: number | null
+          fuel_per_lap_litres?: number | null
+          incident_count?: number
+          recorded_at?: string
+        }
+        Relationships: []
+      }
+
+      endurance_practice_sessions: {
+        Row: {
+          id: string
+          event_id: string
+          team_id: string | null
+          label: string
+          started_at: string
+          ended_at: string | null
+          requires_registered: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          team_id?: string | null
+          label?: string
+          started_at?: string
+          ended_at?: string | null
+          requires_registered?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          team_id?: string | null
+          label?: string
+          started_at?: string
+          ended_at?: string | null
+          requires_registered?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+
+      endurance_team_members: {
+        Row: {
+          id: string
+          team_id: string
+          user_id: string
+          role: Database["public"]["Enums"]["endurance_team_role"]
+        }
+        Insert: {
+          id?: string
+          team_id: string
+          user_id: string
+          role: Database["public"]["Enums"]["endurance_team_role"]
+        }
+        Update: {
+          id?: string
+          team_id?: string
+          user_id?: string
+          role?: Database["public"]["Enums"]["endurance_team_role"]
+        }
+        Relationships: []
+      }
+
+      endurance_teams: {
+        Row: {
+          id: string
+          event_id: string
+          name: string
+          car_id: string | null
+          car_number: string | null
+          manager_id: string | null
+          livery: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          name: string
+          car_id: string | null
+          car_number: string | null
+          manager_id: string | null
+          livery: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          name?: string
+          car_id?: string | null
+          car_number?: string | null
+          manager_id?: string | null
+          livery?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+
       leagues: {
         Row: {
           car_class: string | null
@@ -1041,9 +1606,9 @@ export type Database = {
         ]
       }
       simhub_pairing_codes: {
-        Row: { code_hash: string; consumed_at: string | null; created_at: string; expires_at: string; id: string; owner_user_id: string; race_id: string; team_id: string }
-        Insert: { code_hash: string; consumed_at?: string | null; created_at?: string; expires_at: string; id?: string; owner_user_id: string; race_id: string; team_id: string }
-        Update: { code_hash?: string; consumed_at?: string | null; created_at?: string; expires_at?: string; id?: string; owner_user_id?: string; race_id?: string; team_id?: string }
+        Row: { code_hash: string; consumed_at: string | null; created_at: string; expires_at: string; id: string; owner_user_id: string; race_id: string | null; team_id: string | null }
+        Insert: { code_hash: string; consumed_at?: string | null; created_at?: string; expires_at: string; id?: string; owner_user_id: string; race_id?: string | null; team_id?: string | null }
+        Update: { code_hash?: string; consumed_at?: string | null; created_at?: string; expires_at?: string; id?: string; owner_user_id?: string; race_id?: string | null; team_id?: string | null }
         Relationships: []
       }
 
@@ -1051,51 +1616,51 @@ export type Database = {
         Row: {
           connector_id: string
           device_name: string
-          expires_at: string
+          expires_at: string | null
           id: string
           last_sequence: number
           last_seen_at: string | null
           last_session_id: string | null
           owner_user_id: string
           paired_at: string
-          race_id: string
+          race_id: string | null
           revoked_at: string | null
           revoked_by: string | null
-          team_id: string
+          team_id: string | null
           token_hash: string
           updated_at: string
         }
         Insert: {
           connector_id: string
           device_name: string
-          expires_at: string
+          expires_at?: string | null
           id?: string
           last_sequence?: number
           last_seen_at?: string | null
           last_session_id?: string | null
           owner_user_id: string
           paired_at?: string
-          race_id: string
+          race_id?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
-          team_id: string
+          team_id?: string | null
           token_hash: string
           updated_at?: string
         }
         Update: {
           connector_id?: string
           device_name?: string
-          expires_at?: string
+          expires_at?: string | null
           id?: string
           last_sequence?: number
           last_seen_at?: string | null
           last_session_id?: string | null
           owner_user_id?: string
           paired_at?: string
-          race_id?: string
+          race_id?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
-          team_id?: string
+          team_id?: string | null
           token_hash?: string
           updated_at?: string
         }
@@ -1129,12 +1694,12 @@ export type Database = {
           device_id: string
           game: string
           owner_user_id: string
-          race_id: string
+          race_id: string | null
           received_at: string
           sequence: number
           session_id: string
           simhub_version: string
-          team_id: string
+          team_id: string | null
           telemetry: Json
         }
         Insert: {
@@ -1143,12 +1708,12 @@ export type Database = {
           device_id: string
           game: string
           owner_user_id: string
-          race_id: string
+          race_id?: string | null
           received_at?: string
           sequence: number
           session_id: string
           simhub_version: string
-          team_id: string
+          team_id?: string | null
           telemetry: Json
         }
         Update: {
@@ -1157,12 +1722,12 @@ export type Database = {
           device_id?: string
           game?: string
           owner_user_id?: string
-          race_id?: string
+          race_id?: string | null
           received_at?: string
           sequence?: number
           session_id?: string
           simhub_version?: string
-          team_id?: string
+          team_id?: string | null
           telemetry?: Json
         }
         Relationships: [
@@ -1352,16 +1917,107 @@ export type Database = {
       }
     }
     Functions: {
+      admin_get_community_support_payment_config: {
+        Args: never
+        Returns: {
+          paypal_enabled: boolean
+          paypal_me_url: string
+          suggested_amounts_eur: number[]
+          payment_admin_discord_id: string
+          iracing_referral_enabled: boolean
+          iracing_referral_url: string
+          paypal_checkout_enabled: boolean
+          paypal_checkout_environment: string
+        }[]
+      }
+      admin_set_community_support_paypal_checkout: {
+        Args: { p_enabled: boolean; p_environment: string }
+        Returns: undefined
+      }
+      admin_update_community_support_payment_config: {
+        Args: {
+          p_paypal_enabled: boolean
+          p_paypal_checkout_enabled: boolean
+          p_paypal_checkout_environment: string
+          p_paypal_me_url: string
+          p_suggested_amounts_eur: number[]
+          p_payment_admin_discord_id: string
+          p_iracing_referral_enabled: boolean
+          p_iracing_referral_url: string
+        }
+        Returns: undefined
+      }
+      create_community_support_payment_intent: {
+        Args: {
+          p_requested_amount_eur: number
+          p_payer_name_private: string
+          p_show_supporter_name: boolean
+          p_show_amount: boolean
+        }
+        Returns: string
+      }
+      create_community_support_paypal_checkout_intent: {
+        Args: {
+          p_requested_amount_eur: number
+          p_payer_name_private: string
+          p_show_supporter_name: boolean
+          p_show_amount: boolean
+        }
+        Returns: string
+      }
+      cancel_community_support_paypal_checkout_intent: {
+        Args: { p_intent_id: string }
+        Returns: string
+      }
+      get_community_support_payment_config: {
+        Args: never
+        Returns: {
+          paypal_enabled: boolean
+          paypal_me_url: string
+          suggested_amounts_eur: number[]
+          iracing_referral_enabled: boolean
+          iracing_referral_url: string
+          paypal_checkout_enabled: boolean
+          paypal_checkout_environment: string
+        }[]
+      }
+      get_community_support_paypal_checkout_recovery_intent: {
+        Args: never
+        Returns: { intent_id: string; status: string }[]
+      }
+      get_public_community_support_payment_ledger: {
+        Args: never
+        Returns: {
+          id: string
+          date: string
+          direction: string
+          category: string
+          description: string
+          amount_eur: number | null
+          supporter_name: string | null
+        }[]
+      }
+      get_public_community_support_payment_totals: {
+        Args: never
+        Returns: {
+          month: string
+          contribution_total_eur: number
+          fee_total_eur: number
+        }[]
+      }
       can_manage_simhub: { Args: never; Returns: boolean }
       is_active_simhub_device: { Args: { p_device_id: string }; Returns: boolean }
+      simhub_create_device_pairing_code: {
+        Args: { p_code_hash: string; p_expires_at: string; p_owner_user_id: string }
+        Returns: boolean
+      }
       simhub_create_pairing_code: {
         Args: { p_code_hash: string; p_expires_at: string; p_owner_user_id: string; p_race_id: string; p_team_id: string }
         Returns: boolean
       }
-
       simhub_exchange_pairing_code: {
         Args: { p_code_hash: string; p_connector_id: string; p_device_name: string; p_token_hash: string }
-        Returns: { device_id: string; owner_user_id: string; race_id: string; result: string; team_id: string }[]
+        Returns: { device_id: string; owner_user_id: string; race_id: string | null; result: string; team_id: string | null }[]
       }
       simhub_revoke_device: { Args: { p_device_id: string; p_revoked_by: string }; Returns: boolean }
       simhub_ingest_snapshot: {
@@ -1480,6 +2136,15 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user" | "super_admin" | "editor"
+      endurance_availability_type: "available" | "preferred" | "avoid" | "unavailable" | "uncertain"
+      endurance_confirmation_status: "unseen" | "viewed" | "accepted" | "change_requested"
+      endurance_event_status: "draft" | "registration_open" | "registration_closed" | "planning" | "live" | "completed"
+      endurance_event_visibility: "open" | "invite_only" | "hidden"
+      endurance_notification_type: "invitation" | "deadline" | "availability_missing" | "team_assigned" | "plan_published" | "plan_changed" | "confirmation_needed" | "stint_soon"
+      endurance_registration_status: "interest" | "provisional" | "confirmed" | "reserve" | "rejected" | "withdrawn"
+      endurance_stint_status: "draft" | "confirmed" | "ready" | "in_car" | "completed" | "expired" | "replaced"
+      endurance_team_role: "manager" | "driver" | "reserve"
+
     }
     CompositeTypes: {
       [_ in never]: never

@@ -14,9 +14,6 @@ const navItems = [
   { label: "Nieuws", path: "/news/", icon: Newspaper },
   { label: "Seizoenen", path: "/seasons/", icon: Trophy },
   { label: "Meedoen", path: "/meedoen/", icon: UserPlus },
-  ...(import.meta.env.DEV && import.meta.env.VITE_ENDURANCE_LOCAL_MVP === "true"
-    ? [{ label: "Endurance", path: "/endurance/", icon: TimerReset }]
-    : []),
 ];
 
 const Navbar = () => {
@@ -24,6 +21,11 @@ const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, isAdmin, isSuperAdmin, isSteward, isEditor, signOut } = useAuth();
   const { language, setLanguage } = useLanguage();
+
+  // Endurance is een verborgen super-admin-only project; de link verschijnt uitsluitend voor super-admin.
+  const visibleNavItems = isSuperAdmin
+    ? [...navItems, { label: "Endurance", path: "/endurance/", icon: TimerReset }]
+    : navItems;
 
   const canEditNews = isAdmin || isSuperAdmin || isEditor;
   const canUseStewards = isAdmin || isSuperAdmin || isSteward;
@@ -68,7 +70,7 @@ const Navbar = () => {
 
         {/* Desktop */}
         <div className={`hidden ${showDesktop} items-center gap-1.5`}>
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = location.pathname === item.path || (item.path !== "/" && location.pathname === item.path.replace(/\/$/, ""));
             return (
               <Link
@@ -189,7 +191,7 @@ const Navbar = () => {
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">Taal</span>
             <LanguageSwitch />
           </div>
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = location.pathname === item.path || (item.path !== "/" && location.pathname === item.path.replace(/\/$/, ""));
             return (
               <Link

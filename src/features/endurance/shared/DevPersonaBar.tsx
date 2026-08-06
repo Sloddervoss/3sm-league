@@ -1,33 +1,38 @@
-import { RotateCcw, ShieldCheck } from "lucide-react";
-import { useEnduranceStore } from "../core/EnduranceStore";
-import { SecondaryButton } from "./ui";
+import { ShieldCheck, UserRound } from "lucide-react";
+import { useEnduranceActor } from "../core/ActorContext";
+import { useAuth } from "@/contexts/AuthContext";
 
-const roleLabels = {
-  endurance_admin: "Endurancebeheerder",
-  race_manager: "Racemanager",
-  team_manager: "Teammanager",
-  driver: "Coureur",
-  reserve: "Reserve",
-};
-
+/**
+ * Test-als slider — super-admin-only canary.
+ * Kiest met welke coureur de super-admin inschrijft/werkt. De RLS checkt alleen
+ * de sessie (super-admin), dus de geselecteerde actor-id kan veilig als user_id
+ * worden gebruikt zonder echte accounts op de live site te tonen.
+ */
 export const DevPersonaBar = () => {
-  const { state, activePersona, dispatch, reset } = useEnduranceStore();
+  const { user } = useAuth();
+  const { actorId, setActorId, displayName, testActors } = useEnduranceActor();
+
   return (
     <div className="rounded-2xl bg-sky-500/[0.07] p-3 ring-1 ring-sky-400/20">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2 text-sm text-sky-100">
           <ShieldCheck className="h-4 w-4 text-sky-300" />
-          <div><strong>Lokale ontwikkelomgeving</strong><span className="ml-2 text-sky-200/65">Alle gegevens blijven in deze browser · MVP-taal: Nederlands.</span></div>
+          <div><strong>Super-admin canary</strong><span className="ml-2 text-sky-200/65">Testomgeving · alleen super-admin zichtbaar.</span></div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <label className="flex items-center gap-2 text-xs font-bold text-sky-100">
-            Test als
-            <select value={activePersona.id} onChange={(event) => dispatch({ type: "set_active_persona", personaId: event.target.value })} className="h-9 rounded-lg bg-black/35 px-3 text-sm text-white ring-1 ring-white/10">
-              {state.personas.map((persona) => <option key={persona.id} value={persona.id}>{persona.name} · {roleLabels[persona.role]}</option>)}
-            </select>
-          </label>
-          <SecondaryButton type="button" onClick={reset} className="min-h-9 px-3 py-1.5 text-xs"><RotateCcw className="h-3.5 w-3.5" /> Reset werkset</SecondaryButton>
-        </div>
+        <label className="flex items-center gap-2 text-xs font-bold text-sky-100">
+          <UserRound className="h-4 w-4 text-sky-300" />
+          Schrijf als
+          <select
+            value={actorId}
+            onChange={(event) => setActorId(event.target.value)}
+            className="h-9 rounded-lg bg-black/35 px-3 text-sm text-white ring-1 ring-white/10"
+          >
+            <option value={user?.id}>{displayName(user?.id ?? "")}</option>
+            {testActors.map((actor) => (
+              <option key={actor.id} value={actor.id}>{actor.label} · {actor.role === "reserve" ? "Reserve" : "Coureur"}</option>
+            ))}
+          </select>
+        </label>
       </div>
     </div>
   );

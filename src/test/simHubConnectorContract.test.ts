@@ -41,7 +41,7 @@ describe("3SM SimHub connector spike contract", () => {
     expect(plugin).toContain("_deviceToken = UnprotectToken");
     expect(plugin).toContain("CancellationTokenSource");
     expect(plugin).toContain("lock (_sendGate)");
-    expect(plugin).toContain("Settings.SchemaVersion < 2");
+    expect(plugin).toContain("Settings.SchemaVersion < 3");
     expect(plugin).toContain("IsGuid(result.DeviceId)");
     expect(plugin).toContain("Guid.TryParseExact");
     expect(plugin).toContain("IsDeviceToken");
@@ -67,9 +67,16 @@ describe("3SM SimHub connector spike contract", () => {
   });
 
   it("keeps the one-time pairing response separate from telemetry", () => {
-    for (const name of ["action", "code", "connectorId", "deviceName", "paired", "deviceToken", "deviceId", "raceId", "teamId", "ownerUserId", "error"]) {
-      expect(contracts).toContain(`DataMember(Name = "${name}"`);
+    const pairingRequest = contracts.split("public sealed class PairingRequest")[1].split("public sealed class PairingResponse")[0];
+    const pairingResponse = contracts.split("public sealed class PairingResponse")[1];
+    for (const name of ["action", "code", "connectorId", "deviceName"]) {
+      expect(pairingRequest).toContain(`DataMember(Name = "${name}"`);
     }
+    for (const name of ["paired", "deviceToken", "deviceId", "ownerUserId", "error"]) {
+      expect(pairingResponse).toContain(`DataMember(Name = "${name}"`);
+    }
+    expect(pairingResponse).not.toContain('DataMember(Name = "raceId"');
+    expect(pairingResponse).not.toContain('DataMember(Name = "teamId"');
   });
 
   it("protects the local bridge with auth, size and replay guards", () => {

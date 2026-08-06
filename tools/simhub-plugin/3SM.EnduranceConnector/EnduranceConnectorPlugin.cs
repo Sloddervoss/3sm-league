@@ -47,17 +47,17 @@ namespace ThreeSM.EnduranceConnector
         public ImageSource PictureIcon { get { return null; } }
         public string LeftMenuTitle { get { return "3SM Endurance"; } }
         public string Status { get { return _status; } private set { SetStatus(value); } }
-        public bool IsPaired { get { lock (_settingsGate) return !string.IsNullOrWhiteSpace(_deviceToken) && !string.IsNullOrWhiteSpace(Settings.BoundRaceId) && !string.IsNullOrWhiteSpace(Settings.BoundTeamId); } }
+        public bool IsPaired { get { lock (_settingsGate) return !string.IsNullOrWhiteSpace(_deviceToken) && !string.IsNullOrWhiteSpace(Settings.DeviceId) && !string.IsNullOrWhiteSpace(Settings.BoundOwnerUserId); } }
         public event PropertyChangedEventHandler PropertyChanged;
 
         public void Init(PluginManager pluginManager)
         {
             PluginManager = pluginManager;
             Settings = this.ReadCommonSettings<ConnectorSettings>("ConnectorSettings", () => new ConnectorSettings());
-            if (Settings.SchemaVersion < 2)
+            if (Settings.SchemaVersion < 3)
             {
-                Settings.UseCentralRelay = false;
-                Settings.SchemaVersion = 2;
+                if (Settings.SchemaVersion < 2) Settings.UseCentralRelay = false;
+                Settings.SchemaVersion = 3;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
@@ -221,7 +221,7 @@ namespace ThreeSM.EnduranceConnector
                         var result = Deserialize<PairingResponse>(responseBody);
                         if (!response.IsSuccessStatusCode || result == null || !result.Paired
                             || !IsDeviceToken(result.DeviceToken)
-                            || !IsGuid(result.DeviceId) || !IsGuid(result.RaceId) || !IsGuid(result.TeamId) || !IsGuid(result.OwnerUserId))
+                            || !IsGuid(result.DeviceId) || !IsGuid(result.OwnerUserId))
                         {
                             throw new HttpRequestException(result != null && !string.IsNullOrWhiteSpace(result.Error) ? result.Error : "pairing HTTP " + (int)response.StatusCode);
                         }
@@ -240,8 +240,8 @@ namespace ThreeSM.EnduranceConnector
                             {
                                 Settings.DeviceTokenProtected = ProtectToken(result.DeviceToken);
                                 Settings.DeviceId = result.DeviceId;
-                                Settings.BoundRaceId = result.RaceId;
-                                Settings.BoundTeamId = result.TeamId;
+                                Settings.BoundRaceId = string.Empty;
+                                Settings.BoundTeamId = string.Empty;
                                 Settings.BoundOwnerUserId = result.OwnerUserId;
                                 Settings.UseCentralRelay = true;
                                 this.SaveCommonSettings("ConnectorSettings", Settings);
@@ -337,8 +337,8 @@ namespace ThreeSM.EnduranceConnector
                 Source = new TelemetrySource { ConnectorId = NonEmpty(Settings.ConnectorId, Environment.MachineName), SimHubVersion = typeof(PluginManager).Assembly.GetName().Version.ToString(), Game = "IRacing" },
                 Race = new RaceIdentity
                 {
-                    EventId = central ? Settings.BoundRaceId : Settings.EventId,
-                    TeamId = central ? Settings.BoundTeamId : Settings.TeamId,
+                    EventId = central ? "connection-test" : Settings.EventId,
+                    TeamId = central ? "unassigned" : Settings.TeamId,
                     SessionId = _sessionId,
                     DriverId = central ? null : (string.IsNullOrWhiteSpace(Settings.DriverId) ? null : Settings.DriverId),
                 },
