@@ -7,7 +7,6 @@ import { getEnduranceCar } from "../core/carCatalog";
 import { useEnduranceEvents } from "../repository/eventsRepository";
 import { useAllEnduranceRegistrations } from "../repository/registrationsRepository";
 import { enduranceEventRowsToAppModels } from "../repository/mappers";
-import { LiveDatabaseEvents } from "../workspace/LiveDatabaseEvents";
 
 const statusLabel = { draft: "Concept", registration_open: "Inschrijving open", registration_closed: "Inschrijving gesloten", planning: "Planning", live: "Live", completed: "Afgerond" } as const;
 
@@ -28,7 +27,6 @@ export const UpcomingRaces = ({ onSelect }: { onSelect: (event: EnduranceEvent) 
   return (
     <div>
       <SectionHeading eyebrow="Endurance kalender" title="Aankomende races" description="Kies een evenement, meld je aan en werk daarna samen in de afgeschermde raceomgeving." />
-      <div className="mb-6"><LiveDatabaseEvents /></div>
       <div className="grid gap-5 xl:grid-cols-2">
         {events.map((event) => {
           const myReg = registrations.find((r) => r.event_id === event.id && r.user_id === actorId);
