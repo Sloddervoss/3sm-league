@@ -7,10 +7,15 @@ import type { EnduranceEvent } from "../core/types";
 import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, SectionHeading, StatusPill } from "../shared/ui";
 
 /**
- * DeviceAssignmentPanel — Fase 4.
+ * DeviceAssignmentPanel — Fase 4 + auto-bind.
  * Super-admin koppelt een (eenmalig aangemaakte) SimHub-installatie aan een
  * endurance event + team. De plugin hoeft niet opnieuw gekoppeld te worden;
  * de routing gebeurt server-side op basis van deze binding.
+ *
+ * Sinds Fase auto-bind: het device van een rijder wordt automatisch aan het
+ * team gekoppeld zodra hij/zij lid wordt van dat team (en ontbonden bij vertrek).
+ * Deze handmatige tab is een OVERRIDE voor het gewone auto-gedrag; een hier
+ * toegewezen binding wordt door de automatische koppeling nooit overschreven.
  */
 export const DeviceAssignmentPanel = ({ event }: { event: EnduranceEvent }) => {
   const { isSuperAdmin } = useAuth();

@@ -1616,6 +1616,7 @@ export type Database = {
         Row: {
           connector_id: string
           device_name: string
+          endurance_binding_source: string | null
           endurance_event_id: string | null
           endurance_team_id: string | null
           expires_at: string | null
