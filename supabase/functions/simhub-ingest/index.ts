@@ -47,6 +47,13 @@ Deno.serve(async (request) => {
       p_simhub_version: envelope.source.simHubVersion,
       p_game: envelope.source.game,
       p_telemetry: envelope.telemetry,
+      p_driver_id: envelope.race.driverId,
+      p_current_driver_id: envelope.race.currentDriverId,
+      p_current_driver_name: envelope.race.currentDriverName,
+      p_car_id: envelope.race.carId,
+      p_car_name: envelope.race.carName,
+      p_track_name: envelope.race.trackName,
+      p_track_config: envelope.race.trackConfig,
     });
     if (error) throw error;
 
