@@ -14,7 +14,7 @@ import { useNow, formatCountdown } from "@/lib/useCountdown";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
-import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
+import { isRaceLiveForDisplay, isRaceRegistrationOpen } from "@/lib/raceRegistration";
 
 type CalendarRace = RaceWithLeagueSummary;
 
@@ -46,9 +46,7 @@ const CalendarPage = () => {
     },
   });
 
-  const liveRace = races.find((r) =>
-    r.status !== "completed" && new Date(r.race_date) <= now
-  ) as CalendarRace | undefined;
+  const liveRace = races.find((race) => isRaceLiveForDisplay(race, now)) as CalendarRace | undefined;
   const upcomingRace = [...races]
     .filter((r) => isRaceRegistrationOpen(r, now))
     .sort((a, b) => new Date(a.race_date).getTime() - new Date(b.race_date).getTime())[0] as CalendarRace | undefined;
@@ -115,6 +113,7 @@ const CalendarPage = () => {
                 carClass={activeLeague.car_class}
                 registrantCount={reg.seasonRegCount(activeLeague.id)}
                 isRegistered={reg.isRegisteredForSeason(activeLeague.id)}
+                isAuthenticated={Boolean(reg.user)}
                 profileComplete={reg.profileComplete}
                 isLoading={reg.registerForSeason.isPending || reg.unregisterFromSeason.isPending}
                 onRegister={() => reg.registerForSeason.mutate(activeLeague.id)}
@@ -123,14 +122,14 @@ const CalendarPage = () => {
             )}
 
             <div className="space-y-3">
-              {races.filter((race) => race.status !== "completed").map((race, i) => {
+              {races.filter((race) => race.status !== "completed" && race.status !== "cancelled").map((race, i) => {
                 const leagueId = race.leagues?.id;
                 return (
                   <NewRaceCard
                     key={race.id}
                     race={race}
                     index={i}
-                    countdown={race.status !== "completed" ? formatCountdown(race.race_date, now) : null}
+                    countdown={isRaceRegistrationOpen(race, now) ? formatCountdown(race.race_date, now) : null}
                     isRegistered={reg.isRegisteredForRace(race.id, leagueId)}
                     onSelect={() => setSelectedRace(race)}
                   />

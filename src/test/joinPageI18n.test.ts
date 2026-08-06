@@ -46,4 +46,31 @@ describe("join page i18n", () => {
     expect(page).not.toContain("iRacing Nederland & Discord Community");
     expect(homepage).toContain("Bekijk racekalender");
   });
+
+  it("keeps homepage runtime metadata aligned with crawler HTML and language-aware", () => {
+    const homepage = read("src/pages/HomepagePrototype.tsx");
+    const generator = read("scripts/generate-route-html.mjs");
+    const title = "3 Stripe Motorsport - Nederlandse iRacing League & Community";
+    const description = "3 Stripe Motorsport is een Nederlandse iRacing league en sim racing community. Race mee, sluit aan via Discord en bekijk kalender, standings en uitslagen.";
+
+    expect(homepage).toContain(`title: "${title}"`);
+    expect(homepage).toContain(`description: "${description}"`);
+    expect(homepage).toContain('title: "3 Stripe Motorsport - Dutch iRacing League & Community"');
+    expect(homepage).toContain('canonicalUrl: "https://3stripemotorsport.cc/"');
+    expect(generator).toContain(`title: '${title}'`);
+    expect(generator).toContain(description);
+  });
+
+  it("does not introduce the unrelated low-volume query into public SEO surfaces", () => {
+    const unrelatedQuery = ["3x3", "race"].join("");
+    for (const path of [
+      "src/pages/HomepagePrototype.tsx",
+      "src/pages/JoinPage.tsx",
+      "scripts/generate-route-html.mjs",
+      "index.html",
+      "public/sitemap.xml",
+    ]) {
+      expect(read(path).toLowerCase()).not.toContain(unrelatedQuery);
+    }
+  });
 });

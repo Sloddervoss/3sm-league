@@ -277,7 +277,9 @@ export const SeasonRaceWorkspace = ({ onAction, initialTab = "overview", initial
         <div><p className="text-xs font-black uppercase tracking-[0.18em] text-orange-300">Control Room</p><h2 className="mt-1 font-heading text-2xl font-black">SEIZOEN & RACES</h2><p className="mt-1 text-sm text-gray-400">Native read workspace. Live actions are passed through typed callbacks.</p></div>
         <div className="flex flex-wrap gap-2">
           {actionButton("Nieuw seizoen", { id: "season-create", impact: "write", context: { tab: activeTab } }, "border-orange-400/40 bg-orange-500/15 text-orange-100")}
-          {actionButton("Nieuwe race", { id: "race-create", impact: "write", context: { seasonId: seasonId || undefined, tab: activeTab } })}
+          {activeTab === "solo"
+            ? actionButton("Nieuwe losse race", { id: "solo-race-create", impact: "write", context: { tab: "solo" } })
+            : actionButton("Nieuwe race", { id: "race-create", impact: "write", context: { seasonId: seasonId || undefined, tab: activeTab } })}
         </div>
       </header>
 

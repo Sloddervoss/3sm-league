@@ -22,18 +22,15 @@ const Navbar = () => {
   const { user, isAdmin, isSuperAdmin, isSteward, isEditor, isEnduranceManager, isTester, signOut } = useAuth();
   const { language, setLanguage } = useLanguage();
 
-  // Endurance is een besloten project; de link verschijnt alleen voor super_admin,
-  // endurance_manager of tester.
+  const canEditNews = isAdmin || isSuperAdmin || isEditor;
+  const canUseStewards = isAdmin || isSuperAdmin || isSteward;
+  const showAdmin = isAdmin || isSuperAdmin;
   const canUseEndurance = Boolean(isSuperAdmin || isEnduranceManager || isTester);
   const visibleNavItems = canUseEndurance
     ? [...navItems, { label: "Endurance", path: "/endurance/", icon: TimerReset }]
     : navItems;
-
-  const canEditNews = isAdmin || isSuperAdmin || isEditor;
-  const canUseStewards = isAdmin || isSuperAdmin || isSteward;
-  const showAdmin = isAdmin || isSuperAdmin;
-  const showDesktop = "2xl:flex";
-  const hideDesktop = "2xl:hidden";
+  const showDesktop = showAdmin ? "xl:flex" : "lg:flex";
+  const hideDesktop = showAdmin ? "xl:hidden" : "lg:hidden";
   const LanguageSwitch = ({ className = "" }: { className?: string }) => (
     <div
       className={`inline-flex h-8 items-center rounded-md border border-border bg-card/40 p-0.5 ${className}`}
@@ -140,10 +137,7 @@ const Navbar = () => {
                   to="/simhub-koppelen"
                   className="px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <span className="flex items-center gap-1.5">
-                    <Cable className="w-3.5 h-3.5" />
-                    SimHub
-                  </span>
+                  <span className="flex items-center gap-1.5"><Cable className="w-3.5 h-3.5" />SimHub</span>
                 </Link>
               )}
               <Link

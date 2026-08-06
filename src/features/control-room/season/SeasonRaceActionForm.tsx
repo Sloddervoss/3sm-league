@@ -124,9 +124,6 @@ export const SeasonRaceActionForm = ({ action, onComplete }: SeasonRaceActionFor
   const [seasonDefaults, setSeasonDefaults] = useState<SeasonRaceDefaults>(DEFAULT_SEASON_RACE_SETTINGS);
   const [slots, setSlots] = useState<RaceSlot[]>(() => Array.from({ length: 6 }, (_, index) => defaultSlot(`Race ${index + 1}`)));
   const [raceForm, setRaceForm] = useState<RaceForm>(defaultRaceForm);
-  const targetRace = races.find((race) => race.id === action.context.raceId) ?? null;
-  const targetLeagueId = action.context.seasonId || targetRace?.league_id || null;
-  const targetLeague = leagues.find((league) => league.id === targetLeagueId) ?? null;
   const isSeasonCreate = action.id === "season-create";
   const isSeasonEdit = action.id === "season-edit";
   const isRaceCreate = action.id === "race-create";
@@ -134,6 +131,9 @@ export const SeasonRaceActionForm = ({ action, onComplete }: SeasonRaceActionFor
   const isSoloCreate = action.id === "solo-race-create";
   const isSoloEdit = action.id === "solo-race-edit";
   const isLobbyEdit = action.id === "lobby-edit";
+  const targetRace = races.find((race) => race.id === action.context.raceId) ?? null;
+  const targetLeagueId = isSoloCreate ? null : action.context.seasonId || targetRace?.league_id || null;
+  const targetLeague = leagues.find((league) => league.id === targetLeagueId) ?? null;
   const hydratedLeagueRef = useRef<string | null>(null);
   const hydratedRaceRef = useRef<string | null>(null);
 

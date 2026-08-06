@@ -3,6 +3,7 @@
  */
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, CheckCircle2, LogIn, LogOut, Loader2, AlertCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface Props {
   leagueId: string;
@@ -11,6 +12,7 @@ interface Props {
   carClass?: string;
   registrantCount: number;
   isRegistered: boolean;
+  isAuthenticated: boolean;
   profileComplete: boolean;
   isLoading?: boolean;
   onRegister: () => void;
@@ -24,6 +26,7 @@ const SeasonBanner = ({
   carClass,
   registrantCount,
   isRegistered,
+  isAuthenticated,
   profileComplete,
   isLoading,
   onRegister,
@@ -102,12 +105,18 @@ const SeasonBanner = ({
 
         {/* Right: button */}
         <div className="shrink-0">
-          {!profileComplete ? (
-            <div className="flex items-center gap-1.5 text-[11px] text-yellow-500/80 px-3 py-2 rounded-xl"
+          {!isAuthenticated ? (
+            <Link to="/auth" className="flex items-center gap-1.5 text-[11px] text-orange-400 px-3 py-2 rounded-xl"
+              style={{ background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.18)" }}>
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Log in om je in te schrijven</span>
+            </Link>
+          ) : !profileComplete ? (
+            <Link to="/profile" className="flex items-center gap-1.5 text-[11px] text-yellow-500/80 px-3 py-2 rounded-xl"
               style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.15)" }}>
               <AlertCircle className="w-3.5 h-3.5" />
-              <span>Profiel incompleet</span>
-            </div>
+              <span>Maak je profiel compleet</span>
+            </Link>
           ) : isRegistered ? (
             <button
               onClick={onUnregister}

@@ -29,6 +29,7 @@ const STATUS = {
   upcoming:  { label: "Upcoming",  dot: "#f97316", text: "#f97316", bg: "rgba(249,115,22,0.1)",  bar: "#f97316" },
   live:      { label: "● LIVE",    dot: "#22c55e", text: "#22c55e", bg: "rgba(34,197,94,0.1)",   bar: "#22c55e" },
   completed: { label: "Afgelopen", dot: "#374151", text: "#6b7280", bg: "rgba(55,65,81,0.1)",    bar: "#1f2937" },
+  cancelled: { label: "Geannuleerd", dot: "#ef4444", text: "#f87171", bg: "rgba(239,68,68,0.1)", bar: "#ef4444" },
 };
 
 const SOLO_COLOR = "#818cf8";
@@ -84,7 +85,7 @@ const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Pro
           src={trackPhoto}
           alt={race.track}
           className="absolute inset-0 w-full h-full object-cover"
-          style={{ opacity: race.status === "completed" ? 0.25 : 0.55, filter: "saturate(0.6) brightness(0.7)" }}
+          style={{ opacity: race.status === "completed" || race.status === "cancelled" ? 0.25 : 0.55, filter: "saturate(0.6) brightness(0.7)" }}
         />
         <div
           className="absolute inset-0"
