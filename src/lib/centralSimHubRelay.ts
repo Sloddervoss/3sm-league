@@ -118,3 +118,26 @@ export const readCentralSimHubTelemetry = async (deviceId: string): Promise<SimH
   if (error) throw error;
   return data ? centralRowToBridgeResponse(data) : null;
 };
+
+export interface RelayLatestTelemetryRow {
+  endurance_team_id: string | null;
+  received_at: string;
+  current_driver_name: string | null;
+  car_name: string | null;
+  telemetry: unknown;
+}
+
+/**
+ * Nieuwste telemetry-snapshot per device voor een endurance-event (voor de
+ * live-standings). Dit is het sanitaire SimHub-touchpoint: de endurance-repo
+ * raakt simhub_telemetry_latest zelf niet aan (alleen endurance_*-tabellen).
+ */
+export const readLatestTelemetryForEvent = async (eventId: string): Promise<RelayLatestTelemetryRow[]> => {
+  const { data, error } = await supabase
+    .from("simhub_telemetry_latest")
+    .select("endurance_team_id,received_at,current_driver_name,car_name,telemetry")
+    .eq("endurance_event_id", eventId)
+    .order("received_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as RelayLatestTelemetryRow[];
+};
