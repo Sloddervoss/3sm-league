@@ -23,12 +23,14 @@ const ArchivePanel = () => {
 };
 
 const EnduranceContent = () => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isEnduranceManager, isTester } = useAuth();
   const { data: dbEvents = [] } = useEnduranceEvents();
   const location = useLocation();
   const navigate = useNavigate();
   const [section, setSection] = useState<EnduranceSection>("upcoming");
-  const showManage = Boolean(isSuperAdmin);
+  // Beheer (events aanmaken) is voor super_admin + endurance_manager; testers
+  // en managers mogen de suite zien/gebruiken, testers zien geen beheer-tab.
+  const showManage = Boolean(isSuperAdmin || isEnduranceManager);
   useEffect(() => { if (!showManage && section === "manage") setSection("upcoming"); }, [showManage, section]);
 
   // URL-gedreven navigatie: /endurance/ = lijst, /endurance/races/:id = workspace.
@@ -44,12 +46,13 @@ const EnduranceContent = () => {
 };
 
 const EndurancePage = () => {
-  const { loading, rolesLoading, user, isSuperAdmin } = useAuth();
+  const { loading, rolesLoading, user, isSuperAdmin, isTester, isEnduranceManager } = useAuth();
+  const canSee = Boolean(isSuperAdmin || isTester || isEnduranceManager);
   useEffect(() => { document.title = "3Stripe Endurance Control Center"; const description = document.querySelector('meta[name="description"]'); description?.setAttribute("content", "Plan 3Stripe endurance-races, beschikbaarheid, teams, stints en Race Control in één besloten omgeving."); }, []);
   if (loading || rolesLoading) return <div className="flex min-h-screen items-center justify-center bg-background text-sm text-gray-400">Account laden…</div>;
   if (!user) return <Navigate to="/auth?redirect=/endurance" replace />;
-  if (!isSuperAdmin) {
-    return <><Navbar /><main className="flex min-h-[70vh] flex-col items-center justify-center gap-4 bg-background px-4 pt-20 text-center"><Lock className="h-10 w-10 text-orange-400" /><h1 className="font-heading text-3xl font-black text-white">Super-admin vereist</h1><p className="max-w-md text-sm text-gray-400">Het Endurance Control Center is een besloten project dat momenteel uitsluitend beschikbaar is voor super-admin. Hier is niets zichtbaar voor anderen.</p></main><Footer /></>;
+  if (!canSee) {
+    return <><Navbar /><main className="flex min-h-[70vh] flex-col items-center justify-center gap-4 bg-background px-4 pt-20 text-center"><Lock className="h-10 w-10 text-orange-400" /><h1 className="font-heading text-3xl font-black text-white">Besloten omgeving</h1><p className="max-w-md text-sm text-gray-400">Het Endurance Control Center is een besloten, niet-openbare omgeving. Hier is niets zichtbaar voor jou.</p></main><Footer /></>;
   }
   return <EnduranceStoreProvider><EnduranceActorProvider selfId={user.id}><EnduranceContent /></EnduranceActorProvider></EnduranceStoreProvider>;
 };

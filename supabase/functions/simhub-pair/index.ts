@@ -40,6 +40,14 @@ const isSuperAdmin = async (userId: string): Promise<boolean> => {
   return (data || []).some((row: { role: string }) => row.role === "super_admin");
 };
 
+// Endurance-ster: super_admin, endurance_manager of tester. Testers mogen hun
+// EIGEN device koppelen (paar-code aanmaken), maar niet beheren/intrekken.
+const isEnduranceStaff = async (userId: string): Promise<boolean> => {
+  const { data, error } = await service.from("user_roles").select("role").eq("user_id", userId);
+  if (error) throw error;
+  return (data || []).some((row: { role: string }) => ["super_admin", "endurance_manager", "tester"].includes(row.role));
+};
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return jsonResponse(request, { ok: true });
   if (request.method !== "POST") return jsonResponse(request, { error: "method_not_allowed" }, 405);
@@ -81,13 +89,26 @@ Deno.serve(async (request) => {
     }
 
     const user = await authenticatedUser(request);
-    if (!(await isSuperAdmin(user.id))) return jsonResponse(request, { error: "super_admin_required" }, 403);
+
+    // Beheeracties (list/revoke/assign/clear + legacy race/team-binding) blijven
+    // super_admin-only. Het aanmaken van een device-only paar-code staat open
+    // voor endurance-ster (super_admin, endurance_manager, tester).
+    if (action !== "create" && !(await isSuperAdmin(user.id))) {
+      return jsonResponse(request, { error: "super_admin_required" }, 403);
+    }
 
     if (action === "create") {
+      const staff = await isEnduranceStaff(user.id);
+      if (!staff) return jsonResponse(request, { error: "super_admin_required" }, 403);
+
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       const raceId = typeof body.raceId === "string" ? body.raceId.trim() : "";
       const teamId = typeof body.teamId === "string" ? body.teamId.trim() : "";
       const legacyBoundPairing = Boolean(raceId || teamId);
+      // Legacy race/team-binding is een beheeractie -> alleen super_admin.
+      if (legacyBoundPairing && !(await isSuperAdmin(user.id))) {
+        return jsonResponse(request, { error: "super_admin_required" }, 403);
+      }
       if (legacyBoundPairing && (!uuidPattern.test(raceId) || !uuidPattern.test(teamId))) {
         return jsonResponse(request, { error: "invalid_binding" }, 400);
       }

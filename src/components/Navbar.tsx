@@ -19,11 +19,13 @@ const navItems = [
 const Navbar = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, signOut } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, isEnduranceManager, isTester, signOut } = useAuth();
   const { language, setLanguage } = useLanguage();
 
-  // Endurance is een verborgen super-admin-only project; de link verschijnt uitsluitend voor super-admin.
-  const visibleNavItems = isSuperAdmin
+  // Endurance is een besloten project; de link verschijnt alleen voor super_admin,
+  // endurance_manager of tester.
+  const canUseEndurance = Boolean(isSuperAdmin || isEnduranceManager || isTester);
+  const visibleNavItems = canUseEndurance
     ? [...navItems, { label: "Endurance", path: "/endurance/", icon: TimerReset }]
     : navItems;
 
@@ -133,7 +135,7 @@ const Navbar = () => {
                   </span>
                 </Link>
               )}
-              {isSuperAdmin && (
+              {canUseEndurance && (
                 <Link
                   to="/simhub-koppelen"
                   className="px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -225,7 +227,7 @@ const Navbar = () => {
                   <Trophy className="w-4 h-4" /> Stewards
                 </Link>
               )}
-              {isSuperAdmin && (
+              {canUseEndurance && (
                 <Link to="/simhub-koppelen" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
                   <Cable className="w-4 h-4" /> SimHub
                 </Link>

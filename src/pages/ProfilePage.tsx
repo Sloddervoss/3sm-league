@@ -7,7 +7,7 @@ import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, User
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
-import { Navigate } from "react-router-dom";
+import { Navigate, Link as RouterLink } from "react-router-dom";
 
 type ProfileRow = {
   user_id: string;
@@ -46,7 +46,8 @@ type MyResult = {
 };
 
 const ProfilePage = () => {
-  const { user, session, loading } = useAuth();
+  const { user, session, loading, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const canUseSimhub = Boolean(isSuperAdmin || isEnduranceManager || isTester);
   const queryClient = useQueryClient();
 
   const { data: profile } = useQuery({
@@ -432,6 +433,23 @@ const ProfilePage = () => {
                   </div>
                 </div>
               </motion.div>
+
+              {canUseSimhub && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }} className="bg-card border border-border rounded-lg p-6 racing-stripe-left">
+                  <h2 className="font-heading font-bold text-lg mb-1 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-orange-400" /> SimHub telemetry koppeling
+                  </h2>
+                  <div className="flex items-start gap-1.5 mb-4 p-2.5 rounded-md bg-orange-500/10 border border-orange-500/20">
+                    <Info className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-orange-200/90 leading-relaxed">
+                      Koppel je SimHub-installatie eenmalig aan je account voor live endurance-telemetry. Je race/team toewijzing gebeurt in het Endurance Control Center.
+                    </p>
+                  </div>
+                  <RouterLink to="/simhub-koppelen" className="inline-flex items-center gap-2 rounded-lg bg-gradient-racing px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-orange-950/30 hover:opacity-90">
+                    <Shield className="w-4 h-4" /> SimHub koppelen
+                  </RouterLink>
+                </motion.div>
+              )}
 
               {/* iRating & Safety */}
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card border border-border rounded-lg p-6 racing-stripe-left md:col-span-2">

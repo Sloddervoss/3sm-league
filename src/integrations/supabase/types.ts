@@ -2168,7 +2168,7 @@ export type Database = {
       uid: { Args: never; Returns: string }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user" | "super_admin" | "editor"
+      app_role: "admin" | "moderator" | "user" | "super_admin" | "editor" | "tester" | "endurance_manager"
       endurance_availability_type: "available" | "preferred" | "avoid" | "unavailable" | "uncertain"
       endurance_confirmation_status: "unseen" | "viewed" | "accepted" | "change_requested"
       endurance_event_status: "draft" | "registration_open" | "registration_closed" | "planning" | "live" | "completed"
@@ -2305,7 +2305,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user", "super_admin", "editor"],
+      app_role: ["admin", "moderator", "user", "super_admin", "editor", "tester", "endurance_manager"],
     },
   },
 } as const
