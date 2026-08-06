@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List, UserPlus, Newspaper, TimerReset, Cable } from "lucide-react";
+import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, Car, List, UserPlus, Newspaper, TimerReset } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
@@ -132,14 +132,6 @@ const Navbar = () => {
                   </span>
                 </Link>
               )}
-              {canUseEndurance && (
-                <Link
-                  to="/simhub-koppelen"
-                  className="px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <span className="flex items-center gap-1.5"><Cable className="w-3.5 h-3.5" />SimHub</span>
-                </Link>
-              )}
               <Link
                 to="/profile/"
                 className="px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -219,11 +211,6 @@ const Navbar = () => {
               {canUseStewards && (
                 <Link to="/stewards/" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
                   <Trophy className="w-4 h-4" /> Stewards
-                </Link>
-              )}
-              {canUseEndurance && (
-                <Link to="/simhub-koppelen" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">
-                  <Cable className="w-4 h-4" /> SimHub
                 </Link>
               )}
               <Link to="/profile/" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground">

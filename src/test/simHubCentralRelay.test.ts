@@ -224,6 +224,7 @@ describe("central SimHub relay", () => {
     expect(centralRelay).toContain("error.context.clone().json()");
     expect(pairingPage).toContain("const staff = Boolean(isSuperAdmin || isEnduranceManager || isTester)");
     expect(navbar).toMatch(/canUseEndurance\s*= Boolean\(isSuperAdmin \|\| isEnduranceManager \|\| isTester\)/);
-    expect(navbar).toMatch(/canUseEndurance\s*&&\s*\([\s\S]*?to="\/simhub-koppelen"/);
+    // SimHub-pairing is via Profiel bereikbaar; geen redundante top-level tab meer in de navbar.
+    expect(navbar).not.toContain('to="/simhub-koppelen"');
   });
 });
