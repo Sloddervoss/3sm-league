@@ -38,6 +38,7 @@ export const EventManager = () => {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   // Formuliervelden
   const [name, setName] = useState("");
@@ -138,10 +139,16 @@ export const EventManager = () => {
     });
   };
 
-  const doDelete = (id: string) => {
-    if (confirmDeleteId !== id) { setConfirmDeleteId(id); return; }
-    void remove.mutateAsync(id);
-    setConfirmDeleteId(null);
+  const doDelete = async (id: string) => {
+    if (confirmDeleteId !== id) { setConfirmDeleteId(id); setDeleteError(""); return; }
+    setDeleteError("");
+    try {
+      await remove.mutateAsync(id);
+      setConfirmDeleteId(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Verwijderen mislukt.");
+      setConfirmDeleteId(null);
+    }
   };
 
   return <div><SectionHeading eyebrow="Manager" title="Racebeheer" description="Maak evenementen aan in de databank, bewerk of verwijder ze. Alleen een super-admin kan dit: de RLS weigert elke andere rol." action={<PrimaryButton onClick={openNew}><Plus className="h-4 w-4" /> Nieuwe race</PrimaryButton>} />
@@ -159,6 +166,7 @@ export const EventManager = () => {
       <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-2"><PrimaryButton type="submit" disabled={!classIds.length || upsert.isPending}>{upsert.isPending ? "Opslaan…" : editingId ? "Wijzigingen opslaan" : "Race opslaan"}</PrimaryButton><SecondaryButton type="button" onClick={() => { setOpen(false); setEditingId(null); }}>Annuleren</SecondaryButton></div>
     </form></Panel>}
     {isError ? <Panel><p className="text-sm text-red-400">Kon evenementen niet laden: {(error as Error)?.message}</p></Panel> : null}
+    {deleteError ? <Panel><p role="alert" className="text-sm text-red-400">Verwijderen mislukt: {deleteError}</p></Panel> : null}
     <div className="grid gap-4 lg:grid-cols-2">{isLoading ? <Panel><p className="text-sm text-gray-400">Laden…</p></Panel> : dbEvents.map((event) => <Panel key={event.id}><div className="flex items-start justify-between gap-4"><div><StatusPill tone={event.status === "draft" ? "neutral" : "orange"}>{event.status}</StatusPill><h3 className="mt-3 font-heading text-lg font-black text-white">{event.name}</h3><p className="mt-1 text-sm text-gray-400">{event.circuit} · {formatAmsterdam(event.start_at)}</p><p className="mt-2 text-xs text-gray-500">Stemming: {event.class_ids.join(" · ") || "—"} · Definitief: {event.selected_class_id && getEnduranceCar(event.selected_car_id) ? `${event.selected_class_id} · ${getEnduranceCar(event.selected_car_id)?.name}` : "nog niet gekozen"}</p></div><div className="flex shrink-0 flex-wrap justify-end gap-2"><SecondaryButton onClick={() => openEdit(event)} className="px-3"><Pencil className="h-4 w-4" /></SecondaryButton><SecondaryButton onClick={() => copyEvent(event)} className="px-3" aria-label="Kopiëren"><Copy className="h-4 w-4" /></SecondaryButton><PrimaryButton onClick={() => doDelete(event.id)} className={`px-3 ${confirmDeleteId === event.id ? "bg-red-600 text-white hover:bg-red-500" : ""}`}>{confirmDeleteId === event.id ? "Zeker?" : <Trash2 className="h-4 w-4" />}</PrimaryButton></div></div></Panel>)}</div>
   </div>;
 };
