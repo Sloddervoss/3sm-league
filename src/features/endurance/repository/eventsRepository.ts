@@ -136,6 +136,7 @@ export async function createEnduranceEvent(
       max_drivers_per_car: input.max_drivers_per_car ?? 4,
       visibility: input.visibility,
       status: input.status,
+      invited_user_ids: input.invited_user_ids ?? [],
     })
     .select(selectEventColumns)
     .single();
@@ -170,6 +171,7 @@ export async function updateEnduranceEvent(
       max_drivers_per_car: patch.max_drivers_per_car,
       visibility: patch.visibility,
       status: patch.status,
+      invited_user_ids: patch.invited_user_ids,
     })
     .eq("id", id)
     .select(selectEventColumns)

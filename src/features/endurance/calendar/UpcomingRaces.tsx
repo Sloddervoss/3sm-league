@@ -36,7 +36,7 @@ export const UpcomingRaces = ({ onSelect }: { onSelect: (event: EnduranceEvent) 
             <Panel key={event.id} className="group relative overflow-hidden">
               <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-orange-500/10 blur-3xl" />
               <div className="relative">
-                <div className="mb-4 flex flex-wrap items-center gap-2"><StatusPill tone={event.status === "live" ? "red" : "orange"}>{statusLabel[event.status]}</StatusPill>{myReg && <StatusPill tone="green">{myReg.status}</StatusPill>}<StatusPill>{event.visibility === "open" ? "Open voor leden" : event.visibility === "invite_only" ? "Op uitnodiging" : "Verborgen"}</StatusPill></div>
+                <div className="mb-4 flex flex-wrap items-center gap-2"><StatusPill tone={event.status === "live" ? "red" : "orange"}>{statusLabel[event.status]}</StatusPill>{myReg && <StatusPill tone="green">{myReg.status}</StatusPill>}{!myReg && event.visibility === "invite_only" && event.invitedUserIds.includes(actorId) && <StatusPill tone="orange">Uitgenodigd · accepteer</StatusPill>}<StatusPill>{event.visibility === "open" ? "Open voor leden" : event.visibility === "invite_only" ? "Op uitnodiging" : "Verborgen"}</StatusPill></div>
                 <h3 className="font-heading text-2xl font-black text-white">{event.name}</h3>
                 <p className="mt-1 flex items-center gap-2 text-sm text-gray-400"><Flag className="h-4 w-4 text-orange-400" /> {event.circuit} · {event.configuration}</p>
                 <div className="my-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
