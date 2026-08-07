@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { assertEnduranceTable } from "../features/endurance/repository/dataAccess";
-import { listEnduranceEvents, createEnduranceEvent } from "../features/endurance/repository/eventsRepository";
+import { listEnduranceEvents, createEnduranceEvent, updateEnduranceEvent } from "../features/endurance/repository/eventsRepository";
 
 // hoisted spies — beschikbaar vóór de vi.mock-factory (die wordt gehoist).
 const spies = vi.hoisted(() => ({
@@ -10,6 +10,10 @@ const spies = vi.hoisted(() => ({
   insertSpy: vi.fn(),
   insertSelectSpy: vi.fn(),
   insertSingleSpy: vi.fn(),
+  updateSpy: vi.fn(),
+  updateEqSpy: vi.fn(),
+  updateSelectSpy: vi.fn(),
+  updateSingleSpy: vi.fn(),
 }));
 
 // De repository gebruikt enduranceClient() -> supabase uit de echte client-module.
@@ -58,6 +62,54 @@ describe("endurance events repository (Fase 3 data-access contract)", () => {
     const payload = spies.insertSpy.mock.calls[0][0];
     expect(payload.name).toBe("Testrace");
     expect(payload.class_ids).toEqual(["GT3"]);
+  });
+
+  it("insert — schrijft invited_user_ids uit de input mee (en default [] indien afwezig)", async () => {
+    spies.insertSpy.mockClear();
+    spies.insertSelectSpy.mockReturnValue({ single: spies.insertSingleSpy });
+    spies.insertSingleSpy.mockResolvedValue({ data: { id: "evt-1" }, error: null });
+    spies.insertSpy.mockReturnValue({ select: spies.insertSelectSpy });
+    spies.fromSpy.mockReturnValue({ insert: spies.insertSpy });
+
+    await createEnduranceEvent({
+      name: "Invite race",
+      circuit: "Road America",
+      configuration: "Full Course",
+      start_at: "2026-09-01T12:00:00Z",
+      end_at: "2026-09-01T18:00:00Z",
+      class_ids: ["GT3"],
+      visibility: "invite_only",
+      status: "registration_open",
+      invited_user_ids: ["u-1", "u-2"],
+    });
+    expect(spies.insertSpy.mock.calls[0][0].invited_user_ids).toEqual(["u-1", "u-2"]);
+
+    await createEnduranceEvent({
+      name: "Open race",
+      circuit: "Zandvoort",
+      configuration: "GP",
+      start_at: "2026-09-01T12:00:00Z",
+      end_at: "2026-09-01T18:00:00Z",
+      class_ids: ["GT3"],
+      visibility: "open",
+      status: "registration_open",
+    });
+    expect(spies.insertSpy.mock.calls[1][0].invited_user_ids).toEqual([]);
+  });
+
+  it("update — schrijft invited_user_ids bij een bestaand event", async () => {
+    spies.updateSpy.mockClear();
+    spies.updateSingleSpy.mockResolvedValue({ data: { id: "evt-1" }, error: null });
+    spies.updateSelectSpy.mockReturnValue({ single: spies.updateSingleSpy });
+    spies.updateEqSpy.mockReturnValue({ select: spies.updateSelectSpy });
+    spies.updateSpy.mockReturnValue({ eq: spies.updateEqSpy });
+    spies.fromSpy.mockReturnValue({ update: spies.updateSpy });
+
+    await updateEnduranceEvent("evt-1", {
+      invited_user_ids: ["u-3", "u-1"],
+    });
+    expect(spies.fromSpy).toHaveBeenCalledWith("endurance_events");
+    expect(spies.updateSpy.mock.calls[0][0].invited_user_ids).toEqual(["u-3", "u-1"]);
   });
 
   it("weigert een niet-endurance-tabelnaam via assertEnduranceTable", () => {

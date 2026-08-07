@@ -57,3 +57,50 @@ export function useMarkEnduranceNotificationRead() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["endurance", "notifications"] }),
   });
 }
+
+export type EnduranceNotificationType =
+  | "invitation"
+  | "deadline"
+  | "availability_missing"
+  | "team_assigned"
+  | "plan_published"
+  | "plan_changed"
+  | "confirmation_needed"
+  | "stint_soon";
+
+export type CreateEnduranceNotificationInput = {
+  user_id: string;
+  event_id: string;
+  type: EnduranceNotificationType;
+  title: string;
+  message?: string | null;
+  private_path?: string | null;
+};
+
+/** Plain: maak één of meer endurance-notificaties aan (bijv. uitnodigingen). */
+export async function createEnduranceNotifications(rows: CreateEnduranceNotificationInput[]): Promise<void> {
+  assertEnduranceTable(TABLE);
+  if (!rows.length) return;
+  const { error } = await enduranceClient().from("endurance_notifications").insert(
+    rows.map((r) => ({
+      user_id: r.user_id,
+      event_id: r.event_id,
+      type: r.type,
+      title: r.title,
+      message: r.message ?? null,
+      private_path: r.private_path ?? null,
+      read: false,
+      discord_status: "disabled",
+    }))
+  );
+  if (error) throw new Error(`Endurance uitnodigingen versturen mislukt: ${error.message}`);
+}
+
+/** TanStack Query: maak uitnodigingen/notificaties aan. */
+export function useCreateEnduranceNotifications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createEnduranceNotifications,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["endurance", "notifications"] }),
+  });
+}

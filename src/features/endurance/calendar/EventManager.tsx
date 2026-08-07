@@ -5,6 +5,8 @@ import {
   useUpsertEnduranceEvent,
   useDeleteEnduranceEvent,
 } from "../repository/eventsRepository";
+import { useCreateEnduranceNotifications } from "../repository/notificationsRepository";
+import { InviteePicker } from "./InviteePicker";
 import { makeId } from "../core/actions";
 import { IRACING_ENDURANCE_CLASSES, getEnduranceCar, type EnduranceClassId } from "../core/carCatalog";
 import { ENDURANCE_CIRCUIT_OPTIONS, ENDURANCE_CONFIGURATION_OPTIONS, ENDURANCE_CONFIGURATION_FOR_CIRCUIT } from "../core/enduranceTracks";
@@ -32,6 +34,7 @@ export const EventManager = () => {
   const { data: dbEvents = [], isLoading, isError, error } = useEnduranceEvents();
   const upsert = useUpsertEnduranceEvent();
   const remove = useDeleteEnduranceEvent();
+  const sendInvites = useCreateEnduranceNotifications();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -46,12 +49,15 @@ export const EventManager = () => {
   const [visibility, setVisibility] = useState<"open" | "invite_only" | "hidden">("open");
   const [maxDrivers, setMaxDrivers] = useState(4);
   const [classIds, setClassIds] = useState<EnduranceClassId[]>(() => [...IRACING_ENDURANCE_CLASSES]);
+  const [invitedUserIds, setInvitedUserIds] = useState<string[]>([]);
+  const [prevInvited, setPrevInvited] = useState<string[]>([]);
 
   const openNew = () => {
     setEditingId(null);
     setName(""); setCircuit(""); setConfiguration("Full Course");
     setStartAt("2026-08-15T13:00"); setDuration(6); setDeadline("2026-08-10T23:59");
     setVisibility("open"); setMaxDrivers(4); setClassIds([...IRACING_ENDURANCE_CLASSES]);
+    setInvitedUserIds([]); setPrevInvited([]);
     setOpen(true);
   };
 
@@ -64,16 +70,18 @@ export const EventManager = () => {
     setVisibility(event.visibility as "open" | "invite_only" | "hidden");
     setMaxDrivers(event.max_drivers_per_car);
     setClassIds((event.class_ids.length ? event.class_ids : [...IRACING_ENDURANCE_CLASSES]) as EnduranceClassId[]);
+    setInvitedUserIds(event.invited_user_ids ?? []);
+    setPrevInvited(event.invited_user_ids ?? []);
     setOpen(true);
     setConfirmDeleteId(null);
   };
 
-  const save = (formEvent: React.FormEvent) => {
+  const save = async (formEvent: React.FormEvent) => {
     formEvent.preventDefault();
     if (!classIds.length || upsert.isPending) return;
     const start = toIso(startAt);
     const end = new Date(new Date(start).getTime() + duration * 3_600_000).toISOString();
-    void upsert.mutateAsync({
+    const saved = await upsert.mutateAsync({
       ...(editingId ? { id: editingId } : {}),
       name,
       circuit,
@@ -91,9 +99,27 @@ export const EventManager = () => {
       visibility,
       status: "registration_open",
       source: "manual",
-      invited_user_ids: [],
+      invited_user_ids: invitedUserIds,
       manager_ids: [],
     });
+    // Stuur alleen een uitnodigings-melding naar NIET eerder genodigde rijders.
+    const newly = invitedUserIds.filter((id) => !prevInvited.includes(id));
+    if (newly.length > 0) {
+      try {
+        await sendInvites.mutateAsync(
+          newly.map((userId) => ({
+            user_id: userId,
+            event_id: saved.id,
+            type: "invitation" as const,
+            title: `Je bent uitgenodigd voor ${name}`,
+            message: `Open de race en bevestig je deelname aan de endurance.`,
+            private_path: `/endurance/races/${saved.id}`,
+          }))
+        );
+      } catch {
+        // Opslaan is gelukt; een mislukte melding mag de opslag niet ongedaan maken.
+      }
+    }
     setName(""); setCircuit(""); setOpen(false); setEditingId(null);
   };
 
@@ -128,6 +154,7 @@ export const EventManager = () => {
       <Field label="Aanmelddeadline"><input required type="datetime-local" className={inputClass} value={deadline} onChange={(e) => setDeadline(e.target.value)} /></Field>
       <Field label="Max. coureurs per auto" hint="Bovengrens, niet verplicht vol. Sta gerust hoger in voor teams met 6+ rijders."><input required type="number" min={1} max={30} className={inputClass} value={maxDrivers} onChange={(e) => setMaxDrivers(Math.max(1, Math.min(30, Number(e.target.value) || 1)))} /></Field>
       <Field label="Zichtbaarheid"><select className={inputClass} value={visibility} onChange={(e) => setVisibility(e.target.value as "open" | "invite_only" | "hidden")}><option value="open">Open voor alle leden</option><option value="invite_only">Alleen op uitnodiging</option><option value="hidden">Verborgen</option></select></Field>
+      <InviteePicker value={invitedUserIds} onChange={setInvitedUserIds} />
       <div className="sm:col-span-2 lg:col-span-3"><span className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500">Klassen voor de stemming</span><div className="flex flex-wrap gap-2">{IRACING_ENDURANCE_CLASSES.map((value) => <label key={value} className="flex items-center gap-2 rounded-xl bg-black/20 px-4 py-3 text-sm text-gray-200 ring-1 ring-white/5"><input type="checkbox" checked={classIds.includes(value)} onChange={(e) => setClassIds((current) => e.target.checked ? [...current, value] : current.filter((item) => item !== value))} className="accent-orange-500" />{value}</label>)}</div></div>
       <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-2"><PrimaryButton type="submit" disabled={!classIds.length || upsert.isPending}>{upsert.isPending ? "Opslaan…" : editingId ? "Wijzigingen opslaan" : "Race opslaan"}</PrimaryButton><SecondaryButton type="button" onClick={() => { setOpen(false); setEditingId(null); }}>Annuleren</SecondaryButton></div>
     </form></Panel>}
