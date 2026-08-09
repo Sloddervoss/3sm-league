@@ -4,6 +4,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
@@ -211,7 +212,7 @@ namespace ThreeSM.EnduranceConnector
                         token = Settings.PairingToken;
                         if (string.IsNullOrWhiteSpace(token) || token.Length < 12) throw new InvalidOperationException("lokaal pairingtoken is te kort");
                     }
-                    envelope = Capture(pluginManager, central, isInCar);
+                    envelope = Capture(pluginManager, data, central, isInCar);
                 }
                 lock (_sendGate)
                 {
@@ -407,12 +408,23 @@ namespace ThreeSM.EnduranceConnector
             OnPropertyChanged("IsPaired");
         }
 
-        private TelemetryEnvelope Capture(PluginManager manager, bool central, bool isInCar)
+        private TelemetryEnvelope Capture(PluginManager manager, GameData data, bool central, bool isInCar)
         {
             var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
             var fuelPerLap = GetNullableDouble(manager, Settings.FuelPerLapProperty, true);
             var estimatedLaps = GetNullableDouble(manager, Settings.EstimatedLapsProperty, false);
             if (!estimatedLaps.HasValue && fuelPerLap.HasValue && fuelPerLap.Value > 0) estimatedLaps = fuel / fuelPerLap.Value;
+            var snapshot = data.NewData;
+            var player = snapshot.Opponents == null ? null : snapshot.Opponents.FirstOrDefault(opponent => opponent != null && opponent.IsPlayer);
+            var currentDriverId = FirstNonEmpty(player == null ? null : player.Id, GetNullableString(manager, Settings.CurrentDriverIdProperty));
+            var currentDriverName = FirstNonEmpty(snapshot.PlayerName, player == null ? null : player.Name, GetNullableString(manager, Settings.CurrentDriverNameProperty));
+            var carId = FirstNonEmpty(snapshot.CarId, GetNullableString(manager, Settings.CarIdProperty));
+            var carName = FirstNonEmpty(snapshot.CarModel, player == null ? null : player.CarName, GetNullableString(manager, Settings.CarNameProperty));
+            var trackName = FirstNonEmpty(snapshot.TrackName, GetNullableString(manager, Settings.TrackNameProperty));
+            var trackConfig = FirstNonEmpty(snapshot.TrackConfig, GetNullableString(manager, Settings.TrackConfigProperty));
+            var position = PositiveOrNull(snapshot.Position) ?? PositiveOrNull(GetInt(manager, Settings.PositionProperty, 0));
+            var classPosition = PositiveOrNull(player == null ? 0 : player.PositionInClass) ?? PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0));
+            var flag = ResolveFlag(snapshot, GetRaw(manager, Settings.FlagProperty));
             return new TelemetryEnvelope
             {
                 ProtocolVersion = 2,
@@ -425,12 +437,12 @@ namespace ThreeSM.EnduranceConnector
                     TeamId = central ? "unassigned" : Settings.TeamId,
                     SessionId = _sessionId,
                     DriverId = central ? null : (string.IsNullOrWhiteSpace(Settings.DriverId) ? null : Settings.DriverId),
-                    CurrentDriverId = GetNullableString(manager, Settings.CurrentDriverIdProperty),
-                    CurrentDriverName = GetNullableString(manager, Settings.CurrentDriverNameProperty),
-                    CarId = GetNullableString(manager, Settings.CarIdProperty),
-                    CarName = GetNullableString(manager, Settings.CarNameProperty),
-                    TrackName = GetNullableString(manager, Settings.TrackNameProperty),
-                    TrackConfig = GetNullableString(manager, Settings.TrackConfigProperty),
+                    CurrentDriverId = currentDriverId,
+                    CurrentDriverName = currentDriverName,
+                    CarId = carId,
+                    CarName = carName,
+                    TrackName = trackName,
+                    TrackConfig = trackConfig,
                 },
                 Telemetry = new TelemetryValues
                 {
@@ -439,8 +451,8 @@ namespace ThreeSM.EnduranceConnector
                     Lap = Math.Max(0, GetInt(manager, Settings.LapProperty, 0)),
                     CompletedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0)),
                     LapTimeSeconds = GetNullableSeconds(manager, Settings.LapTimeProperty),
-                    Position = PositiveOrNull(GetInt(manager, Settings.PositionProperty, 0)),
-                    ClassPosition = PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0)),
+                    Position = position,
+                    ClassPosition = classPosition,
                     SpeedKph = Clamp(GetDouble(manager, Settings.SpeedProperty, 0), 0, 500),
                     FuelLitres = Clamp(fuel, 0, 250),
                     FuelPerLapLitres = fuelPerLap,
@@ -449,7 +461,7 @@ namespace ThreeSM.EnduranceConnector
                     PitLimiter = GetBool(manager, Settings.PitLimiterProperty, false),
                     StintElapsedSeconds = _stintClock.Elapsed.TotalSeconds,
                     Incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty)),
-                    Flag = NormalizeFlag(GetRaw(manager, Settings.FlagProperty)),
+                    Flag = flag,
                     IsInCar = isInCar,
                 }
             };
@@ -587,7 +599,35 @@ namespace ThreeSM.EnduranceConnector
             catch { return null; }
         }
         private static ImageSource LoadIconResource(string resourceName) { return LoadImageResource(resourceName); }
-        private static string NormalizeFlag(object value) { var text = value == null ? "unknown" : value.ToString().ToLowerInvariant(); foreach (var flag in new[] { "green", "yellow", "red", "white", "checkered" }) if (text.Contains(flag)) return flag; return "unknown"; }
+        private static string FirstNonEmpty(params string[] values)
+        {
+            if (values == null) return null;
+            foreach (var value in values)
+                if (!string.IsNullOrWhiteSpace(value) && !string.Equals(value.Trim(), "unknown", StringComparison.OrdinalIgnoreCase)) return value.Trim();
+            return null;
+        }
+
+        private static string ResolveFlag(StatusDataBase snapshot, object fallback)
+        {
+            var normalized = NormalizeFlag(snapshot == null ? null : snapshot.Flag_Name);
+            if (normalized != "unknown") return normalized;
+            if (snapshot != null)
+            {
+                if (snapshot.Flag_Checkered != 0) return "checkered";
+                if (snapshot.Flag_Yellow != 0) return "yellow";
+                if (snapshot.Flag_White != 0) return "white";
+                if (snapshot.Flag_Green != 0) return "green";
+            }
+            return NormalizeFlag(fallback);
+        }
+
+        private static string NormalizeFlag(object value)
+        {
+            var text = value == null ? "unknown" : value.ToString().ToLowerInvariant();
+            if (text.Contains("checkered") || text.Contains("chequered")) return "checkered";
+            foreach (var flag in new[] { "green", "yellow", "red", "white" }) if (text.Contains(flag)) return flag;
+            return "unknown";
+        }
         private static string DisplayText(string value) { return string.IsNullOrWhiteSpace(value) ? "Onbekend" : value.Trim(); }
         private static string DisplayNumber(double? value, string suffix) { return value.HasValue ? value.Value.ToString("0.0") + suffix : "Onbekend"; }
         private static string DisplayPosition(int? value) { return value.HasValue ? value.Value.ToString() : "Onbekend"; }

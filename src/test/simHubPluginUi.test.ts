@@ -20,9 +20,29 @@ describe("SimHub plugin settings UI resources", () => {
 
   it("leidt isInCar af uit de echte SimHub GameData-statussen", () => {
     expect(plugin).toContain("var isInCar = running && data.NewData != null && !data.NewData.Spectating && !data.GameInMenu && !data.GameReplay;");
-    expect(plugin).toContain("Capture(pluginManager, central, isInCar)");
+    expect(plugin).toContain("Capture(pluginManager, data, central, isInCar)");
     expect(plugin).toContain("IsInCar = isInCar");
     expect(plugin).not.toContain("IsInCar = true");
+  });
+
+  it("leest coureur, auto, posities en vlag primair uit de echte SimHub SDK", () => {
+    expect(plugin).toContain("snapshot.PlayerName");
+    expect(plugin).toContain("snapshot.CarModel");
+    expect(plugin).toContain("snapshot.Position");
+    expect(plugin).toContain("player.PositionInClass");
+    expect(plugin).toContain("snapshot.Flag_Name");
+    expect(plugin).toContain("snapshot.Flag_Checkered");
+    expect(plugin).toContain("GetNullableString(manager, Settings.CurrentDriverNameProperty)");
+  });
+
+  it("maakt de koppeling met de 3SM-site dominant en dynamisch zichtbaar", () => {
+    expect(settings).toContain('Text = "KOPPELSTATUS"');
+    expect(settings).toContain('"✓ GEKOPPELD MET DE 3SM-SITE"');
+    expect(settings).toContain('"NIET GEKOPPELD MET DE 3SM-SITE"');
+    expect(settings).toContain("pairingCode.IsEnabled = !paired");
+    expect(settings).toContain("pairButton.IsEnabled = !paired");
+    expect(settings).toContain('new Binding("IsPaired")');
+    expect(settings).toContain('"✓ Gekoppeld met de 3SM-site"');
   });
 
   it("toont de lokaal verzonden snapshot en een handmatige updatecontrole", () => {
