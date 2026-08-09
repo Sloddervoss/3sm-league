@@ -102,6 +102,17 @@ namespace ThreeSM.EnduranceConnector
             var stack = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
             stack.Children.Add(SectionTitle("Koppeling", "Verbind deze installatie eenmalig met je 3SM-account."));
 
+            var pairingCard = new Border { BorderThickness = T(1), CornerRadius = new CornerRadius(8), Padding = T(14), Margin = new Thickness(0, 6, 0, 14) };
+            var pairingCardStack = new StackPanel();
+            var pairingEyebrow = new TextBlock { Text = "KOPPELSTATUS", FontSize = 11, FontWeight = FontWeights.Bold };
+            var pairingTitle = new TextBlock { FontSize = 18, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 7, 0, 3) };
+            var pairingDetail = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = TextMain };
+            pairingCardStack.Children.Add(pairingEyebrow);
+            pairingCardStack.Children.Add(pairingTitle);
+            pairingCardStack.Children.Add(pairingDetail);
+            pairingCard.Child = pairingCardStack;
+            stack.Children.Add(pairingCard);
+
             var centralMode = new CheckBox { Content = "Centrale 3SM-relay gebruiken (aanbevolen)", IsChecked = _settings.UseCentralRelay, Foreground = TextMain, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 4) };
             centralMode.Checked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = true); };
             centralMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = false); };
@@ -119,12 +130,22 @@ namespace ThreeSM.EnduranceConnector
             buttons.Children.Add(unpairButton);
             stack.Children.Add(buttons);
 
-            var binding = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 8), Foreground = TextMuted };
-            Action refreshBinding = () => binding.Text = _plugin.IsPaired
-                ? "Gekoppeld aan 3SM-account · klaar voor connection-test"
-                : "Nog niet gekoppeld";
+            Action refreshBinding = () =>
+            {
+                var paired = _plugin.IsPaired;
+                pairingCard.Background = paired ? Brush("#173529") : Brush("#342719");
+                pairingCard.BorderBrush = paired ? StatusOk : StatusWarn;
+                pairingEyebrow.Foreground = paired ? StatusOk : StatusWarn;
+                pairingTitle.Foreground = paired ? StatusOk : StatusWarn;
+                pairingTitle.Text = paired ? "✓ GEKOPPELD MET DE 3SM-SITE" : "NIET GEKOPPELD MET DE 3SM-SITE";
+                pairingDetail.Text = paired
+                    ? "Dit apparaat is veilig aan je 3SM-account gekoppeld en kan telemetry naar de centrale 3SM-relay sturen."
+                    : "Maak op de 3SM-site een tijdelijke code en koppel dit apparaat voordat telemetry kan worden verstuurd.";
+                pairingCode.IsEnabled = !paired;
+                pairButton.IsEnabled = !paired;
+                unpairButton.IsEnabled = paired;
+            };
             refreshBinding();
-            stack.Children.Add(binding);
 
             pairButton.Click += async delegate
             {
@@ -133,7 +154,6 @@ namespace ThreeSM.EnduranceConnector
                 centralMode.IsChecked = _settings.UseCentralRelay;
                 pairingCode.Text = string.Empty;
                 refreshBinding();
-                pairButton.IsEnabled = true; unpairButton.IsEnabled = true;
             };
             unpairButton.Click += delegate { _plugin.Unpair(); refreshBinding(); };
 
@@ -208,7 +228,16 @@ namespace ThreeSM.EnduranceConnector
             var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 15, Foreground = TextMain, Margin = new Thickness(0, 7, 0, 3) };
             status.SetBinding(TextBlock.TextProperty, new Binding("Status") { Source = _plugin });
             connectionStack.Children.Add(status);
-            connectionStack.Children.Add(new TextBlock { Text = _plugin.IsPaired ? "3SM-koppeling actief" : "Nog niet gekoppeld aan 3SM", Foreground = _plugin.IsPaired ? StatusOk : StatusWarn });
+            var pairingState = new TextBlock();
+            var pairingStateStyle = new Style(typeof(TextBlock));
+            pairingStateStyle.Setters.Add(new Setter(TextBlock.TextProperty, "Nog niet gekoppeld aan de 3SM-site"));
+            pairingStateStyle.Setters.Add(new Setter(TextBlock.ForegroundProperty, StatusWarn));
+            var pairedTrigger = new DataTrigger { Binding = new Binding("IsPaired") { Source = _plugin }, Value = true };
+            pairedTrigger.Setters.Add(new Setter(TextBlock.TextProperty, "✓ Gekoppeld met de 3SM-site"));
+            pairedTrigger.Setters.Add(new Setter(TextBlock.ForegroundProperty, StatusOk));
+            pairingStateStyle.Triggers.Add(pairedTrigger);
+            pairingState.Style = pairingStateStyle;
+            connectionStack.Children.Add(pairingState);
             connectionCard.Child = connectionStack;
             stack.Children.Add(connectionCard);
 
