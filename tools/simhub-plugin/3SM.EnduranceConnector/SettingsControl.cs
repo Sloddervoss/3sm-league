@@ -1,141 +1,302 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace ThreeSM.EnduranceConnector
 {
+    /// <summary>
+    /// 3SM-stijl instellingenpaneel: donker thema + oranje accent, met een zijbalk-menu
+    /// dat de bestaande instellingen groepeert. Functionele logica is identiek aan de
+    /// oude lijst; alleen de presentatie is herwerkt. De plugin blijft een pure data-zender.
+    /// </summary>
     public sealed class SettingsControl : UserControl
     {
+        private static readonly SolidColorBrush Bg            = Brush("#17181C");
+        private static readonly SolidColorBrush PanelBg       = Brush("#1F2127");
+        private static readonly SolidColorBrush PanelBgAlt    = Brush("#262932");
+        private static readonly SolidColorBrush BorderColor   = Brush("#2E323E");
+        private static readonly SolidColorBrush TextMain      = Brush("#F4F5F7");
+        private static readonly SolidColorBrush TextMuted     = Brush("#9AA1B0");
+        private static readonly SolidColorBrush Accent        = Brush("#FF6B1A");
+        private static readonly SolidColorBrush AccentText    = Brush("#FF9A5C");
+        private static readonly SolidColorBrush StatusOk      = Brush("#3DD68C");
+        private static readonly SolidColorBrush StatusWarn    = Brush("#FFC24B");
+
+        private static SolidColorBrush Brush(string hex)
+        {
+            var color = (Color)ColorConverter.ConvertFromString(hex);
+            return new SolidColorBrush(color);
+        }
+
+        private static Thickness T(double all) { return new Thickness(all); }
+        private static Thickness T(double h, double v) { return new Thickness(h, v, h, v); }
+
+        private readonly EnduranceConnectorPlugin _plugin;
+        private readonly ConnectorSettings _settings;
+
         public SettingsControl(EnduranceConnectorPlugin plugin)
         {
-            var settings = plugin.Settings;
-            var panel = new StackPanel { Margin = new Thickness(18) };
-            panel.Children.Add(new TextBlock { Text = "3SM Endurance Connector", FontSize = 22, FontWeight = FontWeights.Bold });
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Verbindt SimHub via outbound HTTPS met 3SM. Telemetry blijft adviserend en wijzigt de planning nooit automatisch.",
-                Margin = new Thickness(0, 4, 0, 16),
-                TextWrapping = TextWrapping.Wrap,
-            });
+            _plugin = plugin;
+            _settings = plugin.Settings;
 
-            var centralMode = new CheckBox
-            {
-                Content = "Centrale 3SM-relay gebruiken (aanbevolen)",
-                IsChecked = settings.UseCentralRelay,
-                FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 4, 0, 10),
-            };
-            centralMode.Checked += delegate { plugin.UpdateSettings(s => s.UseCentralRelay = true); };
-            centralMode.Unchecked += delegate { plugin.UpdateSettings(s => s.UseCentralRelay = false); };
-            panel.Children.Add(centralMode);
+            // ---------- Zijbalk ----------
+            var sidebar = new Border { Width = 210, Background = Bg, BorderBrush = BorderColor, BorderThickness = new Thickness(0, 0, 1, 0) };
+            var sidebarStack = new StackPanel();
 
-            panel.Children.Add(new TextBlock { Text = "Eenmalig koppelen", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 8, 0, 3) });
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Maak op de 3SM-site een tijdelijke code en vul alleen die code hieronder in. De installatie wordt aan je 3SM-account gekoppeld; race en endurance-team volgen later in de Endurance-tab.",
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 6),
-            });
-            var pairingCode = new TextBox { MinWidth = 260, MaxWidth = 420, Padding = new Thickness(8), CharacterCasing = CharacterCasing.Upper };
-            panel.Children.Add(pairingCode);
+            // Logo / branding
+            var wordmark = new Image { Source = EnduranceConnectorPlugin.LoadImageResource("Assets.wordmark.png"), Stretch = Stretch.Uniform, Margin = new Thickness(14, 16, 14, 18), MaxHeight = 78, HorizontalAlignment = HorizontalAlignment.Left };
+            sidebarStack.Children.Add(wordmark);
 
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 4) };
-            var pairButton = new Button { Content = "Koppelen", Padding = new Thickness(14, 7, 14, 7), MinWidth = 110 };
-            var unpairButton = new Button { Content = "Lokale koppeling vergeten", Padding = new Thickness(14, 7, 14, 7), Margin = new Thickness(8, 0, 0, 0), MinWidth = 170 };
+            var navItems = new[] { ("Koppeling", "⛓"), ("Verbinding", "●"), ("Lokale bridge", "⇄"), ("Property-mapping", "⌗"), ("Status", "◉") };
+            for (int i = 0; i < navItems.Length; i++)
+            {
+                var paneIndex = i;
+                var item = navItems[i];
+                var rb = new RadioButton
+                {
+                    GroupName = "nav", Content = item.Item2 + "  " + item.Item1, IsChecked = (i == 0),
+                    FontSize = 13, Foreground = TextMuted, Margin = new Thickness(10, 3, 10, 3),
+                    Padding = new Thickness(12, 9, 12, 9), HorizontalContentAlignment = HorizontalAlignment.Left,
+                };
+                rb.Checked += (s, e) => { SelectPane(paneIndex); };
+                sidebarStack.Children.Add(rb);
+            }
+            sidebar.Child = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = sidebarStack };
+
+            // ---------- Inhoud (5 panes) ----------
+            var content = new Grid { Background = PanelBg };
+            _content = content;
+            content.Children.Add(BuildKoppelingPane());
+            content.Children.Add(BuildVerbindingPane());
+            content.Children.Add(BuildLokaleBridgePane());
+            content.Children.Add(BuildMappingPane());
+            content.Children.Add(BuildStatusPane());
+            for (int i = 1; i < content.Children.Count; i++) content.Children[i].Visibility = Visibility.Collapsed;
+
+            // ---------- Layout ----------
+            var root = new Grid { Background = PanelBg };
+            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(210) });
+            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(sidebar, 0);
+            Grid.SetColumn(content, 1);
+            root.Children.Add(sidebar);
+            root.Children.Add(content);
+
+            Content = root;
+        }
+
+        private Grid _content;
+        private void SelectPane(int index)
+        {
+            if (_content == null) return;
+            for (int i = 0; i < _content.Children.Count; i++)
+                _content.Children[i].Visibility = (i == index) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // ---------- Pane: Koppeling ----------
+        private Border BuildKoppelingPane()
+        {
+            var stack = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
+            stack.Children.Add(SectionTitle("Koppeling", "Verbind deze installatie eenmalig met je 3SM-account."));
+
+            var centralMode = new CheckBox { Content = "Centrale 3SM-relay gebruiken (aanbevolen)", IsChecked = _settings.UseCentralRelay, Foreground = TextMain, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 4) };
+            centralMode.Checked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = true); };
+            centralMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = false); };
+            stack.Children.Add(centralMode);
+
+            stack.Children.Add(Block("Maak op de 3SM-site een tijdelijke code en vul alleen die code hieronder in. De installatie wordt aan je 3SM-account gekoppeld; race en endurance-team volgen later in de Endurance-tab.", 0, 2, 0, 12));
+
+            var pairingCode = new TextBox { MinWidth = 300, MaxWidth = 420, Padding = new Thickness(8), CharacterCasing = CharacterCasing.Upper, Background = PanelBgAlt, Foreground = TextMain, BorderBrush = BorderColor };
+            stack.Children.Add(pairingCode);
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 4) };
+            var pairButton = StyleAction("Koppelen");
+            var unpairButton = StyleSecondary("Lokale koppeling vergeten");
             buttons.Children.Add(pairButton);
             buttons.Children.Add(unpairButton);
-            panel.Children.Add(buttons);
+            stack.Children.Add(buttons);
 
-            var binding = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 10) };
-            Action refreshBinding = () =>
-            {
-                binding.Text = plugin.IsPaired
-                    ? "Gekoppeld aan 3SM-account · klaar voor connection-test"
-                    : "Nog niet gekoppeld";
-            };
+            var binding = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 8), Foreground = TextMuted };
+            Action refreshBinding = () => binding.Text = _plugin.IsPaired
+                ? "Gekoppeld aan 3SM-account · klaar voor connection-test"
+                : "Nog niet gekoppeld";
             refreshBinding();
-            panel.Children.Add(binding);
+            stack.Children.Add(binding);
 
             pairButton.Click += async delegate
             {
-                pairButton.IsEnabled = false;
-                unpairButton.IsEnabled = false;
-                await plugin.PairAsync(pairingCode.Text);
-                centralMode.IsChecked = settings.UseCentralRelay;
+                pairButton.IsEnabled = false; unpairButton.IsEnabled = false;
+                await _plugin.PairAsync(pairingCode.Text);
+                centralMode.IsChecked = _settings.UseCentralRelay;
                 pairingCode.Text = string.Empty;
                 refreshBinding();
-                pairButton.IsEnabled = true;
-                unpairButton.IsEnabled = true;
+                pairButton.IsEnabled = true; unpairButton.IsEnabled = true;
             };
-            unpairButton.Click += delegate
-            {
-                plugin.Unpair();
-                refreshBinding();
-            };
+            unpairButton.Click += delegate { _plugin.Unpair(); refreshBinding(); };
 
-            var connection = new StackPanel();
-            connection.Children.Add(new TextBlock { Text = "Productierelay: https://api.3stripemotorsport.cc/functions/v1 (vastgezet om tokenlekken te voorkomen)", TextWrapping = TextWrapping.Wrap });
-            AddText(connection, "Connector-ID", settings.ConnectorId, value => plugin.UpdateSettings(s => s.ConnectorId = value));
-            AddText(connection, "Interval in milliseconden (minimaal 500)", settings.SendIntervalMilliseconds.ToString(), value =>
+            return WrappedPane(stack);
+        }
+
+        // ---------- Pane: Verbinding ----------
+        private Border BuildVerbindingPane()
+        {
+            var stack = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
+            stack.Children.Add(SectionTitle("Verbinding", "Outbound HTTPS naar de vaste 3SM-relay. De bestemming is vastgezet om tokenlekken te voorkomen."));
+            AddField(stack, "Productierelay", "https://api.3stripemotorsport.cc/functions/v1", null);
+            AddField(stack, "Connector-ID", _settings.ConnectorId, value => _plugin.UpdateSettings(s => s.ConnectorId = value));
+            AddField(stack, "Interval in milliseconden (minimaal 500)", _settings.SendIntervalMilliseconds.ToString(), value =>
             {
                 int parsed;
-                if (int.TryParse(value, out parsed)) plugin.UpdateSettings(s => s.SendIntervalMilliseconds = Math.Max(500, parsed));
+                if (int.TryParse(value, out parsed)) _plugin.UpdateSettings(s => s.SendIntervalMilliseconds = Math.Max(500, parsed));
             });
-            panel.Children.Add(new Expander { Header = "Geavanceerde verbindingsinstellingen", Content = connection, Margin = new Thickness(0, 10, 0, 0) });
-
-            var local = new StackPanel();
-            local.Children.Add(new TextBlock { Text = "Alleen voor lokale ontwikkeling/simulator. Zet centrale relay hierboven uit.", TextWrapping = TextWrapping.Wrap });
-            AddText(local, "Lokale bridge-URL", settings.BridgeUrl, value => plugin.UpdateSettings(s => s.BridgeUrl = value));
-            AddPassword(local, "Lokaal pairingtoken", settings.PairingToken, value => plugin.UpdateSettings(s => s.PairingToken = value));
-            AddText(local, "Lokaal event-ID", settings.EventId, value => plugin.UpdateSettings(s => s.EventId = value));
-            AddText(local, "Lokaal team-ID", settings.TeamId, value => plugin.UpdateSettings(s => s.TeamId = value));
-            AddText(local, "Lokaal coureur-ID", settings.DriverId, value => plugin.UpdateSettings(s => s.DriverId = value));
-            panel.Children.Add(new Expander { Header = "Lokale bridgefallback", Content = local, Margin = new Thickness(0, 10, 0, 0) });
-
-            var mappings = new StackPanel();
-            AddText(mappings, "Snelheid", settings.SpeedProperty, value => plugin.UpdateSettings(s => s.SpeedProperty = value));
-            AddText(mappings, "Huidige ronde", settings.LapProperty, value => plugin.UpdateSettings(s => s.LapProperty = value));
-            AddText(mappings, "Voltooide ronden", settings.CompletedLapsProperty, value => plugin.UpdateSettings(s => s.CompletedLapsProperty = value));
-            AddText(mappings, "Rondetijd", settings.LapTimeProperty, value => plugin.UpdateSettings(s => s.LapTimeProperty = value));
-            AddText(mappings, "Positie", settings.PositionProperty, value => plugin.UpdateSettings(s => s.PositionProperty = value));
-            AddText(mappings, "Klassepositie", settings.ClassPositionProperty, value => plugin.UpdateSettings(s => s.ClassPositionProperty = value));
-            AddText(mappings, "Brandstof", settings.FuelProperty, value => plugin.UpdateSettings(s => s.FuelProperty = value));
-            AddText(mappings, "Brandstof per ronde", settings.FuelPerLapProperty, value => plugin.UpdateSettings(s => s.FuelPerLapProperty = value));
-            AddText(mappings, "Geschatte resterende ronden", settings.EstimatedLapsProperty, value => plugin.UpdateSettings(s => s.EstimatedLapsProperty = value));
-            AddText(mappings, "Pitlane", settings.PitLaneProperty, value => plugin.UpdateSettings(s => s.PitLaneProperty = value));
-            AddText(mappings, "Pitlimiter", settings.PitLimiterProperty, value => plugin.UpdateSettings(s => s.PitLimiterProperty = value));
-            AddText(mappings, "Incidenten", settings.IncidentsProperty, value => plugin.UpdateSettings(s => s.IncidentsProperty = value));
-            AddText(mappings, "Vlag", settings.FlagProperty, value => plugin.UpdateSettings(s => s.FlagProperty = value));
-            AddText(mappings, "Sessietijd", settings.SessionTimeProperty, value => plugin.UpdateSettings(s => s.SessionTimeProperty = value));
-            AddText(mappings, "Huidige coureur-ID", settings.CurrentDriverIdProperty, value => plugin.UpdateSettings(s => s.CurrentDriverIdProperty = value));
-            AddText(mappings, "Huidige coureurnaam", settings.CurrentDriverNameProperty, value => plugin.UpdateSettings(s => s.CurrentDriverNameProperty = value));
-            AddText(mappings, "Auto-ID", settings.CarIdProperty, value => plugin.UpdateSettings(s => s.CarIdProperty = value));
-            AddText(mappings, "Autonaam", settings.CarNameProperty, value => plugin.UpdateSettings(s => s.CarNameProperty = value));
-            AddText(mappings, "Circuitnaam", settings.TrackNameProperty, value => plugin.UpdateSettings(s => s.TrackNameProperty = value));
-            AddText(mappings, "Circuitconfiguratie", settings.TrackConfigProperty, value => plugin.UpdateSettings(s => s.TrackConfigProperty = value));
-            panel.Children.Add(new Expander { Header = "Geavanceerde SimHub-propertymapping", Content = mappings, Margin = new Thickness(0, 10, 0, 0) });
-
-            panel.Children.Add(new TextBlock { Text = "Status", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 18, 0, 3) });
-            var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
-            status.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Status") { Source = plugin });
-            panel.Children.Add(status);
-            Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = panel };
+            return WrappedPane(stack);
         }
 
-        private static void AddText(Panel panel, string label, string initial, Action<string> changed)
+        // ---------- Pane: Lokale bridge ----------
+        private Border BuildLokaleBridgePane()
         {
-            panel.Children.Add(new TextBlock { Text = label, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 3) });
-            var input = new TextBox { Text = initial ?? string.Empty, MinWidth = 420, Padding = new Thickness(6) };
-            input.TextChanged += delegate { changed(input.Text.Trim()); };
+            var stack = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
+            stack.Children.Add(SectionTitle("Lokale bridgefallback", "Alleen voor lokale ontwikkeling / simulator. Zet centrale relay uit."));
+            AddField(stack, "Lokale bridge-URL", _settings.BridgeUrl, value => _plugin.UpdateSettings(s => s.BridgeUrl = value));
+            AddPasswordField(stack, "Lokaal pairingtoken", _settings.PairingToken, value => _plugin.UpdateSettings(s => s.PairingToken = value));
+            AddField(stack, "Lokaal event-ID", _settings.EventId, value => _plugin.UpdateSettings(s => s.EventId = value));
+            AddField(stack, "Lokaal team-ID", _settings.TeamId, value => _plugin.UpdateSettings(s => s.TeamId = value));
+            AddField(stack, "Lokaal coureur-ID", _settings.DriverId, value => _plugin.UpdateSettings(s => s.DriverId = value));
+            return WrappedPane(stack);
+        }
+
+        // ---------- Pane: Property-mapping ----------
+        private Border BuildMappingPane()
+        {
+            var stack = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
+            stack.Children.Add(SectionTitle("SimHub-propertymapping", "Stel per bron-veld de SimHub DataCore-property in."));
+            AddField(stack, "Snelheid", _settings.SpeedProperty, v => _plugin.UpdateSettings(s => s.SpeedProperty = v));
+            AddField(stack, "Huidige ronde", _settings.LapProperty, v => _plugin.UpdateSettings(s => s.LapProperty = v));
+            AddField(stack, "Voltooide ronden", _settings.CompletedLapsProperty, v => _plugin.UpdateSettings(s => s.CompletedLapsProperty = v));
+            AddField(stack, "Rondetijd", _settings.LapTimeProperty, v => _plugin.UpdateSettings(s => s.LapTimeProperty = v));
+            AddField(stack, "Positie", _settings.PositionProperty, v => _plugin.UpdateSettings(s => s.PositionProperty = v));
+            AddField(stack, "Klassepositie", _settings.ClassPositionProperty, v => _plugin.UpdateSettings(s => s.ClassPositionProperty = v));
+            AddField(stack, "Brandstof", _settings.FuelProperty, v => _plugin.UpdateSettings(s => s.FuelProperty = v));
+            AddField(stack, "Brandstof per ronde", _settings.FuelPerLapProperty, v => _plugin.UpdateSettings(s => s.FuelPerLapProperty = v));
+            AddField(stack, "Geschatte resterende ronden", _settings.EstimatedLapsProperty, v => _plugin.UpdateSettings(s => s.EstimatedLapsProperty = v));
+            AddField(stack, "Pitlane", _settings.PitLaneProperty, v => _plugin.UpdateSettings(s => s.PitLaneProperty = v));
+            AddField(stack, "Pitlimiter", _settings.PitLimiterProperty, v => _plugin.UpdateSettings(s => s.PitLimiterProperty = v));
+            AddField(stack, "Incidenten", _settings.IncidentsProperty, v => _plugin.UpdateSettings(s => s.IncidentsProperty = v));
+            AddField(stack, "Vlag", _settings.FlagProperty, v => _plugin.UpdateSettings(s => s.FlagProperty = v));
+            AddField(stack, "Sessietijd", _settings.SessionTimeProperty, v => _plugin.UpdateSettings(s => s.SessionTimeProperty = v));
+            AddField(stack, "Huidige coureur-ID", _settings.CurrentDriverIdProperty, v => _plugin.UpdateSettings(s => s.CurrentDriverIdProperty = v));
+            AddField(stack, "Huidige coureurnaam", _settings.CurrentDriverNameProperty, v => _plugin.UpdateSettings(s => s.CurrentDriverNameProperty = v));
+            AddField(stack, "Auto-ID", _settings.CarIdProperty, v => _plugin.UpdateSettings(s => s.CarIdProperty = v));
+            AddField(stack, "Autonaam", _settings.CarNameProperty, v => _plugin.UpdateSettings(s => s.CarNameProperty = v));
+            AddField(stack, "Circuitnaam", _settings.TrackNameProperty, v => _plugin.UpdateSettings(s => s.TrackNameProperty = v));
+            AddField(stack, "Circuitconfiguratie", _settings.TrackConfigProperty, v => _plugin.UpdateSettings(s => s.TrackConfigProperty = v));
+            return WrappedPane(stack);
+        }
+
+        // ---------- Pane: Status ----------
+        private Border BuildStatusPane()
+        {
+            var stack = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
+            stack.Children.Add(SectionTitle("Status", "Wat de connector lokaal uitleest en succesvol naar 3SM heeft verzonden."));
+
+            var connectionCard = new Border { Background = PanelBgAlt, BorderBrush = BorderColor, BorderThickness = T(1), CornerRadius = new CornerRadius(8), Padding = T(14), Margin = new Thickness(0, 0, 0, 12) };
+            var connectionStack = new StackPanel();
+            connectionStack.Children.Add(new TextBlock { Text = "VERBINDING", Foreground = AccentText, FontWeight = FontWeights.Bold, FontSize = 11 });
+            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 15, Foreground = TextMain, Margin = new Thickness(0, 7, 0, 3) };
+            status.SetBinding(TextBlock.TextProperty, new Binding("Status") { Source = _plugin });
+            connectionStack.Children.Add(status);
+            connectionStack.Children.Add(new TextBlock { Text = _plugin.IsPaired ? "3SM-koppeling actief" : "Nog niet gekoppeld aan 3SM", Foreground = _plugin.IsPaired ? StatusOk : StatusWarn });
+            connectionCard.Child = connectionStack;
+            stack.Children.Add(connectionCard);
+
+            var telemetryCard = new Border { Background = PanelBgAlt, BorderBrush = BorderColor, BorderThickness = T(1), CornerRadius = new CornerRadius(8), Padding = T(14), Margin = new Thickness(0, 0, 0, 12) };
+            var telemetryStack = new StackPanel();
+            telemetryStack.Children.Add(new TextBlock { Text = "LAATST VERZONDEN TELEMETRY", Foreground = AccentText, FontWeight = FontWeights.Bold, FontSize = 11 });
+            var telemetry = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = TextMain, FontFamily = new FontFamily("Consolas"), FontSize = 12.5, LineHeight = 20, Margin = new Thickness(0, 8, 0, 0) };
+            telemetry.SetBinding(TextBlock.TextProperty, new Binding("LastTelemetrySummary") { Source = _plugin });
+            telemetryStack.Children.Add(telemetry);
+            telemetryCard.Child = telemetryStack;
+            stack.Children.Add(telemetryCard);
+
+            var updateCard = new Border { Background = PanelBgAlt, BorderBrush = BorderColor, BorderThickness = T(1), CornerRadius = new CornerRadius(8), Padding = T(14) };
+            var updateStack = new StackPanel();
+            updateStack.Children.Add(new TextBlock { Text = "PLUGINUPDATE", Foreground = AccentText, FontWeight = FontWeights.Bold, FontSize = 11 });
+            updateStack.Children.Add(new TextBlock { Text = "Geïnstalleerde versie: " + _plugin.InstalledVersion, Foreground = TextMain, Margin = new Thickness(0, 7, 0, 2) });
+            var updateStatus = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = TextMuted, Margin = new Thickness(0, 2, 0, 9) };
+            updateStatus.SetBinding(TextBlock.TextProperty, new Binding("UpdateStatus") { Source = _plugin });
+            updateStack.Children.Add(updateStatus);
+            var updateButton = StyleSecondary("Nu op updates controleren");
+            updateButton.Click += async delegate
+            {
+                updateButton.IsEnabled = false;
+                try { await _plugin.CheckForUpdateNowAsync(); }
+                finally { updateButton.IsEnabled = true; }
+            };
+            updateStack.Children.Add(updateButton);
+            updateCard.Child = updateStack;
+            stack.Children.Add(updateCard);
+
+            return WrappedPane(stack);
+        }
+
+        // ---------- Helpers ----------
+        private static Border WrappedPane(UIElement child)
+        {
+            return new Border { Child = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = child } };
+        }
+
+        private static TextBlock SectionTitle(string title, string subtitle)
+        {
+            title = title ?? string.Empty;
+            subtitle = subtitle ?? string.Empty;
+            var block = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 14) };
+            block.Inlines.Add(new System.Windows.Documents.Run(title + "\n") { FontSize = 20, FontWeight = FontWeights.Bold, Foreground = TextMain });
+            if (subtitle.Length > 0)
+                block.Inlines.Add(new System.Windows.Documents.Run(subtitle) { FontSize = 12.5, Foreground = TextMuted });
+            return block;
+        }
+
+        private static TextBlock Block(string text, double top, double right, double bottom, double left)
+        {
+            return new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, Foreground = TextMuted, Margin = new Thickness(left, top, right, bottom), FontSize = 12.5 };
+        }
+
+        private static void AddField(Panel panel, string label, string initial, Action<string> changed)
+        {
+            panel.Children.Add(new TextBlock { Text = label, Foreground = TextMuted, FontSize = 12.5, Margin = new Thickness(0, 10, 0, 3), FontWeight = FontWeights.SemiBold });
+            var input = new TextBox { Text = initial ?? string.Empty, MinWidth = 320, MaxWidth = 460, Padding = new Thickness(8), Background = PanelBgAlt, Foreground = TextMain, BorderBrush = BorderColor };
+            if (changed != null) input.TextChanged += delegate { changed(input.Text.Trim()); };
+            if (changed == null) input.IsReadOnly = true;
             panel.Children.Add(input);
         }
 
-        private static void AddPassword(Panel panel, string label, string initial, Action<string> changed)
+        private static void AddPasswordField(Panel panel, string label, string initial, Action<string> changed)
         {
-            panel.Children.Add(new TextBlock { Text = label, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 3) });
-            var input = new PasswordBox { Password = initial ?? string.Empty, MinWidth = 420, Padding = new Thickness(6) };
+            panel.Children.Add(new TextBlock { Text = label, Foreground = TextMuted, FontSize = 12.5, Margin = new Thickness(0, 10, 0, 3), FontWeight = FontWeights.SemiBold });
+            var input = new PasswordBox { Password = initial ?? string.Empty, MinWidth = 320, MaxWidth = 460, Padding = new Thickness(8), Background = PanelBgAlt, Foreground = TextMain, BorderBrush = BorderColor };
             input.PasswordChanged += delegate { changed(input.Password); };
             panel.Children.Add(input);
+        }
+
+        private static Button StyleAction(string text)
+        {
+            return new Button
+            {
+                Content = text, Padding = new Thickness(16, 8, 16, 8), MinWidth = 120, Margin = new Thickness(0, 0, 8, 0),
+                Background = Accent, Foreground = Brushes.White, FontWeight = FontWeights.Bold, BorderThickness = T(0),
+            };
+        }
+
+        private static Button StyleSecondary(string text)
+        {
+            return new Button
+            {
+                Content = text, Padding = new Thickness(16, 8, 16, 8), MinWidth = 140,
+                Background = PanelBgAlt, Foreground = TextMain, BorderBrush = Accent, BorderThickness = T(1),
+            };
         }
     }
 }
