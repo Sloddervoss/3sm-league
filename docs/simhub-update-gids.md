@@ -16,9 +16,11 @@ Vanaf de updater-bootstrap (`0.3.0.0`) verloopt een update zo:
 6. Bij een installatiefout wordt de geverifieerde vorige DLL teruggezet.
 
 De eerste installatie van een versie van vóór `0.3.0.0` naar de updater-bootstrap blijft
-eenmalig handmatig: sluit SimHub, vervang `3SM.EnduranceConnector.dll` in de map met
-`SimHubWPF.exe` en start SimHub opnieuw. Dezelfde handmatige route blijft beschikbaar als
-fallback wanneer UAC of lokale beveiligingssoftware de helper blokkeert.
+eenmalig handmatig: sluit SimHub, hernoem een versioned download zoals
+`3SM.EnduranceConnector-0.3.0.0.dll` eerst naar exact `3SM.EnduranceConnector.dll`, en plaats
+alleen dat canoniek benoemde bestand in de map met `SimHubWPF.exe`. Laat geen tweede versioned
+kopie in de SimHub-map staan. Start SimHub daarna opnieuw. Dezelfde handmatige route blijft
+beschikbaar als fallback wanneer UAC of lokale beveiligingssoftware de helper blokkeert.
 
 ## Veiligheidsmodel
 
