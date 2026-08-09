@@ -8,5 +8,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("3Stripe Motorsport")]
 [assembly: ComVisible(false)]
 [assembly: Guid("9c99e74c-a6b7-4c46-9c2b-31c4b5d08fc4")]
-[assembly: AssemblyVersion("0.3.0.0")]
-[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyVersion("0.3.0.1")]
+[assembly: AssemblyFileVersion("0.3.0.1")]

@@ -18,12 +18,19 @@ Deno.serve(async (request) => {
   const version = Deno.env.get("SIMHUB_PLUGIN_VERSION") ?? "";
   const dllUrl = Deno.env.get("SIMHUB_PLUGIN_DLL_URL") ?? "";
   const sha256 = Deno.env.get("SIMHUB_PLUGIN_SHA256") ?? "";
+  const byteLengthText = Deno.env.get("SIMHUB_PLUGIN_BYTE_LENGTH") ?? "";
+  const fileName = Deno.env.get("SIMHUB_PLUGIN_FILE_NAME") ?? "";
+  const signature = Deno.env.get("SIMHUB_PLUGIN_SIGNATURE") ?? "";
+  const byteLength = /^\d+$/.test(byteLengthText) ? Number(byteLengthText) : 0;
 
   return jsonResponse(request, {
     name: "3SM Endurance Connector",
-    version: version || "unknown",
+    version: version || null,
     dllUrl: dllUrl || null,
     sha256: /^[a-f0-9]{64}$/i.test(sha256) ? sha256.toLowerCase() : null,
+    byteLength: Number.isSafeInteger(byteLength) && byteLength > 0 ? byteLength : null,
+    fileName: fileName || null,
+    signature: /^[A-Za-z0-9+/]+={0,2}$/.test(signature) ? signature : null,
     checkedAt: new Date().toISOString(),
   });
 });
