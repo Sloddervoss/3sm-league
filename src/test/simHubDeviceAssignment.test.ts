@@ -39,6 +39,9 @@ describe("SimHub device assignment + safe update check (Fase 4)", () => {
     expect(version).toContain("simhub-version");
     expect(version).toContain("SIMHUB_PLUGIN_VERSION");
     expect(version).toContain("SIMHUB_PLUGIN_SHA256");
+    expect(version).toContain("SIMHUB_PLUGIN_BYTE_LENGTH");
+    expect(version).toContain("SIMHUB_PLUGIN_FILE_NAME");
+    expect(version).toContain("SIMHUB_PLUGIN_SIGNATURE");
     expect(version).toContain("dllUrl");
     expect(version).toContain("sha256");
     expect(version).not.toContain("service_role");
@@ -50,6 +53,8 @@ describe("SimHub device assignment + safe update check (Fase 4)", () => {
     expect(connectorSettings).toContain("LastVersionCheckUtc");
     expect(connectorSettings).toContain("LastKnownRemoteDllUrl");
     expect(connectorSettings).toContain("LastKnownRemoteSha256");
+    expect(connectorSettings).toContain("LastKnownRemoteByteLength");
+    expect(connectorSettings).toContain("LastKnownRemoteSignature");
     expect(plugin).toContain("CheckForUpdateAsync");
     expect(plugin).toContain("TimeSpan.FromHours(24)");
     expect(plugin).toContain("klaar voor éénklik-installatie");
@@ -58,5 +63,6 @@ describe("SimHub device assignment + safe update check (Fase 4)", () => {
     expect(plugin).not.toMatch(/File\.(Copy|Move|Replace)\(/);
     expect(contracts).toContain("public sealed class VersionResponse");
     expect(contracts).toContain('DataMember(Name = "sha256"');
+    expect(contracts).toContain('DataMember(Name = "signature"');
   });
 });

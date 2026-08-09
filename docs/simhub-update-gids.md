@@ -2,28 +2,40 @@
 
 ## Voor deelnemers: hoe verloopt een update?
 
-De plugin koppelt **eenmalig**. Een update zit verpakt in één DLL-bestand en laat je
-koppeling intact — je hoeft **niet opnieuw te koppelen** na elke update.
+De plugin koppelt **eenmalig**. Updates bewaren de versleutelde device-token en de
+bestaande 3SM-koppeling; opnieuw koppelen is normaal niet nodig.
 
-1. Download het nieuwe artifact van GitHub Actions (de **3SM-EnduranceConnector-SimHub-…**-bundle).
-2. Sluit SimHub volledig af.
-3. Vervang de oude `3SM.EnduranceConnector.dll` door de nieuwe (map met `SimHubWPF.exe`).
-4. Rechtsklik → Eigenschappen → eventueel **Blokkering opheffen**.
-5. Start SimHub opnieuw.
+Vanaf de updater-bootstrap (`0.3.0.0`) verloopt een update zo:
 
-**Pairing blijft:** de device-token staat versleuteld opgeslagen en wordt bij upgrade
-bewaard. Je hoeft zelden een nieuwe paar-code aan te vragen.
+1. Open de 3SM-plugin in SimHub en klik eventueel **Nu op updates controleren**.
+2. Bij een nieuwere versie wordt **Update installeren en SimHub herstarten** actief.
+3. Bevestig de update en daarna de Windows UAC-melding.
+4. De plugin controleert releasemetadata, download, grootte, SHA-256 en DLL-versie.
+5. Een extern helperproces wacht tot SimHub volledig is afgesloten, bewaart de vorige DLL,
+   plaatst de nieuwe DLL atomair en start SimHub via de normale Explorer-shell opnieuw.
+6. Bij een installatiefout wordt de geverifieerde vorige DLL teruggezet.
 
-## Waarom géén automatische update?
+De eerste installatie van een versie van vóór `0.3.0.0` naar de updater-bootstrap blijft
+eenmalig handmatig: sluit SimHub, vervang `3SM.EnduranceConnector.dll` in de map met
+`SimHubWPF.exe` en start SimHub opnieuw. Dezelfde handmatige route blijft beschikbaar als
+fallback wanneer UAC of lokale beveiligingssoftware de helper blokkeert.
 
-SimHub heeft **geen native auto-update** voor externe plugins die naast `SimHubWPF.exe`
-in Program Files liggen. De plugin doet wél een **veilige, eenmalig-per-24-uur**
-versie-check (naar `…/simhub-version`) en toont **"Nieuwe versie beschikbaar · vervang de
-DLL en herstart"** in de status. De plugin vervangt zelf **nooit** de DLL: dat zou
-schrijfrechten op Program Files, AV/code-signing en een niet-bestaande betrouwbaarheidsketen
-vereisen — een disproportioneel risico voor deze community.
+## Veiligheidsmodel
 
-## Schaagbaarheid (~30 man)
+De geladen plugin-DLL overschrijft zichzelf nooit. Download en vervanging zijn gescheiden:
+de plugin valideert en staged, waarna een extern verhoogd helperproces pas na SimHub-exit
+back-upt en vervangt. Een geladen `0.3.0.1` of nieuwere plugin verifieert bovendien een
+immutable RSA-ondertekend manifest met vaste HTTPS-host, versiegebonden bestandsnaam,
+bytegrootte, SHA-256 en versie. De eenmalige overgang `0.3.0.0 → 0.3.0.1` wordt nog door
+de oudere bootstrap uitgevoerd en gebruikt vaste TLS-host, versiepad en SHA-256, maar nog
+niet de nieuwe RSA-handtekening of ready-handshake. De publieke verificatiesleutel staat in
+de repository; de privésleutel wordt niet meegeleverd of gecommit.
+
+De helper heeft nog geen Authenticode-certificaat. Windows kan de UAC-uitgever daarom als
+onbekend tonen. Accepteer die melding alleen wanneer de update vanuit de 3SM-plugin is
+gestart en de getoonde versie overeenkomt met de aangekondigde 3SM-release.
+
+## Schaalbaarheid (~30 man)
 
 De limieten zijn in de code geverifieerd en ruim toereikend voor tientallen deelnemers:
 
