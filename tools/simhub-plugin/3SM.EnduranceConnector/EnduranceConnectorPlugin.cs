@@ -39,12 +39,14 @@ namespace ThreeSM.EnduranceConnector
         private Task<bool> _activePairing = Task.FromResult(false);
         private int _pairingBusy;
         private int _updateCheckBusy;
+        private int _updateInstallBusy;
         private string _deviceToken = string.Empty;
         private bool _gameWasRunning;
         private string _sessionId;
         private string _status = "Nog niet gestart";
         private string _lastTelemetrySummary = "Nog geen succesvolle telemetryverzending.";
         private string _updateStatus = "Updatecontrole nog niet gestart.";
+        private bool _updateAvailable;
 
         public PluginManager PluginManager { get; set; }
         public ConnectorSettings Settings { get; internal set; }
@@ -62,6 +64,7 @@ namespace ThreeSM.EnduranceConnector
         public string Status { get { return _status; } private set { SetStatus(value); } }
         public string LastTelemetrySummary { get { return _lastTelemetrySummary; } }
         public string UpdateStatus { get { return _updateStatus; } }
+        public bool UpdateAvailable { get { return _updateAvailable; } }
         public bool IsPaired { get { lock (_settingsGate) return !string.IsNullOrWhiteSpace(_deviceToken) && !string.IsNullOrWhiteSpace(Settings.DeviceId) && !string.IsNullOrWhiteSpace(Settings.BoundOwnerUserId); } }
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -107,6 +110,109 @@ namespace ThreeSM.EnduranceConnector
             return CheckForUpdateAsync(_shutdown.Token, true);
         }
 
+        public async Task InstallAvailableUpdateAsync()
+        {
+            if (Interlocked.CompareExchange(ref _updateInstallBusy, 1, 0) != 0)
+            {
+                SetUpdateStatus("Update-installatie loopt al.");
+                return;
+            }
+
+            try
+            {
+                string versionText;
+                string dllUrl;
+                string expectedHash;
+                lock (_settingsGate)
+                {
+                    versionText = Settings.LastKnownRemoteVersion;
+                    dllUrl = Settings.LastKnownRemoteDllUrl;
+                    expectedHash = Settings.LastKnownRemoteSha256;
+                }
+
+                Version remoteVersion;
+                if (!Version.TryParse(versionText, out remoteVersion) || remoteVersion <= this.GetType().Assembly.GetName().Version)
+                    throw new InvalidOperationException("Er staat geen nieuwere update klaar.");
+
+                Uri downloadUri;
+                if (!Uri.TryCreate(dllUrl, UriKind.Absolute, out downloadUri) || !IsAllowedPluginDownload(downloadUri, remoteVersion))
+                    throw new InvalidDataException("De update-URL is niet toegestaan.");
+                expectedHash = NormalizeSha256(expectedHash);
+
+                var confirmation = MessageBox.Show(
+                    "3SM " + remoteVersion + " wordt gecontroleerd gedownload en geïnstalleerd.\n\n" +
+                    "SimHub sluit daarna af en start automatisch opnieuw. Doorgaan?",
+                    "3SM-plugin bijwerken",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (confirmation != MessageBoxResult.Yes) return;
+
+                SetUpdateStatus("Update " + remoteVersion + " downloaden…");
+                var stagingDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "3SM", "EnduranceConnector", "Updates", remoteVersion.ToString());
+                Directory.CreateDirectory(stagingDirectory);
+                var stagedDll = Path.Combine(stagingDirectory, "3SM.EnduranceConnector.dll");
+                var updaterExe = Path.Combine(stagingDirectory, "3SM.EnduranceConnector.Updater.exe");
+
+                await DownloadUpdateAsync(downloadUri, stagedDll, 5 * 1024 * 1024, _shutdown.Token).ConfigureAwait(true);
+                if (!FixedTimeEquals(ComputeSha256(stagedDll), expectedHash))
+                    throw new InvalidDataException("SHA-256-controle van de update is mislukt.");
+
+                Version payloadVersion;
+                if (!Version.TryParse(FileVersionInfo.GetVersionInfo(stagedDll).FileVersion, out payloadVersion) || payloadVersion != remoteVersion)
+                    throw new InvalidDataException("De gedownloade DLL heeft niet de aangekondigde versie.");
+
+                ExtractUpdater(updaterExe);
+                var currentProcess = Process.GetCurrentProcess();
+                var simHubPath = currentProcess.MainModule.FileName;
+                if (!string.Equals(Path.GetFileName(simHubPath), "SimHubWPF.exe", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Het actieve SimHub-proces kon niet veilig worden vastgesteld.");
+
+                var targetDll = this.GetType().Assembly.Location;
+                var arguments =
+                    "--pid " + QuoteArgument(currentProcess.Id.ToString()) +
+                    " --target " + QuoteArgument(targetDll) +
+                    " --staged " + QuoteArgument(stagedDll) +
+                    " --sha256 " + QuoteArgument(expectedHash) +
+                    " --version " + QuoteArgument(remoteVersion.ToString()) +
+                    " --simhub " + QuoteArgument(simHubPath);
+
+                var updaterProcess = Process.Start(new ProcessStartInfo
+                {
+                    FileName = updaterExe,
+                    Arguments = arguments,
+                    WorkingDirectory = stagingDirectory,
+                    UseShellExecute = true,
+                    Verb = "runas",
+                });
+                if (updaterProcess == null) throw new InvalidOperationException("De externe updater kon niet worden gestart.");
+
+                SetUpdateStatus("Updater gestart · SimHub wordt afgesloten en opnieuw gestart.");
+                if (Application.Current != null && Application.Current.MainWindow != null)
+                {
+                    _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => Application.Current.MainWindow.Close()));
+                }
+            }
+            catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+            {
+                SetUpdateStatus("Update geannuleerd door afsluiten van SimHub.");
+            }
+            catch (Win32Exception error) when (error.NativeErrorCode == 1223)
+            {
+                SetUpdateStatus("Update geannuleerd bij de Windows-bevestiging.");
+            }
+            catch (Exception error)
+            {
+                SetUpdateStatus("Update-installatie mislukt · " + error.Message);
+                SimHub.Logging.Current.Error("3SM Endurance: update-installatie mislukt: " + error);
+            }
+            finally
+            {
+                Volatile.Write(ref _updateInstallBusy, 0);
+            }
+        }
+
         private async Task CheckForUpdateAsync(CancellationToken cancellationToken, bool force)
         {
             if (Interlocked.CompareExchange(ref _updateCheckBusy, 1, 0) != 0)
@@ -137,15 +243,29 @@ namespace ThreeSM.EnduranceConnector
                     {
                         Settings.LastKnownRemoteVersion = info.Version.Trim();
                         Settings.LastKnownRemoteDllUrl = info.DllUrl?.Trim() ?? string.Empty;
+                        Settings.LastKnownRemoteSha256 = info.Sha256?.Trim() ?? string.Empty;
                         Settings.LastVersionCheckUtc = DateTime.UtcNow;
                         this.SaveCommonSettings("ConnectorSettings", Settings);
                     }
                     if (remote > localVersion)
                     {
-                        SetUpdateStatus("Nieuwe versie " + remote + " beschikbaar · DLL handmatig vervangen en SimHub herstarten.");
-                        if (Volatile.Read(ref _ending) == 0) Status = "Nieuwe versie beschikbaar · vervang de DLL en herstart";
+                        Uri downloadUri;
+                        var metadataValid = Uri.TryCreate(info.DllUrl, UriKind.Absolute, out downloadUri)
+                            && IsAllowedPluginDownload(downloadUri, remote)
+                            && IsSha256(info.Sha256);
+                        SetUpdateAvailable(metadataValid);
+                        SetUpdateStatus(metadataValid
+                            ? "Nieuwe versie " + remote + " beschikbaar · klaar voor éénklik-installatie."
+                            : "Nieuwe versie " + remote + " beschikbaar, maar veilige installatiemetadata ontbreekt.");
+                        if (Volatile.Read(ref _ending) == 0) Status = metadataValid
+                            ? "Nieuwe versie beschikbaar · klaar voor installatie"
+                            : "Nieuwe versie beschikbaar · metadata ongeldig";
                     }
-                    else SetUpdateStatus("Actueel · geïnstalleerd " + localVersion + " · server " + remote + " · gecontroleerd " + DateTime.Now.ToString("HH:mm:ss"));
+                    else
+                    {
+                        SetUpdateAvailable(false);
+                        SetUpdateStatus("Actueel · geïnstalleerd " + localVersion + " · server " + remote + " · gecontroleerd " + DateTime.Now.ToString("HH:mm:ss"));
+                    }
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -531,11 +651,114 @@ namespace ThreeSM.EnduranceConnector
                 {
                     var read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
                     if (read == 0) break;
-                    if (output.Length + read > maxBytes) throw new HttpRequestException("pairingresponse is te groot");
+                    if (output.Length + read > maxBytes) throw new HttpRequestException("response is te groot");
                     output.Write(buffer, 0, read);
                 }
                 return Encoding.UTF8.GetString(output.ToArray());
             }
+        }
+
+        private static async Task DownloadUpdateAsync(Uri downloadUri, string destination, int maxBytes, CancellationToken cancellationToken)
+        {
+            try
+            {
+                using (var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(45) })
+                using (var request = new HttpRequestMessage(HttpMethod.Get, downloadUri))
+                using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
+                {
+                    if (!response.IsSuccessStatusCode) throw new HttpRequestException("download HTTP " + (int)response.StatusCode);
+                    if (response.Content.Headers.ContentLength.HasValue && response.Content.Headers.ContentLength.Value > maxBytes)
+                        throw new HttpRequestException("updatebestand is te groot");
+
+                    using (var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                    using (var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        var buffer = new byte[81920];
+                        var total = 0;
+                        while (true)
+                        {
+                            var read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                            if (read == 0) break;
+                            total += read;
+                            if (total > maxBytes) throw new HttpRequestException("updatebestand is te groot");
+                            await output.WriteAsync(buffer, 0, read, cancellationToken).ConfigureAwait(false);
+                        }
+                        if (total == 0) throw new HttpRequestException("updatebestand is leeg");
+                        await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch
+            {
+                try { if (File.Exists(destination)) File.Delete(destination); } catch { }
+                throw;
+            }
+        }
+
+        private static bool IsAllowedPluginDownload(Uri uri, Version version)
+        {
+            if (uri == null || version == null || !uri.IsAbsoluteUri) return false;
+            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(uri.Host, "3stripemotorsport.cc", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment)) return false;
+            var expectedPath = "/downloads/3SM.EnduranceConnector-" + version + ".dll";
+            return string.Equals(uri.AbsolutePath, expectedPath, StringComparison.Ordinal);
+        }
+
+        private static bool IsSha256(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Trim().Length != 64) return false;
+            foreach (var character in value.Trim())
+            {
+                var hexadecimal = (character >= '0' && character <= '9') ||
+                                  (character >= 'a' && character <= 'f') ||
+                                  (character >= 'A' && character <= 'F');
+                if (!hexadecimal) return false;
+            }
+            return true;
+        }
+
+        private static string NormalizeSha256(string value)
+        {
+            if (!IsSha256(value)) throw new InvalidDataException("De update-SHA-256 is ongeldig.");
+            return value.Trim().ToLowerInvariant();
+        }
+
+        private static string ComputeSha256(string path)
+        {
+            using (var algorithm = SHA256.Create())
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                var bytes = algorithm.ComputeHash(stream);
+                var builder = new StringBuilder(bytes.Length * 2);
+                foreach (var item in bytes) builder.Append(item.ToString("x2"));
+                return builder.ToString();
+            }
+        }
+
+        private static bool FixedTimeEquals(string left, string right)
+        {
+            if (left == null || right == null || left.Length != right.Length) return false;
+            var difference = 0;
+            for (var index = 0; index < left.Length; index++) difference |= left[index] ^ right[index];
+            return difference == 0;
+        }
+
+        private static void ExtractUpdater(string destination)
+        {
+            const string resourceName = "ThreeSM.EnduranceConnector.Assets.3SM.EnduranceConnector.Updater.exe";
+            using (var input = typeof(EnduranceConnectorPlugin).Assembly.GetManifestResourceStream(resourceName))
+            {
+                if (input == null) throw new InvalidOperationException("De embedded 3SM-updater ontbreekt.");
+                using (var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None)) input.CopyTo(output);
+            }
+        }
+
+        private static string QuoteArgument(string value)
+        {
+            value = value ?? string.Empty;
+            if (value.IndexOf('\"') >= 0) throw new ArgumentException("Ongeldig aanhalingsteken in updaterargument.");
+            return "\"" + value + "\"";
         }
 
         private static string Serialize(object value, Type type)
@@ -654,6 +877,20 @@ namespace ThreeSM.EnduranceConnector
                 "Snelheid: " + telemetry.SpeedKph.ToString("0") + " km/u · brandstof: " + telemetry.FuelLitres.ToString("0.0") + " L\n" +
                 "Pitlane: " + (telemetry.InPitLane ? "JA" : "NEE") + " · limiter: " + (telemetry.PitLimiter ? "AAN" : "UIT") + " · vlag: " + DisplayText(telemetry.Flag);
             OnPropertyChanged("LastTelemetrySummary");
+        }
+
+        private void SetUpdateAvailable(bool value)
+        {
+            if (Volatile.Read(ref _ending) != 0) return;
+            var application = Application.Current;
+            if (application != null && !application.Dispatcher.CheckAccess())
+            {
+                try { application.Dispatcher.BeginInvoke(new Action(() => SetUpdateAvailable(value))); } catch (InvalidOperationException) { }
+                return;
+            }
+            if (_updateAvailable == value) return;
+            _updateAvailable = value;
+            OnPropertyChanged("UpdateAvailable");
         }
 
         private void SetUpdateStatus(string value)

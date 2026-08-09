@@ -257,6 +257,12 @@ namespace ThreeSM.EnduranceConnector
             var updateStatus = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = TextMuted, Margin = new Thickness(0, 2, 0, 9) };
             updateStatus.SetBinding(TextBlock.TextProperty, new Binding("UpdateStatus") { Source = _plugin });
             updateStack.Children.Add(updateStatus);
+            var updateButtons = new StackPanel { Orientation = Orientation.Horizontal };
+            var installButton = StyleAction("Update installeren en SimHub herstarten");
+            installButton.SetBinding(Button.IsEnabledProperty, new Binding("UpdateAvailable") { Source = _plugin });
+            installButton.Click += async delegate { await _plugin.InstallAvailableUpdateAsync(); };
+            updateButtons.Children.Add(installButton);
+
             var updateButton = StyleSecondary("Nu op updates controleren");
             updateButton.Click += async delegate
             {
@@ -264,7 +270,8 @@ namespace ThreeSM.EnduranceConnector
                 try { await _plugin.CheckForUpdateNowAsync(); }
                 finally { updateButton.IsEnabled = true; }
             };
-            updateStack.Children.Add(updateButton);
+            updateButtons.Children.Add(updateButton);
+            updateStack.Children.Add(updateButtons);
             updateCard.Child = updateStack;
             stack.Children.Add(updateCard);
 
