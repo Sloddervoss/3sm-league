@@ -50,10 +50,11 @@ namespace ThreeSM.EnduranceConnector
         public string TrackNameProperty = "DataCorePlugin.GameData.NewData.TrackName";
         public string TrackConfigProperty = "DataCorePlugin.GameData.NewData.TrackConfig";
 
-        // Veilige versie-check: alleen een "nieuwe versie beschikbaar"-melding.
-        // De plugin vervangt nooit zelf de DLL en stuurt geen credentials.
+        // Veilige versie-check en staged update. De plugin downloadt alleen van de vaste
+        // 3SM-host; een extern updaterproces vervangt de geladen DLL na SimHub-exit.
         public string LastKnownRemoteVersion = string.Empty;
         public string LastKnownRemoteDllUrl = string.Empty;
+        public string LastKnownRemoteSha256 = string.Empty;
         public DateTime? LastVersionCheckUtc;
     }
 }

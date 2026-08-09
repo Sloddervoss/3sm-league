@@ -52,8 +52,12 @@ describe("SimHub plugin settings UI resources", () => {
     expect(plugin).toContain("public Task CheckForUpdateNowAsync()");
     expect(plugin).toContain("CheckForUpdateAsync(_shutdown.Token, true)");
     expect(settings).toContain('StyleSecondary("Nu op updates controleren")');
+    expect(settings).toContain('StyleAction("Update installeren en SimHub herstarten")');
+    expect(settings).toContain('new Binding("UpdateAvailable")');
     expect(settings).toContain('new Binding("LastTelemetrySummary")');
     expect(settings).toContain('new Binding("UpdateStatus")');
-    expect(plugin).not.toMatch(/File\.(Copy|Move)|Process\.Start/);
+    expect(plugin).toContain("InstallAvailableUpdateAsync");
+    expect(plugin).toContain('Verb = "runas"');
+    expect(plugin).not.toMatch(/File\.(Copy|Move|Replace)\(/);
   });
 });
