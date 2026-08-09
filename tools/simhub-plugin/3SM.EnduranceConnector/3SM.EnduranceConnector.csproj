@@ -32,5 +32,16 @@
     <Compile Include="TelemetryContracts.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Assets\plugin-icon.png" />
+    <None Include="Assets\plugin-icon-64.png" />
+    <None Include="Assets\wordmark.png" />
+    <None Include="Assets\stripes-icon.svg" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\plugin-icon.png" />
+    <EmbeddedResource Include="Assets\plugin-icon-64.png" />
+    <EmbeddedResource Include="Assets\wordmark.png" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
