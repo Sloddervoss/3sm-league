@@ -20,6 +20,7 @@ interface Race {
   id: string;
   name: string;
   track: string;
+  iracing_track_id?: number | null;
   race_date: string;
   status: string;
   weather?: string;
@@ -312,6 +313,7 @@ const RaceModal = ({ race, registration }: Props) => {
         />
         <TrackMap
           track={race.track}
+          trackId={race.iracing_track_id}
           className="absolute right-6 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
           style={{ opacity: 0.9 }}
           fallbackStyle={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}

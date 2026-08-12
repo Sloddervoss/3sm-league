@@ -337,7 +337,7 @@ const UpcomingRaces = () => {
 
                   {/* Right: circuit image + countdown + registration */}
                   <div className="flex flex-col items-start md:items-end gap-4 shrink-0">
-                    <TrackMap track={nextRace.track} className="w-36 h-24 object-contain hidden md:block" style={{ opacity: 0.85 }} fallbackStyle={{ opacity: 0.3, filter: "invert(1)" }} />
+                    <TrackMap track={nextRace.track} trackId={nextRace.iracing_track_id} className="w-36 h-24 object-contain hidden md:block" style={{ opacity: 0.85 }} fallbackStyle={{ opacity: 0.3, filter: "invert(1)" }} />
                     {countdown && (
                       <div className="text-right">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Aftellen</p>
@@ -472,6 +472,7 @@ const UpcomingRaces = () => {
                         <div className="md:w-20 shrink-0 flex items-center justify-center relative self-stretch">
                           <TrackMap
                             track={race.track}
+                            trackId={race.iracing_track_id}
                             className="w-16 h-14 object-contain"
                             style={{ opacity: race.status === "completed" ? 0.45 : 0.9 }}
                             fallbackStyle={{ opacity: 0.4, filter: "invert(1)" }}

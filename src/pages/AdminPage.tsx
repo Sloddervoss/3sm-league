@@ -22,6 +22,7 @@ type AdminOverviewRace = {
   id: string;
   name: string;
   track: string;
+  iracing_track_id: number | null;
   race_date: string;
   league_id: string | null;
   status: string | null;
@@ -65,7 +66,7 @@ const AdminPage = () => {
   const { data: allRaces } = useQuery({
     queryKey: ["all-races-admin"],
     queryFn: async (): Promise<AdminOverviewRace[]> => {
-      const { data, error } = await supabase.from("races").select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, season)").order("race_date", { ascending: true });
+      const { data, error } = await supabase.from("races").select("id, name, track, iracing_track_id, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, leagues(name, season)").order("race_date", { ascending: true });
       if (error) throw error;
       return (data || []) as AdminOverviewRace[];
     },
@@ -238,7 +239,7 @@ const AdminPage = () => {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-3 shrink-0">
-                            <TrackMap track={nr.track} className="w-24 h-16 object-contain" style={{ opacity: 0.8 }} fallbackStyle={{ opacity: 0.25, filter: "invert(1)" }} />
+                            <TrackMap track={nr.track} trackId={nr.iracing_track_id} className="w-24 h-16 object-contain" style={{ opacity: 0.8 }} fallbackStyle={{ opacity: 0.25, filter: "invert(1)" }} />
                             {countdown && (
                               <div className="text-right">
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Aftellen</p>

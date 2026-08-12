@@ -162,6 +162,7 @@ const NextRaceTeaser = () => {
             <div className="relative flex-1 p-6 md:p-8 flex flex-col justify-between overflow-hidden">
               <TrackMap
                 track={nextRace.track}
+                trackId={nextRace.iracing_track_id}
                 className="absolute right-4 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
                 style={{ opacity: 0.9 }}
                 fallbackStyle={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}

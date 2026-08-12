@@ -8,6 +8,7 @@ interface Race {
   id: string;
   name: string;
   track: string;
+  iracing_track_id?: number | null;
   race_date: string;
   status: string;
   weather?: string;
@@ -66,6 +67,7 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
       {/* Track map (circuit layout) rechts */}
       <TrackMap
         track={race.track}
+        trackId={race.iracing_track_id}
         className="absolute right-6 top-1/2 -translate-y-1/2 w-64 h-64 object-contain select-none pointer-events-none hidden md:block"
         style={{ opacity: 0.9 }}
         fallbackStyle={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}

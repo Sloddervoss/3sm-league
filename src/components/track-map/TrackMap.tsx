@@ -4,6 +4,7 @@ import { loadLayeredTrackRuntime, resolveLayeredTrackMap } from "@/lib/layeredTr
 
 export interface TrackMapProps {
   track: string;
+  trackId?: number | null;
   className?: string;
   style?: CSSProperties;
   fallbackStyle?: CSSProperties;
@@ -16,6 +17,7 @@ export interface TrackMapProps {
 /** Shared circuit renderer. Runtime/config/asset failures fail closed to the old map. */
 export function TrackMap({
   track,
+  trackId = null,
   className,
   style,
   fallbackStyle,
@@ -34,14 +36,14 @@ export function TrackMap({
     setSource(oldImage);
     void loadLayeredTrackRuntime().then((manifest) => {
       if (!active || !manifest) return;
-      const resolved = resolveLayeredTrackMap(track, manifest);
+      const resolved = resolveLayeredTrackMap(track, manifest, trackId);
       if (resolved) {
         setLayeredImage(resolved);
         setSource(resolved);
       }
     });
     return () => { active = false; };
-  }, [oldImage, track]);
+  }, [oldImage, track, trackId]);
 
   if (!source) return <>{fallback}</>;
 
