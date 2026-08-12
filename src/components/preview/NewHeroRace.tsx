@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { MapPin, Clock, Timer, CloudSun, Gauge, Users, CheckCircle2, ChevronRight } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
+import { TrackMap } from "@/components/track-map/TrackMap";
 
 interface Race {
   id: string;
@@ -63,16 +64,12 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
       />
 
       {/* Track map (circuit layout) rechts */}
-      {trackInfo?.imageUrl && (
-        <img
-          src={trackInfo.imageUrl}
-          alt=""
-          aria-hidden
-          className="absolute right-6 top-1/2 -translate-y-1/2 w-64 h-64 object-contain select-none pointer-events-none hidden md:block"
-          style={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      )}
+      <TrackMap
+        track={race.track}
+        className="absolute right-6 top-1/2 -translate-y-1/2 w-64 h-64 object-contain select-none pointer-events-none hidden md:block"
+        style={{ opacity: 0.9 }}
+        fallbackStyle={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}
+      />
 
       {/* Gradient overlay */}
       <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(8,8,15,0.92) 0%, rgba(8,8,15,0.7) 50%, rgba(8,8,15,0.3) 100%)" }} />
