@@ -27,7 +27,7 @@ export function normalizeTrackName(track: string): string {
 export function isLayeredTrackManifest(value: unknown): value is LayeredTrackManifest {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<LayeredTrackManifest>;
-  return (
+  if (!(
     candidate.schemaVersion === 1 &&
     typeof candidate.count === "number" &&
     Array.isArray(candidate.tracks) &&
@@ -38,14 +38,22 @@ export function isLayeredTrackManifest(value: unknown): value is LayeredTrackMan
       typeof track?.path === "string" &&
       /^\/tracks\/layered\/track-\d+\.svg$/.test(track.path),
     )
-  );
+  )) return false;
+  const ids = candidate.tracks.map((track) => track.trackId);
+  const paths = candidate.tracks.map((track) => track.path);
+  return new Set(ids).size === ids.length && new Set(paths).size === paths.length;
 }
 
 export function resolveLayeredTrackMap(
   trackName: string,
   manifest: LayeredTrackManifest | null | undefined,
+  trackId?: number | null,
 ): string | null {
-  if (!manifest || typeof trackName !== "string") return null;
+  if (!manifest) return null;
+  if (trackId != null) {
+    return manifest.tracks.find((track) => track.trackId === trackId)?.path ?? null;
+  }
+  if (typeof trackName !== "string") return null;
   const normalized = normalizeTrackName(trackName);
   if (!normalized) return null;
 
@@ -61,6 +69,7 @@ export function resolveLayeredTrackMap(
 }
 
 let runtimePromise: Promise<LayeredTrackManifest | null> | null = null;
+let manifestPromise: Promise<LayeredTrackManifest | null> | null = null;
 
 async function fetchJson(url: string): Promise<unknown> {
   const separator = url.includes("?") ? "&" : "?";
@@ -75,8 +84,7 @@ export async function loadLayeredTrackRuntime(): Promise<LayeredTrackManifest | 
       try {
         const config = await fetchJson(TRACK_RUNTIME_CONFIG_URL) as Partial<LayeredTrackRuntimeConfig>;
         if (config.enabled !== true) return null;
-        const manifest = await fetchJson(TRACK_MANIFEST_URL);
-        return isLayeredTrackManifest(manifest) ? manifest : null;
+        return loadLayeredTrackManifest();
       } catch {
         return null;
       }
@@ -85,6 +93,22 @@ export async function loadLayeredTrackRuntime(): Promise<LayeredTrackManifest | 
   return runtimePromise;
 }
 
+/** Loads the local authoritative catalog independently from the renderer kill switch. */
+export async function loadLayeredTrackManifest(): Promise<LayeredTrackManifest | null> {
+  if (!manifestPromise) {
+    manifestPromise = (async () => {
+      try {
+        const manifest = await fetchJson(TRACK_MANIFEST_URL);
+        return isLayeredTrackManifest(manifest) ? manifest : null;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return manifestPromise;
+}
+
 export function resetLayeredTrackRuntimeForTests(): void {
   runtimePromise = null;
+  manifestPromise = null;
 }

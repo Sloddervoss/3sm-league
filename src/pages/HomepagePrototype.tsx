@@ -206,6 +206,7 @@ const NextRaceRefresh = () => {
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_50%,rgba(249,115,22,0.04),transparent_60%)]" />
               <TrackMap
                 track={nextRace.track}
+                trackId={nextRace.iracing_track_id}
                 className="max-h-60 max-w-full object-contain"
                 style={{ opacity: 0.95 }}
                 fallbackStyle={{ opacity: 0.75, filter: "invert(1)" }}

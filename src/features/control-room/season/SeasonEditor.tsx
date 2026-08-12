@@ -37,6 +37,7 @@ export type SeasonEditorRace = {
   id: string;
   name: string;
   track: string;
+  iracing_track_id: number | null;
   race_date: string | null;
   round: number | null;
   status: string | null;
@@ -57,6 +58,7 @@ export type SeasonEditorSoloRace = {
   league_id: string | null;
   name: string;
   track: string;
+  iracing_track_id: number | null;
   race_date: string | null;
   status: string | null;
   race_type: string | null;
@@ -74,14 +76,14 @@ export type SeasonEditorSoloRace = {
 
 /** Data shape for a single race slot when creating a new league with races. */
 type RaceSlot = {
-  name: string; track: string; date: string; time: string;
+  name: string; track: string; iracing_track_id: number | null; date: string; time: string;
   race_type: string; race_duration: string; practice_duration: string;
   qualifying_duration: string; start_type: string; weather: string; setup: string;
   lobby_name: string; lobby_password: string; lobby_reveal_minutes: number;
 };
 
 const SOLO_RACE_DEFAULTS: RaceSlot = {
-  name: "", track: "", date: "", time: "20:00", race_type: "Feature",
+  name: "", track: "", iracing_track_id: null, date: "", time: "20:00", race_type: "Feature",
   race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min",
   start_type: "Standing", weather: "Fixed", setup: "Fixed",
   lobby_name: "", lobby_password: "", lobby_reveal_minutes: 15,
@@ -105,6 +107,7 @@ export type SeasonEditorAction =
 export type SeasonEditorRaceUpdate = {
   name?: string | null;
   track?: string | null;
+  iracing_track_id?: number | null;
   race_date?: string | null;
   race_type?: string | null;
   race_duration?: string | null;
@@ -172,7 +175,7 @@ export const SeasonEditor = ({ onAction, focus }: SeasonEditorProps) => {
     queryFn: async (): Promise<SeasonEditorSoloRace[]> => {
       const { data, error } = await supabase
         .from("races")
-        .select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, lobby_name, lobby_password, lobby_reveal_minutes, leagues(name, season)")
+        .select("id, name, track, iracing_track_id, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, lobby_name, lobby_password, lobby_reveal_minutes, leagues(name, season)")
         .order("race_date", { ascending: true });
       if (error) throw error;
       return (data || []) as SeasonEditorSoloRace[];
@@ -222,7 +225,7 @@ export const SeasonEditor = ({ onAction, focus }: SeasonEditorProps) => {
   /* ── Helpers ── */
   const generateRaceSlots = () => {
     setRaces(Array.from({ length: newLeague.raceCount }, (_, i) => ({
-      name: `Race ${i + 1}`, track: "", date: "", time: "20:00", race_type: "Feature",
+      name: `Race ${i + 1}`, track: "", iracing_track_id: null, date: "", time: "20:00", race_type: "Feature",
       race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min",
       start_type: "Standing", weather: "Fixed", setup: "Fixed",
       lobby_name: "", lobby_password: "", lobby_reveal_minutes: 15,
@@ -242,7 +245,7 @@ export const SeasonEditor = ({ onAction, focus }: SeasonEditorProps) => {
       ? (data.race_date.length > 16 ? utcToAmsLocal(data.race_date) : data.race_date)
       : null;
     return {
-      name: data.name, track: data.track,
+      name: data.name, track: data.track, iracing_track_id: data.iracing_track_id,
       race_date: localDate ? amsToUTC(localDate) : null,
       race_type: data.race_type || null, race_duration: data.race_duration || null,
       practice_duration: data.practice_duration || null, qualifying_duration: data.qualifying_duration || null,
@@ -253,7 +256,7 @@ export const SeasonEditor = ({ onAction, focus }: SeasonEditorProps) => {
     };
   };
   const raceInsertPayload = (slot: RaceSlot, leagueId: string | null, round?: number) => ({
-    league_id: leagueId, ...(round ? { round } : {}), name: slot.name, track: slot.track,
+    league_id: leagueId, ...(round ? { round } : {}), name: slot.name, track: slot.track, iracing_track_id: slot.iracing_track_id,
     race_date: amsToUTC(`${slot.date}T${slot.time}`), status: "upcoming" as const,
     race_type: slot.race_type || null, race_duration: slot.race_duration || null,
     practice_duration: slot.practice_duration || null, qualifying_duration: slot.qualifying_duration || null,
@@ -530,14 +533,14 @@ const LeagueCreateForm = ({
     {races.length > 0 && (
       <div className="space-y-3 mb-4">
         {races.map((race, i) => {
-          const upd = (key: keyof RaceSlot, val: string) => {
+          const upd = <K extends keyof RaceSlot>(key: K, val: RaceSlot[K]) => {
             const u = [...races]; u[i] = { ...u[i], [key]: val }; setRaces(u);
           };
           return (
             <div key={i} className="p-3 bg-secondary/50 rounded-md border border-border/50 space-y-2">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <input type="text" value={race.name} onChange={(e) => upd("name", e.target.value)} placeholder={`Race ${i + 1}`} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
-                <TrackSelect value={race.track} onChange={(v) => upd("track", v)} />
+                <TrackSelect value={race.track} trackId={race.iracing_track_id} onChange={(name, trackId) => { upd("track", name); upd("iracing_track_id", trackId); }} />
                 <input type="date" value={race.date} onChange={(e) => upd("date", e.target.value)} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 <input type="time" value={race.time} onChange={(e) => upd("time", e.target.value)} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
@@ -548,7 +551,7 @@ const LeagueCreateForm = ({
     )}
 
     <div className="flex gap-3">
-      <button onClick={onCreate} disabled={!newLeague.name || isPending} className="px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">{isPending ? "Aanmaken..." : "Aanmaken"}</button>
+      <button onClick={onCreate} disabled={!newLeague.name || races.some((race) => !race.iracing_track_id) || isPending} className="px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">{isPending ? "Aanmaken..." : "Aanmaken"}</button>
       <button onClick={onCancel} disabled={isPending} className="px-6 py-2.5 rounded-md border border-border text-muted-foreground font-heading font-bold text-sm hover:text-foreground transition-colors disabled:opacity-50">Annuleren</button>
     </div>
   </motion.div>
@@ -594,7 +597,7 @@ const LeagueCard = ({
       onRaceCreationStarted?.();
     }
   }, [onRaceCreationStarted, startRaceCreation]);
-  const setRd = (raceId: string, field: keyof SeasonEditorRaceUpdate, val: string | number) =>
+  const setRd = (raceId: string, field: keyof SeasonEditorRaceUpdate, val: string | number | null) =>
     setEditingRaces((prev) => ({ ...prev, [raceId]: { ...prev[raceId], [field]: val } }));
 
   return (
@@ -642,7 +645,7 @@ const LeagueCard = ({
           </div>
 
           {canWrite && <div className="rounded-md border border-border/50 bg-secondary/30 p-3">
-            {!addingRace ? <button type="button" onClick={() => setAddingRace(true)} disabled={isSaving} className="flex items-center gap-1.5 text-xs font-bold text-primary disabled:opacity-50"><Plus className="h-3.5 w-3.5" /> Race toevoegen</button> : <div className="space-y-2"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nieuwe seizoensrace</p><div className="grid grid-cols-2 gap-2 md:grid-cols-4"><input value={newRace.name} onChange={(event) => setNewRace({ ...newRace, name: event.target.value })} placeholder="Naam *" className="px-2 py-1.5 rounded-md bg-secondary border border-border text-xs" /><TrackSelect value={newRace.track} onChange={(track) => setNewRace({ ...newRace, track })} className="px-2 py-1.5 text-xs" /><input type="date" value={newRace.date} onChange={(event) => setNewRace({ ...newRace, date: event.target.value })} className="px-2 py-1.5 rounded-md bg-secondary border border-border text-xs" /><input type="time" value={newRace.time} onChange={(event) => setNewRace({ ...newRace, time: event.target.value })} className="px-2 py-1.5 rounded-md bg-secondary border border-border text-xs" /></div><div className="flex gap-2"><button type="button" onClick={() => { onCreateRace(newRace); setAddingRace(false); }} disabled={!newRace.name || !newRace.track || !newRace.date || isSaving} className="px-3 py-1.5 rounded-md bg-gradient-racing text-xs font-bold text-white disabled:opacity-50">{isSaving ? "Aanmaken..." : "Race aanmaken"}</button><button type="button" onClick={() => setAddingRace(false)} disabled={isSaving} className="px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground">Annuleren</button></div></div>}
+            {!addingRace ? <button type="button" onClick={() => setAddingRace(true)} disabled={isSaving} className="flex items-center gap-1.5 text-xs font-bold text-primary disabled:opacity-50"><Plus className="h-3.5 w-3.5" /> Race toevoegen</button> : <div className="space-y-2"><p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nieuwe seizoensrace</p><div className="grid grid-cols-2 gap-2 md:grid-cols-4"><input value={newRace.name} onChange={(event) => setNewRace({ ...newRace, name: event.target.value })} placeholder="Naam *" className="px-2 py-1.5 rounded-md bg-secondary border border-border text-xs" /><TrackSelect value={newRace.track} trackId={newRace.iracing_track_id} onChange={(track, trackId) => setNewRace({ ...newRace, track, iracing_track_id: trackId })} className="px-2 py-1.5 text-xs" /><input type="date" value={newRace.date} onChange={(event) => setNewRace({ ...newRace, date: event.target.value })} className="px-2 py-1.5 rounded-md bg-secondary border border-border text-xs" /><input type="time" value={newRace.time} onChange={(event) => setNewRace({ ...newRace, time: event.target.value })} className="px-2 py-1.5 rounded-md bg-secondary border border-border text-xs" /></div><div className="flex gap-2"><button type="button" onClick={() => { onCreateRace(newRace); setAddingRace(false); }} disabled={!newRace.name || !newRace.iracing_track_id || !newRace.date || isSaving} className="px-3 py-1.5 rounded-md bg-gradient-racing text-xs font-bold text-white disabled:opacity-50">{isSaving ? "Aanmaken..." : "Race aanmaken"}</button><button type="button" onClick={() => setAddingRace(false)} disabled={isSaving} className="px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground">Annuleren</button></div></div>}
           </div>}
 
           {league.races?.length > 0 && (
@@ -663,7 +666,7 @@ const LeagueCard = ({
                         <input type="text" value={rd.name || ""} onChange={(e) => setRd(race.id, "name", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
                       </RaceEditField>
                       <RaceEditField label="Circuit">
-                        <TrackSelect value={rd.track || ""} onChange={(v) => setRd(race.id, "track", v)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                        <TrackSelect value={rd.track || ""} trackId={rd.iracing_track_id} onChange={(name, trackId) => { setRd(race.id, "track", name); setRd(race.id, "iracing_track_id", trackId); }} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
                       </RaceEditField>
                       <RaceEditField label="Datum & tijd">
                         <input type="datetime-local" value={rd.race_date ? (rd.race_date.length > 16 ? utcToAmsLocal(rd.race_date) : rd.race_date) : ""} onChange={(e) => setRd(race.id, "race_date", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
@@ -755,7 +758,7 @@ const SoloRaceCreateForm = ({ newSoloRace, setNewSoloRace, onCreate, isPending, 
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <input type="text" value={newSoloRace.name} onChange={(e) => setNewSoloRace({ ...newSoloRace, name: e.target.value })} placeholder="Race naam *" className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
-        <TrackSelect value={newSoloRace.track} onChange={(v) => setNewSoloRace({ ...newSoloRace, track: v })} />
+        <TrackSelect value={newSoloRace.track} trackId={newSoloRace.iracing_track_id} onChange={(name, trackId) => setNewSoloRace({ ...newSoloRace, track: name, iracing_track_id: trackId })} />
         <input type="date" value={newSoloRace.date} onChange={(e) => setNewSoloRace({ ...newSoloRace, date: e.target.value })} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
         <input type="time" value={newSoloRace.time} onChange={(e) => setNewSoloRace({ ...newSoloRace, time: e.target.value })} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
       </div>
@@ -849,7 +852,7 @@ const SoloRaceCard = ({
   race, isEditing, editingData, setEditingData,
   onEdit, onCancelEdit, onUpdate, onDelete, canWrite, isSaving,
 }: SoloRaceCardProps) => {
-  const setSrd = (field: keyof SeasonEditorRaceUpdate, val: string | number) =>
+  const setSrd = (field: keyof SeasonEditorRaceUpdate, val: string | number | null) =>
     setEditingData((prev) => ({ ...prev, [field]: val }));
 
   return (
@@ -884,7 +887,7 @@ const SoloRaceCard = ({
               <input type="text" value={editingData.name || ""} onChange={(e) => setSrd("name", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
             </RaceEditField>
             <RaceEditField label="Circuit">
-              <TrackSelect value={editingData.track || ""} onChange={(v) => setSrd("track", v)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+              <TrackSelect value={editingData.track || ""} trackId={editingData.iracing_track_id} onChange={(name, trackId) => { setSrd("track", name); setSrd("iracing_track_id", trackId); }} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
             </RaceEditField>
             <RaceEditField label="Datum & tijd">
               <input type="datetime-local" value={editingData.race_date || ""} onChange={(e) => setSrd("race_date", e.target.value)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />

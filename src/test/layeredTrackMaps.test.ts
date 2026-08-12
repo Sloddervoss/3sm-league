@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isLayeredTrackManifest,
+  loadLayeredTrackManifest,
   loadLayeredTrackRuntime,
   normalizeTrackName,
   resetLayeredTrackRuntimeForTests,
@@ -34,6 +35,11 @@ describe("layered track map resolver", () => {
     expect(resolveLayeredTrackMap("Oran Park Raceway – Grand Prix", manifest)).toBe("/tracks/layered/track-202.svg");
   });
 
+  it("gives an authoritative TrackID priority over a stale readable name", () => {
+    expect(resolveLayeredTrackMap("Historische of hernoemde baan", manifest, 523)).toBe("/tracks/layered/track-523.svg");
+    expect(resolveLayeredTrackMap("Oran Park Raceway - Grand Prix", manifest, 999999)).toBeNull();
+  });
+
   it("never fuzzy-matches an incomplete or ambiguous circuit name", () => {
     expect(resolveLayeredTrackMap("Oran Park Raceway", manifest)).toBeNull();
     expect(resolveLayeredTrackMap("Circuit de Spa-Francorchamps", manifest)).toBeNull();
@@ -44,10 +50,18 @@ describe("layered track map resolver", () => {
     expect(isLayeredTrackManifest(manifest)).toBe(true);
     expect(isLayeredTrackManifest({ ...manifest, count: 3 })).toBe(false);
     expect(isLayeredTrackManifest({ ...manifest, tracks: [{ ...manifest.tracks[0], path: "https://example.com/map.svg" }], count: 1 })).toBe(false);
+    expect(isLayeredTrackManifest({ ...manifest, tracks: [manifest.tracks[0], { ...manifest.tracks[1], trackId: manifest.tracks[0].trackId }], count: 2 })).toBe(false);
   });
 });
 
 describe("runtime kill switch", () => {
+  it("keeps the authoritative admin catalog available when rendering is disabled", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(manifest), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await loadLayeredTrackManifest()).toEqual(manifest);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("loads the manifest only when runtime config is enabled", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ enabled: true }), { status: 200 }))

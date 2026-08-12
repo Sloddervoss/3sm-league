@@ -1425,6 +1425,7 @@ export type Database = {
           created_at: string
           id: string
           iracing_session_id: string | null
+          iracing_track_id: number | null
           caution_laps: number | null
           cautions: number | null
           league_id: string | null
@@ -1454,6 +1455,7 @@ export type Database = {
           created_at?: string
           id?: string
           iracing_session_id?: string | null
+          iracing_track_id?: number | null
           caution_laps?: number | null
           cautions?: number | null
           league_id?: string | null
@@ -1483,6 +1485,7 @@ export type Database = {
           created_at?: string
           id?: string
           iracing_session_id?: string | null
+          iracing_track_id?: number | null
           caution_laps?: number | null
           cautions?: number | null
           league_id?: string | null

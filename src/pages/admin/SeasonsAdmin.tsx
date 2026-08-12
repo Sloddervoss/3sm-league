@@ -12,6 +12,7 @@ type AdminLeagueRace = {
   id: string;
   name: string;
   track: string;
+  iracing_track_id: number | null;
   race_date: string | null;
   round: number | null;
   status: string | null;
@@ -45,6 +46,7 @@ type AdminRace = {
   id: string;
   name: string;
   track: string;
+  iracing_track_id: number | null;
   race_date: string | null;
   league_id: string | null;
   status: string | null;
@@ -89,6 +91,7 @@ type RaceEditData = {
   id?: string;
   name?: string | null;
   track?: string | null;
+  iracing_track_id?: number | null;
   race_date?: string | null;
   race_type?: string | null;
   race_duration?: string | null;
@@ -105,14 +108,14 @@ type RaceEditData = {
 };
 
 type RaceSlot = {
-  name: string; track: string; date: string; time: string;
+  name: string; track: string; iracing_track_id: number | null; date: string; time: string;
   race_type: string; race_duration: string; practice_duration: string;
   qualifying_duration: string; start_type: string; weather: string; setup: string;
   lobby_name: string; lobby_password: string; lobby_reveal_minutes: number;
 };
 
 const SOLO_RACE_DEFAULTS: RaceSlot = {
-  name: "", track: "", date: "", time: "20:00", race_type: "Feature",
+  name: "", track: "", iracing_track_id: null, date: "", time: "20:00", race_type: "Feature",
   race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min",
   start_type: "Standing", weather: "Fixed", setup: "Fixed",
   lobby_name: "", lobby_password: "", lobby_reveal_minutes: 15,
@@ -149,7 +152,7 @@ const SeasonsAdmin = () => {
     queryFn: async (): Promise<AdminRace[]> => {
       const { data, error } = await supabase
         .from("races")
-        .select("id, name, track, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, lobby_name, lobby_password, lobby_reveal_minutes, leagues(name, season)")
+        .select("id, name, track, iracing_track_id, race_date, league_id, status, practice_duration, qualifying_duration, race_duration, start_type, weather, setup, lobby_name, lobby_password, lobby_reveal_minutes, leagues(name, season)")
         .order("race_date", { ascending: true });
       if (error) throw error;
       return (data || []) as AdminRace[];
@@ -191,7 +194,7 @@ const SeasonsAdmin = () => {
 
   const generateRaceSlots = () => {
     setRaces(Array.from({ length: newLeague.raceCount }, (_, i) => ({
-      name: `Race ${i + 1}`, track: "", date: "", time: "20:00", race_type: "Feature",
+      name: `Race ${i + 1}`, track: "", iracing_track_id: null, date: "", time: "20:00", race_type: "Feature",
       race_duration: "60 min", practice_duration: "15 min", qualifying_duration: "10 min",
       start_type: "Standing", weather: "Fixed", setup: "Fixed",
       lobby_name: "", lobby_password: "", lobby_reveal_minutes: 15,
@@ -208,7 +211,7 @@ const SeasonsAdmin = () => {
       if (races.length > 0) {
         const { error: re } = await supabase.from("races").insert(
           races.map((r, i) => ({
-            league_id: league.id, round: i + 1, name: r.name, track: r.track,
+            league_id: league.id, round: i + 1, name: r.name, track: r.track, iracing_track_id: r.iracing_track_id,
             race_date: amsToUTC(`${r.date}T${r.time}`), status: "upcoming" as const,
             race_type: r.race_type || null, race_duration: r.race_duration || null,
             practice_duration: r.practice_duration || null, qualifying_duration: r.qualifying_duration || null,
@@ -263,7 +266,7 @@ const SeasonsAdmin = () => {
   const createSoloRace = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("races").insert({
-        league_id: null, name: newSoloRace.name, track: newSoloRace.track,
+        league_id: null, name: newSoloRace.name, track: newSoloRace.track, iracing_track_id: newSoloRace.iracing_track_id,
         race_date: amsToUTC(`${newSoloRace.date}T${newSoloRace.time}`),
         status: "upcoming",
         race_type: newSoloRace.race_type || null, race_duration: newSoloRace.race_duration || null,
@@ -300,7 +303,7 @@ const SeasonsAdmin = () => {
         ? (data.race_date.length > 16 ? utcToAmsLocal(data.race_date) : data.race_date)
         : null;
       const { error } = await supabase.from("races").update({
-        name: data.name, track: data.track,
+        name: data.name, track: data.track, iracing_track_id: data.iracing_track_id,
         race_date: normalizedDate ? amsToUTC(normalizedDate) : null,
         race_type: data.race_type || null, race_duration: data.race_duration || null,
         practice_duration: data.practice_duration || null, qualifying_duration: data.qualifying_duration || null,
@@ -359,12 +362,12 @@ const SeasonsAdmin = () => {
           {races.length > 0 && (
             <div className="space-y-3 mb-4">
               {races.map((race, i) => {
-                const upd = (key: keyof RaceSlot, val: string) => { const u = [...races]; u[i] = { ...u[i], [key]: val }; setRaces(u); };
+                const upd = <K extends keyof RaceSlot>(key: K, val: RaceSlot[K]) => { const u = [...races]; u[i] = { ...u[i], [key]: val }; setRaces(u); };
                 return (
                   <div key={i} className="p-3 bg-secondary/50 rounded-md border border-border/50 space-y-2">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       <input type="text" value={race.name} onChange={(e) => upd("name", e.target.value)} placeholder={`Race ${i + 1}`} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
-                      <TrackSelect value={race.track} onChange={v => upd("track", v)} />
+                      <TrackSelect value={race.track} trackId={race.iracing_track_id} onChange={(name, trackId) => { upd("track", name); upd("iracing_track_id", trackId); }} />
                       <input type="date" value={race.date} onChange={(e) => upd("date", e.target.value)} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                       <input type="time" value={race.time} onChange={(e) => upd("time", e.target.value)} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                     </div>
@@ -412,7 +415,7 @@ const SeasonsAdmin = () => {
             </div>
           )}
           <div className="flex gap-3">
-            <button onClick={() => createLeague.mutate()} disabled={!newLeague.name || createLeague.isPending} className="px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">{createLeague.isPending ? "Aanmaken..." : "Aanmaken"}</button>
+            <button onClick={() => createLeague.mutate()} disabled={!newLeague.name || races.some((race) => !race.iracing_track_id) || createLeague.isPending} className="px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">{createLeague.isPending ? "Aanmaken..." : "Aanmaken"}</button>
             <button onClick={() => setShowLeagueForm(false)} className="px-6 py-2.5 rounded-md border border-border text-muted-foreground font-heading font-bold text-sm hover:text-foreground transition-colors">Annuleren</button>
           </div>
         </motion.div>
@@ -488,7 +491,7 @@ const SeasonsAdmin = () => {
                               </div>
                               <div>
                                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Circuit</label>
-                                <TrackSelect value={rd.track || ""} onChange={v => setRd("track", v)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                                <TrackSelect value={rd.track || ""} trackId={rd.iracing_track_id} onChange={(name, trackId) => { setRd("track", name); setRd("iracing_track_id", trackId); }} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
                               </div>
                               <div>
                                 <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Datum & tijd</label>
@@ -690,7 +693,7 @@ const SeasonsAdmin = () => {
             <div className="space-y-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <input type="text" value={newSoloRace.name} onChange={(e) => setNewSoloRace({ ...newSoloRace, name: e.target.value })} placeholder="Race naam *" className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
-                <TrackSelect value={newSoloRace.track} onChange={v => setNewSoloRace({ ...newSoloRace, track: v })} />
+                <TrackSelect value={newSoloRace.track} trackId={newSoloRace.iracing_track_id} onChange={(name, trackId) => setNewSoloRace({ ...newSoloRace, track: name, iracing_track_id: trackId })} />
                 <input type="date" value={newSoloRace.date} onChange={(e) => setNewSoloRace({ ...newSoloRace, date: e.target.value })} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 <input type="time" value={newSoloRace.time} onChange={(e) => setNewSoloRace({ ...newSoloRace, time: e.target.value })} className="px-3 py-2 rounded-md bg-secondary border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
@@ -776,7 +779,7 @@ const SeasonsAdmin = () => {
               </div>
             </div>
             <div className="flex gap-3 mt-4">
-              <button onClick={() => createSoloRace.mutate()} disabled={!newSoloRace.name || !newSoloRace.track || !newSoloRace.date || createSoloRace.isPending} className="px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">{createSoloRace.isPending ? "Aanmaken..." : "Aanmaken"}</button>
+              <button onClick={() => createSoloRace.mutate()} disabled={!newSoloRace.name || !newSoloRace.iracing_track_id || !newSoloRace.date || createSoloRace.isPending} className="px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm disabled:opacity-50 hover:opacity-90 transition-opacity">{createSoloRace.isPending ? "Aanmaken..." : "Aanmaken"}</button>
               <button onClick={() => setShowSoloRaceForm(false)} className="px-6 py-2.5 rounded-md border border-border text-muted-foreground font-heading font-bold text-sm hover:text-foreground transition-colors">Annuleren</button>
             </div>
           </motion.div>
@@ -848,7 +851,7 @@ const SeasonsAdmin = () => {
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Circuit</label>
-                        <TrackSelect value={srd.track || ""} onChange={v => setSrd("track", v)} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                        <TrackSelect value={srd.track || ""} trackId={srd.iracing_track_id} onChange={(name, trackId) => { setSrd("track", name); setSrd("iracing_track_id", trackId); }} className="w-full px-2 py-1.5 rounded-md bg-secondary border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary/50" />
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Datum & tijd</label>
