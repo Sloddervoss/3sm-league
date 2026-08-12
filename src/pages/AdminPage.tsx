@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trophy, Calendar, Settings, Users, Car, Shield, BarChart2, Upload, Clock, MapPin, Flag, CloudSun, Gauge, Timer } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
+import { TrackMap } from "@/components/track-map/TrackMap";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
@@ -237,9 +238,7 @@ const AdminPage = () => {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-3 shrink-0">
-                            {trackInfo?.imageUrl && (
-                              <img src={trackInfo.imageUrl} alt="" aria-hidden className="w-24 h-16 object-contain invert opacity-25" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                            )}
+                            <TrackMap track={nr.track} className="w-24 h-16 object-contain" style={{ opacity: 0.8 }} fallbackStyle={{ opacity: 0.25, filter: "invert(1)" }} />
                             {countdown && (
                               <div className="text-right">
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Aftellen</p>
