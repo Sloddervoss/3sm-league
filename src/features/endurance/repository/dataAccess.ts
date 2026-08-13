@@ -40,7 +40,10 @@ export type EnduranceOnlyTableName =
   | "endurance_notifications"
   | "endurance_audit_log"
   | "endurance_practice_sessions"
-  | "endurance_practice_laps";
+  | "endurance_practice_laps"
+  | "endurance_iracing_events"
+  | "endurance_iracing_event_slots"
+  | "endurance_iracing_sync_runs";
 
 export const assertEnduranceTable = (table: string): EnduranceOnlyTableName => {
   if (!table.startsWith("endurance_")) {

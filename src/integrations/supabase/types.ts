@@ -394,6 +394,91 @@ export type Database = {
         Relationships: []
       }
 
+      endurance_iracing_events: {
+        Row: {
+          id: string
+          source_key: string
+          iracing_series_id: number | null
+          iracing_season_id: number | null
+          name: string
+          year: number
+          circuit: string | null
+          configuration: string | null
+          track_id: number | null
+          event_start_date: string | null
+          event_end_date: string | null
+          duration_minutes: number | null
+          class_ids: string[]
+          local_class_ids: string[]
+          cars: Json
+          team_event: boolean
+          official_url: string | null
+          poster_url: string | null
+          source_payload: Json
+          source_hash: string
+          availability_status: string
+          active: boolean
+          first_seen_at: string
+          last_seen_at: string
+          source_updated_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Database["public"]["Tables"]["endurance_iracing_events"]["Row"]
+        Update: Partial<Database["public"]["Tables"]["endurance_iracing_events"]["Row"]>
+        Relationships: []
+      }
+
+      endurance_iracing_event_slots: {
+        Row: {
+          id: string
+          catalog_event_id: string
+          source_slot_key: string
+          session_start_at: string
+          practice_start_at: string | null
+          practice_duration_minutes: number | null
+          qualifying_start_at: string | null
+          qualifying_duration_minutes: number | null
+          transition_duration_minutes: number | null
+          estimated_race_start_at: string | null
+          race_duration_minutes: number | null
+          race_lap_limit: number | null
+          session_duration_minutes: number | null
+          session_timing_status: string
+          registration_open_at: string | null
+          label: string | null
+          source: string
+          active: boolean
+          missing_successful_syncs: number
+          first_seen_at: string
+          last_seen_at: string
+          updated_at: string
+        }
+        Insert: Database["public"]["Tables"]["endurance_iracing_event_slots"]["Row"]
+        Update: Partial<Database["public"]["Tables"]["endurance_iracing_event_slots"]["Row"]>
+        Relationships: []
+      }
+
+      endurance_iracing_sync_runs: {
+        Row: {
+          id: string
+          started_at: string
+          finished_at: string | null
+          status: string
+          events_seen: number
+          events_inserted: number
+          events_updated: number
+          slots_seen: number
+          slots_inserted: number
+          slots_updated: number
+          error_summary: string | null
+          source_modified_at: string | null
+        }
+        Insert: Database["public"]["Tables"]["endurance_iracing_sync_runs"]["Row"]
+        Update: Partial<Database["public"]["Tables"]["endurance_iracing_sync_runs"]["Row"]>
+        Relationships: []
+      }
+
       endurance_notifications: {
         Row: {
           id: string
@@ -1954,6 +2039,18 @@ export type Database = {
       }
     }
     Functions: {
+      endurance_activate_iracing_slot: {
+        Args: {
+          p_catalog_event_id: string
+          p_catalog_slot_id: string
+          p_registration_deadline?: string | null
+          p_visibility?: Database["public"]["Enums"]["endurance_event_visibility"]
+          p_max_drivers_per_car?: number
+          p_invited_user_ids?: string[]
+          p_manager_ids?: string[]
+        }
+        Returns: string
+      }
       admin_get_community_support_payment_config: {
         Args: never
         Returns: {
@@ -2042,6 +2139,14 @@ export type Database = {
           fee_total_eur: number
         }[]
       }
+      endurance_replace_draft_stints: {
+        Args: { p_event_id: string; p_team_id: string; p_stints: Json }
+        Returns: Database["public"]["Tables"]["endurance_stints"]["Row"][]
+      }
+      endurance_apply_stint_updates: {
+        Args: { p_event_id: string; p_team_id: string; p_stints: Json }
+        Returns: Database["public"]["Tables"]["endurance_stints"]["Row"][]
+      }
       can_manage_simhub: { Args: never; Returns: boolean }
       is_active_simhub_device: { Args: { p_device_id: string }; Returns: boolean }
       simhub_create_device_pairing_code: {
@@ -2057,6 +2162,24 @@ export type Database = {
         Returns: { device_id: string; owner_user_id: string; race_id: string | null; result: string; team_id: string | null }[]
       }
       simhub_revoke_device: { Args: { p_device_id: string; p_revoked_by: string }; Returns: boolean }
+      simhub_list_effective_endurance_devices: {
+        Args: { p_event_id: string; p_team_id: string }
+        Returns: {
+          connector_id: string
+          device_name: string
+          endurance_event_id: string
+          endurance_team_id: string
+          expires_at: string | null
+          id: string
+          last_seen_at: string | null
+          paired_at: string
+          revoked_at: string | null
+        }[]
+      }
+      simhub_read_effective_endurance_latest: {
+        Args: { p_device_id: string; p_event_id: string; p_team_id: string }
+        Returns: Database["public"]["Tables"]["simhub_telemetry_latest"]["Row"][]
+      }
       simhub_ingest_snapshot: {
         Args: { p_captured_at: string; p_connector_id: string; p_game: string; p_sequence: number; p_session_id: string; p_simhub_version: string; p_telemetry: Json; p_token_hash: string }
         Returns: { received_at: string | null; result: string }[]

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0B0F17"/>
+      <stop offset="0.6" stop-color="#131B29"/>
+      <stop offset="1" stop-color="#07090E"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFE9CB" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#FF6B1A" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="headGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFE3C6" stop-opacity="0.95"/>
+      <stop offset="0.25" stop-color="#FF6B1A" stop-opacity="0.75"/>
+      <stop offset="0.7" stop-color="#FF6B1A" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#FF6B1A" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="blur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="12"/></filter>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5"/></filter>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect width="1600" height="900" fill="#FF6B1A" opacity="0.05"/>
+
+  <!-- depth curves -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M -200 760 C 560 470, 1100 420, 1800 180" stroke="#263247" stroke-width="60" opacity="0.6"/>
+    <path d="M -200 760 C 560 470, 1100 420, 1800 180" stroke="#1B2433" stroke-width="20" opacity="0.9"/>
+    <path d="M 160 60 C 520 90, 1080 150, 1720 300" stroke="#263247" stroke-width="26" opacity="0.3"/>
+  </g>
+
+  <!-- 3 diagonal stripes -->
+  <g filter="url(#blur)" opacity="0.5"><polygon points="0.0 120.0 46.0 86.0 1346.0 1386.0 1300.0 1420.0" fill="#FF6B1A" opacity="1"/><polygon points="0.0 74.0 46.0 40.0 1346.0 1340.0 1300.0 1374.0" fill="#FF6B1A" opacity="0.68"/><polygon points="0.0 28.0 46.0 -6.0 1346.0 1294.0 1300.0 1328.0" fill="#FF6B1A" opacity="0.42"/></g>
+  <g><polygon points="0.0 115.0 46.0 81.0 1346.0 1381.0 1300.0 1415.0" fill="#FF6B1A" opacity="1"/><polygon points="0.0 69.0 46.0 35.0 1346.0 1335.0 1300.0 1369.0" fill="#FF6B1A" opacity="0.68"/><polygon points="0.0 23.0 46.0 -11.0 1346.0 1289.0 1300.0 1323.0" fill="#FF6B1A" opacity="0.42"/></g>
+
+  <!-- car -->
+  <g transform="translate(180 520) rotate(-6) scale(0.62)">
+    <polygon points="300,120 1240,-220 1300,-150 300,210" fill="url(#beam)"/>
+    <polygon points="300,120 1400,-420 1460,-350 300,220" fill="url(#beam)" opacity="0.7"/>
+    <ellipse cx="190" cy="150" rx="34" ry="52" fill="#070A10"/>
+    <ellipse cx="470" cy="148" rx="35" ry="54" fill="#070A10"/>
+    <path d="M 60 150 L 60 118 C 82 94, 152 64, 236 57 C 266 54, 276 40, 326 40 C 356 40, 472 76, 502 90 C 542 110, 546 150, 520 150 Z"
+          fill="#0E141F" stroke="#263247" stroke-width="3"/>
+    <path d="M 78 138 C 120 110, 210 84, 300 78 C 360 74, 430 92, 500 108"
+          fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="6" stroke-linecap="round"/>
+    <g>
+      <path d="M 84 52 L 84 30 L 168 16 C 190 30 196 46 194 60 L 122 66 Z" fill="#FF6B1A"/>
+      <rect x="82" y="26" width="10" height="44" rx="2" fill="#E63B2E"/>
+    </g>
+    <path d="M 120 150 L 520 150 L 470 138 L 85 138 Z" fill="none" stroke="#FF6B1A" stroke-opacity="0.4" stroke-width="3"/>
+    <ellipse cx="200" cy="150" rx="46" ry="70" fill="#05070C"/>
+    <ellipse cx="200" cy="150" rx="30" ry="46" fill="#0C1119"/>
+    <ellipse cx="200" cy="150" rx="10" ry="15" fill="#FF6B1A"/>
+    <ellipse cx="500" cy="150" rx="46" ry="70" fill="#05070C"/>
+    <ellipse cx="500" cy="150" rx="30" ry="46" fill="#0C1119"/>
+    <ellipse cx="500" cy="150" rx="10" ry="15" fill="#FF6B1A"/>
+    <ellipse cx="533" cy="112" rx="12" ry="22" fill="#FFE9CB"/>
+    <ellipse cx="536" cy="118" rx="60" ry="70" fill="url(#headGlow)"/>
+  </g>
+
+  <!-- type -->
+  <g font-family="DejaVu Sans, Arial, sans-serif">
+    <text x="720" y="150" font-size="26" font-weight="bold" fill="#8A93A6" letter-spacing="6">3 STRIPE · ENDURANCE</text>
+    <text x="722" y="330" font-size="150" font-weight="900" fill="#F4F6FA" letter-spacing="-4">3SM</text>
+    <rect x="678" y="356" width="210" height="12" rx="6" fill="#FF6B1A"/>
+    <text x="722" y="430" font-size="64" font-weight="900" fill="#F4F6FA" letter-spacing="2">ENDURANCE</text>
+    <text x="726" y="468" font-size="24" font-weight="bold" fill="#8A93A6" letter-spacing="8">ONE RACE · MANY KILOMETERS</text>
+    <rect x="120" y="770" width="1360" height="2" fill="#FF6B1A" opacity="0.5"/>
+    <text x="120" y="820" font-size="20" font-weight="bold" fill="#8A93A6" letter-spacing="4">3STRIPEMOTORSPORT.CC</text>
+    <text x="1360" y="820" font-size="20" font-weight="bold" fill="#8A93A6" letter-spacing="4">#3SM</text>
+  </g>
+</svg>

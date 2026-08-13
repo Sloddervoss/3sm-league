@@ -22,10 +22,16 @@ describe("endurance repository data-access contract (Fase 3)", () => {
     }
   });
 
-  it("bevat geen RAW SQL, .rpc(, fetch() of non-endurance client access", () => {
+  it("bevat geen RAW SQL, ongeautoriseerde RPC, fetch() of non-endurance client access", () => {
     const combined = repositoryFiles.map((file) => readFileSync(file, "utf8")).join("\n");
-    // Word-boundary guards om niet te matchen op `expected_*` kolommen.
-    expect(combined).not.toMatch(/\.rpc\(/);
+    // Atomische Endurance-RPC's blijven binnen dezelfde repositorygrens expliciet toegestaan.
+    const rpcCalls = [...combined.matchAll(/\.rpc\(\s*"([^"]+)"/g)].map((match) => match[1]);
+    expect(rpcCalls).toContain("endurance_activate_iracing_slot");
+    expect(rpcCalls.every((rpc) => [
+      "endurance_replace_draft_stints",
+      "endurance_apply_stint_updates",
+      "endurance_activate_iracing_slot",
+    ].includes(rpc))).toBe(true);
     expect(combined).not.toMatch(/\bfetch\s*\(/);
     expect(combined).not.toMatch(/\bXMLHttpRequest\b/);
     expect(combined).not.toMatch(/POSTGREST/);

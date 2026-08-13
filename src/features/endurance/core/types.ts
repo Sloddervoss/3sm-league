@@ -38,7 +38,7 @@ export interface EnduranceEvent {
   maxDriversPerCar: number;
   visibility: EventVisibility;
   status: EventStatus;
-  source: "manual" | "calendar_import" | "copied";
+  source: "manual" | "calendar_import" | "copied" | "iracing_catalog";
   invitedUserIds: string[];
   managerIds: string[];
   createdAt: string;

@@ -23,7 +23,7 @@ export const RegistrationForm = ({ event, onRegistered }: { event: EnduranceEven
   const [classPreference, setClassPreference] = useState<EnduranceClassId>(initialClass);
   const cars = useMemo(() => enduranceCarsForClass(classPreference), [classPreference]);
   const [preferredCarId, setPreferredCarId] = useState(existing?.preferred_car_id ?? cars[0]?.id ?? "");
-  const [slotId, setSlotId] = useState<string>(existing?.slot_id ?? (event.slots as { id: string }[])[0]?.id ?? "");
+  const selectedSlot = (event.slots as { id: string; label: string }[])[0] ?? null;
   const [maxStints, setMaxStints] = useState(existing?.max_stints ?? 3);
   const [maxStintMinutes, setMaxStintMinutes] = useState<number | null>(existing?.max_stint_minutes ?? null);
   const [maxTotalMinutes, setMaxTotalMinutes] = useState<number | null>(existing?.max_total_minutes ?? null);
@@ -41,7 +41,7 @@ export const RegistrationForm = ({ event, onRegistered }: { event: EnduranceEven
     setStatus(existing?.status ?? "provisional");
     setClassPreference((existing?.class_preference ?? event.classIds[0] ?? "GT3") as EnduranceClassId);
     setPreferredCarId(existing?.preferred_car_id ?? "");
-    setSlotId(existing?.slot_id ?? (event.slots as { id: string }[])[0]?.id ?? "");
+
     setMaxStints(existing?.max_stints ?? 3);
     setMaxStintMinutes(existing?.max_stint_minutes ?? null);
     setMaxTotalMinutes(existing?.max_total_minutes ?? null);
@@ -67,7 +67,9 @@ export const RegistrationForm = ({ event, onRegistered }: { event: EnduranceEven
         status: status as "interest" | "provisional" | "confirmed" | "reserve" | "rejected" | "withdrawn",
         class_preference: classPreference,
         preferred_car_id: preferredCarId || null,
-        slot_id: slotId || null,
+        // Bij officiële events bevat de lokale race exact één geactiveerd slot.
+        // De database valideert/forceert dit opnieuw; de browser biedt geen andere keuze.
+        slot_id: selectedSlot?.id ?? null,
         max_stints: maxStints,
         max_stint_minutes: maxStintMinutes,
         max_total_minutes: maxTotalMinutes,
@@ -93,7 +95,7 @@ export const RegistrationForm = ({ event, onRegistered }: { event: EnduranceEven
           <Field label="Aanmeldstatus"><select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value)}><option value="interest">Interesse</option><option value="provisional">Voorlopig aangemeld</option><option value="reserve">Alleen reserve</option></select></Field>
           <Field label="Klasvoorkeur (stem)"><select className={inputClass} value={classPreference} onChange={(e) => { const nextClass = e.target.value as EnduranceClassId; setClassPreference(nextClass); setPreferredCarId(enduranceCarsForClass(nextClass)[0]?.id ?? ""); }}>{event.classIds.map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Autovoorkeur (stem)"><select className={inputClass} value={preferredCarId} onChange={(e) => setPreferredCarId(e.target.value)}>{cars.map((car) => <option key={car.id} value={car.id}>{car.name}</option>)}</select></Field>
-          <Field label="Startslotvoorkeur"><select className={inputClass} value={slotId} onChange={(e) => setSlotId(e.target.value)}>{(event.slots as { id: string; label: string }[]).map((slot) => <option key={slot.id} value={slot.id}>{slot.label}</option>)}</select></Field>
+          <Field label="3SM-timeslot" hint="Dit slot is door de Endurance Manager gekozen en staat vast voor alle inschrijvingen."><div className={`${inputClass} flex items-center text-gray-300`}>{selectedSlot?.label ?? "Handmatige race zonder apart timeslot"}</div></Field>
           <Field label="Maximaal aantal stints"><input className={inputClass} type="number" min={1} max={12} value={maxStints} onChange={(e) => setMaxStints(Number(e.target.value))} /></Field>
           <Field label="Max. stintduur (min)"><input className={inputClass} type="number" min={0} max={480} placeholder="optioneel" value={maxStintMinutes ?? ""} onChange={(e) => setMaxStintMinutes(e.target.value === "" ? null : Number(e.target.value))} /></Field>
           <Field label="Max. totale rijtijd (min)"><input className={inputClass} type="number" min={0} max={1440} placeholder="optioneel" value={maxTotalMinutes ?? ""} onChange={(e) => setMaxTotalMinutes(e.target.value === "" ? null : Number(e.target.value))} /></Field>

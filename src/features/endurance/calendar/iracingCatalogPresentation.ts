@@ -1,0 +1,89 @@
+export type CatalogTimingStatus = "full" | "partial" | "race_only";
+
+export type IRacingCatalogSlot = {
+  id: string;
+  catalog_event_id: string;
+  source_slot_key: string;
+  session_start_at: string;
+  practice_start_at: string | null;
+  practice_duration_minutes: number | null;
+  qualifying_start_at: string | null;
+  qualifying_duration_minutes: number | null;
+  transition_duration_minutes: number | null;
+  estimated_race_start_at: string | null;
+  race_duration_minutes: number | null;
+  race_lap_limit: number | null;
+  session_duration_minutes: number | null;
+  session_timing_status: CatalogTimingStatus;
+  label: string | null;
+  active: boolean;
+};
+
+export type IRacingCatalogEvent = {
+  id: string;
+  source_key: string;
+  name: string;
+  year: number;
+  circuit: string | null;
+  configuration: string | null;
+  event_start_date: string | null;
+  event_end_date: string | null;
+  duration_minutes: number | null;
+  class_ids: string[];
+  local_class_ids: string[];
+  team_event: boolean;
+  official_url: string | null;
+  poster_url: string | null;
+  availability_status: "exact_slots" | "date_only" | "tbd";
+  source_updated_at: string | null;
+  last_seen_at: string;
+  active: boolean;
+  slots: IRacingCatalogSlot[];
+  selectedEventId: string | null;
+  selectedSlotId: string | null;
+};
+
+const amsterdamFormatter = new Intl.DateTimeFormat("nl-NL", {
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/Amsterdam",
+  timeZoneName: "short",
+});
+
+const utcFormatter = new Intl.DateTimeFormat("nl-NL", {
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "UTC",
+  timeZoneName: "short",
+});
+
+export const formatCatalogInstant = (iso: string, zone: "utc" | "amsterdam") =>
+  (zone === "utc" ? utcFormatter : amsterdamFormatter).format(new Date(iso));
+
+export const phaseRange = (startAt: string | null, minutes: number | null) => {
+  if (!startAt || minutes === null) return null;
+  const endAt = new Date(new Date(startAt).getTime() + minutes * 60_000).toISOString();
+  const short = new Intl.DateTimeFormat("nl-NL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Amsterdam",
+  });
+  return `${short.format(new Date(startAt))}–${short.format(new Date(endAt))}`;
+};
+
+export const catalogDateWindow = (event: Pick<IRacingCatalogEvent, "event_start_date" | "event_end_date">) => {
+  if (!event.event_start_date) return "Datum nog niet gepubliceerd";
+  const formatter = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  const start = formatter.format(new Date(`${event.event_start_date}T12:00:00Z`));
+  if (!event.event_end_date || event.event_end_date === event.event_start_date) return start;
+  return `${start} – ${formatter.format(new Date(`${event.event_end_date}T12:00:00Z`))}`;
+};
+
+export const selectedCatalogSlot = (event: IRacingCatalogEvent) =>
+  event.slots.find((slot) => slot.id === event.selectedSlotId) ?? null;

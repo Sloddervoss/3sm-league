@@ -22,11 +22,11 @@ export const UpcomingRaces = ({ onSelect }: { onSelect: (event: EnduranceEvent) 
   const { data: dbEvents = [], isLoading, isError } = useEnduranceEvents();
   const { data: registrations = [] } = useAllEnduranceRegistrations();
   const events: EnduranceEvent[] = isError ? [] : enduranceEventRowsToAppModels(dbEvents)
-    .filter((event) => event.status !== "completed")
+    .filter((event) => event.status !== "completed" && event.source !== "iracing_catalog")
     .sort((a, b) => a.startAt.localeCompare(b.startAt));
   return (
     <div>
-      <SectionHeading eyebrow="Endurance kalender" title="Aankomende races" description="Kies een evenement, meld je aan en werk daarna samen in de afgeschermde raceomgeving." />
+      <SectionHeading eyebrow="3SM-races" title="Handmatige en geactiveerde races" description="Hier staan handmatige 3SM-races en officiële evenementen nadat een manager een timeslot heeft gekozen." />
       <div className="grid gap-5 xl:grid-cols-2">
         {events.map((event) => {
           const myReg = registrations.find((r) => r.event_id === event.id && r.user_id === actorId);
