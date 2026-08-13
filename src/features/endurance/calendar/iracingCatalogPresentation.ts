@@ -86,6 +86,18 @@ const utcFormatter = new Intl.DateTimeFormat("nl-NL", {
 export const formatCatalogInstant = (iso: string, zone: "utc" | "amsterdam") =>
   (zone === "utc" ? utcFormatter : amsterdamFormatter).format(new Date(iso));
 
+/** Lokale kalenderdag voor event-zichtbaarheid; niet afleiden uit UTC. */
+export const catalogTodayAmsterdam = (now = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Europe/Amsterdam",
+  }).formatToParts(now);
+  const value = (type: "year" | "month" | "day") => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+};
+
 export const phaseRange = (startAt: string | null, minutes: number | null) => {
   if (!startAt || minutes === null) return null;
   const endAt = new Date(new Date(startAt).getTime() + minutes * 60_000).toISOString();

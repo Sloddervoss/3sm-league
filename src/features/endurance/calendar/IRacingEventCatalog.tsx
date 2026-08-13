@@ -8,6 +8,7 @@ import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, StatusPill } 
 import { InviteePicker } from "./InviteePicker";
 import {
   catalogDateWindow,
+  catalogTodayAmsterdam,
   formatCatalogInstant,
   phaseRange,
   selectedCatalogSlot,
@@ -140,7 +141,7 @@ const CompactEventCard = ({ event, onOpen }: { event: IRacingCatalogEvent; onOpe
     <div className="space-y-3 p-5">
       <div className="flex flex-wrap gap-2">
         <StatusPill>Officiële bron</StatusPill>
-        <StatusPill tone={selected ? "orange" : "neutral"}>{selected ? "Geselecteerd" : `${event.slots.length} timeslot${event.slots.length === 1 ? "" : "s"}`}</StatusPill>
+        <StatusPill tone={selected ? "orange" : "neutral"}>{selected ? "Geselecteerd" : event.slots.length ? `${event.slots.length} timeslot${event.slots.length === 1 ? "" : "s"}` : "Tijden volgen"}</StatusPill>
       </div>
       <h3 className="font-heading text-xl font-black leading-tight text-white">{event.name}</h3>
       <div className="space-y-1.5 text-xs text-gray-400">
@@ -254,7 +255,10 @@ export const IRacingEventCatalog = () => {
   const canManage = Boolean(isSuperAdmin || isEnduranceManager);
   const { data: events = [], isLoading, isError, error } = useIRacingEnduranceCatalog();
   const [openEventId, setOpenEventId] = useState<string | null>(null);
-  const visible = useMemo(() => events.filter((event) => event.active), [events]);
+  const visible = useMemo(() => {
+    const today = catalogTodayAmsterdam();
+    return events.filter((event) => event.active && (!event.event_end_date || event.event_end_date >= today || Boolean(event.selectedEventId)));
+  }, [events]);
 
   if (isLoading) return <Panel><p role="status" className="text-sm text-gray-400">Officiële iRacing Endurance-kalender laden…</p></Panel>;
   if (isError) return <Panel><p role="alert" className="text-sm text-red-300">Officiële kalender kon niet worden geladen: {(error as Error).message}</p></Panel>;

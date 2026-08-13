@@ -1,8 +1,8 @@
 [Unit]
-Description=Wekelijkse officiële iRacing Endurance-catalogussync
+Description=Dagelijkse officiële iRacing Endurance-catalogussync
 
 [Timer]
-OnCalendar=Mon *-*-* 04:15:00 Europe/Amsterdam
+OnCalendar=*-*-* 04:15:00 Europe/Amsterdam
 Persistent=true
 RandomizedDelaySec=5m
 Unit=3sm-iracing-endurance-sync.service

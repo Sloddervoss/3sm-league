@@ -102,8 +102,9 @@ const htmlText = (value: string) => value
   .replace(/\s+/g, " ").trim();
 
 const monthNumber: Record<string, number> = {
-  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
-  july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4, may: 5, june: 6, jun: 6,
+  july: 7, jul: 7, august: 8, aug: 8, september: 9, sep: 9, sept: 9, october: 10, oct: 10,
+  november: 11, nov: 11, december: 12, dec: 12,
 };
 const isoDate = (year: number, month: number, day: number) =>
   `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -135,6 +136,81 @@ const eventCarsFromSection = (section: string): OfficialEventCar[] => {
   });
 };
 
+const officialClassesFromArea = (carsArea: string): string[] => htmlText(
+  carsArea.match(/<summary>([\s\S]*?)<\/summary>/i)?.[1] ?? "",
+).split(/\s*(?:\/\/|\/|\\+|,)\s*/)
+  .map((value) => value.trim())
+  .filter((value) => value.length > 0 && !/^(?:cars?\s*:\s*)?(?:tba|tbd|to be (?:announced|determined))$/i.test(value));
+
+const sourceSlug = (value: string) => value.normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .replace(/&/g, " and ")
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "");
+
+const eventSectionAround = (calendarHtml: string, headingOffset: number): string | null => {
+  const sectionStart = calendarHtml.lastIndexOf("<section", headingOffset);
+  const sectionEnd = calendarHtml.indexOf("</section>", headingOffset);
+  if (sectionStart < 0 || sectionEnd < 0) return null;
+  return calendarHtml.slice(sectionStart, sectionEnd + 10);
+};
+
+/** Ontdek alle officiële toekomstige events; slots blijven expliciet gemapt. */
+export function discoverUpcomingSpecialEvents(calendarHtml: string): SpecialEventSeed[] {
+  const upcomingHeading = calendarHtml.search(/<h[1-3]\b[^>]*>\s*Upcoming Events\s*<\/h[1-3]>/i);
+  const completedHeading = calendarHtml.search(/<h[1-3]\b[^>]*>\s*Completed Events\s*<\/h[1-3]>/i);
+  if (upcomingHeading < 0 || completedHeading <= upcomingHeading) {
+    throw new Error("Officiële Upcoming/Completed-eventgrenzen ontbreken");
+  }
+  const upcomingHtml = calendarHtml.slice(upcomingHeading, completedHeading);
+  const yearCounts = new Map<number, number>();
+  for (const dateMatch of upcomingHtml.matchAll(/<em>([\s\S]*?)<\/em>/gi)) {
+    const parsed = parseOfficialDateRange(htmlText(dateMatch[1]));
+    if (!parsed) continue;
+    const year = Number(parsed.dateStart.slice(0, 4));
+    yearCounts.set(year, (yearCounts.get(year) ?? 0) + 1);
+  }
+  const rankedYears = [...yearCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const dominantYear = rankedYears.length > 0 && (rankedYears.length === 1 || rankedYears[0][1] > rankedYears[1][1])
+    ? rankedYears[0][0]
+    : null;
+  const headingPattern = /<h2\b[^>]*>([\s\S]*?)<\/h2>/gi;
+  const discovered = new Map<string, SpecialEventSeed>();
+  for (const match of upcomingHtml.matchAll(headingPattern)) {
+    const name = htmlText(match[1]);
+    const headingOffset = upcomingHeading + (match.index ?? 0);
+    const section = eventSectionAround(calendarHtml, headingOffset);
+    if (!name || !section || !/Cars Competing<\/h3>/i.test(section)) continue;
+    const dateText = htmlText(section.match(/<p\b[^>]*>[\s\S]*?<em>([\s\S]*?)<\/em>[\s\S]*?<\/p>/i)?.[1] ?? "");
+    const dates = parseOfficialDateRange(dateText);
+    const poster = section.match(/<figure\b[^>]*class="[^"]*wp-block-image[^"]*"[^>]*>[\s\S]*?<img\b[^>]*\bsrc="([^"]+)"/i)?.[1] ?? null;
+    const year = dates ? Number(dates.dateStart.slice(0, 4)) : dominantYear;
+    if (!Number.isInteger(year) || year < 2008 || year > 2100) continue;
+    const carsArea = section.split(/Cars Competing<\/h3>/i)[1] ?? "";
+    const classIds = officialClassesFromArea(carsArea);
+    const trackName = htmlText(section.match(/<a\b[^>]*href="\/tracks\/[^"]+"[^>]*>([\s\S]*?)<\/a>/i)?.[1] ?? "") || null;
+    const slug = sourceSlug(name);
+    if (!slug) continue;
+    const seed: SpecialEventSeed = {
+      sourceKey: `iracing:${year}:${slug}`,
+      year,
+      name,
+      circuit: trackName,
+      dateStart: dates?.dateStart ?? null,
+      dateEnd: dates?.dateEnd ?? null,
+      classIds,
+      cars: eventCarsFromSection(section),
+      teamEvent: /\bTEAM EVENT\b/i.test(htmlText(section)),
+      officialUrl: "https://www.iracing.com/special-events/",
+      posterUrl: poster,
+    };
+    discovered.set(seed.sourceKey, seed);
+  }
+  if (discovered.size === 0) throw new Error("Geen officiële Upcoming Events gevonden");
+  return [...discovered.values()];
+}
+
 export function enrichSeedFromOfficialCalendar(seed: SpecialEventSeed, calendarHtml: string): SpecialEventSeed {
   const anchor = seed.officialUrl?.split("#")[1] ?? "";
   if (!anchor) throw new Error("Officiële event-URL mist een sectieanker");
@@ -149,8 +225,7 @@ export function enrichSeedFromOfficialCalendar(seed: SpecialEventSeed, calendarH
   const dateText = htmlText(section.match(/<p\b[^>]*>[\s\S]*?<em>([\s\S]*?)<\/em>[\s\S]*?<\/p>/i)?.[1] ?? "");
   const dates = parseOfficialDateRange(dateText);
   const carsArea = section.split(/Cars Competing<\/h3>/i)[1] ?? "";
-  const classes = htmlText(carsArea.match(/<summary>([\s\S]*?)<\/summary>/i)?.[1] ?? "")
-    .split(/\s*\/\/\s*|\s*\/\s*|\s*,\s*/).map((value) => value.trim()).filter(Boolean);
+  const classes = officialClassesFromArea(carsArea);
   const cars = eventCarsFromSection(section);
   return {
     ...seed,

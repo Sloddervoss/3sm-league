@@ -101,6 +101,14 @@ describe("iRacing Endurance event-card flow", () => {
     expect(repo).toContain("local_car_ids");
   });
 
+  it("toont datum-only events als tijden-volgen en houdt afgelopen ongekozen events uit de lijst", () => {
+    const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
+    expect(component).toContain('"Tijden volgen"');
+    expect(component).toContain("catalogTodayAmsterdam()");
+    expect(component).toContain("!event.event_end_date || event.event_end_date >= today || Boolean(event.selectedEventId)");
+    expect(component).toContain("Exacte starttijden nog niet gepubliceerd door iRacing");
+  });
+
   it("rendert activatie alleen voor managers en registratie alleen bij het gekozen slot", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
     expect(component).toContain("isSuperAdmin || isEnduranceManager");
