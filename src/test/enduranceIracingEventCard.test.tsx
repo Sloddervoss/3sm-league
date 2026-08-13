@@ -134,10 +134,13 @@ describe("iRacing Endurance event-card flow", () => {
     expect(form).toContain("slot_id: selectedSlot?.id ?? null");
   });
 
-  it("gebruikt voor Portimão het ongewijzigde officiële eventlogo met een 3SM-fallback", () => {
+  it("gebruikt de originele iRacing-poster met officiële en 3SM-fallbacks", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
+    expect(component).toContain("event.poster_url");
+    expect(component).toContain("Originele iRacing-eventvisual voor");
+    expect(component).toContain("onError={() => setSourceIndex");
     expect(component).toContain('/endurance-assets/official/iracing-2026-portimao-1000.png');
-    expect(component).toContain('Officieel eventlogo © iRacing');
+    expect(component).toContain('Originele eventvisual © iRacing');
     expect(component).toContain('object-contain');
     expect(component).toContain('/endurance-assets/endurance-card-landscape.webp');
     expect(component).toContain('aspect-video');
