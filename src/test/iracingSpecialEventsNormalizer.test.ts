@@ -65,7 +65,7 @@ describe("iRacing Special Events normalizer", () => {
   });
 
   it("ververst naam, datums, poster en klassen uit de gemapte officiële kalendersectie", () => {
-    const html = `<section id="portimao-1000"><figure class="wp-block-image size-full"><img src="https://www.iracing.com/poster.png"></figure><p>TEAM EVENT</p><h2>Portimao 1000</h2><p><em>August 14-15, 2026</em></p><h3>Cars Competing</h3><details><summary>HPD // GT1 // GT2</summary></details></section>`;
+    const html = `<section id="portimao-1000"><figure class="wp-block-image size-full"><img src="https://www.iracing.com/poster.png"></figure><p>TEAM EVENT</p><h2>Portimao 1000</h2><p><em>August 14-15, 2026</em></p><h3>Cars Competing</h3><details><summary>HPD // GT1 // GT2</summary><figure data-wp-context="{&quot;uploadedSrc&quot;:&quot;https://www.iracing.com/wp-content/uploads/2012/11/HRC-ARX01c-feature.jpg&quot;}"><img src="https://s100.iracing.com/HRC-ARX01c-feature-350x197.jpg"></figure><figure><img src="https://s100.iracing.com/Corvette-C6R.jpg"></figure></details></section>`;
     const enriched = enrichSeedFromOfficialCalendar(fixture.seed, html);
     expect(enriched).toMatchObject({
       name: "Portimao 1000",
@@ -73,6 +73,10 @@ describe("iRacing Special Events normalizer", () => {
       dateEnd: "2026-08-15",
       posterUrl: "https://www.iracing.com/poster.png",
       classIds: ["HPD", "GT1", "GT2"],
+      cars: [
+        { sourceKey: "hrc-arx01c-feature", name: "HRC ARX01c", imageUrl: "https://www.iracing.com/wp-content/uploads/2012/11/HRC-ARX01c-feature.jpg", officialClassId: null },
+        { sourceKey: "corvette-c6r", name: "Corvette C6R", imageUrl: "https://s100.iracing.com/Corvette-C6R.jpg", officialClassId: null },
+      ],
       teamEvent: true,
     });
   });

@@ -1,5 +1,21 @@
 export type CatalogTimingStatus = "full" | "partial" | "race_only";
 
+/** Eén officieel deelnemende auto uit het `cars` JSON-veld van een event. */
+export type IRacingCatalogCar = {
+  id?: string;
+  sourceKey?: string;
+  name: string;
+  imageUrl?: string | null;
+  officialClassId?: string | null;
+  localCarId?: string | null;
+};
+
+export type IRacingInterestSummaryRow = {
+  catalog_event_id: string;
+  interested_count: number;
+  is_current_user_interested: boolean;
+};
+
 export type IRacingCatalogSlot = {
   id: string;
   catalog_event_id: string;
@@ -31,6 +47,10 @@ export type IRacingCatalogEvent = {
   duration_minutes: number | null;
   class_ids: string[];
   local_class_ids: string[];
+  /** Gekoppelde lokale 3SM-auto-ID's om de activatiegate te bepalen. */
+  local_car_ids: string[];
+  /** Officiële deelnemende auto's uit het `cars` JSONB-veld. */
+  cars: IRacingCatalogCar[];
   team_event: boolean;
   official_url: string | null;
   poster_url: string | null;

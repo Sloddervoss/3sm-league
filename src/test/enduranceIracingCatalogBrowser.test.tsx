@@ -6,14 +6,16 @@ import { IRacingEventCatalog } from "@/features/endurance/calendar/IRacingEventC
 const mutateAsync = vi.fn(async () => "local-event-portimao");
 const localClassIds = { current: ["GTP", "LMP2", "GT3"] };
 
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ isSuperAdmin: false, isEnduranceManager: true }) }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "manager" }, isSuperAdmin: false, isEnduranceManager: true }) }));
 vi.mock("@/features/endurance/calendar/InviteePicker", () => ({ InviteePicker: () => <div>Uitnodigingen</div> }));
 vi.mock("@/features/endurance/repository/iracingEventsRepository", () => ({
   useIRacingEnduranceCatalog: () => ({
     data: [{
       id: "event-portimao", source_key: "iracing:6578", name: "Portimão 1000", year: 2026,
       circuit: "Algarve International Circuit", configuration: "Grand Prix", event_start_date: "2026-08-14",
-      event_end_date: "2026-08-15", duration_minutes: null, class_ids: ["HPD", "GT1", "GT2"], local_class_ids: localClassIds.current, team_event: true,
+      event_end_date: "2026-08-15", duration_minutes: null, class_ids: ["HPD", "GT1", "GT2"], local_class_ids: localClassIds.current,
+      local_car_ids: ["hpd-arx-01c", "chevrolet-corvette-c6r", "aston-martin-dbr9-gt1", "ford-gt-gt2-gt3"],
+      cars: [{ sourceKey: "hrc-arx01c-feature", name: "HPD ARX-01c", imageUrl: null, officialClassId: "HPD" }], team_event: true,
       official_url: "https://www.iracing.com/special-events/", poster_url: null, availability_status: "exact_slots",
       source_updated_at: null, last_seen_at: "2026-08-13T08:00:00Z", active: true, selectedEventId: null, selectedSlotId: null,
       slots: ["00:00", "09:00", "14:00", "18:00", "22:00"].map((label, index) => ({
@@ -26,6 +28,8 @@ vi.mock("@/features/endurance/repository/iracingEventsRepository", () => ({
     }], isLoading: false, isError: false, error: null,
   }),
   useActivateIRacingEnduranceSlot: () => ({ mutateAsync, isPending: false }),
+  useIRacingInterestSummary: () => ({ data: [], isLoading: false }),
+  useSetIRacingInterest: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 describe("iRacing Endurance catalogus browserflow", () => {
@@ -33,8 +37,9 @@ describe("iRacing Endurance catalogus browserflow", () => {
 
   it("rendert één kaart met vijf slots en opent de managerbevestiging", async () => {
     render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><IRacingEventCatalog /></MemoryRouter>);
-    expect(screen.getAllByRole("article")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "Portimão 1000" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" })).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" })); });
+    expect(screen.getAllByRole("heading", { name: "Portimão 1000" })).toHaveLength(2);
     expect(screen.getAllByText("Officieel timeslot")).toHaveLength(5);
     expect(screen.getByText("HPD · GT1 · GT2")).toBeInTheDocument();
 
@@ -50,6 +55,7 @@ describe("iRacing Endurance catalogus browserflow", () => {
   it("blokkeert activatie zichtbaar zolang geen expliciete lokale klassemapping bestaat", () => {
     localClassIds.current = [];
     render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><IRacingEventCatalog /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" }));
     expect(screen.getByText(/Activatie geblokkeerd/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Deze gaan we rijden" })).not.toBeInTheDocument();
   });

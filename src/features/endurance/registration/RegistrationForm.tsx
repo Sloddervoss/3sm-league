@@ -3,7 +3,7 @@ import { CheckCircle2, LockKeyhole } from "lucide-react";
 import { useEnduranceActor } from "../core/ActorContext";
 import { useEnduranceRegistrations, useUpsertEnduranceRegistration } from "../repository/registrationsRepository";
 import type { EnduranceEvent } from "../core/types";
-import { enduranceCarsForClass, type EnduranceClassId } from "../core/carCatalog";
+import { allowedEnduranceCarsForClass, type EnduranceClassId } from "../core/carCatalog";
 import { Field, inputClass, Panel, PrimaryButton, SectionHeading } from "../shared/ui";
 
 /**
@@ -21,7 +21,7 @@ export const RegistrationForm = ({ event, onRegistered }: { event: EnduranceEven
   const [status, setStatus] = useState<string>(existing?.status ?? "provisional");
   const initialClass = (existing?.class_preference ?? event.classIds[0] ?? "GT3") as EnduranceClassId;
   const [classPreference, setClassPreference] = useState<EnduranceClassId>(initialClass);
-  const cars = useMemo(() => enduranceCarsForClass(classPreference), [classPreference]);
+  const cars = useMemo(() => allowedEnduranceCarsForClass(classPreference, event.allowedCarIds), [classPreference, event.allowedCarIds]);
   const [preferredCarId, setPreferredCarId] = useState(existing?.preferred_car_id ?? cars[0]?.id ?? "");
   const selectedSlot = (event.slots as { id: string; label: string }[])[0] ?? null;
   const [maxStints, setMaxStints] = useState(existing?.max_stints ?? 3);
@@ -93,7 +93,7 @@ export const RegistrationForm = ({ event, onRegistered }: { event: EnduranceEven
       <form onSubmit={submit} className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Aanmeldstatus"><select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value)}><option value="interest">Interesse</option><option value="provisional">Voorlopig aangemeld</option><option value="reserve">Alleen reserve</option></select></Field>
-          <Field label="Klasvoorkeur (stem)"><select className={inputClass} value={classPreference} onChange={(e) => { const nextClass = e.target.value as EnduranceClassId; setClassPreference(nextClass); setPreferredCarId(enduranceCarsForClass(nextClass)[0]?.id ?? ""); }}>{event.classIds.map((value) => <option key={value}>{value}</option>)}</select></Field>
+          <Field label="Klasvoorkeur (stem)"><select className={inputClass} value={classPreference} onChange={(e) => { const nextClass = e.target.value as EnduranceClassId; setClassPreference(nextClass); setPreferredCarId(allowedEnduranceCarsForClass(nextClass, event.allowedCarIds)[0]?.id ?? ""); }}>{event.classIds.map((value) => <option key={value}>{value}</option>)}</select></Field>
           <Field label="Autovoorkeur (stem)"><select className={inputClass} value={preferredCarId} onChange={(e) => setPreferredCarId(e.target.value)}>{cars.map((car) => <option key={car.id} value={car.id}>{car.name}</option>)}</select></Field>
           <Field label="3SM-timeslot" hint="Dit slot is door de Endurance Manager gekozen en staat vast voor alle inschrijvingen."><div className={`${inputClass} flex items-center text-gray-300`}>{selectedSlot?.label ?? "Handmatige race zonder apart timeslot"}</div></Field>
           <Field label="Maximaal aantal stints"><input className={inputClass} type="number" min={1} max={12} value={maxStints} onChange={(e) => setMaxStints(Number(e.target.value))} /></Field>

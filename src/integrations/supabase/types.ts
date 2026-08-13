@@ -329,6 +329,7 @@ export type Database = {
           registration_deadline: string | null
           slots: Json
           class_ids: string[]
+          allowed_car_ids: string[] | null
           selected_class_id: string | null
           selected_car_id: string | null
           max_drivers_per_car: number
@@ -354,6 +355,7 @@ export type Database = {
           registration_deadline: string | null
           slots: Json
           class_ids: string[]
+          allowed_car_ids: string[] | null
           selected_class_id: string | null
           selected_car_id: string | null
           max_drivers_per_car: number
@@ -379,6 +381,7 @@ export type Database = {
           registration_deadline?: string | null
           slots?: Json
           class_ids?: string[]
+          allowed_car_ids?: string[]
           selected_class_id?: string | null
           selected_car_id?: string | null
           max_drivers_per_car?: number
@@ -410,6 +413,7 @@ export type Database = {
           duration_minutes: number | null
           class_ids: string[]
           local_class_ids: string[]
+          local_car_ids: string[]
           cars: Json
           team_event: boolean
           official_url: string | null
@@ -2050,6 +2054,21 @@ export type Database = {
           p_manager_ids?: string[]
         }
         Returns: string
+      }
+      endurance_iracing_interest_summary: {
+        Args: never
+        Returns: {
+          catalog_event_id: string
+          interested_count: number
+          is_current_user_interested: boolean
+        }[]
+      }
+      endurance_set_iracing_interest: {
+        Args: {
+          p_catalog_event_id: string
+          p_interested: boolean
+        }
+        Returns: undefined
       }
       admin_get_community_support_payment_config: {
         Args: never

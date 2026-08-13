@@ -62,6 +62,7 @@ describe("endurance events repository (Fase 3 data-access contract)", () => {
     const payload = spies.insertSpy.mock.calls[0][0];
     expect(payload.name).toBe("Testrace");
     expect(payload.class_ids).toEqual(["GT3"]);
+    expect(payload.allowed_car_ids).toBeNull();
   });
 
   it("insert — schrijft invited_user_ids uit de input mee (en default [] indien afwezig)", async () => {

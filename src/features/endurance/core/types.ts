@@ -33,6 +33,7 @@ export interface EnduranceEvent {
   registrationDeadline: string;
   slots: EventSlot[];
   classIds: EnduranceClassId[];
+  allowedCarIds?: string[] | null;
   selectedClassId: EnduranceClassId | null;
   selectedCarId: string | null;
   maxDriversPerCar: number;
