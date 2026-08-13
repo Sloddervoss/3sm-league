@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
-import { enrichSeedFromOfficialCalendar, normalizeSpecialEvent, type SpecialEventSeed } from "./normalize.ts";
+import { discoverUpcomingSpecialEvents, normalizeSpecialEvent, type SpecialEventSeed } from "./normalize.ts";
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -92,13 +92,34 @@ Deno.serve(async (request) => {
     } catch (error) {
       errors.push(`official_calendar: ${cleanError(error)}`);
     }
-    const client = await createIRacingClient();
-    for (const entry of mapping) {
+    const discoveredSeeds = calendarHtml
+      ? discoverUpcomingSpecialEvents(calendarHtml)
+      : mapping.map((entry) => entry.seed);
+    const mappingBySourceKey = new Map(mapping.map((entry) => [entry.seed.sourceKey, entry]));
+    let clientPromise: ReturnType<typeof createIRacingClient> | null = null;
+    const dataClient = async () => {
+      clientPromise ??= createIRacingClient();
+      try { return await clientPromise; }
+      catch (error) { clientPromise = null; throw error; }
+    };
+    for (const discoveredSeed of discoveredSeeds) {
       try {
-        const officialSeed = calendarHtml ? enrichSeedFromOfficialCalendar(entry.seed, calendarHtml) : entry.seed;
-        const schedule = await client.fetchData(`/data/series/season_schedule?season_id=${entry.seasonId}`);
+        const entry = mappingBySourceKey.get(discoveredSeed.sourceKey);
+        // Officiële paginadata wint; handmatige seedvelden vullen uitsluitend
+        // ontbrekende track/API-metadata aan voor expliciet gemapte events.
+        const officialSeed = entry ? {
+          ...discoveredSeed,
+          sourceKey: entry.seed.sourceKey,
+          circuit: discoveredSeed.circuit ?? entry.seed.circuit ?? null,
+          configuration: discoveredSeed.configuration ?? entry.seed.configuration ?? null,
+          trackId: discoveredSeed.trackId ?? entry.seed.trackId ?? null,
+          officialUrl: entry.seed.officialUrl ?? discoveredSeed.officialUrl ?? null,
+        } : discoveredSeed;
+        const schedule = entry
+          ? await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${entry.seasonId}`)
+          : null;
         const normalized = await normalizeSpecialEvent(officialSeed, schedule as never);
-        const localCarMap = entry.localCarMap ?? {};
+        const localCarMap = entry?.localCarMap ?? {};
         const cars = normalized.cars.map((car) => ({ ...car, localCarId: localCarMap[car.sourceKey] ?? null }));
         const localCarIds = [...new Set(cars.flatMap((car) => car.localCarId ? [car.localCarId] : []))];
         counts.events_seen += 1;
@@ -109,8 +130,8 @@ Deno.serve(async (request) => {
         if (existingError) throw existingError;
         const eventPayload = {
           source_key: normalized.sourceKey,
-          iracing_series_id: entry.seriesId ?? null,
-          iracing_season_id: entry.seasonId,
+          iracing_series_id: entry?.seriesId ?? null,
+          iracing_season_id: entry?.seasonId ?? null,
           name: normalized.name,
           year: normalized.year,
           circuit: normalized.circuit,
@@ -120,20 +141,22 @@ Deno.serve(async (request) => {
           event_end_date: normalized.dateEnd,
           duration_minutes: normalized.durationMinutes,
           class_ids: normalized.classIds,
-          local_class_ids: entry.localClassIds,
+          local_class_ids: entry?.localClassIds ?? [],
           local_car_ids: localCarIds,
           cars,
           team_event: normalized.teamEvent,
           official_url: normalized.officialUrl,
           poster_url: normalized.posterUrl,
           source_payload: calendarHtml ? {
-            provenance: "official iRacing Special Events page + authenticated Data API",
+            provenance: entry
+              ? "official iRacing Special Events page + authenticated Data API"
+              : "official iRacing Special Events page; exact times pending explicit season mapping",
             calendar_page_id: 263677,
             calendar_modified_at: calendarModifiedAt,
-            season_id: entry.seasonId,
+            season_id: entry?.seasonId ?? null,
           } : existing?.source_payload ?? {
             provenance: "authenticated iRacing Data API; calendar verification pending",
-            season_id: entry.seasonId,
+            season_id: entry?.seasonId ?? null,
           },
           source_hash: normalized.sourceHash,
           availability_status: normalized.availabilityStatus,
@@ -178,7 +201,7 @@ Deno.serve(async (request) => {
           if (!previous) counts.slots_inserted += 1;
           else if (previous.session_start_at !== slot.sessionStartAt || previous.estimated_race_start_at !== slot.estimatedRaceStartAt) counts.slots_updated += 1;
         }
-        if (calendarHtml && normalized.availabilityStatus === "exact_slots" && normalized.slots.length > 0) {
+        if (entry && calendarHtml && normalized.availabilityStatus === "exact_slots" && normalized.slots.length > 0) {
           const currentKeys = normalized.slots.map((slot) => slot.sourceSlotKey);
           const { data: candidates, error: candidatesError } = await service.from("endurance_iracing_event_slots")
             .select("id,source_slot_key,missing_successful_syncs").eq("catalog_event_id", event.id).eq("active", true);
@@ -198,7 +221,7 @@ Deno.serve(async (request) => {
         // Deze teller wordt pas na een volledig geslaagde event+slotronde aangepast.
         // Partial failures verwijderen of deactiveren dus nooit oude goede slots.
       } catch (error) {
-        errors.push(`${entry.seed.sourceKey}: ${cleanError(error)}`);
+        errors.push(`${discoveredSeed.sourceKey}: ${cleanError(error)}`);
       }
     }
     const status = errors.length === 0 ? "success" : counts.events_seen > 0 ? "partial" : "failed";

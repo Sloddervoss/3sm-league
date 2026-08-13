@@ -45,10 +45,18 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).not.toMatch(/json\(\{[^}]*error_summary/s);
   });
 
-  it("vereist een expliciete seasonmapping in plaats van namen te gokken", () => {
+  it("ontdekt alle officiële Upcoming Events maar haalt slots alleen voor expliciete mappings", () => {
+    expect(source).toContain("discoverUpcomingSpecialEvents(calendarHtml)");
+    expect(source).toContain("mappingBySourceKey");
+    expect(source).toMatch(/entry\s*\?\s*await \(await dataClient\(\)\)\.fetchData/);
+    expect(source).toContain("clientPromise ??= createIRacingClient()");
+    expect(source).toContain("clientPromise = null");
+    expect(source).toContain(": null;");
+    expect(source).toContain("local_class_ids: entry?.localClassIds ?? []");
+    expect(source).toContain("exact times pending explicit season mapping");
     expect(source).toContain("ENDURANCE_IRACING_SEASON_MAP_JSON");
     expect(source).toContain("https://www.iracing.com/wp-json/wp/v2/pages/263677");
-    expect(normalizer).toContain("Eventsectie ontbreekt op officiële iRacing-kalender");
+    expect(normalizer).toContain("Officiële Upcoming/Completed-eventgrenzen ontbreken");
     expect(source).toContain("season_schedule?season_id=");
   });
 });
