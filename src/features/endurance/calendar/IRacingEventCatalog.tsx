@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CalendarDays, Car, CheckCircle2, Clock3, ExternalLink, Flag, Gauge, Heart, MapPinned, ShieldCheck, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,6 +33,28 @@ const durationLabel = (event: IRacingCatalogEvent, slot: IRacingCatalogSlot) => 
 
 const officialEventLogos: Record<string, string> = {
   "iracing:2026:portimao-1000": "/endurance-assets/official/iracing-2026-portimao-1000.png",
+};
+
+const fallbackEventVisual = "/endurance-assets/endurance-card-landscape.webp";
+
+const EventVisual = ({ event, className }: { event: IRacingCatalogEvent; className: string }) => {
+  const sources = useMemo(
+    () => [event.poster_url, officialEventLogos[event.source_key], fallbackEventVisual].filter(
+      (source, index, all): source is string => Boolean(source) && all.indexOf(source) === index,
+    ),
+    [event.poster_url, event.source_key],
+  );
+  const [sourceIndex, setSourceIndex] = useState(0);
+  useEffect(() => setSourceIndex(0), [event.id, event.poster_url]);
+  const source = sources[Math.min(sourceIndex, sources.length - 1)] ?? fallbackEventVisual;
+  const originalPoster = source === event.poster_url;
+  const officialLogo = source === officialEventLogos[event.source_key];
+  return <img
+    src={source}
+    alt={originalPoster ? `Originele iRacing-eventvisual voor ${event.name}` : officialLogo ? `Officieel iRacing-logo voor ${event.name}` : `3SM Endurance-visual voor ${event.name}`}
+    className={className}
+    onError={() => setSourceIndex((current) => Math.min(current + 1, sources.length - 1))}
+  />;
 };
 
 /** Activatie is pas mogelijk wanneer zowel lokale 3SM-klassen als officiële auto's zijn gemapt. */
@@ -122,7 +144,6 @@ const ActivationPanel = ({ event, slot, onClose }: { event: IRacingCatalogEvent;
 
 const CompactEventCard = ({ event, onOpen }: { event: IRacingCatalogEvent; onOpen: () => void }) => {
   const selected = selectedCatalogSlot(event);
-  const officialEventLogo = officialEventLogos[event.source_key];
   return <button
     type="button"
     aria-haspopup="dialog"
@@ -131,11 +152,7 @@ const CompactEventCard = ({ event, onOpen }: { event: IRacingCatalogEvent; onOpe
     className="group overflow-hidden rounded-[1.75rem] bg-[#111318] text-left shadow-2xl shadow-black/30 ring-1 ring-white/[0.07] transition hover:-translate-y-0.5 hover:ring-orange-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
   >
     <div className="relative aspect-video overflow-hidden border-b border-white/[0.07] bg-[radial-gradient(circle_at_center,_#24104d_0%,_#0a0711_62%,_#050506_100%)] p-4 sm:p-6">
-      <img
-        src={officialEventLogo ?? "/endurance-assets/endurance-card-landscape.webp"}
-        alt={officialEventLogo ? `Officieel iRacing-logo voor ${event.name}` : `3SM Endurance-visual voor ${event.name}`}
-        className={`h-full w-full opacity-100 transition duration-300 ${officialEventLogo ? "object-contain" : "object-cover group-hover:scale-[1.03]"}`}
-      />
+      <EventVisual event={event} className="h-full w-full object-contain opacity-100 transition duration-300 group-hover:scale-[1.02]" />
       {selected && <span className="absolute left-3 top-3"><StatusPill tone="orange">Geselecteerd door 3SM</StatusPill></span>}
     </div>
     <div className="space-y-3 p-5">
@@ -208,9 +225,9 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
         <p className="flex gap-2"><CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" />{catalogDateWindow(event)}</p>
         <p className="flex gap-2"><MapPinned className="mt-0.5 h-4 w-4 shrink-0 text-orange-400" />{event.circuit ?? "Circuit nog niet gepubliceerd"}{event.configuration ? ` · ${event.configuration}` : ""}</p>
       </div>
-      {officialEventLogo && <img src={officialEventLogo} alt={`Officieel iRacing-logo voor ${event.name}`} className="mt-4 h-16 w-auto object-contain" />}
+      <EventVisual event={event} className="mt-4 h-24 w-full max-w-md object-contain object-left" />
       {event.official_url && <a href={event.official_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-orange-300 hover:text-orange-200">Officiële eventinformatie <ExternalLink className="h-3.5 w-3.5" /></a>}
-      {officialEventLogo && <p className="mt-2 text-[11px] text-gray-500">Officieel eventlogo © iRacing · ongewijzigd uit het 2026 Special Event-logopakket.</p>}
+      <p className="mt-2 text-[11px] text-gray-500">Originele eventvisual © iRacing · rechtstreeks van de officiële Special Events-pagina.</p>
     </div>
 
     <div className="space-y-5 p-6 sm:p-8">

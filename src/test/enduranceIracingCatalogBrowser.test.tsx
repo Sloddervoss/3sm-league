@@ -5,18 +5,19 @@ import { IRacingEventCatalog } from "@/features/endurance/calendar/IRacingEventC
 
 const mutateAsync = vi.fn(async () => "local-event-portimao");
 const localClassIds = { current: ["GTP", "LMP2", "GT3"] };
+const officialPosterUrl = "https://www.iracing.com/wp-content/uploads/2025/12/iRSE-2026-Portimao-1000.png";
 
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "manager" }, isSuperAdmin: false, isEnduranceManager: true }) }));
 vi.mock("@/features/endurance/calendar/InviteePicker", () => ({ InviteePicker: () => <div>Uitnodigingen</div> }));
 vi.mock("@/features/endurance/repository/iracingEventsRepository", () => ({
   useIRacingEnduranceCatalog: () => ({
     data: [{
-      id: "event-portimao", source_key: "iracing:6578", name: "Portimão 1000", year: 2026,
+      id: "event-portimao", source_key: "iracing:2026:portimao-1000", name: "Portimão 1000", year: 2026,
       circuit: "Algarve International Circuit", configuration: "Grand Prix", event_start_date: "2026-08-14",
       event_end_date: "2026-08-15", duration_minutes: null, class_ids: ["HPD", "GT1", "GT2"], local_class_ids: localClassIds.current,
       local_car_ids: ["hpd-arx-01c", "chevrolet-corvette-c6r", "aston-martin-dbr9-gt1", "ford-gt-gt2-gt3"],
       cars: [{ sourceKey: "hrc-arx01c-feature", name: "HPD ARX-01c", imageUrl: null, officialClassId: "HPD" }], team_event: true,
-      official_url: "https://www.iracing.com/special-events/", poster_url: null, availability_status: "exact_slots",
+      official_url: "https://www.iracing.com/special-events/", poster_url: officialPosterUrl, availability_status: "exact_slots",
       source_updated_at: null, last_seen_at: "2026-08-13T08:00:00Z", active: true, selectedEventId: null, selectedSlotId: null,
       slots: ["00:00", "09:00", "14:00", "18:00", "22:00"].map((label, index) => ({
         id: `slot-${index}`, catalog_event_id: "event-portimao", source_slot_key: `slot-${index}`,
@@ -50,6 +51,17 @@ describe("iRacing Endurance catalogus browserflow", () => {
     expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({
       catalogEventId: "event-portimao", catalogSlotId: "slot-2", registrationDeadline: null,
     }));
+  });
+
+  it("rendert de originele officiële poster en valt bij een laadfout terug op het lokale officiële logo", () => {
+    render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><IRacingEventCatalog /></MemoryRouter>);
+    const poster = screen.getByRole("img", { name: "Originele iRacing-eventvisual voor Portimão 1000" });
+    expect(poster).toHaveAttribute("src", officialPosterUrl);
+    fireEvent.error(poster);
+    expect(screen.getByRole("img", { name: "Officieel iRacing-logo voor Portimão 1000" })).toHaveAttribute(
+      "src",
+      "/endurance-assets/official/iracing-2026-portimao-1000.png",
+    );
   });
 
   it("blokkeert activatie zichtbaar zolang geen expliciete lokale klassemapping bestaat", () => {
