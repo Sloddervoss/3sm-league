@@ -1,0 +1,54 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const source = readFileSync("supabase/functions/iracing-special-events-sync/index.ts", "utf8");
+const normalizer = readFileSync("supabase/functions/iracing-special-events-sync/normalize.ts", "utf8");
+const config = readFileSync("supabase/config.toml", "utf8");
+
+describe("iRacing Special Events sync security contract", () => {
+  it("gebruikt dedicated scheduler-token of een geverifieerde super_admin", () => {
+    expect(source).toContain('Deno.env.get("ENDURANCE_IRACING_SYNC_TOKEN")');
+    expect(source).toContain('row.role === "super_admin"');
+    expect(source).toContain("auth.auth.getUser(token)");
+    expect(source).not.toMatch(/token\s*===\s*serviceKey/);
+    expect(config).toMatch(/\[functions\.iracing-special-events-sync\]\s+verify_jwt = false/);
+  });
+
+  it("hergebruikt uitsluitend de gedeelde server-side iRacing-client", () => {
+    expect(source).toContain('from "../_shared/iracingClient.ts"');
+    expect(source).toContain("createIRacingClient()");
+    expect(source).not.toContain("IRACING_PASSWORD");
+  });
+
+  it("maakt zichtbare runstatussen en behoudt oude slots bij partial failures", () => {
+    for (const status of ["running", "success", "partial", "failed"]) expect(source).toContain(`"${status}"`);
+    expect(source).toContain("Partial failures verwijderen of deactiveren dus nooit oude goede slots");
+    expect(source).toContain("active: misses < 2");
+    expect(source).toContain('calendarHtml && normalized.availabilityStatus === "exact_slots"');
+    expect(source).toContain("existing?.source_payload");
+    expect(source).toContain('eq("iracing_catalog_slot_id", candidate.id)');
+    expect(source).not.toMatch(/\.delete\(\).*endurance_iracing_event_slots/s);
+    expect(source).toContain('runError?.code === "23505"');
+  });
+
+  it("upsert idempotent op source_key en catalog_event_id/source_slot_key", () => {
+    expect(source).toContain('onConflict: "source_key"');
+    expect(source).toContain('onConflict: "catalog_event_id,source_slot_key"');
+    expect(normalizer).toContain("sourceSlotKey:");
+    expect(normalizer).toContain("sourceHash:");
+  });
+
+  it("redigeert secrets en retourneert alleen status/tellingen/tijd", () => {
+    expect(source).toContain("[REDACTED]");
+    expect(source).toContain("events_seen");
+    expect(source).toContain("finished_at");
+    expect(source).not.toMatch(/json\(\{[^}]*error_summary/s);
+  });
+
+  it("vereist een expliciete seasonmapping in plaats van namen te gokken", () => {
+    expect(source).toContain("ENDURANCE_IRACING_SEASON_MAP_JSON");
+    expect(source).toContain("https://www.iracing.com/wp-json/wp/v2/pages/263677");
+    expect(normalizer).toContain("Eventsectie ontbreekt op officiële iRacing-kalender");
+    expect(source).toContain("season_schedule?season_id=");
+  });
+});

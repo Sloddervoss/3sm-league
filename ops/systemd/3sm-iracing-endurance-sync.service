@@ -1,0 +1,18 @@
+[Unit]
+Description=Synchroniseer officiële iRacing Endurance-events naar 3SM
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/3sm/iracing-endurance-sync.env
+WorkingDirectory=/opt/3sm
+ExecStart=/usr/bin/bash /opt/3sm/scripts/sync-iracing-endurance-events.sh
+# Installeer met systemd drop-in User=/Group= voor het bewezen serviceaccount.
+# Zonder drop-in draait de timer als root zodat het 0600 envbestand leesbaar is.
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

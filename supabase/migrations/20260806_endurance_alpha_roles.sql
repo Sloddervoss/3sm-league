@@ -1,21 +1,17 @@
 -- Endurance alpha-rollen: tester + endurance_manager.
--- Additief: voegt nieuwe app_role-waarden en helper-functies toe. Verandert geen
--- bestaand gedrag voor de huidige rollen (super_admin blijft alles mogen).
+-- PostgreSQL staat toe dat ALTER TYPE ... ADD VALUE in een transactie gebeurt,
+-- maar de nieuwe waarde mag pas na COMMIT worden gebruikt. Daarom staan de
+-- enumuitbreiding en de helperfuncties bewust in afzonderlijke transacties.
+
 BEGIN;
 
--- Voeg rollen toe (idempotent per waarde).
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'tester' AND enumtypid = 'public.app_role'::regtype) THEN
-    ALTER TYPE public.app_role ADD VALUE 'tester';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'endurance_manager' AND enumtypid = 'public.app_role'::regtype) THEN
-    ALTER TYPE public.app_role ADD VALUE 'endurance_manager';
-  END IF;
-END $$;
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'tester';
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'endurance_manager';
 
--- helper: endurance-beheer (super_admin of endurance_manager) — kan endurance-data
--- beheren + devices aan teams koppelen.
+COMMIT;
+
+BEGIN;
+
 CREATE OR REPLACE FUNCTION public.is_endurance_manager(_user_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -30,8 +26,6 @@ AS $$
   );
 $$;
 
--- helper: endurance-ster (super_admin, endurance_manager of tester) — mag de
--- suite zien, eigen device koppelen en (voor testers) streamen.
 CREATE OR REPLACE FUNCTION public.is_endurance_staff(_user_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
