@@ -12,7 +12,7 @@
  *   • the 3 orange stripes kept as a SUBTLE dynamic accent (not a full-bleed diagonal)
  *   • a CALM text zone reserved for the event overlay (branding kept small & quiet)
  *
- * Produces public/endurance/endurance-card.svg/.png/.webp
+ * Produces public/endurance-assets/endurance-card.svg/.png/.webp
  *   portrait 1600x2000 and landscape 1600x900 variants.
  */
 import sharp from "sharp";
@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUT = join(__dirname, "..", "public", "endurance");
+const OUT = join(__dirname, "..", "public", "endurance-assets");
 mkdirSync(OUT, { recursive: true });
 
 // ----------------------------------------------------------------- palette
