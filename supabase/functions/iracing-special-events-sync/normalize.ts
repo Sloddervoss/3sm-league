@@ -220,6 +220,17 @@ export async function normalizeSpecialEvent(seed: SpecialEventSeed, input?: IRac
   }));
   const dateStart = seed.dateStart ?? null;
   const dateEnd = seed.dateEnd ?? null;
+  if (slots.length && dateStart && dateEnd) {
+    const earliestAllowed = Date.parse(`${dateStart}T00:00:00Z`) - 24 * 60 * 60 * 1000;
+    const latestAllowedExclusive = Date.parse(`${dateEnd}T00:00:00Z`) + 2 * 24 * 60 * 60 * 1000;
+    const outsideOfficialWindow = slots.some((slot) => {
+      const instant = Date.parse(slot.sessionStartAt);
+      return instant < earliestAllowed || instant >= latestAllowedExclusive;
+    });
+    if (outsideOfficialWindow) {
+      throw new Error("iRacing-seasonmapping bevat timeslots buiten het officiële eventvenster");
+    }
+  }
   const eventWithoutHash = {
     ...seed,
     circuit: seed.circuit ?? schedule?.track?.track_name ?? null,
