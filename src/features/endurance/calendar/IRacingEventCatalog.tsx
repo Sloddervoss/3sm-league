@@ -111,9 +111,12 @@ export const IRacingEventCatalog = () => {
     <div><p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Officiële iRacing-kalender</p><h2 id="official-endurance-title" className="mt-2 font-heading text-3xl font-black text-white">Endurance & Special Events</h2><p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">Eén evenement, alle officiële timeslots. Inschrijven verschijnt pas wanneer een Endurance Manager één slot namens 3SM heeft gekozen.</p></div>
     <div className="grid gap-6">{visible.map((event) => {
       const selected = selectedCatalogSlot(event);
-      return <article key={event.id} className="relative overflow-hidden rounded-[1.75rem] bg-[#111318] shadow-2xl shadow-black/30 ring-1 ring-white/[0.07]">
-        <div className="absolute inset-0"><img src="/endurance-assets/endurance-card-landscape.webp" alt="" className="h-full w-full object-cover opacity-25" /><div className="absolute inset-0 bg-gradient-to-r from-[#0e1014] via-[#0e1014]/95 to-[#0e1014]/55" /></div>
-        <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[0.72fr_1.28fr]">
+      return <article key={event.id} className="overflow-hidden rounded-[1.75rem] bg-[#111318] shadow-2xl shadow-black/30 ring-1 ring-white/[0.07]">
+        <div className="relative aspect-video overflow-hidden border-b border-white/[0.07] bg-black">
+          <img src="/endurance-assets/endurance-card-landscape.webp" alt={`3SM Endurance-visual voor ${event.name}`} className="h-full w-full object-cover opacity-100" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#111318]/35 via-transparent to-transparent" />
+        </div>
+        <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[0.72fr_1.28fr]">
           <header>
             <div className="flex flex-wrap gap-2"><StatusPill tone={selected ? "orange" : "neutral"}>{selected ? "Geselecteerd door 3SM" : "Nog niet door 3SM geselecteerd"}</StatusPill><StatusPill>Officiële bron</StatusPill></div>
             <h3 className="mt-4 font-heading text-3xl font-black leading-tight text-white">{event.name}</h3>
