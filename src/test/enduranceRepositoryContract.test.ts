@@ -33,6 +33,9 @@ describe("endurance repository data-access contract (Fase 3)", () => {
       "endurance_activate_iracing_slot",
       "endurance_iracing_interest_summary",
       "endurance_set_iracing_interest",
+      "endurance_iracing_slot_interest_summary",
+      "endurance_set_iracing_slot_interest",
+      "endurance_iracing_slot_interest_members",
     ].includes(rpc))).toBe(true);
     expect(combined).not.toMatch(/\bfetch\s*\(/);
     expect(combined).not.toMatch(/\bXMLHttpRequest\b/);

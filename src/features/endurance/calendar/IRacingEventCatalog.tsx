@@ -19,8 +19,9 @@ import {
 import {
   useActivateIRacingEnduranceSlot,
   useIRacingEnduranceCatalog,
-  useIRacingInterestSummary,
-  useSetIRacingInterest,
+  useIRacingSlotInterestMembers,
+  useIRacingSlotInterestSummary,
+  useSetIRacingSlotInterest,
 } from "../repository/iracingEventsRepository";
 
 const durationLabel = (event: IRacingCatalogEvent, slot: IRacingCatalogSlot) => {
@@ -73,11 +74,17 @@ const activationBlockedReason = (event: IRacingCatalogEvent): string | null => {
   return null;
 };
 
-const SlotTimeline = ({ event, slot, selected, canManage, onActivate, onOpen }: {
+const SlotTimeline = ({ event, slot, selected, canManage, isAuthenticated, interestedCount, isCurrentUserInterested, interestedNames, interestPending, onToggleInterest, onActivate, onOpen }: {
   event: IRacingCatalogEvent;
   slot: IRacingCatalogSlot;
   selected: boolean;
   canManage: boolean;
+  isAuthenticated: boolean;
+  interestedCount: number;
+  isCurrentUserInterested: boolean;
+  interestedNames: string[];
+  interestPending: boolean;
+  onToggleInterest: (slot: IRacingCatalogSlot, interested: boolean) => void;
   onActivate: (slot: IRacingCatalogSlot) => void;
   onOpen: (eventId: string) => void;
 }) => {
@@ -100,8 +107,22 @@ const SlotTimeline = ({ event, slot, selected, canManage, onActivate, onOpen }: 
           <div><dt className="text-gray-500">Kwalificatie</dt><dd>{qualifying ? `${qualifying} Nederland` : "Niet gepubliceerd door iRacing"}</dd></div>
           <div><dt className="text-gray-500">Verwachte racestart</dt><dd>{expectedRaceStart ? `circa ${formatCatalogInstant(expectedRaceStart, "amsterdam")}` : "Niet gepubliceerd door iRacing"}</dd></div>
         </dl>
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-300"><Users className="h-3.5 w-3.5 text-orange-400" /><span>{interestedCount}</span> <span>{interestedCount === 1 ? "coureur kan" : "coureurs kunnen"}</span> <span>dit slot</span></span>
+          {isAuthenticated && <SecondaryButton
+            onClick={() => onToggleInterest(slot, !isCurrentUserInterested)}
+            disabled={interestPending}
+            className={isCurrentUserInterested ? "!text-emerald-300 ring-emerald-500/30" : ""}
+          >
+            <Heart className={`h-4 w-4 ${isCurrentUserInterested ? "fill-current" : ""}`} />
+            {interestPending ? "Bijwerken…" : isCurrentUserInterested ? "Ik kan dit slot niet meer" : "Ik kan dit slot"}
+          </SecondaryButton>}
+        </div>
+        {canManage && interestedNames.length > 0 && <div className="rounded-xl bg-white/[0.035] px-3 py-2 text-xs text-gray-400 ring-1 ring-white/[0.06]">
+          <span className="font-bold text-gray-200">Beschikbaar:</span> {interestedNames.join(", ")}
+        </div>}
       </div>
-      {canManage && !event.selectedEventId && !activationBlockedReason(event) && <SecondaryButton onClick={() => onActivate(slot)} className="shrink-0">Deze gaan we rijden</SecondaryButton>}
+      {canManage && !event.selectedEventId && <SecondaryButton onClick={() => onActivate(slot)} className="shrink-0">Deze gaan we rijden</SecondaryButton>}
       {selected && event.selectedEventId && <PrimaryButton onClick={() => onOpen(event.selectedEventId!)} className="shrink-0">Open race / inschrijven</PrimaryButton>}
     </div>
   </div>;
@@ -114,6 +135,12 @@ const ActivationPanel = ({ event, slot, onClose }: { event: IRacingCatalogEvent;
   const [maxDrivers, setMaxDrivers] = useState(4);
   const [invitees, setInvitees] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const blockedReason = activationBlockedReason(event);
+  if (blockedReason) return <Panel className="mt-4 bg-amber-500/[0.06] ring-amber-500/20">
+    <p role="alert" className="text-sm font-bold text-amber-100">{blockedReason}</p>
+    <p className="mt-2 text-xs text-amber-100/70">Dit is beheerinformatie; bezoekers zien deze technische reden niet.</p>
+    <SecondaryButton type="button" onClick={onClose} className="mt-4">Sluiten</SecondaryButton>
+  </Panel>;
   const submit = async (formEvent: React.FormEvent) => {
     formEvent.preventDefault();
     setError("");
@@ -173,32 +200,6 @@ const CompactEventCard = ({ event, onOpen }: { event: IRacingCatalogEvent; onOpe
   </button>;
 };
 
-const InterestPanel = ({ event, interestedCount, isCurrentUserInterested }: {
-  event: IRacingCatalogEvent;
-  interestedCount: number;
-  isCurrentUserInterested: boolean;
-}) => {
-  const { user } = useAuth();
-  const setInterest = useSetIRacingInterest();
-  const toggling = setInterest.isPending;
-  const toggle = () => setInterest.mutate({ catalogEventId: event.id, interested: !isCurrentUserInterested });
-  return <div className="rounded-2xl bg-black/25 p-4 ring-1 ring-white/[0.07]">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500/10 text-orange-300 ring-1 ring-orange-500/25"><Users className="h-4 w-4" /></span>
-        <div>
-          <p className="text-sm font-black text-white">{interestedCount} {interestedCount === 1 ? "coureur" : "coureurs"} tonen interesse</p>
-          <p className="text-xs text-gray-500">Voorbereidend animo vóór 3SM een slot kiest.</p>
-        </div>
-      </div>
-      {user && <SecondaryButton onClick={toggle} disabled={toggling} className={isCurrentUserInterested ? "!text-emerald-300 ring-emerald-500/30" : ""}>
-        <Heart className={`h-4 w-4 ${isCurrentUserInterested ? "fill-current" : ""}`} />
-        {toggling ? "Bijwerken…" : isCurrentUserInterested ? "Interesse opgeven" : "Interesse aanmelden"}
-      </SecondaryButton>}
-    </div>
-  </div>;
-};
-
 const EventDetailModal = ({ event, open, onClose, canManage }: {
   event: IRacingCatalogEvent | null;
   open: boolean;
@@ -206,15 +207,15 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
   canManage: boolean;
 }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [activating, setActivating] = useState<IRacingCatalogSlot | null>(null);
-  const { data: interestRows = [] } = useIRacingInterestSummary();
+  const { data: interestRows = [] } = useIRacingSlotInterestSummary();
+  const { data: interestMembers = [] } = useIRacingSlotInterestMembers(event?.id ?? null, canManage && open);
+  const setInterest = useSetIRacingSlotInterest();
   if (!event) return null;
   const selected = selectedCatalogSlot(event);
   const officialEventLogo = officialEventLogos[event.source_key];
-  const blockedReason = activationBlockedReason(event);
-  const interest = interestRows.find((row) => row.catalog_event_id === event.id);
-  const interestedCount = interest?.interested_count ?? 0;
-  const isCurrentUserInterested = interest?.is_current_user_interested ?? false;
+  const toggleInterest = (slot: IRacingCatalogSlot, interested: boolean) => setInterest.mutate({ catalogSlotId: slot.id, interested });
 
   return <PreviewModal open={open} onClose={onClose} ariaLabel={`${event.name} details`} maxWidth="880px">
     <div className="relative border-b border-white/[0.07] bg-[radial-gradient(circle_at_center,_#24104d_0%,_#0a0711_62%,_#050506_100%)] px-6 pb-6 pt-10 sm:px-10 sm:pt-12">
@@ -233,9 +234,7 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
     </div>
 
     <div className="space-y-5 p-6 sm:p-8">
-      {canManage && blockedReason && <p role="alert" className="rounded-xl bg-amber-500/[0.08] p-3 text-xs text-amber-100 ring-1 ring-amber-500/20">{blockedReason}</p>}
       {selected && <p className="flex items-center gap-2 text-xs text-emerald-300"><CheckCircle2 className="h-4 w-4" />Alleen het gemarkeerde slot is gekoppeld aan de inschrijving.</p>}
-      <InterestPanel event={event} interestedCount={interestedCount} isCurrentUserInterested={isCurrentUserInterested} />
 
       <section aria-labelledby={`classes-${event.id}`}>
         <h4 id={`classes-${event.id}`} className="mb-2 font-heading text-base font-black text-white">Officiële klassen & auto's</h4>
@@ -259,7 +258,27 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
           <span className="text-xs text-gray-500">{event.slots.length} officiële slot{event.slots.length === 1 ? "" : "s"}</span>
         </div>
         {event.slots.length ? <div className="space-y-3">
-          {event.slots.map((slot) => <SlotTimeline key={slot.id} event={event} slot={slot} selected={slot.id === event.selectedSlotId} canManage={canManage} onActivate={setActivating} onOpen={(eventId) => navigate(`/endurance/races/${eventId}`)} />)}
+          {event.slots.map((slot) => {
+            const interest = interestRows.find((row) => row.catalog_slot_id === slot.id);
+            const interestedNames = interestMembers
+              .filter((member) => member.catalog_slot_id === slot.id)
+              .map((member) => member.iracing_name ?? member.display_name ?? "Onbekende coureur");
+            return <SlotTimeline
+              key={slot.id}
+              event={event}
+              slot={slot}
+              selected={slot.id === event.selectedSlotId}
+              canManage={canManage}
+              isAuthenticated={Boolean(user)}
+              interestedCount={interest?.interested_count ?? 0}
+              isCurrentUserInterested={interest?.is_current_user_interested ?? false}
+              interestedNames={interestedNames}
+              interestPending={setInterest.isPending && setInterest.variables?.catalogSlotId === slot.id}
+              onToggleInterest={toggleInterest}
+              onActivate={setActivating}
+              onOpen={(eventId) => navigate(`/endurance/races/${eventId}`)}
+            />;
+          })}
           {activating && <ActivationPanel event={event} slot={activating} onClose={() => setActivating(null)} />}
         </div> : <div className="rounded-2xl bg-black/25 p-5 ring-1 ring-white/[0.07]"><p className="flex items-center gap-2 text-sm font-bold text-white"><Flag className="h-4 w-4 text-orange-400" />Exacte starttijden nog niet gepubliceerd door iRacing.</p><p className="mt-2 text-xs text-gray-500">3SM kan dit officiële event pas selecteren zodra een timeslot bekend is.</p></div>}
       </section>
