@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   catalogDateWindow,
+  expectedCatalogRaceStart,
   formatCatalogInstant,
   phaseRange,
   selectedCatalogSlot,
@@ -72,6 +73,16 @@ describe("iRacing Endurance event-card flow", () => {
     expect(formatCatalogInstant(iso, "amsterdam")).toMatch(/14:00/);
     expect(catalogDateWindow(event)).toContain("14 augustus 2026");
     expect(phaseRange(iso, 30)).toBe("14:00–14:30");
+  });
+
+  it("leidt de verwachte racestart af uit het einde van de kwalificatie", () => {
+    const expected = expectedCatalogRaceStart({
+      estimated_race_start_at: null,
+      qualifying_start_at: "2026-08-14T22:30:00Z",
+      qualifying_duration_minutes: 8,
+    });
+    expect(expected).toBe("2026-08-14T22:38:00.000Z");
+    expect(formatCatalogInstant(expected!, "amsterdam")).toMatch(/00:38/);
   });
 
   it("gebruikt een responsive kaartengrid met 1 kolom mobiel en 2+ op desktop", () => {

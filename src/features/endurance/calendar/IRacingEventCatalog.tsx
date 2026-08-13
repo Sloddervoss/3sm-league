@@ -9,6 +9,7 @@ import { InviteePicker } from "./InviteePicker";
 import {
   catalogDateWindow,
   catalogTodayAmsterdam,
+  expectedCatalogRaceStart,
   formatCatalogInstant,
   phaseRange,
   selectedCatalogSlot,
@@ -82,6 +83,7 @@ const SlotTimeline = ({ event, slot, selected, canManage, onActivate, onOpen }: 
 }) => {
   const practice = phaseRange(slot.practice_start_at ?? slot.session_start_at, slot.practice_duration_minutes);
   const qualifying = phaseRange(slot.qualifying_start_at, slot.qualifying_duration_minutes);
+  const expectedRaceStart = expectedCatalogRaceStart(slot);
   return <div className={`rounded-2xl p-4 ring-1 transition ${selected ? "bg-orange-500/[0.10] ring-orange-400/35" : "bg-black/25 ring-white/[0.07]"}`}>
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0 space-y-3">
@@ -96,7 +98,7 @@ const SlotTimeline = ({ event, slot, selected, canManage, onActivate, onOpen }: 
         <dl className="grid gap-2 text-xs text-gray-300 sm:grid-cols-3">
           <div><dt className="text-gray-500">Practice / warm-up</dt><dd>{practice ? `${practice} Nederland` : "Niet gepubliceerd door iRacing"}</dd></div>
           <div><dt className="text-gray-500">Kwalificatie</dt><dd>{qualifying ? `${qualifying} Nederland` : "Niet gepubliceerd door iRacing"}</dd></div>
-          <div><dt className="text-gray-500">Verwachte racestart</dt><dd>{slot.estimated_race_start_at ? `circa ${formatCatalogInstant(slot.estimated_race_start_at, "amsterdam")}` : "Niet gepubliceerd door iRacing"}</dd></div>
+          <div><dt className="text-gray-500">Verwachte racestart</dt><dd>{expectedRaceStart ? `circa ${formatCatalogInstant(expectedRaceStart, "amsterdam")}` : "Niet gepubliceerd door iRacing"}</dd></div>
         </dl>
       </div>
       {canManage && !event.selectedEventId && !activationBlockedReason(event) && <SecondaryButton onClick={() => onActivate(slot)} className="shrink-0">Deze gaan we rijden</SecondaryButton>}

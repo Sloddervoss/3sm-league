@@ -283,20 +283,24 @@ const timing = (schedule: IRacingSchedule, sessionStartAt: string): Omit<Normali
     : null;
   const safeTransition = transition !== null && transition >= 0 && transition <= 30 ? transition : null;
   const hasSequence = practice !== null || qualify !== null || warmup !== null;
-  const canEstimateRace = hasSequence && safeTransition !== null;
   const qualifyingOffset = practice !== null ? practice + (warmup ?? 0) : null;
+  const qualifyingStartAt = qualify !== null && qualifyingOffset !== null ? addMinutes(sessionStartAt, qualifyingOffset) : null;
+  const qualifyingEndAt = qualifyingStartAt !== null && qualify !== null ? addMinutes(qualifyingStartAt, qualify) : null;
+  const estimatedRaceStartAt = hasSequence && safeTransition !== null
+    ? addMinutes(sessionStartAt, knownPreRace + safeTransition)
+    : qualifyingEndAt;
 
   return {
     practiceStartAt: practice !== null ? sessionStartAt : null,
     practiceDurationMinutes: practice,
-    qualifyingStartAt: qualify !== null && qualifyingOffset !== null ? addMinutes(sessionStartAt, qualifyingOffset) : null,
+    qualifyingStartAt,
     qualifyingDurationMinutes: qualify,
     transitionDurationMinutes: safeTransition,
-    estimatedRaceStartAt: canEstimateRace ? addMinutes(sessionStartAt, knownPreRace + safeTransition) : null,
+    estimatedRaceStartAt,
     raceDurationMinutes: raceDuration,
     raceLapLimit,
     sessionDurationMinutes: sessionMinutes,
-    sessionTimingStatus: canEstimateRace ? "full" : hasSequence ? "partial" : "race_only",
+    sessionTimingStatus: estimatedRaceStartAt ? "full" : hasSequence ? "partial" : "race_only",
   };
 };
 

@@ -14,10 +14,10 @@ describe("iRacing Special Events normalizer", () => {
       practiceDurationMinutes: 30,
       qualifyingStartAt: "2026-08-15T12:30:00.000Z",
       qualifyingDurationMinutes: 8,
-      estimatedRaceStartAt: null,
+      estimatedRaceStartAt: "2026-08-15T12:38:00.000Z",
       raceDurationMinutes: null,
       raceLapLimit: 215,
-      sessionTimingStatus: "partial",
+      sessionTimingStatus: "full",
     });
   });
 
