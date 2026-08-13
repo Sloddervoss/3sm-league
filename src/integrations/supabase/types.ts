@@ -2070,6 +2070,28 @@ export type Database = {
         }
         Returns: undefined
       }
+      endurance_iracing_slot_interest_summary: {
+        Args: never
+        Returns: {
+          catalog_event_id: string
+          catalog_slot_id: string
+          interested_count: number
+          is_current_user_interested: boolean
+        }[]
+      }
+      endurance_set_iracing_slot_interest: {
+        Args: { p_catalog_slot_id: string; p_interested: boolean }
+        Returns: undefined
+      }
+      endurance_iracing_slot_interest_members: {
+        Args: { p_catalog_event_id: string }
+        Returns: {
+          catalog_slot_id: string
+          user_id: string
+          iracing_name: string | null
+          display_name: string | null
+        }[]
+      }
       admin_get_community_support_payment_config: {
         Args: never
         Returns: {

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IRacingEventCatalog } from "@/features/endurance/calendar/IRacingEventCatalog";
 
 const mutateAsync = vi.fn(async () => "local-event-portimao");
+const setSlotInterest = vi.fn();
 const localClassIds = { current: ["GTP", "LMP2", "GT3"] };
 const officialPosterUrl = "https://www.iracing.com/wp-content/uploads/2025/12/iRSE-2026-Portimao-1000.png";
 
@@ -29,12 +30,19 @@ vi.mock("@/features/endurance/repository/iracingEventsRepository", () => ({
     }], isLoading: false, isError: false, error: null,
   }),
   useActivateIRacingEnduranceSlot: () => ({ mutateAsync, isPending: false }),
-  useIRacingInterestSummary: () => ({ data: [], isLoading: false }),
-  useSetIRacingInterest: () => ({ mutate: vi.fn(), isPending: false }),
+  useIRacingSlotInterestSummary: () => ({ data: [
+    { catalog_event_id: "event-portimao", catalog_slot_id: "slot-0", interested_count: 2, is_current_user_interested: true },
+    { catalog_event_id: "event-portimao", catalog_slot_id: "slot-1", interested_count: 1, is_current_user_interested: false },
+  ], isLoading: false }),
+  useIRacingSlotInterestMembers: () => ({ data: [
+    { catalog_slot_id: "slot-0", user_id: "driver-a", iracing_name: "Driver A", display_name: "A" },
+    { catalog_slot_id: "slot-0", user_id: "driver-b", iracing_name: null, display_name: "Driver B" },
+  ] }),
+  useSetIRacingSlotInterest: () => ({ mutate: setSlotInterest, isPending: false, variables: undefined }),
 }));
 
 describe("iRacing Endurance catalogus browserflow", () => {
-  beforeEach(() => { mutateAsync.mockClear(); localClassIds.current = ["GTP", "LMP2", "GT3"]; });
+  beforeEach(() => { mutateAsync.mockClear(); setSlotInterest.mockClear(); localClassIds.current = ["GTP", "LMP2", "GT3"]; });
 
   it("rendert één kaart met vijf slots en opent de managerbevestiging", async () => {
     render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><IRacingEventCatalog /></MemoryRouter>);
@@ -43,6 +51,12 @@ describe("iRacing Endurance catalogus browserflow", () => {
     expect(screen.getAllByRole("heading", { name: "Portimão 1000" })).toHaveLength(2);
     expect(screen.getAllByText("Officieel timeslot")).toHaveLength(5);
     expect(screen.getByText("HPD · GT1 · GT2")).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === "2 coureurs kunnen dit slot")).toBeInTheDocument();
+    expect(screen.getByText(/Driver A, Driver B/)).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Ik kan dit slot" })[0]); });
+    expect(setSlotInterest).toHaveBeenCalledWith({ catalogSlotId: "slot-1", interested: true });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Ik kan dit slot niet meer" })); });
+    expect(setSlotInterest).toHaveBeenCalledWith({ catalogSlotId: "slot-0", interested: false });
 
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Deze gaan we rijden" })[2]); });
     expect(screen.getByRole("heading", { name: "Bevestig dit 3SM-timeslot" })).toBeInTheDocument();
@@ -64,11 +78,12 @@ describe("iRacing Endurance catalogus browserflow", () => {
     );
   });
 
-  it("blokkeert activatie zichtbaar zolang geen expliciete lokale klassemapping bestaat", () => {
+  it("toont de technische activatieblokkade pas nadat een manager een slot probeert te activeren", () => {
     localClassIds.current = [];
     render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><IRacingEventCatalog /></MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" }));
+    expect(screen.queryByText(/Activatie geblokkeerd/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Deze gaan we rijden" })[0]);
     expect(screen.getByText(/Activatie geblokkeerd/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Deze gaan we rijden" })).not.toBeInTheDocument();
   });
 });

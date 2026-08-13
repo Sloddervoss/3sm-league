@@ -101,14 +101,16 @@ describe("iRacing Endurance event-card flow", () => {
     expect(component).toContain("Alle timeslots");
   });
 
-  it("gebruikt het detail-panel met klassen/auto's, animo en een toegankelijk venster", () => {
+  it("gebruikt het detail-panel met klassen/auto's, slotanimo en een toegankelijk venster", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
     expect(component).toContain("Officiële klassen & auto's");
-    expect(component).toContain("tonen interesse");
-    expect(component).toContain("Interesse aanmelden");
+    expect(component).toContain("coureurs kunnen");
+    expect(component).toContain("Ik kan dit slot");
+    expect(component).toContain("Beschikbaar:");
     const repo = read("src/features/endurance/repository/iracingEventsRepository.ts");
-    expect(repo).toContain("endurance_iracing_interest_summary");
-    expect(repo).toContain("endurance_set_iracing_interest");
+    expect(repo).toContain("endurance_iracing_slot_interest_summary");
+    expect(repo).toContain("endurance_set_iracing_slot_interest");
+    expect(repo).toContain("endurance_iracing_slot_interest_members");
     expect(repo).toContain("local_car_ids");
   });
 

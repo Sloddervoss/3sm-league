@@ -10,10 +10,18 @@ export type IRacingCatalogCar = {
   localCarId?: string | null;
 };
 
-export type IRacingInterestSummaryRow = {
+export type IRacingSlotInterestSummaryRow = {
   catalog_event_id: string;
+  catalog_slot_id: string;
   interested_count: number;
   is_current_user_interested: boolean;
+};
+
+export type IRacingSlotInterestMember = {
+  catalog_slot_id: string;
+  user_id: string;
+  iracing_name: string | null;
+  display_name: string | null;
 };
 
 export type IRacingCatalogSlot = {
