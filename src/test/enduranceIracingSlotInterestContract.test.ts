@@ -10,7 +10,7 @@ const rollback = readFileSync(
   "utf8",
 );
 
-describe("endurance iRacing timeslot-interest migration contract", () => {
+describe("endurance iRacing tijdslot-interest migration contract", () => {
   it("slaat meerdere slotkeuzes per gebruiker op maar nooit dubbel binnen hetzelfde slot", () => {
     expect(migration).toContain("CREATE TABLE public.endurance_iracing_slot_interest");
     expect(migration).toContain("catalog_event_id UUID NOT NULL");

@@ -29,8 +29,10 @@ const Navbar = () => {
   const visibleNavItems = canUseEndurance
     ? [...navItems, { label: "Endurance", path: "/endurance/", icon: TimerReset }]
     : navItems;
-  const showDesktop = showAdmin ? "xl:flex" : "lg:flex";
-  const hideDesktop = showAdmin ? "xl:hidden" : "lg:hidden";
+  // Authenticated navigation can exceed a 1440px viewport. Keep the existing
+  // menu variant active until 2xl so the language control remains reachable.
+  const showDesktop = "2xl:flex";
+  const hideDesktop = "2xl:hidden";
   const LanguageSwitch = ({ className = "" }: { className?: string }) => (
     <div
       className={`inline-flex h-8 items-center rounded-md border border-border bg-card/40 p-0.5 ${className}`}
