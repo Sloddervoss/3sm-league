@@ -109,6 +109,13 @@ export const phaseRange = (startAt: string | null, minutes: number | null) => {
   return `${short.format(new Date(startAt))}–${short.format(new Date(endAt))}`;
 };
 
+/** Een iRacing-race volgt direct op de kwalificatie wanneer geen aparte overgang is gepubliceerd. */
+export const expectedCatalogRaceStart = (slot: Pick<IRacingCatalogSlot, "estimated_race_start_at" | "qualifying_start_at" | "qualifying_duration_minutes">) => {
+  if (slot.estimated_race_start_at) return slot.estimated_race_start_at;
+  if (!slot.qualifying_start_at || slot.qualifying_duration_minutes === null) return null;
+  return new Date(new Date(slot.qualifying_start_at).getTime() + slot.qualifying_duration_minutes * 60_000).toISOString();
+};
+
 export const catalogDateWindow = (event: Pick<IRacingCatalogEvent, "event_start_date" | "event_end_date">) => {
   if (!event.event_start_date) return "Datum nog niet gepubliceerd";
   const formatter = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
