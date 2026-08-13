@@ -86,7 +86,8 @@ describe("iRacing Endurance event-card flow", () => {
 
   it("gebruikt de originele 3SM-kaartasset en geen officiële poster in de UI", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
-    expect(component).toContain('/endurance/endurance-card-landscape.webp');
+    expect(component).toContain('/endurance-assets/endurance-card-landscape.webp');
+    expect(component).not.toContain('src="/endurance/');
     expect(component).not.toContain("images-static.iracing.com");
   });
 });

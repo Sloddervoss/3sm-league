@@ -112,7 +112,7 @@ export const IRacingEventCatalog = () => {
     <div className="grid gap-6">{visible.map((event) => {
       const selected = selectedCatalogSlot(event);
       return <article key={event.id} className="relative overflow-hidden rounded-[1.75rem] bg-[#111318] shadow-2xl shadow-black/30 ring-1 ring-white/[0.07]">
-        <div className="absolute inset-0"><img src="/endurance/endurance-card-landscape.webp" alt="" className="h-full w-full object-cover opacity-25" /><div className="absolute inset-0 bg-gradient-to-r from-[#0e1014] via-[#0e1014]/95 to-[#0e1014]/55" /></div>
+        <div className="absolute inset-0"><img src="/endurance-assets/endurance-card-landscape.webp" alt="" className="h-full w-full object-cover opacity-25" /><div className="absolute inset-0 bg-gradient-to-r from-[#0e1014] via-[#0e1014]/95 to-[#0e1014]/55" /></div>
         <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[0.72fr_1.28fr]">
           <header>
             <div className="flex flex-wrap gap-2"><StatusPill tone={selected ? "orange" : "neutral"}>{selected ? "Geselecteerd door 3SM" : "Nog niet door 3SM geselecteerd"}</StatusPill><StatusPill>Officiële bron</StatusPill></div>
