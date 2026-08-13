@@ -7,7 +7,7 @@ declare const Deno: {
   serve(handler: (request: Request) => Response | Promise<Response>): void;
 };
 
-type SeasonMapEntry = { seasonId: number; seriesId?: number; localClassIds: string[]; seed: SpecialEventSeed };
+type SeasonMapEntry = { seasonId: number; seriesId?: number; localClassIds: string[]; localCarMap?: Record<string, string>; seed: SpecialEventSeed };
 type Counts = { events_seen: number; events_inserted: number; events_updated: number; slots_seen: number; slots_inserted: number; slots_updated: number };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -30,7 +30,10 @@ const parseSeasonMap = (): SeasonMapEntry[] => {
   if (!Array.isArray(parsed)) throw new Error("ENDURANCE_IRACING_SEASON_MAP_JSON moet een array zijn");
   return parsed.map((entry) => {
     const value = entry as Partial<SeasonMapEntry>;
-    if (!Number.isInteger(value.seasonId) || !Array.isArray(value.localClassIds) || !value.localClassIds.every((id) => ["GTP", "LMP2", "GT3"].includes(id)) || !value.seed?.sourceKey || !value.seed?.name) {
+    if (!Number.isInteger(value.seasonId) || !Array.isArray(value.localClassIds) || !value.localClassIds.every((id) => typeof id === "string")
+      || (value.localCarMap !== undefined && (typeof value.localCarMap !== "object" || Array.isArray(value.localCarMap)
+        || !Object.entries(value.localCarMap).every(([sourceKey, localId]) => sourceKey.trim() && typeof localId === "string" && localId.trim())))
+      || !value.seed?.sourceKey || !value.seed?.name) {
       throw new Error("Ongeldige seasonmapping");
     }
     return value as SeasonMapEntry;
@@ -95,6 +98,9 @@ Deno.serve(async (request) => {
         const officialSeed = calendarHtml ? enrichSeedFromOfficialCalendar(entry.seed, calendarHtml) : entry.seed;
         const schedule = await client.fetchData(`/data/series/season_schedule?season_id=${entry.seasonId}`);
         const normalized = await normalizeSpecialEvent(officialSeed, schedule as never);
+        const localCarMap = entry.localCarMap ?? {};
+        const cars = normalized.cars.map((car) => ({ ...car, localCarId: localCarMap[car.sourceKey] ?? null }));
+        const localCarIds = [...new Set(cars.flatMap((car) => car.localCarId ? [car.localCarId] : []))];
         counts.events_seen += 1;
         counts.slots_seen += normalized.slots.length;
 
@@ -115,6 +121,8 @@ Deno.serve(async (request) => {
           duration_minutes: normalized.durationMinutes,
           class_ids: normalized.classIds,
           local_class_ids: entry.localClassIds,
+          local_car_ids: localCarIds,
+          cars,
           team_event: normalized.teamEvent,
           official_url: normalized.officialUrl,
           poster_url: normalized.posterUrl,

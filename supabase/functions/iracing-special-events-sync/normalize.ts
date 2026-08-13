@@ -1,6 +1,14 @@
 export type TimingStatus = "full" | "partial" | "race_only";
 export type AvailabilityStatus = "exact_slots" | "date_only" | "tbd";
 
+export type OfficialEventCar = {
+  sourceKey: string;
+  name: string;
+  imageUrl: string | null;
+  officialClassId: string | null;
+  localCarId?: string | null;
+};
+
 export type SpecialEventSeed = {
   sourceKey: string;
   year: number;
@@ -11,6 +19,7 @@ export type SpecialEventSeed = {
   dateStart?: string | null;
   dateEnd?: string | null;
   classIds?: string[];
+  cars?: OfficialEventCar[];
   teamEvent?: boolean;
   officialUrl?: string | null;
   posterUrl?: string | null;
@@ -75,6 +84,7 @@ export type NormalizedSpecialEvent = SpecialEventSeed & {
   dateEnd: string | null;
   durationMinutes: number | null;
   classIds: string[];
+  cars: OfficialEventCar[];
   teamEvent: boolean;
   officialUrl: string | null;
   posterUrl: string | null;
@@ -107,6 +117,24 @@ const parseOfficialDateRange = (text: string): { dateStart: string; dateEnd: str
   return { dateStart: isoDate(year, startMonth, Number(match[2])), dateEnd: isoDate(year, endMonth, Number(match[4] ?? match[2])) };
 };
 
+const eventCarsFromSection = (section: string): OfficialEventCar[] => {
+  const carsArea = section.split(/Cars Competing<\/h3>/i)[1] ?? "";
+  const figures = carsArea.match(/<figure\b[\s\S]*?<\/figure>/gi) ?? [];
+  const seen = new Set<string>();
+  return figures.flatMap((figure) => {
+    const contextSource = figure.match(/uploadedSrc&quot;:&quot;([^&]+)&quot;/i)?.[1]?.replace(/\\\//g, "/");
+    const imageUrl = contextSource ?? figure.match(/<img\b[^>]*\bsrc="([^"]+)"/i)?.[1] ?? null;
+    if (!imageUrl) return [];
+    const rawName = imageUrl.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+    const sourceKey = rawName.toLowerCase().replace(/-\d+x\d+$/i, "");
+    if (!sourceKey || seen.has(sourceKey)) return [];
+    seen.add(sourceKey);
+    const name = rawName.replace(/-\d+x\d+$/i, "").replace(/[-_]+/g, " ")
+      .replace(/\bfeature\b/gi, "").replace(/\s+/g, " ").trim();
+    return [{ sourceKey, name, imageUrl, officialClassId: null }];
+  });
+};
+
 export function enrichSeedFromOfficialCalendar(seed: SpecialEventSeed, calendarHtml: string): SpecialEventSeed {
   const anchor = seed.officialUrl?.split("#")[1] ?? "";
   if (!anchor) throw new Error("Officiële event-URL mist een sectieanker");
@@ -123,6 +151,7 @@ export function enrichSeedFromOfficialCalendar(seed: SpecialEventSeed, calendarH
   const carsArea = section.split(/Cars Competing<\/h3>/i)[1] ?? "";
   const classes = htmlText(carsArea.match(/<summary>([\s\S]*?)<\/summary>/i)?.[1] ?? "")
     .split(/\s*\/\/\s*|\s*\/\s*|\s*,\s*/).map((value) => value.trim()).filter(Boolean);
+  const cars = eventCarsFromSection(section);
   return {
     ...seed,
     name: heading ? htmlText(heading) : seed.name,
@@ -130,6 +159,7 @@ export function enrichSeedFromOfficialCalendar(seed: SpecialEventSeed, calendarH
     dateEnd: dates?.dateEnd ?? seed.dateEnd ?? null,
     posterUrl: poster ?? seed.posterUrl ?? null,
     classIds: classes.length ? classes : seed.classIds,
+    cars: cars.length ? cars : seed.cars,
     teamEvent: /\bTEAM EVENT\b/i.test(htmlText(section)) || seed.teamEvent === true,
   };
 }
@@ -240,6 +270,8 @@ export async function normalizeSpecialEvent(seed: SpecialEventSeed, input?: IRac
     dateEnd,
     durationMinutes: finiteMinutes(schedule?.race_time_limit),
     classIds: [...new Set(seed.classIds ?? [])].sort(),
+    cars: Array.from(new Map((seed.cars ?? []).map((car) => [car.sourceKey, car])).values())
+      .sort((a, b) => a.sourceKey.localeCompare(b.sourceKey)),
     teamEvent: seed.teamEvent ?? true,
     officialUrl: seed.officialUrl ?? null,
     posterUrl: seed.posterUrl ?? null,

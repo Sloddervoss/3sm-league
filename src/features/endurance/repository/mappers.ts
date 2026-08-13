@@ -25,6 +25,7 @@ export function enduranceEventRowToAppModel(row: EnduranceEventRow): EnduranceEv
     registrationDeadline: row.registration_deadline ?? "",
     slots: slots.map((slot) => ({ id: slot.id, startAt: slot.startAt ?? row.start_at, label: slot.label ?? slot.id })),
     classIds: row.class_ids as EnduranceEvent["classIds"],
+    allowedCarIds: row.allowed_car_ids,
     selectedClassId: row.selected_class_id as EnduranceEvent["selectedClassId"],
     selectedCarId: row.selected_car_id,
     maxDriversPerCar: row.max_drivers_per_car,

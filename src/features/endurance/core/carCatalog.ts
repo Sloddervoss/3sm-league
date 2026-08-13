@@ -1,4 +1,4 @@
-export const IRACING_ENDURANCE_CLASSES = ["GTP", "LMP2", "GT3"] as const;
+export const IRACING_ENDURANCE_CLASSES = ["GTP", "LMP2", "GT3", "HPD", "GT1", "GT2"] as const;
 export type EnduranceClassId = typeof IRACING_ENDURANCE_CLASSES[number];
 
 export interface IRacingEnduranceCar {
@@ -42,8 +42,17 @@ export const IRACING_ENDURANCE_CARS: readonly IRacingEnduranceCar[] = [
   car("mclaren-720s-gt3-evo", "GT3", "McLaren 720S GT3 EVO", "mclaren-720s-gt3-evo"),
   car("mercedes-amg-gt3-2020", "GT3", "Mercedes-AMG GT3 2020", "mercedes-amg-gt3-2020"),
   car("porsche-911-gt3-r-992", "GT3", "Porsche 911 GT3 R (992)", "porsche-911-gt3-r-992"),
+
+  car("hpd-arx-01c", "HPD", "HPD ARX-01c", "hpd-arx-01c"),
+  car("chevrolet-corvette-c6r", "GT1", "Chevrolet Corvette C6.R", "chevrolet-corvette-c6r"),
+  car("aston-martin-dbr9-gt1", "GT1", "Aston Martin DBR9 GT1", "aston-martin-dbr9-gt1"),
+  car("ford-gt-gt2-gt3", "GT2", "Ford GT GT2/GT3", "ford-gt-gt2-gt3"),
 ] as const;
 
 export const enduranceCarsForClass = (classId: EnduranceClassId) => IRACING_ENDURANCE_CARS.filter((candidate) => candidate.classId === classId);
+export const allowedEnduranceCarsForClass = (classId: EnduranceClassId, allowedCarIds?: readonly string[]) => {
+  const cars = enduranceCarsForClass(classId);
+  return allowedCarIds ? cars.filter((candidate) => allowedCarIds.includes(candidate.id)) : cars;
+};
 export const getEnduranceCar = (id: string | null | undefined) => IRACING_ENDURANCE_CARS.find((candidate) => candidate.id === id);
 export const isEnduranceClassId = (value: string): value is EnduranceClassId => IRACING_ENDURANCE_CLASSES.includes(value as EnduranceClassId);

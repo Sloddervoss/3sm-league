@@ -20,6 +20,11 @@ const event: IRacingCatalogEvent = {
   duration_minutes: null,
   class_ids: ["HPD", "GT1", "GT2"],
   local_class_ids: ["GTP", "LMP2", "GT3"],
+  local_car_ids: ["car-gtp", "car-lmp2"],
+  cars: [
+    { id: "car-1", name: "HRC ARX01c", imageUrl: "https://example.com/hrc.jpg", officialClassId: "HPD" },
+    { id: "car-2", name: "Corvette C6R", imageUrl: "https://example.com/vette.jpg", officialClassId: "GT1" },
+  ],
   team_event: true,
   official_url: "https://www.iracing.com/special-events/",
   poster_url: null,
@@ -57,6 +62,8 @@ describe("iRacing Endurance event-card flow", () => {
     expect(new Set(event.slots.map((slot) => slot.catalog_event_id))).toEqual(new Set([event.id]));
     expect(selectedCatalogSlot(event)).toBeNull();
     expect(selectedCatalogSlot({ ...event, selectedSlotId: "slot-2" })?.id).toBe("slot-2");
+    expect(event.local_car_ids).toHaveLength(2);
+    expect(event.cars.map((car) => car.name)).toContain("HRC ARX01c");
   });
 
   it("formatteert UTC en Amsterdam expliciet en toont het datumvenster", () => {
@@ -65,6 +72,33 @@ describe("iRacing Endurance event-card flow", () => {
     expect(formatCatalogInstant(iso, "amsterdam")).toMatch(/14:00/);
     expect(catalogDateWindow(event)).toContain("14 augustus 2026");
     expect(phaseRange(iso, 30)).toBe("14:00–14:30");
+  });
+
+  it("gebruikt een responsive kaartengrid met 1 kolom mobiel en 2+ op desktop", () => {
+    const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
+    expect(component).toContain("md:grid-cols-2");
+    expect(component).toContain("2xl:grid-cols-3");
+    expect(component).toContain("grid gap-5");
+  });
+
+  it("inlined slots niet meer in de kaarten maar verplaatst ze naar de modal-popup", () => {
+    const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
+    expect(component).toContain("CompactEventCard");
+    expect(component).toContain("onOpen={() => setOpenEventId(event.id)}");
+    expect(component).toContain("EventDetailModal");
+    expect(component).toContain("aria-haspopup=\"dialog\"");
+    expect(component).toContain("Alle timeslots");
+  });
+
+  it("gebruikt het detail-panel met klassen/auto's, animo en een toegankelijk venster", () => {
+    const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
+    expect(component).toContain("Officiële klassen & auto's");
+    expect(component).toContain("tonen interesse");
+    expect(component).toContain("Interesse aanmelden");
+    const repo = read("src/features/endurance/repository/iracingEventsRepository.ts");
+    expect(repo).toContain("endurance_iracing_interest_summary");
+    expect(repo).toContain("endurance_set_iracing_interest");
+    expect(repo).toContain("local_car_ids");
   });
 
   it("rendert activatie alleen voor managers en registratie alleen bij het gekozen slot", () => {
@@ -77,6 +111,14 @@ describe("iRacing Endurance event-card flow", () => {
     expect(component).toContain("Exacte starttijden nog niet gepubliceerd door iRacing");
   });
 
+  it("blokkeert manager-activatie ruim zonder gemapte lokale klassen én officiële auto's", () => {
+    const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
+    expect(component).toContain("local_class_ids.length === 0");
+    expect(component).toContain("event.local_car_ids.length === 0");
+    expect(component).toContain("Activatie geblokkeerd");
+    expect(component).toContain("koppel eerst expliciet ondersteunde lokale 3SM-klassen én de officiële auto's");
+  });
+
   it("laat deelnemers geen ander officieel slot kiezen", () => {
     const form = read("src/features/endurance/registration/RegistrationForm.tsx");
     expect(form).not.toContain("Startslotvoorkeur");
@@ -84,8 +126,11 @@ describe("iRacing Endurance event-card flow", () => {
     expect(form).toContain("slot_id: selectedSlot?.id ?? null");
   });
 
-  it("gebruikt de originele 3SM-kaartasset en geen officiële poster in de UI", () => {
+  it("gebruikt voor Portimão het ongewijzigde officiële eventlogo met een 3SM-fallback", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
+    expect(component).toContain('/endurance-assets/official/iracing-2026-portimao-1000.png');
+    expect(component).toContain('Officieel eventlogo © iRacing');
+    expect(component).toContain('object-contain');
     expect(component).toContain('/endurance-assets/endurance-card-landscape.webp');
     expect(component).toContain('aspect-video');
     expect(component).toContain('opacity-100');
