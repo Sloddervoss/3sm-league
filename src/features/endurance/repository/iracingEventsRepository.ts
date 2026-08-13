@@ -128,7 +128,11 @@ export async function listIRacingInterestSummary(): Promise<IRacingInterestSumma
   assertEnduranceTable("endurance_iracing_events");
   const { data, error } = await enduranceClient().rpc("endurance_iracing_interest_summary");
   if (error) throw new Error(`iRacing-animo laden mislukt: ${error.message}`);
-  return (data ?? []) as IRacingInterestSummaryRow[];
+  return ((data ?? []) as Array<IRacingInterestSummaryRow & { interested_count: number | string }>).map((row) => ({
+    ...row,
+    // PostgreSQL BIGINT wordt door PostgREST als string geserialiseerd.
+    interested_count: Number(row.interested_count),
+  }));
 }
 
 export function useIRacingInterestSummary() {
