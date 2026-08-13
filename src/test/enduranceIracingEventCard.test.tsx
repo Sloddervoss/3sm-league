@@ -92,25 +92,32 @@ describe("iRacing Endurance event-card flow", () => {
     expect(component).toContain("grid gap-5");
   });
 
+  it("houdt de taalbediening bereikbaar bij de brede ingelogde navigatie", () => {
+    const navbar = read("src/components/Navbar.tsx");
+    expect(navbar).toContain('const showDesktop = "2xl:flex"');
+    expect(navbar).toContain('const hideDesktop = "2xl:hidden"');
+  });
+
   it("inlined slots niet meer in de kaarten maar verplaatst ze naar de modal-popup", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
     expect(component).toContain("CompactEventCard");
     expect(component).toContain("onOpen={() => setOpenEventId(event.id)}");
     expect(component).toContain("EventDetailModal");
     expect(component).toContain("aria-haspopup=\"dialog\"");
-    expect(component).toContain("Alle timeslots");
+    expect(component).toContain("Alle tijdsloten");
   });
 
   it("gebruikt het detail-panel met klassen/auto's, slotanimo en een toegankelijk venster", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
     expect(component).toContain("Officiële klassen & auto's");
     expect(component).toContain("coureurs kunnen");
-    expect(component).toContain("Ik kan dit slot");
+    expect(component).toContain("Ik kan dit tijdslot");
     expect(component).toContain("Beschikbaar:");
     const repo = read("src/features/endurance/repository/iracingEventsRepository.ts");
     expect(repo).toContain("endurance_iracing_slot_interest_summary");
     expect(repo).toContain("endurance_set_iracing_slot_interest");
     expect(repo).toContain("endurance_iracing_slot_interest_members");
+    expect(repo).toContain("endurance_iracing_manager_interest_overview");
     expect(repo).toContain("local_car_ids");
   });
 

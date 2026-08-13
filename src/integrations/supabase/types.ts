@@ -2092,6 +2092,13 @@ export type Database = {
           display_name: string | null
         }[]
       }
+      endurance_iracing_manager_interest_overview: {
+        Args: never
+        Returns: {
+          catalog_event_id: string
+          interested_count: number
+        }[]
+      }
       admin_get_community_support_payment_config: {
         Args: never
         Returns: {

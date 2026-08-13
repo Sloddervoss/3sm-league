@@ -40,7 +40,7 @@ describe("iRacing Special Events normalizer", () => {
     });
   });
 
-  it("weigert een seasonmapping waarvan timeslots buiten het officiële eventvenster vallen", async () => {
+  it("weigert een seasonmapping waarvan tijdsloten buiten het officiële eventvenster vallen", async () => {
     await expect(normalizeSpecialEvent(
       { sourceKey: "iracing:2026:nurburgring-24h", year: 2026, name: "Nürburgring 24h", dateStart: "2026-05-01", dateEnd: "2026-05-03" },
       { race_time_descriptors: [{ session_times: ["2026-03-21T07:00:00Z", "2026-05-02T12:00:00Z"] }] },

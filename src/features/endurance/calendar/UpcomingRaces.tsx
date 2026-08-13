@@ -7,6 +7,7 @@ import { getEnduranceCar } from "../core/carCatalog";
 import { useEnduranceEvents } from "../repository/eventsRepository";
 import { useAllEnduranceRegistrations } from "../repository/registrationsRepository";
 import { enduranceEventRowsToAppModels } from "../repository/mappers";
+import { useLanguage } from "@/i18n/useLanguage";
 
 const statusLabel = { draft: "Concept", registration_open: "Inschrijving open", registration_closed: "Inschrijving gesloten", planning: "Planning", live: "Live", completed: "Afgerond" } as const;
 
@@ -18,6 +19,7 @@ const statusLabel = { draft: "Concept", registration_open: "Inschrijving open", 
  * het inschrijfformulier zolang de actor nog niet is ingeschreven).
  */
 export const UpcomingRaces = ({ onSelect }: { onSelect: (event: EnduranceEvent) => void }) => {
+  const { language } = useLanguage();
   const { actorId } = useEnduranceActor();
   const { data: dbEvents = [], isLoading, isError } = useEnduranceEvents();
   const { data: registrations = [] } = useAllEnduranceRegistrations();
@@ -26,7 +28,13 @@ export const UpcomingRaces = ({ onSelect }: { onSelect: (event: EnduranceEvent) 
     .sort((a, b) => a.startAt.localeCompare(b.startAt));
   return (
     <div>
-      <SectionHeading eyebrow="3SM-races" title="Handmatige en geactiveerde races" description="Hier staan handmatige 3SM-races en officiële evenementen nadat een manager een timeslot heeft gekozen." />
+      <SectionHeading
+        eyebrow="3SM-races"
+        title={language === "en" ? "Manual and activated races" : "Handmatige en geactiveerde races"}
+        description={language === "en"
+          ? "This section lists manual 3SM races and official events after a manager selects a time slot."
+          : "Hier staan handmatige 3SM-races en officiële evenementen nadat een manager een tijdslot heeft gekozen."}
+      />
       <div className="grid gap-5 xl:grid-cols-2">
         {events.map((event) => {
           const myReg = registrations.find((r) => r.event_id === event.id && r.user_id === actorId);

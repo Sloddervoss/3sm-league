@@ -24,6 +24,17 @@ export type IRacingSlotInterestMember = {
   display_name: string | null;
 };
 
+export type IRacingEventInterestSummaryRow = {
+  catalog_event_id: string;
+  interested_count: number;
+  is_current_user_interested: boolean;
+};
+
+export type IRacingManagerInterestOverviewRow = {
+  catalog_event_id: string;
+  interested_count: number;
+};
+
 export type IRacingCatalogSlot = {
   id: string;
   catalog_event_id: string;
@@ -71,28 +82,18 @@ export type IRacingCatalogEvent = {
   selectedSlotId: string | null;
 };
 
-const amsterdamFormatter = new Intl.DateTimeFormat("nl-NL", {
+const instantFormatter = (language: "nl" | "en", zone: "utc" | "amsterdam") => new Intl.DateTimeFormat(language === "en" ? "en-GB" : "nl-NL", {
   weekday: "short",
   day: "2-digit",
   month: "short",
   hour: "2-digit",
   minute: "2-digit",
-  timeZone: "Europe/Amsterdam",
+  timeZone: zone === "utc" ? "UTC" : "Europe/Amsterdam",
   timeZoneName: "short",
 });
 
-const utcFormatter = new Intl.DateTimeFormat("nl-NL", {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "UTC",
-  timeZoneName: "short",
-});
-
-export const formatCatalogInstant = (iso: string, zone: "utc" | "amsterdam") =>
-  (zone === "utc" ? utcFormatter : amsterdamFormatter).format(new Date(iso));
+export const formatCatalogInstant = (iso: string, zone: "utc" | "amsterdam", language: "nl" | "en" = "nl") =>
+  instantFormatter(language, zone).format(new Date(iso));
 
 /** Lokale kalenderdag voor event-zichtbaarheid; niet afleiden uit UTC. */
 export const catalogTodayAmsterdam = (now = new Date()) => {
@@ -106,10 +107,10 @@ export const catalogTodayAmsterdam = (now = new Date()) => {
   return `${value("year")}-${value("month")}-${value("day")}`;
 };
 
-export const phaseRange = (startAt: string | null, minutes: number | null) => {
+export const phaseRange = (startAt: string | null, minutes: number | null, language: "nl" | "en" = "nl") => {
   if (!startAt || minutes === null) return null;
   const endAt = new Date(new Date(startAt).getTime() + minutes * 60_000).toISOString();
-  const short = new Intl.DateTimeFormat("nl-NL", {
+  const short = new Intl.DateTimeFormat(language === "en" ? "en-GB" : "nl-NL", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Amsterdam",
@@ -124,9 +125,9 @@ export const expectedCatalogRaceStart = (slot: Pick<IRacingCatalogSlot, "estimat
   return new Date(new Date(slot.qualifying_start_at).getTime() + slot.qualifying_duration_minutes * 60_000).toISOString();
 };
 
-export const catalogDateWindow = (event: Pick<IRacingCatalogEvent, "event_start_date" | "event_end_date">) => {
-  if (!event.event_start_date) return "Datum nog niet gepubliceerd";
-  const formatter = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+export const catalogDateWindow = (event: Pick<IRacingCatalogEvent, "event_start_date" | "event_end_date">, language: "nl" | "en" = "nl") => {
+  if (!event.event_start_date) return language === "en" ? "Date not yet published" : "Datum nog niet gepubliceerd";
+  const formatter = new Intl.DateTimeFormat(language === "en" ? "en-GB" : "nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
   const start = formatter.format(new Date(`${event.event_start_date}T12:00:00Z`));
   if (!event.event_end_date || event.event_end_date === event.event_start_date) return start;
   return `${start} – ${formatter.format(new Date(`${event.event_end_date}T12:00:00Z`))}`;

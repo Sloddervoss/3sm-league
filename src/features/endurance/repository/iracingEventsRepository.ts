@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { assertEnduranceTable, enduranceClient } from "./dataAccess";
-import type { IRacingCatalogCar, IRacingCatalogEvent, IRacingCatalogSlot, IRacingSlotInterestMember, IRacingSlotInterestSummaryRow } from "../calendar/iracingCatalogPresentation";
+import type { IRacingCatalogCar, IRacingCatalogEvent, IRacingCatalogSlot, IRacingEventInterestSummaryRow, IRacingManagerInterestOverviewRow, IRacingSlotInterestMember, IRacingSlotInterestSummaryRow } from "../calendar/iracingCatalogPresentation";
 
 const EVENT_COLUMNS = "id,source_key,name,year,circuit,configuration,event_start_date,event_end_date,duration_minutes,class_ids,local_class_ids,local_car_ids,cars,team_event,official_url,poster_url,availability_status,source_updated_at,last_seen_at,active";
 const SLOT_COLUMNS = "id,catalog_event_id,source_slot_key,session_start_at,practice_start_at,practice_duration_minutes,qualifying_start_at,qualifying_duration_minutes,transition_duration_minutes,estimated_race_start_at,race_duration_minutes,race_lap_limit,session_duration_minutes,session_timing_status,label,active";
@@ -46,7 +46,7 @@ export async function listIRacingEnduranceCatalog(): Promise<IRacingCatalogEvent
     enduranceClient().from("endurance_events").select(LOCAL_LINK_COLUMNS).not("iracing_catalog_event_id", "is", null),
   ]);
   if (eventsResult.error) throw new Error(`iRacing endurancecatalogus laden mislukt: ${eventsResult.error.message}`);
-  if (slotsResult.error) throw new Error(`iRacing endurance-timeslots laden mislukt: ${slotsResult.error.message}`);
+  if (slotsResult.error) throw new Error(`iRacing endurance-tijdsloten laden mislukt: ${slotsResult.error.message}`);
   if (linksResult.error) throw new Error(`3SM-slotselecties laden mislukt: ${linksResult.error.message}`);
 
   const slots = (slotsResult.data ?? []) as IRacingCatalogSlot[];
@@ -111,19 +111,21 @@ export async function activateIRacingEnduranceSlot(input: ActivateIRacingSlotInp
     p_max_drivers_per_car: input.maxDriversPerCar,
     p_invited_user_ids: input.invitedUserIds,
   });
-  if (error) throw new Error(`iRacing-timeslot activeren mislukt: ${error.message}`);
-  if (typeof data !== "string") throw new Error("iRacing-timeslot is geactiveerd zonder geldige 3SM-race-ID.");
+  if (error) throw new Error(`iRacing-tijdslot activeren mislukt: ${error.message}`);
+  if (typeof data !== "string") throw new Error("iRacing-tijdslot is geactiveerd zonder geldige 3SM-race-ID.");
   return data;
 }
 
 export const iracingCatalogQueryKey = ["endurance", "iracing-catalog"] as const;
 export const iracingSlotInterestSummaryQueryKey = ["endurance", "iracing-slot-interest-summary"] as const;
+export const iracingEventInterestSummaryQueryKey = ["endurance", "iracing-event-interest-summary"] as const;
+export const iracingManagerInterestOverviewQueryKey = ["endurance", "iracing-manager-interest-overview"] as const;
 
 export function useIRacingEnduranceCatalog() {
   return useQuery({ queryKey: iracingCatalogQueryKey, queryFn: listIRacingEnduranceCatalog });
 }
 
-/** Laadt per timeslot uitsluitend het aggregaat en de keuze van de huidige gebruiker. */
+/** Laadt per tijdslot uitsluitend het aggregaat en de keuze van de huidige gebruiker. */
 export async function listIRacingSlotInterestSummary(): Promise<IRacingSlotInterestSummaryRow[]> {
   assertEnduranceTable("endurance_iracing_event_slots");
   const { data, error } = await enduranceClient().rpc("endurance_iracing_slot_interest_summary");
@@ -139,7 +141,7 @@ export function useIRacingSlotInterestSummary() {
   return useQuery({ queryKey: iracingSlotInterestSummaryQueryKey, queryFn: listIRacingSlotInterestSummary });
 }
 
-/** Zet de eigen beschikbaarheid voor exact één officieel timeslot aan/uit. */
+/** Zet de eigen beschikbaarheid voor exact één officieel tijdslot aan/uit. */
 export async function setIRacingSlotInterest(catalogSlotId: string, interested: boolean): Promise<void> {
   assertEnduranceTable("endurance_iracing_event_slots");
   const { error } = await enduranceClient().rpc("endurance_set_iracing_slot_interest", {
@@ -166,7 +168,7 @@ export async function listIRacingSlotInterestMembers(catalogEventId: string): Pr
   const { data, error } = await enduranceClient().rpc("endurance_iracing_slot_interest_members", {
     p_catalog_event_id: catalogEventId,
   });
-  if (error) throw new Error(`Timeslotbeschikbaarheid laden mislukt: ${error.message}`);
+  if (error) throw new Error(`Tijdslotbeschikbaarheid laden mislukt: ${error.message}`);
   return (data ?? []) as IRacingSlotInterestMember[];
 }
 
@@ -175,6 +177,52 @@ export function useIRacingSlotInterestMembers(catalogEventId: string | null, ena
     queryKey: ["endurance", "iracing-slot-interest-members", catalogEventId],
     queryFn: () => listIRacingSlotInterestMembers(catalogEventId!),
     enabled: enabled && Boolean(catalogEventId),
+  });
+}
+
+const normalizeCount = <T extends { interested_count: number | string }>(row: T) => ({
+  ...row,
+  interested_count: Number(row.interested_count),
+});
+
+export async function listIRacingEventInterestSummary(): Promise<IRacingEventInterestSummaryRow[]> {
+  const { data, error } = await enduranceClient().rpc("endurance_iracing_interest_summary");
+  if (error) throw new Error(`Voorlopige eventinteresse laden mislukt: ${error.message}`);
+  return ((data ?? []) as Array<IRacingEventInterestSummaryRow & { interested_count: number | string }>).map(normalizeCount);
+}
+
+export function useIRacingEventInterestSummary(enabled: boolean) {
+  return useQuery({ queryKey: iracingEventInterestSummaryQueryKey, queryFn: listIRacingEventInterestSummary, enabled });
+}
+
+export function useSetIRacingEventInterest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ catalogEventId, interested }: { catalogEventId: string; interested: boolean }) => {
+      const { error } = await enduranceClient().rpc("endurance_set_iracing_interest", {
+        p_catalog_event_id: catalogEventId,
+        p_interested: interested,
+      });
+      if (error) throw new Error(`Voorlopige eventinteresse bijwerken mislukt: ${error.message}`);
+    },
+    onSuccess: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: iracingEventInterestSummaryQueryKey }),
+      queryClient.invalidateQueries({ queryKey: iracingManagerInterestOverviewQueryKey }),
+    ]),
+  });
+}
+
+export async function listIRacingManagerInterestOverview(): Promise<IRacingManagerInterestOverviewRow[]> {
+  const { data, error } = await enduranceClient().rpc("endurance_iracing_manager_interest_overview");
+  if (error) throw new Error(`Eventanimo laden mislukt: ${error.message}`);
+  return ((data ?? []) as Array<IRacingManagerInterestOverviewRow & { interested_count: number | string }>).map(normalizeCount);
+}
+
+export function useIRacingManagerInterestOverview(enabled: boolean) {
+  return useQuery({
+    queryKey: iracingManagerInterestOverviewQueryKey,
+    queryFn: listIRacingManagerInterestOverview,
+    enabled,
   });
 }
 
