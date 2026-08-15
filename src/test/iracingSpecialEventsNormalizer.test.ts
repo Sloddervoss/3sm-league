@@ -9,6 +9,7 @@ import {
   discoverUpcomingSpecialEvents,
   enrichSeedFromOfficialCalendar,
   normalizeSpecialEvent,
+  resolveSeriesRoster,
 } from "../../supabase/functions/iracing-special-events-sync/normalize";
 
 describe("iRacing Special Events normalizer", () => {
@@ -80,18 +81,55 @@ describe("iRacing Special Events normalizer", () => {
     expect(combined).not.toBeNull();
     expect(combined?.sourceKey).toBe("iracing:2026:nurburgring-endurance-championship");
     expect(combined?.name).toBe("Nürburgring Endurance Championship");
-    // 2 weken -> 2 slots, gesorteerd op datum (maart vóór november).
-    expect(combined?.slots).toHaveLength(2);
+    // 2 weken x 4 racemomenten = 8 slots, gesorteerd op datum/tijd (maart vóór november).
+    expect(combined?.slots).toHaveLength(8);
     expect(combined?.slots[0]).toMatchObject({
       sessionStartAt: "2026-03-21T07:00:00.000Z",
       label: expect.stringContaining("2026"),
-      sourceSlotKey: "iracing:2026:nurburgring-endurance-championship:week0",
     });
-    expect(combined?.slots[1]?.sessionStartAt).toBe("2026-11-07T07:00:00.000Z");
+    // Het tweede racemoment van dezelfde week (17:00 UTC = 19:00 Amsterdam) moet ook bestaan.
+    expect(combined?.slots.map((slot) => slot.sessionStartAt)).toContain("2026-03-21T17:00:00.000Z");
+    // Elke slot heeft een unieke sourceSlotKey (week + tijd).
+    const keys = combined?.slots.map((slot) => slot.sourceSlotKey);
+    expect(new Set(keys).size).toBe(keys?.length);
+    expect(combined?.slots[0]?.sourceSlotKey).toMatch(/^iracing:2026:nurburgring-endurance-championship:week0:/);
+    expect(combined?.slots[1]?.sessionStartAt).toBe("2026-03-21T17:00:00.000Z");
     expect(combined?.dateStart).toBe("2026-03-21");
-    expect(combined?.dateEnd).toBe("2026-11-07");
+    expect(combined?.dateEnd).toBe("2026-11-08");
     // Elke week-slot heeft een leesbaar datumlabel.
     expect(combined?.slots[0]?.label).toBeTruthy();
+  });
+
+  it("resolveert officiële klassen + auto's uit de iRacing carclass/car-data", () => {
+    // Nürburgring EC season 6236: car_class_ids 4098 (NEC GT3), 4099 (PCup), 4100 (GT4).
+    const carClassData = {
+      "4098": { car_class_id: 4098, name: "NEC GT3 2026", cars_in_class: [{ car_id: 156 }, { car_id: 174 }] },
+      "4099": { car_class_id: 4099, name: "NEC PCup 2026", cars_in_class: [{ car_id: 158 }] },
+      "4100": { car_class_id: 4100, name: "NEC GT4 2026", cars_in_class: [{ car_id: 160 }] },
+      "9999": { car_class_id: 9999, name: "Onbekend", cars_in_class: [{ car_id: 999 }] },
+    };
+    const carData = {
+      "156": { car_id: 156, car_name: "Mercedes-AMG GT3 2020" },
+      "174": { car_id: 174, car_name: "Porsche 963 GTP" },
+      "158": { car_id: 158, car_name: "Porsche 992 Porsche Cup" },
+      "160": { car_id: 160, car_name: "Mercedes-AMG GT4" },
+    };
+    const roster = resolveSeriesRoster([4098, 4099, 4100], carClassData, carData);
+    expect(roster.classIds).toEqual(["NEC GT3 2026", "NEC GT4 2026", "NEC PCup 2026"]);
+    // 4 bekende auto's, gesorteerd op source_key.
+    expect(roster.cars.map((car) => car.name)).toEqual([
+      "Mercedes-AMG GT3 2020",
+      "Mercedes-AMG GT4",
+      "Porsche 963 GTP",
+      "Porsche 992 Porsche Cup",
+    ]);
+    expect(roster.cars.every((car) => car.officialClassId)).toBe(true);
+    // Onbekende auto (car 999) wordt overgeslagen maar de class met naam blijft.
+    const unknown = resolveSeriesRoster([9999], carClassData, carData);
+    expect(unknown.classIds).toEqual(["Onbekend"]);
+    expect(unknown.cars).toEqual([]);
+    // Lege input geeft lege lijst.
+    expect(resolveSeriesRoster(undefined, null, null)).toEqual({ classIds: [], cars: [] });
   });
 
   it("normaliseert vijf officiële Portimão-sessiestarts zonder groene vlag te gokken", async () => {

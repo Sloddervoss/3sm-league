@@ -5,6 +5,7 @@ import {
   discoverSeriesRaces,
   discoverUpcomingSpecialEvents,
   normalizeSpecialEvent,
+  resolveSeriesRoster,
   type SeriesSeed,
   type SpecialEventSeed,
 } from "./normalize.ts";
@@ -230,14 +231,46 @@ Deno.serve(async (request) => {
     // Gewone endurance-series: elke season_schedule-row is één individuele race.
     // Een serie met `combined: true` (bv. Nürburgring EC, alle races op één
     // circuit) wordt juist één event met per-week child-slots.
-    for (const seriesEntry of mapping.filter((entry) => entry.kind === "series")) {
+    // Officiële klassen+auto's: één keer per serie de season car_class_ids
+    // laden en via /data/carclass/get + /data/car/get naar namen resolven.
+    let roster: Map<number, Awaited<ReturnType<typeof resolveSeriesRoster>>> | null = null;
+    const seriesEntries = mapping.filter((entry) => entry.kind === "series");
+    if (seriesEntries.length) {
       try {
+        const client = await dataClient();
+        const seasonsRaw = await client.fetchData("/data/series/seasons") as unknown;
+        const seasonsArr = Array.isArray(seasonsRaw) ? seasonsRaw : seasonsRaw ? Object.values(seasonsRaw) : [];
+        const seasonBySeasonId = new Map(seasonsArr
+          .filter((s): s is { season_id: number } => Boolean(s && typeof s === "object" && (s as { season_id?: unknown }).season_id))
+          .map((s) => [Number((s as { season_id: number }).season_id), s as { season_id: number; car_class_ids?: number[] }]));
+        const carClassData = await client.fetchData("/data/carclass/get").catch(() => null);
+        const carData = await client.fetchData("/data/car/get").catch(() => null);
+        roster = new Map();
+        for (const entry of seriesEntries) {
+          const season = seasonBySeasonId.get(entry.seasonId);
+          if (!season) continue;
+          const resolved = resolveSeriesRoster(
+            season.car_class_ids,
+            (carClassData ?? null) as Record<string | number, unknown> | unknown[] | null | undefined,
+            (carData ?? null) as Record<string | number, unknown> | unknown[] | null | undefined,
+          );
+          roster.set(entry.seasonId, resolved);
+        }
+      } catch (error) {
+        errors.push(`series_roster: ${cleanError(error)}`);
+      }
+    }
+    for (const seriesEntry of seriesEntries) {
+      try {
+        const rosterForSeries = roster?.get(seriesEntry.seasonId);
         const seriesSeed: SeriesSeed = {
           ...seriesEntry.seed,
           seasonId: seriesEntry.seasonId,
           seriesId: seriesEntry.seriesId ?? null,
           seriesName: seriesEntry.seed.name,
           combined: seriesEntry.combined === true,
+          classIds: rosterForSeries?.classIds ?? seriesEntry.seed.classIds ?? [],
+          cars: rosterForSeries?.cars ?? seriesEntry.seed.cars ?? [],
         };
         const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${seriesEntry.seasonId}`);
         if (seriesSeed.combined) {
