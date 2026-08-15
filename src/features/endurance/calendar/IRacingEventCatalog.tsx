@@ -14,6 +14,7 @@ import {
   formatCatalogInstant,
   phaseRange,
   selectedCatalogSlot,
+  sortCatalogByNextStart,
   type IRacingCatalogEvent,
   type IRacingCatalogSlot,
   upcomingCatalogSlots,
@@ -405,7 +406,9 @@ export const IRacingEventCatalog = () => {
   const [openEventId, setOpenEventId] = useState<string | null>(null);
   const visible = useMemo(() => {
     const today = catalogTodayAmsterdam();
-    return events.filter((event) => event.active && (!event.event_end_date || event.event_end_date >= today || Boolean(event.selectedEventId)));
+    return sortCatalogByNextStart(
+      events.filter((event) => event.active && (!event.event_end_date || event.event_end_date >= today || Boolean(event.selectedEventId))),
+    );
   }, [events]);
 
   if (isLoading) return <Panel><p role="status" className="text-sm text-gray-400">{c.loading}</p></Panel>;

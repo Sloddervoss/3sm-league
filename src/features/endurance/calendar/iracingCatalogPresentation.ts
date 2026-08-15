@@ -160,3 +160,38 @@ export const upcomingCatalogSlots = (
 
 export const selectedCatalogSlot = (event: IRacingCatalogEvent) =>
   event.slots.find((slot) => slot.id === event.selectedSlotId) ?? null;
+
+/**
+ * Berekent het eerstvolgende startmoment van een event voor catalogussortering:
+ * de vroegste nog upcoming slot-sessiestart. Heeft een event (nog) geen
+ * tijdsloten of zijn die allemaal verstreken, dan valt het terug op de
+ * event_start_date (event begint dan op die dag). Gebruikt voor 'eerst komt
+ * eerst gepresenteerd' in de catalogusgrid.
+ */
+export const nextCatalogStart = (
+  event: Pick<IRacingCatalogEvent, "slots" | "event_start_date">,
+  now: Date = new Date(),
+): number => {
+  const startTimes = event.slots
+    .map((slot) => slot.session_start_at)
+    .filter((iso): iso is string => Boolean(iso))
+    .map((iso) => new Date(iso).getTime())
+    .filter((time) => time >= now.getTime());
+  if (startTimes.length) return Math.min(...startTimes);
+  // Geen (verstrekte) slots meer: val alleen terug op de eventdatum als die
+  // nog in de toekomst ligt (tijdsloten nog niet gepubliceerd). Een verlopen
+  // event zonder toekomstige sloten zakt helemaal naar de onderkant in plaats
+  // van bovenaan te blijven staan.
+  if (event.event_start_date) {
+    const eventDate = new Date(`${event.event_start_date}T12:00:00Z`).getTime();
+    if (eventDate >= now.getTime()) return eventDate;
+  }
+  return Number.POSITIVE_INFINITY;
+};
+
+/** Sorteert events op het eerstvolgende startmoment (oplopend). */
+export const sortCatalogByNextStart = (
+  events: IRacingCatalogEvent[],
+  now: Date = new Date(),
+): IRacingCatalogEvent[] =>
+  [...events].sort((a, b) => nextCatalogStart(a, now) - nextCatalogStart(b, now));

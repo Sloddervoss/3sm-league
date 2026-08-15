@@ -6,6 +6,7 @@ import {
   formatCatalogInstant,
   phaseRange,
   selectedCatalogSlot,
+  sortCatalogByNextStart,
   upcomingCatalogSlots,
   type IRacingCatalogEvent,
 } from "@/features/endurance/calendar/iracingCatalogPresentation";
@@ -81,6 +82,27 @@ describe("iRacing Endurance event-card flow", () => {
     // Enkel de upcoming slots (>= vandaag) naast het geselecteerde slot.
     const mixed = upcomingCatalogSlots(event.slots, "slot-2", "2026-08-15");
     expect(mixed.some((slot) => slot.id === "slot-2")).toBe(true);
+  });
+
+  it("sorteert de catalogus op het eerstvolgende startmoment", () => {
+    const portimao: IRacingCatalogEvent = {
+      ...event,
+      id: "event-portimao", event_start_date: "2026-08-14",
+      slots: ["2026-08-15T09:00:00Z", "2026-08-15T14:00:00Z", "2026-08-15T18:00:00Z"].map((iso, index) => ({
+        ...event.slots[0], id: `p-slot-${index}`, session_start_at: iso,
+      })),
+    };
+    // Geen slot, maar eventdatum 16-08 => valt terug op de dag na Portimão's eerste slot.
+    const barcelona: IRacingCatalogEvent = { ...event, id: "event-barcelona", event_start_date: "2026-08-16", slots: [] };
+    // Eventdatum 20-08 => later dan Barcelona.
+    const suzuka: IRacingCatalogEvent = { ...event, id: "event-suzuka", event_start_date: "2026-08-20", slots: [] };
+    const ordered = sortCatalogByNextStart([suzuka, portimao, barcelona], new Date("2026-08-15T08:00:00Z"));
+    expect(ordered.map((e) => e.id)).toEqual(["event-portimao", "event-barcelona", "event-suzuka"]);
+    // Een verlopen event zonder toekomstige sloten zakt helemaal naar de onderkant.
+    const expired: IRacingCatalogEvent = { ...event, id: "event-expired", event_start_date: "2026-07-01",
+      slots: [{ ...event.slots[0], id: "x-slot", session_start_at: "2026-07-01T12:00:00Z" }] };
+    const withExpired = sortCatalogByNextStart([expired, portimao, barcelona], new Date("2026-08-15T08:00:00Z"));
+    expect(withExpired.map((e) => e.id)).toEqual(["event-portimao", "event-barcelona", "event-expired"]);
   });
 
   it("verbergt tijdsgevoelig slots die vandaag al zijn begonnen, maar houdt latere slots van dezelfde dag (Date-filter)", () => {
