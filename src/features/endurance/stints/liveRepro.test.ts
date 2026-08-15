@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createEnduranceSeed } from "../core/seed";
 import { generateStints } from "./stintGenerator";
@@ -71,5 +72,21 @@ describe("live 3-rijders repro", () => {
     expect(stints.length).toBeGreaterThan(0);
     const used = new Set(stints.map((s) => s.driverId));
     expect([...used].sort()).toEqual([U_DEVOS, U_RICKY, U_WEIJTS].sort());
+  });
+
+  it("StintTimeline toont de verwijderknop ALTIJD voor editable stints (ook dunne 24u-balken)", () => {
+    const timeline = readFileSync("src/features/endurance/stints/StintTimeline.tsx", "utf8");
+    expect(timeline).toContain("aria-label=\"Stint verwijderen\"");
+    // delete-knop mag niet meer achter `width >= 10` schuilgaan (dunne 24u-balken).
+    expect(timeline).not.toMatch(/width >= 10[\s\S]*Stint verwijderen/);
+    // smalle balken tonen minimaal de delete-knop.
+    expect(timeline).toContain('aria-label="Stint verwijderen"><Trash2');
+  });
+
+  it("StintPlanner vervangt bestaande draft-stints bij hergenereren (geen overlap)", () => {
+    const planner = readFileSync("src/features/endurance/stints/StintPlanner.tsx", "utf8");
+    expect(planner).toContain("replaceDraftStints");
+    expect(planner).toContain('s.status === "draft"');
+    expect(planner).toContain("remove.mutateAsync(draft.id)");
   });
 });
