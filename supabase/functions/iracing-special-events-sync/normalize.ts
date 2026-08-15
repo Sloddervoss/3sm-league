@@ -156,7 +156,7 @@ const officialClassesFromArea = (carsArea: string): string[] => htmlText(
   .map((value) => value.trim())
   .filter((value) => value.length > 0 && !/^(?:cars?\s*:\s*)?(?:tba|tbd|to be (?:announced|determined))$/i.test(value));
 
-const sourceSlug = (value: string) => value.normalize("NFKD")
+export const sourceSlug = (value: string) => value.normalize("NFKD")
   .replace(/[\u0300-\u036f]/g, "")
   .toLowerCase()
   .replace(/&/g, " and ")
@@ -442,6 +442,62 @@ const formatWeekLabel = (startDate: string | undefined): string | null => {
 };
 
 /**
+ * Resolveert officiële iRacing-klassen + auto's voor een serie op basis van de
+ * season `car_class_ids` en de `/data/carclass/get` + `/data/car/get` payloads.
+ * Klassenaam is de officiële classname; auto's krijgen een leesbare car_name.
+ * Onbekende class-IDs worden overgeslagen (nooit gegokt).
+ */
+export type ResolvedSeriesRoster = { classIds: string[]; cars: OfficialEventCar[] };
+
+export function resolveSeriesRoster(
+  carClassIds: number[] | undefined,
+  carClassData: Record<string | number, unknown> | unknown[] | null | undefined,
+  carData: Record<string | number, unknown> | unknown[] | null | undefined,
+): ResolvedSeriesRoster {
+  const classes = Array.isArray(carClassData) ? carClassData : carClassData ? Object.values(carClassData) : [];
+  const cars = Array.isArray(carData) ? carData : carData ? Object.values(carData) : [];
+  const carClassByName = new Map<string, { name?: string; cars_in_class?: { car_id?: number }[] }>();
+  for (const row of classes) {
+    if (!row || typeof row !== "object") continue;
+    const rec = row as { car_class_id?: number; name?: string; cars_in_class?: { car_id?: number }[] };
+    if (rec.car_class_id !== undefined) carClassByName.set(String(rec.car_class_id), rec);
+  }
+  const carById = new Map<string, { car_name?: string; car_id?: number }>();
+  for (const row of cars) {
+    if (!row || typeof row !== "object") continue;
+    const rec = row as { car_id?: number; car_name?: string };
+    if (rec.car_id !== undefined) carById.set(String(rec.car_id), rec);
+  }
+
+  const classIds = [...new Set((carClassIds ?? [])
+    .map((id) => carClassByName.get(String(id))?.name?.trim())
+    .filter((name): name is string => Boolean(name)))];
+  classIds.sort((a, b) => a.localeCompare(b));
+
+  const carMap = new Map<string, OfficialEventCar>();
+  for (const id of carClassIds ?? []) {
+    const cls = carClassByName.get(String(id));
+    if (!cls?.name) continue;
+    for (const entry of cls.cars_in_class ?? []) {
+      const meta = entry?.car_id !== undefined ? carById.get(String(entry.car_id)) : undefined;
+      const dirPath = (entry as { car_dirpath?: string }).car_dirpath;
+      const rawName = meta?.car_name?.trim() || dirPath?.trim() || "";
+      if (!rawName) continue;
+      const sourceKey = sourceSlug(rawName);
+      if (!sourceKey) continue;
+      carMap.set(sourceKey, {
+        sourceKey,
+        name: rawName,
+        imageUrl: null,
+        officialClassId: String(id),
+      });
+    }
+  }
+  const uniqueCars = [...carMap.values()].sort((a, b) => a.sourceKey.localeCompare(b.sourceKey));
+  return { classIds, cars: uniqueCars };
+}
+
+/**
  * Combineert alle race-weken van één serie tot een enkel catalog-event met
  * per-week child-slots, per datum gesorteerd. Bedoeld voor series die alle
  * races op één circuit rijden (bv. Nürburgring Endurance Championship), die
@@ -490,12 +546,15 @@ export async function discoverCombinedSeriesEvent(
       dateEnd: seriesSeed.dateEnd ?? null,
     };
     const weekEvent = await normalizeSpecialEvent(weekSeed, row);
-    const primary = weekEvent.slots[0];
-    if (!primary) continue;
-    const day = primary.sessionStartAt.slice(0, 10);
-    if (!dateStart || day < dateStart) dateStart = day;
-    if (!dateEnd || day > dateEnd) dateEnd = day;
-    slotsByWeek.push({ ...primary, sourceSlotKey: `${seriesSeed.sourceKey}:week${week}`, label: formatWeekLabel(row.start_date ?? day) });
+    if (!weekEvent.slots.length) continue;
+    for (const slot of weekEvent.slots) {
+      const day = slot.sessionStartAt.slice(0, 10);
+      if (!dateStart || day < dateStart) dateStart = day;
+      if (!dateEnd || day > dateEnd) dateEnd = day;
+      // Unieke slot per racemoment binnen de week (datum+tijd), gelabeld met de weekdatum.
+      const timeTag = slot.sessionStartAt.replace(/[^0-9]/g, "").slice(0, 14);
+      slotsByWeek.push({ ...slot, sourceSlotKey: `${seriesSeed.sourceKey}:week${week}:${timeTag}`, label: formatWeekLabel(row.start_date ?? day) });
+    }
   }
   const ordered = slotsByWeek.sort((a, b) => a.sessionStartAt.localeCompare(b.sessionStartAt));
   if (ordered.length === 0) return null;
