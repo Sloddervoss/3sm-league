@@ -168,6 +168,19 @@ describe("central SimHub relay", () => {
     expect(migration.match(/role_record\.role = 'super_admin'::public\.app_role/g)).toHaveLength(5);
   });
 
+  it("laat endurance-ster (tester/manager) hun EIGEN device opvragen en intrekken, en houdt beheeracties super_admin-only", () => {
+    // list/revoke staan open voor endurance-ster maar filteren op hun eigen device.
+    const listGate = pairing.indexOf('action === "list"');
+    expect(listGate).toBeGreaterThan(-1);
+    expect(pairing.slice(listGate)).toContain('if (!superAdmin) query = query.eq("owner_user_id", user.id)');
+    const revokeGate = pairing.indexOf('action === "revoke"');
+    expect(pairing.slice(revokeGate)).toContain('.eq("owner_user_id", user.id)');
+    // De toplevel-gate laat list/revoke/create door voor endurance-ster; assign,
+    // clear en legacy-binding blijven daarbuiten (super_admin-only).
+    expect(pairing).toContain('action !== "list" && action !== "revoke" && action !== "create" && !superAdmin');
+    expect(pairing).toContain('if (legacyBoundPairing && !superAdmin) {');
+  });
+
   it("uses a short single-use website code and DPAPI-protected device token", () => {
     expect(pairing).toContain("10 * 60 * 1000");
     expect(pairing).toContain("randomPairCode");
