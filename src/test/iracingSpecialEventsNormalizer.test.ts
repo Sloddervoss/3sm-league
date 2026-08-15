@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../supabase/functions/iracing-special-events-sync/fixtures/portimao-2026.json";
 import seriesFixture from "../../supabase/functions/iracing-special-events-sync/fixtures/imsa-endurance-s3.json";
+import combinedFixture from "../../supabase/functions/iracing-special-events-sync/fixtures/nurburgring-ec-combined.json";
 import { catalogTodayAmsterdam } from "../features/endurance/calendar/iracingCatalogPresentation";
 import {
+  discoverCombinedSeriesEvent,
   discoverSeriesRaces,
   discoverUpcomingSpecialEvents,
   enrichSeedFromOfficialCalendar,
@@ -68,6 +70,28 @@ describe("iRacing Special Events normalizer", () => {
       { sourceKey: "x", year: 2026, name: "X", seasonId: NaN as unknown as number, seriesName: "X" },
       seriesFixture.schedule,
     )).rejects.toThrow("Ongeldige serieseason-id");
+  });
+
+  it("combineert alle race-weken van een serie tot één event met per-week slots, per datum gesorteerd", async () => {
+    const combined = await discoverCombinedSeriesEvent(
+      { sourceKey: combinedFixture.seed.sourceKey, year: 2026, name: combinedFixture.seed.name, seasonId: combinedFixture.seasonId, seriesId: combinedFixture.seriesId, seriesName: combinedFixture.seed.name, combined: true },
+      combinedFixture.schedule,
+    );
+    expect(combined).not.toBeNull();
+    expect(combined?.sourceKey).toBe("iracing:2026:nurburgring-endurance-championship");
+    expect(combined?.name).toBe("Nürburgring Endurance Championship");
+    // 2 weken -> 2 slots, gesorteerd op datum (maart vóór november).
+    expect(combined?.slots).toHaveLength(2);
+    expect(combined?.slots[0]).toMatchObject({
+      sessionStartAt: "2026-03-21T07:00:00.000Z",
+      label: expect.stringContaining("2026"),
+      sourceSlotKey: "iracing:2026:nurburgring-endurance-championship:week0",
+    });
+    expect(combined?.slots[1]?.sessionStartAt).toBe("2026-11-07T07:00:00.000Z");
+    expect(combined?.dateStart).toBe("2026-03-21");
+    expect(combined?.dateEnd).toBe("2026-11-07");
+    // Elke week-slot heeft een leesbaar datumlabel.
+    expect(combined?.slots[0]?.label).toBeTruthy();
   });
 
   it("normaliseert vijf officiële Portimão-sessiestarts zonder groene vlag te gokken", async () => {

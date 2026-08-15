@@ -30,6 +30,8 @@ export type SeriesSeed = SpecialEventSeed & {
   seasonId: number;
   seriesId?: number | null;
   seriesName: string;
+  /** combineer alle race-weken tot 1 catalog-event met per-week child-slots. */
+  combined?: boolean;
 };
 
 type RaceTimeDescriptor = {
@@ -430,4 +432,72 @@ export async function discoverSeriesRaces(
     results.push(normalized);
   }
   return results;
+}
+
+const formatWeekLabel = (startDate: string | undefined): string | null => {
+  if (!startDate) return null;
+  const date = new Date(`${startDate}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+};
+
+/**
+ * Combineert alle race-weken van één serie tot een enkel catalog-event met
+ * per-week child-slots, per datum gesorteerd. Bedoeld voor series die alle
+ * races op één circuit rijden (bv. Nürburgring Endurance Championship), die
+ * anders als N identieke kaarten zouden verschijnen.
+ */
+export async function discoverCombinedSeriesEvent(
+  seriesSeed: SeriesSeed,
+  input?: IRacingSchedule | ScheduleEnvelope | IRacingSchedule[] | null,
+): Promise<NormalizedSpecialEvent | null> {
+  if (!seriesSeed.seasonId || !Number.isInteger(seriesSeed.seasonId)) {
+    throw new Error("Ongeldige serieseason-id");
+  }
+  const envelope = Array.isArray(input) ? { schedules: input as IRacingSchedule[] } : input ?? {};
+  const rows = Array.isArray((envelope as ScheduleEnvelope).schedules)
+    ? (envelope as ScheduleEnvelope).schedules ?? []
+    : [envelope as IRacingSchedule];
+
+  const firstRow = rows.find((row) => row?.track?.track_name);
+  const seed: SpecialEventSeed = {
+    ...seriesSeed,
+    name: seriesSeed.seriesName ?? seriesSeed.name,
+    circuit: firstRow?.track?.track_name ?? seriesSeed.circuit ?? null,
+    configuration: firstRow?.track?.config_name ?? seriesSeed.configuration ?? null,
+    trackId: firstRow?.track?.track_id ?? seriesSeed.trackId ?? null,
+    dateStart: seriesSeed.dateStart,
+    dateEnd: seriesSeed.dateEnd,
+    officialUrl: seriesSeed.officialUrl ?? null,
+    posterUrl: seriesSeed.posterUrl ?? null,
+  };
+  const event = await normalizeSpecialEvent(seed, null);
+
+  const slotsByWeek: NormalizedSlot[] = [];
+  let dateStart: string | null = seriesSeed.dateStart ?? null;
+  let dateEnd: string | null = seriesSeed.dateEnd ?? null;
+  for (const row of rows) {
+    if (!row?.track?.track_name) continue;
+    const week = row.race_week_num ?? 0;
+    const weekSeed: SpecialEventSeed = {
+      ...seed,
+      sourceKey: `${seriesSeed.sourceKey}:week${week}`,
+      name: `${seriesSeed.seriesName} — ${row.track.track_name}`,
+      circuit: row.track.track_name,
+      configuration: row.track.config_name ?? null,
+      trackId: row.track.track_id ?? null,
+      dateStart: row.start_date ?? seriesSeed.dateStart ?? null,
+      dateEnd: seriesSeed.dateEnd ?? null,
+    };
+    const weekEvent = await normalizeSpecialEvent(weekSeed, row);
+    const primary = weekEvent.slots[0];
+    if (!primary) continue;
+    const day = primary.sessionStartAt.slice(0, 10);
+    if (!dateStart || day < dateStart) dateStart = day;
+    if (!dateEnd || day > dateEnd) dateEnd = day;
+    slotsByWeek.push({ ...primary, sourceSlotKey: `${seriesSeed.sourceKey}:week${week}`, label: formatWeekLabel(row.start_date ?? day) });
+  }
+  const ordered = slotsByWeek.sort((a, b) => a.sessionStartAt.localeCompare(b.sessionStartAt));
+  if (ordered.length === 0) return null;
+  return { ...event, sourceKey: seriesSeed.sourceKey, name: seriesSeed.seriesName, dateStart, dateEnd, slots: ordered };
 }
