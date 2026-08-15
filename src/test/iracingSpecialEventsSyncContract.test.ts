@@ -70,6 +70,14 @@ describe("iRacing Special Events sync security contract", () => {
     expect(normalizer).toContain("dateEnd");
   });
 
+  it("combineert een series met combined:true tot één event met per-week slots", () => {
+    expect(source).toContain("combined");
+    expect(source).toContain("discoverCombinedSeriesEvent");
+    expect(source).toContain("seriesSeed.combined");
+    expect(normalizer).toContain("discoverCombinedSeriesEvent");
+    expect(normalizer).toContain("formatWeekLabel");
+  });
+
   it("importeert losse special events uitsluitend uit Vincents gemapte lijst", () => {
     expect(source).toContain("if (!entry) continue;");
     expect(source).toContain("Onbekende/ongemapte events worden niet geïmporteerd");

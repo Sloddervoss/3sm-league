@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
 import {
+  discoverCombinedSeriesEvent,
   discoverSeriesRaces,
   discoverUpcomingSpecialEvents,
   normalizeSpecialEvent,
@@ -17,6 +18,7 @@ type SeasonMapEntry = {
   kind?: "special" | "series";
   seasonId: number;
   seriesId?: number | null;
+  combined?: boolean;
   localClassIds: string[];
   localCarMap?: Record<string, string>;
   seed: SpecialEventSeed;
@@ -226,6 +228,8 @@ Deno.serve(async (request) => {
     };
 
     // Gewone endurance-series: elke season_schedule-row is één individuele race.
+    // Een serie met `combined: true` (bv. Nürburgring EC, alle races op één
+    // circuit) wordt juist één event met per-week child-slots.
     for (const seriesEntry of mapping.filter((entry) => entry.kind === "series")) {
       try {
         const seriesSeed: SeriesSeed = {
@@ -233,11 +237,17 @@ Deno.serve(async (request) => {
           seasonId: seriesEntry.seasonId,
           seriesId: seriesEntry.seriesId ?? null,
           seriesName: seriesEntry.seed.name,
+          combined: seriesEntry.combined === true,
         };
         const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${seriesEntry.seasonId}`);
-        const races = await discoverSeriesRaces(seriesSeed, schedule as never);
-        for (const race of races) {
-          await upsertEventAndSlots(race, seriesEntry);
+        if (seriesSeed.combined) {
+          const combined = await discoverCombinedSeriesEvent(seriesSeed, schedule as never);
+          if (combined) await upsertEventAndSlots(combined, seriesEntry);
+        } else {
+          const races = await discoverSeriesRaces(seriesSeed, schedule as never);
+          for (const race of races) {
+            await upsertEventAndSlots(race, seriesEntry);
+          }
         }
       } catch (error) {
         errors.push(`${seriesEntry.seed.sourceKey}: ${cleanError(error)}`);
