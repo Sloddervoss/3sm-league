@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ChevronsRight, Copy, Minus, Plus, Trash2 } from "lucide-react";
 import { availabilityForStint, formatAmsterdam } from "../core/selectors";
 import type { AvailabilityBlock, EnduranceEvent, EndurancePersona, EnduranceStint } from "../core/types";
@@ -20,9 +20,16 @@ const toLocalInput = (iso: string) => {
  *   knopjes om precies aan te passen, te verlengen, te kopiëren of te wissen.
  * Alle tijden blijven op snapronde (snapMinutes) en binnen de race.
  */
-export const StintTimeline = ({ event, stints, personas, availability, editable, snapMinutes, onMove, onResize, onDelete, onCopy, onExtend, onAssign }: { event: EnduranceEvent; stints: EnduranceStint[]; personas: EndurancePersona[]; availability: AvailabilityBlock[]; editable: boolean; snapMinutes: number; onMove: (stint: EnduranceStint, startAt: string) => void; onResize: (stint: EnduranceStint, deltaMinutes: number) => void; onDelete: (id: string) => void; onCopy: (stint: EnduranceStint) => void; onExtend: (stint: EnduranceStint) => void; onAssign: (stint: EnduranceStint, driverId: string) => void }) => {
+export const StintTimeline = ({ event, stints, personas, availability, editable, snapMinutes, onMove, onResize, onDelete, onCopy, onExtend, onAssign, onResizeEdge }: { event: EnduranceEvent; stints: EnduranceStint[]; personas: EndurancePersona[]; availability: AvailabilityBlock[]; editable: boolean; snapMinutes: number; onMove: (stint: EnduranceStint, startAt: string) => void; onResize: (stint: EnduranceStint, deltaMinutes: number) => void; onDelete: (id: string) => void; onCopy: (stint: EnduranceStint) => void; onExtend: (stint: EnduranceStint) => void; onAssign: (stint: EnduranceStint, driverId: string) => void; onResizeEdge: (stint: EnduranceStint, startAt: string, endAt: string) => void }) => {
   const start = new Date(event.startAt).getTime(); const end = new Date(event.endAt).getTime(); const span = end - start;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Dragging-state voor de rand-handgrepen. ref i.p.v. state zodat pointermove
+  // niet hoef te re-renderen; de live tijdelijke stint-positie wordt via een kleine
+  // state bijgewerkt t.b.v. visuele feedback.
+  const dragEdge = useRef<{ stintId: string; side: "left" | "right"; startMs: number; endMs: number } | null>(null);
+  const [liveEdge, setLiveEdge] = useState<{ stintId: string; startAt: string; endAt: string } | null>(null);
+  // Anchors de tijdlijn-container zodat rand-slepen pixels → minuten kan mappen.
+  const laneRef = useRef<HTMLDivElement | null>(null);
 
   // Coureurs: echte teamleden eerst, daarna alle stints-coureurs (voor balken
   // waarvan de coureur tijdelijk uit het team is). Alleen 'driver'-rol krijgt
@@ -59,9 +66,55 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
     const duration = new Date(stint.actualEndAt).getTime() - new Date(stint.actualStartAt).getTime();
     const maxStartMinutes = Math.max(0, ((end - start - duration) / 60_000));
     const effectiveMinutes = Math.min(startMinutes, maxStartMinutes);
-    // Coureur gewijzigd? Dat fikt zogezegd eerst, dan de tijd.
+    // Coureur gewijzigd? Dat regelen we eerst, dan de tijd.
     if (stint.driverId !== targetDriverId) onAssign(stint, targetDriverId);
     onMove(stint, new Date(start + effectiveMinutes * 60_000).toISOString());
+  };
+
+  // Tijd van een clientX in pixels (absoluut t.o.v. de race) → ms.
+  const msFromEventX = (clientX: number) => {
+    const lane = laneRef.current;
+    if (!lane) return 0;
+    const rect = lane.getBoundingClientRect();
+    return start + ((clientX - rect.left) / rect.width) * span;
+  };
+
+  const beginEdgeDrag = (e: React.PointerEvent, stint: EnduranceStint, side: "left" | "right") => {
+    if (!editable) return;
+    e.preventDefault(); e.stopPropagation();
+    dragEdge.current = { stintId: stint.id, side, startMs: new Date(stint.actualStartAt).getTime(), endMs: new Date(stint.actualEndAt).getTime() };
+    setLiveEdge({ stintId: stint.id, startAt: stint.actualStartAt, endAt: stint.actualEndAt });
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+
+  const moveEdgeDrag = (e: React.PointerEvent) => {
+    if (!dragEdge.current) return;
+    const d = dragEdge.current;
+    const ms = msFromEventX(e.clientX);
+    const minSnap = Math.round((ms - start) / 60_000 / snapMinutes) * snapMinutes;
+    // Snap naar de dichtstbijzijnde snapboundary, afgeklemd op de andere rand.
+    const p = () => Math.max(start, Math.min(end, start + minSnap * 60_000));
+    let nextStartMs = d.startMs;
+    let nextEndMs = d.endMs;
+    if (d.side === "left") {
+      const candidate = p();
+      if (candidate <= d.endMs - 5 * 60_000) nextStartMs = candidate;
+    } else {
+      const candidate = p();
+      if (candidate >= d.startMs + 5 * 60_000) nextEndMs = candidate;
+    }
+    setLiveEdge({ stintId: d.stintId, startAt: new Date(nextStartMs).toISOString(), endAt: new Date(nextEndMs).toISOString() });
+  };
+
+  const endEdgeDrag = (e: React.PointerEvent) => {
+    if (!dragEdge.current) return;
+    const d = dragEdge.current;
+    dragEdge.current = null;
+    const stint = stints.find((candidate) => candidate.id === d.stintId);
+    setLiveEdge(null);
+    if (!stint || !liveEdge) return;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    onResizeEdge(stint, liveEdge.startAt, liveEdge.endAt);
   };
 
   const selected = stints.find((s) => s.id === selectedId) ?? null;
@@ -80,7 +133,13 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
             <span key={h} className="absolute top-0 text-[10px] tabular-nums text-gray-500" style={{ left: `${(h * 3_600_000) / span * 100}%` }}>{shiftClock(event.startAt, h * 60).split(" ").pop()}</span>
           ))}
         </div>
-        <div className="relative">
+        <div
+          className="relative"
+          ref={laneRef}
+          onPointerMove={editable ? moveEdgeDrag : undefined}
+          onPointerUp={editable ? endEdgeDrag : undefined}
+          onPointerCancel={editable ? endEdgeDrag : undefined}
+        >
           {laneDrivers.map((driverId, laneIndex) => {
             const laneStints = stints.filter((s) => s.driverId === driverId);
             return (
@@ -97,8 +156,11 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
                 >
                   <span className="pointer-events-none absolute left-2 top-1 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-white/40"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: colors[laneIndex % colors.length] }} />{laneIndex + 1}</span>
                   {laneStints.map((stint) => {
-                    const left = ((new Date(stint.actualStartAt).getTime() - start) / span) * 100;
-                    const width = ((new Date(stint.actualEndAt).getTime() - new Date(stint.actualStartAt).getTime()) / span) * 100;
+                    const live = liveEdge && liveEdge.stintId === stint.id;
+                    const startAt = live ? liveEdge.startAt : stint.actualStartAt;
+                    const endAt = live ? liveEdge.endAt : stint.actualEndAt;
+                    const left = ((new Date(startAt).getTime() - start) / span) * 100;
+                    const width = ((new Date(endAt).getTime() - new Date(startAt).getTime()) / span) * 100;
                     const availabilityState = availabilityForStint(availability, stint);
                     const isSelected = stint.id === selectedId;
                     return <div
@@ -106,11 +168,20 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
                       draggable={editable}
                       onClick={() => setSelectedId(isSelected ? null : stint.id)}
                       onDragStart={(e) => e.dataTransfer.setData("text/endurance-stint", stint.id)}
-                      className={`absolute inset-y-1.5 cursor-pointer overflow-hidden rounded-lg shadow-md ring-2 transition-opacity ${isSelected ? "ring-2 ring-white" : "ring-white/15 opacity-90 hover:opacity-100"} ${colors[laneIndex % colors.length]} ${availabilityState === "hard" ? "ring-red-300" : availabilityState === "soft" || availabilityState === "missing" ? "ring-amber-300/70" : "ring-white/15"}`}
-                      style={{ left: `${left}%`, width: `${Math.max(2, width)}%` }}
-                      title={`${driverName(stint.driverId)} · ${formatAmsterdam(stint.actualStartAt)} – ${formatAmsterdam(stint.actualEndAt)}\nKlik voor details`}
+                      className={`absolute inset-y-1.5 overflow-hidden rounded-lg shadow-md ring-2 transition-opacity ${isSelected ? "ring-2 ring-white" : "ring-white/15 opacity-90 hover:opacity-100"} ${colors[laneIndex % colors.length]} ${availabilityState === "hard" ? "ring-red-300" : availabilityState === "soft" || availabilityState === "missing" ? "ring-amber-300/70" : "ring-white/15"}`}
+                      style={{ left: `${left}%`, width: `${Math.max(2, width)}%`, cursor: editable ? "default" : undefined }}
+                      title={`${driverName(stint.driverId)} · ${formatAmsterdam(startAt)} – ${formatAmsterdam(endAt)}\nKlik voor details; versleep de randen om te rekken`}
                     >
                       <span className="block truncate px-1.5 text-[9px] font-black text-white" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.7)" }}>{stint.expectedLaps}r</span>
+                      {editable && <><span
+                        onPointerDown={(e) => beginEdgeDrag(e, stint, "left")}
+                        className="absolute inset-y-0 left-0 w-2 cursor-ew-resize bg-black/30 opacity-0 transition-opacity hover:opacity-100"
+                        aria-label="Stint links uitrekken"
+                      /><span
+                        onPointerDown={(e) => beginEdgeDrag(e, stint, "right")}
+                        className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/30 opacity-0 transition-opacity hover:opacity-100"
+                        aria-label="Stint rechts uitrekken"
+                      /></>}
                     </div>;
                   })}
                 </div>

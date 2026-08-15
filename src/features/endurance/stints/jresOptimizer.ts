@@ -139,7 +139,13 @@ export function marshalJresInput(
   const first = options.firstStintDriver ?? memberUserIds.find((uid) => driverOpts[uid]?.willingToStart) ?? null;
   return {
     success: true,
-    consecutiveStints: Math.max(1, minDefined(memberUserIds.map((u) => driverOpts[u]?.maxConsecutiveStints), 1)),
+    // De JRES-solver kent één globale consecutiveStints-parameter. We moeten
+    // daarin aansluiten bij de GROOTSTE gewenste reeks (anders respecteert de
+    // optimizer de 'max stints achter elkaar'-wens van de manager niet: bij een
+    // team met min=1 zou iedereen op 1-om-1 worden gezet). De solver egaliseert
+    // de workload vanzelf, dus een coureur wil 1 blijft in de praktijk eerlijk
+    // verdeeld; wie 2/3 wil kan die reeks daadwerkelijk krijgen.
+    consecutiveStints: Math.max(1, maxDefined(memberUserIds.map((u) => driverOpts[u]?.maxConsecutiveStints), 1)),
     minimumRestHours: Math.max(0, (minDefined(memberUserIds.map((u) => driverOpts[u]?.minRestMinutes), 0) ?? 0) / 60),
     maximumBusyHours: 8,
     firstStintDriver: first,
@@ -152,6 +158,11 @@ export function marshalJresInput(
 function minDefined(values: (number | null | undefined)[], fallback: number): number {
   const nums = values.filter((v): v is number => typeof v === "number" && v > 0);
   return nums.length ? Math.min(...nums) : fallback;
+}
+
+function maxDefined(values: (number | null | undefined)[], fallback: number): number {
+  const nums = values.filter((v): v is number => typeof v === "number" && v > 0);
+  return nums.length ? Math.max(...nums) : fallback;
 }
 
 export interface JresScheduleEntry {

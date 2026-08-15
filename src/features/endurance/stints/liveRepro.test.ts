@@ -145,4 +145,20 @@ describe("live 3-rijders repro", () => {
     expect(planner).toContain("const assign = ");
     expect(planner).toContain("onAssign={assign}");
   });
+
+  it("stints zijn aan de randen uit te rekken (drag-resize) en de optimizer gebruikt de grootste gewenste stints-achter-elkaar-wens", () => {
+    const timeline = readFileSync("src/features/endurance/stints/StintTimeline.tsx", "utf8");
+    const planner = readFileSync("src/features/endurance/stints/StintPlanner.tsx", "utf8");
+    const optimizer = readFileSync("src/features/endurance/stints/jresOptimizer.ts", "utf8");
+    // edge-handles (links + rechts) + live feedback + onResizeEdge-commit
+    expect(timeline).toContain("beginEdgeDrag");
+    expect(timeline).toContain("aria-label=\"Stint links uitrekken\"");
+    expect(timeline).toContain("aria-label=\"Stint rechts uitrekken\"");
+    expect(timeline).toContain("onResizeEdge(stint, liveEdge.startAt, liveEdge.endAt)");
+    expect(planner).toContain("const resizeEdge = ");
+    expect(planner).toContain("onResizeEdge={resizeEdge}");
+    // optimizer: max i.p.v. min over de maxConsecutiveStints-wensen
+    expect(optimizer).toContain("maxDefined");
+    expect(optimizer).toContain("consecutiveStints: Math.max(1, maxDefined");
+  });
 });
