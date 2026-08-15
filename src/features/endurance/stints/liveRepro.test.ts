@@ -161,4 +161,19 @@ describe("live 3-rijders repro", () => {
     expect(optimizer).toContain("maxDefined");
     expect(optimizer).toContain("consecutiveStints: Math.max(1, maxDefined");
   });
+
+  it("StintPlanner koppelt de echte availability uit de DB aan beide planningsknoppen ('leeg = altijd beschikbaar')", () => {
+    const planner = readFileSync("src/features/endurance/stints/StintPlanner.tsx", "utf8");
+    const generator = readFileSync("src/features/endurance/stints/stintGenerator.ts", "utf8");
+    const optimizer = readFileSync("src/features/endurance/stints/jresOptimizer.ts", "utf8");
+    // StintPlanner haalt beschikbaarheid op en geeft hem door (geen lege array meer)
+    expect(planner).toContain("useEnduranceAvailability");
+    expect(planner).toContain("availabilityRows.map");
+    expect(planner).toContain("availability={availability}");
+    // generator: per coureur, géén eigen blokken = altijd beschikbaar
+    expect(generator).toContain("ownBlocks");
+    expect(generator).toContain("if (!ownBlocks.length) return true;");
+    // optimizer: per coureur, géén eigen blokken = Available
+    expect(optimizer).toContain("if (!blocks.length) {");
+  });
 });

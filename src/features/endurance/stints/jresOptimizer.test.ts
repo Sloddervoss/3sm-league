@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEnduranceSeed } from "../core/seed";
-import { marshalJresInput, buildJresStints, parseJresOutput, keyFor, runOptimize, type OptimizerFetcher } from "./jresOptimizer";
+import { marshalJresInput, buildJresStints, buildJresAvailability, parseJresOutput, keyFor, runOptimize, type OptimizerFetcher } from "./jresOptimizer";
 
 describe("jresOptimizer marshalling", () => {
   it("builds fixed stint segments covering the full race without gaps", () => {
@@ -83,6 +83,25 @@ describe("jresOptimizer marshalling", () => {
     expect(stints[0].teamId).toBe("team-orange-31");
     expect(stints[0].status).toBe("draft");
     expect(stints[0].notes).toContain("JRES");
+  });
+
+  it("availability per coureur: géén eigen blokken = altijd Available, wél blokken = beschikbaar binnenblokkering", () => {
+    const state = createEnduranceSeed();
+    const event = state.events[0];
+    const userIds = ["user-rookie", "user-jaimy"];
+    const map = buildJresAvailability(state, event, userIds);
+    // 1) Coureur zonder OWN blokken wordt over het hele venster 'Available'
+    //    (niet 'Unavailable'), óók wanneer een teamgenoot wél blokken heeft.
+    const rookie = Object.values(map["user-rookie"]);
+    expect(rookie.length).toBeGreaterThan(0);
+    expect(rookie.every((v) => v === "Available")).toBe(true);
+    // 2) Coureur mét blokken krijgt 'Unavailable' daarbuiten en 'Preferred'/
+    //    'Available' binnen de blokken.
+    const jaimy = map["user-jaimy"];
+    const values = Object.values(jaimy);
+    expect(values).toContain("Unavailable");
+    expect(values).toContain("Preferred");
+    expect(values).toContain("Available");
   });
 });
 
