@@ -6,7 +6,7 @@ import { reduceEnduranceState } from "./actions";
 
 describe("iRacing endurance vehicle voting", () => {
   it("keeps one central, unique catalog for modern and mapped legacy endurance classes", () => {
-    expect(IRACING_ENDURANCE_CLASSES).toEqual(["GTP", "LMP2", "GT3", "HPD", "GT1", "GT2"]);
+    expect(IRACING_ENDURANCE_CLASSES).toEqual(["GTP", "LMP2", "LMP3", "GT3", "GT4", "TCR", "PCUP", "M2", "PROD", "HPD", "GT1", "GT2"]);
     expect(new Set(IRACING_ENDURANCE_CARS.map((car) => car.id)).size).toBe(IRACING_ENDURANCE_CARS.length);
     expect(enduranceCarsForClass("GTP")).toHaveLength(5);
     expect(enduranceCarsForClass("LMP2").map((car) => car.name)).toEqual(["Dallara P217"]);

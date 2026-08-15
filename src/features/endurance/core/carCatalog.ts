@@ -1,4 +1,4 @@
-export const IRACING_ENDURANCE_CLASSES = ["GTP", "LMP2", "GT3", "HPD", "GT1", "GT2"] as const;
+export const IRACING_ENDURANCE_CLASSES = ["GTP", "LMP2", "LMP3", "GT3", "GT4", "TCR", "PCUP", "M2", "PROD", "HPD", "GT1", "GT2"] as const;
 export type EnduranceClassId = typeof IRACING_ENDURANCE_CLASSES[number];
 
 export interface IRacingEnduranceCar {
@@ -30,6 +30,7 @@ export const IRACING_ENDURANCE_CARS: readonly IRacingEnduranceCar[] = [
   car("porsche-963", "GTP", "Porsche 963", "porsche-963-gtp"),
 
   car("dallara-p217", "LMP2", "Dallara P217", "dallara-p217"),
+  car("ligier-js-p320", "LMP3", "Ligier JS P320", "ligier-js-p320"),
 
   car("acura-nsx-gt3-evo-22", "GT3", "Acura NSX GT3 EVO 22", "acura-nsx-gt3-evo22"),
   car("aston-martin-vantage-gt3-evo", "GT3", "Aston Martin Vantage GT3 EVO", "aston-martin-vantage-gt3-evo"),
@@ -42,6 +43,25 @@ export const IRACING_ENDURANCE_CARS: readonly IRacingEnduranceCar[] = [
   car("mclaren-720s-gt3-evo", "GT3", "McLaren 720S GT3 EVO", "mclaren-720s-gt3-evo"),
   car("mercedes-amg-gt3-2020", "GT3", "Mercedes-AMG GT3 2020", "mercedes-amg-gt3-2020"),
   car("porsche-911-gt3-r-992", "GT3", "Porsche 911 GT3 R (992)", "porsche-911-gt3-r-992"),
+
+  car("aston-martin-vantage-gt4", "GT4", "Aston Martin Vantage GT4", "aston-martin-vantage-gt4"),
+  car("bmw-m4-g82-gt4-evo", "GT4", "BMW M4 G82 GT4 Evo", "bmw-m4-g82-gt4-evo"),
+  car("ford-mustang-gt4", "GT4", "Ford Mustang GT4", "ford-mustang-gt4"),
+  car("mclaren-570s-gt4", "GT4", "McLaren 570S GT4", "mclaren-570s-gt4"),
+  car("mercedes-amg-gt4", "GT4", "Mercedes-AMG GT4", "mercedes-amg-gt4"),
+  car("porsche-718-cayman-gt4-clubsport-mr", "GT4", "Porsche 718 Cayman GT4 Clubsport MR", "porsche-718-cayman-gt4-clubsport-mr"),
+
+  car("audi-rs3-lms-gen2-tcr", "TCR", "Audi RS3 LMS Gen2 TCR", "audi-rs3-lms-gen2-tcr"),
+  car("honda-civic-type-r-tcr", "TCR", "Honda Civic Type R TCR", "honda-civic-type-r-tcr"),
+  car("hyundai-elantra-n-tcr", "TCR", "Hyundai Elantra N TCR", "hyundai-elantra-n-tcr"),
+  car("hyundai-veloster-n-tcr", "TCR", "Hyundai Veloster N TCR", "hyundai-veloster-n-tcr"),
+
+  car("porsche-911-cup-992-2", "PCUP", "Porsche 911 Cup (992.2)", "porsche-911-cup-992-2"),
+  car("bmw-m2-racing-g87", "M2", "BMW M2 Racing (G87)", "bmw-m2-racing-g87"),
+
+  car("global-mazda-mx-5-cup", "PROD", "Global Mazda MX-5 Cup", "global-mazda-mx-5-cup"),
+  car("renault-clio", "PROD", "Renault Clio", "renault-clio"),
+  car("toyota-gr86", "PROD", "Toyota GR86", "toyota-gr86"),
 
   car("hpd-arx-01c", "HPD", "HPD ARX-01c", "hpd-arx-01c"),
   car("chevrolet-corvette-c6r", "GT1", "Chevrolet Corvette C6.R", "chevrolet-corvette-c6r"),
