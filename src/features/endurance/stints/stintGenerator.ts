@@ -80,13 +80,15 @@ export const generateStints = (
 
   // Beschikbaarheid per coureur bepalen (een coureur is "beschikbaar" als er
   // een overlap-blok is, of als er helemaal geen availability-blokken zijn).
-  const hasAvailabilityBlocks = state.availability.some((block) => block.eventId === event.id);
+  // Beschikbaarheid per coureur: een coureur die GEEN availability-blokken heeft
+  // ingesteld is altijd beschikbaar. Heeft hij/zij wél blokken, dan is hij/zij
+  // alleen beschikbaar in 'available'/'preferred'-blokken (en dus niet beschikbaar
+  // buiten die tijden, bv. in 'unavailable'/'avoid'-gaten).
   const isAvailable = (userId: string, fromMs: number, toMs: number): boolean => {
-    if (!hasAvailabilityBlocks) return true;
-    return state.availability.some(
+    const ownBlocks = state.availability.filter((block) => block.eventId === event.id && block.userId === userId);
+    if (!ownBlocks.length) return true;
+    return ownBlocks.some(
       (block) =>
-        block.eventId === event.id &&
-        block.userId === userId &&
         ["available", "preferred"].includes(block.type) &&
         rangesOverlap(block.startAt, block.endAt, new Date(fromMs).toISOString(), new Date(toMs).toISOString())
     );

@@ -87,15 +87,18 @@ export function buildJresStints(event: EnduranceEvent, tankMinutes: number): { i
  *  start-uren van de input-stints), zodat elke mogelijke stintstart gedekt is. */
 export function buildJresAvailability(state: EnduranceState, event: EnduranceEvent, userIds: string[]): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
-  const anyBlocks = state.availability.some((b) => b.eventId === event.id);
   // Alle hele-uur-buckets over het (afgeronde) racevenster.
   const hours = buildJresStints(event, 60);
   for (const userId of userIds) {
     const map: Record<string, string> = {};
     const blocks = state.availability.filter((b) => b.eventId === event.id && b.userId === userId);
+    // Per coureur: géén eigen blokken = altijd beschikbaar. Alleen coureurs met
+    // eigen blokken krijgen 'Available'/'Preferred' in hun blokken en
+    // 'Unavailable' daarbuiten (zodat 'niet ingevuld' niet als 'nooit
+    // beschikbaar' wordt uitgelegd wanneer een teamgenoot wél blokken heeft).
     for (const s of hours) {
       const k = keyFor(s.startTime);
-      if (!anyBlocks) {
+      if (!blocks.length) {
         map[k] = "Available";
       } else {
         const hit = blocks.find((b) => overlap(b, s.startTime, s.endTime));
