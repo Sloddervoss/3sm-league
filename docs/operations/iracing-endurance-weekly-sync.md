@@ -99,6 +99,14 @@ oorspronkelijke GTP/LMP2/GT3-whitelist vielen. Losse special events (bv. Suzuka,
 Petit Le Mans) gebruiken rauwe feature-artwork auto-sourceKeys en worden apart
 gemapt. Na een wijziging in de SEASON_MAP: `docker compose up -d --force-recreate functions` (env-recreate) en de sync opnieuw draaien.
 
+**Losse special events (2026-08-15):** Portimão 1000 is volledig actieveerbaar
+(`HPD/GT1/GT2` + 4 auto's via `localCarMap`, 5 exacte slots). De andere losse
+specials (Suzuka 1000km, Britcar 24HR, Petit Le Mans, Bathurst 1000, 8 Hours of
+Indianapolis) blijven `date_only` omdat iRacing er geen exacte sessietijden/
+season-record voor publiceert (alleen datumbereiken); de activatie-RPC eist een
+geldig slot + sessieduur, dus die kunnen fail-closed niet geactiveerd worden
+zonder dat er exacte tijden beschikbaar komen (nooit gokken).
+
 Voorbeeld serie-mapping (geen secret) — elke individuele race wordt 1 catalog-event:
 
 ```json
