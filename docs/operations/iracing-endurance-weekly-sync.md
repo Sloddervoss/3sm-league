@@ -26,6 +26,12 @@ Elke mapping-entry heeft een `kind`: `"special"` (default) of `"series"`.
     races op één circuit rijdt) verschijnt als EÉN serieskaart met alle race-weken
     als child-slots, per datum gesorteerd — geen N identieke kaarten.
 
+**Slot-zichtbaarheid (UI):** een eventkaart toont alleen `upcoming` slots (sessiestart
+>= vandaag, lokale Amsterdam-datum). Verlopen week-slots (bv. maart-juli in de
+gecombineerde Nürburgring-kaart) worden verborgen zolang het event actief is. Het
+geselecteerde/geactiveerde slot blijft altijd zichtbaar zodat een kaart waarop teams
+zijn geregistreerd nooit leeg raakt. Zie `upcomingCatalogSlots()`.
+
 Alleen events met een expliciete mapping worden geïmporteerd. Events op de officiële
 Special Events-pagina die niet in de mapping staan, worden overgeslagen (geen volledige
 lijst, uitsluitend Vincents vastgelegde endurance-series en -races).
