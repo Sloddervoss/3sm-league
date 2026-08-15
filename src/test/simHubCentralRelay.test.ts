@@ -175,9 +175,10 @@ describe("central SimHub relay", () => {
     expect(pairing.slice(listGate)).toContain('if (!superAdmin) query = query.eq("owner_user_id", user.id)');
     const revokeGate = pairing.indexOf('action === "revoke"');
     expect(pairing.slice(revokeGate)).toContain('.eq("owner_user_id", user.id)');
-    // De toplevel-gate laat list/revoke/create door voor endurance-ster; assign,
-    // clear en legacy-binding blijven daarbuiten (super_admin-only).
-    expect(pairing).toContain('action !== "list" && action !== "revoke" && action !== "create" && !superAdmin');
+    // De toplevel-gate laat list/revoke/create door voor endurance-ster; assign/clear
+    // staan open voor endurance-manager (+super_admin); legacy-binding blijft super_admin-only.
+    expect(pairing).toContain('const adminSuperOnly = !["list", "revoke", "create", "assign", "clear"].includes(action)');
+    expect(pairing).toContain('if (["assign", "clear"].includes(action) && !manager) {');
     expect(pairing).toContain('if (legacyBoundPairing && !superAdmin) {');
   });
 
