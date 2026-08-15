@@ -66,8 +66,8 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).toContain("seriesName:");
     expect(normalizer).toContain("discoverSeriesRaces");
     expect(normalizer).toContain("Ongeldige serieseason-id");
-    expect(normalizer).toContain("schedule_name");
     expect(normalizer).toContain("sourceSlug(row.track.track_name)");
+    expect(normalizer).toContain("dateEnd");
   });
 
   it("importeert losse special events uitsluitend uit Vincents gemapte lijst", () => {
