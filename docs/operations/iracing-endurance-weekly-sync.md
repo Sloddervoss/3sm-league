@@ -22,6 +22,9 @@ Elke mapping-entry heeft een `kind`: `"special"` (default) of `"series"`.
   - Naam is altijd `Serie — Circuit` (niet de rauwe iRacing `schedule_name`).
   - `event_end_date` wordt afgeleid uit de sessiestarttijden, zodat het catalogus-
     past-filter verlopen races verbergt (net als bij special events).
+  - Serie met `"combined": true` (bv. Nürburgring Endurance Championship, die alle
+    races op één circuit rijdt) verschijnt als EÉN serieskaart met alle race-weken
+    als child-slots, per datum gesorteerd — geen N identieke kaarten.
 
 Alleen events met een expliciete mapping worden geïmporteerd. Events op de officiële
 Special Events-pagina die niet in de mapping staan, worden overgeslagen (geen volledige
