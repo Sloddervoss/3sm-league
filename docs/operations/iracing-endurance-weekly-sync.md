@@ -19,6 +19,9 @@ Elke mapping-entry heeft een `kind`: `"special"` (default) of `"series"`.
   De sync haalt de volledige `season_schedule` op en maakt **voor elke individuele
   race (week + circuit) één apart catalog-event** met eigen child-slots. De source_key
   van zo'n serie-race is `iracing:<jaar>:<serie-slug>:week<N>:<track-slug>`.
+  - Naam is altijd `Serie — Circuit` (niet de rauwe iRacing `schedule_name`).
+  - `event_end_date` wordt afgeleid uit de sessiestarttijden, zodat het catalogus-
+    past-filter verlopen races verbergt (net als bij special events).
 
 Alleen events met een expliciete mapping worden geïmporteerd. Events op de officiële
 Special Events-pagina die niet in de mapping staan, worden overgeslagen (geen volledige
