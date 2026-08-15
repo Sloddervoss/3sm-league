@@ -81,6 +81,18 @@ describe("iRacing Endurance catalogus browserflow", () => {
     expect(scrollIntoView).toHaveBeenCalled();
   });
 
+  it("rendert de catalogusgrid in volgorde van het eerstvolgende startmoment", () => {
+    renderCatalog();
+    // Southern 500 (event_start 2026-09-02, geen slots) valt terug op zijn datum;
+    // Portimão heeft slots in 2099. Southern's eerstvolgende moment is dus eerder,
+    // dus Southern moet vóór Portimão in de grid staan.
+    const southern = screen.getByRole("button", { name: "Details voor Southern 500 bekijken" });
+    const portimao = screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" });
+    const position = southern.compareDocumentPosition(portimao);
+    // DOCUMENT_POSITION_FOLLOWING (4): southern staat eerder in de DOM dan portimao.
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("rendert eventkaarten, vijf tijdsloten en opent de managerbevestiging", async () => {
     renderCatalog();
     expect(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" })).toBeInTheDocument();
