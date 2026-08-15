@@ -9,6 +9,21 @@ Configureer uitsluitend server-side:
 - `ENDURANCE_IRACING_SEASON_MAP_JSON`: expliciete JSON-array met officiële season-ID's en metadata;
 - de gebruikelijke `SUPABASE_URL`, `SUPABASE_ANON_KEY` en `SUPABASE_SERVICE_ROLE_KEY`.
 
+## Mappingtypen
+
+Elke mapping-entry heeft een `kind`: `"special"` (default) of `"series"`.
+
+- **`kind: "special"`** — één officieel los special event (bv. Portimão 1000). Exact
+  het bestaande model: 1 event met child-slots.
+- **`kind: "series"`** — één gewone endurance-serie (de "niet special events").
+  De sync haalt de volledige `season_schedule` op en maakt **voor elke individuele
+  race (week + circuit) één apart catalog-event** met eigen child-slots. De source_key
+  van zo'n serie-race is `iracing:<jaar>:<serie-slug>:week<N>:<track-slug>`.
+
+Alleen events met een expliciete mapping worden geïmporteerd. Events op de officiële
+Special Events-pagina die niet in de mapping staan, worden overgeslagen (geen volledige
+lijst, uitsluitend Vincents vastgelegde endurance-series en -races).
+
 Voorbeeldmapping (geen secret):
 
 ```json
@@ -31,6 +46,27 @@ Voorbeeldmapping (geen secret):
 ```
 
 `localClassIds` is bewust apart van de officiële `classIds` en accepteert alleen de lokaal ondersteunde stemklassen `GTP`, `LMP2` en `GT3`. Laat deze array leeg als de officiële klassen niet expliciet en inhoudelijk aan de lokale autoselectie zijn gekoppeld; het event blijft dan zichtbaar maar activatie wordt database-side geblokkeerd. Gok bijvoorbeeld niet dat een historische `HPD`-klasse automatisch `GTP` betekent.
+
+Voorbeeld serie-mapping (geen secret) — elke individuele race wordt 1 catalog-event:
+
+```json
+[{
+  "kind": "series",
+  "seasonId": 6310,
+  "seriesId": 419,
+  "localClassIds": [],
+  "seed": {
+    "sourceKey": "iracing:2026:imsa-endurance-series",
+    "year": 2026,
+    "name": "IMSA Endurance Series",
+    "teamEvent": true,
+    "officialUrl": "https://www.iracing.com/special-events/"
+  }
+}]
+```
+
+De serie-logo's zitten hash-bewezen in `public/endurance-assets/official/` en worden in
+de frontend per serie via source_key-prefix gekoppeld.
 
 Season-ID's worden expres niet uit namen gegokt. Pas de mapping aan wanneer iRacing een nieuw event/schedule publiceert.
 

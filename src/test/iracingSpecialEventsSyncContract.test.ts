@@ -48,7 +48,7 @@ describe("iRacing Special Events sync security contract", () => {
   it("ontdekt alle officiële Upcoming Events maar haalt slots alleen voor expliciete mappings", () => {
     expect(source).toContain("discoverUpcomingSpecialEvents(calendarHtml)");
     expect(source).toContain("mappingBySourceKey");
-    expect(source).toMatch(/entry\s*\?\s*await \(await dataClient\(\)\)\.fetchData/);
+    expect(source).toMatch(/await \(await dataClient\(\)\)\.fetchData\(`\/data\/series\/season_schedule/);
     expect(source).toContain("clientPromise ??= createIRacingClient()");
     expect(source).toContain("clientPromise = null");
     expect(source).toContain(": null;");
@@ -58,5 +58,20 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).toContain("https://www.iracing.com/wp-json/wp/v2/pages/263677");
     expect(normalizer).toContain("Officiële Upcoming/Completed-eventgrenzen ontbreken");
     expect(source).toContain("season_schedule?season_id=");
+  });
+
+  it("verwerkt gewone endurance-series per individuele race via discoverSeriesRaces", () => {
+    expect(source).toContain('entry.kind === "series"');
+    expect(source).toContain("discoverSeriesRaces");
+    expect(source).toContain("seriesName:");
+    expect(normalizer).toContain("discoverSeriesRaces");
+    expect(normalizer).toContain("Ongeldige serieseason-id");
+    expect(normalizer).toContain("schedule_name");
+    expect(normalizer).toContain("sourceSlug(row.track.track_name)");
+  });
+
+  it("importeert losse special events uitsluitend uit Vincents gemapte lijst", () => {
+    expect(source).toContain("if (!entry) continue;");
+    expect(source).toContain("Onbekende/ongemapte events worden niet geïmporteerd");
   });
 });
