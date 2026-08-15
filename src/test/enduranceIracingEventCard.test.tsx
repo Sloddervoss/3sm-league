@@ -83,6 +83,25 @@ describe("iRacing Endurance event-card flow", () => {
     expect(mixed.some((slot) => slot.id === "slot-2")).toBe(true);
   });
 
+  it("verbergt tijdsgevoelig slots die vandaag al zijn begonnen, maar houdt latere slots van dezelfde dag (Date-filter)", () => {
+    // slot-0: 2026-08-14T22:00Z (vorige dag), slot-4: 2026-08-15T00:00Z,
+    // slot-1: 07:00Z, slot-2: 12:00Z, slot-3: 16:00Z (alle 15 aug).
+    // Rond 12:30Z op 15 aug zijn slot-4, slot-1 en slot-2 al begonnen/verstreken;
+    // slot-3 (16:00Z) is later op dezelfde dag en moet nog zichtbaar zijn.
+    const now = new Date("2026-08-15T12:30:00Z");
+    const visible = upcomingCatalogSlots(event.slots, null, now);
+    const ids = visible.map((slot) => slot.id);
+    expect(ids).toContain("slot-3");
+    // slot-0 heeft sessiestart 2026-08-14T22:00Z < 12:30Z => niet zichtbaar.
+    expect(ids).not.toContain("slot-0");
+    expect(ids).not.toContain("slot-4");
+    expect(ids).not.toContain("slot-1");
+    expect(ids).not.toContain("slot-2");
+    // Geselecteerd slot blijft zelfs als het verstreken is, naast de nog upcoming slot.
+    const selectedKept = upcomingCatalogSlots(event.slots, "slot-1", new Date("2026-08-15T12:30:00Z"));
+    expect(selectedKept.map((slot) => slot.id)).toEqual(["slot-1", "slot-3"]);
+  });
+
   it("formatteert UTC en Amsterdam expliciet en toont het datumvenster", () => {
     const iso = "2026-08-15T12:00:00Z";
     expect(formatCatalogInstant(iso, "utc")).toMatch(/12:00/);
