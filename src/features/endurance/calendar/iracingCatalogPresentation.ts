@@ -134,19 +134,28 @@ export const catalogDateWindow = (event: Pick<IRacingCatalogEvent, "event_start_
 };
 
 /**
- * Filtert slots op de officiële catalogus: alleen upcoming slots (sessiestart
- * op of na vandaag, lokale Amsterdam-datum) worden getoond. Het geselecteerde/
- * geactiveerde slot blijft altijd zichtbaar zodat een verlopen kaart waarop
- * teams geregistreerd hebben nooit leeg raakt. Eén momentopname per call.
+ * Filtert slots op de officiële catalogus: alleen upcoming slots worden getoond.
+ * - Wordt een Amsterdam-datum-string meegegeven, dan wordt op dagniveau gefilterd
+ *   (sessiestart op of na die dag) — backward-compat voor daggebaseerde callers.
+ * - Wordt een echt moment (Date) meegegeven (of weggelaten), dan is de filter
+ *   tijdsgevoelig: slots die al begonnen zijn (sessiestart in het verleden)
+ *   verdwijnen zodra hun tijd verstreken is, ook op de dag van vandaag.
+ * Het geselecteerde/geactiveerde slot blijft altijd zichtbaar zodat een verlopen
+ * kaart waarop teams geregistreerd hebben nooit leeg raakt.
  */
 export const upcomingCatalogSlots = (
   slots: IRacingCatalogSlot[],
   selectedSlotId: string | null | undefined,
-  today: string = catalogTodayAmsterdam(),
+  now: string | Date = new Date(),
 ): IRacingCatalogSlot[] =>
   slots.filter((slot) => {
     if (selectedSlotId && slot.id === selectedSlotId) return true;
-    return (slot.session_start_at?.slice(0, 10) ?? "") >= today;
+    const start = slot.session_start_at;
+    if (!start) return false;
+    // Datum-string => dagffilter (sessiestart op of na die dag).
+    if (typeof now === "string") return start.slice(0, 10) >= now;
+    // Echt moment => tijdsgevoelig: nog niet begonnen.
+    return new Date(start).getTime() >= now.getTime();
   });
 
 export const selectedCatalogSlot = (event: IRacingCatalogEvent) =>

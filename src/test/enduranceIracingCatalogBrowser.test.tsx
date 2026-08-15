@@ -25,7 +25,7 @@ vi.mock("@/features/endurance/repository/iracingEventsRepository", () => ({
       source_updated_at: null, last_seen_at: "2026-08-13T08:00:00Z", active: true, selectedEventId: null, selectedSlotId: null,
       slots: ["00:00", "09:00", "14:00", "18:00", "22:00"].map((label, index) => ({
         id: `slot-${index}`, catalog_event_id: "event-portimao", source_slot_key: `slot-${index}`,
-        session_start_at: `2026-08-15T${label}:00Z`, practice_start_at: null, practice_duration_minutes: 30,
+        session_start_at: `2099-08-15T${label}:00Z`, practice_start_at: null, practice_duration_minutes: 30,
         qualifying_start_at: null, qualifying_duration_minutes: 8, transition_duration_minutes: null,
         estimated_race_start_at: null, race_duration_minutes: null, race_lap_limit: 215,
         session_duration_minutes: null, session_timing_status: "partial", label, active: true,
