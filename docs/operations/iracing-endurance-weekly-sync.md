@@ -77,15 +77,27 @@ De activatie-RPC (`endurance_activate_iracing_slot`) is fail-closed: een event i
 
 De sync schrijft `local_class_ids` uit `localClassIds` en leidt `local_car_ids` + per-auto `localCarId` af uit `localCarMap`. Zonder mapping blijft `local_class_ids`/`local_car_ids` leeg en blokkeert de activatie — dat is het bedoelde fail-closed gedrag.
 
-**Status (2026-08-15):** drie series hebben een volledige lokale mapping gekregen in `ENDURANCE_IRACING_SEASON_MAP_JSON` en zijn daarmee actieveerbaar:
+**Status (2026-08-15):** alle acht endurance-series hebben een volledige lokale mapping gekregen in `ENDURANCE_IRACING_SEASON_MAP_JSON` en zijn daarmee actieveerbaar:
 
 | Serie | `localClassIds` |
 |---|---|
 | IMSA Endurance Series | `GTP, LMP2, GT3` |
 | Global Endurance Tour | `GTP, LMP2, GT3` |
-| GT Endurance Series by Simucube | `GT3` (officieel puur GT3) |
+| GT Endurance Series by Simucube | `GT3` |
+| Nürburgring EC | `GT3, GT4, TCR, PCUP, M2` |
+| Creventic | `GT3, GT4, PCUP` |
+| Production Endurance | `M2, PROD` |
+| IMSA Michelin Pilot | `GT4, TCR` |
+| IMSA Sportscar | `GT4, LMP3` |
 
-De overige series (Nürburgring EC, Creventic, Production Endurance, Michelin Pilot, Sportscar) bevatten GT4/TCR/PCup/M2/production-auto's die **buiten** de lokale RPC-whitelist vallen; die blijven fail-closed tot er een expliciete keuze is of de RPC-whitelist wordt uitgebreid (migratie). Na een wijziging in de SEASON_MAP: `docker compose up -d --force-recreate functions` (env-recreate) en de sync opnieuw draaien.
+De lokale klassen-whitelist is uitgebreid met `GT3`→`GT4`,`TCR`,`PCUP`,`M2`,`LMP3`,`PROD` in
+`endurance_activate_iracing_slot` + `endurance_guard_iracing_registration_car`
+(migratie `20260815120000_endurance_iracing_class_catalog_expansion.sql`, met rollback).
+De andere series (Nürburgring EC, Creventic, Production Endurance, Michelin Pilot,
+Sportscar) waren vóór deze migratie fail-closed omdat hun auto's buiten de
+oorspronkelijke GTP/LMP2/GT3-whitelist vielen. Losse special events (bv. Suzuka,
+Petit Le Mans) gebruiken rauwe feature-artwork auto-sourceKeys en worden apart
+gemapt. Na een wijziging in de SEASON_MAP: `docker compose up -d --force-recreate functions` (env-recreate) en de sync opnieuw draaien.
 
 Voorbeeld serie-mapping (geen secret) — elke individuele race wordt 1 catalog-event:
 
