@@ -25,6 +25,13 @@ export type SpecialEventSeed = {
   posterUrl?: string | null;
 };
 
+/** Seed voor één gewone endurance-serie: meerdere races (season_schedule rows). */
+export type SeriesSeed = SpecialEventSeed & {
+  seasonId: number;
+  seriesId?: number | null;
+  seriesName: string;
+};
+
 type RaceTimeDescriptor = {
   session_times?: string[];
   repeating?: boolean;
@@ -34,6 +41,7 @@ type RaceTimeDescriptor = {
 export type IRacingSchedule = {
   season_id?: number;
   series_id?: number;
+  race_week_num?: number;
   track?: { track_id?: number; track_name?: string; config_name?: string };
   race_time_descriptors?: RaceTimeDescriptor[];
   practice_length?: number;
@@ -42,6 +50,10 @@ export type IRacingSchedule = {
   race_time_limit?: number;
   race_lap_limit?: number;
   session_minutes?: number;
+  schedule_name?: string;
+  series_name?: string;
+  season_name?: string;
+  start_date?: string;
 };
 
 type ScheduleEnvelope = IRacingSchedule & { schedules?: IRacingSchedule[] };
@@ -358,4 +370,57 @@ export async function normalizeSpecialEvent(seed: SpecialEventSeed, input?: IRac
     slots,
   };
   return { ...eventWithoutHash, sourceHash: await sha256(eventWithoutHash) };
+}
+
+/**
+ * Zet een gewone endurance-serie (season_schedule) om naar per-race
+ * catalog-events. Elke row is één individuele race (track/week) met eigen
+ * child-slots. Rows zonder race_time_descriptors of zonder een geldig
+ * track/week worden overgeslagen; een rij mét tijden wordt een exact_slots
+ * event, anders date_only. Er wordt nooit gegokt.
+ */
+export async function discoverSeriesRaces(
+  seriesSeed: SeriesSeed,
+  input?: IRacingSchedule | ScheduleEnvelope | IRacingSchedule[] | null,
+): Promise<NormalizedSpecialEvent[]> {
+  if (!seriesSeed.seasonId || !Number.isInteger(seriesSeed.seasonId)) {
+    throw new Error("Ongeldige serieseason-id");
+  }
+  const envelope = Array.isArray(input) ? { schedules: input as IRacingSchedule[] } : input ?? {};
+  const rows = Array.isArray((envelope as ScheduleEnvelope).schedules)
+    ? (envelope as ScheduleEnvelope).schedules ?? []
+    : [envelope as IRacingSchedule];
+  const results: NormalizedSpecialEvent[] = [];
+  const seen = new Map<string, number>();
+  for (const row of rows) {
+    if (!row?.track?.track_name) continue;
+    const trackSlug = sourceSlug(row.track.track_name);
+    const week = row.race_week_num ?? 0;
+    if (!trackSlug) continue;
+    const baseKey = `${seriesSeed.sourceKey}:week${week}:${trackSlug}`;
+    const count = seen.get(baseKey) ?? 0;
+    seen.set(baseKey, count + 1);
+    const sourceKey = count > 0 ? `${baseKey}:${count + 1}` : baseKey;
+    const raceName = row.schedule_name && row.schedule_name !== seriesSeed.seriesName
+      ? row.schedule_name
+      : `${seriesSeed.seriesName} — ${row.track.track_name}`;
+    const rowSeed: SpecialEventSeed = {
+      ...seriesSeed,
+      sourceKey,
+      name: raceName,
+      circuit: row.track.track_name,
+      configuration: row.track.config_name ?? null,
+      trackId: row.track.track_id ?? null,
+      dateStart: row.start_date ?? seriesSeed.dateStart ?? null,
+      dateEnd: seriesSeed.dateEnd ?? null,
+      classIds: seriesSeed.classIds,
+      cars: seriesSeed.cars,
+      teamEvent: seriesSeed.teamEvent ?? true,
+      officialUrl: seriesSeed.officialUrl ?? null,
+      posterUrl: seriesSeed.posterUrl ?? null,
+    };
+    const normalized = await normalizeSpecialEvent(rowSeed, row);
+    results.push(normalized);
+  }
+  return results;
 }

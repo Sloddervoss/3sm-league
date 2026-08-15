@@ -1,0 +1,68 @@
+{
+  "seed": {
+    "sourceKey": "iracing:2026:imsa-endurance-series",
+    "year": 2026,
+    "name": "IMSA Endurance Series",
+    "teamEvent": true,
+    "officialUrl": "https://www.iracing.com/special-events/"
+  },
+  "seasonId": 6310,
+  "seriesId": 419,
+  "schedule": {
+    "schedules": [
+      {
+        "season_id": 6310,
+        "series_id": 419,
+        "race_week_num": 4,
+        "season_name": "IMSA Endurance Series - 2026 Season 3",
+        "series_name": "IMSA Endurance Series",
+        "start_date": "2026-08-15",
+        "practice_length": 30,
+        "qualify_length": 8,
+        "warmup_length": 0,
+        "race_time_limit": 120,
+        "race_lap_limit": null,
+        "track": {
+          "track_id": 465,
+          "track_name": "Virginia International Raceway",
+          "config_name": "Full Course"
+        },
+        "race_time_descriptors": [
+          {
+            "repeating": false,
+            "session_times": ["2026-08-15T02:00:00Z", "2026-08-15T07:00:00Z", "2026-08-15T18:00:00Z"]
+          }
+        ]
+      },
+      {
+        "season_id": 6310,
+        "series_id": 419,
+        "race_week_num": 5,
+        "season_name": "IMSA Endurance Series - 2026 Season 3",
+        "series_name": "IMSA Endurance Series",
+        "start_date": "2026-08-29",
+        "practice_length": 30,
+        "qualify_length": 8,
+        "warmup_length": 0,
+        "race_time_limit": 120,
+        "race_lap_limit": null,
+        "track": {
+          "track_id": 127,
+          "track_name": "Road Atlanta",
+          "config_name": "Full Course"
+        },
+        "race_time_descriptors": [
+          {
+            "repeating": false,
+            "session_times": ["2026-08-29T02:00:00Z", "2026-08-29T07:00:00Z", "2026-08-29T18:00:00Z"]
+          }
+        ]
+      }
+    ]
+  },
+  "provenance": {
+    "sanitized": true,
+    "scheduleSource": "authenticated iRacing Data API season_schedule season_id=6310",
+    "capturedAt": "2026-08-15"
+  }
+}

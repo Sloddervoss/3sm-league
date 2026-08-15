@@ -1,9 +1,47 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../supabase/functions/iracing-special-events-sync/fixtures/portimao-2026.json";
+import seriesFixture from "../../supabase/functions/iracing-special-events-sync/fixtures/imsa-endurance-s3.json";
 import { catalogTodayAmsterdam } from "../features/endurance/calendar/iracingCatalogPresentation";
-import { discoverUpcomingSpecialEvents, enrichSeedFromOfficialCalendar, normalizeSpecialEvent } from "../../supabase/functions/iracing-special-events-sync/normalize";
+import {
+  discoverSeriesRaces,
+  discoverUpcomingSpecialEvents,
+  enrichSeedFromOfficialCalendar,
+  normalizeSpecialEvent,
+} from "../../supabase/functions/iracing-special-events-sync/normalize";
 
 describe("iRacing Special Events normalizer", () => {
+  it("zet elke gewone endurance-serie-race om naar één event met eigen child-slots", async () => {
+    const races = await discoverSeriesRaces(
+      { sourceKey: seriesFixture.seed.sourceKey, year: 2026, name: seriesFixture.seed.name, seasonId: seriesFixture.seasonId, seriesId: seriesFixture.seriesId, seriesName: seriesFixture.seed.name },
+      seriesFixture.schedule,
+    );
+    expect(races).toHaveLength(2);
+    expect(races[0]).toMatchObject({
+      sourceKey: "iracing:2026:imsa-endurance-series:week4:virginia-international-raceway",
+      name: "IMSA Endurance Series — Virginia International Raceway",
+      circuit: "Virginia International Raceway",
+      configuration: "Full Course",
+      trackId: 465,
+      availabilityStatus: "exact_slots",
+    });
+    expect(races[0].slots).toHaveLength(3);
+    expect(races[0].slots[0].sessionStartAt).toBe("2026-08-15T02:00:00.000Z");
+    expect(races[0].slots[0].sessionTimingStatus).toBe("full");
+    expect(races[0].slots[0].estimatedRaceStartAt).toBe("2026-08-15T02:38:00.000Z");
+    expect(races[1]).toMatchObject({
+      sourceKey: "iracing:2026:imsa-endurance-series:week5:road-atlanta",
+      name: "IMSA Endurance Series — Road Atlanta",
+    });
+    expect(races[1].slots).toHaveLength(3);
+  });
+
+  it("weigert een serieseason zonder geldig seasonId", async () => {
+    await expect(discoverSeriesRaces(
+      { sourceKey: "x", year: 2026, name: "X", seasonId: NaN as unknown as number, seriesName: "X" },
+      seriesFixture.schedule,
+    )).rejects.toThrow("Ongeldige serieseason-id");
+  });
+
   it("normaliseert vijf officiële Portimão-sessiestarts zonder groene vlag te gokken", async () => {
     const normalized = await normalizeSpecialEvent(fixture.seed, fixture.schedule);
     expect(normalized.availabilityStatus).toBe("exact_slots");

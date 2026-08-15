@@ -89,22 +89,40 @@ const durationLabel = (event: IRacingCatalogEvent, slot: IRacingCatalogSlot, lan
 
 const officialEventLogos: Record<string, string> = {
   "iracing:2026:portimao-1000": "/endurance-assets/official/iracing-2026-portimao-1000.png",
+  "iracing:2026:imsa-endurance-series": "/endurance-assets/official/iracing-2026-imsa-endurance-series.png",
+  "iracing:2026:global-endurance-tour": "/endurance-assets/official/iracing-2026-global-endurance-tour.png",
+  "iracing:2026:creventic-endurance-series": "/endurance-assets/official/iracing-2026-creventic-endurance-series.png",
+  "iracing:2026:production-endurance-challenge": "/endurance-assets/official/iracing-2026-production-endurance-challenge.png",
+  "iracing:2026:imsa-sportscar-endurance-challenge": "/endurance-assets/official/iracing-2026-imsa-sportscar-endurance-challenge.png",
+  "iracing:2026:imsa-michelin-pilot-challenge": "/endurance-assets/official/iracing-2026-imsa-michelin-pilot-challenge.png",
+  "iracing:2026:gt-endurance-series-by-simucube": "/endurance-assets/official/iracing-2026-gt-endurance-series-by-simucube.png",
+};
+
+/** Uniek-logo voor een event: exacte source_key eerste, dan serie-prefix (bv. serie-race). */
+const officialEventLogoFor = (sourceKey: string): string | undefined => {
+  const exact = officialEventLogos[sourceKey];
+  if (exact) return exact;
+  return Object.entries(officialEventLogos)
+    .filter(([key]) => key !== "iracing:2026:portimao-1000")
+    .sort(([a], [b]) => b.length - a.length)
+    .find(([key]) => sourceKey.startsWith(`${key}:`))?.[1];
 };
 
 const fallbackEventVisual = "/endurance-assets/endurance-card-landscape.webp";
 
 const EventVisual = ({ event, className }: { event: IRacingCatalogEvent; className: string }) => {
+  const officialLogoForEvent = officialEventLogoFor(event.source_key);
   const sources = useMemo(
-    () => [event.poster_url, officialEventLogos[event.source_key], fallbackEventVisual].filter(
+    () => [event.poster_url, officialLogoForEvent, fallbackEventVisual].filter(
       (source, index, all): source is string => Boolean(source) && all.indexOf(source) === index,
     ),
-    [event.poster_url, event.source_key],
+    [event.poster_url, officialLogoForEvent],
   );
   const [sourceIndex, setSourceIndex] = useState(0);
   useEffect(() => setSourceIndex(0), [event.id, event.poster_url]);
   const source = sources[Math.min(sourceIndex, sources.length - 1)] ?? fallbackEventVisual;
   const originalPoster = source === event.poster_url;
-  const officialLogo = source === officialEventLogos[event.source_key];
+  const officialLogo = source === officialLogoForEvent;
   return <img
     src={source}
     alt={originalPoster ? `Originele iRacing-eventvisual voor ${event.name}` : officialLogo ? `Officieel iRacing-logo voor ${event.name}` : `3SM Endurance-visual voor ${event.name}`}

@@ -1,13 +1,26 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
-import { discoverUpcomingSpecialEvents, normalizeSpecialEvent, type SpecialEventSeed } from "./normalize.ts";
+import {
+  discoverSeriesRaces,
+  discoverUpcomingSpecialEvents,
+  normalizeSpecialEvent,
+  type SeriesSeed,
+  type SpecialEventSeed,
+} from "./normalize.ts";
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
   serve(handler: (request: Request) => Response | Promise<Response>): void;
 };
 
-type SeasonMapEntry = { seasonId: number; seriesId?: number; localClassIds: string[]; localCarMap?: Record<string, string>; seed: SpecialEventSeed };
+type SeasonMapEntry = {
+  kind?: "special" | "series";
+  seasonId: number;
+  seriesId?: number | null;
+  localClassIds: string[];
+  localCarMap?: Record<string, string>;
+  seed: SpecialEventSeed;
+};
 type Counts = { events_seen: number; events_inserted: number; events_updated: number; slots_seen: number; slots_inserted: number; slots_updated: number };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -35,6 +48,9 @@ const parseSeasonMap = (): SeasonMapEntry[] => {
         || !Object.entries(value.localCarMap).every(([sourceKey, localId]) => sourceKey.trim() && typeof localId === "string" && localId.trim())))
       || !value.seed?.sourceKey || !value.seed?.name) {
       throw new Error("Ongeldige seasonmapping");
+    }
+    if (value.kind !== undefined && value.kind !== "special" && value.kind !== "series") {
+      throw new Error("Ongeldig mappingtype");
     }
     return value as SeasonMapEntry;
   });
@@ -102,124 +118,151 @@ Deno.serve(async (request) => {
       try { return await clientPromise; }
       catch (error) { clientPromise = null; throw error; }
     };
+
+    // Persist één genormaliseerd event + zijn child-slots. Idempotent op
+    // source_key / (catalog_event_id, source_slot_key).
+    const upsertEventAndSlots = async (normalized: Awaited<ReturnType<typeof normalizeSpecialEvent>>, entry: SeasonMapEntry | undefined) => {
+      const localCarMap = entry?.localCarMap ?? {};
+      const cars = normalized.cars.map((car) => ({ ...car, localCarId: localCarMap[car.sourceKey] ?? null }));
+      const localCarIds = [...new Set(cars.flatMap((car) => car.localCarId ? [car.localCarId] : []))];
+      counts.events_seen += 1;
+      counts.slots_seen += normalized.slots.length;
+
+      const { data: existing, error: existingError } = await service.from("endurance_iracing_events")
+        .select("id,source_hash,source_payload").eq("source_key", normalized.sourceKey).maybeSingle();
+      if (existingError) throw existingError;
+      const eventPayload = {
+        source_key: normalized.sourceKey,
+        iracing_series_id: entry?.seriesId ?? null,
+        iracing_season_id: entry?.seasonId ?? null,
+        name: normalized.name,
+        year: normalized.year,
+        circuit: normalized.circuit,
+        configuration: normalized.configuration,
+        track_id: normalized.trackId,
+        event_start_date: normalized.dateStart,
+        event_end_date: normalized.dateEnd,
+        duration_minutes: normalized.durationMinutes,
+        class_ids: normalized.classIds,
+        local_class_ids: entry?.localClassIds ?? [],
+        local_car_ids: localCarIds,
+        cars,
+        team_event: normalized.teamEvent,
+        official_url: normalized.officialUrl,
+        poster_url: normalized.posterUrl,
+        source_payload: calendarHtml ? {
+          provenance: entry
+            ? "official iRacing Special Events page + authenticated Data API"
+            : "official iRacing Special Events page; exact times pending explicit season mapping",
+          calendar_page_id: 263677,
+          calendar_modified_at: calendarModifiedAt,
+          season_id: entry?.seasonId ?? null,
+        } : existing?.source_payload ?? {
+          provenance: "authenticated iRacing Data API; calendar verification pending",
+          season_id: entry?.seasonId ?? null,
+        },
+        source_hash: normalized.sourceHash,
+        availability_status: normalized.availabilityStatus,
+        active: true,
+        last_seen_at: new Date().toISOString(),
+        source_updated_at: new Date().toISOString(),
+      };
+      const { data: event, error: eventError } = await service.from("endurance_iracing_events")
+        .upsert(eventPayload, { onConflict: "source_key" }).select("id").single();
+      if (eventError || !event) throw eventError ?? new Error("Event-upsert gaf geen id");
+      if (!existing) counts.events_inserted += 1;
+      else if (existing.source_hash !== normalized.sourceHash) counts.events_updated += 1;
+
+      for (const slot of normalized.slots) {
+        const { data: previous, error: previousError } = await service.from("endurance_iracing_event_slots")
+          .select("id,session_start_at,estimated_race_start_at").eq("catalog_event_id", event.id)
+          .eq("source_slot_key", slot.sourceSlotKey).maybeSingle();
+        if (previousError) throw previousError;
+        const slotPayload = {
+          catalog_event_id: event.id,
+          source_slot_key: slot.sourceSlotKey,
+          session_start_at: slot.sessionStartAt,
+          practice_start_at: slot.practiceStartAt,
+          practice_duration_minutes: slot.practiceDurationMinutes,
+          qualifying_start_at: slot.qualifyingStartAt,
+          qualifying_duration_minutes: slot.qualifyingDurationMinutes,
+          transition_duration_minutes: slot.transitionDurationMinutes,
+          estimated_race_start_at: slot.estimatedRaceStartAt,
+          race_duration_minutes: slot.raceDurationMinutes,
+          race_lap_limit: slot.raceLapLimit,
+          session_duration_minutes: slot.sessionDurationMinutes,
+          session_timing_status: slot.sessionTimingStatus,
+          label: slot.label,
+          source: slot.source,
+          active: true,
+          missing_successful_syncs: 0,
+          last_seen_at: new Date().toISOString(),
+        };
+        const { error: slotError } = await service.from("endurance_iracing_event_slots")
+          .upsert(slotPayload, { onConflict: "catalog_event_id,source_slot_key" });
+        if (slotError) throw slotError;
+        if (!previous) counts.slots_inserted += 1;
+        else if (previous.session_start_at !== slot.sessionStartAt || previous.estimated_race_start_at !== slot.estimatedRaceStartAt) counts.slots_updated += 1;
+      }
+      if (entry && calendarHtml && normalized.availabilityStatus === "exact_slots" && normalized.slots.length > 0) {
+        const currentKeys = normalized.slots.map((slot) => slot.sourceSlotKey);
+        const { data: candidates, error: candidatesError } = await service.from("endurance_iracing_event_slots")
+          .select("id,source_slot_key,missing_successful_syncs").eq("catalog_event_id", event.id).eq("active", true);
+        if (candidatesError) throw candidatesError;
+        for (const candidate of candidates ?? []) {
+          if (currentKeys.includes(candidate.source_slot_key)) continue;
+          const { data: linked, error: linkedError } = await service.from("endurance_events")
+            .select("id").eq("iracing_catalog_slot_id", candidate.id).limit(1);
+          if (linkedError) throw linkedError;
+          if ((linked ?? []).length) continue;
+          const misses = Number(candidate.missing_successful_syncs ?? 0) + 1;
+          const { error: staleError } = await service.from("endurance_iracing_event_slots")
+            .update({ missing_successful_syncs: misses, active: misses < 2 }).eq("id", candidate.id);
+          if (staleError) throw staleError;
+        }
+      }
+      // Deze teller wordt pas na een volledig geslaagde event+slotronde aangepast.
+      // Partial failures verwijderen of deactiveren dus nooit oude goede slots.
+    };
+
+    // Gewone endurance-series: elke season_schedule-row is één individuele race.
+    for (const seriesEntry of mapping.filter((entry) => entry.kind === "series")) {
+      try {
+        const seriesSeed: SeriesSeed = {
+          ...seriesEntry.seed,
+          seasonId: seriesEntry.seasonId,
+          seriesId: seriesEntry.seriesId ?? null,
+          seriesName: seriesEntry.seed.name,
+        };
+        const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${seriesEntry.seasonId}`);
+        const races = await discoverSeriesRaces(seriesSeed, schedule as never);
+        for (const race of races) {
+          await upsertEventAndSlots(race, seriesEntry);
+        }
+      } catch (error) {
+        errors.push(`${seriesEntry.seed.sourceKey}: ${cleanError(error)}`);
+      }
+    }
+
+    // Losse special events: uitsluitend events op Vincents vastgelegde lijst
+    // (gemapte source keys). Onbekende/ongemapte events worden niet geïmporteerd.
     for (const discoveredSeed of discoveredSeeds) {
       try {
         const entry = mappingBySourceKey.get(discoveredSeed.sourceKey);
+        if (!entry) continue;
         // Officiële paginadata wint; handmatige seedvelden vullen uitsluitend
         // ontbrekende track/API-metadata aan voor expliciet gemapte events.
-        const officialSeed = entry ? {
+        const officialSeed = {
           ...discoveredSeed,
           sourceKey: entry.seed.sourceKey,
           circuit: discoveredSeed.circuit ?? entry.seed.circuit ?? null,
           configuration: discoveredSeed.configuration ?? entry.seed.configuration ?? null,
           trackId: discoveredSeed.trackId ?? entry.seed.trackId ?? null,
           officialUrl: entry.seed.officialUrl ?? discoveredSeed.officialUrl ?? null,
-        } : discoveredSeed;
-        const schedule = entry
-          ? await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${entry.seasonId}`)
-          : null;
-        const normalized = await normalizeSpecialEvent(officialSeed, schedule as never);
-        const localCarMap = entry?.localCarMap ?? {};
-        const cars = normalized.cars.map((car) => ({ ...car, localCarId: localCarMap[car.sourceKey] ?? null }));
-        const localCarIds = [...new Set(cars.flatMap((car) => car.localCarId ? [car.localCarId] : []))];
-        counts.events_seen += 1;
-        counts.slots_seen += normalized.slots.length;
-
-        const { data: existing, error: existingError } = await service.from("endurance_iracing_events")
-          .select("id,source_hash,source_payload").eq("source_key", normalized.sourceKey).maybeSingle();
-        if (existingError) throw existingError;
-        const eventPayload = {
-          source_key: normalized.sourceKey,
-          iracing_series_id: entry?.seriesId ?? null,
-          iracing_season_id: entry?.seasonId ?? null,
-          name: normalized.name,
-          year: normalized.year,
-          circuit: normalized.circuit,
-          configuration: normalized.configuration,
-          track_id: normalized.trackId,
-          event_start_date: normalized.dateStart,
-          event_end_date: normalized.dateEnd,
-          duration_minutes: normalized.durationMinutes,
-          class_ids: normalized.classIds,
-          local_class_ids: entry?.localClassIds ?? [],
-          local_car_ids: localCarIds,
-          cars,
-          team_event: normalized.teamEvent,
-          official_url: normalized.officialUrl,
-          poster_url: normalized.posterUrl,
-          source_payload: calendarHtml ? {
-            provenance: entry
-              ? "official iRacing Special Events page + authenticated Data API"
-              : "official iRacing Special Events page; exact times pending explicit season mapping",
-            calendar_page_id: 263677,
-            calendar_modified_at: calendarModifiedAt,
-            season_id: entry?.seasonId ?? null,
-          } : existing?.source_payload ?? {
-            provenance: "authenticated iRacing Data API; calendar verification pending",
-            season_id: entry?.seasonId ?? null,
-          },
-          source_hash: normalized.sourceHash,
-          availability_status: normalized.availabilityStatus,
-          active: true,
-          last_seen_at: new Date().toISOString(),
-          source_updated_at: new Date().toISOString(),
         };
-        const { data: event, error: eventError } = await service.from("endurance_iracing_events")
-          .upsert(eventPayload, { onConflict: "source_key" }).select("id").single();
-        if (eventError || !event) throw eventError ?? new Error("Event-upsert gaf geen id");
-        if (!existing) counts.events_inserted += 1;
-        else if (existing.source_hash !== normalized.sourceHash) counts.events_updated += 1;
-
-        for (const slot of normalized.slots) {
-          const { data: previous, error: previousError } = await service.from("endurance_iracing_event_slots")
-            .select("id,session_start_at,estimated_race_start_at").eq("catalog_event_id", event.id)
-            .eq("source_slot_key", slot.sourceSlotKey).maybeSingle();
-          if (previousError) throw previousError;
-          const slotPayload = {
-            catalog_event_id: event.id,
-            source_slot_key: slot.sourceSlotKey,
-            session_start_at: slot.sessionStartAt,
-            practice_start_at: slot.practiceStartAt,
-            practice_duration_minutes: slot.practiceDurationMinutes,
-            qualifying_start_at: slot.qualifyingStartAt,
-            qualifying_duration_minutes: slot.qualifyingDurationMinutes,
-            transition_duration_minutes: slot.transitionDurationMinutes,
-            estimated_race_start_at: slot.estimatedRaceStartAt,
-            race_duration_minutes: slot.raceDurationMinutes,
-            race_lap_limit: slot.raceLapLimit,
-            session_duration_minutes: slot.sessionDurationMinutes,
-            session_timing_status: slot.sessionTimingStatus,
-            label: slot.label,
-            source: slot.source,
-            active: true,
-            missing_successful_syncs: 0,
-            last_seen_at: new Date().toISOString(),
-          };
-          const { error: slotError } = await service.from("endurance_iracing_event_slots")
-            .upsert(slotPayload, { onConflict: "catalog_event_id,source_slot_key" });
-          if (slotError) throw slotError;
-          if (!previous) counts.slots_inserted += 1;
-          else if (previous.session_start_at !== slot.sessionStartAt || previous.estimated_race_start_at !== slot.estimatedRaceStartAt) counts.slots_updated += 1;
-        }
-        if (entry && calendarHtml && normalized.availabilityStatus === "exact_slots" && normalized.slots.length > 0) {
-          const currentKeys = normalized.slots.map((slot) => slot.sourceSlotKey);
-          const { data: candidates, error: candidatesError } = await service.from("endurance_iracing_event_slots")
-            .select("id,source_slot_key,missing_successful_syncs").eq("catalog_event_id", event.id).eq("active", true);
-          if (candidatesError) throw candidatesError;
-          for (const candidate of candidates ?? []) {
-            if (currentKeys.includes(candidate.source_slot_key)) continue;
-            const { data: linked, error: linkedError } = await service.from("endurance_events")
-              .select("id").eq("iracing_catalog_slot_id", candidate.id).limit(1);
-            if (linkedError) throw linkedError;
-            if ((linked ?? []).length) continue;
-            const misses = Number(candidate.missing_successful_syncs ?? 0) + 1;
-            const { error: staleError } = await service.from("endurance_iracing_event_slots")
-              .update({ missing_successful_syncs: misses, active: misses < 2 }).eq("id", candidate.id);
-            if (staleError) throw staleError;
-          }
-        }
-        // Deze teller wordt pas na een volledig geslaagde event+slotronde aangepast.
-        // Partial failures verwijderen of deactiveren dus nooit oude goede slots.
+        const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${entry.seasonId}`);
+        const normalized = await normalizeSpecialEvent(officialSeed, schedule as never);
+        await upsertEventAndSlots(normalized, entry);
       } catch (error) {
         errors.push(`${discoveredSeed.sourceKey}: ${cleanError(error)}`);
       }
