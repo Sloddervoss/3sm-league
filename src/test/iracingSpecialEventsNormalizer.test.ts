@@ -23,6 +23,7 @@ describe("iRacing Special Events normalizer", () => {
       configuration: "Full Course",
       trackId: 465,
       availabilityStatus: "exact_slots",
+      dateEnd: "2026-08-15",
     });
     expect(races[0].slots).toHaveLength(3);
     expect(races[0].slots[0].sessionStartAt).toBe("2026-08-15T02:00:00.000Z");
@@ -31,8 +32,35 @@ describe("iRacing Special Events normalizer", () => {
     expect(races[1]).toMatchObject({
       sourceKey: "iracing:2026:imsa-endurance-series:week5:road-atlanta",
       name: "IMSA Endurance Series — Road Atlanta",
+      dateEnd: "2026-08-29",
     });
     expect(races[1].slots).toHaveLength(3);
+  });
+
+  it("leidt de event-einddatum af uit de sessietijden zodat verlopen races verborgen worden", async () => {
+    const races = await discoverSeriesRaces(
+      { sourceKey: "iracing:2026:vln", year: 2026, name: "Nürburgring Endurance Championship", seasonId: 6236, seriesName: "Nürburgring Endurance Championship" },
+      {
+        schedules: [
+          {
+            race_week_num: 0,
+            start_date: "2026-03-21",
+            track: { track_name: "Nürburgring Combined", track_id: 1 },
+            race_time_descriptors: [{ session_times: ["2026-03-21T07:00:00Z", "2026-03-21T17:00:00Z"] }],
+          },
+          {
+            race_week_num: 1,
+            start_date: "2026-11-07",
+            track: { track_name: "Nürburgring Combined", track_id: 1 },
+            race_time_descriptors: [{ session_times: ["2026-11-07T07:00:00Z"] }],
+          },
+        ],
+      },
+    );
+    expect(races[0]).toMatchObject({ name: "Nürburgring Endurance Championship — Nürburgring Combined", dateStart: "2026-03-21", dateEnd: "2026-03-21" });
+    expect(races[1]).toMatchObject({ dateStart: "2026-11-07", dateEnd: "2026-11-07" });
+    // Geen schedule_name-vervuiling: elke race heet Serie — Circuit.
+    expect(races.every((r) => r.name === "Nürburgring Endurance Championship — Nürburgring Combined")).toBe(true);
   });
 
   it("weigert een serieseason zonder geldig seasonId", async () => {

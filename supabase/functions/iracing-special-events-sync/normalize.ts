@@ -401,9 +401,16 @@ export async function discoverSeriesRaces(
     const count = seen.get(baseKey) ?? 0;
     seen.set(baseKey, count + 1);
     const sourceKey = count > 0 ? `${baseKey}:${count + 1}` : baseKey;
-    const raceName = row.schedule_name && row.schedule_name !== seriesSeed.seriesName
-      ? row.schedule_name
-      : `${seriesSeed.seriesName} — ${row.track.track_name}`;
+    const raceName = `${seriesSeed.seriesName} — ${row.track.track_name}`;
+    // Leid de event-einddatum af uit de werkelijke sessiestarttijden, zodat
+    // verlopen races door het presentatie-past-filter verborgen worden.
+    const sessionStarts: string[] = (row.race_time_descriptors ?? [])
+      .flatMap((descriptor) => descriptor.session_times ?? [])
+      .map((raw) => utcIso(raw))
+      .filter((value): value is string => Boolean(value));
+    const dateEnd = sessionStarts.length
+      ? sessionStarts.map((iso) => iso.slice(0, 10)).sort().at(-1) ?? null
+      : seriesSeed.dateEnd ?? null;
     const rowSeed: SpecialEventSeed = {
       ...seriesSeed,
       sourceKey,
@@ -412,7 +419,7 @@ export async function discoverSeriesRaces(
       configuration: row.track.config_name ?? null,
       trackId: row.track.track_id ?? null,
       dateStart: row.start_date ?? seriesSeed.dateStart ?? null,
-      dateEnd: seriesSeed.dateEnd ?? null,
+      dateEnd,
       classIds: seriesSeed.classIds,
       cars: seriesSeed.cars,
       teamEvent: seriesSeed.teamEvent ?? true,
