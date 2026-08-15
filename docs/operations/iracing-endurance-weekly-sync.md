@@ -22,9 +22,15 @@ Elke mapping-entry heeft een `kind`: `"special"` (default) of `"series"`.
   - Naam is altijd `Serie — Circuit` (niet de rauwe iRacing `schedule_name`).
   - `event_end_date` wordt afgeleid uit de sessiestarttijden, zodat het catalogus-
     past-filter verlopen races verbergt (net als bij special events).
+  - **Klassen + auto's**: de sync laadt per serie de officiële `car_class_ids` uit
+    het season-record en resolved die via `/data/carclass/get` (klassenaam) en
+    `/data/car/get` (leesbare autonaam) naar `class_ids` + `cars` op elk event.
+    Onbekende class-/auto-IDs worden overgeslagen; nooit gegokt.
   - Serie met `"combined": true` (bv. Nürburgring Endurance Championship, die alle
     races op één circuit rijdt) verschijnt als EÉN serieskaart met alle race-weken
-    als child-slots, per datum gesorteerd — geen N identieke kaarten.
+    als child-slots, per datum gesorteerd — geen N identieke kaarten. Binnen een
+    week worden **alle** officiële racemomenten (alle `session_times`) als slots
+    getoond, niet alleen het eerste.
 
 **Slot-zichtbaarheid (UI):** een eventkaart toont alleen `upcoming` slots (sessiestart
 >= vandaag, lokale Amsterdam-datum). Verlopen week-slots (bv. maart-juli in de
