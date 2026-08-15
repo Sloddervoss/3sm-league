@@ -1,10 +1,10 @@
-import { Copy, GripVertical, Minus, Plus, Trash2 } from "lucide-react";
+import { ChevronsRight, Copy, GripVertical, Minus, Plus, Trash2 } from "lucide-react";
 import { availabilityForStint, formatAmsterdam } from "../core/selectors";
 import type { AvailabilityBlock, EnduranceEvent, EndurancePersona, EnduranceStint } from "../core/types";
 
 const colors = ["bg-orange-500/80", "bg-sky-500/75", "bg-violet-500/75", "bg-emerald-500/75", "bg-rose-500/75"];
 
-export const StintTimeline = ({ event, stints, personas, availability, editable, snapMinutes, onMove, onResize, onDelete, onCopy }: { event: EnduranceEvent; stints: EnduranceStint[]; personas: EndurancePersona[]; availability: AvailabilityBlock[]; editable: boolean; snapMinutes: number; onMove: (stint: EnduranceStint, startAt: string) => void; onResize: (stint: EnduranceStint, deltaMinutes: number) => void; onDelete: (id: string) => void; onCopy: (stint: EnduranceStint) => void }) => {
+export const StintTimeline = ({ event, stints, personas, availability, editable, snapMinutes, onMove, onResize, onDelete, onCopy, onExtend }: { event: EnduranceEvent; stints: EnduranceStint[]; personas: EndurancePersona[]; availability: AvailabilityBlock[]; editable: boolean; snapMinutes: number; onMove: (stint: EnduranceStint, startAt: string) => void; onResize: (stint: EnduranceStint, deltaMinutes: number) => void; onDelete: (id: string) => void; onCopy: (stint: EnduranceStint) => void; onExtend: (stint: EnduranceStint) => void }) => {
   const start = new Date(event.startAt).getTime(); const end = new Date(event.endAt).getTime(); const span = end - start;
   const sorted = [...stints].sort((a, b) => a.actualStartAt.localeCompare(b.actualStartAt));
   const drop = (dropEvent: React.DragEvent<HTMLDivElement>) => { if (!editable) return; dropEvent.preventDefault(); const id = dropEvent.dataTransfer.getData("text/endurance-stint"); const stint = stints.find((candidate) => candidate.id === id); if (!stint) return; const rect = dropEvent.currentTarget.getBoundingClientRect(); const rawMinutes = ((dropEvent.clientX - rect.left) / rect.width) * (span / 60_000); const snapped = Math.max(0, Math.round(rawMinutes / snapMinutes) * snapMinutes); const duration = new Date(stint.actualEndAt).getTime() - new Date(stint.actualStartAt).getTime(); const maxStart = end - duration; onMove(stint, new Date(Math.min(maxStart, start + snapped * 60_000)).toISOString()); };
@@ -28,12 +28,14 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
             {editable && (wide ? (
               <div className="flex gap-1">
                 <button type="button" onClick={() => onResize(stint, -snapMinutes)} className="rounded bg-black/25 p-1" aria-label="Stint verkorten"><Minus className="h-3 w-3" /></button>
-                <button type="button" onClick={() => onResize(stint, snapMinutes)} className="rounded bg-black/25 p-1" aria-label="Stint verlengen"><Plus className="h-3 w-3" /></button>
+                <button type="button" onClick={() => onResize(stint, snapMinutes)} className="rounded bg-black/25 p-1" aria-label="Stint verlengen duur"><Plus className="h-3 w-3" /></button>
                 <button type="button" onClick={() => onCopy(stint)} className="rounded bg-black/25 p-1" aria-label="Stint kopiëren"><Copy className="h-3 w-3" /></button>
+                <button type="button" onClick={() => onExtend(stint)} className="rounded bg-black/25 p-1" aria-label="Zelfde coureur nog een stint"><ChevronsRight className="h-3 w-3" /></button>
                 <button type="button" onClick={() => onDelete(stint.id)} className="rounded bg-black/25 p-1" aria-label="Stint verwijderen"><Trash2 className="h-3 w-3" /></button>
               </div>
             ) : (
               <div className="flex gap-1">
+                <button type="button" onClick={() => onExtend(stint)} className="rounded bg-black/25 p-1" aria-label="Zelfde coureur nog een stint"><ChevronsRight className="h-3 w-3" /></button>
                 <button type="button" onClick={() => onDelete(stint.id)} className="rounded bg-black/25 p-1" aria-label="Stint verwijderen"><Trash2 className="h-3 w-3" /></button>
               </div>
             ))}

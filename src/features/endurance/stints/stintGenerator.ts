@@ -76,6 +76,7 @@ export const generateStints = (
   const result: EnduranceStint[] = [];
   let cursor = startMs;
   let index = 0;
+  let prevDriverId: string | null = null;
 
   // Beschikbaarheid per coureur bepalen (een coureur is "beschikbaar" als er
   // een overlap-blok is, of als er helemaal geen availability-blokken zijn).
@@ -134,12 +135,32 @@ export const generateStints = (
       if (viable.length) pool = viable;
     }
 
-    // Fair-share: kies de coureur met de minste totale rijtijd tot nu toe.
-    let driverId = pool[0];
-    let minTotal = Infinity;
-    for (const userId of pool) {
-      const t = run[userId].totalMinutes;
-      if (t < minTotal) { minTotal = t; driverId = userId; }
+    // Vast-houden: als de coureur die net reed expliciet een maxConsecutiveStints
+    // > 1 heeft ingesteld en nog binnen die grens zit (en beschikbaar blijft),
+    // laat hem de volgende stint rijden i.p.v. altijd naar de minst-belaste door
+    // te roteren. Zo respecteert de planner de wens om 2/3 stints achter elkaar
+    // te rijden, en iedereen zonder die instelling blijft gewoon 1-om-1 wisselen.
+    // Wanneer de coureur op zijn grens zit (of net pas gereden heeft zonder
+    // ingestelde grens, of niet meer beschikbaar) valt hij terug op fair-share.
+    let driverId: string | null = null;
+    if (prevDriverId) {
+      const prev = run[prevDriverId];
+      const prevLimit = limits[prevDriverId];
+      const wantsContinue = prevLimit?.maxConsecutiveStints != null && prevLimit.maxConsecutiveStints > prev.consecutive;
+      const stillAvailable = isAvailable(prevDriverId, cursor, Math.min(endMs, cursor + tankMinutes * 60_000));
+      const restOk = !prevLimit?.minRestMinutes || !prev.hasDriven || cursor - prev.lastEndMs >= prevLimit.minRestMinutes * 60_000;
+      if (wantsContinue && stillAvailable && restOk && pool.includes(prevDriverId)) driverId = prevDriverId;
+    }
+
+    // Fair-share (of vastgehouden coureur): kies de coureur met de minste totale rijtijd.
+    if (!driverId) {
+      let candidate = pool[0];
+      let minTotal = Infinity;
+      for (const userId of pool) {
+        const t = run[userId].totalMinutes;
+        if (t < minTotal) { minTotal = t; candidate = userId; }
+      }
+      driverId = candidate;
     }
 
     // Stint-eindtijd: cappen op per-coureur stintduur/totale rijtijd in comfort-modus.
@@ -183,6 +204,7 @@ export const generateStints = (
     }
 
     cursor = stintEndMsCapped;
+    prevDriverId = driverId;
     index += 1;
   }
   return result;

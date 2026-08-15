@@ -74,6 +74,24 @@ describe("live 3-rijders repro", () => {
     expect([...used].sort()).toEqual([U_DEVOS, U_RICKY, U_WEIJTS].sort());
   });
 
+  it("houdt een coureur vast tot zijn maxConsecutiveStints (double/triple stint), i.p.v. altijd 1-om-1", () => {
+    const { state, event } = build(6); // 6u race, genoeg stints voor een reeks
+    const stints = generateStints(state, event, "team-live3", 60, {
+      mode: "race",
+      driverLimits: {
+        [U_DEVOS]: { willingToStart: true, maxConsecutiveStints: 3 },
+        [U_RICKY]: { willingToStart: false, maxConsecutiveStints: 1 },
+        [U_WEIJTS]: { willingToStart: false, maxConsecutiveStints: 1 },
+      },
+    });
+    expect(stints.length).toBeGreaterThan(2);
+    // deDevos begint en mag 3 achter elkaar; eerst-3 moeten dus allemaal deDevos zijn.
+    // (er is geen andere coureur met willingToStart + maxConsecutive > 1)
+    const firstThree = stints.slice(0, 3).map((s) => s.driverId);
+    expect(firstThree[0]).toBe(U_DEVOS);
+    expect(firstThree.every((id) => id === U_DEVOS)).toBe(true);
+  });
+
   it("StintTimeline toont de verwijderknop ALTIJD voor editable stints (ook dunne 24u-balken)", () => {
     const timeline = readFileSync("src/features/endurance/stints/StintTimeline.tsx", "utf8");
     expect(timeline).toContain("aria-label=\"Stint verwijderen\"");
@@ -88,5 +106,29 @@ describe("live 3-rijders repro", () => {
     expect(planner).toContain("replaceDraftStints");
     expect(planner).toContain('s.status === "draft"');
     expect(planner).toContain("remove.mutateAsync(draft.id)");
+  });
+
+  it("manager kan per coureur 'max stints achter elkaar' instellen dat bij genereren wordt gebruikt", () => {
+    const planner = readFileSync("src/features/endurance/stints/StintPlanner.tsx", "utf8");
+    expect(planner).toContain("consecutiveOverride");
+    expect(planner).toContain("overrideLimits");
+    // de override voedt beide generator-paden
+    expect(planner).toContain("driverLimits: overrideLimits");
+    expect(planner).toContain("driverOpts: overrideLimits");
+    // bewerk-UX per coureur met 1/2/3 keuze
+    expect(planner).toContain("Stints achter elkaar per coureur");
+    expect(planner).toContain('<option value={1}>1</option>');
+    expect(planner).toContain('<option value={3}>3</option>');
+  });
+
+  it("elke stint heeft een 'verlengen'-knop die dezelfde coureur nog een stint toevoegt", () => {
+    const timeline = readFileSync("src/features/endurance/stints/StintTimeline.tsx", "utf8");
+    const planner = readFileSync("src/features/endurance/stints/StintPlanner.tsx", "utf8");
+    expect(timeline).toContain("onExtend");
+    expect(timeline).toContain('aria-label="Zelfde coureur nog een stint"');
+    expect(timeline).toContain("onExtend(stint)");
+    expect(planner).toContain("const extend = ");
+    expect(planner).toContain("onExtend={extend}");
+    expect(planner).toContain("notes: \"Verlengd (zelfde coureur)\"");
   });
 });
