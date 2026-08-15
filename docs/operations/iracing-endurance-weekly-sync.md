@@ -154,7 +154,7 @@ Controleer daarna `endurance_iracing_sync_runs`: `status`, tellingen en `error_s
 
 ## Planning
 
-Voorkeur op de bestaande host: de meegeleverde systemd-timer draait maandag 04:15 `Europe/Amsterdam`. Gebruik een root-only `EnvironmentFile` met mode `0600`. De servicetemplate draait standaard als root om dit envbestand te lezen; stel via een systemd drop-in pas `User=`/`Group=` in nadat het echte hostserviceaccount en diens leesrechten zijn bewezen. Activeer de timer pas na een handmatige groene run in de doelomgeving.
+Voorkeur op de bestaande host: de meegeleverde systemd-timer draait **dagelijks** 04:15 `Europe/Amsterdam` (met `RandomizedDelaySec=5m`). De dagelijkse frequentie laat de losse special events zichzelf automatisch activeerbaar maken zodra iRacing exacte sessietijden publiceert (zonder wekelijks te wachten). Gebruik een root-only `EnvironmentFile` met mode `0600`. De servicetemplate draait standaard als root om dit envbestand te lezen; stel via een systemd drop-in pas `User=`/`Group=` in nadat het echte hostserviceaccount en diens leesrechten zijn bewezen. Activeer de timer pas na een handmatige groene run in de doelomgeving. Na het wijzigen van het schema: `systemctl stop`, `reset-failed` en `start` de timer (i.p.v. alleen restart) zodat systemd de volgende `NextElapse` correct herberekent.
 
 ## Uitschakelen en rotatie
 
