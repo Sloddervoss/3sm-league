@@ -11,6 +11,7 @@ const navbar = readFileSync("src/components/Navbar.tsx", "utf8");
 const vehiclePanel = readFileSync("src/features/endurance/workspace/VehicleVotePanel.tsx", "utf8");
 const actorContext = readFileSync("src/features/endurance/core/ActorContext.tsx", "utf8");
 const sharedQueries = readFileSync("src/hooks/data/useSharedQueries.ts", "utf8");
+const stintPlanner = readFileSync("src/features/endurance/stints/StintPlanner.tsx", "utf8");
 
 describe("endurance alpha-rollen (tester + endurance_manager)", () => {
   it("voegt beide rollen additief toe aan app_role", () => {
@@ -68,5 +69,16 @@ describe("endurance alpha-rollen (tester + endurance_manager)", () => {
     const page2 = readFileSync("src/features/endurance/shell/EndurancePage.tsx", "utf8");
     expect(page2).toContain("useDriverNameMap()");
     expect(page2).toContain("names={profileNames}");
+  });
+
+  it("geeft echte drivernamen door aan de stint-tijdlijn i.p.v. een lege persone-lijst", () => {
+    // StintPlanner bouwde de tijdlijn ooit met personas={[]}, waardoor elke stint
+    // als driver-id-nummer viel op de kale user-id. Nu levert hij personae op
+    // basis van de teamleden en displayName (profielnaam). De tijdlijn zelf toont
+    // driver?.name ?? driverId en mag nooit leeg gelaten worden.
+    expect(stintPlanner).toContain("const personas = useMemo(");
+    expect(stintPlanner).toContain("name: displayName(m.user_id)");
+    expect(stintPlanner).toContain("personas={personas}");
+    expect(stintPlanner).not.toContain("personas={[]}");
   });
 });
