@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEnduranceSeed } from "../core/seed";
-import { marshalJresInput, buildJresStints, buildJresAvailability, parseJresOutput, keyFor, runOptimize, type OptimizerFetcher } from "./jresOptimizer";
+import { marshalJresInput, buildJresStints, buildJresAvailability, parseJresOutput, enforceConsecutiveLimits, keyFor, runOptimize, type OptimizerFetcher } from "./jresOptimizer";
 
 describe("jresOptimizer marshalling", () => {
   it("builds fixed stint segments covering the full race without gaps", () => {
@@ -102,6 +102,38 @@ describe("jresOptimizer marshalling", () => {
     expect(values).toContain("Unavailable");
     expect(values).toContain("Preferred");
     expect(values).toContain("Available");
+  });
+
+  it("enforceConsecutiveLimits herverdeelt overtollige aaneengesloten stints naar een coureur binnen diens eigen limiet", () => {
+    const base = createEnduranceSeed().events[0];
+    const mk = (i: number, driverId: string, h: number) => ({
+      id: `stint-${i}`, eventId: base.id, teamId: "t", driverId,
+      originalStartAt: new Date(`2026-08-22T${String(h).padStart(2, "0")}:00:00Z`).toISOString(),
+      originalEndAt: new Date(`2026-08-22T${String(h + 1).padStart(2, "0")}:00:00Z`).toISOString(),
+      actualStartAt: new Date(`2026-08-22T${String(h).padStart(2, "0")}:00:00Z`).toISOString(),
+      actualEndAt: new Date(`2026-08-22T${String(h + 1).padStart(2, "0")}:00:00Z`).toISOString(),
+      expectedLaps: 10, fuelLitres: 10, tyreChange: false, doubleStint: false, notes: "", status: "draft" as const,
+    });
+    // JRES gaf: devos dubbel (h0+h1), ricky dubbel (h2+h3), weijts dubbel (h4+h5) — ongeldig voor de max=1.
+    const input = [
+      mk(1, "user-devos", 0), mk(2, "user-devos", 1),
+      mk(3, "user-ricky", 2), mk(4, "user-ricky", 3),
+      mk(5, "user-weijts", 4), mk(6, "user-weijts", 5),
+    ];
+    const opts = {
+      "user-devos": { maxConsecutiveStints: 2 },
+      "user-ricky": { maxConsecutiveStints: 2 },
+      "user-weijts": { maxConsecutiveStints: 1 },
+      "user-steven": { maxConsecutiveStints: 1 },
+    };
+    const out = enforceConsecutiveLimits(input, opts, {}, ["user-devos", "user-ricky", "user-weijts", "user-steven"]);
+    // Weijts mag maar 1 achter elkaar; de 2e weijts-stint wordt herverdeeld.
+    for (let i = 1; i < out.length; i++) {
+      if (out[i].driverId === "user-weijts") expect(out[i - 1].driverId).not.toBe("user-weijts");
+    }
+    // devos en ricky mogen wél 2 — hun dubbel mag overeind blijven.
+    expect(out[0]?.driverId).toBe("user-devos");
+    expect(out[1]?.driverId).toBe("user-devos");
   });
 });
 

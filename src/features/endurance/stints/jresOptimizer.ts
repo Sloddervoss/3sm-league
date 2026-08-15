@@ -214,6 +214,70 @@ export interface OptimizeResult {
 }
 
 /**
+ * Post-correctie na de JRES-berekening. JRES kent maar ÉÉN globale
+ * `consecutiveStints` (we zetten die op het MAX van de wensen zodat wie 2/3 wil
+ * het ook kan rijden) — maar daardoor kan een coureur met een STRENGERE eigen
+ * limiet (max 1) tóch 2/3 achter elkaar krijgen. Deze stap herverdeelt die
+ * overtollige, aaneengesloten stints naar een andere teamcoureur die (a) nog
+ * binnen zijn eigen limiet zit en (b) beschikbaar is. Zo handhaaft het eindresultaat
+ * per coureur de gewenste reeks zonder dat de optimizer globale keuze wordt opgeheven.
+ */
+export function enforceConsecutiveLimits(
+  stints: EnduranceStint[],
+  driverOpts: MarshalOptions["driverOpts"],
+  availability: Record<string, Record<string, string>>,
+  userIds: string[]
+): EnduranceStint[] {
+  if (!driverOpts) return stints;
+  const sorted = [...stints].sort((a, b) => a.actualStartAt.localeCompare(b.actualStartAt));
+  const result: EnduranceStint[] = [];
+  let runDriver: string | null = null;
+  let runCount = 0;
+
+  const availAt = (userId: string, startAt: string): boolean => {
+    const key = keyFor(startAt);
+    const map = availability[userId];
+    if (!map) return true; // geen blokken = altijd beschikbaar
+    return map[key] !== "Unavailable";
+  };
+
+  for (const stint of sorted) {
+    const limit = driverOpts[stint.driverId]?.maxConsecutiveStints;
+    const same = stint.driverId === runDriver;
+    const nextRunCount = same ? runCount + 1 : 1;
+    const exceeds = Boolean(limit != null && limit > 0 && nextRunCount > limit);
+
+    if (exceeds && runDriver) {
+      // Zoek een vervanger: ander lid, binnen beperking, beschikbaar, met de
+      // minste workload tot nu toe (voorkeur voor de rustigste).
+      let replacement: string | null = null;
+      let bestTotal = Infinity;
+      for (const candidate of userIds) {
+        if (candidate === runDriver) continue;
+        const cl = driverOpts[candidate]?.maxConsecutiveStints;
+        const cAllowed = cl == null || cl === 0 || cl >= 1; // elke coureur mag op z'n minst 1
+        if (!cAllowed) continue;
+        if (!availAt(candidate, stint.actualStartAt)) continue;
+        const total = result.filter((s) => s.driverId === candidate).length;
+        if (total < bestTotal) { bestTotal = total; replacement = candidate; }
+      }
+      if (replacement) {
+        result.push({ ...stint, driverId: replacement, notes: `${stint.notes ?? "Optimale planning (JRES/HiGHS)"} · gecorrigeerd` });
+        // run van de vervanger moet opnieuw geteld worden vanaf deze stint
+        runDriver = replacement;
+        runCount = 1;
+        continue;
+      }
+    }
+
+    result.push(stint);
+    runDriver = same ? runDriver : stint.driverId;
+    runCount = nextRunCount;
+  }
+  return result;
+}
+
+/**
  * Orkestreert de optimizer-stap voor een team, puur en testbaar:
  * marshall → fetcher → parse. Event/model-agnostisch in/uit.
  */
@@ -237,7 +301,16 @@ export async function runOptimize(
   if (result.status === "error") return { ok: false, message: `Optimalisatie mislukt: ${result.error ?? "onbekende fout"}`, stints: [] };
   if (result.status === "infeasible") return { ok: false, message: "Geen geldige planning mogelijk (constraints conflicteren). Pas limieten aan.", stints: [] };
   if (!result.output) return { ok: false, message: "Optimalisatie gaf geen planning terug.", stints: [] };
-  const stints = parseJresOutput(result.output as JresOutput, event, teamId);
-  if (!stints.length) return { ok: false, message: "Optimalisatie leverde geen stints op.", stints: [] };
+  const parsedStints = parseJresOutput(result.output as JresOutput, event, teamId);
+  if (!parsedStints.length) return { ok: false, message: "Optimalisatie leverde geen stints op.", stints: [] };
+  // Post-correctie: respecteer per coureur de eigen maxConsecutiveStints (JRES
+  // kent maar één globale waarde; die overtollige aaneengesloten stints worden
+  // herverdeeld naar een beschikbare teamgenoot binnen diens limiet).
+  const stints = enforceConsecutiveLimits(
+    parsedStints,
+    options.driverOpts,
+    input.availability,
+    memberUserIds
+  );
   return { ok: true, message: `Optimale planning opgehaald (${stints.length} stints).`, stints };
 }
