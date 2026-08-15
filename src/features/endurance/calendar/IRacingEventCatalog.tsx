@@ -97,7 +97,7 @@ const officialEventLogos: Record<string, string> = {
   "iracing:2026:imsa-sportscar-endurance-challenge": "/endurance-assets/official/iracing-2026-imsa-sportscar-endurance-challenge.png",
   "iracing:2026:imsa-michelin-pilot-challenge": "/endurance-assets/official/iracing-2026-imsa-michelin-pilot-challenge.png",
   "iracing:2026:gt-endurance-series-by-simucube": "/endurance-assets/official/iracing-2026-gt-endurance-series-by-simucube.png",
-  "iracing:2026:nurburgring-endurance-championship": "/endurance-assets/official/iracing-2026-nurburgring-endurance-championship.jpg",
+  "iracing:2026:nurburgring-endurance-championship": "/endurance-assets/official/iracing-2026-nurburgring-endurance-championship.png",
 };
 
 /** Uniek-logo voor een event: exacte source_key eerste, dan serie-prefix (bv. serie-race). */
