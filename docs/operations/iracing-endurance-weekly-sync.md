@@ -63,7 +63,29 @@ Voorbeeldmapping (geen secret):
 }]
 ```
 
-`localClassIds` is bewust apart van de officiële `classIds` en accepteert alleen de lokaal ondersteunde stemklassen `GTP`, `LMP2` en `GT3`. Laat deze array leeg als de officiële klassen niet expliciet en inhoudelijk aan de lokale autoselectie zijn gekoppeld; het event blijft dan zichtbaar maar activatie wordt database-side geblokkeerd. Gok bijvoorbeeld niet dat een historische `HPD`-klasse automatisch `GTP` betekent.
+`localClassIds` is bewust apart van de officiële `classIds` en accepteert alleen de lokaal ondersteunde stemklassen `GTP`, `LMP2`, `GT3` (plus legacy `HPD`, `GT1`, `GT2`). Laat deze array leeg als de officiële klassen niet expliciet en inhoudelijk aan de lokale autoselectie zijn gekoppeld; het event blijft dan zichtbaar maar activatie wordt database-side geblokkeerd. Gok bijvoorbeeld niet dat een historische `HPD`-klasse automatisch `GTP` betekent.
+
+## Lokale activatie-mapping (klasse + auto's)
+
+De activatie-RPC (`endurance_activate_iracing_slot`) is fail-closed: een event is pas te activeren wanneer het **expliciet** een geldige lokale mapping heeft:
+
+- `localClassIds` — niet-leeg en een subset van `GTP/LMP2/GT3/HPD/GT1/GT2`;
+- `localCarMap` — per officiële `sourceKey` de lokale 3SM auto-ID (uit de RPC-whitelist);
+- **elke officiële auto** in `cars` moet een `localCarId` hebben die in `local_car_ids` zit;
+- elke toegestane auto hoort bij een lokaal gemapte klasse;
+- elke lokale klasse heeft minstens één toegestane auto (geen lege stemkeuze).
+
+De sync schrijft `local_class_ids` uit `localClassIds` en leidt `local_car_ids` + per-auto `localCarId` af uit `localCarMap`. Zonder mapping blijft `local_class_ids`/`local_car_ids` leeg en blokkeert de activatie — dat is het bedoelde fail-closed gedrag.
+
+**Status (2026-08-15):** drie series hebben een volledige lokale mapping gekregen in `ENDURANCE_IRACING_SEASON_MAP_JSON` en zijn daarmee actieveerbaar:
+
+| Serie | `localClassIds` |
+|---|---|
+| IMSA Endurance Series | `GTP, LMP2, GT3` |
+| Global Endurance Tour | `GTP, LMP2, GT3` |
+| GT Endurance Series by Simucube | `GT3` (officieel puur GT3) |
+
+De overige series (Nürburgring EC, Creventic, Production Endurance, Michelin Pilot, Sportscar) bevatten GT4/TCR/PCup/M2/production-auto's die **buiten** de lokale RPC-whitelist vallen; die blijven fail-closed tot er een expliciete keuze is of de RPC-whitelist wordt uitgebreid (migratie). Na een wijziging in de SEASON_MAP: `docker compose up -d --force-recreate functions` (env-recreate) en de sync opnieuw draaien.
 
 Voorbeeld serie-mapping (geen secret) — elke individuele race wordt 1 catalog-event:
 
@@ -72,7 +94,15 @@ Voorbeeld serie-mapping (geen secret) — elke individuele race wordt 1 catalog-
   "kind": "series",
   "seasonId": 6310,
   "seriesId": 419,
-  "localClassIds": [],
+  "localClassIds": ["GTP", "LMP2", "GT3"],
+  "localCarMap": {
+    "acura-arx-06-gtp": "acura-arx-06",
+    "bmw-m-hybrid-v8-evo": "bmw-m-hybrid-v8",
+    "cadillac-v-series-r-gtp": "cadillac-v-series-r",
+    "ferrari-499p": "ferrari-499p",
+    "porsche-963-gtp": "porsche-963",
+    "dallara-p217": "dallara-p217"
+  },
   "seed": {
     "sourceKey": "iracing:2026:imsa-endurance-series",
     "year": 2026,
@@ -82,6 +112,8 @@ Voorbeeld serie-mapping (geen secret) — elke individuele race wordt 1 catalog-
   }
 }]
 ```
+
+GT3-auto's mappen 1-op-1 (officiële `sourceKey` = lokale ID, bv. `mercedes-amg-gt3-2020`); GTP-auto's hebben in iRacing een `-gtp`/`-evo`-suffix dat lokaal ontbreekt en worden expliciet vertaald.
 
 De serie-logo's zitten hash-bewezen in `public/endurance-assets/official/` en worden in
 de frontend per serie via source_key-prefix gekoppeld.
