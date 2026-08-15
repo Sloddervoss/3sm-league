@@ -107,14 +107,19 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
   } as never;
   const warnings = planningWarnings(plannerState, event.id, teamId);
 
-  const generate = () => {
-    if (!team) return;
-    const next = generateStints(plannerState, event, team.id, tankMinutes, { mode, driverLimits, firstStintDriver });
-    if (!next.length) { setMessage("Voeg eerst coureurs toe aan deze auto."); return; }
+  // Vervang een voorstel volledig: verwijder eerst de bestaande DRAFT-stints van
+  // dit team, daarna de nieuwe. Zo hoopt een her-aanklik van "Voorstel genereren"
+  // / "Optimaal berekenen" geen stints op en overlappen coureurs nooit dubbel.
+  // Bevestigde (confirmed/ready/etc.) stints worden nooit aangeraakt.
+  const replaceDraftStints = async (next: EnduranceStint[]) => {
+    const existingDrafts = stintRows.filter((s) => s.team_id === team?.id && s.status === "draft");
+    for (const draft of existingDrafts) {
+      await remove.mutateAsync(draft.id);
+    }
     for (const stint of next) {
-      void upsert.mutateAsync({
+      await upsert.mutateAsync({
         event_id: event.id,
-        team_id: team.id,
+        team_id: team!.id,
         driver_id: stint.driverId || null,
         original_start_at: stint.originalStartAt,
         original_end_at: stint.originalEndAt,
@@ -128,7 +133,18 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
         status: "draft",
       });
     }
-    setMessage("Nieuw automatisch voorstel gemaakt.");
+  };
+
+  const generate = async () => {
+    if (!team) return;
+    const next = generateStints(plannerState, event, team.id, tankMinutes, { mode, driverLimits, firstStintDriver });
+    if (!next.length) { setMessage("Voeg eerst coureurs toe aan deze auto."); return; }
+    try {
+      await replaceDraftStints(next);
+      setMessage("Nieuw automatisch voorstel gemaakt.");
+    } catch {
+      setMessage("Voorstel opslaan mislukt.");
+    }
   };
 
   const optimize = async () => {
@@ -138,24 +154,12 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
       const memberIds = members.filter((m) => m.team_id === team.id && m.role !== "reserve").map((m) => m.user_id);
       const result = await runOptimize(plannerState, event, memberIds, team.id, { tankMinutes, driverOpts: driverLimits, firstStintDriver }, optimizerFetcher);
       if (!result.ok) { setMessage(result.message); return; }
-      for (const stint of result.stints) {
-        void upsert.mutateAsync({
-          event_id: event.id,
-          team_id: team.id,
-          driver_id: stint.driverId || null,
-          original_start_at: stint.originalStartAt,
-          original_end_at: stint.originalEndAt,
-          actual_start_at: stint.actualStartAt,
-          actual_end_at: stint.actualEndAt,
-          expected_laps: stint.expectedLaps || null,
-          fuel_litres: stint.fuelLitres || null,
-          tyre_change: stint.tyreChange,
-          double_stint: stint.doubleStint,
-          notes: stint.notes || null,
-          status: "draft",
-        });
+      try {
+        await replaceDraftStints(result.stints);
+        setMessage(result.message);
+      } catch {
+        setMessage("Optimalisatie opslaan mislukt.");
       }
-      setMessage(result.message);
     } catch (err) {
       setMessage(`Optimalisatie mislukt: ${(err as Error)?.message ?? String(err)}`);
     }
