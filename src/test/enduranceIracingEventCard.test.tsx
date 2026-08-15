@@ -6,6 +6,7 @@ import {
   formatCatalogInstant,
   phaseRange,
   selectedCatalogSlot,
+  upcomingCatalogSlots,
   type IRacingCatalogEvent,
 } from "@/features/endurance/calendar/iracingCatalogPresentation";
 
@@ -65,6 +66,21 @@ describe("iRacing Endurance event-card flow", () => {
     expect(selectedCatalogSlot({ ...event, selectedSlotId: "slot-2" })?.id).toBe("slot-2");
     expect(event.local_car_ids).toHaveLength(2);
     expect(event.cars.map((car) => car.name)).toContain("HRC ARX01c");
+  });
+
+  it("toont alleen upcoming slots en houdt het geselecteerde slot altijd zichtbaar", () => {
+    // Alle slot-datums liggen in aug 2026; met vandaag = begin september zijn ze allemaal verlopen.
+    const pastOnly = upcomingCatalogSlots(event.slots, null, "2026-09-01");
+    expect(pastOnly).toHaveLength(0);
+    // Met vandaag = vóór het event blijven alle upcoming slots zichtbaar.
+    const allUpcoming = upcomingCatalogSlots(event.slots, null, "2026-08-01");
+    expect(allUpcoming).toHaveLength(5);
+    // Een geselecteerd slot blijft tonen, ook als de datum verlopen is.
+    const selectedKept = upcomingCatalogSlots(event.slots, "slot-2", "2026-09-01");
+    expect(selectedKept.map((slot) => slot.id)).toEqual(["slot-2"]);
+    // Enkel de upcoming slots (>= vandaag) naast het geselecteerde slot.
+    const mixed = upcomingCatalogSlots(event.slots, "slot-2", "2026-08-15");
+    expect(mixed.some((slot) => slot.id === "slot-2")).toBe(true);
   });
 
   it("formatteert UTC en Amsterdam expliciet en toont het datumvenster", () => {
