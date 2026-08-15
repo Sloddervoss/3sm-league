@@ -133,5 +133,21 @@ export const catalogDateWindow = (event: Pick<IRacingCatalogEvent, "event_start_
   return `${start} – ${formatter.format(new Date(`${event.event_end_date}T12:00:00Z`))}`;
 };
 
+/**
+ * Filtert slots op de officiële catalogus: alleen upcoming slots (sessiestart
+ * op of na vandaag, lokale Amsterdam-datum) worden getoond. Het geselecteerde/
+ * geactiveerde slot blijft altijd zichtbaar zodat een verlopen kaart waarop
+ * teams geregistreerd hebben nooit leeg raakt. Eén momentopname per call.
+ */
+export const upcomingCatalogSlots = (
+  slots: IRacingCatalogSlot[],
+  selectedSlotId: string | null | undefined,
+  today: string = catalogTodayAmsterdam(),
+): IRacingCatalogSlot[] =>
+  slots.filter((slot) => {
+    if (selectedSlotId && slot.id === selectedSlotId) return true;
+    return (slot.session_start_at?.slice(0, 10) ?? "") >= today;
+  });
+
 export const selectedCatalogSlot = (event: IRacingCatalogEvent) =>
   event.slots.find((slot) => slot.id === event.selectedSlotId) ?? null;

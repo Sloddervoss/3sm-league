@@ -16,6 +16,7 @@ import {
   selectedCatalogSlot,
   type IRacingCatalogEvent,
   type IRacingCatalogSlot,
+  upcomingCatalogSlots,
 } from "./iracingCatalogPresentation";
 import {
   useActivateIRacingEnduranceSlot,
@@ -299,6 +300,9 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
   if (!event) return null;
   const selected = selectedCatalogSlot(event);
   const officialEventLogo = officialEventLogos[event.source_key];
+  // Toon alleen upcoming slots; het geselecteerde/geactiveerde slot blijft altijd
+  // zichtbaar (daarop hebben teams geregistreerd) waardoor een verlopen kaart nooit leeg raakt.
+  const visibleSlots = upcomingCatalogSlots(event.slots, event.selectedSlotId);
   const eventInterest = eventInterestRows.find((row) => row.catalog_event_id === event.id);
   const toggleInterest = (slot: IRacingCatalogSlot, interested: boolean) => setInterest.mutate({ catalogSlotId: slot.id, interested });
   const toggleEventInterest = () => setEventInterest.mutate({ catalogEventId: event.id, interested: !eventInterest?.is_current_user_interested });
@@ -341,10 +345,10 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
       <section aria-labelledby={`slots-${event.id}`}>
         <div className="mb-2 flex items-center justify-between">
           <h4 id={`slots-${event.id}`} className="font-heading text-base font-black text-white">{c.allSlots}</h4>
-          <span className="text-xs text-gray-500">{c.officialSlots(event.slots.length)}</span>
+          <span className="text-xs text-gray-500">{c.officialSlots(visibleSlots.length)}</span>
         </div>
-        {event.slots.length ? <div className="space-y-3">
-          {event.slots.map((slot) => {
+        {visibleSlots.length ? <div className="space-y-3">
+          {visibleSlots.map((slot) => {
             const interest = interestRows.find((row) => row.catalog_slot_id === slot.id);
             const interestedNames = interestMembers
               .filter((member) => member.catalog_slot_id === slot.id)
