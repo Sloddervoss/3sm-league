@@ -8,7 +8,7 @@ import { useEnduranceStints, useEnduranceStintMutations } from "../repository/st
 import { useEndurancePlanWorkspace, useEndurancePlanMutations } from "../repository/planRepository";
 import { enduranceStintRowsToAppModels } from "../repository/mappers";
 import { planningWarnings } from "../core/selectors";
-import type { EnduranceEvent, EnduranceStint } from "../core/types";
+import type { EnduranceEvent, EnduranceRole, EnduranceStint } from "../core/types";
 import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, SectionHeading, StatusPill } from "../shared/ui";
 import { generateStints, type StintMode } from "./stintGenerator";
 import { runOptimize, type OptimizerFetcher } from "./jresOptimizer";
@@ -25,7 +25,7 @@ const shift = (iso: string, minutes: number) => new Date(new Date(iso).getTime()
  */
 export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher }: { event: EnduranceEvent; optimizerFetcher?: OptimizerFetcher }) => {
   const { user, isSuperAdmin } = useAuth();
-  const { actorId } = useEnduranceActor();
+  const { actorId, displayName } = useEnduranceActor();
   const { data: teamWorkspace } = useEnduranceTeamWorkspace(event.id);
   const { data: stintRows = [] } = useEnduranceStints(event.id);
   const { upsert, remove } = useEnduranceStintMutations(event.id);
@@ -54,6 +54,15 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
   const [teamId, setTeamId] = useState(accessibleTeams[0]?.id ?? "");
   const [tankMinutes, setTankMinutes] = useState(90);
   const [snap, setSnap] = useState(15);
+
+  // Echte coureur-labels voor de tijdlijn: toon hun profielnaam (i.p.v. kale
+  // user-id-nummers) via displayName uit de profiel-lookup.
+  const personas = useMemo(
+    () => members
+      .filter((m) => m.team_id === teamId)
+      .map((m) => ({ id: m.user_id, name: displayName(m.user_id), role: (m.role === "driver" ? "driver" : "reserve") as EnduranceRole, timezone: "Europe/Amsterdam" })),
+    [members, teamId, displayName]
+  );
   const [mode, setMode] = useState<StintMode>("race");
   const [message, setMessage] = useState("");
 
@@ -173,7 +182,7 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
   if (!accessibleTeams.length) return <Panel><SectionHeading title="Stintplanner" description="Je bent nog niet aan een auto gekoppeld. Een manager kan je via Team Builder indelen." /></Panel>;
   return <div className="space-y-5"><Panel><SectionHeading eyebrow="Centrale planning" title="Stintplanner" description="Sleep, vergroot, verklein en publiceer stints. Originele en actuele tijden blijven afzonderlijk bewaard." action={editable && <div className="flex gap-2"><PrimaryButton onClick={generate}><WandSparkles className="h-4 w-4" /> Voorstel genereren</PrimaryButton><PrimaryButton onClick={() => void optimize()}><WandSparkles className="h-4 w-4" /> Optimaal berekenen</PrimaryButton><SecondaryButton onClick={publishPlan} disabled={!stints.length}><Play className="h-4 w-4" /> Publiceren</SecondaryButton></div>} />
     <div className="mb-4 grid gap-3 sm:grid-cols-4"><Field label="Auto / team"><select className={inputClass} value={teamId} onChange={(e) => setTeamId(e.target.value)}>{accessibleTeams.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} #{candidate.car_number}</option>)}</select></Field>{editable && <><Field label="Reeksmodus"><select className={inputClass} value={mode} onChange={(e) => setMode(e.target.value as StintMode)}><option value="race">Race (minimaliseren pitstops)</option><option value="comfort">Eer/comfort (respecteer rijlimieten)</option></select></Field><Field label="Tankduur"><select className={inputClass} value={tankMinutes} onChange={(e) => setTankMinutes(Number(e.target.value))}><option value={45}>45 minuten</option><option value={60}>60 minuten</option><option value={90}>90 minuten</option></select></Field><Field label="Snap"><select className={inputClass} value={snap} onChange={(e) => setSnap(Number(e.target.value))}><option value={5}>5 minuten</option><option value={10}>10 minuten</option><option value={15}>15 minuten</option></select></Field></>}</div>
-    <StintTimeline event={event} stints={stints} personas={[]} availability={[]} editable={editable} snapMinutes={snap} onMove={move} onResize={resize} onDelete={(id) => void remove.mutateAsync(id)} onCopy={copy} />
+    <StintTimeline event={event} stints={stints} personas={personas} availability={[]} editable={editable} snapMinutes={snap} onMove={move} onResize={resize} onDelete={(id) => void remove.mutateAsync(id)} onCopy={copy} />
     {message && <p role="status" className="mt-3 text-sm text-orange-200">{message}</p>}
   </Panel>
   <div className="grid gap-5 lg:grid-cols-2"><Panel><SectionHeading title="Waarschuwingen" description="Harde conflicten moeten vóór publicatie worden opgelost." />{warnings.length ? <div className="space-y-2">{warnings.map((warning) => <div key={warning.id} className={`flex gap-2 rounded-xl p-3 text-sm ring-1 ${warning.level === "hard" ? "bg-red-500/10 text-red-200 ring-red-500/20" : "bg-amber-500/10 text-amber-200 ring-amber-500/20"}`}><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{warning.message}</div>)}</div> : <div className="flex items-center gap-2 text-sm text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Geen planningsconflicten.</div>}</Panel>
