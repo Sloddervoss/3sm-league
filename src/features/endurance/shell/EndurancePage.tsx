@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { EnduranceStoreProvider, useEnduranceStore } from "../core/EnduranceStore";
 import { EnduranceActorProvider } from "../core/ActorContext";
+import { useDriverNameMap } from "@/hooks/data/useSharedQueries";
 import { UpcomingRaces } from "../calendar/UpcomingRaces";
 import { MyRaces } from "../calendar/MyRaces";
 import { EventManager } from "../calendar/EventManager";
@@ -49,10 +50,11 @@ const EnduranceContent = () => {
 
 const EndurancePage = () => {
   const { loading, rolesLoading, user } = useAuth();
+  const profileNames = useDriverNameMap();
   useEffect(() => { document.title = "3Stripe Endurance Control Center"; const description = document.querySelector('meta[name="description"]'); description?.setAttribute("content", "Plan 3Stripe endurance-races, beschikbaarheid, teams, stints en Race Control in één besloten omgeving."); }, []);
   if (loading || rolesLoading) return <div className="flex min-h-screen items-center justify-center bg-background text-sm text-gray-400">Account laden…</div>;
   if (!user) return <Navigate to="/auth?redirect=/endurance" replace />;
-  return <EnduranceStoreProvider><EnduranceActorProvider selfId={user.id}><EnduranceContent /></EnduranceActorProvider></EnduranceStoreProvider>;
+  return <EnduranceStoreProvider><EnduranceActorProvider selfId={user.id} names={profileNames}><EnduranceContent /></EnduranceActorProvider></EnduranceStoreProvider>;
 };
 
 export default EndurancePage;

@@ -11,11 +11,11 @@ import { Field, inputClass, Panel, PrimaryButton, SectionHeading, StatusPill } f
 /**
  * Stemuitslag & definitieve auto — Fase 3.
  * Stemmen komen nu uit de ECHTE DB-registraties (preferred_car_id /
- * class_preference). De bevestiging van de definitieve auto is alleen voor de
- * super-admin (de enige met RLS-toegang in deze canary).
+ * class_preference). De bevestiging van de definitieve auto is voor de
+ * super-admin en endurance-managers (beide met RLS-toegang in de canary).
  */
 export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isEnduranceManager } = useAuth();
   const { data: registrations = [] } = useEnduranceRegistrations(event.id);
   const upsert = useUpsertEnduranceEvent();
 
@@ -40,7 +40,8 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
 
   const votes = useMemo(() => getEventVehicleVotes(voteRegistrations, event.id), [voteRegistrations, event.id]);
   const recommendation = useMemo(() => recommendedVehicle(voteRegistrations, event.id), [voteRegistrations, event.id]);
-  const manager = Boolean(isSuperAdmin);
+  // Bevestiging van de definitieve auto is voor super-admin én endurance-managers.
+  const manager = Boolean(isSuperAdmin || isEnduranceManager);
   const classWinners = useMemo(() => winningClassIds(voteRegistrations, event.id), [voteRegistrations, event.id]);
   const selectableClasses = classWinners.length ? event.classIds.filter((classId) => classWinners.includes(classId)) : event.classIds;
   const initialClass = recommendation.classId ?? selectableClasses[0] ?? event.selectedClassId ?? "GT3";
