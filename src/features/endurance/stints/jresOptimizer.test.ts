@@ -45,7 +45,7 @@ describe("jresOptimizer marshalling", () => {
       tankMinutes: 90,
       driverOpts: { "user-jaimy": { maxConsecutiveStints: 2, minRestMinutes: 120 }, "user-sven": { maxConsecutiveStints: 3, minRestMinutes: 60 } },
     });
-    expect(inObj.consecutiveStints).toBe(2); // min over coureurs
+    expect(inObj.consecutiveStints).toBe(3); // max over coureurs: de grootste gewenste reeks telt
     expect(inObj.minimumRestHours).toBe(1); // 60/60
   });
 
