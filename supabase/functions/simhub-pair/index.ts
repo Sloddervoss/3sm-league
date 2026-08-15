@@ -48,6 +48,15 @@ const isEnduranceStaff = async (userId: string): Promise<boolean> => {
   return (data || []).some((row: { role: string }) => ["super_admin", "endurance_manager", "tester"].includes(row.role));
 };
 
+// Device->race/-team-binding (assign/clear) is beheer: super_admin of
+// endurance_manager. Testers kunnen hun eigen device wel koppelen op de
+// SimHub-pagina, maar géén apparaten aan event/team toewijzen.
+const isEnduranceManager = async (userId: string): Promise<boolean> => {
+  const { data, error } = await service.from("user_roles").select("role").eq("user_id", userId);
+  if (error) throw error;
+  return (data || []).some((row: { role: string }) => ["super_admin", "endurance_manager"].includes(row.role));
+};
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return jsonResponse(request, { ok: true });
   if (request.method !== "POST") return jsonResponse(request, { error: "method_not_allowed" }, 405);
@@ -91,14 +100,20 @@ Deno.serve(async (request) => {
     const user = await authenticatedUser(request);
     const superAdmin = await isSuperAdmin(user.id);
     const staff = await isEnduranceStaff(user.id);
+    const manager = await isEnduranceManager(user.id);
 
     // Algemeen auteursregime:
     //  - create: endurance-ster (super_admin, endurance_manager, tester) koppelt
     //    hun EIGEN device only.
     //  - list/revoke: super_admin ziet/beheert alle devices; endurance-ster
     //    (testers/managers) alleen hun eigen device.
-    //  - assign/clear + legacy race/team-binding: beheer -> super_admin only.
-    if (action !== "list" && action !== "revoke" && action !== "create" && !superAdmin) {
+    //  - assign/clear (device->race/-team): endurance_manager of super_admin.
+    //  - legacy race/team-binding: super_admin only.
+    const adminSuperOnly = !["list", "revoke", "create", "assign", "clear"].includes(action);
+    if (adminSuperOnly && !superAdmin) {
+      return jsonResponse(request, { error: "super_admin_required" }, 403);
+    }
+    if (["assign", "clear"].includes(action) && !manager) {
       return jsonResponse(request, { error: "super_admin_required" }, 403);
     }
 

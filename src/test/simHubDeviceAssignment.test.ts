@@ -26,14 +26,15 @@ describe("SimHub device assignment + safe update check (Fase 4)", () => {
     expect(relay).toContain("endurance_team_id ?? row.team_id");
   });
 
-  it("adds the devices tab only reachable by super-admin", () => {
-    expect(workspace).toContain("id: \"devices\", label: \"Apparaten\"");
-    expect(workspace).toContain("<DeviceAssignmentPanel event={event} />");
-    expect(panel).toContain("useAuth()");
-    expect(panel).toContain("assignCentralSimHubDevice");
-    expect(panel).toContain("uitsluitend beschikbaar voor super-admin");
-    expect(panel).not.toContain("from(\"");
-  });
+  it("adds the devices tab reachable by endurance-managers and super-admin", () => {
+      expect(workspace).toContain('id: "devices", label: "Apparaten"');
+      expect(workspace).toContain("<DeviceAssignmentPanel event={event} />");
+      expect(panel).toContain("useAuth()");
+      expect(panel).toContain("assignCentralSimHubDevice");
+      expect(panel).toContain("isSuperAdmin || isEnduranceManager");
+      expect(panel).toContain("Device-koppeling is beschikbaar voor endurance-managers en super-admin.");
+      expect(panel).not.toContain('from("');
+    });
 
   it("serves a read-only version endpoint with no credentials or writes", () => {
     expect(version).toContain("simhub-version");
