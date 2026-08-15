@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { assertEnduranceTable } from "../features/endurance/repository/dataAccess";
-import { listEnduranceEvents, createEnduranceEvent, updateEnduranceEvent } from "../features/endurance/repository/eventsRepository";
+import { deleteEnduranceEvent, listEnduranceEvents, createEnduranceEvent, updateEnduranceEvent } from "../features/endurance/repository/eventsRepository";
 
 // hoisted spies — beschikbaar vóór de vi.mock-factory (die wordt gehoist).
 const spies = vi.hoisted(() => ({
@@ -14,6 +15,8 @@ const spies = vi.hoisted(() => ({
   updateEqSpy: vi.fn(),
   updateSelectSpy: vi.fn(),
   updateSingleSpy: vi.fn(),
+  deleteSpy: vi.fn(),
+  deleteEqSpy: vi.fn(),
 }));
 
 // De repository gebruikt enduranceClient() -> supabase uit de echte client-module.
@@ -119,5 +122,28 @@ describe("endurance events repository (Fase 3 data-access contract)", () => {
     expect(() => assertEnduranceTable("profiles")).toThrow(/alleen endurance_\*-tabellen/);
     expect(() => assertEnduranceTable("endurance_events")).not.toThrow();
     expect(() => assertEnduranceTable("endurance_stints")).not.toThrow();
+  });
+
+  it("delete — verwijdert alleen uit endurance_events op het gevraagde id", async () => {
+    spies.deleteEqSpy.mockResolvedValue({ error: null });
+    spies.deleteSpy.mockReturnValue({ eq: spies.deleteEqSpy });
+    spies.fromSpy.mockReturnValue({ delete: spies.deleteSpy });
+
+    await deleteEnduranceEvent("evt-1");
+
+    expect(spies.fromSpy).toHaveBeenCalledWith("endurance_events");
+    expect(spies.deleteSpy).toHaveBeenCalledTimes(1);
+    expect(spies.deleteEqSpy).toHaveBeenCalledWith("id", "evt-1");
+  });
+
+  it("verwijdert een geactiveerd iRacing-catalogusevent onder de iRacing-querykeys", () => {
+    const source = readFileSync("src/features/endurance/repository/eventsRepository.ts", "utf8");
+    const deleteHookStart = source.indexOf("export function useDeleteEnduranceEvent");
+    const deleteHook = source.slice(deleteHookStart);
+    expect(deleteHook).toContain('queryClient.invalidateQueries({ queryKey: ["endurance", "events"] })');
+    expect(deleteHook).toContain("iracingCatalogQueryKey");
+    expect(deleteHook).toContain("iracingSlotInterestSummaryQueryKey");
+    expect(deleteHook).toContain("iracingEventInterestSummaryQueryKey");
+    expect(deleteHook).toContain("iracingManagerInterestOverviewQueryKey");
   });
 });

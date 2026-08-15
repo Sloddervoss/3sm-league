@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { EnduranceOnlyTableName } from "./dataAccess";
 import { assertEnduranceTable, enduranceClient } from "./dataAccess";
+import { iracingCatalogQueryKey, iracingEventInterestSummaryQueryKey, iracingManagerInterestOverviewQueryKey, iracingSlotInterestSummaryQueryKey } from "./iracingEventsRepository";
 
 /**
  * Endurance events repository — Fase 3.
@@ -218,6 +219,16 @@ export function useDeleteEnduranceEvent() {
     mutationFn: deleteEnduranceEvent,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["endurance", "events"] });
+      // Een geactiveerd iRacing-catalogusevent dat via racebeheer wordt
+      // verwijderd, mag niet gedurende de sessie de gekozen-status in de
+      // catalogus blijven tonen (stale `selectedEventId`) — anders blijft de
+      // kaart "Geselecteerd door 3SM" tonen en verwezen "Open race" naar een
+      // verwijderde race. Invalidatie afdwingen op de catalogus en de
+      // interesse-aggregaten.
+      void queryClient.invalidateQueries({ queryKey: iracingCatalogQueryKey });
+      void queryClient.invalidateQueries({ queryKey: iracingSlotInterestSummaryQueryKey });
+      void queryClient.invalidateQueries({ queryKey: iracingEventInterestSummaryQueryKey });
+      void queryClient.invalidateQueries({ queryKey: iracingManagerInterestOverviewQueryKey });
     },
   });
 }
