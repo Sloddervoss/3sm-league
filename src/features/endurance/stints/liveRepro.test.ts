@@ -126,9 +126,23 @@ describe("live 3-rijders repro", () => {
     const planner = readFileSync("src/features/endurance/stints/StintPlanner.tsx", "utf8");
     expect(timeline).toContain("onExtend");
     expect(timeline).toContain('aria-label="Zelfde coureur nog een stint"');
-    expect(timeline).toContain("onExtend(stint)");
+    expect(timeline).toContain("onExtend(selected)");
     expect(planner).toContain("const extend = ");
     expect(planner).toContain("onExtend={extend}");
-    expect(planner).toContain("notes: \"Verlengd (zelfde coureur)\"");
+    expect(planner).toContain('notes: "Verlengd (zelfde coureur)"');
+  });
+
+  it("timeline gebruikt swimlanes: elke coureur heeft een eigen rij en je kunt van coureur wisselen via slepen/selectie", () => {
+    const timeline = readFileSync("src/features/endurance/stints/StintTimeline.tsx", "utf8");
+    const planner = readFileSync("src/features/endurance/stints/StintPlanner.tsx", "utf8");
+    // swimlane-structuur + drag-naar-andere-rij (coureur) + detailpaneel
+    expect(timeline).toContain("laneDrivers");
+    expect(timeline).toContain("laneDrop");
+    expect(timeline).toContain("onAssign(stint, targetDriverId)");
+    expect(timeline).toContain("Klik een stint aan voor details");
+    expect(timeline).toContain('aria-label="Stint starttijd"');
+    // detail-handlers gekoppeld in de planner
+    expect(planner).toContain("const assign = ");
+    expect(planner).toContain("onAssign={assign}");
   });
 });
