@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CalendarDays, Car, CheckCircle2, Clock3, ExternalLink, Flag, Gauge, Heart, MapPinned, ShieldCheck, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -292,6 +292,15 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
   const c = copy[language];
   const { user } = useAuth();
   const [activating, setActivating] = useState<IRacingCatalogSlot | null>(null);
+  const activationRef = useRef<HTMLDivElement | null>(null);
+  // Zodra een manager een tijdslot kiest, scroll de modal naar het bevestigings-
+  // paneel zodat het direct zichtbaar is (zelfs met veel tijdsloten).
+  useEffect(() => {
+    if (activating) {
+      const frame = requestAnimationFrame(() => activationRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [activating]);
   const { data: interestRows = [] } = useIRacingSlotInterestSummary();
   const { data: interestMembers = [] } = useIRacingSlotInterestMembers(event?.id ?? null, canManage && open);
   const { data: eventInterestRows = [] } = useIRacingEventInterestSummary(Boolean(user));
@@ -369,7 +378,7 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
               onOpen={(eventId) => navigate(`/endurance/races/${eventId}`)}
             />;
           })}
-          {activating && <ActivationPanel event={event} slot={activating} onClose={() => setActivating(null)} />}
+          <div ref={activationRef} className="scroll-mt-6">{activating && <ActivationPanel event={event} slot={activating} onClose={() => setActivating(null)} />}</div>
         </div> : <div className="rounded-2xl bg-black/25 p-5 ring-1 ring-white/[0.07]">
           <p className="flex items-center gap-2 text-sm font-bold text-white"><Flag className="h-4 w-4 text-orange-400" />{c.exactTimesPending}</p>
           <p className="mt-2 text-xs text-gray-500">{c.noSlotSelection}</p>

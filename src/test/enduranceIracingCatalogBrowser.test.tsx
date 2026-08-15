@@ -68,6 +68,19 @@ describe("iRacing Endurance catalogus browserflow", () => {
     authRoles.isSuperAdmin = false; authRoles.isEnduranceManager = true;
   });
 
+  it("scrollt automatisch naar het bevestigingspaneel bij tijdslotkeuze (vele slots)", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderCatalog();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" })); });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Deze gaan we rijden" })[4]); });
+    // De modal moet naar het (onderaan geplaatste) bevestigingspaneel scrollen
+    // zodra een tijdslot wordt gekozen, zodat een manager met veel sloten het
+    // formulier direct ziet in plaats van erheen te moeten scrollen.
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
   it("rendert eventkaarten, vijf tijdsloten en opent de managerbevestiging", async () => {
     renderCatalog();
     expect(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" })).toBeInTheDocument();
