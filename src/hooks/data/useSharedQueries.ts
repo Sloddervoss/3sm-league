@@ -7,7 +7,6 @@ export type Team = Database["public"]["Tables"]["teams"]["Row"];
 /**
  * Shared data hooks for de meest gebruikte queries.
  * Eén bron van waarheid voor query keys + cache.
- * Selecteert altijd alle kolommen — als dat performance kost, kan per-hook select aangepast worden.
  */
 
 export function useDrivers() {
@@ -18,6 +17,29 @@ export function useDrivers() {
       return data || [];
     },
   });
+}
+
+/**
+ * Publieke driver-id → naam map (iRacing-naam primair, anders profielnaam).
+ * Gebruikt door de Endurance-naamresolutie om echte namen te tonen in plaats
+ * van kale user-id-nummers. Leest alleen public_profiles.
+ */
+export function useDriverNameMap(): ReadonlyMap<string, string> {
+  return useQuery({
+    queryKey: ["driver-name-map"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("public_profiles")
+        .select("user_id, display_name, iracing_name");
+      const map = new Map<string, string>();
+      (data ?? []).forEach((row) => {
+        const name = (row.iracing_name ?? "").trim() || (row.display_name ?? "").trim();
+        if (row.user_id && name) map.set(row.user_id, name);
+      });
+      return map;
+    },
+    placeholderData: new Map<string, string>(),
+  }).data ?? new Map();
 }
 
 export function useTeams() {

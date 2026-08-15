@@ -2,13 +2,19 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { ENDURANCE_TEST_ACTORS } from "./testActors";
 
 /**
- * ActorContext — Fase 3 (test-als).
+ * ActorContext — oorspronkelijk "test-als" voor de canary.
  *
- * Binnen de super-admin-canary "speelt" de super-admin verschillende coureurs
- * via de Test-als-slider. De geselecteerde `actorId` wordt als `user_id`
- * gebruikt bij alle endurance-lees/schrijf-acties van die coureur. De sessie
- * blijft de echte super-admin (anders zou de RLS weigeren); alleen de
- * `user_id`-waarde in de endurance-tabellen varieert.
+ * Naast de vaste test-actors kan de geselecteerde actor een ECHTE user-id zijn
+ * (bijv. een aangesloten tester/manager). `displayName` lost vandaar altijd een
+ * leesbaar label op, in volgorde:
+ *   1. eigen zelf-id  -> "Ik (jij)"
+ *   2. echte profielnaam (binnenkomt via de `names`-map, gevuld in de shell)
+ *   3. test-actor-label
+ *   4. id-voorvoegsel (laatste redmiddel)
+ *
+ * Deze module is bewust onderdeel van de puur geïsoleerde planning-kern en
+ * raakt het data-platform dus niet aan. De profielnamen (supabase/public_profiles)
+ * worden in de repository-laag opgehaald en als `names`-prop aangeleverd.
  */
 interface EnduranceActorContextValue {
   /** Geselecteerde actor-id (default: de echte user-id = "Ik"). */
@@ -23,15 +29,26 @@ interface EnduranceActorContextValue {
 
 const EnduranceActorContext = createContext<EnduranceActorContextValue | null>(null);
 
-export function EnduranceActorProvider({ selfId, children }: { selfId: string; children: ReactNode }) {
+export function EnduranceActorProvider({
+  selfId,
+  names,
+  children,
+}: {
+  selfId: string;
+  /** Echte profielnamen per user-id (iRacing-naam primair) voor naamresolutie. */
+  names: ReadonlyMap<string, string>;
+  children: ReactNode;
+}) {
   const [actorId, setActorId] = useState<string>(selfId);
 
   const displayName = useCallback(
     (id: string) => {
       if (id === selfId) return "Ik (jij)";
+      const profile = names.get(id);
+      if (profile) return profile;
       return ENDURANCE_TEST_ACTORS.find((actor) => actor.id === id)?.label ?? id.slice(0, 8);
     },
-    [selfId]
+    [selfId, names]
   );
 
   const value = useMemo(

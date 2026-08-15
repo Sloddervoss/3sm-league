@@ -8,6 +8,9 @@ const rls = readFileSync("supabase/migrations/20260806_endurance_rls_roles.sql",
 const auth = readFileSync("src/contexts/AuthContext.tsx", "utf8");
 const page = readFileSync("src/features/endurance/shell/EndurancePage.tsx", "utf8");
 const navbar = readFileSync("src/components/Navbar.tsx", "utf8");
+const vehiclePanel = readFileSync("src/features/endurance/workspace/VehicleVotePanel.tsx", "utf8");
+const actorContext = readFileSync("src/features/endurance/core/ActorContext.tsx", "utf8");
+const sharedQueries = readFileSync("src/hooks/data/useSharedQueries.ts", "utf8");
 
 describe("endurance alpha-rollen (tester + endurance_manager)", () => {
   it("voegt beide rollen additief toe aan app_role", () => {
@@ -43,5 +46,27 @@ describe("endurance alpha-rollen (tester + endurance_manager)", () => {
     expect(auth).toContain('roles.has("endurance_manager")');
     expect(page).toContain("isSuperAdmin || isTester || isEnduranceManager");
     expect(navbar).toContain("canUseEndurance");
+  });
+
+  it("staat endurance-managers toe de definitieve auto te bevestigen (niet alleen super-admin)", () => {
+    expect(vehiclePanel).toContain("isSuperAdmin, isEnduranceManager");
+    expect(vehiclePanel).toContain("isSuperAdmin || isEnduranceManager");
+  });
+
+  it("lost drivernamen op via echte profielen i.p.v. kale id-nummers", () => {
+    // ActorContext mag nooit terugvallen op een kale uuid: hij toont echte
+    // profielnamen (iRacing-naam primair, profielnaam fallback) aangeleverd via
+    // de names-map. De lookup zelf woont in de repository-laag (core blijft
+    // datapatform-onschuldig).
+    expect(actorContext).toContain("names.get(id)");
+    expect(actorContext).toContain("ENDURANCE_TEST_ACTORS.find");
+    // public_profiles wordt in de gedeelde site-hook gelezen (iRacing-naam primair).
+    expect(sharedQueries).toContain("useDriverNameMap");
+    expect(sharedQueries).toContain('.from("public_profiles")');
+    expect(sharedQueries).toContain("iracing_name");
+    // En de shell levert die map aan de provider door.
+    const page2 = readFileSync("src/features/endurance/shell/EndurancePage.tsx", "utf8");
+    expect(page2).toContain("useDriverNameMap()");
+    expect(page2).toContain("names={profileNames}");
   });
 });
