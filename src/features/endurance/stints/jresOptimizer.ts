@@ -242,10 +242,14 @@ export function enforceConsecutiveLimits(
   };
 
   for (const stint of sorted) {
-    const limit = driverOpts[stint.driverId]?.maxConsecutiveStints;
+    // maxConsecutiveStints default = 1 (1-om-1). Een NULL/undefined (niet
+    // ingesteld in de inschrijving én niet door de manager overridden) betekent
+    // géén extra reeks wens — dus gewoon 1 achter elkaar, NIET ongelimiteerd.
+    const rawLimit = driverOpts[stint.driverId]?.maxConsecutiveStints;
+    const limit = rawLimit == null || rawLimit <= 0 ? 1 : rawLimit;
     const same = stint.driverId === runDriver;
     const nextRunCount = same ? runCount + 1 : 1;
-    const exceeds = Boolean(limit != null && limit > 0 && nextRunCount > limit);
+    const exceeds = nextRunCount > limit;
 
     if (exceeds && runDriver) {
       // Zoek een vervanger: ander lid, binnen beperking, beschikbaar, met de
@@ -255,7 +259,7 @@ export function enforceConsecutiveLimits(
       for (const candidate of userIds) {
         if (candidate === runDriver) continue;
         const cl = driverOpts[candidate]?.maxConsecutiveStints;
-        const cAllowed = cl == null || cl === 0 || cl >= 1; // elke coureur mag op z'n minst 1
+        const cAllowed = cl == null || cl <= 0 || cl >= 1; // elke coureur mag op z'n minst 1
         if (!cAllowed) continue;
         if (!availAt(candidate, stint.actualStartAt)) continue;
         const total = result.filter((s) => s.driverId === candidate).length;

@@ -190,4 +190,41 @@ describe("runOptimize orchestration", () => {
     const bad: OptimizerFetcher = async () => { throw new Error("net down"); };
     await expect(runOptimize(state, event, members, teamId, { tankMinutes: 90 }, bad)).rejects.toThrow("net down");
   });
+
+  it("E2E: een coureur met maxConsecutiveStints=1 (of NULL/ongelimiteerd=default 1) krijgt na runOptimize nooit 2 stints achter elkaar", async () => {
+    const state = createEnduranceSeed();
+    const event = state.events[0]; // 11:00-17:00, 6u
+    // Steven heeft GEEN maxConsecutiveStints ingesteld (NULL) → default = 1.
+    // JRES geeft hem tóch twee opeenvolgende segmenten (net als de echte live
+    // situatie waar Wijts/Steven een NULL-inschrijving hadden).
+    const sched = [
+      { id: 1, driver: "user-jaimy", spotter: "N/A", startTime: "2026-07-25T11:00:00Z", endTime: "2026-07-25T12:00:00Z" },
+      { id: 2, driver: "user-sven", spotter: "N/A", startTime: "2026-07-25T12:00:00Z", endTime: "2026-07-25T13:00:00Z" },
+      // Steven dubbel! 13:00-14:00 en 14:00-15:00 — overtreding voor default=1.
+      { id: 3, driver: "user-steven", spotter: "N/A", startTime: "2026-07-25T13:00:00Z", endTime: "2026-07-25T14:00:00Z" },
+      { id: 4, driver: "user-steven", spotter: "N/A", startTime: "2026-07-25T14:00:00Z", endTime: "2026-07-25T15:00:00Z" },
+      // De rest netjes wisselen.
+      { id: 5, driver: "user-jaimy", spotter: "N/A", startTime: "2026-07-25T15:00:00Z", endTime: "2026-07-25T16:00:00Z" },
+      { id: 6, driver: "user-sven", spotter: "N/A", startTime: "2026-07-25T16:00:00Z", endTime: "2026-07-25T17:00:00Z" },
+    ];
+    const fetcher: OptimizerFetcher = async () => ({ status: "ok", output: { schedule: sched } });
+    const members = ["user-jaimy", "user-sven", "user-steven"];
+    const r = await runOptimize(state, event, members, "team-orange-31", {
+      tankMinutes: 60,
+      driverOpts: {
+        "user-jaimy": { maxConsecutiveStints: 2 },
+        "user-sven": { maxConsecutiveStints: 2 },
+        // Steven: géén maxConsecutiveStints opgegeven (NULL) → moet default 1 zijn
+        "user-steven": { willingToStart: false },
+      },
+    }, fetcher);
+    expect(r.ok).toBe(true);
+    expect(r.stints.length).toBe(6);
+    // Steven mag na de post-correctie nooit meer gevolgd worden door Steven zelf.
+    for (let i = 1; i < r.stints.length; i++) {
+      if (r.stints[i].driverId === "user-steven") {
+        expect(r.stints[i - 1].driverId).not.toBe("user-steven");
+      }
+    }
+  });
 });
