@@ -1,4 +1,5 @@
 (async () => {
+  const EXT_VERSION = "0.6.1"; // versie-marker: toont welke content.js écht draait
   const OWNED_WORDS = [
     "owned", "purchased", "licensed", "my content",
     "content owned", "included", "installed",
@@ -372,35 +373,53 @@
         "https://members-ng.iracing.com/bff/pub/proxy/data/lookup/tracks",
         { credentials: "include", headers: { "Accept": "application/json" } }
       );
-      if (!res.ok) return { owned: [], usable: false };
+      if (!res.ok) {
+        const text = (await res.text().catch(() => "")).slice(0, 300);
+        return { owned: [], usable: false, httpStatus: res.status, raw: text || `HTTP ${res.status}` };
+      }
       let json = await res.json();
+      let followed = false;
       if (json?.link) {
         const linked = await fetch(json.link, { headers: { "Accept": "application/json" } });
-        if (linked.ok) json = await linked.json();
+        if (linked.ok) { json = await linked.json(); followed = true; }
       }
-      // Meerdere bekende vorm en (array, {data:[...]}, {tracks:[...]}) — een rij
-      // is "owned" als lap het veld owned/owned_tracks/is_owned==true heeft, of
-      // als het track geretourneerd is met een owned-voldoende marker voor de
-      // huidige gebruiker. Scores uit rows zonder ownership-info worden genegeerd.
+      // ruwe sample bewaren zodat we de echte veldn namen kunnen zien als de
+      // parser iets mist (beperkt om de storage/export niet te veel te laten groeien).
+      const rawSample = JSON.stringify(json).slice(0, 2500);
       const rows = Array.isArray(json)
         ? json
         : Array.isArray(json?.data) ? json.data
         : Array.isArray(json?.tracks) ? json.tracks
+        : Array.isArray(json?.data?.items) ? json.data.items
+        : Array.isArray(json?.content) ? json.content
         : [];
       const owned = [];
+      let keysSample = null;
       for (const row of rows) {
-        const name = cleanText(row?.track_name || row?.name || row?.display_name || "");
+        if (!keysSample && row && typeof row === "object") keysSample = Object.keys(row).slice(0, 40);
+        const name = cleanText(row?.track_name || row?.name || row?.display_name || row?.friendly_name || row?.label || "");
         if (!name) continue;
         const isOwned = row?.owned === true
           || row?.owned_tracks === true
           || row?.purchase_status === "owned"
           || row?.is_owned === true
-          || (typeof row?.owned === "string" && /^(1|true|owned|purchased)$/i.test(row.owned));
+          || row?.user_owns === true
+          || row?.in_inventory === true
+          || (typeof row?.owned === "string" && /^(1|true|owned|purchased)$/i.test(row.owned))
+          || (typeof row?.purchase_status === "string" && /^(1|owned|purchased|true)$/i.test(row.purchase_status));
         if (isOwned) owned.push(name);
       }
-      return { owned, usable: owned.length > 0 };
-    } catch {
-      return { owned: [], usable: false };
+      return {
+        owned,
+        usable: owned.length > 0,
+        httpStatus: res.status,
+        followedLink: followed,
+        rawCount: rows.length,
+        rawKeys: keysSample,
+        raw: rawSample,
+      };
+    } catch (e) {
+      return { owned: [], usable: false, error: String((e && e.message) || e).slice(0, 300) };
     }
   }
 
@@ -466,6 +485,7 @@
 
   const result = {
     export: {
+      version: EXT_VERSION,
       source: "3 Stripe iRacing Content Extension",
       scannedAt: new Date().toISOString(),
       pageUrl: location.href,
@@ -473,10 +493,19 @@
       pageIsOwnedFilter,
       iracingCustId: custId,
       uploaderName: userName,
+      api: {
+        usable: bffTracks.usable,
+        httpStatus: bffTracks.httpStatus ?? null,
+        followedLink: bffTracks.followedLink ?? null,
+        rawCount: bffTracks.rawCount ?? null,
+        rawKeys: bffTracks.rawKeys ?? null,
+        error: bffTracks.error ?? null,
+      },
       ownedTracks,
       candidates: candidates.map(({ name, owned }) => ({ name, owned })),
     },
     debug: {
+      version: EXT_VERSION,
       pageUrl: location.href,
       pageTitle: document.title,
       pageIsOwnedFilter,
@@ -484,6 +513,12 @@
       uploaderName: userName,
       apiOwnedTracks: bffTracks.owned,
       apiUsable: bffTracks.usable,
+      apiHttpStatus: bffTracks.httpStatus ?? null,
+      apiFollowedLink: bffTracks.followedLink ?? null,
+      apiRawCount: bffTracks.rawCount ?? null,
+      apiRawKeys: bffTracks.rawKeys ?? null,
+      apiRaw: bffTracks.raw ?? null,
+      apiError: bffTracks.error ?? null,
       candidateCount: candidates.length,
       tableResults,
       cardResults,
