@@ -165,12 +165,20 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
     {/* Tijdlijn */}
     <div className="overflow-x-auto">
       <div className="min-w-[880px] rounded-2xl bg-black/25 p-4 ring-1 ring-white/5">
-        <div className="mb-2 flex justify-between text-[10px] font-bold uppercase tracking-wider text-gray-500"><span>{formatAmsterdam(event.startAt)}</span><span>25%</span><span>50%</span><span>75%</span><span>{formatAmsterdam(event.endAt)}</span></div>
-        {/* Header-rij: tijds-as met elk uur eerlijk verdeeld */}
-        <div className="relative h-6">
-          {Array.from({ length: Math.ceil((end - start) / 3_600_000) + 1 }).map((_, h) => (
-            <span key={h} className="absolute top-0 text-[10px] tabular-nums text-gray-500" style={{ left: `${(h * 3_600_000) / span * 100}%` }}>{shiftClock(event.startAt, h * 60).split(" ").pop()}</span>
-          ))}
+        {/* Header + uren-as: zelfde breedte-referentie als de stints (1fr-track
+            ná de 120px coureurkolom). Anders staan de uur-markeringen ±120px te
+            ver naar links t.o.v. de stints-blokken → 'tijd klopt niet'. */}
+        <div className="grid grid-cols-[120px_1fr]">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500">{formatAmsterdam(event.startAt)}</div>
+          <div className="mb-2 flex justify-between text-[10px] font-bold uppercase tracking-wider text-gray-500"><span>25%</span><span>50%</span><span>75%</span><span className="mr-14 text-gray-600/70">{formatAmsterdam(event.endAt)}</span></div>
+        </div>
+        <div className="grid grid-cols-[120px_1fr]">
+          <div />
+          <div className="relative h-6">
+            {Array.from({ length: Math.ceil((end - start) / 3_600_000) + 1 }).map((_, h) => (
+              <span key={h} className="absolute top-0 text-[10px] tabular-nums text-gray-500" style={{ left: `${(h * 3_600_000) / span * 100}%` }}>{shiftClock(event.startAt, h * 60).split(" ").pop()}</span>
+            ))}
+          </div>
         </div>
         <div
           className="relative"
