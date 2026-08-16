@@ -101,8 +101,13 @@ export function buildJresAvailability(state: EnduranceState, event: EnduranceEve
       if (!blocks.length) {
         map[k] = "Available";
       } else {
-        const hit = blocks.find((b) => overlap(b, s.startTime, s.endTime));
-        map[k] = !hit ? "Unavailable" : hit.type === "preferred" ? "Preferred" : "Available";
+        // Een bucket is uitsluitend 'Available'/'Preferred' als een
+        // available/preferred-blok hem dekt. Alles buiten zulke blokken —
+        // inclusief gaten én 'unavailable'/'avoid'-blokken — is 'Unavailable'.
+        // Zo wordt een coureur nooit op onbeschikbare uren gepland en blijft
+        // 'leeg invullen = altijd beschikbaar' alleen voor wie géén blokken zet.
+        const okHit = blocks.find((b) => overlap(b, s.startTime, s.endTime) && (b.type === "available" || b.type === "preferred"));
+        map[k] = !okHit ? "Unavailable" : okHit.type === "preferred" ? "Preferred" : "Available";
       }
     }
     out[userId] = map;

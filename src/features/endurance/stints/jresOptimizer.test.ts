@@ -104,6 +104,31 @@ describe("jresOptimizer marshalling", () => {
     expect(values).toContain("Available");
   });
 
+  it("buildJresAvailability: een 'unavailable'-blok maakt de bucket 'Unavailable', géén 'Available'", () => {
+    // Regression: voorheen werd het EÉRSTE overlappende blok als 'Available'
+    // behandeld tenzij 'preferred' — een 'unavailable'/'avoid'-blok telde dan
+    // mee als beschikbaar, waardoor de optimizer coureurs op onbeschikbare
+    // uren plande (live: Steven 15:00-17:00 terwijl hij 13-18u unavailable had).
+    const state = createEnduranceSeed();
+    const event = state.events[0];
+    state.availability.push({
+      id: "av-jaimy-off", eventId: event.id, userId: "user-jaimy",
+      startAt: "2026-07-25T14:00:00.000Z", endAt: "2026-07-25T15:30:00.000Z",
+      type: "unavailable", note: "Vaste afspraak",
+    });
+    const map = buildJresAvailability(state, event, ["user-jaimy"]);
+    const jaimy = map["user-jaimy"];
+    // T14 valt binnen het unavailable-blok → 'Unavailable', nooit 'Available'.
+    const k14 = keyFor("2026-07-25T14:00:00.000Z");
+    expect(jaimy[k14]).toBe("Unavailable");
+    // De bestaande preferred (10-14) en available (15:30-17:30) blijven intact:
+    // T11 valt in preferred, T15 valt in available (begint 15:30).
+    const k11 = keyFor("2026-07-25T11:00:00.000Z");
+    const k15 = keyFor("2026-07-25T15:00:00.000Z");
+    expect(jaimy[k11]).toBe("Preferred");
+    expect(jaimy[k15]).toBe("Available");
+  });
+
   it("enforceConsecutiveLimits herverdeelt overtollige aaneengesloten stints naar een coureur binnen diens eigen limiet", () => {
     const base = createEnduranceSeed().events[0];
     const mk = (i: number, driverId: string, h: number) => ({
