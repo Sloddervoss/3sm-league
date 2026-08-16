@@ -98,7 +98,7 @@ export function TrackIntelligenceModule({ onAction }: TrackIntelligenceModulePro
           <button type="button" onClick={() => setShowScannerCoverage(true)} aria-haspopup="dialog" className="inline-flex items-center gap-2 rounded-md border border-orange-400/30 bg-orange-500/[0.08] px-3 py-2 text-xs font-bold text-orange-100 transition hover:border-orange-400/60 hover:bg-orange-500/[0.14]">
             <ScanLine className="h-4 w-4" /> Scannerdekking <span className="rounded bg-black/20 px-1.5 py-0.5 font-black tabular-nums text-white">{scannedMemberCount}/{scannerMembers.length}</span>
           </button>
-          <a href="/iracing-content-extension.zip?v=0.5.10" download className="inline-flex items-center gap-2 rounded-md border border-white/[0.1] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-orange-400/40 hover:text-white"><Download className="h-4 w-4" /> Content Extension downloaden</a>
+          <a href="/iracing-content-extension.zip?v=0.6.2" download className="inline-flex items-center gap-2 rounded-md border border-white/[0.1] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-orange-400/40 hover:text-white"><Download className="h-4 w-4" /> Content Extension downloaden</a>
           <a href="https://github.com/Sloddervoss/3sm-league/tree/main/tools/iracing-content-extension" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-md border border-white/[0.1] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-orange-400/40 hover:text-white"><ExternalLink className="h-4 w-4" /> Extensie broncode</a>
         </div>
       </header>
