@@ -1,5 +1,5 @@
 (async () => {
-  const EXT_VERSION = "0.6.1"; // versie-marker: toont welke content.js écht draait
+  const EXT_VERSION = "0.6.2"; // versie-marker: toont welke content.js écht draait
   const OWNED_WORDS = [
     "owned", "purchased", "licensed", "my content",
     "content owned", "included", "installed",
@@ -59,6 +59,25 @@
     );
   }
 
+  /** Lees pagina-info uit de URL + "N of M"-teller in de tabel. */
+  function readPaginationInfo() {
+    const url = new URL(location.href);
+    const page = parseInt(url.searchParams.get("page") || "1", 10) || 1;
+    const pageSize = parseInt(url.searchParams.get("page_size") || "0", 10) || 0;
+    // Teller zoals "1-12 of 69" of "Rows per page: 12"
+    const bodyText = cleanText(document.body.innerText);
+    let total = 0;
+    let shown = 0;
+    const countMatch = bodyText.match(/(\d+)\s*(?:–|-|of)\s*(\d+)\s+of\s+(\d+)/i)
+      || bodyText.match(/(\d+)\s+of\s+(\d+)/i)
+      || bodyText.match(/of\s+(\d{1,5})\b/i);
+    if (countMatch) {
+      if (countMatch[3]) { shown = parseInt(countMatch[1], 10); total = parseInt(countMatch[3], 10); }
+      else if (countMatch[1] && countMatch[2]) { shown = parseInt(countMatch[1], 10); total = parseInt(countMatch[2], 10); }
+    }
+    return { page, pageSize, totalCount: total || 0, shownCount: shown || 0 };
+  }
+
   function extractNameFromElement(element) {
     const labels = [
       element.getAttribute("aria-label"),
@@ -69,6 +88,17 @@
       element.querySelector("[class*='name' i]")?.textContent,
       element.querySelector("[class*='title' i]")?.textContent,
     ].map(cleanText).filter(Boolean);
+
+    // Nieuwe iRacing-tabel: een rij is "<Track Naam> <N> View <Type>", bijv.
+    // "Adelaide Street Circuit 1 View Track". Pluk de naam = tekst vóór "N View".
+    const rowTextClean = cleanText(element.innerText || element.textContent);
+    const viewMatch = rowTextClean.match(/(.*?)\s+\d+\s+View\b/i);
+    if (viewMatch) {
+      const candidate = cleanText(viewMatch[1]);
+      if (candidate.length >= 8 && candidate.length <= 140 && !GENERIC_TRACK_NAMES.has(candidate.toLowerCase())) {
+        return candidate;
+      }
+    }
 
     const namedLabel = labels.find(looksLikeTrackName);
     if (namedLabel) return namedLabel;
@@ -438,6 +468,8 @@
   if (bffResult.custId && !custId) custId = bffResult.custId;
   if (bffResult.userName && !userName) userName = bffResult.userName;
 
+  const pagination = readPaginationInfo();
+
   // 2. Scan DOM for tracks. De BFF-API is de primaire bron (volledige lijst,
   // imuun voor de pagina-redesign); de DOM-scan geldt alleen als de API niets
   // opleverde (bijv. niet-ingelogd of endpoint gewijzigd).
@@ -501,6 +533,7 @@
         rawKeys: bffTracks.rawKeys ?? null,
         error: bffTracks.error ?? null,
       },
+      pagination,
       ownedTracks,
       candidates: candidates.map(({ name, owned }) => ({ name, owned })),
     },
@@ -519,6 +552,7 @@
       apiRawKeys: bffTracks.rawKeys ?? null,
       apiRaw: bffTracks.raw ?? null,
       apiError: bffTracks.error ?? null,
+      pagination,
       candidateCount: candidates.length,
       tableResults,
       cardResults,
