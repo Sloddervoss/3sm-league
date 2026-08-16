@@ -358,6 +358,52 @@
     return { custId, userName };
   }
 
+  /**
+   * API-first: haal ALLE owned tracks op via de BFF `lookup/tracks` endpoint.
+   * Geschikt voor iRacing's naar secties opgesplitste pagina, waar DOM-scannen
+   * alleen de zichtbare rijen (~7) leest. De API retourneert de volledige lijst
+   * met owned-status, ongeacht de layout.
+   * Volgt het standaard {link:...}-patroon en is tolerant voor meerdere
+   * response-vormen.
+   */
+  async function fetchOwnedTracksViaBff() {
+    try {
+      const res = await fetch(
+        "https://members-ng.iracing.com/bff/pub/proxy/data/lookup/tracks",
+        { credentials: "include", headers: { "Accept": "application/json" } }
+      );
+      if (!res.ok) return { owned: [], usable: false };
+      let json = await res.json();
+      if (json?.link) {
+        const linked = await fetch(json.link, { headers: { "Accept": "application/json" } });
+        if (linked.ok) json = await linked.json();
+      }
+      // Meerdere bekende vorm en (array, {data:[...]}, {tracks:[...]}) — een rij
+      // is "owned" als lap het veld owned/owned_tracks/is_owned==true heeft, of
+      // als het track geretourneerd is met een owned-voldoende marker voor de
+      // huidige gebruiker. Scores uit rows zonder ownership-info worden genegeerd.
+      const rows = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.data) ? json.data
+        : Array.isArray(json?.tracks) ? json.tracks
+        : [];
+      const owned = [];
+      for (const row of rows) {
+        const name = cleanText(row?.track_name || row?.name || row?.display_name || "");
+        if (!name) continue;
+        const isOwned = row?.owned === true
+          || row?.owned_tracks === true
+          || row?.purchase_status === "owned"
+          || row?.is_owned === true
+          || (typeof row?.owned === "string" && /^(1|true|owned|purchased)$/i.test(row.owned));
+        if (isOwned) owned.push(name);
+      }
+      return { owned, usable: owned.length > 0 };
+    } catch {
+      return { owned: [], usable: false };
+    }
+  }
+
   // --- MAIN ---
   const pageIsOwnedFilter = currentPageIsOwnedFilter();
 
@@ -365,12 +411,17 @@
   let custId = extractCustIdFromPage();
   let userName = extractUserNameFromPage();
 
-  const bffResult = await fetchCustIdAndNameViaBff();
+  const [bffResult, bffTracks] = await Promise.all([
+    fetchCustIdAndNameViaBff(),
+    fetchOwnedTracksViaBff(),
+  ]);
 
   if (bffResult.custId && !custId) custId = bffResult.custId;
   if (bffResult.userName && !userName) userName = bffResult.userName;
 
-  // 2. Scan DOM for tracks
+  // 2. Scan DOM for tracks. De BFF-API is de primaire bron (volledige lijst,
+  // imuun voor de pagina-redesign); de DOM-scan geldt alleen als de API niets
+  // opleverde (bijv. niet-ingelogd of endpoint gewijzigd).
   const tableResults = scanTableRows();
   const cardResults = scanCards();
 
@@ -385,9 +436,13 @@
     candidates.push(item);
   }
 
-  // Determine owned tracks
+  // Determine owned tracks. Primary: BFF API (volledige, layout-onafhankelijke
+  // lijst). Fallback: DOM-scan wanneer de API niets gave.
   let ownedTracks;
-  if (pageIsOwnedFilter) {
+  if (bffTracks.usable) {
+    ownedTracks = [...new Set(bffTracks.owned)]
+      .sort((a, b) => a.localeCompare(b));
+  } else if (pageIsOwnedFilter) {
     ownedTracks = candidates.map((c) => c.name).sort((a, b) => a.localeCompare(b));
   } else {
     ownedTracks = candidates
@@ -427,6 +482,8 @@
       pageIsOwnedFilter,
       iracingCustId: custId,
       uploaderName: userName,
+      apiOwnedTracks: bffTracks.owned,
+      apiUsable: bffTracks.usable,
       candidateCount: candidates.length,
       tableResults,
       cardResults,
