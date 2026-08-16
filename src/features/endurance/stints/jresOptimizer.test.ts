@@ -27,6 +27,20 @@ describe("jresOptimizer marshalling", () => {
     for (let i = 1; i < segs.length; i++) expect(segs[i].startTime).toBe(segs[i - 1].endTime);
   });
 
+  it("discretiseert tankduur naar beneden zodat een stint de tankduur nooit overschrijdt (bevinding 8)", () => {
+    const state = createEnduranceSeed();
+    // 90 min tank zoals in de UI; floor(90/60)=1 → segmenten van maximaal 1 uur.
+    const segs = buildJresStints(state.events[0], 90);
+    for (const s of segs) {
+      const durMin = (new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 60_000;
+      expect(durMin).toBeLessThanOrEqual(90);
+      // discretisatie op min. hele uren
+      expect(durMin % 60).toBe(0);
+    }
+    // Behoud van dekking (geen gaten).
+    for (let i = 1; i < segs.length; i++) expect(segs[i].startTime).toBe(segs[i - 1].endTime);
+  });
+
   it("maps team members to driver/spotter roles", () => {
     const state = createEnduranceSeed();
     const inObj = marshalJresInput(state, state.events[0], ["user-jaimy", "user-sven"], {
@@ -159,6 +173,55 @@ describe("jresOptimizer marshalling", () => {
     // devos en ricky mogen wél 2 — hun dubbel mag overeind blijven.
     expect(out[0]?.driverId).toBe("user-devos");
     expect(out[1]?.driverId).toBe("user-devos");
+  });
+
+  it("verplaatst NIET naar een coureur die in een later deel van de stint onbeschikbaar is (bevinding 7)", () => {
+    const base = createEnduranceSeed().events[0];
+    const mk = (i: number, driverId: string, h0: number, h1: number) => ({
+      id: `stint-${i}`, eventId: base.id, teamId: "t", driverId,
+      originalStartAt: new Date(`2026-08-22T${String(h0).padStart(2, "0")}:00:00Z`).toISOString(),
+      originalEndAt: new Date(`2026-08-22T${String(h1).padStart(2, "0")}:00:00Z`).toISOString(),
+      actualStartAt: new Date(`2026-08-22T${String(h0).padStart(2, "0")}:00:00Z`).toISOString(),
+      actualEndAt: new Date(`2026-08-22T${String(h1).padStart(2, "0")}:00:00Z`).toISOString(),
+      expectedLaps: 10, fuelLitres: 10, tyreChange: false, doubleStint: false, notes: "", status: "draft" as const,
+    });
+    // devos rijdt een dubbel (00-02 en 02-04); bij 'max 1' moet de 2e worden herverdeeld.
+    const input = [mk(1, "user-devos", 0, 2), mk(2, "user-devos", 2, 4)];
+    const opts = { "user-devos": { maxConsecutiveStints: 1 }, "user-ricky": { maxConsecutiveStints: 1 }, "user-steven": { maxConsecutiveStints: 1 } };
+    // De te herverdelen stint is 02-04u. ricky is om 02:00 beschikbaar MAAR om
+    // 03:00 (later deel van die stint) NIET. Een check die alleen het startuur
+    // ziet, zou tóch naar ricky verplaatsen; de hele-dur-check moet uitwijken
+    // naar steven die óók het tweede uur dekt.
+    const availability = {
+      "user-devos": { "2026-08-22T00:00:00.000Z": "Available", "2026-08-22T01:00:00.000Z": "Available", "2026-08-22T02:00:00.000Z": "Available" },
+      "user-ricky": { "2026-08-22T02:00:00.000Z": "Available", "2026-08-22T03:00:00.000Z": "Unavailable", "2026-08-22T04:00:00.000Z": "Unavailable" },
+      "user-steven": { "2026-08-22T02:00:00.000Z": "Available", "2026-08-22T03:00:00.000Z": "Available", "2026-08-22T04:00:00.000Z": "Available" },
+    };
+    const out = enforceConsecutiveLimits(input, opts, availability, ["user-devos", "user-ricky", "user-steven"]);
+    expect(out).toHaveLength(2);
+    expect(out[1]?.driverId).toBe("user-steven");
+  });
+
+  it("prefereert de rustigste volledig beschikbare coureur als vervanger", () => {
+    const base = createEnduranceSeed().events[0];
+    const mk = (i: number, driverId: string, h: number) => ({
+      id: `stint-${i}`, eventId: base.id, teamId: "t", driverId,
+      originalStartAt: new Date(`2026-08-22T${String(h).padStart(2, "0")}:00:00Z`).toISOString(),
+      originalEndAt: new Date(`2026-08-22T${String(h + 1).padStart(2, "0")}:00:00Z`).toISOString(),
+      actualStartAt: new Date(`2026-08-22T${String(h).padStart(2, "0")}:00:00Z`).toISOString(),
+      actualEndAt: new Date(`2026-08-22T${String(h + 1).padStart(2, "0")}:00:00Z`).toISOString(),
+      expectedLaps: 10, fuelLitres: 10, tyreChange: false, doubleStint: false, notes: "", status: "draft" as const,
+    });
+    const input = [mk(1, "user-devos", 4), mk(2, "user-devos", 5)];
+    const opts = { "user-devos": { maxConsecutiveStints: 1 } };
+    const availability = {
+      "user-devos": { "2026-08-22T04:00:00.000Z": "Available", "2026-08-22T05:00:00.000Z": "Available" },
+      "user-ricky": { "2026-08-22T05:00:00.000Z": "Available", "2026-08-22T06:00:00.000Z": "Available" },
+      "user-steven": { "2026-08-22T05:00:00.000Z": "Available", "2026-08-22T06:00:00.000Z": "Available" },
+    };
+    const out = enforceConsecutiveLimits(input, opts, availability, ["user-devos", "user-ricky", "user-steven"]);
+    expect(out).toHaveLength(2);
+    expect(["user-ricky", "user-steven"]).toContain(out[1]?.driverId);
   });
 });
 

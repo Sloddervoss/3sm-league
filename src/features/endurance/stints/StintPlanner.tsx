@@ -9,7 +9,7 @@ import { useEnduranceStints, useEnduranceStintMutations } from "../repository/st
 import { useEndurancePlanWorkspace, useEndurancePlanMutations } from "../repository/planRepository";
 import { enduranceStintRowsToAppModels } from "../repository/mappers";
 import { planningWarnings } from "../core/selectors";
-import type { AvailabilityType, EnduranceEvent, EnduranceRole, EnduranceStint } from "../core/types";
+import type { AvailabilityType, EnduranceEvent, EnduranceRole, EnduranceStint, StintPlanningState } from "../core/types";
 import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, SectionHeading, StatusPill } from "../shared/ui";
 import { generateStints, type StintMode } from "./stintGenerator";
 import { runOptimize, type OptimizerFetcher } from "./jresOptimizer";
@@ -129,16 +129,16 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
     [availabilityRows, event.id]
   );
 
-  // Beperkte app-level state voor de (mock) planner-hulpfuncties: events/teams/
-  // members/stints uit de databank; paceEntries nog leeg (volgt).
-  const plannerState = {
+  // Beperkte planner-state-slice voor de puur-functies (generator, waarschuwingen,
+  // optimizer): uitsluitend de velden die die functies consumeren, netjes getypeerd
+  // via StintPlanningState — géén `as never`-escape.
+  const plannerState: StintPlanningState = {
     events: [event],
-    teams: teams.map((t) => ({ id: t.id, eventId: t.event_id, name: t.name, carId: t.car_id ?? "", carNumber: t.car_number ?? "", managerId: t.manager_id ?? "", livery: t.livery ?? "" })),
-    teamMembers: members.map((m) => ({ id: m.id, teamId: m.team_id, userId: m.user_id, role: m.role })),
-    stints: stintsApp,
     availability,
+    teamMembers: members.map((m) => ({ teamId: m.team_id, userId: m.user_id, role: m.role, id: m.id })),
+    stints: stintsApp,
     paceEntries: [],
-  } as never;
+  };
   const warnings = planningWarnings(plannerState, event.id, teamId);
 
   // Vervang een voorstel volledig: verwijder eerst de bestaande DRAFT-stints van
@@ -205,12 +205,14 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
   const move = (stint: EnduranceStint, startAt: string) => {
     const duration = new Date(stint.actualEndAt).getTime() - new Date(stint.actualStartAt).getTime();
     const endAt = new Date(new Date(startAt).getTime() + duration).toISOString();
-    void upsert.mutateAsync({ id: stint.id, event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: startAt, original_end_at: endAt, actual_start_at: startAt, actual_end_at: endAt, status: "draft" });
+    // Bewerking verplaatst alleen de ACTUELE planning; original_* blijft het
+    // gegenereerde/optimale voorstel bevriezen (bevinding 2).
+    void upsert.mutateAsync({ id: stint.id, event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: stint.originalStartAt, original_end_at: stint.originalEndAt, actual_start_at: startAt, actual_end_at: endAt, status: "draft" });
   };
   const resize = (stint: EnduranceStint, delta: number) => {
     const endAt = shift(stint.actualEndAt, delta);
     if (new Date(endAt).getTime() - new Date(stint.actualStartAt).getTime() < 5 * 60_000 || new Date(endAt) > new Date(event.endAt)) return;
-    void upsert.mutateAsync({ id: stint.id, event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: stint.originalStartAt, original_end_at: endAt, actual_start_at: stint.actualStartAt, actual_end_at: endAt, status: "draft" });
+    void upsert.mutateAsync({ id: stint.id, event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: stint.originalStartAt, original_end_at: stint.originalEndAt, actual_start_at: stint.actualStartAt, actual_end_at: endAt, status: "draft" });
   };
 
   // Randslepen: verplaats start-of-eindtijd van een stint om hem groter/kleiner
@@ -220,13 +222,26 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
     if (duration < 5 * 60_000) return;
     if (new Date(startAt) < new Date(event.startAt)) startAt = event.startAt;
     if (new Date(endAt) > new Date(event.endAt)) endAt = event.endAt;
-    void upsert.mutateAsync({ id: stint.id, event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: startAt, original_end_at: endAt, actual_start_at: startAt, actual_end_at: endAt, status: "draft" });
+    void upsert.mutateAsync({ id: stint.id, event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: stint.originalStartAt, original_end_at: stint.originalEndAt, actual_start_at: startAt, actual_end_at: endAt, status: "draft" });
   };
+
+  // Overlap-check: mag dit [startAt,endAt]-venster op deze rij?", zonder botsing
+  // met een andere stint (bevinding 3). Het uitgangspunt dat gekopieerd/verlengd
+  // wordt telt niet mee.
+  const overlapsExisting = (startAt: string, endAt: string, excludeId?: string): boolean =>
+    stints.some(
+      (other) =>
+        other.id !== excludeId &&
+        new Date(startAt).getTime() < new Date(other.actualEndAt).getTime() &&
+        new Date(endAt).getTime() > new Date(other.actualStartAt).getTime()
+    );
+
   const copy = (stint: EnduranceStint) => {
     const duration = (new Date(stint.actualEndAt).getTime() - new Date(stint.actualStartAt).getTime()) / 60_000;
     const startAt = stint.actualEndAt;
     const endAt = shift(startAt, duration);
     if (new Date(endAt) > new Date(event.endAt)) { setMessage("Er is na deze stint niet genoeg ruimte voor een kopie."); return; }
+    if (overlapsExisting(startAt, endAt)) { setMessage("De kopie overlap een andere stint. Maak eerst ruimte vrij."); return; }
     void upsert.mutateAsync({ event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: startAt, original_end_at: endAt, actual_start_at: startAt, actual_end_at: endAt, status: "draft", notes: `${stint.notes} · kopie` });
   };
 
@@ -237,6 +252,7 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
     const startAt = stint.actualEndAt;
     const endAt = shift(startAt, tankMinutes);
     if (new Date(endAt) > new Date(event.endAt)) { setMessage("Er is na deze stint niet genoeg ruimte voor een extra stint."); return; }
+    if (overlapsExisting(startAt, endAt)) { setMessage("Verlengen overlap een andere stint. Maak eerst ruimte vrij."); return; }
     void upsert.mutateAsync({ event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: startAt, original_end_at: endAt, actual_start_at: startAt, actual_end_at: endAt, status: "draft", notes: "Verlengd (zelfde coureur)" });
   };
 

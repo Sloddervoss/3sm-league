@@ -4,11 +4,46 @@ import { availabilityForStint, formatAmsterdam } from "../core/selectors";
 import type { AvailabilityBlock, EnduranceEvent, EndurancePersona, EnduranceStint } from "../core/types";
 
 const colors = ["bg-orange-500/80", "bg-sky-500/75", "bg-violet-500/75", "bg-emerald-500/75", "bg-rose-500/75"];
+// Echte kleurwaarden (hex) voor tekst/dot — de bg-klassen hierboven zijn géén
+// geldige CSS-kleuren voor style. Beide rijen staan op dezelfde volgorde.
+const laneHex = ["#f97316", "#38bdf8", "#a78bfa", "#34d399", "#fb7185"];
+// Breedte van de coureur-labelkolom in het lane-grid (svg grid-cols-[120px_1fr]).
+// Rand-slepen en drop meten tegen de tijdlijn-track ná deze kolom.
+const LANE_LABEL_PX = 120;
+
+// Amsterdam-klok (vaste zone, niet browser-lokaal) voor het Starttijd-veld.
+// De app toont overal Europe/Amsterdam; dit veld deed dat niet (bevinding 1).
+const amsterdamParts = (iso: string) => {
+  const dtf = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  });
+  const parts = dtf.formatToParts(new Date(iso));
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  return { y: Number(pick("year")), m: Number(pick("month")), d: Number(pick("day")), hour: Number(pick("hour")), minute: Number(pick("minute")) };
+};
 
 const toLocalInput = (iso: string) => {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const p = amsterdamParts(iso);
+  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+};
+
+// UTC-offset (minuten) die Amsterdam op dat moment hanteert: (Amsterdam-klok als UTC) − (echte UTC).
+const amsterdamOffsetMinutes = (utcIso: string): number => {
+  const p = amsterdamParts(utcIso);
+  const wallAsUtc = Date.UTC(p.y, p.m - 1, p.d, p.hour, p.minute);
+  return (wallAsUtc - new Date(utcIso).getTime()) / 60_000;
+};
+
+// Bouwt een UTC-instant zodanig dat de Amsterdam-klok die HH:mm toont op event.startAt z'n datum.
+const fromLocalInput = (iso: string, time: string): string => {
+  const [hh = 0, mm = 0] = time.split(":").map(Number);
+  const base = amsterdamParts(iso); // Amsterdam-datum van de eventstart
+  const wallMs = Date.UTC(base.y, base.m - 1, base.d, hh, mm);
+  // Offset bepaal je op een raad-UTC ±2u; daarna exact.
+  const off = amsterdamOffsetMinutes(new Date(wallMs - 120 * 60_000).toISOString());
+  return new Date(wallMs - off * 60_000).toISOString();
 };
 
 /**
@@ -71,12 +106,16 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
     onMove(stint, new Date(start + effectiveMinutes * 60_000).toISOString());
   };
 
-  // Tijd van een clientX in pixels (absoluut t.o.v. de race) → ms.
+  // Tijd van een clientX (viewport) naar racetijd → ms. Meet tegen de
+  // tijdlijn-track (na de vaste labelkolom), zodat rand-slepen/drop op dezelfde
+  // schaal werkt als de positieberekening van de stints-balkjes. (bevinding 5)
   const msFromEventX = (clientX: number) => {
     const lane = laneRef.current;
     if (!lane) return 0;
     const rect = lane.getBoundingClientRect();
-    return start + ((clientX - rect.left) / rect.width) * span;
+    const trackLeft = rect.left + LANE_LABEL_PX;
+    const trackWidth = Math.max(1, rect.width - LANE_LABEL_PX);
+    return start + ((clientX - trackLeft) / trackWidth) * span;
   };
 
   const beginEdgeDrag = (e: React.PointerEvent, stint: EnduranceStint, side: "left" | "right") => {
@@ -145,7 +184,7 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
             return (
               <div key={driverId} className="grid grid-cols-[120px_1fr]">
                 {/* Coureur-label */}
-                <div className={`flex items-center px-2 text-xs font-bold ${laneIndex === 0 ? "pt-4" : ""}`} style={{ color: colors[laneIndex % colors.length].replace("bg-", "") }}>
+                <div className={`flex items-center px-2 text-xs font-bold ${laneIndex === 0 ? "pt-4" : ""}`} style={{ color: laneHex[laneIndex % laneHex.length] }}>
                   <span className="w-full truncate" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.6)" }}>{driverName(driverId)}</span>
                 </div>
                 {/* Lane */}
@@ -154,7 +193,7 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
                   onDrop={(e) => laneDrop(e, driverId)}
                   className={`relative h-16 rounded-lg ${laneIndex === 0 ? "mt-4" : "mt-1.5"} bg-white/[0.025] ring-1 ring-white/5`}
                 >
-                  <span className="pointer-events-none absolute left-2 top-1 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-white/40"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: colors[laneIndex % colors.length] }} />{laneIndex + 1}</span>
+                  <span className="pointer-events-none absolute left-2 top-1 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-white/40"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: laneHex[laneIndex % laneHex.length] }} />{laneIndex + 1}</span>
                   {laneStints.map((stint) => {
                     const live = liveEdge && liveEdge.stintId === stint.id;
                     const startAt = live ? liveEdge.startAt : stint.actualStartAt;
@@ -205,7 +244,7 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
             <span className="mb-1 block font-bold text-gray-400">Starttijd</span>
             <div className="flex items-center gap-1">
               <button type="button" disabled={!editable} onClick={() => onMove(selected, new Date(new Date(selected.actualStartAt).getTime() - snapMinutes * 60_000).toISOString())} className="rounded bg-black/30 px-2 py-1.5 text-white disabled:opacity-40" aria-label="Start eerder"><Minus className="h-3 w-3" /></button>
-              <input className="w-full rounded-lg bg-black/30 px-2 py-1.5 text-sm text-white focus:outline-none" type="time" step={60} value={toLocalInput(selected.actualStartAt)} disabled={!editable} onChange={(e) => { if (!e.target.value) return; const parsed = new Date(`${event.startAt.slice(0, 10)}T${e.target.value}:00`); const startMs = Math.max(start, parsed.getTime()); onMove(selected, new Date(startMs).toISOString()); }} aria-label="Stint starttijd" />
+              <input className="w-full rounded-lg bg-black/30 px-2 py-1.5 text-sm text-white focus:outline-none" type="time" step={60} value={toLocalInput(selected.actualStartAt)} disabled={!editable} onChange={(e) => { if (!e.target.value) return; const startMs = Math.max(start, new Date(fromLocalInput(event.startAt, e.target.value)).getTime()); onMove(selected, new Date(startMs).toISOString()); }} aria-label="Stint starttijd" />
               <button type="button" disabled={!editable} onClick={() => onMove(selected, new Date(new Date(selected.actualStartAt).getTime() + snapMinutes * 60_000).toISOString())} className="rounded bg-black/30 px-2 py-1.5 text-white disabled:opacity-40" aria-label="Start later"><Plus className="h-3 w-3" /></button>
             </div>
           </label>

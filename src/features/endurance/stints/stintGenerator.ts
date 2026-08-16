@@ -1,5 +1,5 @@
 import { makeId } from "../core/actions";
-import type { EnduranceEvent, EnduranceState, EnduranceStint } from "../core/types";
+import type { EnduranceEvent, EnduranceStint, StintPlanningState } from "../core/types";
 import { rangesOverlap } from "../core/selectors";
 
 /**
@@ -45,7 +45,7 @@ interface Candidate {
 }
 
 export const generateStints = (
-  state: EnduranceState,
+  state: Pick<StintPlanningState, "teamMembers" | "availability" | "paceEntries">,
   event: EnduranceEvent,
   teamId: string,
   tankMinutes: number,
