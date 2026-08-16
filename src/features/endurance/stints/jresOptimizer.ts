@@ -1,4 +1,4 @@
-import type { EnduranceEvent, EnduranceState, EnduranceStint } from "../core/types";
+import type { EnduranceEvent, EnduranceStint, StintPlanningState } from "../core/types";
 import { makeId } from "../core/actions";
 
 /**
@@ -66,7 +66,11 @@ export function buildJresStints(event: EnduranceEvent, tankMinutes: number): { i
   const startRounded = Math.ceil(start / 3_600_000) * 3_600_000;
   const endRounded = Math.floor(end / 3_600_000) * 3_600_000;
   if (endRounded <= startRounded) return [];
-  const step = Math.max(3_600_000, Math.round((tankMinutes * 60_000) / 3_600_000) * 3_600_000);
+  // Tankduur discretiseren naar een geheel aantal stints van hele uren. Één uur is
+  // de kleinste JRES-granulariteit. We ronden NAAR BENEDEN af op het dichtstbijzijnde
+  // aantal hele uren zodat een stint NOOIT langer wordt dan de ingestelde tankduur
+  // (bv. 90 min tank → stints van max 60 min, niet 120). Minimaal één uur.
+  const step = Math.max(3_600_000, Math.floor((tankMinutes * 60_000) / 3_600_000) * 3_600_000);
   const segs: { id: number; startTime: string; endTime: string }[] = [];
   let cursor = startRounded;
   let i = 1;
@@ -85,7 +89,7 @@ export function buildJresStints(event: EnduranceEvent, tankMinutes: number): { i
  *  van de stints dekt, anders crasht hij (heap). Daarom wordt beschikbaarheid
  *  per heel-uur-bucket over het hele racevenster gegenereerd (niet alleen de
  *  start-uren van de input-stints), zodat elke mogelijke stintstart gedekt is. */
-export function buildJresAvailability(state: EnduranceState, event: EnduranceEvent, userIds: string[]): Record<string, Record<string, string>> {
+export function buildJresAvailability(state: Pick<StintPlanningState, "availability">, event: EnduranceEvent, userIds: string[]): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
   // Alle hele-uur-buckets over het (afgeronde) racevenster.
   const hours = buildJresStints(event, 60);
@@ -131,7 +135,7 @@ function overlap(block: { startAt: string; endAt: string }, a: string, b: string
  * members = actieve teamleden (userIds). firstStintDriver uit opties of willingToStart.
  */
 export function marshalJresInput(
-  state: EnduranceState,
+  state: Pick<StintPlanningState, "availability">,
   event: EnduranceEvent,
   memberUserIds: string[],
   options: MarshalOptions
@@ -246,6 +250,19 @@ export function enforceConsecutiveLimits(
     return map[key] !== "Unavailable";
   };
 
+  // Beschikbaarheid doorsnede over de HELE stint (niet alleen het startuur):
+  // elke hele-uur-bucket die de stint raakt moet beschikbaar zijn.
+  const availThrough = (userId: string, stint: EnduranceStint): boolean => {
+    const map = availability[userId];
+    if (!map) return true; // geen blokken = altijd beschikbaar
+    const start = new Date(stint.actualStartAt).getTime();
+    const end = new Date(stint.actualEndAt).getTime();
+    for (let cursor = start; cursor < end; cursor += 3_600_000) {
+      if (map[keyFor(new Date(cursor).toISOString())] === "Unavailable") return false;
+    }
+    return availAt(userId, stint.actualStartAt);
+  };
+
   for (const stint of sorted) {
     // maxConsecutiveStints default = 1 (1-om-1). Een NULL/undefined (niet
     // ingesteld in de inschrijving én niet door de manager overridden) betekent
@@ -266,7 +283,7 @@ export function enforceConsecutiveLimits(
         const cl = driverOpts[candidate]?.maxConsecutiveStints;
         const cAllowed = cl == null || cl <= 0 || cl >= 1; // elke coureur mag op z'n minst 1
         if (!cAllowed) continue;
-        if (!availAt(candidate, stint.actualStartAt)) continue;
+        if (!availThrough(candidate, stint)) continue;
         const total = result.filter((s) => s.driverId === candidate).length;
         if (total < bestTotal) { bestTotal = total; replacement = candidate; }
       }
@@ -291,7 +308,7 @@ export function enforceConsecutiveLimits(
  * marshall → fetcher → parse. Event/model-agnostisch in/uit.
  */
 export async function runOptimize(
-  state: EnduranceState,
+  state: Pick<StintPlanningState, "availability">,
   event: EnduranceEvent,
   memberUserIds: string[],
   teamId: string,

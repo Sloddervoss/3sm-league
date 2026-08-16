@@ -193,3 +193,14 @@ export interface EnduranceState {
   notifications: EnduranceNotification[];
   auditLog: AuditRecord[];
 }
+
+/**
+ * De minimale state-slice die de Stint-planner puur-functies (generator,
+ * waarschuwingen, JRES-optimizer) daadwerkelijk consumeren. Beperkt zodat
+ * callers niet met `as never` een half-geconstrueerde EnduranceState hoeven
+ * te casten; een volwaardige EnduranceState ís ook een StintPlanningState.
+ */
+export type StintPlanningState = Pick<
+  EnduranceState,
+  "events" | "availability" | "teamMembers" | "stints" | "paceEntries"
+>;
