@@ -29,6 +29,14 @@ describe("endurance realtime bindings", () => {
       ["endurance", "teams", "evt-123"],
       ["endurance", "teams", "all"],
     ]);
+
+    // stint-planner: beschikbaarheid + geplande versies (Versies & bevestiging)
+    expect(byTable("endurance_availability")?.queryKeys).toEqual([
+      ["endurance", "availability", "evt-123"],
+    ]);
+    expect(byTable("endurance_planning_versions")?.queryKeys).toEqual([
+      ["endurance", "plans", "evt-123"],
+    ]);
   });
 
   it("levert per tabel exact één binding op (geen duplicaten)", () => {
@@ -41,6 +49,8 @@ describe("endurance realtime bindings", () => {
     const allowed = [
       "endurance_events",
       "endurance_stints",
+      "endurance_availability",
+      "endurance_planning_versions",
       "endurance_teams",
       "endurance_team_members",
     ];
