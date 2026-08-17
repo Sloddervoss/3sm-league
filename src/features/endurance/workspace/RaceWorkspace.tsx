@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, Bell, Cable, CalendarRange, Gauge, LayoutDashboard, Radio, Route, Users, TimerReset } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEnduranceActor } from "../core/ActorContext";
+import { useEnduranceEventRealtime } from "../repository/useEnduranceRealtime";
 import { useEnduranceRegistrations, useUpsertEnduranceRegistration } from "../repository/registrationsRepository";
 import type { EnduranceEvent } from "../core/types";
 import { RegistrationForm } from "../registration/RegistrationForm";
@@ -59,6 +60,8 @@ export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack
   const [tab, setTab] = useState<TabId>("overview");
   const myRegistration = registrations.find((r) => r.user_id === actorId);
   const access = isSuperAdmin || (myRegistration ? ACTIVE.includes(myRegistration.status) : false);
+  // Realtime: wijzigingen van andere gebruikers (events/stints/teams) komen live binnen
+  useEnduranceEventRealtime(event.id);
 
   if (isLoading) return <div><SecondaryButton onClick={onBack} className="mb-5"><ArrowLeft className="h-4 w-4" /> Terug naar races</SecondaryButton><p className="text-sm text-gray-400">Laden…</p></div>;
   if (!access) {
