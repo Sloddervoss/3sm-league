@@ -6,6 +6,7 @@ import {
   useDeleteEnduranceEvent,
 } from "../repository/eventsRepository";
 import { useCreateEnduranceNotifications } from "../repository/notificationsRepository";
+import { useEnduranceRealtime } from "../repository/useEnduranceRealtime";
 import { InviteePicker } from "./InviteePicker";
 import { makeId } from "../core/actions";
 import { IRACING_ENDURANCE_CLASSES, getEnduranceCar, type EnduranceClassId } from "../core/carCatalog";
@@ -32,6 +33,11 @@ const toLocalInput = (iso?: string | null) => {
  */
 export const EventManager = () => {
   const { data: dbEvents = [], isLoading, isError, error } = useEnduranceEvents();
+  // Realtime: wijzigingen van andere gebruikers aan events komen live binnen
+  useEnduranceRealtime(
+    [{ table: "endurance_events", queryKeys: [["endurance", "events"]] }],
+    []
+  );
   const upsert = useUpsertEnduranceEvent();
   const remove = useDeleteEnduranceEvent();
   const sendInvites = useCreateEnduranceNotifications();
