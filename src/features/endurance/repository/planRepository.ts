@@ -68,38 +68,24 @@ export type PublishPlanInput = {
 
 /**
  * Publiceren = één versie aanmaken + bevestigingen voor deelnemers.
- * Gebruikt twee queries (super-admin-sessie).
+ * Atomair via de SECURITY DEFINER RPC `endurance_publish_plan`: versie +
+ * alle confirmations in één transactie, met server-side manager/event/team
+ * autorisatie (super_admin/endurance_manager-sessie).
  */
 export async function publishEndurancePlan(input: PublishPlanInput): Promise<EndurancePlanningVersionRow> {
-  assertEnduranceTable(VERSION_TABLE);
-  const { data, error } = await enduranceClient()
-    .from("endurance_planning_versions")
-    .insert({
-      event_id: input.event_id,
-      team_id: input.team_id,
-      label: input.label,
-      created_by: input.created_by,
-      published: true,
-      stints: input.stints as never,
-    })
-    .select(versionColumns)
-    .single();
+  const { data, error } = await enduranceClient().rpc("endurance_publish_plan", {
+    p_event_id: input.event_id,
+    p_team_id: input.team_id,
+    p_label: input.label,
+    p_stints: input.stints as never,
+    p_confirmations: input.confirmations.map((c) => ({
+      user_id: c.user_id,
+      status: c.status,
+      note: c.note ?? null,
+    })),
+  });
   if (error) throw new Error(`Endurance planning publiceren mislukt: ${error.message}`);
-  const versionId = (data as EndurancePlanningVersionRow).id;
-  if (input.confirmations.length) {
-    assertEnduranceTable(CONFIRMATION_TABLE);
-    const { error: confirmError } = await enduranceClient()
-      .from("endurance_confirmations")
-      .insert(input.confirmations.map((c) => ({
-        event_id: input.event_id,
-        version_id: versionId,
-        user_id: c.user_id,
-        status: c.status,
-        note: c.note ?? null,
-      })));
-    if (confirmError) throw new Error(`Endurance bevestigingen opslaan mislukt: ${confirmError.message}`);
-  }
-  return data as EndurancePlanningVersionRow;
+  return (data as unknown) as EndurancePlanningVersionRow;
 }
 
 /** Plain: werk een confirmatie bij (super-admin-sessie). */
