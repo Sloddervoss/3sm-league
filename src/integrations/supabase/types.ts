@@ -329,6 +329,7 @@ export type Database = {
           registration_deadline: string | null
           slots: Json
           class_ids: string[]
+          allowed_car_ids: string[] | null
           selected_class_id: string | null
           selected_car_id: string | null
           max_drivers_per_car: number
@@ -338,6 +339,8 @@ export type Database = {
           invited_user_ids: string[]
           manager_ids: string[]
           race_id: string | null
+          iracing_catalog_event_id: string | null
+          iracing_catalog_slot_id: string | null
           created_at: string
           updated_at: string
         }
@@ -354,6 +357,7 @@ export type Database = {
           registration_deadline: string | null
           slots: Json
           class_ids: string[]
+          allowed_car_ids: string[] | null
           selected_class_id: string | null
           selected_car_id: string | null
           max_drivers_per_car: number
@@ -363,6 +367,8 @@ export type Database = {
           invited_user_ids: string[]
           manager_ids: string[]
           race_id: string | null
+          iracing_catalog_event_id?: string | null
+          iracing_catalog_slot_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -379,6 +385,7 @@ export type Database = {
           registration_deadline?: string | null
           slots?: Json
           class_ids?: string[]
+          allowed_car_ids?: string[]
           selected_class_id?: string | null
           selected_car_id?: string | null
           max_drivers_per_car?: number
@@ -388,9 +395,97 @@ export type Database = {
           invited_user_ids?: string[]
           manager_ids?: string[]
           race_id?: string | null
+          iracing_catalog_event_id?: string | null
+          iracing_catalog_slot_id?: string | null
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
+      }
+
+      endurance_iracing_events: {
+        Row: {
+          id: string
+          source_key: string
+          iracing_series_id: number | null
+          iracing_season_id: number | null
+          name: string
+          year: number
+          circuit: string | null
+          configuration: string | null
+          track_id: number | null
+          event_start_date: string | null
+          event_end_date: string | null
+          duration_minutes: number | null
+          class_ids: string[]
+          local_class_ids: string[]
+          local_car_ids: string[]
+          cars: Json
+          team_event: boolean
+          official_url: string | null
+          poster_url: string | null
+          source_payload: Json
+          source_hash: string
+          availability_status: string
+          active: boolean
+          first_seen_at: string
+          last_seen_at: string
+          source_updated_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Database["public"]["Tables"]["endurance_iracing_events"]["Row"]
+        Update: Partial<Database["public"]["Tables"]["endurance_iracing_events"]["Row"]>
+        Relationships: []
+      }
+
+      endurance_iracing_event_slots: {
+        Row: {
+          id: string
+          catalog_event_id: string
+          source_slot_key: string
+          session_start_at: string
+          practice_start_at: string | null
+          practice_duration_minutes: number | null
+          qualifying_start_at: string | null
+          qualifying_duration_minutes: number | null
+          transition_duration_minutes: number | null
+          estimated_race_start_at: string | null
+          race_duration_minutes: number | null
+          race_lap_limit: number | null
+          session_duration_minutes: number | null
+          session_timing_status: string
+          registration_open_at: string | null
+          label: string | null
+          source: string
+          active: boolean
+          missing_successful_syncs: number
+          first_seen_at: string
+          last_seen_at: string
+          updated_at: string
+        }
+        Insert: Database["public"]["Tables"]["endurance_iracing_event_slots"]["Row"]
+        Update: Partial<Database["public"]["Tables"]["endurance_iracing_event_slots"]["Row"]>
+        Relationships: []
+      }
+
+      endurance_iracing_sync_runs: {
+        Row: {
+          id: string
+          started_at: string
+          finished_at: string | null
+          status: string
+          events_seen: number
+          events_inserted: number
+          events_updated: number
+          slots_seen: number
+          slots_inserted: number
+          slots_updated: number
+          error_summary: string | null
+          source_modified_at: string | null
+        }
+        Insert: Database["public"]["Tables"]["endurance_iracing_sync_runs"]["Row"]
+        Update: Partial<Database["public"]["Tables"]["endurance_iracing_sync_runs"]["Row"]>
         Relationships: []
       }
 
@@ -1437,6 +1532,7 @@ export type Database = {
           created_at: string
           id: string
           iracing_session_id: string | null
+          iracing_track_id: number | null
           caution_laps: number | null
           cautions: number | null
           league_id: string | null
@@ -1466,6 +1562,7 @@ export type Database = {
           created_at?: string
           id?: string
           iracing_session_id?: string | null
+          iracing_track_id?: number | null
           caution_laps?: number | null
           cautions?: number | null
           league_id?: string | null
@@ -1495,6 +1592,7 @@ export type Database = {
           created_at?: string
           id?: string
           iracing_session_id?: string | null
+          iracing_track_id?: number | null
           caution_laps?: number | null
           cautions?: number | null
           league_id?: string | null
@@ -1963,6 +2061,62 @@ export type Database = {
       }
     }
     Functions: {
+      endurance_activate_iracing_slot: {
+        Args: {
+          p_catalog_event_id: string
+          p_catalog_slot_id: string
+          p_registration_deadline?: string | null
+          p_visibility?: Database["public"]["Enums"]["endurance_event_visibility"]
+          p_max_drivers_per_car?: number
+          p_invited_user_ids?: string[]
+          p_manager_ids?: string[]
+        }
+        Returns: string
+      }
+      endurance_iracing_interest_summary: {
+        Args: never
+        Returns: {
+          catalog_event_id: string
+          interested_count: number
+          is_current_user_interested: boolean
+        }[]
+      }
+      endurance_set_iracing_interest: {
+        Args: {
+          p_catalog_event_id: string
+          p_interested: boolean
+        }
+        Returns: undefined
+      }
+      endurance_iracing_slot_interest_summary: {
+        Args: never
+        Returns: {
+          catalog_event_id: string
+          catalog_slot_id: string
+          interested_count: number
+          is_current_user_interested: boolean
+        }[]
+      }
+      endurance_set_iracing_slot_interest: {
+        Args: { p_catalog_slot_id: string; p_interested: boolean }
+        Returns: undefined
+      }
+      endurance_iracing_slot_interest_members: {
+        Args: { p_catalog_event_id: string }
+        Returns: {
+          catalog_slot_id: string
+          user_id: string
+          iracing_name: string | null
+          display_name: string | null
+        }[]
+      }
+      endurance_iracing_manager_interest_overview: {
+        Args: never
+        Returns: {
+          catalog_event_id: string
+          interested_count: number
+        }[]
+      }
       admin_get_community_support_payment_config: {
         Args: never
         Returns: {

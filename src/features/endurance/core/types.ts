@@ -33,12 +33,13 @@ export interface EnduranceEvent {
   registrationDeadline: string;
   slots: EventSlot[];
   classIds: EnduranceClassId[];
+  allowedCarIds?: string[] | null;
   selectedClassId: EnduranceClassId | null;
   selectedCarId: string | null;
   maxDriversPerCar: number;
   visibility: EventVisibility;
   status: EventStatus;
-  source: "manual" | "calendar_import" | "copied";
+  source: "manual" | "calendar_import" | "copied" | "iracing_catalog";
   invitedUserIds: string[];
   managerIds: string[];
   createdAt: string;
@@ -192,3 +193,14 @@ export interface EnduranceState {
   notifications: EnduranceNotification[];
   auditLog: AuditRecord[];
 }
+
+/**
+ * De minimale state-slice die de Stint-planner puur-functies (generator,
+ * waarschuwingen, JRES-optimizer) daadwerkelijk consumeren. Beperkt zodat
+ * callers niet met `as never` een half-geconstrueerde EnduranceState hoeven
+ * te casten; een volwaardige EnduranceState ís ook een StintPlanningState.
+ */
+export type StintPlanningState = Pick<
+  EnduranceState,
+  "events" | "availability" | "teamMembers" | "stints" | "paceEntries"
+>;

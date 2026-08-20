@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { MapPin, Clock, CloudSun, Gauge, Users, Trophy, Flag, Zap, LogIn, LogOut, CheckCircle2, Loader2, AlertCircle, KeyRound, Eye, EyeOff } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
+import { TrackMap } from "@/components/track-map/TrackMap";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
@@ -19,6 +20,7 @@ interface Race {
   id: string;
   name: string;
   track: string;
+  iracing_track_id?: number | null;
   race_date: string;
   status: string;
   weather?: string;
@@ -309,16 +311,13 @@ const RaceModal = ({ race, registration }: Props) => {
           className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
           style={{ opacity: 0.45, filter: "saturate(0.6) brightness(0.7)", objectPosition: "center right" }}
         />
-        {trackInfo?.imageUrl && (
-          <img
-            src={trackInfo.imageUrl}
-            alt=""
-            aria-hidden
-            className="absolute right-6 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
-            style={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
-        )}
+        <TrackMap
+          track={race.track}
+          trackId={race.iracing_track_id}
+          className="absolute right-6 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
+          style={{ opacity: 0.9 }}
+          fallbackStyle={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}
+        />
         <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(14,14,22,0.95) 0%, rgba(14,14,22,0.7) 55%, rgba(14,14,22,0.3) 100%)" }} />
         <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(14,14,22,1) 0%, transparent 50%)" }} />
         <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg, #f97316, transparent)" }} />

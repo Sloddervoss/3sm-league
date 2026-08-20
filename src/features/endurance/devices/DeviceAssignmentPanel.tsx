@@ -8,9 +8,9 @@ import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, SectionHeadin
 
 /**
  * DeviceAssignmentPanel — Fase 4 + auto-bind.
- * Super-admin koppelt een (eenmalig aangemaakte) SimHub-installatie aan een
- * endurance event + team. De plugin hoeft niet opnieuw gekoppeld te worden;
- * de routing gebeurt server-side op basis van deze binding.
+ * Endurance-manager/super-admin koppelt een (eenmalig aangemaakte) SimHub-
+ * installatie aan een endurance event + team. De plugin hoeft niet opnieuw
+ * gekoppeld te worden; de routing gebeurt server-side op basis van deze binding.
  *
  * Sinds Fase auto-bind: het device van een rijder wordt automatisch aan het
  * team gekoppeld zodra hij/zij lid wordt van dat team (en ontbonden bij vertrek).
@@ -18,9 +18,9 @@ import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, SectionHeadin
  * toegewezen binding wordt door de automatische koppeling nooit overschreven.
  */
 export const DeviceAssignmentPanel = ({ event }: { event: EnduranceEvent }) => {
-  const { isSuperAdmin } = useAuth();
-  // Alleen super-admin tijdens de canary (zelfde afscherming als Race Control).
-  const staff = Boolean(isSuperAdmin);
+  const { isSuperAdmin, isEnduranceManager } = useAuth();
+  // Super-admin én endurance-managers mogen een device aan event+team koppelen.
+  const staff = Boolean(isSuperAdmin || isEnduranceManager);
   const { data: teamWorkspace } = useEnduranceTeamWorkspace(event.id);
   const teams = teamWorkspace?.teams ?? [];
 
@@ -75,7 +75,7 @@ export const DeviceAssignmentPanel = ({ event }: { event: EnduranceEvent }) => {
     }
   };
 
-  if (!staff) return <Panel><div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.07] p-4 text-sm text-amber-100"><Crown className="h-4 w-4" />Device-koppeling is tijdens de canary uitsluitend beschikbaar voor super-admin.</div></Panel>;
+  if (!staff) return <Panel><div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.07] p-4 text-sm text-amber-100"><Crown className="h-4 w-4" />Device-koppeling is beschikbaar voor endurance-managers en super-admin.</div></Panel>;
 
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id.slice(0, 8);
 

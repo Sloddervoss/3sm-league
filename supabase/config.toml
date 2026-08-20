@@ -10,3 +10,8 @@ verify_jwt = false
 # and performs explicit Supabase user authentication for config/order/capture actions.
 [functions.paypal-checkout]
 verify_jwt = false
+
+# Dedicated host scheduler tokens are not Supabase JWTs. The function validates
+# either this dedicated token or an authenticated super_admin itself.
+[functions.iracing-special-events-sync]
+verify_jwt = false

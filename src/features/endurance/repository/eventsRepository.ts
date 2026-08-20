@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Json } from "@/integrations/supabase/types";
 import type { EnduranceOnlyTableName } from "./dataAccess";
 import { assertEnduranceTable, enduranceClient } from "./dataAccess";
+import { iracingCatalogQueryKey, iracingEventInterestSummaryQueryKey, iracingManagerInterestOverviewQueryKey, iracingSlotInterestSummaryQueryKey } from "./iracingEventsRepository";
 
 /**
  * Endurance events repository — Fase 3.
@@ -25,6 +26,7 @@ export type EnduranceEventRow = {
   registration_deadline: string | null;
   slots: Json;
   class_ids: string[];
+  allowed_car_ids: string[] | null;
   selected_class_id: string | null;
   selected_car_id: string | null;
   max_drivers_per_car: number;
@@ -38,7 +40,7 @@ export type EnduranceEventRow = {
   updated_at: string;
 };
 
-const selectEventColumns = "id,name,circuit,configuration,image_url,start_at,end_at,briefing_start_at,expected_end_at,registration_deadline,slots,class_ids,selected_class_id,selected_car_id,max_drivers_per_car,visibility,status,source,invited_user_ids,manager_ids,race_id,created_at,updated_at";
+const selectEventColumns = "id,name,circuit,configuration,image_url,start_at,end_at,briefing_start_at,expected_end_at,registration_deadline,slots,class_ids,allowed_car_ids,selected_class_id,selected_car_id,max_drivers_per_car,visibility,status,source,invited_user_ids,manager_ids,race_id,created_at,updated_at";
 
 /** Plain: lijst alle endurance events. */
 export async function listEnduranceEvents(): Promise<EnduranceEventRow[]> {
@@ -102,6 +104,7 @@ export type CreateEnduranceEventInput = {
   registration_deadline?: string | null;
   slots?: Json;
   class_ids: string[];
+  allowed_car_ids?: string[] | null;
   selected_class_id?: string | null;
   selected_car_id?: string | null;
   max_drivers_per_car?: number;
@@ -132,6 +135,9 @@ export async function createEnduranceEvent(
       registration_deadline: input.registration_deadline ?? null,
       slots: input.slots ?? [],
       class_ids: input.class_ids,
+      // NULL betekent: handmatig event gebruikt de volledige catalogus.
+      // Alleen iRacing-activatie schrijft een concrete fail-closed whitelist.
+      allowed_car_ids: input.allowed_car_ids ?? null,
       selected_class_id: input.selected_class_id ?? null,
       selected_car_id: input.selected_car_id ?? null,
       max_drivers_per_car: input.max_drivers_per_car ?? 4,
@@ -170,6 +176,7 @@ export async function updateEnduranceEvent(
       registration_deadline: patch.registration_deadline,
       slots: patch.slots,
       class_ids: patch.class_ids,
+      allowed_car_ids: patch.allowed_car_ids,
       selected_class_id: patch.selected_class_id,
       selected_car_id: patch.selected_car_id,
       max_drivers_per_car: patch.max_drivers_per_car,
@@ -231,6 +238,16 @@ export function useDeleteEnduranceEvent() {
     mutationFn: deleteEnduranceEvent,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["endurance", "events"] });
+      // Een geactiveerd iRacing-catalogusevent dat via racebeheer wordt
+      // verwijderd, mag niet gedurende de sessie de gekozen-status in de
+      // catalogus blijven tonen (stale `selectedEventId`) — anders blijft de
+      // kaart "Geselecteerd door 3SM" tonen en verwezen "Open race" naar een
+      // verwijderde race. Invalidatie afdwingen op de catalogus en de
+      // interesse-aggregaten.
+      void queryClient.invalidateQueries({ queryKey: iracingCatalogQueryKey });
+      void queryClient.invalidateQueries({ queryKey: iracingSlotInterestSummaryQueryKey });
+      void queryClient.invalidateQueries({ queryKey: iracingEventInterestSummaryQueryKey });
+      void queryClient.invalidateQueries({ queryKey: iracingManagerInterestOverviewQueryKey });
     },
   });
 }

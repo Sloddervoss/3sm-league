@@ -1,5 +1,5 @@
 import { makeId } from "../core/actions";
-import type { EnduranceEvent, EnduranceState, EnduranceStint } from "../core/types";
+import type { EnduranceEvent, EnduranceStint, StintPlanningState } from "../core/types";
 import { rangesOverlap } from "../core/selectors";
 
 /**
@@ -40,10 +40,12 @@ interface Candidate {
   consecutive: number;
   totalMinutes: number;
   lastEndMs: number;
+  /** Heeft deze coureur al daadwerkelijk een stint gereden? */
+  hasDriven: boolean;
 }
 
 export const generateStints = (
-  state: EnduranceState,
+  state: Pick<StintPlanningState, "teamMembers" | "availability" | "paceEntries">,
   event: EnduranceEvent,
   teamId: string,
   tankMinutes: number,
@@ -65,6 +67,7 @@ export const generateStints = (
       userId,
       consecutive: 0,
       totalMinutes: 0,
+      hasDriven: false,
       // Coureurs met willingToStart mogen de eerste stint rijden.
       lastEndMs: l?.willingToStart ? startMs - 1 : startMs,
     };
@@ -73,16 +76,19 @@ export const generateStints = (
   const result: EnduranceStint[] = [];
   let cursor = startMs;
   let index = 0;
+  let prevDriverId: string | null = null;
 
   // Beschikbaarheid per coureur bepalen (een coureur is "beschikbaar" als er
   // een overlap-blok is, of als er helemaal geen availability-blokken zijn).
-  const hasAvailabilityBlocks = state.availability.some((block) => block.eventId === event.id);
+  // Beschikbaarheid per coureur: een coureur die GEEN availability-blokken heeft
+  // ingesteld is altijd beschikbaar. Heeft hij/zij wél blokken, dan is hij/zij
+  // alleen beschikbaar in 'available'/'preferred'-blokken (en dus niet beschikbaar
+  // buiten die tijden, bv. in 'unavailable'/'avoid'-gaten).
   const isAvailable = (userId: string, fromMs: number, toMs: number): boolean => {
-    if (!hasAvailabilityBlocks) return true;
-    return state.availability.some(
+    const ownBlocks = state.availability.filter((block) => block.eventId === event.id && block.userId === userId);
+    if (!ownBlocks.length) return true;
+    return ownBlocks.some(
       (block) =>
-        block.eventId === event.id &&
-        block.userId === userId &&
         ["available", "preferred"].includes(block.type) &&
         rangesOverlap(block.startAt, block.endAt, new Date(fromMs).toISOString(), new Date(toMs).toISOString())
     );
@@ -101,8 +107,11 @@ export const generateStints = (
       const stintMinutes = (defaultEndMs - cursor) / 60_000;
       // Consecutive-stint limiet (hard) in beide modi.
       if (l?.maxConsecutiveStints && c.consecutive >= l.maxConsecutiveStints) return false;
-      // Min rusttijd (hard) in beide modi.
-      if (l?.minRestMinutes && cursor - c.lastEndMs < l.minRestMinutes * 60_000) return false;
+      // Min rusttijd (hard) in beide modi — maar alleen NADAT deze coureur al
+      // een stint gereden heeft. Een coureur met minRest blijft dus wél
+      // inzetbaar voor zijn EERSTE stint (anders valt hij/zij in korte races
+      // structureel uit ten gunste van dezelfde 1-2 rijders).
+      if (l?.minRestMinutes && c.hasDriven && cursor - c.lastEndMs < l.minRestMinutes * 60_000) return false;
       // Per-coureur stintduur + totale limiet (alleen comfort rekt ze niet; race houdt tankduur).
       if (mode === "comfort" && l?.maxStintMinutes && stintMinutes > l.maxStintMinutes) return false;
       if (mode === "comfort" && l?.maxTotalMinutes && c.totalMinutes + stintMinutes > l.maxTotalMinutes) return false;
@@ -128,12 +137,32 @@ export const generateStints = (
       if (viable.length) pool = viable;
     }
 
-    // Fair-share: kies de coureur met de minste totale rijtijd tot nu toe.
-    let driverId = pool[0];
-    let minTotal = Infinity;
-    for (const userId of pool) {
-      const t = run[userId].totalMinutes;
-      if (t < minTotal) { minTotal = t; driverId = userId; }
+    // Vast-houden: als de coureur die net reed expliciet een maxConsecutiveStints
+    // > 1 heeft ingesteld en nog binnen die grens zit (en beschikbaar blijft),
+    // laat hem de volgende stint rijden i.p.v. altijd naar de minst-belaste door
+    // te roteren. Zo respecteert de planner de wens om 2/3 stints achter elkaar
+    // te rijden, en iedereen zonder die instelling blijft gewoon 1-om-1 wisselen.
+    // Wanneer de coureur op zijn grens zit (of net pas gereden heeft zonder
+    // ingestelde grens, of niet meer beschikbaar) valt hij terug op fair-share.
+    let driverId: string | null = null;
+    if (prevDriverId) {
+      const prev = run[prevDriverId];
+      const prevLimit = limits[prevDriverId];
+      const wantsContinue = prevLimit?.maxConsecutiveStints != null && prevLimit.maxConsecutiveStints > prev.consecutive;
+      const stillAvailable = isAvailable(prevDriverId, cursor, Math.min(endMs, cursor + tankMinutes * 60_000));
+      const restOk = !prevLimit?.minRestMinutes || !prev.hasDriven || cursor - prev.lastEndMs >= prevLimit.minRestMinutes * 60_000;
+      if (wantsContinue && stillAvailable && restOk && pool.includes(prevDriverId)) driverId = prevDriverId;
+    }
+
+    // Fair-share (of vastgehouden coureur): kies de coureur met de minste totale rijtijd.
+    if (!driverId) {
+      let candidate = pool[0];
+      let minTotal = Infinity;
+      for (const userId of pool) {
+        const t = run[userId].totalMinutes;
+        if (t < minTotal) { minTotal = t; candidate = userId; }
+      }
+      driverId = candidate;
     }
 
     // Stint-eindtijd: cappen op per-coureur stintduur/totale rijtijd in comfort-modus.
@@ -170,12 +199,14 @@ export const generateStints = (
     c.consecutive += 1;
     c.totalMinutes += (stintEndMsCapped - cursor) / 60_000;
     c.lastEndMs = stintEndMsCapped;
+    c.hasDriven = true;
     // Andere coureurs tellen hun consecutive-stints niet meer mee (switch).
     for (const userId of members) {
       if (userId !== driverId) run[userId].consecutive = 0;
     }
 
     cursor = stintEndMsCapped;
+    prevDriverId = driverId;
     index += 1;
   }
   return result;

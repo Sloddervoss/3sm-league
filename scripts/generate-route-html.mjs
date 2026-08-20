@@ -346,6 +346,7 @@ const driverName = (result) =>
 
 let resultsHubSummaries = [];
 let calendarHubSummaries = [];
+let newsHubSummaries = [];
 
 const summarizeCalendarRaceForHub = (race) => ({
   id: race.id,
@@ -497,6 +498,54 @@ const buildResultsHubItemListJsonLd = (summaries) => ({
         sport: 'Sim racing',
         url: SITE_URL,
       },
+    },
+  })),
+});
+
+const buildNewsSummarizePost = (post) => ({
+  path: `/news/${categoryToSlug(post.category)}/${post.slug}`,
+  title: cleanText(post.title),
+  category: cleanText(post.category) || null,
+  excerpt: truncate(post.excerpt || post.content_html || '', 220) || null,
+  formattedDate: formatDateNl(post.published_at) || dateOnly(post.published_at),
+  publishedDate: dateOnly(post.published_at),
+  updatedDate: dateOnly(post.updated_at || post.published_at),
+});
+
+const buildNewsHubCrawlerHtml = (summaries) => {
+  if (!summaries.length) return '';
+
+  const archiveItems = summaries.slice(0, 80).map((post) => {
+    const meta = [post.category, post.formattedDate].filter(Boolean).join(' · ');
+    const excerpt = post.excerpt ? ` ${post.excerpt}` : '';
+    return `          <li><a href="${absoluteUrl(post.path)}">${escapeHtml(post.title)}</a>${meta ? ` — ${escapeHtml(meta)}.` : ''}${escapeHtml(excerpt)}</li>`;
+  }).join('\n');
+
+  return `<section aria-label="Crawler-zichtbare nieuws">
+        <h2>Recente 3SM nieuwsartikelen</h2>
+        <ul>
+${archiveItems}
+        </ul>
+      </section>`;
+};
+
+const buildNewsHubItemListJsonLd = (summaries) => ({
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: '3 Stripe Motorsport nieuws',
+  description: 'Overzicht van gepubliceerde 3SM nieuwsartikelen: raceverslagen, updates en verhalen uit de paddock.',
+  url: absoluteUrl('/news'),
+  itemListElement: summaries.slice(0, 80).map((post, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    item: {
+      '@type': 'BlogPosting',
+      headline: post.title,
+      datePublished: post.publishedDate,
+      dateModified: post.updatedDate,
+      description: post.excerpt || undefined,
+      url: absoluteUrl(post.path),
+      mainEntityOfPage: absoluteUrl(post.path),
     },
   })),
 });
@@ -659,6 +708,7 @@ const fetchDynamicRoutes = async () => {
   if (newsError) {
     console.warn(`Kon nieuws-routes niet ophalen voor sitemap: ${newsError.message}`);
   } else {
+    newsHubSummaries = (publishedPosts || []).map(buildNewsSummarizePost);
     for (const post of publishedPosts || []) {
       const categorySlug = categoryToSlug(post.category);
       const isRaceRecap = categorySlug === 'race-recaps';
@@ -1049,6 +1099,16 @@ const newsRoute = routes.find((route) => route.path === '/news');
 if (newsRoute) {
   newsRoute.crawlerLinksLabel = 'Laatste nieuwsartikelen';
   newsRoute.crawlerLinks = toCrawlerLinks(newsDetailRoutes, 80);
+  if (newsHubSummaries.length) {
+    newsRoute.details = [
+      `De nieuwshub bevat ${newsHubSummaries.length} gepubliceerd${newsHubSummaries.length === 1 ? '' : 'e'} nieuwsartikel${newsHubSummaries.length === 1 ? '' : 'en'} met raceverslagen, updates en verhalen uit de paddock van 3 Stripe Motorsport.`,
+      'Vanaf deze nieuwshub kun je doorklikken naar gepubliceerde artikelen en daarna terug naar kalender, uitslagen en standings.',
+    ];
+    newsRoute.crawlerHtml = buildNewsHubCrawlerHtml(newsHubSummaries);
+    newsRoute.extraJsonLd = [
+      { id: 'news-itemlist-jsonld', data: buildNewsHubItemListJsonLd(newsHubSummaries) },
+    ];
+  }
 }
 
 const homeRoute = routes.find((route) => route.path === '/');

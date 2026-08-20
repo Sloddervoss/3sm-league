@@ -1,0 +1,37 @@
+{
+  "seed": {
+    "sourceKey": "iracing:2026:portimao-1000",
+    "year": 2026,
+    "name": "Portimao 1000",
+    "circuit": "Algarve International Circuit",
+    "dateStart": "2026-08-14",
+    "dateEnd": "2026-08-15",
+    "teamEvent": true,
+    "officialUrl": "https://www.iracing.com/special-events/#portimao-1000",
+    "posterUrl": "https://www.iracing.com/wp-content/uploads/2025/12/iRSE-2026-Portimao-1000.png",
+    "classIds": ["HPD", "GT1", "GT2"]
+  },
+  "schedule": {
+    "season_id": 6578,
+    "practice_length": 30,
+    "qualify_length": 8,
+    "warmup_length": 0,
+    "race_lap_limit": 215,
+    "session_minutes": 439,
+    "race_time_descriptors": [{
+      "session_times": [
+        "2026-08-14T22:00:00Z",
+        "2026-08-15T07:00:00Z",
+        "2026-08-15T12:00:00Z",
+        "2026-08-15T16:00:00Z",
+        "2026-08-16T00:00:00Z"
+      ]
+    }]
+  },
+  "provenance": {
+    "sanitized": true,
+    "scheduleSource": "authenticated iRacing Data API season_schedule season_id=6578",
+    "calendarSource": "official iRacing Special Events WordPress page",
+    "capturedAt": "2026-08-13"
+  }
+}

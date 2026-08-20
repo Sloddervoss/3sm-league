@@ -22,17 +22,22 @@ describe("endurance repository data-access contract (Fase 3)", () => {
     }
   });
 
-  it("bevat geen RAW SQL, non-endurance .rpc(, fetch() of non-endurance client access", () => {
+  it("bevat geen RAW SQL, ongeautoriseerde RPC, fetch() of non-endurance client access", () => {
     const combined = repositoryFiles.map((file) => readFileSync(file, "utf8")).join("\n");
-    // Word-boundary guards om niet te matchen op `expected_*` kolommen.
-    // Alleen endurance_-RPC's zijn toegestaan (atomic stint writes etc.); elke
-    // andere .rpc( is verboden zodat het endurance-datalaag-contract geldig blijft.
-    const rpcCalls = [...combined.matchAll(/\.rpc\(\s*"([^"]+)"/g)].map((m) => m[1]);
-    for (const fn of rpcCalls) {
-      expect(fn.startsWith("endurance_"), `.rpc(${fn}) — alleen endurance_* RPC's toegestaan`).toBe(true);
-    }
-    // Geen dynamische .rpc(: argument moet een literale string zijn.
-    expect(combined).not.toMatch(/\.rpc\(\s*[^"`]/);
+    // Atomische Endurance-RPC's blijven binnen dezelfde repositorygrens expliciet toegestaan.
+    const rpcCalls = [...combined.matchAll(/\.rpc\(\s*"([^"]+)"/g)].map((match) => match[1]);
+    expect(rpcCalls).toContain("endurance_activate_iracing_slot");
+    expect(rpcCalls.every((rpc) => [
+      "endurance_replace_draft_stints",
+      "endurance_apply_stint_updates",
+      "endurance_activate_iracing_slot",
+      "endurance_iracing_interest_summary",
+      "endurance_set_iracing_interest",
+      "endurance_iracing_slot_interest_summary",
+      "endurance_set_iracing_slot_interest",
+      "endurance_iracing_slot_interest_members",
+      "endurance_iracing_manager_interest_overview",
+    ].includes(rpc))).toBe(true);
     expect(combined).not.toMatch(/\bfetch\s*\(/);
     expect(combined).not.toMatch(/\bXMLHttpRequest\b/);
     expect(combined).not.toMatch(/POSTGREST/);

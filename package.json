@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke:iracing-catalog": "bash scripts/ensure-playwright-runtime.sh node scripts/iracing-catalog-visual-smoke.mjs",
     "simhub:bridge": "node tools/simhub-bridge/server.mjs",
     "simhub:simulate": "node tools/simhub-bridge/simulate.mjs",
     "simhub:self-test": "node tools/simhub-bridge/self-test.mjs"

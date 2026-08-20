@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { createEnduranceSeed } from "./seed";
-import { enduranceCarsForClass, getEnduranceCar, IRACING_ENDURANCE_CARS, IRACING_ENDURANCE_CLASSES } from "./carCatalog";
+import { allowedEnduranceCarsForClass, enduranceCarsForClass, getEnduranceCar, IRACING_ENDURANCE_CARS, IRACING_ENDURANCE_CLASSES } from "./carCatalog";
 import { getEventVehicleVotes, recommendedVehicle } from "./vehicleVoting";
 import { reduceEnduranceState } from "./actions";
 
 describe("iRacing endurance vehicle voting", () => {
-  it("keeps one central, unique catalog for GTP, LMP2 and GT3", () => {
-    expect(IRACING_ENDURANCE_CLASSES).toEqual(["GTP", "LMP2", "GT3"]);
+  it("keeps one central, unique catalog for modern and mapped legacy endurance classes", () => {
+    expect(IRACING_ENDURANCE_CLASSES).toEqual(["GTP", "LMP2", "LMP3", "GT3", "GT4", "TCR", "PCUP", "M2", "PROD", "HPD", "GT1", "GT2"]);
     expect(new Set(IRACING_ENDURANCE_CARS.map((car) => car.id)).size).toBe(IRACING_ENDURANCE_CARS.length);
     expect(enduranceCarsForClass("GTP")).toHaveLength(5);
     expect(enduranceCarsForClass("LMP2").map((car) => car.name)).toEqual(["Dallara P217"]);
+    expect(enduranceCarsForClass("HPD").map((car) => car.name)).toEqual(["HPD ARX-01c"]);
+    expect(enduranceCarsForClass("GT1")).toHaveLength(2);
+    expect(enduranceCarsForClass("GT2").map((car) => car.name)).toEqual(["Ford GT GT2/GT3"]);
     expect(enduranceCarsForClass("GT3")).toHaveLength(11);
     expect(getEnduranceCar("porsche-911-gt3-r-992")?.name).toBe("Porsche 911 GT3 R (992)");
+    expect(allowedEnduranceCarsForClass("GT3", null)).toHaveLength(11);
+    expect(allowedEnduranceCarsForClass("GT3", [])).toHaveLength(0);
   });
 
   it("uses active registrations as votes and requires a unique winner", () => {
