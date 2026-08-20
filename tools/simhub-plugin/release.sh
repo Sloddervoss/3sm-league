@@ -78,12 +78,11 @@ else
 fi
 
 echo "DLL uploaden naar webroot..."
-scp "$DLL_PATH" "vdevo@192.168.50.119:$WS_WIN/$DLL_FILE" >/dev/null 2>&1 || true
-ssh -o BatchMode=yes 3sm-web "sudo cp /tmp/3sm-downloads/$DLL_FILE /var/www/3sm/downloads/$DLL_FILE 2>/dev/null; mkdir -p /tmp/3sm-downloads; [ -f /tmp/3sm-downloads/$DLL_FILE ] || echo MISSING"
+scp "$DLL_PATH" "3sm-web:/var/www/3sm/downloads/$DLL_FILE" >/dev/null 2>&1 || { echo "FOUT: Upload naar webroot mislukt."; exit 1; }
+echo "  Gekopieerd naar 3sm-web:/var/www/3sm/downloads/$DLL_FILE"
 
 echo "Edge-functie deployen..."
-ssh -o BatchMode=yes 3sm-web \
-  "ssh 3sm-docker 'cat > /opt/supabase/docker/volumes/functions/simhub-version/.env << EOF
+ssh -o BatchMode=yes 3sm-docker "cat > /opt/supabase/docker/volumes/functions/simhub-version/.env << EOF
 SIMHUB_PLUGIN_VERSION=$NEW
 SIMHUB_PLUGIN_DLL_URL=$DLL_URL
 SIMHUB_PLUGIN_SHA256=$SHA256
@@ -91,7 +90,7 @@ SIMHUB_PLUGIN_BYTE_LENGTH=$BYTES
 SIMHUB_PLUGIN_FILE_NAME=$DLL_FILE
 SIMHUB_PLUGIN_SIGNATURE=$SIGNATURE
 EOF
-cp /opt/supabase/docker/volumes/functions/simhub-version/.env /opt/supabase/docker/volumes/functions/simhub-version/index.ts 2>/dev/null; cd /opt/supabase/docker && docker compose up -d --force-recreate functions'"
+cd /opt/supabase/docker && docker compose up -d --force-recreate functions"
 
 echo ""
 echo "=== Release $NEW voltooid ==="
