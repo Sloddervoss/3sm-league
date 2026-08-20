@@ -835,18 +835,21 @@ export type Database = {
           team_id: string
           user_id: string
           role: Database["public"]["Enums"]["endurance_team_role"]
+          event_id: string | null
         }
         Insert: {
           id?: string
           team_id: string
           user_id: string
           role: Database["public"]["Enums"]["endurance_team_role"]
+          event_id?: string | null
         }
         Update: {
           id?: string
           team_id?: string
           user_id?: string
           role?: Database["public"]["Enums"]["endurance_team_role"]
+          event_id?: string | null
         }
         Relationships: []
       }
@@ -2216,6 +2219,16 @@ export type Database = {
           multi_user_realtime_enabled: boolean
           simhub_ingest_enabled: boolean
         }[]
+      }
+      endurance_publish_plan: {
+        Args: {
+          p_event_id: string
+          p_team_id: string
+          p_label: string
+          p_stints: Json
+          p_confirmations: Json
+        }
+        Returns: Database["public"]["Tables"]["endurance_planning_versions"]["Row"]
       }
       endurance_replace_draft_stints: {
         Args: { p_event_id: string; p_team_id: string; p_stints: Json }

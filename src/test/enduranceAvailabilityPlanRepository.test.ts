@@ -14,6 +14,7 @@ import {
 // Hoisted spies — beschikbaar vóór de vi.mock-factory (wordt gehoist).
 const spies = vi.hoisted(() => ({
   fromSpy: vi.fn(),
+  rpcSpy: vi.fn(),
   selectSpy: vi.fn(),
   orderSpy: vi.fn(),
   eqSpy: vi.fn(),
@@ -31,11 +32,12 @@ const spies = vi.hoisted(() => ({
 // die supabase teruggeeft. We mocken de client zodat we tabelselectie kunnen
 // verifiëren zonder een live databank.
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: spies.fromSpy },
+  supabase: { from: spies.fromSpy, rpc: spies.rpcSpy },
 }));
 
 const resetChains = () => {
   spies.fromSpy.mockReset();
+  spies.rpcSpy.mockReset();
   spies.selectSpy.mockReset();
   spies.orderSpy.mockReset();
   spies.eqSpy.mockReset();
@@ -123,13 +125,9 @@ describe("endurance plan repository (Fase 3 data-access routing)", () => {
     expect(spies.fromSpy).toHaveBeenCalledWith("endurance_confirmations");
   });
 
-  it("publish — schrijft versie naar endurance_planning_versions en bevestigingen naar endurance_confirmations", async () => {
-    spies.insertSingleSpy.mockResolvedValue({ data: { id: "ver-9" }, error: null });
-    spies.insertSelectSpy.mockReturnValue({ single: spies.insertSingleSpy });
-    spies.insertSpy.mockReturnValue({ select: spies.insertSelectSpy });
-    spies.fromSpy
-      .mockReturnValueOnce({ insert: spies.insertSpy })
-      .mockReturnValueOnce({ insert: spies.insertSpy });
+  it("publish — roept de atomische endurance_publish_plan RPC aan (enkel RPC, geen twee-staps insert)", async () => {
+    spies.rpcSpy.mockResolvedValue({ data: { id: "ver-9", event_id: "evt-1", team_id: "team-1" }, error: null });
+    spies.fromSpy.mockReturnValue({});
 
     await publishEndurancePlan({
       event_id: "evt-1",
@@ -140,13 +138,17 @@ describe("endurance plan repository (Fase 3 data-access routing)", () => {
       confirmations: [{ user_id: "usr-1", status: "unseen" }],
     });
 
-    expect(spies.fromSpy).toHaveBeenNthCalledWith(1, "endurance_planning_versions");
-    expect(spies.fromSpy).toHaveBeenNthCalledWith(2, "endurance_confirmations");
-    const versionPayload = spies.insertSpy.mock.calls[0][0];
-    expect(versionPayload.published).toBe(true);
-    const confirmPayloads = spies.insertSpy.mock.calls[1][0];
-    expect(confirmPayloads[0].user_id).toBe("usr-1");
-    expect(confirmPayloads[0].version_id).toBe("ver-9");
+    expect(spies.rpcSpy).toHaveBeenCalledTimes(1);
+    expect(spies.rpcSpy.mock.calls[0][0]).toBe("endurance_publish_plan");
+    const payload = spies.rpcSpy.mock.calls[0][1];
+    expect(payload.p_event_id).toBe("evt-1");
+    expect(payload.p_team_id).toBe("team-1");
+    expect(payload.p_label).toBe("Versie 1");
+    expect(Array.isArray(payload.p_confirmations)).toBe(true);
+    expect(payload.p_confirmations[0].user_id).toBe("usr-1");
+    // geen directe uitvoering meer naar de tabellen zelf
+    expect(spies.fromSpy).not.toHaveBeenCalledWith("endurance_planning_versions");
+    expect(spies.fromSpy).not.toHaveBeenCalledWith("endurance_confirmations");
   });
 
   it("update confirmation — werkt endurance_confirmations bij", async () => {
