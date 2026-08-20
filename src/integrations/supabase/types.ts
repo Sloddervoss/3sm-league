@@ -627,6 +627,76 @@ export type Database = {
         Relationships: []
       }
 
+      endurance_race_control_audit: {
+        Row: {
+          id: string
+          event_id: string
+          team_id: string
+          stint_id: string
+          actor_id: string
+          operation: Database["public"]["Enums"]["endurance_race_control_op"]
+          delta_minutes: number | null
+          repair_seconds: number | null
+          replacement_driver_id: string | null
+          effective_at: string | null
+          expected_updated_at: string | null
+          before_actual_start_at: string | null
+          before_actual_end_at: string | null
+          after_actual_start_at: string | null
+          after_actual_end_at: string | null
+          before_status: Database["public"]["Enums"]["endurance_stint_status"]
+          after_status: Database["public"]["Enums"]["endurance_stint_status"]
+          before_driver_id: string | null
+          after_driver_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          team_id: string
+          stint_id: string
+          actor_id: string
+          operation: Database["public"]["Enums"]["endurance_race_control_op"]
+          delta_minutes?: number | null
+          repair_seconds?: number | null
+          replacement_driver_id?: string | null
+          effective_at?: string | null
+          expected_updated_at?: string | null
+          before_actual_start_at?: string | null
+          before_actual_end_at?: string | null
+          after_actual_start_at?: string | null
+          after_actual_end_at?: string | null
+          before_status: Database["public"]["Enums"]["endurance_stint_status"]
+          after_status: Database["public"]["Enums"]["endurance_stint_status"]
+          before_driver_id?: string | null
+          after_driver_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          team_id?: string
+          stint_id?: string
+          actor_id?: string
+          operation?: Database["public"]["Enums"]["endurance_race_control_op"]
+          delta_minutes?: number | null
+          repair_seconds?: number | null
+          replacement_driver_id?: string | null
+          effective_at?: string | null
+          expected_updated_at?: string | null
+          before_actual_start_at?: string | null
+          before_actual_end_at?: string | null
+          after_actual_start_at?: string | null
+          after_actual_end_at?: string | null
+          before_status?: Database["public"]["Enums"]["endurance_stint_status"]
+          after_status?: Database["public"]["Enums"]["endurance_stint_status"]
+          before_driver_id?: string | null
+          after_driver_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+
       endurance_registrations: {
         Row: {
           id: string
@@ -2234,6 +2304,24 @@ export type Database = {
         Args: { p_event_id: string; p_team_id: string; p_stints: Json }
         Returns: Database["public"]["Tables"]["endurance_stints"]["Row"][]
       }
+      endurance_race_control_apply: {
+        Args: {
+          p_event_id: string
+          p_team_id: string
+          p_stint_id: string
+          p_operation: Database["public"]["Enums"]["endurance_race_control_op"]
+          p_delta_minutes: number | null
+          p_repair_seconds: number | null
+          p_replacement_driver_id: string | null
+          p_effective_at: string | null
+          p_expected_updated_at: string | null
+        }
+        Returns: Database["public"]["Tables"]["endurance_stints"]["Row"]
+      }
+      endurance_list_race_control_audit: {
+        Args: { p_event_id: string }
+        Returns: Database["public"]["Tables"]["endurance_race_control_audit"]["Row"][]
+      }
       endurance_apply_stint_updates: {
         Args: { p_event_id: string; p_team_id: string; p_stints: Json }
         Returns: Database["public"]["Tables"]["endurance_stints"]["Row"][]
@@ -2392,6 +2480,7 @@ export type Database = {
       endurance_event_status: "draft" | "registration_open" | "registration_closed" | "planning" | "live" | "completed"
       endurance_event_visibility: "open" | "invite_only" | "hidden"
       endurance_notification_type: "invitation" | "deadline" | "availability_missing" | "team_assigned" | "plan_published" | "plan_changed" | "confirmation_needed" | "stint_soon"
+      endurance_race_control_op: "delay" | "repair" | "complete" | "replace_driver"
       endurance_registration_status: "interest" | "provisional" | "confirmed" | "reserve" | "rejected" | "withdrawn"
       endurance_stint_status: "draft" | "confirmed" | "ready" | "in_car" | "completed" | "expired" | "replaced"
       endurance_team_role: "manager" | "driver" | "reserve"

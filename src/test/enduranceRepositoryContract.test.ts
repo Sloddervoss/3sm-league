@@ -30,6 +30,8 @@ describe("endurance repository data-access contract (Fase 3)", () => {
     expect(rpcCalls.every((rpc) => [
       "endurance_replace_draft_stints",
       "endurance_apply_stint_updates",
+      "endurance_race_control_apply",
+      "endurance_list_race_control_audit",
       "endurance_activate_iracing_slot",
       "endurance_iracing_interest_summary",
       "endurance_set_iracing_interest",
