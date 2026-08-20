@@ -236,7 +236,10 @@ namespace ThreeSM.EnduranceConnector
                 SetUpdateStatus("Updater gestart · SimHub wordt afgesloten en opnieuw gestart.");
                 if (PluginManager == null)
                     throw new InvalidOperationException("SimHub PluginManager is niet beschikbaar voor gecontroleerd afsluiten.");
-                PluginManager.RequestApplicationExit(false);
+                var application = Application.Current;
+                if (application == null || application.Dispatcher == null)
+                    throw new InvalidOperationException("SimHub UI-thread is niet beschikbaar voor gecontroleerd afsluiten.");
+                _ = application.Dispatcher.BeginInvoke(new Action(() => PluginManager.RequestApplicationExit(false)));
             }
             catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
             {
