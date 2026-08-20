@@ -26,7 +26,7 @@ namespace ThreeSM.EnduranceConnector
     {
         private const string ProductionRelayBaseUrl = "https://api.3stripemotorsport.cc/functions/v1";
         private const long MaxUpdateBytes = 5 * 1024 * 1024;
-        private const string ReleasePublicKeyXml = "<RSAKeyValue><Modulus>623ziGDiaH7x+n1WwVv4lp+CswGiM4b/+h410wt1IBXZc+xeIoJbS2GnSU+wCgsUD1Ek4Eup0XKumuyuEvkZYUJ7zzLuIV5qBj9jk1lSnZmp4ibMyanmhJOIxsuSzylpNV9ru2QAuJQLpK9Jahk8vbOjSaNaaO1ZxKP0U0Xxy79N/9vutjdO6dW9r2MzQUP5KNGCTBlgHwm5Kn3KujtyV3EB5jeFbwl0L1G5R2taan6wzrcSLtNKrJACbm/bLvOijAvUAjpVH7+ThUPY/w9womXuxtWCPFT0cp7wq9rBieOEFjWxFLSkr9uZ/Z+gWyuBINrGJ7gLGuONvNq3TbqkwRmnPu91hstTQR5EfLDduohdfsRW6g+BHUNgZFo9cheM/NpJx6vpZ61Rzjw46Bu8QVCInRW7W43u4e/Xb9CjlPEf6ou8jnEeUY9ZgDOKhs7oHbDg3072GIPTc/8HJjATN6YlnTU0tqB43zElN2BrWc/aFqqTdrXce9vEEqPclWVT</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
+        private const string ReleasePublicKeyXml = "<RSAKeyValue><Modulus>3UZ5n5YfSLd9TVF6tXEMW6NLIq1t9wq3xtx3SZ7peA3ZSf0YRMrauKYau4qJ3zjEooP4Jd390B+7zXiRLMOvXcuZ9RphurFqr4K/8pQPjNfCX+UHG7n1ljw5HBNU6vAjXegALRkMrRqeIlVsM7nFyxEmMhkC6oKfDNfjmk6QLwhvkSdXdjnEF5TW4/dREoNB4zOg8RxrZNEoabait5ddNdqLbHrCIfovoCxpei1AcDgOIcLPAaDvgTixMQgPbb98e8cnINSChj9t8+yWtbW3BM38bHYS5Us4+03JSyVNawjd+8xaOb8Os42tyg9vlLfiTlhYNMpmIMuvqu41/LZd3w==</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         private readonly HttpClient _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(4) };
         private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
         private readonly object _sendGate = new object();
