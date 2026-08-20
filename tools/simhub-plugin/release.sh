@@ -5,7 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ASSEMBLY="$SCRIPT_DIR/3SM.EnduranceConnector/AssemblyInfo.cs"
-PRIVATE_KEY="$SCRIPT_DIR/release-signing-private.pem"
+PRIVATE_KEY="${HOME}/.hermes/keys/release-signing-private.pem"
+[ -f "$PRIVATE_KEY" ] || PRIVATE_KEY="$SCRIPT_DIR/release-signing-private.pem"
 SSH_WIN="ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no vdevo@192.168.50.119"
 WS_WIN="C:/Users/vdevo/3sm/simhub-plugin"
 BUILD_SCRIPT_WIN="C:/Users/vdevo/3sm/build-plugin.ps1"
@@ -60,12 +61,16 @@ DLL_FILE="3SM.EnduranceConnector-$NEW.dll"
 DLL_URL="https://3stripemotorsport.cc/downloads/$DLL_FILE"
 SHA256=$(sha256sum "$DLL_PATH" | awk '{print $1}')
 BYTES=$(stat -c%s "$DLL_PATH")
-PAYLOAD="${NEW}\n${DLL_URL}\n${SHA256}\n${BYTES}\n${DLL_FILE}"
 
 if [ -f "$PRIVATE_KEY" ]; then
-  SIGNATURE=$(printf "$PAYLOAD" | openssl dgst -sha256 -sign "$PRIVATE_KEY" | base64 -w0)
-  printf "$PAYLOAD" | openssl dgst -sha256 -verify "$SCRIPT_DIR/release-signing-public.pem" \
-    -signature <(printf "$SIGNATURE" | base64 -d) >/dev/null 2>&1 || { echo "FOUT: Handtekeningverificatie"; exit 1; }
+  # Signeer het manifest: gebruik tijdelijk bestand voor robuuste openssl-verificatie
+  MANIFEST_TMP="$(mktemp /tmp/3sm-manifest-XXXX)"
+  cleanup_manifest() { rm -f "$MANIFEST_TMP" "${MANIFEST_TMP}.sig"; }
+  trap cleanup_manifest EXIT
+  printf '%s\n' "$NEW" "$DLL_URL" "$SHA256" "$BYTES" "$DLL_FILE" > "$MANIFEST_TMP"
+  SIGNATURE=$(printf '%s\n' "$NEW" "$DLL_URL" "$SHA256" "$BYTES" "$DLL_FILE" | openssl dgst -sha256 -sign "$PRIVATE_KEY" | base64 -w0)
+  printf '%s\n' "$NEW" "$DLL_URL" "$SHA256" "$BYTES" "$DLL_FILE" | openssl dgst -sha256 -verify "$SCRIPT_DIR/release-signing-public.pem" \
+    -signature <(printf '%s' "$SIGNATURE" | base64 -d) >/dev/null 2>&1 || { echo "FOUT: Handtekeningverificatie"; exit 1; }
   echo "Manifest ondertekend en geverifieerd."
 else
   SIGNATURE=""
