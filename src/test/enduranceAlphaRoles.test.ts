@@ -49,7 +49,7 @@ describe("endurance alpha-rollen (tester + endurance_manager)", () => {
     expect(auth).toContain('roles.has("tester")');
     expect(auth).toContain('roles.has("endurance_manager")');
     expect(page).toContain('const { loading, rolesLoading, user } = useAuth()');
-    expect(navbar).toContain("const canUseEndurance = Boolean(user)");
+    expect(navbar).toContain("enduranceCapabilities.can_access");
   });
 
   it("staat endurance-managers toe de definitieve auto te bevestigen (niet alleen super-admin)", () => {

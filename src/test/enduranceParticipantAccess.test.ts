@@ -25,10 +25,11 @@ describe("Endurance participant access hardening", () => {
     expect(migration.match(/SET search_path = pg_catalog, public, auth, pg_temp/g)?.length).toBeGreaterThanOrEqual(4);
   });
 
-  it("allows authenticated invitees into the route without exposing management", () => {
+  it("allows capability-approved invitees into the route without exposing management", () => {
     expect(page).toContain('if (!user) return <Navigate to="/auth?redirect=/endurance" replace />');
-    expect(page).toContain("isSuperAdmin || isEnduranceManager");
-    expect(navbar).toContain("const canUseEndurance = Boolean(user)");
+    expect(page).toContain("capabilities.can_manage_events");
+    expect(page).toContain("capabilities.can_access");
+    expect(navbar).toContain("enduranceCapabilities.can_access");
     expect(workspace).toContain("await accept.mutateAsync");
     expect(workspace).toContain('role="alert"');
   });

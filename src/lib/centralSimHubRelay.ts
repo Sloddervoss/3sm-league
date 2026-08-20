@@ -5,6 +5,7 @@ import { parseSimHubBridgeResponse, type SimHubBridgeResponse } from "./localSim
 export type CentralSimHubLatestRow = Database["public"]["Tables"]["simhub_telemetry_latest"]["Row"];
 export interface CentralSimHubDevice {
   id: string;
+  owner_user_id?: string;
   device_name: string;
   connector_id: string;
   paired_at: string;
@@ -44,6 +45,15 @@ export const listCentralSimHubDevices = async (): Promise<CentralSimHubDevice[]>
     body: { action: "list" },
   });
   if (error) throw new Error(await functionError(error, "Gekoppelde SimHub-apparaten konden niet worden geladen."));
+  if (data?.error) throw new Error(data.error);
+  return data?.devices ?? [];
+};
+
+export const listOwnCentralSimHubDevices = async (): Promise<CentralSimHubDevice[]> => {
+  const { data, error } = await supabase.functions.invoke<{ devices?: CentralSimHubDevice[]; error?: string }>("simhub-pair", {
+    body: { action: "list-own" },
+  });
+  if (error) throw new Error(await functionError(error, "Je SimHub-apparaten konden niet worden geladen."));
   if (data?.error) throw new Error(data.error);
   return data?.devices ?? [];
 };

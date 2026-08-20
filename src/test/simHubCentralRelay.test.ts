@@ -168,17 +168,16 @@ describe("central SimHub relay", () => {
     expect(migration.match(/role_record\.role = 'super_admin'::public\.app_role/g)).toHaveLength(5);
   });
 
-  it("laat endurance-ster (tester/manager) hun EIGEN device opvragen en intrekken, en houdt beheeracties super_admin-only", () => {
-    // list/revoke staan open voor endurance-ster maar filteren op hun eigen device.
-    const listGate = pairing.indexOf('action === "list"');
+  it("scheidt owner-only devicebeheer van manager assignmentbeheer", () => {
+    const listGate = pairing.indexOf('action === "list" || action === "list-own"');
     expect(listGate).toBeGreaterThan(-1);
-    expect(pairing.slice(listGate)).toContain('if (!superAdmin) query = query.eq("owner_user_id", user.id)');
+    expect(pairing.slice(listGate)).toContain('if (action === "list-own") query = query.eq("owner_user_id", user.id)');
     const revokeGate = pairing.indexOf('action === "revoke"');
     expect(pairing.slice(revokeGate)).toContain('.eq("owner_user_id", user.id)');
     // De toplevel-gate laat list/revoke/create door voor endurance-ster; assign/clear
     // staan open voor endurance-manager (+super_admin); legacy-binding blijft super_admin-only.
-    expect(pairing).toContain('const adminSuperOnly = !["list", "revoke", "create", "assign", "clear"].includes(action)');
-    expect(pairing).toContain('if (["assign", "clear"].includes(action) && !manager) {');
+    expect(pairing).toContain('const adminSuperOnly = !["list", "list-own", "revoke", "create", "assign", "clear"].includes(action)');
+    expect(pairing).toContain('if (["list", "assign", "clear"].includes(action) && !capabilities.can_manage_devices) {');
     expect(pairing).toContain('if (legacyBoundPairing && !superAdmin) {');
   });
 
@@ -240,8 +239,8 @@ describe("central SimHub relay", () => {
     expect(pairingPage).toContain('status === "SUBSCRIBED"');
     expect(pairingPage).toContain("if (!active) return");
     expect(centralRelay).toContain("error.context.clone().json()");
-    expect(pairingPage).toContain("const staff = Boolean(isSuperAdmin || isEnduranceManager || isTester)");
-    expect(navbar).toContain("const canUseEndurance = Boolean(user);");
+    expect(pairingPage).toContain("capabilities.can_pair_own_device");
+    expect(navbar).toContain("enduranceCapabilities.can_access");
     // SimHub-pairing is via Profiel bereikbaar; geen redundante top-level tab meer in de navbar.
     expect(navbar).not.toContain('to="/simhub-koppelen"');
   });

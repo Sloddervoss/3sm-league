@@ -2205,6 +2205,18 @@ export type Database = {
           fee_total_eur: number
         }[]
       }
+      endurance_current_capabilities: {
+        Args: never
+        Returns: {
+          can_access: boolean
+          can_pair_own_device: boolean
+          can_ingest_own_device: boolean
+          can_manage_events: boolean
+          can_manage_devices: boolean
+          multi_user_realtime_enabled: boolean
+          simhub_ingest_enabled: boolean
+        }[]
+      }
       endurance_replace_draft_stints: {
         Args: { p_event_id: string; p_team_id: string; p_stints: Json }
         Returns: Database["public"]["Tables"]["endurance_stints"]["Row"][]

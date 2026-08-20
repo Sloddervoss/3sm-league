@@ -31,7 +31,24 @@ const authenticatedUser = async (request: Request) => {
   });
   const { data, error } = await authClient.auth.getUser(token);
   if (error || !data.user) throw new Error("not_authenticated");
-  return data.user;
+  return { user: data.user, authClient };
+};
+
+type EnduranceCapabilities = {
+  can_access: boolean;
+  can_pair_own_device: boolean;
+  can_ingest_own_device: boolean;
+  can_manage_events: boolean;
+  can_manage_devices: boolean;
+  multi_user_realtime_enabled: boolean;
+  simhub_ingest_enabled: boolean;
+};
+
+const capabilityRpcUnavailable = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error && typeof error.code === "string" ? error.code : "";
+  const message = "message" in error && typeof error.message === "string" ? error.message.toLowerCase() : "";
+  return code === "PGRST202" || (message.includes("schema cache") && message.includes("endurance_"));
 };
 
 const isSuperAdmin = async (userId: string): Promise<boolean> => {
@@ -57,6 +74,32 @@ const isEnduranceManager = async (userId: string): Promise<boolean> => {
   return (data || []).some((row: { role: string }) => ["super_admin", "endurance_manager"].includes(row.role));
 };
 
+const enduranceCapabilities = async (
+  authClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<EnduranceCapabilities> => {
+  const { data, error } = await authClient.rpc("endurance_current_capabilities");
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!error && row) return row as EnduranceCapabilities;
+  if (error && !capabilityRpcUnavailable(error)) throw error;
+
+  // Zero-downtime fallback while the additive migration is not available yet:
+  // preserve alpha staff access and never grant an ordinary user new access.
+  const [staff, manager] = await Promise.all([
+    isEnduranceStaff(userId),
+    isEnduranceManager(userId),
+  ]);
+  return {
+    can_access: staff,
+    can_pair_own_device: staff,
+    can_ingest_own_device: staff,
+    can_manage_events: manager,
+    can_manage_devices: manager,
+    multi_user_realtime_enabled: false,
+    simhub_ingest_enabled: true,
+  };
+};
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return jsonResponse(request, { ok: true });
   if (request.method !== "POST") return jsonResponse(request, { error: "method_not_allowed" }, 405);
@@ -78,9 +121,28 @@ Deno.serve(async (request) => {
       const allowed = await consumeEdgeRateLimit(`pair:${clientAddress(request)}`, 30, 10 * 60 * 1000);
       if (!allowed) return jsonResponse(request, { error: "rate_limited" }, 429);
 
+      const codeHash = await sha256Hex(code);
+      const { data: pendingCode, error: pendingError } = await service
+        .from("simhub_pairing_codes")
+        .select("owner_user_id")
+        .eq("code_hash", codeHash)
+        .is("consumed_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+      if (pendingError) throw pendingError;
+      if (pendingCode?.owner_user_id) {
+        const { data: capabilityRows, error: capabilityError } = await service.rpc("endurance_capabilities_for_user", {
+          _user_id: pendingCode.owner_user_id,
+        });
+        let canPair = !capabilityError && Boolean(capabilityRows?.[0]?.can_pair_own_device);
+        if (capabilityError && capabilityRpcUnavailable(capabilityError)) canPair = await isEnduranceStaff(pendingCode.owner_user_id);
+        else if (capabilityError) throw capabilityError;
+        if (!canPair) return jsonResponse(request, { error: "pairing_not_allowed" }, 403);
+      }
+
       const deviceToken = randomDeviceToken();
       const { data, error } = await service.rpc("simhub_exchange_pairing_code", {
-        p_code_hash: await sha256Hex(code),
+        p_code_hash: codeHash,
         p_token_hash: await sha256Hex(deviceToken),
         p_connector_id: connectorId,
         p_device_name: deviceName,
@@ -97,28 +159,27 @@ Deno.serve(async (request) => {
       });
     }
 
-    const user = await authenticatedUser(request);
-    const superAdmin = await isSuperAdmin(user.id);
-    const staff = await isEnduranceStaff(user.id);
-    const manager = await isEnduranceManager(user.id);
+    const { user, authClient } = await authenticatedUser(request);
+    const [superAdmin, capabilities] = await Promise.all([
+      isSuperAdmin(user.id),
+      enduranceCapabilities(authClient, user.id),
+    ]);
 
-    // Algemeen auteursregime:
-    //  - create: endurance-ster (super_admin, endurance_manager, tester) koppelt
-    //    hun EIGEN device only.
-    //  - list/revoke: super_admin ziet/beheert alle devices; endurance-ster
-    //    (testers/managers) alleen hun eigen device.
-    //  - assign/clear (device->race/-team): endurance_manager of super_admin.
-    //  - legacy race/team-binding: super_admin only.
-    const adminSuperOnly = !["list", "revoke", "create", "assign", "clear"].includes(action);
+    // Capability regime:
+    //  - create: current user may pair their own device when capability allows;
+    //  - list-own/revoke: any authenticated owner can see/revoke only own rows;
+    //  - list/assign/clear: endurance manager or super-admin;
+    //  - legacy race/team-bound pairing: super-admin only.
+    const adminSuperOnly = !["list", "list-own", "revoke", "create", "assign", "clear"].includes(action);
     if (adminSuperOnly && !superAdmin) {
       return jsonResponse(request, { error: "super_admin_required" }, 403);
     }
-    if (["assign", "clear"].includes(action) && !manager) {
+    if (["list", "assign", "clear"].includes(action) && !capabilities.can_manage_devices) {
       return jsonResponse(request, { error: "super_admin_required" }, 403);
     }
 
     if (action === "create") {
-      if (!staff) return jsonResponse(request, { error: "super_admin_required" }, 403);
+      if (!capabilities.can_pair_own_device) return jsonResponse(request, { error: "pairing_not_allowed" }, 403);
 
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       const raceId = typeof body.raceId === "string" ? body.raceId.trim() : "";
@@ -160,11 +221,10 @@ Deno.serve(async (request) => {
       return jsonResponse(request, { code, expiresAt });
     }
 
-    if (action === "list") {
+    if (action === "list" || action === "list-own") {
       let query = service.from("simhub_devices")
-        .select("id,device_name,connector_id,race_id,team_id,endurance_event_id,endurance_team_id,paired_at,expires_at,last_seen_at,revoked_at,race:races(name),team:teams(name)");
-      // Endurance-ster ziet alleen hun eigen devices; super_admin ziet alles.
-      if (!superAdmin) query = query.eq("owner_user_id", user.id);
+        .select("id,owner_user_id,device_name,connector_id,race_id,team_id,endurance_event_id,endurance_team_id,paired_at,expires_at,last_seen_at,revoked_at,race:races(name),team:teams(name)");
+      if (action === "list-own") query = query.eq("owner_user_id", user.id);
       const { data, error } = await query.order("paired_at", { ascending: false });
       if (error) throw error;
       return jsonResponse(request, { devices: data || [] });
