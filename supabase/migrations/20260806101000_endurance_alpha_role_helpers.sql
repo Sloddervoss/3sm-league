@@ -1,18 +1,6 @@
--- Endurance alpha-rollen: tester + endurance_manager.
--- Additief: voegt nieuwe app_role-waarden en helper-functies toe. Verandert geen
--- bestaand gedrag voor de huidige rollen (super_admin blijft alles mogen).
+-- Endurance alpha-role helpers. De enumwaarden zijn in de voorgaande migratie
+-- toegevoegd en gecommit voordat ze hier worden gebruikt.
 BEGIN;
-
--- Voeg rollen toe (idempotent per waarde).
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'tester' AND enumtypid = 'public.app_role'::regtype) THEN
-    ALTER TYPE public.app_role ADD VALUE 'tester';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'endurance_manager' AND enumtypid = 'public.app_role'::regtype) THEN
-    ALTER TYPE public.app_role ADD VALUE 'endurance_manager';
-  END IF;
-END $$;
 
 -- helper: endurance-beheer (super_admin of endurance_manager) — kan endurance-data
 -- beheren + devices aan teams koppelen.

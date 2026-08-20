@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="48" fill="#0F1117"/>
+  <!-- 3 diagonale oranje stripes (nagemaakt van de mock-topbar) -->
+  <g transform="rotate(-45 128 128)">
+    <rect x="86" y="96" width="84" height="22" rx="11" fill="#FF6B1A"/>
+    <rect x="86" y="122" width="84" height="22" rx="11" fill="#FF6B1A" opacity="0.65"/>
+    <rect x="86" y="148" width="84" height="22" rx="11" fill="#FF6B1A" opacity="0.35"/>
+  </g>
+</svg>

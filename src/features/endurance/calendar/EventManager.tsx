@@ -6,6 +6,7 @@ import {
   useDeleteEnduranceEvent,
 } from "../repository/eventsRepository";
 import { useCreateEnduranceNotifications } from "../repository/notificationsRepository";
+import { useEnduranceRealtime } from "../repository/useEnduranceRealtime";
 import { InviteePicker } from "./InviteePicker";
 import { makeId } from "../core/actions";
 import { IRACING_ENDURANCE_CLASSES, getEnduranceCar, type EnduranceClassId } from "../core/carCatalog";
@@ -13,6 +14,7 @@ import { ENDURANCE_CIRCUIT_OPTIONS, ENDURANCE_CONFIGURATION_OPTIONS, ENDURANCE_C
 import { formatAmsterdam } from "../core/selectors";
 import { Field, inputClass, Panel, PrimaryButton, SecondaryButton, SectionHeading, StatusPill } from "../shared/ui";
 import type { EnduranceEventRow } from "../repository/eventsRepository";
+import { eventManagedFields } from "./eventFormPayload";
 
 const toIso = (value: string) => new Date(value).toISOString();
 const toLocalInput = (iso?: string | null) => {
@@ -32,6 +34,17 @@ const toLocalInput = (iso?: string | null) => {
  */
 export const EventManager = () => {
   const { data: dbEvents = [], isLoading, isError, error } = useEnduranceEvents();
+  // Realtime: events die een andere admin aanmaakt/bewerkt verschijnen live
+  // in de kalender zonder te verversen.
+  useEnduranceRealtime(
+    [
+      {
+        table: "endurance_events",
+        queryKeys: [["endurance", "events"]],
+      },
+    ],
+    []
+  );
   const upsert = useUpsertEnduranceEvent();
   const remove = useDeleteEnduranceEvent();
   const sendInvites = useCreateEnduranceNotifications();
@@ -82,6 +95,12 @@ export const EventManager = () => {
     if (!classIds.length || upsert.isPending) return;
     const start = toIso(startAt);
     const end = new Date(new Date(start).getTime() + duration * 3_600_000).toISOString();
+    const existing = editingId ? dbEvents.find((event) => event.id === editingId) : undefined;
+    const defaultSlot = {
+      id: makeId("slot"),
+      startAt: start,
+      label: new Intl.DateTimeFormat("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" }).format(new Date(start)),
+    };
     const saved = await upsert.mutateAsync({
       ...(editingId ? { id: editingId } : {}),
       name,
@@ -92,16 +111,11 @@ export const EventManager = () => {
       briefing_start_at: new Date(new Date(start).getTime() - 3_600_000).toISOString(),
       expected_end_at: new Date(new Date(end).getTime() + 30 * 60_000).toISOString(),
       registration_deadline: toIso(deadline),
-      slots: [{ id: makeId("slot"), startAt: start, label: new Intl.DateTimeFormat("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" }).format(new Date(start)) }],
       class_ids: classIds,
-      selected_class_id: null,
-      selected_car_id: null,
       max_drivers_per_car: maxDrivers,
       visibility,
-      status: "registration_open",
-      source: "manual",
       invited_user_ids: invitedUserIds,
-      manager_ids: [],
+      ...eventManagedFields(existing, defaultSlot),
     });
     // Stuur alleen een uitnodigings-melding naar NIET eerder genodigde rijders.
     const newly = invitedUserIds.filter((id) => !prevInvited.includes(id));

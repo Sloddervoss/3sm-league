@@ -6,7 +6,7 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { centralRowToBridgeResponse, createCentralSimHubPairingCode, listCentralSimHubDevices, readCentralSimHubTelemetry, revokeCentralSimHubDevice, type CentralSimHubLatestRow, type SimHubPairingCode } from "@/lib/centralSimHubRelay";
+import { centralRowToBridgeResponse, createCentralSimHubPairingCode, listCentralSimHubDevices, revokeCentralSimHubDevice, type CentralSimHubLatestRow, type SimHubPairingCode } from "@/lib/centralSimHubRelay";
 import { getSimHubTelemetryState, type SimHubBridgeResponse } from "@/lib/localSimHubBridge";
 
 const SimHubPairingPage = () => {
@@ -41,13 +41,26 @@ const SimHubPairingPage = () => {
     setRelayError("");
     if (!user || !staff || !selectedDeviceId) return;
     let active = true;
-    const refreshSnapshot = () => readCentralSimHubTelemetry(selectedDeviceId).then((snapshot) => {
-      if (!active) return;
-      setLatest((current) => !current || (snapshot && Date.parse(snapshot.receivedAt) >= Date.parse(current.receivedAt)) ? snapshot : current);
-      setCheckedAt(Date.now());
-    }).catch((error) => {
-      if (active) setRelayError(error instanceof Error ? error.message : "Connection-test kon niet worden geladen.");
-    });
+    // Device-only connection-test: lees de laatste snapshot van dit device
+    // rechtstreeks (device-scoped, RLS-gated). De gecentraliseerde relay leest
+    // uitsluitend via de effectieve event/team-RPC voor Race Control.
+    const refreshSnapshot = async () => {
+      try {
+        const { data } = await supabase
+          .from("simhub_telemetry_latest")
+          .select("*")
+          .eq("device_id", selectedDeviceId)
+          .order("received_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!active) return;
+        const snapshot: SimHubBridgeResponse | null = data ? centralRowToBridgeResponse(data) : null;
+        setLatest((current) => !current || (snapshot && Date.parse(snapshot.receivedAt) >= Date.parse(current.receivedAt)) ? snapshot : current);
+        setCheckedAt(Date.now());
+      } catch (error) {
+        if (active) setRelayError(error instanceof Error ? error.message : "Connection-test kon niet worden geladen.");
+      }
+    };
     const channel = supabase.channel(`simhub-pairing-page-${selectedDeviceId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "simhub_telemetry_latest", filter: `device_id=eq.${selectedDeviceId}` }, (change) => {
         if (!active) return;

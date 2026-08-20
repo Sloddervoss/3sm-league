@@ -101,20 +101,23 @@ export const centralRowToBridgeResponse = (row: CentralSimHubLatestRow): SimHubB
   });
 };
 
-/** Alle niet-ingetrokken devices die aan een bepaald endurance team zijn gekoppeld. */
+/** Alleen devices waarvan de actuele server-side binding exact bij event + team hoort. */
 export const listCentralSimHubDevicesForTeam = async (eventId: string, teamId: string): Promise<CentralSimHubDevice[]> => {
-  const devices = await listCentralSimHubDevices();
-  return devices.filter((device) => !device.revoked_at && device.endurance_event_id === eventId && device.endurance_team_id === teamId);
+  const { data, error } = await supabase.rpc("simhub_list_effective_endurance_devices", {
+    p_event_id: eventId,
+    p_team_id: teamId,
+  });
+  if (error) throw error;
+  return data ?? [];
 };
 
-export const readCentralSimHubTelemetry = async (deviceId: string): Promise<SimHubBridgeResponse | null> => {
-  const { data, error } = await supabase
-    .from("simhub_telemetry_latest")
-    .select("*")
-    .eq("device_id", deviceId)
-    .order("received_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+export const readCentralSimHubTelemetry = async (deviceId: string, eventId: string, teamId: string): Promise<SimHubBridgeResponse | null> => {
+  const { data, error } = await supabase.rpc("simhub_read_effective_endurance_latest", {
+    p_device_id: deviceId,
+    p_event_id: eventId,
+    p_team_id: teamId,
+  });
   if (error) throw error;
-  return data ? centralRowToBridgeResponse(data) : null;
+  const row = data?.[0];
+  return row ? centralRowToBridgeResponse(row) : null;
 };

@@ -19,13 +19,13 @@ const navItems = [
 const Navbar = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, isEnduranceManager, isTester, signOut } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, signOut } = useAuth();
   const { language, setLanguage } = useLanguage();
 
   const canEditNews = isAdmin || isSuperAdmin || isEditor;
   const canUseStewards = isAdmin || isSuperAdmin || isSteward;
   const showAdmin = isAdmin || isSuperAdmin;
-  const canUseEndurance = Boolean(isSuperAdmin || isEnduranceManager || isTester);
+  const canUseEndurance = Boolean(user);
   const visibleNavItems = canUseEndurance
     ? [...navItems, { label: "Endurance", path: "/endurance/", icon: TimerReset }]
     : navItems;

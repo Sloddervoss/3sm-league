@@ -15,6 +15,7 @@ import { PracticeSessionPanel } from "../practice/PracticeSessionPanel";
 import { DeviceAssignmentPanel } from "../devices/DeviceAssignmentPanel";
 import { PrimaryButton, SecondaryButton, StatusPill, Panel } from "../shared/ui";
 import { OverviewPanel } from "./OverviewPanel";
+import { useEnduranceEventRealtime } from "../repository/useEnduranceRealtime";
 
 const tabs = [
   { id: "overview", label: "Overzicht", icon: LayoutDashboard },
@@ -32,14 +33,15 @@ type TabId = typeof tabs[number]["id"];
 const ACTIVE = ["interest", "provisional", "confirmed", "reserve"];
 
 /** Banner die een openstaande uitnodiging toont vóór het inschrijvingsformulier. */
-const InvitationBanner = ({ event, pending, onAccept }: { event: EnduranceEvent; pending: boolean; onAccept: () => void }) => (
+const InvitationBanner = ({ event, pending, error, onAccept }: { event: EnduranceEvent; pending: boolean; error: string; onAccept: () => void }) => (
   <Panel className="mx-auto max-w-2xl">
     <div className="mb-4"><StatusPill tone="orange">Uitnodiging</StatusPill></div>
     <h2 className="font-heading text-2xl font-black text-white">Je bent uitgenodigd voor {event.name}</h2>
     <p className="mt-2 text-sm text-gray-400">{event.circuit} · {event.configuration}</p>
     <p className="mt-4 rounded-xl bg-orange-500/[0.06] p-4 text-sm leading-relaxed text-gray-300 ring-1 ring-orange-500/15">
-      Bevestig je deelname om het inschrijvingsformulier te openen en toegang te krijgen tot de afgeschermde raceomgeving.
+      Bevestig je deelname om toegang te krijgen tot de afgeschermde raceomgeving.
     </p>
+    {error && <p role="alert" className="mt-3 rounded-xl bg-red-500/10 p-3 text-sm text-red-200 ring-1 ring-red-500/20">{error}</p>}
     <div className="mt-5 flex flex-wrap gap-2">
       <PrimaryButton onClick={onAccept} disabled={pending}>{pending ? "Bevestigen…" : "Accepteren"}</PrimaryButton>
     </div>
@@ -52,13 +54,26 @@ const InvitationBanner = ({ event, pending, onAccept }: { event: EnduranceEvent;
  * heeft altijd toegang voor testdoeleinden). De event-id is een echt DB-event.
  */
 export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack: () => void }) => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isEnduranceManager } = useAuth();
   const { actorId } = useEnduranceActor();
+  // Realtime: wijzigingen van andere gebruikers (events/stints/teams) komen
+  // hierbinnen live binnen zonder handmatig te verversen.
+  useEnduranceEventRealtime(event.id);
   const { data: registrations = [], isLoading } = useEnduranceRegistrations(event.id);
   const accept = useUpsertEnduranceRegistration();
   const [tab, setTab] = useState<TabId>("overview");
+  const [inviteError, setInviteError] = useState("");
   const myRegistration = registrations.find((r) => r.user_id === actorId);
-  const access = isSuperAdmin || (myRegistration ? ACTIVE.includes(myRegistration.status) : false);
+  const access = isSuperAdmin || isEnduranceManager || (myRegistration ? ACTIVE.includes(myRegistration.status) : false);
+
+  const acceptInvite = async () => {
+    setInviteError("");
+    try {
+      await accept.mutateAsync({ event_id: event.id, user_id: actorId, status: "interest" });
+    } catch (error) {
+      setInviteError(error instanceof Error ? error.message : "Uitnodiging accepteren mislukt.");
+    }
+  };
 
   if (isLoading) return <div><SecondaryButton onClick={onBack} className="mb-5"><ArrowLeft className="h-4 w-4" /> Terug naar races</SecondaryButton><p className="text-sm text-gray-400">Laden…</p></div>;
   if (!access) {
@@ -70,7 +85,8 @@ export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack
         <InvitationBanner
           event={event}
           pending={accept.isPending}
-          onAccept={() => void accept.mutateAsync({ event_id: event.id, user_id: actorId, status: "interest" })}
+          error={inviteError}
+          onAccept={() => void acceptInvite()}
         />
       </div>;
     }

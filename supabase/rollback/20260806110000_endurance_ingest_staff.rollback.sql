@@ -1,17 +1,6 @@
--- Rollback: extraheer de endurance-ingest-uitbreiding en herstel de originele
--- 8-parameter simhub_ingest_snapshot (zonder endurance-gate/practice-routing).
+-- Rollback: restore the immediately preceding ingest-routing definition, whose
+-- owner gate is super_admin-only while preserving the exact 15-argument contract.
 BEGIN;
-
-ALTER TABLE public.simhub_telemetry_latest
-  DROP COLUMN IF EXISTS endurance_event_id,
-  DROP COLUMN IF EXISTS endurance_team_id,
-  DROP COLUMN IF EXISTS driver_id,
-  DROP COLUMN IF EXISTS current_driver_id,
-  DROP COLUMN IF EXISTS current_driver_name,
-  DROP COLUMN IF EXISTS car_id,
-  DROP COLUMN IF EXISTS car_name,
-  DROP COLUMN IF EXISTS track_name,
-  DROP COLUMN IF EXISTS track_config;
 
 CREATE OR REPLACE FUNCTION public.simhub_ingest_snapshot(
   p_token_hash TEXT,
@@ -21,7 +10,14 @@ CREATE OR REPLACE FUNCTION public.simhub_ingest_snapshot(
   p_connector_id TEXT,
   p_simhub_version TEXT,
   p_game TEXT,
-  p_telemetry JSONB
+  p_telemetry JSONB,
+  p_driver_id TEXT DEFAULT NULL,
+  p_current_driver_id TEXT DEFAULT NULL,
+  p_current_driver_name TEXT DEFAULT NULL,
+  p_car_id TEXT DEFAULT NULL,
+  p_car_name TEXT DEFAULT NULL,
+  p_track_name TEXT DEFAULT NULL,
+  p_track_config TEXT DEFAULT NULL
 )
 RETURNS TABLE(result TEXT, received_at TIMESTAMPTZ)
 LANGUAGE plpgsql
@@ -35,6 +31,9 @@ DECLARE
   v_session_sequence BIGINT;
   v_session_found BOOLEAN;
   v_session_count INTEGER;
+  v_registered BOOLEAN;
+  v_practice_session public.endurance_practice_sessions%ROWTYPE;
+  v_lap_time NUMERIC;
 BEGIN
   IF auth.role() <> 'service_role' THEN
     RAISE EXCEPTION 'Permission denied' USING ERRCODE = '42501';
@@ -65,7 +64,7 @@ BEGIN
 
   IF NOT v_device_found OR v_device.revoked_at IS NOT NULL
      OR NOT (
-       (v_device.race_id IS NULL AND v_device.team_id IS NULL AND v_device.expires_at IS NULL)
+       (v_device.race_id IS NULL AND v_device.team_id IS NULL AND v_device.expires_at IS NULL AND v_device.endurance_event_id IS NULL AND v_device.endurance_team_id IS NULL)
        OR (
          v_device.race_id IS NOT NULL AND v_device.team_id IS NOT NULL
          AND v_device.expires_at > v_now
@@ -75,6 +74,9 @@ BEGIN
              AND race.status IN ('upcoming', 'live')
              AND race.race_date > v_now - interval '36 hours'
          )
+       )
+       OR (
+         v_device.endurance_event_id IS NOT NULL AND v_device.endurance_team_id IS NOT NULL
        )
      )
      OR NOT EXISTS (
@@ -92,6 +94,55 @@ BEGIN
     END IF;
     RETURN QUERY SELECT 'invalid_device'::TEXT, NULL::TIMESTAMPTZ;
     RETURN;
+  END IF;
+
+  -- Endurance-gate: een endurance-gebonden device mag pas telemetry leveren als
+  -- de eigenaar (de coureur) ingeschreven is voor het event.
+  IF v_device.endurance_event_id IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM public.endurance_registrations AS reg
+      WHERE reg.event_id = v_device.endurance_event_id
+        AND reg.user_id = v_device.owner_user_id
+        AND reg.status NOT IN ('rejected', 'withdrawn')
+    ) INTO v_registered;
+
+    IF NOT v_registered THEN
+      RETURN QUERY SELECT 'not_registered'::TEXT, v_now;
+      RETURN;
+    END IF;
+
+    -- Practice-routing: is er een actieve practice-sessie voor dit event, en is
+    -- deze snapshot een voltooide ronde, schrijf dan een practice-ronde.
+    SELECT session.* INTO v_practice_session
+    FROM public.endurance_practice_sessions AS session
+    WHERE session.event_id = v_device.endurance_event_id
+      AND session.ended_at IS NULL
+    ORDER BY session.started_at DESC
+    LIMIT 1;
+
+    IF FOUND THEN
+      BEGIN
+        v_lap_time := (p_telemetry->>'lapTimeSeconds')::NUMERIC;
+      EXCEPTION WHEN OTHERS THEN
+        v_lap_time := NULL;
+      END;
+
+      IF v_lap_time IS NOT NULL AND v_lap_time > 0 AND v_lap_time <= 3600 THEN
+        INSERT INTO public.endurance_practice_laps (
+          session_id, event_id, user_id, car_id, circuit,
+          lap_seconds, fuel_used_litres, fuel_per_lap_litres,
+          incident_count, recorded_at
+        ) VALUES (
+          v_practice_session.id, v_device.endurance_event_id, v_device.owner_user_id,
+          NULLIF(trim(COALESCE(p_car_id, '')), ''), NULLIF(trim(COALESCE(p_track_name, '')), ''),
+          v_lap_time,
+          NULLIF((p_telemetry->>'fuelPerLapLitres')::TEXT, '')::NUMERIC,
+          NULLIF((p_telemetry->>'fuelPerLapLitres')::TEXT, '')::NUMERIC,
+          COALESCE(NULLIF((p_telemetry->>'incidents')::TEXT, '')::INTEGER, 0),
+          p_captured_at
+        );
+      END IF;
+    END IF;
   END IF;
 
   IF v_device.last_seen_at IS NOT NULL
@@ -143,16 +194,26 @@ BEGIN
   WHERE device.id = v_device.id;
 
   INSERT INTO public.simhub_telemetry_latest (
-    device_id, owner_user_id, race_id, team_id, session_id, sequence, captured_at, received_at,
-    connector_id, simhub_version, game, telemetry
+    device_id, owner_user_id, race_id, team_id, endurance_event_id, endurance_team_id,
+    session_id, sequence, captured_at, received_at, connector_id, simhub_version, game,
+    driver_id, current_driver_id, current_driver_name, car_id, car_name, track_name, track_config,
+    telemetry
   ) VALUES (
     v_device.id, v_device.owner_user_id, v_device.race_id, v_device.team_id,
-    trim(p_session_id), p_sequence, p_captured_at, v_now, trim(p_connector_id), trim(p_simhub_version), p_game, p_telemetry
+    v_device.endurance_event_id, v_device.endurance_team_id,
+    trim(p_session_id), p_sequence, p_captured_at, v_now, trim(p_connector_id), trim(p_simhub_version), p_game,
+    NULLIF(trim(COALESCE(p_driver_id, '')), ''), NULLIF(trim(COALESCE(p_current_driver_id, '')), ''),
+    NULLIF(trim(COALESCE(p_current_driver_name, '')), ''), NULLIF(trim(COALESCE(p_car_id, '')), ''),
+    NULLIF(trim(COALESCE(p_car_name, '')), ''), NULLIF(trim(COALESCE(p_track_name, '')), ''),
+    NULLIF(trim(COALESCE(p_track_config, '')), ''),
+    p_telemetry
   )
   ON CONFLICT (device_id) DO UPDATE
   SET owner_user_id = EXCLUDED.owner_user_id,
       race_id = EXCLUDED.race_id,
       team_id = EXCLUDED.team_id,
+      endurance_event_id = EXCLUDED.endurance_event_id,
+      endurance_team_id = EXCLUDED.endurance_team_id,
       session_id = EXCLUDED.session_id,
       sequence = EXCLUDED.sequence,
       captured_at = EXCLUDED.captured_at,
@@ -160,13 +221,21 @@ BEGIN
       connector_id = EXCLUDED.connector_id,
       simhub_version = EXCLUDED.simhub_version,
       game = EXCLUDED.game,
+      driver_id = EXCLUDED.driver_id,
+      current_driver_id = EXCLUDED.current_driver_id,
+      current_driver_name = EXCLUDED.current_driver_name,
+      car_id = EXCLUDED.car_id,
+      car_name = EXCLUDED.car_name,
+      track_name = EXCLUDED.track_name,
+      track_config = EXCLUDED.track_config,
       telemetry = EXCLUDED.telemetry;
 
   RETURN QUERY SELECT 'accepted'::TEXT, v_now;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.simhub_ingest_snapshot(TEXT, TEXT, BIGINT, TIMESTAMPTZ, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.simhub_ingest_snapshot(TEXT, TEXT, BIGINT, TIMESTAMPTZ, TEXT, TEXT, TEXT, JSONB) TO service_role;
+REVOKE ALL ON FUNCTION public.simhub_ingest_snapshot(TEXT, TEXT, BIGINT, TIMESTAMPTZ, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.simhub_ingest_snapshot(TEXT, TEXT, BIGINT, TIMESTAMPTZ, TEXT, TEXT, TEXT, JSONB, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
+
 
 COMMIT;

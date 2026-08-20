@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const mig = readFileSync("supabase/migrations/20260806_endurance_auto_binding.sql", "utf8");
-const rollback = readFileSync("supabase/rollback/20260806_endurance_auto_binding.rollback.sql", "utf8");
+const mig = readFileSync("supabase/migrations/20260806103000_endurance_auto_binding.sql", "utf8");
+const rollback = readFileSync("supabase/rollback/20260806103000_endurance_auto_binding.rollback.sql", "utf8");
 const types = readFileSync("src/integrations/supabase/types.ts", "utf8");
 const panel = readFileSync("src/features/endurance/devices/DeviceAssignmentPanel.tsx", "utf8");
 

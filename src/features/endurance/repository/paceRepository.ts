@@ -58,7 +58,9 @@ export type UpsertEndurancePaceInput = {
   consistency_seconds?: number | null;
   valid_laps?: number | null;
   incidents?: number | null;
+  average_stint_minutes?: number | null;
   source?: string;
+  notes?: string | null;
 };
 
 /** Plain: schrijf een pace-entry (super-admin-sessie). */
@@ -81,7 +83,9 @@ export async function upsertEndurancePace(input: UpsertEndurancePaceInput): Prom
       consistency_seconds: input.consistency_seconds ?? null,
       valid_laps: input.valid_laps ?? null,
       incidents: input.incidents ?? null,
+      average_stint_minutes: input.average_stint_minutes ?? null,
       source: input.source ?? "manual",
+      notes: input.notes ?? null,
     })
     .select(selectColumns)
     .single();

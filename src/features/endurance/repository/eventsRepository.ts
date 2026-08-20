@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Json } from "@/integrations/supabase/types";
 import type { EnduranceOnlyTableName } from "./dataAccess";
 import { assertEnduranceTable, enduranceClient } from "./dataAccess";
 
@@ -22,7 +23,7 @@ export type EnduranceEventRow = {
   briefing_start_at: string | null;
   expected_end_at: string | null;
   registration_deadline: string | null;
-  slots: unknown;
+  slots: Json;
   class_ids: string[];
   selected_class_id: string | null;
   selected_car_id: string | null;
@@ -99,7 +100,7 @@ export type CreateEnduranceEventInput = {
   briefing_start_at?: string | null;
   expected_end_at?: string | null;
   registration_deadline?: string | null;
-  slots?: unknown;
+  slots?: Json;
   class_ids: string[];
   selected_class_id?: string | null;
   selected_car_id?: string | null;
@@ -136,7 +137,10 @@ export async function createEnduranceEvent(
       max_drivers_per_car: input.max_drivers_per_car ?? 4,
       visibility: input.visibility,
       status: input.status,
+      source: input.source ?? "manual",
       invited_user_ids: input.invited_user_ids ?? [],
+      manager_ids: input.manager_ids ?? [],
+      race_id: input.race_id ?? null,
     })
     .select(selectEventColumns)
     .single();
@@ -171,7 +175,10 @@ export async function updateEnduranceEvent(
       max_drivers_per_car: patch.max_drivers_per_car,
       visibility: patch.visibility,
       status: patch.status,
+      source: patch.source,
       invited_user_ids: patch.invited_user_ids,
+      manager_ids: patch.manager_ids,
+      race_id: patch.race_id,
     })
     .eq("id", id)
     .select(selectEventColumns)
@@ -190,6 +197,18 @@ export function useUpsertEnduranceEvent() {
       args.id
         ? updateEnduranceEvent(args.id, args)
         : createEnduranceEvent(args),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["endurance", "events"] });
+    },
+  });
+}
+
+/** TanStack Query hook: werk een beperkte set event-velden bij (bijv. alleen klasse/auto bevestigen). */
+export function useUpdateEnduranceEventFields() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { id: string } & Partial<Omit<CreateEnduranceEventInput, "class_ids_confirmation">>) =>
+      updateEnduranceEvent(args.id, args),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["endurance", "events"] });
     },

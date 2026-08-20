@@ -17,7 +17,7 @@ import { getEnduranceCar } from "../core/carCatalog";
  * laag er is, toont het paneel start/stop + de aangemaakte sessies.
  */
 export const PracticeSessionPanel = ({ event }: { event: EnduranceEvent }) => {
-  const { user, isSuperAdmin } = useAuth();
+  const { user, isSuperAdmin, isEnduranceManager } = useAuth();
   const { displayName } = useEnduranceActor();
   const { data: registrations = [] } = useEnduranceRegistrations(event.id);
   const { data } = useEndurancePracticeWorkspace(event.id);
@@ -48,9 +48,9 @@ export const PracticeSessionPanel = ({ event }: { event: EnduranceEvent }) => {
   };
 
   const sessions = data?.sessions ?? [];
-  const lapsBySession = data?.lapsBySession ?? {};
+  const lapsBySession = useMemo(() => data?.lapsBySession ?? {}, [data?.lapsBySession]);
   const active = sessions.find((session) => !session.ended_at) ?? null;
-  const manager = Boolean(user?.id && isSuperAdmin);
+  const manager = Boolean(user?.id && (isSuperAdmin || isEnduranceManager));
   const registeredCount = registrations.filter((r) => !["rejected", "withdrawn"].includes(r.status)).length;
 
   // Per-sessie: snelste rondetijd per coureur (als de opname-laag later laps levert).
