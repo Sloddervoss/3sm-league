@@ -5,13 +5,15 @@ import { Link } from "react-router-dom";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useEnduranceCapabilities } from "@/features/endurance/repository/capabilitiesRepository";
 import { supabase } from "@/integrations/supabase/client";
-import { centralRowToBridgeResponse, createCentralSimHubPairingCode, listCentralSimHubDevices, revokeCentralSimHubDevice, type CentralSimHubLatestRow, type SimHubPairingCode } from "@/lib/centralSimHubRelay";
+import { centralRowToBridgeResponse, createCentralSimHubPairingCode, listOwnCentralSimHubDevices, revokeCentralSimHubDevice, type CentralSimHubLatestRow, type SimHubPairingCode } from "@/lib/centralSimHubRelay";
 import { getSimHubTelemetryState, type SimHubBridgeResponse } from "@/lib/localSimHubBridge";
 
 const SimHubPairingPage = () => {
   const { user, loading, rolesLoading, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
-  const staff = Boolean(isSuperAdmin || isEnduranceManager || isTester);
+  const { capabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
+  const canPair = capabilities.can_pair_own_device;
   const [pairing, setPairing] = useState<SimHubPairingCode | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,9 +27,9 @@ const SimHubPairingPage = () => {
 
   const devices = useQuery({
     queryKey: ["simhub", "pairing-page-devices", user?.id],
-    enabled: Boolean(user && staff),
-    queryFn: listCentralSimHubDevices,
-    refetchInterval: user && staff ? 3_000 : false,
+    enabled: Boolean(user),
+    queryFn: listOwnCentralSimHubDevices,
+    refetchInterval: user ? 3_000 : false,
   });
 
   useEffect(() => {
@@ -39,7 +41,7 @@ const SimHubPairingPage = () => {
   useEffect(() => {
     setLatest(null);
     setRelayError("");
-    if (!user || !staff || !selectedDeviceId) return;
+    if (!user || !selectedDeviceId) return;
     let active = true;
     // Device-only connection-test: lees de laatste snapshot van dit device
     // rechtstreeks (device-scoped, RLS-gated). De gecentraliseerde relay leest
@@ -87,7 +89,7 @@ const SimHubPairingPage = () => {
       });
     const freshness = window.setInterval(() => setCheckedAt(Date.now()), 1_000);
     return () => { active = false; window.clearInterval(freshness); void supabase.removeChannel(channel); };
-  }, [selectedDeviceId, staff, user]);
+  }, [selectedDeviceId, user]);
 
   const createCode = async () => {
     if (createBusyRef.current) return;
@@ -142,14 +144,14 @@ const SimHubPairingPage = () => {
           <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">Verbind deze sim-pc éénmalig met je 3SM-account. Een race of team wordt pas later in de Endurance-tab toegewezen; deze pagina test alleen of de beveiligde verbinding werkt.</p>
         </div>
 
-        {(loading || rolesLoading) ? <div className="rounded-2xl border border-border bg-card p-8 text-center"><Loader2 className="mx-auto h-7 w-7 animate-spin text-orange-400" /><p className="mt-3 text-sm text-muted-foreground">Account laden…</p></div> : !user ? <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.07] p-8 text-center"><Cable className="mx-auto h-10 w-10 text-orange-400" /><h2 className="mt-4 text-xl font-bold text-white">Log eerst in</h2><p className="mt-2 text-sm text-gray-400">Pairingcodes zijn kort geldig en tijdens de testfase alleen beschikbaar voor Super-admin.</p><Link to="/auth?redirect=/simhub-koppelen" className="mt-6 inline-flex rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-bold text-black hover:bg-orange-400">Inloggen</Link></div> : !staff ? <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-8 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-amber-300" /><h2 className="mt-4 text-xl font-bold text-white">Besloten omgeving</h2><p className="mt-2 text-sm text-gray-400">Deze SimHub-koppeling is een besloten toepassing en staat uitsluitend open voor de betrokken rollen.</p></div> : <div className="space-y-5">
+        {(loading || rolesLoading) ? <div className="rounded-2xl border border-border bg-card p-8 text-center"><Loader2 className="mx-auto h-7 w-7 animate-spin text-orange-400" /><p className="mt-3 text-sm text-muted-foreground">Account laden…</p></div> : !user ? <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.07] p-8 text-center"><Cable className="mx-auto h-10 w-10 text-orange-400" /><h2 className="mt-4 text-xl font-bold text-white">Log eerst in</h2><p className="mt-2 text-sm text-gray-400">Pairingcodes zijn kort geldig en accountgebonden.</p><Link to="/auth?redirect=/simhub-koppelen" className="mt-6 inline-flex rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-bold text-black hover:bg-orange-400">Inloggen</Link></div> : !canPair && !devices.data?.length ? <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-8 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-amber-300" /><h2 className="mt-4 text-xl font-bold text-white">Besloten omgeving</h2><p className="mt-2 text-sm text-gray-400">Nieuwe SimHub-koppelingen staan nu uitsluitend open voor de betrokken alpha-rollen.</p></div> : <div className="space-y-5">
           {devices.error && <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">Gekoppelde installaties konden niet worden geladen: {devices.error instanceof Error ? devices.error.message : "onbekende fout"}</p>}
 
-          <section className="rounded-2xl border border-border bg-card p-6 shadow-lg">
+          {canPair && <section className="rounded-2xl border border-border bg-card p-6 shadow-lg">
             <div className="flex items-start gap-3"><div className="rounded-xl bg-orange-500/10 p-2.5"><Cable className="h-5 w-5 text-orange-400" /></div><div><h2 className="text-xl font-bold text-white">Nieuwe installatie koppelen</h2><p className="mt-1 text-sm text-gray-400">Maak een tijdelijke code en vul die in de SimHub-plugin in. Er wordt nog geen race of team gekozen.</p></div></div>
             <button type="button" onClick={() => void createCode()} disabled={busy} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-black text-black transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cable className="h-4 w-4" />}Koppeling testen</button>
             {pairing && <div className="mt-5 rounded-xl border border-orange-500/20 bg-orange-500/[0.06] p-5"><p className="text-xs font-bold uppercase tracking-wider text-orange-300">Tijdelijke code</p><div className="mt-2 flex flex-wrap items-center gap-3"><code className="text-3xl font-black tracking-[0.18em] text-white">{pairing.code}</code><button type="button" onClick={() => void copyPairingCode()} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-gray-200 hover:bg-white/5"><Copy className="h-4 w-4" />Kopiëren</button></div><p className="mt-2 text-xs text-gray-500">Geldig tot {new Date(pairing.expiresAt).toLocaleTimeString("nl-NL")}. De installatie blijft daarna gekoppeld totdat je haar intrekt.</p></div>}
-          </section>
+          </section>}
 
           <section className="rounded-2xl border border-border bg-card p-6"><div className="flex items-start gap-3"><MonitorCheck className="mt-0.5 h-5 w-5 text-emerald-400" /><div><h2 className="text-lg font-bold text-white">Gekoppelde installaties</h2><p className="mt-1 text-sm text-gray-400">Selecteer een installatie om de connection-test te bekijken. Een ingetrokken token kan direct niets meer publiceren.</p></div></div><div className="mt-5 space-y-2">{devices.isLoading ? <p className="text-sm text-gray-500">Laden…</p> : !devices.data?.length ? <p className="rounded-lg border border-dashed border-white/10 p-4 text-sm text-gray-500">Nog geen SimHub-installatie gekoppeld.</p> : devices.data.map((device) => <div key={device.id} className={`flex items-center justify-between gap-4 rounded-xl p-4 ring-1 ${selectedDeviceId === device.id ? "bg-orange-500/[0.07] ring-orange-500/25" : "bg-black/20 ring-white/5"}`}><button type="button" onClick={() => setSelectedDeviceId(device.id)} className="min-w-0 flex-1 text-left"><strong className="text-sm text-white">{device.device_name}</strong><p className="mt-1 text-xs font-medium text-gray-400">3SM-account gekoppeld · {device.connector_id}</p><p className="mt-1 text-xs text-gray-500">{device.last_seen_at ? `Verbinding gezien ${new Date(device.last_seen_at).toLocaleString("nl-NL")}` : "Wacht op eerste iRacing-telemetry"}{device.revoked_at ? " · ingetrokken" : device.expires_at ? ` · geldig tot ${new Date(device.expires_at).toLocaleString("nl-NL")}` : " · geldig tot intrekken"}</p></button>{!device.revoked_at && <button type="button" disabled={revokingDeviceId === device.id} onClick={() => void revoke(device.id)} className="inline-flex items-center gap-1.5 text-xs font-bold text-red-300 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50">{revokingDeviceId === device.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Intrekken</button>}</div>)}</div></section>
 

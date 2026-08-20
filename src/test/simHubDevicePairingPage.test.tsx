@@ -39,6 +39,18 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+vi.mock("@/features/endurance/repository/capabilitiesRepository", () => ({
+  useEnduranceCapabilities: () => ({ capabilities: {
+    can_access: true,
+    can_pair_own_device: true,
+    can_ingest_own_device: true,
+    can_manage_events: true,
+    can_manage_devices: true,
+    multi_user_realtime_enabled: false,
+    simhub_ingest_enabled: true,
+  } }),
+}));
+
 vi.mock("@/components/Navbar", () => ({ default: () => <div>Navbar</div> }));
 vi.mock("@/components/Footer", () => ({ default: () => <div>Footer</div> }));
 
@@ -52,6 +64,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("@/lib/centralSimHubRelay", () => ({
   createCentralSimHubPairingCode: vi.fn(),
   listCentralSimHubDevices: vi.fn(),
+  listOwnCentralSimHubDevices: vi.fn(),
   readCentralSimHubTelemetry: vi.fn(async () => null),
   revokeCentralSimHubDevice: vi.fn(),
   centralRowToBridgeResponse: vi.fn(),

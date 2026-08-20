@@ -3,6 +3,7 @@ import { Flag, Calendar, Trophy, Users, Menu, X, LogIn, User, Settings, LogOut, 
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
+import { useEnduranceCapabilities } from "@/features/endurance/repository/capabilitiesRepository";
 
 const navItems = [
   { label: "Home", path: "/", icon: Flag },
@@ -19,13 +20,14 @@ const navItems = [
 const Navbar = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, signOut } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, isEnduranceManager, isTester, signOut } = useAuth();
+  const { capabilities: enduranceCapabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
   const { language, setLanguage } = useLanguage();
 
   const canEditNews = isAdmin || isSuperAdmin || isEditor;
   const canUseStewards = isAdmin || isSuperAdmin || isSteward;
   const showAdmin = isAdmin || isSuperAdmin;
-  const canUseEndurance = Boolean(user);
+  const canUseEndurance = Boolean(user && enduranceCapabilities.can_access);
   const visibleNavItems = canUseEndurance
     ? [...navItems, { label: "Endurance", path: "/endurance/", icon: TimerReset }]
     : navItems;
