@@ -35,6 +35,7 @@ class FakeChannel implements EnduranceRealtimeChannel {
 
 const binding = (table: FilteredEnduranceRealtimeBinding["table"]): FilteredEnduranceRealtimeBinding => ({
   table,
+  subscriptionTable: "endurance_realtime_stream",
   filter: { column: "event_id", value: "evt-123" },
   queryKeys: [["endurance", table, "evt-123"]],
 });

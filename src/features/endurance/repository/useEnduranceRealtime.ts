@@ -19,12 +19,15 @@ const createSupabaseChannel = (name: string): EnduranceRealtimeChannel => {
       channel.on(
         "postgres_changes",
         {
-          event: "*",
+          event: "INSERT",
           schema: "public",
-          table: binding.table,
+          table: binding.subscriptionTable,
           filter: `${binding.filter.column}=eq.${binding.filter.value}`,
         },
-        onRow,
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          if (row.source_table === binding.table) onRow();
+        },
       );
     },
     subscribe(callback) {
