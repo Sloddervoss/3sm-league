@@ -26,19 +26,23 @@ describe("SimHub device assignment + safe update check (Fase 4)", () => {
     expect(relay).toContain("endurance_team_id ?? row.team_id");
   });
 
-  it("adds the devices tab only reachable by super-admin", () => {
-    expect(workspace).toContain("id: \"devices\", label: \"Apparaten\"");
-    expect(workspace).toContain("<DeviceAssignmentPanel event={event} />");
-    expect(panel).toContain("useAuth()");
-    expect(panel).toContain("assignCentralSimHubDevice");
-    expect(panel).toContain("uitsluitend beschikbaar voor super-admin");
-    expect(panel).not.toContain("from(\"");
-  });
+  it("adds the devices tab reachable by endurance-managers and super-admin", () => {
+      expect(workspace).toContain('id: "devices", label: "Apparaten"');
+      expect(workspace).toContain("<DeviceAssignmentPanel event={event} />");
+      expect(panel).toContain("useAuth()");
+      expect(panel).toContain("assignCentralSimHubDevice");
+      expect(panel).toContain("isSuperAdmin || isEnduranceManager");
+      expect(panel).toContain("Device-koppeling is beschikbaar voor endurance-managers en super-admin.");
+      expect(panel).not.toContain('from("');
+    });
 
   it("serves a read-only version endpoint with no credentials or writes", () => {
     expect(version).toContain("simhub-version");
     expect(version).toContain("SIMHUB_PLUGIN_VERSION");
     expect(version).toContain("SIMHUB_PLUGIN_SHA256");
+    expect(version).toContain("SIMHUB_PLUGIN_BYTE_LENGTH");
+    expect(version).toContain("SIMHUB_PLUGIN_FILE_NAME");
+    expect(version).toContain("SIMHUB_PLUGIN_SIGNATURE");
     expect(version).toContain("dllUrl");
     expect(version).toContain("sha256");
     expect(version).not.toContain("service_role");
@@ -50,6 +54,8 @@ describe("SimHub device assignment + safe update check (Fase 4)", () => {
     expect(connectorSettings).toContain("LastVersionCheckUtc");
     expect(connectorSettings).toContain("LastKnownRemoteDllUrl");
     expect(connectorSettings).toContain("LastKnownRemoteSha256");
+    expect(connectorSettings).toContain("LastKnownRemoteByteLength");
+    expect(connectorSettings).toContain("LastKnownRemoteSignature");
     expect(plugin).toContain("CheckForUpdateAsync");
     expect(plugin).toContain("TimeSpan.FromHours(24)");
     expect(plugin).toContain("klaar voor éénklik-installatie");
@@ -58,5 +64,6 @@ describe("SimHub device assignment + safe update check (Fase 4)", () => {
     expect(plugin).not.toMatch(/File\.(Copy|Move|Replace)\(/);
     expect(contracts).toContain("public sealed class VersionResponse");
     expect(contracts).toContain('DataMember(Name = "sha256"');
+    expect(contracts).toContain('DataMember(Name = "signature"');
   });
 });

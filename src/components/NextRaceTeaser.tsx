@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { MapPin, Clock, Timer, ChevronRight, Calendar, CheckCircle2 } from "lucide-react";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
+import { TrackMap } from "@/components/track-map/TrackMap";
 import { useRegistration } from "@/lib/useRegistration";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
@@ -159,16 +160,13 @@ const NextRaceTeaser = () => {
 
             {/* Content */}
             <div className="relative flex-1 p-6 md:p-8 flex flex-col justify-between overflow-hidden">
-              {trackInfo?.imageUrl && (
-                <img
-                  src={trackInfo.imageUrl}
-                  alt=""
-                  aria-hidden
-                  className="absolute right-4 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
-                  style={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              )}
+              <TrackMap
+                track={nextRace.track}
+                trackId={nextRace.iracing_track_id}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-48 h-48 object-contain select-none pointer-events-none hidden md:block"
+                style={{ opacity: 0.9 }}
+                fallbackStyle={{ opacity: 0.55, filter: "invert(1) brightness(3)" }}
+              />
               <div>
                 {/* Status + type badge */}
                 <div className="flex items-center gap-3 mb-3 flex-wrap">

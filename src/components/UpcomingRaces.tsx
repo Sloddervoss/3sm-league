@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { getTrackInfo } from "@/lib/trackData";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
+import { TrackMap } from "@/components/track-map/TrackMap";
 
 type UpcomingRace = RaceWithLeagueSummary;
 
@@ -336,15 +337,7 @@ const UpcomingRaces = () => {
 
                   {/* Right: circuit image + countdown + registration */}
                   <div className="flex flex-col items-start md:items-end gap-4 shrink-0">
-                    {trackInfo?.imageUrl && (
-                      <img
-                        src={trackInfo.imageUrl}
-                        alt=""
-                        aria-hidden
-                        className="w-36 h-24 object-contain invert opacity-30 hidden md:block"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
-                    )}
+                    <TrackMap track={nextRace.track} trackId={nextRace.iracing_track_id} className="w-36 h-24 object-contain hidden md:block" style={{ opacity: 0.85 }} fallbackStyle={{ opacity: 0.3, filter: "invert(1)" }} />
                     {countdown && (
                       <div className="text-right">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Aftellen</p>
@@ -477,28 +470,14 @@ const UpcomingRaces = () => {
                       >
                         {/* Round number / circuit map */}
                         <div className="md:w-20 shrink-0 flex items-center justify-center relative self-stretch">
-                          {trackInfo?.imageUrl ? (
-                            <div className="relative w-16 h-14 flex items-center justify-center">
-                              <img
-                                src={trackInfo.imageUrl}
-                                alt=""
-                                aria-hidden
-                                className="w-full h-full object-contain invert opacity-40"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display = "none";
-                                  const fb = (e.target as HTMLImageElement).nextElementSibling as HTMLElement | null;
-                                  if (fb) fb.style.display = "block";
-                                }}
-                              />
-                              <span className="absolute bottom-0 left-0 font-heading font-black text-[10px] text-muted-foreground/40 hidden" data-fallback>
-                                R{String(race.round).padStart(2, "0")}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className={`font-heading font-black text-2xl ${race.status === "completed" ? "text-muted-foreground/40" : isNext ? "text-primary/60" : "text-muted-foreground"}`}>
-                              R{String(race.round).padStart(2, "0")}
-                            </span>
-                          )}
+                          <TrackMap
+                            track={race.track}
+                            trackId={race.iracing_track_id}
+                            className="w-16 h-14 object-contain"
+                            style={{ opacity: race.status === "completed" ? 0.45 : 0.9 }}
+                            fallbackStyle={{ opacity: 0.4, filter: "invert(1)" }}
+                            fallback={<span className={`font-heading font-black text-2xl ${race.status === "completed" ? "text-muted-foreground/40" : isNext ? "text-primary/60" : "text-muted-foreground"}`}>R{String(race.round).padStart(2, "0")}</span>}
+                          />
                         </div>
 
                         {/* Track info */}

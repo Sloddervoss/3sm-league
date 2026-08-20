@@ -1,4 +1,5 @@
 (async () => {
+  const EXT_VERSION = "0.6.2"; // versie-marker: toont welke content.js écht draait
   const OWNED_WORDS = [
     "owned", "purchased", "licensed", "my content",
     "content owned", "included", "installed",
@@ -58,6 +59,25 @@
     );
   }
 
+  /** Lees pagina-info uit de URL + "N of M"-teller in de tabel. */
+  function readPaginationInfo() {
+    const url = new URL(location.href);
+    const page = parseInt(url.searchParams.get("page") || "1", 10) || 1;
+    const pageSize = parseInt(url.searchParams.get("page_size") || "0", 10) || 0;
+    // Teller zoals "1-12 of 69" of "Rows per page: 12"
+    const bodyText = cleanText(document.body.innerText);
+    let total = 0;
+    let shown = 0;
+    const countMatch = bodyText.match(/(\d+)\s*(?:–|-|of)\s*(\d+)\s+of\s+(\d+)/i)
+      || bodyText.match(/(\d+)\s+of\s+(\d+)/i)
+      || bodyText.match(/of\s+(\d{1,5})\b/i);
+    if (countMatch) {
+      if (countMatch[3]) { shown = parseInt(countMatch[1], 10); total = parseInt(countMatch[3], 10); }
+      else if (countMatch[1] && countMatch[2]) { shown = parseInt(countMatch[1], 10); total = parseInt(countMatch[2], 10); }
+    }
+    return { page, pageSize, totalCount: total || 0, shownCount: shown || 0 };
+  }
+
   function extractNameFromElement(element) {
     const labels = [
       element.getAttribute("aria-label"),
@@ -68,6 +88,17 @@
       element.querySelector("[class*='name' i]")?.textContent,
       element.querySelector("[class*='title' i]")?.textContent,
     ].map(cleanText).filter(Boolean);
+
+    // Nieuwe iRacing-tabel: een rij is "<Track Naam> <N> View <Type>", bijv.
+    // "Adelaide Street Circuit 1 View Track". Pluk de naam = tekst vóór "N View".
+    const rowTextClean = cleanText(element.innerText || element.textContent);
+    const viewMatch = rowTextClean.match(/(.*?)\s+\d+\s+View\b/i);
+    if (viewMatch) {
+      const candidate = cleanText(viewMatch[1]);
+      if (candidate.length >= 8 && candidate.length <= 140 && !GENERIC_TRACK_NAMES.has(candidate.toLowerCase())) {
+        return candidate;
+      }
+    }
 
     const namedLabel = labels.find(looksLikeTrackName);
     if (namedLabel) return namedLabel;
@@ -358,6 +389,70 @@
     return { custId, userName };
   }
 
+  /**
+   * API-first: haal ALLE owned tracks op via de BFF `lookup/tracks` endpoint.
+   * Geschikt voor iRacing's naar secties opgesplitste pagina, waar DOM-scannen
+   * alleen de zichtbare rijen (~7) leest. De API retourneert de volledige lijst
+   * met owned-status, ongeacht de layout.
+   * Volgt het standaard {link:...}-patroon en is tolerant voor meerdere
+   * response-vormen.
+   */
+  async function fetchOwnedTracksViaBff() {
+    try {
+      const res = await fetch(
+        "https://members-ng.iracing.com/bff/pub/proxy/data/lookup/tracks",
+        { credentials: "include", headers: { "Accept": "application/json" } }
+      );
+      if (!res.ok) {
+        const text = (await res.text().catch(() => "")).slice(0, 300);
+        return { owned: [], usable: false, httpStatus: res.status, raw: text || `HTTP ${res.status}` };
+      }
+      let json = await res.json();
+      let followed = false;
+      if (json?.link) {
+        const linked = await fetch(json.link, { headers: { "Accept": "application/json" } });
+        if (linked.ok) { json = await linked.json(); followed = true; }
+      }
+      // ruwe sample bewaren zodat we de echte veldn namen kunnen zien als de
+      // parser iets mist (beperkt om de storage/export niet te veel te laten groeien).
+      const rawSample = JSON.stringify(json).slice(0, 2500);
+      const rows = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.data) ? json.data
+        : Array.isArray(json?.tracks) ? json.tracks
+        : Array.isArray(json?.data?.items) ? json.data.items
+        : Array.isArray(json?.content) ? json.content
+        : [];
+      const owned = [];
+      let keysSample = null;
+      for (const row of rows) {
+        if (!keysSample && row && typeof row === "object") keysSample = Object.keys(row).slice(0, 40);
+        const name = cleanText(row?.track_name || row?.name || row?.display_name || row?.friendly_name || row?.label || "");
+        if (!name) continue;
+        const isOwned = row?.owned === true
+          || row?.owned_tracks === true
+          || row?.purchase_status === "owned"
+          || row?.is_owned === true
+          || row?.user_owns === true
+          || row?.in_inventory === true
+          || (typeof row?.owned === "string" && /^(1|true|owned|purchased)$/i.test(row.owned))
+          || (typeof row?.purchase_status === "string" && /^(1|owned|purchased|true)$/i.test(row.purchase_status));
+        if (isOwned) owned.push(name);
+      }
+      return {
+        owned,
+        usable: owned.length > 0,
+        httpStatus: res.status,
+        followedLink: followed,
+        rawCount: rows.length,
+        rawKeys: keysSample,
+        raw: rawSample,
+      };
+    } catch (e) {
+      return { owned: [], usable: false, error: String((e && e.message) || e).slice(0, 300) };
+    }
+  }
+
   // --- MAIN ---
   const pageIsOwnedFilter = currentPageIsOwnedFilter();
 
@@ -365,12 +460,19 @@
   let custId = extractCustIdFromPage();
   let userName = extractUserNameFromPage();
 
-  const bffResult = await fetchCustIdAndNameViaBff();
+  const [bffResult, bffTracks] = await Promise.all([
+    fetchCustIdAndNameViaBff(),
+    fetchOwnedTracksViaBff(),
+  ]);
 
   if (bffResult.custId && !custId) custId = bffResult.custId;
   if (bffResult.userName && !userName) userName = bffResult.userName;
 
-  // 2. Scan DOM for tracks
+  const pagination = readPaginationInfo();
+
+  // 2. Scan DOM for tracks. De BFF-API is de primaire bron (volledige lijst,
+  // imuun voor de pagina-redesign); de DOM-scan geldt alleen als de API niets
+  // opleverde (bijv. niet-ingelogd of endpoint gewijzigd).
   const tableResults = scanTableRows();
   const cardResults = scanCards();
 
@@ -385,9 +487,13 @@
     candidates.push(item);
   }
 
-  // Determine owned tracks
+  // Determine owned tracks. Primary: BFF API (volledige, layout-onafhankelijke
+  // lijst). Fallback: DOM-scan wanneer de API niets gave.
   let ownedTracks;
-  if (pageIsOwnedFilter) {
+  if (bffTracks.usable) {
+    ownedTracks = [...new Set(bffTracks.owned)]
+      .sort((a, b) => a.localeCompare(b));
+  } else if (pageIsOwnedFilter) {
     ownedTracks = candidates.map((c) => c.name).sort((a, b) => a.localeCompare(b));
   } else {
     ownedTracks = candidates
@@ -411,6 +517,7 @@
 
   const result = {
     export: {
+      version: EXT_VERSION,
       source: "3 Stripe iRacing Content Extension",
       scannedAt: new Date().toISOString(),
       pageUrl: location.href,
@@ -418,15 +525,34 @@
       pageIsOwnedFilter,
       iracingCustId: custId,
       uploaderName: userName,
+      api: {
+        usable: bffTracks.usable,
+        httpStatus: bffTracks.httpStatus ?? null,
+        followedLink: bffTracks.followedLink ?? null,
+        rawCount: bffTracks.rawCount ?? null,
+        rawKeys: bffTracks.rawKeys ?? null,
+        error: bffTracks.error ?? null,
+      },
+      pagination,
       ownedTracks,
       candidates: candidates.map(({ name, owned }) => ({ name, owned })),
     },
     debug: {
+      version: EXT_VERSION,
       pageUrl: location.href,
       pageTitle: document.title,
       pageIsOwnedFilter,
       iracingCustId: custId,
       uploaderName: userName,
+      apiOwnedTracks: bffTracks.owned,
+      apiUsable: bffTracks.usable,
+      apiHttpStatus: bffTracks.httpStatus ?? null,
+      apiFollowedLink: bffTracks.followedLink ?? null,
+      apiRawCount: bffTracks.rawCount ?? null,
+      apiRawKeys: bffTracks.rawKeys ?? null,
+      apiRaw: bffTracks.raw ?? null,
+      apiError: bffTracks.error ?? null,
+      pagination,
       candidateCount: candidates.length,
       tableResults,
       cardResults,

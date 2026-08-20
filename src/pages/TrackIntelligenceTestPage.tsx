@@ -387,7 +387,7 @@ const TrackIntelligenceTestPage = () => {
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
               <a
-                href="/iracing-content-extension.zip?v=0.5.10"
+                href="/iracing-content-extension.zip?v=0.6.2"
                 download
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-border hover:border-accent text-sm transition-colors"
               >

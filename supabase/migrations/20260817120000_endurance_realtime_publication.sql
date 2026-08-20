@@ -19,6 +19,10 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.endurance_events;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.endurance_teams;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.endurance_team_members;
 
+-- Stint-planner: beschikbaarheid + geplande versies live (versies & bevestiging)
+ALTER PUBLICATION supabase_realtime ADD TABLE public.endurance_availability;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.endurance_planning_versions;
+
 -- Stints worden reeds gepubliceerd (data-layer-migratie); hier expliciet
 -- herbekrachtigd ter volledigheid (idempotent-veilig, geen dubbele rij).
 DO $$

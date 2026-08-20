@@ -4,15 +4,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEnduranceRegistrations } from "../repository/registrationsRepository";
 import { useUpdateEnduranceEventFields } from "../repository/eventsRepository";
 import type { EnduranceEvent } from "../core/types";
-import { enduranceCarsForClass, getEnduranceCar, type EnduranceClassId } from "../core/carCatalog";
+import { allowedEnduranceCarsForClass, getEnduranceCar, type EnduranceClassId } from "../core/carCatalog";
 import { getEventVehicleVotes, recommendedVehicle, winningCarIdsForClass, winningClassIds } from "../core/vehicleVoting";
 import { Field, inputClass, Panel, PrimaryButton, SectionHeading, StatusPill } from "../shared/ui";
 
 /**
  * Stemuitslag & definitieve auto — Fase 3.
  * Stemmen komen nu uit de ECHTE DB-registraties (preferred_car_id /
- * class_preference). De bevestiging van de definitieve auto is alleen voor de
- * super-admin (de enige met RLS-toegang in deze canary).
+ * class_preference). De bevestiging van de definitieve auto is voor de
+ * super-admin en endurance-managers (beide met RLS-toegang in de canary).
  */
 export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
   const { isSuperAdmin, isEnduranceManager } = useAuth();
@@ -29,8 +29,8 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
     preferredCarId: r.preferred_car_id ?? "",
     slotId: r.slot_id ?? "",
     maxStints: r.max_stints ?? 1,
-    maxStintMinutes: r.max_stint_minutes ?? null,
-    maxTotalMinutes: r.max_total_minutes ?? null,
+    maxStintMinutes: r.max_stint_minutes,
+    maxTotalMinutes: r.max_total_minutes,
     nightDriving: r.night_driving,
     willingToStart: r.willing_to_start,
     willingToFinish: r.willing_to_finish,
@@ -40,6 +40,7 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
 
   const votes = useMemo(() => getEventVehicleVotes(voteRegistrations, event.id), [voteRegistrations, event.id]);
   const recommendation = useMemo(() => recommendedVehicle(voteRegistrations, event.id), [voteRegistrations, event.id]);
+  // Bevestiging van de definitieve auto is voor super-admin én endurance-managers.
   const manager = Boolean(isSuperAdmin || isEnduranceManager);
   const classWinners = useMemo(() => winningClassIds(voteRegistrations, event.id), [voteRegistrations, event.id]);
   const selectableClasses = classWinners.length ? event.classIds.filter((classId) => classWinners.includes(classId)) : event.classIds;
@@ -47,9 +48,9 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
   const [classId, setClassId] = useState<EnduranceClassId>(initialClass);
   const carWinnerIds = useMemo(() => winningCarIdsForClass(voteRegistrations, event.id, classId), [voteRegistrations, event.id, classId]);
   const cars = useMemo(() => {
-    const classCars = enduranceCarsForClass(classId);
+    const classCars = allowedEnduranceCarsForClass(classId, event.allowedCarIds);
     return carWinnerIds.length ? classCars.filter((car) => carWinnerIds.includes(car.id)) : classCars;
-  }, [classId, carWinnerIds]);
+  }, [classId, carWinnerIds, event.allowedCarIds]);
   const [carId, setCarId] = useState(event.selectedCarId ?? (recommendation.classId === classId ? recommendation.carId : null) ?? cars[0]?.id ?? "");
   const finalCar = getEnduranceCar(event.selectedCarId);
   const recommendedCar = getEnduranceCar(recommendation.carId);
@@ -62,7 +63,7 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
   const changeClass = (next: EnduranceClassId) => {
     setClassId(next);
     const winners = winningCarIdsForClass(voteRegistrations, event.id, next);
-    const options = enduranceCarsForClass(next).filter((car) => !winners.length || winners.includes(car.id));
+    const options = allowedEnduranceCarsForClass(next, event.allowedCarIds).filter((car) => !winners.length || winners.includes(car.id));
     setCarId(recommendation.classId === next && recommendation.carId ? recommendation.carId : options[0]?.id ?? "");
   };
   const confirm = () => {

@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 2000" width="1600" height="2000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B0F17"/>
+      <stop offset="0.55" stop-color="#131B29"/>
+      <stop offset="1" stop-color="#07090E"/>
+    </linearGradient>
+    <radialGradient id="stage" cx="0.68" cy="0.8" r="0.55">
+      <stop offset="0" stop-color="#FF6B1A" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#FF6B1A" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#FF6B1A" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="headGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFE3C6" stop-opacity="0.95"/>
+      <stop offset="0.22" stop-color="#FF6B1A" stop-opacity="0.7"/>
+      <stop offset="0.6" stop-color="#FF6B1A" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#FF6B1A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFE9CB" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#FF6B1A" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E63B2E"/>
+      <stop offset="1" stop-color="#FF6B1A"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="blur" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <pattern id="carbon" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M0 60 L60 0 M0 0 L0 0" stroke="#ffffff" stroke-opacity="0.025" stroke-width="1"/>
+      <path d="M60 60 L120 0" stroke="#ffffff" stroke-opacity="0.015" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- background -->
+  <rect width="1600" height="2000" fill="url(#bg)"/>
+  <rect width="1600" height="2000" fill="url(#stage)"/>
+  <rect width="1600" height="2000" fill="url(#carbon)" opacity="0.5"/>
+
+  <!-- faint circuit curves: depth / track flowing through the dark -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M -260 1660 C 520 1430, 1050 1330, 1900 950" stroke="#263247" stroke-width="70" opacity="0.7"/>
+    <path d="M -260 1660 C 520 1430, 1050 1330, 1900 950" stroke="#1B2433" stroke-width="26" opacity="0.9"/>
+    <path d="M -260 1780 C 560 1600, 1150 1500, 2050 1200" stroke="#263247" stroke-width="46" opacity="0.45"/>
+    <path d="M 40 300 C 420 260, 800 210, 1660 40" stroke="#263247" stroke-width="34" opacity="0.35"/>
+    <path d="M 40 390 C 460 340, 880 280, 1700 120" stroke="#263247" stroke-width="18" opacity="0.28"/>
+  </g>
+
+  <!-- center distance line (depth) -->
+  <g stroke="#263247" stroke-width="2" opacity="0.5" fill="none">
+    <path d="M 200 2000 L 1000 1180 L 1500 500"/>
+  </g>
+
+  <!-- ============ three diagonal speed stripes (the 3SM mark) ============ -->
+  <g filter="url(#blur)" opacity="0.5">
+    <polygon points="0.0 210.0 64.0 176.0 1364.0 1476.0 1300.0 1510.0" fill="#FF6B1A" opacity="1"/><polygon points="0.0 164.0 64.0 130.0 1364.0 1430.0 1300.0 1464.0" fill="#FF6B1A" opacity="0.68"/><polygon points="0.0 118.0 64.0 84.0 1364.0 1384.0 1300.0 1418.0" fill="#FF6B1A" opacity="0.42"/>
+  </g>
+  <g>
+    <polygon points="0.0 205.0 64.0 171.0 1364.0 1471.0 1300.0 1505.0" fill="#FF6B1A" opacity="1"/><polygon points="0.0 159.0 64.0 125.0 1364.0 1425.0 1300.0 1459.0" fill="#FF6B1A" opacity="0.68"/><polygon points="0.0 113.0 64.0 79.0 1364.0 1379.0 1300.0 1413.0" fill="#FF6B1A" opacity="0.42"/>
+  </g>
+
+  <!-- ===================== car silhouette ===================== -->
+  <g transform="translate(330 1460) rotate(-8)">
+    <!-- light beams sweeping up-right -->
+    <polygon points="300,120 1180,-120 1240,-60 300,210" fill="url(#beam)"/>
+    <polygon points="300,120 1340,-320 1400,-250 300,220" fill="url(#beam)" opacity="0.7"/>
+    <polygon points="300,120 1000,-40 1030,0 300,150" fill="#FFFFFF" opacity="0.10"/>
+
+    <!-- far wheels (perspective) -->
+    <ellipse cx="190" cy="150" rx="34" ry="52" fill="#070A10"/>
+    <ellipse cx="470" cy="148" rx="35" ry="54" fill="#070A10"/>
+
+    <!-- body -->
+    <path d="M 60 150 L 60 118 C 82 94, 152 64, 236 57 C 266 54, 276 40, 326 40 C 356 40, 472 76, 502 90 C 542 110, 546 150, 520 150 Z"
+          fill="#0E141F" stroke="#263247" stroke-width="3"/>
+    <!-- bodyside highlight -->
+    <path d="M 78 138 C 120 110, 210 84, 300 78 C 360 74, 430 92, 500 108"
+          fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- rear wing (endurance GT) -->
+    <g>
+      <path d="M 84 52 L 84 30 L 168 16 C 190 30 196 46 194 60 L 122 66 Z" fill="url(#wing)"/>
+      <path d="M 92 66 L 92 46 L 168 34" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="3"/>
+      <rect x="82" y="26" width="10" height="44" rx="2" fill="#E63B2E"/>
+    </g>
+
+    <!-- splitter + diffuser fins -->
+    <path d="M 120 150 L 520 150 L 470 138 L 85 138 Z" fill="none" stroke="#FF6B1A" stroke-opacity="0.4" stroke-width="3"/>
+    <path d="M 500 150 L 540 150 L 536 128 L 500 132 Z" fill="#FF6B1A" opacity="0.85"/>
+    <path d="M 60 136 L 76 104 L 90 108 L 80 136 Z" fill="none" stroke="#FF6B1A" stroke-opacity="0.35" stroke-width="3"/>
+
+    <!-- near wheels with glowing hubs -->
+    <ellipse cx="200" cy="150" rx="46" ry="70" fill="#05070C"/>
+    <ellipse cx="200" cy="150" rx="30" ry="46" fill="#0C1119"/>
+    <ellipse cx="200" cy="150" rx="10" ry="15" fill="#FF6B1A"/>
+    <ellipse cx="200" cy="150" rx="10" ry="15" fill="#FF6B1A" filter="url(#soft)" opacity="0.8"/>
+    <path d="M 200 118 L 200 182 M 178 134 L 222 166 M 176 166 L 224 134" stroke="#263247" stroke-width="3"/>
+
+    <ellipse cx="500" cy="150" rx="46" ry="70" fill="#05070C"/>
+    <ellipse cx="500" cy="150" rx="30" ry="46" fill="#0C1119"/>
+    <ellipse cx="500" cy="150" rx="10" ry="15" fill="#FF6B1A"/>
+    <ellipse cx="500" cy="150" rx="10" ry="15" fill="#FF6B1A" filter="url(#soft)" opacity="0.8"/>
+
+    <!-- headlights -->
+    <ellipse cx="533" cy="104" rx="12" ry="22" fill="#FFE9CB"/>
+    <ellipse cx="533" cy="126" rx="10" ry="20" fill="#FFD9A8"/>
+    <ellipse cx="536" cy="112" rx="60" ry="70" fill="url(#headGlow)"/>
+  </g>
+
+  <!-- ===================== typography ===================== -->
+  <g font-family="DejaVu Sans, Arial, sans-serif">
+    <!-- small label row -->
+    <g fill="#8A93A6" font-weight="bold" letter-spacing="6">
+      <text x="1010" y="252" font-size="26">3 STRIPE</text>
+      <text x="1164" y="252" font-size="26">·</text>
+      <text x="1186" y="252" font-size="26">ENDURANCE</text>
+    </g>
+
+    <!-- big rhythm: 3SM -->
+    <text x="985" y="560" font-size="330" font-weight="900" fill="#F4F6FA" letter-spacing="-6">3SM</text>
+    <!-- hard orange underline through the letterform -->
+    <rect x="940" y="600" width="330" height="16" rx="8" fill="#FF6B1A"/>
+    <rect x="940" y="600" width="330" height="16" rx="8" fill="#FF6B1A" filter="url(#soft)" opacity="0.7"/>
+
+    <!-- 3SM red M echo -->
+    <text x="985" y="560" font-size="330" font-weight="900" fill="none"
+          stroke="#E63B2E" stroke-width="3" letter-spacing="-6" opacity="0.55">3SM</text>
+
+    <!-- subtitle -->
+    <text x="990" y="720" font-size="64" font-weight="900" fill="#F4F6FA" letter-spacing="2">ENDURANCE</text>
+    <text x="994" y="764" font-size="26" font-weight="bold" fill="#8A93A6" letter-spacing="8">ONE RACE · MANY KILOMETERS</text>
+
+    <!-- meta block -->
+    <g font-weight="bold" fill="#8A93A6" letter-spacing="4">
+      <text x="180" y="1780" font-size="24">SEASON</text>
+      <text x="180" y="1816" font-size="34" fill="#F4F6FA" letter-spacing="2">MULTI-CLASS</text>
+      <text x="180" y="1864" font-size="24">GT · SPORTSCAR</text>
+
+      <text x="620" y="1780" font-size="24">FORMAT</text>
+      <text x="620" y="1816" font-size="34" fill="#F4F6FA" letter-spacing="2">ENDURANCE</text>
+      <text x="620" y="1864" font-size="24">TEAM · STINTS</text>
+
+      <text x="1050" y="1780" font-size="24">CIRCUIT</text>
+      <text x="1050" y="1816" font-size="34" fill="#F4F6FA" letter-spacing="2">GRAND PRIX</text>
+      <text x="1050" y="1864" font-size="24">— EVENT SLOT —</text>
+    </g>
+
+    <!-- base bar -->
+    <rect x="120" y="1900" width="1360" height="3" fill="#FF6B1A" opacity="0.5"/>
+    <text x="120" y="1948" font-size="22" font-weight="bold" fill="#8A93A6" letter-spacing="5">3STRIPEMOTORSPORT.CC</text>
+    <text x="1200" y="1948" font-size="22" font-weight="bold" fill="#8A93A6" letter-spacing="5">#3SM</text>
+  </g>
+</svg>

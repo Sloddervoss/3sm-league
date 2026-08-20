@@ -1,4 +1,4 @@
-import type { EnduranceEvent, EnduranceState, EnduranceStint } from "../core/types";
+import type { EnduranceEvent, EnduranceStint, StintPlanningState } from "../core/types";
 import { makeId } from "../core/actions";
 
 /**
@@ -66,7 +66,11 @@ export function buildJresStints(event: EnduranceEvent, tankMinutes: number): { i
   const startRounded = Math.ceil(start / 3_600_000) * 3_600_000;
   const endRounded = Math.floor(end / 3_600_000) * 3_600_000;
   if (endRounded <= startRounded) return [];
-  const step = Math.max(3_600_000, Math.round((tankMinutes * 60_000) / 3_600_000) * 3_600_000);
+  // Tankduur discretiseren naar een geheel aantal stints van hele uren. Één uur is
+  // de kleinste JRES-granulariteit. We ronden NAAR BENEDEN af op het dichtstbijzijnde
+  // aantal hele uren zodat een stint NOOIT langer wordt dan de ingestelde tankduur
+  // (bv. 90 min tank → stints van max 60 min, niet 120). Minimaal één uur.
+  const step = Math.max(3_600_000, Math.floor((tankMinutes * 60_000) / 3_600_000) * 3_600_000);
   const segs: { id: number; startTime: string; endTime: string }[] = [];
   let cursor = startRounded;
   let i = 1;
@@ -85,21 +89,29 @@ export function buildJresStints(event: EnduranceEvent, tankMinutes: number): { i
  *  van de stints dekt, anders crasht hij (heap). Daarom wordt beschikbaarheid
  *  per heel-uur-bucket over het hele racevenster gegenereerd (niet alleen de
  *  start-uren van de input-stints), zodat elke mogelijke stintstart gedekt is. */
-export function buildJresAvailability(state: EnduranceState, event: EnduranceEvent, userIds: string[]): Record<string, Record<string, string>> {
+export function buildJresAvailability(state: Pick<StintPlanningState, "availability">, event: EnduranceEvent, userIds: string[]): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
-  const anyBlocks = state.availability.some((b) => b.eventId === event.id);
   // Alle hele-uur-buckets over het (afgeronde) racevenster.
   const hours = buildJresStints(event, 60);
   for (const userId of userIds) {
     const map: Record<string, string> = {};
     const blocks = state.availability.filter((b) => b.eventId === event.id && b.userId === userId);
+    // Per coureur: géén eigen blokken = altijd beschikbaar. Alleen coureurs met
+    // eigen blokken krijgen 'Available'/'Preferred' in hun blokken en
+    // 'Unavailable' daarbuiten (zodat 'niet ingevuld' niet als 'nooit
+    // beschikbaar' wordt uitgelegd wanneer een teamgenoot wél blokken heeft).
     for (const s of hours) {
       const k = keyFor(s.startTime);
-      if (!anyBlocks) {
+      if (!blocks.length) {
         map[k] = "Available";
       } else {
-        const hit = blocks.find((b) => overlap(b, s.startTime, s.endTime));
-        map[k] = !hit ? "Unavailable" : hit.type === "preferred" ? "Preferred" : "Available";
+        // Een bucket is uitsluitend 'Available'/'Preferred' als een
+        // available/preferred-blok hem dekt. Alles buiten zulke blokken —
+        // inclusief gaten én 'unavailable'/'avoid'-blokken — is 'Unavailable'.
+        // Zo wordt een coureur nooit op onbeschikbare uren gepland en blijft
+        // 'leeg invullen = altijd beschikbaar' alleen voor wie géén blokken zet.
+        const okHit = blocks.find((b) => overlap(b, s.startTime, s.endTime) && (b.type === "available" || b.type === "preferred"));
+        map[k] = !okHit ? "Unavailable" : okHit.type === "preferred" ? "Preferred" : "Available";
       }
     }
     out[userId] = map;
@@ -123,7 +135,7 @@ function overlap(block: { startAt: string; endAt: string }, a: string, b: string
  * members = actieve teamleden (userIds). firstStintDriver uit opties of willingToStart.
  */
 export function marshalJresInput(
-  state: EnduranceState,
+  state: Pick<StintPlanningState, "availability">,
   event: EnduranceEvent,
   memberUserIds: string[],
   options: MarshalOptions
@@ -139,7 +151,13 @@ export function marshalJresInput(
   const first = options.firstStintDriver ?? memberUserIds.find((uid) => driverOpts[uid]?.willingToStart) ?? null;
   return {
     success: true,
-    consecutiveStints: Math.max(1, minDefined(memberUserIds.map((u) => driverOpts[u]?.maxConsecutiveStints), 1)),
+    // De JRES-solver kent één globale consecutiveStints-parameter. We moeten
+    // daarin aansluiten bij de GROOTSTE gewenste reeks (anders respecteert de
+    // optimizer de 'max stints achter elkaar'-wens van de manager niet: bij een
+    // team met min=1 zou iedereen op 1-om-1 worden gezet). De solver egaliseert
+    // de workload vanzelf, dus een coureur wil 1 blijft in de praktijk eerlijk
+    // verdeeld; wie 2/3 wil kan die reeks daadwerkelijk krijgen.
+    consecutiveStints: Math.max(1, maxDefined(memberUserIds.map((u) => driverOpts[u]?.maxConsecutiveStints), 1)),
     minimumRestHours: Math.max(0, (minDefined(memberUserIds.map((u) => driverOpts[u]?.minRestMinutes), 0) ?? 0) / 60),
     maximumBusyHours: 8,
     firstStintDriver: first,
@@ -152,6 +170,11 @@ export function marshalJresInput(
 function minDefined(values: (number | null | undefined)[], fallback: number): number {
   const nums = values.filter((v): v is number => typeof v === "number" && v > 0);
   return nums.length ? Math.min(...nums) : fallback;
+}
+
+function maxDefined(values: (number | null | undefined)[], fallback: number): number {
+  const nums = values.filter((v): v is number => typeof v === "number" && v > 0);
+  return nums.length ? Math.max(...nums) : fallback;
 }
 
 export interface JresScheduleEntry {
@@ -200,11 +223,92 @@ export interface OptimizeResult {
 }
 
 /**
+ * Post-correctie na de JRES-berekening. JRES kent maar ÉÉN globale
+ * `consecutiveStints` (we zetten die op het MAX van de wensen zodat wie 2/3 wil
+ * het ook kan rijden) — maar daardoor kan een coureur met een STRENGERE eigen
+ * limiet (max 1) tóch 2/3 achter elkaar krijgen. Deze stap herverdeelt die
+ * overtollige, aaneengesloten stints naar een andere teamcoureur die (a) nog
+ * binnen zijn eigen limiet zit en (b) beschikbaar is. Zo handhaaft het eindresultaat
+ * per coureur de gewenste reeks zonder dat de optimizer globale keuze wordt opgeheven.
+ */
+export function enforceConsecutiveLimits(
+  stints: EnduranceStint[],
+  driverOpts: MarshalOptions["driverOpts"],
+  availability: Record<string, Record<string, string>>,
+  userIds: string[]
+): EnduranceStint[] {
+  if (!driverOpts) return stints;
+  const sorted = [...stints].sort((a, b) => a.actualStartAt.localeCompare(b.actualStartAt));
+  const result: EnduranceStint[] = [];
+  let runDriver: string | null = null;
+  let runCount = 0;
+
+  const availAt = (userId: string, startAt: string): boolean => {
+    const key = keyFor(startAt);
+    const map = availability[userId];
+    if (!map) return true; // geen blokken = altijd beschikbaar
+    return map[key] !== "Unavailable";
+  };
+
+  // Beschikbaarheid doorsnede over de HELE stint (niet alleen het startuur):
+  // elke hele-uur-bucket die de stint raakt moet beschikbaar zijn.
+  const availThrough = (userId: string, stint: EnduranceStint): boolean => {
+    const map = availability[userId];
+    if (!map) return true; // geen blokken = altijd beschikbaar
+    const start = new Date(stint.actualStartAt).getTime();
+    const end = new Date(stint.actualEndAt).getTime();
+    for (let cursor = start; cursor < end; cursor += 3_600_000) {
+      if (map[keyFor(new Date(cursor).toISOString())] === "Unavailable") return false;
+    }
+    return availAt(userId, stint.actualStartAt);
+  };
+
+  for (const stint of sorted) {
+    // maxConsecutiveStints default = 1 (1-om-1). Een NULL/undefined (niet
+    // ingesteld in de inschrijving én niet door de manager overridden) betekent
+    // géén extra reeks wens — dus gewoon 1 achter elkaar, NIET ongelimiteerd.
+    const rawLimit = driverOpts[stint.driverId]?.maxConsecutiveStints;
+    const limit = rawLimit == null || rawLimit <= 0 ? 1 : rawLimit;
+    const same = stint.driverId === runDriver;
+    const nextRunCount = same ? runCount + 1 : 1;
+    const exceeds = nextRunCount > limit;
+
+    if (exceeds && runDriver) {
+      // Zoek een vervanger: ander lid, binnen beperking, beschikbaar, met de
+      // minste workload tot nu toe (voorkeur voor de rustigste).
+      let replacement: string | null = null;
+      let bestTotal = Infinity;
+      for (const candidate of userIds) {
+        if (candidate === runDriver) continue;
+        const cl = driverOpts[candidate]?.maxConsecutiveStints;
+        const cAllowed = cl == null || cl <= 0 || cl >= 1; // elke coureur mag op z'n minst 1
+        if (!cAllowed) continue;
+        if (!availThrough(candidate, stint)) continue;
+        const total = result.filter((s) => s.driverId === candidate).length;
+        if (total < bestTotal) { bestTotal = total; replacement = candidate; }
+      }
+      if (replacement) {
+        result.push({ ...stint, driverId: replacement, notes: `${stint.notes ?? "Optimale planning (JRES/HiGHS)"} · gecorrigeerd` });
+        // run van de vervanger moet opnieuw geteld worden vanaf deze stint
+        runDriver = replacement;
+        runCount = 1;
+        continue;
+      }
+    }
+
+    result.push(stint);
+    runDriver = same ? runDriver : stint.driverId;
+    runCount = nextRunCount;
+  }
+  return result;
+}
+
+/**
  * Orkestreert de optimizer-stap voor een team, puur en testbaar:
  * marshall → fetcher → parse. Event/model-agnostisch in/uit.
  */
 export async function runOptimize(
-  state: EnduranceState,
+  state: Pick<StintPlanningState, "availability">,
   event: EnduranceEvent,
   memberUserIds: string[],
   teamId: string,
@@ -223,7 +327,16 @@ export async function runOptimize(
   if (result.status === "error") return { ok: false, message: `Optimalisatie mislukt: ${result.error ?? "onbekende fout"}`, stints: [] };
   if (result.status === "infeasible") return { ok: false, message: "Geen geldige planning mogelijk (constraints conflicteren). Pas limieten aan.", stints: [] };
   if (!result.output) return { ok: false, message: "Optimalisatie gaf geen planning terug.", stints: [] };
-  const stints = parseJresOutput(result.output as JresOutput, event, teamId);
-  if (!stints.length) return { ok: false, message: "Optimalisatie leverde geen stints op.", stints: [] };
+  const parsedStints = parseJresOutput(result.output as JresOutput, event, teamId);
+  if (!parsedStints.length) return { ok: false, message: "Optimalisatie leverde geen stints op.", stints: [] };
+  // Post-correctie: respecteer per coureur de eigen maxConsecutiveStints (JRES
+  // kent maar één globale waarde; die overtollige aaneengesloten stints worden
+  // herverdeeld naar een beschikbare teamgenoot binnen diens limiet).
+  const stints = enforceConsecutiveLimits(
+    parsedStints,
+    options.driverOpts,
+    input.availability,
+    memberUserIds
+  );
   return { ok: true, message: `Optimale planning opgehaald (${stints.length} stints).`, stints };
 }

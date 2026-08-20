@@ -46,6 +46,14 @@ export const enduranceRealtimeBindingsForEvent = (eventId: string): EnduranceRea
     ],
   },
   {
+    table: "endurance_availability",
+    queryKeys: [["endurance", "availability", eventId]],
+  },
+  {
+    table: "endurance_planning_versions",
+    queryKeys: [["endurance", "plans", eventId]],
+  },
+  {
     table: "endurance_teams",
     queryKeys: [
       ["endurance", "teams", eventId],

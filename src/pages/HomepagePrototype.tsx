@@ -12,6 +12,7 @@ import heroBgDesktop from "@/assets/hero-bg-desktop.webp";
 import heroBgMobile from "@/assets/hero-bg-mobile.webp";
 import { getTrackInfo } from "@/lib/trackData";
 import { getTrackPhoto } from "@/lib/trackPhotos";
+import { TrackMap } from "@/components/track-map/TrackMap";
 import { formatCountdown, useNow } from "@/lib/useCountdown";
 import { useRegistration } from "@/lib/useRegistration";
 import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
@@ -203,7 +204,15 @@ const NextRaceRefresh = () => {
             <div className="relative hidden self-center place-items-center overflow-hidden p-8 lg:grid">
               <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-transparent via-white/[0.07] to-transparent" />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_50%,rgba(249,115,22,0.04),transparent_60%)]" />
-              {trackInfo?.imageUrl ? <img src={trackInfo.imageUrl} alt="" className="max-h-60 max-w-full object-contain opacity-75 invert" /> : <Flag className="h-28 w-28 text-white/10" />}
+              <TrackMap
+                track={nextRace.track}
+                trackId={nextRace.iracing_track_id}
+                className="max-h-60 max-w-full object-contain"
+                style={{ opacity: 0.95 }}
+                fallbackStyle={{ opacity: 0.75, filter: "invert(1)" }}
+                loading="eager"
+                fallback={<Flag className="h-28 w-28 text-white/10" />}
+              />
             </div>
           </div>
         </div>

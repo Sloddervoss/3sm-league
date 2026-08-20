@@ -86,7 +86,7 @@ export const availabilityForStint = (blocks: AvailabilityBlock[], stint: Enduran
 
 export interface PlanningWarning { id: string; level: "hard" | "soft"; message: string; stintId?: string }
 
-export const planningWarnings = (state: EnduranceState, eventId: string, teamId?: string): PlanningWarning[] => {
+export const planningWarnings = (state: Pick<EnduranceState, "stints" | "availability" | "events">, eventId: string, teamId?: string): PlanningWarning[] => {
   const stints = state.stints
     .filter((stint) => stint.eventId === eventId && (!teamId || stint.teamId === teamId))
     .sort((a, b) => a.actualStartAt.localeCompare(b.actualStartAt));

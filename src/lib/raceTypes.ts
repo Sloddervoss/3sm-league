@@ -9,6 +9,7 @@ export type RaceWithLeagueSummary = {
   id: string;
   name: string;
   track: string;
+  iracing_track_id: number | null;
   race_date: string;
   league_id: string | null;
   status: string | null;

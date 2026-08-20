@@ -1,0 +1,562 @@
+export type TimingStatus = "full" | "partial" | "race_only";
+export type AvailabilityStatus = "exact_slots" | "date_only" | "tbd";
+
+export type OfficialEventCar = {
+  sourceKey: string;
+  name: string;
+  imageUrl: string | null;
+  officialClassId: string | null;
+  localCarId?: string | null;
+};
+
+export type SpecialEventSeed = {
+  sourceKey: string;
+  year: number;
+  name: string;
+  circuit?: string | null;
+  configuration?: string | null;
+  trackId?: number | null;
+  dateStart?: string | null;
+  dateEnd?: string | null;
+  classIds?: string[];
+  cars?: OfficialEventCar[];
+  teamEvent?: boolean;
+  officialUrl?: string | null;
+  posterUrl?: string | null;
+};
+
+/** Seed voor één gewone endurance-serie: meerdere races (season_schedule rows). */
+export type SeriesSeed = SpecialEventSeed & {
+  seasonId: number;
+  seriesId?: number | null;
+  seriesName: string;
+  /** combineer alle race-weken tot 1 catalog-event met per-week child-slots. */
+  combined?: boolean;
+};
+
+type RaceTimeDescriptor = {
+  session_times?: string[];
+  repeating?: boolean;
+  first_session_time?: string;
+};
+
+export type IRacingSchedule = {
+  season_id?: number;
+  series_id?: number;
+  race_week_num?: number;
+  track?: { track_id?: number; track_name?: string; config_name?: string };
+  race_time_descriptors?: RaceTimeDescriptor[];
+  practice_length?: number;
+  qualify_length?: number;
+  warmup_length?: number;
+  race_time_limit?: number;
+  race_lap_limit?: number;
+  session_minutes?: number;
+  schedule_name?: string;
+  series_name?: string;
+  season_name?: string;
+  start_date?: string;
+};
+
+type ScheduleEnvelope = IRacingSchedule & { schedules?: IRacingSchedule[] };
+
+const unwrapSchedule = (input?: IRacingSchedule | ScheduleEnvelope | IRacingSchedule[] | null): IRacingSchedule => {
+  if (!input) return {};
+  const rows = Array.isArray(input) ? input : Array.isArray((input as ScheduleEnvelope).schedules)
+    ? (input as ScheduleEnvelope).schedules ?? []
+    : [input as IRacingSchedule];
+  if (rows.length === 0) return {};
+  const base = rows.find((row) => row.race_time_descriptors?.length) ?? rows[0];
+  return {
+    ...base,
+    race_time_descriptors: rows.flatMap((row) => row.race_time_descriptors ?? []),
+  };
+};
+
+export type NormalizedSlot = {
+  sourceSlotKey: string;
+  sessionStartAt: string;
+  practiceStartAt: string | null;
+  practiceDurationMinutes: number | null;
+  qualifyingStartAt: string | null;
+  qualifyingDurationMinutes: number | null;
+  transitionDurationMinutes: number | null;
+  estimatedRaceStartAt: string | null;
+  raceDurationMinutes: number | null;
+  raceLapLimit: number | null;
+  sessionDurationMinutes: number | null;
+  sessionTimingStatus: TimingStatus;
+  label: string | null;
+  source: string;
+};
+
+export type NormalizedSpecialEvent = SpecialEventSeed & {
+  circuit: string | null;
+  configuration: string | null;
+  trackId: number | null;
+  dateStart: string | null;
+  dateEnd: string | null;
+  durationMinutes: number | null;
+  classIds: string[];
+  cars: OfficialEventCar[];
+  teamEvent: boolean;
+  officialUrl: string | null;
+  posterUrl: string | null;
+  availabilityStatus: AvailabilityStatus;
+  slots: NormalizedSlot[];
+  sourceHash: string;
+};
+
+const htmlText = (value: string) => value
+  .replace(/<[^>]+>/g, " ")
+  .replace(/&amp;/g, "&")
+  .replace(/&nbsp;|&#160;/g, " ")
+  .replace(/&#8211;|&#x2013;/gi, "-")
+  .replace(/&#8217;|&#x2019;/gi, "'")
+  .replace(/\s+/g, " ").trim();
+
+const monthNumber: Record<string, number> = {
+  january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4, may: 5, june: 6, jun: 6,
+  july: 7, jul: 7, august: 8, aug: 8, september: 9, sep: 9, sept: 9, october: 10, oct: 10,
+  november: 11, nov: 11, december: 12, dec: 12,
+};
+const isoDate = (year: number, month: number, day: number) =>
+  `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+const parseOfficialDateRange = (text: string): { dateStart: string; dateEnd: string } | null => {
+  const match = text.match(/\b([A-Za-z]+)\s+(\d{1,2})(?:\s*[-–]\s*(?:(?:([A-Za-z]+)\s+)?(\d{1,2})))?,\s*(\d{4})\b/);
+  if (!match) return null;
+  const startMonth = monthNumber[match[1].toLowerCase()];
+  const endMonth = monthNumber[(match[3] ?? match[1]).toLowerCase()];
+  if (!startMonth || !endMonth) return null;
+  const year = Number(match[5]);
+  return { dateStart: isoDate(year, startMonth, Number(match[2])), dateEnd: isoDate(year, endMonth, Number(match[4] ?? match[2])) };
+};
+
+const eventCarsFromSection = (section: string): OfficialEventCar[] => {
+  const carsArea = section.split(/Cars Competing<\/h3>/i)[1] ?? "";
+  const figures = carsArea.match(/<figure\b[\s\S]*?<\/figure>/gi) ?? [];
+  const seen = new Set<string>();
+  return figures.flatMap((figure) => {
+    const contextSource = figure.match(/uploadedSrc&quot;:&quot;([^&]+)&quot;/i)?.[1]?.replace(/\\\//g, "/");
+    const imageUrl = contextSource ?? figure.match(/<img\b[^>]*\bsrc="([^"]+)"/i)?.[1] ?? null;
+    if (!imageUrl) return [];
+    const rawName = imageUrl.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
+    const sourceKey = rawName.toLowerCase().replace(/-\d+x\d+$/i, "");
+    if (!sourceKey || seen.has(sourceKey)) return [];
+    seen.add(sourceKey);
+    const name = rawName.replace(/-\d+x\d+$/i, "").replace(/[-_]+/g, " ")
+      .replace(/\bfeature\b/gi, "").replace(/\s+/g, " ").trim();
+    return [{ sourceKey, name, imageUrl, officialClassId: null }];
+  });
+};
+
+const officialClassesFromArea = (carsArea: string): string[] => htmlText(
+  carsArea.match(/<summary>([\s\S]*?)<\/summary>/i)?.[1] ?? "",
+).split(/\s*(?:\/\/|\/|\\+|,)\s*/)
+  .map((value) => value.trim())
+  .filter((value) => value.length > 0 && !/^(?:cars?\s*:\s*)?(?:tba|tbd|to be (?:announced|determined))$/i.test(value));
+
+export const sourceSlug = (value: string) => value.normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .replace(/&/g, " and ")
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "");
+
+const eventSectionAround = (calendarHtml: string, headingOffset: number): string | null => {
+  const sectionStart = calendarHtml.lastIndexOf("<section", headingOffset);
+  const sectionEnd = calendarHtml.indexOf("</section>", headingOffset);
+  if (sectionStart < 0 || sectionEnd < 0) return null;
+  return calendarHtml.slice(sectionStart, sectionEnd + 10);
+};
+
+/** Ontdek alle officiële toekomstige events; slots blijven expliciet gemapt. */
+export function discoverUpcomingSpecialEvents(calendarHtml: string): SpecialEventSeed[] {
+  const upcomingHeading = calendarHtml.search(/<h[1-3]\b[^>]*>\s*Upcoming Events\s*<\/h[1-3]>/i);
+  const completedHeading = calendarHtml.search(/<h[1-3]\b[^>]*>\s*Completed Events\s*<\/h[1-3]>/i);
+  if (upcomingHeading < 0 || completedHeading <= upcomingHeading) {
+    throw new Error("Officiële Upcoming/Completed-eventgrenzen ontbreken");
+  }
+  const upcomingHtml = calendarHtml.slice(upcomingHeading, completedHeading);
+  const yearCounts = new Map<number, number>();
+  for (const dateMatch of upcomingHtml.matchAll(/<em>([\s\S]*?)<\/em>/gi)) {
+    const parsed = parseOfficialDateRange(htmlText(dateMatch[1]));
+    if (!parsed) continue;
+    const year = Number(parsed.dateStart.slice(0, 4));
+    yearCounts.set(year, (yearCounts.get(year) ?? 0) + 1);
+  }
+  const rankedYears = [...yearCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const dominantYear = rankedYears.length > 0 && (rankedYears.length === 1 || rankedYears[0][1] > rankedYears[1][1])
+    ? rankedYears[0][0]
+    : null;
+  const headingPattern = /<h2\b[^>]*>([\s\S]*?)<\/h2>/gi;
+  const discovered = new Map<string, SpecialEventSeed>();
+  for (const match of upcomingHtml.matchAll(headingPattern)) {
+    const name = htmlText(match[1]);
+    const headingOffset = upcomingHeading + (match.index ?? 0);
+    const section = eventSectionAround(calendarHtml, headingOffset);
+    if (!name || !section || !/Cars Competing<\/h3>/i.test(section)) continue;
+    const dateText = htmlText(section.match(/<p\b[^>]*>[\s\S]*?<em>([\s\S]*?)<\/em>[\s\S]*?<\/p>/i)?.[1] ?? "");
+    const dates = parseOfficialDateRange(dateText);
+    const poster = section.match(/<figure\b[^>]*class="[^"]*wp-block-image[^"]*"[^>]*>[\s\S]*?<img\b[^>]*\bsrc="([^"]+)"/i)?.[1] ?? null;
+    const year = dates ? Number(dates.dateStart.slice(0, 4)) : dominantYear;
+    if (!Number.isInteger(year) || year < 2008 || year > 2100) continue;
+    const carsArea = section.split(/Cars Competing<\/h3>/i)[1] ?? "";
+    const classIds = officialClassesFromArea(carsArea);
+    const trackName = htmlText(section.match(/<a\b[^>]*href="\/tracks\/[^"]+"[^>]*>([\s\S]*?)<\/a>/i)?.[1] ?? "") || null;
+    const slug = sourceSlug(name);
+    if (!slug) continue;
+    const seed: SpecialEventSeed = {
+      sourceKey: `iracing:${year}:${slug}`,
+      year,
+      name,
+      circuit: trackName,
+      dateStart: dates?.dateStart ?? null,
+      dateEnd: dates?.dateEnd ?? null,
+      classIds,
+      cars: eventCarsFromSection(section),
+      teamEvent: /\bTEAM EVENT\b/i.test(htmlText(section)),
+      officialUrl: "https://www.iracing.com/special-events/",
+      posterUrl: poster,
+    };
+    discovered.set(seed.sourceKey, seed);
+  }
+  if (discovered.size === 0) throw new Error("Geen officiële Upcoming Events gevonden");
+  return [...discovered.values()];
+}
+
+export function enrichSeedFromOfficialCalendar(seed: SpecialEventSeed, calendarHtml: string): SpecialEventSeed {
+  const anchor = seed.officialUrl?.split("#")[1] ?? "";
+  if (!anchor) throw new Error("Officiële event-URL mist een sectieanker");
+  const start = calendarHtml.indexOf(`id="${anchor}"`);
+  if (start < 0) throw new Error("Eventsectie ontbreekt op officiële iRacing-kalender");
+  const sectionStart = calendarHtml.lastIndexOf("<section", start);
+  const sectionEnd = calendarHtml.indexOf("</section>", start);
+  if (sectionStart < 0 || sectionEnd < 0) throw new Error("Officiële eventsectie is onvolledig");
+  const section = calendarHtml.slice(sectionStart, sectionEnd + 10);
+  const heading = section.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1];
+  const poster = section.match(/<figure\b[^>]*class="[^"]*wp-block-image[^"]*"[^>]*>[\s\S]*?<img\b[^>]*\bsrc="([^"]+)"/i)?.[1];
+  const dateText = htmlText(section.match(/<p\b[^>]*>[\s\S]*?<em>([\s\S]*?)<\/em>[\s\S]*?<\/p>/i)?.[1] ?? "");
+  const dates = parseOfficialDateRange(dateText);
+  const carsArea = section.split(/Cars Competing<\/h3>/i)[1] ?? "";
+  const classes = officialClassesFromArea(carsArea);
+  const cars = eventCarsFromSection(section);
+  return {
+    ...seed,
+    name: heading ? htmlText(heading) : seed.name,
+    dateStart: dates?.dateStart ?? seed.dateStart ?? null,
+    dateEnd: dates?.dateEnd ?? seed.dateEnd ?? null,
+    posterUrl: poster ?? seed.posterUrl ?? null,
+    classIds: classes.length ? classes : seed.classIds,
+    cars: cars.length ? cars : seed.cars,
+    teamEvent: /\bTEAM EVENT\b/i.test(htmlText(section)) || seed.teamEvent === true,
+  };
+}
+
+const finiteMinutes = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+
+const addMinutes = (iso: string, minutes: number) =>
+  new Date(new Date(iso).getTime() + minutes * 60_000).toISOString();
+
+const utcIso = (value: string): string | null => {
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim())) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const canonical = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, child]) => [key, canonical(child)]));
+  }
+  return value;
+};
+
+const sha256 = async (value: unknown) => {
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical(value)));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
+const timing = (schedule: IRacingSchedule, sessionStartAt: string): Omit<NormalizedSlot, "sourceSlotKey" | "sessionStartAt" | "label" | "source"> => {
+  const practice = finiteMinutes(schedule.practice_length);
+  const qualify = finiteMinutes(schedule.qualify_length);
+  const warmup = finiteMinutes(schedule.warmup_length);
+  const raceDuration = finiteMinutes(schedule.race_time_limit);
+  const raceLapLimit = finiteMinutes(schedule.race_lap_limit);
+  const sessionMinutes = finiteMinutes(schedule.session_minutes);
+  const knownPreRace = (practice ?? 0) + (qualify ?? 0) + (warmup ?? 0);
+
+  // Alleen een aantoonbare resttijd gebruiken: totale sessie - gepubliceerde fasen -
+  // time-limited race. Lap-limited schedules leveren geen betrouwbare eindtijd.
+  const transition = sessionMinutes !== null && raceDuration !== null
+    ? sessionMinutes - knownPreRace - raceDuration
+    : null;
+  const safeTransition = transition !== null && transition >= 0 && transition <= 30 ? transition : null;
+  const hasSequence = practice !== null || qualify !== null || warmup !== null;
+  const qualifyingOffset = practice !== null ? practice + (warmup ?? 0) : null;
+  const qualifyingStartAt = qualify !== null && qualifyingOffset !== null ? addMinutes(sessionStartAt, qualifyingOffset) : null;
+  const qualifyingEndAt = qualifyingStartAt !== null && qualify !== null ? addMinutes(qualifyingStartAt, qualify) : null;
+  const estimatedRaceStartAt = hasSequence && safeTransition !== null
+    ? addMinutes(sessionStartAt, knownPreRace + safeTransition)
+    : qualifyingEndAt;
+
+  return {
+    practiceStartAt: practice !== null ? sessionStartAt : null,
+    practiceDurationMinutes: practice,
+    qualifyingStartAt,
+    qualifyingDurationMinutes: qualify,
+    transitionDurationMinutes: safeTransition,
+    estimatedRaceStartAt,
+    raceDurationMinutes: raceDuration,
+    raceLapLimit,
+    sessionDurationMinutes: sessionMinutes,
+    sessionTimingStatus: estimatedRaceStartAt ? "full" : hasSequence ? "partial" : "race_only",
+  };
+};
+
+export async function normalizeSpecialEvent(seed: SpecialEventSeed, input?: IRacingSchedule | ScheduleEnvelope | IRacingSchedule[] | null): Promise<NormalizedSpecialEvent> {
+  if (!seed.sourceKey.trim() || !seed.name.trim() || !Number.isInteger(seed.year)) {
+    throw new Error("Ongeldig Special Event-bronrecord");
+  }
+  const schedule = unwrapSchedule(input);
+  const starts = new Set<string>();
+  for (const descriptor of schedule?.race_time_descriptors ?? []) {
+    for (const raw of descriptor.session_times ?? []) {
+      const iso = utcIso(raw);
+      if (iso) starts.add(iso);
+    }
+    if (!descriptor.repeating && descriptor.first_session_time) {
+      const iso = utcIso(descriptor.first_session_time);
+      if (iso) starts.add(iso);
+    }
+  }
+  const slots = Array.from(starts).sort().map((sessionStartAt) => ({
+    sourceSlotKey: `${seed.sourceKey}:${sessionStartAt}`,
+    sessionStartAt,
+    ...timing(schedule ?? {}, sessionStartAt),
+    label: null,
+    source: "iracing_data_api",
+  }));
+  const dateStart = seed.dateStart ?? null;
+  const dateEnd = seed.dateEnd ?? null;
+  if (slots.length && dateStart && dateEnd) {
+    const earliestAllowed = Date.parse(`${dateStart}T00:00:00Z`) - 24 * 60 * 60 * 1000;
+    const latestAllowedExclusive = Date.parse(`${dateEnd}T00:00:00Z`) + 2 * 24 * 60 * 60 * 1000;
+    const outsideOfficialWindow = slots.some((slot) => {
+      const instant = Date.parse(slot.sessionStartAt);
+      return instant < earliestAllowed || instant >= latestAllowedExclusive;
+    });
+    if (outsideOfficialWindow) {
+      throw new Error("iRacing-seasonmapping bevat timeslots buiten het officiële eventvenster");
+    }
+  }
+  const eventWithoutHash = {
+    ...seed,
+    circuit: seed.circuit ?? schedule?.track?.track_name ?? null,
+    configuration: seed.configuration ?? schedule?.track?.config_name ?? null,
+    trackId: seed.trackId ?? schedule?.track?.track_id ?? null,
+    dateStart,
+    dateEnd,
+    durationMinutes: finiteMinutes(schedule?.race_time_limit),
+    classIds: [...new Set(seed.classIds ?? [])].sort(),
+    cars: Array.from(new Map((seed.cars ?? []).map((car) => [car.sourceKey, car])).values())
+      .sort((a, b) => a.sourceKey.localeCompare(b.sourceKey)),
+    teamEvent: seed.teamEvent ?? true,
+    officialUrl: seed.officialUrl ?? null,
+    posterUrl: seed.posterUrl ?? null,
+    availabilityStatus: (slots.length ? "exact_slots" : dateStart ? "date_only" : "tbd") as AvailabilityStatus,
+    slots,
+  };
+  return { ...eventWithoutHash, sourceHash: await sha256(eventWithoutHash) };
+}
+
+/**
+ * Zet een gewone endurance-serie (season_schedule) om naar per-race
+ * catalog-events. Elke row is één individuele race (track/week) met eigen
+ * child-slots. Rows zonder race_time_descriptors of zonder een geldig
+ * track/week worden overgeslagen; een rij mét tijden wordt een exact_slots
+ * event, anders date_only. Er wordt nooit gegokt.
+ */
+export async function discoverSeriesRaces(
+  seriesSeed: SeriesSeed,
+  input?: IRacingSchedule | ScheduleEnvelope | IRacingSchedule[] | null,
+): Promise<NormalizedSpecialEvent[]> {
+  if (!seriesSeed.seasonId || !Number.isInteger(seriesSeed.seasonId)) {
+    throw new Error("Ongeldige serieseason-id");
+  }
+  const envelope = Array.isArray(input) ? { schedules: input as IRacingSchedule[] } : input ?? {};
+  const rows = Array.isArray((envelope as ScheduleEnvelope).schedules)
+    ? (envelope as ScheduleEnvelope).schedules ?? []
+    : [envelope as IRacingSchedule];
+  const results: NormalizedSpecialEvent[] = [];
+  const seen = new Map<string, number>();
+  for (const row of rows) {
+    if (!row?.track?.track_name) continue;
+    const trackSlug = sourceSlug(row.track.track_name);
+    const week = row.race_week_num ?? 0;
+    if (!trackSlug) continue;
+    const baseKey = `${seriesSeed.sourceKey}:week${week}:${trackSlug}`;
+    const count = seen.get(baseKey) ?? 0;
+    seen.set(baseKey, count + 1);
+    const sourceKey = count > 0 ? `${baseKey}:${count + 1}` : baseKey;
+    const raceName = `${seriesSeed.seriesName} — ${row.track.track_name}`;
+    // Leid de event-einddatum af uit de werkelijke sessiestarttijden, zodat
+    // verlopen races door het presentatie-past-filter verborgen worden.
+    const sessionStarts: string[] = (row.race_time_descriptors ?? [])
+      .flatMap((descriptor) => descriptor.session_times ?? [])
+      .map((raw) => utcIso(raw))
+      .filter((value): value is string => Boolean(value));
+    const dateEnd = sessionStarts.length
+      ? sessionStarts.map((iso) => iso.slice(0, 10)).sort().at(-1) ?? null
+      : seriesSeed.dateEnd ?? null;
+    const rowSeed: SpecialEventSeed = {
+      ...seriesSeed,
+      sourceKey,
+      name: raceName,
+      circuit: row.track.track_name,
+      configuration: row.track.config_name ?? null,
+      trackId: row.track.track_id ?? null,
+      dateStart: row.start_date ?? seriesSeed.dateStart ?? null,
+      dateEnd,
+      classIds: seriesSeed.classIds,
+      cars: seriesSeed.cars,
+      teamEvent: seriesSeed.teamEvent ?? true,
+      officialUrl: seriesSeed.officialUrl ?? null,
+      posterUrl: seriesSeed.posterUrl ?? null,
+    };
+    const normalized = await normalizeSpecialEvent(rowSeed, row);
+    results.push(normalized);
+  }
+  return results;
+}
+
+const formatWeekLabel = (startDate: string | undefined): string | null => {
+  if (!startDate) return null;
+  const date = new Date(`${startDate}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+};
+
+/**
+ * Resolveert officiële iRacing-klassen + auto's voor een serie op basis van de
+ * season `car_class_ids` en de `/data/carclass/get` + `/data/car/get` payloads.
+ * Klassenaam is de officiële classname; auto's krijgen een leesbare car_name.
+ * Onbekende class-IDs worden overgeslagen (nooit gegokt).
+ */
+export type ResolvedSeriesRoster = { classIds: string[]; cars: OfficialEventCar[] };
+
+export function resolveSeriesRoster(
+  carClassIds: number[] | undefined,
+  carClassData: Record<string | number, unknown> | unknown[] | null | undefined,
+  carData: Record<string | number, unknown> | unknown[] | null | undefined,
+): ResolvedSeriesRoster {
+  const classes = Array.isArray(carClassData) ? carClassData : carClassData ? Object.values(carClassData) : [];
+  const cars = Array.isArray(carData) ? carData : carData ? Object.values(carData) : [];
+  const carClassByName = new Map<string, { name?: string; cars_in_class?: { car_id?: number }[] }>();
+  for (const row of classes) {
+    if (!row || typeof row !== "object") continue;
+    const rec = row as { car_class_id?: number; name?: string; cars_in_class?: { car_id?: number }[] };
+    if (rec.car_class_id !== undefined) carClassByName.set(String(rec.car_class_id), rec);
+  }
+  const carById = new Map<string, { car_name?: string; car_id?: number }>();
+  for (const row of cars) {
+    if (!row || typeof row !== "object") continue;
+    const rec = row as { car_id?: number; car_name?: string };
+    if (rec.car_id !== undefined) carById.set(String(rec.car_id), rec);
+  }
+
+  const classIds = [...new Set((carClassIds ?? [])
+    .map((id) => carClassByName.get(String(id))?.name?.trim())
+    .filter((name): name is string => Boolean(name)))];
+  classIds.sort((a, b) => a.localeCompare(b));
+
+  const carMap = new Map<string, OfficialEventCar>();
+  for (const id of carClassIds ?? []) {
+    const cls = carClassByName.get(String(id));
+    if (!cls?.name) continue;
+    for (const entry of cls.cars_in_class ?? []) {
+      const meta = entry?.car_id !== undefined ? carById.get(String(entry.car_id)) : undefined;
+      const dirPath = (entry as { car_dirpath?: string }).car_dirpath;
+      const rawName = meta?.car_name?.trim() || dirPath?.trim() || "";
+      if (!rawName) continue;
+      const sourceKey = sourceSlug(rawName);
+      if (!sourceKey) continue;
+      carMap.set(sourceKey, {
+        sourceKey,
+        name: rawName,
+        imageUrl: null,
+        officialClassId: String(id),
+      });
+    }
+  }
+  const uniqueCars = [...carMap.values()].sort((a, b) => a.sourceKey.localeCompare(b.sourceKey));
+  return { classIds, cars: uniqueCars };
+}
+
+/**
+ * Combineert alle race-weken van één serie tot een enkel catalog-event met
+ * per-week child-slots, per datum gesorteerd. Bedoeld voor series die alle
+ * races op één circuit rijden (bv. Nürburgring Endurance Championship), die
+ * anders als N identieke kaarten zouden verschijnen.
+ */
+export async function discoverCombinedSeriesEvent(
+  seriesSeed: SeriesSeed,
+  input?: IRacingSchedule | ScheduleEnvelope | IRacingSchedule[] | null,
+): Promise<NormalizedSpecialEvent | null> {
+  if (!seriesSeed.seasonId || !Number.isInteger(seriesSeed.seasonId)) {
+    throw new Error("Ongeldige serieseason-id");
+  }
+  const envelope = Array.isArray(input) ? { schedules: input as IRacingSchedule[] } : input ?? {};
+  const rows = Array.isArray((envelope as ScheduleEnvelope).schedules)
+    ? (envelope as ScheduleEnvelope).schedules ?? []
+    : [envelope as IRacingSchedule];
+
+  const firstRow = rows.find((row) => row?.track?.track_name);
+  const seed: SpecialEventSeed = {
+    ...seriesSeed,
+    name: seriesSeed.seriesName ?? seriesSeed.name,
+    circuit: firstRow?.track?.track_name ?? seriesSeed.circuit ?? null,
+    configuration: firstRow?.track?.config_name ?? seriesSeed.configuration ?? null,
+    trackId: firstRow?.track?.track_id ?? seriesSeed.trackId ?? null,
+    dateStart: seriesSeed.dateStart,
+    dateEnd: seriesSeed.dateEnd,
+    officialUrl: seriesSeed.officialUrl ?? null,
+    posterUrl: seriesSeed.posterUrl ?? null,
+  };
+  const event = await normalizeSpecialEvent(seed, null);
+
+  const slotsByWeek: NormalizedSlot[] = [];
+  let dateStart: string | null = seriesSeed.dateStart ?? null;
+  let dateEnd: string | null = seriesSeed.dateEnd ?? null;
+  for (const row of rows) {
+    if (!row?.track?.track_name) continue;
+    const week = row.race_week_num ?? 0;
+    const weekSeed: SpecialEventSeed = {
+      ...seed,
+      sourceKey: `${seriesSeed.sourceKey}:week${week}`,
+      name: `${seriesSeed.seriesName} — ${row.track.track_name}`,
+      circuit: row.track.track_name,
+      configuration: row.track.config_name ?? null,
+      trackId: row.track.track_id ?? null,
+      dateStart: row.start_date ?? seriesSeed.dateStart ?? null,
+      dateEnd: seriesSeed.dateEnd ?? null,
+    };
+    const weekEvent = await normalizeSpecialEvent(weekSeed, row);
+    if (!weekEvent.slots.length) continue;
+    for (const slot of weekEvent.slots) {
+      const day = slot.sessionStartAt.slice(0, 10);
+      if (!dateStart || day < dateStart) dateStart = day;
+      if (!dateEnd || day > dateEnd) dateEnd = day;
+      // Unieke slot per racemoment binnen de week (datum+tijd), gelabeld met de weekdatum.
+      const timeTag = slot.sessionStartAt.replace(/[^0-9]/g, "").slice(0, 14);
+      slotsByWeek.push({ ...slot, sourceSlotKey: `${seriesSeed.sourceKey}:week${week}:${timeTag}`, label: formatWeekLabel(row.start_date ?? day) });
+    }
+  }
+  const ordered = slotsByWeek.sort((a, b) => a.sessionStartAt.localeCompare(b.sessionStartAt));
+  if (ordered.length === 0) return null;
+  return { ...event, sourceKey: seriesSeed.sourceKey, name: seriesSeed.seriesName, dateStart, dateEnd, slots: ordered };
+}

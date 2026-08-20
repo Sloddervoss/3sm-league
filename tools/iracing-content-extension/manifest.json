@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "3 Stripe iRacing Content Scanner",
-  "version": "0.5.10",
+  "version": "0.6.2",
   "description": "Scans je iRacing content en uploadt tracks naar 3 Stripe Motorsport voor kalenderplanning.",
   "icons": {
     "16": "icon-16.png",

@@ -147,6 +147,86 @@ function displayResult(result) {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Bouw een page-URL met specifiek pagina-nummer, gebaseerd op de huidige URL. */
+function pageUrlFor(baseUrl, page) {
+  const url = new URL(baseUrl);
+  const pageSize = url.searchParams.get("page_size") || url.searchParams.get("rows_per_page");
+  if (pageSize) url.searchParams.set("page_size", pageSize);
+  url.searchParams.set("page", String(page));
+  // Verwijder 'rows_per_page'-alias indien aanwezig (iRacing gebruikt page_size)
+  url.searchParams.delete("rows_per_page");
+  return url.href;
+}
+
+async function scanAllPages() {
+  const tab = await getTargetIracingTab();
+  if (!tab?.id) throw new Error("Geen iRacing-tab gevonden.");
+  const startUrl = tab.url || "";
+
+  // Vind de startpagina uit de URL (default 1) en scan hem eerst.
+  let expectedPage;
+  try { expectedPage = parseInt(new URL(startUrl).searchParams.get("page") || "1", 10) || 1; }
+  catch { expectedPage = 1; }
+
+  const first = await runScanOnTab(tab.id);
+  const pag = first?.export?.pagination || first?.debug?.pagination || {};
+  const total = pag.totalCount || 0;
+  const pageSize = pag.pageSize || 12;
+
+  // Verzameling van alle unieke tracknamen over de pagina's heen.
+  const seenNames = new Set();
+  const seenCandidates = new Map(); // name -> owned
+
+  function absorb(scanResult) {
+    const exp = scanResult?.export || scanResult;
+    const owned = Array.isArray(exp.ownedTracks) ? exp.ownedTracks : exp.candidates
+      ?.filter((c) => exp.pageIsOwnedFilter || c.owned).map((c) => c.name) || [];
+    owned.forEach((n) => seenNames.add(n));
+    (Array.isArray(exp.candidates) ? exp.candidates : []).forEach((c) => {
+      if (!seenCandidates.has(c.name)) seenCandidates.set(c.name, { name: c.name, owned: c.owned });
+    });
+    return exp;
+  }
+
+  const firstExport = absorb(first);
+
+  // Bepaal hoeveel pagina's er zijn. Als we de teller niet kunnen lezen, stop na 1.
+  let lastPage = 1;
+  if (total > 0 && pageSize > 0) {
+    lastPage = Math.ceil(total / pageSize);
+  } else {
+    const count = firstExport.ownedTracks?.length || 0;
+    if (total > count) lastPage = Math.ceil(total / (count || pageSize || 1));
+  }
+  if (lastPage < 1) lastPage = 1;
+  // Cap defensief zodat we niet eindeloos door navigeren op een verkeerde parse.
+  if (lastPage > 200) lastPage = 200;
+
+  // Scan de resterende pagina's door de iRacing-tab telkens opnieuw te laden.
+  for (let page = expectedPage + 1; page <= lastPage; page++) {
+    setStatus(`Pagina ${page}/${lastPage} scannen...`);
+    const targetUrl = pageUrlFor(startUrl, page);
+    const updated = await chrome.tabs.update(tab.id, { url: targetUrl, active: true });
+    await sleep(6000); // wacht op SPA-load
+    const scanned = await runScanOnTab(updated.id);
+    absorb(scanned);
+  }
+
+  // Bouw een samengevoegde export: paginering weergevend dat we allemaal hebben.
+  const mergedExport = firstExport;
+  mergedExport.ownedTracks = [...seenNames].sort((a, b) => a.localeCompare(b));
+  mergedExport.candidates = [...seenCandidates.values()];
+  mergedExport.pagination = {
+    ...pag,
+    scannedPages: Math.max(1, lastPage - expectedPage + 1),
+    merged: true,
+  };
+  // Meerder dit zo dat displayResult de nieuwe tijden ook echt laat zien.
+  return { export: mergedExport, debug: { ...(first?.debug || {}), pagination: mergedExport.pagination } };
+}
+
 async function scanCurrentPage() {
   const buttons = [scanCurrentBtn, openTracksBtn, openTracksFromEmpty, rescanFromEmpty];
   buttons.forEach((b) => { if (b) b.disabled = true; });
@@ -162,8 +242,13 @@ async function scanCurrentPage() {
       return;
     }
 
-    const result = await runScanOnTab(tab.id);
+    const result = await scanAllPages();
     displayResult(result);
+    const exp = result.export || result;
+    const pag = exp.pagination || {};
+    if (pag.totalCount && pag.merged) {
+      setStatus(`${exp.ownedTracks.length} tracks gevonden (alle ${pag.totalCount} via ${pag.scannedPages || 1} pagina's). Upload naar 3 Stripe of scannen opnieuw.`);
+    }
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Scan mislukt.";
     setStatus(msg, true);
@@ -188,13 +273,15 @@ async function openTracksPage() {
     }
     if (targetTab?.id) await rememberTargetTab(targetTab.id);
 
-    // Wacht 7 sec voor SPA laadtijd, scan dan automatisch. In vaste-tab modus blijft deze scanner-tab bestaan.
+    // Wacht 7 sec voor SPA laadtijd, scan dan automatisch alle pagina's.
     setTimeout(async () => {
       try {
         const target = targetTab?.id ? await chrome.tabs.get(targetTab.id) : await getTargetIracingTab();
         if (target?.id && isIracingUrl(target.url || "")) {
-          const result = await runScanOnTab(target.id);
+          const result = await scanAllPages();
           displayResult(result);
+          const pag = (result.export || result).pagination || {};
+          if (pag.totalCount && pag.merged) setStatus(`Alle ${pag.totalCount} tracks gevonden (${pag.scannedPages || 1} pagina's).`);
           return;
         }
       } catch {}
