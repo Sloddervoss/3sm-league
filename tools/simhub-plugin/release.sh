@@ -69,9 +69,13 @@ BUILT_VERSION=$(tr -d '\r\n' <<<"$BUILT_VERSION")
 
 if [ -f "$PRIVATE_KEY" ]; then
   MANIFEST_TMP="$(mktemp /tmp/3sm-manifest-XXXX)"
-  printf '%s\n' "$NEW" "$DLL_URL" "$SHA256" "$BYTES" "$DLL_FILE" > "$MANIFEST_TMP"
-  SIGNATURE=$(printf '%s\n' "$NEW" "$DLL_URL" "$SHA256" "$BYTES" "$DLL_FILE" | openssl dgst -sha256 -sign "$PRIVATE_KEY" | base64 -w0)
-  printf '%s\n' "$NEW" "$DLL_URL" "$SHA256" "$BYTES" "$DLL_FILE" | openssl dgst -sha256 -verify "$SCRIPT_DIR/release-signing-public.pem" \
+  write_manifest() {
+    # Moet byte-voor-byte overeenkomen met BuildManifestPayload(): geen newline na fileName.
+    printf '%s\n%s\n%s\n%s\n%s' "$NEW" "$DLL_URL" "$SHA256" "$BYTES" "$DLL_FILE"
+  }
+  write_manifest > "$MANIFEST_TMP"
+  SIGNATURE=$(write_manifest | openssl dgst -sha256 -sign "$PRIVATE_KEY" | base64 -w0)
+  write_manifest | openssl dgst -sha256 -verify "$SCRIPT_DIR/release-signing-public.pem" \
     -signature <(printf '%s' "$SIGNATURE" | base64 -d) >/dev/null 2>&1 || { echo "FOUT: Handtekeningverificatie"; exit 1; }
   echo "Manifest ondertekend en geverifieerd."
 else
