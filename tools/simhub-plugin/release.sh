@@ -35,8 +35,8 @@ if [ -z "$SKIP_BUILD" ]; then
   fi
 
   echo "Bronbestanden syncen..."
-    scp "$SCRIPT_DIR/create-dirs.ps1" "vdevo@192.168.50.119:C:/Users/vdevo/3sm/create-dirs.ps1"
-    $SSH_WIN "powershell -NoP -Exec Bypass -File C:\\Users\\vdevo\\3sm\\create-dirs.ps1"
+  scp "$SCRIPT_DIR/create-dirs.ps1" "vdevo@192.168.50.119:C:/Users/vdevo/3sm/create-dirs.ps1"
+  $SSH_WIN "powershell -NoP -Exec Bypass -File C:\\Users\\vdevo\\3sm\\create-dirs.ps1"
 
   scp "$SCRIPT_DIR"/3SM.EnduranceConnector/{AssemblyInfo.cs,ConnectorSettings.cs,EnduranceConnectorPlugin.cs,SettingsControl.cs,TelemetryContracts.cs,3SM.EnduranceConnector.csproj} \
     "vdevo@192.168.50.119:$WS_WIN/3SM.EnduranceConnector/"
@@ -64,7 +64,6 @@ SHA256=$(sha256sum "$DLL_PATH" | awk '{print $1}')
 BYTES=$(stat -c%s "$DLL_PATH")
 
 if [ -f "$PRIVATE_KEY" ]; then
-  # Signeer het manifest: gebruik tijdelijk bestand voor robuuste openssl-verificatie
   MANIFEST_TMP="$(mktemp /tmp/3sm-manifest-XXXX)"
   cleanup_manifest() { rm -f "$MANIFEST_TMP" "${MANIFEST_TMP}.sig"; }
   trap cleanup_manifest EXIT
@@ -82,18 +81,18 @@ echo "DLL uploaden naar webroot..."
 scp "$DLL_PATH" "3sm-web:/var/www/3sm/downloads/$DLL_FILE" >/dev/null 2>&1 || { echo "FOUT: Upload naar webroot mislukt."; exit 1; }
 echo "  Gekopieerd naar 3sm-web:/var/www/3sm/downloads/$DLL_FILE"
 
-echo "Edge-functie deployen..."
-ssh -o BatchMode=yes 3sm-docker "cat > /opt/supabase/docker/volumes/functions/simhub-version/.env << EOF
-SIMHUB_PLUGIN_VERSION=$NEW
-SIMHUB_PLUGIN_DLL_URL=$DLL_URL
-SIMHUB_PLUGIN_SHA256=$SHA256
-SIMHUB_PLUGIN_BYTE_LENGTH=$BYTES
-SIMHUB_PLUGIN_FILE_NAME=$DLL_FILE
-SIMHUB_PLUGIN_SIGNATURE=$SIGNATURE
-EOF
-cd /opt/supabase/docker && docker compose up -d --force-recreate functions"
+echo "Edge-functie env bijwerken in docker-compose.override.yml..."
+ssh -o BatchMode=yes -o StrictHostKeyChecking=no 3sm-docker "sed -i 's|SIMHUB_PLUGIN_VERSION: \".*\"|SIMHUB_PLUGIN_VERSION: \"$NEW\"|;
+s|SIMHUB_PLUGIN_DLL_URL: \".*\"|SIMHUB_PLUGIN_DLL_URL: \"$DLL_URL\"|;
+s|SIMHUB_PLUGIN_SHA256: \".*\"|SIMHUB_PLUGIN_SHA256: \"$SHA256\"|;
+s|SIMHUB_PLUGIN_BYTE_LENGTH: \".*\"|SIMHUB_PLUGIN_BYTE_LENGTH: \"$BYTES\"|;
+s|SIMHUB_PLUGIN_FILE_NAME: \".*\"|SIMHUB_PLUGIN_FILE_NAME: \"$DLL_FILE\"|;
+s|SIMHUB_PLUGIN_SIGNATURE: \".*\"|SIMHUB_PLUGIN_SIGNATURE: \"$SIGNATURE\"|" /opt/supabase/docker/docker-compose.override.yml"
 
+echo "Edge-functie container herstarten..."
+ssh -o BatchMode=yes -o StrictHostKeyChecking=no 3sm-docker "cd /opt/supabase/docker && docker compose up -d --force-recreate functions"
 echo ""
+
 echo "=== Release $NEW voltooid ==="
 echo "DLL: $DLL_URL"
 echo "SHA256: $SHA256"
