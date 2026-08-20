@@ -508,6 +508,7 @@ const buildNewsSummarizePost = (post) => ({
   category: cleanText(post.category) || null,
   excerpt: truncate(post.excerpt || post.content_html || '', 220) || null,
   formattedDate: formatDateNl(post.published_at) || dateOnly(post.published_at),
+  publishedDate: dateOnly(post.published_at),
   updatedDate: dateOnly(post.updated_at || post.published_at),
 });
 
@@ -532,17 +533,20 @@ const buildNewsHubItemListJsonLd = (summaries) => ({
   '@context': 'https://schema.org',
   '@type': 'ItemList',
   name: '3 Stripe Motorsport nieuws',
-  description: 'Overzicht van gepubliceerde 3SM nieuwsartikelen: raceverslagen, updates e verhalen uit de paddock.',
+  description: 'Overzicht van gepubliceerde 3SM nieuwsartikelen: raceverslagen, updates en verhalen uit de paddock.',
   url: absoluteUrl('/news'),
   itemListElement: summaries.slice(0, 80).map((post, index) => ({
-    '@type': 'BlogPosting',
+    '@type': 'ListItem',
     position: index + 1,
-    headline: post.title,
-    datePublished: post.updatedDate,
-    dateModified: post.updatedDate,
-    description: post.excerpt || undefined,
-    url: absoluteUrl(post.path),
-    mainEntityOfPage: absoluteUrl(post.path),
+    item: {
+      '@type': 'BlogPosting',
+      headline: post.title,
+      datePublished: post.publishedDate,
+      dateModified: post.updatedDate,
+      description: post.excerpt || undefined,
+      url: absoluteUrl(post.path),
+      mainEntityOfPage: absoluteUrl(post.path),
+    },
   })),
 });
 
@@ -1098,7 +1102,7 @@ if (newsRoute) {
   if (newsHubSummaries.length) {
     newsRoute.details = [
       `De nieuwshub bevat ${newsHubSummaries.length} gepubliceerd${newsHubSummaries.length === 1 ? '' : 'e'} nieuwsartikel${newsHubSummaries.length === 1 ? '' : 'en'} met raceverslagen, updates en verhalen uit de paddock van 3 Stripe Motorsport.`,
-      'Vanaf deze nieuwshub kun je doorklikken naar gepubliceerde artikelen en daarna terug naar kalender, uitslagen and standings.',
+      'Vanaf deze nieuwshub kun je doorklikken naar gepubliceerde artikelen en daarna terug naar kalender, uitslagen en standings.',
     ];
     newsRoute.crawlerHtml = buildNewsHubCrawlerHtml(newsHubSummaries);
     newsRoute.extraJsonLd = [
