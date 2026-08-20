@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   useEnduranceEvents,
@@ -34,17 +34,15 @@ const toLocalInput = (iso?: string | null) => {
  */
 export const EventManager = () => {
   const { data: dbEvents = [], isLoading, isError, error } = useEnduranceEvents();
-  // Realtime: events die een andere admin aanmaakt/bewerkt verschijnen live
-  // in de kalender zonder te verversen.
-  useEnduranceRealtime(
-    [
-      {
-        table: "endurance_events",
-        queryKeys: [["endurance", "events"]],
-      },
-    ],
-    []
-  );
+  const knownEventBindings = useMemo(() => dbEvents.map((event) => ({
+    table: "endurance_events" as const,
+    filter: { column: "id", value: event.id },
+    queryKeys: [["endurance", "events"]],
+  })), [dbEvents]);
+  useEnduranceRealtime(knownEventBindings, [knownEventBindings], {
+    kind: "event",
+    identity: "event-manager-known-events",
+  });
   const upsert = useUpsertEnduranceEvent();
   const remove = useDeleteEnduranceEvent();
   const sendInvites = useCreateEnduranceNotifications();
