@@ -6,8 +6,6 @@ namespace ThreeSM.EnduranceConnector
     public sealed class ConnectorSettings
     {
         public int SchemaVersion = 0;
-        // Veilige upgrade-default: bestaande installaties blijven lokaal tot een geslaagde pairing.
-        public bool UseCentralRelay = false;
         public string RelayBaseUrl = "https://api.3stripemotorsport.cc/functions/v1";
         public string DeviceTokenProtected = string.Empty;
         public string DeviceId = string.Empty;
@@ -15,13 +13,6 @@ namespace ThreeSM.EnduranceConnector
         public string BoundRaceId = string.Empty;
         public string BoundTeamId = string.Empty;
         public string BoundOwnerUserId = string.Empty;
-
-        // Geavanceerde lokale fallback voor ontwikkeling en offline simulatie.
-        public string BridgeUrl = "http://127.0.0.1:8787";
-        public string PairingToken = "local-3sm-simhub-spike";
-        public string EventId = "event-road-america-6h";
-        public string TeamId = "team-orange-31";
-        public string DriverId = "user-jaimy";
 
         public string ConnectorId = Environment.MachineName;
         public int SendIntervalMilliseconds = 1000;

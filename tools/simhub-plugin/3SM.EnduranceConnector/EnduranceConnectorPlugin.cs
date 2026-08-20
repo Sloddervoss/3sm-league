@@ -75,10 +75,9 @@ namespace ThreeSM.EnduranceConnector
         {
             PluginManager = pluginManager;
             Settings = this.ReadCommonSettings<ConnectorSettings>("ConnectorSettings", () => new ConnectorSettings());
-            if (Settings.SchemaVersion < 3)
+            if (Settings.SchemaVersion < 4)
             {
-                if (Settings.SchemaVersion < 2) Settings.UseCentralRelay = false;
-                Settings.SchemaVersion = 3;
+                Settings.SchemaVersion = 4;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
@@ -90,18 +89,15 @@ namespace ThreeSM.EnduranceConnector
                 Settings.BoundRaceId = string.Empty;
                 Settings.BoundTeamId = string.Empty;
                 Settings.BoundOwnerUserId = string.Empty;
-                Settings.UseCentralRelay = false;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
             _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
-            Status = Settings.UseCentralRelay
-                ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
-                : "Lokale fallback · wacht op iRacing";
+            Status = IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site";
             var cachedRemoteVersion = string.IsNullOrWhiteSpace(Settings.LastKnownRemoteVersion) ? "nog niet bekend" : Settings.LastKnownRemoteVersion;
             SetUpdateStatus("Geïnstalleerd " + InstalledVersion + " · serverversie " + cachedRemoteVersion);
             SimHub.Logging.Current.Info("3SM Endurance Connector gestart");
             // Veilige, laagfrequente versie-check (max 1x per 24u); faalt stil.
-            if (Settings.UseCentralRelay && !Volatile.Read(ref _ending).Equals(1))
+            if (!Volatile.Read(ref _ending).Equals(1))
             {
                 try { Task.Run(async () => await CheckForUpdateAsync(_shutdown.Token, false).ConfigureAwait(false)); }
                 catch { /* fire-and-forget; versie-check mag de plugin nooit breken */ }
@@ -356,8 +352,7 @@ namespace ThreeSM.EnduranceConnector
                 TelemetryEnvelope envelope;
                 lock (_settingsGate)
                 {
-                    var central = Settings.UseCentralRelay;
-                    if (central && !IsPaired)
+                    if (!IsPaired)
                     {
                         Status = "Niet gekoppeld · voer een 3SM-code in";
                         return;
@@ -366,20 +361,9 @@ namespace ThreeSM.EnduranceConnector
                     var now = _sendClock.ElapsedMilliseconds;
                     if (now - _lastQueuedMilliseconds < interval || Interlocked.CompareExchange(ref _sendBusy, 1, 0) != 0) return;
                     _lastQueuedMilliseconds = now;
-                    if (central)
-                    {
-                        endpoint = BuildRelayEndpoint("simhub-ingest");
-                        token = _deviceToken;
-                    }
-                    else
-                    {
-                        Uri baseUri;
-                        if (!Uri.TryCreate(Settings.BridgeUrl, UriKind.Absolute, out baseUri) || baseUri.Scheme != Uri.UriSchemeHttp || !baseUri.IsLoopback) throw new InvalidOperationException("lokale bridge moet loopback gebruiken");
-                        endpoint = new Uri(baseUri, "/v1/telemetry");
-                        token = Settings.PairingToken;
-                        if (string.IsNullOrWhiteSpace(token) || token.Length < 12) throw new InvalidOperationException("lokaal pairingtoken is te kort");
-                    }
-                    envelope = Capture(pluginManager, data, central, isInCar);
+                    endpoint = BuildRelayEndpoint("simhub-ingest");
+                    token = _deviceToken;
+                    envelope = Capture(pluginManager, data, isInCar);
                 }
                 lock (_sendGate)
                 {
@@ -488,7 +472,6 @@ namespace ThreeSM.EnduranceConnector
                             var oldRaceId = Settings.BoundRaceId;
                             var oldTeamId = Settings.BoundTeamId;
                             var oldOwnerId = Settings.BoundOwnerUserId;
-                            var oldCentral = Settings.UseCentralRelay;
                             var oldToken = _deviceToken;
                             try
                             {
@@ -497,7 +480,6 @@ namespace ThreeSM.EnduranceConnector
                                 Settings.BoundRaceId = string.Empty;
                                 Settings.BoundTeamId = string.Empty;
                                 Settings.BoundOwnerUserId = result.OwnerUserId;
-                                Settings.UseCentralRelay = true;
                                 this.SaveCommonSettings("ConnectorSettings", Settings);
                                 _deviceToken = result.DeviceToken;
                             }
@@ -508,7 +490,6 @@ namespace ThreeSM.EnduranceConnector
                                 Settings.BoundRaceId = oldRaceId;
                                 Settings.BoundTeamId = oldTeamId;
                                 Settings.BoundOwnerUserId = oldOwnerId;
-                                Settings.UseCentralRelay = oldCentral;
                                 _deviceToken = oldToken;
                                 try { this.SaveCommonSettings("ConnectorSettings", Settings); }
                                 catch (Exception rollbackError) { SimHub.Logging.Current.Warn("3SM Endurance pairingrollback kon niet worden opgeslagen: " + rollbackError); }
@@ -569,15 +550,15 @@ namespace ThreeSM.EnduranceConnector
                     Settings.BoundOwnerUserId = oldOwnerId;
                     try { this.SaveCommonSettings("ConnectorSettings", Settings); }
                     catch (Exception rollbackError) { SimHub.Logging.Current.Warn("3SM Endurance unpairrollback kon niet worden opgeslagen: " + rollbackError); }
-                    Status = "Lokaal vergeten mislukt · " + error.Message;
+                    Status = "Koppeling verwijderen mislukt · " + error.Message;
                     return;
                 }
             }
-            Status = "Lokaal vergeten · trek het device ook op de 3SM-site in";
+            Status = "Koppeling verwijderd · trek het device ook op de 3SM-site in";
             OnPropertyChanged("IsPaired");
         }
 
-        private TelemetryEnvelope Capture(PluginManager manager, GameData data, bool central, bool isInCar)
+        private TelemetryEnvelope Capture(PluginManager manager, GameData data, bool isInCar)
         {
             var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
             var fuelPerLap = GetNullableDouble(manager, Settings.FuelPerLapProperty, true);
@@ -602,10 +583,10 @@ namespace ThreeSM.EnduranceConnector
                 Source = new TelemetrySource { ConnectorId = NonEmpty(Settings.ConnectorId, Environment.MachineName), SimHubVersion = typeof(PluginManager).Assembly.GetName().Version.ToString(), Game = "IRacing" },
                 Race = new RaceIdentity
                 {
-                    EventId = central ? "connection-test" : Settings.EventId,
-                    TeamId = central ? "unassigned" : Settings.TeamId,
+                    EventId = "connection-test",
+                    TeamId = "unassigned",
                     SessionId = _sessionId,
-                    DriverId = central ? null : (string.IsNullOrWhiteSpace(Settings.DriverId) ? null : Settings.DriverId),
+                    DriverId = null,
                     CurrentDriverId = currentDriverId,
                     CurrentDriverName = currentDriverName,
                     CarId = carId,
