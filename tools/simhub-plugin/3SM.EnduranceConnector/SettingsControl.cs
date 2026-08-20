@@ -50,7 +50,7 @@ namespace ThreeSM.EnduranceConnector
             var wordmark = new Image { Source = EnduranceConnectorPlugin.LoadImageResource("Assets.wordmark.png"), Stretch = Stretch.Uniform, Margin = new Thickness(14, 16, 14, 18), MaxHeight = 78, HorizontalAlignment = HorizontalAlignment.Left };
             sidebarStack.Children.Add(wordmark);
 
-            var navItems = new[] { ("Koppeling", "⛓"), ("Verbinding", "●"), ("Lokale bridge", "⇄"), ("Property-mapping", "⌗"), ("Status", "◉") };
+            var navItems = new[] { ("Koppeling", "⛓"), ("Verbinding", "●"), ("Lokale bridge", "⇄"), ("Property-mapping", "⌗"), ("Status", "◉"), ("Updates", "↑") };
             for (int i = 0; i < navItems.Length; i++)
             {
                 var paneIndex = i;
@@ -66,7 +66,7 @@ namespace ThreeSM.EnduranceConnector
             }
             sidebar.Child = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = sidebarStack };
 
-            // ---------- Inhoud (5 panes) ----------
+            // ---------- Inhoud (6 panes) ----------
             var content = new Grid { Background = PanelBg };
             _content = content;
             content.Children.Add(BuildKoppelingPane());
@@ -74,6 +74,7 @@ namespace ThreeSM.EnduranceConnector
             content.Children.Add(BuildLokaleBridgePane());
             content.Children.Add(BuildMappingPane());
             content.Children.Add(BuildStatusPane());
+            content.Children.Add(BuildUpdatesPane());
             for (int i = 1; i < content.Children.Count; i++) content.Children[i].Visibility = Visibility.Collapsed;
 
             // ---------- Layout ----------
@@ -113,11 +114,6 @@ namespace ThreeSM.EnduranceConnector
             pairingCard.Child = pairingCardStack;
             stack.Children.Add(pairingCard);
 
-            var centralMode = new CheckBox { Content = "Centrale 3SM-relay gebruiken (aanbevolen)", IsChecked = _settings.UseCentralRelay, Foreground = TextMain, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 4) };
-            centralMode.Checked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = true); };
-            centralMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = false); };
-            stack.Children.Add(centralMode);
-
             stack.Children.Add(Block("Maak op de 3SM-site een tijdelijke code en vul alleen die code hieronder in. De installatie wordt aan je 3SM-account gekoppeld; race en endurance-team volgen later in de Endurance-tab.", 0, 2, 0, 12));
 
             var pairingCode = new TextBox { MinWidth = 300, MaxWidth = 420, Padding = new Thickness(8), CharacterCasing = CharacterCasing.Upper, Background = PanelBgAlt, Foreground = TextMain, BorderBrush = BorderColor };
@@ -151,7 +147,6 @@ namespace ThreeSM.EnduranceConnector
             {
                 pairButton.IsEnabled = false; unpairButton.IsEnabled = false;
                 await _plugin.PairAsync(pairingCode.Text);
-                centralMode.IsChecked = _settings.UseCentralRelay;
                 pairingCode.Text = string.Empty;
                 refreshBinding();
             };
@@ -164,14 +159,20 @@ namespace ThreeSM.EnduranceConnector
         private Border BuildVerbindingPane()
         {
             var stack = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
-            stack.Children.Add(SectionTitle("Verbinding", "Outbound HTTPS naar de vaste 3SM-relay. De bestemming is vastgezet om tokenlekken te voorkomen."));
-            AddField(stack, "Productierelay", "https://api.3stripemotorsport.cc/functions/v1", null);
-            AddField(stack, "Connector-ID", _settings.ConnectorId, value => _plugin.UpdateSettings(s => s.ConnectorId = value));
-            AddField(stack, "Interval in milliseconden (minimaal 500)", _settings.SendIntervalMilliseconds.ToString(), value =>
-            {
-                int parsed;
-                if (int.TryParse(value, out parsed)) _plugin.UpdateSettings(s => s.SendIntervalMilliseconds = Math.Max(500, parsed));
-            });
+            stack.Children.Add(SectionTitle("Verbinding", "Kies hoe de connector telemetry verstuurt. Voor leden is de centrale 3SM-relay de aanbevolen instelling."));
+
+            var connectionCard = new Border { Background = PanelBgAlt, BorderBrush = BorderColor, BorderThickness = T(1), CornerRadius = new CornerRadius(8), Padding = T(14), Margin = new Thickness(0, 4, 0, 14) };
+            var connectionStack = new StackPanel();
+            connectionStack.Children.Add(new TextBlock { Text = "CENTRALE 3SM-RELAY", Foreground = AccentText, FontWeight = FontWeights.Bold, FontSize = 11 });
+            connectionStack.Children.Add(Block("Veilige uitgaande HTTPS-verbinding. De relaybestemming en technische verzendinstellingen worden automatisch beheerd.", 7, 0, 0, 0));
+            connectionCard.Child = connectionStack;
+            stack.Children.Add(connectionCard);
+
+            var centralMode = new CheckBox { Content = "Centrale 3SM-relay gebruiken (aanbevolen)", IsChecked = _settings.UseCentralRelay, Foreground = TextMain, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 2, 0, 8) };
+            centralMode.Checked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = true); };
+            centralMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = false); };
+            stack.Children.Add(centralMode);
+            stack.Children.Add(Block("Schakel dit alleen uit wanneer je bewust de lokale bridge gebruikt.", 0, 0, 0, 0));
             return WrappedPane(stack);
         }
 
@@ -249,6 +250,15 @@ namespace ThreeSM.EnduranceConnector
             telemetryStack.Children.Add(telemetry);
             telemetryCard.Child = telemetryStack;
             stack.Children.Add(telemetryCard);
+
+            return WrappedPane(stack);
+        }
+
+        // ---------- Pane: Updates ----------
+        private Border BuildUpdatesPane()
+        {
+            var stack = new StackPanel { Margin = new Thickness(26, 22, 26, 22) };
+            stack.Children.Add(SectionTitle("Updates", "Controleer veilig op een nieuwe pluginversie en installeer die met gecontroleerde SimHub-herstart."));
 
             var updateCard = new Border { Background = PanelBgAlt, BorderBrush = BorderColor, BorderThickness = T(1), CornerRadius = new CornerRadius(8), Padding = T(14) };
             var updateStack = new StackPanel();
