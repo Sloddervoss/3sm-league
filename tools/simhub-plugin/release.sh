@@ -35,7 +35,8 @@ if [ -z "$SKIP_BUILD" ]; then
   fi
 
   echo "Bronbestanden syncen..."
-  $SSH_WIN "powershell -NoP '\$n=\"$WS_WIN\"; foreach(\$d in @(\"\$n/3SM.EnduranceConnector\",\"\$n/3SM.EnduranceConnector/Assets\",\"\$n/3SM.EnduranceConnector.Updater\")) { New-Item -ItemType Dir -Force \$d | Out-Null }'"
+    scp "$SCRIPT_DIR/create-dirs.ps1" "vdevo@192.168.50.119:C:/Users/vdevo/3sm/create-dirs.ps1"
+    $SSH_WIN "powershell -NoP -Exec Bypass -File C:\\Users\\vdevo\\3sm\\create-dirs.ps1"
 
   scp "$SCRIPT_DIR"/3SM.EnduranceConnector/{AssemblyInfo.cs,ConnectorSettings.cs,EnduranceConnectorPlugin.cs,SettingsControl.cs,TelemetryContracts.cs,3SM.EnduranceConnector.csproj} \
     "vdevo@192.168.50.119:$WS_WIN/3SM.EnduranceConnector/"
@@ -51,7 +52,7 @@ if [ -z "$SKIP_BUILD" ]; then
   echo "$BUILD_OUTPUT"
   if ! grep -q "BUILD_OK" <<<"$BUILD_OUTPUT"; then echo "FOUT: Build mislukt."; exit 1; fi
 
-  scp "vdevo@192.168.50.119:$WS_WIN/3SM.EnduranceConnector/bin/Release/3SM.EnduranceConnector.dll" \
+  scp "vdevo@192.168.50.119:C:/Users/vdevo/3sm/3SM.EnduranceConnector/bin/Release/3SM.EnduranceConnector.dll" \
     "$STAGING/3SM.EnduranceConnector.dll"
 fi
 
