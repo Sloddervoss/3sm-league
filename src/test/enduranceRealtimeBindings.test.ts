@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { enduranceRealtimeBindingsForEvent } from "../features/endurance/repository/useEnduranceRealtime";
+import { enduranceRealtimeWorkspaceTables } from "../features/endurance/repository/enduranceRealtimeMatrix";
 
 describe("endurance realtime bindings", () => {
   it("mapt events/stints/teams op de juiste query keys voor een event", () => {
@@ -46,14 +47,7 @@ describe("endurance realtime bindings", () => {
   });
 
   it("bevat alleen geldige endurance-tabellen", () => {
-    const allowed = [
-      "endurance_events",
-      "endurance_stints",
-      "endurance_availability",
-      "endurance_planning_versions",
-      "endurance_teams",
-      "endurance_team_members",
-    ];
+    const allowed = enduranceRealtimeWorkspaceTables();
     for (const binding of enduranceRealtimeBindingsForEvent("evt-123")) {
       expect(allowed).toContain(binding.table);
       expect(binding.queryKeys.length).toBeGreaterThan(0);
