@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BarChart3, CheckCircle2, Vote } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEnduranceRegistrations } from "../repository/registrationsRepository";
-import { useUpsertEnduranceEvent } from "../repository/eventsRepository";
+import { useUpdateEnduranceEventFields } from "../repository/eventsRepository";
 import type { EnduranceEvent } from "../core/types";
 import { enduranceCarsForClass, getEnduranceCar, type EnduranceClassId } from "../core/carCatalog";
 import { getEventVehicleVotes, recommendedVehicle, winningCarIdsForClass, winningClassIds } from "../core/vehicleVoting";
@@ -15,9 +15,9 @@ import { Field, inputClass, Panel, PrimaryButton, SectionHeading, StatusPill } f
  * super-admin (de enige met RLS-toegang in deze canary).
  */
 export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isEnduranceManager } = useAuth();
   const { data: registrations = [] } = useEnduranceRegistrations(event.id);
-  const upsert = useUpsertEnduranceEvent();
+  const upsert = useUpdateEnduranceEventFields();
 
   // Map DB-rows → het stemming-model (cpu-mock-type shape).
   const voteRegistrations = useMemo(() => registrations.map((r) => ({
@@ -29,6 +29,8 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
     preferredCarId: r.preferred_car_id ?? "",
     slotId: r.slot_id ?? "",
     maxStints: r.max_stints ?? 1,
+    maxStintMinutes: r.max_stint_minutes ?? null,
+    maxTotalMinutes: r.max_total_minutes ?? null,
     nightDriving: r.night_driving,
     willingToStart: r.willing_to_start,
     willingToFinish: r.willing_to_finish,
@@ -38,7 +40,7 @@ export const VehicleVotePanel = ({ event }: { event: EnduranceEvent }) => {
 
   const votes = useMemo(() => getEventVehicleVotes(voteRegistrations, event.id), [voteRegistrations, event.id]);
   const recommendation = useMemo(() => recommendedVehicle(voteRegistrations, event.id), [voteRegistrations, event.id]);
-  const manager = Boolean(isSuperAdmin);
+  const manager = Boolean(isSuperAdmin || isEnduranceManager);
   const classWinners = useMemo(() => winningClassIds(voteRegistrations, event.id), [voteRegistrations, event.id]);
   const selectableClasses = classWinners.length ? event.classIds.filter((classId) => classWinners.includes(classId)) : event.classIds;
   const initialClass = recommendation.classId ?? selectableClasses[0] ?? event.selectedClassId ?? "GT3";

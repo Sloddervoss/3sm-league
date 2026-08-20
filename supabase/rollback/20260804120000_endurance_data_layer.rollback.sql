@@ -1,8 +1,28 @@
 BEGIN;
 
--- Rollback van de 3SM Endurance datalaag (Fase 2).
--- Uitsluitend objecten met de prefix `endurance_` worden verwijderd; geen
--- enkel bestaand productie-object wordt geraakt.
+-- Rollback of the Endurance data layer after all later Endurance rollbacks.
+-- Remove publication membership and triggers before dependent tables/functions.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'endurance_notifications'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime DROP TABLE public.endurance_notifications;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'endurance_stints'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime DROP TABLE public.endurance_stints;
+  END IF;
+END;
+$$;
 
 DROP TRIGGER IF EXISTS endurance_stints_touch ON public.endurance_stints;
 DROP TRIGGER IF EXISTS endurance_teams_touch ON public.endurance_teams;

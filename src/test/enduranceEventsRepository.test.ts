@@ -107,9 +107,16 @@ describe("endurance events repository (Fase 3 data-access contract)", () => {
 
     await updateEnduranceEvent("evt-1", {
       invited_user_ids: ["u-3", "u-1"],
+      source: "season",
+      manager_ids: ["manager-1"],
+      race_id: "race-1",
     });
     expect(spies.fromSpy).toHaveBeenCalledWith("endurance_events");
-    expect(spies.updateSpy.mock.calls[0][0].invited_user_ids).toEqual(["u-3", "u-1"]);
+    const payload = spies.updateSpy.mock.calls[0][0];
+    expect(payload.invited_user_ids).toEqual(["u-3", "u-1"]);
+    expect(payload.source).toBe("season");
+    expect(payload.manager_ids).toEqual(["manager-1"]);
+    expect(payload.race_id).toBe("race-1");
   });
 
   it("weigert een niet-endurance-tabelnaam via assertEnduranceTable", () => {

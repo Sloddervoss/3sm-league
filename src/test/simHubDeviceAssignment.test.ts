@@ -38,19 +38,25 @@ describe("SimHub device assignment + safe update check (Fase 4)", () => {
   it("serves a read-only version endpoint with no credentials or writes", () => {
     expect(version).toContain("simhub-version");
     expect(version).toContain("SIMHUB_PLUGIN_VERSION");
+    expect(version).toContain("SIMHUB_PLUGIN_SHA256");
     expect(version).toContain("dllUrl");
+    expect(version).toContain("sha256");
     expect(version).not.toContain("service_role");
     expect(version).not.toContain("Bearer");
   });
 
-  it("plugin update-check is non-blocking, rate-limited and never self-replaces", () => {
+  it("plugin update-check is rate-limited and stages replacement in an external updater", () => {
     expect(connectorSettings).toContain("LastKnownRemoteVersion");
     expect(connectorSettings).toContain("LastVersionCheckUtc");
     expect(connectorSettings).toContain("LastKnownRemoteDllUrl");
+    expect(connectorSettings).toContain("LastKnownRemoteSha256");
     expect(plugin).toContain("CheckForUpdateAsync");
     expect(plugin).toContain("TimeSpan.FromHours(24)");
-    expect(plugin).toContain("Nieuwe versie beschikbaar · vervang de DLL en herstart");
-    expect(plugin).not.toContain("File.Delete");
+    expect(plugin).toContain("klaar voor éénklik-installatie");
+    expect(plugin).toContain("IsAllowedPluginDownload");
+    expect(plugin).toContain("ExtractUpdater");
+    expect(plugin).not.toMatch(/File\.(Copy|Move|Replace)\(/);
     expect(contracts).toContain("public sealed class VersionResponse");
+    expect(contracts).toContain('DataMember(Name = "sha256"');
   });
 });

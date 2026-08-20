@@ -24,7 +24,7 @@ function formatAmsterdamTime(iso: string) {
  * (status aanpassen) is voor de super-admin-manager.
  */
 export const OverviewPanel = ({ event }: { event: EnduranceEvent }) => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isEnduranceManager } = useAuth();
   const { actorId, displayName } = useEnduranceActor();
   const { data: registrations = [] } = useEnduranceRegistrations(event.id);
   const upsert = useUpsertEnduranceRegistration();
@@ -37,7 +37,7 @@ export const OverviewPanel = ({ event }: { event: EnduranceEvent }) => {
     .filter((s) => s.event_id === event.id && s.driver_id === actorId && s.status !== "completed")
     .sort((a, b) => a.actual_start_at.localeCompare(b.actual_start_at));
   const nextStint = myStints[0];
-  const manager = Boolean(isSuperAdmin);
+  const manager = Boolean(isSuperAdmin || isEnduranceManager);
   const participants = registrations.filter((candidate) => candidate.event_id === event.id && candidate.status !== "withdrawn");
   const showForm = manager && !registration;
 

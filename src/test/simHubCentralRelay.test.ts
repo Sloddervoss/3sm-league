@@ -215,7 +215,11 @@ describe("central SimHub relay", () => {
     expect(pairingPage).toContain("createCentralSimHubPairingCode");
     expect(pairingPage).toContain("revokeCentralSimHubDevice");
     expect(pairingPage).toContain('table: "simhub_telemetry_latest"');
-    expect(pairingPage).toContain("readCentralSimHubTelemetry");
+    // Device-only connection-test: de pairing-pagina leest de laatste snapshot
+    // rechtstreeks device-scoped (RLS-gated) i.p.v. via de event/team-RPC — die
+    // is gereserveerd voor Race Control en vereist een endurance-binding.
+    expect(pairingPage).toContain('.from("simhub_telemetry_latest")');
+    expect(pairingPage).toContain("centralRowToBridgeResponse");
     expect(pairingPage).toContain("createBusyRef.current");
     expect(pairingPage).toContain("revokeBusyRef.current");
     expect(pairingPage).toContain('change.eventType === "DELETE"');
@@ -223,7 +227,7 @@ describe("central SimHub relay", () => {
     expect(pairingPage).toContain("if (!active) return");
     expect(centralRelay).toContain("error.context.clone().json()");
     expect(pairingPage).toContain("const staff = Boolean(isSuperAdmin || isEnduranceManager || isTester)");
-    expect(navbar).toMatch(/canUseEndurance\s*= Boolean\(isSuperAdmin \|\| isEnduranceManager \|\| isTester\)/);
+    expect(navbar).toContain("const canUseEndurance = Boolean(user);");
     // SimHub-pairing is via Profiel bereikbaar; geen redundante top-level tab meer in de navbar.
     expect(navbar).not.toContain('to="/simhub-koppelen"');
   });

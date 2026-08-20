@@ -542,6 +542,10 @@ export type Database = {
           preferred_car_id: string | null
           slot_id: string | null
           max_stints: number | null
+          max_stint_minutes: number | null
+          max_total_minutes: number | null
+          max_consecutive_stints: number | null
+          min_rest_minutes: number | null
           night_driving: boolean
           willing_to_start: boolean
           willing_to_finish: boolean
@@ -557,6 +561,10 @@ export type Database = {
           preferred_car_id: string | null
           slot_id: string | null
           max_stints: number | null
+          max_stint_minutes: number | null
+          max_total_minutes: number | null
+          max_consecutive_stints: number | null
+          min_rest_minutes: number | null
           night_driving: boolean
           willing_to_start: boolean
           willing_to_finish: boolean
@@ -572,6 +580,10 @@ export type Database = {
           preferred_car_id?: string | null
           slot_id?: string | null
           max_stints?: number | null
+          max_stint_minutes?: number | null
+          max_total_minutes?: number | null
+          max_consecutive_stints?: number | null
+          min_rest_minutes?: number | null
           night_driving?: boolean
           willing_to_start?: boolean
           willing_to_finish?: boolean
@@ -2039,6 +2051,14 @@ export type Database = {
           fee_total_eur: number
         }[]
       }
+      endurance_replace_draft_stints: {
+        Args: { p_event_id: string; p_team_id: string; p_stints: Json }
+        Returns: Database["public"]["Tables"]["endurance_stints"]["Row"][]
+      }
+      endurance_apply_stint_updates: {
+        Args: { p_event_id: string; p_team_id: string; p_stints: Json }
+        Returns: Database["public"]["Tables"]["endurance_stints"]["Row"][]
+      }
       can_manage_simhub: { Args: never; Returns: boolean }
       is_active_simhub_device: { Args: { p_device_id: string }; Returns: boolean }
       simhub_create_device_pairing_code: {
@@ -2054,6 +2074,24 @@ export type Database = {
         Returns: { device_id: string; owner_user_id: string; race_id: string | null; result: string; team_id: string | null }[]
       }
       simhub_revoke_device: { Args: { p_device_id: string; p_revoked_by: string }; Returns: boolean }
+      simhub_list_effective_endurance_devices: {
+        Args: { p_event_id: string; p_team_id: string }
+        Returns: {
+          connector_id: string
+          device_name: string
+          endurance_event_id: string
+          endurance_team_id: string
+          expires_at: string | null
+          id: string
+          last_seen_at: string | null
+          paired_at: string
+          revoked_at: string | null
+        }[]
+      }
+      simhub_read_effective_endurance_latest: {
+        Args: { p_device_id: string; p_event_id: string; p_team_id: string }
+        Returns: Database["public"]["Tables"]["simhub_telemetry_latest"]["Row"][]
+      }
       simhub_ingest_snapshot: {
         Args: { p_captured_at: string; p_connector_id: string; p_game: string; p_sequence: number; p_session_id: string; p_simhub_version: string; p_telemetry: Json; p_token_hash: string }
         Returns: { received_at: string | null; result: string }[]

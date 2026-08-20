@@ -4,6 +4,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
@@ -37,16 +38,33 @@ namespace ThreeSM.EnduranceConnector
         private Task _activeSend = Task.FromResult(0);
         private Task<bool> _activePairing = Task.FromResult(false);
         private int _pairingBusy;
+        private int _updateCheckBusy;
+        private int _updateInstallBusy;
         private string _deviceToken = string.Empty;
         private bool _gameWasRunning;
         private string _sessionId;
         private string _status = "Nog niet gestart";
+        private string _lastTelemetrySummary = "Nog geen succesvolle telemetryverzending.";
+        private string _updateStatus = "Updatecontrole nog niet gestart.";
+        private bool _updateAvailable;
 
         public PluginManager PluginManager { get; set; }
         public ConnectorSettings Settings { get; internal set; }
-        public ImageSource PictureIcon { get { return null; } }
-        public string LeftMenuTitle { get { return "3SM Endurance"; } }
+        private ImageSource _pictureIcon;
+        public ImageSource PictureIcon
+        {
+            get
+            {
+                if (_pictureIcon == null) _pictureIcon = LoadIconResource("Assets.plugin-icon.png");
+                return _pictureIcon;
+            }
+        }
+        public string LeftMenuTitle { get { return "3SM"; } }
+        public string InstalledVersion { get { return this.GetType().Assembly.GetName().Version.ToString(); } }
         public string Status { get { return _status; } private set { SetStatus(value); } }
+        public string LastTelemetrySummary { get { return _lastTelemetrySummary; } }
+        public string UpdateStatus { get { return _updateStatus; } }
+        public bool UpdateAvailable { get { return _updateAvailable; } }
         public bool IsPaired { get { lock (_settingsGate) return !string.IsNullOrWhiteSpace(_deviceToken) && !string.IsNullOrWhiteSpace(Settings.DeviceId) && !string.IsNullOrWhiteSpace(Settings.BoundOwnerUserId); } }
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -76,45 +94,177 @@ namespace ThreeSM.EnduranceConnector
             Status = Settings.UseCentralRelay
                 ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
                 : "Lokale fallback · wacht op iRacing";
+            var cachedRemoteVersion = string.IsNullOrWhiteSpace(Settings.LastKnownRemoteVersion) ? "nog niet bekend" : Settings.LastKnownRemoteVersion;
+            SetUpdateStatus("Geïnstalleerd " + InstalledVersion + " · serverversie " + cachedRemoteVersion);
             SimHub.Logging.Current.Info("3SM Endurance Connector gestart");
             // Veilige, laagfrequente versie-check (max 1x per 24u); faalt stil.
             if (Settings.UseCentralRelay && !Volatile.Read(ref _ending).Equals(1))
             {
-                try { Task.Run(async () => await CheckForUpdateAsync(_shutdown.Token).ConfigureAwait(false)); }
+                try { Task.Run(async () => await CheckForUpdateAsync(_shutdown.Token, false).ConfigureAwait(false)); }
                 catch { /* fire-and-forget; versie-check mag de plugin nooit breken */ }
             }
         }
 
-        private async Task CheckForUpdateAsync(CancellationToken cancellationToken)
+        public Task CheckForUpdateNowAsync()
         {
+            return CheckForUpdateAsync(_shutdown.Token, true);
+        }
+
+        public async Task InstallAvailableUpdateAsync()
+        {
+            if (Interlocked.CompareExchange(ref _updateInstallBusy, 1, 0) != 0)
+            {
+                SetUpdateStatus("Update-installatie loopt al.");
+                return;
+            }
+
             try
             {
-                // Niet vaker dan 1x per 24 uur naar de endpoint.
+                string versionText;
+                string dllUrl;
+                string expectedHash;
+                lock (_settingsGate)
+                {
+                    versionText = Settings.LastKnownRemoteVersion;
+                    dllUrl = Settings.LastKnownRemoteDllUrl;
+                    expectedHash = Settings.LastKnownRemoteSha256;
+                }
+
+                Version remoteVersion;
+                if (!Version.TryParse(versionText, out remoteVersion) || remoteVersion <= this.GetType().Assembly.GetName().Version)
+                    throw new InvalidOperationException("Er staat geen nieuwere update klaar.");
+
+                Uri downloadUri;
+                if (!Uri.TryCreate(dllUrl, UriKind.Absolute, out downloadUri) || !IsAllowedPluginDownload(downloadUri, remoteVersion))
+                    throw new InvalidDataException("De update-URL is niet toegestaan.");
+                expectedHash = NormalizeSha256(expectedHash);
+
+                var confirmation = MessageBox.Show(
+                    "3SM " + remoteVersion + " wordt gecontroleerd gedownload en geïnstalleerd.\n\n" +
+                    "SimHub sluit daarna af en start automatisch opnieuw. Doorgaan?",
+                    "3SM-plugin bijwerken",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (confirmation != MessageBoxResult.Yes) return;
+
+                SetUpdateStatus("Update " + remoteVersion + " downloaden…");
+                var stagingDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "3SM", "EnduranceConnector", "Updates", remoteVersion.ToString());
+                Directory.CreateDirectory(stagingDirectory);
+                var stagedDll = Path.Combine(stagingDirectory, "3SM.EnduranceConnector.dll");
+                var updaterExe = Path.Combine(stagingDirectory, "3SM.EnduranceConnector.Updater.exe");
+
+                await DownloadUpdateAsync(downloadUri, stagedDll, 5 * 1024 * 1024, _shutdown.Token).ConfigureAwait(true);
+                if (!FixedTimeEquals(ComputeSha256(stagedDll), expectedHash))
+                    throw new InvalidDataException("SHA-256-controle van de update is mislukt.");
+
+                Version payloadVersion;
+                if (!Version.TryParse(FileVersionInfo.GetVersionInfo(stagedDll).FileVersion, out payloadVersion) || payloadVersion != remoteVersion)
+                    throw new InvalidDataException("De gedownloade DLL heeft niet de aangekondigde versie.");
+
+                ExtractUpdater(updaterExe);
+                var currentProcess = Process.GetCurrentProcess();
+                var simHubPath = currentProcess.MainModule.FileName;
+                if (!string.Equals(Path.GetFileName(simHubPath), "SimHubWPF.exe", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Het actieve SimHub-proces kon niet veilig worden vastgesteld.");
+
+                var targetDll = this.GetType().Assembly.Location;
+                var arguments =
+                    "--pid " + QuoteArgument(currentProcess.Id.ToString()) +
+                    " --target " + QuoteArgument(targetDll) +
+                    " --staged " + QuoteArgument(stagedDll) +
+                    " --sha256 " + QuoteArgument(expectedHash) +
+                    " --version " + QuoteArgument(remoteVersion.ToString()) +
+                    " --simhub " + QuoteArgument(simHubPath);
+
+                var updaterProcess = Process.Start(new ProcessStartInfo
+                {
+                    FileName = updaterExe,
+                    Arguments = arguments,
+                    WorkingDirectory = stagingDirectory,
+                    UseShellExecute = true,
+                    Verb = "runas",
+                });
+                if (updaterProcess == null) throw new InvalidOperationException("De externe updater kon niet worden gestart.");
+
+                SetUpdateStatus("Updater gestart · SimHub wordt afgesloten en opnieuw gestart.");
+                if (Application.Current != null && Application.Current.MainWindow != null)
+                {
+                    _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => Application.Current.MainWindow.Close()));
+                }
+            }
+            catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+            {
+                SetUpdateStatus("Update geannuleerd door afsluiten van SimHub.");
+            }
+            catch (Win32Exception error) when (error.NativeErrorCode == 1223)
+            {
+                SetUpdateStatus("Update geannuleerd bij de Windows-bevestiging.");
+            }
+            catch (Exception error)
+            {
+                SetUpdateStatus("Update-installatie mislukt · " + error.Message);
+                SimHub.Logging.Current.Error("3SM Endurance: update-installatie mislukt: " + error);
+            }
+            finally
+            {
+                Volatile.Write(ref _updateInstallBusy, 0);
+            }
+        }
+
+        private async Task CheckForUpdateAsync(CancellationToken cancellationToken, bool force)
+        {
+            if (Interlocked.CompareExchange(ref _updateCheckBusy, 1, 0) != 0)
+            {
+                if (force) SetUpdateStatus("Updatecontrole loopt al.");
+                return;
+            }
+            try
+            {
+                // De automatische check gebruikt maximaal 1x per 24 uur; de UI-knop mag bewust forceren.
                 DateTime? lastCheck;
                 lock (_settingsGate) lastCheck = Settings.LastVersionCheckUtc;
-                if (lastCheck.HasValue && DateTime.UtcNow - lastCheck.Value < TimeSpan.FromHours(24)) return;
+                if (!force && lastCheck.HasValue && DateTime.UtcNow - lastCheck.Value < TimeSpan.FromHours(24)) return;
+                if (force) SetUpdateStatus("Controleren op updates…");
 
                 var localVersion = this.GetType().Assembly.GetName().Version;
                 var endpoint = BuildRelayEndpoint("simhub-version");
                 using (var request = new HttpRequestMessage(HttpMethod.Get, endpoint))
                 using (var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
                 {
-                    if (!response.IsSuccessStatusCode) return;
+                    if (!response.IsSuccessStatusCode) throw new HttpRequestException("versie-endpoint HTTP " + (int)response.StatusCode);
                     var body = await ReadBoundedResponseAsync(response.Content, 8192, cancellationToken).ConfigureAwait(false);
                     var info = Deserialize<VersionResponse>(body);
-                    if (info == null || string.IsNullOrWhiteSpace(info.Version)) return;
+                    if (info == null || string.IsNullOrWhiteSpace(info.Version)) throw new HttpRequestException("versie-endpoint gaf geen versie terug");
+                    var remote = Version.TryParse(info.Version.Trim(), out var parsed) ? parsed : null;
+                    if (remote == null) throw new HttpRequestException("serverversie is ongeldig: " + info.Version.Trim());
                     lock (_settingsGate)
                     {
                         Settings.LastKnownRemoteVersion = info.Version.Trim();
                         Settings.LastKnownRemoteDllUrl = info.DllUrl?.Trim() ?? string.Empty;
+                        Settings.LastKnownRemoteSha256 = info.Sha256?.Trim() ?? string.Empty;
                         Settings.LastVersionCheckUtc = DateTime.UtcNow;
                         this.SaveCommonSettings("ConnectorSettings", Settings);
                     }
-                    // Vergelijk alleen de assembly-versie; bump de DLL-assembly bij elke release.
-                    var remote = Version.TryParse(info.Version.Trim(), out var parsed) ? parsed : null;
-                    if (remote != null && localVersion != null && remote > localVersion)
+                    if (remote > localVersion)
                     {
-                        if (Volatile.Read(ref _ending) == 0) Status = "Nieuwe versie beschikbaar · vervang de DLL en herstart";
+                        Uri downloadUri;
+                        var metadataValid = Uri.TryCreate(info.DllUrl, UriKind.Absolute, out downloadUri)
+                            && IsAllowedPluginDownload(downloadUri, remote)
+                            && IsSha256(info.Sha256);
+                        SetUpdateAvailable(metadataValid);
+                        SetUpdateStatus(metadataValid
+                            ? "Nieuwe versie " + remote + " beschikbaar · klaar voor éénklik-installatie."
+                            : "Nieuwe versie " + remote + " beschikbaar, maar veilige installatiemetadata ontbreekt.");
+                        if (Volatile.Read(ref _ending) == 0) Status = metadataValid
+                            ? "Nieuwe versie beschikbaar · klaar voor installatie"
+                            : "Nieuwe versie beschikbaar · metadata ongeldig";
+                    }
+                    else
+                    {
+                        SetUpdateAvailable(false);
+                        SetUpdateStatus("Actueel · geïnstalleerd " + localVersion + " · server " + remote + " · gecontroleerd " + DateTime.Now.ToString("HH:mm:ss"));
                     }
                 }
             }
@@ -124,7 +274,12 @@ namespace ThreeSM.EnduranceConnector
             }
             catch (Exception error)
             {
+                if (force) SetUpdateStatus("Updatecontrole mislukt · " + error.Message);
                 SimHub.Logging.Current.Warn("3SM Endurance: versie-check mislukt (niet-blokkerend): " + error.Message);
+            }
+            finally
+            {
+                Volatile.Write(ref _updateCheckBusy, 0);
             }
         }
 
@@ -135,6 +290,7 @@ namespace ThreeSM.EnduranceConnector
                 if (Volatile.Read(ref _ending) != 0) return;
                 var isIRacing = string.Equals(data.GameName, "IRacing", StringComparison.OrdinalIgnoreCase);
                 var running = isIRacing && data.GameRunning;
+                var isInCar = running && data.NewData != null && !data.NewData.Spectating && !data.GameInMenu && !data.GameReplay;
                 if (running && !_gameWasRunning)
                 {
                     _stintClock.Restart();
@@ -176,7 +332,7 @@ namespace ThreeSM.EnduranceConnector
                         token = Settings.PairingToken;
                         if (string.IsNullOrWhiteSpace(token) || token.Length < 12) throw new InvalidOperationException("lokaal pairingtoken is te kort");
                     }
-                    envelope = Capture(pluginManager, central);
+                    envelope = Capture(pluginManager, data, central, isInCar);
                 }
                 lock (_sendGate)
                 {
@@ -372,12 +528,23 @@ namespace ThreeSM.EnduranceConnector
             OnPropertyChanged("IsPaired");
         }
 
-        private TelemetryEnvelope Capture(PluginManager manager, bool central)
+        private TelemetryEnvelope Capture(PluginManager manager, GameData data, bool central, bool isInCar)
         {
             var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
             var fuelPerLap = GetNullableDouble(manager, Settings.FuelPerLapProperty, true);
             var estimatedLaps = GetNullableDouble(manager, Settings.EstimatedLapsProperty, false);
             if (!estimatedLaps.HasValue && fuelPerLap.HasValue && fuelPerLap.Value > 0) estimatedLaps = fuel / fuelPerLap.Value;
+            var snapshot = data.NewData;
+            var player = snapshot.Opponents == null ? null : snapshot.Opponents.FirstOrDefault(opponent => opponent != null && opponent.IsPlayer);
+            var currentDriverId = FirstNonEmpty(player == null ? null : player.Id, GetNullableString(manager, Settings.CurrentDriverIdProperty));
+            var currentDriverName = FirstNonEmpty(snapshot.PlayerName, player == null ? null : player.Name, GetNullableString(manager, Settings.CurrentDriverNameProperty));
+            var carId = FirstNonEmpty(snapshot.CarId, GetNullableString(manager, Settings.CarIdProperty));
+            var carName = FirstNonEmpty(snapshot.CarModel, player == null ? null : player.CarName, GetNullableString(manager, Settings.CarNameProperty));
+            var trackName = FirstNonEmpty(snapshot.TrackName, GetNullableString(manager, Settings.TrackNameProperty));
+            var trackConfig = FirstNonEmpty(snapshot.TrackConfig, GetNullableString(manager, Settings.TrackConfigProperty));
+            var position = PositiveOrNull(snapshot.Position) ?? PositiveOrNull(GetInt(manager, Settings.PositionProperty, 0));
+            var classPosition = PositiveOrNull(player == null ? 0 : player.PositionInClass) ?? PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0));
+            var flag = ResolveFlag(snapshot, GetRaw(manager, Settings.FlagProperty));
             return new TelemetryEnvelope
             {
                 ProtocolVersion = 2,
@@ -390,12 +557,12 @@ namespace ThreeSM.EnduranceConnector
                     TeamId = central ? "unassigned" : Settings.TeamId,
                     SessionId = _sessionId,
                     DriverId = central ? null : (string.IsNullOrWhiteSpace(Settings.DriverId) ? null : Settings.DriverId),
-                    CurrentDriverId = GetNullableString(manager, Settings.CurrentDriverIdProperty),
-                    CurrentDriverName = GetNullableString(manager, Settings.CurrentDriverNameProperty),
-                    CarId = GetNullableString(manager, Settings.CarIdProperty),
-                    CarName = GetNullableString(manager, Settings.CarNameProperty),
-                    TrackName = GetNullableString(manager, Settings.TrackNameProperty),
-                    TrackConfig = GetNullableString(manager, Settings.TrackConfigProperty),
+                    CurrentDriverId = currentDriverId,
+                    CurrentDriverName = currentDriverName,
+                    CarId = carId,
+                    CarName = carName,
+                    TrackName = trackName,
+                    TrackConfig = trackConfig,
                 },
                 Telemetry = new TelemetryValues
                 {
@@ -404,8 +571,8 @@ namespace ThreeSM.EnduranceConnector
                     Lap = Math.Max(0, GetInt(manager, Settings.LapProperty, 0)),
                     CompletedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0)),
                     LapTimeSeconds = GetNullableSeconds(manager, Settings.LapTimeProperty),
-                    Position = PositiveOrNull(GetInt(manager, Settings.PositionProperty, 0)),
-                    ClassPosition = PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0)),
+                    Position = position,
+                    ClassPosition = classPosition,
                     SpeedKph = Clamp(GetDouble(manager, Settings.SpeedProperty, 0), 0, 500),
                     FuelLitres = Clamp(fuel, 0, 250),
                     FuelPerLapLitres = fuelPerLap,
@@ -414,8 +581,8 @@ namespace ThreeSM.EnduranceConnector
                     PitLimiter = GetBool(manager, Settings.PitLimiterProperty, false),
                     StintElapsedSeconds = _stintClock.Elapsed.TotalSeconds,
                     Incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty)),
-                    Flag = NormalizeFlag(GetRaw(manager, Settings.FlagProperty)),
-                    IsInCar = true,
+                    Flag = flag,
+                    IsInCar = isInCar,
                 }
             };
         }
@@ -434,6 +601,7 @@ namespace ThreeSM.EnduranceConnector
                         if (!response.IsSuccessStatusCode) throw new HttpRequestException("relay HTTP " + (int)response.StatusCode);
                     }
                 }
+                SetLastTelemetrySummary(envelope);
                 if (Volatile.Read(ref _ending) == 0) Status = "Live · sequence " + envelope.Sequence;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -483,11 +651,114 @@ namespace ThreeSM.EnduranceConnector
                 {
                     var read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
                     if (read == 0) break;
-                    if (output.Length + read > maxBytes) throw new HttpRequestException("pairingresponse is te groot");
+                    if (output.Length + read > maxBytes) throw new HttpRequestException("response is te groot");
                     output.Write(buffer, 0, read);
                 }
                 return Encoding.UTF8.GetString(output.ToArray());
             }
+        }
+
+        private static async Task DownloadUpdateAsync(Uri downloadUri, string destination, int maxBytes, CancellationToken cancellationToken)
+        {
+            try
+            {
+                using (var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(45) })
+                using (var request = new HttpRequestMessage(HttpMethod.Get, downloadUri))
+                using (var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
+                {
+                    if (!response.IsSuccessStatusCode) throw new HttpRequestException("download HTTP " + (int)response.StatusCode);
+                    if (response.Content.Headers.ContentLength.HasValue && response.Content.Headers.ContentLength.Value > maxBytes)
+                        throw new HttpRequestException("updatebestand is te groot");
+
+                    using (var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                    using (var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        var buffer = new byte[81920];
+                        var total = 0;
+                        while (true)
+                        {
+                            var read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                            if (read == 0) break;
+                            total += read;
+                            if (total > maxBytes) throw new HttpRequestException("updatebestand is te groot");
+                            await output.WriteAsync(buffer, 0, read, cancellationToken).ConfigureAwait(false);
+                        }
+                        if (total == 0) throw new HttpRequestException("updatebestand is leeg");
+                        await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch
+            {
+                try { if (File.Exists(destination)) File.Delete(destination); } catch { }
+                throw;
+            }
+        }
+
+        private static bool IsAllowedPluginDownload(Uri uri, Version version)
+        {
+            if (uri == null || version == null || !uri.IsAbsoluteUri) return false;
+            if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(uri.Host, "3stripemotorsport.cc", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment)) return false;
+            var expectedPath = "/downloads/3SM.EnduranceConnector-" + version + ".dll";
+            return string.Equals(uri.AbsolutePath, expectedPath, StringComparison.Ordinal);
+        }
+
+        private static bool IsSha256(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Trim().Length != 64) return false;
+            foreach (var character in value.Trim())
+            {
+                var hexadecimal = (character >= '0' && character <= '9') ||
+                                  (character >= 'a' && character <= 'f') ||
+                                  (character >= 'A' && character <= 'F');
+                if (!hexadecimal) return false;
+            }
+            return true;
+        }
+
+        private static string NormalizeSha256(string value)
+        {
+            if (!IsSha256(value)) throw new InvalidDataException("De update-SHA-256 is ongeldig.");
+            return value.Trim().ToLowerInvariant();
+        }
+
+        private static string ComputeSha256(string path)
+        {
+            using (var algorithm = SHA256.Create())
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                var bytes = algorithm.ComputeHash(stream);
+                var builder = new StringBuilder(bytes.Length * 2);
+                foreach (var item in bytes) builder.Append(item.ToString("x2"));
+                return builder.ToString();
+            }
+        }
+
+        private static bool FixedTimeEquals(string left, string right)
+        {
+            if (left == null || right == null || left.Length != right.Length) return false;
+            var difference = 0;
+            for (var index = 0; index < left.Length; index++) difference |= left[index] ^ right[index];
+            return difference == 0;
+        }
+
+        private static void ExtractUpdater(string destination)
+        {
+            const string resourceName = "ThreeSM.EnduranceConnector.Assets.3SM.EnduranceConnector.Updater.exe";
+            using (var input = typeof(EnduranceConnectorPlugin).Assembly.GetManifestResourceStream(resourceName))
+            {
+                if (input == null) throw new InvalidOperationException("De embedded 3SM-updater ontbreekt.");
+                using (var output = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None)) input.CopyTo(output);
+            }
+        }
+
+        private static string QuoteArgument(string value)
+        {
+            value = value ?? string.Empty;
+            if (value.IndexOf('\"') >= 0) throw new ArgumentException("Ongeldig aanhalingsteken in updaterargument.");
+            return "\"" + value + "\"";
         }
 
         private static string Serialize(object value, Type type)
@@ -531,7 +802,111 @@ namespace ThreeSM.EnduranceConnector
             return true;
         }
         private static double Clamp(double value, double min, double max) { return value < min ? min : value > max ? max : value; }
-        private static string NormalizeFlag(object value) { var text = value == null ? "unknown" : value.ToString().ToLowerInvariant(); foreach (var flag in new[] { "green", "yellow", "red", "white", "checkered" }) if (text.Contains(flag)) return flag; return "unknown"; }
+
+        // Laad een embedded PNG als WPF-beeldbron (wordt gebruikt voor icon + branding).
+        internal static ImageSource LoadImageResource(string resourceName)
+        {
+            try
+            {
+                var assembly = typeof(EnduranceConnectorPlugin).Assembly;
+                var qualifiedName = resourceName.StartsWith(typeof(EnduranceConnectorPlugin).Namespace + ".", StringComparison.Ordinal)
+                    ? resourceName
+                    : typeof(EnduranceConnectorPlugin).Namespace + "." + resourceName;
+                using (var stream = assembly.GetManifestResourceStream(qualifiedName))
+                {
+                    if (stream == null) return null;
+                    var decoder = new System.Windows.Media.Imaging.PngBitmapDecoder(stream, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                    return decoder.Frames[0];
+                }
+            }
+            catch { return null; }
+        }
+        private static ImageSource LoadIconResource(string resourceName) { return LoadImageResource(resourceName); }
+        private static string FirstNonEmpty(params string[] values)
+        {
+            if (values == null) return null;
+            foreach (var value in values)
+                if (!string.IsNullOrWhiteSpace(value) && !string.Equals(value.Trim(), "unknown", StringComparison.OrdinalIgnoreCase)) return value.Trim();
+            return null;
+        }
+
+        private static string ResolveFlag(StatusDataBase snapshot, object fallback)
+        {
+            var normalized = NormalizeFlag(snapshot == null ? null : snapshot.Flag_Name);
+            if (normalized != "unknown") return normalized;
+            if (snapshot != null)
+            {
+                if (snapshot.Flag_Checkered != 0) return "checkered";
+                if (snapshot.Flag_Yellow != 0) return "yellow";
+                if (snapshot.Flag_White != 0) return "white";
+                if (snapshot.Flag_Green != 0) return "green";
+            }
+            return NormalizeFlag(fallback);
+        }
+
+        private static string NormalizeFlag(object value)
+        {
+            var text = value == null ? "unknown" : value.ToString().ToLowerInvariant();
+            if (text.Contains("checkered") || text.Contains("chequered")) return "checkered";
+            foreach (var flag in new[] { "green", "yellow", "red", "white" }) if (text.Contains(flag)) return flag;
+            return "unknown";
+        }
+        private static string DisplayText(string value) { return string.IsNullOrWhiteSpace(value) ? "Onbekend" : value.Trim(); }
+        private static string DisplayNumber(double? value, string suffix) { return value.HasValue ? value.Value.ToString("0.0") + suffix : "Onbekend"; }
+        private static string DisplayPosition(int? value) { return value.HasValue ? value.Value.ToString() : "Onbekend"; }
+
+        private void SetLastTelemetrySummary(TelemetryEnvelope envelope)
+        {
+            if (envelope == null || envelope.Telemetry == null || envelope.Race == null || Volatile.Read(ref _ending) != 0) return;
+            var application = Application.Current;
+            if (application != null && !application.Dispatcher.CheckAccess())
+            {
+                try { application.Dispatcher.BeginInvoke(new Action(() => SetLastTelemetrySummary(envelope))); } catch (InvalidOperationException) { }
+                return;
+            }
+            var telemetry = envelope.Telemetry;
+            var race = envelope.Race;
+            _lastTelemetrySummary =
+                "Laatste succesvolle verzending: " + DateTime.Now.ToString("HH:mm:ss") + "\n" +
+                "Sequence: " + envelope.Sequence + " · In auto: " + (telemetry.IsInCar ? "JA" : "NEE") + "\n" +
+                "Coureur: " + DisplayText(race.CurrentDriverName) + "\n" +
+                "Auto: " + DisplayText(race.CarName) + "\n" +
+                "Circuit: " + DisplayText(race.TrackName) + (string.IsNullOrWhiteSpace(race.TrackConfig) ? string.Empty : " · " + race.TrackConfig.Trim()) + "\n" +
+                "Ronde: " + telemetry.Lap + " · voltooid: " + telemetry.CompletedLaps + " · rondetijd: " + DisplayNumber(telemetry.LapTimeSeconds, " s") + "\n" +
+                "Positie: " + DisplayPosition(telemetry.Position) + " · klasse: " + DisplayPosition(telemetry.ClassPosition) + "\n" +
+                "Snelheid: " + telemetry.SpeedKph.ToString("0") + " km/u · brandstof: " + telemetry.FuelLitres.ToString("0.0") + " L\n" +
+                "Pitlane: " + (telemetry.InPitLane ? "JA" : "NEE") + " · limiter: " + (telemetry.PitLimiter ? "AAN" : "UIT") + " · vlag: " + DisplayText(telemetry.Flag);
+            OnPropertyChanged("LastTelemetrySummary");
+        }
+
+        private void SetUpdateAvailable(bool value)
+        {
+            if (Volatile.Read(ref _ending) != 0) return;
+            var application = Application.Current;
+            if (application != null && !application.Dispatcher.CheckAccess())
+            {
+                try { application.Dispatcher.BeginInvoke(new Action(() => SetUpdateAvailable(value))); } catch (InvalidOperationException) { }
+                return;
+            }
+            if (_updateAvailable == value) return;
+            _updateAvailable = value;
+            OnPropertyChanged("UpdateAvailable");
+        }
+
+        private void SetUpdateStatus(string value)
+        {
+            if (Volatile.Read(ref _ending) != 0) return;
+            var application = Application.Current;
+            if (application != null && !application.Dispatcher.CheckAccess())
+            {
+                try { application.Dispatcher.BeginInvoke(new Action(() => SetUpdateStatus(value))); } catch (InvalidOperationException) { }
+                return;
+            }
+            if (_updateStatus == value) return;
+            _updateStatus = value;
+            OnPropertyChanged("UpdateStatus");
+        }
+
         private void SetStatus(string value)
         {
             if (Volatile.Read(ref _ending) != 0 && !string.Equals(value, "Gestopt", StringComparison.Ordinal)) return;

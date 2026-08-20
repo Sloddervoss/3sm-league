@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, Cable, Crown, Fuel, Gauge, Loader2, Radio, RefreshCw, Timer } from "lucide-react";
-import { centralRowToBridgeResponse, listCentralSimHubDevices, listCentralSimHubDevicesForTeam, readCentralSimHubTelemetry, type CentralSimHubDevice, type CentralSimHubLatestRow } from "@/lib/centralSimHubRelay";
+import { centralRowToBridgeResponse, listCentralSimHubDevicesForTeam, readCentralSimHubTelemetry, type CentralSimHubDevice, type CentralSimHubLatestRow } from "@/lib/centralSimHubRelay";
 import { getSimHubTelemetryState, type SimHubBridgeResponse } from "@/lib/localSimHubBridge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,19 +27,18 @@ export const SimHubTelemetryPanel = ({ eventId, teamId, plannedDriverId }: { eve
   const [error, setError] = useState("");
   const [checkedAt, setCheckedAt] = useState(0);
 
-  const loadDevices = async () => {
+  const loadDevices = useCallback(async () => {
     if (!staff) { setDevices([]); setEnabled(false); return; }
     try {
       const teamBound = teamId ? await listCentralSimHubDevicesForTeam(eventId, teamId) : [];
-      const fallback = teamBound.length ? teamBound : (await listCentralSimHubDevices()).filter((device) => !device.revoked_at);
-      setDevices(fallback);
-      if (teamBound.length) { setSelectedDeviceId(teamBound[0].id); }
+      setDevices(teamBound);
+      setSelectedDeviceId(teamBound[0]?.id ?? "");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Gekoppelde SimHub-apparaten konden niet worden geladen.");
     }
-  };
+  }, [staff, eventId, teamId]);
 
-  useEffect(() => { void loadDevices(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [staff, user?.id, eventId, teamId]);
+  useEffect(() => { void loadDevices(); }, [loadDevices]);
 
   useEffect(() => {
     if (devices.length && !devices.some((device) => device.id === selectedDeviceId)) setSelectedDeviceId(devices[0].id);
@@ -50,7 +49,7 @@ export const SimHubTelemetryPanel = ({ eventId, teamId, plannedDriverId }: { eve
     setLatest(null); setError(""); setStatus(devices.length ? "Wacht op telemetry" : "Geen device geselecteerd");
     if (!enabled || !selectedDeviceId) return;
     let active = true;
-    const refreshSnapshot = () => readCentralSimHubTelemetry(selectedDeviceId).then((snapshot) => {
+    const refreshSnapshot = () => readCentralSimHubTelemetry(selectedDeviceId, eventId, teamId).then((snapshot) => {
       if (!active) return;
       setLatest((current) => !current || (snapshot && Date.parse(snapshot.receivedAt) >= Date.parse(current.receivedAt)) ? snapshot : current);
       setCheckedAt(Date.now());
@@ -73,7 +72,7 @@ export const SimHubTelemetryPanel = ({ eventId, teamId, plannedDriverId }: { eve
       });
     const freshness = window.setInterval(() => setCheckedAt(Date.now()), 1_000);
     return () => { active = false; window.clearInterval(interval); window.clearInterval(freshness); void supabase.removeChannel(channel); };
-  }, [enabled, selectedDeviceId]);
+  }, [enabled, selectedDeviceId, eventId, teamId, devices.length]);
 
   const refreshDeviceList = async () => { setRefreshing(true); try { await loadDevices(); } finally { setRefreshing(false); } };
 

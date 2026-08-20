@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const binding = readFileSync("supabase/migrations/20260806_endurance_device_binding.sql", "utf8");
-const bindingRollback = readFileSync("supabase/rollback/20260806_endurance_device_binding.rollback.sql", "utf8");
-const routing = readFileSync("supabase/migrations/20260806_endurance_ingest_routing.sql", "utf8");
-const routingRollback = readFileSync("supabase/rollback/20260806_endurance_ingest_routing.rollback.sql", "utf8");
+const binding = readFileSync("supabase/migrations/20260806102000_endurance_device_binding.sql", "utf8");
+const bindingRollback = readFileSync("supabase/rollback/20260806102000_endurance_device_binding.rollback.sql", "utf8");
+const routing = readFileSync("supabase/migrations/20260806105000_endurance_ingest_routing.sql", "utf8");
+const routingRollback = readFileSync("supabase/rollback/20260806105000_endurance_ingest_routing.rollback.sql", "utf8");
 const ingest = readFileSync("supabase/functions/simhub-ingest/index.ts", "utf8");
 
 describe("endurance device <-> entry binding + ingest routing", () => {
