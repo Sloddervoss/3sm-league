@@ -697,6 +697,34 @@ export type Database = {
         Relationships: []
       }
 
+      endurance_realtime_stream: {
+        Row: {
+          id: number
+          source_table: string
+          event_id: string | null
+          team_id: string | null
+          user_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: never
+          source_table: string
+          event_id?: string | null
+          team_id?: string | null
+          user_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: never
+          source_table?: string
+          event_id?: string | null
+          team_id?: string | null
+          user_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+
       endurance_registrations: {
         Row: {
           id: string

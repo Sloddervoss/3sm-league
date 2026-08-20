@@ -36,7 +36,8 @@ export const EventManager = () => {
   const { data: dbEvents = [], isLoading, isError, error } = useEnduranceEvents();
   const knownEventBindings = useMemo(() => dbEvents.map((event) => ({
     table: "endurance_events" as const,
-    filter: { column: "id", value: event.id },
+    subscriptionTable: "endurance_realtime_stream" as const,
+    filter: { column: "event_id", value: event.id },
     queryKeys: [["endurance", "events"]],
   })), [dbEvents]);
   useEnduranceRealtime(knownEventBindings, [knownEventBindings], {

@@ -42,6 +42,7 @@ describe("endurance realtime binding matrix", () => {
 
   it("never emits an unfiltered (broad) subscription for an event workspace", () => {
     for (const binding of enduranceRealtimeBindingsForEvent(EVENT, { userId: USER })) {
+      expect(binding.subscriptionTable).toBe("endurance_realtime_stream");
       expect(binding.filter).toBeDefined();
       expect(binding.filter.column.length).toBeGreaterThan(0);
       expect(binding.filter.value).toBeTruthy();
@@ -85,9 +86,9 @@ describe("endurance realtime binding matrix", () => {
 
   it("uses the narrow pairing column each table supports (event_id / id / user_id)", () => {
     const filterFor = (table: string) => bindingFor(table)?.filter;
-    // event rows are filtered by their primary key, not an event_id column (which
-    // the events table does not have).
-    expect(filterFor("endurance_events")).toEqual({ column: "id", value: EVENT });
+    // Alle subscriptions richten zich op de carrier; ook event-wijzigingen
+    // staan daar onder event_id (de trigger leidt dit af uit events.id).
+    expect(filterFor("endurance_events")).toEqual({ column: "event_id", value: EVENT });
     // descendants are filtered by event_id.
     for (const table of ["endurance_registrations", "endurance_availability", "endurance_pace_entries",
       "endurance_practice_sessions", "endurance_practice_laps", "endurance_teams",
@@ -162,5 +163,22 @@ describe("endurance realtime publication delta", () => {
     expect(forward).toContain("endurance race control audit managers select");
     expect(forward).toContain("team.manager_id = auth.uid()");
     expect(rollback).toContain('DROP POLICY IF EXISTS "endurance race control audit managers select"');
+  });
+
+  it("moves streaming off every domain table onto a server-gated carrier", () => {
+    const forward = readFileSync("supabase/migrations/20260820180000_endurance_realtime_server_gate.sql", "utf8");
+    const rollback = readFileSync("supabase/rollback/20260820180000_endurance_realtime_server_gate.rollback.sql", "utf8");
+    expect(forward).toContain("CREATE TABLE public.endurance_realtime_stream");
+    expect(forward).toContain("capability.multi_user_realtime_enabled");
+    expect(forward).toContain("public.is_endurance_staff(auth.uid())");
+    expect(forward).toContain("public.is_endurance_manager(auth.uid())");
+    expect(forward).toMatch(/is_endurance_staff\(auth\.uid\(\)\)[\s\S]+AND CASE/);
+    expect(forward).toContain("ALTER PUBLICATION supabase_realtime ADD TABLE public.endurance_realtime_stream");
+    expect(forward.match(/ALTER PUBLICATION supabase_realtime DROP TABLE public\.endurance_/g)).toHaveLength(13);
+    expect(forward).toContain("CREATE TRIGGER endurance_realtime_enqueue_trg AFTER INSERT OR UPDATE OR DELETE");
+    expect(rollback).toContain("DROP TABLE public.endurance_realtime_stream");
+    expect(rollback.match(/ALTER PUBLICATION supabase_realtime ADD TABLE public\.endurance_/g)).toHaveLength(13);
+    const invariants = readFileSync("supabase/migrations/20260820150000_endurance_invariants_atomic_publish.sql", "utf8");
+    expect(invariants).toMatch(/endurance_team_members[\s\S]+ADD COLUMN IF NOT EXISTS event_id/);
   });
 });

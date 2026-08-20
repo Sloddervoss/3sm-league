@@ -42,6 +42,7 @@ export type EnduranceOnlyTableName =
   | "endurance_practice_sessions"
   | "endurance_practice_laps"
   | "endurance_race_control_audit"
+  | "endurance_realtime_stream"
   | "endurance_iracing_events"
   | "endurance_iracing_event_slots"
   | "endurance_iracing_sync_runs";

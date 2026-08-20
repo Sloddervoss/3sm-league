@@ -2,7 +2,8 @@ import type { EnduranceOnlyTableName } from "./dataAccess";
 
 export type EnduranceRealtimeFilter = { column: string; value: string };
 export type EnduranceRealtimeBinding = {
-  table: EnduranceOnlyTableName | "endurance_race_control_audit";
+  table: EnduranceOnlyTableName;
+  subscriptionTable: "endurance_realtime_stream";
   filter: EnduranceRealtimeFilter;
   queryKeys: unknown[][];
 };
@@ -12,7 +13,7 @@ const eventBinding = (
   eventId: string,
   queryKeys: unknown[][],
   column = "event_id",
-): EnduranceRealtimeBinding => ({ table, filter: { column, value: eventId }, queryKeys });
+): EnduranceRealtimeBinding => ({ table, subscriptionTable: "endurance_realtime_stream", filter: { column, value: eventId }, queryKeys });
 
 /** Centrale table → filter → TanStack-query-key matrix voor één eventworkspace. */
 export const enduranceRealtimeBindingsForEvent = (
@@ -20,7 +21,7 @@ export const enduranceRealtimeBindingsForEvent = (
   options: { userId?: string } = {},
 ): EnduranceRealtimeBinding[] => {
   const bindings: EnduranceRealtimeBinding[] = [
-    eventBinding("endurance_events", eventId, [["endurance", "events"], ["endurance", "events", eventId]], "id"),
+    eventBinding("endurance_events", eventId, [["endurance", "events"], ["endurance", "events", eventId]]),
     eventBinding("endurance_registrations", eventId, [["endurance", "registrations", eventId], ["endurance", "registrations", "all"]]),
     eventBinding("endurance_availability", eventId, [["endurance", "availability", eventId]]),
     eventBinding("endurance_pace_entries", eventId, [["endurance", "pace", eventId]]),
@@ -36,6 +37,7 @@ export const enduranceRealtimeBindingsForEvent = (
   if (options.userId) {
     bindings.push({
       table: "endurance_notifications",
+      subscriptionTable: "endurance_realtime_stream",
       filter: { column: "user_id", value: options.userId },
       queryKeys: [["endurance", "notifications"]],
     });
@@ -46,11 +48,13 @@ export const enduranceRealtimeBindingsForEvent = (
 export const enduranceRealtimeUserBindings = (userId: string): EnduranceRealtimeBinding[] => [
   {
     table: "endurance_notifications",
+    subscriptionTable: "endurance_realtime_stream",
     filter: { column: "user_id", value: userId },
     queryKeys: [["endurance", "notifications"]],
   },
   {
     table: "endurance_availability",
+    subscriptionTable: "endurance_realtime_stream",
     filter: { column: "user_id", value: userId },
     queryKeys: [["endurance", "availability"]],
   },
