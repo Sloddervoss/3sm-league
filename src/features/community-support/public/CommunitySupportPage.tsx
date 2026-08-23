@@ -27,6 +27,7 @@ import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
 import { COMMUNITY_SUPPORT_HAS_SHARED_DATA, COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
 import { fetchPublicPaymentConfig, fetchSharedPaymentLedger, submitPaymentIntent } from "../paymentApi";
+import { emptySharedSupportState, fetchPublicCommunitySupportData } from "../supportDataApi";
 import { useCommunitySupport } from "../store";
 import SeasonLedgerModal from "./SeasonLedgerModal";
 import PayPalContributionModal from "./PayPalContributionModal";
@@ -251,15 +252,25 @@ const CommunitySupportPage = () => {
     enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
     staleTime: 60_000,
   });
+  const { data: sharedSupportData } = useQuery({
+    queryKey: ["community-support", "shared-data", "public"],
+    queryFn: fetchPublicCommunitySupportData,
+    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
+    staleTime: 0,
+  });
+  const emptyPublicState = useMemo(emptySharedSupportState, []);
+  const displayState = COMMUNITY_SUPPORT_HAS_SHARED_DATA
+    ? (sharedSupportData?.displayState ?? emptyPublicState)
+    : state;
 
   const availableYears = useMemo(() => Array.from(new Set([
     currentYear,
-    ...state.ledger.map((entry) => entry.date.slice(0, 4)),
-    ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
-    ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
+    ...displayState.ledger.map((entry) => entry.date.slice(0, 4)),
+    ...displayState.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
+    ...displayState.raceCosts.map((cost) => cost.date.slice(0, 4)),
     ...(sharedPaymentLedger?.entries ?? []).map((entry) => entry.date.slice(0, 4)),
     ...(sharedPaymentLedger?.metricEntries ?? []).map((entry) => entry.date.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, sharedPaymentLedger, state.ledger, state.raceCosts, state.recurringCosts]);
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, sharedPaymentLedger, displayState.ledger, displayState.raceCosts, displayState.recurringCosts]);
 
   const requestedPeriodRef = useRef({
     year: new URLSearchParams(window.location.search).get("year"),
@@ -297,7 +308,7 @@ const CommunitySupportPage = () => {
     enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
     staleTime: 60_000,
   });
-  const paymentSettings = useMemo(() => sharedPaymentConfig ? { ...state.settings, ...sharedPaymentConfig } : state.settings, [sharedPaymentConfig, state.settings]);
+  const paymentSettings = useMemo(() => sharedPaymentConfig ? { ...displayState.settings, ...sharedPaymentConfig } : displayState.settings, [sharedPaymentConfig, displayState.settings]);
   const paymentEnabled = paymentSettings.paypalCheckoutEnabled || paymentSettings.paypalEnabled;
 
   const availableMonths = useMemo(() => Array.from({ length: 12 }, (_, index) => `${selectedYear}-${String(index + 1).padStart(2, "0")}`), [selectedYear]);
@@ -337,21 +348,27 @@ const CommunitySupportPage = () => {
   };
 
   const stateWithoutLocalPayPal = useMemo(() => COMMUNITY_SUPPORT_HAS_SHARED_DATA
-    ? { ...state, ledger: state.ledger.filter((entry) => !entry.id.startsWith("paypal-contribution:") && !entry.id.startsWith("paypal-fee:")) }
-    : state, [state]);
-  const metricState = useMemo(() => sharedPaymentLedger
-    ? { ...stateWithoutLocalPayPal, ledger: [...stateWithoutLocalPayPal.ledger, ...sharedPaymentLedger.metricEntries] }
-    : stateWithoutLocalPayPal, [sharedPaymentLedger, stateWithoutLocalPayPal]);
+    ? { ...displayState, ledger: displayState.ledger.filter((entry) => !entry.id.startsWith("paypal-contribution:") && !entry.id.startsWith("paypal-fee:")) }
+    : displayState, [displayState]);
+  const metricState = useMemo(() => {
+    if (!COMMUNITY_SUPPORT_HAS_SHARED_DATA) return stateWithoutLocalPayPal;
+    return {
+      ...stateWithoutLocalPayPal,
+      ledger: [...(sharedSupportData?.metricLedger ?? []), ...(sharedPaymentLedger?.metricEntries ?? [])],
+      recurringCosts: [],
+      raceCosts: [],
+    };
+  }, [sharedPaymentLedger, sharedSupportData, stateWithoutLocalPayPal]);
   const metrics = useMemo(() => supportMetricsForYear(metricState, selectedYear), [metricState, selectedYear]);
   const annualPublicLedger = useMemo(() => [
     ...publicLedgerForYear(stateWithoutLocalPayPal, selectedYear),
     ...(sharedPaymentLedger?.entries ?? []).filter((entry) => entry.date.startsWith(selectedYear)),
   ].sort((a, b) => b.date.localeCompare(a.date)), [selectedYear, sharedPaymentLedger, stateWithoutLocalPayPal]);
-  const annualPublicRaceCosts = useMemo(() => publicRaceCostsForYear(state, selectedYear), [state, selectedYear]);
+  const annualPublicRaceCosts = useMemo(() => publicRaceCostsForYear(displayState, selectedYear), [displayState, selectedYear]);
   const publicLedger = useMemo(() => selectedMonth === "all" ? annualPublicLedger : annualPublicLedger.filter((entry) => entry.date.startsWith(selectedMonth)), [annualPublicLedger, selectedMonth]);
-  const products = useMemo(() => state.products.filter((product) => COMMUNITY_SUPPORT_PUBLIC
+  const products = useMemo(() => displayState.products.filter((product) => COMMUNITY_SUPPORT_PUBLIC
     ? product.active && !product.concept
-    : product.active || product.concept), [state.products]);
+    : product.active || product.concept), [displayState.products]);
 
   const supporters = useMemo(() => annualPublicLedger.filter((entry) =>
     entry.direction === "income" && entry.category === "contribution",
