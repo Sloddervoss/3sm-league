@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  assertApprovedOrderMatchesIntent,
   assertCaptureMatchesIntent,
   buildPayPalMerchOrderPayload,
   buildPayPalOrderPayload,
@@ -31,6 +32,16 @@ const completedOrder = {
         net_amount: { currency_code: "EUR", value: "9.31" },
       },
     }] },
+  }],
+};
+
+const approvedOrder = {
+  id: orderId,
+  status: "APPROVED",
+  purchase_units: [{
+    custom_id: intentId,
+    payee: { merchant_id: merchantId },
+    amount: { currency_code: "EUR", value: "10.00" },
   }],
 };
 
@@ -73,6 +84,13 @@ describe("PayPal Checkout server contract", () => {
     expect(buildPayPalMerchOrderPayload(intentId, "Digitale pas", 5, "digital").application_context?.shipping_preference).toBe("NO_SHIPPING");
     expect(extractPayPalPayerEmail({ payer: { email_address: "Member@Example.COM" } })).toBe("member@example.com");
     expect(() => extractPayPalPayerEmail({ payer: {} })).toThrow(/email/);
+  });
+
+  it("verifies the approved order binding before any server-side capture", () => {
+    expect(() => assertApprovedOrderMatchesIntent(approvedOrder, { intentId, orderId, merchantId, amountEur: 10 })).not.toThrow();
+    expect(() => assertApprovedOrderMatchesIntent({ ...approvedOrder, status: "CREATED" }, { intentId, orderId, merchantId, amountEur: 10 })).toThrow(/not approved/);
+    expect(() => assertApprovedOrderMatchesIntent({ ...approvedOrder, purchase_units: [{ ...approvedOrder.purchase_units[0], custom_id: "wrong" }] }, { intentId, orderId, merchantId, amountEur: 10 })).toThrow(/intent mismatch/);
+    expect(() => assertApprovedOrderMatchesIntent({ ...approvedOrder, purchase_units: [{ ...approvedOrder.purchase_units[0], amount: { currency_code: "EUR", value: "11.00" } }] }, { intentId, orderId, merchantId, amountEur: 10 })).toThrow(/amount mismatch/);
   });
 
   it("extracts PayPal gross, fee and net snapshots and verifies every financial binding", () => {
@@ -139,6 +157,11 @@ describe("PayPal Checkout server contract", () => {
     expect(edge).toContain('PAYMENT.CAPTURE.REFUNDED');
     expect(edge).toContain('PAYMENT.CAPTURE.REVERSED');
     expect(edge).toContain('CHECKOUT.ORDER.APPROVED');
+    expect(edge).toContain('const reconcileContributionIntent = async');
+    expect(edge).toContain('await reconcileContributionIntent(intent as PaymentIntentRow)');
+    expect(edge).toContain('assertApprovedOrderMatchesIntent(currentOrder');
+    expect(edge).toContain('PayPal-Request-Id": `capture-${intent.paypal_order_id}`');
+    expect(edge).toContain('error instanceof PayPalRequestError && error.status === 422');
     expect(edge).toContain('.eq("paypal_environment", PAYPAL_ENV).eq("paypal_capture_id", resourceId)');
     expect(edge).toContain('currentOrder.status === "COMPLETED"');
     expect(config).toMatch(/\[functions\.paypal-checkout\]\nverify_jwt = false/);
@@ -186,6 +209,9 @@ describe("PayPal Checkout server contract", () => {
     expect(migration.indexOf("SELECT id INTO v_refund_id FROM public.community_support_merch_refunds")).toBeLessThan(migration.indexOf("v_order.refunded_amount_eur+p_refund_amount_eur>v_order.unit_price_eur"));
     expect(merchApi).not.toContain('.from("community_support_merch_orders")');
     expect(edge).toContain('pathname.endsWith("/maintenance")');
+    expect(edge).toContain('const reconcileActiveContributionIntents = async');
+    expect(edge).toContain('return jsonResponse(await reconcileActiveCheckoutRecords(), 200)');
+    expect(edge).toContain('.eq("payment_flow", "paypal_checkout")');
     expect(edge).toContain('req.headers.get("Authorization") !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`');
     expect(edge).toContain('.in("status", ["pending", "approved"])');
     expect(bot).toContain("reconcileMerchOrders");
