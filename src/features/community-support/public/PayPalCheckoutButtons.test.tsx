@@ -174,7 +174,7 @@ describe("PayPal Checkout buttons", () => {
     expect(screen.queryByRole("button", { name: "Bedrag of privacykeuzes wijzigen" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Controleer betaling opnieuw" }));
     await waitFor(() => expect(onCompleted).toHaveBeenCalledWith(expect.objectContaining({ result: "already_confirmed" })));
-    expect(captureOrder).toHaveBeenCalledWith(intentId);
+    expect(captureOrder).toHaveBeenCalledWith({ intentId, status: "approved" });
     expect(createIntent).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
   });
@@ -183,7 +183,7 @@ describe("PayPal Checkout buttons", () => {
     const oldIntentId = "2a9ad46e-f4c1-4c77-94fd-cde7531b76d7";
     const newIntentId = "3b9ad46e-f4c1-4c77-94fd-cde7531b76d8";
     const cancelIntent = vi.fn(async () => undefined);
-    const createIntent = vi.fn(async () => newIntentId);
+    const createIntent = vi.fn(async () => ({ intentId: newIntentId }));
     const createOrder = vi.fn(async () => "5O190127TN364715T");
     let callbacks: { createOrder: () => Promise<string> } | null = null;
 
@@ -216,9 +216,9 @@ describe("PayPal Checkout buttons", () => {
     />);
 
     expect(await screen.findByRole("button", { name: "Sandbox PayPal button" })).toBeInTheDocument();
-    expect(cancelIntent).toHaveBeenCalledWith(oldIntentId);
+    expect(cancelIntent).toHaveBeenCalledWith({ intentId: oldIntentId, status: "pending" });
     await act(async () => { await callbacks!.createOrder(); });
     expect(createIntent).toHaveBeenCalledWith(draft);
-    expect(createOrder).toHaveBeenCalledWith(newIntentId);
+    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({ intentId: newIntentId }));
   });
 });
