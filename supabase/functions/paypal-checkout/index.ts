@@ -19,7 +19,8 @@ declare const Deno: {
 type Json = Record<string, unknown>;
 type PaymentIntentRow = {
   id: string;
-  user_id: string;
+  user_id: string | null;
+  guest_access_token_hash: string | null;
   requested_amount_eur: number | string;
   status: string;
   payment_flow: string;
@@ -154,13 +155,41 @@ const authenticatedUser = async (req: Request) => {
   return data.user;
 };
 
+const optionalAuthenticatedUser = async (req: Request) => {
+  try {
+    return await authenticatedUser(req);
+  } catch {
+    return null;
+  }
+};
+
+const bytesToHex = (bytes: Uint8Array) => Array.from(bytes, (v) => v.toString(16).padStart(2, "0")).join("");
+const sha256 = async (value: string) => bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))));
+const randomGuestToken = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+};
+const guestFingerprint = async (req: Request) => {
+  const ip = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SUPABASE_SERVICE_ROLE_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signed = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ip));
+  return bytesToHex(new Uint8Array(signed));
+};
+
 const getIntent = async (id: string): Promise<PaymentIntentRow> => {
   const { data, error } = await serviceClient().from("community_support_payment_intents")
-    .select("id,user_id,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
+    .select("id,user_id,guest_access_token_hash,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
     .eq("id", id).maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("Payment intent not found");
   return data as PaymentIntentRow;
+};
+
+const authorizeIntent = async (req: Request, intent: PaymentIntentRow, guestToken: string) => {
+  const user = await optionalAuthenticatedUser(req);
+  if (user && intent.user_id === user.id && !intent.guest_access_token_hash) return;
+  if (!intent.user_id && intent.guest_access_token_hash && guestToken && await sha256(guestToken) === intent.guest_access_token_hash) return;
+  throw new Error("Checkout owner verification failed");
 };
 
 const settleOrder = async (intent: PaymentIntentRow, order: Json) => {
@@ -367,7 +396,7 @@ const reconcileActiveMerchOrders = async () => {
 
 const reconcileActiveContributionIntents = async () => {
   const { data, error } = await serviceClient().from("community_support_payment_intents")
-    .select("id,user_id,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
+    .select("id,user_id,guest_access_token_hash,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
     .eq("payment_flow", "paypal_checkout")
     .eq("paypal_environment", PAYPAL_ENV)
     .in("status", ["pending", "approved"])
@@ -457,7 +486,7 @@ const processWebhook = async (req: Request, origin: string) => {
         status = "processed";
       } else {
         const { data: intent, error: intentError } = await client.from("community_support_payment_intents")
-          .select("id,user_id,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
+          .select("id,user_id,guest_access_token_hash,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
           .eq("paypal_environment", PAYPAL_ENV).eq("paypal_order_id", resourceId).maybeSingle();
         if (intentError) throw intentError;
         if (intent && eventType === "CHECKOUT.ORDER.APPROVED") {
@@ -491,7 +520,7 @@ const processWebhook = async (req: Request, origin: string) => {
           await settleMerchOrder(merch as MerchOrderRow, await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(orderId)}`));
         } else {
           const { data: intent, error } = await client.from("community_support_payment_intents")
-            .select("id,user_id,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
+            .select("id,user_id,guest_access_token_hash,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
             .eq("paypal_environment", PAYPAL_ENV).eq("paypal_order_id", orderId).maybeSingle();
           if (error || !intent) throw error ?? new Error("Webhook order not linked to a checkout record");
           await settleOrder(intent as PaymentIntentRow, await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(orderId)}`));
@@ -567,8 +596,54 @@ Deno.serve(async (req) => {
     const body = await readJsonBody(req);
     const action = String(body.action ?? "");
     if (action === "config") {
-      await authenticatedUser(req);
       return jsonResponse({ clientId: PAYPAL_CLIENT_ID, environment: PAYPAL_ENV, currency: "EUR" }, 200, origin);
+    }
+
+    // Guest Checkout (no authentication required)
+    if (action === "create-guest-intent") {
+      if (await optionalAuthenticatedUser(req)) throw new Error("Signed-in visitors must use account checkout");
+      const requestedAmount = Number(body.requestedAmount);
+      const payerName = String(body.payerName ?? "").trim();
+      const showSupporterName = body.showSupporterName === true;
+      const showAmount = body.showAmount === true;
+      if (!Number.isFinite(requestedAmount) || requestedAmount < 1 || requestedAmount > 1_000
+          || Math.abs(requestedAmount * 100 - Math.round(requestedAmount * 100)) > 1e-7
+          || payerName.length > 100 || (showSupporterName && !payerName)) {
+        throw new Error("Invalid guest contribution draft");
+      }
+      const guestToken = randomGuestToken();
+      const { data: intentId, error } = await serviceClient().rpc("paypal_create_community_support_guest_intent", {
+        p_requested_amount_eur: requestedAmount,
+        p_payer_name_private: payerName,
+        p_show_supporter_name: showSupporterName,
+        p_show_amount: showAmount,
+        p_guest_access_token_hash: await sha256(guestToken),
+        p_guest_fingerprint_hash: await guestFingerprint(req),
+        p_environment: PAYPAL_ENV,
+      });
+      if (error || !intentId) throw error ?? new Error("Guest intent could not be created");
+      return jsonResponse({ intentId, guestToken }, 200, origin);
+    }
+
+    // Guest Checkout status/cancel (ownership-sealed by authorizeIntent via
+    // the guest owner hash; these never touch account intents).
+    const intentIdRaw = String(body.intentId ?? "");
+    const guestTokenRaw = String(body.guestToken ?? "");
+    if (intentIdRaw && (action === "guest-status" || action === "cancel-guest-intent")) {
+      const guestCtxIntent = await getIntent(intentIdRaw);
+      await authorizeIntent(req, guestCtxIntent, guestTokenRaw);
+      if (!guestCtxIntent.guest_access_token_hash) throw new Error("Not a guest Checkout intent");
+      if (action === "guest-status") {
+        return jsonResponse({ status: guestCtxIntent.status }, 200, origin);
+      }
+      const { data: cancelled, error: cancelError } = await serviceClient().rpc("paypal_cancel_community_support_guest_intent", {
+        p_intent_id: guestCtxIntent.id,
+        p_guest_access_token_hash: guestCtxIntent.guest_access_token_hash,
+        p_environment: PAYPAL_ENV,
+      });
+      if (cancelError) throw cancelError;
+      if (cancelled !== "cancelled" && cancelled !== "already_cancelled") throw new Error(`Guest cancellation rejected: ${cancelled}`);
+      return jsonResponse({ result: cancelled }, 200, origin);
     }
 
     const user = await authenticatedUser(req);
@@ -624,8 +699,9 @@ Deno.serve(async (req) => {
     }
 
     const intentId = String(body.intentId ?? "");
+    const guestToken = String(body.guestToken ?? "");
     const intent = await getIntent(intentId);
-    if (intent.user_id !== user.id) throw new Error("Payment intent does not belong to this user");
+    await authorizeIntent(req, intent, guestToken);
     if (intent.payment_flow !== "paypal_checkout") throw new Error("Payment intent is not a Checkout intent");
 
     if (action === "create-order") {
@@ -642,7 +718,7 @@ Deno.serve(async (req) => {
       if (!orderId || order.status !== "CREATED" || payee?.merchant_id !== PAYPAL_MERCHANT_ID) throw new Error("PayPal order binding failed");
       const { data, error } = await serviceClient().rpc("paypal_attach_community_support_order", {
         p_intent_id: intent.id,
-        p_user_id: user.id,
+        p_user_id: intent.user_id,
         p_environment: PAYPAL_ENV,
         p_order_id: orderId,
         p_merchant_id: PAYPAL_MERCHANT_ID,

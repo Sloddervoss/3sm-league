@@ -8,6 +8,7 @@ export type SharedPaymentLedger = {
   metricEntries: SupportLedgerEntry[];
 };
 export type PayPalCheckoutConfig = { clientId: string; environment: "sandbox" | "live"; currency: "EUR" };
+export type PayPalCheckoutSession = { intentId: string; guestToken?: string };
 export type PayPalCaptureResult = { result: "confirmed" | "already_confirmed"; captureId: string; grossAmount: number; feeAmount: number; netAmount: number };
 type PublicPaymentTotalRow = { month: string; contribution_total_eur: number; fee_total_eur: number };
 
@@ -137,32 +138,73 @@ export const submitPaymentIntent = async (draft: SupportPaymentIntentDraft): Pro
   return data;
 };
 
-export const submitPayPalCheckoutIntent = async (draft: SupportPaymentIntentDraft): Promise<string> => {
-  const { data, error } = await supabase.rpc("create_community_support_paypal_checkout_intent", {
-    p_requested_amount_eur: draft.requestedAmount,
-    p_payer_name_private: draft.payerName,
-    p_show_supporter_name: draft.showSupporterName,
-    p_show_amount: draft.showAmount,
+export const submitPayPalCheckoutIntent = async (draft: SupportPaymentIntentDraft): Promise<PayPalCheckoutSession> => {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (sessionData.session?.user) {
+    const { data, error } = await supabase.rpc("create_community_support_paypal_checkout_intent", {
+      p_requested_amount_eur: draft.requestedAmount,
+      p_payer_name_private: draft.payerName || "Anonieme supporter",
+      p_show_supporter_name: draft.showSupporterName,
+      p_show_amount: draft.showAmount,
+    });
+    if (error || !data) throw error ?? new Error("PayPal Checkout intent could not be created");
+    return { intentId: data };
+  }
+  const guest = await invokePayPalCheckout<PayPalCheckoutSession>({
+    action: "create-guest-intent",
+    requestedAmount: draft.requestedAmount,
+    payerName: draft.payerName,
+    showSupporterName: draft.showSupporterName,
+    showAmount: draft.showAmount,
   });
-  if (error || !data) throw error ?? new Error("PayPal Checkout intent could not be created");
-  return data;
+  if (!guest.intentId || !guest.guestToken) throw new Error("Guest PayPal Checkout intent could not be created");
+  sessionStorage.setItem("3sm-community-support-guest-checkout", JSON.stringify(guest));
+  return guest;
 };
 
-export const cancelPayPalCheckoutIntent = async (intentId: string): Promise<void> => {
-  const { data, error } = await supabase.rpc("cancel_community_support_paypal_checkout_intent", { p_intent_id: intentId });
+export const cancelPayPalCheckoutIntent = async (checkout: PayPalCheckoutSession): Promise<void> => {
+  if (checkout.guestToken) {
+    const result = await invokePayPalCheckout<{ result: string }>({ action: "cancel-guest-intent", ...checkout });
+    if (!["cancelled", "already_cancelled"].includes(result.result)) throw new Error("Guest PayPal Checkout intent could not be cancelled");
+    sessionStorage.removeItem("3sm-community-support-guest-checkout");
+    return;
+  }
+  const { data, error } = await supabase.rpc("cancel_community_support_paypal_checkout_intent", { p_intent_id: checkout.intentId });
   if (error || !["cancelled", "already_cancelled"].includes(data)) {
     throw error ?? new Error("PayPal Checkout intent could not be cancelled");
   }
 };
 
-export type PayPalCheckoutRecoveryIntent = { intentId: string; status: "pending" | "approved" };
+export type PayPalCheckoutRecoveryIntent = PayPalCheckoutSession & { status: "pending" | "approved" };
 export const fetchPayPalCheckoutRecoveryIntent = async (): Promise<PayPalCheckoutRecoveryIntent | null> => {
-  const { data, error } = await supabase.rpc("get_community_support_paypal_checkout_recovery_intent");
-  if (error) throw error;
-  const row = data?.[0];
-  if (!row) return null;
-  if (row.status !== "pending" && row.status !== "approved") throw new Error("Invalid PayPal Checkout recovery state");
-  return { intentId: row.intent_id, status: row.status };
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (sessionData.session?.user) {
+    const { data, error } = await supabase.rpc("get_community_support_paypal_checkout_recovery_intent");
+    if (error) throw error;
+    const row = data?.[0];
+    if (!row) return null;
+    if (row.status !== "pending" && row.status !== "approved") throw new Error("Invalid PayPal Checkout recovery state");
+    return { intentId: row.intent_id, status: row.status };
+  }
+  const raw = sessionStorage.getItem("3sm-community-support-guest-checkout");
+  if (!raw) return null;
+  let checkout: PayPalCheckoutSession;
+  try {
+    checkout = JSON.parse(raw) as PayPalCheckoutSession;
+  } catch {
+    sessionStorage.removeItem("3sm-community-support-guest-checkout");
+    return null;
+  }
+  if (!checkout.intentId || !checkout.guestToken) {
+    sessionStorage.removeItem("3sm-community-support-guest-checkout");
+    return null;
+  }
+  const result = await invokePayPalCheckout<{ status: string }>({ action: "guest-status", ...checkout });
+  if (result.status !== "pending" && result.status !== "approved") {
+    sessionStorage.removeItem("3sm-community-support-guest-checkout");
+    return null;
+  }
+  return { ...checkout, status: result.status };
 };
 
 
@@ -174,43 +216,17 @@ export const fetchPayPalCheckoutConfig = async (): Promise<PayPalCheckoutConfig>
   return config;
 };
 
-export const createPayPalCheckoutOrder = async (intentId: string): Promise<string> => {
-  const result = await invokePayPalCheckout<{ orderId: string }>({ action: "create-order", intentId });
+export const createPayPalCheckoutOrder = async (checkout: PayPalCheckoutSession): Promise<string> => {
+  const result = await invokePayPalCheckout<{ orderId: string }>({ action: "create-order", intentId: checkout.intentId, guestToken: checkout.guestToken });
   if (!result.orderId) throw new Error("PayPal order was not created.");
   return result.orderId;
 };
 
-export const capturePayPalCheckoutOrder = async (intentId: string): Promise<PayPalCaptureResult> => {
-  const result = await invokePayPalCheckout<PayPalCaptureResult>({ action: "capture-order", intentId });
+export const capturePayPalCheckoutOrder = async (checkout: PayPalCheckoutSession): Promise<PayPalCaptureResult> => {
+  const result = await invokePayPalCheckout<PayPalCaptureResult>({ action: "capture-order", intentId: checkout.intentId, guestToken: checkout.guestToken });
   if (!result.captureId || !["confirmed", "already_confirmed"].includes(result.result)) {
     throw new Error("PayPal payment was not confirmed.");
   }
+  if (checkout.guestToken) sessionStorage.removeItem("3sm-community-support-guest-checkout");
   return result;
-};
-
-export type PayPalMerchOrderResult = { orderId: string; merchOrderId: string };
-export type PayPalMerchCaptureResult = { result: "confirmed" | "already_confirmed"; orderId: string; captureId: string; grossAmount: number };
-export type PayPalMerchRecoveryResult =
-  | PayPalMerchCaptureResult
-  | { result: "pending"; merchOrderId: string; orderId: string }
-  | { result: "none" | "cancelled" | "already_cancelled" | "awaiting_provider_expiry"; merchOrderId?: string };
-
-export const recoverPayPalMerchOrder = async (productId: string): Promise<PayPalMerchRecoveryResult> =>
-  invokePayPalCheckout<PayPalMerchRecoveryResult>({ action: "recover-merch-order", productId });
-
-export const createPayPalMerchOrder = async (productId: string): Promise<PayPalMerchOrderResult> => {
-  const result = await invokePayPalCheckout<PayPalMerchOrderResult>({ action: "create-merch-order", productId });
-  if (!result.orderId || !result.merchOrderId) throw new Error("Merchandise order was not created.");
-  return result;
-};
-
-export const capturePayPalMerchOrder = async (merchOrderId: string): Promise<PayPalMerchCaptureResult> => {
-  const result = await invokePayPalCheckout<PayPalMerchCaptureResult>({ action: "capture-merch-order", merchOrderId });
-  if (!result.captureId || !["confirmed", "already_confirmed"].includes(result.result)) throw new Error("Merchandise payment was not confirmed.");
-  return result;
-};
-
-export const cancelPayPalMerchOrder = async (merchOrderId: string): Promise<void> => {
-  const result = await invokePayPalCheckout<{ result: string }>({ action: "cancel-merch-order", merchOrderId });
-  if (!["cancelled", "already_cancelled", "awaiting_provider_expiry"].includes(result.result)) throw new Error("Merchandise order was not cancelled safely.");
 };

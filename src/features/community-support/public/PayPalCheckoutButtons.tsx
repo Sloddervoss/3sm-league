@@ -11,6 +11,7 @@ import {
   type PayPalCaptureResult,
   type PayPalCheckoutConfig,
   type PayPalCheckoutRecoveryIntent,
+  type PayPalCheckoutSession,
 } from "../paymentApi";
 
 type Props = {
@@ -19,10 +20,10 @@ type Props = {
   onCompleted: (result: PayPalCaptureResult) => void;
   onCancelled: () => void;
   getConfig?: () => Promise<PayPalCheckoutConfig>;
-  createIntent?: (draft: SupportPaymentIntentDraft) => Promise<string>;
-  createOrder?: (intentId: string) => Promise<string>;
-  captureOrder?: (intentId: string) => Promise<PayPalCaptureResult>;
-  cancelIntent?: (intentId: string) => Promise<void>;
+  createIntent?: (draft: SupportPaymentIntentDraft) => Promise<PayPalCheckoutSession>;
+  createOrder?: (checkout: PayPalCheckoutSession) => Promise<string>;
+  captureOrder?: (checkout: PayPalCheckoutSession) => Promise<PayPalCaptureResult>;
+  cancelIntent?: (checkout: PayPalCheckoutSession) => Promise<void>;
   recoverIntent?: () => Promise<PayPalCheckoutRecoveryIntent | null>;
 };
 
@@ -39,7 +40,7 @@ const PayPalCheckoutButtons = ({
   recoverIntent = fetchPayPalCheckoutRecoveryIntent,
 }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const intentIdRef = useRef("");
+  const checkoutRef = useRef<PayPalCheckoutSession | null>(null);
   const recoveringRef = useRef(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -47,17 +48,17 @@ const PayPalCheckoutButtons = ({
   const [recovering, setRecovering] = useState(false);
 
   const reconcileCapture = useCallback(async () => {
-    if (!intentIdRef.current || recoveringRef.current) return;
+    if (!checkoutRef.current || recoveringRef.current) return;
     recoveringRef.current = true;
     setRecovering(true);
     setError("");
     try {
-      onCompleted(await captureOrder(intentIdRef.current));
+      onCompleted(await captureOrder(checkoutRef.current));
     } catch {
       setCaptureUncertain(true);
       setError(language === "en"
-        ? "PayPal confirmation is uncertain. Use ‘Check payment again’; 3SM will never charge again during this check."
-        : "De PayPal-bevestiging is onzeker. Kies ‘Controleer betaling opnieuw’; 3SM schrijft tijdens die controle nooit opnieuw af.");
+        ? "PayPal confirmation is uncertain. Use 'Check payment again'; 3SM will never charge again during this check."
+        : "De PayPal-bevestiging is onzeker. Kies 'Controleer betaling opnieuw'; 3SM schrijft tijdens die controle nooit opnieuw af.");
     } finally {
       recoveringRef.current = false;
       setRecovering(false);
@@ -66,8 +67,8 @@ const PayPalCheckoutButtons = ({
 
   const cancelFlow = useCallback(async () => {
     try {
-      if (intentIdRef.current) await cancelIntent(intentIdRef.current);
-      intentIdRef.current = "";
+      if (checkoutRef.current) await cancelIntent(checkoutRef.current);
+      checkoutRef.current = null;
       setCaptureUncertain(false);
       onCancelled();
     } catch {
@@ -87,29 +88,29 @@ const PayPalCheckoutButtons = ({
         const recoveredIntent = await recoverIntent();
         if (!active) return;
         if (recoveredIntent?.status === "approved") {
-          intentIdRef.current = recoveredIntent.intentId;
+          checkoutRef.current = recoveredIntent;
           setCaptureUncertain(true);
           setError(language === "en"
-            ? "An earlier PayPal confirmation still needs checking. Use ‘Check payment again’; this check never charges again."
-            : "Een eerdere PayPal-bevestiging moet nog worden gecontroleerd. Kies ‘Controleer betaling opnieuw’; deze controle schrijft nooit opnieuw af.");
+            ? "An earlier PayPal confirmation still needs checking. Use 'Check payment again'; this check never charges again."
+            : "Een eerdere PayPal-bevestiging moet nog worden gecontroleerd. Kies 'Controleer betaling opnieuw'; deze controle schrijft nooit opnieuw af.");
           return;
         }
         if (recoveredIntent?.status === "pending") {
           // A parent-modal close cannot reliably finish async cleanup. Expire
           // the orphaned draft on the next open before creating another one.
-          intentIdRef.current = recoveredIntent.intentId;
+          checkoutRef.current = recoveredIntent;
           try {
-            await cancelIntent(recoveredIntent.intentId);
-            intentIdRef.current = "";
+            await cancelIntent(recoveredIntent);
+            checkoutRef.current = null;
           } catch {
             const racedIntent = await recoverIntent();
             if (!active) return;
             if (racedIntent?.status === "approved") {
-              intentIdRef.current = racedIntent.intentId;
+              checkoutRef.current = racedIntent;
               setCaptureUncertain(true);
               setError(language === "en"
-                ? "An earlier PayPal confirmation still needs checking. Use ‘Check payment again’; this check never charges again."
-                : "Een eerdere PayPal-bevestiging moet nog worden gecontroleerd. Kies ‘Controleer betaling opnieuw’; deze controle schrijft nooit opnieuw af.");
+                ? "An earlier PayPal confirmation still needs checking. Use 'Check payment again'; this check never charges again."
+                : "Een eerdere PayPal-bevestiging moet nog worden gecontroleerd. Kies 'Controleer betaling opnieuw'; deze controle schrijft nooit opnieuw af.");
               return;
             }
             throw new Error("Pending PayPal Checkout intent could not be cleared");
@@ -121,10 +122,10 @@ const PayPalCheckoutButtons = ({
         if (!active) return;
         buttons = paypal.Buttons({
           createOrder: async () => {
-            if (!intentIdRef.current) {
-              intentIdRef.current = await createIntent(draft);
+            if (!checkoutRef.current) {
+              checkoutRef.current = await createIntent(draft);
             }
-            return createOrder(intentIdRef.current);
+            return createOrder(checkoutRef.current);
           },
           onApprove: reconcileCapture,
           onCancel: () => { void cancelFlow(); },
@@ -150,10 +151,10 @@ const PayPalCheckoutButtons = ({
   }, [cancelFlow, cancelIntent, createIntent, createOrder, draft, getConfig, language, reconcileCapture, recoverIntent]);
 
   return <div>
-    {loading && <p role="status" className="text-sm font-bold text-gray-400">{language === "en" ? "Loading secure PayPal Checkout…" : "Beveiligde PayPal Checkout laden…"}</p>}
+    {loading && <p role="status" className="text-sm font-bold text-gray-400">{language === "en" ? "Loading secure PayPal Checkout\u2026" : "Beveiligde PayPal Checkout laden\u2026"}</p>}
     <div ref={containerRef} className={loading ? "hidden" : "min-h-12"} />
     {error && <p role="alert" className="mt-4 text-sm font-bold text-rose-300">{error}</p>}
-    {error && captureUncertain && <button type="button" disabled={recovering} onClick={() => void reconcileCapture()} className="mt-4 min-h-11 w-full rounded-xl bg-amber-400/10 px-5 text-sm font-black text-amber-200 ring-1 ring-amber-300/25 hover:bg-amber-400/15 disabled:cursor-wait disabled:opacity-60">{recovering ? (language === "en" ? "Checking…" : "Controleren…") : (language === "en" ? "Check payment again" : "Controleer betaling opnieuw")}</button>}
+    {error && captureUncertain && <button type="button" disabled={recovering} onClick={() => void reconcileCapture()} className="mt-4 min-h-11 w-full rounded-xl bg-amber-400/10 px-5 text-sm font-black text-amber-200 ring-1 ring-amber-300/25 hover:bg-amber-400/15 disabled:cursor-wait disabled:opacity-60">{recovering ? (language === "en" ? "Checking\u2026" : "Controleren\u2026") : (language === "en" ? "Check payment again" : "Controleer betaling opnieuw")}</button>}
     {!captureUncertain && <button type="button" disabled={recovering} onClick={() => void cancelFlow()} className="mt-4 min-h-11 w-full rounded-xl bg-white/[0.045] px-5 text-sm font-bold text-gray-300 ring-1 ring-white/10 hover:bg-white/[0.08] disabled:cursor-wait disabled:opacity-60">{language === "en" ? "Change amount or privacy choices" : "Bedrag of privacykeuzes wijzigen"}</button>}
   </div>;
 };

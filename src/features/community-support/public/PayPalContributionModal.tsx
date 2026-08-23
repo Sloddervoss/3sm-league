@@ -9,6 +9,7 @@ type Props = {
   language: Language;
   settings: CommunitySupportSettings;
   localReview: boolean;
+  isAuthenticated?: boolean;
   canOpenPayPal: boolean;
   onAuthenticationRequired: () => void;
   onSubmit: (draft: SupportPaymentIntentDraft) => boolean | Promise<boolean>;
@@ -23,8 +24,9 @@ const copyFor = (language: Language) => language === "en" ? {
   amount: "Amount",
   customAmount: "Other amount",
   payerName: "Name visible in PayPal",
+  payerNameCheckout: "Name (optional for Checkout)",
   payerHelp: "Used privately by the payment admin to match your transfer.",
-  payerHelpCheckout: "Used privately to bind this Checkout attempt to your signed-in 3SM account and PayPal confirmation.",
+  payerHelpCheckout: "No 3SM account is required. Leave this empty for an anonymous contribution; enter a name only if you want it shown publicly.",
   showName: "Show my name in the season ledger after confirmation",
   showAmount: "Show my amount in the season ledger after confirmation",
   openPayPal: "Continue to secure PayPal Checkout",
@@ -55,8 +57,9 @@ const copyFor = (language: Language) => language === "en" ? {
   amount: "Bedrag",
   customAmount: "Ander bedrag",
   payerName: "Naam zichtbaar in PayPal",
+  payerNameCheckout: "Naam (optioneel bij Checkout)",
   payerHelp: "Wordt alleen privé gebruikt door de betaaladmin om je betaling te herkennen.",
-  payerHelpCheckout: "Wordt alleen privé gebruikt om deze Checkout-poging aan je ingelogde 3SM-account en PayPal-bevestiging te koppelen.",
+  payerHelpCheckout: "Een 3SM-account is niet nodig. Laat dit leeg voor een anonieme bijdrage; vul alleen een naam in als je die openbaar wilt tonen.",
   showName: "Toon mijn naam na bevestiging in het seizoensboek",
   showAmount: "Toon mijn bedrag na bevestiging in het seizoensboek",
   openPayPal: "Ga naar beveiligde PayPal Checkout",
@@ -83,13 +86,13 @@ const copyFor = (language: Language) => language === "en" ? {
 
 const inputClass = "mt-2 h-12 w-full rounded-xl border-0 bg-white/[0.055] px-4 text-sm font-bold text-white outline-none ring-1 ring-white/10 placeholder:text-gray-600 focus:ring-2 focus:ring-orange-400";
 
-const PayPalContributionModal = ({ language, settings, localReview, canOpenPayPal, onAuthenticationRequired, onSubmit, onCheckoutCompleted }: Props) => {
+const PayPalContributionModal = ({ language, settings, localReview, isAuthenticated = true, canOpenPayPal, onAuthenticationRequired, onSubmit, onCheckoutCompleted }: Props) => {
   const copy = copyFor(language);
   const [stage, setStage] = useState<"choose" | "paypal" | "checkout" | "done">("choose");
   const [amount, setAmount] = useState(settings.paypalSuggestedAmounts[0] ?? 5);
   const [customAmount, setCustomAmount] = useState("");
   const [payerName, setPayerName] = useState("");
-  const [showName, setShowName] = useState(settings.publicSupporterNamesByDefault);
+  const [showName, setShowName] = useState(isAuthenticated ? settings.publicSupporterNamesByDefault : false);
   const [showAmount, setShowAmount] = useState(settings.publicSupporterAmountsByDefault);
   const [checkoutDraft, setCheckoutDraft] = useState<SupportPaymentIntentDraft | null>(null);
   const [attempted, setAttempted] = useState(false);
@@ -102,7 +105,8 @@ const PayPalContributionModal = ({ language, settings, localReview, canOpenPayPa
   const checkoutEnabled = !localReview && settings.paypalCheckoutEnabled;
   const paypalUrl = useMemo(() => buildPayPalMeUrl(settings.paypalMeUrl, selectedAmount), [selectedAmount, settings.paypalMeUrl]);
   const validAmount = Number.isFinite(selectedAmount) && selectedAmount >= 1 && selectedAmount <= 1_000 && Math.abs(selectedAmount * 100 - Math.round(selectedAmount * 100)) < 1e-7;
-  const valid = Boolean(validAmount && payerName.trim() && (checkoutEnabled || paypalUrl));
+  const validName = checkoutEnabled ? (!showName || Boolean(payerName.trim())) : Boolean(payerName.trim());
+  const valid = Boolean(validAmount && validName && (checkoutEnabled || paypalUrl));
 
   useEffect(() => {
     if (previousStageRef.current !== stage) stageHeadingRef.current?.focus();
@@ -112,7 +116,7 @@ const PayPalContributionModal = ({ language, settings, localReview, canOpenPayPa
   const openPayPal = () => {
     setAttempted(true);
     if (!valid) return;
-    if (!canOpenPayPal) {
+    if (!checkoutEnabled && !canOpenPayPal) {
       onAuthenticationRequired();
       return;
     }
@@ -177,7 +181,7 @@ const PayPalContributionModal = ({ language, settings, localReview, canOpenPayPa
         </div>
         <label className="mt-4 block text-xs font-bold text-gray-400">{copy.customAmount}<input type="number" min="1" max="1000" step="0.01" inputMode="decimal" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} className={inputClass} /></label>
       </fieldset>
-      <label className="mt-5 block text-xs font-bold text-gray-400">{copy.payerName}<input value={payerName} maxLength={100} autoComplete="name" onChange={(event) => setPayerName(event.target.value)} className={inputClass} /><span className="mt-2 block font-normal leading-5 text-gray-500">{checkoutEnabled ? copy.payerHelpCheckout : copy.payerHelp}</span></label>
+      <label className="mt-5 block text-xs font-bold text-gray-400">{checkoutEnabled ? copy.payerNameCheckout : copy.payerName}<input value={payerName} maxLength={100} autoComplete="name" onChange={(event) => setPayerName(event.target.value)} className={inputClass} /><span className="mt-2 block font-normal leading-5 text-gray-500">{checkoutEnabled ? copy.payerHelpCheckout : copy.payerHelp}</span></label>
       <div className="mt-6 space-y-3">
         <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-white/[0.025] p-4 text-sm text-gray-300 ring-1 ring-white/[0.06]"><input type="checkbox" checked={showName} onChange={(event) => setShowName(event.target.checked)} className="mt-0.5 h-4 w-4 accent-orange-500" />{copy.showName}</label>
         <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-white/[0.025] p-4 text-sm text-gray-300 ring-1 ring-white/[0.06]"><input type="checkbox" checked={showAmount} onChange={(event) => setShowAmount(event.target.checked)} className="mt-0.5 h-4 w-4 accent-orange-500" />{copy.showAmount}</label>

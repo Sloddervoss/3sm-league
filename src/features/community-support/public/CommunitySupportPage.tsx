@@ -26,12 +26,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
 import { COMMUNITY_SUPPORT_HAS_SHARED_DATA, COMMUNITY_SUPPORT_PUBLIC, monthKey, publicLedgerForYear, publicRaceCostsForYear, supportMetricsForYear } from "../model";
-import { fetchOwnedActiveMerchProductIds } from "../merchApi";
 import { fetchPublicPaymentConfig, fetchSharedPaymentLedger, submitPaymentIntent } from "../paymentApi";
-import { emptySharedSupportState, fetchPublicCommunitySupportData } from "../supportDataApi";
 import { useCommunitySupport } from "../store";
-import type { SupportProduct } from "../types";
-import MerchandiseCheckout from "./MerchandiseCheckout";
 import SeasonLedgerModal from "./SeasonLedgerModal";
 import PayPalContributionModal from "./PayPalContributionModal";
 
@@ -73,7 +69,7 @@ const getCopy = (language: Language) => language === "en" ? {
   supportCta: "See how you can contribute",
   supportIntro: "Would you like to help cover the race season costs? Choose an amount. Contributions are always voluntary.",
   paypalTitle: "Voluntary contribution",
-  paypalText: "Choose an amount and pay directly through secure PayPal Checkout. 3SM books the contribution only after server-side capture verification.",
+  paypalText: "Choose an amount and pay directly through secure PayPal Checkout—no 3SM account required. 3SM books the contribution only after server-side capture verification.",
   paypalManualText: "Choose an amount and continue to PayPal.Me. The contribution is booked only after the 3SM payment admin has manually verified it.",
   paypalCta: "Contribute through PayPal",
   paypalOffTitle: "Financial support",
@@ -92,9 +88,6 @@ const getCopy = (language: Language) => language === "en" ? {
   active: "Available",
   soldOut: "Out of stock",
   stock: "in stock",
-  buy: "Buy with PayPal",
-  signInToBuy: "Sign in to order",
-  orderComplete: "Payment confirmed. Your order and shipping address are saved.",
   merchandiseEmpty: "There are no community products available at the moment.",
   merchandiseEmptyHint: "New items will appear here after they have been added and made available by 3SM.",
   spendingTitle: "Where the season costs sit",
@@ -156,7 +149,7 @@ const getCopy = (language: Language) => language === "en" ? {
   supportCta: "Bekijk hoe je kunt bijdragen",
   supportIntro: "Wil je meehelpen met de kosten van het raceseizoen? Kies zelf een bedrag. Bijdragen is altijd vrijwillig.",
   paypalTitle: "Vrijwillige bijdrage",
-  paypalText: "Kies een bedrag en reken direct af via beveiligde PayPal Checkout. 3SM boekt de bijdrage pas na server-side verificatie van de capture.",
+  paypalText: "Kies een bedrag en reken direct af via beveiligde PayPal Checkout—zonder 3SM-account. 3SM boekt de bijdrage pas na server-side verificatie van de capture.",
   paypalManualText: "Kies een bedrag en ga verder via PayPal.Me. 3SM boekt de bijdrage pas nadat de betaaladmin deze handmatig heeft gecontroleerd.",
   paypalCta: "Bijdragen via PayPal",
   paypalOffTitle: "Financieel steunen",
@@ -175,9 +168,6 @@ const getCopy = (language: Language) => language === "en" ? {
   active: "Beschikbaar",
   soldOut: "Niet op voorraad",
   stock: "op voorraad",
-  buy: "Kopen met PayPal",
-  signInToBuy: "Log in om te bestellen",
-  orderComplete: "Betaling bevestigd. Je bestelling en verzendadres zijn opgeslagen.",
   merchandiseEmpty: "Er zijn momenteel geen communityproducten beschikbaar.",
   merchandiseEmptyHint: "Nieuwe producten verschijnen hier zodra 3SM ze heeft toegevoegd en beschikbaar heeft gemaakt.",
   spendingTitle: "Waar de seizoenskosten zitten",
@@ -250,7 +240,7 @@ const CommunitySupportPage = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { state: adminState, addPaymentIntent } = useCommunitySupport();
+  const { state, addPaymentIntent } = useCommunitySupport();
   const lang: Language = language === "en" ? "en" : "nl";
   const copy = getCopy(lang);
   const currentMonth = monthKey(new Date());
@@ -261,31 +251,15 @@ const CommunitySupportPage = () => {
     enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
     staleTime: 60_000,
   });
-  const { data: sharedSupportData, isError: sharedSupportDataError } = useQuery({
-    queryKey: ["community-support", "shared-data", "public"],
-    queryFn: fetchPublicCommunitySupportData,
-    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA,
-    staleTime: 0,
-  });
-  const { data: activeMerchProductIds = [] } = useQuery({
-    queryKey: ["community-support", "merch-orders", "active", user?.id],
-    queryFn: fetchOwnedActiveMerchProductIds,
-    enabled: COMMUNITY_SUPPORT_HAS_SHARED_DATA && Boolean(user),
-    staleTime: 0,
-  });
-  const activeMerchProducts = useMemo(() => new Set(activeMerchProductIds), [activeMerchProductIds]);
-  const emptyPublicState = useMemo(emptySharedSupportState, []);
-  const state = COMMUNITY_SUPPORT_HAS_SHARED_DATA ? (sharedSupportData?.displayState ?? emptyPublicState) : adminState;
 
   const availableYears = useMemo(() => Array.from(new Set([
     currentYear,
     ...state.ledger.map((entry) => entry.date.slice(0, 4)),
     ...state.recurringCosts.map((cost) => cost.startsOn.slice(0, 4)),
     ...state.raceCosts.map((cost) => cost.date.slice(0, 4)),
-    ...(sharedSupportData?.metricLedger ?? []).map((entry) => entry.date.slice(0, 4)),
     ...(sharedPaymentLedger?.entries ?? []).map((entry) => entry.date.slice(0, 4)),
     ...(sharedPaymentLedger?.metricEntries ?? []).map((entry) => entry.date.slice(0, 4)),
-  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, sharedPaymentLedger, sharedSupportData, state.ledger, state.raceCosts, state.recurringCosts]);
+  ].filter((value) => /^\d{4}$/.test(value)))).sort((a, b) => b.localeCompare(a)), [currentYear, sharedPaymentLedger, state.ledger, state.raceCosts, state.recurringCosts]);
 
   const requestedPeriodRef = useRef({
     year: new URLSearchParams(window.location.search).get("year"),
@@ -303,26 +277,16 @@ const CommunitySupportPage = () => {
   });
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<SupportProduct | null>(null);
-  const [orderComplete, setOrderComplete] = useState(false);
   const requirePaymentAuthentication = () => {
     setPaymentOpen(false);
     navigate("/auth?redirect=/support/");
   };
   const beginContribution = () => {
-    if (COMMUNITY_SUPPORT_HAS_SHARED_DATA && !user) {
+    if (COMMUNITY_SUPPORT_HAS_SHARED_DATA && !user && !paymentSettings.paypalCheckoutEnabled) {
       requirePaymentAuthentication();
       return;
     }
     setPaymentOpen(true);
-  };
-  const beginProductOrder = (product: SupportProduct) => {
-    if (!user) {
-      navigate("/auth?redirect=/support/%23merchandise");
-      return;
-    }
-    setOrderComplete(false);
-    setSelectedProduct(product);
   };
   const refreshPaymentLedger = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["community-support", "payment-ledger"] });
@@ -375,15 +339,9 @@ const CommunitySupportPage = () => {
   const stateWithoutLocalPayPal = useMemo(() => COMMUNITY_SUPPORT_HAS_SHARED_DATA
     ? { ...state, ledger: state.ledger.filter((entry) => !entry.id.startsWith("paypal-contribution:") && !entry.id.startsWith("paypal-fee:")) }
     : state, [state]);
-  const metricState = useMemo(() => {
-    if (!COMMUNITY_SUPPORT_HAS_SHARED_DATA) return stateWithoutLocalPayPal;
-    return {
-      ...stateWithoutLocalPayPal,
-      ledger: [...(sharedSupportData?.metricLedger ?? []), ...(sharedPaymentLedger?.metricEntries ?? [])],
-      recurringCosts: [],
-      raceCosts: [],
-    };
-  }, [sharedPaymentLedger, sharedSupportData, stateWithoutLocalPayPal]);
+  const metricState = useMemo(() => sharedPaymentLedger
+    ? { ...stateWithoutLocalPayPal, ledger: [...stateWithoutLocalPayPal.ledger, ...sharedPaymentLedger.metricEntries] }
+    : stateWithoutLocalPayPal, [sharedPaymentLedger, stateWithoutLocalPayPal]);
   const metrics = useMemo(() => supportMetricsForYear(metricState, selectedYear), [metricState, selectedYear]);
   const annualPublicLedger = useMemo(() => [
     ...publicLedgerForYear(stateWithoutLocalPayPal, selectedYear),
@@ -427,7 +385,6 @@ const CommunitySupportPage = () => {
     <div className="min-h-screen bg-background text-gray-100">
       <Navbar />
       <main className="overflow-hidden pt-16">
-        {sharedSupportDataError && <div role="alert" className="mx-auto mt-6 max-w-7xl px-4 sm:px-6"><div className="rounded-2xl border border-rose-400/25 bg-rose-500/10 p-4 text-sm font-bold text-rose-100">{lang === "en" ? "The current Community Support data could not be loaded. Please try again." : "De actuele Community Support-gegevens konden niet worden geladen. Probeer de pagina opnieuw."}</div></div>}
         <header className="relative border-b border-white/[0.055]">
           <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(circle_at_70%_18%,rgba(249,115,22,0.14),transparent_31%),radial-gradient(circle_at_15%_80%,rgba(234,88,12,0.07),transparent_30%),linear-gradient(180deg,#11141c_0%,#0d1016_100%)]" />
           <div aria-hidden="true" className="absolute -right-24 top-10 h-72 w-72 rounded-full border border-orange-400/[0.08]" />
@@ -514,8 +471,8 @@ const CommunitySupportPage = () => {
                 </div>
                 <div className="grid shrink-0 grid-cols-3 gap-2 lg:w-[430px]">
                   <div className="rounded-xl bg-black/15 p-3 ring-1 ring-white/[0.055]"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">{copy.openBookTransactions}</span><p className="mt-1 font-heading text-xl font-black text-white">{annualPublicLedger.filter((entry) => entry.category !== "race_hosting").length}</p></div>
-                  <div className="rounded-xl bg-black/15 p-3 ring-1 ring-white/[0.055]"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">{copy.openBookRaces}</span><p className="mt-1 font-heading text-xl font-black text-white">{annualPublicRaceCosts.length}</p></div>
-                  <div className="rounded-xl bg-orange-500/[0.08] p-3 ring-1 ring-orange-400/20"><span className="text-[9px] font-black uppercase tracking-wider text-orange-300">{copy.openBookRaceCosts}</span><p className="mt-1 font-heading text-xl font-black text-white">{formatMoney(annualPublicRaceCosts.reduce((total, cost) => total + cost.amount, 0), lang)}</p></div>
+                  <div className="rounded-xl bg-black/15 p-3 ring-1 ring-white/[0.055]"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">{copy.openBookRaces}</span><p className="mt-1 font-heading text-xl font-black text-white">{metrics.raceCosts.length}</p></div>
+                  <div className="rounded-xl bg-orange-500/[0.08] p-3 ring-1 ring-orange-400/20"><span className="text-[9px] font-black uppercase tracking-wider text-orange-300">{copy.openBookRaceCosts}</span><p className="mt-1 font-heading text-xl font-black text-white">{formatMoney(metrics.raceCostTotal, lang)}</p></div>
                 </div>
               </div>
               <div className="relative mt-5 flex items-center gap-2 border-t border-white/[0.06] pt-4 text-sm font-black text-orange-300">{copy.openBookCta}<ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" /></div>
@@ -562,7 +519,6 @@ const CommunitySupportPage = () => {
                       <div className="flex flex-wrap items-center gap-2">
                         {!COMMUNITY_SUPPORT_PUBLIC && product.concept && <span className="rounded-full bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-amber-200 ring-1 ring-amber-300/20">{copy.concept}</span>}
                         {product.active && <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-200 ring-1 ring-emerald-300/20">{copy.active}</span>}
-                        <span className="rounded-full bg-violet-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-violet-200 ring-1 ring-violet-300/20">{product.fulfillmentMode === "digital" ? (lang === "en" ? "Digital delivery" : "Digitale levering") : (lang === "en" ? "Shipping" : "Wordt verzonden")}</span>
                       </div>
                       <h3 className="mt-4 font-heading text-xl font-black text-white">{product.name}</h3>
                       <p className="mt-2 min-h-12 text-sm leading-6 text-gray-400">{product.description}</p>
@@ -570,7 +526,6 @@ const CommunitySupportPage = () => {
                         <span className="font-heading text-xl font-black text-white">{formatMoney(product.price, lang)}</span>
                         <span className={`text-xs font-bold ${product.stock > 0 ? "text-gray-400" : "text-rose-300"}`}>{product.stock > 0 ? `${product.stock} ${copy.stock}` : copy.soldOut}</span>
                       </div>
-                      {(product.stock > 0 || activeMerchProducts.has(product.id)) && paymentSettings.paypalCheckoutEnabled && <button type="button" onClick={() => beginProductOrder(product)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"><ShoppingBag className="h-4 w-4" aria-hidden="true" />{activeMerchProducts.has(product.id) ? (lang === "en" ? "Resume order" : "Bestelling hervatten") : user ? copy.buy : copy.signInToBuy}</button>}
                     </div>
                   </Surface>)}
                 </div>
@@ -627,8 +582,8 @@ const CommunitySupportPage = () => {
           annualLedger={annualPublicLedger}
           visibleLedger={publicLedger}
           raceCosts={annualPublicRaceCosts}
-          totalRaceCount={annualPublicRaceCosts.length}
-          raceCostTotalEur={annualPublicRaceCosts.reduce((total, cost) => total + cost.amount, 0)}
+          totalRaceCount={metrics.raceCosts.length}
+          raceCostTotalEur={metrics.raceCostTotal}
           summary={{
             operationalExpenses: metrics.operationalExpenses,
             communityCovered: metrics.communityCovered,
@@ -648,7 +603,8 @@ const CommunitySupportPage = () => {
           language={lang}
           settings={paymentSettings}
           localReview={!COMMUNITY_SUPPORT_HAS_SHARED_DATA}
-          canOpenPayPal={!COMMUNITY_SUPPORT_HAS_SHARED_DATA || Boolean(user)}
+          isAuthenticated={Boolean(user)}
+          canOpenPayPal={!COMMUNITY_SUPPORT_HAS_SHARED_DATA || paymentSettings.paypalCheckoutEnabled || Boolean(user)}
           onAuthenticationRequired={requirePaymentAuthentication}
           onCheckoutCompleted={refreshPaymentLedger}
           onSubmit={async (draft) => {
@@ -659,23 +615,6 @@ const CommunitySupportPage = () => {
             return Boolean(addPaymentIntent(draft));
           }}
         />
-      </PreviewModal>
-      <PreviewModal
-        open={Boolean(selectedProduct)}
-        onClose={() => setSelectedProduct(null)}
-        maxWidth="640px"
-        ariaLabel={lang === "en" ? "Merchandise checkout" : "Merchandise afrekenen"}
-        closeLabel={lang === "en" ? "Close merchandise checkout" : "Sluit merchandise checkout"}
-      >
-        {selectedProduct && (orderComplete ? <div role="status" className="rounded-2xl bg-emerald-500/10 p-6 text-emerald-100 ring-1 ring-emerald-400/20"><CheckCircle2 className="h-7 w-7" aria-hidden="true" /><p className="mt-4 font-heading text-xl font-black">{selectedProduct.fulfillmentMode === "digital" ? (lang === "en" ? "Payment confirmed. Your digital order is saved for email delivery." : "Betaling bevestigd. Je digitale bestelling is opgeslagen voor levering per e-mail.") : copy.orderComplete}</p><button type="button" onClick={() => setSelectedProduct(null)} className="mt-5 min-h-11 rounded-xl bg-white/10 px-5 text-sm font-black ring-1 ring-white/15">{lang === "en" ? "Close" : "Sluiten"}</button></div> : <MerchandiseCheckout product={selectedProduct} language={lang} onCancelled={() => {
-          setSelectedProduct(null);
-          void queryClient.invalidateQueries({ queryKey: ["community-support", "merch-orders", "active"] });
-        }} onCompleted={() => {
-          setOrderComplete(true);
-          void queryClient.invalidateQueries({ queryKey: ["community-support", "shared-data"] });
-          void queryClient.invalidateQueries({ queryKey: ["community-support", "payment-ledger"] });
-          void queryClient.invalidateQueries({ queryKey: ["community-support", "merch-orders", "active"] });
-        }} />)}
       </PreviewModal>
     </div>
   );

@@ -136,8 +136,26 @@ describe("PayPal contribution flows", () => {
 
   it("uses server-verification help text in Checkout mode", () => {
     render(<PayPalContributionModal language="nl" settings={{ ...settings, paypalEnabled: false, paypalCheckoutEnabled: true }} localReview={false} canOpenPayPal onAuthenticationRequired={vi.fn()} onSubmit={vi.fn()} />);
-    expect(screen.getByText(/Checkout-poging aan je ingelogde 3SM-account en PayPal-bevestiging/)).toBeInTheDocument();
+    expect(screen.getByText(/Een 3SM-account is niet nodig/)).toBeInTheDocument();
     expect(screen.queryByText(/betaaladmin om je betaling te herkennen/)).not.toBeInTheDocument();
+  });
+
+  it("lets a signed-out visitor start an anonymous Checkout contribution", () => {
+    const onAuthenticationRequired = vi.fn();
+    render(<PayPalContributionModal
+      language="nl"
+      settings={{ ...settings, paypalEnabled: false, paypalCheckoutEnabled: true }}
+      localReview={false}
+      isAuthenticated={false}
+      canOpenPayPal
+      onAuthenticationRequired={onAuthenticationRequired}
+      onSubmit={vi.fn()}
+    />);
+
+    expect(screen.getByRole("checkbox", { name: "Toon mijn naam na bevestiging in het seizoensboek" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Ga naar beveiligde PayPal Checkout" }));
+    expect(screen.getByRole("heading", { name: "Veilig betalen met PayPal" })).toBeInTheDocument();
+    expect(onAuthenticationRequired).not.toHaveBeenCalled();
   });
 
   it("never opens PayPal before shared-mode authentication", () => {
