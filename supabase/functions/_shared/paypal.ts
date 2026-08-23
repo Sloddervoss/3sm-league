@@ -24,6 +24,15 @@ export type PayPalCaptureSnapshot = {
   capturedAt: string;
 };
 
+export type PayPalOrderBinding = {
+  orderId: string;
+  status: string;
+  customId: string;
+  merchantId: string;
+  currency: string;
+  amount: number;
+};
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MONEY_RE = /^\d{1,7}\.\d{2}$/;
 
@@ -92,6 +101,34 @@ const money = (value: unknown, label: string): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`Invalid ${label}`);
   return Math.round(parsed * 100) / 100;
+};
+
+export const extractPayPalOrderBinding = (order: Record<string, unknown>): PayPalOrderBinding => {
+  const purchaseUnits = Array.isArray(order.purchase_units) ? order.purchase_units : [];
+  if (purchaseUnits.length !== 1) throw new Error("Expected one PayPal purchase unit");
+  const unit = purchaseUnits[0] as Record<string, unknown>;
+  const payee = unit.payee as Record<string, unknown> | undefined;
+  const amount = unit.amount as Record<string, unknown> | undefined;
+  return {
+    orderId: String(order.id ?? ""),
+    status: String(order.status ?? ""),
+    customId: String(unit.custom_id ?? ""),
+    merchantId: String(payee?.merchant_id ?? ""),
+    currency: String(amount?.currency_code ?? ""),
+    amount: money(amount?.value, "order amount"),
+  };
+};
+
+export const assertApprovedOrderMatchesIntent = (
+  order: Record<string, unknown>,
+  expected: { intentId: string; orderId: string; merchantId: string; amountEur: number },
+): void => {
+  const binding = extractPayPalOrderBinding(order);
+  if (binding.status !== "APPROVED") throw new Error("PayPal order is not approved");
+  if (binding.customId !== expected.intentId) throw new Error("PayPal intent mismatch");
+  if (binding.orderId !== expected.orderId) throw new Error("PayPal order mismatch");
+  if (binding.merchantId !== expected.merchantId) throw new Error("PayPal merchant mismatch");
+  if (binding.currency !== "EUR" || binding.amount !== Number(toEurValue(expected.amountEur))) throw new Error("PayPal amount mismatch");
 };
 
 export const extractPayPalCaptureSnapshot = (order: Record<string, unknown>): PayPalCaptureSnapshot => {

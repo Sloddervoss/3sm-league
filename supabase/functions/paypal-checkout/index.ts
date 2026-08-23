@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  assertApprovedOrderMatchesIntent,
   assertCaptureMatchesIntent,
   buildPayPalMerchOrderPayload,
   buildPayPalOrderPayload,
@@ -188,6 +189,51 @@ const settleOrder = async (intent: PaymentIntentRow, order: Json) => {
   return { result: data, captureId: snapshot.captureId, grossAmount: snapshot.grossAmount, feeAmount: snapshot.feeAmount, netAmount: snapshot.netAmount };
 };
 
+const reconcileContributionIntent = async (intent: PaymentIntentRow) => {
+  if (!intent.paypal_order_id || intent.paypal_environment !== PAYPAL_ENV || intent.paypal_merchant_id !== PAYPAL_MERCHANT_ID) {
+    throw new Error("Payment intent has no valid PayPal order");
+  }
+  const orderPath = `/v2/checkout/orders/${encodeURIComponent(intent.paypal_order_id)}`;
+  const currentOrder = await paypalRequest(orderPath);
+  if (currentOrder.status === "COMPLETED") return settleOrder(intent, currentOrder);
+  if (intent.status === "expired") return { result: "cancelled", intentId: intent.id };
+  if (currentOrder.status === "CREATED" || currentOrder.status === "PAYER_ACTION_REQUIRED") {
+    return { result: "pending", intentId: intent.id };
+  }
+  assertApprovedOrderMatchesIntent(currentOrder, {
+    intentId: intent.id,
+    orderId: intent.paypal_order_id,
+    merchantId: PAYPAL_MERCHANT_ID,
+    amountEur: Number(intent.requested_amount_eur),
+  });
+  const { data: beginResult, error: beginError } = await serviceClient().rpc("paypal_begin_community_support_capture", {
+    p_intent_id: intent.id,
+    p_user_id: intent.user_id,
+    p_environment: PAYPAL_ENV,
+    p_order_id: intent.paypal_order_id,
+  });
+  if (beginError) throw beginError;
+  if (beginResult !== "begun" && beginResult !== "already_begun") {
+    return { result: String(beginResult), intentId: intent.id };
+  }
+  try {
+    return settleOrder(intent, await paypalRequest(`${orderPath}/capture`, {
+      method: "POST",
+      headers: { "PayPal-Request-Id": `capture-${intent.paypal_order_id}` },
+      body: "{}",
+    }));
+  } catch (error) {
+    // Browser approval and the signed webhook can race. If PayPal reports that
+    // the other caller already captured the order, reconcile the authoritative
+    // completed representation instead of treating the idempotent race as loss.
+    if (error instanceof PayPalRequestError && error.status === 422) {
+      const completedOrder = await paypalRequest(orderPath);
+      if (completedOrder.status === "COMPLETED") return settleOrder(intent, completedOrder);
+    }
+    throw error;
+  }
+};
+
 const getMerchOrder = async (id: string): Promise<MerchOrderRow> => {
   const { data, error } = await serviceClient().from("community_support_merch_orders")
     .select("id,user_id,product_id,product_name,unit_price_eur,fulfillment_mode,status,expires_at,paypal_environment,paypal_order_id,paypal_capture_id,paypal_merchant_id")
@@ -319,6 +365,45 @@ const reconcileActiveMerchOrders = async () => {
   return summary;
 };
 
+const reconcileActiveContributionIntents = async () => {
+  const { data, error } = await serviceClient().from("community_support_payment_intents")
+    .select("id,user_id,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
+    .eq("payment_flow", "paypal_checkout")
+    .eq("paypal_environment", PAYPAL_ENV)
+    .in("status", ["pending", "approved"])
+    .not("paypal_order_id", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(100);
+  if (error) throw error;
+  const summary = { inspected: 0, confirmed: 0, cancelled: 0, pending: 0, failed: 0 };
+  for (const row of (data ?? []) as PaymentIntentRow[]) {
+    summary.inspected += 1;
+    try {
+      const result = await reconcileContributionIntent(row);
+      if ("captureId" in result) summary.confirmed += 1;
+      else if (result.result === "cancelled" || result.result === "not_pending") summary.cancelled += 1;
+      else summary.pending += 1;
+    } catch {
+      summary.failed += 1;
+    }
+  }
+  return summary;
+};
+
+const reconcileActiveCheckoutRecords = async () => {
+  const contributions = await reconcileActiveContributionIntents();
+  const merchandise = await reconcileActiveMerchOrders();
+  return {
+    inspected: contributions.inspected + merchandise.inspected,
+    confirmed: contributions.confirmed + merchandise.confirmed,
+    cancelled: contributions.cancelled + merchandise.cancelled,
+    pending: contributions.pending + merchandise.pending,
+    failed: contributions.failed + merchandise.failed,
+    contributions,
+    merchandise,
+  };
+};
+
 const verifyWebhook = async (req: Request, event: Json) => {
   if (!PAYPAL_WEBHOOK_ID) throw new Error("PayPal webhook configuration missing");
   const requiredHeaders = ["paypal-auth-algo", "paypal-cert-url", "paypal-transmission-id", "paypal-transmission-sig", "paypal-transmission-time"];
@@ -370,6 +455,18 @@ const processWebhook = async (req: Request, origin: string) => {
           await cancelMerchOrderFromProviderState(merch as MerchOrderRow, "VOIDED");
         }
         status = "processed";
+      } else {
+        const { data: intent, error: intentError } = await client.from("community_support_payment_intents")
+          .select("id,user_id,requested_amount_eur,status,payment_flow,expires_at,paypal_environment,paypal_order_id,paypal_merchant_id")
+          .eq("paypal_environment", PAYPAL_ENV).eq("paypal_order_id", resourceId).maybeSingle();
+        if (intentError) throw intentError;
+        if (intent && eventType === "CHECKOUT.ORDER.APPROVED") {
+          const reconciled = await reconcileContributionIntent(intent as PaymentIntentRow);
+          if (!("captureId" in reconciled) && !["cancelled", "not_pending"].includes(reconciled.result)) {
+            throw new Error(`Approved contribution did not settle: ${reconciled.result}`);
+          }
+          status = "processed";
+        }
       }
     } else if (eventType === "PAYMENT.CAPTURE.COMPLETED") {
       if (!resourceId) throw new Error("Completed capture missing capture ID");
@@ -463,7 +560,7 @@ Deno.serve(async (req) => {
     if (webhookRequest) return await processWebhook(req, origin);
     if (maintenanceRequest) {
       if (req.headers.get("Authorization") !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) return jsonResponse({ error: "Authentication required" }, 401);
-      return jsonResponse(await reconcileActiveMerchOrders(), 200);
+      return jsonResponse(await reconcileActiveCheckoutRecords(), 200);
     }
     if (!origin || !ALLOWED_ORIGINS.has(origin)) return jsonResponse({ error: "Origin not allowed" }, 403, origin);
 
@@ -556,27 +653,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === "capture-order") {
-      if (!intent.paypal_order_id || intent.paypal_environment !== PAYPAL_ENV || intent.paypal_merchant_id !== PAYPAL_MERCHANT_ID) throw new Error("Payment intent has no valid PayPal order");
-      const orderPath = `/v2/checkout/orders/${encodeURIComponent(intent.paypal_order_id)}`;
-      const currentOrder = await paypalRequest(orderPath);
-      if (currentOrder.status === "COMPLETED") {
-        return jsonResponse(await settleOrder(intent, currentOrder), 200, origin);
-      }
-      if (currentOrder.status !== "APPROVED") throw new Error("PayPal order is not approved for capture");
-      const { data: beginResult, error: beginError } = await serviceClient().rpc("paypal_begin_community_support_capture", {
-        p_intent_id: intent.id,
-        p_user_id: user.id,
-        p_environment: PAYPAL_ENV,
-        p_order_id: intent.paypal_order_id,
-      });
-      if (beginError) throw beginError;
-      if (beginResult !== "begun" && beginResult !== "already_begun") throw new Error(`Capture start rejected: ${beginResult}`);
-      const capturedOrder = await paypalRequest(`${orderPath}/capture`, {
-        method: "POST",
-        headers: { "PayPal-Request-Id": `capture-${intent.paypal_order_id}` },
-        body: "{}",
-      });
-      return jsonResponse(await settleOrder(intent, capturedOrder), 200, origin);
+      const reconciled = await reconcileContributionIntent(intent);
+      if (!("captureId" in reconciled)) throw new Error(`Payment intent is not ready for settlement: ${reconciled.result}`);
+      return jsonResponse(reconciled, 200, origin);
     }
 
     return jsonResponse({ error: "Unknown action" }, 400, origin);
