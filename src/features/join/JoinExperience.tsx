@@ -88,65 +88,6 @@ const TrackFallback = ({ compact = false }: { compact?: boolean }) => (
   </div>
 );
 
-const HeroInstrument = ({ reduced }: { reduced: boolean | null }) => (
-  <div className="relative mx-auto w-full max-w-[34rem] lg:ml-auto">
-    <div className="absolute -inset-10 bg-[radial-gradient(circle,rgba(249,115,22,0.16),transparent_62%)] blur-2xl" aria-hidden="true" />
-    <div className="relative overflow-hidden rounded-[2rem] bg-[#0d1017]/92 p-4 shadow-2xl shadow-black/40 ring-1 ring-white/[0.08] sm:p-5">
-      <div className="flex items-center justify-between border-b border-white/[0.07] pb-4">
-        <div className="flex items-center gap-3">
-          <div className="grid grid-cols-3 gap-1" aria-hidden="true">
-            {[0, 1, 2].map((item) => <span key={item} className="h-2 w-2 rounded-full bg-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.7)]" />)}
-          </div>
-          <span className="font-heading text-xs font-black uppercase tracking-[0.22em] text-gray-300">3SM Race Signal</span>
-        </div>
-        <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-300"><Radio className="h-3 w-3" />Active</span>
-      </div>
-      <div className="relative mt-4 overflow-hidden rounded-[1.55rem] bg-[#090b10] p-4 ring-1 ring-white/[0.06] sm:p-6">
-        <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] [background-size:32px_32px]" aria-hidden="true" />
-        <svg viewBox="0 0 520 330" className="relative h-auto w-full" role="presentation" aria-hidden="true">
-          <defs>
-            <linearGradient id="join-track-gradient" x1="0" x2="1" y1="0" y2="1">
-              <stop stopColor="#fb923c" />
-              <stop offset="0.55" stopColor="#f97316" />
-              <stop offset="1" stopColor="#ef4444" />
-            </linearGradient>
-            <filter id="join-track-glow"><feGaussianBlur stdDeviation="5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-          </defs>
-          <path d="M63 211C38 148 85 75 161 76c68 1 88 62 139 53 53-10 65-73 119-44 68 36 34 132-25 151-66 21-105-30-155 10-48 38-145 34-176-35Z" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="54" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M63 211C38 148 85 75 161 76c68 1 88 62 139 53 53-10 65-73 119-44 68 36 34 132-25 151-66 21-105-30-155 10-48 38-145 34-176-35Z" fill="none" stroke="#080a0f" strokeWidth="34" strokeLinecap="round" strokeLinejoin="round" />
-          <motion.path
-            d="M63 211C38 148 85 75 161 76c68 1 88 62 139 53 53-10 65-73 119-44 68 36 34 132-25 151-66 21-105-30-155 10-48 38-145 34-176-35Z"
-            fill="none"
-            stroke="url(#join-track-gradient)"
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            filter="url(#join-track-glow)"
-            initial={reduced ? undefined : { pathLength: 0, opacity: 0.3 }}
-            animate={reduced ? undefined : { pathLength: 1, opacity: 1 }}
-            transition={{ duration: 2.2, ease: "easeInOut" }}
-          />
-          {[{ x: 63, y: 211, label: "GRID" }, { x: 300, y: 129, label: "SECTOR 2" }, { x: 394, y: 236, label: "FINISH" }].map((point, index) => (
-            <g key={point.label}>
-              <circle cx={point.x} cy={point.y} r="13" fill="#0a0d13" stroke={index === 1 ? "#fb923c" : "#ef4444"} strokeWidth="3" />
-              <circle cx={point.x} cy={point.y} r="4" fill="#fff" />
-              <text x={point.x + (index === 2 ? -16 : 18)} y={point.y - 19} textAnchor={index === 2 ? "end" : "start"} fill="#9ca3af" fontSize="10" fontWeight="800" letterSpacing="2">{point.label}</text>
-            </g>
-          ))}
-        </svg>
-        <div className="relative mt-3 grid grid-cols-3 gap-2">
-          {["CALENDAR", "RESULTS", "STANDINGS"].map((label, index) => (
-            <div key={label} className="rounded-xl bg-white/[0.035] px-3 py-2 ring-1 ring-white/[0.06]">
-              <span className="block text-[9px] font-black tracking-[0.16em] text-gray-400">0{index + 1}</span>
-              <span className="mt-1 block font-heading text-[10px] font-black tracking-wider text-gray-200 sm:text-xs">{label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
 const formatRaceDate = (race: JoinRaceSummary, language: JoinLocale) => {
   const locale = language === "en" ? "en-GB" : "nl-NL";
   const date = new Date(race.raceDate);
@@ -169,6 +110,111 @@ const RaceMap = ({ race, language, compact = false }: { race: JoinRaceSummary; l
     fallback={<TrackFallback compact={compact} />}
   />
 );
+
+const HeroNextRace = ({
+  language,
+  race,
+  registrationCount,
+  registrationLoading,
+  registrationFailed,
+  loading,
+  failed,
+  reduced,
+}: {
+  language: JoinLocale;
+  race: JoinRaceSummary | null;
+  registrationCount: number | null;
+  registrationLoading: boolean;
+  registrationFailed: boolean;
+  loading: boolean;
+  failed: boolean;
+  reduced: boolean | null;
+}) => {
+  const copy = joinCopy[language];
+  const when = race ? formatRaceDate(race, language) : null;
+  const circuitName = race?.track.split(" - ")[0]?.trim() || race?.track;
+
+  return (
+    <div className="relative mx-auto w-full max-w-[34rem] lg:ml-auto">
+      <motion.div
+        className="absolute -inset-10 bg-[radial-gradient(circle,rgba(249,115,22,0.17),transparent_62%)] blur-2xl"
+        aria-hidden="true"
+        animate={reduced ? undefined : { opacity: [0.45, 0.75, 0.45] }}
+        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <article className="relative overflow-hidden rounded-[2rem] bg-[#0d1017]/94 p-4 shadow-2xl shadow-black/40 ring-1 ring-white/[0.09] sm:p-5">
+        <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] pb-4">
+          <div className="flex items-center gap-3">
+            <div className="grid grid-cols-3 gap-1" aria-hidden="true">
+              {[0, 1, 2].map((item) => <span key={item} className="h-2 w-2 rounded-full bg-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.65)]" />)}
+            </div>
+            <span className="font-heading text-[11px] font-black uppercase tracking-[0.2em] text-gray-200 sm:text-xs">3SM Next on Grid</span>
+          </div>
+          {race && !failed && (
+            <span className="flex shrink-0 items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-emerald-300 sm:text-[10px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_9px_rgba(52,211,153,0.65)]" aria-hidden="true" />
+              {copy.live.hiddenRegistrationNote}
+            </span>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="mt-4 h-[23rem] animate-pulse rounded-[1.55rem] bg-white/[0.035] ring-1 ring-white/[0.06]" role="status" aria-label={language === "en" ? "Loading next race" : "Volgende race laden"} />
+        ) : race ? (
+          <div className="relative mt-4 overflow-hidden rounded-[1.55rem] bg-[#090b10] p-5 ring-1 ring-white/[0.06] sm:p-6">
+            <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] [background-size:32px_32px]" aria-hidden="true" />
+            <div className="relative">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-400">{copy.live.next}</p>
+                  <h2 className="mt-2 font-heading text-2xl font-black uppercase leading-none text-white sm:text-3xl">{circuitName}</h2>
+                  <p className="mt-2 text-sm font-semibold text-gray-300">{race.name}{race.league?.carClass ? ` · ${race.league.carClass}` : ""}</p>
+                </div>
+                {when && (
+                  <div className="shrink-0 text-right">
+                    <strong className="block font-heading text-xl font-black uppercase text-white">{new Date(race.raceDate).toLocaleDateString(language === "en" ? "en-GB" : "nl-NL", { day: "2-digit", month: "short", timeZone: "Europe/Amsterdam" })}</strong>
+                    <span className="mt-1 block text-xs font-bold text-gray-400">{when.time}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="relative my-5 flex min-h-40 items-center justify-center overflow-hidden rounded-2xl bg-orange-500/[0.025] px-5 ring-1 ring-white/[0.05]">
+                <div className="absolute inset-8 bg-orange-500/[0.12] blur-3xl" aria-hidden="true" />
+                <TrackMap
+                  track={race.track}
+                  trackId={race.trackId}
+                  decorative={false}
+                  alt={language === "en" ? `${race.track} circuit map` : `Circuitkaart van ${race.track}`}
+                  loading="eager"
+                  className="relative h-40 w-full object-contain"
+                  style={{ opacity: 0.96 }}
+                  fallbackStyle={{ opacity: 0.78, filter: "invert(1) brightness(2.6)" }}
+                  fallback={<TrackFallback compact />}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.07] pt-4">
+                {!registrationFailed && shouldShowRegistrationCount(registrationCount) && !registrationLoading ? (
+                  <span className="inline-flex items-center gap-2 text-xs font-black text-emerald-300"><UsersRound className="h-4 w-4" />{registrationCount} {copy.live.registrations}</span>
+                ) : <span />}
+                <Link to="/calendar/" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-orange-500 px-4 text-xs font-black uppercase tracking-wider text-white transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
+                  {copy.live.calendar}<ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 flex min-h-80 flex-col items-center justify-center rounded-[1.55rem] bg-[#090b10] p-7 text-center ring-1 ring-white/[0.06]" role={failed ? "status" : undefined}>
+            <Flag className="h-7 w-7 text-orange-400" />
+            <h2 className="mt-4 font-heading text-2xl font-black text-white">{failed ? copy.live.unavailableTitle : copy.live.noUpcoming}</h2>
+            <p className="mt-3 max-w-sm text-[15px] leading-7 text-gray-300">{failed ? copy.live.unavailable : copy.live.noUpcomingDetail}</p>
+            <Link to="/calendar/" className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/[0.06] px-4 text-sm font-black text-white ring-1 ring-white/[0.10]">{copy.live.calendar}<ArrowRight className="h-4 w-4 text-orange-400" /></Link>
+          </div>
+        )}
+      </article>
+    </div>
+  );
+};
 
 const RaceSkeleton = ({ compact = false, language }: { compact?: boolean; language: JoinLocale }) => (
   <div className={cn("animate-pulse rounded-[1.75rem] bg-white/[0.035] ring-1 ring-white/[0.06]", compact ? "h-80" : "h-[30rem]")} aria-label={language === "en" ? "Loading race data" : "Racegegevens laden"} role="status">
@@ -282,11 +328,11 @@ export const JoinExperience = ({
 
   return (
     <div className="overflow-hidden bg-[#080a0f] text-white">
-      <section className="relative min-h-[calc(100vh-108px)] border-b border-white/[0.06]">
+      <section className="relative border-b border-white/[0.06]">
         <div className="absolute inset-0 [background-image:linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] [background-size:44px_44px] [mask-image:linear-gradient(to_bottom,black,transparent_88%)]" aria-hidden="true" />
         <div className="absolute -left-36 top-0 h-[34rem] w-[34rem] rounded-full bg-red-500/[0.11] blur-[110px]" aria-hidden="true" />
         <div className="absolute -right-40 bottom-0 h-[32rem] w-[32rem] rounded-full bg-orange-500/[0.10] blur-[120px]" aria-hidden="true" />
-        <div className="container relative mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:py-20 lg:grid-cols-[minmax(0,1.05fr)_minmax(24rem,0.95fr)] lg:items-center lg:py-24">
+        <div className="container relative mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:py-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(24rem,0.95fr)] lg:items-center lg:py-20">
           <motion.div {...reveal(reduced)}>
             <SectionLabel icon={Flag}>{copy.hero.eyebrow}</SectionLabel>
             <h1 className="mt-7 max-w-4xl font-heading text-[clamp(2.8rem,8vw,6.7rem)] font-black uppercase leading-[0.86] tracking-[-0.045em] text-white">
@@ -303,7 +349,18 @@ export const JoinExperience = ({
             </div>
             <p className="mt-9 border-l-2 border-orange-500 pl-4 font-heading text-sm font-black uppercase tracking-[0.16em] text-gray-300 sm:text-base">{copy.hero.slogan}</p>
           </motion.div>
-          <motion.div {...reveal(reduced, 0.08)}><HeroInstrument reduced={reduced} /></motion.div>
+          <motion.div {...reveal(reduced, 0.08)}>
+            <HeroNextRace
+              language={language}
+              race={nextRace}
+              registrationCount={registrationCount}
+              registrationLoading={loading.registrationCount}
+              registrationFailed={failed.registrationCount}
+              loading={loading.nextRace}
+              failed={failed.nextRace}
+              reduced={reduced}
+            />
+          </motion.div>
         </div>
       </section>
 
@@ -316,7 +373,7 @@ export const JoinExperience = ({
                 <div key={item.title} className="group min-w-0 bg-[#0d1017] p-4 transition hover:bg-[#11151e] sm:p-5">
                   <Icon className="h-4 w-4 text-orange-400" aria-hidden="true" />
                   <strong className="mt-3 block font-heading text-base font-black text-white sm:text-lg">{item.title}</strong>
-                  <span className="mt-1 block text-xs leading-5 text-gray-400 sm:text-sm">{item.detail}</span>
+                  <span className="mt-1 block text-sm leading-6 text-gray-300">{item.detail}</span>
                 </div>
               );
             })}
@@ -324,13 +381,13 @@ export const JoinExperience = ({
         </div>
       </section>
 
-      <section id="race-activity" className="relative scroll-mt-28 py-20 sm:py-28">
+      <section id="race-activity" className="relative scroll-mt-28 py-16 sm:py-24">
         <div className="absolute left-1/2 top-20 h-[30rem] w-[58rem] -translate-x-1/2 rounded-full bg-orange-500/[0.06] blur-[120px]" aria-hidden="true" />
         <div className="container relative mx-auto max-w-7xl px-4">
           <motion.div {...reveal(reduced)} className="max-w-3xl">
             <SectionLabel icon={Radio}>{copy.live.eyebrow}</SectionLabel>
-            <h2 className="mt-6 font-heading text-4xl font-black uppercase leading-[0.95] tracking-tight text-white sm:text-6xl">{copy.live.title}</h2>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-gray-400 sm:text-lg">{copy.live.lead}</p>
+            <h2 className="mt-6 font-heading text-4xl font-black uppercase leading-[0.96] tracking-tight text-white sm:text-5xl">{copy.live.title}</h2>
+            <p className="mt-5 max-w-2xl text-[17px] leading-8 text-gray-300">{copy.live.lead}</p>
           </motion.div>
 
           <div className="mt-12 grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.75fr)]">
@@ -349,7 +406,7 @@ export const JoinExperience = ({
                     <Trophy className="h-5 w-5 text-orange-400" />
                   </div>
                   <h3 className="mt-5 font-heading text-2xl font-black text-white sm:text-3xl">{latestRace.name}</h3>
-                  <p className="mt-2 text-sm text-gray-400">{latestRace.track}</p>
+                  <p className="mt-2 text-[15px] leading-6 text-gray-300">{latestRace.track}</p>
                   <Podium entries={podium} language={language} />
                   <Link to={`/results/?race=${latestRace.id}`} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-white/[0.05] px-4 text-sm font-black text-white ring-1 ring-white/[0.09] transition hover:bg-white/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">{copy.live.results}<ArrowRight className="h-4 w-4 text-orange-400" /></Link>
                 </div>
@@ -368,12 +425,12 @@ export const JoinExperience = ({
         </div>
       </section>
 
-      <section className="border-y border-white/[0.06] bg-[#0b0e14] py-20 sm:py-28">
+      <section className="border-y border-white/[0.06] bg-[#0b0e14] py-16 sm:py-24">
         <div className="container mx-auto grid max-w-7xl gap-12 px-4 lg:grid-cols-[0.86fr_1.14fr] lg:items-start">
           <motion.div {...reveal(reduced)} className="lg:sticky lg:top-32">
             <SectionLabel icon={CircuitBoard}>{copy.why.eyebrow}</SectionLabel>
-            <h2 className="mt-6 font-heading text-4xl font-black uppercase leading-[0.95] text-white sm:text-6xl">{copy.why.title}</h2>
-            <p className="mt-6 max-w-xl text-base leading-7 text-gray-400 sm:text-lg">{copy.why.lead}</p>
+            <h2 className="mt-6 font-heading text-3xl font-black uppercase leading-[0.98] text-white sm:text-5xl">{copy.why.title}</h2>
+            <p className="mt-6 max-w-xl text-[17px] leading-8 text-gray-300">{copy.why.lead}</p>
           </motion.div>
           <div className="relative">
             <div className="absolute bottom-8 left-5 top-8 w-px bg-gradient-to-b from-orange-500 via-red-500/50 to-transparent sm:left-7" aria-hidden="true" />
@@ -384,7 +441,7 @@ export const JoinExperience = ({
                   <span className="absolute -left-[3.25rem] top-7 flex h-10 w-10 items-center justify-center rounded-full bg-[#11151d] text-orange-400 ring-1 ring-orange-400/25 sm:-left-[4.1rem] sm:top-9 sm:h-12 sm:w-12"><Icon className="h-5 w-5" /></span>
                   <span className="text-[10px] font-black tracking-[0.24em] text-gray-400">0{index + 1}</span>
                   <h3 className="mt-2 font-heading text-2xl font-black text-white sm:text-3xl">{item.title}</h3>
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400 sm:text-base sm:leading-7">{item.text}</p>
+                  <p className="mt-3 max-w-2xl text-[15px] leading-7 text-gray-300 sm:text-base">{item.text}</p>
                 </motion.article>
               );
             })}
@@ -392,42 +449,42 @@ export const JoinExperience = ({
         </div>
       </section>
 
-      <section className="py-20 sm:py-28">
+      <section className="py-16 sm:py-24">
         <div className="container mx-auto max-w-7xl px-4">
           <motion.div {...reveal(reduced)} className="max-w-3xl">
             <SectionLabel icon={UsersRound}>{copy.participation.eyebrow}</SectionLabel>
-            <h2 className="mt-6 font-heading text-4xl font-black uppercase leading-[0.95] text-white sm:text-6xl">{copy.participation.title}</h2>
-            <p className="mt-5 text-base leading-7 text-gray-400 sm:text-lg">{copy.participation.lead}</p>
+            <h2 className="mt-6 font-heading text-3xl font-black uppercase leading-[0.98] text-white sm:text-5xl">{copy.participation.title}</h2>
+            <p className="mt-5 text-[17px] leading-8 text-gray-300">{copy.participation.lead}</p>
           </motion.div>
-          <div className="mt-12 grid gap-4 lg:grid-cols-2">
+          <div className="mt-10 grid gap-4 lg:grid-cols-2">
             {[{ ...copy.participation.solo, icon: UserRound, number: "01" }, { ...copy.participation.team, icon: UsersRound, number: "02" }].map((route, index) => (
-              <motion.article key={route.title} {...reveal(reduced, index * 0.06)} className="group relative min-h-80 overflow-hidden rounded-[1.8rem] bg-gradient-to-br from-white/[0.055] to-white/[0.018] p-7 ring-1 ring-white/[0.07] sm:p-9">
+              <motion.article key={route.title} {...reveal(reduced, index * 0.06)} className="group relative overflow-hidden rounded-[1.8rem] bg-gradient-to-br from-white/[0.055] to-white/[0.018] p-6 ring-1 ring-white/[0.07] sm:p-7">
                 <span className="absolute right-5 top-2 font-heading text-8xl font-black text-white/[0.025]">{route.number}</span>
-                <route.icon className="h-8 w-8 text-orange-400" />
-                <span className="mt-8 inline-flex rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-300 ring-1 ring-orange-400/20">{route.tag}</span>
-                <h3 className="mt-5 max-w-md font-heading text-3xl font-black text-white sm:text-4xl">{route.title}</h3>
-                <p className="mt-4 max-w-xl text-sm leading-7 text-gray-400 sm:text-base">{route.text}</p>
+                <route.icon className="h-7 w-7 text-orange-400" />
+                <span className="mt-5 inline-flex rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-300 ring-1 ring-orange-400/20">{route.tag}</span>
+                <h3 className="mt-4 max-w-md font-heading text-2xl font-black text-white sm:text-3xl">{route.title}</h3>
+                <p className="mt-3 max-w-xl text-[15px] leading-7 text-gray-300 sm:text-base">{route.text}</p>
               </motion.article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-y border-white/[0.06] bg-[#0b0e14] py-20 sm:py-28">
+      <section className="border-y border-white/[0.06] bg-[#0b0e14] py-16 sm:py-24">
         <div className="container mx-auto max-w-7xl px-4">
           <motion.div {...reveal(reduced)} className="mx-auto max-w-3xl text-center">
             <SectionLabel icon={Flag}><span className="mx-auto">{copy.steps.eyebrow}</span></SectionLabel>
-            <h2 className="mt-6 font-heading text-4xl font-black uppercase leading-[0.95] text-white sm:text-6xl">{copy.steps.title}</h2>
-            <p className="mt-5 text-base leading-7 text-gray-400 sm:text-lg">{copy.steps.lead}</p>
+            <h2 className="mt-6 font-heading text-3xl font-black uppercase leading-[0.98] text-white sm:text-5xl">{copy.steps.title}</h2>
+            <p className="mt-5 text-[17px] leading-8 text-gray-300">{copy.steps.lead}</p>
           </motion.div>
-          <div className="relative mt-14 grid gap-3 lg:grid-cols-6">
+          <div className="relative mt-10 grid gap-3 lg:grid-cols-6">
             <div className="absolute left-[8.3%] right-[8.3%] top-7 hidden h-px bg-gradient-to-r from-orange-500 via-red-500 to-orange-500 lg:block" aria-hidden="true" />
             {copy.steps.items.map((step, index) => (
-              <motion.article key={step.number} {...reveal(reduced, index * 0.035)} className="relative grid grid-cols-[3.5rem_1fr] gap-4 rounded-2xl bg-white/[0.025] p-4 ring-1 ring-white/[0.06] lg:block lg:bg-transparent lg:p-2 lg:text-center lg:ring-0">
+              <motion.article key={step.number} {...reveal(reduced, index * 0.035)} className="relative grid grid-cols-[3.5rem_1fr] gap-4 rounded-2xl bg-white/[0.035] p-5 ring-1 ring-white/[0.07] lg:block lg:bg-transparent lg:p-2 lg:text-center lg:ring-0">
                 <span className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-[#11151d] font-heading text-sm font-black text-orange-300 ring-1 ring-orange-400/30 lg:mx-auto lg:h-14 lg:w-14">{step.number}</span>
                 <div className="lg:mt-6">
                   <h3 className="font-heading text-lg font-black text-white lg:text-xl">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-gray-400">{step.text}</p>
+                  <p className="mt-2 text-[15px] leading-7 text-gray-300 lg:text-sm lg:leading-6">{step.text}</p>
                 </div>
               </motion.article>
             ))}
@@ -435,14 +492,14 @@ export const JoinExperience = ({
         </div>
       </section>
 
-      <section className="py-20 sm:py-28">
+      <section className="py-16 sm:py-24">
         <div className="container mx-auto max-w-7xl px-4">
           <motion.div {...reveal(reduced)} className="max-w-4xl">
             <SectionLabel icon={Layers3}>{copy.formats.eyebrow}</SectionLabel>
-            <h2 className="mt-6 font-heading text-4xl font-black uppercase leading-[0.95] text-white sm:text-6xl">{copy.formats.title}</h2>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-gray-400 sm:text-lg">{copy.formats.lead}</p>
+            <h2 className="mt-6 font-heading text-3xl font-black uppercase leading-[0.98] text-white sm:text-5xl">{copy.formats.title}</h2>
+            <p className="mt-5 max-w-2xl text-[17px] leading-8 text-gray-300">{copy.formats.lead}</p>
           </motion.div>
-          <div className="mt-12 overflow-hidden rounded-[1.8rem] bg-white/[0.025] ring-1 ring-white/[0.07]">
+          <div className="mt-10 overflow-hidden rounded-[1.8rem] bg-white/[0.025] ring-1 ring-white/[0.07]">
             {copy.formats.items.map((item, index) => {
               const status = item.status === "now" ? copy.formats.now : item.status === "interest" ? copy.formats.interest : copy.formats.development;
               const Icon = item.status === "now" ? Gauge : item.status === "interest" ? Sparkles : TimerReset;
@@ -450,7 +507,7 @@ export const JoinExperience = ({
                 <motion.article key={item.title} {...reveal(reduced, index * 0.04)} className="grid gap-5 border-b border-white/[0.06] p-6 last:border-0 sm:p-8 md:grid-cols-[3rem_minmax(12rem,0.5fr)_minmax(0,1fr)_auto] md:items-center">
                   <Icon className="h-6 w-6 text-orange-400" />
                   <h3 className="font-heading text-2xl font-black text-white">{item.title}</h3>
-                  <p className="text-sm leading-6 text-gray-400 sm:text-base">{item.text}</p>
+                  <p className="text-[15px] leading-7 text-gray-300 sm:text-base">{item.text}</p>
                   <span className={cn("justify-self-start rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] ring-1", item.status === "now" ? "bg-emerald-500/10 text-emerald-300 ring-emerald-400/20" : item.status === "development" ? "bg-orange-500/10 text-orange-300 ring-orange-400/20" : "bg-white/[0.04] text-gray-300 ring-white/[0.08]")}>{status}</span>
                 </motion.article>
               );
@@ -459,31 +516,31 @@ export const JoinExperience = ({
         </div>
       </section>
 
-      <section className="border-y border-white/[0.06] bg-[#0b0e14] py-20 sm:py-28">
+      <section className="border-y border-white/[0.06] bg-[#0b0e14] py-16 sm:py-24">
         <div className="container mx-auto max-w-5xl px-4">
           <motion.div {...reveal(reduced)} className="text-center">
             <SectionLabel icon={BadgeCheck}><span className="mx-auto">{copy.faq.eyebrow}</span></SectionLabel>
-            <h2 className="mt-6 font-heading text-4xl font-black uppercase leading-[0.95] text-white sm:text-6xl">{copy.faq.title}</h2>
+            <h2 className="mt-6 font-heading text-3xl font-black uppercase leading-[0.98] text-white sm:text-5xl">{copy.faq.title}</h2>
           </motion.div>
-          <Accordion type="single" collapsible className="mt-12 grid items-start gap-3 md:grid-cols-2">
+          <Accordion type="single" collapsible className="mt-10 grid items-start gap-3 md:grid-cols-2">
             {copy.faq.items.map((item, index) => (
               <AccordionItem key={item.question} value={`faq-${index}`} className="overflow-hidden rounded-2xl border-0 bg-white/[0.028] px-5 ring-1 ring-white/[0.07] data-[state=open]:bg-white/[0.045] data-[state=open]:ring-orange-400/20">
                 <AccordionTrigger className="min-h-16 py-4 text-left font-heading text-base font-black text-white hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300 sm:text-lg">{item.question}</AccordionTrigger>
-                <AccordionContent className="pb-5 text-sm leading-7 text-gray-400 sm:text-base">{item.answer}</AccordionContent>
+                <AccordionContent className="pb-5 text-[15px] leading-7 text-gray-300 sm:text-base">{item.answer}</AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
         </div>
       </section>
 
-      <section className="py-20 sm:py-28">
+      <section className="py-16 sm:py-24">
         <div className="container mx-auto max-w-7xl px-4">
           <motion.div {...reveal(reduced)} className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-orange-500/[0.17] via-[#151419] to-red-500/[0.08] p-7 shadow-2xl shadow-black/30 ring-1 ring-orange-400/20 sm:p-10 lg:p-14">
             <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-orange-500/[0.15] blur-3xl" aria-hidden="true" />
             <div className="relative grid gap-9 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <div>
                 <SectionLabel icon={MessageCircle}>{copy.closing.eyebrow}</SectionLabel>
-                <h2 className="mt-6 max-w-4xl font-heading text-4xl font-black uppercase leading-[0.95] text-white sm:text-6xl">{copy.closing.title}</h2>
+                <h2 className="mt-6 max-w-4xl font-heading text-3xl font-black uppercase leading-[0.98] text-white sm:text-5xl">{copy.closing.title}</h2>
                 <p className="mt-5 max-w-2xl text-base leading-7 text-gray-300 sm:text-lg">{copy.closing.lead}</p>
                 <p className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-orange-200"><Check className="h-4 w-4" />{copy.closing.note}</p>
               </div>

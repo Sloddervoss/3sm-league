@@ -42,6 +42,19 @@ describe("join page redesign contracts", () => {
     expect(generator).toContain("FAQPage");
   });
 
+  it("maakt de hero-kaart functioneel met echte volgende-racedata zonder nep-live interface", () => {
+    const experience = read("src/features/join/JoinExperience.tsx");
+    expect(experience).toContain("const HeroNextRace");
+    expect(experience).toContain("race={nextRace}");
+    expect(experience).toContain("track={race.track}");
+    expect(experience).toContain("trackId={race.trackId}");
+    expect(experience).toContain("shouldShowRegistrationCount(registrationCount)");
+    expect(experience).not.toContain("3SM Race Signal");
+    expect(experience).not.toContain("SECTOR 2");
+    expect(experience).not.toContain('["CALENDAR", "RESULTS", "STANDINGS"]');
+    expect(experience).not.toContain("min-h-[calc(100vh-108px)]");
+  });
+
   it("bevat geen em dash in de nieuwe marketingcopy of page UI", () => {
     const files = [
       "src/pages/JoinPage.tsx",
