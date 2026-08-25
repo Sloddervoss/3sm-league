@@ -42,6 +42,17 @@ describe("join page redesign contracts", () => {
     expect(generator).toContain("FAQPage");
   });
 
+  it("zet de geografische league-intentie direct na de H1 voor runtime en Google-fallback", () => {
+    const content = read("src/features/join/content.ts");
+    const generator = read("scripts/generate-route-html.mjs");
+    const lead = "3 Stripe Motorsport is een Nederlandse iRacing league en community, ontstaan in Nederland en open voor coureurs met dezelfde race-mentaliteit.";
+
+    expect(content).toContain(lead);
+    expect(generator).toContain(lead);
+    expect(generator).toContain('<h1>${escapeHtml(route.h1)}</h1>\n        <p>${escapeHtml(route.intro)}</p>');
+    expect(generator).not.toContain("De 3SM community is in Nederland begonnen en organiseert een eigen iRacing league");
+  });
+
   it("maakt de hero-kaart functioneel met echte volgende-racedata zonder nep-live interface", () => {
     const experience = read("src/features/join/JoinExperience.tsx");
     expect(experience).toContain("const HeroNextRace");
