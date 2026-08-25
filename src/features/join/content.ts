@@ -67,7 +67,7 @@ const nl: JoinCopy = {
   hero: {
     eyebrow: "Nederlandse iRacing community",
     title: "Een iRacing community",
-    accent: "voor competitie én plezier.",
+    accent: "voor competitie en plezier.",
     lead: "3 Stripe Motorsport is een Nederlandse iRacing league en community, ontstaan in Nederland en open voor coureurs met dezelfde race-mentaliteit. Deelname is gratis en beginners en ervaren coureurs zijn welkom.",
     explore: "Zo werkt meedoen",
     calendar: "Naar de racekalender",

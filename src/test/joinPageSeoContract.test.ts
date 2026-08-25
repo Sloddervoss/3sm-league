@@ -51,6 +51,9 @@ describe("join page redesign contracts", () => {
     expect(generator).toContain(lead);
     expect(generator).toContain('<h1>${escapeHtml(route.h1)}</h1>\n        <p>${escapeHtml(route.intro)}</p>');
     expect(generator).not.toContain("De 3SM community is in Nederland begonnen en organiseert een eigen iRacing league");
+    expect(content).toContain('accent: "voor competitie en plezier."');
+    expect(content).not.toContain("competitie én plezier");
+    expect(generator).not.toContain("competitie én plezier");
   });
 
   it("maakt de hero-kaart functioneel met echte volgende-racedata zonder nep-live interface", () => {

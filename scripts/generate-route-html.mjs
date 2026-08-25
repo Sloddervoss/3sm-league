@@ -52,7 +52,7 @@ const routes = [
     changefreq: 'monthly',
     description:
       'Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.',
-    h1: 'Een iRacing community voor competitie én plezier',
+    h1: 'Een iRacing community voor competitie en plezier',
     intro:
       '3 Stripe Motorsport is een Nederlandse iRacing league en community, ontstaan in Nederland en open voor coureurs met dezelfde race-mentaliteit. Deelname is gratis en beginners en ervaren coureurs zijn welkom.',
     details: [
