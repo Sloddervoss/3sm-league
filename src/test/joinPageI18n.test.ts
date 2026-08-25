@@ -37,13 +37,15 @@ describe("join page i18n", () => {
 
   it("keeps the concise join title aligned between runtime and crawler HTML", () => {
     const page = read("src/pages/JoinPage.tsx");
+    const content = read("src/features/join/content.ts");
     const generator = read("scripts/generate-route-html.mjs");
     const homepage = read("src/pages/HomepagePrototype.tsx");
     const title = "Meedoen met 3SM – Nederlandse iRacing League";
 
-    expect(page).toContain(`title: "${title}"`);
+    expect(content).toContain(`title: "${title}"`);
     expect(generator).toContain(`title: '${title}'`);
-    expect(page).not.toContain("iRacing Nederland & Discord Community");
+    expect(content).not.toContain("iRacing Nederland & Discord Community");
+    expect(page).toContain("joinCopy[locale]");
     expect(homepage).toContain("Bekijk racekalender");
   });
 
