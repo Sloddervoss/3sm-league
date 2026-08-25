@@ -131,7 +131,7 @@ describe("public news workflow", () => {
     expect(generator).toContain("const absoluteUrl = (path) => `${SITE_URL}${canonicalPath(path)}`;");
     expect(generator).toContain("title: 'iRacing racekalender Nederland | 3SM'");
     expect(generator).toContain("Bekijk de 3SM iRacing racekalender: aankomende races");
-    expect(generator).toContain("De 3SM community is in Nederland begonnen");
+    expect(generator).toContain("3 Stripe Motorsport is een Nederlandse iRacing league en community, ontstaan in Nederland");
     expect(generator).toContain("Echte kalender- en uitslagdata");
     expect(generator).toContain("solo of met een eigen team rijden");
     expect(generator).toContain("GT3 is momenteel de belangrijkste klasse");

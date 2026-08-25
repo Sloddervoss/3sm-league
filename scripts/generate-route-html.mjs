@@ -54,9 +54,8 @@ const routes = [
       'Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.',
     h1: 'Een iRacing community voor competitie én plezier',
     intro:
-      '3 Stripe Motorsport organiseert iRacing races met een eigen kalender, inschrijvingen, uitslagen, standings en teams. Deelname is gratis voor beginners, ervaren coureurs, solo racers en eigen teams.',
+      '3 Stripe Motorsport is een Nederlandse iRacing league en community, ontstaan in Nederland en open voor coureurs met dezelfde race-mentaliteit. Deelname is gratis en beginners en ervaren coureurs zijn welkom.',
     details: [
-      'De 3SM community is in Nederland begonnen en organiseert een eigen iRacing league waarin competitie en plezier naast elkaar bestaan.',
       'Echte kalender- en uitslagdata tonen welke races worden georganiseerd, waar er wordt gereden en hoe de standings zich ontwikkelen.',
       'Deelnemers kunnen solo of met een eigen team rijden en hoeven niet iedere race aanwezig te zijn.',
       'GT3 is momenteel de belangrijkste klasse. Andere klassen kunnen worden toegevoegd bij voldoende interesse.',

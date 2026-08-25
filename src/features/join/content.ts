@@ -68,7 +68,7 @@ const nl: JoinCopy = {
     eyebrow: "Nederlandse iRacing community",
     title: "Een iRacing community",
     accent: "voor competitie én plezier.",
-    lead: "3 Stripe Motorsport organiseert iRacing races met een eigen kalender, inschrijvingen, uitslagen en standings. Deelname is gratis en beginners en ervaren coureurs zijn welkom.",
+    lead: "3 Stripe Motorsport is een Nederlandse iRacing league en community, ontstaan in Nederland en open voor coureurs met dezelfde race-mentaliteit. Deelname is gratis en beginners en ervaren coureurs zijn welkom.",
     explore: "Zo werkt meedoen",
     calendar: "Naar de racekalender",
     slogan: "Hard racen. Slim racen. Respectvol racen.",
@@ -102,7 +102,7 @@ const nl: JoinCopy = {
   why: {
     eyebrow: "Waarom 3SM",
     title: "Meer dan alleen een Discord.",
-    lead: "3SM organiseert een eigen iRacing league en houdt de belangrijke informatie voor en na iedere race op één plek bij.",
+    lead: "Kalender, inschrijvingen, uitslagen en standings brengen alle belangrijke informatie voor en na iedere race op één plek samen.",
     items: [
       { title: "Kalender en inschrijving", text: "Aankomende races, circuits en tijden staan op de site. Inschrijven gebeurt per race of via een seizoen wanneer dat beschikbaar is." },
       { title: "Uitslagen en standings", text: "Geïmporteerde resultaten vormen het racearchief en werken door in de kampioenschapsstand." },
@@ -180,7 +180,7 @@ const en: JoinCopy = {
     eyebrow: "Dutch iRacing community",
     title: "An iRacing community",
     accent: "for competition and fun.",
-    lead: "3 Stripe Motorsport organises iRacing races with its own calendar, registrations, results and standings. Participation is free, and beginners and experienced drivers are welcome.",
+    lead: "3 Stripe Motorsport is a Dutch iRacing league and community, founded in the Netherlands and open to drivers who share the same racing mentality. Participation is free, and beginners and experienced drivers are welcome.",
     explore: "How joining works",
     calendar: "Go to the race calendar",
     slogan: "Race hard. Race smart. Race respectfully.",
@@ -214,7 +214,7 @@ const en: JoinCopy = {
   why: {
     eyebrow: "Why 3SM",
     title: "More than just a Discord.",
-    lead: "3SM organises its own iRacing league and keeps the key information before and after every race in one place.",
+    lead: "The calendar, registrations, results and standings keep all key information before and after every race in one place.",
     items: [
       { title: "Calendar and registration", text: "Upcoming races, circuits and times are published on the site. Registration is available per race or by season when offered." },
       { title: "Results and standings", text: "Imported results build the race archive and feed into the championship standings." },
