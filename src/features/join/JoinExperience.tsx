@@ -16,6 +16,7 @@ import {
   Layers3,
   MessageCircle,
   Radio,
+  ShieldCheck,
   Sparkles,
   TimerReset,
   Trophy,
@@ -363,6 +364,22 @@ export const JoinExperience = ({
               {uniqueCircuitCount !== null && <div className="flex items-center justify-between rounded-2xl bg-white/[0.025] px-5 py-4 ring-1 ring-white/[0.06]"><span className="text-sm font-semibold text-gray-400">{copy.live.circuits}</span><strong className="font-heading text-3xl font-black text-orange-400">{uniqueCircuitCount}</strong></div>}
             </motion.div>
           )}
+
+          <motion.div {...reveal(reduced, 0.06)} className="mt-12 border-t border-white/[0.07] pt-10">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] lg:items-end">
+              <h3 className="font-heading text-3xl font-black uppercase leading-none text-white sm:text-4xl">{copy.live.raceDay.title}</h3>
+              <p className="max-w-2xl text-[15px] leading-7 text-gray-300 sm:text-base">{copy.live.raceDay.lead}</p>
+            </div>
+            <div className="mt-7 grid gap-px overflow-hidden rounded-[1.5rem] bg-white/[0.07] ring-1 ring-white/[0.07] sm:grid-cols-2 lg:grid-cols-4">
+              {copy.live.raceDay.items.map((item, index) => (
+                <article key={item.label} className="relative bg-[#0d1017] p-5 sm:p-6">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-400">0{index + 1} · {item.label}</span>
+                  <h4 className="mt-3 font-heading text-xl font-black text-white">{item.title}</h4>
+                  <p className="mt-3 text-[15px] leading-7 text-gray-300">{item.text}</p>
+                </article>
+              ))}
+            </div>
+          </motion.div>
         </div>
       </section>
 
@@ -386,6 +403,11 @@ export const JoinExperience = ({
                 </motion.article>
               );
             })}
+            <motion.aside {...reveal(reduced, 0.08)} className="relative ml-12 mt-5 rounded-[1.5rem] bg-orange-500/[0.07] p-5 ring-1 ring-orange-400/20 sm:ml-16 sm:p-6">
+              <ShieldCheck className="h-6 w-6 text-orange-400" aria-hidden="true" />
+              <h3 className="mt-4 font-heading text-2xl font-black text-white">{copy.why.mentality.title}</h3>
+              <p className="mt-3 text-[15px] leading-7 text-gray-300 sm:text-base">{copy.why.mentality.text}</p>
+            </motion.aside>
           </div>
         </div>
       </section>
@@ -430,6 +452,19 @@ export const JoinExperience = ({
               </motion.article>
             ))}
           </div>
+          <motion.aside {...reveal(reduced, 0.06)} className="mx-auto mt-10 max-w-5xl rounded-[1.5rem] bg-white/[0.035] p-5 ring-1 ring-white/[0.07] sm:p-7">
+            <div className="grid gap-3 lg:grid-cols-[minmax(12rem,0.55fr)_minmax(0,1.45fr)] lg:items-end">
+              <h3 className="font-heading text-2xl font-black uppercase text-white sm:text-3xl">{copy.steps.requirements.title}</h3>
+              <p className="text-[15px] leading-7 text-gray-300 sm:text-base">{copy.steps.requirements.lead}</p>
+            </div>
+            <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {copy.steps.requirements.items.map((item) => (
+                <li key={item} className="flex min-h-14 items-center gap-3 rounded-xl bg-black/20 px-4 py-3 text-sm font-semibold leading-5 text-gray-200 ring-1 ring-white/[0.06]">
+                  <Check className="h-4 w-4 shrink-0 text-orange-400" aria-hidden="true" />{item}
+                </li>
+              ))}
+            </ul>
+          </motion.aside>
         </div>
       </section>
 

@@ -24,12 +24,18 @@ export type JoinCopy = {
     unavailableTitle: string;
     unavailable: string;
     hiddenRegistrationNote: string;
+    raceDay: {
+      title: string;
+      lead: string;
+      items: Array<{ label: string; title: string; text: string }>;
+    };
   };
   why: {
     eyebrow: string;
     title: string;
     lead: string;
     items: Array<{ title: string; text: string }>;
+    mentality: { title: string; text: string };
   };
   participation: {
     eyebrow: string;
@@ -43,6 +49,7 @@ export type JoinCopy = {
     title: string;
     lead: string;
     items: Array<{ number: string; title: string; text: string }>;
+    requirements: { title: string; lead: string; items: string[] };
   };
   formats: {
     eyebrow: string;
@@ -98,6 +105,16 @@ const nl: JoinCopy = {
     unavailableTitle: "Racegegevens tijdelijk niet beschikbaar",
     unavailable: "De kalender en resultaten konden niet worden geladen. De rest van de pagina blijft gewoon werken.",
     hiddenRegistrationNote: "Inschrijving geopend",
+    raceDay: {
+      title: "Zo verloopt een raceavond.",
+      lead: "Van voorbereiding tot uitslag heeft iedere fase een duidelijke plek. Zo weet je vooraf wat er van jou en de andere coureurs wordt verwacht.",
+      items: [
+        { label: "Vooraf", title: "Kalender en briefing checken", text: "Bekijk circuit, sessietijden, inschrijving, Discord-updates en eventuele extra mededelingen." },
+        { label: "Training", title: "Tempo vinden", text: "Gebruik practice om lijnen, setup, banden en racepace te leren kennen voordat het serieus wordt." },
+        { label: "Race", title: "Hard maar fair", text: "Vecht voor positie en geef ruimte. Een sterke battle is meer waard dan een onnodig incident." },
+        { label: "Na afloop", title: "Uitslagen en standings", text: "Resultaten worden verwerkt, kampioenschapsstanden bijgewerkt en opvallende momenten besproken." },
+      ],
+    },
   },
   why: {
     eyebrow: "Waarom 3SM",
@@ -109,6 +126,10 @@ const nl: JoinCopy = {
       { title: "Seizoenen en kampioenschappen", text: "Races kunnen als rondes binnen een seizoen worden georganiseerd. Resultaten en punten vormen daarna één doorlopend kampioenschap." },
       { title: "Community rond de races", text: "Discord is de paddock voor aankondigingen, vragen, voorbereiding en contact met andere coureurs." },
     ],
+    mentality: {
+      title: "Hard racen vraagt om vertrouwen.",
+      text: "Voorbereid starten, ruimte geven en incidenten netjes via de steward-flow afhandelen houden de competitie sterk en toegankelijk. Snelheid telt, maar controle en respect maken de race beter voor iedereen.",
+    },
   },
   participation: {
     eyebrow: "Community, niet alleen een team",
@@ -127,6 +148,11 @@ const nl: JoinCopy = {
       { number: "03", title: "Kies een race", text: "Bekijk de kalender en schrijf je in voor een race of seizoen dat bij je planning past." },
       { number: "04", title: "Race mee", text: "Bereid je voor, rijd clean en volg daarna de uitslag en standings." },
     ],
+    requirements: {
+      title: "Dit heb je nodig",
+      lead: "Geen ingewikkelde toelating. Zorg dat deze basis op orde is voordat je je eerste race kiest.",
+      items: ["Een actief iRacing-account", "Discord voor communicatie", "Een compleet 3SM-profiel", "Je exacte iRacing-naam en Customer ID", "Voorbereiding en respectvol rijgedrag"],
+    },
   },
   formats: {
     eyebrow: "Klassen en langere races",
@@ -210,6 +236,16 @@ const en: JoinCopy = {
     unavailableTitle: "Race data is temporarily unavailable",
     unavailable: "The calendar and results could not be loaded. The rest of the page remains available.",
     hiddenRegistrationNote: "Registration open",
+    raceDay: {
+      title: "How a race night works.",
+      lead: "Every phase has a clear purpose, from preparation to the final result. You know what is expected before joining the grid.",
+      items: [
+        { label: "Before", title: "Check the calendar and briefing", text: "Review the circuit, session times, registration, Discord updates and any additional announcements." },
+        { label: "Practice", title: "Find your pace", text: "Use practice to learn the lines, setup, tyres and race pace before the competitive session begins." },
+        { label: "Race", title: "Race hard but fair", text: "Fight for position and leave room. A strong battle is worth more than an avoidable incident." },
+        { label: "Afterwards", title: "Results and standings", text: "Results are processed, championship standings updated and notable moments discussed." },
+      ],
+    },
   },
   why: {
     eyebrow: "Why 3SM",
@@ -221,6 +257,10 @@ const en: JoinCopy = {
       { title: "Seasons and championships", text: "Races can be organised as rounds within a season. Results and points then form one continuous championship." },
       { title: "Community around racing", text: "Discord is the paddock for announcements, questions, preparation and meeting other drivers." },
     ],
+    mentality: {
+      title: "Hard racing depends on trust.",
+      text: "Arriving prepared, leaving room and handling incidents properly through the stewarding flow keep the competition strong and accessible. Speed matters, but control and respect improve the race for everyone.",
+    },
   },
   participation: {
     eyebrow: "A community, not just one team",
@@ -239,6 +279,11 @@ const en: JoinCopy = {
       { number: "03", title: "Choose a race", text: "Check the calendar and register for a race or season that fits your schedule." },
       { number: "04", title: "Race", text: "Prepare, race cleanly and follow the result and standings afterwards." },
     ],
+    requirements: {
+      title: "What you need",
+      lead: "There is no complicated entry procedure. Make sure these basics are ready before choosing your first race.",
+      items: ["An active iRacing account", "Discord for communication", "A complete 3SM profile", "Your exact iRacing name and Customer ID", "Preparation and respectful driving"],
+    },
   },
   formats: {
     eyebrow: "Classes and longer races",
