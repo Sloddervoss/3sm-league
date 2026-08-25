@@ -90,7 +90,7 @@ const nl: JoinCopy = {
   live: {
     eyebrow: "Echte races, echte data",
     title: "Recente raceactiviteit.",
-    lead: "De laatste race, het podium en de historische statistieken laten zien dat hier daadwerkelijk wordt geracet.",
+    lead: "De laatste race, het podium en de statistieken. Het bewijs dat de grid leeft.",
     next: "Eerstvolgende race",
     latest: "Laatste race",
     registrations: "inschrijvingen via race of seizoen",
@@ -221,7 +221,7 @@ const en: JoinCopy = {
   live: {
     eyebrow: "Real races, real data",
     title: "Recent race activity.",
-    lead: "The latest race, podium and historical statistics show that the community is actively racing.",
+    lead: "The latest race, podium and statistics. Proof that the grid is alive.",
     next: "Next race",
     latest: "Latest race",
     registrations: "race or season registrations",
