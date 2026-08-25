@@ -16,7 +16,6 @@ import {
   Layers3,
   MessageCircle,
   Radio,
-  ShieldCheck,
   Sparkles,
   TimerReset,
   Trophy,
@@ -222,66 +221,6 @@ const RaceSkeleton = ({ compact = false, language }: { compact?: boolean; langua
   </div>
 );
 
-const LiveRaceCard = ({
-  race,
-  language,
-  label,
-  link,
-  linkLabel,
-  registrationCount,
-  registrationLoading,
-  registrationFailed,
-  compact = false,
-}: {
-  race: JoinRaceSummary;
-  language: JoinLocale;
-  label: string;
-  link: string;
-  linkLabel: string;
-  registrationCount?: number | null;
-  registrationLoading?: boolean;
-  registrationFailed?: boolean;
-  compact?: boolean;
-}) => {
-  const copy = joinCopy[language];
-  const when = formatRaceDate(race, language);
-  return (
-    <article className={cn("group relative overflow-hidden rounded-[1.8rem] bg-[#10131a] shadow-2xl shadow-black/25 ring-1 ring-white/[0.07]", compact ? "p-5 sm:p-6" : "p-5 sm:p-8")}>
-      <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-orange-400/75 to-transparent" aria-hidden="true" />
-      <div className={cn("relative grid gap-5", compact ? "" : "lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.72fr)] lg:items-center")}>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-300 ring-1 ring-orange-400/20">{label}</span>
-            {race.league?.carClass && <span className="rounded-full bg-white/[0.045] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-gray-300 ring-1 ring-white/[0.07]">{race.league.carClass}</span>}
-          </div>
-          <h3 className={cn("mt-5 font-heading font-black leading-[0.96] text-white", compact ? "text-2xl sm:text-3xl" : "text-3xl sm:text-5xl")}>{race.name}</h3>
-          <p className="mt-3 text-sm font-semibold text-gray-300 sm:text-base">{race.track}</p>
-          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-400">
-            <span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4 text-orange-400" />{when.date}</span>
-            <span className="inline-flex items-center gap-2"><Clock3 className="h-4 w-4 text-orange-400" />{when.time}</span>
-            {race.raceDuration && <span className="inline-flex items-center gap-2"><Gauge className="h-4 w-4 text-orange-400" />{race.raceDuration}</span>}
-          </div>
-          {!compact && !registrationFailed && (
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              {registrationLoading ? <span className="h-7 w-32 animate-pulse rounded-full bg-white/[0.05]" aria-hidden="true" /> : shouldShowRegistrationCount(registrationCount) ? (
-                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-black text-emerald-300 ring-1 ring-emerald-400/20"><UsersRound className="h-4 w-4" />{registrationCount} {copy.live.registrations}</span>
-              ) : (
-                <span className="inline-flex items-center gap-2 text-xs font-bold text-gray-400"><BadgeCheck className="h-4 w-4 text-orange-400" />{copy.live.hiddenRegistrationNote}</span>
-              )}
-            </div>
-          )}
-          <Link to={link} className="mt-7 inline-flex min-h-11 items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
-            {linkLabel}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </Link>
-        </div>
-        <div className={cn("relative overflow-hidden rounded-[1.5rem] bg-black/20 p-3 ring-1 ring-white/[0.05]", compact && "mt-3")}>
-          <RaceMap race={race} language={language} compact={compact} />
-        </div>
-      </div>
-    </article>
-  );
-};
-
 const Podium = ({ entries, language }: { entries: JoinPodiumEntry[]; language: JoinLocale }) => {
   const order = [entries.find((entry) => entry.position === 2), entries.find((entry) => entry.position === 1), entries.find((entry) => entry.position === 3)].filter(Boolean) as JoinPodiumEntry[];
   if (!order.length) return null;
@@ -323,8 +262,8 @@ export const JoinExperience = ({
 }: JoinExperienceProps) => {
   const copy = joinCopy[language];
   const reduced = useReducedMotion();
-  const trustIcons = [HeartHandshake, ShieldCheck, Gauge, Clock3, UserRound, UsersRound];
-  const whyIcons = [CalendarDays, Trophy, UsersRound, MessageCircle];
+  const trustIcons = [HeartHandshake, Gauge, UserRound, UsersRound, Clock3];
+  const whyIcons = [CalendarDays, Trophy, Layers3, MessageCircle];
 
   return (
     <div className="overflow-hidden bg-[#080a0f] text-white">
@@ -340,7 +279,7 @@ export const JoinExperience = ({
             </h1>
             <p className="mt-7 max-w-2xl text-base leading-7 text-gray-300 sm:text-lg sm:leading-8">{copy.hero.lead}</p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href="#race-activity" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 font-heading text-sm font-black uppercase tracking-wider text-white shadow-xl shadow-orange-950/25 transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
+              <a href="#join-steps" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 font-heading text-sm font-black uppercase tracking-wider text-white shadow-xl shadow-orange-950/25 transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
                 {copy.hero.explore}<ArrowDown className="h-4 w-4" />
               </a>
               <Link to="/calendar/" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white/[0.045] px-5 font-heading text-sm font-black uppercase tracking-wider text-white ring-1 ring-white/[0.10] transition hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
@@ -366,11 +305,11 @@ export const JoinExperience = ({
 
       <section aria-label={language === "en" ? "Participation facts" : "Feiten over deelname"} className="relative border-b border-white/[0.06] bg-[#0b0e14]">
         <div className="container mx-auto max-w-7xl px-4 py-6 sm:py-8">
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[1.4rem] bg-white/[0.07] ring-1 ring-white/[0.06] md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[1.4rem] bg-white/[0.07] ring-1 ring-white/[0.06] md:grid-cols-5">
             {copy.trust.map((item, index) => {
               const Icon = trustIcons[index];
               return (
-                <div key={item.title} className="group min-w-0 bg-[#0d1017] p-4 transition hover:bg-[#11151e] sm:p-5">
+                <div key={item.title} className="group min-w-0 bg-[#0d1017] p-4 transition last:col-span-2 hover:bg-[#11151e] sm:p-5 md:last:col-span-1">
                   <Icon className="h-4 w-4 text-orange-400" aria-hidden="true" />
                   <strong className="mt-3 block font-heading text-base font-black text-white sm:text-lg">{item.title}</strong>
                   <span className="mt-1 block text-sm leading-6 text-gray-300">{item.detail}</span>
@@ -390,26 +329,28 @@ export const JoinExperience = ({
             <p className="mt-5 max-w-2xl text-[17px] leading-8 text-gray-300">{copy.live.lead}</p>
           </motion.div>
 
-          <div className="mt-12 grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.75fr)]">
+          <div className="mt-10">
             <motion.div {...reveal(reduced, 0.04)}>
-              {loading.nextRace ? <RaceSkeleton language={language} /> : nextRace ? (
-                <LiveRaceCard race={nextRace} language={language} label={copy.live.next} link="/calendar/" linkLabel={copy.live.calendar} registrationCount={registrationCount} registrationLoading={loading.registrationCount} registrationFailed={failed.registrationCount} />
-              ) : (
-                <EmptyRaceCard title={failed.nextRace ? copy.live.unavailableTitle : copy.live.noUpcoming} detail={failed.nextRace ? copy.live.unavailable : copy.live.noUpcomingDetail} failed={failed.nextRace} />
-              )}
-            </motion.div>
-            <motion.div {...reveal(reduced, 0.08)}>
-              {loading.latestRace ? <RaceSkeleton compact language={language} /> : latestRace ? (
-                <div className="h-full rounded-[1.8rem] bg-[#10131a] p-5 shadow-2xl shadow-black/25 ring-1 ring-white/[0.07] sm:p-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="rounded-full bg-white/[0.045] px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-gray-300 ring-1 ring-white/[0.07]">{copy.live.latest}</span>
-                    <Trophy className="h-5 w-5 text-orange-400" />
+              {loading.latestRace ? <RaceSkeleton language={language} /> : latestRace ? (
+                <article className="relative overflow-hidden rounded-[1.8rem] bg-[#10131a] p-5 shadow-2xl shadow-black/25 ring-1 ring-white/[0.07] sm:p-8">
+                  <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-orange-400/75 to-transparent" aria-hidden="true" />
+                  <div className="relative grid gap-7 lg:grid-cols-[minmax(0,0.82fr)_minmax(20rem,0.68fr)] lg:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="rounded-full bg-orange-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-orange-300 ring-1 ring-orange-400/20">{copy.live.latest}</span>
+                        <span className="text-sm font-semibold text-gray-400">{formatRaceDate(latestRace, language).date}</span>
+                      </div>
+                      <h3 className="mt-5 font-heading text-3xl font-black uppercase leading-none text-white sm:text-4xl">{latestRace.name}</h3>
+                      <p className="mt-3 text-[15px] leading-6 text-gray-300">{latestRace.track}</p>
+                      <Podium entries={podium} language={language} />
+                      <Link to={`/results/?race=${latestRace.id}`} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-orange-500 px-4 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">{copy.live.results}<ArrowRight className="h-4 w-4" /></Link>
+                    </div>
+                    <div className="relative overflow-hidden rounded-[1.5rem] bg-black/20 p-4 ring-1 ring-white/[0.05]">
+                      <div className="absolute inset-8 bg-orange-500/[0.10] blur-3xl" aria-hidden="true" />
+                      <RaceMap race={latestRace} language={language} />
+                    </div>
                   </div>
-                  <h3 className="mt-5 font-heading text-2xl font-black text-white sm:text-3xl">{latestRace.name}</h3>
-                  <p className="mt-2 text-[15px] leading-6 text-gray-300">{latestRace.track}</p>
-                  <Podium entries={podium} language={language} />
-                  <Link to={`/results/?race=${latestRace.id}`} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-white/[0.05] px-4 text-sm font-black text-white ring-1 ring-white/[0.09] transition hover:bg-white/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">{copy.live.results}<ArrowRight className="h-4 w-4 text-orange-400" /></Link>
-                </div>
+                </article>
               ) : (
                 <EmptyRaceCard title={failed.latestRace ? copy.live.unavailableTitle : copy.live.noResult} detail={failed.latestRace ? copy.live.unavailable : copy.live.noResultDetail} failed={failed.latestRace} />
               )}
@@ -470,15 +411,15 @@ export const JoinExperience = ({
         </div>
       </section>
 
-      <section className="border-y border-white/[0.06] bg-[#0b0e14] py-16 sm:py-24">
+      <section id="join-steps" className="scroll-mt-28 border-y border-white/[0.06] bg-[#0b0e14] py-16 sm:py-24">
         <div className="container mx-auto max-w-7xl px-4">
           <motion.div {...reveal(reduced)} className="mx-auto max-w-3xl text-center">
             <SectionLabel icon={Flag}><span className="mx-auto">{copy.steps.eyebrow}</span></SectionLabel>
             <h2 className="mt-6 font-heading text-3xl font-black uppercase leading-[0.98] text-white sm:text-5xl">{copy.steps.title}</h2>
             <p className="mt-5 text-[17px] leading-8 text-gray-300">{copy.steps.lead}</p>
           </motion.div>
-          <div className="relative mt-10 grid gap-3 lg:grid-cols-6">
-            <div className="absolute left-[8.3%] right-[8.3%] top-7 hidden h-px bg-gradient-to-r from-orange-500 via-red-500 to-orange-500 lg:block" aria-hidden="true" />
+          <div className="relative mx-auto mt-10 grid max-w-5xl gap-3 lg:grid-cols-4">
+            <div className="absolute left-[12.5%] right-[12.5%] top-7 hidden h-px bg-gradient-to-r from-orange-500 via-red-500 to-orange-500 lg:block" aria-hidden="true" />
             {copy.steps.items.map((step, index) => (
               <motion.article key={step.number} {...reveal(reduced, index * 0.035)} className="relative grid grid-cols-[3.5rem_1fr] gap-4 rounded-2xl bg-white/[0.035] p-5 ring-1 ring-white/[0.07] lg:block lg:bg-transparent lg:p-2 lg:text-center lg:ring-0">
                 <span className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-[#11151d] font-heading text-sm font-black text-orange-300 ring-1 ring-orange-400/30 lg:mx-auto lg:h-14 lg:w-14">{step.number}</span>
