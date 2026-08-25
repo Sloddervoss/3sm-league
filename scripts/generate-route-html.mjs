@@ -52,15 +52,15 @@ const routes = [
     changefreq: 'monthly',
     description:
       'Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.',
-    h1: 'Meedoen met de 3SM iRacing community',
+    h1: 'Een iRacing community voor competitie én plezier',
     intro:
-      'Zoek je een iRacing community in Nederland of een Discord waar je mee kunt racen? Bij 3SM sluit je aan bij een Nederlandse iRacing league met kalender, standings en uitslagen.',
+      '3 Stripe Motorsport organiseert iRacing races met een eigen kalender, inschrijvingen, uitslagen, standings en teams. Deelname is gratis voor beginners, ervaren coureurs, solo racers en eigen teams.',
     details: [
-      'Waarom 3 Stripe Motorsport? Geen losse lobby, maar een herkenbare competitie met geplande GT3-races, duidelijke communicatie, standings, teams en ruimte om door te groeien.',
-      'Zo doe je mee: join de 3SM Discord, maak je profiel compleet, koppel Discord met /koppel en schrijf je via de kalender in voor de race die je wilt rijden.',
-      'Wat heb je nodig? Een actief iRacing account, een Discord account, een compleet 3SM profiel met iRacing naam en Customer ID, respect voor regels en voorbereiding op de raceavond.',
-      'Wat kun je verwachten? Een toegankelijke iRacing league met kalender, briefing, training, raceavond, uitslagen en standings na afloop.',
-      'Begonnen in Nederland, maar open voor iedereen met dezelfde race-mentaliteit: leuk, fair en respectvol racen.',
+      'De 3SM community is in Nederland begonnen en organiseert een eigen iRacing league waarin competitie en plezier naast elkaar bestaan.',
+      'Echte kalender- en uitslagdata tonen welke races worden georganiseerd, waar er wordt gereden en hoe de standings zich ontwikkelen.',
+      'Deelnemers kunnen solo of met een eigen team rijden en hoeven niet iedere race aanwezig te zijn.',
+      'GT3 is momenteel de belangrijkste klasse. Andere klassen kunnen worden toegevoegd bij voldoende interesse.',
+      'Een eigen planningslaag voor bestaande iRacing endurance-events is actief in ontwikkeling en nog niet volledig beschikbaar.',
       'Hard racen. Slim racen. Respectvol racen.',
     ],
     links: [
@@ -237,46 +237,57 @@ const privateRoutes = createPrivateSeoRoutes(communitySupportPublic);
 
 const joinFaq = [
   {
-    question: 'Hoe kan ik meedoen met 3 Stripe Motorsport?',
-    answer:
-      'Join eerst de Discord, maak daarna een profiel aan op de site, vul je iRacing gegevens in, koppel Discord met /koppel en schrijf je via de kalender in voor een race of seizoen.',
+    question: 'Kost deelname aan 3SM geld?',
+    answer: 'Nee. Deelname aan de 3SM-races en community is gratis.',
   },
   {
-    question: 'Is 3SM alleen voor Nederlandse coureurs?',
-    answer:
-      'Nee. 3SM is begonnen als Nederlandse community en een groot deel van de coureurs is Nederlands, maar iedereen is welkom zolang het doel hetzelfde is: leuk, fair en respectvol racen.',
+    question: 'Is er een minimum iRating?',
+    answer: 'Nee. Er geldt geen minimum iRating om mee te mogen doen.',
   },
   {
-    question: 'Moet ik al ervaren zijn om mee te doen?',
-    answer:
-      'Nee. Ervaring helpt, maar de belangrijkste basis is veilig, respectvol en leergierig rijden. Nieuwe coureurs zijn welkom zolang ze de regels en andere rijders serieus nemen.',
+    question: 'Is er een minimum Safety Rating?',
+    answer: 'Nee. Er geldt geen minimum Safety Rating. Clean en respectvol rijden blijft wel de basis.',
   },
   {
-    question: 'Waarom moet ik mijn iRacing gegevens invullen?',
-    answer:
-      'Je iRacing naam en Customer ID zorgen dat inschrijvingen, geïmporteerde resultaten, standings, teams en profielen betrouwbaar aan de juiste coureur gekoppeld worden.',
+    question: 'Zijn beginners welkom?',
+    answer: 'Ja. Beginners en ervaren coureurs zijn welkom. Voorbereiding, respect en veilig rijgedrag zijn belangrijker dan een bepaald niveau.',
   },
   {
-    question: 'Waar vind ik de volgende race?',
-    answer:
-      'De kalender op de site is je vaste startpunt voor races, circuits, tijden en inschrijven. Discord wordt gebruikt voor reminders, aankondigingen en praktische updates.',
+    question: 'Moet iedere race gereden worden?',
+    answer: 'Nee. Rijd de races die in je planning passen. Iedere race aanwezig zijn is niet verplicht.',
   },
   {
-    question: 'Welke klasse rijden jullie?',
-    answer:
-      'Op dit moment focussen we op GT3 in iRacing. Als de community groeit, willen we later uitbreiden naar bijvoorbeeld multiclass of extra raceformats.',
+    question: 'Kan ik zonder team meedoen?',
+    answer: 'Ja. Solo coureurs kunnen zich gewoon inschrijven en deelnemen.',
   },
   {
-    question: 'Kan ik nog instappen?',
-    answer:
-      'Ja. De grid groeit en nieuwe coureurs kunnen nog aansluiten bij races, teams en seizoenen.',
+    question: 'Kan mijn eigen team deelnemen?',
+    answer: 'Ja. Eigen teams zijn welkom en hoeven niet onder de 3SM-teamnaam te rijden.',
   },
   {
-    question: 'Kan ik met een team meedoen?',
-    answer:
-      'Ja. Je kunt aansluiten bij een bestaand team of een nieuw team aanvragen. Teams krijgen een eigen Discord-sectie voor teamleden.',
+    question: 'Welke klasse wordt momenteel gereden?',
+    answer: 'De belangrijkste eigen league-klasse is momenteel GT3 in iRacing.',
+  },
+  {
+    question: 'Komen er andere klassen?',
+    answer: 'Dat kan. Andere klassen en formats kunnen worden toegevoegd wanneer daar binnen de community voldoende interesse voor is.',
+  },
+  {
+    question: 'Hoe werkt aanmelden?',
+    answer: 'Join Discord, maak je siteprofiel compleet, koppel je Discord-account en schrijf je daarna via de kalender in voor een race of seizoen.',
+  },
+  {
+    question: 'Wat heb ik nodig om mee te doen?',
+    answer: 'Een iRacing-account, Discord, een compleet 3SM-profiel en de bereidheid om voorbereid, clean en respectvol te racen.',
+  },
+  {
+    question: 'Hoe zit het met endurance?',
+    answer: '3SM werkt aan een eigen planningslaag voor bestaande iRacing endurance-events. Die omgeving is actief in ontwikkeling en nog niet volledig beschikbaar.',
   },
 ];
+
+const joinRoute = routes.find((route) => route.path === '/meedoen');
+if (joinRoute) joinRoute.faq = joinFaq;
 
 const escapeAttr = (value) =>
   String(value)
@@ -843,6 +854,7 @@ const buildSiteNavigationJsonLd = () => ({
 const buildJoinFaqJsonLd = () => ({
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
+  inLanguage: 'nl-NL',
   mainEntity: joinFaq.map(({ question, answer }) => ({
     '@type': 'Question',
     name: question,
@@ -852,6 +864,10 @@ const buildJoinFaqJsonLd = () => ({
     },
   })),
 });
+
+if (joinRoute) {
+  joinRoute.extraJsonLd = [{ id: 'join-page-faq-schema', data: buildJoinFaqJsonLd() }];
+}
 
 const buildJsonLdScript = (id, data) =>
   `<script type="application/ld+json" id="${id}">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
@@ -933,6 +949,31 @@ ${buildRouteDetailsHtml(route)}
       ${faqHtml}`;
 };
 
+const buildJoinRootFallback = (route) => {
+  const details = (route.details || []).map((detail) => `<p>${escapeHtml(detail)}</p>`).join('\n        ');
+  const links = (route.links || []).map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('');
+  const faq = (route.faq || []).map(({ question, answer }) => `<details><summary>${escapeHtml(question)}</summary><p>${escapeHtml(answer)}</p></details>`).join('\n        ');
+  return `<main style="max-width:72rem;margin:0 auto;padding:3rem 1.25rem;color:#f5f5f5;background:#080a0f;font-family:system-ui,sans-serif;line-height:1.7">
+      <header>
+        <p>3 Stripe Motorsport</p>
+        <h1>${escapeHtml(route.h1)}</h1>
+        <p>${escapeHtml(route.intro)}</p>
+      </header>
+      <section aria-labelledby="join-facts-heading">
+        <h2 id="join-facts-heading">Nederlandse iRacing community en league</h2>
+        ${details}
+        <p>Deelname is gratis. Er geldt geen minimum iRating of Safety Rating. Beginners, ervaren coureurs, solo racers en eigen teams zijn welkom.</p>
+        <p>GT3 is momenteel de belangrijkste klasse. Andere klassen kunnen volgen bij voldoende interesse. De endurance-planningslaag is actief in ontwikkeling en nog niet volledig beschikbaar.</p>
+      </section>
+      <nav aria-label="Belangrijke 3SM links"><ul>${links}</ul></nav>
+      <section aria-labelledby="join-faq-heading">
+        <h2 id="join-faq-heading">Veelgestelde vragen over meedoen</h2>
+        ${faq}
+      </section>
+      <p><a href="https://discord.gg/H7tZVuzBgT">Join de 3SM Discord</a></p>
+    </main>`;
+};
+
 const applyRouteMeta = (html, route) => {
   const canonical = absoluteUrl(route.path);
   const title = escapeAttr(route.title);
@@ -952,6 +993,7 @@ const applyRouteMeta = (html, route) => {
   out = out.replace(/\s*<script type="application\/ld\+json" id="site-website"[\s\S]*?<\/script>\n?\s*/g, '\n');
   out = out.replace(/\s*<script type="application\/ld\+json" id="site-navigation"[\s\S]*?<\/script>\n?\s*/g, '\n');
   out = out.replace(/\s*<script type="application\/ld\+json" id="route-faq"[\s\S]*?<\/script>\n?\s*/g, '\n');
+  out = out.replace(/\s*<script type="application\/ld\+json" id="join-page-faq-schema"[\s\S]*?<\/script>\n?\s*/g, '\n');
   const routeJsonLd = [
     ...(route.path === '/' ? [
       buildJsonLdScript('site-website', buildWebSiteJsonLd()),
@@ -967,6 +1009,12 @@ const applyRouteMeta = (html, route) => {
     `    ${routeJsonLd}${extraJsonLd}\n  </head>`,
   );
   out = stripGeneratedRouteSeo(out);
+  if (route.path === '/meedoen') {
+    return out.replace(
+      '<div id="root"></div>',
+      `<div id="root">${buildJoinRootFallback(route)}</div>`,
+    );
+  }
   const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
   const noscriptLinks = route.links || [];
   const noscriptCrawlerLinks = route.crawlerLinks?.length ? buildCrawlerLinksHtml(route) : '';

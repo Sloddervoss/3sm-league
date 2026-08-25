@@ -131,11 +131,11 @@ describe("public news workflow", () => {
     expect(generator).toContain("const absoluteUrl = (path) => `${SITE_URL}${canonicalPath(path)}`;");
     expect(generator).toContain("title: 'iRacing racekalender Nederland | 3SM'");
     expect(generator).toContain("Bekijk de 3SM iRacing racekalender: aankomende races");
-    expect(generator).toContain("Waarom 3 Stripe Motorsport? Geen losse lobby");
-    expect(generator).toContain("Zo doe je mee: join de 3SM Discord");
-    expect(generator).toContain("Wat heb je nodig? Een actief iRacing account");
-    expect(generator).toContain("Wat kun je verwachten? Een toegankelijke iRacing league");
-    expect(generator).toContain("Begonnen in Nederland, maar open voor iedereen");
+    expect(generator).toContain("De 3SM community is in Nederland begonnen");
+    expect(generator).toContain("Echte kalender- en uitslagdata");
+    expect(generator).toContain("solo of met een eigen team rijden");
+    expect(generator).toContain("GT3 is momenteel de belangrijkste klasse");
+    expect(generator).toContain("endurance-events is actief in ontwikkeling");
     expect(generator).toContain("Hard racen. Slim racen. Respectvol racen.");
     expect(generator).toContain("const isRaceRecap = categorySlug === 'race-recaps'");
     expect(generator).toContain("...(isRaceRecap ? [['/meedoen', 'Zelf meerijden? Bekijk hoe je meedoet']] : [])");
