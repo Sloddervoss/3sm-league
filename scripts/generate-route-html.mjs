@@ -57,6 +57,9 @@ const routes = [
       '3 Stripe Motorsport is een Nederlandse iRacing league en community, ontstaan in Nederland en open voor coureurs met dezelfde race-mentaliteit. Deelname is gratis en beginners en ervaren coureurs zijn welkom.',
     details: [
       'Echte kalender- en uitslagdata tonen welke races worden georganiseerd, waar er wordt gereden en hoe de standings zich ontwikkelen.',
+      'Een raceavond begint met kalender, briefing en voorbereiding. Daarna volgen training, hard maar fair racen en na afloop de uitslagen en bijgewerkte standings.',
+      'Voor deelname zijn een actief iRacing-account, Discord, een compleet 3SM-profiel, de juiste iRacing-naam en Customer ID nodig.',
+      'Voorbereid starten, ruimte geven en incidenten netjes via de steward-flow afhandelen houden de competitie sterk en toegankelijk.',
       'Deelnemers kunnen solo of met een eigen team rijden en hoeven niet iedere race aanwezig te zijn.',
       'GT3 is momenteel de belangrijkste klasse. Andere klassen kunnen worden toegevoegd bij voldoende interesse.',
       'Een eigen planningslaag voor bestaande iRacing endurance-events is actief in ontwikkeling en nog niet volledig beschikbaar.',

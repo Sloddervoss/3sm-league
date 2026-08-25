@@ -86,6 +86,25 @@ describe("join page redesign contracts", () => {
     expect(content).not.toContain('{ number: "06"');
   });
 
+  it("voegt inhoudsdiepte toe zonder de informatieflow opnieuw te dupliceren", () => {
+    const experience = read("src/features/join/JoinExperience.tsx");
+    const content = read("src/features/join/content.ts");
+    const generator = read("scripts/generate-route-html.mjs");
+
+    expect(experience).toContain("copy.live.raceDay.items.map");
+    expect(experience).toContain("copy.why.mentality.text");
+    expect(experience).toContain("copy.steps.requirements.items.map");
+    expect(content).toContain('title: "Zo verloopt een raceavond."');
+    expect(content).toContain('title: "Dit heb je nodig"');
+    expect(content).toContain('title: "Hard racen vraagt om vertrouwen."');
+    expect(content).toContain('title: "How a race night works."');
+    expect(content).toContain('title: "What you need"');
+    expect(content).toContain('title: "Hard racing depends on trust."');
+    expect(generator).toContain("Een raceavond begint met kalender, briefing en voorbereiding");
+    expect(generator).toContain("een actief iRacing-account, Discord, een compleet 3SM-profiel");
+    expect(generator).toContain("incidenten netjes via de steward-flow afhandelen");
+  });
+
   it("bevat geen em dash in de nieuwe marketingcopy of page UI", () => {
     const files = [
       "src/pages/JoinPage.tsx",
