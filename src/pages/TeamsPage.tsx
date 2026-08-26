@@ -35,6 +35,40 @@ type TeamWithStats = Team & {
   wins: number;
 };
 
+type PublicTeamProfile = {
+  user_id: string | null;
+  display_name: string | null;
+  iracing_name: string | null;
+};
+
+const loadTeamMemberships = async (): Promise<TeamMembership[]> => {
+  const { data: membershipRows, error: membershipError } = await supabase
+    .from("team_memberships")
+    .select("id, team_id, user_id, role");
+  if (membershipError) throw membershipError;
+
+  const memberships = membershipRows || [];
+  const userIds = [...new Set(memberships.map((membership) => membership.user_id).filter(Boolean))];
+  if (!userIds.length) return [];
+
+  const { data: profileRows, error: profileError } = await supabase
+    .from("public_profiles")
+    .select("user_id, display_name, iracing_name")
+    .in("user_id", userIds);
+  if (profileError) throw profileError;
+
+  const profiles = new Map(
+    ((profileRows || []) as PublicTeamProfile[])
+      .filter((profile): profile is PublicTeamProfile & { user_id: string } => Boolean(profile.user_id))
+      .map((profile) => [profile.user_id, profile]),
+  );
+
+  return memberships.map((membership) => ({
+    ...membership,
+    profiles: profiles.get(membership.user_id) || null,
+  }));
+};
+
 const TeamsPage = () => {
   const { language } = useLanguage();
   const [selectedTeam, setSelectedTeam] = useState<TeamWithStats | null>(null);
@@ -42,18 +76,14 @@ const TeamsPage = () => {
 
   const { data: memberships = [] } = useQuery({
     queryKey: ["team-memberships-with-profiles"],
-    queryFn: async (): Promise<TeamMembership[]> => {
-      const { data } = await supabase
-        .from("team_memberships")
-        .select("*, profiles(display_name, iracing_name)");
-      return (data || []) as TeamMembership[];
-    },
+    queryFn: loadTeamMemberships,
   });
 
   const { data: results = [] } = useQuery({
     queryKey: ["team-results"],
     queryFn: async (): Promise<TeamResult[]> => {
-      const { data } = await supabase.from("race_results").select("user_id, position, points");
+      const { data, error } = await supabase.from("race_results").select("user_id, position, points");
+      if (error) throw error;
       return (data || []) as TeamResult[];
     },
   });
