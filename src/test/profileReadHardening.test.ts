@@ -17,6 +17,7 @@ const publicProfileConsumers = [
   "src/pages/RaceDetailPage.tsx",
   "src/pages/SeasonsPage.tsx",
   "src/pages/StandingsPage.tsx",
+  "src/pages/TeamsPage.tsx",
   "src/components/StandingsStrip.tsx",
   "src/components/RaceRecapPanel.tsx",
   "src/components/preview/RaceModal.tsx",
@@ -77,11 +78,12 @@ describe("profile read hardening", () => {
       "src/pages/HomepagePrototype.tsx",
       "src/components/RaceRecapPanel.tsx",
       "src/pages/SeasonsPage.tsx",
+      "src/pages/TeamsPage.tsx",
       "src/components/preview/RaceModal.tsx",
     ]) {
       const page = source(path);
       expect(page, path).toContain('from("public_profiles")');
-      expect(page, path).toContain(".select(\"user_id, display_name, iracing_name");
+      expect(page, path).toContain('.select("user_id, display_name, iracing_name');
       expect(page, path).not.toMatch(/profiles\s*\(/);
     }
   });
