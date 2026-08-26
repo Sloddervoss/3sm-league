@@ -108,9 +108,9 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
 
   if (isLoading) {
     return (
-      <div className="px-6 py-6 border-t border-border">
+      <div className="border-t border-white/[0.07] px-4 py-6 sm:px-6">
         <div className="space-y-2">
-          {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-secondary/30 rounded animate-pulse" />)}
+          {[1, 2, 3].map((i) => <div key={i} className="h-10 animate-pulse rounded-xl bg-white/[0.04]" />)}
         </div>
       </div>
     );
@@ -118,7 +118,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
 
   if (!results.length) {
     return (
-      <div className="px-6 py-8 text-center text-muted-foreground border-t border-border">
+      <div className="border-t border-white/[0.07] px-6 py-8 text-center text-gray-400">
         <p className="text-sm">Geen resultaten beschikbaar voor deze race.</p>
       </div>
     );
@@ -129,10 +129,10 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: "auto" }}
       exit={{ opacity: 0, height: 0 }}
-      className="border-t border-border"
+      className="border-t border-white/[0.07]"
     >
       <div className="overflow-x-auto">
-        <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2 bg-secondary/30 text-xs font-bold uppercase tracking-wider text-muted-foreground min-w-[500px]">
+        <div className="grid min-w-[500px] grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 bg-black/20 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-gray-500">
           <span>Pos</span>
           <span>Coureur</span>
           <span className="text-center">Ronden</span>
@@ -144,7 +144,7 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
           return (
             <div
               key={result.id}
-              className={`grid grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 px-4 py-2.5 items-center border-b border-border/30 hover:bg-secondary/20 transition-colors min-w-[500px] ${result.position !== null && result.position <= 3 ? "racing-stripe-left" : ""}`}
+              className={`grid min-w-[500px] grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] items-center gap-2 border-b border-white/[0.05] px-4 py-3 transition-colors hover:bg-white/[0.025] ${result.position !== null && result.position <= 3 ? "racing-stripe-left" : ""}`}
             >
               <span className={`font-heading font-black text-lg ${positionColors[result.position!] || "text-muted-foreground"}`}>
                 {result.dnf ? "DNF" : result.position}
@@ -157,9 +157,9 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
                   <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold">FL</span>
                 )}
               </div>
-              <span className="text-center text-sm text-muted-foreground">{result.laps || "-"}</span>
-              <span className="text-center text-sm font-mono text-muted-foreground">{result.best_lap || "-"}</span>
-              <span className="text-center text-sm text-muted-foreground hidden md:block">
+              <span className="text-center text-sm text-gray-400">{result.laps || "-"}</span>
+              <span className="text-center font-mono text-sm text-gray-400">{result.best_lap || "-"}</span>
+              <span className="hidden text-center text-sm text-gray-400 md:block">
                 {result.incidents != null ? (
                   <span className={result.incidents > 4 ? "text-red-400" : ""}>{result.incidents}x</span>
                 ) : "-"}
@@ -348,58 +348,58 @@ const ResultsPage = () => {
   }, [language, races, winners]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#080a0f] text-white">
       <Navbar />
       <StickyRaceBar />
-      <main className="pt-[108px]">
-        <section className="py-12 bg-gradient-to-b from-card/50 to-transparent border-b border-border">
-          <div className="container mx-auto px-4">
-            <div className="flex items-center gap-2 mb-2">
-              <List className="w-5 h-5 text-accent" />
-              <span className="text-sm font-medium text-accent uppercase tracking-[0.15em]">3SM</span>
+      <main className="relative overflow-hidden pt-[108px] [background-image:radial-gradient(circle_at_50%_16%,rgba(249,115,22,0.055),transparent_27%),linear-gradient(180deg,#080a0f_0%,#0b0e14_46%,#080a0f_100%)]">
+        <section className="relative border-b border-white/[0.06] py-10 before:absolute before:inset-0 before:bg-[linear-gradient(rgba(255,255,255,0.022)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.022)_1px,transparent_1px)] before:bg-[size:44px_44px] before:[mask-image:linear-gradient(to_bottom,black,transparent_92%)] before:content-[''] sm:py-8">
+          <div className="container relative mx-auto max-w-7xl px-4">
+            <div className="mb-3 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.26em] text-orange-400 sm:text-xs">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10 ring-1 ring-orange-400/20"><List className="h-3.5 w-3.5" /></span>
+              <span>3SM</span>
             </div>
-            <h1 className="font-heading text-4xl md:text-5xl font-black">UITSLAGEN</h1>
-            <p className="text-muted-foreground mt-2">Alle race uitslagen en klassementen</p>
+            <h1 className="font-heading text-4xl font-black uppercase leading-[0.9] tracking-tight text-white sm:text-5xl">UITSLAGEN</h1>
+            <p className="mt-4 text-[17px] leading-8 text-gray-300">Alle race uitslagen en klassementen</p>
           </div>
         </section>
 
-        <section className="py-12">
-          <div className="container mx-auto px-4">
+        <section className="py-10 sm:py-12">
+          <div className="container mx-auto max-w-7xl px-4">
 
             {/* Latest Result Spotlight */}
             {!isLoading && latestRace && (
-              <div className="mb-10">
-                <div className="flex items-center gap-2 mb-4">
-                  <Flag className="w-4 h-4 text-orange-500" />
-                  <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Laatste Uitslag</span>
+              <div className="mb-14">
+                <div className="mb-5 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.24em] text-orange-400 sm:text-xs">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10 ring-1 ring-orange-400/20"><Flag className="h-3.5 w-3.5" /></span>
+                  <span>Laatste Uitslag</span>
                 </div>
 
                 {latestLoading ? (
-                  <div className="h-48 bg-card rounded-lg animate-pulse border border-border" />
+                  <div className="h-48 animate-pulse rounded-[1.8rem] bg-white/[0.035] ring-1 ring-white/[0.07]" />
                 ) : latestResults.length === 0 ? (
-                  <div className="bg-card border border-border rounded-lg px-6 py-8 text-center text-muted-foreground text-sm">
+                  <div className="rounded-[1.8rem] bg-white/[0.025] px-6 py-8 text-center text-sm text-gray-400 ring-1 ring-white/[0.07]">
                     Nog geen detailresultaten beschikbaar.
                   </div>
                 ) : (
-                  <div className="bg-card border border-orange-500/20 rounded-lg overflow-hidden">
-                    <div className="h-0.5" style={{ background: "linear-gradient(90deg, #f97316, transparent)" }} />
+                  <div className="relative overflow-hidden rounded-[1.8rem] bg-[radial-gradient(circle_at_85%_0%,rgba(249,115,22,0.12),transparent_34%),linear-gradient(145deg,#12161e_0%,#0c0f15_72%)] shadow-2xl shadow-black/35 ring-1 ring-orange-400/20">
+                    <div className="h-0.5" style={{ background: "linear-gradient(90deg, transparent, #f97316, transparent)" }} />
 
                     {/* Race meta */}
-                    <div className="px-6 py-4 flex flex-wrap items-center gap-3 border-b border-border">
+                    <div className="flex flex-wrap items-center gap-3 border-b border-white/[0.07] bg-black/10 px-5 py-5 sm:px-7">
                       <div className="flex items-center gap-2">
                         {latestRace.round != null && (
-                          <span className="font-heading font-black text-sm text-muted-foreground">
+                          <span className="font-heading text-sm font-black text-gray-400">
                             R{String(latestRace.round).padStart(2, "0")}
                           </span>
                         )}
                         <h3 className="font-heading font-black text-lg">{latestRace.name}</h3>
                       </div>
                       {latestRace.leagues?.name && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">
+                        <span className="rounded-full bg-white/[0.05] px-2.5 py-0.5 text-[10px] text-gray-300 ring-1 ring-white/[0.07]">
                           {latestRace.leagues.name}
                         </span>
                       )}
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
+                      <div className="ml-auto flex items-center gap-2 text-sm text-gray-400">
                         <span>{latestRace.track}</span>
                         <span>·</span>
                         <span>
@@ -411,22 +411,22 @@ const ResultsPage = () => {
                     </div>
 
                     {/* Podium + highlights */}
-                    <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
+                    <div className="grid divide-y divide-white/[0.07] md:grid-cols-2 md:divide-x md:divide-y-0">
 
                       {/* Podium */}
-                      <div className="p-6">
-                        <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-4">Podium</div>
+                      <div className="bg-gradient-to-br from-white/[0.025] to-transparent p-5 sm:p-7">
+                        <div className="mb-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Podium</div>
                         <div className="space-y-2.5">
                           {spPodium.map((r, i) => {
                             const c = PODIUM_COLORS[i];
                             return (
                               <div
                                 key={r.user_id}
-                                className="flex items-center gap-3 rounded-lg px-4 py-3"
+                                className="flex items-center gap-3 rounded-xl px-4 py-3"
                                 style={{ background: c.bg, border: `1px solid ${c.border}` }}
                               >
                                 <div
-                                  className="w-8 h-8 rounded-lg flex items-center justify-center font-heading font-black text-sm shrink-0"
+                                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-heading text-sm font-black"
                                   style={{ background: `${c.text}20`, color: c.text }}
                                 >
                                   {i + 1}
@@ -448,13 +448,13 @@ const ResultsPage = () => {
                       </div>
 
                       {/* Highlights */}
-                      <div className="p-6">
-                        <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-4">Highlights</div>
+                      <div className="bg-black/[0.08] p-5 sm:p-7">
+                        <div className="mb-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Highlights</div>
                         <div className="space-y-3">
 
                           {spFastest && (
                             <div
-                              className="flex items-start gap-3 rounded-lg px-4 py-3"
+                              className="flex items-start gap-3 rounded-xl px-4 py-3"
                               style={{ background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.2)" }}
                             >
                               <span className="text-base shrink-0 leading-none mt-0.5">⚡</span>
@@ -470,7 +470,7 @@ const ResultsPage = () => {
 
                           {spCleanest && (
                             <div
-                              className="flex items-start gap-3 rounded-lg px-4 py-3"
+                              className="flex items-start gap-3 rounded-xl px-4 py-3"
                               style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)" }}
                             >
                               <span className="text-base shrink-0 leading-none mt-0.5">🧊</span>
@@ -483,7 +483,7 @@ const ResultsPage = () => {
                           )}
 
                           <div
-                            className="flex items-center gap-4 rounded-lg px-4 py-3"
+                            className="flex items-center gap-4 rounded-xl px-4 py-3"
                             style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
                           >
                             <div className="text-center">
@@ -515,20 +515,20 @@ const ResultsPage = () => {
                     </div>
 
                     {/* CTA */}
-                    <div className="px-6 py-4 border-t border-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-xs text-muted-foreground">
+                    <div className="flex flex-col gap-4 border-t border-white/[0.07] bg-black/15 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+                      <div className="text-xs leading-5 text-gray-400">
                         Kies tussen de deelbare racepagina of de snelle archiefweergave op deze pagina.
                       </div>
                       <div className="flex flex-wrap items-center gap-3">
                         <Link
                           to={`/results/${latestRace.id}/`}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-white hover:bg-orange-400 transition-colors"
+                          className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2 text-xs font-heading font-bold uppercase tracking-wider text-white transition-colors hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
                         >
                           Details & delen
                         </Link>
                         <button
                           onClick={() => toggleArchiveRace(latestRace.id)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs font-heading font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:border-orange-500/40 transition-colors"
+                          className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-white/[0.045] px-4 py-2 text-xs font-heading font-bold uppercase tracking-wider text-gray-300 ring-1 ring-white/[0.10] transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
                         >
                           {expandedRace === latestRace.id ? "Sluit snelle uitslag" : "Snelle uitslag"}
                           {expandedRace === latestRace.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -542,25 +542,25 @@ const ResultsPage = () => {
 
             {/* Race archive */}
             {isLoading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => <div key={i} className="h-20 bg-card rounded-lg animate-pulse" />)}
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-[1.4rem] bg-white/[0.035] ring-1 ring-white/[0.06]" />)}
               </div>
             ) : !races?.length ? (
-              <div className="text-center py-24 text-muted-foreground">
+              <div className="py-24 text-center text-gray-400">
                 <Flag className="w-12 h-12 mx-auto mb-4 opacity-40" />
                 <p className="text-lg font-heading font-bold">GEEN RESULTATEN</p>
                 <p className="text-sm mt-1">Er zijn nog geen race resultaten beschikbaar.</p>
               </div>
             ) : (
               <>
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <Flag className="w-4 h-4 text-orange-500" />
-                    <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Race Archief</span>
+                <div className="mb-7">
+                  <div className="mb-1 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.24em] text-orange-400 sm:text-xs">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10 ring-1 ring-orange-400/20"><Flag className="h-3.5 w-3.5" /></span>
+                    <span>Race Archief</span>
                   </div>
-                  <p className="text-xs text-muted-foreground ml-6">Alle afgeronde races</p>
+                  <p className="ml-11 text-sm text-gray-400">Alle afgeronde races</p>
                 </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {races.map((race, i) => {
                   const winner = winners?.find((w) => w.race_id === race.id);
                   const isExpanded = expandedRace === race.id;
@@ -572,26 +572,26 @@ const ResultsPage = () => {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.04 }}
-                      className={`bg-card border border-border rounded-lg overflow-hidden${i === 0 ? " scroll-mt-[120px]" : ""}`}
+                      className={`relative overflow-hidden rounded-[1.4rem] bg-gradient-to-r from-white/[0.04] to-white/[0.018] shadow-lg shadow-black/15 ring-1 ring-white/[0.075] transition before:absolute before:bottom-4 before:left-0 before:top-4 before:w-0.5 before:rounded-full before:bg-gradient-to-b before:from-orange-400 before:to-red-500 before:opacity-45 before:content-[''] hover:from-white/[0.055] hover:to-white/[0.025] hover:ring-orange-400/25 hover:before:opacity-100${i === 0 ? " scroll-mt-[120px]" : ""}`}
                     >
                       <button
                         onClick={() => toggleArchiveRace(race.id)}
-                        className="w-full px-6 py-4 flex items-center gap-4 hover:bg-secondary/30 transition-colors text-left"
+                        className="flex w-full items-center gap-3 px-4 py-5 text-left transition-colors hover:bg-white/[0.025] sm:gap-5 sm:px-6"
                       >
-                        <div className="w-10 shrink-0 flex flex-col items-center justify-center">
+                        <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-black/20 ring-1 ring-white/[0.06]">
                           {race.round != null && (
                             <>
-                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 leading-none mb-0.5">Ronde</span>
-                              <span className="font-heading font-black text-lg text-muted-foreground leading-none">{String(race.round).padStart(2, "0")}</span>
+                              <span className="mb-0.5 text-[9px] font-black uppercase leading-none tracking-widest text-gray-600">Ronde</span>
+                              <span className="font-heading text-lg font-black leading-none text-gray-400">{String(race.round).padStart(2, "0")}</span>
                             </>
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-heading font-bold text-lg">{race.name}</h3>
-                          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mt-0.5">
+                          <h3 className="font-heading text-lg font-black text-white sm:text-xl">{race.name}</h3>
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-400">
                             <span>{race.track}</span>
                             {race.leagues?.name && (
-                              <span className="text-xs px-2 py-0.5 rounded bg-secondary text-secondary-foreground">
+                              <span className="rounded-full bg-white/[0.05] px-2.5 py-0.5 text-[10px] text-gray-300 ring-1 ring-white/[0.07]">
                                 {race.leagues.name}
                               </span>
                             )}
@@ -609,7 +609,7 @@ const ResultsPage = () => {
                         {winner && (
                           <div className="hidden md:flex items-center gap-3 shrink-0">
                             <div className="text-right">
-                              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Winnaar</div>
+                              <div className="mb-0.5 text-[10px] uppercase tracking-[0.16em] text-gray-500">Winnaar</div>
                               <div className="font-heading font-bold text-yellow-400">
                                 {winner.profiles?.iracing_name || winner.profiles?.display_name || "Onbekend"}
                               </div>
@@ -617,23 +617,23 @@ const ResultsPage = () => {
                             <Trophy className="w-5 h-5 text-yellow-400" />
                           </div>
                         )}
-                        <div className="shrink-0 text-muted-foreground">
+                        <div className="shrink-0 text-gray-500">
                           {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                         </div>
                       </button>
 
-                      <div className="px-6 pb-3 -mt-1">
+                      <div className="-mt-1 border-t border-white/[0.045] bg-black/[0.06] px-4 pb-4 pt-3 sm:px-6">
                         <div className="flex flex-wrap items-center gap-3">
                           <Link
                             to={`/results/${race.id}/`}
-                            className="inline-flex items-center gap-1 text-xs font-heading font-bold text-orange-500 hover:text-orange-400 transition-colors"
+                            className="inline-flex items-center gap-1 text-xs font-heading font-bold text-orange-400 transition-colors hover:text-orange-300"
                           >
                             Details & delen
                           </Link>
                           <button
                             type="button"
                             onClick={() => toggleArchiveRace(race.id)}
-                            className="inline-flex items-center gap-1 text-xs font-heading font-bold text-muted-foreground hover:text-foreground transition-colors"
+                            className="inline-flex items-center gap-1 text-xs font-heading font-bold text-gray-500 transition-colors hover:text-white"
                           >
                             {isExpanded ? "Sluit snelle uitslag" : "Snelle uitslag"}
                             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
