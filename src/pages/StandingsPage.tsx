@@ -12,6 +12,7 @@ import { Trophy } from "lucide-react";
 import type { DriverModalProfile, StandingRow, StandingsProfile, StandingsRaceResult, StandingTeam } from "@/lib/standingsTypes";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
+import { selectDefaultStandingsLeagueId, type StandingsSeasonRace } from "@/lib/standingsSeason";
 
 const StandingsPage = () => {
   const { language } = useLanguage();
@@ -41,7 +42,20 @@ const StandingsPage = () => {
   const { data: teams = [] } = useTeams();
   const { data: profiles = [] } = useDrivers();
 
-  const selectedId = activeLeagueId ?? leagues?.[0]?.id ?? null;
+  const { data: seasonRaces = [], isLoading: seasonRacesLoading } = useQuery({
+    queryKey: ["standings-season-schedule"],
+    queryFn: async (): Promise<StandingsSeasonRace[]> => {
+      const { data, error } = await supabase
+        .from("races")
+        .select("league_id, race_date, status")
+        .not("league_id", "is", null);
+      if (error) throw error;
+      return (data || []) as StandingsSeasonRace[];
+    },
+  });
+
+  const defaultLeagueId = seasonRacesLoading ? null : selectDefaultStandingsLeagueId(leagues, seasonRaces);
+  const selectedId = activeLeagueId ?? defaultLeagueId;
 
   const { data: standings = [] } = useQuery({
     queryKey: ["standings-full", selectedId],
@@ -126,15 +140,19 @@ const StandingsPage = () => {
             </div>
           )}
 
-          <NewStandingsTable
-            standings={standings}
-            leagueName={selectedLeague?.name}
-            variant="page"
-            onSelectDriver={(uid) => {
-              const driver = (profiles as DriverModalProfile[]).find((p) => p.user_id === uid);
-              if (driver) setSelectedDriver(driver);
-            }}
-          />
+          {seasonRacesLoading ? (
+            <div className="h-72 animate-pulse rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06]" role="status" aria-label="Standings laden" />
+          ) : (
+            <NewStandingsTable
+              standings={standings}
+              leagueName={selectedLeague?.name}
+              variant="page"
+              onSelectDriver={(uid) => {
+                const driver = (profiles as DriverModalProfile[]).find((p) => p.user_id === uid);
+                if (driver) setSelectedDriver(driver);
+              }}
+            />
+          )}
         </div>
       </main>
       <Footer />
