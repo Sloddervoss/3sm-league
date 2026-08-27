@@ -149,12 +149,12 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
               <span className={`font-heading font-black text-lg ${positionColors[result.position!] || "text-muted-foreground"}`}>
                 {result.dnf ? "DNF" : result.position}
               </span>
-              <div>
-                <span className="font-heading font-bold text-sm">
+              <div className="min-w-0">
+                <span className="font-heading font-bold text-sm truncate">
                   {result.profiles?.iracing_name || result.profiles?.display_name || "Onbekend"}
                 </span>
                 {result.fastest_lap && (
-                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold">FL</span>
+                  <span className="ml-2 inline-block shrink-0 align-middle text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold">FL</span>
                 )}
               </div>
               <span className="text-center text-sm text-gray-400">{result.laps || "-"}</span>
