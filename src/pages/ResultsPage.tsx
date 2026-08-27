@@ -132,19 +132,19 @@ const ExpandedRaceContent = ({ raceId }: { raceId: string }) => {
       className="border-t border-white/[0.07]"
     >
       <div className="overflow-x-auto">
-        <div className="grid min-w-[500px] grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] gap-2 bg-black/20 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-gray-500">
+        <div className="grid grid-cols-[2rem_minmax(0,1fr)_2.75rem_5rem_2.5rem] gap-2 bg-black/20 px-4 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-gray-500 md:grid-cols-[3rem_minmax(0,1fr)_5rem_6rem_5rem_4rem] md:tracking-[0.16em]">
           <span>Pos</span>
-          <span>Coureur</span>
+          <span className="whitespace-nowrap">Coureur</span>
           <span className="text-center">Ronden</span>
           <span className="text-center">Beste ronde</span>
-          <span className="text-center hidden md:block">Inc.</span>
+          <span className="hidden text-center md:block">Inc.</span>
           <span className="text-center">Pts</span>
         </div>
         {results.map((result) => {
           return (
             <div
               key={result.id}
-              className={`grid min-w-[500px] grid-cols-[3rem_1fr_5rem_6rem_5rem_4rem] items-center gap-2 border-b border-white/[0.05] px-4 py-3 transition-colors hover:bg-white/[0.025] ${result.position !== null && result.position <= 3 ? "racing-stripe-left" : ""}`}
+              className={`grid grid-cols-[2rem_minmax(0,1fr)_2.75rem_5rem_2.5rem] items-center gap-2 border-b border-white/[0.05] px-4 py-3 transition-colors hover:bg-white/[0.025] md:grid-cols-[3rem_minmax(0,1fr)_5rem_6rem_5rem_4rem] ${result.position !== null && result.position <= 3 ? "racing-stripe-left" : ""}`}
             >
               <span className={`font-heading font-black text-lg ${positionColors[result.position!] || "text-muted-foreground"}`}>
                 {result.dnf ? "DNF" : result.position}
