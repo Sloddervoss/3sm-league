@@ -27,6 +27,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
+    <Compile Include="SessionTelemetryReader.cs" />
     <Compile Include="ConnectorSettings.cs" />
     <Compile Include="SettingsControl.cs" />
     <Compile Include="TelemetryContracts.cs" />

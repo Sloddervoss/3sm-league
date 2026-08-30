@@ -40,7 +40,7 @@ namespace ThreeSM.EnduranceConnector
     public sealed class TelemetryValues
     {
         [DataMember(Name = "connected", Order = 1)] public bool Connected { get; set; }
-        [DataMember(Name = "sessionTimeSeconds", Order = 2)] public double SessionTimeSeconds { get; set; }
+        [DataMember(Name = "sessionTimeSeconds", Order = 2)] public double? SessionTimeSeconds { get; set; }
         [DataMember(Name = "lap", Order = 3)] public int Lap { get; set; }
         [DataMember(Name = "completedLaps", Order = 4)] public int CompletedLaps { get; set; }
         [DataMember(Name = "lapTimeSeconds", Order = 5)] public double? LapTimeSeconds { get; set; }
@@ -84,9 +84,6 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "version", Order = 2)] public string Version { get; set; }
         [DataMember(Name = "dllUrl", Order = 3)] public string DllUrl { get; set; }
         [DataMember(Name = "sha256", Order = 4)] public string Sha256 { get; set; }
-        [DataMember(Name = "byteLength", Order = 5)] public long ByteLength { get; set; }
-        [DataMember(Name = "fileName", Order = 6)] public string FileName { get; set; }
-        [DataMember(Name = "signature", Order = 7)] public string Signature { get; set; }
-        [DataMember(Name = "checkedAt", Order = 8)] public string CheckedAt { get; set; }
+        [DataMember(Name = "checkedAt", Order = 5)] public string CheckedAt { get; set; }
     }
 }
