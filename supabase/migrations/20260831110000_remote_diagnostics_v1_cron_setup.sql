@@ -12,7 +12,7 @@
 
 -- 2. Schedule de dagelijkse cleanup via pg_cron.
 --    Idempotent: unschedule eerst de oude job als die bestaat, daarna opnieuw.
-DO $$
+DO $migration$
 BEGIN
     -- Verwijder oude job eerst (idempotent)
     PERFORM cron.unschedule('diagnostics-7day-cleanup');
@@ -24,4 +24,4 @@ BEGIN
         $$SELECT public.simhub_cleanup_old_diagnostic_events();$$
     );
 END
-$$;
+$migration$;
