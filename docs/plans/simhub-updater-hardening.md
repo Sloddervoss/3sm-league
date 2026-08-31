@@ -378,15 +378,16 @@ Expliciete, stabiele codes (voor persisted `LastUpdateErrorCode` + toekomstige D
 | 8 | HTTP timeout/failure | bestaande DLL intact, update-afgebroken | ⏳ (connector-side DownloadUpdateAsync) |
 | 9 | partial/truncated download | reject vóór install | ⏳ |
 | 10 | SimHub sluit normaal → install | `INSTALLING→SUCCESS`, back-up behouden | ✅ **T02 dekt dit** (dummy SimHub exit na 1.5s → install + SUCCESS) |
-| 11 | SimHub blijft >2 min → **WAITING_FOR_RESTART** | geen DLL-mutatie, staged behouden, netjes stoppen (exit 0) | ✅ **T05 PASS**: na 120.9s → state `WAITING_FOR_RESTART`, `lastUpdateErrorCode:UPDATE_WAITING`, target intact (0.3.8.0), exit 0 |
+| 11 | SimHub blijft >2 min → **WAITING_FOR_RESTART** | geen DLL-mutatie, staged behouden, netjes stoppen (exit 0) | ✅ **T05 PASS**: na 120.9s → state `WAITING_FOR_RESTART`, `lastUpdateErrorCode:UPDATE_WAITING`, target intact(0.3.8.0), exit   0 |
 | 12 | staged blijft valide aanwezig na WAITING | staged-dll + state `pendingStagedDll` behouden | ✅ **T05 PASS** (state file toont `pendingStagedDll`, staged-dir intact) |
-| 13 | WAITING → volgende schone exit → max 1 hervatpoging | één poging, geen auto-loop | ⏳ (resume-logica zit in connector InstallAvailableUpdateAsync; E2E volgt) |
+| 13 | WAITING → volgende schone exit → max 1 hervatpoging | één poging, geen auto-loop | ⏳ T13-harness gebouwd (herstart staged + installerst); vereist 4s-exit vir de dummy-PID-race; zie block toe |
 | 14 | tweede WAITING-failure → `FAILED`, geen retry-loop | state FAILED; geen loop | ⏳ |
-| 15 | crash vóór staging | target intact; next start schoon | ⏳ |
-| 16 | crash na staging vóór replace | journal-recovery → rollback naar last-known-good | ⏳ |
-| 17 | crash tijdens/na replace vóór re-verify | journal-recovery; geen half-state | ⏳ |
-| 18 | crash na re-verify vóór COMMITTED | rollback naar last-known-good | ⏳ |
-| 19 | crash na COMMITTED journal | bewezen complete commit herkend; journal opgeruimd | ⏳ |
+| 15 | crash vóór staging | target intact; next start schoon | ✅ **CRASH[1]** pre-replace: crash-run target=oud; recovery-run → 0.3.9.0 + SUCCESS |
+| 16 | crash na staging vóór replace | journal-recovery → rollback naar last-known-good | ✅ **CRASH[2]** post-stage-pre-replace: crash-run target=oud; recovery → 0.3.9.0 + SUCCESS |
+| 17 | crash direct na replace vóór re-verify | journal-recovery; geen half-state | ✅ **CRASH[3]** post-replace-pre-reverify: crash-run target=nieuw; recovery → 0.3.9.0 + SUCCESS |
+| 18 | crash na re-verify vóór COMMITTED | bewezen nieuwe + committed (DLL al geverifieerd nieuw, journal opgeruimd) | ✅ **CRASH[4]** post-reverify-pre-commit: crash-run target=nieuw; recovery → SUCCESS (na re-verify geldt nieuw als geldig; COMMITTED-volgende-run opgeruimd) |
+| 19 | crash na COMMITTED journal | bewezen complete commit herkend; journal opgeruimd | ✅ **CRASH[5]** post-commit: crash-run target=nieuw (gecommit); recovery (staged hersteld) → SUCCESS |
+| 19b | **rollback zelf faalt** (corrupte backup) | géén SUCCESS; state FAILED; journal behouden | ✅ **T29 PASS**: target beschadigd + corrupte backup → exit≠0, state `FAILED`+`UPDATE_INSTALL_FAILED`, journalExists=True |
 | 20 | **install-fout ná File.Replace → rollback** | target = vorige werkende DLL, state FAILED | ✅ **T08 PASS**: `--simulate-failure` → IOException na replace, log "Installatiefout; vorige DLL wordt atomair teruggezet", target terug naar 0.3.8.0, state `FAILED`+`UPDATE_INSTALL_FAILED` |
 | 21 | **tweede updater-start terwijl eerste bezig** | `Er draait al een 3SM-updater`, geen dubbele mutatie | ✅ **T10 PASS**: tweede start → `System.InvalidOperationException: Er draait al een 3SM-updater` (regel 41), exit≠0 |
 | 22 | 10-arg arg-contract in 0.3.9.0 | connector bevat `--started-utc-ticks --installed-sha256 --length --ready-event` | ✅ build + strings op 0.3.9.0-DLL + T02 handshake-bewijs |
