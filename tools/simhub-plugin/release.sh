@@ -5,8 +5,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ASSEMBLY="$SCRIPT_DIR/3SM.EnduranceConnector/AssemblyInfo.cs"
-PRIVATE_KEY="${HOME}/.hermes/keys/release-signing-private.pem"
-[ -f "$PRIVATE_KEY" ] || PRIVATE_KEY="$SCRIPT_DIR/release-signing-private.pem"
+# SimHub-release signing key: HOORT bij de public key die in de connector is gehard
+# (modulus 623ziGD... / eb6df3). De oude key (release-signing-private.pem) past daar NIET op.
+# Geen stille fallback naar de oude key; als de juiste key ontbreekt faalt de release hard.
+PRIVATE_KEY="${HOME}/.hermes/keys/3sm-simhub-release-private.pem"
+[ -f "$PRIVATE_KEY" ] || PRIVATE_KEY="$SCRIPT_DIR/3sm-simhub-release-private.pem"
 SSH_WIN="ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no vdevo@192.168.50.119"
 WS_WIN="C:/Users/vdevo/3sm/simhub-plugin"
 BUILD_SCRIPT_WIN="C:/Users/vdevo/3sm/build-plugin.ps1"
@@ -68,6 +71,8 @@ BUILT_VERSION=$(tr -d '\r\n' <<<"$BUILT_VERSION")
 [ "$BUILT_VERSION" = "$NEW" ] || { echo "FOUT: assemblyversie $BUILT_VERSION komt niet overeen met release $NEW"; exit 1; }
 
 if [ -f "$PRIVATE_KEY" ]; then
+  PUBLIC_KEY="${HOME}/.hermes/keys/3sm-simhub-release-public.pem"
+  [ -f "$PUBLIC_KEY" ] || PUBLIC_KEY="$SCRIPT_DIR/3sm-simhub-release-public.pem"
   MANIFEST_TMP="$(mktemp /tmp/3sm-manifest-XXXX)"
   write_manifest() {
     # Moet byte-voor-byte overeenkomen met BuildManifestPayload(): geen newline na fileName.
@@ -75,7 +80,7 @@ if [ -f "$PRIVATE_KEY" ]; then
   }
   write_manifest > "$MANIFEST_TMP"
   SIGNATURE=$(write_manifest | openssl dgst -sha256 -sign "$PRIVATE_KEY" | base64 -w0)
-  write_manifest | openssl dgst -sha256 -verify "$SCRIPT_DIR/release-signing-public.pem" \
+  write_manifest | openssl dgst -sha256 -verify "$PUBLIC_KEY" \
     -signature <(printf '%s' "$SIGNATURE" | base64 -d) >/dev/null 2>&1 || { echo "FOUT: Handtekeningverificatie"; exit 1; }
   echo "Manifest ondertekend en geverifieerd."
 else
