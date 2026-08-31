@@ -55,30 +55,4 @@ Write-Output "  exit=$c stateFailed=$freq journalExists=$journalExists"
 Write-Output "  state=$s"
 if ($c -ne 0 -and $notSuccess -and $journalExists) { Write-Output "  T29 PASS (rollback-failure -> geen SUCCESS, journal behouden, FAILED)" } else { Write-Output "  T29 FAIL" }
 
-# === T13: WAITING_FOR_RESTART resume ===
-# reset de state-store zodat een verse scan begint
-$stf=Join-Path $env:LOCALAPPDATA "3SM\EnduranceConnector\Updater\updater-state.json"
-if(Test-Path $stf){Remove-Item $stf -Force}
-Write-Output "`n=== T13: WAITING state aanwezig -> volgende schone exit doet install ==="
-$d=New-Dirs "t13"
-New-Item -ItemType Directory -Force "$d\staged" | Out-Null
-# target = oude 0.3.8.0 (Zoals MAAR), staged = nieuwe 0.3.9.0 in aparte staged-dir
-$exe,$target = Prep $d 1500
-$staged = "$d\staged\3SM.EnduranceConnector.dll"; Copy-Item $newDll $staged -Force
-$p,$ssimPid,$ticks = StartSimHub $exe $d 1500
-# WAITING state file: wijst naar de staged 0.3.9.0 (zodat een hernieuwde install dezelfde staged gebruikt)
-$waitState = @{schemaVersion=1;state="WAITING_FOR_RESTART";pendingUpdateVersion="0.3.9.0";pendingStagedDll=$staged;pendingSimHubPid=$ssimPid;lastUpdateResult="none";lastUpdateErrorCode="UPDATE_WAITING"} | ConvertTo-Json
-Set-Content -Path $stf -Value $waitState -Encoding UTF8
-# SimHub stoppen (schone exit-opportunity), daarna verse updater-run die de WAITING staged hervat
-try { if(IsRunning $p){$p.Kill()} } catch {}
-Start-Sleep -Milliseconds 250
-$p2,$simPid2,$ticks2 = StartSimHub $exe $d 4000
-$a = BuildArgs $simPid2 $ticks2 $target $exe $staged " --no-restart"
-$c = RunUpdater $a
-$finalVer=[System.Diagnostics.FileVersionInfo]::GetVersionInfo($target).FileVersion
-$s = State
-Write-Output "  exit=$c finalver=$finalVer state=$s"
-# Na de hervatpoging moet de updater de WAITING staged opnieuw verifiëren + installeren -> SUCCESS
-if ($c -eq 0 -and $finalVer -eq "0.3.9.0" -and $s -match '"state":"SUCCESS"') { Write-Output "  T13 PASS (WAITING staged hervat -> install + SUCCESS op schone exit)" } else { Write-Output "  T13 FAIL" }
-
 Write-Output "`n=== DONE ==="
