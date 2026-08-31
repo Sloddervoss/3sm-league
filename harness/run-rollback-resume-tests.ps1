@@ -18,7 +18,6 @@ function BuildArgs($simPid,$ticks,$target,$exe,$staged,$extra){
   return "--pid $simPid --started-utc-ticks $ticks --target `"$target`" --staged `"$staged`" --sha256 $(Sha256($staged)) --installed-sha256 $(Sha256($target)) --length $((Get-Item $staged).Length) --version 0.3.9.0 --simhub `"$exe`" --ready-event `"$rn`"" + $extra
 }
 $log=Join-Path $env:LOCALAPPDATA "3SM\EnduranceConnector\Updater\updater.log"
-function RunUpdater($a){ $p=Start-Process $updater -ArgumentList $a -PassThru -Wait; return $p.ExitCode }
 
 Write-Output "updater: $([System.Diagnostics.FileVersionInfo]::GetVersionInfo($updater).FileVersion)"
 
