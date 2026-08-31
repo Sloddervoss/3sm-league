@@ -380,8 +380,10 @@ Expliciete, stabiele codes (voor persisted `LastUpdateErrorCode` + toekomstige D
 | 10 | SimHub sluit normaal → install | `INSTALLING→SUCCESS`, back-up behouden | ✅ **T02 dekt dit** (dummy SimHub exit na 1.5s → install + SUCCESS) |
 | 11 | SimHub blijft >2 min → **WAITING_FOR_RESTART** | geen DLL-mutatie, staged behouden, netjes stoppen (exit 0) | ✅ **T05 PASS**: na 120.9s → state `WAITING_FOR_RESTART`, `lastUpdateErrorCode:UPDATE_WAITING`, target intact(0.3.8.0), exit   0 |
 | 12 | staged blijft valide aanwezig na WAITING | staged-dll + state `pendingStagedDll` behouden | ✅ **T05 PASS** (state file toont `pendingStagedDll`, staged-dir intact) |
-| 13 | WAITING → volgende schone exit → max 1 hervatpoging | één poging, geen auto-loop | ⏳ T13-harness gebouwd (herstart staged + installerst); vereist 4s-exit vir de dummy-PID-race; zie block toe |
-| 14 | tweede WAITING-failure → `FAILED`, geen retry-loop | state FAILED; geen loop | ⏳ |
+| 13 | WAITING → volgende schone exit → max 1 hervatpoging | één poging, geen auto-loop | ✅ **T13-A PASS** (deterministic events, `run-t13-deterministic.ps1`): WAITING persisted (target oud 0.3.8.0, staged 0.3.9.0), dummy deterministisch actief via named events, updater valideert PID, ALLOW_EXIT → clean sluiten → install → target 0.3.9.0 + SUCCESS, exit 0 |
+| 14 | tweede WAITING-failure → `FAILED`, geen retry-loop | state FAILED; geen loop | ✅ **T13-B PASS** (deterministic events): WAITING met corrupte staged → ValidatePayload faalt → state `FAILED`+`UPDATE_INSTALL_FAILED`, target last-known-good 0.3.8.0 intact, journal/state bruikbaar, géén tweede automatische poging |
+| 14b | **HTTP: timeout / connection / HTTP-error / truncated / wronglen / abort** | error, target intact, geen updater-launch, geen valide staged | ✅ **H1-H6 PASS**: elk → error + staging-bestand verwijderd (DownloadUpdateAsync catch), target nooit aangeraakt. H1 token-cancel, H2 conn-refused, H3 404+500, H4 truncated, H5 content-length mismatch, H6 abort mid-download |
+| 14c | **HTTP: recovery na failure** | eerdere mislukte download blokkeert volgende niet | ✅ **H7 PASS**: eerst /404 faalt, daarna /ok (300000B) slaagt |
 | 15 | crash vóór staging | target intact; next start schoon | ✅ **CRASH[1]** pre-replace: crash-run target=oud; recovery-run → 0.3.9.0 + SUCCESS |
 | 16 | crash na staging vóór replace | journal-recovery → rollback naar last-known-good | ✅ **CRASH[2]** post-stage-pre-replace: crash-run target=oud; recovery → 0.3.9.0 + SUCCESS |
 | 17 | crash direct na replace vóór re-verify | journal-recovery; geen half-state | ✅ **CRASH[3]** post-replace-pre-reverify: crash-run target=nieuw; recovery → 0.3.9.0 + SUCCESS |
@@ -401,7 +403,9 @@ Expliciete, stabiele codes (voor persisted `LastUpdateErrorCode` + toekomstige D
 
 > **Bewezen met echte productiecomponenten** (lokale E2E-harness op Beest, geen live endpoint/publicatie): T01 (0.3.8.0-defect-reproductie), T02 (0.3.9.0 10-arg handshake + upgrade + SUCCESS), T04/T06/T07 (fraud-reject vóór mutatie: SHA/version/length), T05 (WAITING_FOR_RESTART), T08 (rollback), T10 (concurrency-mutex), T19/T25-T28 (state-store). De harness gebruikt de echte `3SM.EnduranceConnector.Updater.exe`, echte dummy `SimHubWPF.exe` (PID/starttijd/pad-identiteit, named ready-event), echte `Global\`-mutex, echte staging/File.Replace/journal/rollback.
 >
-> **Nog te bouwen/te draaien:** crash/recovery-injectie op de 5 fasen (15-19), HTTP-timeout/partial (8/9), resume-hervatpoging (13/14), rollback-faalmode (29). Deze vereisen alleen extra harness-cases — geen code- of publicatiewijziging.
+> **RSA-keten (overname uit `main`, commit `af10454`, alleen-RSA-scope bevestigd via diff):** `ValidateReleaseManifest` + `ReleasePublicKeyXml` + `BuildPluginDownloadUri` + `BuildManifestPayload` + `VersionResponse.Signature` + `ConnectorSettings.LastKnownRemoteSignature`. Check-flow `metadataValid = ValidateReleaseManifest(info, remote)`, install-flow verifieert vóór download/staging. Test-seam `#if RSA_TEST_KEY` (test-build) vs productiekey (Release); géén runtime/config override. **RSA-ketentest A-F groen:** TEST-build A(geldig test-signed accept) B/C/D/E(reject); RELEASE-build F(test-signed weigerd) + B/C/D/E(reject).
+
+**Nog te bouwen/te draaien:** volledige regressie is gedraaid op Beest (schone omgeving) en bevestigd groen: T01-T10, CRASH[1-5], T29, T13-A/B (deterministisch), RSA A-F, waarna de HTTP H1-H7 los groen. Zie definitief rapport.
 
 ---
 
