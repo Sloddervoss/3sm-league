@@ -126,4 +126,34 @@ if ($Only -eq "" -or $Only -eq "t10") {
     try { if (-not $u1.HasExited) { $u1.Kill() } } catch {}
     if (IsRunning $p) { $p.Kill() }
 }
+if ($Only -eq "" -or $Only -eq "fraud") {
+    Write-Output "`n=== T4/T7/T6: fraud detectie (verkeerde SHA / version / length) -> reject vóór mutatie ==="
+    $d = New-Dirs "fraud"; $exe,$target,$staged = Prep $d 1500
+    $p,$simPid,$ticks,$pf = StartSimHub $exe $d 1500
+    $goodHash = Sha256 $staged
+    $goodLen = (Get-Item $staged).Length
+
+    # T4: verkeerde SHA
+    $badSha = ("0" * 64)
+    $a = "--pid $simPid --started-utc-ticks $ticks --target `"$target`" --staged `"$staged`" --sha256 $badSha --installed-sha256 $(Sha256($target)) --length $goodLen --version 0.3.9.0 --simhub `"$exe`" --no-restart"
+    $c = RunUpdater $a
+    $intact4 = (Sha256 $target) -eq (Sha256 $oldDll)
+    Write-Output "  T4(bad sha): exit=$c intact=$intact4"
+    if ($c -ne 0 -and $intact4) { Write-Output "  T4 PASS (SHA-reject vóór mutatie)" } else { Write-Output "  T4 FAIL" }
+
+    # T7: verkeerde version (manifest zegt 0.3.8.0 i.p.v. geclaimde 0.3.9.0)
+    $a = "--pid $simPid --started-utc-ticks $ticks --target `"$target`" --staged `"$staged`" --sha256 $goodHash --installed-sha256 $(Sha256($target)) --length $goodLen --version 0.3.8.0 --simhub `"$exe`" --no-restart"
+    $c = RunUpdater $a
+    $intact7 = (Sha256 $target) -eq (Sha256 $oldDll)
+    Write-Output "  T7(bad version): exit=$c intact=$intact7"
+    if ($c -ne 0 -and $intact7) { Write-Output "  T7 PASS (version-reject vóór mutatie)" } else { Write-Output "  T7 FAIL" }
+
+    # T6: verkeerde length
+    $a = "--pid $simPid --started-utc-ticks $ticks --target `"$target`" --staged `"$staged`" --sha256 $goodHash --installed-sha256 $(Sha256($target)) --length 12345 --version 0.3.9.0 --simhub `"$exe`" --no-restart"
+    $c = RunUpdater $a
+    $intact6 = (Sha256 $target) -eq (Sha256 $oldDll)
+    Write-Output "  T6(bad length): exit=$c intact=$intact6"
+    if ($c -ne 0 -and $intact6) { Write-Output "  T6 PASS (length-reject vóór mutatie)" } else { Write-Output "  T6 FAIL" }
+    if (IsRunning $p) { $p.Kill() }
+}
 Write-Output "`n=== DONE ==="

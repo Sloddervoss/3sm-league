@@ -53,6 +53,8 @@ namespace ThreeSM.EnduranceConnector.Updater
                 var simHubPath = FullPath(Required(options, "simhub"));
                 var noRestart = options.ContainsKey("no-restart");
                 var simulateFailure = options.ContainsKey("simulate-failure");
+                string crashPoint;
+                options.TryGetValue("simulate-crash", out crashPoint);
                 string readyEventName;
                 options.TryGetValue("ready-event", out readyEventName);
 
@@ -85,7 +87,7 @@ namespace ThreeSM.EnduranceConnector.Updater
                     throw new InvalidDataException("De geïnstalleerde DLL is gewijzigd nadat de update werd gestart.");
 
                 SetInstallingState(staged, expectedVersion.ToString(), pid);
-                Install(target, staged, installedHash, expectedHash, expectedVersion, expectedLength, simulateFailure);
+                Install(target, staged, installedHash, expectedHash, expectedVersion, expectedLength, simulateFailure, crashPoint);
                 Log("Update succesvol geïnstalleerd: " + expectedVersion);
                 SetSuccessState(expectedVersion.ToString());
 
@@ -133,7 +135,7 @@ namespace ThreeSM.EnduranceConnector.Updater
             }
         }
 
-        private static void Install(string target, string staged, string installedHash, string expectedHash, Version expectedVersion, long expectedLength, bool simulateFailure)
+        private static void Install(string target, string staged, string installedHash, string expectedHash, Version expectedVersion, long expectedLength, bool simulateFailure, string crashPoint)
         {
             var targetDirectory = Path.GetDirectoryName(target);
             var incoming = Path.Combine(targetDirectory, PluginFileName + ".3sm-new-" + Guid.NewGuid().ToString("N"));
@@ -141,22 +143,30 @@ namespace ThreeSM.EnduranceConnector.Updater
             var journal = target + ".3sm-journal";
             var replaced = false;
 
+            // TEST-ONLY crash-injectie (zoals --simulate-failure): simuleert abrupte
+            // process-termination op een exacte fase via Environment.FailFast (geen
+            // finally/rollback-run, geen exception-catch — een echte harde abort).
+            if (crashPoint == "pre-replace") CrashNow("pre-replace");
             try
             {
                 CopyAndFlush(staged, incoming, false);
                 ValidatePayload(incoming, expectedHash, expectedVersion, expectedLength);
                 WriteJournal(journal, target, backup, installedHash, expectedHash);
 
+                if (crashPoint == "post-stage-pre-replace") CrashNow("post-stage-pre-replace");
                 File.Replace(incoming, target, backup, true);
                 replaced = true;
 
                 if (simulateFailure) throw new IOException("Gesimuleerde fout na vervanging.");
+                if (crashPoint == "post-replace-pre-reverify") CrashNow("post-replace-pre-reverify");
                 ValidatePayload(target, expectedHash, expectedVersion, expectedLength);
                 if (!File.Exists(backup) || !FixedTimeEquals(Sha256(backup), installedHash))
                     throw new InvalidDataException("De vorige DLL is niet correct geback-upt.");
 
+                if (crashPoint == "post-reverify-pre-commit") CrashNow("post-reverify-pre-commit");
                 TryDelete(staged);
                 TryDelete(journal);
+                if (crashPoint == "post-commit") CrashNow("post-commit");
             }
             catch
             {
@@ -549,6 +559,13 @@ namespace ThreeSM.EnduranceConnector.Updater
         {
             if (value != null && value.IndexOf('"') >= 0) throw new ArgumentException("Ongeldig aanhalingsteken in startpad.");
             return "\"" + (value ?? string.Empty) + "\"";
+        }
+
+        // TEST-ONLY crash-injectie (Environment.FailFast = harde abort, geen try-catch/finally).
+        private static void CrashNow(string point)
+        {
+            Log("TEST-CRASH injectie op fase: " + point);
+            Environment.FailFast("3SM updater TEST-crash injectie: " + point);
         }
 
         private static void Log(string message)
