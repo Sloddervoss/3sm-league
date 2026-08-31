@@ -74,6 +74,20 @@ Record exactly one artifact: branch, commit, filename, version, byteLength, SHA2
 rebuild and publish different bytes. A rebuild invalidates the freeze and requires full
 re-verification.
 
+### Two distinct release artifacts — MACHINE vs HUMAN
+Every release publishes two deliberately separate artifacts from the same frozen DLL:
+
+1. **MACHINE artifact:** versioned `.dll` for the automatic updater. This is the artifact in
+   the signed manifest; its SHA256/byteLength/signature are frozen.
+2. **HUMAN artifact:** versioned `.zip` containing the byte-identical canonical
+   `3SM.EnduranceConnector.dll`, current `INSTALLEREN.txt`, and optionally `SHA256.txt`.
+
+The public-facing website button points to the HUMAN ZIP. The updater always uses only the
+MACHINE DLL. The ZIP is never part of the updater manifest and must not alter the updater
+DLL hash/signature. If a stable `3SM.EnduranceConnector-latest.zip` alias is used, update it
+only after the versioned ZIP is independently verified (HTTP 200, ZIP content-type, opens
+correctly, installation text present, inner DLL hash exactly matches the frozen MACHINE DLL).
+
 ## Phase 2 — PUBLICATION (only after explicit GO)
 
 Order matters: artifact → download → sign → config → manifest last.

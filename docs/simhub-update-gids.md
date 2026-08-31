@@ -15,6 +15,18 @@ Vanaf de updater-bootstrap (`0.3.0.0`) verloopt een update zo:
    plaatst de nieuwe DLL atomair en start SimHub via de normale Explorer-shell opnieuw.
 6. Bij een installatiefout wordt de geverifieerde vorige DLL teruggezet.
 
+## Handmatige installatie via de publieke ZIP
+
+Voor een handmatige installatie download je `3SM.EnduranceConnector-latest.zip` via de
+3SM-site. Sluit SimHub volledig af, hef zo nodig vóór het uitpakken de Windows-blokkering op
+de ZIP op, pak de ZIP uit en volg `INSTALLEREN.txt`. Plaats alleen de canoniek benoemde
+`3SM.EnduranceConnector.dll` in de map met `SimHubWPF.exe`; laat geen tweede versioned kopie
+in die map staan. Start SimHub daarna opnieuw en controleer de connectorversie.
+
+De overgang `0.3.8.0 → 0.3.9.0` moet door het bekende 0.3.8.0 self-update-defect éénmalig
+handmatig worden uitgevoerd. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer via
+de normale automatische updater.
+
 De eerste installatie van een versie van vóór `0.3.0.0` naar de updater-bootstrap blijft
 eenmalig handmatig: sluit SimHub, hernoem een versioned download zoals
 `3SM.EnduranceConnector-0.3.0.0.dll` eerst naar exact `3SM.EnduranceConnector.dll`, en plaats
