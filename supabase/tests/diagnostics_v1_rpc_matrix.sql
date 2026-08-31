@@ -25,7 +25,7 @@ INSERT INTO simhub_devices (id, owner_user_id, connector_id, device_name, token_
 VALUES
  ('10000000-0000-0000-0000-000000000001','cccccccc-0000-4000-8000-000000000001','TEST-PC','TEST-PC',
   'aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd',
-  'active_binding','test-session-1',0)
+  'inactive','test-session-1',0)
 ON CONFLICT (id) DO NOTHING;
 
 -- Second device (for unbound test)
@@ -33,7 +33,7 @@ INSERT INTO simhub_devices (id, owner_user_id, connector_id, device_name, token_
 VALUES
  ('20000000-0000-0000-0000-000000000002','cccccccc-0000-4000-8000-000000000001','UNBOUND-PC','UNBOUND-PC',
   'bbbbccccbbbbccccbbbbccccbbbbccccbbbbccccbbbbccccbbbbccccbbbbcccc',
-  'active_binding','test-session-2',0)
+  'inactive','test-session-2',0)
 ON CONFLICT (id) DO NOTHING;
 
 -- Revoked device (for T04)
