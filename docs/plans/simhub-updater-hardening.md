@@ -371,10 +371,10 @@ Expliciete, stabiele codes (voor persisted `LastUpdateErrorCode` + toekomstige D
 | 1 | **0.3.8.0 6-arg → defect** | 6 args → updater gooit `Verplicht updaterargument ontbreekt: --started-utc-ticks`, exit≠0, target intact | ✅ **T01 PASS**: exit −532462766 (0xE0434352), log `System.ArgumentException … --started-utc-ticks` bij `Program.Required` (regel 479), target-sha = 0.3.8.0 (intact) |
 | 2 | **0.3.9.0 10-arg → install** | 10 args + ready-event → handshake, `INSTALLING→SUCCESS`, target=0.3.9.0 | ✅ **T02 PASS**: exit 0, targetver=0.3.9.0, state file `SUCCESS` + `lastUpdateResult:success`, ready-event handshake geaccepteerd |
 | 3 | upgrade 0.3.8.0 → 0.3.9.0 (volledige cyclus) | download→verify→stage→install→SUCCESS | ✅ **T02 + T01 dekt contract/upgrade pad**. Echte manifest-live (lease-upgrade) is 🔴 tot publicatie |
-| 4 | wrong SHA → reject vóór mutatie | afwijzen; target intact | ⏳ (ValidatePayload-code aanwezig; batch toe te voegen) |
+| 4 | wrong SHA → reject vóór mutatie | afwijzen; target intact | ✅ **T4 PASS**: bad-SHA-invocatie → exit −532462766, target intact (0.3.8.0) |
 | 5 | wrong RSA signature → reject | `UPDATE_SIGNATURE_FAILED` vóór mutatie | 🔴 RSA-metadata-check zit op de **main-lijn**, NIET in de 0.3.9.0-release (die verifieert SHA-256, géén embedded-RSA-manifest) — zie sectie 2 "feitcorrectie" |
-| 6 | wrong byteLength → reject | afwijzen vóór mutatie | ⏳ |
-| 7 | wrong fileName/version → reject | `InvalidDataException` bij ValidatePayload/ValidatePaths | ⏳ |
+| 6 | wrong byteLength → reject | afwijzen vóór mutatie | ✅ **T6 PASS**: bad-length-invocatie → exit ≠ 0, target intact |
+| 7 | wrong fileName/version → reject | `InvalidDataException` bij ValidatePayload/ValidatePaths | ✅ **T7 PASS**: bad-version-invocatie → exit ≠ 0, target intact |
 | 8 | HTTP timeout/failure | bestaande DLL intact, update-afgebroken | ⏳ (connector-side DownloadUpdateAsync) |
 | 9 | partial/truncated download | reject vóór install | ⏳ |
 | 10 | SimHub sluit normaal → install | `INSTALLING→SUCCESS`, back-up behouden | ✅ **T02 dekt dit** (dummy SimHub exit na 1.5s → install + SUCCESS) |
@@ -398,9 +398,9 @@ Expliciete, stabiele codes (voor persisted `LastUpdateErrorCode` + toekomstige D
 | 28 | state-store: multiwriter (plugin+updater) | last-writer-wins, geen corruptie, geen crash | ✅ **T19 PASS** (2 threads × 60) |
 | 29 | rollback zelf faalt | duidelijke RECOVERY_REQUIRED/FAILED, geen verborgen SUCCESS | ⏳ (RestoreBackupAtomic-waaier) |
 
-> **Bewezen met echte productiecomponenten** (lokale E2E-harness op Beest, geen live endpoint/publicatie): T01 (0.3.8.0-defect-reproductie), T02 (0.3.9.0 10-arg handshake + upgrade + SUCCESS), T05 (WAITING_FOR_RESTART), T08 (rollback), T10 (concurrency-mutex), T19/T25-T28 (state-store). De harness gebruikt de echte `3SM.EnduranceConnector.Updater.exe`, echte dummy `SimHubWPF.exe` (PID/starttijd/pad-identiteit, named ready-event), echte `Global\`-mutex, echte staging/File.Replace/journal/rollback.
+> **Bewezen met echte productiecomponenten** (lokale E2E-harness op Beest, geen live endpoint/publicatie): T01 (0.3.8.0-defect-reproductie), T02 (0.3.9.0 10-arg handshake + upgrade + SUCCESS), T04/T06/T07 (fraud-reject vóór mutatie: SHA/version/length), T05 (WAITING_FOR_RESTART), T08 (rollback), T10 (concurrency-mutex), T19/T25-T28 (state-store). De harness gebruikt de echte `3SM.EnduranceConnector.Updater.exe`, echte dummy `SimHubWPF.exe` (PID/starttijd/pad-identiteit, named ready-event), echte `Global\`-mutex, echte staging/File.Replace/journal/rollback.
 >
-> **Nog te bouwen/te draaien:** crash/recovery-injectie op de 5 fasen (15-19), fout-pad batch (SHA/byteLength/version), resume-hervatpoging (13/14), rollback-faalmode (29). Deze vereisen alleen extra harness-cases — geen code- of publicatiewijziging.
+> **Nog te bouwen/te draaien:** crash/recovery-injectie op de 5 fasen (15-19), HTTP-timeout/partial (8/9), resume-hervatpoging (13/14), rollback-faalmode (29). Deze vereisen alleen extra harness-cases — geen code- of publicatiewijziging.
 
 ---
 
