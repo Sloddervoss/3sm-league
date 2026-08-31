@@ -14,6 +14,28 @@ koppeling intact — je hoeft **niet opnieuw te koppelen** na elke update.
 **Pairing blijft:** de device-token staat versleuteld opgeslagen en wordt bij upgrade
 bewaard. Je hoeft zelden een nieuwe paar-code aan te vragen.
 
+## ⚠️ Eenmalige bootstrap van 0.3.8.0 → 0.3.9.0 (belangrijk)
+
+0.3.8.0 had een defect: de ingebedde updater vereist 10 invoerargumenten, maar de
+0.3.8.0-connector gaf er maar 6 mee. Daardoor **lukte de automatische self-update-knop
+niet** (de updater stopte met `Verplicht updaterargument ontbreekt: --started-utc-ticks`).
+
+**Vanaf 0.3.9.0 werkt de automatische self-update weer normaal.** Die énige overgang van
+0.3.8.0 naar 0.3.9.0 gebeurt daarom handmatig, via dezelfde officiële methode als elke
+andere update (hierboven), die het defect volledig omzeilt:
+
+1. Download het **0.3.9.0**-artifact (deploy-bundle / GitHub Actions).
+2. Sluit SimHub volledig af.
+3. Vervang de oude `3SM.EnduranceConnector.dll` door de 0.3.9.0-variant (map met `SimHubWPF.exe`).
+4. Rechtsklik → Eigenschappen → zo nodig **Blokkering opheffen**.
+5. Start SimHub opnieuw.
+
+**Controle achteraf (optioneel):** je ziet in de status van de plugin of 0.3.9.0 actief is.
+De oude 0.3.8.0-settings en je koppeling (device-token) blijven behouden.
+
+Daarna kan de plugin weer **automatisch** toekomstige versies installeren via de normale
+geharde 10-arg self-updater (geen handmatige vervanging meer nodig).
+
 ## Waarom géén automatische update?
 
 SimHub heeft **geen native auto-update** voor externe plugins die naast `SimHubWPF.exe`

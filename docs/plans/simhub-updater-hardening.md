@@ -452,3 +452,30 @@ De bestaande 0.3.8.0 en M4 blijven ongemoeid; er wordt nu nog niets gebouwd.
 - **Vóór definitief bouwen/publiceren van 0.3.9.0:** indien mogelijk nog de echte CAT-PC `%LOCALAPPDATA%\3SM\EnduranceConnector\Updater\updater.log` + relevante `SimHub.log` rond de crash bekijken.
 - Als die logs **niet meer beschikbaar** zijn: dat rapporteren, en de updater-hardening behandelen als **preventieve robustness-release** (geen bewezen root-cause-fix).
 - Dit onderzoek kan later **parallel** lopen zodra CAT-PC beschikbaar is.
+
+---
+
+## 18. Publicatieplan (nog NIET uitgevoerd — vereist aparte GO)
+
+**Doel:** bestaande 0.3.8.0-clients naar 0.3.9.0 via eenmalige handmatige bootstrap (updategids, officiële route A), daarna normale self-update.
+
+### Release-artifact (definitief, NIET herbouwen na verificatie)
+- **Commit:** `c2d9eee` (`release/simhub-0.3.9.0`)
+- **Bestand:** `3SM.EnduranceConnector.dll` (Release, zonder `RSA_TEST_KEY`)
+- **Assembly/File versie:** 0.3.9.0 · **ByteLength:** 317440
+- **SHA256:** `f5b94834d60603763c1967d06a6323fe1860786b39c26a2dd23df483bce8af17`
+- **Productie RSA public key:** aanwezig (`623ziGD...`) ✓ · **Testkey (RSA_TEST_KEY):** afwezig ✓
+- **Embedded 10-arg updater:** aanwezig (`--started-utc-ticks --installed-sha256 --length --ready-event`, `Verplicht updaterargument ontbreekt`) ✓
+- **Releasebestanden:** `3SM.EnduranceConnector.dll` (embedded updater in de DLL; bij deploy-bundle evt. externe updater-exe erbij)
+
+### Stappen
+1. Huidige live 0.3.8.0 manifest/artifact-state vastleggen (versie, SHA, bytes, signature) voor vergelijking/rollback.
+2. Definitieve 0.3.9.0-artifact uploaden naar `/downloads/3SM.EnduranceConnector-0.3.9.0.dll`.
+3. Server-side hash/bytes controleren (SHA256 `f5b94834...`, length 317440).
+4. Signature/manifest genereren met de productie-private sleutel + controleren (`ValidateReleaseManifest`-payload: version\ndllUrl\nsha256\nbyteLength\nfileName).
+5. Downloadendpoint controleren: `application/octet-stream`, exacte bytes.
+6. Pas daarna `simhub-version`-manifest omzetten naar 0.3.9.0.
+7. Publieke endpoint opnieuw uitlezen + hash/length/signature verifiëren (connector-lens).
+8. **Communiceren:** 0.3.8.0-clients eerst handmatige bootstrap (updategids); vanaf 0.3.9.0 werkt de normale self-update.
+
+**Nog NIET uitgevoerd.** Live `simhub-version` + downloads blijven op 0.3.8.0 tot aparte publicatie-GO.
