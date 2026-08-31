@@ -8,6 +8,10 @@ const exactTranslations: Record<string, string> = {
   "Een onderdeel van de pagina kon niet geladen worden. Probeer de pagina te verversen.": "A part of this page could not be loaded. Try refreshing the page.",
   "Probeer opnieuw": "Try again",
   "Terug naar home": "Back to home",
+  "Download 3SM Endurance Connector": "Download 3SM Endurance Connector",
+  "Versie 0.3.9.0 · Handmatige installatie": "Version 0.3.9.0 · Manual installation",
+  "Sluit SimHub, pak de ZIP uit en volg INSTALLEREN.txt. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer automatisch.": "Close SimHub, extract the ZIP and follow INSTALLEREN.txt. From version 0.3.9.0 onward, future supported updates work automatically again.",
+  "ZIP downloaden": "Download ZIP",
 
   Home: "Home",
   Kalender: "Calendar",
