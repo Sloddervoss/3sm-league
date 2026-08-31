@@ -18,6 +18,30 @@ publication requires explicit GO from Vincent.
 Private keys live under `~/.hermes/keys/` on the Hermes VM. Never commit or log them.
 Only public key / modulus / fingerprint / hash may appear in reports.
 
+## `/downloads/` — release-managed, excluded from website deploy
+
+The `/var/www/3sm/downloads/` directory is **RELEASE-MANAGED** and is **NOT** managed by the normal
+website deploy. The `deploy.sh` rsync command explicitly excludes `downloads/` via
+`--exclude='downloads/'` to prevent accidental deletion of manually managed artifacts.
+
+Every SimHub release manages three types of files in `/downloads/`:
+
+1. **MACHINE artifact** — versioned `.dll` (e.g. `3SM.EnduranceConnector-0.3.9.0.dll`).
+   Used by the automatic updater, frozen SHA/bytes, signed manifest. Uploaded during Phase 2
+   step 2. Never deleted by deploy.
+
+2. **HUMAN artifact** — versioned `.zip` (e.g. `3SM.EnduranceConnector-0.3.9.0.zip`).
+   Contains the byte-identical frozen DLL, current `INSTALLEREN.txt`, and `SHA256.txt`.
+   Created during Phase 1 as part of freeze. Uploaded during Phase 2 alongside the DLL.
+
+3. **Alias** — `3SM.EnduranceConnector-latest.zip`.
+   Updated only after the versioned ZIP is verified (HTTP 200, application/zip, opens
+   correctly, inner DLL SHA matches frozen MACHINE DLL). The alias is a hard copy of the
+   versioned ZIP, not a symlink.
+
+Historical artifacts (older DLLs, manifests) remain in `/downloads/` permanently for
+rollback reference. The `--delete-after` exclusion ensures they persist across deploys.
+
 Before any Windows work, confirm Beest is on:
 ```bash
 timeout 4 bash -c "echo > /dev/tcp/192.168.50.119/22" 2>/dev/null && echo OPEN || echo CLOSED
