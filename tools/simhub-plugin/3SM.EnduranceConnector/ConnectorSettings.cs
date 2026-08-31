@@ -55,6 +55,8 @@ namespace ThreeSM.EnduranceConnector
         public string LastKnownRemoteVersion = string.Empty;
         public string LastKnownRemoteDllUrl = string.Empty;
         public string LastKnownRemoteSha256 = string.Empty;
+        public string LastKnownRemoteFileName = string.Empty;
+        public long LastKnownRemoteByteLength = 0;
         public DateTime? LastVersionCheckUtc;
     }
 }

@@ -49,6 +49,8 @@ namespace ThreeSM.EnduranceConnector
         private string _lastTelemetrySummary = "Nog geen succesvolle telemetryverzending.";
         private string _updateStatus = "Updatecontrole nog niet gestart.";
         private bool _updateAvailable;
+        private UpdaterStateStore _updaterStateStore;
+        private UpdaterState _updaterState;
 
         public PluginManager PluginManager { get; set; }
         public ConnectorSettings Settings { get; internal set; }
@@ -80,6 +82,7 @@ namespace ThreeSM.EnduranceConnector
                 Settings.SchemaVersion = 3;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
+            InitUpdaterStateStore();
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
             if (!string.IsNullOrWhiteSpace(Settings.DeviceTokenProtected) && string.IsNullOrWhiteSpace(_deviceToken))
             {
@@ -125,11 +128,13 @@ namespace ThreeSM.EnduranceConnector
                 string versionText;
                 string dllUrl;
                 string expectedHash;
+                long expectedLength;
                 lock (_settingsGate)
                 {
                     versionText = Settings.LastKnownRemoteVersion;
                     dllUrl = Settings.LastKnownRemoteDllUrl;
                     expectedHash = Settings.LastKnownRemoteSha256;
+                    expectedLength = Settings.LastKnownRemoteByteLength;
                 }
 
                 Version remoteVersion;
@@ -157,38 +162,65 @@ namespace ThreeSM.EnduranceConnector
                 var stagedDll = Path.Combine(stagingDirectory, "3SM.EnduranceConnector.dll");
                 var updaterExe = Path.Combine(stagingDirectory, "3SM.EnduranceConnector.Updater.exe");
 
-                await DownloadUpdateAsync(downloadUri, stagedDll, 5 * 1024 * 1024, _shutdown.Token).ConfigureAwait(true);
+                // FSM: download bezig.
+                SetUpdaterState(new UpdaterState { state = "DOWNLOADING", pendingUpdateVersion = remoteVersion.ToString(), pendingStagedDll = stagedDll });
+
+                var downloadCap = expectedLength > 0 && expectedLength <= int.MaxValue ? (int)expectedLength : 5 * 1024 * 1024;
+                await DownloadUpdateAsync(downloadUri, stagedDll, downloadCap, _shutdown.Token).ConfigureAwait(true);
                 if (!FixedTimeEquals(ComputeSha256(stagedDll), expectedHash))
                     throw new InvalidDataException("SHA-256-controle van de update is mislukt.");
 
                 Version payloadVersion;
                 if (!Version.TryParse(FileVersionInfo.GetVersionInfo(stagedDll).FileVersion, out payloadVersion) || payloadVersion != remoteVersion)
                     throw new InvalidDataException("De gedownloade DLL heeft niet de aangekondigde versie.");
+                if (System.Reflection.AssemblyName.GetAssemblyName(stagedDll).Version != remoteVersion)
+                    throw new InvalidDataException("De managed assemblyversie komt niet overeen met de aangekondigde versie.");
+
+                // FSM: download verify OK -> STAGED.
+                SetUpdaterState(new UpdaterState { state = "STAGED", pendingUpdateVersion = remoteVersion.ToString(), pendingStagedDll = stagedDll });
 
                 ExtractUpdater(updaterExe);
                 var currentProcess = Process.GetCurrentProcess();
-                var simHubPath = currentProcess.MainModule.FileName;
+                var simHubPath = Path.GetFullPath(currentProcess.MainModule.FileName);
                 if (!string.Equals(Path.GetFileName(simHubPath), "SimHubWPF.exe", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Het actieve SimHub-proces kon niet veilig worden vastgesteld.");
 
-                var targetDll = this.GetType().Assembly.Location;
+                var targetDll = Path.GetFullPath(this.GetType().Assembly.Location);
+                var expectedTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(simHubPath), "3SM.EnduranceConnector.dll"));
+                if (!string.Equals(targetDll, expectedTarget, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("De geladen plugin staat niet op het verwachte SimHub-pad; gebruik handmatige installatie.");
+                var installedHash = ComputeSha256(targetDll);
+                var readyEventName = "Local\\3SM.EnduranceConnector.Updater.Ready." + Guid.NewGuid().ToString("N");
                 var arguments =
                     "--pid " + QuoteArgument(currentProcess.Id.ToString()) +
+                    " --started-utc-ticks " + QuoteArgument(currentProcess.StartTime.ToUniversalTime().Ticks.ToString()) +
                     " --target " + QuoteArgument(targetDll) +
                     " --staged " + QuoteArgument(stagedDll) +
                     " --sha256 " + QuoteArgument(expectedHash) +
+                    " --installed-sha256 " + QuoteArgument(installedHash) +
+                    " --length " + QuoteArgument(expectedLength.ToString()) +
                     " --version " + QuoteArgument(remoteVersion.ToString()) +
-                    " --simhub " + QuoteArgument(simHubPath);
+                    " --simhub " + QuoteArgument(simHubPath) +
+                    " --ready-event " + QuoteArgument(readyEventName);
 
-                var updaterProcess = Process.Start(new ProcessStartInfo
+                // Houd de geëxtraheerde helper vast (read-share houdt write/delete-lock af) zodat
+                // niemand de helper tussentijds kan vervangen, via dezelfde ready-before-shutdown
+                // handshake als de geharde updater verwacht.
+                using (var updaterLock = new FileStream(updaterExe, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var readyEvent = new System.Threading.EventWaitHandle(false, EventResetMode.ManualReset, readyEventName))
                 {
-                    FileName = updaterExe,
-                    Arguments = arguments,
-                    WorkingDirectory = stagingDirectory,
-                    UseShellExecute = true,
-                    Verb = "runas",
-                });
-                if (updaterProcess == null) throw new InvalidOperationException("De externe updater kon niet worden gestart.");
+                    var updaterProcess = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = updaterExe,
+                        Arguments = arguments,
+                        WorkingDirectory = stagingDirectory,
+                        UseShellExecute = true,
+                        Verb = "runas",
+                    });
+                    if (updaterProcess == null) throw new InvalidOperationException("De externe updater kon niet worden gestart.");
+                    if (!readyEvent.WaitOne(TimeSpan.FromSeconds(15)))
+                        throw new TimeoutException("De externe updater bevestigde zijn proceshandle niet op tijd.");
+                }
 
                 SetUpdateStatus("Updater gestart · SimHub wordt afgesloten en opnieuw gestart.");
                 if (Application.Current != null && Application.Current.MainWindow != null)
@@ -198,14 +230,17 @@ namespace ThreeSM.EnduranceConnector
             }
             catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
             {
+                SetUpdaterState(new UpdaterState { state = "IDLE" });
                 SetUpdateStatus("Update geannuleerd door afsluiten van SimHub.");
             }
             catch (Win32Exception error) when (error.NativeErrorCode == 1223)
             {
+                SetUpdaterState(new UpdaterState { state = "FAILED", lastUpdateErrorCode = "UPDATE_UAC_CANCELLED" });
                 SetUpdateStatus("Update geannuleerd bij de Windows-bevestiging.");
             }
             catch (Exception error)
             {
+                SetUpdaterState(new UpdaterState { state = "FAILED", lastUpdateErrorCode = "UPDATE_INSTALL_FAILED", lastUpdateResult = "failure:install" });
                 SetUpdateStatus("Update-installatie mislukt · " + error.Message);
                 SimHub.Logging.Current.Error("3SM Endurance: update-installatie mislukt: " + error);
             }
@@ -229,6 +264,7 @@ namespace ThreeSM.EnduranceConnector
                 lock (_settingsGate) lastCheck = Settings.LastVersionCheckUtc;
                 if (!force && lastCheck.HasValue && DateTime.UtcNow - lastCheck.Value < TimeSpan.FromHours(24)) return;
                 if (force) SetUpdateStatus("Controleren op updates…");
+                SetUpdaterState(new UpdaterState { state = "CHECKING" });
 
                 var localVersion = this.GetType().Assembly.GetName().Version;
                 var endpoint = BuildRelayEndpoint("simhub-version");
@@ -246,6 +282,8 @@ namespace ThreeSM.EnduranceConnector
                         Settings.LastKnownRemoteVersion = info.Version.Trim();
                         Settings.LastKnownRemoteDllUrl = info.DllUrl?.Trim() ?? string.Empty;
                         Settings.LastKnownRemoteSha256 = info.Sha256?.Trim() ?? string.Empty;
+                        Settings.LastKnownRemoteFileName = info.FileName?.Trim() ?? string.Empty;
+                        Settings.LastKnownRemoteByteLength = info.ByteLength;
                         Settings.LastVersionCheckUtc = DateTime.UtcNow;
                         this.SaveCommonSettings("ConnectorSettings", Settings);
                     }
@@ -256,9 +294,16 @@ namespace ThreeSM.EnduranceConnector
                             && IsAllowedPluginDownload(downloadUri, remote)
                             && IsSha256(info.Sha256);
                         SetUpdateAvailable(metadataValid);
-                        SetUpdateStatus(metadataValid
-                            ? "Nieuwe versie " + remote + " beschikbaar · klaar voor éénklik-installatie."
-                            : "Nieuwe versie " + remote + " beschikbaar, maar veilige installatiemetadata ontbreekt.");
+                        if (metadataValid)
+                        {
+                            SetUpdaterState(new UpdaterState { state = "UPDATE_AVAILABLE", pendingUpdateVersion = remote.ToString() });
+                            SetUpdateStatus("Nieuwe versie " + remote + " beschikbaar · klaar voor éénklik-installatie.");
+                        }
+                        else
+                        {
+                            SetUpdaterState(new UpdaterState { state = "IDLE" });
+                            SetUpdateStatus("Nieuwe versie " + remote + " beschikbaar, maar veilige installatiemetadata ontbreekt.");
+                        }
                         if (Volatile.Read(ref _ending) == 0) Status = metadataValid
                             ? "Nieuwe versie beschikbaar · klaar voor installatie"
                             : "Nieuwe versie beschikbaar · metadata ongeldig";
@@ -266,6 +311,7 @@ namespace ThreeSM.EnduranceConnector
                     else
                     {
                         SetUpdateAvailable(false);
+                        SetUpdaterState(new UpdaterState { state = "IDLE" });
                         SetUpdateStatus("Actueel · geïnstalleerd " + localVersion + " · server " + remote + " · gecontroleerd " + DateTime.Now.ToString("HH:mm:ss"));
                     }
                 }
@@ -381,6 +427,53 @@ namespace ThreeSM.EnduranceConnector
         }
 
         public Control GetWPFSettingsControl(PluginManager pluginManager) { return new SettingsControl(this); }
+
+        internal void InitUpdaterStateStore()
+        {
+            try
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "3SM", "EnduranceConnector", "Updater");
+                _updaterStateStore = new UpdaterStateStore(dir);
+                _updaterState = _updaterStateStore.Load();
+                // Fallback B: NO automatic install/resume on startup. WAITING state is
+                // merely surfaced to the user; install resumes only on an explicit trigger.
+                if (_updaterState != null && _updaterState.state == "WAITING_FOR_RESTART")
+                {
+                    SetUpdateStatus("Er staat een update klaar die wacht op installeren · open Update-installatie opnieuw.");
+                }
+            }
+            catch
+            {
+                _updaterStateStore = null;
+                _updaterState = null;
+            }
+        }
+
+        internal void SetUpdaterState(UpdaterState next)
+        {
+            if (_updaterStateStore == null) { _updaterState = next; return; }
+            try
+            {
+                if (_updaterStateStore.TryUpdate(cur => CopyInto(cur, next))) _updaterState = _updaterStateStore.Load();
+            }
+            catch { _updaterState = next; }
+        }
+
+        private static void CopyInto(UpdaterState target, UpdaterState source)
+        {
+            if (target == null || source == null) return;
+            target.schemaVersion = source.schemaVersion;
+            target.state = source.state;
+            target.stateChangedUtc = source.stateChangedUtc;
+            target.pendingUpdateVersion = source.pendingUpdateVersion;
+            target.pendingStagedDll = source.pendingStagedDll;
+            target.pendingSimHubPid = source.pendingSimHubPid;
+            target.lastUpdateResult = source.lastUpdateResult;
+            target.lastUpdateUtc = source.lastUpdateUtc;
+            target.lastUpdateErrorCode = source.lastUpdateErrorCode;
+        }
 
         internal void UpdateSettings(Action<ConnectorSettings> update)
         {

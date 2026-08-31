@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using ThreeSM.EnduranceConnector;
 
 namespace ThreeSM.EnduranceConnector.Updater
 {
@@ -59,15 +60,34 @@ namespace ThreeSM.EnduranceConnector.Updater
                 ValidatePayload(staged, expectedHash, expectedVersion, expectedLength);
                 simHubProcess = AcquireSimHubProcess(pid, startedUtcTicks, simHubPath, noRestart);
                 SignalReady(readyEventName, pid);
-                WaitForSimHubExit(simHubProcess, noRestart, TimeSpan.FromMinutes(2));
+                bool waiting = false;
+                try
+                {
+                    WaitForSimHubExit(simHubProcess, noRestart, TimeSpan.FromMinutes(2));
+                }
+                catch (TimeoutException)
+                {
+                    // Fallback B: SimHub stop niet binnen 2 min. NIET forceren, NIET de DLL
+                    // vervangen. Staged behouden; updater stopt netjes. Installatie wordt bij
+                    // een volgende expliciete gebruikersactie hervat (ook zonder resterende hook).
+                    waiting = true;
+                }
+                if (waiting)
+                {
+                    Log("SimHub sloot niet binnen twee minuten af; update wordt uitgesteld tot een schone exit.");
+                    SetWaitingForRestart(staged, expectedVersion.ToString(), pid);
+                    return 0;
+                }
                 ValidatePaths(target, staged, simHubPath);
                 ValidatePayload(staged, expectedHash, expectedVersion, expectedLength);
                 RecoverPreviousTransaction(target, installedHash);
                 if (!FixedTimeEquals(Sha256(target), installedHash))
                     throw new InvalidDataException("De geïnstalleerde DLL is gewijzigd nadat de update werd gestart.");
 
+                SetInstallingState(staged, expectedVersion.ToString(), pid);
                 Install(target, staged, installedHash, expectedHash, expectedVersion, expectedLength, simulateFailure);
                 Log("Update succesvol geïnstalleerd: " + expectedVersion);
+                SetSuccessState(expectedVersion.ToString());
 
                 if (!noRestart)
                 {
@@ -90,6 +110,7 @@ namespace ThreeSM.EnduranceConnector.Updater
             catch (Exception error)
             {
                 Log("FOUT: " + error);
+                SetFailedState(error);
                 if (!silent)
                 {
                     MessageBox.Show(
@@ -538,6 +559,78 @@ namespace ThreeSM.EnduranceConnector.Updater
                 File.AppendAllText(LogPath, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine, Encoding.UTF8);
             }
             catch { }
+        }
+
+        // --- Dedicated updater-state persistence (losse FSM, niet ConnectorSettings) ---
+        // Gebruikt dezelfde dedicated state store als de connector. De updater is eigenaar
+        // van STAGED/WAITING -> INSTALLING -> SUCCESS|FAILED transities en lastUpdate*.
+        // Het update-journal (.3sm-journal) blijft de fysieke install/recovery-authority.
+        private static void WriteUpdaterState(Action<UpdaterState> mutate)
+        {
+            try
+            {
+                var store = new UpdaterStateStore(LogDirectory);
+                store.TryUpdate(mutate);
+            }
+            catch { /* best-effort: state-wegschrijven mag de updater nooit breken */ }
+        }
+
+        private static void SetWaitingForRestart(string staged, string version, int pid)
+        {
+            WriteUpdaterState(cur =>
+            {
+                cur.state = "WAITING_FOR_RESTART";
+                cur.pendingUpdateVersion = version;
+                cur.pendingStagedDll = staged;
+                cur.pendingSimHubPid = pid;
+                cur.lastUpdateResult = "none";
+                cur.lastUpdateErrorCode = "UPDATE_WAITING";
+                cur.lastUpdateUtc = DateTime.UtcNow.ToString("O");
+            });
+        }
+
+        private static void SetInstallingState(string staged, string version, int pid)
+        {
+            WriteUpdaterState(cur =>
+            {
+                cur.state = "INSTALLING";
+                cur.pendingUpdateVersion = version;
+                cur.pendingStagedDll = staged;
+                cur.pendingSimHubPid = pid;
+            });
+        }
+
+        private static void SetSuccessState(string version)
+        {
+            WriteUpdaterState(cur =>
+            {
+                cur.state = "SUCCESS";
+                cur.pendingUpdateVersion = null;
+                cur.pendingStagedDll = null;
+                cur.pendingSimHubPid = null;
+                cur.lastUpdateResult = "success";
+                cur.lastUpdateErrorCode = null;
+                cur.lastUpdateUtc = DateTime.UtcNow.ToString("O");
+            });
+        }
+
+        private static void SetFailedState(Exception error)
+        {
+            WriteUpdaterState(cur =>
+            {
+                cur.state = "FAILED";
+                cur.lastUpdateResult = error is InvalidDataException ? "failure:update" : "failure:" + error.GetType().Name;
+                cur.lastUpdateErrorCode = error is TimeoutException ? "UPDATE_TIMEOUT_RESTART" : MapFailureCode(error);
+                cur.lastUpdateUtc = DateTime.UtcNow.ToString("O");
+            });
+        }
+
+        private static string MapFailureCode(Exception error)
+        {
+            if (error is System.Security.Cryptography.CryptographicException) return "UPDATE_SIGNATURE_FAILED";
+            if (error != null && error.Message.Contains("SHA-256")) return "UPDATE_HASH_FAILED";
+            if (error != null && error.Message.Contains("versie") || (error != null && error.Message.Contains("grootte"))) return "UPDATE_INSTALL_FAILED";
+            return "UPDATE_INSTALL_FAILED";
         }
     }
 }
