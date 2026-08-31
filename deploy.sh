@@ -23,6 +23,6 @@ mkdir -p /var/www/3sm/assets
 rsync -a dist/assets/ /var/www/3sm/assets/
 # Publish HTML and all non-asset files only after their new assets exist.
 # Delete stale non-asset routes/files after transfer; protect assets from deletion.
-rsync -a --delete-after --exclude='assets/' dist/ /var/www/3sm/
+rsync -a --delete-after --exclude='assets/' --exclude='downloads/' dist/ /var/www/3sm/
 
 echo "✓ Deploy done!"
