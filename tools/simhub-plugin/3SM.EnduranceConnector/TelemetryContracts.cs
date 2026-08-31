@@ -86,6 +86,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "sha256", Order = 4)] public string Sha256 { get; set; }
         [DataMember(Name = "byteLength", Order = 5)] public long ByteLength { get; set; }
         [DataMember(Name = "fileName", Order = 6)] public string FileName { get; set; }
-        [DataMember(Name = "checkedAt", Order = 7)] public string CheckedAt { get; set; }
+        [DataMember(Name = "signature", Order = 7)] public string Signature { get; set; }
+        [DataMember(Name = "checkedAt", Order = 8)] public string CheckedAt { get; set; }
     }
 }

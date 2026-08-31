@@ -26,6 +26,8 @@ namespace ThreeSM.EnduranceConnector
     public sealed class EnduranceConnectorPlugin : IPlugin, IDataPlugin, IWPFSettingsV2, INotifyPropertyChanged
     {
         private const string ProductionRelayBaseUrl = "https://api.3stripemotorsport.cc/functions/v1";
+        private const long MaxUpdateBytes = 5 * 1024 * 1024;
+        private const string ReleasePublicKeyXml = "<RSAKeyValue><Modulus>623ziGDiaH7x+n1WwVv4lp+CswGiM4b/+h410wt1IBXZc+xeIoJbS2GnSU+wCgsUD1Ek4Eup0XKumuyuEvkZYUJ7zzLuIV5qBj9jk1lSnZmp4ibMyanmhJOIxsuSzylpNV9ru2QAuJQLpK9Jahk8vbOjSaNaaO1ZxKP0U0Xxy79N/9vutjdO6dW9r2MzQUP5KNGCTBlgHwm5Kn3KujtyV3EB5jeFbwl0L1G5R2taan6wzrcSLtNKrJACbm/bLvOijAvUAjpVH7+ThUPY/w9womXuxtWCPFT0cp7wq9rBieOEFjWxFLSkr9uZ/Z+gWyuBINrGJ7gLGuONvNq3TbqkwRmnPu91hstTQR5EfLDduohdfsRW6g+BHUNgZFo9cheM/NpJx6vpZ61Rzjw46Bu8QVCInRW7W43u4e/Xb9CjlPEf6ou8jnEeUY9ZgDOKhs7oHbDg3072GIPTc/8HJjATN6YlnTU0tqB43zElN2BrWc/aFqqTdrXce9vEEqPclWVT</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         private readonly HttpClient _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(4) };
         private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
         private readonly object _sendGate = new object();
@@ -126,25 +128,37 @@ namespace ThreeSM.EnduranceConnector
             try
             {
                 string versionText;
-                string dllUrl;
                 string expectedHash;
                 long expectedLength;
+                string expectedFileName;
+                string expectedSignature;
                 lock (_settingsGate)
                 {
                     versionText = Settings.LastKnownRemoteVersion;
-                    dllUrl = Settings.LastKnownRemoteDllUrl;
                     expectedHash = Settings.LastKnownRemoteSha256;
                     expectedLength = Settings.LastKnownRemoteByteLength;
+                    expectedFileName = Settings.LastKnownRemoteFileName;
+                    expectedSignature = Settings.LastKnownRemoteSignature;
                 }
 
                 Version remoteVersion;
                 if (!Version.TryParse(versionText, out remoteVersion) || remoteVersion <= this.GetType().Assembly.GetName().Version)
                     throw new InvalidOperationException("Er staat geen nieuwere update klaar.");
 
-                Uri downloadUri;
-                if (!Uri.TryCreate(dllUrl, UriKind.Absolute, out downloadUri) || !IsAllowedPluginDownload(downloadUri, remoteVersion))
-                    throw new InvalidDataException("De update-URL is niet toegestaan.");
+                // RSA-verificatie van de opgeslagen releasemetadata vóór enige download/staging.
                 expectedHash = NormalizeSha256(expectedHash);
+                var downloadUri = BuildPluginDownloadUri(remoteVersion);
+                var manifest = new VersionResponse
+                {
+                    Version = versionText,
+                    DllUrl = downloadUri.AbsoluteUri,
+                    Sha256 = expectedHash,
+                    ByteLength = expectedLength,
+                    FileName = expectedFileName,
+                    Signature = expectedSignature,
+                };
+                if (!ValidateReleaseManifest(manifest, remoteVersion))
+                    throw new InvalidDataException("De ondertekende releasemetadata is ongeldig.");
 
                 var confirmation = MessageBox.Show(
                     "3SM " + remoteVersion + " wordt gecontroleerd gedownload en geïnstalleerd.\n\n" +
@@ -277,22 +291,20 @@ namespace ThreeSM.EnduranceConnector
                     if (info == null || string.IsNullOrWhiteSpace(info.Version)) throw new HttpRequestException("versie-endpoint gaf geen versie terug");
                     var remote = Version.TryParse(info.Version.Trim(), out var parsed) ? parsed : null;
                     if (remote == null) throw new HttpRequestException("serverversie is ongeldig: " + info.Version.Trim());
-                    lock (_settingsGate)
-                    {
-                        Settings.LastKnownRemoteVersion = info.Version.Trim();
-                        Settings.LastKnownRemoteDllUrl = info.DllUrl?.Trim() ?? string.Empty;
-                        Settings.LastKnownRemoteSha256 = info.Sha256?.Trim() ?? string.Empty;
-                        Settings.LastKnownRemoteFileName = info.FileName?.Trim() ?? string.Empty;
-                        Settings.LastKnownRemoteByteLength = info.ByteLength;
-                        Settings.LastVersionCheckUtc = DateTime.UtcNow;
-                        this.SaveCommonSettings("ConnectorSettings", Settings);
-                    }
                     if (remote > localVersion)
                     {
-                        Uri downloadUri;
-                        var metadataValid = Uri.TryCreate(info.DllUrl, UriKind.Absolute, out downloadUri)
-                            && IsAllowedPluginDownload(downloadUri, remote)
-                            && IsSha256(info.Sha256);
+                        var metadataValid = ValidateReleaseManifest(info, remote);
+                        lock (_settingsGate)
+                        {
+                            Settings.LastKnownRemoteVersion = info.Version.Trim();
+                            Settings.LastKnownRemoteDllUrl = metadataValid ? BuildPluginDownloadUri(remote).AbsoluteUri : string.Empty;
+                            Settings.LastKnownRemoteSha256 = metadataValid ? NormalizeSha256(info.Sha256) : string.Empty;
+                            Settings.LastKnownRemoteByteLength = metadataValid ? info.ByteLength : 0;
+                            Settings.LastKnownRemoteFileName = metadataValid ? (info.FileName ?? string.Empty).Trim() : string.Empty;
+                            Settings.LastKnownRemoteSignature = metadataValid ? (info.Signature ?? string.Empty).Trim() : string.Empty;
+                            Settings.LastVersionCheckUtc = DateTime.UtcNow;
+                            this.SaveCommonSettings("ConnectorSettings", Settings);
+                        }
                         SetUpdateAvailable(metadataValid);
                         if (metadataValid)
                         {
@@ -310,6 +322,17 @@ namespace ThreeSM.EnduranceConnector
                     }
                     else
                     {
+                        lock (_settingsGate)
+                        {
+                            Settings.LastKnownRemoteVersion = info.Version.Trim();
+                            Settings.LastKnownRemoteDllUrl = string.Empty;
+                            Settings.LastKnownRemoteSha256 = string.Empty;
+                            Settings.LastKnownRemoteByteLength = 0;
+                            Settings.LastKnownRemoteFileName = string.Empty;
+                            Settings.LastKnownRemoteSignature = string.Empty;
+                            Settings.LastVersionCheckUtc = DateTime.UtcNow;
+                            this.SaveCommonSettings("ConnectorSettings", Settings);
+                        }
                         SetUpdateAvailable(false);
                         SetUpdaterState(new UpdaterState { state = "IDLE" });
                         SetUpdateStatus("Actueel · geïnstalleerd " + localVersion + " · server " + remote + " · gecontroleerd " + DateTime.Now.ToString("HH:mm:ss"));
@@ -788,6 +811,60 @@ namespace ThreeSM.EnduranceConnector
                 try { if (File.Exists(destination)) File.Delete(destination); } catch { }
                 throw;
             }
+        }
+
+        private static Uri BuildPluginDownloadUri(Version version)
+        {
+            if (version == null) throw new ArgumentNullException("version");
+            return new Uri("https://3stripemotorsport.cc/downloads/3SM.EnduranceConnector-" + version + ".dll", UriKind.Absolute);
+        }
+
+        // Test-seam-friendly sleutelbron: productiebuild retourneert ALTIJD de echte public key,
+        // ongeacht welke definities er zijn. Alleen een test-only define (RSA_TEST_KEY) laat een
+        // test-RSA-key toe en die define wordt NOOIT in een Release-build actief gezet.
+        private static string GetReleasePublicKeyXml()
+        {
+#if RSA_TEST_KEY
+            // TEST-ONLY: deze define wordt uitsluitend in test-builds gezet (niet in Release).
+            return @"<RSAKeyValue><Modulus>lhXlfzwFlm1RkUvcn0gNPDOS9X1B+k599ZvUgVuLsslkEuaWJWTkRx369mMM761dFhC2oagIwASuD5vUJRtFwA/BZBAmsrs+1ld3uBFjgrOnW+aXxTncCKj61yJN38fWFIipYgCQCPjblC4FeV9rfTk9JoPnSvgykH0EP4bYiWzAN4rF95V9Ki84wBLa3U38Eo0lpENE52p3/X9mTZlv/vQnS0vyYDK/N5xR8XYSu01beIoZtB5cAOGXbpcTIcy9ToKgD+wF+LsTD4pF37mqz4WXkeaJ83S/1UVLGft64w+ImfiiHmN53sF5ONMMMZK68sHJU2X+gxMFTEbFz3y1Mw==</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
+#else
+            return ReleasePublicKeyXml;
+#endif
+        }
+
+        private static bool ValidateReleaseManifest(VersionResponse info, Version version)
+        {
+            if (info == null || version == null || !IsSha256(info.Sha256)) return false;
+            if (!string.Equals(info.Version, version.ToString(), StringComparison.Ordinal)) return false;
+            if (!string.Equals(info.Sha256, info.Sha256.ToLowerInvariant(), StringComparison.Ordinal)) return false;
+            if (info.ByteLength <= 0 || info.ByteLength > MaxUpdateBytes) return false;
+            var expectedFileName = "3SM.EnduranceConnector-" + version + ".dll";
+            if (!string.Equals(info.FileName, expectedFileName, StringComparison.Ordinal)) return false;
+            var expectedUri = BuildPluginDownloadUri(version);
+            Uri announcedUri;
+            if (!Uri.TryCreate(info.DllUrl, UriKind.Absolute, out announcedUri) || !IsAllowedPluginDownload(announcedUri, version)) return false;
+            if (!string.Equals(announcedUri.AbsoluteUri, expectedUri.AbsoluteUri, StringComparison.Ordinal)) return false;
+            byte[] signature;
+            if (string.IsNullOrWhiteSpace(info.Signature) || info.Signature != info.Signature.Trim()) return false;
+            try { signature = Convert.FromBase64String(info.Signature); }
+            catch (FormatException) { return false; }
+            if (signature.Length == 0) return false;
+            var payload = BuildManifestPayload(version.ToString(), expectedUri.AbsoluteUri, NormalizeSha256(info.Sha256), info.ByteLength, expectedFileName);
+            try
+            {
+                using (var rsa = new RSACryptoServiceProvider())
+                {
+                    rsa.PersistKeyInCsp = false;
+                    rsa.FromXmlString(GetReleasePublicKeyXml());
+                    return rsa.VerifyData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID("SHA256"), signature);
+                }
+            }
+            catch (CryptographicException) { return false; }
+        }
+
+        private static string BuildManifestPayload(string version, string dllUrl, string sha256, long byteLength, string fileName)
+        {
+            return version + "\n" + dllUrl + "\n" + sha256 + "\n" + byteLength.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n" + fileName;
         }
 
         private static bool IsAllowedPluginDownload(Uri uri, Version version)
