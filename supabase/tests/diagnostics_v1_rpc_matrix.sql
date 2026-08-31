@@ -229,6 +229,41 @@ SELECT result::text FROM simhub_upsert_health(
     '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"client_last_telemetry_attempt_utc":null,"client_last_successful_ingest_utc":null,"client_last_ingest_http_status":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
 ) AS result;
 
+-- ============== T10e: 7-day retention via cron cleanup (ONAFHANKELIJK van insert RPC) ==============
+\echo '=== T10e: 7-day retention — cron cleanup onafhankelijk van insert RPC ==='
+
+-- Tel events voor device 4 (heeft 100 events van T10a, allemaal recent)
+\echo '--- T10e pre: device 4 event count ---'
+SELECT count(*) AS event_count FROM simhub_device_diagnostic_events WHERE device_id = '00000000-0000-0000-0000-000000000004';
+
+-- Voeg 1 oud event toe (8 dagen geleden) voor device 5 (schoon device)
+INSERT INTO simhub_devices (id, owner_user_id, token_hash, connector_id, device_name, device_status, device_role, last_session_id, last_sequence)
+VALUES ('55555555-0000-0000-0000-000000000005', 'cccccccc-0000-4000-8000-000000000001', '55555555aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'CRON-TEST', 'CRON-TEST-DEVICE', 'inactive', NULL, 'test-cron', 0);
+
+INSERT INTO simhub_device_diagnostic_events
+    (device_id, code, exception_type, detail, reported_at_utc, received_at)
+VALUES
+    ('55555555-0000-0000-0000-000000000005', 'RAW_DATA_UNAVAILABLE'::simhub_diagnostic_code, NULL, NULL, now() - interval '8 days', now() - interval '8 days'),
+    ('55555555-0000-0000-0000-000000000005', 'OK'::simhub_diagnostic_code, NULL, NULL, now() - interval '1 day', now() - interval '1 day');
+
+\echo '--- T10e pre: device 5 oude + jonge events ---'
+SELECT count(*) AS old_before, (SELECT count(*) FROM simhub_device_diagnostic_events WHERE device_id = '55555555-0000-0000-0000-000000000005' AND received_at > now() - interval '7 days') AS young_before;
+
+-- ROEP GEEN diagnostic insert RPC aan. Voer ALLEEN de cleanup function uit (gescheduled via pg_cron).
+SELECT public.simhub_cleanup_old_diagnostic_events();
+
+\echo '--- T10e verify: oude event verwijderd, jonge event behouden ---'
+SELECT count(*) AS old_remaining FROM simhub_device_diagnostic_events WHERE device_id = '55555555-0000-0000-0000-000000000005' AND received_at < now() - interval '7 days';
+SELECT count(*) AS young_count FROM simhub_device_diagnostic_events WHERE device_id = '55555555-0000-0000-0000-000000000005' AND received_at > now() - interval '7 days';
+
+-- Verify: simhub_device_health onaangetast
+\echo '--- T10e verify: health table unaangetast ---'
+SELECT count(*) AS health_count FROM simhub_device_health;
+
+-- Verify: cleanup werkt over ALLE devices (device 1 events niet geraakt als die jonger zijn dan 7 dagen)
+\echo '--- T10e verify: device 1 events na cleanup ---'
+SELECT count(*) AS device1_count FROM simhub_device_diagnostic_events WHERE device_id = '10000000-0000-0000-0000-000000000001';
+
 -- ============================ SUMMARY =============================
 \echo ''
 \echo '=== DIAGNOSTICS V1 RPC TESTMATRIX SUMMARY ==='
