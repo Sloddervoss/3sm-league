@@ -205,6 +205,7 @@ BEGIN
         last_update_result = EXCLUDED.last_update_result,
         last_update_utc = EXCLUDED.last_update_utc,
         client_reported_at_utc = EXCLUDED.client_reported_at_utc,
+        received_at = EXCLUDED.received_at,
         updated_at = now();
 
     RETURN jsonb_build_object('result', 'accepted');
