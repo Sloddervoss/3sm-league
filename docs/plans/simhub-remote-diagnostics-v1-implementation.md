@@ -1,8 +1,9 @@
 # 3SM Remote Diagnostics v1 — Implementation Plan
 
 - **Release:** 0.3.10.0
-- **Status:** PLAN — nog NIET bouwen, NIET migreren, NIET deployen, NIET releasen
-- **Datum:** 2026-08-31
+- **Status:** PLAN / FASE A BEGONNEN — DB-migraties + RPCs in uitvoering.
+  Nog GEEN productie-deploy, nog GEEN 0.3.10.0 release zonder aparte GO.
+- **Datum:** 2026-08-31, herzien n.a.v. review-besluiten
 - **Scope:** Remote Diagnostics v1 — uitsluitend observability, **geen** remote management
 
 ---
@@ -93,8 +94,8 @@ Alle velden `required` tenzij anders vermeld.
 | `deviceId` | string | nee | idem heartbeat — server cross-check |
 | `code` | string | nee | vaste diagnostic-eventcode |
 | `atUtc` | string | nee | clienttijdstempel van gedetecteerd statusverloop |
-| `exceptionType` | string | ja | alleen exception **type** (geen stacktrace) |
-| `detail` | string | ja | korte gesaniteerde boodschap (≤ 200 chars) |
+| `exceptionType` | string | ja | alleen exception **type-naam**; nooit `Exception.Message` |
+| `detail` | string | ja | **alleen 3SM-generated** (allowlist, max 200 chars); nooit raw exception text |
 | `occurredAfter` | string | ja | voorgaande status die deze verandering triggerde |
 
 **Voorbeeld event:**
@@ -129,9 +130,9 @@ Alle velden `required` tenzij anders vermeld.
 | `session_time_seconds` | double precision | | |
 | `session_time_reader` | text | NOT NULL | |
 | `sequence` | bigint | NOT NULL | |
-| `last_telemetry_attempt_utc` | timestamptz | | |
-| `last_successful_ingest_utc` | timestamptz | | |
-| `last_ingest_http_status` | integer | | |
+| `client_last_telemetry_attempt_utc` | timestamptz | | **client-reported**, niet authoritative |
+| `client_last_successful_ingest_utc` | timestamptz | | **client-reported**, niet authoritative |
+| `client_last_ingest_http_status` | integer | | **client-reported**, niet authoritative |
 | `diagnostic_code` | text | NOT NULL, CHECK in allowed codes | |
 | `updater_state` | text | NOT NULL | |
 | `updater_current_version` | text | NOT NULL | |
@@ -228,8 +229,8 @@ BEGIN
         device_id, connector_version, simhub_version,
         game_connected, telemetry_available, raw_data_available,
         raw_telemetry_available, session_time_read_ok, session_time_seconds,
-        session_time_reader, sequence, last_telemetry_attempt_utc,
-        last_successful_ingest_utc, last_ingest_http_status, diagnostic_code,
+        session_time_reader, sequence, client_last_telemetry_attempt_utc,
+        client_last_successful_ingest_utc, client_last_ingest_http_status, diagnostic_code,
         updater_state, updater_current_version, updater_target_version,
         last_update_result, last_update_utc, client_reported_at_utc,
         received_at, updated_at
@@ -267,9 +268,9 @@ BEGIN
         session_time_seconds = EXCLUDED.session_time_seconds,
         session_time_reader = EXCLUDED.session_time_reader,
         sequence = EXCLUDED.sequence,
-        last_telemetry_attempt_utc = EXCLUDED.last_telemetry_attempt_utc,
-        last_successful_ingest_utc = EXCLUDED.last_successful_ingest_utc,
-        last_ingest_http_status = EXCLUDED.last_ingest_http_status,
+        client_last_telemetry_attempt_utc = EXCLUDED.client_last_telemetry_attempt_utc,
+        client_last_successful_ingest_utc = EXCLUDED.client_last_successful_ingest_utc,
+        client_last_ingest_http_status = EXCLUDED.client_last_ingest_http_status,
         diagnostic_code = EXCLUDED.diagnostic_code,
         updater_state = EXCLUDED.updater_state,
         updater_current_version = EXCLUDED.updater_current_version,
@@ -352,16 +353,19 @@ $$;
 **Gescheiden van telemetry-ingest. Geen gedeelde rate-limitbucket met `simhub-ingest`.**
 
 ### Heartbeat
-- **Client:** maximaal 1 per 60 seconden per device (cooldown-based `_diagnosticsDiagTimer`).
-- **Server:** harde grens `consumeEdgeRateLimit("diagnostic-address:<cf-ip>", 60, 60 * 1000)` op het endpoint.
+- **Client:** maximaal 1 per 60 seconden per device (cooldown-based timer).
+- **Server — DB/RPC-authoritative:** de RPC checkt `received_at` van de vorige heartbeat voor dat device. Als `now() - received_at < 55 seconds` → reject met 429 (`"diagnostic_rate_limited"`). Tolerantie 55s (i.p.v. 60) accepteert clock/jitter. `received_at` (server timestamp) is authoritative.
+- **Edge mag daarnaast een snelle lokale limiter hebben** (bijv. `consumeEdgeRateLimit("diagnostic-address:<cf-ip>", 60, 60 * 1000)`), maar de DB/RPC is de uiteindelijke authority.
+- **Geen gedeelde bucket met telemetry-ingest.**
 
 ### Status/error event
 - **Client:** alleen bij state change, maximaal 1 per 10 seconden per device.
-- **Server:** dedupe/cooldown — dezelfde `code` binnen het cooldown-venster wordt niet opnieuw geschreven tenzij state of detail veranderd is.
+- **Server — DB/RPC-authoritative:** de RPC checkt `received_at` van het vorige event voor dat device met dezelfde `code`. Als `now() - received_at < 10 seconds` → reject (dedupe). State change zonder code-wijziging binnen cooldown wordt gededupliceerd.
 - **Recovery → OK:** één herstel-event, daarna geen herhaalde `OK`-spam.
 
 ### 429-handling (client)
 - Client verlengt cooldown. Geen directe retry. Volgende heartbeat na 60 s.
+- **Belangrijk:** de 429 komt nu van de RPC (DB-authoritative rate limit), niet alleen van de Edge. Client behandelt elke 429 hetzelfde: cooldown verlengen, geen directe retry.
 
 ---
 
@@ -371,7 +375,7 @@ $$;
 |---|---|---|
 | `simhub_device_health` | 1 rij per device (latest) | `ON CONFLICT (device_id) DO UPDATE` |
 | `simhub_device_diagnostic_events` | max 100 events/device | `DELETE` bij insert (zie RPC) |
-| | max 7 dagen | `DELETE WHERE received_at < now() - interval '7 days'` |
+| | max 7 dagen | `DELETE` bij insert **plus** periodieke cleanup (bv. dagelijkse cron). Periodieke cleanup is noodzakelijk omdat devices die stoppen met events sturen nooit meer per-insert cleanup triggeren. Bestaande cron/scheduler gebruiken; geen nieuwe infrastructuur. |
 
 ---
 
@@ -513,7 +517,7 @@ Voor elk scenario: **telemetry-ingest blijft volledig onaangetast** (eigen clien
 | Raw telemetry OK | `raw_telemetry_available` |
 | SessionTime reader OK | `session_time_read_ok` |
 | Current SessionTime | `session_time_seconds` |
-| Ingest status | `last_ingest_http_status` |
+| Ingest status | `client_last_ingest_http_status` |
 | Diagnostic code | `diagnostic_code` |
 | Updater state | `updater_state` |
 | Current/target version | `updater_current_version` / `updater_target_version` |
