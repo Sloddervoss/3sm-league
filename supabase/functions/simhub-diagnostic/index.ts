@@ -174,7 +174,7 @@ const validateHeartbeat = (body: Record<string, unknown>): void => {
   assertBoolean(body.sessionTimeReadOk, "sessionTimeReadOk");
   assertNumber(body.sessionTimeSeconds, "sessionTimeSeconds", { nullable: true, max: 604800 });
   assertString(body.sessionTimeReader, "sessionTimeReader", 60);
-  assertNumber(body.sequence, "sequence", { integer: true, max: 1000000000 });
+  assertNumber(body.sequence, "sequence", { integer: true, min: -1, max: 1000000000 });
   assertTimestampOrNull(body.lastTelemetryAttemptUtc);
   assertTimestampOrNull(body.lastSuccessfulIngestUtc);
   assertNumber(body.lastIngestHttpStatus, "lastIngestHttpStatus", { nullable: true, integer: true, min: 0, max: 999 });
