@@ -143,6 +143,24 @@ namespace ThreeSM.EnduranceConnector
             return parsed;
         }
 
+        /// <summary>
+        /// Strict read-only load for observability consumers. Unlike Load(), this method
+        /// never copies, renames, deletes or writes a corrupt store; it only returns safe
+        /// defaults. Diagnostics uses this path so observing updater state cannot mutate it.
+        /// </summary>
+        public UpdaterState LoadReadOnly()
+        {
+            try
+            {
+                if (!File.Exists(_filePath)) return UpdaterState.SafeDefaults();
+                var content = File.ReadAllText(_filePath, new UTF8Encoding(false));
+                if (string.IsNullOrWhiteSpace(content)) return UpdaterState.SafeDefaults();
+                var parsed = FromJson(content);
+                return parsed != null && parsed.IsValid() ? parsed : UpdaterState.SafeDefaults();
+            }
+            catch { return UpdaterState.SafeDefaults(); }
+        }
+
         /// <summary>Atomic, mutex-guarded write. Returns true on success.</summary>
         public bool Save(UpdaterState state)
         {

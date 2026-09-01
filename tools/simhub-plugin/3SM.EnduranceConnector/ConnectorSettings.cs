@@ -8,6 +8,8 @@ namespace ThreeSM.EnduranceConnector
         public int SchemaVersion = 0;
         // Veilige upgrade-default: bestaande installaties blijven lokaal tot een geslaagde pairing.
         public bool UseCentralRelay = false;
+        // Remote Diagnostics is opt-out. Het pad blijft inert zonder geldige pairing/token.
+        public bool DiagnosticsEnabled = true;
         public string RelayBaseUrl = "https://api.3stripemotorsport.cc/functions/v1";
         public string DeviceTokenProtected = string.Empty;
         public string DeviceId = string.Empty;

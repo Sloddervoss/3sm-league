@@ -22,6 +22,17 @@ namespace ThreeSM.EnduranceConnector
         /// <summary>Leest NewData.RawData.Telemetry.SessionTime als double? (finite, >= 0) of null.</summary>
         public double? Read(object newData)
         {
+            bool rawTelemetryAvailable;
+            return ReadWithHealth(newData, out rawTelemetryAvailable);
+        }
+
+        /// <summary>
+        /// Leest exact hetzelfde gecachete reflectiepad één keer en rapporteert daarnaast
+        /// of het vaste RawData.Telemetry-object bestond. Geen tree-scan of fallback.
+        /// </summary>
+        public double? ReadWithHealth(object newData, out bool rawTelemetryAvailable)
+        {
+            rawTelemetryAvailable = false;
             if (newData == null) return null;
             try
             {
@@ -29,6 +40,7 @@ namespace ThreeSM.EnduranceConnector
                 if (rawData == null) return null;
                 object telemetry = GetMember(rawData, ref _telemetryProp, "Telemetry");
                 if (telemetry == null) return null;
+                rawTelemetryAvailable = true;
                 object value = GetMember(telemetry, ref _sessionTimeProp, "SessionTime");
                 return ToFiniteNonNegativeSeconds(value);
             }

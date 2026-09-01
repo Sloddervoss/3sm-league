@@ -53,6 +53,8 @@ namespace ThreeSM.EnduranceConnector
         private bool _updateAvailable;
         private UpdaterStateStore _updaterStateStore;
         private UpdaterState _updaterState;
+        private readonly object _diagnosticsGate = new object();
+        private DiagnosticsClient _diagnostics;
 
         public PluginManager PluginManager { get; set; }
         public ConnectorSettings Settings { get; internal set; }
@@ -78,10 +80,11 @@ namespace ThreeSM.EnduranceConnector
         {
             PluginManager = pluginManager;
             Settings = this.ReadCommonSettings<ConnectorSettings>("ConnectorSettings", () => new ConnectorSettings());
-            if (Settings.SchemaVersion < 3)
+            if (Settings.SchemaVersion < 4)
             {
                 if (Settings.SchemaVersion < 2) Settings.UseCentralRelay = false;
-                Settings.SchemaVersion = 3;
+                if (Settings.SchemaVersion < 4) Settings.DiagnosticsEnabled = true;
+                Settings.SchemaVersion = 4;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
             InitUpdaterStateStore();
@@ -97,6 +100,7 @@ namespace ThreeSM.EnduranceConnector
                 Settings.UseCentralRelay = false;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
+            ApplyDiagnosticsSettings();
             _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
             Status = Settings.UseCentralRelay
                 ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
@@ -372,6 +376,15 @@ namespace ThreeSM.EnduranceConnector
                 _gameWasRunning = running;
                 if (!running)
                 {
+                    ObserveDiagnostics(new DiagnosticsObservation
+                    {
+                        GameConnected = false,
+                        RawDataAvailable = data.NewData != null,
+                        RawTelemetryAvailable = false,
+                        SessionTimeReadOk = false,
+                        SessionTimeSeconds = null,
+                        Sequence = Interlocked.Read(ref _sequence)
+                    });
                     Status = isIRacing ? "iRacing gestart · wacht op telemetry" : "Wacht op iRacing";
                     return;
                 }
@@ -403,7 +416,9 @@ namespace ThreeSM.EnduranceConnector
                         token = Settings.PairingToken;
                         if (string.IsNullOrWhiteSpace(token) || token.Length < 12) throw new InvalidOperationException("lokaal pairingtoken is te kort");
                     }
-                    envelope = Capture(pluginManager, data, central, isInCar);
+                    DiagnosticsObservation observation;
+                    envelope = Capture(pluginManager, data, central, isInCar, out observation);
+                    ObserveDiagnostics(observation);
                 }
                 lock (_sendGate)
                 {
@@ -434,6 +449,7 @@ namespace ThreeSM.EnduranceConnector
                 activeSend = _activeSend;
                 activePairing = _activePairing;
             }
+            DisposeDiagnostics();
             try { Task.WaitAll(new[] { activeSend, activePairing }, TimeSpan.FromSeconds(5)); } catch { }
             lock (_settingsGate)
             {
@@ -502,6 +518,67 @@ namespace ThreeSM.EnduranceConnector
         {
             if (update == null) return;
             lock (_settingsGate) update(Settings);
+        }
+
+        internal void ApplyDiagnosticsSettings()
+        {
+            bool enabled;
+            string token;
+            string deviceId;
+            lock (_settingsGate)
+            {
+                enabled = Settings != null && Settings.DiagnosticsEnabled && Settings.UseCentralRelay &&
+                          !string.IsNullOrWhiteSpace(_deviceToken) && !string.IsNullOrWhiteSpace(Settings.DeviceId) &&
+                          !string.IsNullOrWhiteSpace(Settings.BoundOwnerUserId);
+                token = _deviceToken;
+                deviceId = Settings == null ? null : Settings.DeviceId;
+            }
+
+            // The diagnostics gate only protects the reference. Dispose can wait for an
+            // in-flight diagnostics request, so it must never hold up telemetry's brief read.
+            DiagnosticsClient stopped = null;
+            lock (_diagnosticsGate)
+            {
+                if (!enabled || Volatile.Read(ref _ending) != 0)
+                {
+                    stopped = _diagnostics;
+                    _diagnostics = null;
+                }
+                else if (_diagnostics == null)
+                {
+                    DiagnosticsClient diagnostics = null;
+                    try
+                    {
+                        var endpoint = BuildRelayEndpoint("simhub-diagnostic");
+                        var store = _updaterStateStore;
+                        diagnostics = new DiagnosticsClient(endpoint,
+                            () => store == null ? UpdaterState.SafeDefaults() : store.LoadReadOnly());
+                        diagnostics.Start(token, deviceId, InstalledVersion, typeof(PluginManager).Assembly.GetName().Version.ToString());
+                        _diagnostics = diagnostics;
+                    }
+                    catch
+                    {
+                        // Diagnostics is optional. A failed init must not affect plugin load or telemetry.
+                        stopped = diagnostics;
+                        SimHub.Logging.Current.Warn("3SM Endurance diagnostics kon niet veilig starten; diagnostics blijft uit.");
+                    }
+                }
+            }
+            if (stopped != null) stopped.Dispose();
+        }
+
+        private void ObserveDiagnostics(DiagnosticsObservation observation)
+        {
+            DiagnosticsClient diagnostics;
+            lock (_diagnosticsGate) diagnostics = _diagnostics;
+            if (diagnostics != null) diagnostics.Observe(observation);
+        }
+
+        private void DisposeDiagnostics()
+        {
+            DiagnosticsClient diagnostics;
+            lock (_diagnosticsGate) { diagnostics = _diagnostics; _diagnostics = null; }
+            if (diagnostics != null) diagnostics.Dispose();
         }
 
         public Task<bool> PairAsync(string code)
@@ -590,6 +667,7 @@ namespace ThreeSM.EnduranceConnector
                 Interlocked.Exchange(ref _sequence, -1);
                 Status = "Gekoppeld · wacht op iRacing";
                 OnPropertyChanged("IsPaired");
+                ApplyDiagnosticsSettings();
                 return true;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -642,11 +720,12 @@ namespace ThreeSM.EnduranceConnector
                     return;
                 }
             }
+            ApplyDiagnosticsSettings();
             Status = "Lokaal vergeten · trek het device ook op de 3SM-site in";
             OnPropertyChanged("IsPaired");
         }
 
-        private TelemetryEnvelope Capture(PluginManager manager, GameData data, bool central, bool isInCar)
+        private TelemetryEnvelope Capture(PluginManager manager, GameData data, bool central, bool isInCar, out DiagnosticsObservation diagnosticObservation)
         {
             var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
             var fuelPerLap = GetNullableDouble(manager, Settings.FuelPerLapProperty, true);
@@ -663,10 +742,22 @@ namespace ThreeSM.EnduranceConnector
             var position = PositiveOrNull(snapshot.Position) ?? PositiveOrNull(GetInt(manager, Settings.PositionProperty, 0));
             var classPosition = PositiveOrNull(player == null ? 0 : player.PositionInClass) ?? PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0));
             var flag = ResolveFlag(snapshot, GetRaw(manager, Settings.FlagProperty));
+            bool rawTelemetryAvailable;
+            var sessionTimeSeconds = _sessionTime.ReadWithHealth(snapshot, out rawTelemetryAvailable);
+            var nextSequence = Interlocked.Increment(ref _sequence);
+            diagnosticObservation = new DiagnosticsObservation
+            {
+                GameConnected = true,
+                RawDataAvailable = snapshot != null,
+                RawTelemetryAvailable = rawTelemetryAvailable,
+                SessionTimeReadOk = sessionTimeSeconds.HasValue,
+                SessionTimeSeconds = sessionTimeSeconds,
+                Sequence = nextSequence
+            };
             return new TelemetryEnvelope
             {
                 ProtocolVersion = 2,
-                Sequence = Interlocked.Increment(ref _sequence),
+                Sequence = nextSequence,
                 CapturedAt = DateTime.UtcNow.ToString("o"),
                 Source = new TelemetrySource { ConnectorId = NonEmpty(Settings.ConnectorId, Environment.MachineName), SimHubVersion = typeof(PluginManager).Assembly.GetName().Version.ToString(), Game = "IRacing" },
                 Race = new RaceIdentity
@@ -685,7 +776,7 @@ namespace ThreeSM.EnduranceConnector
                 Telemetry = new TelemetryValues
                 {
                     Connected = true,
-                    SessionTimeSeconds = _sessionTime.Read(snapshot),
+                    SessionTimeSeconds = sessionTimeSeconds,
                     Lap = Math.Max(0, GetInt(manager, Settings.LapProperty, 0)),
                     CompletedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0)),
                     LapTimeSeconds = GetNullableSeconds(manager, Settings.LapTimeProperty),
@@ -707,6 +798,11 @@ namespace ThreeSM.EnduranceConnector
 
         private async Task SendAsync(TelemetryEnvelope envelope, Uri endpoint, string token, CancellationToken cancellationToken)
         {
+            var attemptUtc = DateTime.UtcNow;
+            var ingestResultRecorded = false;
+            DiagnosticsClient diagnosticsAtAttempt;
+            lock (_diagnosticsGate) diagnosticsAtAttempt = _diagnostics;
+            if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestAttempt(attemptUtc);
             try
             {
                 var body = Serialize(envelope, typeof(TelemetryEnvelope));
@@ -716,6 +812,8 @@ namespace ThreeSM.EnduranceConnector
                     request.Content = new StringContent(body, Encoding.UTF8, "application/json");
                     using (var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false))
                     {
+                        if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, (int)response.StatusCode, response.IsSuccessStatusCode);
+                        ingestResultRecorded = true;
                         if (!response.IsSuccessStatusCode) throw new HttpRequestException("relay HTTP " + (int)response.StatusCode);
                     }
                 }
@@ -728,6 +826,7 @@ namespace ThreeSM.EnduranceConnector
             }
             catch (Exception error)
             {
+                if (!ingestResultRecorded && diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, 0, false);
                 if (Volatile.Read(ref _ending) == 0) Status = "Relayfout · " + error.Message;
             }
             finally

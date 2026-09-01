@@ -114,9 +114,14 @@ namespace ThreeSM.EnduranceConnector
             stack.Children.Add(pairingCard);
 
             var centralMode = new CheckBox { Content = "Centrale 3SM-relay gebruiken (aanbevolen)", IsChecked = _settings.UseCentralRelay, Foreground = TextMain, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 4) };
-            centralMode.Checked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = true); };
-            centralMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = false); };
+            centralMode.Checked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = true); _plugin.ApplyDiagnosticsSettings(); };
+            centralMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.UseCentralRelay = false); _plugin.ApplyDiagnosticsSettings(); };
             stack.Children.Add(centralMode);
+
+            var diagnosticsMode = new CheckBox { Content = "Remote diagnostics inschakelen", IsChecked = _settings.DiagnosticsEnabled, Foreground = TextMain, Margin = new Thickness(0, 4, 0, 4) };
+            diagnosticsMode.Checked += delegate { _plugin.UpdateSettings(s => s.DiagnosticsEnabled = true); _plugin.ApplyDiagnosticsSettings(); };
+            diagnosticsMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.DiagnosticsEnabled = false); _plugin.ApplyDiagnosticsSettings(); };
+            stack.Children.Add(diagnosticsMode);
 
             stack.Children.Add(Block("Maak op de 3SM-site een tijdelijke code en vul alleen die code hieronder in. De installatie wordt aan je 3SM-account gekoppeld; race en endurance-team volgen later in de Endurance-tab.", 0, 2, 0, 12));
 
