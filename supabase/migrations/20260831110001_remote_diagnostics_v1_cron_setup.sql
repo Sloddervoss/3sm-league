@@ -4,11 +4,11 @@
 -- Deze migration is IDEMPOTENT en veilig.
 -- Gebruikt de bestaande pg_cron extensie (verondersteld aanwezig op postgres DB).
 --
--- Rollback: supabase/rollback/20260831110000_remote_diagnostics_v1_cron_setup.rollback.sql
+-- Rollback: supabase/rollback/20260831110001_remote_diagnostics_v1_cron_setup.rollback.sql
 -- ============================================================================
 
 -- 1. De cleanup function moet bestaan voordat cron hem kan aanroepen.
---    Deze wordt aangemaakt door migration 20260831100000.
+--    Deze wordt aangemaakt door migration 20260831110000.
 
 -- 2. Schedule de dagelijkse cleanup via pg_cron.
 --    Idempotent: unschedule eerst de oude job als die bestaat, daarna opnieuw.

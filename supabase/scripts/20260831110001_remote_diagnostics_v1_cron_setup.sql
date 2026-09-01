@@ -3,9 +3,9 @@
 -- ============================================================================
 -- Dit script wordt NIET door de normale migration runner uitgevoerd.
 -- Voer het éénmalig handmatig uit op de postgres database nadat de
--- migration 20260831110000 is toegepast:
+-- migration 20260831110001 is toegepast:
 --
---   psql -U postgres -d postgres -f supabase/rollback/20260831110000_remote_diagnostics_v1_cron_setup.sql
+--   psql -U postgres -d postgres -f supabase/rollback/20260831110001_remote_diagnostics_v1_cron_setup.sql
 -- ============================================================================
 
 -- pg_cron extension aanmaken (indien nog niet gedaan)

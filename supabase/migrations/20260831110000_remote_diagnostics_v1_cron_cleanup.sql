@@ -24,6 +24,6 @@ END;
 $$;
 
 -- De pg_cron extensie en scheduling zijn apart uitgevoerd op de postgres
--- database (zie supabase/rollback/20260831110000_remote_diagnostics_v1_cron_setup.sql).
+-- database (zie supabase/rollback/20260831110001_remote_diagnostics_v1_cron_setup.sql).
 -- De migration maakt alleen de functie aan; de cron job wordt bij de
 -- eerste productie-deploy handmatig geactiveerd.
