@@ -173,9 +173,9 @@ BEGIN
         (p_health->>'sessionTimeSeconds')::double precision,
         p_health->>'sessionTimeReader',
         (p_health->>'sequence')::bigint,
-        (p_health->>'client_last_telemetry_attempt_utc')::timestamptz,
-        (p_health->>'client_last_successful_ingest_utc')::timestamptz,
-        (p_health->>'client_last_ingest_http_status')::integer,
+        (p_health->>'lastTelemetryAttemptUtc')::timestamptz,
+        (p_health->>'lastSuccessfulIngestUtc')::timestamptz,
+        (p_health->>'lastIngestHttpStatus')::integer,
         (p_health->>'diagnosticCode')::simhub_diagnostic_code,
         p_health->>'updaterState',
         p_health->>'updaterCurrentVersion',
@@ -229,9 +229,13 @@ DECLARE
     v_device simhub_devices;
     v_detail text;
 BEGIN
+    -- Serialize all diagnostics mutations for one device. This makes the
+    -- 10-second rate limit and the retention cap concurrency-safe without
+    -- locking unrelated devices.
     SELECT * INTO v_device FROM simhub_devices
     WHERE token_hash = p_token_hash
-    LIMIT 1;
+    LIMIT 1
+    FOR UPDATE;
     IF NOT FOUND THEN
         RETURN jsonb_build_object('result', 'invalid_device');
     END IF;
@@ -239,39 +243,18 @@ BEGIN
         RETURN jsonb_build_object('result', 'invalid_device');
     END IF;
 
-    -- Retention #1: max 100 per device (deterministic via row_number, ongeacht
-    -- timestamp-ties — ORDER BY received_at DESC, id DESC).
-    -- Dit gebeurt ALTIJD vóór de rate limit check, zodat cleanup ook draait
-    -- als een event rate-limited wordt (geen stale events).
-    DELETE FROM simhub_device_diagnostic_events
-    WHERE device_id = v_device.id
-    AND id IN (
-        SELECT id FROM (
-            SELECT id, row_number() OVER (
-                PARTITION BY device_id
-                ORDER BY received_at DESC, id DESC
-            ) AS rn
-            FROM simhub_device_diagnostic_events
-            WHERE device_id = v_device.id
-        ) ranked
-        WHERE ranked.rn > 100
-    );
-
-    -- Retention #2: verwijder events ouder dan 7 dagen (harde grens).
+    -- Retention #1: remove expired events even if the new event is rate-limited.
     DELETE FROM simhub_device_diagnostic_events
     WHERE device_id = v_device.id
     AND received_at < now() - interval '7 days';
 
     -- Event rate limit (DB-authoritative): max 1 diagnostic event per 10s per device
-    -- ongeacht code. Dit voorkomt dat code-alternatie de limiet omzeilt.
+    -- regardless of code. The locked device row prevents concurrent bypasses.
     IF EXISTS (
         SELECT 1 FROM simhub_device_diagnostic_events
         WHERE device_id = v_device.id
         AND received_at > now() - interval '10 seconds'
     ) THEN
-        -- Binnen 10s: nog een insert blokkeren. De code mag wel veranderen in
-        -- simhub_device_health.diagnostic_code (health update apart), maar history
-        -- blijft onder 1/10s grens. Retention-cleanup is hierboven al uitgevoerd.
         RETURN jsonb_build_object('result', 'diagnostic_event_rate_limited');
     END IF;
 
@@ -291,7 +274,22 @@ BEGIN
         now()
     );
 
-    -- RETURN (cleanup is al gebeurd vóór de rate limit check)
+    -- Retention #2: rank after the accepted insert, so the newly accepted event
+    -- is included in the deterministic newest-100 set.
+    DELETE FROM simhub_device_diagnostic_events
+    WHERE device_id = v_device.id
+    AND id IN (
+        SELECT id FROM (
+            SELECT id, row_number() OVER (
+                PARTITION BY device_id
+                ORDER BY received_at DESC, id DESC
+            ) AS rn
+            FROM simhub_device_diagnostic_events
+            WHERE device_id = v_device.id
+        ) ranked
+        WHERE ranked.rn > 100
+    );
+
     RETURN jsonb_build_object('result', 'accepted');
 END;
 $$;

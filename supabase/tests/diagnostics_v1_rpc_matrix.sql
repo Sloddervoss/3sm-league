@@ -26,7 +26,13 @@ VALUES
   'inactive','test-session-2',0),
  ('40000000-0000-0000-0000-000000000004','eeeeeeee-0000-4000-8000-000000000003','OTHER-PC','OTHER-PC',
   'ddddeeeeddddeeeeddddeeeeddddeeeeddddeeeeddddeeeeddddeeeeddddeeee',
-  'inactive','test-session-4',0)
+  'inactive','test-session-4',0),
+ ('60000000-0000-0000-0000-000000000006','cccccccc-0000-4000-8000-000000000001','RETENTION-A','RETENTION-A',
+  '6666666666666666666666666666666666666666666666666666666666666666',
+  'inactive','test-session-6',0),
+ ('70000000-0000-0000-0000-000000000007','cccccccc-0000-4000-8000-000000000001','RETENTION-B','RETENTION-B',
+  '7777777777777777777777777777777777777777777777777777777777777777',
+  'inactive','test-session-7',0)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO simhub_devices (id, owner_user_id, connector_id, device_name, token_hash, device_status, revoked_at, last_session_id, last_sequence)
@@ -40,13 +46,29 @@ ON CONFLICT (id) DO NOTHING;
 \echo '=== T01: valid heartbeat ==='
 SELECT simhub_upsert_health(
     'aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd',
-    '{"type":"heartbeat","deviceId":"10000000-0000-0000-0000-000000000001","connectorVersion":"0.3.10.0","simHubVersion":"1.0.9735.26972","gameConnected":true,"telemetryAvailable":true,"rawDataAvailable":true,"rawTelemetryAvailable":false,"sessionTimeReadOk":true,"sessionTimeSeconds":1873.5,"sessionTimeReader":"RawDataReflection","sequence":410,"client_last_telemetry_attempt_utc":null,"client_last_successful_ingest_utc":null,"client_last_ingest_http_status":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
+    '{"type":"heartbeat","deviceId":"10000000-0000-0000-0000-000000000001","connectorVersion":"0.3.10.0","simHubVersion":"1.0.9735.26972","gameConnected":true,"telemetryAvailable":true,"rawDataAvailable":true,"rawTelemetryAvailable":false,"sessionTimeReadOk":true,"sessionTimeSeconds":1873.5,"sessionTimeReader":"RawDataReflection","sequence":410,"lastTelemetryAttemptUtc":"2026-08-31T17:59:00Z","lastSuccessfulIngestUtc":"2026-08-31T17:58:00Z","lastIngestHttpStatus":202,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
 ) AS result;
 
 \echo '--- T01 verify ---'
-SELECT device_id, connector_version, diagnostic_code, updater_state, game_connected
+SELECT device_id, connector_version, diagnostic_code, updater_state, game_connected,
+       client_last_telemetry_attempt_utc, client_last_successful_ingest_utc,
+       client_last_ingest_http_status
 FROM simhub_device_health
 WHERE device_id = '10000000-0000-0000-0000-000000000001';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM simhub_device_health
+        WHERE device_id = '10000000-0000-0000-0000-000000000001'
+          AND client_last_telemetry_attempt_utc = '2026-08-31T17:59:00Z'::timestamptz
+          AND client_last_successful_ingest_utc = '2026-08-31T17:58:00Z'::timestamptz
+          AND client_last_ingest_http_status = 202
+    ) THEN
+        RAISE EXCEPTION 'T01 camelCase heartbeat mapping did not persist expected health values';
+    END IF;
+END $$;
 
 -- ============== T02: deviceId mismatch ==============
 \echo '=== T02: deviceId mismatch (PENDING PHASE C — Edge-side) ==='
@@ -59,22 +81,36 @@ WHERE device_id = '10000000-0000-0000-0000-000000000001';
 \echo '=== T03: bad token ==='
 SELECT simhub_upsert_health(
     '0000000000000000000000000000000000000000000000000000000000000000',
-    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"client_last_telemetry_attempt_utc":null,"client_last_successful_ingest_utc":null,"client_last_ingest_http_status":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
+    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"lastTelemetryAttemptUtc":null,"lastSuccessfulIngestUtc":null,"lastIngestHttpStatus":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
 ) AS result;
 
 -- ====================== T04: revoked device ======================
 \echo '=== T04: revoked device ==='
 SELECT simhub_upsert_health(
     'ccccddddccccddddccccddddccccddddccccddddccccddddccccddddccccdddd',
-    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"client_last_telemetry_attempt_utc":null,"client_last_successful_ingest_utc":null,"client_last_ingest_http_status":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
+    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"lastTelemetryAttemptUtc":null,"lastSuccessfulIngestUtc":null,"lastIngestHttpStatus":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
 ) AS result;
 
 -- ============== T05: unbound device WEL toegestaan ==============
 \echo '=== T05: unbound device (geen event/team binding) WEL toegestaan ==='
 SELECT simhub_upsert_health(
     'bbbbccccbbbbccccbbbbccccbbbbccccbbbbccccbbbbccccbbbbccccbbbbcccc',
-    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"client_last_telemetry_attempt_utc":null,"client_last_successful_ingest_utc":null,"client_last_ingest_http_status":null,"diagnosticCode":"DEVICE_UNBOUND","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
+    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"lastTelemetryAttemptUtc":null,"lastSuccessfulIngestUtc":null,"lastIngestHttpStatus":null,"diagnosticCode":"DEVICE_UNBOUND","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
 ) AS result;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM simhub_device_health
+        WHERE device_id = '20000000-0000-0000-0000-000000000002'
+          AND client_last_telemetry_attempt_utc IS NULL
+          AND client_last_successful_ingest_utc IS NULL
+          AND client_last_ingest_http_status IS NULL
+    ) THEN
+        RAISE EXCEPTION 'T05 nullable camelCase heartbeat fields did not persist as NULL';
+    END IF;
+END $$;
 
 -- ====================== T06: valid event ======================
 \echo '=== T06: valid event ==='
@@ -121,7 +157,7 @@ SELECT simhub_insert_diagnostic_event(
 \echo '=== T08: heartbeat rate limit (55s) ==='
 SELECT simhub_upsert_health(
     'aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd',
-    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":true,"telemetryAvailable":true,"rawDataAvailable":true,"rawTelemetryAvailable":false,"sessionTimeReadOk":true,"sessionTimeSeconds":1890.0,"sessionTimeReader":"RawDataReflection","sequence":411,"client_last_telemetry_attempt_utc":null,"client_last_successful_ingest_utc":null,"client_last_ingest_http_status":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:30Z"}'::jsonb
+    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":true,"telemetryAvailable":true,"rawDataAvailable":true,"rawTelemetryAvailable":false,"sessionTimeReadOk":true,"sessionTimeSeconds":1890.0,"sessionTimeReader":"RawDataReflection","sequence":411,"lastTelemetryAttemptUtc":null,"lastSuccessfulIngestUtc":null,"lastIngestHttpStatus":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:30Z"}'::jsonb
 ) AS result;
 
 -- ====================== T09: recovery event ======================
@@ -144,7 +180,7 @@ DELETE FROM simhub_device_diagnostic_events WHERE device_id = '40000000-0000-000
 DO $$
 DECLARE
     i int;
-    ts timestamptz := now();
+    ts timestamptz := now() - interval '11 seconds';
 BEGIN
     FOR i IN 1..107 LOOP
         INSERT INTO simhub_device_diagnostic_events
@@ -167,6 +203,12 @@ SELECT simhub_insert_diagnostic_event(
 
 \echo '--- T10a verify: exact 100 events retained ---'
 SELECT count(*) as event_count FROM simhub_device_diagnostic_events
+WHERE device_id = '40000000-0000-0000-0000-000000000004';
+
+-- Move the accepted R10a event outside the rate-limit window before the
+-- independent R10b cap assertion.
+UPDATE simhub_device_diagnostic_events
+SET received_at = now() - interval '11 seconds'
 WHERE device_id = '40000000-0000-0000-0000-000000000004';
 
 -- ============== T10b: retention — nieuwe insert bij 100 → 100 ==============
@@ -200,6 +242,12 @@ VALUES (
     now() - interval '8 days'
 );
 
+-- Zet device 1 events terug zodat de 10s-cooldown gepasseerd is; de
+-- seven-day assertion moet een accepted insert gebruiken.
+UPDATE simhub_device_diagnostic_events
+SET received_at = now() - interval '11 seconds'
+WHERE device_id = '10000000-0000-0000-0000-000000000001';
+
 SELECT simhub_insert_diagnostic_event(
     'aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd',
     '{"type":"event","deviceId":null,"code":"INGEST_500","atUtc":"2026-08-31T18:07:00Z","exceptionType":null,"detail":"ingest 500 test","occurredAfter":"OK"}'::jsonb
@@ -209,6 +257,95 @@ SELECT simhub_insert_diagnostic_event(
 SELECT count(*) as old_event_count FROM simhub_device_diagnostic_events
 WHERE device_id = '10000000-0000-0000-0000-000000000001'
 AND received_at < now() - interval '7 days';
+
+-- ============== R100/R101/R102/R107: post-insert cap invariant ==============
+\echo '=== R100/R101/R102/R107: post-insert cap invariant ==='
+DO $$
+DECLARE
+    v_seed_count int;
+    v_count int;
+    v_result jsonb;
+BEGIN
+    FOREACH v_seed_count IN ARRAY ARRAY[99, 100, 101] LOOP
+        DELETE FROM simhub_device_diagnostic_events
+        WHERE device_id = '60000000-0000-0000-0000-000000000006';
+
+        INSERT INTO simhub_device_diagnostic_events (device_id, code, detail, received_at)
+        SELECT '60000000-0000-0000-0000-000000000006', 'RAW_DATA_UNAVAILABLE',
+               'cap-seed-' || gs, now() - interval '11 seconds'
+        FROM generate_series(1, v_seed_count) AS gs;
+
+        v_result := simhub_insert_diagnostic_event(
+            '6666666666666666666666666666666666666666666666666666666666666666',
+            jsonb_build_object('type','event','deviceId',null,'code','INGEST_500',
+                'atUtc','2026-08-31T18:08:00Z','exceptionType',null,'detail','cap probe','occurredAfter','OK')
+        );
+        IF v_result <> jsonb_build_object('result', 'accepted') THEN
+            RAISE EXCEPTION 'R% expected accepted, got %', v_seed_count, v_result;
+        END IF;
+        SELECT count(*) INTO v_count FROM simhub_device_diagnostic_events
+        WHERE device_id = '60000000-0000-0000-0000-000000000006';
+        IF v_count <> 100 THEN
+            RAISE EXCEPTION 'R% expected 100 events, got %', v_seed_count, v_count;
+        END IF;
+    END LOOP;
+
+    -- R107 + deterministic same-timestamp tie behavior: after the new event,
+    -- 99 highest-id tied seed rows remain; seed 8 is pruned and seed 9 remains.
+    DELETE FROM simhub_device_diagnostic_events
+    WHERE device_id = '60000000-0000-0000-0000-000000000006';
+    INSERT INTO simhub_device_diagnostic_events (device_id, code, detail, received_at)
+    SELECT '60000000-0000-0000-0000-000000000006', 'RAW_DATA_UNAVAILABLE',
+           'tie-seed-' || gs, now() - interval '11 seconds'
+    FROM generate_series(1, 107) AS gs;
+    v_result := simhub_insert_diagnostic_event(
+        '6666666666666666666666666666666666666666666666666666666666666666',
+        jsonb_build_object('type','event','deviceId',null,'code','INGEST_500',
+            'atUtc','2026-08-31T18:09:00Z','exceptionType',null,'detail','tie probe','occurredAfter','OK')
+    );
+    IF v_result <> jsonb_build_object('result', 'accepted') THEN
+        RAISE EXCEPTION 'R107 expected accepted, got %', v_result;
+    END IF;
+    SELECT count(*) INTO v_count FROM simhub_device_diagnostic_events
+    WHERE device_id = '60000000-0000-0000-0000-000000000006';
+    IF v_count <> 100
+       OR EXISTS (SELECT 1 FROM simhub_device_diagnostic_events WHERE device_id = '60000000-0000-0000-0000-000000000006' AND detail = 'tie-seed-8')
+       OR NOT EXISTS (SELECT 1 FROM simhub_device_diagnostic_events WHERE device_id = '60000000-0000-0000-0000-000000000006' AND detail = 'tie-seed-9') THEN
+        RAISE EXCEPTION 'R107 deterministic newest-100 invariant failed';
+    END IF;
+
+    -- Per-device isolation: retaining A cannot delete B's 107 seeded rows.
+    DELETE FROM simhub_device_diagnostic_events
+    WHERE device_id IN ('60000000-0000-0000-0000-000000000006', '70000000-0000-0000-0000-000000000007');
+    INSERT INTO simhub_device_diagnostic_events (device_id, code, detail, received_at)
+    SELECT '60000000-0000-0000-0000-000000000006', 'RAW_DATA_UNAVAILABLE',
+           'isolation-a-' || gs, now() - interval '11 seconds' FROM generate_series(1,100) AS gs;
+    INSERT INTO simhub_device_diagnostic_events (device_id, code, detail, received_at)
+    SELECT '70000000-0000-0000-0000-000000000007', 'RAW_DATA_UNAVAILABLE',
+           'isolation-b-' || gs, now() - interval '11 seconds' FROM generate_series(1,107) AS gs;
+    PERFORM simhub_insert_diagnostic_event(
+        '6666666666666666666666666666666666666666666666666666666666666666',
+        jsonb_build_object('type','event','deviceId',null,'code','INGEST_500',
+            'atUtc','2026-08-31T18:10:00Z','exceptionType',null,'detail','isolation probe','occurredAfter','OK')
+    );
+    IF (SELECT count(*) FROM simhub_device_diagnostic_events WHERE device_id = '60000000-0000-0000-0000-000000000006') <> 100
+       OR (SELECT count(*) FROM simhub_device_diagnostic_events WHERE device_id = '70000000-0000-0000-0000-000000000007') <> 107 THEN
+        RAISE EXCEPTION 'per-device retention isolation failed';
+    END IF;
+
+    -- Seven-day cleanup remains independent of the cap.
+    DELETE FROM simhub_device_diagnostic_events WHERE device_id = '60000000-0000-0000-0000-000000000006';
+    INSERT INTO simhub_device_diagnostic_events (device_id, code, detail, received_at)
+    VALUES ('60000000-0000-0000-0000-000000000006', 'RAW_DATA_UNAVAILABLE', 'expired probe', now() - interval '8 days');
+    PERFORM simhub_insert_diagnostic_event(
+        '6666666666666666666666666666666666666666666666666666666666666666',
+        jsonb_build_object('type','event','deviceId',null,'code','INGEST_500',
+            'atUtc','2026-08-31T18:11:00Z','exceptionType',null,'detail','seven-day probe','occurredAfter','OK')
+    );
+    IF EXISTS (SELECT 1 FROM simhub_device_diagnostic_events WHERE device_id = '60000000-0000-0000-0000-000000000006' AND received_at < now() - interval '7 days') THEN
+        RAISE EXCEPTION 'seven-day retention failed';
+    END IF;
+END $$;
 
 -- ============== T11: RLS verified with real semantics ==============
 \echo '=== T11: RLS verified with real can_manage_simhub() semantics ==='
@@ -226,7 +363,7 @@ ORDER BY tablename, policyname;
 \echo '=== T12: verify RPC result types ==='
 SELECT result::text FROM simhub_upsert_health(
     'aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd',
-    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"client_last_telemetry_attempt_utc":null,"client_last_successful_ingest_utc":null,"client_last_ingest_http_status":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
+    '{"type":"heartbeat","deviceId":null,"connectorVersion":"0.3.10.0","simHubVersion":"1.0","gameConnected":false,"telemetryAvailable":false,"rawDataAvailable":false,"rawTelemetryAvailable":false,"sessionTimeReadOk":false,"sessionTimeSeconds":null,"sessionTimeReader":"RawDataReflection","sequence":0,"lastTelemetryAttemptUtc":null,"lastSuccessfulIngestUtc":null,"lastIngestHttpStatus":null,"diagnosticCode":"OK","updaterState":"IDLE","updaterCurrentVersion":"0.3.10.0","updaterTargetVersion":null,"lastUpdateResult":"none","lastUpdateUtc":null,"clientReportedAtUtc":"2026-08-31T18:00:00Z"}'::jsonb
 ) AS result;
 
 -- ============== T10e: 7-day retention via cron cleanup (ONAFHANKELIJK van insert RPC) ==============
