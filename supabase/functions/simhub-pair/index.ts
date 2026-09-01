@@ -162,12 +162,13 @@ Deno.serve(async (request) => {
     }
 
     if (action === "list-own") {
-      // list-own is always the authenticated user's own devices, never a
+      // list-own is always the authenticated user's own, non-revoked devices, never a
       // super_admin/endurance-ster bypass. The frontend uses this as the
       // primary device listing on the SimHub-koppelen page.
       const { data, error } = await service.from("simhub_devices")
         .select("id,device_name,connector_id,race_id,team_id,endurance_event_id,endurance_team_id,paired_at,expires_at,last_seen_at,revoked_at,race:races(name),team:teams(name)")
         .eq("owner_user_id", user.id)
+        .is("revoked_at", null)
         .order("paired_at", { ascending: false });
       if (error) throw error;
       return jsonResponse(request, { devices: data || [] });
