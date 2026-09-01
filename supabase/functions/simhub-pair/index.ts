@@ -48,6 +48,15 @@ const isEnduranceStaff = async (userId: string): Promise<boolean> => {
   return (data || []).some((row: { role: string }) => ["super_admin", "endurance_manager", "tester"].includes(row.role));
 };
 
+// Device->race/-team-binding (assign/clear) is beheer: super_admin of
+// endurance_manager. Testers kunnen hun eigen device wel koppelen op de
+// SimHub-pagina, maar géén apparaten aan event/team toewijzen.
+const isEnduranceManager = async (userId: string): Promise<boolean> => {
+  const { data, error } = await service.from("user_roles").select("role").eq("user_id", userId);
+  if (error) throw error;
+  return (data || []).some((row: { role: string }) => ["super_admin", "endurance_manager"].includes(row.role));
+};
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return jsonResponse(request, { ok: true });
   if (request.method !== "POST") return jsonResponse(request, { error: "method_not_allowed" }, 405);
@@ -89,16 +98,27 @@ Deno.serve(async (request) => {
     }
 
     const user = await authenticatedUser(request);
+    const superAdmin = await isSuperAdmin(user.id);
+    const staff = await isEnduranceStaff(user.id);
+    const manager = await isEnduranceManager(user.id);
 
-    // Beheeracties (list/revoke/assign/clear + legacy race/team-binding) blijven
-    // super_admin-only. Het aanmaken van een device-only paar-code staat open
-    // voor endurance-ster (super_admin, endurance_manager, tester).
-    if (action !== "create" && !(await isSuperAdmin(user.id))) {
+    // Algemeen auteursregime:
+    //  - create: endurance-ster (super_admin, endurance_manager, tester) koppelt
+    //    hun EIGEN device only.
+    //  - list/revoke: super_admin ziet/beheert alle devices; endurance-ster
+    //    (testers/managers) alleen hun eigen device.
+    //  - list-own: altijd eigen-apparaat-scoped (geen super_admin bypass).
+    //  - assign/clear (device->race/-team): endurance_manager of super_admin.
+    //  - legacy race/team-binding: super_admin only.
+    const adminSuperOnly = !["list", "list-own", "revoke", "create", "assign", "clear"].includes(action);
+    if (adminSuperOnly && !superAdmin) {
+      return jsonResponse(request, { error: "super_admin_required" }, 403);
+    }
+    if (["assign", "clear"].includes(action) && !manager) {
       return jsonResponse(request, { error: "super_admin_required" }, 403);
     }
 
     if (action === "create") {
-      const staff = await isEnduranceStaff(user.id);
       if (!staff) return jsonResponse(request, { error: "super_admin_required" }, 403);
 
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -106,7 +126,7 @@ Deno.serve(async (request) => {
       const teamId = typeof body.teamId === "string" ? body.teamId.trim() : "";
       const legacyBoundPairing = Boolean(raceId || teamId);
       // Legacy race/team-binding is een beheeractie -> alleen super_admin.
-      if (legacyBoundPairing && !(await isSuperAdmin(user.id))) {
+      if (legacyBoundPairing && !superAdmin) {
         return jsonResponse(request, { error: "super_admin_required" }, 403);
       }
       if (legacyBoundPairing && (!uuidPattern.test(raceId) || !uuidPattern.test(teamId))) {
@@ -141,10 +161,24 @@ Deno.serve(async (request) => {
       return jsonResponse(request, { code, expiresAt });
     }
 
-    if (action === "list") {
+    if (action === "list-own") {
+      // list-own is always the authenticated user's own devices, never a
+      // super_admin/endurance-ster bypass. The frontend uses this as the
+      // primary device listing on the SimHub-koppelen page.
       const { data, error } = await service.from("simhub_devices")
         .select("id,device_name,connector_id,race_id,team_id,endurance_event_id,endurance_team_id,paired_at,expires_at,last_seen_at,revoked_at,race:races(name),team:teams(name)")
+        .eq("owner_user_id", user.id)
         .order("paired_at", { ascending: false });
+      if (error) throw error;
+      return jsonResponse(request, { devices: data || [] });
+    }
+
+    if (action === "list") {
+      let query = service.from("simhub_devices")
+        .select("id,device_name,connector_id,race_id,team_id,endurance_event_id,endurance_team_id,paired_at,expires_at,last_seen_at,revoked_at,race:races(name),team:teams(name)");
+      // Endurance-ster ziet alleen hun eigen devices; super_admin ziet alles.
+      if (!superAdmin) query = query.eq("owner_user_id", user.id);
+      const { data, error } = await query.order("paired_at", { ascending: false });
       if (error) throw error;
       return jsonResponse(request, { devices: data || [] });
     }
@@ -152,6 +186,13 @@ Deno.serve(async (request) => {
     if (action === "revoke") {
       const deviceId = typeof body.deviceId === "string" ? body.deviceId : "";
       if (!uuidPattern.test(deviceId)) return jsonResponse(request, { error: "invalid_device" }, 400);
+      // Endurance-ster mag alleen hun EIGEN device intrekken.
+      if (!superAdmin) {
+        const { data: owned, error: ownedError } = await service
+          .from("simhub_devices").select("id").eq("id", deviceId).eq("owner_user_id", user.id).maybeSingle();
+        if (ownedError) throw ownedError;
+        if (!owned) return jsonResponse(request, { error: "super_admin_required" }, 403);
+      }
       const { data, error } = await service.rpc("simhub_revoke_device", {
         p_device_id: deviceId,
         p_revoked_by: user.id,
