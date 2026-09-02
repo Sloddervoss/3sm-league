@@ -1,0 +1,116 @@
+{
+  "kind": "RECOVERED PRODUCTION BASELINE",
+  "historicalOwnerKnown": false,
+  "historicalOwner": "UNKNOWN",
+  "source": "production-read-only-audit",
+  "auditDate": "2026-09-02",
+  "observedDatabase": "postgres",
+  "observedServer": "PostgreSQL 15.8",
+  "preExistingBaseObjects": [
+    "public.endurance_telemetry_events",
+    "public.simhub_telemetry_latest"
+  ],
+  "schemaArtifactSha256": {
+    "public.endurance_telemetry_events": "2c4fd4694284a594b167dc25b783d17810b1f84cfb201e70350b1fa7de281c9b",
+    "public.simhub_telemetry_latest": "6bf88e1c0a73a2b6171fe54c83a4a7bc1a327fd3c3ad9a00f212c2835fae5677"
+  },
+  "phaseEOwnershipRule": "Both objects are PRE_EXISTING_BASE_OBJECTS. Phase E must only evolve them additively and must never create, replace, own, or drop them.",
+  "objects": {
+    "public.endurance_telemetry_events": {
+      "owner": "supabase_admin",
+      "rls": { "enabled": true, "forced": false },
+      "replicaIdentity": "DEFAULT",
+      "columns": [
+        { "position": 1, "name": "id", "type": "uuid", "nullable": false, "default": "gen_random_uuid()" },
+        { "position": 2, "name": "device_id", "type": "uuid", "nullable": false },
+        { "position": 3, "name": "event_id", "type": "uuid", "nullable": false },
+        { "position": 4, "name": "team_id", "type": "uuid", "nullable": false },
+        { "position": 5, "name": "session_id", "type": "text", "nullable": false },
+        { "position": 6, "name": "event_type", "type": "text", "nullable": false },
+        { "position": 7, "name": "event_key", "type": "text", "nullable": false },
+        { "position": 8, "name": "sequence", "type": "bigint", "nullable": false },
+        { "position": 9, "name": "captured_at", "type": "timestamp with time zone", "nullable": false },
+        { "position": 10, "name": "received_at", "type": "timestamp with time zone", "nullable": false, "default": "clock_timestamp()" },
+        { "position": 11, "name": "lap", "type": "integer", "nullable": true },
+        { "position": 12, "name": "completed_laps", "type": "integer", "nullable": true },
+        { "position": 13, "name": "driver_id", "type": "text", "nullable": true },
+        { "position": 14, "name": "stint_elapsed_s", "type": "numeric", "nullable": true },
+        { "position": 15, "name": "session_time_s", "type": "numeric", "nullable": true },
+        { "position": 16, "name": "fuel_litres", "type": "numeric", "nullable": true },
+        { "position": 17, "name": "fuel_per_lap_litres", "type": "numeric", "nullable": true },
+        { "position": 18, "name": "fuel_added_est_litres", "type": "numeric", "nullable": true },
+        { "position": 19, "name": "laps_remaining_est", "type": "numeric", "nullable": true },
+        { "position": 20, "name": "lap_time_from_deltas_s", "type": "numeric", "nullable": true },
+        { "position": 21, "name": "in_pit_lane", "type": "boolean", "nullable": true },
+        { "position": 22, "name": "incidents", "type": "integer", "nullable": true },
+        { "position": 23, "name": "flag", "type": "text", "nullable": true },
+        { "position": 24, "name": "is_in_car", "type": "boolean", "nullable": true },
+        { "position": 25, "name": "event_detection_source", "type": "text", "nullable": false },
+        { "position": 26, "name": "payload", "type": "jsonb", "nullable": true }
+      ],
+      "constraints": [
+        { "name": "endurance_telemetry_events_pkey", "type": "primary_key", "definition": "PRIMARY KEY (id)" },
+        { "name": "endurance_telemetry_events_device_id_fkey", "type": "foreign_key", "definition": "FOREIGN KEY (device_id) REFERENCES public.simhub_devices(id) ON DELETE CASCADE" },
+        { "name": "endurance_telemetry_events_event_id_fkey", "type": "foreign_key", "definition": "FOREIGN KEY (event_id) REFERENCES public.endurance_events(id) ON DELETE CASCADE" },
+        { "name": "endurance_telemetry_events_team_id_fkey", "type": "foreign_key", "definition": "FOREIGN KEY (team_id) REFERENCES public.endurance_teams(id) ON DELETE CASCADE" },
+        { "name": "endurance_telemetry_events_event_type_check", "type": "check", "allowedValues": ["sample", "lap_completed", "pit_entry", "pit_exit", "fuel_added", "driver_change", "stint_start", "stint_end", "flag_change", "car_state_change"] }
+      ],
+      "indexes": [
+        { "name": "endurance_telemetry_events_pkey", "unique": true, "definition": "CREATE UNIQUE INDEX endurance_telemetry_events_pkey ON public.endurance_telemetry_events USING btree (id)" },
+        { "name": "endurance_telemetry_events_context_idx", "unique": false, "definition": "CREATE INDEX endurance_telemetry_events_context_idx ON public.endurance_telemetry_events USING btree (event_id, team_id, captured_at DESC)" },
+        { "name": "endurance_telemetry_events_key_uniq", "unique": true, "definition": "CREATE UNIQUE INDEX endurance_telemetry_events_key_uniq ON public.endurance_telemetry_events USING btree (device_id, session_id, event_key)" },
+        { "name": "endurance_telemetry_events_type_idx", "unique": false, "definition": "CREATE INDEX endurance_telemetry_events_type_idx ON public.endurance_telemetry_events USING btree (event_id, event_type, captured_at DESC)" }
+      ],
+      "policies": [{ "name": "staff read full endurance telemetry events", "command": "SELECT", "permissive": true, "roles": ["authenticated"], "using": "can_manage_simhub()", "withCheck": null }],
+      "grants": { "postgres": ["ALL"], "authenticated": ["ALL"], "service_role": ["ALL"], "anon": [], "PUBLIC": [] },
+      "triggers": [],
+      "directFunctionReferences": [
+        "simhub_ingest_snapshot(text,text,bigint,timestamp with time zone,text,text,text,jsonb)",
+        "simhub_ingest_snapshot(text,text,bigint,timestamp with time zone,text,text,text,jsonb,text,text,text,text,text,text,text)",
+        "simhub_write_telemetry_event(uuid,uuid,uuid,text,text,text,bigint,timestamp with time zone,timestamp with time zone,integer,integer,text,numeric,numeric,numeric,numeric,numeric,numeric,numeric,boolean,integer,text,boolean,text)",
+        "simhub_revoke_device(uuid,uuid)"
+      ]
+    },
+    "public.simhub_telemetry_latest": {
+      "owner": "supabase_admin",
+      "rls": { "enabled": true, "forced": false },
+      "replicaIdentity": "FULL",
+      "columns": [
+        { "position": 1, "name": "device_id", "type": "uuid", "nullable": false }, { "position": 2, "name": "owner_user_id", "type": "uuid", "nullable": false },
+        { "position": 3, "name": "race_id", "type": "uuid", "nullable": true }, { "position": 4, "name": "team_id", "type": "uuid", "nullable": true },
+        { "position": 5, "name": "session_id", "type": "text", "nullable": false }, { "position": 6, "name": "sequence", "type": "bigint", "nullable": false },
+        { "position": 7, "name": "captured_at", "type": "timestamp with time zone", "nullable": false }, { "position": 8, "name": "received_at", "type": "timestamp with time zone", "nullable": false, "default": "now()" },
+        { "position": 9, "name": "connector_id", "type": "text", "nullable": false }, { "position": 10, "name": "simhub_version", "type": "text", "nullable": false },
+        { "position": 11, "name": "game", "type": "text", "nullable": false }, { "position": 12, "name": "telemetry", "type": "jsonb", "nullable": false },
+        { "position": 13, "name": "endurance_event_id", "type": "uuid", "nullable": true }, { "position": 14, "name": "endurance_team_id", "type": "uuid", "nullable": true },
+        { "position": 15, "name": "driver_id", "type": "text", "nullable": true }, { "position": 16, "name": "current_driver_id", "type": "text", "nullable": true },
+        { "position": 17, "name": "current_driver_name", "type": "text", "nullable": true }, { "position": 18, "name": "car_id", "type": "text", "nullable": true },
+        { "position": 19, "name": "car_name", "type": "text", "nullable": true }, { "position": 20, "name": "track_name", "type": "text", "nullable": true },
+        { "position": 21, "name": "track_config", "type": "text", "nullable": true }
+      ],
+      "constraints": [
+        { "name": "simhub_telemetry_latest_pkey", "type": "primary_key", "definition": "PRIMARY KEY (device_id)" },
+        { "name": "simhub_telemetry_latest_device_id_fkey", "type": "foreign_key", "definition": "FOREIGN KEY (device_id) REFERENCES public.simhub_devices(id) ON DELETE CASCADE" },
+        { "name": "simhub_telemetry_latest_owner_user_id_fkey", "type": "foreign_key", "definition": "FOREIGN KEY (owner_user_id) REFERENCES auth.users(id) ON DELETE CASCADE" },
+        { "name": "simhub_telemetry_latest_race_id_fkey", "type": "foreign_key", "definition": "FOREIGN KEY (race_id) REFERENCES public.races(id) ON DELETE CASCADE" },
+        { "name": "simhub_telemetry_latest_team_id_fkey", "type": "foreign_key", "definition": "FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE" },
+        { "name": "simhub_telemetry_latest_connector_id_check", "type": "check" }, { "name": "simhub_telemetry_latest_context_shape", "type": "check" }, { "name": "simhub_telemetry_latest_game_check", "type": "check" }, { "name": "simhub_telemetry_latest_sequence_check", "type": "check" }, { "name": "simhub_telemetry_latest_session_id_check", "type": "check" }, { "name": "simhub_telemetry_latest_simhub_version_check", "type": "check" }, { "name": "simhub_telemetry_latest_telemetry_check", "type": "check" }
+      ],
+      "indexes": [
+        { "name": "simhub_telemetry_latest_pkey", "unique": true, "definition": "CREATE UNIQUE INDEX simhub_telemetry_latest_pkey ON public.simhub_telemetry_latest USING btree (device_id)" },
+        { "name": "simhub_telemetry_latest_race_team_idx", "unique": false, "definition": "CREATE INDEX simhub_telemetry_latest_race_team_idx ON public.simhub_telemetry_latest USING btree (race_id, team_id, received_at DESC)" }
+      ],
+      "policies": [{ "name": "Staff can read active latest SimHub telemetry", "command": "SELECT", "permissive": true, "roles": ["authenticated"], "using": "can_manage_simhub() AND is_active_simhub_device(device_id)", "withCheck": null }],
+      "grants": { "postgres": ["ALL"], "authenticated": ["SELECT"], "service_role": ["ALL"], "anon": [], "PUBLIC": [] },
+      "triggers": [],
+      "directFunctionReferences": [
+        "simhub_ingest_snapshot(text,text,bigint,timestamp with time zone,text,text,text,jsonb)",
+        "simhub_ingest_snapshot(text,text,bigint,timestamp with time zone,text,text,text,jsonb,text,text,text,text,text,text,text)",
+        "simhub_revoke_device(uuid,uuid)"
+      ],
+      "phaseECandidateColumnsAbsent": ["race_run_id", "v3_normalized"]
+    }
+  },
+  "fixtureIsNotCanonical": true,
+  "freshInstallHistoryRecovery": "OUT_OF_SCOPE_SEPARATE_REPOSITORY_HYGIENE_AND_DISASTER_RECOVERY_ISSUE"
+}
