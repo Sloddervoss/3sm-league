@@ -51,6 +51,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "currentLapElapsedSeconds", Order = 1)] public double? CurrentLapElapsedSeconds { get; set; }
         [DataMember(Name = "lastLapTimeSeconds", Order = 2)] public double? LastLapTimeSeconds { get; set; }
         [DataMember(Name = "bestLapTimeSeconds", Order = 3)] public double? BestLapTimeSeconds { get; set; }
+        [DataMember(Name = "completedLaps", Order = 4)] public int? CompletedLaps { get; set; }
     }
 
     [DataContract]

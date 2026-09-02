@@ -86,6 +86,7 @@ const v3Payload = (overrides: Record<string, unknown> = {}) => ({
     currentLapElapsedSeconds: 45.12,
     lastLapTimeSeconds: 121.25,
     bestLapTimeSeconds: 120.98,
+    completedLaps: 17,
   },
   position: {
     position: 4,
@@ -342,8 +343,8 @@ describe("D17-D28 protocol and parser", () => {
     db.devices = [makeDevice({ token_hash: await sha256(TOKEN) })];
     db.activeRuns.set("evt-1111-1111:team-1111-1111:race", "run-1111-1111");
     const ctx = await resolveTelemetryContext(TOKEN, v3Payload({
+      timing: { currentLapElapsedSeconds: null, lastLapTimeSeconds: null, bestLapTimeSeconds: null, completedLaps: null },
       position: { position: null, classPosition: null, gapToLeaderSeconds: null },
-      timing: { currentLapElapsedSeconds: null, lastLapTimeSeconds: null, bestLapTimeSeconds: null },
     }), makeMockSupabase(db), sha256);
     expect(ctx.result).toBe("accepted_context");
     expect(ctx.normalized!.position.position).toBeNull();

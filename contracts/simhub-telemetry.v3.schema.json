@@ -70,11 +70,12 @@
     "timing": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds"],
+      "required": ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds", "completedLaps"],
       "properties": {
         "currentLapElapsedSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 86400 },
         "lastLapTimeSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 86400 },
-        "bestLapTimeSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 86400 }
+        "bestLapTimeSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 86400 },
+        "completedLaps": { "type": ["integer", "null"], "minimum": 0, "maximum": 100000 }
       }
     },
     "position": {

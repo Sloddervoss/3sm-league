@@ -191,6 +191,7 @@ export type NormalizedTelemetryEnvelope = {
     currentLapElapsedSeconds: number | null;
     lastLapTimeSeconds: number | null;
     bestLapTimeSeconds: number | null;
+    completedLaps: number | null;
   };
   position: {
     position: number | null;
@@ -271,7 +272,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   const session = asRecord(root.session, "session");
   exactKeys(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], "session");
   const timing = asRecord(root.timing, "timing");
-  exactKeys(timing, ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds"], "timing");
+  exactKeys(timing, ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds", "completedLaps"], "timing");
   const position = asRecord(root.position, "position");
   exactKeys(position, ["position", "classPosition", "gapToLeaderSeconds"], "position");
   const track = asRecord(root.track, "track");
@@ -315,6 +316,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
       currentLapElapsedSeconds: v3Number(timing.currentLapElapsedSeconds, "timing.currentLapElapsedSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
       lastLapTimeSeconds: v3Number(timing.lastLapTimeSeconds, "timing.lastLapTimeSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
       bestLapTimeSeconds: v3Number(timing.bestLapTimeSeconds, "timing.bestLapTimeSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
+      completedLaps: v3Number(timing.completedLaps, "timing.completedLaps", { nullable: true, integer: true, min: 0, max: 100000, sentinels: [-1] }),
     },
     position: {
       position: v3Number(position.position, "position.position", { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] }),
@@ -383,6 +385,7 @@ const normalizeV12Envelope = (env: SimHubTelemetryEnvelope): NormalizedTelemetry
       currentLapElapsedSeconds: null,
       lastLapTimeSeconds: env.telemetry.lapTimeSeconds,
       bestLapTimeSeconds: null,
+      completedLaps: env.telemetry.completedLaps,
     },
     position: {
       position: env.telemetry.position,

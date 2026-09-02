@@ -25,7 +25,8 @@
   "timing": {
     "currentLapElapsedSeconds": 45.12,
     "lastLapTimeSeconds": null,
-    "bestLapTimeSeconds": null
+    "bestLapTimeSeconds": null,
+    "completedLaps": 17
   },
   "position": {
     "position": 4,

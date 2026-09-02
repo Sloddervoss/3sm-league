@@ -39,7 +39,8 @@ Every V3 payload has an exact per-version allowlist. No unknown keys, non-finite
   "timing": {
     "currentLapElapsedSeconds": null,
     "lastLapTimeSeconds": null,
-    "bestLapTimeSeconds": null
+    "bestLapTimeSeconds": null,
+    "completedLaps": null
   },
   "position": {
     "position": null,
@@ -77,6 +78,7 @@ Every V3 payload has an exact per-version allowlist. No unknown keys, non-finite
 | `sessionTimeRemainingSeconds` | finite seconds or null | SOURCE-PROVEN |
 | `sessionLapsRemaining` | integer or null | SOURCE-PROVEN |
 | timing values | positive finite seconds or null | SOURCE-PROVEN |
+| `completedLaps` | non-negative integer or null | PROVEN |
 | positions | positive integer or null | SOURCE-PROVEN; class source PROVEN |
 | `gapToLeaderSeconds` | finite seconds or null | SOURCE-PROVEN |
 | `lapDistancePct` | finite number in `[0,1]` or null | SOURCE-PROVEN |
@@ -136,7 +138,15 @@ Events remain in the existing `endurance_telemetry_events` layer; no replacement
 
 Transition-driven events include `lap_completed`, `pit_entry`, `pit_exit`, `pit_service_started`, `pit_service_completed`, `fuel_added`, `tyres_changed`, `driver_changed`, `incident_count_changed`, `flag_changed`, and `repair_state_changed`.
 
-Transport dedupe identity for an event detected from an accepted source snapshot is conceptually:
+lap_completed event detection from raw telemetry:
+same raceRun + same authoritative source segment, previous completedLaps → current completedLaps.
+Normal event: current = previous + 1. No synthetic lap_completed across A-last → B-first authority handoff.
+Large jumps/regressions: fail-closed/degraded, not synthetic multiple laps.
+
+Domain dedupe key for lap_completed: raceRunId + completedLaps.
+Source provenance additionally retains sourceDeviceId, transportSessionId, sequence.
+
+transport dedupe identity for an event detected from an accepted source snapshot is conceptually:
 
 ```text
 raceRunId + sourceDeviceId + transportSessionId + sequence + eventType

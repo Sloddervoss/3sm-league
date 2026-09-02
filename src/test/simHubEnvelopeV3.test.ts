@@ -142,7 +142,7 @@ describe("v3 strict parser — accepts", () => {
       raceRunId: null, eventId: null, teamId: null, deviceId: null, ownerUserId: null, authority: null, deviceRole: null,
       identity: { currentDriverId: null, currentDriverName: null, carId: null, carName: null, trackName: null, trackConfig: null },
       session: { isInCar: false, sessionTimeSeconds: null, sessionTimeRemainingSeconds: null, sessionLapsRemaining: null, flags: null, sessionState: "unknown" },
-      timing: { currentLapElapsedSeconds: null, lastLapTimeSeconds: null, bestLapTimeSeconds: null },
+      timing: { currentLapElapsedSeconds: null, lastLapTimeSeconds: null, bestLapTimeSeconds: null, completedLaps: null },
       position: { position: null, classPosition: null, gapToLeaderSeconds: null },
       track: { lapDistancePct: null, trackSurface: "unknown", onPitRoad: null },
       fuel: { fuelLitres: null, fuelPct: null },
@@ -322,6 +322,45 @@ describe("v3 strict parser — numeric/type constraints & sentinel normalization
   });
   it("[A52] rejects gapToLeaderSeconds negative beyond sentinel (-2)", () => {
     rejects((p) => { (p.position as Record<string, unknown>).gapToLeaderSeconds = -2; });
+  });
+
+  // ---------------------------------------------------------------------------
+  // L01-L10: completedLaps (Freeze Amendment 1)
+  // ---------------------------------------------------------------------------
+  it("[L01] completedLaps 0 accepted", () => {
+    expect(parsed((p) => { timing(p).completedLaps = 0; }).timing.completedLaps).toBe(0);
+  });
+  it("[L02] completedLaps positive accepted", () => {
+    expect(parsed((p) => { timing(p).completedLaps = 17; }).timing.completedLaps).toBe(17);
+  });
+  it("[L03] completedLaps null accepted", () => {
+    expect(parsed((p) => { timing(p).completedLaps = null; }).timing.completedLaps).toBeNull();
+  });
+  it("[L04] completedLaps -1 sentinel normalizes to null", () => {
+    expect(parsed((p) => { timing(p).completedLaps = -1; }).timing.completedLaps).toBeNull();
+  });
+  it("[L04b] completedLaps below -1 rejected", () => {
+    rejects((p) => { timing(p).completedLaps = -2; });
+  });
+  it("[L05] completedLaps non-integer rejected", () => {
+    rejects((p) => { timing(p).completedLaps = 17.5; });
+  });
+  it("[L06] completedLaps above max rejected", () => {
+    rejects((p) => { timing(p).completedLaps = 100001; });
+  });
+  it("[L07] V2 completedLaps maps to normalized DTO timing.completedLaps", () => {
+    const out = normalizeTelemetryEnvelope(v2Envelope());
+    expect(out.timing.completedLaps).toBe(17);
+  });
+  it("[L08] V3 completedLaps maps to normalized DTO timing.completedLaps", () => {
+    const out = parseTelemetryV3Envelope(v3Full());
+    expect(out.timing.completedLaps).toBe(17);
+  });
+  it("[L09] V2/V3 semantic parity: completedLaps=5 produces same normalized value", () => {
+    const v3 = parseTelemetryV3Envelope({ ...v3Full(), timing: { ...v3Full().timing, completedLaps: 5 } });
+    const v2 = normalizeTelemetryEnvelope(v2Envelope({ telemetry: { ...v2Envelope().telemetry, completedLaps: 5 } }));
+    expect(v3.timing.completedLaps).toBe(5);
+    expect(v2.timing.completedLaps).toBe(5);
   });
 });
 

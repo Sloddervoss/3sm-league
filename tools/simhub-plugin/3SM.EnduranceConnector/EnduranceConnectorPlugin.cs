@@ -596,6 +596,7 @@ namespace ThreeSM.EnduranceConnector
         private const string P_CarIdxBestLapTime = "DataCorePlugin.GameData.NewData.CarIdxBestLapTime";
         private const string P_CarIdxCurrentLap = "DataCorePlugin.GameData.NewData.CarIdxLapCurrentLapTime";
         private const string P_CarIdxOnPitRoad = "DataCorePlugin.GameData.NewData.CarIdxOnPitRoad";
+        private const string P_CompletedLaps = "DataCorePlugin.GameData.NewData.CompletedLaps";
 
         // V3 capture entry point. Reads the same SimHub properties through
         // PluginManager but maps them into the V3 structure. isInCar comes from
@@ -674,6 +675,7 @@ namespace ThreeSM.EnduranceConnector
                     CurrentLapElapsedSeconds = NormalizeTiming(GetCarIdxDoubleOr(raw, P_CarIdxCurrentLap, playerCarIdx, P_CurrentLapElapsed)),
                     LastLapTimeSeconds = NormalizeTiming(GetCarIdxDouble(raw, P_CarIdxLastLapTime, playerCarIdx)),
                     BestLapTimeSeconds = NormalizeTiming(GetCarIdxDouble(raw, P_CarIdxBestLapTime, playerCarIdx)),
+                    CompletedLaps = NormalizeNonNegativeInt(NullableInt(raw, P_CompletedLaps)),
                 },
                 Position = new V3Position
                 {
