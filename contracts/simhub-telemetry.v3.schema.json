@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://3stripemotorsport.local/contracts/simhub-telemetry.v3.schema.json",
+  "title": "3SM SimHub telemetry envelope v3 (strict wire contract)",
+  "description": "Frozen V3 strict wire contract from docs/telemetry/simhub-telemetry-v3-design.md (SHA 7c12b0d4). Exact per-version allowlist: no unknown keys, no source/connectorId/race trees, no client-authority fields. Sentinels (32767 sessionLapsRemaining, 604800 sessionTimeRemainingSeconds) are not valid wire values and normalize to null in the parser.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "sequence",
+    "capturedAt",
+    "transportSessionId",
+    "identity",
+    "session",
+    "timing",
+    "position",
+    "track",
+    "fuel",
+    "raceState",
+    "pitService"
+  ],
+  "properties": {
+    "protocolVersion": { "const": 3 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "transportSessionId": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"],
+      "properties": {
+        "currentDriverId": { "type": ["string", "null"], "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "currentDriverName": { "type": ["string", "null"], "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "carId": { "type": ["string", "null"], "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "carName": { "type": ["string", "null"], "minLength": 1, "maxLength": 160, "pattern": "\\S" },
+        "trackName": { "type": ["string", "null"], "minLength": 1, "maxLength": 160, "pattern": "\\S" },
+        "trackConfig": { "type": ["string", "null"], "minLength": 1, "maxLength": 160, "pattern": "\\S" }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"],
+      "properties": {
+        "isInCar": { "type": "boolean" },
+        "sessionTimeSeconds": { "type": ["number", "null"], "minimum": 0, "maximum": 604800 },
+        "sessionTimeRemainingSeconds": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 604800,
+          "not": { "const": 604800 }
+        },
+        "sessionLapsRemaining": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 100000,
+          "not": { "const": 32767 }
+        },
+        "flags": {
+          "type": ["array", "null"],
+          "items": {
+            "enum": ["green", "yellow", "red", "white", "checkered", "blue", "black", "meatball", "disqualify"]
+          }
+        },
+        "sessionState": {
+          "enum": ["not_in_world", "warmup", "parade_laps", "racing", "checkered", "cool_down", "unknown"]
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds"],
+      "properties": {
+        "currentLapElapsedSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 86400 },
+        "lastLapTimeSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 86400 },
+        "bestLapTimeSeconds": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 86400 }
+      }
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "classPosition", "gapToLeaderSeconds"],
+      "properties": {
+        "position": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000 },
+        "classPosition": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000 },
+        "gapToLeaderSeconds": { "type": ["number", "null"], "minimum": 0, "maximum": 86400 }
+      }
+    },
+    "track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lapDistancePct", "trackSurface", "onPitRoad"],
+      "properties": {
+        "lapDistancePct": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "trackSurface": {
+          "enum": ["on_track", "off_track", "in_pit_stall", "approaching_pits", "not_in_world", "unknown"]
+        },
+        "onPitRoad": { "type": ["boolean", "null"] }
+      }
+    },
+    "fuel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fuelLitres", "fuelPct"],
+      "properties": {
+        "fuelLitres": { "type": ["number", "null"], "minimum": 0, "maximum": 250 },
+        "fuelPct": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "raceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["incidents"],
+      "properties": {
+        "incidents": { "type": ["integer", "null"], "minimum": 0, "maximum": 100000 }
+      }
+    },
+    "pitService": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pitServiceFlagsRaw", "requiredRepairSeconds", "optionalRepairSeconds"],
+      "properties": {
+        "pitServiceFlagsRaw": { "type": ["integer", "null"], "minimum": 0, "maximum": 2147483647 },
+        "requiredRepairSeconds": { "type": ["number", "null"], "minimum": 0, "maximum": 86400 },
+        "optionalRepairSeconds": { "type": ["number", "null"], "minimum": 0, "maximum": 86400 }
+      }
+    }
+  }
+}
