@@ -8,7 +8,7 @@
 
 DO $$
 BEGIN
-  IF current_database() NOT IN ('phase_e_test', 'test_pre_phase_e_baseline') THEN
+  IF current_database() NOT IN ('phase_e_test', 'test_pre_phase_e_baseline', 'test_phase_f') THEN
     RAISE EXCEPTION 'ABORT: disposable baseline fixture forbidden on database %', current_database();
   END IF;
 END $$;

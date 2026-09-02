@@ -11,7 +11,7 @@
 \set ON_ERROR_STOP on
 DO $$
 BEGIN
-  IF current_database() NOT IN ('test_pre_phase_e_baseline', 'phase_e_test') THEN
+  IF current_database() NOT IN ('test_pre_phase_e_baseline', 'phase_e_test', 'test_phase_f') THEN
     RAISE EXCEPTION 'ABORT: phase-e persistence test forbidden on %', current_database();
   END IF;
 END $$;

@@ -5,8 +5,8 @@ DECLARE
   v_count integer;
   v_def text;
 BEGIN
-  IF current_database() <> 'test_pre_phase_e_baseline' THEN
-    RAISE EXCEPTION 'ABORT: expected test_pre_phase_e_baseline, got %', current_database();
+  IF current_database() NOT IN ('test_pre_phase_e_baseline', 'test_phase_f') THEN
+    RAISE EXCEPTION 'ABORT: expected test_pre_phase_e_baseline or test_phase_f, got %', current_database();
   END IF;
 
   SELECT count(*) INTO v_count FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
