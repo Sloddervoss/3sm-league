@@ -50,6 +50,33 @@ namespace ThreeSM.EnduranceConnector
         public string TrackNameProperty = "DataCorePlugin.GameData.NewData.TrackName";
         public string TrackConfigProperty = "DataCorePlugin.GameData.NewData.TrackConfig";
 
+        // ------------------------------------------------------------------
+        // Envelope v3 (Phase C): nieuwe property-paden voor de V3-structuur.
+        // Alle CarIdx-arrayleden worden altijd via playerCarIdx gelezen (met
+        // bounds-checking); de directe niet-CarIdx-varianten (bv. PitSvFlags,
+        // LapDistPct) dienen alleen als fallback wanneer playerCarIdx ongeldig is.
+        // ------------------------------------------------------------------
+        public string PlayerCarIdxProperty = "DataCorePlugin.GameData.NewData.PlayerCarIdx";
+        public string CurrentLapElapsedProperty = "DataCorePlugin.GameData.NewData.LapCurrentLapTime";
+        public string SessionTimeRemainingProperty = "DataCorePlugin.GameData.NewData.SessionTimeRemain";
+        public string SessionLapsRemainingProperty = "DataCorePlugin.GameData.NewData.SessionLapsRemainEx";
+        public string GapToLeaderProperty = "DataCorePlugin.GameData.NewData.F2Time";
+        public string LapDistanceProperty = "DataCorePlugin.GameData.NewData.LapDistPct";
+        public string FuelPctProperty = "DataCorePlugin.GameData.NewData.FuelLevelPct";
+        public string PlayerCarDriverIncidentCountProperty = "DataCorePlugin.GameData.NewData.PlayerCarDriverIncidentCount";
+        public string PitServiceFlagsProperty = "DataCorePlugin.GameData.NewData.PitSvFlags";
+        public string RequiredRepairProperty = "DataCorePlugin.GameData.NewData.PitRepairLeft";
+        public string OptionalRepairProperty = "DataCorePlugin.GameData.NewData.PitOptRepairLeft";
+        public string CarIdxLapDistPctProperty = "DataCorePlugin.GameData.NewData.CarIdxLapDistPct";
+        public string CarIdxPositionProperty = "DataCorePlugin.GameData.NewData.CarIdxPosition";
+        public string CarIdxClassPositionProperty = "DataCorePlugin.GameData.NewData.CarIdxClassPosition";
+        public string CarIdxF2TimeProperty = "DataCorePlugin.GameData.NewData.CarIdxF2Time";
+        public string CarIdxLastLapTimeProperty = "DataCorePlugin.GameData.NewData.CarIdxLastLapTime";
+        public string CarIdxBestLapTimeProperty = "DataCorePlugin.GameData.NewData.CarIdxBestLapTime";
+        public string CarIdxCurrentLapProperty = "DataCorePlugin.GameData.NewData.CarIdxLapCurrentLapTime";
+        public string CarIdxTrackSurfaceProperty = "DataCorePlugin.GameData.NewData.CarIdxTrackSurface";
+        public string CarIdxOnPitRoadProperty = "DataCorePlugin.GameData.NewData.CarIdxOnPitRoad";
+
         // Veilige versie-check: alleen een "nieuwe versie beschikbaar"-melding.
         // De plugin vervangt nooit zelf de DLL en stuurt geen credentials.
         public string LastKnownRemoteVersion = string.Empty;

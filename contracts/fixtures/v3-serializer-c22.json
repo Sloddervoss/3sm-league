@@ -1,0 +1,49 @@
+{
+  "protocolVersion": 3,
+  "sequence": 0,
+  "capturedAt": "2026-09-02T14:35:00.000Z",
+  "transportSessionId": "connector-session-guid-0002",
+  "identity": {
+    "currentDriverId": null,
+    "currentDriverName": null,
+    "carId": null,
+    "carName": null,
+    "trackName": null,
+    "trackConfig": null
+  },
+  "session": {
+    "isInCar": false,
+    "sessionTimeSeconds": null,
+    "sessionTimeRemainingSeconds": null,
+    "sessionLapsRemaining": null,
+    "flags": null,
+    "sessionState": "unknown"
+  },
+  "timing": {
+    "currentLapElapsedSeconds": null,
+    "lastLapTimeSeconds": null,
+    "bestLapTimeSeconds": null
+  },
+  "position": {
+    "position": null,
+    "classPosition": null,
+    "gapToLeaderSeconds": null
+  },
+  "track": {
+    "lapDistancePct": null,
+    "trackSurface": "unknown",
+    "onPitRoad": null
+  },
+  "fuel": {
+    "fuelLitres": null,
+    "fuelPct": null
+  },
+  "raceState": {
+    "incidents": null
+  },
+  "pitService": {
+    "pitServiceFlagsRaw": null,
+    "requiredRepairSeconds": null,
+    "optionalRepairSeconds": null
+  }
+}

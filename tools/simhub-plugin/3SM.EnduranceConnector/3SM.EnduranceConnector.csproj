@@ -30,6 +30,7 @@
     <Compile Include="ConnectorSettings.cs" />
     <Compile Include="SettingsControl.cs" />
     <Compile Include="TelemetryContracts.cs" />
+    <Compile Include="TelemetryContractsV3.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

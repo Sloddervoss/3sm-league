@@ -1,6 +1,7 @@
 using GameReaderCommon;
 using SimHub.Plugins;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -557,6 +558,343 @@ namespace ThreeSM.EnduranceConnector
             }
             var handler = PropertyChanged;
             if (handler != null) handler(this, new PropertyChangedEventArgs(name));
+        }
+
+        // =====================================================================
+        // Telemetry V3 (Phase C) — connector-side capture model + immutable
+        // snapshot mapping. V3 is a fully separate path from V2 (Capture() above
+        // is untouched). Mapping of sessionState/trackSurface to the frozen enum
+        // is deferred (always "unknown"). Sentinel normalization happens here so
+        // the emitted JSON always satisfies the V3 schema.
+        // =====================================================================
+        private const string P_IsInCar = "__isInCar";
+        private const string P_CurrentDriverId = "DataCorePlugin.GameData.NewData.DriverId";
+        private const string P_CurrentDriverName = "DataCorePlugin.GameData.NewData.CurrentDriverName";
+        private const string P_CarId = "DataCorePlugin.GameData.NewData.CarId";
+        private const string P_CarName = "DataCorePlugin.GameData.NewData.CarName";
+        private const string P_TrackName = "DataCorePlugin.GameData.NewData.TrackName";
+        private const string P_TrackConfig = "DataCorePlugin.GameData.NewData.TrackConfig";
+        private const string P_SessionTime = "DataCorePlugin.GameData.NewData.SessionTime";
+        private const string P_SessionTimeRemaining = "DataCorePlugin.GameData.NewData.SessionTimeRemain";
+        private const string P_SessionLapsRemaining = "DataCorePlugin.GameData.NewData.SessionLapsRemainEx";
+        private const string P_Fuel = "DataCorePlugin.GameData.NewData.Fuel";
+        private const string P_FuelPct = "DataCorePlugin.GameData.NewData.FuelLevelPct";
+        private const string P_Incidents = "DataCorePlugin.GameData.NewData.PlayerCarDriverIncidentCount";
+        private const string P_PitServiceFlags = "DataCorePlugin.GameData.NewData.PitSvFlags";
+        private const string P_RequiredRepair = "DataCorePlugin.GameData.NewData.PitRepairLeft";
+        private const string P_OptionalRepair = "DataCorePlugin.GameData.NewData.PitOptRepairLeft";
+        private const string P_Flag = "DataCorePlugin.GameData.NewData.Flag";
+        private const string P_CurrentLapElapsed = "DataCorePlugin.GameData.NewData.LapCurrentLapTime";
+        private const string P_GapToLeader = "DataCorePlugin.GameData.NewData.F2Time";
+        private const string P_LapDistance = "DataCorePlugin.GameData.NewData.LapDistPct";
+        private const string P_IsInPitLane = "DataCorePlugin.GameData.NewData.IsInPitLane";
+        private const string P_CarIdxLapDistPct = "DataCorePlugin.GameData.NewData.CarIdxLapDistPct";
+        private const string P_CarIdxPosition = "DataCorePlugin.GameData.NewData.CarIdxPosition";
+        private const string P_CarIdxClassPosition = "DataCorePlugin.GameData.NewData.CarIdxClassPosition";
+        private const string P_CarIdxF2Time = "DataCorePlugin.GameData.NewData.CarIdxF2Time";
+        private const string P_CarIdxLastLapTime = "DataCorePlugin.GameData.NewData.CarIdxLastLapTime";
+        private const string P_CarIdxBestLapTime = "DataCorePlugin.GameData.NewData.CarIdxBestLapTime";
+        private const string P_CarIdxCurrentLap = "DataCorePlugin.GameData.NewData.CarIdxLapCurrentLapTime";
+        private const string P_CarIdxOnPitRoad = "DataCorePlugin.GameData.NewData.CarIdxOnPitRoad";
+
+        // V3 capture entry point. Reads the same SimHub properties through
+        // PluginManager but maps them into the V3 structure. isInCar comes from
+        // the same fail-closed running logic used by the V2 path (only invoked
+        // while iRacing is running with telemetry).
+        internal TelemetryEnvelopeV3 CaptureV3(PluginManager manager, bool isInCar)
+        {
+            var playerCarIdx = GetNullablePlayerCarIdx(manager, Settings.PlayerCarIdxProperty);
+            var raw = new Dictionary<string, object>();
+            raw[P_IsInCar] = isInCar;
+            raw[P_CurrentDriverId] = GetRaw(manager, Settings.CurrentDriverIdProperty);
+            raw[P_CurrentDriverName] = GetRaw(manager, Settings.CurrentDriverNameProperty);
+            raw[P_CarId] = GetRaw(manager, Settings.CarIdProperty);
+            raw[P_CarName] = GetRaw(manager, Settings.CarNameProperty);
+            raw[P_TrackName] = GetRaw(manager, Settings.TrackNameProperty);
+            raw[P_TrackConfig] = GetRaw(manager, Settings.TrackConfigProperty);
+            raw[P_SessionTime] = GetRaw(manager, Settings.SessionTimeProperty);
+            raw[P_SessionTimeRemaining] = GetRaw(manager, Settings.SessionTimeRemainingProperty);
+            raw[P_SessionLapsRemaining] = GetRaw(manager, Settings.SessionLapsRemainingProperty);
+            raw[P_Fuel] = GetRaw(manager, Settings.FuelProperty);
+            raw[P_FuelPct] = GetRaw(manager, Settings.FuelPctProperty);
+            raw[P_Incidents] = GetRaw(manager, Settings.PlayerCarDriverIncidentCountProperty);
+            raw[P_PitServiceFlags] = GetRaw(manager, Settings.PitServiceFlagsProperty);
+            raw[P_RequiredRepair] = GetRaw(manager, Settings.RequiredRepairProperty);
+            raw[P_OptionalRepair] = GetRaw(manager, Settings.OptionalRepairProperty);
+            raw[P_Flag] = GetRaw(manager, Settings.FlagProperty);
+            raw[P_CurrentLapElapsed] = GetRaw(manager, Settings.CurrentLapElapsedProperty);
+            raw[P_GapToLeader] = GetRaw(manager, Settings.GapToLeaderProperty);
+            raw[P_LapDistance] = GetRaw(manager, Settings.LapDistanceProperty);
+            raw[P_IsInPitLane] = GetRaw(manager, Settings.PitLaneProperty);
+            // CarIdx-backed array members are always read at the playerCarIdx slot,
+            // bounds-checked; we never assume index 0.
+            raw[P_CarIdxLapDistPct] = GetNullableCarIdxDouble(manager, Settings.CarIdxLapDistPctProperty, playerCarIdx);
+            raw[P_CarIdxPosition] = GetNullableCarIdxInt(manager, Settings.CarIdxPositionProperty, playerCarIdx);
+            raw[P_CarIdxClassPosition] = GetNullableCarIdxInt(manager, Settings.CarIdxClassPositionProperty, playerCarIdx);
+            raw[P_CarIdxF2Time] = GetNullableCarIdxDouble(manager, Settings.CarIdxF2TimeProperty, playerCarIdx);
+            raw[P_CarIdxLastLapTime] = GetNullableCarIdxDouble(manager, Settings.CarIdxLastLapTimeProperty, playerCarIdx);
+            raw[P_CarIdxBestLapTime] = GetNullableCarIdxDouble(manager, Settings.CarIdxBestLapTimeProperty, playerCarIdx);
+            raw[P_CarIdxCurrentLap] = GetNullableCarIdxDouble(manager, Settings.CarIdxCurrentLapProperty, playerCarIdx);
+            raw[P_CarIdxOnPitRoad] = GetNullableCarIdxBool(manager, Settings.CarIdxOnPitRoadProperty, playerCarIdx);
+
+            var envelope = CreateFromRaw(raw, playerCarIdx);
+            envelope.TransportSessionId = _sessionId;
+            envelope.Sequence = Interlocked.Increment(ref _sequence);
+            envelope.CapturedAt = DateTime.UtcNow.ToString("o");
+            return envelope;
+        }
+
+        // Pure mapping over a property bag (simulates PluginManager.GetPropertyValue)
+        // so it can be unit-tested without a live SimHub instance.
+        internal static TelemetryEnvelopeV3 CreateFromRaw(Dictionary<string, object> raw, int? playerCarIdx)
+        {
+            var envelope = new TelemetryEnvelopeV3
+            {
+                ProtocolVersion = 3,
+                Identity = new V3Identity
+                {
+                    CurrentDriverId = NullableText(raw, P_CurrentDriverId),
+                    CurrentDriverName = NullableText(raw, P_CurrentDriverName),
+                    CarId = NullableText(raw, P_CarId),
+                    CarName = NullableText(raw, P_CarName),
+                    TrackName = NullableText(raw, P_TrackName),
+                    TrackConfig = NullableText(raw, P_TrackConfig),
+                },
+                Session = new V3Session
+                {
+                    IsInCar = raw != null && raw.TryGetValue(P_IsInCar, out var inCar) && inCar is bool carIn && carIn,
+                    SessionTimeSeconds = NormalizeNonNegative(NullableDouble(raw, P_SessionTime)),
+                    SessionTimeRemainingSeconds = NormalizeTimeRemaining(NullableDouble(raw, P_SessionTimeRemaining)),
+                    SessionLapsRemaining = NormalizeLaps(NullableInt(raw, P_SessionLapsRemaining)),
+                    Flags = ExtractFlags(Raw(raw, P_Flag)),
+                    SessionState = "unknown",
+                },
+                Timing = new V3Timing
+                {
+                    CurrentLapElapsedSeconds = NormalizeTiming(GetCarIdxDoubleOr(raw, P_CarIdxCurrentLap, playerCarIdx, P_CurrentLapElapsed)),
+                    LastLapTimeSeconds = NormalizeTiming(GetCarIdxDouble(raw, P_CarIdxLastLapTime, playerCarIdx)),
+                    BestLapTimeSeconds = NormalizeTiming(GetCarIdxDouble(raw, P_CarIdxBestLapTime, playerCarIdx)),
+                },
+                Position = new V3Position
+                {
+                    Position = NormalizePosition(GetCarIdxInt(raw, P_CarIdxPosition, playerCarIdx)),
+                    ClassPosition = NormalizePosition(GetCarIdxInt(raw, P_CarIdxClassPosition, playerCarIdx)),
+                    GapToLeaderSeconds = NormalizeNonNegative(GetCarIdxDoubleOr(raw, P_CarIdxF2Time, playerCarIdx, P_GapToLeader)),
+                },
+                Track = new V3Track
+                {
+                    LapDistancePct = NormalizeLapDist(GetCarIdxDoubleOr(raw, P_CarIdxLapDistPct, playerCarIdx, P_LapDistance)),
+                    TrackSurface = "unknown",
+                    OnPitRoad = GetCarIdxBoolOr(raw, P_CarIdxOnPitRoad, playerCarIdx, P_IsInPitLane),
+                },
+                Fuel = new V3Fuel
+                {
+                    FuelLitres = NormalizeNonNegative(NullableDouble(raw, P_Fuel)),
+                    FuelPct = NormalizeFuelPct(NullableDouble(raw, P_FuelPct)),
+                },
+                RaceState = new V3RaceState
+                {
+                    Incidents = NormalizeNonNegativeInt(NullableInt(raw, P_Incidents)),
+                },
+                PitService = new V3PitService
+                {
+                    PitServiceFlagsRaw = NormalizeNonNegativeInt(NullableInt(raw, P_PitServiceFlags)),
+                    RequiredRepairSeconds = NormalizeNonNegative(NullableDouble(raw, P_RequiredRepair)),
+                    OptionalRepairSeconds = NormalizeNonNegative(NullableDouble(raw, P_OptionalRepair)),
+                },
+            };
+            return envelope;
+        }
+
+        // PlayerCarIdx resolution: read the raw value, require a non-negative int.
+        // Bounds checking against the CarIdx array length happens in GetCarIdxValue.
+        private static int? GetNullablePlayerCarIdx(PluginManager manager, string property)
+        {
+            var value = GetRaw(manager, property);
+            if (value == null) return null;
+            int parsed;
+            if (value is int playerIndex) parsed = playerIndex;
+            else if (!int.TryParse(value.ToString(), out parsed)) return null;
+            return parsed >= 0 ? (int?)parsed : null;
+        }
+
+        private static object GetCarIdxValue(PluginManager manager, string arrayProperty, int? playerCarIdx)
+        {
+            if (!playerCarIdx.HasValue || playerCarIdx.Value < 0) return null;
+            var array = GetRaw(manager, arrayProperty) as Array;
+            if (array == null) return null;
+            if (playerCarIdx.Value >= array.Length) return null;
+            return array.GetValue(playerCarIdx.Value);
+        }
+
+        private static double? GetNullableCarIdxDouble(PluginManager manager, string arrayProperty, int? playerCarIdx)
+        {
+            return ToDouble(GetCarIdxValue(manager, arrayProperty, playerCarIdx));
+        }
+
+        private static int? GetNullableCarIdxInt(PluginManager manager, string arrayProperty, int? playerCarIdx)
+        {
+            var value = GetCarIdxValue(manager, arrayProperty, playerCarIdx);
+            if (value == null) return null;
+            int parsed;
+            return int.TryParse(value.ToString(), out parsed) ? (int?)parsed : null;
+        }
+
+        private static bool? GetNullableCarIdxBool(PluginManager manager, string arrayProperty, int? playerCarIdx)
+        {
+            var value = GetCarIdxValue(manager, arrayProperty, playerCarIdx);
+            if (value == null) return null;
+            if (value is bool flag) return flag;
+            bool parsedBool;
+            if (bool.TryParse(value.ToString(), out parsedBool)) return parsedBool;
+            int parsedInt;
+            return int.TryParse(value.ToString(), out parsedInt) ? (bool?)(parsedInt != 0) : null;
+        }
+
+        // --- raw property-bag accessors (Array-or-scalar aware) ---
+        private static object Raw(Dictionary<string, object> raw, string key)
+        {
+            object value;
+            return raw != null && raw.TryGetValue(key, out value) ? value : null;
+        }
+
+        private static object CarIdxValue(Dictionary<string, object> raw, string key, int? playerCarIdx)
+        {
+            var value = Raw(raw, key);
+            if (value == null) return null;
+            var array = value as Array;
+            if (array == null) return value; // caller already extracted scalar slot
+            if (!playerCarIdx.HasValue || playerCarIdx.Value < 0 || playerCarIdx.Value >= array.Length) return null;
+            return array.GetValue(playerCarIdx.Value);
+        }
+
+        private static double? GetCarIdxDouble(Dictionary<string, object> raw, string key, int? playerCarIdx)
+        {
+            return ToDouble(CarIdxValue(raw, key, playerCarIdx));
+        }
+
+        private static double? GetCarIdxDoubleOr(Dictionary<string, object> raw, string key, int? playerCarIdx, string fallbackKey)
+        {
+            if (playerCarIdx.HasValue && playerCarIdx.Value >= 0) return GetCarIdxDouble(raw, key, playerCarIdx);
+            return ToDouble(Raw(raw, fallbackKey));
+        }
+
+        private static int? GetCarIdxInt(Dictionary<string, object> raw, string key, int? playerCarIdx)
+        {
+            var value = CarIdxValue(raw, key, playerCarIdx);
+            if (value == null) return null;
+            int parsed;
+            return int.TryParse(value.ToString(), out parsed) ? (int?)parsed : null;
+        }
+
+        private static bool? GetCarIdxBoolOr(Dictionary<string, object> raw, string key, int? playerCarIdx, string fallbackKey)
+        {
+            var value = CarIdxValue(raw, key, playerCarIdx);
+            if (value != null)
+            {
+                if (value is bool boolVal) return boolVal;
+                bool parsedBool;
+                if (bool.TryParse(value.ToString(), out parsedBool)) return parsedBool;
+                int parsedInt;
+                if (int.TryParse(value.ToString(), out parsedInt)) return parsedInt != 0;
+            }
+            if (playerCarIdx.HasValue && playerCarIdx.Value >= 0) return null;
+            var direct = Raw(raw, fallbackKey);
+            if (direct == null) return null;
+            if (direct is bool directBool) return directBool;
+            bool directParsedBool;
+            if (bool.TryParse(direct.ToString(), out directParsedBool)) return directParsedBool;
+            int directParsedInt;
+            return int.TryParse(direct.ToString(), out directParsedInt) ? (bool?)(directParsedInt != 0) : null;
+        }
+
+        private static double? NullableDouble(Dictionary<string, object> raw, string key)
+        {
+            return ToDouble(Raw(raw, key));
+        }
+
+        private static int? NullableInt(Dictionary<string, object> raw, string key)
+        {
+            var value = Raw(raw, key);
+            if (value == null) return null;
+            int parsed;
+            return int.TryParse(value.ToString(), out parsed) ? (int?)parsed : null;
+        }
+
+        private static string NullableText(Dictionary<string, object> raw, string key)
+        {
+            var value = Raw(raw, key);
+            if (value == null) return null;
+            var text = value.ToString().Trim();
+            return string.IsNullOrWhiteSpace(text) || string.Equals(text, "unknown", StringComparison.OrdinalIgnoreCase) ? null : text;
+        }
+
+        private static double? ToDouble(object value)
+        {
+            if (value == null) return null;
+            if (value is TimeSpan timeSpan) return timeSpan.TotalSeconds;
+            if (value is double d) return double.IsNaN(d) || double.IsInfinity(d) ? (double?)null : d;
+            if (value is float f) { var fd = (double)f; return double.IsNaN(fd) || double.IsInfinity(fd) ? (double?)null : fd; }
+            if (value is int i) return i;
+            if (value is long l) return l;
+            if (value is short s) return s;
+            if (value is bool) return null;
+            double parsed;
+            if (double.TryParse(value.ToString(), out parsed) && !double.IsNaN(parsed) && !double.IsInfinity(parsed)) return parsed;
+            return null;
+        }
+
+        // --- sentinel normalization (emitted JSON must satisfy the V3 schema) ---
+        private static double? NormalizeNonNegative(double? value) { return value.HasValue && value.Value >= 0 ? value : null; }
+        private static int? NormalizeNonNegativeInt(int? value) { return value.HasValue && value.Value >= 0 ? value : null; }
+        private static double? NormalizeTimeRemaining(double? value) { if (!value.HasValue) return null; if (value.Value == 604800.0 || value.Value < 0) return null; return value; }
+        private static int? NormalizeLaps(int? value) { if (!value.HasValue) return null; if (value.Value == 32767 || value.Value < 0) return null; return value; }
+        private static double? NormalizeTiming(double? value) { if (!value.HasValue) return null; return value.Value > 0 ? value : null; }
+        private static int? NormalizePosition(int? value) { if (!value.HasValue) return null; return value.Value > 0 ? value : null; }
+        private static double? NormalizeLapDist(double? value) { if (!value.HasValue) return null; return (value.Value >= 0 && value.Value <= 1) ? value : null; }
+        private static double? NormalizeFuelPct(double? value) { if (!value.HasValue) return null; return NormalizeLapDist(value); }
+
+        // flags: build an ordered, allowlisted string[] from the raw flag value
+        // (iRacing SessionFlags bitmask or comma/seperated names), deduplicated.
+        private static string[] ExtractFlags(object rawFlag)
+        {
+            if (rawFlag == null) return null;
+            var text = rawFlag.ToString().ToLowerInvariant();
+            long bits = -1;
+            if (rawFlag is byte byteVal) bits = byteVal;
+            else if (rawFlag is short shortVal) bits = shortVal;
+            else if (rawFlag is int intVal) bits = intVal;
+            else if (rawFlag is long longVal) bits = longVal;
+            else if (!long.TryParse(text, out bits)) bits = -1;
+
+            var found = new List<string>();
+            if (bits >= 0)
+            {
+                // iRacing SessionFlags bit mapping (green=0x2 yellow=0x4 red=0x8
+                // checkered=0x1 blue=0x10 white=0x20 black=0x40 disqualify=0x80 meatball=0x100000).
+                AddFlag(found, bits, 0x2L, "green");
+                AddFlag(found, bits, 0x4L, "yellow");
+                AddFlag(found, bits, 0x8L, "red");
+                AddFlag(found, bits, 0x1L, "checkered");
+                AddFlag(found, bits, 0x10L, "blue");
+                AddFlag(found, bits, 0x20L, "white");
+                AddFlag(found, bits, 0x40L, "black");
+                AddFlag(found, bits, 0x80L, "disqualify");
+                AddFlag(found, bits, 0x100000L, "meatball");
+            }
+            else
+            {
+                foreach (var name in new[] { "green", "yellow", "red", "white", "checkered", "blue", "black", "meatball", "disqualify" })
+                {
+                    if (text.Contains(name) && !found.Contains(name)) found.Add(name);
+                }
+            }
+            return found.Count == 0 ? null : found.ToArray();
+        }
+
+        private static void AddFlag(List<string> found, long bits, long bit, string name)
+        {
+            if ((bits & bit) != 0) found.Add(name);
         }
     }
 }

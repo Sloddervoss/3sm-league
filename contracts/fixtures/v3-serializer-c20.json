@@ -1,0 +1,59 @@
+{
+  "protocolVersion": 3,
+  "sequence": 12345,
+  "capturedAt": "2026-09-02T14:35:00.000Z",
+  "transportSessionId": "connector-session-guid-0001",
+  "identity": {
+    "currentDriverId": "302911",
+    "currentDriverName": "Vincent",
+    "carId": "GT3-911",
+    "carName": "Porsche 911 GT3 R",
+    "trackName": "Zandvoort",
+    "trackConfig": "Grand Prix"
+  },
+  "session": {
+    "isInCar": true,
+    "sessionTimeSeconds": 1234.56,
+    "sessionTimeRemainingSeconds": 3600.0,
+    "sessionLapsRemaining": 42,
+    "flags": [
+      "green",
+      "yellow",
+      "red",
+      "white",
+      "checkered",
+      "blue",
+      "black",
+      "meatball",
+      "disqualify"
+    ],
+    "sessionState": "unknown"
+  },
+  "timing": {
+    "currentLapElapsedSeconds": 45.12,
+    "lastLapTimeSeconds": 121.25,
+    "bestLapTimeSeconds": 120.98
+  },
+  "position": {
+    "position": 4,
+    "classPosition": 2,
+    "gapToLeaderSeconds": 3.75
+  },
+  "track": {
+    "lapDistancePct": 0.375,
+    "trackSurface": "unknown",
+    "onPitRoad": false
+  },
+  "fuel": {
+    "fuelLitres": 52.67,
+    "fuelPct": 0.48
+  },
+  "raceState": {
+    "incidents": 6
+  },
+  "pitService": {
+    "pitServiceFlagsRaw": 0,
+    "requiredRepairSeconds": 12.5,
+    "optionalRepairSeconds": null
+  }
+}
