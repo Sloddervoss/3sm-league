@@ -9,6 +9,12 @@ export type ResolvedTelemetryContext = {
   raceRunId: string | null;
   runKind: string | null;
   hasActiveRaceRun: boolean;
+  // Device-source fields needed by the V3 latest/event persistence path
+  // (connector_id / simhub_version / owner / legacy race-team refs).
+  connectorId: string | null;
+  deviceName: string | null;
+  ownerUserId: string | null;
+  raceId: string | null;
   result:
     | "accepted_context"
     | "accepted_context_no_race_run"
@@ -52,7 +58,7 @@ export const resolveTelemetryContext = async (
   const tokenHash = await sha256(token);
   const { data: device, error: deviceError } = await supabase
     .from("simhub_devices")
-    .select("id, owner_user_id, endurance_event_id, endurance_team_id, device_status, device_role, revoked_at")
+    .select("id, owner_user_id, race_id, team_id, endurance_event_id, endurance_team_id, device_status, device_role, revoked_at, connector_id, device_name")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
@@ -60,8 +66,10 @@ export const resolveTelemetryContext = async (
     return mkResult("invalid_device", null);
   }
   const dev = device as unknown as {
-    id: string; endurance_event_id: string | null; endurance_team_id: string | null;
+    id: string; owner_user_id: string; race_id: string | null; team_id: string | null;
+    endurance_event_id: string | null; endurance_team_id: string | null;
     device_status: string | null; device_role: string | null; revoked_at: string | null;
+    connector_id: string | null; device_name: string | null;
   };
   if (dev.revoked_at) {
     return mkResult("revoked", null, dev.id);
@@ -110,12 +118,16 @@ export const resolveTelemetryContext = async (
   }
 
   return {
-    deviceId: device.id,
+    deviceId: dev.id,
     eventId, teamId,
     isAuthority: true,
     raceRunId,
     runKind: raceRunId ? "race" : null,
     hasActiveRaceRun: raceRunId !== null,
+    connectorId: dev.connector_id,
+    deviceName: dev.device_name,
+    ownerUserId: dev.owner_user_id,
+    raceId: dev.race_id,
     result: raceRunId ? "accepted_context" : "accepted_context_no_race_run",
     normalized,
   };
@@ -135,6 +147,10 @@ const mkResult = (
   raceRunId: null,
   runKind: null,
   hasActiveRaceRun: false,
+  connectorId: null,
+  deviceName: null,
+  ownerUserId: null,
+  raceId: null,
   result,
   normalized,
 });

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "include": [
+    "supabase/functions/_shared/simhub.ts",
+    "supabase/functions/simhub-ingest-v3/persist.ts",
+    "supabase/functions/simhub-ingest-v3/context.ts",
+    "src/test/simHubV3Persistence.test.ts"
+  ],
+  "compilerOptions": { "noEmit": true, "skipLibCheck": true }
+}

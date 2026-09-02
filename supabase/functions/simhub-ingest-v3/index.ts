@@ -77,7 +77,7 @@ Deno.serve(async (request) => {
       return jsonResponse(request, { accepted: true, receivedAt: result.received_at }, 202);
     }
 
-    // V3 dispatch via context resolution
+    // V3 dispatch via context resolution + Phase E persistence
     if (version === 3) {
       const context = await resolveTelemetryContext(token, rawBody, service, sha256Hex);
 
@@ -85,17 +85,27 @@ Deno.serve(async (request) => {
       if (context.result === "revoked") return jsonResponse(request, { error: "invalid_device" }, 401);
       if (context.result === "unsupported_version") return jsonResponse(request, { error: "invalid_payload" }, 422);
       if (context.result === "invalid_payload") return jsonResponse(request, { error: "invalid_payload" }, 422);
+      if (context.result === "not_bound") return jsonResponse(request, { error: context.result }, 403);
+      if (context.result === "not_authority") return jsonResponse(request, { error: context.result }, 403);
 
-      // Return the resolved context (no persistence yet — Phase E adds latest/event storage)
-      return jsonResponse(request, {
-        result: context.result,
-        deviceId: context.deviceId,
-        eventId: context.eventId,
-        teamId: context.teamId,
-        isAuthority: context.isAuthority,
-        raceRunId: context.raceRunId,
-        hasActiveRaceRun: context.hasActiveRaceRun,
-      }, 202);
+      // Transactionality, write-time authority, source baselines and all event
+      // writes live in the service-role-only database RPC; Edge makes one call.
+      const { data, error } = await service.rpc("simhub_persist_v3", {
+        p_token_hash: await sha256Hex(token),
+        p_session_id: context.normalized!.transportSessionId,
+        p_sequence: context.normalized!.sequence,
+        p_captured_at: context.normalized!.capturedAt,
+        p_v3_normalized: context.normalized,
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      const result = row?.result;
+      if (result === "not_authority" || result === "not_bound" || result === "not_registered") return jsonResponse(request, { error: result }, 403);
+      if (result === "invalid_device" || result === "revoked") return jsonResponse(request, { error: "invalid_device" }, 401);
+      if (result === "replayed") return jsonResponse(request, { error: "replayed" }, 409);
+      if (result === "invalid_payload") return jsonResponse(request, { error: result }, 422);
+      if (result !== "accepted") return jsonResponse(request, { error: "internal_error" }, 500);
+      return jsonResponse(request, { accepted: true, receivedAt: row.received_at }, 202);
     }
 
     // Unknown protocol version
