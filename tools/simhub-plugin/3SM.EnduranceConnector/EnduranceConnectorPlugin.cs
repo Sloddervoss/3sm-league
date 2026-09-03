@@ -25,6 +25,7 @@ namespace ThreeSM.EnduranceConnector
     public sealed class EnduranceConnectorPlugin : IPlugin, IDataPlugin, IWPFSettingsV2, INotifyPropertyChanged
     {
         private const string ProductionRelayBaseUrl = "https://api.3stripemotorsport.cc/functions/v1";
+        private const string V3IngestFunction = "simhub-ingest-v3";
         private readonly HttpClient _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(4) };
         private readonly CancellationTokenSource _shutdown = new CancellationTokenSource();
         private readonly object _sendGate = new object();
@@ -151,7 +152,7 @@ namespace ThreeSM.EnduranceConnector
                 }
                 Uri endpoint;
                 string token;
-                TelemetryEnvelope envelope;
+                TelemetryEnvelopeV3 envelope;
                 lock (_settingsGate)
                 {
                     var central = Settings.UseCentralRelay;
@@ -166,18 +167,18 @@ namespace ThreeSM.EnduranceConnector
                     _lastQueuedMilliseconds = now;
                     if (central)
                     {
-                        endpoint = BuildRelayEndpoint("simhub-ingest");
+                        endpoint = BuildRelayEndpoint(V3IngestFunction);
                         token = _deviceToken;
                     }
                     else
                     {
                         Uri baseUri;
                         if (!Uri.TryCreate(Settings.BridgeUrl, UriKind.Absolute, out baseUri) || baseUri.Scheme != Uri.UriSchemeHttp || !baseUri.IsLoopback) throw new InvalidOperationException("lokale bridge moet loopback gebruiken");
-                        endpoint = new Uri(baseUri, "/v1/telemetry");
+                        endpoint = new Uri(baseUri, "/v1/telemetry-v3");
                         token = Settings.PairingToken;
                         if (string.IsNullOrWhiteSpace(token) || token.Length < 12) throw new InvalidOperationException("lokaal pairingtoken is te kort");
                     }
-                    envelope = Capture(pluginManager, central);
+                    envelope = CaptureV3(pluginManager, true);
                 }
                 lock (_sendGate)
                 {
@@ -186,7 +187,7 @@ namespace ThreeSM.EnduranceConnector
                         Volatile.Write(ref _sendBusy, 0);
                         return;
                     }
-                    _activeSend = Task.Run(async () => await SendAsync(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
+                    _activeSend = Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
                 }
             }
             catch (Exception error)
@@ -439,7 +440,35 @@ namespace ThreeSM.EnduranceConnector
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Normale plugin-shutdown; End bepaalt de eindstatus.
+            }
+            catch (Exception error)
+            {
+                if (Volatile.Read(ref _ending) == 0) Status = "Relayfout · " + error.Message;
+            }
+            finally
+            {
+                Volatile.Write(ref _sendBusy, 0);
+            }
+        }
+
+        private async Task SendV3Async(TelemetryEnvelopeV3 envelope, Uri endpoint, string token, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
+                using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
+                {
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+                    using (var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false))
+                    {
+                        if (!response.IsSuccessStatusCode) throw new HttpRequestException("relay HTTP " + (int)response.StatusCode);
+                    }
+                }
+                if (Volatile.Read(ref _ending) == 0) Status = "V3 " + envelope.TransportSessionId.Substring(0, Math.Min(8, envelope.TransportSessionId.Length)) + " · seq " + envelope.Sequence;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
             }
             catch (Exception error)
             {
