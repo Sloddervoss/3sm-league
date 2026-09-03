@@ -52,6 +52,9 @@ namespace ThreeSM.EnduranceConnector
         public string TrackNameProperty = "DataCorePlugin.GameData.NewData.TrackName";
         public string TrackConfigProperty = "DataCorePlugin.GameData.NewData.TrackConfig";
 
+        // V3: gap to leader (fallback property; null-tolerant).
+        public string GapToLeaderProperty = "DataCorePlugin.GameData.NewData.F2Time";
+
         // Veilige versie-check en staged update. De plugin downloadt alleen van de vaste
         // 3SM-host; een extern updaterproces vervangt de geladen DLL na SimHub-exit.
         public string LastKnownRemoteVersion = string.Empty;

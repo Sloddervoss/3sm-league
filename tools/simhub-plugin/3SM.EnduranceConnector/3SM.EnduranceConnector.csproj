@@ -26,6 +26,12 @@
     <Reference Include="PresentationCore" /><Reference Include="PresentationFramework" /><Reference Include="System.Xaml" /><Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="UpdaterStateStore.cs" />
     <Compile Include="SessionTelemetryReader.cs" />
@@ -33,6 +39,7 @@
     <Compile Include="ConnectorSettings.cs" />
     <Compile Include="SettingsControl.cs" />
     <Compile Include="TelemetryContracts.cs" />
+    <Compile Include="TelemetryContractsV3.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -45,14 +52,6 @@
     <EmbeddedResource Include="Assets\plugin-icon.png" />
     <EmbeddedResource Include="Assets\plugin-icon-64.png" />
     <EmbeddedResource Include="Assets\wordmark.png" />
-    <EmbeddedResource Include="..\3SM.EnduranceConnector.Updater\bin\$(Configuration)\3SM.EnduranceConnector.Updater.exe">
-      <LogicalName>ThreeSM.EnduranceConnector.Assets.3SM.EnduranceConnector.Updater.exe</LogicalName>
-    </EmbeddedResource>
   </ItemGroup>
-  <Target Name="BuildEmbeddedUpdater" BeforeTargets="PrepareResources">
-    <MSBuild Projects="..\3SM.EnduranceConnector.Updater\3SM.EnduranceConnector.Updater.csproj"
-             Targets="Build"
-             Properties="Configuration=$(Configuration);Platform=$(Platform)" />
-  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

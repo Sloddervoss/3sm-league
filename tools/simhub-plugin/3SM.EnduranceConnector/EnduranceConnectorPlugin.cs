@@ -1,6 +1,7 @@
 using GameReaderCommon;
 using SimHub.Plugins;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -26,6 +27,7 @@ namespace ThreeSM.EnduranceConnector
     public sealed class EnduranceConnectorPlugin : IPlugin, IDataPlugin, IWPFSettingsV2, INotifyPropertyChanged
     {
         private const string ProductionRelayBaseUrl = "https://api.3stripemotorsport.cc/functions/v1";
+        private const string V3IngestFunction = "simhub-ingest-v3";
         private const long MaxUpdateBytes = 5 * 1024 * 1024;
         private const string ReleasePublicKeyXml = "<RSAKeyValue><Modulus>623ziGDiaH7x+n1WwVv4lp+CswGiM4b/+h410wt1IBXZc+xeIoJbS2GnSU+wCgsUD1Ek4Eup0XKumuyuEvkZYUJ7zzLuIV5qBj9jk1lSnZmp4ibMyanmhJOIxsuSzylpNV9ru2QAuJQLpK9Jahk8vbOjSaNaaO1ZxKP0U0Xxy79N/9vutjdO6dW9r2MzQUP5KNGCTBlgHwm5Kn3KujtyV3EB5jeFbwl0L1G5R2taan6wzrcSLtNKrJACbm/bLvOijAvUAjpVH7+ThUPY/w9womXuxtWCPFT0cp7wq9rBieOEFjWxFLSkr9uZ/Z+gWyuBINrGJ7gLGuONvNq3TbqkwRmnPu91hstTQR5EfLDduohdfsRW6g+BHUNgZFo9cheM/NpJx6vpZ61Rzjw46Bu8QVCInRW7W43u4e/Xb9CjlPEf6ou8jnEeUY9ZgDOKhs7oHbDg3072GIPTc/8HJjATN6YlnTU0tqB43zElN2BrWc/aFqqTdrXce9vEEqPclWVT</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         private readonly HttpClient _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(4) };
@@ -390,7 +392,7 @@ namespace ThreeSM.EnduranceConnector
                 }
                 Uri endpoint;
                 string token;
-                TelemetryEnvelope envelope;
+                TelemetryEnvelopeV3 envelope;
                 lock (_settingsGate)
                 {
                     var central = Settings.UseCentralRelay;
@@ -405,19 +407,19 @@ namespace ThreeSM.EnduranceConnector
                     _lastQueuedMilliseconds = now;
                     if (central)
                     {
-                        endpoint = BuildRelayEndpoint("simhub-ingest");
+                        endpoint = BuildRelayEndpoint(V3IngestFunction);
                         token = _deviceToken;
                     }
                     else
                     {
                         Uri baseUri;
                         if (!Uri.TryCreate(Settings.BridgeUrl, UriKind.Absolute, out baseUri) || baseUri.Scheme != Uri.UriSchemeHttp || !baseUri.IsLoopback) throw new InvalidOperationException("lokale bridge moet loopback gebruiken");
-                        endpoint = new Uri(baseUri, "/v1/telemetry");
+                        endpoint = new Uri(baseUri, "/v1/telemetry-v3");
                         token = Settings.PairingToken;
                         if (string.IsNullOrWhiteSpace(token) || token.Length < 12) throw new InvalidOperationException("lokaal pairingtoken is te kort");
                     }
                     DiagnosticsObservation observation;
-                    envelope = Capture(pluginManager, data, central, isInCar, out observation);
+                    envelope = CaptureV3(pluginManager, data, isInCar, out observation);
                     ObserveDiagnostics(observation);
                 }
                 lock (_sendGate)
@@ -427,7 +429,7 @@ namespace ThreeSM.EnduranceConnector
                         Volatile.Write(ref _sendBusy, 0);
                         return;
                     }
-                    _activeSend = Task.Run(async () => await SendAsync(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
+                    _activeSend = Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
                 }
             }
             catch (Exception error)
@@ -796,6 +798,103 @@ namespace ThreeSM.EnduranceConnector
             };
         }
 
+        internal TelemetryEnvelopeV3 CaptureV3(PluginManager manager, GameData data, bool isInCar, out DiagnosticsObservation diagnosticObservation)
+        {
+            var snapshot = data.NewData;
+            var player = snapshot.Opponents == null ? null : snapshot.Opponents.FirstOrDefault(opponent => opponent != null && opponent.IsPlayer);
+            var currentDriverId = FirstNonEmpty(player == null ? null : player.Id, GetNullableString(manager, Settings.CurrentDriverIdProperty));
+            var currentDriverName = FirstNonEmpty(snapshot.PlayerName, player == null ? null : player.Name, GetNullableString(manager, Settings.CurrentDriverNameProperty));
+            var carId = FirstNonEmpty(snapshot.CarId, GetNullableString(manager, Settings.CarIdProperty));
+            var carName = FirstNonEmpty(snapshot.CarModel, player == null ? null : player.CarName, GetNullableString(manager, Settings.CarNameProperty));
+            var trackName = FirstNonEmpty(snapshot.TrackName, GetNullableString(manager, Settings.TrackNameProperty));
+            var trackConfig = FirstNonEmpty(snapshot.TrackConfig, GetNullableString(manager, Settings.TrackConfigProperty));
+            var position = PositiveOrNull(snapshot.Position) ?? PositiveOrNull(GetInt(manager, Settings.PositionProperty, 0));
+            var classPosition = PositiveOrNull(player == null ? 0 : player.PositionInClass) ?? PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0));
+            var flag = ResolveFlag(snapshot, GetRaw(manager, Settings.FlagProperty));
+            var completedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0));
+            var lapTimeSeconds = GetNullableSeconds(manager, Settings.LapTimeProperty);
+            var gapToLeader = GetNullableSeconds(manager, Settings.GapToLeaderProperty);
+            var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
+            var incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty));
+            var inPitLane = GetBool(manager, Settings.PitLaneProperty, false);
+            var nextSequence = Interlocked.Increment(ref _sequence);
+
+            bool rawTelemetryAvailable;
+            var sessionTimeSeconds = _sessionTime.ReadWithHealth(snapshot, out rawTelemetryAvailable);
+            diagnosticObservation = new DiagnosticsObservation
+            {
+                GameConnected = true,
+                RawDataAvailable = snapshot != null,
+                RawTelemetryAvailable = rawTelemetryAvailable,
+                SessionTimeReadOk = sessionTimeSeconds.HasValue,
+                SessionTimeSeconds = sessionTimeSeconds,
+                Sequence = nextSequence
+            };
+
+            var flags = new List<string>();
+            if (flag != null && flag != "unknown") flags.Add(flag);
+
+            return new TelemetryEnvelopeV3
+            {
+                ProtocolVersion = 3,
+                Sequence = nextSequence,
+                CapturedAt = DateTime.UtcNow.ToString("o"),
+                TransportSessionId = _sessionId,
+                Identity = new V3Identity
+                {
+                    CurrentDriverId = currentDriverId,
+                    CurrentDriverName = currentDriverName,
+                    CarId = carId,
+                    CarName = carName,
+                    TrackName = trackName,
+                    TrackConfig = trackConfig,
+                },
+                Session = new V3Session
+                {
+                    IsInCar = isInCar,
+                    SessionTimeSeconds = sessionTimeSeconds,
+                    SessionTimeRemainingSeconds = null,
+                    SessionLapsRemaining = null,
+                    Flags = flags.Count == 0 ? null : flags.ToArray(),
+                    SessionState = "unknown",
+                },
+                Timing = new V3Timing
+                {
+                    CurrentLapElapsedSeconds = null,
+                    LastLapTimeSeconds = lapTimeSeconds,
+                    BestLapTimeSeconds = null,
+                    CompletedLaps = completedLaps,
+                },
+                Position = new V3Position
+                {
+                    Position = position,
+                    ClassPosition = classPosition,
+                    GapToLeaderSeconds = gapToLeader,
+                },
+                Track = new V3Track
+                {
+                    LapDistancePct = null,
+                    TrackSurface = "unknown",
+                    OnPitRoad = inPitLane,
+                },
+                Fuel = new V3Fuel
+                {
+                    FuelLitres = fuel,
+                    FuelPct = null,
+                },
+                RaceState = new V3RaceState
+                {
+                    Incidents = incidents,
+                },
+                PitService = new V3PitService
+                {
+                    PitServiceFlagsRaw = null,
+                    RequiredRepairSeconds = null,
+                    OptionalRepairSeconds = null,
+                },
+            };
+        }
+
         private async Task SendAsync(TelemetryEnvelope envelope, Uri endpoint, string token, CancellationToken cancellationToken)
         {
             var attemptUtc = DateTime.UtcNow;
@@ -823,6 +922,43 @@ namespace ThreeSM.EnduranceConnector
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 // Normale plugin-shutdown; End bepaalt de eindstatus.
+            }
+            catch (Exception error)
+            {
+                if (!ingestResultRecorded && diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, 0, false);
+                if (Volatile.Read(ref _ending) == 0) Status = "Relayfout · " + error.Message;
+            }
+            finally
+            {
+                Volatile.Write(ref _sendBusy, 0);
+            }
+        }
+
+        private async Task SendV3Async(TelemetryEnvelopeV3 envelope, Uri endpoint, string token, CancellationToken cancellationToken)
+        {
+            var attemptUtc = DateTime.UtcNow;
+            var ingestResultRecorded = false;
+            DiagnosticsClient diagnosticsAtAttempt;
+            lock (_diagnosticsGate) diagnosticsAtAttempt = _diagnostics;
+            if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestAttempt(attemptUtc);
+            try
+            {
+                var body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
+                using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
+                {
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+                    using (var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false))
+                    {
+                        if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, (int)response.StatusCode, response.IsSuccessStatusCode);
+                        ingestResultRecorded = true;
+                        if (!response.IsSuccessStatusCode) throw new HttpRequestException("relay HTTP " + (int)response.StatusCode);
+                    }
+                }
+                if (Volatile.Read(ref _ending) == 0) Status = "V3 " + envelope.TransportSessionId.Substring(0, Math.Min(8, envelope.TransportSessionId.Length)) + " · seq " + envelope.Sequence;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
             }
             catch (Exception error)
             {
