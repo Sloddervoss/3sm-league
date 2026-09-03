@@ -287,7 +287,7 @@ namespace ThreeSM.EnduranceConnector
                 SetUpdaterState(new UpdaterState { state = "CHECKING" });
 
                 var localVersion = this.GetType().Assembly.GetName().Version;
-                var endpoint = new Uri(BuildRelayEndpoint("simhub-version").AbsoluteUri + "?channel=canary");
+                var endpoint = BuildRelayEndpoint("simhub-version");
                 using (var request = new HttpRequestMessage(HttpMethod.Get, endpoint))
                 using (var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
                 {
