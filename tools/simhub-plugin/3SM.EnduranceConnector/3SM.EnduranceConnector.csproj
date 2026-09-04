@@ -26,10 +26,20 @@
     <Reference Include="PresentationCore" /><Reference Include="PresentationFramework" /><Reference Include="System.Xaml" /><Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
+    <Compile Include="UpdaterStateStore.cs" />
+    <Compile Include="SessionTelemetryReader.cs" />
+    <Compile Include="DiagnosticsClient.cs" />
     <Compile Include="ConnectorSettings.cs" />
     <Compile Include="SettingsControl.cs" />
     <Compile Include="TelemetryContracts.cs" />
+    <Compile Include="TelemetryContractsV3.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />
   </ItemGroup>
   <ItemGroup>

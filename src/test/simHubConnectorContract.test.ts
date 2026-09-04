@@ -16,7 +16,7 @@ describe("3SM SimHub connector spike contract", () => {
     expect(project).toContain("GameReaderCommon.dll");
     expect(plugin).toContain("IPlugin, IDataPlugin, IWPFSettingsV2");
     expect(plugin).toContain("public void DataUpdate(PluginManager pluginManager, ref GameData data)");
-    expect(plugin).toContain("Task.Run(async () => await SendAsync(envelope, endpoint, token, _shutdown.Token)");
+    expect(plugin).toContain("Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token)");
     expect(plugin).not.toContain("GameRawData");
     expect(plugin).not.toContain("async void DataUpdate");
   });
@@ -35,13 +35,13 @@ describe("3SM SimHub connector spike contract", () => {
     expect(plugin).toContain("lock (_settingsGate)");
     expect(plugin).not.toContain("Settings.RelayBaseUrl");
     expect(plugin).toContain("baseUri.IsLoopback");
-    expect(plugin).toContain('new Uri(baseUri, "/v1/telemetry")');
+    expect(plugin).toContain('new Uri(baseUri, "/v1/telemetry-v3")');
     expect(plugin).not.toContain("supabase");
     expect(plugin).not.toContain("adjust_future_stints");
     expect(plugin).toContain("_deviceToken = UnprotectToken");
     expect(plugin).toContain("CancellationTokenSource");
     expect(plugin).toContain("lock (_sendGate)");
-    expect(plugin).toContain("Settings.SchemaVersion < 3");
+    expect(plugin).toContain("Settings.SchemaVersion < 4");
     expect(plugin).toContain("IsGuid(result.DeviceId)");
     expect(plugin).toContain("Guid.TryParseExact");
     expect(plugin).toContain("IsDeviceToken");

@@ -5,8 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ASSEMBLY="$SCRIPT_DIR/3SM.EnduranceConnector/AssemblyInfo.cs"
-# Canonical SimHub release signing key — matches the public key embedded in the hardened
-# connector (modulus 623ziGD…). NEVER fall back to release-signing-private.pem (old key).
+# SimHub-release signing key: HOORT bij de public key die in de connector is gehard
+# (modulus 623ziGD... / eb6df3). De oude key (release-signing-private.pem) past daar NIET op.
+# Geen stille fallback naar de oude key; als de juiste key ontbreekt faalt de release hard.
 PRIVATE_KEY="${HOME}/.hermes/keys/3sm-simhub-release-private.pem"
 [ -f "$PRIVATE_KEY" ] || PRIVATE_KEY="$SCRIPT_DIR/3sm-simhub-release-private.pem"
 SSH_WIN="ssh -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no vdevo@192.168.50.119"
