@@ -98,6 +98,10 @@ request `?channel=canary`). That machine is COMPLETE and must not be manually re
   best/current lap), ingest errors, stale/reset.
 - Natural testers may not have produced telemetry yet — mark **NOT YET OBSERVED**.
   Never fabricate validation.
+- **0.4.1 opponents:** each TEST device emits a bounded (≤40) opponent snapshot per tick.
+  Validation starts only when a TEST user naturally enters a session with opponents; report
+  per session opponent count, identity stability, position/class/lap-dist/gap/lap-timing
+  coverage, pit status, stale cleanup, ingest errors. Until then: NOT YET OBSERVED.
 
 ## Rollback (TEST-only)
 
