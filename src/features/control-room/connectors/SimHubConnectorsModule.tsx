@@ -83,6 +83,15 @@ const telemetryStatus = (row: SimHubFleetRow): TelemetryStatus => {
 const diagnosticStatus = (code: string | null): DiagnosticStatus => {
   if (!code) return "unknown";
   if (code === "OK") return "ok";
+  // Missing binding is NOT a telemetry fault — it is informational/warning only.
+  // Per Vincent's device-scoped ingest decision: binding controls routing, not acceptance.
+  if (code === "DEVICE_UNBOUND") return "warning";
+  // Transient / data-availability conditions are warnings, not errors.
+  if (["RAW_DATA_UNAVAILABLE", "RAW_TELEMETRY_UNAVAILABLE", "TELEMETRY_STALE", "INGEST_429"].includes(code)) return "warning";
+  // Genuine auth / revocation / ingest failures remain errors.
+  if (["DEVICE_REVOKED", "INGEST_401", "INGEST_403", "INGEST_500"].includes(code)) return "error";
+  // Updater install failures are errors.
+  if (code.startsWith("UPDATE_")) return "error";
   return "error";
 };
 
@@ -132,6 +141,7 @@ const NoneBadge = () => <StatusBadge label="Geen" color="bg-gray-500/10 text-gra
 const GameOnBadge = () => <StatusBadge label="Verbonden" color="bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25" />;
 const GameOffBadge = () => <StatusBadge label="Niet verbonden" color="bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/15" />;
 const DiagOkBadge = () => <StatusBadge label="OK" color="bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25" />;
+const DiagWarningBadge = () => <StatusBadge label="Waarschuwing" color="bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/25" />;
 const DiagErrorBadge = () => <StatusBadge label="Fout" color="bg-red-400/15 text-red-300 ring-1 ring-red-400/25" />;
 const DiagUnknownBadge = () => <StatusBadge label="Onbekend" color="bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/15" />;
 const UpToDateBadge = () => <StatusBadge label="Actueel" color="bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25" />;
@@ -203,6 +213,15 @@ const updaterBadge = (status: UpdaterStatus) => {
   }
 };
 
+const diagBadge = (status: DiagnosticStatus) => {
+  switch (status) {
+    case "ok": return <DiagOkBadge />;
+    case "warning": return <DiagWarningBadge />;
+    case "error": return <DiagErrorBadge />;
+    default: return <DiagUnknownBadge />;
+  }
+};
+
 /* ───── Fleet overview row ───── */
 
 const FleetRow = ({ row, onClick }: { row: SimHubFleetRow; onClick: () => void }) => {
@@ -254,11 +273,12 @@ const FleetRow = ({ row, onClick }: { row: SimHubFleetRow; onClick: () => void }
         ) : (
           <UnboundBadge />
         )}
+        <span className="sr-only">Binding bepaalt alleen aan welk Endurance-team/event telemetrie wordt gekoppeld; een niet-gekoppeld apparaat kan wél telemetrie sturen.</span>
       </span>
 
       {/* Diagnostic + updater warnings */}
       <span className="flex items-center gap-2 self-center justify-self-end">
-        {dStatus === "ok" ? <DiagOkBadge /> : dStatus === "error" ? <DiagErrorBadge /> : <DiagUnknownBadge />}
+        {diagBadge(dStatus)}
         {uStatus === "failed" && (
           <span className="shrink-0">{updaterBadge(uStatus)}</span>
         )}
@@ -502,11 +522,7 @@ const DeviceDetail = ({ deviceId, onBack }: { deviceId: string; onBack: () => vo
       <div className="grid gap-4 md:grid-cols-2">
         {/* Connection / Health */}
         <DetailCard icon={Activity} title="Verbinding & gezondheid">
-          <InfoRow label="Diagnostiek" value={
-            health?.diagnostic_code === "OK" ? <DiagOkBadge /> :
-            health?.diagnostic_code ? <span className="font-bold text-red-300">{diagnosticLabel(health.diagnostic_code)}</span> :
-            <DiagUnknownBadge />
-          } />
+          <InfoRow label="Diagnostiek" value={diagBadge(diagnosticStatus(health?.diagnostic_code ?? null))} />
           <InfoRow label="SimHub versie" value={<span className="font-mono text-gray-300">{health?.simhub_version ?? "—"}</span>} />
           <InfoRow label="Game" value={gStatus === "connected" ? <GameOnBadge /> : gStatus === "disconnected" ? <GameOffBadge /> : <UnknownBadge />} />
           <InfoRow label="Telemetrie" value={telemetryBadge(tStatus)} />
