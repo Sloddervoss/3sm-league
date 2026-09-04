@@ -37,6 +37,7 @@ export const TopRaceBar = ({ strategy, position, raceClock, offlineMode }: Props
     ? Math.max(0, pitLap - completedLaps)
     : null;
   const isPitThisLap = fuelLaps != null && fuelLaps < 1.5;
+  const isLowSample = strategy.strategy_status === "low_sample";
 
   return (
     <div className="flex items-center gap-0 rounded-lg bg-black/50 px-4 py-2.5 text-sm ring-1 ring-white/8">
@@ -64,7 +65,7 @@ export const TopRaceBar = ({ strategy, position, raceClock, offlineMode }: Props
       <BarItem>
         <BarLabel>LEIDER</BarLabel>
         <BarValue mono>
-          {position?.gapToLeaderSeconds != null && !isPitThisLap
+          {position?.gapToLeaderSeconds != null
             ? `+${position.gapToLeaderSeconds.toFixed(1)}s`
             : "—"}
         </BarValue>
@@ -86,7 +87,11 @@ export const TopRaceBar = ({ strategy, position, raceClock, offlineMode }: Props
 
       {/* NEXT ACTION — pushed right via ml-auto */}
       <div className="ml-auto">
-        {isPitThisLap ? (
+        {isLowSample ? (
+          <span className="rounded-md px-4 py-2 font-black text-xs tracking-wider bg-yellow-500/15 text-yellow-300 ring-1 ring-yellow-500/15">
+            WACHT OP DATA
+          </span>
+        ) : isPitThisLap ? (
           <span className="rounded-md bg-red-500/20 px-4 py-2 font-black text-red-300 text-base tracking-wider ring-1 ring-red-500/20">
             PIT DEZE RONDE
           </span>

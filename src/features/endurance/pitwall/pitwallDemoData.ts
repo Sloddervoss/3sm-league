@@ -168,7 +168,7 @@ const scenarios: Record<DemoScenario, DemoData> = {
     scenario: "pit", strategy: PIT_STRATEGY, events: PIT_EVENTS,
     teams: TEAMS, plannedStints: STINTS, alerts: PIT_HIGH_ALERTS, loading: false,
     position: { overallPosition: 6, classPosition: 2, gapToLeaderSeconds: 18.3 },
-    pace: { lastLapSeconds: 0.0, bestLapSeconds: 91.8, stintAvgSeconds: 93.5, targetSeconds: 92.0 },
+    pace: { lastLapSeconds: 93.1, bestLapSeconds: 91.8, stintAvgSeconds: 93.5, targetSeconds: 92.0 },
     raceClock: { remainingSeconds: 8300, remainingLaps: 49 },
   },
   "low-data": {

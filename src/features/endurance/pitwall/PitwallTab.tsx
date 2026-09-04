@@ -13,7 +13,7 @@ import { RacePositionPanel } from "./RacePositionPanel";
 import { AlertZone } from "./AlertZone";
 import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { useLocation } from "react-router-dom";
 import type { PitwallPositionData, PitwallPaceData, PitwallRaceClock } from "./pitwallHelpers";
 
@@ -35,6 +35,15 @@ const useMemberships = (eventId: string, actorId: string, enabled: boolean) => {
 export const PitwallTab = ({ event }: Props) => {
   const { actorId } = useEnduranceActor();
   const location = useLocation();
+  const [focusButtonMode, setFocusButtonMode] = useState(false);
+
+  /* Focus mode: from URL or button state */
+  const isFocusMode = useMemo(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      return params.get("pitwallFocus") === "1" || focusButtonMode;
+    } catch { return focusButtonMode; }
+  }, [location.search, focusButtonMode]);
 
   const demoScenario: DemoScenario | null = useMemo(() => {
     if (!import.meta.env.DEV) return null;
@@ -88,11 +97,67 @@ export const PitwallTab = ({ event }: Props) => {
   const driverName = isDemo ? (currentStint?.driver_id ?? null) : null;
   const nextDriverName = isDemo ? (nextStint?.driver_id ?? null) : null;
 
+  const enterFocus = useCallback(() => setFocusButtonMode(true), []);
+  const exitFocus = useCallback(() => {
+    setFocusButtonMode(false);
+    try {
+      const params = new URLSearchParams(location.search);
+      params.delete("pitwallFocus");
+      const search = params.toString();
+      window.history.replaceState(null, "", `${location.pathname}${search ? `?${search}` : ""}`);
+    } catch { /* ignore */ }
+  }, [location.pathname, location.search]);
+
+  const requestFullscreen = useCallback(() => {
+    try { document.documentElement.requestFullscreen?.(); } catch { /* not available */ }
+  }, []);
+
   return (
-    /* data-pitwall enables future fullscreen CSS targeting */
-    <div className="space-y-3" data-pitwall="true">
+    /* data-pitwall + data-pitwall-focus for CSS targeting */
+    <div className={isFocusMode ? "space-y-2" : "space-y-3"} data-pitwall="true" data-pitwall-focus={isFocusMode ? "true" : undefined}>
+      {/* FOCUS MODE TOP STRIP */}
+      {isFocusMode && (
+        <div className="flex items-center gap-3 rounded-lg bg-black/60 px-4 py-2 text-xs ring-1 ring-white/5">
+          <span className="font-black text-orange-400 tracking-wider text-[10px]">3SM</span>
+          <span className="h-4 w-px bg-white/10" />
+          <span className="font-bold text-white">{event.name}</span>
+          <span className="h-4 w-px bg-white/10" />
+          {selectedTeamId && (
+            <>
+              <span className="text-gray-400">Team: <span className="font-bold text-white">
+                {teams.find((t) => t.id === selectedTeamId)?.name ?? selectedTeamId}
+              </span></span>
+              <span className="h-4 w-px bg-white/10" />
+            </>
+          )}
+          <span className={`inline-flex items-center gap-1 font-bold ${
+            strategy?.strategy_status === "insufficient_data" || strategy?.strategy_status === "low_sample"
+              ? "text-yellow-400" : "text-emerald-400"
+          }`}>
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+            {strategy?.strategy_status === "insufficient_data" ? "OFFLINE" : "LIVE"}
+          </span>
+          <div className="ml-auto flex gap-2">
+            <button
+              type="button"
+              onClick={requestFullscreen}
+              className="rounded bg-white/10 px-2 py-1 font-bold text-gray-400 hover:text-white text-[10px] transition"
+            >
+              Volledig scherm
+            </button>
+            <button
+              type="button"
+              onClick={exitFocus}
+              className="rounded bg-white/10 px-2 py-1 font-bold text-gray-400 hover:text-white text-[10px] transition"
+            >
+              Focus verlaten
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* === DEMO SWITCHER === */}
-      {isDemo && (
+      {isDemo && !isFocusMode && (
         <div className="rounded-lg border border-dashed border-orange-500/30 bg-orange-500/[0.04] px-3 py-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full bg-orange-500" />
@@ -117,8 +182,21 @@ export const PitwallTab = ({ event }: Props) => {
         </div>
       )}
 
+      {/* Focus toggle button — only in non-focus embedded mode */}
+      {!isFocusMode && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={enterFocus}
+            className="rounded bg-white/8 px-3 py-1 text-xs font-bold text-gray-400 hover:text-white transition ring-1 ring-white/10"
+          >
+            Focus mode
+          </button>
+        </div>
+      )}
+
       {/* === TEAM SELECTOR (real mode only) === */}
-      {teams.length > 1 && !isDemo && (
+      {teams.length > 1 && !isDemo && !isFocusMode && (
         <div className="flex flex-wrap gap-2">
           {teams.map((team) => (
             <button
@@ -135,7 +213,7 @@ export const PitwallTab = ({ event }: Props) => {
         </div>
       )}
 
-      {/* === TOP BAR === */}
+      {/* === TOP BAR — sticky in focus mode === */}
       {strategy && (
         <TopRaceBar
           strategy={strategy}
@@ -158,14 +236,11 @@ export const PitwallTab = ({ event }: Props) => {
       {strategy && (
         <>
           {/* === MAIN GRID: 3 ROWS === */}
-          {/* ROW 1: Positie | Pit Actie (center) | Coureur */}
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className={`grid gap-3 ${isFocusMode ? "" : "lg:grid-cols-3"}`}>
             <div className="space-y-3">
-              {/* Future slot: Live Standings can go here above RacePositionPanel */}
               <div data-pitwall-slot="standings" className="hidden" />
               <RacePositionPanel strategy={strategy} position={position} />
             </div>
-
             <div className="space-y-3">
               <PitStrategyBlock
                 strategy={strategy}
@@ -174,7 +249,6 @@ export const PitwallTab = ({ event }: Props) => {
                 nextDriverName={nextDriverName}
               />
             </div>
-
             <div className="space-y-3">
               <StintDriverPanel
                 strategy={strategy}
@@ -184,14 +258,11 @@ export const PitwallTab = ({ event }: Props) => {
             </div>
           </div>
 
-          {/* ROW 2: Brandstof | Forecast | Pace */}
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className={`grid gap-3 ${isFocusMode ? "" : "lg:grid-cols-3"}`}>
             <div className="space-y-3">
-              {/* Future slot: Tyres can go here below FuelPanel */}
               <FuelPanel strategy={strategy} />
               <div data-pitwall-slot="tyres" className="hidden" />
             </div>
-
             <div className="space-y-3">
               <StrategyForecast
                 strategy={strategy}
@@ -201,15 +272,12 @@ export const PitwallTab = ({ event }: Props) => {
                 nextDriverName={nextDriverName}
               />
             </div>
-
             <div className="space-y-3">
               <PacePanel strategy={strategy} pace={pace} />
-              {/* Future slot: Track map can go here below PacePanel */}
               <div data-pitwall-slot="trackmap" className="hidden" />
             </div>
           </div>
 
-          {/* ROW 3: Alerts + Timeline — full width */}
           <AlertZone alerts={alerts} />
           <RaceTimeline events={events} plannedStints={plannedStints} />
         </>

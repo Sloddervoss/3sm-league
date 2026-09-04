@@ -234,7 +234,7 @@ export interface TeamOption {
 }
 
 export const formatLapTime = (seconds: number | null | undefined): string => {
-  if (seconds == null) return "—";
+  if (seconds == null || seconds <= 0 || isNaN(seconds)) return "—";
   const min = Math.floor(seconds / 60);
   const sec = (seconds % 60).toFixed(1);
   return `${min}:${sec.padStart(4, "0")}`;
