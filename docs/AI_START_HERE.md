@@ -49,8 +49,9 @@ Dit document is het startpunt voor AI-assistenten die aan de 3SM-codebase werken
    - Data/schema: `docs/DATA_MODEL.md`
    - Auth/rollen: `docs/AUTH_AND_ROLES.md`
 3. Voor productie of build: `docs/DEPLOYMENT.md`
-4. Voor risicovolle wijzigingen: `docs/RISK_AREAS.md`
-5. Voor aanpak per wijzigingstype: `docs/FUTURE_CHANGE_GUIDE.md`
+4. Voor DB-migraties/inspectie: `docs/operations/production-access-runbook.md` — productie-Supabase is self-hosted Docker op 3sm-docker, **niet** Supabase Cloud.
+5. Voor risicovolle wijzigingen: `docs/RISK_AREAS.md`
+6. Voor aanpak per wijzigingstype: `docs/FUTURE_CHANGE_GUIDE.md`
 
 ## Lokale commands
 
