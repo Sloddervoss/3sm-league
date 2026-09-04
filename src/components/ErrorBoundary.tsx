@@ -7,7 +7,31 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  showDebug: boolean;
+  copied: boolean;
+  componentStack: string;
 }
+
+const isDebugMode = () => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("debug") === "1";
+  } catch {
+    return false;
+  }
+};
+
+const collectDebugInfo = (error: Error, info: ErrorInfo) => {
+  return {
+    name: error.name,
+    message: error.message,
+    stack: error.stack,
+    componentStack: info.componentStack,
+    pathname: window.location.pathname,
+    userAgent: navigator.userAgent,
+    timestamp: new Date().toISOString(),
+  };
+};
 
 const CHUNK_RELOAD_KEY = "3sm:chunk-reload-attempted";
 const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
@@ -39,13 +63,14 @@ const logErrorToConsole = (error: Error, info: ErrorInfo) => {
 };
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, error: null };
+  state: State = { hasError: false, error: null, showDebug: false, copied: false, componentStack: "" };
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error, showDebug: false, copied: false, componentStack: "" };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    this.setState({ componentStack: info.componentStack });
     logErrorToConsole(error, info);
 
     const lastChunkReload = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || 0);
@@ -55,6 +80,49 @@ export class ErrorBoundary extends Component<Props, State> {
       return;
     }
   }
+
+  toggleDebug = () => {
+    this.setState((prev) => ({ showDebug: !prev.showDebug, copied: false }));
+  };
+
+  copyDetails = () => {
+    if (!this.state.error) return;
+    const debug = collectDebugInfo(this.state.error, { componentStack: this.state.componentStack || "" });
+    const text = [
+      `Name: ${debug.name}`,
+      `Message: ${debug.message}`,
+      `Stack: ${debug.stack}`,
+      `ComponentStack: ${debug.componentStack}`,
+      `Pathname: ${debug.pathname}`,
+      `UserAgent: ${debug.userAgent}`,
+      `Timestamp: ${debug.timestamp}`,
+    ].join("\n\n");
+
+    try {
+      navigator.clipboard.writeText(text).then(
+        () => this.setState({ copied: true }),
+        () => this.fallbackCopy(text)
+      );
+    } catch {
+      this.fallbackCopy(text);
+    }
+  };
+
+  fallbackCopy = (text: string) => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      this.setState({ copied: true });
+    } catch {
+      /* clipboard unavailable — user can manually copy from the visible details */
+    }
+  };
 
   reset = () => {
     sessionStorage.removeItem(CHUNK_RELOAD_KEY);
@@ -91,6 +159,32 @@ export class ErrorBoundary extends Component<Props, State> {
                 Terug naar home
               </button>
             </div>
+            {isDebugMode() && this.state.error && (
+              <div className="mt-4 border-t border-border pt-3">
+                <button
+                  onClick={this.toggleDebug}
+                  className="text-xs text-muted-foreground hover:text-foreground underline mb-2"
+                >
+                  {this.state.showDebug ? "Verberg" : "Toon"} technische foutdetails
+                </button>
+                <button
+                  onClick={this.copyDetails}
+                  className="text-xs text-orange-400 hover:text-orange-300 underline ml-3"
+                >
+                  {this.state.copied ? "✓ Gekopieerd" : "Kopieer foutdetails"}
+                </button>
+                {this.state.showDebug && (
+                  <pre className="text-[10px] text-left text-muted-foreground bg-black/20 p-2 rounded mt-2 overflow-auto max-h-60 whitespace-pre-wrap break-all">
+{`Name: ${this.state.error.name}
+Message: ${this.state.error.message}
+Stack: ${this.state.error.stack || "(geen stack)"}
+ComponentStack: ${this.state.componentStack || "(geen componentStack)"}
+Pathname: ${window.location.pathname}
+UserAgent: ${navigator.userAgent}
+Timestamp: ${new Date().toISOString()}`}</pre>
+                )}
+              </div>
+            )}
           </div>
         </div>
       );
