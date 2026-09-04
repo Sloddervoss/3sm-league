@@ -20,6 +20,10 @@ export interface StandingsDerivation {
   ahead: V3Opponent | null;
   /** Directly behind: nearest active connected opponent behind. null if none/unavailable. */
   behind: V3Opponent | null;
+  /** Closing rate (s/lap, + = opponent closing) for the ahead car. null when unreliable. */
+  aheadTrend: number | null;
+  /** Closing rate (s/lap, + = opponent closing) for the behind car. null when unreliable. */
+  behindTrend: number | null;
   /** True when no opponent array present (clean empty state). */
   noData: boolean;
 }
@@ -39,10 +43,12 @@ const fallbackOwnPosition = (rows: V3Opponent[]): number | null => {
   return typeof player?.position === "number" ? player.position : null;
 };
 
-/** Derive standings from the current V3 snapshot. Bound ≤ opponent cap + player. */
+/** Derive standings from the current V3 snapshot. Bound ≤ opponent cap + player.
+ *  Optional `trends`: opponent-id → closingRatePerLap (from bounded OpponentHistory). */
 export function deriveStandings(
   v3?: V3Normalized | null,
   maxRows = 40,
+  trends?: Record<string, number | null> | null,
 ): StandingsDerivation {
   const opponents = v3?.opponents ?? [];
   const noData = !Array.isArray(v3?.opponents) || opponents.length === 0;
@@ -72,7 +78,16 @@ export function deriveStandings(
     behind = behindCand[0] ?? null;
   }
 
-  return { overallPosition: ownOverall, classPosition: ownClass, rows, ahead, behind, noData };
+  return {
+    overallPosition: ownOverall,
+    classPosition: ownClass,
+    rows,
+    ahead,
+    behind,
+    aheadTrend: ahead ? (trends?.[ahead.id] ?? null) : null,
+    behindTrend: behind ? (trends?.[behind.id] ?? null) : null,
+    noData,
+  };
 }
 
 /** Render a gap value: prefer gapToPlayer for ahead/behind, else null. */

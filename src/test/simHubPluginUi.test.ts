@@ -20,7 +20,7 @@ describe("SimHub plugin settings UI resources", () => {
 
   it("leidt isInCar af uit de echte SimHub GameData-statussen", () => {
     expect(plugin).toContain("var isInCar = running && data.NewData != null && !data.NewData.Spectating && !data.GameInMenu && !data.GameReplay;");
-    expect(plugin).toContain("Capture(pluginManager, data, central, isInCar)");
+    expect(plugin).toContain("CaptureV3(pluginManager, data, isInCar, out observation)");
     expect(plugin).toContain("IsInCar = isInCar");
     expect(plugin).not.toContain("IsInCar = true");
   });
@@ -36,9 +36,9 @@ describe("SimHub plugin settings UI resources", () => {
   });
 
   it("maakt de koppeling met de 3SM-site dominant en dynamisch zichtbaar", () => {
-    expect(settings).toContain('Text = "KOPPELSTATUS"');
-    expect(settings).toContain('"✓ GEKOPPELD MET DE 3SM-SITE"');
-    expect(settings).toContain('"NIET GEKOPPELD MET DE 3SM-SITE"');
+    expect(settings).toContain('Text = "APPARAATSTATUS"');
+    expect(settings).toContain('"✓ Gekoppeld met de 3SM-site"');
+    expect(settings).toContain('"Nog niet gekoppeld aan de 3SM-site"');
     expect(settings).toContain("pairingCode.IsEnabled = !paired");
     expect(settings).toContain("pairButton.IsEnabled = !paired");
     expect(settings).toContain('new Binding("IsPaired")');

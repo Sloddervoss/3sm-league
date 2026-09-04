@@ -93,16 +93,16 @@ export const PitwallTab = ({ event }: Props) => {
   const pace: PitwallPaceData | null = isDemo ? demo.pace : real.pace ?? null;
   const raceClock: PitwallRaceClock | null = isDemo ? demo.raceClock : real.raceClock ?? null;
 
-  /* 0.4.2: live standings derivation from opponent snapshot (real or demo). */
+  /* 0.4.2/0.4.3: live standings derivation from opponent snapshot (real or demo) + trends. */
   const standings = useMemo(() => {
     if (isDemo) {
       return deriveStandings({
         position: { position: demo.position.overallPosition ?? undefined, classPosition: demo.position.classPosition ?? undefined, gapToLeaderSeconds: demo.position.gapToLeaderSeconds ?? undefined },
         opponents: demo.opponents,
-      });
+      }, 40, { p5: 0.2, p7: -0.1 });
     }
-    return deriveStandings(real.v3 ?? null);
-  }, [isDemo, demo, real.v3]);
+    return deriveStandings(real.v3 ?? null, 40, real.trends);
+  }, [isDemo, demo, real.v3, real.trends]);
 
   const currentStint = plannedStints.find((s) => s.status === "in_car");
   const nextStints = plannedStints.filter((s) => s.status === "draft");

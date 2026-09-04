@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type {
@@ -7,6 +7,7 @@ import type {
   V3Normalized, PitwallPlannedStint, V3Opponent,
 } from "./pitwallHelpers";
 import { extractRaceClock } from "./pitwallHelpers";
+import { OpponentHistory } from "./opponentHistory";
 
 /* ==========================================================================
  * REAL MODE: uses get_pitwall_data() RPC.
@@ -28,6 +29,7 @@ interface PitwallRpcResponse {
   } | null;
   telemetry: Record<string, unknown> | null;
   v3_normalized: V3Normalized | null;
+  opponent_trends?: Record<string, { closing_rate_s_per_min: number | null; sample_count: number; window_seconds: number }> | null;
   strategy: PitwallStrategyRow | null;
   timeline: PitwallTimelineEvent[];
   planned_stints: PitwallPlannedStint[];
@@ -117,6 +119,32 @@ export function usePitwallData(eventId: string, initialTeamId: string | null) {
     return Array.isArray(list) ? list : [];
   }, [v3]);
 
+  /** 0.4.3: server-derived opponent trends (production source of truth).
+ *  get_pitwall_data.opponent_trends comes from the server-side sampled history.
+ *  Client-side OpponentHistory is retained DEV-only for diagnostics (never the
+ *  production authority). Two competing live trend sources are avoided. */
+  const historyRef = useRef<OpponentHistory | null>(null);
+  const trends: Record<string, number | null> = useMemo(() => {
+    // Production: consume server-derived trends when present.
+    const server = rpcData?.opponent_trends;
+    if (server && Object.keys(server).length > 0) {
+      const map: Record<string, number | null> = {};
+      for (const id of Object.keys(server)) map[id] = server[id]?.closing_rate_s_per_min ?? null;
+      return map;
+    }
+    // DEV-only: browser-local sampled history as a diagnostics fallback.
+    if (import.meta.env.DEV) {
+      if (!historyRef.current) historyRef.current = new OpponentHistory();
+      const now = Date.now() / 1000;
+      historyRef.current.record(opponents, now);
+      const map: Record<string, number | null> = {};
+      for (const o of opponents) if (o.id) map[o.id] = historyRef.current.trendFor(o.id);
+      return map;
+    }
+    // Production without server trends yet => no trend (null).
+    return {};
+  }, [rpcData, opponents]);
+
   /* Derive alert conditions from strategy data */
   const alerts = useMemo(() => {
     const list: Array<{ severity: "high" | "medium" | "info"; message: string }> = [];
@@ -158,6 +186,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null) {
     raceClock,
     plannedStints,
     opponents,
+    trends,
     v3,
   };
 }
