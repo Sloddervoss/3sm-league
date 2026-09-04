@@ -8,9 +8,9 @@ using System.Windows.Media.Imaging;
 namespace ThreeSM.EnduranceConnector
 {
     /// <summary>
-    /// 3SM-stijl instellingenpaneel: donker thema + oranje accent, met een zijbalk-menu
-    /// dat de bestaande instellingen groepeert. Functionele logica is identiek aan de
-    /// oude lijst; alleen de presentatie is herwerkt. De plugin blijft een pure data-zender.
+    /// 3SM-stijl instellingenpaneel: donker thema + oranje accent, met een zijbalk-menu.
+    /// Navigatie: Koppeling, Status, Updates.
+    /// Remote Diagnostics checkbox in Koppeling-pane.
     /// </summary>
     public sealed class SettingsControl : UserControl
     {
@@ -135,6 +135,12 @@ namespace ThreeSM.EnduranceConnector
             setup.Children.Add(Block("🔒 De code wordt rechtstreeks met de beveiligde 3SM-relay uitgewisseld en niet lokaal opgeslagen.", 10, 0, 0, 0));
             setupCard.Child = setup;
             stack.Children.Add(setupCard);
+
+            // Diagnostics checkbox (altijd zichtbaar, ook na pairing)
+            var diagnosticsMode = new CheckBox { Content = "Remote diagnostics inschakelen", IsChecked = _plugin.Settings != null && _plugin.Settings.DiagnosticsEnabled, Foreground = TextMain, Margin = new Thickness(0, 0, 0, 10) };
+            diagnosticsMode.Checked += delegate { _plugin.UpdateSettings(s => s.DiagnosticsEnabled = true); _plugin.ApplyDiagnosticsSettings(); };
+            diagnosticsMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.DiagnosticsEnabled = false); _plugin.ApplyDiagnosticsSettings(); };
+            stack.Children.Add(diagnosticsMode);
 
             var unpairButton = StyleSecondary("Koppeling verwijderen");
             unpairButton.HorizontalAlignment = HorizontalAlignment.Left;

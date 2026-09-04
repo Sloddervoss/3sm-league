@@ -57,7 +57,7 @@ describe("SimHub plugin one-click updater contract", () => {
     expect(project).toContain("BuildEmbeddedUpdater");
     expect(project).toContain("3SM.EnduranceConnector.Updater.exe");
     expect(plugin).toContain("ExtractUpdater(updaterExe)");
-    expect(plugin).toContain("ComputeSha256(updaterLock)");
+    expect(plugin).toContain("ComputeSha256(stagedDll)");
     expect(plugin).toContain("FileShare.Read");
     expect(plugin).toContain("readyEvent.WaitOne");
     expect(plugin).toContain("--ready-event");
