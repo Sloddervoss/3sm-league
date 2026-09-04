@@ -1,5 +1,4 @@
 import type { PitwallStrategyRow, PitwallPositionData } from "./pitwallHelpers";
-import { formatSeconds } from "./pitwallHelpers";
 
 interface Props {
   strategy: PitwallStrategyRow | null;
@@ -8,7 +7,7 @@ interface Props {
 
 export const RacePositionPanel = ({ strategy, position }: Props) => {
   if (!strategy) {
-    return <PanelShell title="RACE POSITIE"><p className="text-sm text-gray-500">Geen data</p></PanelShell>;
+    return <PanelShell title="POSITIE"><p className="text-xs text-gray-500">Geen data</p></PanelShell>;
   }
 
   const completedLaps = strategy.last_completed_laps;
@@ -17,42 +16,20 @@ export const RacePositionPanel = ({ strategy, position }: Props) => {
   const gap = position?.gapToLeaderSeconds;
 
   return (
-    <PanelShell title="RACE POSITIE">
-      <div className="space-y-2 text-sm">
-        <Row
-          label="Overall"
-          value={ov != null ? `P${ov}` : "—"}
-          note={ov == null ? "vereist V3 telemetrie" : undefined}
-        />
-        <Row
-          label="Klasse"
-          value={cls != null ? `K${cls}` : "—"}
-          note={cls == null ? "vereist V3 telemetrie" : undefined}
-        />
-        <Row label="Ronde" value={completedLaps != null ? String(completedLaps) : "—"} />
-        <Row
-          label="Gap leider"
-          value={gap != null ? `+${gap.toFixed(1)}s` : "—"}
-          note={gap == null ? "vereist V3 telemetrie" : undefined}
-        />
+    <PanelShell title="POSITIE">
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+        <span className="text-gray-500">Overall <span className="font-bold text-white">{ov != null ? `P${ov}` : "—"}</span></span>
+        <span className="text-gray-500">Klasse <span className="font-bold text-orange-300">{cls != null ? `K${cls}` : "—"}</span></span>
+        <span className="text-gray-500">Ronde <span className="font-bold text-white">{completedLaps ?? "—"}</span></span>
+        <span className="text-gray-500">Gap <span className="font-bold text-white">{gap != null ? `+${gap.toFixed(1)}s` : "—"}</span></span>
       </div>
     </PanelShell>
   );
 };
 
 const PanelShell = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-    <h3 className="mb-3 text-[11px] font-black uppercase tracking-widest text-gray-500">{title}</h3>
+  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+    <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</div>
     {children}
-  </div>
-);
-
-const Row = ({ label, value, note }: { label: string; value: string; note?: string }) => (
-  <div className="flex items-center justify-between">
-    <span className="text-gray-400">{label}</span>
-    <div className="text-right">
-      <div className="font-mono font-bold text-white">{value}</div>
-      {note && <div className="text-[10px] text-gray-600">{note}</div>}
-    </div>
   </div>
 );
