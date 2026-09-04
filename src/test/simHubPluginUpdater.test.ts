@@ -6,7 +6,7 @@ const plugin = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector/Enduranc
 const updater = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector.Updater/Program.cs", "utf8");
 const project = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector/3SM.EnduranceConnector.csproj", "utf8");
 const endpoint = readFileSync("supabase/functions/simhub-version/index.ts", "utf8");
-const publicKey = readFileSync("tools/simhub-plugin/release-signing-public.pem", "utf8");
+const publicKey = readFileSync("tools/simhub-plugin/3sm-simhub-release-public.pem", "utf8");
 const artifact = readFileSync("public/downloads/3SM.EnduranceConnector-0.3.0.1.dll");
 const manifest = JSON.parse(readFileSync("public/downloads/3SM.EnduranceConnector-0.3.0.1.manifest.json", "utf8")) as {
   version: string;

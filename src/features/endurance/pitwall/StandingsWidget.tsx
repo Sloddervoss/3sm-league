@@ -1,6 +1,7 @@
 import type { StandingsDerivation, StandingsRow } from "./standings";
 import { renderGap, renderPosition } from "./standings";
 import type { V3Opponent } from "./pitwallHelpers";
+import { formatClosingRate } from "./closingRate";
 
 interface Props {
   standings: StandingsDerivation;
@@ -14,6 +15,21 @@ const rowLabel = (r: V3Opponent): string => {
   return r.teamName ?? r.driverName ?? r.carNumber ?? `#${r.id}`;
 };
 
+/** Compact trend annotation: "+0.2s/lap" (closing) or "los" (pulling away) — muted, no over-color. */
+const TrendMark = ({ rate }: { rate: number | null }) => {
+  if (rate == null || !Number.isFinite(rate)) return null;
+  const closing = rate >= 0;
+  return (
+    <span className={`text-[9px] font-bold ${closing ? "text-emerald-400" : "text-gray-500"}`}>
+      {closing ? "sluit " : "los "}{formatClosingRate(rate)}
+    </span>
+  );
+};
+
+const LayoutMark = ({ rate }: { rate: number | null }) => (
+  <span className="flex items-center gap-1"><TrendMark rate={rate} /></span>
+);
+
 export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props) => {
   if (standings.noData) {
     return (
@@ -24,7 +40,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
     );
   }
 
-  const { overallPosition, classPosition, ahead, behind, rows } = standings;
+  const { overallPosition, classPosition, ahead, behind, aheadTrend, behindTrend, rows } = standings;
 
   return (
     <section data-pitwall-slot="standings" className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
@@ -45,7 +61,10 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
               {typeof ahead.classPosition === "number" && <span className="text-gray-500">K{ahead.classPosition}</span>}
               {ahead.carNumber && <span className="text-gray-400">#{ahead.carNumber}</span>}
               <span className="truncate text-gray-300">{rowLabel(ahead)}</span>
-              <span className="ml-auto text-orange-300">{ahead.inPit ? "PIT" : renderGap(ahead)}</span>
+              <span className="ml-auto flex items-center gap-1.5">
+                <LayoutMark rate={aheadTrend} />
+                <span className="text-orange-300">{ahead.inPit ? "PIT" : renderGap(ahead)}</span>
+              </span>
             </>
           ) : (
             <span className="text-gray-600">—</span>
@@ -66,7 +85,10 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
               {typeof behind.classPosition === "number" && <span className="text-gray-500">K{behind.classPosition}</span>}
               {behind.carNumber && <span className="text-gray-400">#{behind.carNumber}</span>}
               <span className="truncate text-gray-300">{rowLabel(behind)}</span>
-              <span className="ml-auto text-orange-300">{behind.inPit ? "PIT" : renderGap(behind)}</span>
+              <span className="ml-auto flex items-center gap-1.5">
+                <LayoutMark rate={behindTrend} />
+                <span className="text-orange-300">{behind.inPit ? "PIT" : renderGap(behind)}</span>
+              </span>
             </>
           ) : (
             <span className="text-gray-600">—</span>

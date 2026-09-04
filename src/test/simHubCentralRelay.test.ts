@@ -189,7 +189,9 @@ describe("central SimHub relay", () => {
     expect(plugin).toContain("ProtectedData.Protect");
     expect(plugin).toContain("DataProtectionScope.CurrentUser");
     expect(plugin).toContain('BuildRelayEndpoint("simhub-pair")');
-    expect(plugin).toContain('BuildRelayEndpoint("simhub-ingest")');
+    // V3 ingest endpoint is a canonical constant consumed via BuildRelayEndpoint(V3IngestFunction).
+    expect(plugin).toContain('V3IngestFunction = "simhub-ingest-v3"');
+    expect(plugin).toContain("BuildRelayEndpoint(V3IngestFunction)");
   });
 
   it("pairs a persistent device without requiring a race or fixed team", () => {

@@ -77,4 +77,26 @@ describe("0.4.2 standings derivation", () => {
     expect(d.overallPosition).toBe(6);
     expect(d.classPosition).toBe(2);
   });
+
+  it("applies closing-rate trends to ahead/behind from the trends map", () => {
+    const d = deriveStandings(mkV3([
+      opp({ id: "p2", position: 2 }),
+      opp({ id: "player", position: 3, isPlayer: true }),
+      opp({ id: "p5", position: 5 }),
+    ], 3), 40, { p2: 0.2, p5: -0.1 });
+    expect(d.ahead?.id).toBe("p2");
+    expect(d.aheadTrend).toBe(0.2);
+    expect(d.behind?.id).toBe("p5");
+    expect(d.behindTrend).toBe(-0.1);
+  });
+
+  it("trends default to null when no trends map provided", () => {
+    const d = deriveStandings(mkV3([
+      opp({ id: "p2", position: 2 }),
+      opp({ id: "player", position: 3, isPlayer: true }),
+      opp({ id: "p5", position: 5 }),
+    ], 3));
+    expect(d.aheadTrend).toBeNull();
+    expect(d.behindTrend).toBeNull();
+  });
 });
