@@ -7,6 +7,8 @@ import {
   formatSeconds,
   formatFuel,
   formatLaps,
+  formatLapTime,
+  formatDelta,
 } from "./pitwallHelpers";
 
 describe("strategyStatusInfo", () => {
@@ -133,5 +135,39 @@ describe("NaN and null safety", () => {
   it("handles NaN gracefully", () => {
     expect(formatFuel(NaN)).toBe("NaNL");
     expect(formatSeconds(NaN)).toBe("NaN:NaN");
+  });
+});
+
+describe("formatLapTime", () => {
+  it("formats seconds to M:SS.s", () => {
+    expect(formatLapTime(92.4)).toBe("1:32.4");
+    expect(formatLapTime(64.0)).toBe("1:04.0");
+    expect(formatLapTime(60)).toBe("1:00.0");
+  });
+
+  it("returns dash for null/undefined", () => {
+    expect(formatLapTime(null)).toBe("—");
+    expect(formatLapTime(undefined)).toBe("—");
+  });
+});
+
+describe("formatDelta", () => {
+  it("shows positive delta with plus sign", () => {
+    const d = formatDelta(1.1);
+    expect(d).not.toBeNull();
+    expect(d!.text).toBe("+1.1s");
+    expect(d!.faster).toBe(false);
+  });
+
+  it("shows negative delta as faster", () => {
+    const d = formatDelta(-0.5);
+    expect(d).not.toBeNull();
+    expect(d!.text).toBe("-0.5s");
+    expect(d!.faster).toBe(true);
+  });
+
+  it("returns null for null/undefined", () => {
+    expect(formatDelta(null)).toBeNull();
+    expect(formatDelta(undefined)).toBeNull();
   });
 });
