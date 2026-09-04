@@ -40,7 +40,7 @@ namespace ThreeSM.EnduranceConnector
     public sealed class TelemetryValues
     {
         [DataMember(Name = "connected", Order = 1)] public bool Connected { get; set; }
-        [DataMember(Name = "sessionTimeSeconds", Order = 2)] public double SessionTimeSeconds { get; set; }
+        [DataMember(Name = "sessionTimeSeconds", Order = 2)] public double? SessionTimeSeconds { get; set; }
         [DataMember(Name = "lap", Order = 3)] public int Lap { get; set; }
         [DataMember(Name = "completedLaps", Order = 4)] public int CompletedLaps { get; set; }
         [DataMember(Name = "lapTimeSeconds", Order = 5)] public double? LapTimeSeconds { get; set; }
