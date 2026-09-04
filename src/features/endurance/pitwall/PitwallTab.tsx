@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEnduranceActor } from "../core/ActorContext";
 import type { EnduranceEvent } from "../core/types";
 import { usePitwallData } from "./usePitwallData";
-import { getDemoData, getDemoScenarioFromUrl, DEMO_SCENARIO_LIST, type DemoScenario, type DemoData } from "./pitwallDemoData";
+import { getDemoData, DEMO_SCENARIO_LIST, type DemoScenario, type DemoData } from "./pitwallDemoData";
 import { TopRaceBar } from "./TopRaceBar";
 import { PitStrategyBlock } from "./PitStrategyBlock";
 import { FuelPanel } from "./FuelPanel";
@@ -13,12 +13,13 @@ import { RacePositionPanel } from "./RacePositionPanel";
 import { AlertZone } from "./AlertZone";
 import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
-import { useState, useMemo } from "react";
+import { useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 
-const useMemberships = (eventId: string, actorId: string) => {
+const useMemberships = (eventId: string, actorId: string, enabled: boolean) => {
   return useQuery({
     queryKey: ["pitwall", "memberships", eventId],
-    enabled: Boolean(eventId),
+    enabled: Boolean(eventId) && enabled,
     queryFn: async () => {
       const sb = supabase as unknown as {
         from: (t: string) => { select: (s: string) => { eq: (k: string, v: string) => { eq: (k2: string, v2: string) => Promise<{ data: unknown; error: unknown }> } } }
@@ -32,12 +33,43 @@ const useMemberships = (eventId: string, actorId: string) => {
 
 export const PitwallTab = ({ event }: Props) => {
   const { actorId } = useEnduranceActor();
-  const [demoScenario, setDemoScenario] = useState<DemoScenario | null>(() => getDemoScenarioFromUrl());
+  const location = useLocation();
 
-  const { data: memberships } = useMemberships(event.id, actorId);
+  /* Read pitwallDemo from URL reactively — works even when query param is preserved via navigation */
+  const demoScenario: DemoScenario | null = useMemo(() => {
+    if (!import.meta.env.DEV) return null;
+    try {
+      const params = new URLSearchParams(location.search);
+      const value = params.get("pitwallDemo");
+      if (value && ["normal", "pit", "low-data", "offline"].includes(value)) {
+        return value as DemoScenario;
+      }
+    } catch { /* ignore */ }
+    return null;
+  }, [location.search]);
+
+  const setDemoScenario = useCallback((scenario: DemoScenario) => {
+    const params = new URLSearchParams(location.search);
+    params.set("pitwallDemo", scenario);
+    const newSearch = params.toString();
+    window.history.replaceState(null, "", `${location.pathname}?${newSearch}`);
+  }, [location.pathname, location.search]);
+
+  const clearDemoScenario = useCallback(() => {
+    const params = new URLSearchParams(location.search);
+    params.delete("pitwallDemo");
+    const newSearch = params.toString();
+    window.history.replaceState(null, "", `${location.pathname}${newSearch ? `?${newSearch}` : ""}`);
+  }, [location.pathname, location.search]);
+
+  const { data: memberships } = useMemberships(event.id, actorId, !demoScenario);
   const myTeamId = memberships && memberships.length > 0 ? memberships[0].team_id : null;
 
-  const real = usePitwallData(event.id, myTeamId);
+  /* Skip real data fetching when demo mode is active */
+  const real = usePitwallData(
+    demoScenario ? "" : event.id,
+    demoScenario ? null : myTeamId
+  );
 
   /* If demo is active and DEV, replace real data with demo fixtures */
   const demo: DemoData | null = useMemo(() => {
@@ -45,7 +77,8 @@ export const PitwallTab = ({ event }: Props) => {
     return getDemoData(demoScenario);
   }, [demoScenario]);
 
-  const isDemo = demo !== null;
+  /* DEV guard: only activate demo mode in dev builds, never in production */
+  const isDemo = import.meta.env.DEV && demo !== null;
 
   const strategy = isDemo ? demo.strategy : real.strategy;
   const events = isDemo ? demo.events : real.events;
