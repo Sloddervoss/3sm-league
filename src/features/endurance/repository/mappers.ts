@@ -11,7 +11,20 @@ import type { EnduranceEvent, EnduranceStint } from "../core/types";
  * (nodig voor FK-correcte writes naar endurance_registrations/teams/stints).
  */
 export function enduranceEventRowToAppModel(row: EnduranceEventRow): EnduranceEvent {
-  const slots = (row.slots ?? []) as Array<{ id: string; label?: string; startAt?: string }>;
+  /* Diagnostic guard: non-array slots data */
+  const rawSlots = row.slots ?? [];
+  if (!Array.isArray(rawSlots)) {
+    console.error("[3SM Endurance invalid data]", {
+      field: "slots",
+      value: rawSlots,
+      type: typeof rawSlots,
+      isArray: false,
+      keys: rawSlots && typeof rawSlots === "object" ? Object.keys(rawSlots) : null,
+      rowId: row.id,
+      rowName: row.name,
+    });
+  }
+  const slots = Array.isArray(rawSlots) ? rawSlots : [];
   return {
     id: row.id,
     name: row.name,
