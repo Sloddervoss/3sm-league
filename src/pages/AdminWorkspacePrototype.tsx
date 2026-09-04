@@ -21,11 +21,13 @@ import { OverviewModule, type OverviewNavigation } from "@/features/control-room
 import { RolesRightsModule } from "@/features/control-room/roles/RolesRightsModule";
 import { StewardingWorkspace } from "@/features/control-room/stewarding";
 import { CommunitySupportModule } from "@/features/control-room/support";
+import SimHubConnectorsModule from "@/features/control-room/connectors/SimHubConnectorsModule";
 import {
   Activity,
   ArrowRight,
   Bell,
   BrainCircuit,
+  Cpu,
   CalendarDays,
   Car,
   Check,
@@ -52,7 +54,7 @@ import {
   X,
 } from "lucide-react";
 
-type Workspace = "overview" | "race" | "season" | "community" | "support" | "intelligence" | "announcements" | "settings";
+type Workspace = "overview" | "race" | "season" | "community" | "support" | "intelligence" | "announcements" | "settings" | "connectors";
 type Audience = "none" | "everyone" | "team";
 
 type AdminProfile = { user_id: string; display_name: string | null; iracing_name: string | null; iracing_id: string | number | null; irating: number | null; safety_rating: string | null };
@@ -64,6 +66,7 @@ const navigation: { id: Workspace; label: string; icon: typeof LayoutDashboard }
   { id: "overview", label: "Overzicht", icon: LayoutDashboard },
   { id: "race", label: "Resultaten", icon: Flag },
   { id: "season", label: "Races", icon: Trophy },
+  { id: "connectors", label: "Connectors", icon: Cpu },
   { id: "community", label: "Community", icon: Users },
   { id: "support", label: "Community Support", icon: HandHeart },
   { id: "intelligence", label: "Track Intelligence", icon: BrainCircuit },
@@ -383,6 +386,7 @@ const AdminWorkspacePrototype = () => {
     overview: <OverviewModule onNavigate={openOverviewNavigation} />,
     race: <ResultImportWorkspace />,
     season: <SeasonRaceWorkspace onAction={openSeasonAction} />,
+    connectors: <SimHubConnectorsModule />,
     community: <CommunityModule />,
     support: <CommunitySupportModule />,
     intelligence: <TrackIntelligenceModule onAction={openTrackAction} />,
