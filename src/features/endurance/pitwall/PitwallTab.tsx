@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEnduranceActor } from "../core/ActorContext";
 import type { EnduranceEvent } from "../core/types";
 import { usePitwallData } from "./usePitwallData";
+import { getDemoData, getDemoScenarioFromUrl, DEMO_SCENARIO_LIST, type DemoScenario, type DemoData } from "./pitwallDemoData";
 import { TopRaceBar } from "./TopRaceBar";
 import { PitStrategyBlock } from "./PitStrategyBlock";
 import { FuelPanel } from "./FuelPanel";
@@ -12,21 +13,15 @@ import { RacePositionPanel } from "./RacePositionPanel";
 import { AlertZone } from "./AlertZone";
 import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
+import { useState, useMemo } from "react";
 
-const useMemberships = (eventId: string) => {
-  const { actorId } = useEnduranceActor();
+const useMemberships = (eventId: string, actorId: string) => {
   return useQuery({
     queryKey: ["pitwall", "memberships", eventId],
     enabled: Boolean(eventId),
     queryFn: async () => {
       const sb = supabase as unknown as {
-        from: (t: string) => {
-          select: (s: string) => {
-            eq: (k: string, v: string) => {
-              eq: (k2: string, v2: string) => Promise<{ data: unknown; error: unknown }>
-            }
-          }
-        }
+        from: (t: string) => { select: (s: string) => { eq: (k: string, v: string) => { eq: (k2: string, v2: string) => Promise<{ data: unknown; error: unknown }> } } }
       };
       const { data, error } = await sb.from("endurance_team_members").select("team_id").eq("event_id", eventId).eq("user_id", actorId);
       if (error) throw error;
@@ -37,24 +32,61 @@ const useMemberships = (eventId: string) => {
 
 export const PitwallTab = ({ event }: Props) => {
   const { actorId } = useEnduranceActor();
-  const { data: memberships } = useMemberships(event.id);
+  const [demoScenario, setDemoScenario] = useState<DemoScenario | null>(() => getDemoScenarioFromUrl());
 
+  const { data: memberships } = useMemberships(event.id, actorId);
   const myTeamId = memberships && memberships.length > 0 ? memberships[0].team_id : null;
 
-  const {
-    strategy,
-    events,
-    teams,
-    alerts,
-    loading,
-    selectedTeamId,
-    setSelectedTeamId,
-  } = usePitwallData(event.id, myTeamId);
+  const real = usePitwallData(event.id, myTeamId);
+
+  /* If demo is active and DEV, replace real data with demo fixtures */
+  const demo: DemoData | null = useMemo(() => {
+    if (!demoScenario) return null;
+    return getDemoData(demoScenario);
+  }, [demoScenario]);
+
+  const isDemo = demo !== null;
+
+  const strategy = isDemo ? demo.strategy : real.strategy;
+  const events = isDemo ? demo.events : real.events;
+  const teams = isDemo ? demo.teams : real.teams;
+  const plannedStints = isDemo ? demo.plannedStints : [];
+  const alerts = isDemo ? demo.alerts : real.alerts;
+  const loading = isDemo ? demo.loading : real.loading;
+  const selectedTeamId = isDemo ? "demo-team" : real.selectedTeamId;
+  const setSelectedTeamId = isDemo ? (id: string | null) => {} : real.setSelectedTeamId;
+
+  /* Derive driver info from planned stints (demo) or null (real) */
+  const currentStint = plannedStints.find((s) => s.status === "in_car");
+  const nextStint = plannedStints.find((s) => s.status === "draft" && s.id !== currentStint?.id);
+  const driverName = isDemo ? (currentStint?.driver_id ?? null) : null;
+  const nextDriverName = isDemo ? (nextStint?.driver_id ?? null) : null;
 
   return (
     <div className="space-y-4">
-      {/* Team selector — visible when staff sees multiple teams */}
-      {teams.length > 1 && (
+      {/* DEV-ONLY demo scenario switcher */}
+      {isDemo && (
+        <div className="mb-2 rounded-xl border border-dashed border-orange-500/30 bg-orange-500/[0.04] p-3">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-orange-400">DEMO — pitwallDemo={demoScenario}</div>
+          <div className="flex flex-wrap gap-2">
+            {DEMO_SCENARIO_LIST.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setDemoScenario(s.id)}
+                className={`rounded-lg px-3 py-1 text-xs font-bold transition ${
+                  demoScenario === s.id ? "bg-orange-500 text-white" : "bg-white/10 text-gray-400 hover:text-white"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Team selector */}
+      {teams.length > 1 && !isDemo && (
         <div className="flex flex-wrap gap-2">
           {teams.map((team) => (
             <button
@@ -62,9 +94,7 @@ export const PitwallTab = ({ event }: Props) => {
               type="button"
               onClick={() => setSelectedTeamId(team.id)}
               className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                selectedTeamId === team.id
-                  ? "bg-orange-500 text-white"
-                  : "bg-black/20 text-gray-400 hover:text-white"
+                selectedTeamId === team.id ? "bg-orange-500 text-white" : "bg-black/20 text-gray-400 hover:text-white"
               }`}
             >
               {team.name}
@@ -73,14 +103,14 @@ export const PitwallTab = ({ event }: Props) => {
         </div>
       )}
 
-      {/* Top Race Bar — visible even when loading */}
+      {/* Top Race Bar */}
       {strategy && <TopRaceBar strategy={strategy} />}
 
       {loading && !strategy && (
         <p className="text-sm text-gray-500">Pitwall laden…</p>
       )}
 
-      {!loading && !strategy && (
+      {!loading && !strategy && !isDemo && (
         <p className="text-sm text-gray-500">
           Geen pitwall-data beschikbaar. {!selectedTeamId && "Selecteer een team om te beginnen."}
         </p>
@@ -96,8 +126,8 @@ export const PitwallTab = ({ event }: Props) => {
               <FuelPanel strategy={strategy} />
               <StintDriverPanel
                 strategy={strategy}
-                plannedStints={[]}
-                driverName={null}
+                plannedStints={plannedStints}
+                driverName={driverName}
               />
             </div>
 
@@ -105,14 +135,15 @@ export const PitwallTab = ({ event }: Props) => {
               <PitStrategyBlock
                 strategy={strategy}
                 currentFuel={strategy.current_fuel_litres}
-                driverName={null}
+                driverName={driverName}
+                nextDriverName={nextDriverName}
               />
               <StrategyForecast strategy={strategy} />
             </div>
 
             <div className="space-y-4">
               <RacePositionPanel strategy={strategy} />
-              <RaceTimeline events={events} plannedStints={[]} />
+              <RaceTimeline events={events} plannedStints={plannedStints} />
             </div>
           </div>
         </>
