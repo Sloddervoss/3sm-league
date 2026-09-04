@@ -22,6 +22,22 @@ const isChunkLoadError = (error: Error) => {
   );
 };
 
+const logErrorToConsole = (error: Error, info: ErrorInfo) => {
+  try {
+    console.error("[3SM ErrorBoundary]", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      componentStack: info.componentStack,
+      url: window.location.href,
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    // Never let logging itself throw
+  }
+};
+
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null };
 
@@ -30,20 +46,19 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    logErrorToConsole(error, info);
+
     const lastChunkReload = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || 0);
     if (isChunkLoadError(error) && Date.now() - lastChunkReload > CHUNK_RELOAD_COOLDOWN_MS) {
       sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
       window.location.reload();
       return;
     }
-
-    if (import.meta.env.DEV) {
-      console.error("ErrorBoundary caught:", error, info);
-    }
   }
 
   reset = () => {
     sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+    sessionStorage.removeItem("3sm:vite-reload-attempted");
     this.setState({ hasError: false, error: null });
   };
 
