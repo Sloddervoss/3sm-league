@@ -15,6 +15,7 @@ import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
 import { useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
+import type { PitwallPositionData, PitwallPaceData, PitwallRaceClock } from "./pitwallHelpers";
 
 const useMemberships = (eventId: string, actorId: string, enabled: boolean) => {
   return useQuery({
@@ -35,7 +36,7 @@ export const PitwallTab = ({ event }: Props) => {
   const { actorId } = useEnduranceActor();
   const location = useLocation();
 
-  /* Read pitwallDemo from URL reactively — works even when query param is preserved via navigation */
+  /* Read pitwallDemo from URL reactively */
   const demoScenario: DemoScenario | null = useMemo(() => {
     if (!import.meta.env.DEV) return null;
     try {
@@ -55,13 +56,6 @@ export const PitwallTab = ({ event }: Props) => {
     window.history.replaceState(null, "", `${location.pathname}?${newSearch}`);
   }, [location.pathname, location.search]);
 
-  const clearDemoScenario = useCallback(() => {
-    const params = new URLSearchParams(location.search);
-    params.delete("pitwallDemo");
-    const newSearch = params.toString();
-    window.history.replaceState(null, "", `${location.pathname}${newSearch ? `?${newSearch}` : ""}`);
-  }, [location.pathname, location.search]);
-
   const { data: memberships } = useMemberships(event.id, actorId, !demoScenario);
   const myTeamId = memberships && memberships.length > 0 ? memberships[0].team_id : null;
 
@@ -71,13 +65,12 @@ export const PitwallTab = ({ event }: Props) => {
     demoScenario ? null : myTeamId
   );
 
-  /* If demo is active and DEV, replace real data with demo fixtures */
+  /* Demo data */
   const demo: DemoData | null = useMemo(() => {
     if (!demoScenario) return null;
     return getDemoData(demoScenario);
   }, [demoScenario]);
 
-  /* DEV guard: only activate demo mode in dev builds, never in production */
   const isDemo = import.meta.env.DEV && demo !== null;
 
   const strategy = isDemo ? demo.strategy : real.strategy;
@@ -89,18 +82,29 @@ export const PitwallTab = ({ event }: Props) => {
   const selectedTeamId = isDemo ? "demo-team" : real.selectedTeamId;
   const setSelectedTeamId = isDemo ? (id: string | null) => {} : real.setSelectedTeamId;
 
-  /* Derive driver info from planned stints (demo) or null (real) */
+  /* Position, pace, race clock from demo */
+  const position: PitwallPositionData | null = isDemo ? demo.position : null;
+  const pace: PitwallPaceData | null = isDemo ? demo.pace : null;
+  const raceClock: PitwallRaceClock | null = isDemo ? demo.raceClock : null;
+
+  /* Driver info */
   const currentStint = plannedStints.find((s) => s.status === "in_car");
-  const nextStint = plannedStints.find((s) => s.status === "draft" && s.id !== currentStint?.id);
+  const nextStints = plannedStints.filter((s) => s.status === "draft");
+  const nextStint = nextStints[0];
   const driverName = isDemo ? (currentStint?.driver_id ?? null) : null;
   const nextDriverName = isDemo ? (nextStint?.driver_id ?? null) : null;
 
   return (
     <div className="space-y-4">
-      {/* DEV-ONLY demo scenario switcher */}
+      {/* DEMO scenario switcher */}
       {isDemo && (
-        <div className="mb-2 rounded-xl border border-dashed border-orange-500/30 bg-orange-500/[0.04] p-3">
-          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-orange-400">DEMO — pitwallDemo={demoScenario}</div>
+        <div className="rounded-xl border border-dashed border-orange-500/30 bg-orange-500/[0.04] p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full bg-orange-500" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-orange-400">
+              DEV PITWALL DEMO — Scenario: {demoScenario === "normal" ? "Normale race" : demoScenario === "pit" ? "Pit deze ronde" : demoScenario === "low-data" ? "Weinig data" : "Telemetrie verloren"}
+            </span>
+          </div>
           <div className="flex flex-wrap gap-2">
             {DEMO_SCENARIO_LIST.map((s) => (
               <button
@@ -137,7 +141,14 @@ export const PitwallTab = ({ event }: Props) => {
       )}
 
       {/* Top Race Bar */}
-      {strategy && <TopRaceBar strategy={strategy} />}
+      {strategy && (
+        <TopRaceBar
+          strategy={strategy}
+          position={position}
+          raceClock={raceClock}
+          offlineMode={strategy.strategy_status === "insufficient_data"}
+        />
+      )}
 
       {loading && !strategy && (
         <p className="text-sm text-gray-500">Pitwall laden…</p>
@@ -153,15 +164,15 @@ export const PitwallTab = ({ event }: Props) => {
         <>
           <AlertZone alerts={alerts} />
 
+          {/* Layout: 3-col desktop, bottom full-width timeline */}
+          {/* col 1: Pace + Fuel */}
+          {/* col 2: Pit Action + Strategy Forecast */}
+          {/* col 3: Race Position + Stint */}
+          {/* bottom full-width: Timeline */}
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="space-y-4">
-              <PacePanel strategy={strategy} paceTargets={[]} />
+              <PacePanel strategy={strategy} pace={pace} />
               <FuelPanel strategy={strategy} />
-              <StintDriverPanel
-                strategy={strategy}
-                plannedStints={plannedStints}
-                driverName={driverName}
-              />
             </div>
 
             <div className="space-y-4">
@@ -171,13 +182,28 @@ export const PitwallTab = ({ event }: Props) => {
                 driverName={driverName}
                 nextDriverName={nextDriverName}
               />
-              <StrategyForecast strategy={strategy} />
+              <StrategyForecast
+                strategy={strategy}
+                position={position}
+                pace={pace}
+                plannedStints={plannedStints}
+                nextDriverName={nextDriverName}
+              />
             </div>
 
             <div className="space-y-4">
-              <RacePositionPanel strategy={strategy} />
-              <RaceTimeline events={events} plannedStints={plannedStints} />
+              <RacePositionPanel strategy={strategy} position={position} />
+              <StintDriverPanel
+                strategy={strategy}
+                plannedStints={plannedStints}
+                driverName={driverName}
+              />
             </div>
+          </div>
+
+          {/* Full-width timeline */}
+          <div className="grid gap-4 lg:grid-cols-1">
+            <RaceTimeline events={events} plannedStints={plannedStints} />
           </div>
         </>
       )}

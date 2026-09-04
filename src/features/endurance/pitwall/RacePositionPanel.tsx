@@ -1,27 +1,51 @@
-import type { PitwallStrategyRow } from "./pitwallHelpers";
+import type { PitwallStrategyRow, PitwallPositionData } from "./pitwallHelpers";
 import { formatSeconds } from "./pitwallHelpers";
 
 interface Props {
   strategy: PitwallStrategyRow | null;
+  position: PitwallPositionData | null;
 }
 
-export const RacePositionPanel = ({ strategy }: Props) => {
-  /* Position/laps not in strategy_latest — requires V3 telemetry */
-  const completedLaps = strategy?.last_completed_laps;
+export const RacePositionPanel = ({ strategy, position }: Props) => {
+  if (!strategy) {
+    return <PanelShell title="RACE POSITIE"><p className="text-sm text-gray-500">Geen data</p></PanelShell>;
+  }
+
+  const completedLaps = strategy.last_completed_laps;
+  const ov = position?.overallPosition;
+  const cls = position?.classPosition;
+  const gap = position?.gapToLeaderSeconds;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-      <h3 className="mb-3 text-[11px] font-black uppercase tracking-widest text-gray-500">RACE POSITIE</h3>
-
+    <PanelShell title="RACE POSITIE">
       <div className="space-y-2 text-sm">
-        <Row label="Overall" value="—" note="vereist V3 telemetrie" />
-        <Row label="Klasse" value="—" note="vereist V3 telemetrie" />
+        <Row
+          label="Overall"
+          value={ov != null ? `P${ov}` : "—"}
+          note={ov == null ? "vereist V3 telemetrie" : undefined}
+        />
+        <Row
+          label="Klasse"
+          value={cls != null ? `K${cls}` : "—"}
+          note={cls == null ? "vereist V3 telemetrie" : undefined}
+        />
         <Row label="Ronde" value={completedLaps != null ? String(completedLaps) : "—"} />
-        <Row label="Gap leider" value="—" note="vereist V3 telemetrie" />
+        <Row
+          label="Gap leider"
+          value={gap != null ? `+${gap.toFixed(1)}s` : "—"}
+          note={gap == null ? "vereist V3 telemetrie" : undefined}
+        />
       </div>
-    </div>
+    </PanelShell>
   );
 };
+
+const PanelShell = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+    <h3 className="mb-3 text-[11px] font-black uppercase tracking-widest text-gray-500">{title}</h3>
+    {children}
+  </div>
+);
 
 const Row = ({ label, value, note }: { label: string; value: string; note?: string }) => (
   <div className="flex items-center justify-between">

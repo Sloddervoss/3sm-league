@@ -1,4 +1,21 @@
 /* Pitwall V1 — types & helpers */
+export interface PitwallPositionData {
+  overallPosition: number | null;
+  classPosition: number | null;
+  gapToLeaderSeconds: number | null;
+}
+
+export interface PitwallPaceData {
+  lastLapSeconds: number | null;
+  bestLapSeconds: number | null;
+  stintAvgSeconds: number | null;
+  targetSeconds: number | null;
+}
+
+export interface PitwallRaceClock {
+  remainingSeconds: number | null;
+  remainingLaps: number | null;
+}
 
 export interface PitwallStrategyRow {
   race_run_id: string;
@@ -18,6 +35,8 @@ export interface PitwallStrategyRow {
   strategy_status: string;
   strategy_reason: string | null;
   updated_at: string;
+  /** Strategy's predetermined fuel-to-add recommendation. null = not available / not trustworthy. */
+  fuel_to_add_litres: number | null;
 }
 
 export interface V3Normalized {
@@ -213,3 +232,15 @@ export interface TeamOption {
   id: string;
   name: string;
 }
+
+export const formatLapTime = (seconds: number | null | undefined): string => {
+  if (seconds == null) return "—";
+  const min = Math.floor(seconds / 60);
+  const sec = (seconds % 60).toFixed(1);
+  return `${min}:${sec.padStart(4, "0")}`;
+};
+
+export const formatDelta = (delta: number | null | undefined): { text: string; faster: boolean } | null => {
+  if (delta == null) return null;
+  return { text: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}s`, faster: delta < 0 };
+};

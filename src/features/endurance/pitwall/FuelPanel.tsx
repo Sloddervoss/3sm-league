@@ -12,42 +12,60 @@ export const FuelPanel = ({ strategy }: Props) => {
 
   const samples = strategy.valid_fuel_sample_count;
   const isLowSample = strategy.strategy_status === "low_sample" || samples < 5;
+  const isInsufficient = strategy.strategy_status === "insufficient_data";
+
+  const fuel = strategy.current_fuel_litres;
+  const laps = strategy.fuel_laps_remaining;
+  const perLap = strategy.fuel_per_lap_litres;
+  const raceAvg = strategy.race_fuel_per_lap_litres;
+  const toFinish = strategy.fuel_to_finish_litres;
+  const sufficient = strategy.fuel_sufficient_to_finish;
+
+  const showPrimary = fuel != null || perLap != null || laps != null;
 
   return (
     <PanelShell title="Brandstof">
-      <div className="space-y-2 text-sm">
-        <Row label="Resterend" value={strategy.current_fuel_litres != null ? formatFuel(strategy.current_fuel_litres) : "—"} />
-        <Row
-          label="Per ronde (V3)"
-          value={strategy.fuel_per_lap_litres != null ? `${strategy.fuel_per_lap_litres.toFixed(3)}L` : "—"}
-          note={isLowSample ? `${samples} sample(s)` : undefined}
-        />
-        <Row
-          label="Race gem."
-          value={strategy.race_fuel_per_lap_litres != null ? `${strategy.race_fuel_per_lap_litres.toFixed(3)}L` : "—"}
-        />
-        <Row
-          label="Ronden over"
-          value={strategy.fuel_laps_remaining != null ? `${strategy.fuel_laps_remaining.toFixed(1)}` : "—"}
-        />
-        {strategy.fuel_to_finish_litres != null && (
-          <Row label="Naar finish" value={formatFuel(strategy.fuel_to_finish_litres)} />
-        )}
-        {strategy.fuel_sufficient_to_finish != null && (
-          <Row
-            label="Voldoende?"
-            value={strategy.fuel_sufficient_to_finish ? "Ja" : "Nee"}
-            valueColor={strategy.fuel_sufficient_to_finish ? "text-emerald-400" : "text-red-400"}
-          />
-        )}
-      </div>
-      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-gray-500">
-        <StatusDot status={strategy.strategy_status} />
-        <span>{strategy.strategy_status === "ready" ? `${samples} geldige samples` : `${samples} sample(s)`}</span>
-      </div>
+      {!showPrimary && isInsufficient ? (
+        <p className="text-sm text-gray-500">Geen live telemetrie</p>
+      ) : (
+        <div className="space-y-2 text-sm">
+          {/* PRIMARY: remaining, laps, per-lap */}
+          <div className="grid grid-cols-3 gap-2">
+            <PrimaryCard value={fuel != null ? formatFuel(fuel) : "—"} label="Over" />
+            <PrimaryCard value={laps != null ? `${laps.toFixed(1)}` : "—"} label="Ronden" />
+            <PrimaryCard value={perLap != null ? `${perLap.toFixed(3)}L` : "—"} label="Per ronde" />
+          </div>
+
+          {/* SECONDARY: race avg, sample count */}
+          <div className="space-y-1 text-xs mt-3 pt-2 border-t border-white/5">
+            {raceAvg != null && (
+              <Row label="Race gem." value={`${raceAvg.toFixed(3)}L`} />
+            )}
+            {toFinish != null && (
+              <Row label="Naar finish" value={formatFuel(toFinish)} />
+            )}
+            {sufficient != null && (
+              <Row
+                label="Voldoende?"
+                value={sufficient ? "Ja" : "Nee"}
+                valueColor={sufficient ? "text-emerald-400" : "text-red-400"}
+              />
+            )}
+            {!isInsufficient && (
+              <Row
+                label="Samples"
+                value={`${samples}${isLowSample ? " (weinig)" : ""}`}
+                valueColor={isLowSample ? "text-yellow-400" : "text-gray-400"}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </PanelShell>
   );
 };
+
+/* ====== Sub-components ====== */
 
 const PanelShell = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
@@ -56,19 +74,16 @@ const PanelShell = ({ title, children }: { title: string; children: React.ReactN
   </div>
 );
 
-const Row = ({ label, value, note, valueColor }: { label: string; value: string; note?: string; valueColor?: string }) => (
-  <div className="flex items-center justify-between">
-    <span className="text-gray-400">{label}</span>
-    <span className={`font-mono font-bold ${valueColor ?? "text-white"}`}>
-      {value}
-      {note && <span className="ml-1 text-[10px] text-gray-500">({note})</span>}
-    </span>
+const PrimaryCard = ({ value, label }: { value: string; label: string }) => (
+  <div className="rounded-lg bg-black/20 px-2.5 py-2 text-center">
+    <div className="font-mono font-black text-white text-base">{value}</div>
+    <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
   </div>
 );
 
-const StatusDot = ({ status }: { status: string }) => {
-  const color = status === "ready" ? "bg-emerald-400" :
-    status === "low_sample" ? "bg-yellow-400" :
-    status === "insufficient_data" ? "bg-red-400" : "bg-gray-500";
-  return <span className={`inline-block h-1.5 w-1.5 rounded-full ${color}`} />;
-};
+const Row = ({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) => (
+  <div className="flex items-center justify-between">
+    <span className="text-gray-500">{label}</span>
+    <span className={`font-mono font-bold ${valueColor ?? "text-gray-400"}`}>{value}</span>
+  </div>
+);
