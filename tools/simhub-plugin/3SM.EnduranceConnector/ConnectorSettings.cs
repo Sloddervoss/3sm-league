@@ -55,6 +55,15 @@ namespace ThreeSM.EnduranceConnector
         // V3: gap to leader (fallback property; null-tolerant).
         public string GapToLeaderProperty = "DataCorePlugin.GameData.NewData.F2Time";
 
+        // V3/0.4.0 own-car field population (authoritative existing nullable fields).
+        // NULL-tolerant: when the SimHub profile/current session lacks a property, the
+        // recorded value stays null in the v3 payload (never a fake/derived number).
+        public string SessionTimeRemainingProperty = "DataCorePlugin.GameData.NewData.SessionTimeRemain";
+        public string SessionLapsRemainingProperty = "DataCorePlugin.GameData.NewData.SessionLapsRemainEx";
+        public string CurrentLapElapsedProperty = "DataCorePlugin.GameData.NewData.LapCurrentLapTime";
+        public string BestLapTimeProperty = "DataCorePlugin.GameData.NewData.BestLapTime";
+        public string LapDistancePctProperty = "DataCorePlugin.GameData.NewData.LapDistPct";
+
         // Veilige versie-check en staged update. De plugin downloadt alleen van de vaste
         // 3SM-host; een extern updaterproces vervangt de geladen DLL na SimHub-exit.
         public string LastKnownRemoteVersion = string.Empty;

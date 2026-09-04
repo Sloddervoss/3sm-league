@@ -28,6 +28,10 @@ namespace ThreeSM.EnduranceConnector
     {
         private const string ProductionRelayBaseUrl = "https://api.3stripemotorsport.cc/functions/v1";
         private const string V3IngestFunction = "simhub-ingest-v3";
+        // Release channel for the version check. TEST/canary builds append "?channel=canary"
+        // so designated testers receive TEST manifest releases; STABLE builds leave this
+        // empty (plain GET, stable manifest). Set per release branch — never user-facing.
+        private const string ReleaseChannelQuery = "?channel=canary";
         private const long MaxUpdateBytes = 5 * 1024 * 1024;
         private const string ReleasePublicKeyXml = "<RSAKeyValue><Modulus>623ziGDiaH7x+n1WwVv4lp+CswGiM4b/+h410wt1IBXZc+xeIoJbS2GnSU+wCgsUD1Ek4Eup0XKumuyuEvkZYUJ7zzLuIV5qBj9jk1lSnZmp4ibMyanmhJOIxsuSzylpNV9ru2QAuJQLpK9Jahk8vbOjSaNaaO1ZxKP0U0Xxy79N/9vutjdO6dW9r2MzQUP5KNGCTBlgHwm5Kn3KujtyV3EB5jeFbwl0L1G5R2taan6wzrcSLtNKrJACbm/bLvOijAvUAjpVH7+ThUPY/w9womXuxtWCPFT0cp7wq9rBieOEFjWxFLSkr9uZ/Z+gWyuBINrGJ7gLGuONvNq3TbqkwRmnPu91hstTQR5EfLDduohdfsRW6g+BHUNgZFo9cheM/NpJx6vpZ61Rzjw46Bu8QVCInRW7W43u4e/Xb9CjlPEf6ou8jnEeUY9ZgDOKhs7oHbDg3072GIPTc/8HJjATN6YlnTU0tqB43zElN2BrWc/aFqqTdrXce9vEEqPclWVT</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         private readonly HttpClient _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(4) };
@@ -287,7 +291,9 @@ namespace ThreeSM.EnduranceConnector
                 SetUpdaterState(new UpdaterState { state = "CHECKING" });
 
                 var localVersion = this.GetType().Assembly.GetName().Version;
-                var endpoint = BuildRelayEndpoint("simhub-version");
+                // TEST/canary builds append their release channel so the version check selects
+                // the correct manifest; STABLE builds stay a plain GET (unchanged behavior).
+                var endpoint = new Uri(BuildRelayEndpoint("simhub-version").AbsoluteUri + ReleaseChannelQuery);
                 using (var request = new HttpRequestMessage(HttpMethod.Get, endpoint))
                 using (var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
                 {
@@ -814,6 +820,12 @@ namespace ThreeSM.EnduranceConnector
             var completedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0));
             var lapTimeSeconds = GetNullableSeconds(manager, Settings.LapTimeProperty);
             var gapToLeader = GetNullableSeconds(manager, Settings.GapToLeaderProperty);
+            // V3/0.4.0: populatie van bestaande nullable eigen-auto velden (NULL-tolerant).
+            var sessionTimeRemaining = GetNullableSeconds(manager, Settings.SessionTimeRemainingProperty);
+            var sessionLapsRemaining = GetNullableInt(manager, Settings.SessionLapsRemainingProperty);
+            var currentLapElapsed = GetNullableSeconds(manager, Settings.CurrentLapElapsedProperty);
+            var bestLapTime = GetNullableSeconds(manager, Settings.BestLapTimeProperty);
+            var lapDistancePct = GetNullableDouble(manager, Settings.LapDistancePctProperty, false);
             var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
             var incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty));
             var inPitLane = GetBool(manager, Settings.PitLaneProperty, false);
@@ -853,16 +865,16 @@ namespace ThreeSM.EnduranceConnector
                 {
                     IsInCar = isInCar,
                     SessionTimeSeconds = sessionTimeSeconds,
-                    SessionTimeRemainingSeconds = null,
-                    SessionLapsRemaining = null,
+                    SessionTimeRemainingSeconds = NormalizeTimeRemaining(sessionTimeRemaining),
+                    SessionLapsRemaining = NormalizeRemainingLaps(sessionLapsRemaining),
                     Flags = flags.Count == 0 ? null : flags.ToArray(),
                     SessionState = "unknown",
                 },
                 Timing = new V3Timing
                 {
-                    CurrentLapElapsedSeconds = null,
+                    CurrentLapElapsedSeconds = NormalizeTiming(currentLapElapsed),
                     LastLapTimeSeconds = lapTimeSeconds,
-                    BestLapTimeSeconds = null,
+                    BestLapTimeSeconds = NormalizeTiming(bestLapTime),
                     CompletedLaps = completedLaps,
                 },
                 Position = new V3Position
@@ -873,7 +885,7 @@ namespace ThreeSM.EnduranceConnector
                 },
                 Track = new V3Track
                 {
-                    LapDistancePct = null,
+                    LapDistancePct = NormalizeLapDist(lapDistancePct),
                     TrackSurface = "unknown",
                     OnPitRoad = inPitLane,
                 },
@@ -1195,6 +1207,12 @@ namespace ThreeSM.EnduranceConnector
         private static bool GetBool(PluginManager manager, string property, bool fallback) { var value = GetRaw(manager, property); if (value is bool) return (bool)value; bool parsed; if (value != null && bool.TryParse(value.ToString(), out parsed)) return parsed; int integer; return value != null && int.TryParse(value.ToString(), out integer) ? integer != 0 : fallback; }
         private static int? PositiveOrNull(int value) { return value > 0 ? (int?)value : null; }
         private static int? NonNegativeOrNull(int? value) { return value.HasValue && value.Value >= 0 ? value : null; }
+        // V3/0.4.0 sentinel normalization: convert iRacing sentinel values to null so the
+        // emitted v3 payload always satisfies the schema (never a fake number).
+        private static double? NormalizeTimeRemaining(double? value) { if (!value.HasValue) return null; if (value.Value >= 604800.0 || value.Value < 0) return null; return value; }
+        private static int? NormalizeRemainingLaps(int? value) { if (!value.HasValue) return null; if (value.Value >= 32767 || value.Value < 0) return null; return value; }
+        private static double? NormalizeTiming(double? value) { if (!value.HasValue) return null; return value.Value > 0 ? value : null; }
+        private static double? NormalizeLapDist(double? value) { if (!value.HasValue) return null; return (value.Value >= 0 && value.Value <= 1) ? value : null; }
         private static string NonEmpty(string value, string fallback) { return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim(); }
         private static bool IsGuid(string value) { Guid parsed; return !string.IsNullOrWhiteSpace(value) && Guid.TryParseExact(value, "D", out parsed); }
         private static bool IsDeviceToken(string value)
