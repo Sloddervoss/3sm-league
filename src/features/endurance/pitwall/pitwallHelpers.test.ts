@@ -9,6 +9,7 @@ import {
   formatLaps,
   formatLapTime,
   formatDelta,
+  extractRaceClock,
 } from "./pitwallHelpers";
 
 describe("strategyStatusInfo", () => {
@@ -55,12 +56,12 @@ describe("calcPitLap", () => {
 
 describe("calcFuelToAdd", () => {
   it("calculates fuel to add for a stint", () => {
-    // current=20L, perLap=3L, remaining=25 laps → need 75L, minus 20 = 55
-    expect(calcFuelToAdd(20, 3, 25)).toBe(55);
+    // current=20L, perLap=3L, next stint=25 laps → need 75L, minus 20 = 55
+    expect(calcFuelToAdd(20, 3, 25, 100)).toBe(55);
   });
 
   it("returns 0 if enough fuel already", () => {
-    expect(calcFuelToAdd(90, 3, 5)).toBe(0);
+    expect(calcFuelToAdd(90, 3, 5, 100)).toBe(0);
   });
 
   it("caps at tank capacity", () => {
@@ -68,9 +69,30 @@ describe("calcFuelToAdd", () => {
   });
 
   it("returns null if inputs missing", () => {
-    expect(calcFuelToAdd(null, 3, 25)).toBeNull();
-    expect(calcFuelToAdd(20, null, 25)).toBeNull();
-    expect(calcFuelToAdd(20, 3, null)).toBeNull();
+    expect(calcFuelToAdd(null, 3, 25, 100)).toBeNull();
+    expect(calcFuelToAdd(20, null, 25, 100)).toBeNull();
+    expect(calcFuelToAdd(20, 3, null, 100)).toBeNull();
+  });
+
+  it("returns null for invalid tank capacity", () => {
+    expect(calcFuelToAdd(20, 3, 25, 0)).toBeNull();
+    expect(calcFuelToAdd(20, 3, 25, -1)).toBeNull();
+  });
+
+  it("with fuel_laps_remaining (current range) as stint length returns ~0 (semantic proof)", () => {
+    // When fuelLapsRemaining = currentFuel / fuelPerLap (current range)
+    // calcFuelToAdd(currentFuel, fuelPerLap, fuelLapsRemaining, tankCapacity)
+    // fuelNeeded = fuelLapsRemaining * fuelPerLap ≈ currentFuel
+    // toAdd ≈ currentFuel - currentFuel ≈ 0
+    // This proves fuel_laps_remaining is WRONG as a next-stint horizon.
+    const currentFuel = 21.7;
+    const fuelPerLap = 3.12;
+    const rangeLaps = currentFuel / fuelPerLap; // ≈ 6.96
+    expect(calcFuelToAdd(currentFuel, fuelPerLap, rangeLaps, 100)).toBeLessThanOrEqual(0);
+    // With round: 6.96 * 3.12 = 21.72 - 21.7 = 0.02 → rounds to 0
+    expect(calcFuelToAdd(currentFuel, fuelPerLap, Math.floor(rangeLaps), 100)).toBe(0);
+    // A correct next-stint horizon (e.g. 25 laps) gives a positive value
+    expect(calcFuelToAdd(currentFuel, fuelPerLap, 25, 100)).toBeGreaterThan(0);
   });
 });
 
@@ -174,5 +196,37 @@ describe("formatDelta", () => {
   it("returns null for null/undefined", () => {
     expect(formatDelta(null)).toBeNull();
     expect(formatDelta(undefined)).toBeNull();
+  });
+});
+
+describe("extractRaceClock", () => {
+  it("extracts from V3 session clock", () => {
+    const clock = extractRaceClock({
+      session: { sessionTimeRemainingSeconds: 9692, sessionLapsRemaining: 57 },
+    });
+    expect(clock).not.toBeNull();
+    expect(clock!.remainingSeconds).toBe(9692);
+    expect(clock!.remainingLaps).toBe(57);
+  });
+
+  it("returns null for null input", () => {
+    expect(extractRaceClock(null)).toBeNull();
+  });
+
+  it("returns null for missing session clock", () => {
+    expect(extractRaceClock({})).toBeNull();
+  });
+
+  it("returns null for zero/negative session time", () => {
+    expect(extractRaceClock({ session: { sessionTimeRemainingSeconds: 0 } })).toBeNull();
+    expect(extractRaceClock({ session: { sessionTimeRemainingSeconds: -1 } })).toBeNull();
+  });
+
+  it("returns remainingLaps null when not present", () => {
+    const clock = extractRaceClock({
+      session: { sessionTimeRemainingSeconds: 5000 },
+    });
+    expect(clock!.remainingSeconds).toBe(5000);
+    expect(clock!.remainingLaps).toBeNull();
   });
 });

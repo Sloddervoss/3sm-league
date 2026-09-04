@@ -1,81 +1,122 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { PitwallStrategyRow, PitwallTimelineEvent, TeamOption } from "./pitwallHelpers";
+import type {
+  PitwallStrategyRow, PitwallTimelineEvent, TeamOption,
+  PitwallPositionData, PitwallPaceData, PitwallRaceClock,
+  V3Normalized, PitwallPlannedStint,
+} from "./pitwallHelpers";
+import { extractRaceClock } from "./pitwallHelpers";
 
-/* Fetch strategy_latest directly (team + staff accessible via RLS) */
-const fetchStrategy = async (eventId: string, teamId: string): Promise<PitwallStrategyRow | null> => {
-  const { data, error } = await supabase
-    .from("endurance_strategy_latest")
-    .select("*")
-    .eq("event_id", eventId)
-    .eq("team_id", teamId)
-    .maybeSingle();
+/* ==========================================================================
+ * REAL MODE: uses get_pitwall_data() RPC.
+ *
+ * This RPC is SECURITY DEFINER — it checks own-team membership (via
+ * endurance_team_members) or is_endurance_staff. It returns a combined
+ * jsonb payload with telemetry, strategy, timeline, planned stints,
+ * pace targets, and team info.
+ *
+ * The RPC was created by migration 20260904110000_pitwall_v1_read_rpc.sql.
+ * ========================================================================== */
+
+interface PitwallRpcResponse {
+  team: {
+    id: string;
+    name: string | null;
+    car_id: string | null;
+    car_number: string | null;
+  } | null;
+  telemetry: Record<string, unknown> | null;
+  v3_normalized: V3Normalized | null;
+  strategy: PitwallStrategyRow | null;
+  timeline: PitwallTimelineEvent[];
+  planned_stints: PitwallPlannedStint[];
+  pace_targets: Array<{
+    user_id: string;
+    average_lap_seconds: number;
+    best_lap_seconds: number;
+    valid_laps: number;
+    source: string;
+  }>;
+  access: "staff" | "team_member";
+}
+
+const fetchPitwallData = async (eventId: string, teamId: string): Promise<PitwallRpcResponse> => {
+  const { data, error } = await (supabase as any).rpc("get_pitwall_data", {
+    p_event_id: eventId,
+    p_team_id: teamId,
+  });
   if (error) {
-    console.error("[3SM Pitwall] strategy fetch error:", error);
-    return null;
+    console.error("[3SM Pitwall RPC] error:", error);
+    throw error;
   }
-  if (!data) return null;
-  return data as unknown as PitwallStrategyRow;
+  return data as unknown as PitwallRpcResponse;
 };
 
-/* Fetch telemetry events (staff only via can_manage_simhub RLS — silently returns empty if denied) */
-const fetchEvents = async (eventId: string, teamId: string): Promise<PitwallTimelineEvent[]> => {
-  const { data, error } = await supabase
-    .from("endurance_telemetry_events")
-    .select("*")
-    .eq("event_id", eventId)
-    .eq("team_id", teamId)
-    .order("captured_at", { ascending: false })
-    .limit(50);
-  if (error) return [];
-  return (data ?? []) as unknown as PitwallTimelineEvent[];
-};
+/** Extract PitwallPositionData from V3 normalized telemetry */
+function extractPosition(v3?: V3Normalized | null): PitwallPositionData | null {
+  if (!v3?.position) return null;
+  const p = v3.position;
+  if (p.position == null && p.classPosition == null && p.gapToLeaderSeconds == null) return null;
+  return {
+    overallPosition: p.position ?? null,
+    classPosition: p.classPosition ?? null,
+    gapToLeaderSeconds: p.gapToLeaderSeconds ?? null,
+  };
+}
 
-/* Fetch teams for the event (staff only via RLS — team members see empty) */
-const fetchTeams = async (eventId: string): Promise<TeamOption[]> => {
-  const { data, error } = await supabase
-    .from("endurance_teams")
-    .select("id, name")
-    .eq("event_id", eventId);
-  if (error) return [];
-  return (data ?? []) as TeamOption[];
-};
+/** Extract PitwallPaceData from V3 normalized telemetry */
+function extractPace(v3?: V3Normalized | null): PitwallPaceData | null {
+  if (!v3?.timing) return null;
+  const t = v3.timing;
+  if (t.lastLapTimeSeconds == null && t.bestLapTimeSeconds == null) return null;
+  return {
+    lastLapSeconds: t.lastLapTimeSeconds ?? null,
+    bestLapSeconds: t.bestLapTimeSeconds ?? null,
+    stintAvgSeconds: null, /* Not available from V3 raw — requires calc */
+    targetSeconds: null,   /* Requires pace target data from planner */
+  };
+}
+
+/** Extract team list from RPC response */
+function extractTeams(rpc: PitwallRpcResponse): TeamOption[] {
+  const list: TeamOption[] = [];
+  if (rpc.team) {
+    list.push({ id: rpc.team.id, name: rpc.team.name ?? "Onbekend team" });
+  }
+  return list;
+}
 
 export function usePitwallData(eventId: string, initialTeamId: string | null) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(initialTeamId);
 
-  const strategyQuery = useQuery({
-    queryKey: ["pitwall", "strategy", eventId, selectedTeamId],
+  const rpcQuery = useQuery({
+    queryKey: ["pitwall", "rpc", eventId, selectedTeamId],
     enabled: Boolean(eventId) && Boolean(selectedTeamId),
     refetchInterval: 3_000,
-    queryFn: () => fetchStrategy(eventId, selectedTeamId!),
+    queryFn: () => fetchPitwallData(eventId, selectedTeamId!),
   });
 
-  const eventsQuery = useQuery({
-    queryKey: ["pitwall", "events", eventId, selectedTeamId],
-    enabled: Boolean(eventId) && Boolean(selectedTeamId),
-    refetchInterval: 5_000,
-    queryFn: () => fetchEvents(eventId, selectedTeamId!),
-  });
+  const rpcData = rpcQuery.data;
+  const loading = rpcQuery.isLoading;
+  const error = rpcQuery.error;
 
-  const teamsQuery = useQuery({
-    queryKey: ["pitwall", "teams", eventId],
-    enabled: Boolean(eventId),
-    staleTime: 30_000,
-    queryFn: () => fetchTeams(eventId),
-  });
-
-  const loading = strategyQuery.isLoading || eventsQuery.isLoading || teamsQuery.isLoading;
-  const error = strategyQuery.error || eventsQuery.error || teamsQuery.error;
+  /* Extract data from RPC response */
+  const strategy = rpcData?.strategy ?? null;
+  const events = rpcData?.timeline ?? [];
+  const teams = rpcData ? extractTeams(rpcData) : [];
+  const v3 = rpcData?.v3_normalized ?? null;
+  const position = extractPosition(v3);
+  const pace = extractPace(v3);
+  const raceClock = extractRaceClock(v3);
+  const plannedStints = rpcData?.planned_stints ?? [];
 
   /* Derive alert conditions from strategy data */
   const alerts = useMemo(() => {
     const list: Array<{ severity: "high" | "medium" | "info"; message: string }> = [];
-    if (!strategyQuery.data) return list;
+    if (!strategy) return list;
 
-    const strat = strategyQuery.data;
-    const lapsRemaining = strat.fuel_laps_remaining;
+    const lapsRemaining = strategy.fuel_laps_remaining;
 
     if (lapsRemaining != null) {
       if (lapsRemaining < 1) {
@@ -87,24 +128,28 @@ export function usePitwallData(eventId: string, initialTeamId: string | null) {
       }
     }
 
-    if (strat.strategy_status === "low_sample") {
+    if (strategy.strategy_status === "low_sample") {
       list.push({ severity: "info", message: "Strategie: weinig data" });
     }
-    if (strat.strategy_status === "insufficient_data") {
+    if (strategy.strategy_status === "insufficient_data") {
       list.push({ severity: "medium", message: "Strategie: onvoldoende data" });
     }
 
     return list;
-  }, [strategyQuery.data]);
+  }, [strategy]);
 
   return {
-    strategy: strategyQuery.data,
-    events: eventsQuery.data ?? [],
-    teams: teamsQuery.data ?? [],
+    strategy,
+    events,
+    teams,
     alerts,
     loading,
     error,
     selectedTeamId,
     setSelectedTeamId,
+    position,
+    pace,
+    raceClock,
+    plannedStints,
   };
 }

@@ -190,13 +190,17 @@ export const calcPitLap = (
 export const calcFuelToAdd = (
   currentFuelLitres: number | null,
   fuelPerLap: number | null,
-  remainingLaps: number | null,
-  tankCapacity = 100,
+  /** Laps remaining of the NEXT stint (not current fuel range) */
+  nextStintLaps: number | null,
+  /** Explicit car-specific tank capacity. No default — caller must provide. */
+  tankCapacity: number,
 ): number | null => {
-  if (currentFuelLitres == null || fuelPerLap == null || remainingLaps == null) return null;
-  // Fuel needed for remaining stint = remainingLaps * fuelPerLap
-  // Fuel to add = max(0, min(tankCapacity, fuelNeeded - currentFuel))
-  const fuelNeeded = remainingLaps * fuelPerLap;
+  if (currentFuelLitres == null || fuelPerLap == null || nextStintLaps == null) return null;
+  if (tankCapacity <= 0) return null;
+  // Fuel needed for next stint
+  const fuelNeeded = nextStintLaps * fuelPerLap;
+  // Fuel to add = max(0, min(tankCapacity, fuelNeeded - fuelAtPitEntry))
+  // Note: currentFuel is approximate fuel at pit entry (not exact)
   const toAdd = fuelNeeded - currentFuelLitres;
   if (toAdd <= 0) return 0;
   return Math.min(tankCapacity, toAdd);
@@ -244,3 +248,18 @@ export const formatDelta = (delta: number | null | undefined): { text: string; f
   if (delta == null) return null;
   return { text: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}s`, faster: delta < 0 };
 };
+
+/**
+ * Extract PitwallRaceClock from V3 normalized telemetry.
+ * Priority: V3 session clock → event schedule fallback (caller provides).
+ * Returns null when no authoritative clock is available.
+ */
+export function extractRaceClock(v3?: V3Normalized | null): PitwallRaceClock | null {
+  if (!v3?.session?.sessionTimeRemainingSeconds) return null;
+  const remainingSeconds = v3.session.sessionTimeRemainingSeconds;
+  if (remainingSeconds <= 0) return null;
+  return {
+    remainingSeconds,
+    remainingLaps: v3.session.sessionLapsRemaining ?? null,
+  };
+}

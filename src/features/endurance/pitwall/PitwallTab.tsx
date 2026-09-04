@@ -81,15 +81,15 @@ export const PitwallTab = ({ event }: Props) => {
   const strategy = isDemo ? demo.strategy : real.strategy;
   const events = isDemo ? demo.events : real.events;
   const teams = isDemo ? demo.teams : real.teams;
-  const plannedStints = isDemo ? demo.plannedStints : [];
+  const plannedStints = isDemo ? demo.plannedStints : real.plannedStints;
   const alerts = isDemo ? demo.alerts : real.alerts;
   const loading = isDemo ? demo.loading : real.loading;
   const selectedTeamId = isDemo ? "demo-team" : real.selectedTeamId;
   const setSelectedTeamId = isDemo ? (id: string | null) => {} : real.setSelectedTeamId;
 
-  const position: PitwallPositionData | null = isDemo ? demo.position : null;
-  const pace: PitwallPaceData | null = isDemo ? demo.pace : null;
-  const raceClock: PitwallRaceClock | null = isDemo ? demo.raceClock : null;
+  const position: PitwallPositionData | null = isDemo ? demo.position : real.position ?? null;
+  const pace: PitwallPaceData | null = isDemo ? demo.pace : real.pace ?? null;
+  const raceClock: PitwallRaceClock | null = isDemo ? demo.raceClock : real.raceClock ?? null;
 
   const currentStint = plannedStints.find((s) => s.status === "in_car");
   const nextStints = plannedStints.filter((s) => s.status === "draft");
