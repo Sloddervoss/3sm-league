@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>3SM.EnduranceConnector.DiagnosticsTests</AssemblyName>
+    <RootNamespace>ThreeSM.EnduranceConnector.DiagnosticsTests</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\3SM.EnduranceConnector\DiagnosticsClient.cs" Link="DiagnosticsClient.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\UpdaterStateStore.cs" Link="UpdaterStateStore.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\SessionTelemetryReader.cs" Link="SessionTelemetryReader.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ConnectorSettings.cs" Link="ConnectorSettings.cs" />
+  </ItemGroup>
+</Project>
