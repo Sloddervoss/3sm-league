@@ -51,11 +51,14 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).toMatch(/await \(await dataClient\(\)\)\.fetchData\(`\/data\/series\/season_schedule/);
     expect(source).toContain("clientPromise ??= createIRacingClient()");
     expect(source).toContain("clientPromise = null");
-    expect(source).toContain(": null;");
+    expect(source).toContain("let clientPromise: ReturnType<typeof createIRacingClient> | null = null;");
     expect(source).toContain("local_class_ids: entry?.localClassIds ?? []");
     expect(source).toContain("exact times pending explicit season mapping");
     expect(source).toContain("ENDURANCE_IRACING_SEASON_MAP_JSON");
-    expect(source).toContain("https://www.iracing.com/wp-json/wp/v2/pages/263677");
+    expect(source).toContain("https://www.iracing.com/special-events/");
+    // runtime mag niet meer de dode WP page-id API oproepen (alleen een comment noemt die URL)
+    expect(source).not.toMatch(/fetch\("https:\/\/www\.iracing\.com\/wp-json\/wp\/v2\/pages\/263677"\)/);
+    expect(source).not.toContain('"wp-json/wp/v2/pages/263677"');
     expect(normalizer).toContain("Officiële Upcoming/Completed-eventgrenzen ontbreken");
     expect(source).toContain("season_schedule?season_id=");
   });

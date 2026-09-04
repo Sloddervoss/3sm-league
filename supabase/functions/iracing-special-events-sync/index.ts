@@ -99,15 +99,23 @@ Deno.serve(async (request) => {
     const mapping = parseSeasonMap();
     let calendarHtml = "";
     let calendarModifiedAt: string | null = null;
+    let calendarSourceUrl: string | null = null;
     try {
-      const calendarResponse = await fetch("https://www.iracing.com/wp-json/wp/v2/pages/263677", {
-        headers: { Accept: "application/json", "User-Agent": "3SM Endurance Sync/1.0" },
+      // Stable officiële Special Events route (public HTML). De oude WP page-id API
+      // (wp/v2/pages/263677) is dood (HTTP 404); de en-server toegankelijke route is
+      // dezelfde als de site-navigatiepagina. `discoverUpcomingSpecialEvents` in
+      // normalize.ts parse de <h2>-events + "Cars Competing"-secties uit deze HTML.
+      calendarSourceUrl = "https://www.iracing.com/special-events/";
+      const calendarResponse = await fetch(calendarSourceUrl, {
+        headers: { Accept: "text/html,application/xhtml+xml", "User-Agent": "3SM Endurance Sync/1.0" },
+        redirect: "follow",
       });
       if (!calendarResponse.ok) throw new Error(`HTTP ${calendarResponse.status}`);
-      const calendar = await calendarResponse.json();
-      calendarHtml = String(calendar?.content?.rendered ?? "");
-      calendarModifiedAt = calendar?.modified_gmt ? `${calendar.modified_gmt}Z` : null;
-      if (!calendarHtml) throw new Error("lege officiële kalender");
+      calendarHtml = await calendarResponse.text();
+      // fallback modified-at als header aanwezig is
+      const lastMod = calendarResponse.headers.get("last-modified");
+      if (lastMod) calendarModifiedAt = new Date(lastMod).toISOString();
+      if (!calendarHtml || calendarHtml.length < 1000) throw new Error("lege officiële kalender");
     } catch (error) {
       errors.push(`official_calendar: ${cleanError(error)}`);
     }
@@ -157,7 +165,7 @@ Deno.serve(async (request) => {
           provenance: entry
             ? "official iRacing Special Events page + authenticated Data API"
             : "official iRacing Special Events page; exact times pending explicit season mapping",
-          calendar_page_id: 263677,
+          calendar_source_url: calendarSourceUrl,
           calendar_modified_at: calendarModifiedAt,
           season_id: entry?.seasonId ?? null,
         } : existing?.source_payload ?? {
