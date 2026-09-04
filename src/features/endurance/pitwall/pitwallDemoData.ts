@@ -6,6 +6,7 @@
 import type {
   PitwallStrategyRow, PitwallTimelineEvent, PitwallPlannedStint,
   TeamOption, PitwallPositionData, PitwallPaceData, PitwallRaceClock,
+  V3Normalized, V3Opponent,
 } from "./pitwallHelpers";
 
 export type DemoScenario = "normal" | "pit" | "low-data" | "offline";
@@ -28,6 +29,8 @@ export interface DemoData {
   position: PitwallPositionData;
   pace: PitwallPaceData;
   raceClock: PitwallRaceClock;
+  /** 0.4.2: DEV-only opponent snapshot (as the 0.4.1 connector would send). */
+  opponents: V3Opponent[];
 }
 
 /* ============ STRATEGY FIXTURES ============ */
@@ -154,6 +157,34 @@ const PIT_HIGH_ALERTS: Alert[] = [{ severity: "high", message: "PIT DEZE RONDE �
 const LOW_DATA_INFO_ALERTS: Alert[] = [{ severity: "info", message: "Waarschuwing: strategie nog niet betrouwbaar — slechts 2 samples" }];
 const OFFLINE_HIGH_ALERTS: Alert[] = [{ severity: "high", message: "TELEMETRIE VERLOREN — data is verouderd. Planner/blanco data blijft beschikbaar" }];
 
+/* ============ 0.4.2 DEMO OPPONENT GRID ============ */
+const opp = (o: Partial<V3Opponent> & { id: string }): V3Opponent => ({
+  carNumber: null, driverName: null, teamName: null, carClass: "GT3", carClassId: "gt3",
+  position: null, classPosition: null, lap: null, lapDistancePct: null,
+  gapToPlayerSeconds: null, gapToLeaderSeconds: null, lastLapSeconds: null, bestLapSeconds: null,
+  inPit: false, speedKph: null, connected: true, isPlayer: false, ...o,
+});
+
+/** ~16-car grid, player at P6/K2. Includes lapped, pit, disconnected, missing-gap rows. */
+const DEMO_OPPONENTS: V3Opponent[] = [
+  opp({ id: "p1", carNumber: "11", teamName: "Apex Racing", driverName: "M. vd Berg", position: 1, classPosition: 1, lap: 103, gapToPlayerSeconds: -42.8, gapToLeaderSeconds: 0.0, lastLapSeconds: 91.2, bestLapSeconds: 90.9 }),
+  opp({ id: "p2", carNumber: "77", teamName: "Naober Racing", driverName: "R. Godefrooij", position: 2, classPosition: 1, lap: 103, gapToPlayerSeconds: -30.1, gapToLeaderSeconds: 1.8, lastLapSeconds: 91.8, bestLapSeconds: 91.4 }),
+  opp({ id: "p3", carNumber: "23", teamName: "Paardekracht", driverName: "J. Wever", position: 3, classPosition: 2, lap: 102, gapToPlayerSeconds: -21.5, gapToLeaderSeconds: 3.2, lastLapSeconds: 92.1, bestLapSeconds: 91.6 }),
+  opp({ id: "p4", carNumber: "45", teamName: "3SM Rookie", driverName: "D. Bakker", position: 4, classPosition: 1, lap: 102, gapToPlayerSeconds: -14.0, gapToLeaderSeconds: 6.4, lastLapSeconds: 92.4, bestLapSeconds: 92.0 }),
+  opp({ id: "p5", carNumber: "28", teamName: "SimRanks", driverName: "L. Post", position: 5, classPosition: 2, lap: 101, gapToPlayerSeconds: -3.4, gapToLeaderSeconds: 9.1, lastLapSeconds: 91.9, bestLapSeconds: 91.7 }),
+  opp({ id: "player", carNumber: "45", teamName: "3SM Endurance", driverName: "Vincent", position: 6, classPosition: 2, lap: 101, gapToPlayerSeconds: 0, gapToLeaderSeconds: 12.3, lastLapSeconds: 92.4, bestLapSeconds: 91.8, isPlayer: true }),
+  opp({ id: "p7", carNumber: "88", teamName: "Turn1 Tactics", driverName: "E. Smit", position: 7, classPosition: 3, lap: 101, gapToPlayerSeconds: 2.1, gapToLeaderSeconds: 15.0, lastLapSeconds: 92.8, bestLapSeconds: 92.2 }),
+  opp({ id: "p8", carNumber: "12", teamName: "KartX", driverName: "T. de Wit", position: 8, classPosition: 3, lap: 100, gapToPlayerSeconds: 8.6, gapToLeaderSeconds: 18.4, lastLapSeconds: 93.0, bestLapSeconds: 92.5 }),
+  opp({ id: "p9", carNumber: "99", teamName: "Paddock 7", driverName: "S. Visser", position: 9, classPosition: 4, lap: 100, inPit: true, gapToPlayerSeconds: null, gapToLeaderSeconds: null, lastLapSeconds: 92.9, bestLapSeconds: 92.3 }),
+  opp({ id: "p10", carNumber: "33", teamName: "Pitwall Crew", driverName: "F. Jansen", position: 10, classPosition: 1, lap: 99, gapToPlayerSeconds: 22.0, gapToLeaderSeconds: 25.9, lastLapSeconds: 93.4, bestLapSeconds: 93.0 }),
+  opp({ id: "p11", carNumber: "56", teamName: "Lotus Boys", driverName: "H. Mulder", position: 11, classPosition: 5, lap: 99, gapToPlayerSeconds: 31.2, gapToLeaderSeconds: 33.6, lastLapSeconds: 93.6, bestLapSeconds: 93.2 }),
+  opp({ id: "p12", carNumber: "18", teamName: "Brake Later", driverName: "K. Evers", position: 12, classPosition: 4, lap: 98, gapToPlayerSeconds: 45.5, gapToLeaderSeconds: 47.9, lastLapSeconds: 94.0, bestLapSeconds: 93.5 }),
+  opp({ id: "p13", carNumber: "64", teamName: "Fast Lane", driverName: "G. de Boer", position: 13, classPosition: 6, lap: 97, connected: false, gapToPlayerSeconds: null, gapToLeaderSeconds: null, lastLapSeconds: null, bestLapSeconds: 93.8 }),
+  opp({ id: "p14", carNumber: "21", teamName: "Racing Depot", driverName: "P. Klein", position: 14, classPosition: 2, lap: 97, gapToPlayerSeconds: 88.3, gapToLeaderSeconds: 91.0, lastLapSeconds: 94.5, bestLapSeconds: 94.1 }),
+  opp({ id: "p15", carNumber: "7", teamName: "Turn Point", driverName: "A. Bloem", position: 15, classPosition: 7, lap: 95, gapToPlayerSeconds: 135.7, gapToLeaderSeconds: 138.2, lastLapSeconds: 95.1, bestLapSeconds: 94.6 }),
+  opp({ id: "p16", carNumber: "52", teamName: "Rietveld", driverName: "R. Bos", position: 16, classPosition: 3, lap: 93, gapToPlayerSeconds: null, gapToLeaderSeconds: null, lastLapSeconds: 95.4, bestLapSeconds: 95.0 }),
+];
+
 /* ============ EXPORT ============ */
 
 const scenarios: Record<DemoScenario, DemoData> = {
@@ -163,6 +194,7 @@ const scenarios: Record<DemoScenario, DemoData> = {
     position: { overallPosition: 6, classPosition: 2, gapToLeaderSeconds: 42.8 },
     pace: { lastLapSeconds: 92.4, bestLapSeconds: 91.8, stintAvgSeconds: 93.1, targetSeconds: 92.0 },
     raceClock: { remainingSeconds: 9692, remainingLaps: 57 },
+    opponents: DEMO_OPPONENTS,
   },
   pit: {
     scenario: "pit", strategy: PIT_STRATEGY, events: PIT_EVENTS,
@@ -170,6 +202,7 @@ const scenarios: Record<DemoScenario, DemoData> = {
     position: { overallPosition: 6, classPosition: 2, gapToLeaderSeconds: 18.3 },
     pace: { lastLapSeconds: 93.1, bestLapSeconds: 91.8, stintAvgSeconds: 93.5, targetSeconds: 92.0 },
     raceClock: { remainingSeconds: 8300, remainingLaps: 49 },
+    opponents: DEMO_OPPONENTS,
   },
   "low-data": {
     scenario: "low-data", strategy: LOW_DATA_STRATEGY, events: LOW_DATA_EVENTS,
@@ -177,6 +210,7 @@ const scenarios: Record<DemoScenario, DemoData> = {
     position: { overallPosition: 14, classPosition: 5, gapToLeaderSeconds: 15.2 },
     pace: { lastLapSeconds: 106.1, bestLapSeconds: 104.8, stintAvgSeconds: 105.7, targetSeconds: null },
     raceClock: { remainingSeconds: 20500, remainingLaps: null },
+    opponents: [],
   },
   offline: {
     scenario: "offline", strategy: OFFLINE_STRATEGY, events: OFFLINE_EVENTS,
@@ -184,6 +218,7 @@ const scenarios: Record<DemoScenario, DemoData> = {
     position: { overallPosition: null, classPosition: null, gapToLeaderSeconds: null },
     pace: { lastLapSeconds: null, bestLapSeconds: 91.8, stintAvgSeconds: null, targetSeconds: 92.0 },
     raceClock: { remainingSeconds: null, remainingLaps: null },
+    opponents: [],
   },
 };
 

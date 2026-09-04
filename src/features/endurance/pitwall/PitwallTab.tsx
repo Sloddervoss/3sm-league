@@ -13,6 +13,8 @@ import { RacePositionPanel } from "./RacePositionPanel";
 import { AlertZone } from "./AlertZone";
 import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
+import { StandingsWidget } from "./StandingsWidget";
+import { deriveStandings } from "./standings";
 import { useMemo, useCallback, useState } from "react";
 import { useLocation } from "react-router-dom";
 import type { PitwallPositionData, PitwallPaceData, PitwallRaceClock } from "./pitwallHelpers";
@@ -90,6 +92,17 @@ export const PitwallTab = ({ event }: Props) => {
   const position: PitwallPositionData | null = isDemo ? demo.position : real.position ?? null;
   const pace: PitwallPaceData | null = isDemo ? demo.pace : real.pace ?? null;
   const raceClock: PitwallRaceClock | null = isDemo ? demo.raceClock : real.raceClock ?? null;
+
+  /* 0.4.2: live standings derivation from opponent snapshot (real or demo). */
+  const standings = useMemo(() => {
+    if (isDemo) {
+      return deriveStandings({
+        position: { position: demo.position.overallPosition ?? undefined, classPosition: demo.position.classPosition ?? undefined, gapToLeaderSeconds: demo.position.gapToLeaderSeconds ?? undefined },
+        opponents: demo.opponents,
+      });
+    }
+    return deriveStandings(real.v3 ?? null);
+  }, [isDemo, demo, real.v3]);
 
   const currentStint = plannedStints.find((s) => s.status === "in_car");
   const nextStints = plannedStints.filter((s) => s.status === "draft");
@@ -238,7 +251,11 @@ export const PitwallTab = ({ event }: Props) => {
           {/* === MAIN GRID: 3 ROWS === */}
           <div className="grid gap-3 lg:grid-cols-3">
             <div className="space-y-3">
-              <div data-pitwall-slot="standings" className="hidden" />
+              <StandingsWidget
+                standings={standings}
+                ownCarLabel={teams.find((t) => t.id === selectedTeamId)?.name ?? "Mijn auto"}
+                ownCarNumber={null}
+              />
               <RacePositionPanel strategy={strategy} position={position} />
             </div>
             <div className="space-y-3">
