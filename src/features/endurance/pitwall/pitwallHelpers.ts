@@ -84,6 +84,30 @@ export interface V3Normalized {
     requiredRepairSeconds?: number;
     optionalRepairSeconds?: number;
   };
+  /** 0.4.1+ bounded, null-tolerant opponent snapshot (from SimHub Opponents). */
+  opponents?: V3Opponent[];
+}
+
+/** A single opponent from the 0.4.1 connector snapshot. */
+export interface V3Opponent {
+  id: string;
+  carNumber?: string | null;
+  driverName?: string | null;
+  teamName?: string | null;
+  carClass?: string | null;
+  carClassId?: string | null;
+  position?: number | null;
+  classPosition?: number | null;
+  lap?: number | null;
+  lapDistancePct?: number | null;
+  gapToPlayerSeconds?: number | null;
+  gapToLeaderSeconds?: number | null;
+  lastLapSeconds?: number | null;
+  bestLapSeconds?: number | null;
+  inPit?: boolean | null;
+  speedKph?: number | null;
+  connected?: boolean;
+  isPlayer?: boolean;
 }
 
 export interface PitwallTimelineEvent {
