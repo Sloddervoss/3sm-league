@@ -293,6 +293,10 @@ Deno.serve(async (request) => {
       try {
         const entry = mappingBySourceKey.get(discoveredSeed.sourceKey);
         if (!entry) continue;
+        // Serie-buckets worden door de series-loop geïmporteerd (per-week events
+        // voor niet-combined, één combined-event voor combined). Hier zou de bucket
+        // anders als losse actieve kaart verschijnen naast zijn eigen week-rijen.
+        if (entry.kind === "series") continue;
         // Officiële paginadata wint; handmatige seedvelden vullen uitsluitend
         // ontbrekende track/API-metadata aan voor expliciet gemapte events.
         const officialSeed = {

@@ -82,4 +82,12 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).toContain("if (!entry) continue;");
     expect(source).toContain("Onbekende/ongemapte events worden niet geïmporteerd");
   });
+
+  it("laat serie-buckets niet als losse actieve kaart verschijnen naast hun week-rijen", () => {
+    // De special-events-loop mag geen `kind === "series"`-entry importeren: de
+    // series-loop maakt al de week-rijen (niet-combined) of één combined-event.
+    // Anders verschijnt de bucket als nog een losse kaart naast zijn eigen weeks
+    // (de "duplicate events"-klacht).
+    expect(source).toContain('if (entry.kind === "series") continue;');
+  });
 });
