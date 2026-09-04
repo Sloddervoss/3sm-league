@@ -21,6 +21,32 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "fuel", Order = 10)] public V3Fuel Fuel { get; set; }
         [DataMember(Name = "raceState", Order = 11)] public V3RaceState RaceState { get; set; }
         [DataMember(Name = "pitService", Order = 12)] public V3PitService PitService { get; set; }
+        // 0.4.1 additive: bounded, null-tolerant opponent snapshot. Absent/null => steady/0.4.0
+        // compatible (validator allows when present). Cap enforced in the connector.
+        [DataMember(Name = "opponents", Order = 13)] public V3Opponent[] Opponents { get; set; }
+    }
+
+    [DataContract]
+    public sealed class V3Opponent
+    {
+        [DataMember(Name = "id", Order = 1)] public string Id { get; set; }
+        [DataMember(Name = "carNumber", Order = 2)] public string CarNumber { get; set; }
+        [DataMember(Name = "driverName", Order = 3)] public string DriverName { get; set; }
+        [DataMember(Name = "teamName", Order = 4)] public string TeamName { get; set; }
+        [DataMember(Name = "carClass", Order = 5)] public string CarClass { get; set; }
+        [DataMember(Name = "carClassId", Order = 6)] public string CarClassId { get; set; }
+        [DataMember(Name = "position", Order = 7)] public int? Position { get; set; }
+        [DataMember(Name = "classPosition", Order = 8)] public int? ClassPosition { get; set; }
+        [DataMember(Name = "lap", Order = 9)] public int? Lap { get; set; }
+        [DataMember(Name = "lapDistancePct", Order = 10)] public double? LapDistancePct { get; set; }
+        [DataMember(Name = "gapToPlayerSeconds", Order = 11)] public double? GapToPlayerSeconds { get; set; }
+        [DataMember(Name = "gapToLeaderSeconds", Order = 12)] public double? GapToLeaderSeconds { get; set; }
+        [DataMember(Name = "lastLapSeconds", Order = 13)] public double? LastLapSeconds { get; set; }
+        [DataMember(Name = "bestLapSeconds", Order = 14)] public double? BestLapSeconds { get; set; }
+        [DataMember(Name = "inPit", Order = 15)] public bool? InPit { get; set; }
+        [DataMember(Name = "speedKph", Order = 16)] public double? SpeedKph { get; set; }
+        [DataMember(Name = "connected", Order = 17)] public bool Connected { get; set; }
+        [DataMember(Name = "isPlayer", Order = 18)] public bool IsPlayer { get; set; }
     }
 
     [DataContract]

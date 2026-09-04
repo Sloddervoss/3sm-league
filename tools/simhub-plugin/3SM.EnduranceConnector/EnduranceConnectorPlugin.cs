@@ -32,6 +32,8 @@ namespace ThreeSM.EnduranceConnector
         // so designated testers receive TEST manifest releases; STABLE builds leave this
         // empty (plain GET, stable manifest). Set per release branch — never user-facing.
         private const string ReleaseChannelQuery = "?channel=canary";
+        // 0.4.1: hard cap on opponents per snapshot (bounded payload; proven grid headroom).
+        private const int MaxOpponentsPerSnapshot = 40;
         private const long MaxUpdateBytes = 5 * 1024 * 1024;
         private const string ReleasePublicKeyXml = "<RSAKeyValue><Modulus>623ziGDiaH7x+n1WwVv4lp+CswGiM4b/+h410wt1IBXZc+xeIoJbS2GnSU+wCgsUD1Ek4Eup0XKumuyuEvkZYUJ7zzLuIV5qBj9jk1lSnZmp4ibMyanmhJOIxsuSzylpNV9ru2QAuJQLpK9Jahk8vbOjSaNaaO1ZxKP0U0Xxy79N/9vutjdO6dW9r2MzQUP5KNGCTBlgHwm5Kn3KujtyV3EB5jeFbwl0L1G5R2taan6wzrcSLtNKrJACbm/bLvOijAvUAjpVH7+ThUPY/w9womXuxtWCPFT0cp7wq9rBieOEFjWxFLSkr9uZ/Z+gWyuBINrGJ7gLGuONvNq3TbqkwRmnPu91hstTQR5EfLDduohdfsRW6g+BHUNgZFo9cheM/NpJx6vpZ61Rzjw46Bu8QVCInRW7W43u4e/Xb9CjlPEf6ou8jnEeUY9ZgDOKhs7oHbDg3072GIPTc/8HJjATN6YlnTU0tqB43zElN2BrWc/aFqqTdrXce9vEEqPclWVT</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         private readonly HttpClient _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(4) };
@@ -904,8 +906,57 @@ namespace ThreeSM.EnduranceConnector
                     RequiredRepairSeconds = null,
                     OptionalRepairSeconds = null,
                 },
+                Opponents = BuildOpponentSnapshot(snapshot),
             };
         }
+
+        /// <summary>Build a bounded, null-tolerant opponent snapshot from SimHub Opponents.</summary>
+        internal static V3Opponent[] BuildOpponentSnapshot(GameReaderCommon.StatusDataBase snapshot)
+        {
+            if (snapshot?.Opponents == null) return null;
+            var result = new List<V3Opponent>(MaxOpponentsPerSnapshot);
+            foreach (var opponent in snapshot.Opponents)
+            {
+                if (opponent == null) continue;
+                if (string.IsNullOrWhiteSpace(opponent.Id)) continue; // stable identity key required
+                if (!opponent.IsConnected && !opponent.IsPlayer) continue; // skip stale/disconnected non-players
+                var item = new V3Opponent
+                {
+                    Id = opponent.Id,
+                    CarNumber = opponent.CarNumber,
+                    DriverName = opponent.Name,
+                    TeamName = opponent.TeamName,
+                    CarClass = opponent.CarClass,
+                    CarClassId = opponent.CarClassID,
+                    Position = opponent.Position > 0 ? (int?)opponent.Position : null,
+                    ClassPosition = opponent.PositionInClass > 0 ? (int?)opponent.PositionInClass : null,
+                    Lap = opponent.CurrentLap.HasValue && opponent.CurrentLap.Value > 0 ? (int?)opponent.CurrentLap.Value : null,
+                    LapDistancePct = Clamp01(NullableSeconds(opponent.TrackPositionPercent)),
+                    GapToPlayerSeconds = ClampNonNegative(opponent.GaptoPlayer),
+                    GapToLeaderSeconds = ClampNonNegative(opponent.GaptoLeader),
+                    LastLapSeconds = PositiveSeconds(opponent.LastLapTime),
+                    BestLapSeconds = PositiveSeconds(opponent.BestLapTime),
+                    InPit = opponent.IsCarInPitLane || opponent.IsCarInPit,
+                    SpeedKph = PositiveNullable(opponent.Speed),
+                    Connected = opponent.IsConnected,
+                    IsPlayer = opponent.IsPlayer,
+                };
+                result.Add(item);
+                if (result.Count >= MaxOpponentsPerSnapshot) break;
+            }
+            // Stable order by overall position (player first when tied), compact deterministic payload.
+            return result
+                .OrderBy(o => o.IsPlayer ? 0 : (o.Position ?? int.MaxValue))
+                .ThenBy(o => o.Id, StringComparer.Ordinal)
+                .Take(MaxOpponentsPerSnapshot)
+                .ToArray();
+        }
+
+        private static double? Clamp01(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)Math.Max(0, Math.Min(1, value.Value)) : null; }
+        private static double? ClampNonNegative(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value >= 0 ? (double?)value.Value : null; }
+        private static double? PositiveSeconds(TimeSpan value) { return value > TimeSpan.Zero ? (double?)value.TotalSeconds : null; }
+        private static double? PositiveNullable(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value > 0 ? (double?)value.Value : null; }
+        private static double? NullableSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)value.Value : null; }
 
         private async Task SendAsync(TelemetryEnvelope envelope, Uri endpoint, string token, CancellationToken cancellationToken)
         {

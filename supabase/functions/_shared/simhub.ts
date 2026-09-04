@@ -1,3 +1,5 @@
+import { exactKeysAllowExtra, parseOpponents, type V3Opponent } from "./opponents.ts";
+
 export type SimHubFlag = "green" | "yellow" | "red" | "white" | "checkered" | "unknown";
 
 export type SimHubTelemetryEnvelope = {
@@ -48,6 +50,8 @@ const exactKeys = (value: Record<string, unknown>, keys: string[], path: string)
     throw new Error(`${path} contains unknown or missing fields`);
   }
 };
+
+/* exactKeysAllowExtra + parseOpponents live in ./opponents.ts (framework-free, unit-tested). */
 
 const text = (value: unknown, path: string, max = 120): string => {
   if (typeof value !== "string" || !value.trim() || value.length > max) throw new Error(`${path} is invalid`);
@@ -138,6 +142,288 @@ export const parseTelemetryEnvelope = (input: unknown): SimHubTelemetryEnvelope 
       isInCar: version === 2 ? booleanValue(telemetry.isInCar, "telemetry.isInCar") : true,
     },
   };
+};
+
+// ---------------------------------------------------------------------------
+// Telemetry V3 (Phase A) — strict wire contract + one normalized internal DTO.
+// V1/V2 parsing above is preserved untouched for existing callers; V3 adds its
+// own exact per-version allowlist and normalizes all three versions into the
+// same DTO via normalizeTelemetryEnvelope(). Client-independent server fields
+// (raceRunId, eventId, teamId, deviceId, ownerUserId, authority, deviceRole)
+// are left null at parser stage — they are derived server-side.
+// ---------------------------------------------------------------------------
+
+export type SimHubRaceFlag =
+  | "green" | "yellow" | "red" | "white" | "checkered"
+  | "blue" | "black" | "meatball" | "disqualify";
+
+export type SimHubSessionState =
+  | "not_in_world" | "warmup" | "parade_laps" | "racing" | "checkered" | "cool_down" | "unknown";
+
+export type SimHubTrackSurface =
+  | "on_track" | "off_track" | "in_pit_stall" | "approaching_pits" | "not_in_world" | "unknown";
+
+export type NormalizedTelemetryEnvelope = {
+  protocolVersion: 1 | 2 | 3;
+  sequence: number;
+  capturedAt: string;
+  transportSessionId: string;
+  raceRunId: null;
+  eventId: null;
+  teamId: null;
+  deviceId: null;
+  ownerUserId: null;
+  authority: null;
+  deviceRole: null;
+  identity: {
+    currentDriverId: string | null;
+    currentDriverName: string | null;
+    carId: string | null;
+    carName: string | null;
+    trackName: string | null;
+    trackConfig: string | null;
+  };
+  session: {
+    isInCar: boolean;
+    sessionTimeSeconds: number | null;
+    sessionTimeRemainingSeconds: number | null;
+    sessionLapsRemaining: number | null;
+    flags: SimHubRaceFlag[] | null;
+    sessionState: SimHubSessionState;
+  };
+  timing: {
+    currentLapElapsedSeconds: number | null;
+    lastLapTimeSeconds: number | null;
+    bestLapTimeSeconds: number | null;
+    completedLaps: number | null;
+  };
+  position: {
+    position: number | null;
+    classPosition: number | null;
+    gapToLeaderSeconds: number | null;
+  };
+  track: {
+    lapDistancePct: number | null;
+    trackSurface: SimHubTrackSurface;
+    onPitRoad: boolean | null;
+  };
+  fuel: {
+    fuelLitres: number | null;
+    fuelPct: number | null;
+  };
+  raceState: {
+    incidents: number | null;
+  };
+  pitService: {
+    pitServiceFlagsRaw: number | null;
+    requiredRepairSeconds: number | null;
+    optionalRepairSeconds: number | null;
+  };
+  /** 0.4.1 additive, bounded, null-tolerant opponent snapshot. */
+  opponents: V3Opponent[] | null;
+};
+
+const raceFlagValues = new Set<SimHubRaceFlag>(["green", "yellow", "red", "white", "checkered", "blue", "black", "meatball", "disqualify"]);
+const sessionStateValues = new Set<SimHubSessionState>(["not_in_world", "warmup", "parade_laps", "racing", "checkered", "cool_down", "unknown"]);
+const trackSurfaceValues = new Set<SimHubTrackSurface>(["on_track", "off_track", "in_pit_stall", "approaching_pits", "not_in_world", "unknown"]);
+
+type V3NumberRule = {
+  nullable?: boolean;
+  integer?: boolean;
+  min?: number;
+  max?: number;
+  /** Wire values that normalize to null instead of passing through (SDK sentinels). */
+  sentinels?: number[];
+};
+
+const v3Number = (value: unknown, path: string, rule: V3NumberRule = {}): number | null => {
+  if (rule.nullable && value === null) return null;
+  const min = rule.min ?? 0;
+  const max = rule.max ?? Number.MAX_SAFE_INTEGER;
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${path} is invalid`);
+  if (rule.integer && !Number.isInteger(value)) throw new Error(`${path} must be an integer`);
+  if (rule.sentinels?.includes(value as number)) return null;
+  if (value < min || value > max) throw new Error(`${path} is invalid`);
+  return value;
+};
+
+const v3Enum = <T extends string>(value: unknown, allowed: Set<T>, path: string): T => {
+  if (typeof value !== "string" || !allowed.has(value as T)) throw new Error(`${path} is invalid`);
+  return value as T;
+};
+
+const v3Flags = (value: unknown, path: string): SimHubRaceFlag[] | null => {
+  if (value === null) return null;
+  if (!Array.isArray(value)) throw new Error(`${path} must be an array or null`);
+  return value.map((flag, index) => v3Enum(flag, raceFlagValues, `${path}[${index}]`));
+};
+
+const v3Boolean = (value: unknown, path: string): boolean | null => {
+  if (value === null) return null;
+  if (typeof value !== "boolean") throw new Error(`${path} is invalid`);
+  return value;
+};
+
+export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnvelope => {
+  const root = asRecord(input, "payload");
+  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents"], "payload");
+  if (root.protocolVersion !== 3) throw new Error("unsupported protocolVersion");
+  const sequence = v3Number(root.sequence, "payload.sequence", { integer: true, min: 0 }) as number;
+  const capturedAt = text(root.capturedAt, "payload.capturedAt", 40);
+  if (!Number.isFinite(Date.parse(capturedAt))) throw new Error("payload.capturedAt is invalid");
+  const transportSessionId = text(root.transportSessionId, "payload.transportSessionId", 120);
+
+  const identity = asRecord(root.identity, "identity");
+  exactKeys(identity, ["currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"], "identity");
+  const session = asRecord(root.session, "session");
+  exactKeys(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], "session");
+  const timing = asRecord(root.timing, "timing");
+  exactKeys(timing, ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds", "completedLaps"], "timing");
+  const position = asRecord(root.position, "position");
+  exactKeys(position, ["position", "classPosition", "gapToLeaderSeconds"], "position");
+  const track = asRecord(root.track, "track");
+  exactKeys(track, ["lapDistancePct", "trackSurface", "onPitRoad"], "track");
+  const fuel = asRecord(root.fuel, "fuel");
+  exactKeys(fuel, ["fuelLitres", "fuelPct"], "fuel");
+  const raceState = asRecord(root.raceState, "raceState");
+  exactKeys(raceState, ["incidents"], "raceState");
+  const pitService = asRecord(root.pitService, "pitService");
+  exactKeys(pitService, ["pitServiceFlagsRaw", "requiredRepairSeconds", "optionalRepairSeconds"], "pitService");
+
+  return {
+    protocolVersion: 3,
+    sequence,
+    capturedAt,
+    transportSessionId,
+    raceRunId: null,
+    eventId: null,
+    teamId: null,
+    deviceId: null,
+    ownerUserId: null,
+    authority: null,
+    deviceRole: null,
+    identity: {
+      currentDriverId: nullableText(identity.currentDriverId, "identity.currentDriverId"),
+      currentDriverName: nullableText(identity.currentDriverName, "identity.currentDriverName"),
+      carId: nullableText(identity.carId, "identity.carId"),
+      carName: nullableText(identity.carName, "identity.carName"),
+      trackName: nullableText(identity.trackName, "identity.trackName"),
+      trackConfig: nullableText(identity.trackConfig, "identity.trackConfig"),
+    },
+    session: {
+      isInCar: booleanValue(session.isInCar, "session.isInCar"),
+      sessionTimeSeconds: v3Number(session.sessionTimeSeconds, "session.sessionTimeSeconds", { nullable: true, min: 0, max: 604800, sentinels: [-1] }),
+      sessionTimeRemainingSeconds: v3Number(session.sessionTimeRemainingSeconds, "session.sessionTimeRemainingSeconds", { nullable: true, min: 0, max: 604800, sentinels: [-1, 604800] }),
+      sessionLapsRemaining: v3Number(session.sessionLapsRemaining, "session.sessionLapsRemaining", { nullable: true, integer: true, min: 0, max: 100000, sentinels: [-1, 32767] }),
+      flags: v3Flags(session.flags, "session.flags"),
+      sessionState: v3Enum(session.sessionState, sessionStateValues, "session.sessionState"),
+    },
+    timing: {
+      currentLapElapsedSeconds: v3Number(timing.currentLapElapsedSeconds, "timing.currentLapElapsedSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
+      lastLapTimeSeconds: v3Number(timing.lastLapTimeSeconds, "timing.lastLapTimeSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
+      bestLapTimeSeconds: v3Number(timing.bestLapTimeSeconds, "timing.bestLapTimeSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
+      completedLaps: v3Number(timing.completedLaps, "timing.completedLaps", { nullable: true, integer: true, min: 0, max: 100000, sentinels: [-1] }),
+    },
+    position: {
+      position: v3Number(position.position, "position.position", { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] }),
+      classPosition: v3Number(position.classPosition, "position.classPosition", { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] }),
+      gapToLeaderSeconds: v3Number(position.gapToLeaderSeconds, "position.gapToLeaderSeconds", { nullable: true, min: 0, max: 86400, sentinels: [-1] }),
+    },
+    track: {
+      lapDistancePct: v3Number(track.lapDistancePct, "track.lapDistancePct", { nullable: true, min: 0, max: 1, sentinels: [-1] }),
+      trackSurface: v3Enum(track.trackSurface, trackSurfaceValues, "track.trackSurface"),
+      onPitRoad: v3Boolean(track.onPitRoad, "track.onPitRoad"),
+    },
+    fuel: {
+      fuelLitres: v3Number(fuel.fuelLitres, "fuel.fuelLitres", { nullable: true, min: 0, max: 250, sentinels: [-1] }),
+      fuelPct: v3Number(fuel.fuelPct, "fuel.fuelPct", { nullable: true, min: 0, max: 1, sentinels: [-1] }),
+    },
+    raceState: {
+      incidents: v3Number(raceState.incidents, "raceState.incidents", { nullable: true, integer: true, min: 0, max: 100000, sentinels: [-1] }),
+    },
+    pitService: {
+      pitServiceFlagsRaw: v3Number(pitService.pitServiceFlagsRaw, "pitService.pitServiceFlagsRaw", { nullable: true, integer: true, min: 0, max: 2147483647, sentinels: [-1] }),
+      requiredRepairSeconds: v3Number(pitService.requiredRepairSeconds, "pitService.requiredRepairSeconds", { nullable: true, min: 0, max: 86400, sentinels: [-1] }),
+      optionalRepairSeconds: v3Number(pitService.optionalRepairSeconds, "pitService.optionalRepairSeconds", { nullable: true, min: 0, max: 86400, sentinels: [-1] }),
+    },
+    opponents: parseOpponents(root.opponents, "payload.opponents"),
+  };
+};
+
+const v12FlagToFlags = (flag: SimHubFlag, path: string): SimHubRaceFlag[] | null => {
+  if (flag === "unknown") return null;
+  if (!raceFlagValues.has(flag as SimHubRaceFlag)) throw new Error(`${path} is invalid`);
+  return [flag as SimHubRaceFlag];
+};
+
+const normalizeV12Envelope = (env: SimHubTelemetryEnvelope): NormalizedTelemetryEnvelope => {
+  const sessionLapsRemaining = env.telemetry.estimatedLapsRemaining !== null && Number.isInteger(env.telemetry.estimatedLapsRemaining)
+    ? env.telemetry.estimatedLapsRemaining
+    : null;
+  return {
+    protocolVersion: env.protocolVersion,
+    sequence: env.sequence,
+    capturedAt: env.capturedAt,
+    transportSessionId: env.race.sessionId,
+    raceRunId: null,
+    eventId: null,
+    teamId: null,
+    deviceId: null,
+    ownerUserId: null,
+    authority: null,
+    deviceRole: null,
+    identity: {
+      currentDriverId: env.race.currentDriverId,
+      currentDriverName: env.race.currentDriverName,
+      carId: env.race.carId,
+      carName: env.race.carName,
+      trackName: env.race.trackName,
+      trackConfig: env.race.trackConfig,
+    },
+    session: {
+      isInCar: env.telemetry.isInCar,
+      sessionTimeSeconds: env.telemetry.sessionTimeSeconds,
+      sessionTimeRemainingSeconds: null,
+      sessionLapsRemaining,
+      flags: v12FlagToFlags(env.telemetry.flag, "telemetry.flag"),
+      sessionState: "unknown",
+    },
+    timing: {
+      currentLapElapsedSeconds: null,
+      lastLapTimeSeconds: env.telemetry.lapTimeSeconds,
+      bestLapTimeSeconds: null,
+      completedLaps: env.telemetry.completedLaps,
+    },
+    position: {
+      position: env.telemetry.position,
+      classPosition: env.telemetry.classPosition,
+      gapToLeaderSeconds: null,
+    },
+    track: {
+      lapDistancePct: null,
+      trackSurface: "unknown",
+      onPitRoad: env.telemetry.inPitLane,
+    },
+    fuel: {
+      fuelLitres: env.telemetry.fuelLitres,
+      fuelPct: null,
+    },
+    raceState: { incidents: env.telemetry.incidents },
+    pitService: {
+      pitServiceFlagsRaw: null,
+      requiredRepairSeconds: null,
+      optionalRepairSeconds: null,
+    },
+    opponents: null,
+  };
+};
+
+export const normalizeTelemetryEnvelope = (input: unknown): NormalizedTelemetryEnvelope => {
+  const root = asRecord(input, "payload");
+  const version = root.protocolVersion;
+  if (version === 3) return parseTelemetryV3Envelope(input);
+  if (version === 1 || version === 2) return normalizeV12Envelope(parseTelemetryEnvelope(input));
+  throw new Error("unsupported protocolVersion");
 };
 
 export const normalizePairCode = (value: unknown): string => {
