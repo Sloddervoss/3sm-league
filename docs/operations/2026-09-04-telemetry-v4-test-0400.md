@@ -42,23 +42,28 @@ validation PASS; only the `functions` (edge) service was recreated.
 ## Bootstrap requirement
 
 Legacy 0.3.16.0 testers send a plain version check (no identity, no channel) → **server-side
-enrollment impossible**. Each eligible tester needs a **one-time bootstrap** to 0.4.0.0 TEST
-(see `telemetry-test-channel-workflow.md`), after which future TEST updates flow automatically.
+enrollment impossible**. Enrollment uses the **temporary STABLE bootstrap bridge** (zero-manual,
+see `telemetry-test-channel-workflow.md`): while the bridge is active, default/stable returns the
+0.4.0.0 TEST package so legacy testers update through the normal updater, then the connector
+auto-moves onto `?channel=canary`.
 
-## Fleet state (publish time)
+## Fleet state (after 2026-09-04 bridge)
 
-| Device | Status | Eligible TEST | Bootstrap |
-|---|---|---|---|
-| CAT-PC | active_binding / primary | YES | PENDING (first available) |
-| DESKTOP-E2SEMRP | inactive | pending decision | PENDING |
-| RICKY | inactive | pending decision | PENDING |
-| BEEST | inactive | pending decision | PENDING |
+| Device | Owner | Tester? | 0.4.0 TEST | Bootstrap state |
+|---|---|---|---|---|
+| BEEST | vinnafox | YES (super_admin) | YES (installed) | **COMPLETE** |
+| CAT-PC | vinnafox | YES | pending | READY (bridge) |
+| DESKTOP-E2SEMRP | peters870 | YES (tester) | pending | PENDING/OFFLINE |
+| RICKY | rickygodefrooij | YES (tester) | pending | PENDING/OFFLINE |
 
-Revoked devices are NOT re-enabled automatically.
+Safety gate passed: no non-test/public user owns a device. Revoked devices are NOT re-enabled
+automatically. BEEST proves the TEST-aware updater (0.4.0.0 loaded, DLL locked by SimHubWPF,
+subsequent checks request `?channel=canary`).
 
 ## Stability
 
-- Stable 0.3.16.0 unchanged.
-- No SimHub/iRacing restart performed.
-- No device installed in this release (manual bootstrap deferred to next GO).
+- Stable 0.3.16.0 is the rollback target; during the zero-manual bridge it is **temporarily**
+  pointed at 0.4.0.0, restored to 0.3.16.0 once all intended testers are enrolled.
+- Canary remains 0.4.0.0.
+- No SimHub/iRacing restart performed remotely.
 - No DB migration required (additive nullable fields; V3 remains accepted).

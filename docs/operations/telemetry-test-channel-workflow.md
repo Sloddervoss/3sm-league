@@ -51,19 +51,43 @@ Once a tester is bootstrapped to 0.4.0.0 TEST:
 2. the updater delivers later TEST releases automatically
 3. no per-release manual install is needed
 
-## One-time bootstrap method (not executed in-channel)
+## Zero-manual enrollment — temporary STABLE bootstrap bridge (STANDARD method)
 
-For an eligible tester currently on 0.3.16.0:
+Preference: **no manual DLL replacement** on tester machines. To move legacy 0.3.16.0
+testers onto 0.4.0+ TEST via the normal updater, use a temporary STABLE bridge:
 
-> **Close SimHub on that tester PC.** Then perform the one-time TEST bootstrap:
-> download `3SM.EnduranceConnector-0.4.0.0.dll` from
-> `https://3stripemotorsport.cc/downloads/3SM.EnduranceConnector-0.4.0.0.dll`,
-> verify SHA-256 `e620dc83a8d7adc483d5ba8f79ce419896971730e974097921d805a638ef5f38`
-> (334848 bytes), replace `C:\Program Files (x86)\SimHub\3SM.EnduranceConnector.dll`,
-> then start SimHub. The updater uses only the versioned DLL under the canonical name.
+1. **Safety gate first:** audit all registered `simhub_devices` + owner roles. Confirm
+   NO non-test/public user would receive the bridge. If any genuine public/non-test
+   user exists, do NOT activate — report BLOCKED.
+2. **Snapshot + rollback copy:** record the current stable (0.3.16.0) and canary
+   (0.4.0.0) manifest blocks; copy `docker-compose.override.yml` to a
+   `.pre-<bridge>-bridge` backup.
+3. **Activate bridge:** set the `SIMHUB_PLUGIN_*` (default/stable) block to the exact
+   verified TEST artifact (same 0.4.0.0 package as canary). All three channels
+   (default / `?channel=stable` / `?channel=canary`) must reference the identical
+   hash/size/signature.
+4. **Recreate only the `functions` service**, then verify default/stable/canary all
+   return 0.4.0.0 and the download verifies.
+5. **Normal update flow:** each legacy tester simply opens SimHub; the ordinary updater
+   check delivers 0.4.0.0 through the default path. No manual copy, no iRacing drive.
+6. **Track completion via fresh last_seen/version** (heartbeat, NOT binding/primary).
+   Once all intended eligible testers are on 0.4.0+, restore stable to 0.3.16.0 and
+   verify canary stays 0.4.0.0.
+7. **Do NOT restore stable prematurely** while offline testers remain pending — keep the
+   bridge open until all intended testers update OR Vincent closes it.
 
-After that one install, the connector version is 0.4.0.0, it requests
-`?channel=canary`, and all subsequent TEST updates flow through the updater.
+**Late tester rule:** a legacy tester who misses the bridge returns later → temporarily
+reopen the same stable bridge, let them update normally, then restore stable again.
+
+**BEEST proof (2026-09-04):** one-time manual bootstrap proved the TEST-aware updater
+(the connector loaded 0.4.0.0, DLL locked by running SimHubWPF, subsequent checks
+request `?channel=canary`). That machine is COMPLETE and must not be manually re-touched.
+
+> Archive (only used if a bridge cannot be used): one-time manual DLL replacement —
+> download `3SM.EnduranceConnector-0.4.0.0.dll`, verify SHA-256
+> `e620dc83a8d7adc483d5ba8f79ce419896971730e974097921d805a638ef5f38` (334848 bytes),
+> replace `C:\Program Files (x86)\SimHub\3SM.EnduranceConnector.dll` with SimHub closed,
+> restart SimHub. Only for an individual machine where no bridge is safe.
 
 ## Update / observe behavior
 
