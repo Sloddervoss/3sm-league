@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   PitwallStrategyRow, PitwallTimelineEvent, TeamOption,
   PitwallPositionData, PitwallPaceData, PitwallRaceClock,
-  V3Normalized, PitwallPlannedStint,
+  V3Normalized, PitwallPlannedStint, V3Opponent,
 } from "./pitwallHelpers";
 import { extractRaceClock } from "./pitwallHelpers";
 
@@ -111,6 +111,12 @@ export function usePitwallData(eventId: string, initialTeamId: string | null) {
   const raceClock = extractRaceClock(v3);
   const plannedStints = rpcData?.planned_stints ?? [];
 
+  /** 0.4.2: opponents from the V3 normalized snapshot (connected + player rows). */
+  const opponents: V3Opponent[] = useMemo(() => {
+    const list = v3?.opponents;
+    return Array.isArray(list) ? list : [];
+  }, [v3]);
+
   /* Derive alert conditions from strategy data */
   const alerts = useMemo(() => {
     const list: Array<{ severity: "high" | "medium" | "info"; message: string }> = [];
@@ -151,5 +157,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null) {
     pace,
     raceClock,
     plannedStints,
+    opponents,
+    v3,
   };
 }
