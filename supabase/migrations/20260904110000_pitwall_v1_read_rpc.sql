@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Pitwall V1 read model — get_pitwall_data
--- Datum: 2026-09-04 | Branch: feat/simhub-admin-diagnostics
+-- Datum: 2026-09-04 | Branch: feat/endurance-pitwall-v1
 --
 -- Returns a complete read-only snapshot of Pitwall data for one team in an event.
 -- Gated via endurance_team_members (own-team) or is_endurance_staff (all teams).
@@ -79,63 +79,67 @@ BEGIN
     ),
     -- Recent telemetry events (timeline)
     timeline AS (
-        SELECT jsonb_agg(
-            jsonb_build_object(
-                'event_type', e.event_type,
-                'event_key', e.event_key,
-                'lap', e.lap,
-                'completed_laps', e.completed_laps,
-                'fuel_litres', e.fuel_litres,
-                'fuel_per_lap_litres', e.fuel_per_lap_litres,
-                'fuel_added_est_litres', e.fuel_added_est_litres,
-                'laps_remaining_est', e.laps_remaining_est,
-                'driver_id', e.driver_id,
-                'in_pit_lane', e.in_pit_lane,
-                'incidents', e.incidents,
-                'flag', e.flag,
-                'stint_elapsed_s', e.stint_elapsed_s,
-                'session_time_s', e.session_time_s,
-                'lap_time_from_deltas_s', e.lap_time_from_deltas_s,
-                'captured_at', e.captured_at,
-                'payload', e.payload
-            ) ORDER BY e.captured_at DESC
+        SELECT COALESCE(
+            jsonb_agg(
+                jsonb_build_object(
+                    'event_type', e.event_type,
+                    'event_key', e.event_key,
+                    'lap', e.lap,
+                    'completed_laps', e.completed_laps,
+                    'fuel_litres', e.fuel_litres,
+                    'fuel_per_lap_litres', e.fuel_per_lap_litres,
+                    'fuel_added_est_litres', e.fuel_added_est_litres,
+                    'laps_remaining_est', e.laps_remaining_est,
+                    'driver_id', e.driver_id,
+                    'in_pit_lane', e.in_pit_lane,
+                    'incidents', e.incidents,
+                    'flag', e.flag,
+                    'stint_elapsed_s', e.stint_elapsed_s,
+                    'session_time_s', e.session_time_s,
+                    'lap_time_from_deltas_s', e.lap_time_from_deltas_s,
+                    'captured_at', e.captured_at,
+                    'payload', e.payload
+                ) ORDER BY e.captured_at DESC
+            ), '[]'::jsonb
         ) AS events
         FROM public.endurance_telemetry_events e
         WHERE e.team_id = p_team_id AND e.event_id = p_event_id
     ),
     -- Planned stints from StintPlanner
     planned_stints AS (
-        SELECT jsonb_agg(
-            jsonb_build_object(
-                'id', s.id,
-                'driver_id', s.driver_id,
-                'original_start_at', s.original_start_at,
-                'original_end_at', s.original_end_at,
-                'actual_start_at', s.actual_start_at,
-                'actual_end_at', s.actual_end_at,
-                'expected_laps', s.expected_laps,
-                'fuel_litres', s.fuel_litres,
-                'tyre_change', s.tyre_change,
-                'double_stint', s.double_stint,
-                'status', s.status,
-                'notes', s.notes
-            ) ORDER BY s.original_start_at
+        SELECT COALESCE(
+            jsonb_agg(
+                jsonb_build_object(
+                    'id', s.id,
+                    'driver_id', s.driver_id,
+                    'original_start_at', s.original_start_at,
+                    'original_end_at', s.original_end_at,
+                    'actual_start_at', s.actual_start_at,
+                    'actual_end_at', s.actual_end_at,
+                    'expected_laps', s.expected_laps,
+                    'fuel_litres', s.fuel_litres,
+                    'tyre_change', s.tyre_change,
+                    'double_stint', s.double_stint,
+                    'status', s.status,
+                    'notes', s.notes
+                ) ORDER BY s.original_start_at
+            ), '[]'::jsonb
         ) AS stints
         FROM public.endurance_stints s
         WHERE s.team_id = p_team_id AND s.event_id = p_event_id
-        ORDER BY s.original_start_at
-        LIMIT 50
     ),
     -- Pace targets from PacePanel
     pace_targets AS (
-        SELECT jsonb_agg(
-            jsonb_build_object(
-                'user_id', pe.user_id,
-                'average_lap_seconds', pe.average_lap_seconds,
-                'best_lap_seconds', pe.best_lap_seconds,
-                'valid_laps', pe.valid_laps,
-                'source', pe.source
-            )
+        SELECT COALESCE(
+            jsonb_agg(
+                jsonb_build_object(
+                    'user_id', pe.user_id,
+                    'average_lap_seconds', pe.average_lap_seconds,
+                    'best_lap_seconds', pe.best_lap_seconds,
+                    'valid_laps', pe.valid_laps,
+                    'source', pe.source
+                )
+            ), '[]'::jsonb
         ) AS targets
         FROM public.endurance_pace_entries pe
         WHERE pe.event_id = p_event_id
@@ -162,7 +166,3 @@ $$;
 
 REVOKE ALL ON FUNCTION public.get_pitwall_data(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_pitwall_data(uuid, uuid) TO authenticated;
-
--- ============================================================================
--- Rollback: DROP FUNCTION public.get_pitwall_data(uuid, uuid);
--- ============================================================================
