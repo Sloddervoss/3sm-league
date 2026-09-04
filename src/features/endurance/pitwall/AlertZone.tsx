@@ -8,17 +8,18 @@ interface Props {
 }
 
 export const AlertZone = ({ alerts }: Props) => {
+  /* Hidden when no alerts active */
   if (!alerts || alerts.length === 0) return null;
 
   const severityOrder = { high: 0, medium: 1, info: 2 };
   const sorted = [...alerts].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       {sorted.map((alert, i) => (
         <div
           key={i}
-          className={`rounded-xl px-3 py-2 text-sm font-bold ${
+          className={`rounded-lg px-3 py-1.5 text-sm font-bold ${
             alert.severity === "high"
               ? "bg-red-500/15 text-red-300 ring-1 ring-red-500/20"
               : alert.severity === "medium"

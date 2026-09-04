@@ -1,5 +1,5 @@
 import type { PitwallStrategyRow, PitwallPositionData, PitwallPaceData, PitwallPlannedStint } from "./pitwallHelpers";
-import { formatFuel, formatSeconds, formatLapTime, calcPitLap } from "./pitwallHelpers";
+import { formatFuel, calcPitLap } from "./pitwallHelpers";
 
 interface Props {
   strategy: PitwallStrategyRow | null;
@@ -11,107 +11,88 @@ interface Props {
 
 export const StrategyForecast = ({ strategy, position, pace, plannedStints, nextDriverName }: Props) => {
   if (!strategy) {
-    return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-        <h3 className="mb-3 text-[11px] font-black uppercase tracking-widest text-gray-500">STRATEGIE FORECAST</h3>
-        <p className="text-sm text-gray-500">Geen strategiedata</p>
-      </div>
-    );
+    return <PanelShell title="FORECAST"><p className="text-xs text-gray-500">Geen data</p></PanelShell>;
   }
 
   const isLowData = strategy.strategy_status === "low_sample";
   const isInsufficient = strategy.strategy_status === "insufficient_data";
-
-  const completedLaps = strategy.last_completed_laps;
   const fuelLaps = strategy.fuel_laps_remaining;
-  const pitLap = calcPitLap(completedLaps, fuelLaps);
-
+  const pitLap = calcPitLap(strategy.last_completed_laps, fuelLaps);
   const nextStint = plannedStints.find((s) => s.status === "draft");
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-      <h3 className="mb-3 text-[11px] font-black uppercase tracking-widest text-gray-400">STRATEGIE FORECAST</h3>
+    <PanelShell title="FORECAST">
+      {/* HUIDIG — compact inline */}
+      <div className="mb-2">
+        <div className="text-[9px] font-bold uppercase tracking-wider text-gray-600 mb-1">HUIDIG</div>
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+          <span className="text-gray-500">Pos <span className="font-bold text-white">
+            {position?.overallPosition != null ? `P${position.overallPosition}${position.classPosition != null ? `/K${position.classPosition}` : ""}` : "—"}
+          </span></span>
+          <span className="text-gray-500">Brandstof <span className="font-bold text-white">
+            {strategy.current_fuel_litres != null ? formatFuel(strategy.current_fuel_litres) : "—"}
+          </span></span>
+          <span className="text-gray-500">Ronden <span className="font-bold text-white">
+            {fuelLaps != null ? `${fuelLaps.toFixed(1)}` : "—"}
+          </span></span>
+        </div>
+      </div>
 
-      <div className="space-y-4">
-        {/* CURRENT */}
-        <div>
-          <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">HUIDIG</div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <ForecastRow label="Positie" value={
-              position?.overallPosition != null
-                ? `P${position.overallPosition}${position.classPosition != null ? ` / K${position.classPosition}` : ""}`
-                : "—"
-            } />
-            <ForecastRow label="Brandstof" value={strategy.current_fuel_litres != null ? formatFuel(strategy.current_fuel_litres) : "—"} />
-            <ForecastRow label="Per ronde" value={strategy.fuel_per_lap_litres != null ? `${strategy.fuel_per_lap_litres.toFixed(3)}L` : "—"} />
-            <ForecastRow label="Ronden over" value={fuelLaps != null ? `${fuelLaps.toFixed(1)}` : "—"} />
+      {/* NEXT STOP */}
+      {!isLowData && !isInsufficient && (
+        <div className="mb-2">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-gray-600 mb-1">VOLGENDE STOP</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+            <span className="text-gray-500">Ronde <span className="font-bold text-orange-400">{pitLap != null ? pitLap : "—"}</span></span>
+            <span className="text-gray-500">Coureur <span className="font-bold text-orange-400">{nextDriverName ?? "—"}</span></span>
+            <span className="text-gray-500">Brandstof <span className="font-bold text-white">
+              {strategy.fuel_to_add_litres != null ? `+${formatFuel(strategy.fuel_to_add_litres)}` : "—"}
+            </span></span>
+            <span className="text-gray-500">Banden <span className="font-bold text-gray-300">wisselen</span></span>
           </div>
         </div>
+      )}
 
-        {/* NEXT STOP */}
-        {!isLowData && !isInsufficient && (
-          <div>
-            <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">VOLGENDE STOP</div>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <ForecastRow label="Verwacht" value={pitLap != null ? `Ronde ${pitLap}` : "—"} />
-              <ForecastRow label="Coureur" value={nextDriverName ?? "—"} highlight />
-              <ForecastRow label="Brandstof" value={
-                strategy.fuel_to_add_litres != null
-                  ? `+${formatFuel(strategy.fuel_to_add_litres)}`
-                  : "—"
-              } />
-              <ForecastRow label="Banden" value="wisselen" />
-            </div>
+      {/* DAARNA */}
+      {nextStint && !isLowData && !isInsufficient && (
+        <div className="mb-2">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-gray-600 mb-1">DAARNA</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+            <span className="text-gray-500">Coureur <span className="font-bold text-gray-300">{nextStint.driver_id}</span></span>
+            <span className="text-gray-500">Stint <span className="font-bold text-white">{nextStint.expected_laps}r</span></span>
+            {nextStint.tyre_change && <span className="text-gray-500">Banden <span className="font-bold text-orange-400">wisselen</span></span>}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* LOW DATA / INSUFFICIENT */}
-        {isLowData && (
-          <div className="rounded-lg bg-yellow-500/8 px-3 py-2.5 text-xs">
-            <span className="font-bold text-yellow-400">Nog te weinig data</span>
-            <span className="ml-1 text-gray-400">({strategy.valid_fuel_sample_count} sample(s)). Actuele data wordt getoond maar strategie is nog niet betrouwbaar.</span>
-          </div>
-        )}
-        {isInsufficient && (
-          <div className="rounded-lg bg-gray-500/10 px-3 py-2.5 text-xs">
-            <span className="font-bold text-gray-400">Strategie niet beschikbaar</span>
-            <span className="ml-1 text-gray-500">— telemetrie verbinding verloren</span>
-          </div>
-        )}
+      {/* LOW DATA / INSUFFICIENT */}
+      {isLowData && (
+        <div className="rounded bg-yellow-500/10 px-2 py-1.5 text-[11px]">
+          <span className="font-bold text-yellow-400">Weinig data</span>
+          <span className="text-gray-400"> ({strategy.valid_fuel_sample_count} samples) — strategie niet betrouwbaar</span>
+        </div>
+      )}
+      {isInsufficient && (
+        <div className="rounded bg-gray-500/10 px-2 py-1.5 text-[11px]">
+          <span className="font-bold text-gray-400">Geen data</span>
+          <span className="text-gray-500"> — telemetrie verloren</span>
+        </div>
+      )}
 
-        {/* AFTER THAT — next stint estimate */}
-        {nextStint && !isLowData && !isInsufficient && (
-          <div>
-            <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600">DAARNA</div>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <ForecastRow label="Coureur" value={nextStint.driver_id} />
-              <ForecastRow label="Stint" value={`${nextStint.expected_laps}r`} />
-              {nextStint.tyre_change && <ForecastRow label="Banden" value="wisselen" />}
-            </div>
-          </div>
-        )}
-
-        {/* SAMPLES / STATUS */}
-        {!isInsufficient && (
-          <div className="flex items-center gap-2 text-[11px] pt-1 border-t border-white/5">
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${
-              strategy.strategy_status === "ready" ? "bg-emerald-400" :
-              strategy.strategy_status === "low_sample" ? "bg-yellow-400" : "bg-gray-500"
-            }`} />
-            <span className="text-gray-500">
-              {strategy.valid_fuel_sample_count} sample{strategy.valid_fuel_sample_count !== 1 ? "s" : ""}
-              {strategy.current_stint_valid_sample_count > 0 && ` · ${strategy.current_stint_valid_sample_count} deze stint`}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
+      {/* SAMPLES */}
+      {!isInsufficient && (
+        <div className="text-[10px] text-gray-600 mt-1">
+          {strategy.valid_fuel_sample_count} sample{strategy.valid_fuel_sample_count !== 1 ? "s" : ""}
+          {strategy.current_stint_valid_sample_count > 0 && ` · ${strategy.current_stint_valid_sample_count} deze stint`}
+        </div>
+      )}
+    </PanelShell>
   );
 };
 
-const ForecastRow = ({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) => (
-  <div className="rounded-lg bg-black/20 px-2.5 py-1.5">
-    <div className="text-[10px] text-gray-500">{label}</div>
-    <div className={`font-bold font-mono ${highlight ? "text-orange-400" : "text-white"}`}>{value}</div>
+const PanelShell = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+    <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</div>
+    {children}
   </div>
 );
