@@ -1,0 +1,1 @@
+-- Rollback: DROP FUNCTION IF EXISTS public.get_pitwall_data(uuid, uuid);
