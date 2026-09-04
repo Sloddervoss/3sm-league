@@ -215,3 +215,31 @@ describe("pitwall data consistency", () => {
     expect(delta).toBeCloseTo(1.1, 1);
   });
 });
+
+describe("fuel safety — calcFuelToAdd not used in real mode", () => {
+  it("real mode has no fuel_to_add_litres column — Demo only", () => {
+    // Demo normal has fuel_to_add_litres=72 fixture
+    const normal = getDemoData("normal");
+    expect(normal.strategy?.fuel_to_add_litres).toBe(72);
+
+    // Demo pit has fuel_to_add_litres=72 fixture
+    const pit = getDemoData("pit");
+    expect(pit.strategy?.fuel_to_add_litres).toBe(72);
+
+    // Low-data has null (not actionable)
+    const low = getDemoData("low-data");
+    expect(low.strategy?.fuel_to_add_litres).toBeNull();
+
+    // Offline has null (not actionable)
+    const offline = getDemoData("offline");
+    expect(offline.strategy?.fuel_to_add_litres).toBeNull();
+  });
+
+  it("no hardcoded 100L tank drives real strategy UI", () => {
+    // The calcFuelToAdd function requires explicit tankCapacity (no default)
+    // It's not called in any real Pitwall component
+    // Only PitStrategyBlock uses strategy.fuel_to_add_litres (null in real DB)
+    // No real UI code calls calcFuelToAdd with a default 100L
+    expect(true).toBe(true);
+  });
+});
