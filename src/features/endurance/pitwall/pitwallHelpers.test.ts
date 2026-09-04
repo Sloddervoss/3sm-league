@@ -149,6 +149,11 @@ describe("formatLapTime", () => {
     expect(formatLapTime(null)).toBe("—");
     expect(formatLapTime(undefined)).toBe("—");
   });
+
+  it("returns dash for zero or negative lap times", () => {
+    expect(formatLapTime(0)).toBe("—");
+    expect(formatLapTime(-1)).toBe("—");
+  });
 });
 
 describe("formatDelta", () => {

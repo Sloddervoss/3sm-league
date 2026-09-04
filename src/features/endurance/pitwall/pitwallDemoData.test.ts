@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getDemoData, DEMO_SCENARIO_LIST } from "./pitwallDemoData";
+import { formatLapTime, formatDelta } from "./pitwallHelpers";
 
 describe("pitwall demo data", () => {
   it("getDemoData returns valid data for all 4 scenarios", () => {
@@ -157,5 +158,60 @@ describe("pitwall demo — no fake features or V1.5 data", () => {
       const data = getDemoData(s);
       expect(data.strategy).not.toHaveProperty("postStopPosition");
     }
+  });
+});
+
+describe("pitwall data consistency", () => {
+  it("top bar gap matches RacePosition gap in all scenarios", () => {
+    for (const s of ["normal", "pit", "low-data"] as const) {
+      const data = getDemoData(s);
+      const topGap = data.position.gapToLeaderSeconds;
+      const posGap = data.position.gapToLeaderSeconds;
+      expect(topGap).toBe(posGap);
+      if (topGap != null) {
+        expect(typeof topGap).toBe("number");
+        expect(topGap).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("offline scenario has null gap in both positions", () => {
+    const data = getDemoData("offline");
+    expect(data.position.gapToLeaderSeconds).toBeNull();
+    expect(data.position.overallPosition).toBeNull();
+  });
+
+  it("invalid/zero last lap never renders as valid lap time", () => {
+    // formatLapTime guard tested in pitwallHelpers.test.ts
+    expect(formatLapTime(0)).toBe("—");
+    expect(formatLapTime(NaN)).toBe("—");
+  });
+
+  it("no delta calculated from null/zero last lap", () => {
+    // formatDelta returns null for null input — PacePanel won't show it
+    expect(formatDelta(null)).toBeNull();
+    expect(formatDelta(undefined)).toBeNull();
+  });
+
+  it("top bar action reflects strategy status", () => {
+    const normal = getDemoData("normal");
+    expect(normal.strategy?.strategy_status).toBe("ready");
+    expect(normal.scenario).toBe("normal");
+
+    const lowData = getDemoData("low-data");
+    expect(lowData.strategy?.strategy_status).toBe("low_sample");
+    // low data has fuel_laps_remaining but not actionable
+    expect(lowData.strategy?.fuel_laps_remaining).toBeGreaterThan(0);
+    // fuel_to_add is null (not actionable)
+    expect(lowData.strategy?.fuel_to_add_litres).toBeNull();
+  });
+
+  it("pit scenario has realistic valid last lap", () => {
+    const data = getDemoData("pit");
+    expect(data.pace.lastLapSeconds).toBeGreaterThan(0);
+    expect(data.pace.lastLapSeconds).toBe(93.1);
+    // Delta should be valid: 93.1 - 92.0 = +1.1
+    const delta = data.pace.lastLapSeconds - (data.pace.targetSeconds ?? 0);
+    expect(delta).toBeCloseTo(1.1, 1);
   });
 });
