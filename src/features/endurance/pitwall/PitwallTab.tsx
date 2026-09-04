@@ -114,7 +114,7 @@ export const PitwallTab = ({ event }: Props) => {
 
   return (
     /* data-pitwall + data-pitwall-focus for CSS targeting */
-    <div className={isFocusMode ? "space-y-2" : "space-y-3"} data-pitwall="true" data-pitwall-focus={isFocusMode ? "true" : undefined}>
+    <div className={isFocusMode ? "space-y-2 w-full" : "space-y-3"} data-pitwall="true" data-pitwall-focus={isFocusMode ? "true" : undefined}>
       {/* FOCUS MODE TOP STRIP */}
       {isFocusMode && (
         <div className="flex items-center gap-3 rounded-lg bg-black/60 px-4 py-2 text-xs ring-1 ring-white/5">
@@ -236,7 +236,7 @@ export const PitwallTab = ({ event }: Props) => {
       {strategy && (
         <>
           {/* === MAIN GRID: 3 ROWS === */}
-          <div className={`grid gap-3 ${isFocusMode ? "" : "lg:grid-cols-3"}`}>
+          <div className="grid gap-3 lg:grid-cols-3">
             <div className="space-y-3">
               <div data-pitwall-slot="standings" className="hidden" />
               <RacePositionPanel strategy={strategy} position={position} />
@@ -258,7 +258,7 @@ export const PitwallTab = ({ event }: Props) => {
             </div>
           </div>
 
-          <div className={`grid gap-3 ${isFocusMode ? "" : "lg:grid-cols-3"}`}>
+          <div className="grid gap-3 lg:grid-cols-3">
             <div className="space-y-3">
               <FuelPanel strategy={strategy} />
               <div data-pitwall-slot="tyres" className="hidden" />
