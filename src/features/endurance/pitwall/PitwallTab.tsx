@@ -14,6 +14,9 @@ import { AlertZone } from "./AlertZone";
 import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
 import { StandingsWidget } from "./StandingsWidget";
+import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
+import { LiveTrackPanel } from "./LiveTrackPanel";
+import { RaceTelemetryStrip } from "./RaceTelemetryStrip";
 import { deriveStandings } from "./standings";
 import { useMemo, useCallback, useState } from "react";
 import { useLocation } from "react-router-dom";
@@ -101,8 +104,8 @@ export const PitwallTab = ({ event }: Props) => {
         opponents: demo.opponents,
       }, 40, { p5: 0.2, p7: -0.1 });
     }
-    return deriveStandings(real.v3 ?? null, 40, real.trends);
-  }, [isDemo, demo, real.v3, real.trends]);
+    return deriveStandings(real.isLive ? real.v3 ?? null : null, 40, real.isLive ? real.trends : undefined);
+  }, [isDemo, demo, real.v3, real.trends, real.isLive]);
 
   const currentStint = plannedStints.find((s) => s.status === "in_car");
   const nextStints = plannedStints.filter((s) => s.status === "draft");
@@ -246,39 +249,35 @@ export const PitwallTab = ({ event }: Props) => {
         </p>
       )}
 
-      {strategy && (
-        <>
-          {/* === MAIN GRID: 3 ROWS === */}
-          <div className="grid gap-3 lg:grid-cols-3">
-            <div className="space-y-3">
+      <RaceTelemetryStrip v3={isDemo ? null : real.v3 ?? null} live={isLive} />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.6fr)]">
+        <div className="min-w-0 space-y-3">
+            <LiveTrackPanel v3={isDemo ? null : real.v3 ?? null} live={isLive} fallbackTrack={[event.circuit, event.configuration].filter(Boolean).join(' - ')} />
+            <VehicleTelemetryPanel key={`${event.id}:${selectedTeamId}`} v3={isDemo ? null : real.v3 ?? null} live={isLive} />
+        </div>
+        <div className="min-w-0 space-y-3">
               <StandingsWidget
                 standings={standings}
                 ownCarLabel={teams.find((t) => t.id === selectedTeamId)?.name ?? "Mijn auto"}
                 ownCarNumber={null}
               />
-              <RacePositionPanel strategy={strategy} position={position} />
-            </div>
-            <div className="space-y-3">
+          {strategy && <div className="grid gap-3 md:grid-cols-2">
+            <FuelPanel strategy={strategy} />
               <PitStrategyBlock
                 strategy={strategy}
                 currentFuel={strategy.current_fuel_litres}
                 driverName={driverName}
                 nextDriverName={nextDriverName}
               />
-            </div>
-            <div className="space-y-3">
-              <StintDriverPanel
-                strategy={strategy}
-                plannedStints={plannedStints}
-                driverName={driverName}
-              />
-            </div>
-          </div>
-
+          </div>}
+          {strategy && <RacePositionPanel strategy={strategy} position={position} />}
+        </div>
+      </div>
+      {strategy && (
+        <>
           <div className="grid gap-3 lg:grid-cols-3">
             <div className="space-y-3">
-              <FuelPanel strategy={strategy} />
-              <div data-pitwall-slot="tyres" className="hidden" />
+              <StintDriverPanel strategy={strategy} plannedStints={plannedStints} driverName={driverName} />
             </div>
             <div className="space-y-3">
               <StrategyForecast
@@ -291,7 +290,6 @@ export const PitwallTab = ({ event }: Props) => {
             </div>
             <div className="space-y-3">
               <PacePanel strategy={strategy} pace={pace} />
-              <div data-pitwall-slot="trackmap" className="hidden" />
             </div>
           </div>
 
