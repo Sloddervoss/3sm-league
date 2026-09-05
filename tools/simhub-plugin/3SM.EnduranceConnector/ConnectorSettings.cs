@@ -27,6 +27,9 @@ namespace ThreeSM.EnduranceConnector
 
         public string ConnectorId = Environment.MachineName;
         public int SendIntervalMilliseconds = 1000;
+        // Enable only after the optional vehicle parser is deployed. Old receivers
+        // reject new fields; default off also preserves existing installations.
+        public bool ExtendedPitwallTelemetryEnabled = false;
 
         public string SpeedProperty = "DataCorePlugin.GameData.NewData.SpeedKmh";
         public string LapProperty = "DataCorePlugin.GameData.NewData.CurrentLap";
