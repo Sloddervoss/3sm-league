@@ -48,14 +48,15 @@ cd /opt/3sm
 git pull
 npm ci --legacy-peer-deps
 npm run build
-rm -rf /var/www/3sm/*
-cp -r dist/* /var/www/3sm/
+rsync -a dist/assets/ /var/www/3sm/assets/
+rsync -a --delete-after --exclude='assets/' --exclude='downloads/' dist/ /var/www/3sm/
 ```
 
 Implications:
 
-- It deploys the whole `dist/` artifact into `/var/www/3sm`.
-- It clears the webroot before copying.
+- It publishes hashed assets before HTML and retains previous assets for open browser sessions.
+- It removes stale site routes/files after transfer, without an empty-webroot window.
+- `downloads/` is release-managed and excluded from copying and deletion. Publish SimHub DLLs, ZIPs and aliases through the signed release procedure, not the website build.
 - It does not explicitly deploy nginx config.
 - It does not manage the Discord bot service.
 - It runs `npm run build`, which regenerates `public/iracing-content-extension.zip` in the app checkout.
