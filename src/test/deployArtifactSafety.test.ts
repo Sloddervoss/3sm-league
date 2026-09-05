@@ -8,7 +8,9 @@ describe("production deploy artifact safety", () => {
   it("publishes new hashed assets before HTML without emptying the live webroot", () => {
     expect(deploy).not.toContain("rm -rf /var/www/3sm/*");
     const assetPublish = deploy.indexOf("rsync -a dist/assets/ /var/www/3sm/assets/");
-    const htmlPublish = deploy.indexOf("rsync -a --delete-after --exclude='assets/' dist/ /var/www/3sm/");
+    const htmlPublish = deploy.indexOf(
+      "rsync -a --delete-after --exclude='assets/' --exclude='downloads/' dist/ /var/www/3sm/",
+    );
     expect(assetPublish).toBeGreaterThan(-1);
     expect(htmlPublish).toBeGreaterThan(assetPublish);
   });
@@ -16,6 +18,10 @@ describe("production deploy artifact safety", () => {
   it("keeps old hashed assets available for tabs holding previous HTML", () => {
     expect(deploy).toContain("--exclude='assets/'");
     expect(deploy).not.toContain("--delete-excluded");
+  });
+
+  it("keeps release-managed downloads outside website synchronization", () => {
+    expect(deploy).toContain("--exclude='downloads/'");
   });
 
   it("builds the tracked extension archive with deterministic metadata", () => {
