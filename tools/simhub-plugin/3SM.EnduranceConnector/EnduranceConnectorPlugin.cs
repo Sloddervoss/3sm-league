@@ -384,11 +384,11 @@ namespace ThreeSM.EnduranceConnector
                 }
                 if (!running && _gameWasRunning) _stintClock.Stop();
                 _gameWasRunning = running;
-                if (!running)
+                if (!running || data.NewData == null)
                 {
                     ObserveDiagnostics(new DiagnosticsObservation
                     {
-                        GameConnected = false,
+                        GameConnected = running,
                         RawDataAvailable = data.NewData != null,
                         RawTelemetryAvailable = false,
                         SessionTimeReadOk = false,
@@ -401,6 +401,7 @@ namespace ThreeSM.EnduranceConnector
                 Uri endpoint;
                 string token;
                 TelemetryEnvelopeV3 envelope;
+                TelemetryEnvelope localEnvelope = null;
                 lock (_settingsGate)
                 {
                     var central = Settings.UseCentralRelay;
@@ -422,12 +423,14 @@ namespace ThreeSM.EnduranceConnector
                     {
                         Uri baseUri;
                         if (!Uri.TryCreate(Settings.BridgeUrl, UriKind.Absolute, out baseUri) || baseUri.Scheme != Uri.UriSchemeHttp || !baseUri.IsLoopback) throw new InvalidOperationException("lokale bridge moet loopback gebruiken");
-                        endpoint = new Uri(baseUri, "/v1/telemetry-v3");
+                        endpoint = new Uri(baseUri, "/v1/telemetry");
                         token = Settings.PairingToken;
                         if (string.IsNullOrWhiteSpace(token) || token.Length < 12) throw new InvalidOperationException("lokaal pairingtoken is te kort");
                     }
                     DiagnosticsObservation observation;
-                    envelope = CaptureV3(pluginManager, data, isInCar, out observation);
+                    envelope = null;
+                    if (central) envelope = CaptureV3(pluginManager, data, isInCar, out observation);
+                    else localEnvelope = Capture(pluginManager, data, false, isInCar, out observation);
                     ObserveDiagnostics(observation);
                 }
                 lock (_sendGate)
@@ -437,7 +440,9 @@ namespace ThreeSM.EnduranceConnector
                         Volatile.Write(ref _sendBusy, 0);
                         return;
                     }
-                    _activeSend = Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
+                    _activeSend = envelope != null
+                        ? Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false))
+                        : Task.Run(async () => await SendAsync(localEnvelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
                 }
             }
             catch (Exception error)
@@ -820,7 +825,7 @@ namespace ThreeSM.EnduranceConnector
             var classPosition = PositiveOrNull(player == null ? 0 : player.PositionInClass) ?? PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0));
             var flag = ResolveFlag(snapshot, GetRaw(manager, Settings.FlagProperty));
             var completedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0));
-            var lapTimeSeconds = GetNullableSeconds(manager, Settings.LapTimeProperty);
+            var lapTimeSeconds = GetNullableSeconds(manager, Settings.LastLapTimeProperty);
             var gapToLeader = GetNullableSeconds(manager, Settings.GapToLeaderProperty);
             // V3/0.4.0: populatie van bestaande nullable eigen-auto velden (NULL-tolerant).
             var sessionTimeRemaining = GetNullableSeconds(manager, Settings.SessionTimeRemainingProperty);

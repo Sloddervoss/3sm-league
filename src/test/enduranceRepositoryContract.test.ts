@@ -41,6 +41,8 @@ describe("endurance repository data-access contract (Fase 3)", () => {
       "endurance_iracing_manager_interest_overview",
       "endurance_current_capabilities",
       "endurance_publish_plan",
+      "get_pitwall_data",
+      "get_pitwall_teams",
     ].includes(rpc))).toBe(true);
     expect(combined).not.toMatch(/\bfetch\s*\(/);
     expect(combined).not.toMatch(/\bXMLHttpRequest\b/);

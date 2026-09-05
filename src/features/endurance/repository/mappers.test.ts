@@ -15,6 +15,7 @@ const makeRow = (overrides?: Partial<EnduranceEventRow>): EnduranceEventRow => (
   registration_deadline: null,
   slots: [],
   class_ids: ["gt3"],
+  allowed_car_ids: [],
   selected_class_id: null,
   selected_car_id: null,
   max_drivers_per_car: 4,
@@ -51,37 +52,37 @@ describe("enduranceEventRowToAppModel", () => {
   });
 
   it("handles null slots — fallback to empty array", () => {
-    const row = makeRow({ slots: null as unknown as unknown[] });
+    const row = makeRow({ slots: null });
     const model = enduranceEventRowToAppModel(row);
     expect(model.slots).toEqual([]);
   });
 
   it("handles undefined slots — fallback to empty array", () => {
-    const row = makeRow({ slots: undefined as unknown as unknown[] });
+    const row = makeRow({ slots: undefined });
     const model = enduranceEventRowToAppModel(row);
     expect(model.slots).toEqual([]);
   });
 
   it("handles non-array object {} — normalizes to empty array", () => {
-    const row = makeRow({ slots: {} as unknown as unknown[] });
+    const row = makeRow({ slots: {} });
     const model = enduranceEventRowToAppModel(row);
     expect(model.slots).toEqual([]);
   });
 
   it("handles object with extra keys {} — normalizes to empty array", () => {
-    const row = makeRow({ slots: { items: [] } as unknown as unknown[] });
+    const row = makeRow({ slots: { items: [] } });
     const model = enduranceEventRowToAppModel(row);
     expect(model.slots).toEqual([]);
   });
 
   it("handles string value — normalizes to empty array", () => {
-    const row = makeRow({ slots: "oops" as unknown as unknown[] });
+    const row = makeRow({ slots: "oops" });
     const model = enduranceEventRowToAppModel(row);
     expect(model.slots).toEqual([]);
   });
 
   it("handles numeric value — normalizes to empty array", () => {
-    const row = makeRow({ slots: 42 as unknown as unknown[] });
+    const row = makeRow({ slots: 42 });
     const model = enduranceEventRowToAppModel(row);
     expect(model.slots).toEqual([]);
   });

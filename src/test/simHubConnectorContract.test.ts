@@ -35,7 +35,7 @@ describe("3SM SimHub connector spike contract", () => {
     expect(plugin).toContain("lock (_settingsGate)");
     expect(plugin).not.toContain("Settings.RelayBaseUrl");
     expect(plugin).toContain("baseUri.IsLoopback");
-    expect(plugin).toContain('new Uri(baseUri, "/v1/telemetry-v3")');
+    expect(plugin).toContain('new Uri(baseUri, "/v1/telemetry")');
     expect(plugin).not.toContain("supabase");
     expect(plugin).not.toContain("adjust_future_stints");
     expect(plugin).toContain("_deviceToken = UnprotectToken");

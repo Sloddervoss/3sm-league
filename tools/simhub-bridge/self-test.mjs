@@ -39,6 +39,20 @@ try {
   invalid.sequence = 2;
   const invalidResponse = await post(invalid);
   if (invalidResponse.status !== 400) throw new Error(`invalid=${invalidResponse.status}`);
+  const v2 = structuredClone(payload);
+  v2.protocolVersion = 2;
+  v2.sequence = 2;
+  Object.assign(v2.race, { currentDriverId: null, currentDriverName: "Test Driver", carId: null, carName: "GT3", trackName: "Spa", trackConfig: null });
+  v2.telemetry.isInCar = true;
+  const acceptedV2 = await post(v2);
+  if (acceptedV2.status !== 202) throw new Error(`v2=${acceptedV2.status} ${await acceptedV2.text()}`);
+  const readV2 = await fetch(`${base}/v1/telemetry?eventId=event-road-america-6h&teamId=team-orange-31`, { headers: { authorization: `Bearer ${token}` } });
+  const bodyV2 = await readV2.json();
+  if (bodyV2.payload.protocolVersion !== 2 || bodyV2.payload.race.currentDriverName !== "Test Driver") throw new Error("V2 identity verloren");
+  const invalidV2 = structuredClone(v2);
+  invalidV2.sequence = 3;
+  invalidV2.telemetry.isInCar = "yes";
+  if ((await post(invalidV2)).status !== 400) throw new Error("ongeldige V2 boolean geaccepteerd");
   console.log("OK: auth, validatie, replaybeveiliging en latest-teamtelemetry werken");
 } finally {
   server.close();
