@@ -48,7 +48,8 @@ describe("endurance alpha-rollen (tester + endurance_manager)", () => {
     expect(auth).toContain("isEnduranceManager");
     expect(auth).toContain('roles.has("tester")');
     expect(auth).toContain('roles.has("endurance_manager")');
-    expect(page).toContain('const { loading, rolesLoading, user } = useAuth()');
+    expect(page).toContain("useEnduranceCapabilities(user?.id");
+    expect(page).toContain("capabilities.can_access");
     expect(navbar).toContain("enduranceCapabilities.can_access");
   });
 

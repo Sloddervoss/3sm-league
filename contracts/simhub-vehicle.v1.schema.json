@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Optional V3 vehicle telemetry extension",
+  "description": "Last-available tyre readings, not a claim of continuously measured wear. Absent vehicle is accepted by the enclosing V3 parser.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "additionalProperties": false,
+  "required": [
+    "speedKph",
+    "throttlePct",
+    "brakePct",
+    "rpm",
+    "gear",
+    "sector1Seconds",
+    "sector2Seconds",
+    "sector3Seconds",
+    "tyreDataMode",
+    "pressureUnit",
+    "temperatureUnit",
+    "frontLeft",
+    "frontRight",
+    "rearLeft",
+    "rearRight"
+  ],
+  "properties": {
+    "speedKph": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 600
+    },
+    "throttlePct": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "brakePct": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "rpm": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 30000
+    },
+    "gear": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(R|N|[0-9]{1,2})$"
+    },
+    "sector1Seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0.001,
+      "maximum": 86400
+    },
+    "sector2Seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0.001,
+      "maximum": 86400
+    },
+    "sector3Seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0.001,
+      "maximum": 86400
+    },
+    "tyreDataMode": {
+      "const": "last_available"
+    },
+    "pressureUnit": {
+      "enum": [
+        "psi",
+        "kPa",
+        "bar",
+        null
+      ]
+    },
+    "temperatureUnit": {
+      "enum": [
+        "C",
+        "F",
+        null
+      ]
+    },
+    "frontLeft": {
+      "$ref": "#/$defs/tyre"
+    },
+    "frontRight": {
+      "$ref": "#/$defs/tyre"
+    },
+    "rearLeft": {
+      "$ref": "#/$defs/tyre"
+    },
+    "rearRight": {
+      "$ref": "#/$defs/tyre"
+    }
+  },
+  "$defs": {
+    "tyre": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "wearPercent",
+        "temperature",
+        "pressure"
+      ],
+      "properties": {
+        "wearPercent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "temperature": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": -100,
+          "maximum": 1000
+        },
+        "pressure": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 2000
+        }
+      }
+    }
+  }
+}

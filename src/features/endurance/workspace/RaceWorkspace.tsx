@@ -55,7 +55,7 @@ const InvitationBanner = ({ event, pending, onAccept }: { event: EnduranceEvent;
  * heeft altijd toegang voor testdoeleinden). De event-id is een echt DB-event.
  */
 export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack: () => void }) => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isEnduranceManager } = useAuth();
   const { actorId } = useEnduranceActor();
   const location = useLocation();
   const isFocus = useMemo(() => {
@@ -64,9 +64,10 @@ export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack
   }, [location.search]);
   const { data: registrations = [], isLoading } = useEnduranceRegistrations(event.id);
   const accept = useUpsertEnduranceRegistration();
+  const [acceptError, setAcceptError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>("overview");
   const myRegistration = registrations.find((r) => r.user_id === actorId);
-  const access = isSuperAdmin || (myRegistration ? ACTIVE.includes(myRegistration.status) : false);
+  const access = isSuperAdmin || isEnduranceManager || (myRegistration ? ACTIVE.includes(myRegistration.status) : false);
 
   if (isLoading) return <div><SecondaryButton onClick={onBack} className="mb-5"><ArrowLeft className="h-4 w-4" /> Terug naar races</SecondaryButton><p className="text-sm text-gray-400">Laden…</p></div>;
   if (!access) {
@@ -78,8 +79,13 @@ export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack
         <InvitationBanner
           event={event}
           pending={accept.isPending}
-          onAccept={() => void accept.mutateAsync({ event_id: event.id, user_id: actorId, status: "interest" })}
+          onAccept={async () => {
+            setAcceptError(null);
+            try { await accept.mutateAsync({ event_id: event.id, user_id: actorId, status: "interest" }); }
+            catch { setAcceptError("Uitnodiging accepteren mislukt. Probeer opnieuw."); }
+          }}
         />
+        {acceptError && <p role="alert" className="mt-3 text-red-300">{acceptError}</p>}
       </div>;
     }
     return <div><SecondaryButton onClick={onBack} className="mb-5"><ArrowLeft className="h-4 w-4" /> Terug naar races</SecondaryButton><RegistrationForm event={event} /></div>;

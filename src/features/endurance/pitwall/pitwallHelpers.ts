@@ -1,4 +1,5 @@
 /* Pitwall V1 — types & helpers */
+import type { VehicleTelemetry } from "../../../../supabase/functions/_shared/vehicleTelemetry";
 export interface PitwallPositionData {
   overallPosition: number | null;
   classPosition: number | null;
@@ -40,6 +41,9 @@ export interface PitwallStrategyRow {
 }
 
 export interface V3Normalized {
+  capturedAt?: string;
+  transportSessionId?: string;
+  vehicle?: VehicleTelemetry | null;
   identity?: {
     currentDriverId?: string;
     currentDriverName?: string;

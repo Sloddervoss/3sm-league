@@ -16,6 +16,7 @@ import { Panel, SectionHeading, StatusPill } from "../shared/ui";
 import { EnduranceNav, type EnduranceSection } from "./EnduranceNav";
 import { useEnduranceEvents } from "../repository/eventsRepository";
 import { enduranceEventRowToAppModel } from "../repository/mappers";
+import { useEnduranceCapabilities } from "../repository/capabilitiesRepository";
 
 const ArchivePanel = () => {
   const { data: dbEvents = [] } = useEnduranceEvents();
@@ -24,14 +25,15 @@ const ArchivePanel = () => {
 };
 
 const EnduranceContent = () => {
-  const { isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const { user, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const { capabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
   const { data: dbEvents = [] } = useEnduranceEvents();
   const location = useLocation();
   const navigate = useNavigate();
   const [section, setSection] = useState<EnduranceSection>("upcoming");
   // Beheer (events aanmaken) is voor super_admin + endurance_manager; testers
   // en managers mogen de suite zien/gebruiken, testers zien geen beheer-tab.
-  const showManage = Boolean(isSuperAdmin || isEnduranceManager);
+  const showManage = capabilities.can_manage_events;
   useEffect(() => { if (!showManage && section === "manage") setSection("upcoming"); }, [showManage, section]);
 
   // URL-gedreven navigatie: /endurance/ = lijst, /endurance/races/:id = workspace.
@@ -54,12 +56,15 @@ const EnduranceContent = () => {
 
 const EndurancePage = () => {
   const { loading, rolesLoading, user, isSuperAdmin, isTester, isEnduranceManager } = useAuth();
+  const { capabilities, isPending: capabilitiesPending } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
   const profileNames = useDriverNameMap();
-  const canSee = Boolean(isSuperAdmin || isTester || isEnduranceManager);
+  const legacyStaff = Boolean(isSuperAdmin || isTester || isEnduranceManager);
+  const canUseEndurance = capabilities.can_access;
   useEffect(() => { document.title = "3Stripe Endurance Control Center"; const description = document.querySelector('meta[name="description"]'); description?.setAttribute("content", "Plan 3Stripe endurance-races, beschikbaarheid, teams, stints en Race Control in één besloten omgeving."); }, []);
   if (loading || rolesLoading) return <div className="flex min-h-screen items-center justify-center bg-background text-sm text-gray-400">Account laden…</div>;
   if (!user) return <Navigate to="/auth?redirect=/endurance" replace />;
-  if (!canSee) {
+  if (!legacyStaff && capabilitiesPending) return <div className="p-8 text-gray-400">Toegang laden…</div>;
+  if (!canUseEndurance) {
     return <><Navbar /><main className="flex min-h-[70vh] flex-col items-center justify-center gap-4 bg-background px-4 pt-20 text-center"><Lock className="h-10 w-10 text-orange-400" /><h1 className="font-heading text-3xl font-black text-white">Besloten omgeving</h1><p className="max-w-md text-sm text-gray-400">Het Endurance Control Center is een besloten, niet-openbare omgeving. Hier is niets zichtbaar voor jou.</p></main><Footer /></>;
   }
   return <EnduranceStoreProvider><EnduranceActorProvider selfId={user.id} names={profileNames}><EnduranceContent /></EnduranceActorProvider></EnduranceStoreProvider>;

@@ -9,7 +9,7 @@ interface Props {
 }
 
 export const TopRaceBar = ({ strategy, position, raceClock, offlineMode }: Props) => {
-  if (offlineMode || strategy?.strategy_status === "insufficient_data") {
+  if (offlineMode) {
     return (
       <div className="flex items-center gap-4 rounded-lg bg-black/60 px-5 py-3 text-sm ring-1 ring-gray-700/30">
         <span className="text-xs font-bold uppercase tracking-widest text-orange-400">TELEMETRIE VERLOREN</span>

@@ -18,7 +18,7 @@ const enduranceSource = allEnduranceFiles.map((path) => readFileSync(path, "utf8
 const relayFile = "src/features/endurance/race-control/SimHubTelemetryPanel.tsx";
 const dataAccessRoot = "src/features/endurance/repository";
 const coreSource = allEnduranceFiles
-  .filter((path) => path !== relayFile && !path.startsWith(dataAccessRoot))
+  .filter((path) => path.replace(/\\/g, "/") !== relayFile && !path.replace(/\\/g, "/").startsWith(dataAccessRoot))
   .map((path) => readFileSync(path, "utf8"))
   .join("\n");
 

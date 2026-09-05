@@ -11,7 +11,7 @@ foreach ($file in $required) {
 }
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { throw "Visual Studio 2022 Build Tools met .NET Framework 4.8 targeting pack is vereist." }
-$msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
+$msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
 if (-not $msbuild) { throw "MSBuild niet gevonden." }
 $env:SIMHUB_INSTALL_PATH = (Resolve-Path $SimHubPath).Path.TrimEnd('\') + '\'
 & $msbuild $project /restore /t:Rebuild /p:Configuration=Release /p:Platform=AnyCPU
