@@ -36,7 +36,10 @@ export function enduranceEventRowToAppModel(row: EnduranceEventRow): EnduranceEv
     briefingStartAt: row.briefing_start_at ?? row.start_at,
     expectedEndAt: row.expected_end_at ?? row.end_at,
     registrationDeadline: row.registration_deadline ?? "",
-    slots: slots.map((slot) => ({ id: slot.id, startAt: slot.startAt ?? row.start_at, label: slot.label ?? slot.id })),
+    slots: slots.flatMap((slot) => {
+      if (!slot || typeof slot !== "object" || Array.isArray(slot) || typeof slot.id !== "string") return [];
+      return [{ id: slot.id, startAt: typeof slot.startAt === "string" ? slot.startAt : row.start_at, label: typeof slot.label === "string" ? slot.label : slot.id }];
+    }),
     classIds: row.class_ids as EnduranceEvent["classIds"],
     allowedCarIds: row.allowed_car_ids,
     selectedClassId: row.selected_class_id as EnduranceEvent["selectedClassId"],

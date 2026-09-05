@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { listPitwallTeams } from "../repository/pitwallRepository";
+import { useAuth } from "@/contexts/AuthContext";
 import { useEnduranceActor } from "../core/ActorContext";
 import type { EnduranceEvent } from "../core/types";
 import { usePitwallData } from "./usePitwallData";
@@ -18,37 +19,33 @@ import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
 import { LiveTrackPanel } from "./LiveTrackPanel";
 import { RaceTelemetryStrip } from "./RaceTelemetryStrip";
 import { deriveStandings } from "./standings";
-import { useMemo, useCallback, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useMemo, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { PitwallPositionData, PitwallPaceData, PitwallRaceClock } from "./pitwallHelpers";
 
-const useMemberships = (eventId: string, actorId: string, enabled: boolean) => {
+const useTeams = (eventId: string, actorId: string, staff: boolean, enabled: boolean) => {
   return useQuery({
-    queryKey: ["pitwall", "memberships", eventId],
+    queryKey: ["pitwall", "teams", eventId, actorId, staff],
     enabled: Boolean(eventId) && enabled,
     queryFn: async () => {
-      const sb = supabase as unknown as {
-        from: (t: string) => { select: (s: string) => { eq: (k: string, v: string) => { eq: (k2: string, v2: string) => Promise<{ data: unknown; error: unknown }> } } }
-      };
-      const { data, error } = await sb.from("endurance_team_members").select("team_id").eq("event_id", eventId).eq("user_id", actorId);
-      if (error) throw error;
-      return (data as Array<{ team_id: string }> ?? []) as Array<{ team_id: string }>;
+      return listPitwallTeams(eventId);
     },
   });
 };
 
 export const PitwallTab = ({ event }: Props) => {
-  const { actorId } = useEnduranceActor();
+  const { actorId, displayName } = useEnduranceActor();
+  const { isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
-  const [focusButtonMode, setFocusButtonMode] = useState(false);
 
   /* Focus mode: from URL or button state */
   const isFocusMode = useMemo(() => {
     try {
       const params = new URLSearchParams(location.search);
-      return params.get("pitwallFocus") === "1" || focusButtonMode;
-    } catch { return focusButtonMode; }
-  }, [location.search, focusButtonMode]);
+      return params.get("pitwallFocus") === "1";
+    } catch { return false; }
+  }, [location.search]);
 
   const demoScenario: DemoScenario | null = useMemo(() => {
     if (!import.meta.env.DEV) return null;
@@ -65,15 +62,16 @@ export const PitwallTab = ({ event }: Props) => {
   const setDemoScenario = useCallback((scenario: DemoScenario) => {
     const params = new URLSearchParams(location.search);
     params.set("pitwallDemo", scenario);
-    window.history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
-  }, [location.pathname, location.search]);
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+  }, [location.pathname, location.search, navigate]);
 
-  const { data: memberships } = useMemberships(event.id, actorId, !demoScenario);
-  const myTeamId = memberships && memberships.length > 0 ? memberships[0].team_id : null;
+  const teamQuery = useTeams(event.id, actorId, isSuperAdmin || isEnduranceManager || isTester, !demoScenario);
+  const myTeamId = teamQuery.data?.[0]?.id ?? null;
 
   const real = usePitwallData(
     demoScenario ? "" : event.id,
-    demoScenario ? null : myTeamId
+    demoScenario ? null : myTeamId,
+    actorId
   );
 
   const demo: DemoData | null = useMemo(() => {
@@ -85,10 +83,10 @@ export const PitwallTab = ({ event }: Props) => {
 
   const strategy = isDemo ? demo.strategy : real.strategy;
   const events = isDemo ? demo.events : real.events;
-  const teams = isDemo ? demo.teams : real.teams;
+  const teams = isDemo ? demo.teams : teamQuery.data ?? [];
   const plannedStints = isDemo ? demo.plannedStints : real.plannedStints;
   const alerts = isDemo ? demo.alerts : real.alerts;
-  const loading = isDemo ? demo.loading : real.loading;
+  const loading = isDemo ? demo.loading : real.loading || teamQuery.isPending;
   const selectedTeamId = isDemo ? "demo-team" : real.selectedTeamId;
   const setSelectedTeamId = isDemo ? (id: string | null) => {} : real.setSelectedTeamId;
 
@@ -110,22 +108,26 @@ export const PitwallTab = ({ event }: Props) => {
   const currentStint = plannedStints.find((s) => s.status === "in_car");
   const nextStints = plannedStints.filter((s) => s.status === "draft");
   const nextStint = nextStints[0];
-  const driverName = isDemo ? (currentStint?.driver_id ?? null) : null;
-  const nextDriverName = isDemo ? (nextStint?.driver_id ?? null) : null;
+  const driverName = isDemo ? (currentStint?.driver_id ?? null) : real.v3?.identity?.currentDriverName ?? (currentStint ? displayName(currentStint.driver_id) : null);
+  const nextDriverName = isDemo ? (nextStint?.driver_id ?? null) : nextStint ? displayName(nextStint.driver_id) : null;
+  const isLive = isDemo ? demoScenario !== "offline" : real.isLive;
 
-  const enterFocus = useCallback(() => setFocusButtonMode(true), []);
+  const enterFocus = () => {
+    const params = new URLSearchParams(location.search);
+    params.set("pitwallFocus", "1");
+    navigate({ pathname: location.pathname, search: params.toString() });
+  };
   const exitFocus = useCallback(() => {
-    setFocusButtonMode(false);
     try {
       const params = new URLSearchParams(location.search);
       params.delete("pitwallFocus");
       const search = params.toString();
-      window.history.replaceState(null, "", `${location.pathname}${search ? `?${search}` : ""}`);
+      navigate({ pathname: location.pathname, search }, { replace: true });
     } catch { /* ignore */ }
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, navigate]);
 
   const requestFullscreen = useCallback(() => {
-    try { document.documentElement.requestFullscreen?.(); } catch { /* not available */ }
+    void document.documentElement.requestFullscreen?.().catch(() => { /* browser denied fullscreen */ });
   }, []);
 
   return (
@@ -147,11 +149,11 @@ export const PitwallTab = ({ event }: Props) => {
             </>
           )}
           <span className={`inline-flex items-center gap-1 font-bold ${
-            strategy?.strategy_status === "insufficient_data" || strategy?.strategy_status === "low_sample"
+            !isLive || strategy?.strategy_status === "low_sample"
               ? "text-yellow-400" : "text-emerald-400"
           }`}>
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
-            {strategy?.strategy_status === "insufficient_data" ? "OFFLINE" : "LIVE"}
+            {isLive ? "LIVE" : "OFFLINE"}
           </span>
           <div className="ml-auto flex gap-2">
             <button
@@ -212,7 +214,7 @@ export const PitwallTab = ({ event }: Props) => {
       )}
 
       {/* === TEAM SELECTOR (real mode only) === */}
-      {teams.length > 1 && !isDemo && !isFocusMode && (
+      {teams.length > 1 && !isDemo && (
         <div className="flex flex-wrap gap-2">
           {teams.map((team) => (
             <button
@@ -235,7 +237,7 @@ export const PitwallTab = ({ event }: Props) => {
           strategy={strategy}
           position={position}
           raceClock={raceClock}
-          offlineMode={strategy.strategy_status === "insufficient_data"}
+          offlineMode={!isLive}
         />
       )}
 
@@ -243,9 +245,10 @@ export const PitwallTab = ({ event }: Props) => {
         <p className="text-sm text-gray-500">Pitwall laden…</p>
       )}
 
-      {!loading && !strategy && !isDemo && (
+      {!isDemo && (teamQuery.error || real.error) && <p role="alert" className="text-sm text-red-300">Pitwall laden mislukt. Controleer je toegang en probeer opnieuw.</p>}
+      {!loading && !strategy && !isDemo && !teamQuery.error && !real.error && (
         <p className="text-sm text-gray-500">
-          Geen pitwall-data beschikbaar. {!selectedTeamId && "Selecteer een team om te beginnen."}
+          Geen pitwall-data beschikbaar. {!selectedTeamId && "Er is nog geen toegankelijk team voor deze race."}
         </p>
       )}
 

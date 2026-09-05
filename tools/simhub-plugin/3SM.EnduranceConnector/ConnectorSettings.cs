@@ -35,6 +35,7 @@ namespace ThreeSM.EnduranceConnector
         public string LapProperty = "DataCorePlugin.GameData.NewData.CurrentLap";
         public string CompletedLapsProperty = "DataCorePlugin.GameData.NewData.CompletedLaps";
         public string LapTimeProperty = "DataCorePlugin.GameData.NewData.CurrentLapTime";
+        public string LastLapTimeProperty = "DataCorePlugin.GameData.NewData.LastLapTime";
         public string PositionProperty = "DataCorePlugin.GameData.NewData.Position";
         public string ClassPositionProperty = "DataCorePlugin.GameData.NewData.PositionInClass";
         public string FuelProperty = "DataCorePlugin.GameData.NewData.Fuel";

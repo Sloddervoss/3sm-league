@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { latestSeen, sitePairing, telemetryValues } from "./connectorState";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -64,7 +65,7 @@ const diagnosticLabel = (code: string | null): string =>
 /* ───── Health status helpers ───── */
 
 const healthStatus = (row: SimHubFleetRow): HealthStatus => {
-  const ts = row.health_received_at ?? row.last_seen_at;
+  const ts = latestSeen(row);
   if (!ts) return "unknown";
   const age = Date.now() - Date.parse(ts);
   if (age < 5 * 60_000) return "online";
@@ -144,15 +145,15 @@ const DiagOkBadge = () => <StatusBadge label="OK" color="bg-emerald-400/15 text-
 const DiagWarningBadge = () => <StatusBadge label="Waarschuwing" color="bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/25" />;
 const DiagErrorBadge = () => <StatusBadge label="Fout" color="bg-red-400/15 text-red-300 ring-1 ring-red-400/25" />;
 const DiagUnknownBadge = () => <StatusBadge label="Onbekend" color="bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/15" />;
-const UpToDateBadge = () => <StatusBadge label="Actueel" color="bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25" />;
+const UpToDateBadge = () => <StatusBadge label="Geïnstalleerd" color="bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25" />;
 const UpdateAvailableBadge = () => <StatusBadge label="Update beschikbaar" color="bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/25" />;
 const UpdateBusyBadge = () => <StatusBadge label="Update bezig" color="bg-blue-400/15 text-blue-300 ring-1 ring-blue-400/25" />;
 const UpdateFailedBadge = () => <StatusBadge label="Update mislukt" color="bg-red-400/15 text-red-300 ring-1 ring-red-400/25" />;
 const PrimaryBadge = () => <StatusBadge label="Primair" color="bg-orange-400/15 text-orange-300 ring-1 ring-orange-400/25" />;
 const StandbyBadge = () => <StatusBadge label="Standby" color="bg-blue-400/15 text-blue-300 ring-1 ring-blue-400/25" />;
 const PracticeBadge = () => <StatusBadge label="Practice" color="bg-violet-400/15 text-violet-300 ring-1 ring-violet-400/25" />;
-const BoundBadge = () => <StatusBadge label="Gekoppeld" color="bg-orange-400/15 text-orange-300 ring-1 ring-orange-400/25" />;
-const UnboundBadge = () => <StatusBadge label="Niet gekoppeld" color="bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/15" />;
+const BoundBadge = () => <StatusBadge label="Race toegewezen" color="bg-orange-400/15 text-orange-300 ring-1 ring-orange-400/25" />;
+const UnboundBadge = () => <StatusBadge label="Geen racetoewijzing" color="bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/15" />;
 
 /* ───── Helpers ───── */
 
@@ -228,7 +229,7 @@ const FleetRow = ({ row, onClick }: { row: SimHubFleetRow; onClick: () => void }
   const hStatus = healthStatus(row);
   const tStatus = telemetryStatus(row);
   const dStatus = diagnosticStatus(row.diagnostic_code);
-  const gStatus = gameStatus(row.game_connected);
+  const gStatus = gameStatus(hStatus === "online" ? row.game_connected : null);
   const uStatus = updaterStatus(row.connector_version, row.updater_state, row.last_update_result);
   const isOnline = hStatus === "online";
   const hasBinding = !!(row.endurance_event_name || row.endurance_event_id);
@@ -241,7 +242,10 @@ const FleetRow = ({ row, onClick }: { row: SimHubFleetRow; onClick: () => void }
       {/* Device name with status dot */}
       <span className="flex items-center gap-2.5 min-w-0">
         <span className={`h-2 w-2 shrink-0 rounded-full ${isOnline ? "bg-emerald-400 shadow-sm shadow-emerald-400/30" : "bg-gray-600"}`} />
-        <span className="truncate font-bold text-white">{row.device_name}</span>
+        <span className="min-w-0">
+          <span className="block truncate font-bold text-white">{row.device_name}</span>
+          <span className="block text-[10px] text-gray-400">{sitePairing(row)}</span>
+        </span>
       </span>
 
       {/* Version */}
@@ -251,7 +255,7 @@ const FleetRow = ({ row, onClick }: { row: SimHubFleetRow; onClick: () => void }
 
       {/* Last seen */}
       <span className={`self-center text-xs ${isOnline ? "text-emerald-300" : "text-gray-400"}`}>
-        {relativeTime(row.health_received_at ?? row.last_seen_at)}
+        {relativeTime(latestSeen(row))}
       </span>
 
       {/* Telemetry */}
@@ -273,7 +277,7 @@ const FleetRow = ({ row, onClick }: { row: SimHubFleetRow; onClick: () => void }
         ) : (
           <UnboundBadge />
         )}
-        <span className="sr-only">Binding bepaalt alleen aan welk Endurance-team/event telemetrie wordt gekoppeld; een niet-gekoppeld apparaat kan wél telemetrie sturen.</span>
+        <span className="sr-only">Racetoewijzing bepaalt aan welk Endurance-team/event telemetrie wordt toegewezen; een apparaat zonder racetoewijzing kan wel telemetrie sturen.</span>
       </span>
 
       {/* Diagnostic + updater warnings */}
@@ -293,7 +297,7 @@ const FleetOverview = ({ onSelect }: { onSelect: (id: string) => void }) => {
   const { user, isAdmin, isSuperAdmin } = useAuth();
   const staff = Boolean(isAdmin || isSuperAdmin);
 
-  const { data: fleet = [], isFetching } = useQuery({
+  const { data: fleet = [], isFetching, error } = useQuery({
     queryKey: ["simhub", "fleet"],
     enabled: !!user && staff,
     queryFn: async (): Promise<SimHubFleetRow[]> => {
@@ -304,7 +308,7 @@ const FleetOverview = ({ onSelect }: { onSelect: (id: string) => void }) => {
     refetchInterval: staff ? 10_000 : false,
   });
 
-  const summary = useMemo(() => {
+  const summary = (() => {
     const total = fleet.length;
     let online = 0;
     let offline = 0;
@@ -316,12 +320,12 @@ const FleetOverview = ({ onSelect }: { onSelect: (id: string) => void }) => {
       else offline++;
       if (telemetryStatus(row) === "live") telemetryLive++;
       // Only count CURRENT warnings visible in the row
-      if (diagnosticStatus(row.diagnostic_code) !== "ok" && row.diagnostic_code !== null) warnings++;
-      if (updaterStatus(row.connector_version, row.updater_state, row.last_update_result) === "failed") warnings++;
+      if ((diagnosticStatus(row.diagnostic_code) !== "ok" && row.diagnostic_code !== null) ||
+        updaterStatus(row.connector_version, row.updater_state, row.last_update_result) === "failed") warnings++;
     }
 
     return { total, online, offline, telemetryLive, warnings };
-  }, [fleet]);
+  })();
 
   return (
     <div className="space-y-4">
@@ -332,7 +336,7 @@ const FleetOverview = ({ onSelect }: { onSelect: (id: string) => void }) => {
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">SimHub connectors</p>
             <h2 className="font-heading text-xl font-black text-white">Connectoroverzicht</h2>
-            <p className="text-xs text-gray-400">Realtime status van gekoppelde SimHub-apparaten</p>
+            <p className="text-xs text-gray-400">Deze apparaten zijn aan de site gekoppeld. Racetoewijzing bepaalt apart naar welk team de telemetrie gaat.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -366,12 +370,13 @@ const FleetOverview = ({ onSelect }: { onSelect: (id: string) => void }) => {
           <span>Telemetrie</span>
           <span>Game</span>
           <span>Rol</span>
-          <span>Binding</span>
+          <span>Racetoewijzing</span>
           <span className="text-right">Status</span>
         </div>
 
         {/* Rows */}
-        {fleet.length === 0 && (
+        {error && <p role="alert" className="px-5 py-4 text-sm text-red-300">Connectoren laden mislukt. Probeer het opnieuw.</p>}
+        {!error && !isFetching && fleet.length === 0 && (
           <div className="flex flex-col items-center gap-3 px-5 py-10 text-sm text-gray-500">
             <Cable className="h-8 w-8 text-gray-600" />
             <p>Geen connectoren gevonden</p>
@@ -392,7 +397,7 @@ const DeviceDetail = ({ deviceId, onBack }: { deviceId: string; onBack: () => vo
   const staff = Boolean(isAdmin || isSuperAdmin);
   const [showAllEvents, setShowAllEvents] = useState(false);
 
-  const { data: detail, isFetching } = useQuery({
+  const { data: detail, isFetching, error } = useQuery({
     queryKey: ["simhub", "device-detail", deviceId],
     enabled: !!user && staff && !!deviceId,
     queryFn: async (): Promise<SimHubDeviceDetail> => {
@@ -415,7 +420,7 @@ const DeviceDetail = ({ deviceId, onBack }: { deviceId: string; onBack: () => vo
     return (
       <div className="flex flex-col items-center gap-3 py-20 text-gray-500">
         <CircleX className="h-7 w-7 text-gray-600" />
-        <p className="text-sm">Device niet gevonden</p>
+        <p role={error ? "alert" : undefined} className="text-sm">{error ? "Apparaatgegevens laden mislukt. Probeer opnieuw." : "Device niet gevonden"}</p>
         <button onClick={onBack} className="text-xs font-bold text-orange-300 hover:text-orange-200">Terug naar overzicht</button>
       </div>
     );
@@ -460,7 +465,7 @@ const DeviceDetail = ({ deviceId, onBack }: { deviceId: string; onBack: () => vo
   const hStatus = healthStatus(fleetProxy);
   const isOnline = hStatus === "online";
   const tStatus = telemetryStatus(fleetProxy);
-  const gStatus = gameStatus(health?.game_connected ?? null);
+  const gStatus = gameStatus(isOnline ? health?.game_connected ?? null : null);
   const uStatus = updaterStatus(health?.connector_version ?? null, health?.updater_state ?? null, health?.last_update_result ?? null);
 
   const DetailCard = ({ icon: Icon, title, subtitle, children }: { icon: typeof Activity; title: string; subtitle?: string; children: React.ReactNode }) => (
@@ -482,13 +487,7 @@ const DeviceDetail = ({ deviceId, onBack }: { deviceId: string; onBack: () => vo
   );
 
   // Parse V3 telemetry
-  const v3 = tele?.v3_normalized as Record<string, unknown> | null;
-  const fuel = v3?.fuel ?? (tele?.telemetry as Record<string, unknown>)?.fuel;
-  const completedLaps = v3?.completedLaps ?? (tele?.telemetry as Record<string, unknown>)?.completedLaps;
-  const inPit = v3?.inPit ?? (tele?.telemetry as Record<string, unknown>)?.inPit;
-  const trackName = tele?.track_name ?? v3?.trackName ?? "—";
-  const carName = tele?.car_name ?? v3?.carName ?? "—";
-  const driverName = tele?.current_driver_name ?? v3?.driverName ?? "—";
+  const { fuel, completedLaps, inPit, trackName, carName, driverName } = telemetryValues(tele);
   const eventName = evt?.name as string | null ?? null;
   const teamName = team?.name as string | null ?? null;
 
@@ -541,14 +540,15 @@ const DeviceDetail = ({ deviceId, onBack }: { deviceId: string; onBack: () => vo
           <InfoRow label="Coureur" value={String(driverName)} />
           <InfoRow label="Ronden" value={safeNum(completedLaps, 0) !== "—" ? safeNum(completedLaps, 0) : "—"} />
           <InfoRow label="Brandstof" value={safeNum(fuel) !== "—" ? `${safeNum(fuel)}L` : "—"} />
-          <InfoRow label="In pit" value={inPit ? "Ja" : "Nee"} />
+          <InfoRow label="In pit" value={inPit == null ? "—" : inPit ? "Ja" : "Nee"} />
           <InfoRow label="Laatst ontvangen" value={relativeTime(tele?.received_at ?? null)} />
           {tele?.session_id && <InfoRow label="Sessie" value={<span className="font-mono text-gray-400/70 text-[10px]">{tele.session_id.slice(0, 12)}</span>} />}
         </DetailCard>
 
         {/* Binding / Authority */}
-        <DetailCard icon={ShieldCheck} title="Binding & autoriteit">
-          <InfoRow label="Status" value={
+        <DetailCard icon={ShieldCheck} title="Sitekoppeling & racetoewijzing">
+          <InfoRow label="Sitekoppeling" value={sitePairing(fleetProxy)} />
+          <InfoRow label="Racetoewijzing" value={
             device.device_status === "active_binding" ? <StatusBadge label="Actief" color="bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25" /> :
             device.device_status === "inactive" ? <StatusBadge label="Inactief" color="bg-gray-500/10 text-gray-400 ring-1 ring-gray-500/15" /> :
             <StatusBadge label="Ingetrokken" color="bg-red-400/15 text-red-300 ring-1 ring-red-400/25" />
@@ -574,7 +574,7 @@ const DeviceDetail = ({ deviceId, onBack }: { deviceId: string; onBack: () => vo
             <InfoRow label="Doelversie" value={<span className="font-mono text-gray-300">{health.updater_target_version}</span>} />
           )}
           <InfoRow label="Laatste resultaat" value={
-            (health?.last_update_result && !["success", "SUCCESS", "OK", "UP_TO_DATE", "none"].includes(health.last_update_result.toUpperCase())) ?
+            (health?.last_update_result && !["SUCCESS", "OK", "UP_TO_DATE", "NONE"].includes(health.last_update_result.toUpperCase())) ?
               <span className="font-bold text-red-300">{health.last_update_result}</span> : <span className="text-gray-400/70">{health?.last_update_result ?? "—"}</span>
           } />
           <InfoRow label="Laatste update" value={relativeTime(health?.last_update_utc ?? null)} />
@@ -633,6 +633,11 @@ const DeviceDetail = ({ deviceId, onBack }: { deviceId: string; onBack: () => vo
 
 const SimHubConnectorsModule = () => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => tick((value) => value + 1), 10_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   if (selectedDeviceId) {
     return <DeviceDetail deviceId={selectedDeviceId} onBack={() => setSelectedDeviceId(null)} />;

@@ -20,7 +20,7 @@ const number = (value, path, { integer = false, nullable = false, min = 0, max =
 export const validateTelemetryEnvelope = (input) => {
   const root = object(input, "payload");
   exactKeys(root, ["protocolVersion", "sequence", "capturedAt", "source", "race", "telemetry"], "payload");
-  if (root.protocolVersion !== 1) throw new Error("protocolVersion wordt niet ondersteund");
+  if (root.protocolVersion !== 1 && root.protocolVersion !== 2) throw new Error("protocolVersion wordt niet ondersteund");
   number(root.sequence, "sequence", { integer: true });
   string(root.capturedAt, "capturedAt");
   if (!Number.isFinite(Date.parse(root.capturedAt))) throw new Error("capturedAt is geen geldige ISO-datum");
@@ -32,14 +32,17 @@ export const validateTelemetryEnvelope = (input) => {
   if (source.game !== "IRacing") throw new Error("alleen iRacing wordt in deze spike ondersteund");
 
   const race = object(root.race, "race");
-  exactKeys(race, ["eventId", "teamId", "sessionId", "driverId"], "race");
+  const identityKeys = ["currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"];
+  exactKeys(race, ["eventId", "teamId", "sessionId", "driverId", ...(root.protocolVersion === 2 ? identityKeys : [])], "race");
+  if (root.protocolVersion === 2) for (const key of identityKeys) string(race[key], `race.${key}`, true);
   string(race.eventId, "race.eventId");
   string(race.teamId, "race.teamId");
   string(race.sessionId, "race.sessionId");
   string(race.driverId, "race.driverId", true);
 
   const telemetry = object(root.telemetry, "telemetry");
-  exactKeys(telemetry, ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag"], "telemetry");
+  exactKeys(telemetry, ["connected", "sessionTimeSeconds", "lap", "completedLaps", "lapTimeSeconds", "position", "classPosition", "speedKph", "fuelLitres", "fuelPerLapLitres", "estimatedLapsRemaining", "inPitLane", "pitLimiter", "stintElapsedSeconds", "incidents", "flag", ...(root.protocolVersion === 2 ? ["isInCar"] : [])], "telemetry");
+  if (root.protocolVersion === 2 && typeof telemetry.isInCar !== "boolean") throw new Error("telemetry.isInCar moet true of false zijn");
   for (const key of ["connected", "inPitLane", "pitLimiter"]) if (typeof telemetry[key] !== "boolean") throw new Error(`telemetry.${key} moet true of false zijn`);
   number(telemetry.sessionTimeSeconds, "telemetry.sessionTimeSeconds");
   number(telemetry.lap, "telemetry.lap", { integer: true });
