@@ -5,8 +5,9 @@ Voor de bredere projektcontext geldt `HERMES.md` en `docs/AI_START_HERE.md`.
 
 ## 1. Commit NOOIT direct op `main`
 
-`main` is de beschermde lijn en verandert ALLEEN via merges (pull requests).
-Sta je op het punt om op `main` te committen? **Stop** en maak eerst een branch.
+`main` is de beschermde lijn en verandert ALLEEN via merges — nooit via een
+directe commit. Sta je op het punt om op `main` te committen? **Stop** en maak
+eerst een branch, en merge daarna.
 
 ## 2. Bouw voort op bestaande wijzigingen en besluiten
 
@@ -22,7 +23,9 @@ git checkout main && git pull
 git checkout -b feat/<korte-slug>     # of fix/<korte-slug>
 ```
 
-Werk alleen op die branch. Merge je eigen branch NOOIT zelf naar `main`.
+Werk alleen op die branch. Je mag je eigen branch zelf naar `main` mergen,
+BEHALVE wanneer dat een productiewijziging betreft (zie regel 8): die wachten
+altijd op expliciete goedkeuring voordat ze naar `main` mogen.
 
 ## 4. Conventional Commits — zodat wijzigingen in één oogopslag te classificeren zijn
 
@@ -47,13 +50,15 @@ verifieer de huidige staat op `main` voor je code schrijft. Doet iets of iemand
 al werk op hetzelfde onderdeel (open branch, actieve feature, open PR)?
 **Overleg dan in plaats van dubbel werk te doen of te overschrijven.**
 
-## 7. Push ALTIJD je branch en zet een PR open
+## 7. Push ALTIJD je branch en merge
 
 ```
 git push -u origin <branchnaam>
 ```
 
-Zet daarna een pull request open richting `main`. Merge het niet zelf.
+Merge je branch daarna zelf naar `main` (via een merge, nooit een directe
+commit). Bij productiewijzigingen (regel 8) merge je NIET zelf, maar geef je
+aan dat er goedkeuring nodig is.
 
 ## 8. Eindig met een korte samenvatting
 
@@ -63,6 +68,9 @@ Bevat in ieder geval:
 - het PR-nummer / de link als je die geopend hebt,
 - één regel: **"PRODUCTIEWIJZIGING: JA of NEE"** — of er iets live is geraakt
   (DB-schema, live site-inhoud of productiedata).
+
+Is dit **JA**? Dan mergen naar `main` en deployen gaat pas na expliciete
+goedkeuring van de projecteigenaar.
 
 Als je het DB-schema of migraties gewijzigd hebt, zeg dat dan expliciet in de
 samenvatting en geef migratiebestanden een unieke tijdstempel-prefix.
