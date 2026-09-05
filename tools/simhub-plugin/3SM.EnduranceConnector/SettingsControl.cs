@@ -141,6 +141,10 @@ namespace ThreeSM.EnduranceConnector
             diagnosticsMode.Checked += delegate { _plugin.UpdateSettings(s => s.DiagnosticsEnabled = true); _plugin.ApplyDiagnosticsSettings(); };
             diagnosticsMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.DiagnosticsEnabled = false); _plugin.ApplyDiagnosticsSettings(); };
             stack.Children.Add(diagnosticsMode);
+            var extendedMode = new CheckBox { Content = "Uitgebreide Pitwall-telemetrie (alleen na relay-update)", IsChecked = _plugin.Settings != null && _plugin.Settings.ExtendedPitwallTelemetryEnabled, Foreground = TextMain, Margin = new Thickness(0, 0, 0, 10) };
+            extendedMode.Checked += delegate { _plugin.UpdateSettings(s => s.ExtendedPitwallTelemetryEnabled = true); };
+            extendedMode.Unchecked += delegate { _plugin.UpdateSettings(s => s.ExtendedPitwallTelemetryEnabled = false); };
+            stack.Children.Add(extendedMode);
 
             var unpairButton = StyleSecondary("Koppeling verwijderen");
             unpairButton.HorizontalAlignment = HorizontalAlignment.Left;

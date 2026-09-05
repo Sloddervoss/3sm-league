@@ -384,11 +384,11 @@ namespace ThreeSM.EnduranceConnector
                 }
                 if (!running && _gameWasRunning) _stintClock.Stop();
                 _gameWasRunning = running;
-                if (!running)
+                if (!running || data.NewData == null)
                 {
                     ObserveDiagnostics(new DiagnosticsObservation
                     {
-                        GameConnected = false,
+                        GameConnected = running,
                         RawDataAvailable = data.NewData != null,
                         RawTelemetryAvailable = false,
                         SessionTimeReadOk = false,
@@ -401,6 +401,7 @@ namespace ThreeSM.EnduranceConnector
                 Uri endpoint;
                 string token;
                 TelemetryEnvelopeV3 envelope;
+                TelemetryEnvelope localEnvelope = null;
                 lock (_settingsGate)
                 {
                     var central = Settings.UseCentralRelay;
@@ -422,12 +423,14 @@ namespace ThreeSM.EnduranceConnector
                     {
                         Uri baseUri;
                         if (!Uri.TryCreate(Settings.BridgeUrl, UriKind.Absolute, out baseUri) || baseUri.Scheme != Uri.UriSchemeHttp || !baseUri.IsLoopback) throw new InvalidOperationException("lokale bridge moet loopback gebruiken");
-                        endpoint = new Uri(baseUri, "/v1/telemetry-v3");
+                        endpoint = new Uri(baseUri, "/v1/telemetry");
                         token = Settings.PairingToken;
                         if (string.IsNullOrWhiteSpace(token) || token.Length < 12) throw new InvalidOperationException("lokaal pairingtoken is te kort");
                     }
                     DiagnosticsObservation observation;
-                    envelope = CaptureV3(pluginManager, data, isInCar, out observation);
+                    envelope = null;
+                    if (central) envelope = CaptureV3(pluginManager, data, isInCar, out observation);
+                    else localEnvelope = Capture(pluginManager, data, false, isInCar, out observation);
                     ObserveDiagnostics(observation);
                 }
                 lock (_sendGate)
@@ -437,7 +440,9 @@ namespace ThreeSM.EnduranceConnector
                         Volatile.Write(ref _sendBusy, 0);
                         return;
                     }
-                    _activeSend = Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
+                    _activeSend = envelope != null
+                        ? Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false))
+                        : Task.Run(async () => await SendAsync(localEnvelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
                 }
             }
             catch (Exception error)
@@ -820,14 +825,16 @@ namespace ThreeSM.EnduranceConnector
             var classPosition = PositiveOrNull(player == null ? 0 : player.PositionInClass) ?? PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0));
             var flag = ResolveFlag(snapshot, GetRaw(manager, Settings.FlagProperty));
             var completedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0));
-            var lapTimeSeconds = GetNullableSeconds(manager, Settings.LapTimeProperty);
+            var lapTimeSeconds = GetNullableSeconds(manager, Settings.LastLapTimeProperty);
             var gapToLeader = GetNullableSeconds(manager, Settings.GapToLeaderProperty);
             // V3/0.4.0: populatie van bestaande nullable eigen-auto velden (NULL-tolerant).
             var sessionTimeRemaining = GetNullableSeconds(manager, Settings.SessionTimeRemainingProperty);
             var sessionLapsRemaining = GetNullableInt(manager, Settings.SessionLapsRemainingProperty);
-            var currentLapElapsed = GetNullableSeconds(manager, Settings.CurrentLapElapsedProperty);
+            var currentLapElapsed = GetNullableSeconds(manager, Settings.CurrentLapElapsedProperty)
+                ?? GetNullableSeconds(manager, "DataCorePlugin.GameData.NewData.CurrentLapTime");
             var bestLapTime = GetNullableSeconds(manager, Settings.BestLapTimeProperty);
-            var lapDistancePct = GetNullableDouble(manager, Settings.LapDistancePctProperty, false);
+            var lapDistancePct = GetNullableDouble(manager, Settings.LapDistancePctProperty, false)
+                ?? (player == null ? null : Clamp01(NullableSeconds(player.TrackPositionPercent)));
             var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
             var incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty));
             var inPitLane = GetBool(manager, Settings.PitLaneProperty, false);
@@ -907,6 +914,49 @@ namespace ThreeSM.EnduranceConnector
                     OptionalRepairSeconds = null,
                 },
                 Opponents = BuildOpponentSnapshot(snapshot),
+                Vehicle = Settings.ExtendedPitwallTelemetryEnabled ? CaptureVehicle(manager) : null,
+            };
+        }
+
+        private static double? VehicleNumber(PluginManager manager, string name, double maximum, bool positive = false)
+        {
+            var value = GetNullableDouble(manager, "DataCorePlugin.GameData.NewData." + name, positive);
+            return value.HasValue && value.Value <= maximum ? value : null;
+        }
+
+        private static V3Tyre CaptureTyre(PluginManager manager, string corner)
+        {
+            var pressure = VehicleNumber(manager, "TyrePressure" + corner, 2000, true);
+            var temperature = VehicleNumber(manager, "TyreTemperature" + corner, 1000, true);
+            var wear = VehicleNumber(manager, "TyreWear" + corner, 100, true);
+            // All-zero SDK defaults are not evidence of a measured/depleted tyre.
+            if (!pressure.HasValue && !temperature.HasValue && (!wear.HasValue || wear.Value == 0)) return null;
+            return new V3Tyre { Pressure = pressure, Temperature = temperature, WearPercent = wear };
+        }
+
+        private static V3Vehicle CaptureVehicle(PluginManager manager)
+        {
+            const string prefix = "DataCorePlugin.GameData.NewData.";
+            var pressureUnit = GetNullableString(manager, prefix + "TyrePressureUnit");
+            if (pressureUnit != "psi" && pressureUnit != "kPa" && pressureUnit != "bar") pressureUnit = null;
+            var temperatureUnit = GetNullableString(manager, prefix + "TemperatureUnit");
+            if (temperatureUnit == "°C") temperatureUnit = "C";
+            if (temperatureUnit == "°F") temperatureUnit = "F";
+            if (temperatureUnit != "C" && temperatureUnit != "F") temperatureUnit = null;
+            var gear = GetNullableString(manager, prefix + "Gear");
+            int gearNumber;
+            if (gear != "R" && gear != "N" && (!int.TryParse(gear, out gearNumber) || gearNumber < 0 || gearNumber > 99)) gear = null;
+            return new V3Vehicle {
+                SpeedKph = VehicleNumber(manager, "SpeedKmh", 600),
+                ThrottlePct = VehicleNumber(manager, "Throttle", 100),
+                BrakePct = VehicleNumber(manager, "Brake", 100),
+                Rpm = VehicleNumber(manager, "Rpms", 30000), Gear = gear,
+                Sector1Seconds = NormalizeTiming(GetNullableSeconds(manager, prefix + "Sector1LastLapTime")),
+                Sector2Seconds = NormalizeTiming(GetNullableSeconds(manager, prefix + "Sector2LastLapTime")),
+                Sector3Seconds = NormalizeTiming(GetNullableSeconds(manager, prefix + "Sector3LastLapTime")),
+                TyreDataMode = "last_available", PressureUnit = pressureUnit, TemperatureUnit = temperatureUnit,
+                FrontLeft = CaptureTyre(manager, "FrontLeft"), FrontRight = CaptureTyre(manager, "FrontRight"),
+                RearLeft = CaptureTyre(manager, "RearLeft"), RearRight = CaptureTyre(manager, "RearRight")
             };
         }
 

@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchPitwallData } from "../repository/pitwallRepository";
 import type {
   PitwallStrategyRow, PitwallTimelineEvent, TeamOption,
   PitwallPositionData, PitwallPaceData, PitwallRaceClock,
@@ -43,17 +43,6 @@ interface PitwallRpcResponse {
   access: "staff" | "team_member";
 }
 
-const fetchPitwallData = async (eventId: string, teamId: string): Promise<PitwallRpcResponse> => {
-  const { data, error } = await (supabase as any).rpc("get_pitwall_data", {
-    p_event_id: eventId,
-    p_team_id: teamId,
-  });
-  if (error) {
-    console.error("[3SM Pitwall RPC] error:", error);
-    throw error;
-  }
-  return data as unknown as PitwallRpcResponse;
-};
 
 /** Extract PitwallPositionData from V3 normalized telemetry */
 function extractPosition(v3?: V3Normalized | null): PitwallPositionData | null {
@@ -89,17 +78,27 @@ function extractTeams(rpc: PitwallRpcResponse): TeamOption[] {
   return list;
 }
 
-export function usePitwallData(eventId: string, initialTeamId: string | null) {
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(initialTeamId);
+export function usePitwallData(eventId: string, initialTeamId: string | null, actorId = "") {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 3_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const contextKey = `${eventId}:${actorId}`;
+  const [selection, setSelection] = useState<{ contextKey: string; teamId: string | null } | null>(null);
+  const selectedTeamId = selection?.contextKey === contextKey ? selection.teamId : initialTeamId;
+  const setSelectedTeamId = (teamId: string | null) => setSelection({ contextKey, teamId });
 
   const rpcQuery = useQuery({
-    queryKey: ["pitwall", "rpc", eventId, selectedTeamId],
+    queryKey: ["pitwall", "rpc", eventId, selectedTeamId, actorId],
     enabled: Boolean(eventId) && Boolean(selectedTeamId),
     refetchInterval: 3_000,
-    queryFn: () => fetchPitwallData(eventId, selectedTeamId!),
+    queryFn: async () => await fetchPitwallData(eventId, selectedTeamId!) as PitwallRpcResponse,
   });
 
   const rpcData = rpcQuery.data;
+  const receivedAt = rpcData?.telemetry?.received_at;
+  const isLive = !rpcQuery.error && typeof receivedAt === "string" && now - Date.parse(receivedAt) < 30_000;
   const loading = rpcQuery.isLoading;
   const error = rpcQuery.error;
 
@@ -148,6 +147,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null) {
   /* Derive alert conditions from strategy data */
   const alerts = useMemo(() => {
     const list: Array<{ severity: "high" | "medium" | "info"; message: string }> = [];
+    if (!isLive) return [{ severity: "medium" as const, message: "Geen actuele telemetrie — controleer de verbinding; eerdere waarden kunnen verouderd zijn." }];
     if (!strategy) return list;
 
     const lapsRemaining = strategy.fuel_laps_remaining;
@@ -170,7 +170,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null) {
     }
 
     return list;
-  }, [strategy]);
+  }, [strategy, isLive]);
 
   return {
     strategy,
@@ -188,5 +188,6 @@ export function usePitwallData(eventId: string, initialTeamId: string | null) {
     opponents,
     trends,
     v3,
+    isLive,
   };
 }
