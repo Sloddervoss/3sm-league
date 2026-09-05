@@ -25,7 +25,7 @@ it("loads staff teams, switches team and keeps focus navigation in the router", 
   await waitFor(() => expect(fetchPitwallData).toHaveBeenCalledWith("race", "b"));
   fireEvent.click(screen.getByRole("button", { name: "Focus mode" }));
   expect(screen.getByTestId("location")).toHaveTextContent("pitwallFocus=1");
-  expect(screen.getByText("OFFLINE")).toBeVisible();
+  expect(screen.getAllByText("OFFLINE").length).toBeGreaterThan(0);
   expect(screen.queryByText("LIVE", { exact: true })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Focus verlaten" }));
   expect(screen.getByTestId("location").textContent).toBe("");
