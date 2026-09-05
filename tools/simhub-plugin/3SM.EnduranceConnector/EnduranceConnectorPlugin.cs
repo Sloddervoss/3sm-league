@@ -825,9 +825,11 @@ namespace ThreeSM.EnduranceConnector
             // V3/0.4.0: populatie van bestaande nullable eigen-auto velden (NULL-tolerant).
             var sessionTimeRemaining = GetNullableSeconds(manager, Settings.SessionTimeRemainingProperty);
             var sessionLapsRemaining = GetNullableInt(manager, Settings.SessionLapsRemainingProperty);
-            var currentLapElapsed = GetNullableSeconds(manager, Settings.CurrentLapElapsedProperty);
+            var currentLapElapsed = GetNullableSeconds(manager, Settings.CurrentLapElapsedProperty)
+                ?? GetNullableSeconds(manager, "DataCorePlugin.GameData.NewData.CurrentLapTime");
             var bestLapTime = GetNullableSeconds(manager, Settings.BestLapTimeProperty);
-            var lapDistancePct = GetNullableDouble(manager, Settings.LapDistancePctProperty, false);
+            var lapDistancePct = GetNullableDouble(manager, Settings.LapDistancePctProperty, false)
+                ?? (player == null ? null : Clamp01(NullableSeconds(player.TrackPositionPercent)));
             var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
             var incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty));
             var inPitLane = GetBool(manager, Settings.PitLaneProperty, false);
@@ -907,6 +909,49 @@ namespace ThreeSM.EnduranceConnector
                     OptionalRepairSeconds = null,
                 },
                 Opponents = BuildOpponentSnapshot(snapshot),
+                Vehicle = Settings.ExtendedPitwallTelemetryEnabled ? CaptureVehicle(manager) : null,
+            };
+        }
+
+        private static double? VehicleNumber(PluginManager manager, string name, double maximum, bool positive = false)
+        {
+            var value = GetNullableDouble(manager, "DataCorePlugin.GameData.NewData." + name, positive);
+            return value.HasValue && value.Value <= maximum ? value : null;
+        }
+
+        private static V3Tyre CaptureTyre(PluginManager manager, string corner)
+        {
+            var pressure = VehicleNumber(manager, "TyrePressure" + corner, 2000, true);
+            var temperature = VehicleNumber(manager, "TyreTemperature" + corner, 1000, true);
+            var wear = VehicleNumber(manager, "TyreWear" + corner, 100, true);
+            // All-zero SDK defaults are not evidence of a measured/depleted tyre.
+            if (!pressure.HasValue && !temperature.HasValue && (!wear.HasValue || wear.Value == 0)) return null;
+            return new V3Tyre { Pressure = pressure, Temperature = temperature, WearPercent = wear };
+        }
+
+        private static V3Vehicle CaptureVehicle(PluginManager manager)
+        {
+            const string prefix = "DataCorePlugin.GameData.NewData.";
+            var pressureUnit = GetNullableString(manager, prefix + "TyrePressureUnit");
+            if (pressureUnit != "psi" && pressureUnit != "kPa" && pressureUnit != "bar") pressureUnit = null;
+            var temperatureUnit = GetNullableString(manager, prefix + "TemperatureUnit");
+            if (temperatureUnit == "°C") temperatureUnit = "C";
+            if (temperatureUnit == "°F") temperatureUnit = "F";
+            if (temperatureUnit != "C" && temperatureUnit != "F") temperatureUnit = null;
+            var gear = GetNullableString(manager, prefix + "Gear");
+            int gearNumber;
+            if (gear != "R" && gear != "N" && (!int.TryParse(gear, out gearNumber) || gearNumber < 0 || gearNumber > 99)) gear = null;
+            return new V3Vehicle {
+                SpeedKph = VehicleNumber(manager, "SpeedKmh", 600),
+                ThrottlePct = VehicleNumber(manager, "Throttle", 100),
+                BrakePct = VehicleNumber(manager, "Brake", 100),
+                Rpm = VehicleNumber(manager, "Rpms", 30000), Gear = gear,
+                Sector1Seconds = NormalizeTiming(GetNullableSeconds(manager, prefix + "Sector1LastLapTime")),
+                Sector2Seconds = NormalizeTiming(GetNullableSeconds(manager, prefix + "Sector2LastLapTime")),
+                Sector3Seconds = NormalizeTiming(GetNullableSeconds(manager, prefix + "Sector3LastLapTime")),
+                TyreDataMode = "last_available", PressureUnit = pressureUnit, TemperatureUnit = temperatureUnit,
+                FrontLeft = CaptureTyre(manager, "FrontLeft"), FrontRight = CaptureTyre(manager, "FrontRight"),
+                RearLeft = CaptureTyre(manager, "RearLeft"), RearRight = CaptureTyre(manager, "RearRight")
             };
         }
 

@@ -4,7 +4,8 @@ namespace ThreeSM.EnduranceConnector
 {
     // Telemetry V3 frozen wire contract (Phase A schema contracts/simhub-telemetry.v3.schema.json).
     // protocolVersion=3. No source.connectorId, no raceRunId, no device/event/team/authority fields,
-    // no tyres / fastRepair / gameSessionKey / strategy fields. Nullable scalar members serialize as
+    // no authority / gameSessionKey / strategy inputs. Optional vehicle extension is gated.
+    // Nullable scalar members serialize as
     // JSON null via DataContractJsonSerializer and satisfy the V3 schema's nullable type unions.
     [DataContract]
     public sealed class TelemetryEnvelopeV3
@@ -24,6 +25,35 @@ namespace ThreeSM.EnduranceConnector
         // 0.4.1 additive: bounded, null-tolerant opponent snapshot. Absent/null => steady/0.4.0
         // compatible (validator allows when present). Cap enforced in the connector.
         [DataMember(Name = "opponents", Order = 13)] public V3Opponent[] Opponents { get; set; }
+        [DataMember(Name = "vehicle", Order = 14, EmitDefaultValue = false)] public V3Vehicle Vehicle { get; set; }
+    }
+
+    [DataContract]
+    public sealed class V3Tyre
+    {
+        [DataMember(Name = "wearPercent")] public double? WearPercent { get; set; }
+        [DataMember(Name = "temperature")] public double? Temperature { get; set; }
+        [DataMember(Name = "pressure")] public double? Pressure { get; set; }
+    }
+
+    [DataContract]
+    public sealed class V3Vehicle
+    {
+        [DataMember(Name = "speedKph")] public double? SpeedKph { get; set; }
+        [DataMember(Name = "throttlePct")] public double? ThrottlePct { get; set; }
+        [DataMember(Name = "brakePct")] public double? BrakePct { get; set; }
+        [DataMember(Name = "rpm")] public double? Rpm { get; set; }
+        [DataMember(Name = "gear")] public string Gear { get; set; }
+        [DataMember(Name = "sector1Seconds")] public double? Sector1Seconds { get; set; }
+        [DataMember(Name = "sector2Seconds")] public double? Sector2Seconds { get; set; }
+        [DataMember(Name = "sector3Seconds")] public double? Sector3Seconds { get; set; }
+        [DataMember(Name = "tyreDataMode")] public string TyreDataMode { get; set; }
+        [DataMember(Name = "pressureUnit")] public string PressureUnit { get; set; }
+        [DataMember(Name = "temperatureUnit")] public string TemperatureUnit { get; set; }
+        [DataMember(Name = "frontLeft")] public V3Tyre FrontLeft { get; set; }
+        [DataMember(Name = "frontRight")] public V3Tyre FrontRight { get; set; }
+        [DataMember(Name = "rearLeft")] public V3Tyre RearLeft { get; set; }
+        [DataMember(Name = "rearRight")] public V3Tyre RearRight { get; set; }
     }
 
     [DataContract]
