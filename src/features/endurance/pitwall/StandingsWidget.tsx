@@ -2,6 +2,7 @@ import type { StandingsDerivation, StandingsRow } from "./standings";
 import { renderGap, renderPosition } from "./standings";
 import type { V3Opponent } from "./pitwallHelpers";
 import { formatClosingRate } from "./closingRate";
+import {preciseLapTime} from './telemetryFormat';
 
 interface Props {
   standings: StandingsDerivation;
@@ -98,14 +99,17 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
 
       {/* COMPACT TABLE */}
       {rows.length > 1 && (
-        <div className="mt-2 overflow-hidden rounded border border-white/5">
-          <table className="w-full text-left text-[10px]">
+        <div className="mt-2 overflow-x-auto rounded border border-white/5">
+          <table className="w-full min-w-[620px] text-left text-[10px]">
             <thead className="bg-black/30 text-[9px] font-black uppercase tracking-wider text-gray-500">
               <tr>
                 <th className="px-1.5 py-1">P</th>
                 <th className="px-1 py-1">K</th>
                 <th className="px-1 py-1">#</th>
                 <th className="px-1 py-1">Team</th>
+                <th className="px-1 py-1">Klasse</th>
+                <th className="px-1 py-1 text-right">Laatste</th>
+                <th className="px-1 py-1 text-right">Beste</th>
                 <th className="px-1 py-1 text-right">Ronde</th>
                 <th className="px-1 py-1 text-right">Gap</th>
                 <th className="px-1 py-1 text-center">Pit</th>
@@ -118,6 +122,9 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
                   <td className="px-1 py-1 text-gray-500">{renderPosition(r.classPosition)}</td>
                   <td className="px-1 py-1 text-gray-400">{r.carNumber ?? "—"}</td>
                   <td className="px-1 py-1 truncate max-w-[7rem]">{rowLabel(r)}</td>
+                  <td className="px-1 py-1 text-sky-300">{r.carClass ?? '—'}</td>
+                  <td className="px-1 py-1 text-right font-mono text-amber-200">{preciseLapTime(r.lastLapSeconds)}</td>
+                  <td className="px-1 py-1 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
                   <td className="px-1 py-1 text-right">{r.lap ?? "—"}</td>
                   <td className="px-1 py-1 text-right text-orange-300">{renderGap(r, false)}</td>
                   <td className="px-1 py-1 text-center text-yellow-400">{r.inPit ? "PIT" : "—"}</td>
