@@ -13,7 +13,7 @@ try {
     const { loadTrackProjection } = await import('/src/lib/pitwallTrackGeometry.ts');
     const manifest = await fetch('/tracks/layered/manifest.json').then(r => r.json());
     const rows = [];
-    const entries = visual ? manifest.tracks.filter(e => [127, 145, 168, 181, 186, 392, 414, 493, 501, 503, 580, 581].includes(e.trackId)) : manifest.tracks;
+    const entries = visual ? manifest.tracks.filter(e => [145,146,168,173,175,176,202,207,209,211,215,216,239,242,244,319].includes(e.trackId)) : manifest.tracks;
     document.body.style.cssText = 'background:#080b10;color:white;display:grid;grid-template-columns:repeat(3,1fr);font:14px sans-serif;gap:12px';
     for (const entry of entries) {
       if (rows.length % 50 === 0) console.log(`AUDIT: ${rows.length}/${manifest.count}`);
@@ -52,8 +52,8 @@ try {
   console.log(JSON.stringify(report, null, 2));
   if (report.unavailable.length || report.invalid.length) process.exitCode = 1;
   if (!visual) {
-    const expected = [143,145,146,168,173,175,176,189,202,207,209,211,214,215,216,239,242,244,319,398,399,581];
-    if (report.total !== 424 || report.projected !== 402 || JSON.stringify(report.uncalibrated.map(r => r.id)) !== JSON.stringify(expected)) {
+    const expected = [143,189,214,398,399,581];
+    if (report.total !== 424 || report.projected !== 418 || JSON.stringify(report.uncalibrated.map(r => r.id)) !== JSON.stringify(expected)) {
       console.error('Catalog coverage changed; review the exact supported/uncalibrated set.');
       process.exitCode = 1;
     }
