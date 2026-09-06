@@ -7,20 +7,21 @@ export function TrackProjection({ trackName, trackConfig, v3, live }: { trackNam
   const [geometry, setGeometry] = useState<TrackProjectionGeometry | null>(null);
   const [loadedKey, setLoadedKey] = useState('');
   const [failed, setFailed] = useState(false);
-  const key = JSON.stringify([trackName, trackConfig]);
+  const trackId = v3?.identity?.trackId;
+  const key = JSON.stringify([trackId, trackName, trackConfig]);
   const displayName = trackName.toLowerCase().endsWith(trackConfig.toLowerCase()) ? trackName : [trackName, trackConfig].filter(Boolean).join(' - ');
   useEffect(() => {
     const controller = new AbortController();
     setGeometry(null); setFailed(false);
-    void loadTrackProjection(trackName, trackConfig, controller.signal).then(result => {
+    void loadTrackProjection(trackName, trackConfig, controller.signal, trackId).then(result => {
       if (!controller.signal.aborted) { setGeometry(result); setLoadedKey(key); setFailed(result === null); }
     }).catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => controller.abort();
-  }, [trackName, trackConfig, key]);
+  }, [trackId, trackName, trackConfig, key]);
 
   const cars = live ? [...(v3?.opponents ?? [])].filter(car => car.connected !== false && !(car.isPlayer && v3?.session?.isInCar === false)) : [];
   if (live && v3?.session?.isInCar !== false && !cars.some(car => car.isPlayer) && v3?.track?.lapDistancePct != null) cars.push({ id: 'own', isPlayer: true, lapDistancePct: v3.track.lapDistancePct, carNumber: 'JIJ' });
-  if (!geometry || loadedKey !== key) return <div><TrackMap track={displayName || trackName} className="h-60 w-full object-contain" /><p className="text-[10px] text-gray-500">{failed ? 'Officiële baangeometrie niet beschikbaar; rondevoortgang blijft zichtbaar.' : 'Officiële baangeometrie laden…'}</p></div>;
+  if (!geometry || loadedKey !== key) return <div>{trackId == null && <TrackMap track={displayName || trackName} className="h-60 w-full object-contain" />}<p className="text-[10px] text-gray-500">{failed ? `Officiële baangeometrie niet beschikbaar${trackId != null ? ` voor TrackID ${trackId}` : ''}; rondevoortgang blijft zichtbaar.` : 'Officiële baangeometrie laden…'}</p></div>;
 
   return <div><svg viewBox="0 0 1920 1080" className="h-60 w-full" role="img" aria-label={`${displayName || trackName} met schematische live autoposities`}>
     <image href={geometry.mapPath} width="1920" height="1080" />
