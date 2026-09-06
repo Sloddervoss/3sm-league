@@ -27,6 +27,7 @@ const SeasonsPage = lazy(() => import("./pages/SeasonsPage.tsx"));
 const JoinPage = lazy(() => import("./pages/JoinPage.tsx"));
 const EndurancePage = lazy(() => import("./features/endurance/shell/EndurancePage.tsx"));
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
+const PitwallDeviceTestPage = lazy(() => import("./pages/PitwallDeviceTestPage.tsx"));
 const NewsEditorPage = lazy(() => import("./pages/NewsEditorPage.tsx"));
 const AuthPage = lazy(() => import("./pages/AuthPage.tsx"));
 const CommunitySupportPage = lazy(() => import("./features/community-support/public/CommunitySupportPage.tsx"));
@@ -94,6 +95,7 @@ const App = () => (
                     <Route path="/admin" element={<AdminWorkspacePrototype />} />
                     <Route path="/admin/track-intelligence" element={<TrackIntelligenceTestPage />} />
                     <Route path="/admin/track-intelligence-test" element={<TrackIntelligenceTestPage />} />
+                    <Route path="/admin/pitwall-test" element={<PitwallDeviceTestPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/koppel" element={<KoppelPage />} />
                     <Route path="/simhub-koppelen" element={<SimHubPairingPage />} />
