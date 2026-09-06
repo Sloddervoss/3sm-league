@@ -6,6 +6,16 @@ import { applySvgTransform, inferArrowDirection, orientProjectionPoints, parseSv
 const manifest = JSON.parse(readFileSync('public/tracks/layered/manifest.json', 'utf8')) as LayeredTrackManifest;
 
 describe('Pitwall projection for the complete official track catalog', () => {
+  it('accepts the observed Barcelona SDK identity with SimHub generic Full Course', () => {
+    expect(resolvePitwallTrackPath('barcelona gp', 'Full Course', manifest)).toBe('/tracks/layered/track-345.svg');
+    expect(resolvePitwallTrackPath('barcelona gp', 'National', manifest)).toBeNull();
+    expect(resolvePitwallTrackPath('barcelona', 'Full Course', manifest)).toBeNull();
+    const explicitLayout = { ...manifest, tracks: [...manifest.tracks, {
+      trackId: 9999, name: 'Barcelona - Full Course', configName: 'Full Course',
+      trackDirpath: 'barcelona\\full', path: '/tracks/layered/track-9999.svg',
+    }] };
+    expect(resolvePitwallTrackPath('barcelona gp', 'Full Course', explicitLayout)).toBeNull();
+  });
   it('resolves every SDK directory and SimHub separator variant without guessing', () => {
     for (const entry of manifest.tracks) {
       expect(entry.trackDirpath).toBeTruthy();
