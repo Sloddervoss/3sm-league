@@ -6,6 +6,28 @@ import { applySvgTransform, inferArrowDirection, orientProjectionPoints, parseSv
 const manifest = JSON.parse(readFileSync('public/tracks/layered/manifest.json', 'utf8')) as LayeredTrackManifest;
 
 describe('Pitwall projection for the complete official track catalog', () => {
+  it('resolves every SDK directory and SimHub separator variant without guessing', () => {
+    for (const entry of manifest.tracks) {
+      expect(entry.trackDirpath).toBeTruthy();
+      for (const name of [entry.trackDirpath!, entry.configNameShort!, entry.trackDirpath!.replace(/\\/g, ' ')]) {
+        expect(resolvePitwallTrackPath(name, '', manifest), name).toBe(entry.path);
+      }
+      const parts = entry.trackDirpath!.split('\\');
+      if (parts.length > 1) {
+        const config = parts.pop()!;
+        expect(resolvePitwallTrackPath(parts.join(' '), config, manifest), entry.name).toBe(entry.path);
+        expect(resolvePitwallTrackPath(entry.trackDirpath!, config, manifest), entry.name).toBe(entry.path);
+      }
+    }
+  });
+
+  it('maps Watkins Glen fullcourse to Boot and rejects conflicting layouts', () => {
+    expect(resolvePitwallTrackPath('watkinsglen 2021 fullcourse', '', manifest)).toBe('/tracks/layered/track-434.svg');
+    expect(resolvePitwallTrackPath('watkinsglen 2021', 'fullcourse', manifest)).toBe('/tracks/layered/track-434.svg');
+    expect(resolvePitwallTrackPath('watkinsglen 2021 fullcourse', 'Cup', manifest)).toBeNull();
+    expect(resolvePitwallTrackPath('watkinsglen 2021', '', manifest)).toBeNull();
+  });
+
   it('does not silently use another layout when explicit configuration disagrees', () => {
     const entry = manifest.tracks[0];
     expect(resolvePitwallTrackPath(entry.name, 'Nonexistent layout', manifest)).toBeNull();

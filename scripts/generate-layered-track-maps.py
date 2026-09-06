@@ -67,6 +67,8 @@ def main() -> None:
             "trackId": track_id,
             "name": name,
             "configName": repair_text(config.get("config_name", "")),
+            "trackDirpath": config.get("track_dirpath", ""),
+            "configNameShort": config.get("config_name_short", ""),
             "path": f"/tracks/layered/{filename}",
         })
 
