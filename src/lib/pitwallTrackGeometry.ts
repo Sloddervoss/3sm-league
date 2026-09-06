@@ -4,6 +4,7 @@ import {
   resolveLayeredTrackMap,
   type LayeredTrackManifest,
 } from '@/lib/layeredTrackMaps';
+import { loadRoadProjection, ROAD_PROJECTION_IDS } from './pitwallRoadProjection';
 
 export type TrackProjectionPoint = { x: number; y: number };
 
@@ -75,16 +76,20 @@ export async function loadTrackProjection(trackName: string, trackConfig: string
   if (!mapPath) return null;
   const response = await fetch(mapPath, { signal });
   if (!response.ok) throw new Error('track unavailable');
-  const outer = parseSvg(await response.text());
+  const mapSource = await response.text();
+  const trackId = manifest.tracks.find(entry => entry.path === mapPath)?.trackId;
+  if (trackId != null && ROAD_PROJECTION_IDS.some(id => id === trackId)) {
+    try {
+      const points = await loadRoadProjection(trackId, mapSource, signal);
+      return { mapPath, points, hasOfficialDirection: true, unavailableReason: null };
+    } catch {
+      return { mapPath, points: [], hasOfficialDirection: false, unavailableReason: 'De gecontroleerde road-baanlijn is niet beschikbaar of past niet bij deze kaart.' };
+    }
+  }
+  const outer = parseSvg(mapSource);
   const active = decodeLayer(outer, 'activeColor');
-  const finish = decodeLayer(outer, 'finishColor');
   if (!active) return null;
-
-  const finishShapes = finish ? extractShapePoints(finish) : [];
-  const finishLine = chooseFinishLine(finishShapes);
-  const arrow = chooseDirectionArrow(finishShapes, finishLine);
-  const start = finishLine ? boundsCenter(finishLine.points) : null;
-  const direction = arrow ? inferArrowDirection(arrow.points) : null;
+  const { start, direction, directionLocation } = readOfficialTrackReference(outer);
   const contours = Array.from(active.querySelectorAll('path')).filter(element => !element.closest('defs, clipPath, mask')).flatMap(element =>
     splitClosedSubpaths(element.getAttribute('d') ?? '').map(pathData => transformElementPoints(element, samplePath(pathData, SAMPLE_COUNT))),
   ).filter(points => points.length > 8 && contourLength(points) > 100);
@@ -96,7 +101,19 @@ export async function loadTrackProjection(trackName: string, trackConfig: string
     : !direction ? 'De officiële bron bevat geen bruikbare rijrichtingspijl.'
     : contours.length === 1 || contours.length > 4 || active.querySelector('clipPath, mask') ? 'Deze bijzondere layout heeft aanvullende baankalibratie nodig.'
     : null;
-  return { mapPath, points: unavailableReason ? [] : orientProjectionPoints(contour, start, direction, arrow ? boundsCenter(arrow.points) : start), hasOfficialDirection: direction !== null, unavailableReason };
+  return { mapPath, points: unavailableReason ? [] : orientProjectionPoints(contour, start, direction, directionLocation), hasOfficialDirection: direction !== null, unavailableReason };
+}
+
+/** Also used by the offline road-centerline generator, keeping one reference parser. */
+export function readOfficialTrackReference(source: string | Document) {
+  const outer = typeof source === 'string' ? parseSvg(source) : source;
+  const finish = decodeLayer(outer, 'finishColor');
+  const finishShapes = finish ? extractShapePoints(finish) : [];
+  const finishLine = chooseFinishLine(finishShapes);
+  const arrow = chooseDirectionArrow(finishShapes, finishLine);
+  const start = finishLine ? boundsCenter(finishLine.points) : null;
+  const direction = arrow ? inferArrowDirection(arrow.points) : null;
+  return { start, direction, directionLocation: arrow ? boundsCenter(arrow.points) : start };
 }
 
 function parseSvg(source: string): Document {
