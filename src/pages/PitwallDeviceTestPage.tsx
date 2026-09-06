@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cable, ChevronRight, Cpu, Lock, RefreshCw } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -25,6 +25,7 @@ import { RacePositionPanel } from "@/features/endurance/pitwall/RacePositionPane
 import { PacePanel } from "@/features/endurance/pitwall/PacePanel";
 import { StandingsWidget } from "@/features/endurance/pitwall/StandingsWidget";
 import { deriveStandings } from "@/features/endurance/pitwall/standings";
+import { newestDeviceTelemetry } from "@/features/endurance/pitwall/deviceTelemetryCache";
 
 const ONLINE_WINDOW_MS = 5 * 60_000;
 
@@ -47,6 +48,33 @@ export default function PitwallDeviceTestPage() {
   const { user, isSuperAdmin, loading, rolesLoading } = useAuth();
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
+  const queryClient = useQueryClient();
+  const realtimeAt = useRef(0);
+  useEffect(() => {
+    realtimeAt.current = 0;
+    if (!user || !isSuperAdmin || !deviceId) return;
+    let active = true;
+    const channel = supabase.channel(`pitwall-test-live-${deviceId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'simhub_telemetry_latest', filter: `device_id=eq.${deviceId}` }, change => {
+        if (!active) return;
+        if (change.eventType === 'DELETE') {
+          realtimeAt.current = 0;
+          void queryClient.invalidateQueries({ queryKey: ['pitwall-test', 'device', deviceId] });
+          return;
+        }
+        const row = change.new as SimHubDeviceDetail['telemetry'];
+        if (!row || row.device_id !== deviceId) return;
+        realtimeAt.current = Date.now();
+        queryClient.setQueryData<SimHubDeviceDetail>(['pitwall-test', 'device', deviceId], current => newestDeviceTelemetry(current, row, deviceId));
+      }).subscribe(status => {
+        if (!active) return;
+        if (status !== 'SUBSCRIBED') {
+          realtimeAt.current = 0;
+          void queryClient.invalidateQueries({ queryKey: ['pitwall-test', 'device', deviceId] }, { cancelRefetch: false });
+        }
+      });
+    return () => { active = false; void supabase.removeChannel(channel); };
+  }, [user, isSuperAdmin, deviceId, queryClient]);
 
   /* Fleet: connected SimHub profiles, online-first (same read RPC as the
    * Control Room). Refreshes so new/offline devices appear without reload. */
@@ -68,14 +96,17 @@ export default function PitwallDeviceTestPage() {
     queryFn: async (): Promise<SimHubDeviceDetail> => {
       const { data, error } = await (supabase.rpc as any)("get_simhub_device_details", { p_device_id: deviceId });
       if (error) throw error;
-      return data as SimHubDeviceDetail;
+      const result = data as SimHubDeviceDetail;
+      // A slower RPC response must not replace a newer Realtime snapshot.
+      const cached = queryClient.getQueryData<SimHubDeviceDetail>(['pitwall-test', 'device', deviceId]);
+      return newestDeviceTelemetry(result, cached?.telemetry ?? null, deviceId!) ?? result;
     },
-    refetchInterval: 2_000,
+    refetchInterval: () => Date.now() - realtimeAt.current < 3_000 ? 5_000 : 1_000,
   });
 
   const detail = detailQuery.data ?? null;
   const online = isOnline(detail);
-  const live = isTelemetryLive(detail?.telemetry?.received_at);
+  const live = !detailQuery.error && isTelemetryLive(detail?.telemetry?.received_at);
 
   const v3: V3Normalized | null = useMemo(
     () => (detail?.telemetry?.v3_normalized as V3Normalized | null) ?? null,
@@ -200,6 +231,7 @@ export default function PitwallDeviceTestPage() {
                   <span className="font-mono text-gray-400">{detail.health?.connector_version ?? "—"}</span>
                   <span className="h-4 w-px bg-white/10" />
                   <span className="text-gray-400">Laatst gezien: <span className="text-gray-200">{relTime(detail.health?.received_at)}</span></span>
+                  <span className="text-gray-400">Telemetrie: {relTime(tele?.received_at)} · {Date.now() - realtimeAt.current < 3_000 ? 'Realtime' : '1s polling'}</span>
                   {detail.endurance_team ? (
                     <span className="rounded bg-orange-500/15 px-2 py-0.5 font-bold text-orange-300 ring-1 ring-orange-500/20">
                       Gekoppeld · {((detail.endurance_event ?? {}).name as string | null) ?? "team"}
