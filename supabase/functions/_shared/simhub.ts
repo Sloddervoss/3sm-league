@@ -177,6 +177,7 @@ export type NormalizedTelemetryEnvelope = {
   authority: null;
   deviceRole: null;
   identity: {
+    trackId?: number | null;
     currentDriverId: string | null;
     currentDriverName: string | null;
     carId: string | null;
@@ -276,7 +277,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   const transportSessionId = text(root.transportSessionId, "payload.transportSessionId", 120);
 
   const identity = asRecord(root.identity, "identity");
-  exactKeys(identity, ["currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"], "identity");
+  exactKeysAllowExtra(identity, ["currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"], ["trackId"], "identity");
   const session = asRecord(root.session, "session");
   exactKeys(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], "session");
   const timing = asRecord(root.timing, "timing");
@@ -311,6 +312,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
       carName: nullableText(identity.carName, "identity.carName"),
       trackName: nullableText(identity.trackName, "identity.trackName"),
       trackConfig: nullableText(identity.trackConfig, "identity.trackConfig"),
+      trackId: identity.trackId == null ? null : numberValue(identity.trackId, "identity.trackId", { integer: true, min: 1, max: 2147483647 }),
     },
     session: {
       isInCar: booleanValue(session.isInCar, "session.isInCar"),
