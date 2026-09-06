@@ -18,6 +18,7 @@ export type ResolvedTelemetryContext = {
   result:
     | "accepted_context"
     | "accepted_context_no_race_run"
+    | "accepted_device_context"
     | "invalid_device"
     | "revoked"
     | "not_bound"
@@ -37,7 +38,8 @@ export type ResolvedTelemetryContext = {
  *  4. Check primary authority (device_role = 'primary', device_status = 'active_binding')
  *  5. Resolve active raceRun via simhub_get_active_race_run (Phase B) if bound + primary
  *
- * No-active-run is NOT a rejection — returns accepted_context_no_race_run.
+ * Valid unbound/non-primary devices are accepted without team routing.
+ * The persistence RPC rechecks binding/registration at write time.
  */
 export const resolveTelemetryContext = async (
   token: string,
@@ -96,13 +98,14 @@ export const resolveTelemetryContext = async (
   const teamId: string | null = dev.endurance_team_id ?? null;
   const isBound = eventId && teamId;
 
-  if (!isBound) {
-    return mkResult("not_bound", normalized, dev.id);
-  }
-
   const isPrimary = dev.device_role === "primary" && dev.device_status === "active_binding";
-  if (!isPrimary) {
-    return mkResult("not_authority", normalized, dev.id, eventId, teamId);
+  if (!isBound || !isPrimary) {
+    return {
+      ...mkResult("accepted_device_context", normalized, dev.id),
+      connectorId: dev.connector_id,
+      deviceName: dev.device_name,
+      ownerUserId: dev.owner_user_id,
+    };
   }
 
   // 5. Resolve active race run (Phase B)
