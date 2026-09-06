@@ -88,6 +88,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "carName", Order = 4)] public string CarName { get; set; }
         [DataMember(Name = "trackName", Order = 5)] public string TrackName { get; set; }
         [DataMember(Name = "trackConfig", Order = 6)] public string TrackConfig { get; set; }
+        [DataMember(Name = "trackId", Order = 7, EmitDefaultValue = false)] public int? TrackId { get; set; }
     }
 
     [DataContract]
