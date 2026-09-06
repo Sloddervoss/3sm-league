@@ -21,6 +21,20 @@ const SAMPLE_COUNT = 1024;
 export function resolvePitwallTrackPath(trackName: string, trackConfig: string, manifest: LayeredTrackManifest): string | null {
   const name = trackName.trim();
   const config = trackConfig.trim();
+  // SimHub may send the SDK directory instead of the localized display name.
+  // Compare complete identities only; never guess a layout from a circuit prefix.
+  const sdkKey = (value: string) => normalizeTrackName(value).replace(/[\\/\s_-]+/g, ' ');
+  const sdkMatches = manifest.tracks.filter(entry => {
+    const directory = entry.trackDirpath ?? '';
+    if (!directory) return false;
+    const parts = directory.split(/[\\/]/);
+    const layout = parts.length > 1 ? parts[parts.length - 1] : '';
+    const identities = [directory, entry.configNameShort ?? ''].filter(Boolean).map(sdkKey);
+    const complete = identities.includes(sdkKey(name));
+    const combined = config && identities.includes(sdkKey(`${name} ${config}`));
+    return (complete && (!config || sdkKey(config) === sdkKey(layout) || sdkKey(config) === sdkKey(entry.configName))) || combined;
+  });
+  if (sdkMatches.length === 1) return sdkMatches[0].path;
   const candidates = [
     config && !normalizeTrackName(name).endsWith(normalizeTrackName(config)) ? `${name} - ${config}` : '',
     name,
