@@ -2,6 +2,8 @@ export interface LayeredTrackEntry {
   trackId: number;
   name: string;
   configName: string;
+  trackDirpath?: string;
+  configNameShort?: string;
   path: string;
 }
 
