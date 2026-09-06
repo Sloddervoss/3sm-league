@@ -32,7 +32,16 @@ export function resolvePitwallTrackPath(trackName: string, trackConfig: string, 
     const identities = [directory, entry.configNameShort ?? ''].filter(Boolean).map(sdkKey);
     const complete = identities.includes(sdkKey(name));
     const combined = config && identities.includes(sdkKey(`${name} ${config}`));
-    return (complete && (!config || sdkKey(config) === sdkKey(layout) || sdkKey(config) === sdkKey(entry.configName))) || combined;
+    // SimHub can attach its generic "Full Course" label to a complete SDK ID.
+    // Only tolerate it when this circuit has no actual layout with that name.
+    const circuitKey = sdkKey(parts.slice(0, -1).join(' '));
+    const genericFullCourse = complete && parts.length > 1 && sdkKey(config) === 'full course' &&
+      !manifest.tracks.some(other => {
+        const otherParts = (other.trackDirpath ?? '').split(/[\\/]/);
+        return sdkKey(otherParts.slice(0, -1).join(' ')) === circuitKey &&
+          sdkKey(other.configName) === 'full course';
+      });
+    return (complete && (!config || genericFullCourse || sdkKey(config) === sdkKey(layout) || sdkKey(config) === sdkKey(entry.configName))) || combined;
   });
   if (sdkMatches.length === 1) return sdkMatches[0].path;
   const candidates = [
