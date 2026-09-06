@@ -45,6 +45,7 @@ export interface V3Normalized {
   transportSessionId?: string;
   vehicle?: VehicleTelemetry | null;
   identity?: {
+    trackId?: number | null;
     currentDriverId?: string;
     currentDriverName?: string;
     carId?: string;

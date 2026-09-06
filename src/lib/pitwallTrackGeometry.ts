@@ -18,7 +18,11 @@ export interface TrackProjectionGeometry {
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SAMPLE_COUNT = 1024;
 
-export function resolvePitwallTrackPath(trackName: string, trackConfig: string, manifest: LayeredTrackManifest): string | null {
+export function resolvePitwallTrackPath(trackName: string, trackConfig: string, manifest: LayeredTrackManifest, trackId?: number | null): string | null {
+  if (trackId != null) {
+    if (!Number.isSafeInteger(trackId) || trackId <= 0) return null;
+    return resolveLayeredTrackMap('', manifest, trackId);
+  }
   const name = trackName.trim();
   const config = trackConfig.trim();
   // SimHub may send the SDK directory instead of the localized display name.
@@ -92,10 +96,10 @@ export function orientProjectionPoints(
 }
 
 /** Reads only the shipped official layered SVG selected by the authoritative manifest. */
-export async function loadTrackProjection(trackName: string, trackConfig: string, signal: AbortSignal): Promise<TrackProjectionGeometry | null> {
+export async function loadTrackProjection(trackName: string, trackConfig: string, signal: AbortSignal, officialTrackId?: number | null): Promise<TrackProjectionGeometry | null> {
   const manifest = await loadLayeredTrackRuntime();
   if (!manifest || signal.aborted) return null;
-  const mapPath = resolvePitwallTrackPath(trackName, trackConfig, manifest);
+  const mapPath = resolvePitwallTrackPath(trackName, trackConfig, manifest, officialTrackId);
   if (!mapPath) return null;
   const response = await fetch(mapPath, { signal });
   if (!response.ok) throw new Error('track unavailable');

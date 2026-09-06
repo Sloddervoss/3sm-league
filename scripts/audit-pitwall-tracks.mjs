@@ -18,7 +18,7 @@ try {
     for (const entry of entries) {
       if (rows.length % 50 === 0) console.log(`AUDIT: ${rows.length}/${manifest.count}`);
       try {
-        const geometry = await loadTrackProjection(entry.trackDirpath ?? entry.name, entry.trackDirpath ? '' : entry.configName, new AbortController().signal);
+        const geometry = await loadTrackProjection('SDK display label', 'Full Course', new AbortController().signal, entry.trackId);
         if (entry.trackId === 127 && (!geometry?.points.length || geometry.points[8].y <= geometry.points[0].y)) throw new Error('Road Atlanta direction regression');
         if (entry.trackId === 580 && (!geometry?.points.length || Math.hypot(geometry.points[0].x - 1424, geometry.points[0].y - 640) > 50)) throw new Error('Adelaide symbol/use start-line regression');
         if (visual && geometry) {
