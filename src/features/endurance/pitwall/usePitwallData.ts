@@ -92,13 +92,13 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
   const rpcQuery = useQuery({
     queryKey: ["pitwall", "rpc", eventId, selectedTeamId, actorId],
     enabled: Boolean(eventId) && Boolean(selectedTeamId),
-    refetchInterval: 3_000,
+    refetchInterval: 1_000,
     queryFn: async () => await fetchPitwallData(eventId, selectedTeamId!) as PitwallRpcResponse,
   });
 
   const rpcData = rpcQuery.data;
   const receivedAt = rpcData?.telemetry?.received_at;
-  const isLive = !rpcQuery.error && typeof receivedAt === "string" && now - Date.parse(receivedAt) < 30_000;
+  const isLive = !rpcQuery.error && typeof receivedAt === "string" && now - Date.parse(receivedAt) < 10_000;
   const loading = rpcQuery.isLoading;
   const error = rpcQuery.error;
 
