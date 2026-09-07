@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
+import { findPublishedSpecialSeason, type PublishedSeason } from "./discovery.ts";
 import {
   discoverCombinedSeriesEvent,
   discoverSeriesRaces,
@@ -123,6 +124,22 @@ Deno.serve(async (request) => {
       ? discoverUpcomingSpecialEvents(calendarHtml)
       : mapping.map((entry) => entry.seed);
     const mappingBySourceKey = new Map(mapping.map((entry) => [entry.seed.sourceKey, entry]));
+    // Existing approved catalog entries must keep refreshing even before a
+    // season mapping is published. Never expand the catalog to unknown events.
+    const { data: knownEvents, error: knownError } = await service.from("endurance_iracing_events")
+      .select("id,source_key,local_class_ids,cars,availability_status,event_end_date").eq("active", true);
+    if (knownError) throw knownError;
+    const knownByKey = new Map((knownEvents ?? []).map((event) => [event.source_key, event]));
+    if (calendarHtml) {
+      const discoveredKeys = new Set(discoveredSeeds.map((seed) => seed.sourceKey));
+      for (const event of knownEvents ?? []) {
+        if (event.source_key.includes(":week") || mappingBySourceKey.get(event.source_key)?.kind === "series") continue;
+        if (event.event_end_date >= new Date().toISOString().slice(0, 10) && !discoveredKeys.has(event.source_key)) {
+          errors.push(`${event.source_key}: verwacht event ontbreekt op officiële kalender; bestaande data behouden`);
+        }
+      }
+    }
+    let publishedSeasons: PublishedSeason[] | null = null;
     let clientPromise: ReturnType<typeof createIRacingClient> | null = null;
     const dataClient = async () => {
       clientPromise ??= createIRacingClient();
@@ -213,7 +230,9 @@ Deno.serve(async (request) => {
           .upsert(slotPayload, { onConflict: "catalog_event_id,source_slot_key" });
         if (slotError) throw slotError;
         if (!previous) counts.slots_inserted += 1;
-        else if (previous.session_start_at !== slot.sessionStartAt || previous.estimated_race_start_at !== slot.estimatedRaceStartAt) counts.slots_updated += 1;
+        else if (Date.parse(previous.session_start_at) !== Date.parse(slot.sessionStartAt)
+          || (previous.estimated_race_start_at ? Date.parse(previous.estimated_race_start_at) : null)
+            !== (slot.estimatedRaceStartAt ? Date.parse(slot.estimatedRaceStartAt) : null)) counts.slots_updated += 1;
       }
       if (entry && calendarHtml && normalized.availabilityStatus === "exact_slots" && normalized.slots.length > 0) {
         const currentKeys = normalized.slots.map((slot) => slot.sourceSlotKey);
@@ -248,6 +267,7 @@ Deno.serve(async (request) => {
         const client = await dataClient();
         const seasonsRaw = await client.fetchData("/data/series/seasons") as unknown;
         const seasonsArr = Array.isArray(seasonsRaw) ? seasonsRaw : seasonsRaw ? Object.values(seasonsRaw) : [];
+        publishedSeasons = seasonsArr as PublishedSeason[];
         const seasonBySeasonId = new Map(seasonsArr
           .filter((s): s is { season_id: number } => Boolean(s && typeof s === "object" && (s as { season_id?: unknown }).season_id))
           .map((s) => [Number((s as { season_id: number }).season_id), s as { season_id: number; car_class_ids?: number[] }]));
@@ -295,12 +315,41 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Losse special events: uitsluitend events op Vincents vastgelegde lijst
-    // (gemapte source keys). Onbekende/ongemapte events worden niet geïmporteerd.
+    // Losse special events: gemapte of al bestaande goedgekeurde catalogusrijen.
+    // Onbekende/ongemapte events worden niet geïmporteerd.
     for (const discoveredSeed of discoveredSeeds) {
       try {
-        const entry = mappingBySourceKey.get(discoveredSeed.sourceKey);
-        if (!entry) continue;
+        let entry = mappingBySourceKey.get(discoveredSeed.sourceKey);
+        const known = knownByKey.get(discoveredSeed.sourceKey);
+        if (!entry && !known) continue;
+        if (!entry) {
+          if (!publishedSeasons) {
+            const raw = await (await dataClient()).fetchData("/data/series/seasons");
+            publishedSeasons = (Array.isArray(raw) ? raw : Object.values(raw ?? {})) as PublishedSeason[];
+          }
+          const season = findPublishedSpecialSeason(discoveredSeed, publishedSeasons);
+          if (season) {
+            entry = { kind: "special", seasonId: season.season_id, seriesId: season.series_id,
+              seed: discoveredSeed, localClassIds: known.local_class_ids ?? [],
+              localCarMap: Object.fromEntries((known.cars ?? []).filter((car: { localCarId?: string }) => car.localCarId)
+                .map((car: { sourceKey: string; localCarId: string }) => [car.sourceKey, car.localCarId])),
+            };
+          } else {
+            // Refresh verified calendar fields only. Preserve existing API data,
+            // car mappings and slots; no fabricated times or cleared links.
+            const now = new Date().toISOString();
+            const { error } = await service.from("endurance_iracing_events").update({
+              name: discoveredSeed.name, event_start_date: discoveredSeed.dateStart,
+              event_end_date: discoveredSeed.dateEnd, poster_url: discoveredSeed.posterUrl,
+              ...(discoveredSeed.circuit ? { circuit: discoveredSeed.circuit } : {}),
+              last_seen_at: now, source_updated_at: now,
+            }).eq("id", known.id);
+            if (error) throw error;
+            counts.events_seen += 1;
+            if (known.availability_status === "exact_slots") errors.push(`${discoveredSeed.sourceKey}: gepubliceerde season ontbreekt; oude slots behouden`);
+            continue;
+          }
+        }
         // Serie-buckets worden door de series-loop geïmporteerd (per-week events
         // voor niet-combined, één combined-event voor combined). Hier zou de bucket
         // anders als losse actieve kaart verschijnen naast zijn eigen week-rijen.
@@ -331,7 +380,7 @@ Deno.serve(async (request) => {
       error_summary: errors.length ? errors.join(" | ").slice(0, 1000) : null,
       source_modified_at: calendarModifiedAt,
     }).eq("id", run.id);
-    return json({ status, ...counts, finished_at: finishedAt }, status === "failed" ? 502 : 200);
+    return json({ status, ...counts, finished_at: finishedAt }, status === "success" ? 200 : 502);
   } catch (error) {
     const finishedAt = new Date().toISOString();
     await service.from("endurance_iracing_sync_runs").update({
