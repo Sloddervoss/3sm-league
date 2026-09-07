@@ -38,9 +38,13 @@ gecombineerde Nürburgring-kaart) worden verborgen zolang het event actief is. H
 geselecteerde/geactiveerde slot blijft altijd zichtbaar zodat een kaart waarop teams
 zijn geregistreerd nooit leeg raakt. Zie `upcomingCatalogSlots()`.
 
-Alleen events met een expliciete mapping worden geïmporteerd. Events op de officiële
-Special Events-pagina die niet in de mapping staan, worden overgeslagen (geen volledige
-lijst, uitsluitend Vincents vastgelegde endurance-series en -races).
+Events met een expliciete mapping worden geïmporteerd. Sinds de dagelijkse-refresh-reparatie
+worden ook al bestaande actieve catalogusevents opnieuw gecontroleerd. Voor die goedgekeurde
+events wordt een nieuw gepubliceerd season alleen gebruikt bij een unieke exacte naam/jaar-match
+(een voorgevoegd jaartal en `Presented by`-sponsor mogen verschillen). Ambiguïteit faalt gesloten.
+Zonder gepubliceerd season worden alleen de officiële kalendergegevens bijgewerkt; bestaande
+API-data, lokale automappings en slots blijven behouden. Onbekende events worden niet toegevoegd.
+Een gedeeltelijk mislukte sync retourneert HTTP 502 zodat ook systemd de fout ziet.
 
 Voorbeeldmapping (geen secret):
 

@@ -81,8 +81,9 @@ describe("iRacing Special Events sync security contract", () => {
     expect(normalizer).toContain("formatWeekLabel");
   });
 
-  it("importeert losse special events uitsluitend uit Vincents gemapte lijst", () => {
-    expect(source).toContain("if (!entry) continue;");
+  it("ververst ook bestaande goedgekeurde events zonder onbekende events toe te voegen", () => {
+    expect(source).toContain("if (!entry && !known) continue;");
+    expect(source).toContain("findPublishedSpecialSeason(discoveredSeed, publishedSeasons)");
     expect(source).toContain("Onbekende/ongemapte events worden niet geïmporteerd");
   });
 
