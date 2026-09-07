@@ -38,6 +38,7 @@ type RaceTimeDescriptor = {
   session_times?: string[];
   repeating?: boolean;
   first_session_time?: string;
+  session_minutes?: number;
 };
 
 export type IRacingSchedule = {
@@ -337,7 +338,9 @@ export async function normalizeSpecialEvent(seed: SpecialEventSeed, input?: IRac
   const slots = Array.from(starts).sort().map((sessionStartAt) => ({
     sourceSlotKey: `${seed.sourceKey}:${sessionStartAt}`,
     sessionStartAt,
-    ...timing(schedule ?? {}, sessionStartAt),
+    ...timing({ ...schedule, session_minutes: schedule.session_minutes ?? schedule.race_time_descriptors
+      ?.find((descriptor) => descriptor.session_times?.some((raw) => utcIso(raw) === sessionStartAt)
+        || (!descriptor.repeating && descriptor.first_session_time && utcIso(descriptor.first_session_time) === sessionStartAt))?.session_minutes }, sessionStartAt),
     label: null,
     source: "iracing_data_api",
   }));
