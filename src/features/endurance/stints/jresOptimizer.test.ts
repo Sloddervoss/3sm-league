@@ -13,18 +13,9 @@ describe("jresOptimizer marshalling", () => {
     for (let i = 1; i < segs.length; i++) expect(segs[i].startTime).toBe(segs[i - 1].endTime);
   });
 
-  it("rounds segments to whole-hour boundaries to avoid the JRES half-hour heap crash", () => {
-    const state = createEnduranceSeed();
-    // Race die NIET op een heel uur start (JRES crasht anders op halve uren).
-    const event = { ...state.events[0], startAt: "2026-09-12T14:37:00.000Z", endAt: "2026-09-12T20:23:00.000Z" };
-    const segs = buildJresStints(event, 90);
-    expect(segs.length).toBeGreaterThan(0);
-    for (const s of segs) {
-      expect(s.startTime.endsWith(":00:00.000Z")).toBe(true); // heel uur
-      expect(s.endTime.endsWith(":00:00.000Z")).toBe(true); // heel uur
-    }
-    // dekt het (afgeronde) volledige venster zonder gaten
-    for (let i = 1; i < segs.length; i++) expect(segs[i].startTime).toBe(segs[i - 1].endTime);
+  it("rejects partial-hour solver inputs instead of dropping race coverage", () => {
+    const event = { ...createEnduranceSeed().events[0], startAt: "2026-09-12T14:37:00.000Z", endAt: "2026-09-12T20:23:00.000Z" };
+    expect(() => buildJresStints(event, 90)).toThrow(/exacte minuten/);
   });
 
   it("discretiseert tankduur naar beneden zodat een stint de tankduur nooit overschrijdt (bevinding 8)", () => {
@@ -140,7 +131,7 @@ describe("jresOptimizer marshalling", () => {
     const k11 = keyFor("2026-07-25T11:00:00.000Z");
     const k15 = keyFor("2026-07-25T15:00:00.000Z");
     expect(jaimy[k11]).toBe("Preferred");
-    expect(jaimy[k15]).toBe("Available");
+    expect(jaimy[k15]).toBe("Unavailable"); // available only from 15:30 does not cover this hour
   });
 
   it("enforceConsecutiveLimits herverdeelt overtollige aaneengesloten stints naar een coureur binnen diens eigen limiet", () => {
@@ -228,21 +219,21 @@ describe("jresOptimizer marshalling", () => {
 describe("runOptimize orchestration", () => {
   const seed = () => {
     const state = createEnduranceSeed();
-    return { state, event: state.events[0], teamId: "team-orange-31", members: ["user-jaimy", "user-sven"] };
+    return { state: { ...state, availability: [] }, event: { ...state.events[0], startAt: "2026-01-01T12:00:00.000Z", endAt: "2026-01-01T14:00:00.000Z" }, teamId: "team-orange-31", members: ["user-jaimy", "user-sven"] };
   };
   const okFetcher: OptimizerFetcher = async () => ({
     status: "ok",
     output: {
       schedule: [
-        { id: 1, driver: "user-jaimy", spotter: "N/A", startTime: "2026-01-01T12:00:00Z", endTime: "2026-01-01T13:30:00Z" },
-        { id: 2, driver: "user-sven", spotter: "N/A", startTime: "2026-01-01T13:30:00Z", endTime: "2026-01-01T15:00:00Z" },
+        { id: 1, driver: "user-jaimy", spotter: "N/A", startTime: "2026-01-01T12:00:00Z", endTime: "2026-01-01T13:00:00Z" },
+        { id: 2, driver: "user-sven", spotter: "N/A", startTime: "2026-01-01T13:00:00Z", endTime: "2026-01-01T14:00:00Z" },
       ],
     },
   });
 
   it("returns stints on ok from the fetcher", async () => {
     const { state, event, teamId, members } = seed();
-    const r = await runOptimize(state, event, members, teamId, { tankMinutes: 90 }, okFetcher);
+    const r = await runOptimize(state, event, members, teamId, { tankMinutes: 60 }, okFetcher);
     expect(r.ok).toBe(true);
     expect(r.stints).toHaveLength(2);
     expect(r.stints[0].driverId).toBe("user-jaimy");
@@ -252,7 +243,7 @@ describe("runOptimize orchestration", () => {
   it("surfaces infeasible from the fetcher", async () => {
     const { state, event, teamId, members } = seed();
     const bad: OptimizerFetcher = async () => ({ status: "infeasible", output: { schedule: [], diagnosis: ["conflict"] } });
-    const r = await runOptimize(state, event, members, teamId, { tankMinutes: 90 }, bad);
+    const r = await runOptimize(state, event, members, teamId, { tankMinutes: 60 }, bad);
     expect(r.ok).toBe(false);
     expect(r.stints).toHaveLength(0);
     expect(r.message).toContain("Geen geldige planning");
@@ -261,7 +252,7 @@ describe("runOptimize orchestration", () => {
   it("surfaces error from the fetcher", async () => {
     const { state, event, teamId, members } = seed();
     const bad: OptimizerFetcher = async () => ({ status: "error", error: "boom" });
-    const r = await runOptimize(state, event, members, teamId, { tankMinutes: 90 }, bad);
+    const r = await runOptimize(state, event, members, teamId, { tankMinutes: 60 }, bad);
     expect(r.ok).toBe(false);
     expect(r.message).toContain("boom");
   });
@@ -276,7 +267,7 @@ describe("runOptimize orchestration", () => {
   it("propagates scheduler/network exceptions", async () => {
     const { state, event, teamId, members } = seed();
     const bad: OptimizerFetcher = async () => { throw new Error("net down"); };
-    await expect(runOptimize(state, event, members, teamId, { tankMinutes: 90 }, bad)).rejects.toThrow("net down");
+    await expect(runOptimize(state, event, members, teamId, { tankMinutes: 60 }, bad)).rejects.toThrow("net down");
   });
 
   it("E2E: een coureur met maxConsecutiveStints=1 (of NULL/ongelimiteerd=default 1) krijgt na runOptimize nooit 2 stints achter elkaar", async () => {
@@ -297,7 +288,7 @@ describe("runOptimize orchestration", () => {
     ];
     const fetcher: OptimizerFetcher = async () => ({ status: "ok", output: { schedule: sched } });
     const members = ["user-jaimy", "user-sven", "user-steven"];
-    const r = await runOptimize(state, event, members, "team-orange-31", {
+    const r = await runOptimize({ ...state, availability: [] }, event, members, "team-orange-31", {
       tankMinutes: 60,
       driverOpts: {
         "user-jaimy": { maxConsecutiveStints: 2 },

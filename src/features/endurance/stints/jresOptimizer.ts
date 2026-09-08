@@ -1,3 +1,6 @@
+import { coversAvailability } from "../core/availabilityCoverage";
+import { generateStints } from "./stintGenerator";
+import { validatePlan } from "./planValidation";
 import type { EnduranceEvent, EnduranceStint, StintPlanningState } from "../core/types";
 import { makeId } from "../core/actions";
 
@@ -36,6 +39,7 @@ export interface DriverOpts {
   maxConsecutiveStints?: number | null;
   minRestMinutes?: number | null;
   maxTotalMinutes?: number | null;
+  maxStintMinutes?: number | null;
   willingToStart?: boolean;
 }
 
@@ -63,8 +67,9 @@ export function buildJresStints(event: EnduranceEvent, tankMinutes: number): { i
   const start = new Date(event.startAt).getTime();
   const end = new Date(event.endAt).getTime();
   // Rond het racevenster af naar hele uren (JRES vereist uurlijkse discretisatie).
-  const startRounded = Math.ceil(start / 3_600_000) * 3_600_000;
-  const endRounded = Math.floor(end / 3_600_000) * 3_600_000;
+  if (start % 3_600_000 || end % 3_600_000 || tankMinutes < 60 || !Number.isFinite(tankMinutes)) throw new Error("Deze race vereist planning op exacte minuten.");
+  const startRounded = start;
+  const endRounded = end;
   if (endRounded <= startRounded) return [];
   // Tankduur discretiseren naar een geheel aantal stints van hele uren. Één uur is
   // de kleinste JRES-granulariteit. We ronden NAAR BENEDEN af op het dichtstbijzijnde
@@ -110,7 +115,7 @@ export function buildJresAvailability(state: Pick<StintPlanningState, "availabil
         // inclusief gaten én 'unavailable'/'avoid'-blokken — is 'Unavailable'.
         // Zo wordt een coureur nooit op onbeschikbare uren gepland en blijft
         // 'leeg invullen = altijd beschikbaar' alleen voor wie géén blokken zet.
-        const okHit = blocks.find((b) => overlap(b, s.startTime, s.endTime) && (b.type === "available" || b.type === "preferred"));
+        const okHit = coversAvailability(blocks, userId, s.startTime, s.endTime) ? blocks.find((b) => overlap(b, s.startTime, s.endTime) && (b.type === "available" || b.type === "preferred")) : undefined;
         map[k] = !okHit ? "Unavailable" : okHit.type === "preferred" ? "Preferred" : "Available";
       }
     }
@@ -196,7 +201,7 @@ export function parseJresOutput(output: JresOutput, event: EnduranceEvent, teamI
   return (output?.schedule ?? []).map((entry) => {
     const start = new Date(entry.startTime).getTime();
     const end = new Date(entry.endTime).getTime();
-    const pace = 130;
+    const pace = 0;
     return {
       id: makeId("stint"),
       eventId: event.id,
@@ -206,8 +211,8 @@ export function parseJresOutput(output: JresOutput, event: EnduranceEvent, teamI
       originalEndAt: entry.endTime,
       actualStartAt: entry.startTime,
       actualEndAt: entry.endTime,
-      expectedLaps: Math.max(1, Math.floor((end - start) / 1000 / pace)),
-      fuelLitres: 102,
+      expectedLaps: pace > 0 ? Math.floor((end - start) / 1000 / pace) : 0,
+      fuelLitres: 0,
       tyreChange: false,
       doubleStint: false,
       notes: "Optimale planning (JRES/HiGHS)",
@@ -318,6 +323,16 @@ export async function runOptimize(
   if (!memberUserIds.length || options.tankMinutes < 5) {
     return { ok: false, message: "Voeg eerst coureurs toe aan deze auto.", stints: [] };
   }
+  if (!Number.isFinite(options.tankMinutes) || !Number.isFinite(Date.parse(event.startAt)) || !Number.isFinite(Date.parse(event.endAt)) || Date.parse(event.endAt) <= Date.parse(event.startAt)) return { ok: false, message: "Controleer de tankduur en de start- en eindtijd van de race.", stints: [] };
+  // The external solver only supports whole hours. Preserve exact race times
+  // and tank limits by using the validated local planner for other inputs.
+  if (Date.parse(event.startAt) % 3_600_000 || Date.parse(event.endAt) % 3_600_000 || options.tankMinutes % 60 || Object.values(options.driverOpts ?? {}).some(l => l.maxStintMinutes != null && l.maxStintMinutes % 60 !== 0)) {
+    try {
+      const stints = generateStints({ availability: state.availability, paceEntries: [], teamMembers: memberUserIds.map(userId => ({ id: userId, userId, teamId, role: "driver" as const })) }, event, teamId, options.tankMinutes, { driverLimits: options.driverOpts, firstStintDriver: options.firstStintDriver, mode: "comfort" });
+      const errors = validatePlan(state, event, stints, memberUserIds, options.driverOpts, options.tankMinutes);
+      return errors.length ? { ok: false, message: errors.join(" "), stints: [] } : { ok: true, message: "Voorstel berekend op exacte racetijden en tankduur; controleer het voor toepassen.", stints };
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : "Geen geldige planning mogelijk.", stints: [] }; }
+  }
   const input = marshalJresInput(state, event, memberUserIds, {
     tankMinutes: options.tankMinutes,
     driverOpts: options.driverOpts,
@@ -338,5 +353,7 @@ export async function runOptimize(
     input.availability,
     memberUserIds
   );
+  const errors = validatePlan(state, event, stints, memberUserIds, options.driverOpts, options.tankMinutes);
+  if (errors.length) return { ok: false, message: `Berekende planning afgewezen: ${errors.join(" ")}`, stints: [] };
   return { ok: true, message: `Optimale planning opgehaald (${stints.length} stints).`, stints };
 }

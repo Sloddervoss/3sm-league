@@ -1,8 +1,10 @@
+import { assertSameSiteBuild } from "./seo-release-guard.mjs";
+import { fileURLToPath } from "node:url";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const repoRoot = resolve(new URL('..', import.meta.url).pathname);
+const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const distDir = join(repoRoot, 'dist');
 const webroot = process.env.WEBROOT || '/var/www/3sm';
 const manifestPath = join(distDir, '.route-html-manifest.json');
@@ -35,6 +37,11 @@ const copyFileIfChanged = (from, to) => {
 assertReadableFile(join(distDir, 'index.html'), 'Build artifact dist/index.html');
 assertReadableFile(generatorPath, 'Route HTML generator');
 
+const assertActiveBuild = () => {
+  assertReadableFile(join(webroot, 'index.html'), 'Live index.html');
+  assertSameSiteBuild(readFileSync(join(distDir, 'index.html'), 'utf8'), readFileSync(join(webroot, 'index.html'), 'utf8'));
+};
+assertActiveBuild();
 const previousManifest = readManifest();
 
 const result = spawnSync(process.execPath, [generatorPath], {
@@ -46,6 +53,7 @@ if (result.status !== 0) {
   throw new Error(`generate-route-html.mjs faalde met exit code ${result.status}`);
 }
 
+assertActiveBuild();
 const nextManifest = readManifest();
 if (!nextManifest) throw new Error('Route manifest is niet gegenereerd');
 

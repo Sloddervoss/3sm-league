@@ -1,3 +1,4 @@
+import { coversAvailability } from "./availabilityCoverage";
 import type {
   AvailabilityBlock,
   EnduranceEvent,
@@ -80,7 +81,7 @@ export const availabilityForStint = (blocks: AvailabilityBlock[], stint: Enduran
   const matching = blocks.filter((block) => block.userId === stint.driverId && rangesOverlap(block.startAt, block.endAt, stint.actualStartAt, stint.actualEndAt));
   if (matching.some((block) => block.type === "unavailable")) return "hard" as const;
   if (matching.some((block) => block.type === "uncertain" || block.type === "avoid")) return "soft" as const;
-  if (matching.some((block) => block.type === "available" || block.type === "preferred")) return "covered" as const;
+  if (blocks.some(block => block.userId === stint.driverId)) return coversAvailability(blocks, stint.driverId, stint.actualStartAt, stint.actualEndAt) ? "covered" as const : "hard" as const;
   return "missing" as const;
 };
 
@@ -93,13 +94,17 @@ export const planningWarnings = (state: Pick<EnduranceState, "stints" | "availab
   const warnings: PlanningWarning[] = [];
 
   stints.forEach((stint, index) => {
+    const race = state.events.find(e => e.id === eventId);
+    const start = Date.parse(stint.actualStartAt), end = Date.parse(stint.actualEndAt);
+    if (!stint.driverId) warnings.push({ id: `driver-${stint.id}`, level: "hard", message: "Kies een coureur voor deze stint.", stintId: stint.id });
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || (race && (start < Date.parse(race.startAt) || end > Date.parse(race.endAt)))) warnings.push({ id: `bounds-${stint.id}`, level: "hard", message: "Stint valt buiten de race of heeft een ongeldige duur.", stintId: stint.id });
     const availability = availabilityForStint(state.availability.filter((block) => block.eventId === eventId), stint);
     if (availability === "hard") warnings.push({ id: `unavailable-${stint.id}`, level: "hard", message: "Coureur is niet beschikbaar tijdens deze stint.", stintId: stint.id });
     if (availability === "soft" || availability === "missing") warnings.push({ id: `uncertain-${stint.id}`, level: "soft", message: availability === "missing" ? "Geen beschikbaarheid doorgegeven voor deze stint." : "Stint valt in een onzekere of ongewenste periode.", stintId: stint.id });
 
     stints.slice(index + 1).forEach((other) => {
-      if (other.driverId === stint.driverId && rangesOverlap(stint.actualStartAt, stint.actualEndAt, other.actualStartAt, other.actualEndAt)) {
-        warnings.push({ id: `overlap-${stint.id}-${other.id}`, level: "hard", message: "Coureur is dubbel ingepland.", stintId: stint.id });
+      if ((other.teamId === stint.teamId || other.driverId === stint.driverId) && rangesOverlap(stint.actualStartAt, stint.actualEndAt, other.actualStartAt, other.actualEndAt)) {
+        warnings.push({ id: `overlap-${stint.id}-${other.id}`, level: "hard", message: other.teamId === stint.teamId ? "Deze auto heeft overlappende stints." : "Coureur is dubbel ingepland.", stintId: stint.id });
       }
     });
   });

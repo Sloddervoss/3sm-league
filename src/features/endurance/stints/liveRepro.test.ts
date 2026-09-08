@@ -138,7 +138,7 @@ describe("live 3-rijders repro", () => {
     // swimlane-structuur + drag-naar-andere-rij (coureur) + detailpaneel
     expect(timeline).toContain("laneDrivers");
     expect(timeline).toContain("laneDrop");
-    expect(timeline).toContain("onAssign(stint, targetDriverId)");
+    expect(timeline).toContain("onMove(stint, new Date(start + effectiveMinutes * 60_000).toISOString(), targetDriverId)");
     expect(timeline).toContain("Klik een stint aan voor details");
     expect(timeline).toContain('aria-label="Stint starttijd"');
     // detail-handlers gekoppeld in de planner
@@ -172,7 +172,7 @@ describe("live 3-rijders repro", () => {
     expect(planner).toContain("availability={availability}");
     // generator: per coureur, géén eigen blokken = altijd beschikbaar
     expect(generator).toContain("ownBlocks");
-    expect(generator).toContain("if (!ownBlocks.length) return true;");
+    expect(generator).toContain("coversAvailability(ownBlocks");
     // optimizer: per coureur, géén eigen blokken = Available
     expect(optimizer).toContain("if (!blocks.length) {");
   });

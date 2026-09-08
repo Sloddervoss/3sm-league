@@ -32,6 +32,7 @@ Unit=3sm-seo-refresh.service
 WantedBy=timers.target
 UNIT
 
+bash "$(dirname "${BASH_SOURCE[0]}")/pin-seo-release.sh"
 systemctl daemon-reload
 systemctl enable --now 3sm-seo-refresh.timer
 systemctl list-timers 3sm-seo-refresh.timer --no-pager

@@ -1,3 +1,4 @@
+import { utcToZonedInput, zonedInputToUtc } from "../core/time";
 import { useMemo, useRef, useState } from "react";
 import { ChevronsRight, Copy, Minus, Plus, Trash2 } from "lucide-react";
 import { availabilityForStint, formatAmsterdam } from "../core/selectors";
@@ -11,41 +12,6 @@ const laneHex = ["#f97316", "#38bdf8", "#a78bfa", "#34d399", "#fb7185"];
 // Rand-slepen en drop meten tegen de tijdlijn-track ná deze kolom.
 const LANE_LABEL_PX = 120;
 
-// Amsterdam-klok (vaste zone, niet browser-lokaal) voor het Starttijd-veld.
-// De app toont overal Europe/Amsterdam; dit veld deed dat niet (bevinding 1).
-const amsterdamParts = (iso: string) => {
-  const dtf = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Amsterdam",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
-  });
-  const parts = dtf.formatToParts(new Date(iso));
-  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
-  return { y: Number(pick("year")), m: Number(pick("month")), d: Number(pick("day")), hour: Number(pick("hour")), minute: Number(pick("minute")) };
-};
-
-const toLocalInput = (iso: string) => {
-  const p = amsterdamParts(iso);
-  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
-};
-
-// UTC-offset (minuten) die Amsterdam op dat moment hanteert: (Amsterdam-klok als UTC) − (echte UTC).
-const amsterdamOffsetMinutes = (utcIso: string): number => {
-  const p = amsterdamParts(utcIso);
-  const wallAsUtc = Date.UTC(p.y, p.m - 1, p.d, p.hour, p.minute);
-  return (wallAsUtc - new Date(utcIso).getTime()) / 60_000;
-};
-
-// Bouwt een UTC-instant zodanig dat de Amsterdam-klok die HH:mm toont op event.startAt z'n datum.
-const fromLocalInput = (iso: string, time: string): string => {
-  const [hh = 0, mm = 0] = time.split(":").map(Number);
-  const base = amsterdamParts(iso); // Amsterdam-datum van de eventstart
-  const wallMs = Date.UTC(base.y, base.m - 1, base.d, hh, mm);
-  // Offset bepaal je op een raad-UTC ±2u; daarna exact.
-  const off = amsterdamOffsetMinutes(new Date(wallMs - 120 * 60_000).toISOString());
-  return new Date(wallMs - off * 60_000).toISOString();
-};
-
 /**
  * StintTimeline met swimlanes. Iedere coureur heeft een eigen rij, waardoor een
  * 24u-planning (16+ stints over één balk) wél schaalbaar en bewerkbaar blijft:
@@ -55,8 +21,9 @@ const fromLocalInput = (iso: string, time: string): string => {
  *   knopjes om precies aan te passen, te verlengen, te kopiëren of te wissen.
  * Alle tijden blijven op snapronde (snapMinutes) en binnen de race.
  */
-export const StintTimeline = ({ event, stints, personas, availability, editable, snapMinutes, onMove, onResize, onDelete, onCopy, onExtend, onAssign, onResizeEdge }: { event: EnduranceEvent; stints: EnduranceStint[]; personas: EndurancePersona[]; availability: AvailabilityBlock[]; editable: boolean; snapMinutes: number; onMove: (stint: EnduranceStint, startAt: string) => void; onResize: (stint: EnduranceStint, deltaMinutes: number) => void; onDelete: (id: string) => void; onCopy: (stint: EnduranceStint) => void; onExtend: (stint: EnduranceStint) => void; onAssign: (stint: EnduranceStint, driverId: string) => void; onResizeEdge: (stint: EnduranceStint, startAt: string, endAt: string) => void }) => {
+export const StintTimeline = ({ event, stints, personas, availability, editable, snapMinutes, onMove, onResize, onDelete, onCopy, onExtend, onAssign, onResizeEdge }: { event: EnduranceEvent; stints: EnduranceStint[]; personas: EndurancePersona[]; availability: AvailabilityBlock[]; editable: boolean; snapMinutes: number; onMove: (stint: EnduranceStint, startAt: string, driverId?: string) => void; onResize: (stint: EnduranceStint, deltaMinutes: number) => void; onDelete: (id: string) => void; onCopy: (stint: EnduranceStint) => void; onExtend: (stint: EnduranceStint) => void; onAssign: (stint: EnduranceStint, driverId: string) => void; onResizeEdge: (stint: EnduranceStint, startAt: string, endAt: string) => void }) => {
   const start = new Date(event.startAt).getTime(); const end = new Date(event.endAt).getTime(); const span = end - start;
+  const [timeError, setTimeError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Dragging-state voor de rand-handgrepen. ref i.p.v. state zodat pointermove
   // niet hoef te re-renderen; de live tijdelijke stint-positie wordt via een kleine
@@ -97,13 +64,13 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
     const stint = stints.find((candidate) => candidate.id === id);
     if (!stint) return;
     const rect = dropEvent.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0 || !Number.isFinite(dropEvent.clientX)) return;
     const startMinutes = minutesFromEvent(dropEvent.clientX, { left: rect.left, width: rect.width });
     const duration = new Date(stint.actualEndAt).getTime() - new Date(stint.actualStartAt).getTime();
     const maxStartMinutes = Math.max(0, ((end - start - duration) / 60_000));
     const effectiveMinutes = Math.min(startMinutes, maxStartMinutes);
-    // Coureur gewijzigd? Dat regelen we eerst, dan de tijd.
-    if (stint.driverId !== targetDriverId) onAssign(stint, targetDriverId);
-    onMove(stint, new Date(start + effectiveMinutes * 60_000).toISOString());
+    // Save the driver and time together; two writes would overwrite each other.
+    onMove(stint, new Date(start + effectiveMinutes * 60_000).toISOString(), targetDriverId);
   };
 
   // Tijd van een clientX (viewport) naar racetijd → ms. Meet tegen de
@@ -162,8 +129,12 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
   const minutesToLabel = (adjustMinutes: number) => shiftClock(event.startAt, adjustMinutes);
 
   return <div className="space-y-4">
+    <div className="space-y-2 md:hidden" aria-label="Stints op volgorde">
+      {[...stints].sort((a,b) => Date.parse(a.actualStartAt)-Date.parse(b.actualStartAt)).map(stint => <button key={stint.id} type="button" onClick={() => setSelectedId(selectedId === stint.id ? null : stint.id)} aria-expanded={selectedId === stint.id} className={`w-full rounded-xl border p-4 text-left transition ${selectedId === stint.id ? "border-orange-400 bg-orange-500/10" : "border-white/10 bg-black/20"}`}><span className="flex items-center justify-between gap-3"><strong className="text-sm text-white">{driverName(stint.driverId)}</strong><span className="text-xs font-bold text-orange-300">{Math.round((Date.parse(stint.actualEndAt)-Date.parse(stint.actualStartAt))/60000)} min</span></span><span className="mt-2 block text-xs text-gray-300">{formatAmsterdam(stint.actualStartAt)} → {formatAmsterdam(stint.actualEndAt)}</span><span className="mt-2 block text-[11px] text-gray-500">Tik voor details{editable ? " en aanpassen" : ""}</span></button>)}
+      {!stints.length && <p className="rounded-xl bg-black/20 p-4 text-sm text-gray-400">Nog geen stints gepland.</p>}
+    </div>
     {/* Tijdlijn */}
-    <div className="overflow-x-auto">
+    <div className="hidden overflow-x-auto md:block">
       <div className="min-w-[880px] rounded-2xl bg-black/25 p-4 ring-1 ring-white/5">
         {/* Header + uren-as: zelfde breedte-referentie als de stints (1fr-track
             ná de 120px coureurkolom). Anders staan de uur-markeringen ±120px te
@@ -185,7 +156,7 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
           ref={laneRef}
           onPointerMove={editable ? moveEdgeDrag : undefined}
           onPointerUp={editable ? endEdgeDrag : undefined}
-          onPointerCancel={editable ? endEdgeDrag : undefined}
+          onPointerCancel={() => { dragEdge.current = null; setLiveEdge(null); }}
         >
           {laneDrivers.map((driverId, laneIndex) => {
             const laneStints = stints.filter((s) => s.driverId === driverId);
@@ -213,13 +184,13 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
                     return <div
                       key={stint.id}
                       draggable={editable}
-                      onClick={() => setSelectedId(isSelected ? null : stint.id)}
+                      role="button" tabIndex={0} aria-label={`${driverName(stint.driverId)} · ${formatAmsterdam(startAt)}`} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedId(isSelected ? null : stint.id); } }} onClick={() => setSelectedId(isSelected ? null : stint.id)}
                       onDragStart={(e) => e.dataTransfer.setData("text/endurance-stint", stint.id)}
                       className={`absolute inset-y-1.5 overflow-hidden rounded-lg shadow-md ring-2 transition-opacity ${isSelected ? "ring-2 ring-white" : "ring-white/15 opacity-90 hover:opacity-100"} ${colors[laneIndex % colors.length]} ${availabilityState === "hard" ? "ring-red-300" : availabilityState === "soft" || availabilityState === "missing" ? "ring-amber-300/70" : "ring-white/15"}`}
                       style={{ left: `${left}%`, width: `${Math.max(2, width)}%`, cursor: editable ? "default" : undefined }}
                       title={`${driverName(stint.driverId)} · ${formatAmsterdam(startAt)} – ${formatAmsterdam(endAt)}\nKlik voor details; versleep de randen om te rekken`}
                     >
-                      <span className="block truncate px-1.5 text-[9px] font-black text-white" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.7)" }}>{stint.expectedLaps}r</span>
+                      <span className="block truncate px-1.5 text-[9px] font-black text-white" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.7)" }}>{stint.expectedLaps > 0 ? `${stint.expectedLaps}r` : "—"}</span>
                       {editable && <><span
                         onPointerDown={(e) => beginEdgeDrag(e, stint, "left")}
                         className="absolute inset-y-0 left-0 w-2 cursor-ew-resize bg-black/30 opacity-0 transition-opacity hover:opacity-100"
@@ -240,6 +211,7 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
       </div>
     </div>
 
+    {timeError && <p role="alert" className="text-sm text-red-300">{timeError}</p>}
     {/* Detailpaneel */}
     {selected && (
       <div className="rounded-2xl bg-black/25 p-4 ring-1 ring-white/5">
@@ -249,10 +221,10 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block text-xs">
-            <span className="mb-1 block font-bold text-gray-400">Starttijd</span>
+            <span className="mb-1 block font-bold text-gray-400">Starttijd (Nederland)</span>
             <div className="flex items-center gap-1">
               <button type="button" disabled={!editable} onClick={() => onMove(selected, new Date(new Date(selected.actualStartAt).getTime() - snapMinutes * 60_000).toISOString())} className="rounded bg-black/30 px-2 py-1.5 text-white disabled:opacity-40" aria-label="Start eerder"><Minus className="h-3 w-3" /></button>
-              <input className="w-full rounded-lg bg-black/30 px-2 py-1.5 text-sm text-white focus:outline-none" type="time" step={60} value={toLocalInput(selected.actualStartAt)} disabled={!editable} onChange={(e) => { if (!e.target.value) return; const startMs = Math.max(start, new Date(fromLocalInput(event.startAt, e.target.value)).getTime()); onMove(selected, new Date(startMs).toISOString()); }} aria-label="Stint starttijd" />
+              <input className="w-full rounded-lg bg-black/30 px-2 py-1.5 text-sm text-white focus:outline-none" type="datetime-local" step={60} value={utcToZonedInput(selected.actualStartAt)} disabled={!editable} onChange={(e) => { if (!e.target.value) return; try { const next = zonedInputToUtc(e.target.value); setTimeError(""); onMove(selected, next); } catch (error) { setTimeError(error instanceof Error ? error.message : "Ongeldige starttijd."); } }} aria-label="Stint starttijd" />
               <button type="button" disabled={!editable} onClick={() => onMove(selected, new Date(new Date(selected.actualStartAt).getTime() + snapMinutes * 60_000).toISOString())} className="rounded bg-black/30 px-2 py-1.5 text-white disabled:opacity-40" aria-label="Start later"><Plus className="h-3 w-3" /></button>
             </div>
           </label>
@@ -290,6 +262,5 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
 // Kleine helper: verschuif een ISO-tijd over de event-as en return als label ("HH:mm").
 function shiftClock(iso: string, adjustMinutes: number) {
   const d = new Date(new Date(iso).getTime() + adjustMinutes * 60_000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return new Intl.DateTimeFormat("nl-NL", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
 }

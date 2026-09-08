@@ -1,6 +1,6 @@
 import { makeId } from "../core/actions";
 import type { EnduranceEvent, EnduranceStint, StintPlanningState } from "../core/types";
-import { rangesOverlap } from "../core/selectors";
+import { availableUntil, coversAvailability } from "../core/availabilityCoverage";
 
 /**
  * Per-coureur planningsbeperkingen (alle optioneel als de coureur niks kiest).
@@ -54,10 +54,13 @@ export const generateStints = (
   const mode = options.mode ?? "race";
   const limits = options.driverLimits ?? {};
   const members = state.teamMembers.filter((member) => member.teamId === teamId && member.role !== "reserve").map((member) => member.userId);
-  if (!members.length || tankMinutes < 5) return [];
+  if (!members.length) return [];
+  if (!Number.isFinite(tankMinutes) || tankMinutes < 5) throw new Error("Kies een geldige tankduur van minimaal 5 minuten.");
 
   const startMs = new Date(event.startAt).getTime();
   const endMs = new Date(event.endAt).getTime();
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) throw new Error("De race heeft ongeldige start- of eindtijden.");
 
   // Per-coureur planningstoestand.
   const run: Record<string, Candidate> = {};
@@ -86,12 +89,7 @@ export const generateStints = (
   // buiten die tijden, bv. in 'unavailable'/'avoid'-gaten).
   const isAvailable = (userId: string, fromMs: number, toMs: number): boolean => {
     const ownBlocks = state.availability.filter((block) => block.eventId === event.id && block.userId === userId);
-    if (!ownBlocks.length) return true;
-    return ownBlocks.some(
-      (block) =>
-        ["available", "preferred"].includes(block.type) &&
-        rangesOverlap(block.startAt, block.endAt, new Date(fromMs).toISOString(), new Date(toMs).toISOString())
-    );
+    return coversAvailability(ownBlocks, userId, new Date(fromMs).toISOString(), new Date(toMs).toISOString());
   };
 
   // Startcoureur: expliciet doorgegeven, anders de eerste willingToStart-coureur.
@@ -101,40 +99,27 @@ export const generateStints = (
     const defaultEndMs = Math.min(endMs, cursor + tankMinutes * 60_000);
 
     // Kies de minst-belaste coureur die aan alle constraints voldoet (fair-share plust).
+    const candidateEnds: Record<string, number> = {};
     const candidatesForThisStint = members.filter((userId) => {
       const c = run[userId];
       const l = limits[userId];
-      const stintMinutes = (defaultEndMs - cursor) / 60_000;
-      // Consecutive-stint limiet (hard) in beide modi.
-      if (l?.maxConsecutiveStints && c.consecutive >= l.maxConsecutiveStints) return false;
-      // Min rusttijd (hard) in beide modi — maar alleen NADAT deze coureur al
-      // een stint gereden heeft. Een coureur met minRest blijft dus wél
-      // inzetbaar voor zijn EERSTE stint (anders valt hij/zij in korte races
-      // structureel uit ten gunste van dezelfde 1-2 rijders).
-      if (l?.minRestMinutes && c.hasDriven && cursor - c.lastEndMs < l.minRestMinutes * 60_000) return false;
-      // Per-coureur stintduur + totale limiet (alleen comfort rekt ze niet; race houdt tankduur).
-      if (mode === "comfort" && l?.maxStintMinutes && stintMinutes > l.maxStintMinutes) return false;
-      if (mode === "comfort" && l?.maxTotalMinutes && c.totalMinutes + stintMinutes > l.maxTotalMinutes) return false;
-      // Beschikbaarheid altijd.
-      return isAvailable(userId, cursor, defaultEndMs);
+      const candidateEnd = availableUntil(state.availability.filter(b => b.eventId === event.id), userId, cursor, Math.min(defaultEndMs,
+        cursor + (l?.maxStintMinutes ?? tankMinutes) * 60_000,
+        cursor + ((l?.maxTotalMinutes ?? Infinity) - c.totalMinutes) * 60_000));
+      candidateEnds[userId] = candidateEnd;
+      if (candidateEnd <= cursor || (candidateEnd - cursor < MIN_STINT_MS && candidateEnd !== endMs)) return false;
+      if (c.consecutive >= (l?.maxConsecutiveStints ?? 1)) return false;
+      // Rest applies between driving blocks, not between tanks in one block.
+      if (prevDriverId !== userId && l?.minRestMinutes && c.hasDriven && cursor - c.lastEndMs < l.minRestMinutes * 60_000) return false;
+      return isAvailable(userId, cursor, candidateEnd);
     });
 
-    let pool = candidatesForThisStint.length ? candidatesForThisStint : members;
+    if (!candidatesForThisStint.length) throw new Error(`Geen geldige coureur beschikbaar vanaf ${new Intl.DateTimeFormat("nl-NL", { timeZone: "Europe/Amsterdam", dateStyle: "short", timeStyle: "short" }).format(new Date(cursor))}. Controleer beschikbaarheid, rusttijd en rijlimieten. De bestaande planning blijft behouden.`);
+    let pool = candidatesForThisStint;
 
     // Startcoureur dwingen op stint 0 als die beschikbaar is.
     if (index === 0 && firstStintDriver && pool.includes(firstStintDriver)) {
       pool = [firstStintDriver];
-    }
-
-    if (mode === "comfort") {
-      // Comfort-modus: sluit coureurs uit die we écht niet met hun limieten kunnen plaatsen.
-      const viable = pool.filter((userId) => {
-        const l = limits[userId];
-        const c = run[userId];
-        if (l?.maxTotalMinutes && c.totalMinutes + MIN_STINT_MS / 60_000 > l.maxTotalMinutes) return false;
-        return true;
-      });
-      if (viable.length) pool = viable;
     }
 
     // Vast-houden: als de coureur die net reed expliciet een maxConsecutiveStints
@@ -149,9 +134,7 @@ export const generateStints = (
       const prev = run[prevDriverId];
       const prevLimit = limits[prevDriverId];
       const wantsContinue = prevLimit?.maxConsecutiveStints != null && prevLimit.maxConsecutiveStints > prev.consecutive;
-      const stillAvailable = isAvailable(prevDriverId, cursor, Math.min(endMs, cursor + tankMinutes * 60_000));
-      const restOk = !prevLimit?.minRestMinutes || !prev.hasDriven || cursor - prev.lastEndMs >= prevLimit.minRestMinutes * 60_000;
-      if (wantsContinue && stillAvailable && restOk && pool.includes(prevDriverId)) driverId = prevDriverId;
+      if (wantsContinue && pool.includes(prevDriverId)) driverId = prevDriverId;
     }
 
     // Fair-share (of vastgehouden coureur): kies de coureur met de minste totale rijtijd.
@@ -165,16 +148,9 @@ export const generateStints = (
       driverId = candidate;
     }
 
-    // Stint-eindtijd: cappen op per-coureur stintduur/totale rijtijd in comfort-modus.
-    let stintEndMsCapped = defaultEndMs;
-    const driverLimit = limits[driverId];
-    if (mode === "comfort") {
-      if (driverLimit?.maxStintMinutes) stintEndMsCapped = Math.min(stintEndMsCapped, cursor + driverLimit.maxStintMinutes * 60_000);
-      if (driverLimit?.maxTotalMinutes) stintEndMsCapped = Math.min(stintEndMsCapped, cursor + (driverLimit.maxTotalMinutes - run[driverId].totalMinutes) * 60_000);
-    }
-    stintEndMsCapped = Math.max(cursor + MIN_STINT_MS, Math.min(endMs, stintEndMsCapped));
+    const stintEndMsCapped = candidateEnds[driverId];
 
-    const pace = state.paceEntries.find((entry) => entry.eventId === event.id && entry.userId === driverId)?.averageLapSeconds ?? 130;
+    const pace = state.paceEntries.find((entry) => entry.eventId === event.id && entry.userId === driverId)?.averageLapSeconds ?? 0;
     const startAt = new Date(cursor).toISOString();
     const endAt = new Date(stintEndMsCapped).toISOString();
 
@@ -187,10 +163,10 @@ export const generateStints = (
       originalEndAt: endAt,
       actualStartAt: startAt,
       actualEndAt: endAt,
-      expectedLaps: Math.max(1, Math.floor((stintEndMsCapped - cursor) / 1000 / pace)),
-      fuelLitres: 102,
+      expectedLaps: pace > 0 ? Math.floor((stintEndMsCapped - cursor) / 1000 / pace) : 0,
+      fuelLitres: 0,
       tyreChange: index % 2 === 1,
-      doubleStint: tankMinutes >= 80,
+      doubleStint: prevDriverId === driverId,
       notes: `Automatisch voorstel (${mode})`,
       status: "draft",
     });

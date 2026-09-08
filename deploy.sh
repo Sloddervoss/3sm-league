@@ -4,10 +4,12 @@
 
 set -e
 
-cd /opt/3sm
+cd "$(dirname "${BASH_SOURCE[0]}")"
+exec 9>/var/lock/3sm-site.lock
+flock 9
 
 echo "→ Pulling latest code..."
-git pull
+git pull --ff-only
 
 echo "→ Installing dependencies..."
 npm ci --legacy-peer-deps
@@ -25,5 +27,7 @@ rsync -a dist/assets/ /var/www/3sm/assets/
 # Delete stale site routes/files after transfer. Downloads are release-managed:
 # never overwrite signed releases or the stable ZIP alias from the site build.
 rsync -a --delete-after --exclude='assets/' --exclude='downloads/' dist/ /var/www/3sm/
+
+bash scripts/pin-seo-release.sh
 
 echo "✓ Deploy done!"
