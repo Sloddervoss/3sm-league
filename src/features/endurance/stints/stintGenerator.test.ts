@@ -26,13 +26,13 @@ describe("stint generator", () => {
       if (stint.driverId === "user-jaimy") expect(durationMin).toBeLessThanOrEqual(60.001);
     }
   });
-  it("race mode ignores per-driver comfort limits (long stints allowed)", () => {
+  it("race mode preserves explicit per-driver limits", () => {
     const state = createEnduranceSeed();
     const stints = generateStints(state, state.events[0], "team-orange-31", 90, {
       mode: "race",
       driverLimits: { "user-jaimy": { maxStintMinutes: 60 } },
     });
-    expect(stints).toHaveLength(4); // race-modus: gewoon tankduur (90 min)
+    for (const s of stints.filter(s => s.driverId === "user-jaimy")) expect((Date.parse(s.actualEndAt)-Date.parse(s.actualStartAt))/60000).toBeLessThanOrEqual(60);
   });
   it("hard limit: never exceeds max consecutive stints for a driver", () => {
     const state = createEnduranceSeed();
@@ -59,17 +59,9 @@ describe("stint generator", () => {
     const state = createEnduranceSeed();
     // Geef een lange race (meerdere stints) zodat resttijd relevant is.
     const eventLong = { ...state.events[0], startAt: "1973-06-09T14:00:00.000Z", endAt: "1973-06-10T14:00:00.000Z" };
-    const stints = generateStints(state, eventLong, "team-orange-31", 90, {
-      mode: "race",
-      driverLimits: { "user-jaimy": { minRestMinutes: 240 }, "user-sven": { minRestMinutes: 240 } },
-    });
-    for (let i = 1; i < stints.length; i++) {
-      const prev = stints[i - 1];
-      const curr = stints[i];
-      if (prev.driverId === curr.driverId) {
-        const restMin = (Date.parse(curr.actualStartAt) - Date.parse(prev.actualEndAt)) / 60_000;
-        expect(restMin).toBeGreaterThanOrEqual(240 - 0.001);
-      }
-    }
+    // Two drivers cannot cover 24h in 90-minute stints with four hours rest.
+    expect(() => generateStints({ ...state, availability: [], teamMembers: state.teamMembers.filter(m => m.role === "driver") }, eventLong, "team-orange-31", 90, {
+      mode: "race", driverLimits: { "user-jaimy": { minRestMinutes: 240 }, "user-sven": { minRestMinutes: 240 } },
+    })).toThrow(/Geen geldige coureur/);
   });
 });
