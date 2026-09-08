@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Flag, Gauge, Play, Square, Timer, UserRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,7 +17,8 @@ import { getEnduranceCar } from "../core/carCatalog";
  * koppelt de SimHub-opname-laag later ronden/verbruik aan deze sessie. Tot die
  * laag er is, toont het paneel start/stop + de aangemaakte sessies.
  */
-export const PracticeSessionPanel = ({ event }: { event: EnduranceEvent }) => {
+export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: EnduranceEvent; onPaceSynced?: () => void }) => {
+  const queryClient = useQueryClient();
   const { user, isSuperAdmin, isEnduranceManager } = useAuth();
   const { displayName } = useEnduranceActor();
   const { data: registrations = [] } = useEnduranceRegistrations(event.id);
@@ -39,6 +41,8 @@ export const PracticeSessionPanel = ({ event }: { event: EnduranceEvent }) => {
         configuration: event.configuration,
         car: selectedCar ? selectedCar.name : "Onbekend",
       });
+      await queryClient.invalidateQueries({ queryKey: ["endurance", "pace", event.id] });
+      if (written > 0) onPaceSynced?.();
       setSyncMessage(written > 0 ? `Pace berekend voor ${written} coureur(s) uit practice.` : "Geen ronden gevonden om door te voeren naar pace.");
     } catch (caught) {
       setSyncMessage(caught instanceof Error ? `Pace doorvoeren mislukt: ${caught.message}` : "Pace doorvoeren mislukt.");
@@ -94,7 +98,7 @@ export const PracticeSessionPanel = ({ event }: { event: EnduranceEvent }) => {
         {manager && <SecondaryButton onClick={closeSession} disabled={close.isPending}><Flag className="h-4 w-4" /> Sessie beëindigen</SecondaryButton>}
       </div>}
       {fastestPerDriver.size > 0 && <div className="mb-5"><h3 className="mb-2 font-heading font-black text-white">Snelste rondetijd per coureur</h3><div className="space-y-1">{[...fastestPerDriver.entries()].sort((a, b) => a[1] - b[1]).map(([userId, seconds]) => <div key={userId} className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2 text-sm"><span className="text-gray-200">{displayName(userId)}</span><strong className="text-white">{seconds.toFixed(3)}s</strong></div>)}</div></div>}
-      {!active && !fastestPerDriver.size && <p className="text-sm text-gray-400">Start een sessie om te beginnen met het opnemen van rondetijden.</p>}
+      {!active && !fastestPerDriver.size && <p className="text-sm text-gray-400">Wacht op een trainingssessie van de manager. Je opgenomen ronden verschijnen hier zodra de sessie loopt.</p>}
     </Panel>
 
     <Panel>

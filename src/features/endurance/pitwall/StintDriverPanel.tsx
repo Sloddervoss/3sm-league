@@ -4,10 +4,11 @@ interface Props {
   strategy: PitwallStrategyRow | null;
   plannedStints: PitwallPlannedStint[];
   driverName: string | null;
+  currentStint?: PitwallPlannedStint;
 }
 
-export const StintDriverPanel = ({ strategy, plannedStints, driverName }: Props) => {
-  const current = plannedStints?.find((s) => s.status === "in_car" || s.status === "ready");
+export const StintDriverPanel = ({ strategy, plannedStints, driverName, currentStint }: Props) => {
+  const current = currentStint;
   const rest = plannedStints?.filter((s) => s.id !== current?.id);
   const firstNext = rest?.[0];
   const secondNext = rest?.[1];

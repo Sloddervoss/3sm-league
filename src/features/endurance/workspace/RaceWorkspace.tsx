@@ -1,16 +1,14 @@
-import { ArrowLeft, Activity, Bell, Cable, CalendarRange, Gauge, LayoutDashboard, Radio, Route, Users, TimerReset } from "lucide-react";
+import { ArrowLeft, Activity, Bell, Cable, CalendarRange, Gauge, LayoutDashboard, Route, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEnduranceActor } from "../core/ActorContext";
 import { useEnduranceRegistrations, useUpsertEnduranceRegistration } from "../repository/registrationsRepository";
 import type { EnduranceEvent } from "../core/types";
 import { RegistrationForm } from "../registration/RegistrationForm";
 import { AvailabilityPanel } from "../availability/AvailabilityPanel";
-import { PacePanel } from "../pace/PacePanel";
+import { PracticePaceWorkspace } from "../practice/PracticePaceWorkspace";
 import { TeamBuilder } from "../teams/TeamBuilder";
 import { StintPlanner } from "../stints/StintPlanner";
-import { RaceControlPanel } from "../race-control/RaceControlPanel";
 import { NotificationCenter } from "../notifications/NotificationCenter";
-import { PracticeSessionPanel } from "../practice/PracticeSessionPanel";
 import { DeviceAssignmentPanel } from "../devices/DeviceAssignmentPanel";
 import { PrimaryButton, SecondaryButton, StatusPill, Panel } from "../shared/ui";
 import { OverviewPanel } from "./OverviewPanel";
@@ -20,14 +18,12 @@ import { useLocation } from "react-router-dom";
 
 const tabs = [
   { id: "overview", label: "Overzicht", icon: LayoutDashboard },
-  { id: "pitwall", label: "Pitwall", icon: Activity },
   { id: "availability", label: "Beschikbaarheid", icon: CalendarRange },
-  { id: "pace", label: "Pace", icon: Gauge },
   { id: "teams", label: "Teams", icon: Users },
+  { id: "pace", label: "Practice & Pace", icon: Gauge },
   { id: "stints", label: "Stintplanner", icon: Route },
-  { id: "practice", label: "Practice", icon: TimerReset },
+  { id: "pitwall", label: "Pitwall", icon: Activity },
   { id: "devices", label: "Apparaten", icon: Cable },
-  { id: "race-control", label: "Race Control", icon: Radio },
   { id: "notifications", label: "Meldingen", icon: Bell },
 ] as const;
 type TabId = typeof tabs[number]["id"];
@@ -97,7 +93,7 @@ export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack
   }
 
   return <div><div className="mb-5 flex flex-col gap-4 rounded-[1.5rem] bg-card/65 p-5 ring-1 ring-white/[0.07] lg:flex-row lg:items-center lg:justify-between"><div><div className="flex flex-wrap items-center gap-2"><StatusPill tone={event.status === "live" ? "red" : "orange"}>{event.status}</StatusPill><StatusPill>{event.visibility}</StatusPill></div><h1 className="mt-3 font-heading text-2xl font-black text-white sm:text-3xl">{event.name}</h1><p className="mt-1 text-sm text-gray-400">{event.circuit} · {event.configuration}</p></div><SecondaryButton onClick={onBack}><ArrowLeft className="h-4 w-4" /> Alle races</SecondaryButton></div>
-    <div className="mb-6 overflow-x-auto"><div className="flex min-w-max gap-2 rounded-2xl bg-black/20 p-2 ring-1 ring-white/5">{tabs.map((item) => <button key={item.id} type="button" onClick={() => setTab(item.id)} className={`flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold transition ${tab === item.id ? "bg-orange-500 text-white shadow-lg shadow-orange-950/25" : "text-gray-400 hover:bg-white/5 hover:text-white"}`}><item.icon className="h-4 w-4" />{item.label}</button>)}</div></div>
-    {tab === "overview" && <OverviewPanel event={event} />}{tab === "pitwall" && <PitwallTab event={event} />}{tab === "availability" && <AvailabilityPanel event={event} />}{tab === "pace" && <PacePanel event={event} />}{tab === "teams" && <TeamBuilder event={event} />}{tab === "stints" && <StintPlanner event={event} />}{tab === "practice" && <PracticeSessionPanel event={event} />}{tab === "devices" && <DeviceAssignmentPanel event={event} />}{tab === "race-control" && <RaceControlPanel event={event} />}{tab === "notifications" && <NotificationCenter eventId={event.id} />}
+    <div className="mb-6 overflow-x-auto"><div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8 rounded-2xl bg-black/20 p-2 ring-1 ring-white/5">{tabs.map((item) => <button key={item.id} type="button" onClick={() => setTab(item.id)} aria-current={tab === item.id ? "page" : undefined} className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400 font-bold transition ${tab === item.id ? "bg-orange-500 text-white shadow-lg shadow-orange-950/25" : "text-gray-400 hover:bg-white/5 hover:text-white"}`}><item.icon className="h-4 w-4" />{item.label}</button>)}</div></div>
+    {tab === "overview" && <OverviewPanel event={event} />}{tab === "pitwall" && <PitwallTab event={event} />}{tab === "availability" && <AvailabilityPanel event={event} />}{tab === "pace" && <PracticePaceWorkspace event={event} />}{tab === "teams" && <TeamBuilder event={event} />}{tab === "stints" && <StintPlanner event={event} />}{tab === "devices" && <DeviceAssignmentPanel event={event} />}{tab === "notifications" && <NotificationCenter eventId={event.id} />}
   </div>;
 };
