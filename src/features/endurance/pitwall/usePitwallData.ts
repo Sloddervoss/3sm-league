@@ -173,6 +173,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
   }, [strategy, isLive]);
 
   return {
+    now: new Date(now).toISOString(),
     strategy,
     events,
     teams,

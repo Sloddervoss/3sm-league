@@ -268,6 +268,7 @@ export function useEnduranceStintMutations(eventId: string) {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["endurance", "stints", eventId] });
       queryClient.invalidateQueries({ queryKey: ["endurance", "race-control-audit", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["pitwall", "rpc", eventId] });
     },
   });
   return { upsert, remove, replaceDraft, applyBatch, raceControlApply };

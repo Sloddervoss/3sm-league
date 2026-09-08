@@ -1,3 +1,6 @@
+import { isCurrentStint } from "../shared/stintTiming";
+import { Radio, X } from "lucide-react";
+import { RaceControlPanel } from "../race-control/RaceControlPanel";
 import { useQuery } from "@tanstack/react-query";
 import { listPitwallTeams } from "../repository/pitwallRepository";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,7 +22,7 @@ import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
 import { LiveTrackPanel } from "./LiveTrackPanel";
 import { RaceTelemetryStrip } from "./RaceTelemetryStrip";
 import { deriveStandings } from "./standings";
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { PitwallPositionData, PitwallPaceData, PitwallRaceClock } from "./pitwallHelpers";
 
@@ -34,6 +37,7 @@ const useTeams = (eventId: string, actorId: string, staff: boolean, enabled: boo
 };
 
 export const PitwallTab = ({ event }: Props) => {
+  const [controlOpen, setControlOpen] = useState(false);
   const { actorId, displayName } = useEnduranceActor();
   const { isSuperAdmin, isEnduranceManager, isTester } = useAuth();
   const navigate = useNavigate();
@@ -105,8 +109,8 @@ export const PitwallTab = ({ event }: Props) => {
     return deriveStandings(real.isLive ? real.v3 ?? null : null, 40, real.isLive ? real.trends : undefined);
   }, [isDemo, demo, real.v3, real.trends, real.isLive]);
 
-  const currentStint = plannedStints.find((s) => s.status === "in_car");
-  const nextStints = plannedStints.filter((s) => s.status === "draft");
+  const currentStint = plannedStints.find((s) => isDemo ? s.status === "in_car" : isCurrentStint(s.status, s.actual_start_at ?? s.original_start_at, s.actual_end_at ?? s.original_end_at, real.now));
+  const nextStints = plannedStints.filter((s) => isDemo ? s.status === "draft" : !["completed", "replaced", "expired"].includes(s.status) && Date.parse(s.actual_start_at ?? s.original_start_at) > Date.parse(real.now)).sort((a, b) => (a.actual_start_at ?? a.original_start_at).localeCompare(b.actual_start_at ?? b.original_start_at));
   const nextStint = nextStints[0];
   const driverName = isDemo ? (currentStint?.driver_id ?? null) : real.v3?.identity?.currentDriverName ?? (currentStint ? displayName(currentStint.driver_id) : null);
   const nextDriverName = isDemo ? (nextStint?.driver_id ?? null) : nextStint ? displayName(nextStint.driver_id) : null;
@@ -133,6 +137,34 @@ export const PitwallTab = ({ event }: Props) => {
   return (
     /* data-pitwall + data-pitwall-focus for CSS targeting */
     <div className={isFocusMode ? "space-y-2 w-full" : "space-y-3"} data-pitwall="true" data-pitwall-focus={isFocusMode ? "true" : undefined}>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-orange-500/15 bg-gradient-to-r from-orange-500/10 to-transparent p-4">
+        <div><h2 className="font-heading text-xl font-black text-white">Pitwall</h2><p className="mt-1 text-xs text-gray-400">Je race in beeld. Stints en bijsturen binnen handbereik.</p></div>
+        {!isDemo && <button type="button" aria-expanded={controlOpen} aria-controls="pitwall-race-control" onClick={() => setControlOpen(!controlOpen)} className={`flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400 ${controlOpen ? "bg-white/10 text-white" : "bg-orange-500 text-white hover:bg-orange-400"}`}><Radio className="h-4 w-4" />{controlOpen ? "Race Control sluiten" : "Stints & Race Control"}</button>}
+      </div>
+      {/* === TEAM SELECTOR (real mode only) === */}
+      {teams.length > 1 && !isDemo && (
+        <div className="flex flex-wrap gap-2">
+          {teams.map((team) => (
+            <button
+              key={team.id}
+              type="button"
+              onClick={() => setSelectedTeamId(team.id)}
+              className={`rounded px-3 py-1.5 text-xs font-bold transition ${
+                selectedTeamId === team.id ? "bg-orange-500 text-white" : "bg-black/20 text-gray-400 hover:text-white"
+              }`}
+            >
+              {team.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={controlOpen ? "grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]" : ""}>
+      {controlOpen && <aside id="pitwall-race-control" className="min-w-0 rounded-2xl border border-orange-500/20 bg-card/90 p-3 2xl:sticky 2xl:top-4 2xl:col-start-2 2xl:row-start-1 2xl:max-h-[85vh] 2xl:overflow-y-auto [&_.grid]:!grid-cols-1">
+        <div className="mb-3 flex items-center justify-between px-2"><span className="text-xs font-bold uppercase tracking-wider text-orange-300">Stints & Race Control</span><button type="button" aria-label="Race Control sluiten" onClick={() => setControlOpen(false)} className="rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button></div>
+        <RaceControlPanel key={`${event.id}:${selectedTeamId}`} event={event} selectedTeamId={selectedTeamId ?? ""} embedded />
+      </aside>}
+      <div className="min-w-0 space-y-3 2xl:col-start-1 2xl:row-start-1">
       {/* FOCUS MODE TOP STRIP */}
       {isFocusMode && (
         <div className="flex items-center gap-3 rounded-lg bg-black/60 px-4 py-2 text-xs ring-1 ring-white/5">
@@ -213,24 +245,6 @@ export const PitwallTab = ({ event }: Props) => {
         </div>
       )}
 
-      {/* === TEAM SELECTOR (real mode only) === */}
-      {teams.length > 1 && !isDemo && (
-        <div className="flex flex-wrap gap-2">
-          {teams.map((team) => (
-            <button
-              key={team.id}
-              type="button"
-              onClick={() => setSelectedTeamId(team.id)}
-              className={`rounded px-3 py-1.5 text-xs font-bold transition ${
-                selectedTeamId === team.id ? "bg-orange-500 text-white" : "bg-black/20 text-gray-400 hover:text-white"
-              }`}
-            >
-              {team.name}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* === TOP BAR — sticky in focus mode === */}
       {strategy && (
         <TopRaceBar
@@ -280,7 +294,7 @@ export const PitwallTab = ({ event }: Props) => {
         <>
           <div className="grid gap-3 lg:grid-cols-3">
             <div className="space-y-3">
-              <StintDriverPanel strategy={strategy} plannedStints={plannedStints} driverName={driverName} />
+              <StintDriverPanel strategy={strategy} plannedStints={nextStints.map((s) => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))} currentStint={currentStint} driverName={driverName} />
             </div>
             <div className="space-y-3">
               <StrategyForecast
@@ -300,6 +314,8 @@ export const PitwallTab = ({ event }: Props) => {
           <RaceTimeline events={events} plannedStints={plannedStints} />
         </>
       )}
+      </div>
+      </div>
     </div>
   );
 };

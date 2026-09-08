@@ -12,6 +12,9 @@ vi.mock("@/features/endurance/repository/pitwallRepository", () => ({
   listPitwallTeams: vi.fn(async () => [{ id: "a", name: "Team A" }, { id: "b", name: "Team B" }]),
   fetchPitwallData: vi.fn(async () => ({ telemetry: null, strategy: null })),
 }));
+vi.mock("@/features/endurance/race-control/RaceControlPanel", () => ({
+  RaceControlPanel: ({ selectedTeamId }: { selectedTeamId: string }) => <div data-testid="control-team">{selectedTeamId}</div>,
+}));
 const Location = () => <output data-testid="location">{useLocation().search}</output>;
 
 it("loads staff teams, switches team and keeps focus navigation in the router", async () => {
@@ -23,6 +26,10 @@ it("loads staff teams, switches team and keeps focus navigation in the router", 
   await waitFor(() => expect(fetchPitwallData).toHaveBeenCalledWith("race", "a"));
   fireEvent.click(screen.getByRole("button", { name: "Team B" }));
   await waitFor(() => expect(fetchPitwallData).toHaveBeenCalledWith("race", "b"));
+  fireEvent.click(screen.getByRole("button", { name: "Stints & Race Control" }));
+  expect(screen.getByTestId("control-team")).toHaveTextContent("b");
+  fireEvent.click(screen.getByRole("button", { name: "Team A" }));
+  expect(screen.getByTestId("control-team")).toHaveTextContent("a");
   fireEvent.click(screen.getByRole("button", { name: "Focus mode" }));
   expect(screen.getByTestId("location")).toHaveTextContent("pitwallFocus=1");
   expect(screen.getAllByText("OFFLINE").length).toBeGreaterThan(0);
