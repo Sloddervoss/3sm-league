@@ -25,11 +25,13 @@ export type EnduranceRegistrationRow = {
   night_driving: boolean;
   willing_to_start: boolean;
   willing_to_finish: boolean;
+  team_approach?: "competitive" | "fun" | "either";
+  preferred_team_size?: number | null;
   notes: string | null;
   registered_at: string;
 };
 
-const selectColumns = "id,event_id,user_id,status,class_preference,preferred_car_id,slot_id,max_stints,max_stint_minutes,max_total_minutes,max_consecutive_stints,min_rest_minutes,night_driving,willing_to_start,willing_to_finish,notes,registered_at";
+const selectColumns = "id,event_id,user_id,status,class_preference,preferred_car_id,slot_id,max_stints,max_stint_minutes,max_total_minutes,max_consecutive_stints,min_rest_minutes,night_driving,willing_to_start,willing_to_finish,team_approach,preferred_team_size,notes,registered_at";
 
 /** Plain: alle endurance-registraties voor een event. */
 export async function listEnduranceRegistrations(eventId: string): Promise<EnduranceRegistrationRow[]> {
@@ -66,6 +68,8 @@ export type UpsertEnduranceRegistrationInput = {
   night_driving?: boolean;
   willing_to_start?: boolean;
   willing_to_finish?: boolean;
+  team_approach?: "competitive" | "fun" | "either";
+  preferred_team_size?: number | null;
   notes?: string | null;
 };
 
@@ -92,6 +96,8 @@ export async function upsertEnduranceRegistration(
       night_driving: input.night_driving ?? false,
       willing_to_start: input.willing_to_start ?? false,
       willing_to_finish: input.willing_to_finish ?? false,
+      ...(input.team_approach !== undefined ? { team_approach: input.team_approach } : {}),
+      ...(input.preferred_team_size !== undefined ? { preferred_team_size: input.preferred_team_size } : {}),
       notes: input.notes ?? null,
     }, { onConflict: "event_id,user_id" })
     .select(selectColumns)

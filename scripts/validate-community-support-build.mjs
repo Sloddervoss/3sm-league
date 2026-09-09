@@ -1,7 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const root = new URL('../', import.meta.url).pathname;
+const root = fileURLToPath(new URL('../', import.meta.url));
 const dist = join(root, 'dist');
 const config = JSON.parse(readFileSync(join(root, 'community-support.config.json'), 'utf8'));
 const shared = config.dataSource === 'supabase';

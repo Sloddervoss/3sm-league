@@ -1,7 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { assertEnduranceTable, enduranceClient } from "./dataAccess";
-import { aggregatePracticeLaps } from "../practice/practiceToPace";
-import { upsertEndurancePace } from "./paceRepository";
 
 /**
  * Endurance practice-sessie repository — Fase 3.5 (raamwerk).
@@ -18,6 +16,7 @@ export type PracticeSessionRow = {
   event_id: string;
   team_id: string | null;
   label: string;
+  conditions?: "dry" | "wet";
   started_at: string;
   ended_at: string | null;
   requires_registered: boolean;
@@ -40,7 +39,7 @@ export type PracticeLapRow = {
   recorded_at: string;
 };
 
-const sessionColumns = "id,event_id,team_id,label,started_at,ended_at,requires_registered,created_by,created_at,updated_at";
+const sessionColumns = "id,event_id,team_id,label,conditions,started_at,ended_at,requires_registered,created_by,created_at,updated_at";
 const lapColumns = "id,session_id,event_id,user_id,car_id,circuit,lap_seconds,fuel_used_litres,fuel_per_lap_litres,incident_count,recorded_at";
 
 /** Plain: de actiefste (niet gesloten) practice-sessies voor een event. */
@@ -71,6 +70,7 @@ export type CreatePracticeSessionInput = {
   event_id: string;
   team_id?: string | null;
   label?: string;
+  conditions?: "dry" | "wet";
   requires_registered?: boolean;
   created_by?: string | null;
 };
@@ -83,6 +83,7 @@ export async function createEndurancePracticeSession(input: CreatePracticeSessio
     .insert({
       event_id: input.event_id,
       team_id: input.team_id ?? null,
+      conditions: input.conditions ?? "dry",
       label: input.label ?? "Practice",
       requires_registered: input.requires_registered ?? true,
       created_by: input.created_by ?? null,
@@ -141,49 +142,7 @@ export async function syncPracticeSessionToPace(
   sessionId: string,
   race: { event_id: string; circuit: string; configuration: string; car: string }
 ): Promise<number> {
-  assertEnduranceTable(LAP_TABLE);
-  const laps = await listEndurancePracticeLaps(sessionId);
-  // Groepeer per coureur.
-  const byUser = new Map<string, PracticeLapRow[]>();
-  for (const lap of laps) {
-    if (!lap.user_id) continue;
-    const arr = byUser.get(lap.user_id) ?? [];
-    arr.push(lap);
-    byUser.set(lap.user_id, arr);
-  }
-  let written = 0;
-  for (const [userId, userLaps] of byUser) {
-    const agg = aggregatePracticeLaps(userLaps);
-    if (!agg.bestLapSeconds) continue;
-    // upsert bestaande pace-entry voor deze (coureur, circuit, config, auto, dry)
-    const { data: existing } = await enduranceClient()
-      .from("endurance_pace_entries")
-      .select("id")
-      .eq("event_id", race.event_id)
-      .eq("user_id", userId)
-      .eq("circuit", race.circuit)
-      .eq("configuration", race.configuration)
-      .eq("source", "practice")
-      .maybeSingle();
-    const id = (existing as { id?: string } | null)?.id;
-    await upsertEndurancePace({
-      id,
-      event_id: race.event_id,
-      user_id: userId,
-      circuit: race.circuit,
-      configuration: race.configuration,
-      car: race.car,
-      conditions: "dry",
-      average_lap_seconds: agg.averageLapSeconds,
-      median_lap_seconds: agg.medianLapSeconds,
-      best_lap_seconds: agg.bestLapSeconds,
-      best_five_average_seconds: agg.bestFiveAverageSeconds,
-      consistency_seconds: agg.consistencySeconds,
-      valid_laps: agg.validLaps,
-      incidents: agg.incidents,
-      source: "practice",
-    });
-    written += 1;
-  }
-  return written;
+  const { data, error } = await enduranceClient().rpc("endurance_sync_practice_pace", { p_session_id: sessionId, p_car_alias: race.car });
+  if (error) throw new Error(error.message);
+  return data ?? 0;
 }

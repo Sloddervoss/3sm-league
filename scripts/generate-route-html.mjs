@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
@@ -10,7 +11,7 @@ if (communitySupportConfig.public && !communitySupportHasSharedData) {
   throw new Error('Community Support cannot be public while dataSource is not supabase');
 }
 const communitySupportPublic = communitySupportConfig.public && communitySupportHasSharedData;
-const distDir = new URL('../dist/', import.meta.url).pathname;
+const distDir = fileURLToPath(new URL('../dist/', import.meta.url));
 const templatePath = join(distDir, 'index.html');
 const manifestPath = join(distDir, '.route-html-manifest.json');
 const template = readFileSync(templatePath, 'utf8');

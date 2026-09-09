@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({ teams: [] as unknown[], rows: [] as unknown[],
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user:{id:mocks.manager ? "manager" : "a"}, isSuperAdmin:false, isEnduranceManager:mocks.manager }) }));
 vi.mock("../core/ActorContext", () => ({ useEnduranceActor: () => ({actorId:"manager",displayName:(id:string)=>id}) }));
 vi.mock("../repository/teamsRepository", () => ({ useEnduranceTeamWorkspace: () => ({ data:{teams:mocks.teams,members:[{id:"member",team_id:"t",user_id:"a",role:"driver"}]} }) }));
-vi.mock("../repository/registrationsRepository", () => ({useEnduranceRegistrations:()=>({data:[]})}));
-vi.mock("../repository/availabilityRepository", () => ({useEnduranceAvailability:()=>({data:[]})}));
+vi.mock("../repository/registrationsRepository", () => ({useEnduranceRegistrations:()=>({data:[{user_id:"a",status:"provisional"}]})}));
+vi.mock("../repository/availabilityRepository", () => ({useEnduranceAvailability:()=>({data:[{id:"av",user_id:"a",start_at:"2026-09-08T12:00:00.000Z",end_at:"2026-09-08T13:00:00.000Z",type:"available"}]})}));
 vi.mock("../repository/paceRepository", () => ({useEndurancePace:()=>({data:[]})}));
 vi.mock("../repository/stintsRepository", () => ({useEnduranceStints:()=>({data:mocks.rows}),useEnduranceStintMutations:()=>({upsert:{mutateAsync:mocks.upsert},remove:{mutateAsync:vi.fn()},replaceDraft:{mutateAsync:vi.fn()}})}));
 vi.mock("../repository/planRepository", () => ({ useEndurancePlanWorkspace:()=>({data:{versions:[],confirmations:[]}}),useEndurancePlanMutations:()=>({publish:{mutateAsync:mocks.publish},confirm:{mutateAsync:vi.fn()}})}));

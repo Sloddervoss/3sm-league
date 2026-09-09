@@ -146,7 +146,7 @@ export const StintTimeline = ({ event, stints, personas, availability, editable,
         <div className="grid grid-cols-[120px_1fr]">
           <div />
           <div className="relative h-6">
-            {Array.from({ length: Math.ceil((end - start) / 3_600_000) + 1 }).map((_, h) => (
+            {Array.from({ length: Math.ceil((end - start) / 3_600_000) + 1 }).map((_, h) => h).filter(h => h % Math.max(1, Math.ceil(span / 3_600_000 / 10)) === 0 && h * 3_600_000 < span).map(h => (
               <span key={h} className="absolute top-0 text-[10px] tabular-nums text-gray-500" style={{ left: `${(h * 3_600_000) / span * 100}%` }}>{shiftClock(event.startAt, h * 60).split(" ").pop()}</span>
             ))}
           </div>
