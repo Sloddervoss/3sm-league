@@ -7,6 +7,7 @@ import { availableUntil, coversAvailability } from "../core/availabilityCoverage
  * Gebaseerd op de JRES-solver constrainthuis (MIT) → geïmplementeerd als TS-heuristiek.
  */
 export interface DriverLimits {
+  maxStints?: number | null;
   /** Langste stint die deze coureur mag rijden (min). */
   maxStintMinutes?: number | null;
   /** Max totale rijtijd over de hele race (min). */
@@ -42,6 +43,7 @@ interface Candidate {
   lastEndMs: number;
   /** Heeft deze coureur al daadwerkelijk een stint gereden? */
   hasDriven: boolean;
+  stintCount: number;
 }
 
 export const generateStints = (
@@ -71,6 +73,7 @@ export const generateStints = (
       consecutive: 0,
       totalMinutes: 0,
       hasDriven: false,
+      stintCount: 0,
       // Coureurs met willingToStart mogen de eerste stint rijden.
       lastEndMs: l?.willingToStart ? startMs - 1 : startMs,
     };
@@ -103,6 +106,7 @@ export const generateStints = (
     const candidatesForThisStint = members.filter((userId) => {
       const c = run[userId];
       const l = limits[userId];
+      if (c.stintCount >= (l?.maxStints ?? Infinity)) return false;
       const candidateEnd = availableUntil(state.availability.filter(b => b.eventId === event.id), userId, cursor, Math.min(defaultEndMs,
         cursor + (l?.maxStintMinutes ?? tankMinutes) * 60_000,
         cursor + ((l?.maxTotalMinutes ?? Infinity) - c.totalMinutes) * 60_000));
@@ -173,6 +177,7 @@ export const generateStints = (
 
     const c = run[driverId];
     c.consecutive += 1;
+    c.stintCount += 1;
     c.totalMinutes += (stintEndMsCapped - cursor) / 60_000;
     c.lastEndMs = stintEndMsCapped;
     c.hasDriven = true;

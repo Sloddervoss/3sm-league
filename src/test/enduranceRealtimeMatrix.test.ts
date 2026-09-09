@@ -54,22 +54,30 @@ describe("endurance realtime binding matrix", () => {
     expect(by("endurance_events")).toEqual([
       ["endurance", "events"],
       ["endurance", "events", EVENT],
+      ["endurance", "team-workflow", EVENT],
     ]);
     expect(by("endurance_registrations")).toEqual([
       ["endurance", "registrations", EVENT],
       ["endurance", "registrations", "all"],
+      ["endurance", "team-workflow", EVENT],
     ]);
-    expect(by("endurance_availability")).toEqual([["endurance", "availability", EVENT]]);
-    expect(by("endurance_pace_entries")).toEqual([["endurance", "pace", EVENT]]);
+    expect(by("endurance_availability")).toEqual([["endurance", "availability", EVENT],
+      ["endurance", "team-workflow", EVENT],
+    ]);
+    expect(by("endurance_pace_entries")).toEqual([["endurance", "pace", EVENT],
+      ["endurance", "team-workflow", EVENT],
+    ]);
     expect(by("endurance_practice_sessions")).toEqual([["endurance", "practice", EVENT]]);
     expect(by("endurance_practice_laps")).toEqual([["endurance", "practice", EVENT]]);
     expect(by("endurance_teams")).toEqual([
       ["endurance", "teams", EVENT],
       ["endurance", "teams", "all"],
+      ["endurance", "team-workflow", EVENT],
     ]);
     expect(by("endurance_team_members")).toEqual([
       ["endurance", "teams", EVENT],
       ["endurance", "teams", "all"],
+      ["endurance", "team-workflow", EVENT],
     ]);
     expect(by("endurance_stints")).toEqual([
       ["endurance", "stints", EVENT],

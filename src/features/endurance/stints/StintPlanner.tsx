@@ -40,9 +40,10 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
 
   // Per-coureur rijlimieten uit de inschrijvingen (comfort-modus gebruikt die).
   const driverLimits = useMemo(() => {
-    const map: Record<string, { maxStintMinutes?: number | null; maxTotalMinutes?: number | null; maxConsecutiveStints?: number | null; minRestMinutes?: number | null; willingToStart?: boolean }> = {};
+    const map: Record<string, { maxStints?: number | null; maxStintMinutes?: number | null; maxTotalMinutes?: number | null; maxConsecutiveStints?: number | null; minRestMinutes?: number | null; willingToStart?: boolean }> = {};
     for (const reg of registrations) {
       map[reg.user_id] = {
+        maxStints: reg.max_stints,
         maxStintMinutes: reg.max_stint_minutes,
         maxTotalMinutes: reg.max_total_minutes,
         maxConsecutiveStints: reg.max_consecutive_stints,
@@ -60,16 +61,16 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
   const [consecutiveOverride, setConsecutiveOverride] = useState<Record<string, number>>({});
   const overrideLimits = useMemo(() => {
     if (!Object.keys(consecutiveOverride).length) return driverLimits;
-    const merged: Record<string, { maxStintMinutes?: number | null; maxTotalMinutes?: number | null; maxConsecutiveStints?: number | null; minRestMinutes?: number | null; willingToStart?: boolean }> = { ...driverLimits };
+    const merged: Record<string, { maxStints?: number | null; maxStintMinutes?: number | null; maxTotalMinutes?: number | null; maxConsecutiveStints?: number | null; minRestMinutes?: number | null; willingToStart?: boolean }> = { ...driverLimits };
     for (const [userId, maxConsecutive] of Object.entries(consecutiveOverride)) {
-      merged[userId] = { ...(merged[userId] ?? {}), maxConsecutiveStints: maxConsecutive };
+      merged[userId] = { ...(merged[userId] ?? {}), maxConsecutiveStints: Math.min(maxConsecutive, driverLimits[userId]?.maxConsecutiveStints ?? maxConsecutive) };
     }
     return merged;
   }, [driverLimits, consecutiveOverride]);
 
   const teams = teamWorkspace?.teams ?? [];
   const members = useMemo(() => teamWorkspace?.members ?? [], [teamWorkspace?.members]);
-  const accessibleTeams = teams.filter((team) => team.event_id === event.id && (isSuperAdmin || isEnduranceManager || team.manager_id === user?.id || members.some((m) => m.team_id === team.id && m.user_id === user?.id)));
+  const accessibleTeams = teams.filter((team) => team.event_id === event.id && (isSuperAdmin || isEnduranceManager || event.managerIds?.includes(user?.id ?? "") || team.manager_id === user?.id || members.some((m) => m.team_id === team.id && m.user_id === user?.id)));
 
   const [selectedTeamId, setTeamId] = useState("");
   const teamId = accessibleTeams.some(t => t.id === selectedTeamId) ? selectedTeamId : accessibleTeams[0]?.id ?? "";
@@ -104,7 +105,7 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
 
   const team = accessibleTeams.find((candidate) => candidate.id === teamId);
   const stints = stintsApp.filter((stint) => stint.eventId === event.id && stint.teamId === teamId);
-  const canManage = Boolean(team && (isSuperAdmin || isEnduranceManager || team.manager_id === user?.id));
+  const canManage = Boolean(team && (isSuperAdmin || isEnduranceManager || event.managerIds?.includes(user?.id ?? "") || team.manager_id === user?.id));
   const inputsLoading = teamsLoading || registrationsLoading || availabilityLoading || stintsLoading;
   const inputsError = teamsError || registrationsError || availabilityError || stintsError;
   const editable = canManage && !busy && !inputsLoading && !inputsError && stints.every(s => s.status === "draft");
@@ -112,12 +113,12 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
   const { data: planWorkspace, isLoading: plansLoading, error: plansError } = useEndurancePlanWorkspace(event.id, teamId);
   const { publish, confirm } = useEndurancePlanMutations(event.id, teamId);
   const versions = planWorkspace?.versions ?? [];
-  const latest = versions[0] ?? null;
+  const latest = versions.find(v => v.published) ?? null;
   const confirmation = latest && planWorkspace?.confirmations.find((c) => c.version_id === latest.id && c.user_id === actorId);
 
   const publishPlan = () => {
     if (!editable || plansLoading || plansError || !stints.length) return;
-    const errors = validatePlan(plannerState, event, stints, members.filter(m => m.team_id === teamId && m.role !== "reserve").map(m => m.user_id), overrideLimits, tankMinutes);
+    const errors = validatePlan(plannerState, event, stints, members.filter(m => m.team_id === teamId && m.role !== "reserve" && (!canManage || registrations.some(r => r.user_id===m.user_id && ["provisional","confirmed"].includes(r.status)))).map(m => m.user_id), overrideLimits, tankMinutes);
     if (errors.length) { setMessage(errors.join(" ")); return; }
     const users = [...new Set(stints.map(s => s.driverId))];
     void perform(() => publish.mutateAsync({ label: `Versie ${versions.length + 1}`, created_by: user?.id ?? null, stints,
@@ -153,13 +154,15 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
     paceEntries: paceRows.map(p => ({ id: p.id, eventId: event.id, userId: p.user_id, circuit: p.circuit, configuration: p.configuration, car: p.car, conditions: p.conditions as "dry" | "wet", averageLapSeconds: p.average_lap_seconds ?? 0, medianLapSeconds: p.median_lap_seconds ?? 0, bestLapSeconds: p.best_lap_seconds ?? 0, bestFiveAverageSeconds: p.best_five_average_seconds ?? 0, consistencySeconds: p.consistency_seconds ?? 0, validLaps: p.valid_laps ?? 0, incidents: p.incidents ?? 0, averageStintMinutes: p.average_stint_minutes ?? 0, recordedAt: p.recorded_at, source: p.source as "manual" | "practice", notes: p.notes ?? "" })),
   };
   const warnings = planningWarnings(plannerState, event.id, teamId);
-  const validationErrors = validatePlan(plannerState, event, stints, members.filter(m => m.team_id === teamId && m.role !== "reserve").map(m => m.user_id), overrideLimits, tankMinutes);
+  const validationErrors = validatePlan(plannerState, event, stints, members.filter(m => m.team_id === teamId && m.role !== "reserve" && (!canManage || registrations.some(r => r.user_id===m.user_id && ["provisional","confirmed"].includes(r.status)))).map(m => m.user_id), overrideLimits, tankMinutes);
+
+  if (stints.some(s => !availability.some(a => a.userId===s.driverId))) validationErrors.push("Laat iedere geplande coureur eerst beschikbaarheid invullen.");
 
   // Vervang het volledige conceptvoorstel in één database-transactie. Bevestigde
   // stints worden door de RPC geweigerd en blijven onaangeraakt.
   const replaceDraftStints = async (next: EnduranceStint[]) => {
     if (!team || !editable) throw new Error("Deze planning kan nu niet worden bewerkt.");
-    const errors = validatePlan(plannerState, event, next, members.filter(m => m.team_id === teamId && m.role !== "reserve").map(m => m.user_id), overrideLimits, tankMinutes);
+    const errors = validatePlan(plannerState, event, next, members.filter(m => m.team_id === teamId && m.role !== "reserve" && (!canManage || registrations.some(r => r.user_id===m.user_id && ["provisional","confirmed"].includes(r.status)))).map(m => m.user_id), overrideLimits, tankMinutes);
     if (errors.length) throw new Error(errors.join(" "));
     await replaceDraft.mutateAsync({
       teamId: team.id,
@@ -273,9 +276,10 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
     {inputsError && <p role="alert" className="mb-4 text-sm text-red-300">Planning of coureursgegevens laden mislukt. Vernieuw de pagina.</p>}
     {canManage && stints.some(s => s.status !== "draft") && <p className="mb-4 rounded-xl bg-orange-500/10 p-3 text-sm text-orange-200">Deze planning bevat actieve of bevestigde stints. Gebruik Pitwall → Race Control voor correcties.</p>}
     {validationErrors.length > 0 && stints.length > 0 && <div role="status" className="mb-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-200"><strong>Publiceren kan na het oplossen van:</strong><ul className="mt-2 list-disc pl-5">{validationErrors.map(error => <li key={error}>{error}</li>)}</ul></div>}
+    {team?.plan_needs_review && <p role="status" className="mb-4 rounded-xl bg-amber-500/10 p-4 text-sm text-amber-200">Teamindeling of rijafspraken zijn gewijzigd. Controleer de stints en publiceer een nieuwe versie; eerdere bevestigingen horen bij de oude planning.</p>}
     <StintTimeline key={`${event.id}:${teamId}`} event={event} stints={stints} personas={personas} availability={availability} editable={editable} snapMinutes={snap} onMove={move} onResize={resize} onResizeEdge={resizeEdge} onDelete={(id) => { if (editable) void perform(() => remove.mutateAsync(id), "Stint verwijderd."); }} onCopy={copy} onExtend={extend} onAssign={assign} />
     {message && <p role="status" className="mt-3 text-sm text-orange-200">{message}</p>}
   </Panel>
-  <div className="grid gap-5 lg:grid-cols-2"><Panel><SectionHeading title="Waarschuwingen" description="Harde conflicten moeten vóór publicatie worden opgelost." />{warnings.length ? <div className="space-y-2">{warnings.map((warning) => <div key={warning.id} className={`flex gap-2 rounded-xl p-3 text-sm ring-1 ${warning.level === "hard" ? "bg-red-500/10 text-red-200 ring-red-500/20" : "bg-amber-500/10 text-amber-200 ring-amber-500/20"}`}><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{warning.message}</div>)}</div> : <div className="flex items-center gap-2 text-sm text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Geen planningsconflicten.</div>}</Panel>
-  <Panel><SectionHeading title="Versies & bevestiging" description="Coureurs bevestigen de laatst gepubliceerde versie. Eerdere versies blijven bewaard." />{plansError && <p role="alert" className="mb-3 text-sm text-red-300">Gepubliceerde versies laden mislukt. Vernieuw de pagina.</p>}{latest && <div className="mb-4 rounded-xl bg-black/20 p-3 text-sm"><div className="flex items-center justify-between"><strong className="text-white">{latest.label}</strong><StatusPill tone="green">{latest.published ? "Gepubliceerd" : "Concept"}</StatusPill></div>{confirmation && <div className="mt-3 flex flex-wrap items-center gap-2"><span className="text-gray-400">Jouw status: {confirmation.status}</span><PrimaryButton disabled={busy} onClick={() => void perform(() => confirm.mutateAsync({ versionId: latest.id, userId: actorId, status: "accepted" }), "Je hebt de planning bevestigd.")} className="min-h-8 px-3 py-1 text-xs">Akkoord</PrimaryButton><SecondaryButton disabled={busy} onClick={() => void perform(() => confirm.mutateAsync({ versionId: latest.id, userId: actorId, status: "change_requested", note: "Neem contact op over mijn planning." }), "Je wijzigingsverzoek is opgeslagen.")} className="min-h-8 px-3 py-1 text-xs">Wijziging vragen</SecondaryButton></div>}</div>}<div className="space-y-2">{versions.map((version) => <div key={version.id} className="flex items-center justify-between rounded-xl bg-white/[0.035] p-3 text-sm"><div><strong className="text-gray-200">{version.label}</strong><p className="text-xs text-gray-500">{new Date(version.created_at).toLocaleString("nl-NL")}</p></div></div>)}</div>{!versions.length && <p className="text-sm text-gray-500">Nog geen gepubliceerde versies. Voeg stints toe en publiceer.</p>}</Panel></div></div>;
+  <div className="grid gap-5 lg:grid-cols-2"><Panel><SectionHeading title="Waarschuwingen" description="Harde conflicten moeten vóór publicatie worden opgelost." />{warnings.length ? <div className="space-y-2">{warnings.map((warning) => <div key={warning.id} className={`flex gap-2 rounded-xl p-3 text-sm ring-1 ${warning.level === "hard" ? "bg-red-500/10 text-red-200 ring-red-500/20" : "bg-amber-500/10 text-amber-200 ring-amber-500/20"}`}><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{warning.message}</div>)}</div> : stints.length && !validationErrors.length ? <div className="flex items-center gap-2 text-sm text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Geen planningsconflicten.</div> : <p className="text-sm text-gray-400">{stints.length ? "Los de aangegeven rijlimieten op voordat je publiceert." : "Nog geen planning. Racedekking is nog niet gecontroleerd."}</p>}</Panel>
+  <Panel><SectionHeading title="Versies & bevestiging" description="Coureurs bevestigen de laatst gepubliceerde versie. Eerdere versies blijven bewaard." />{plansError && <p role="alert" className="mb-3 text-sm text-red-300">Gepubliceerde versies laden mislukt. Vernieuw de pagina.</p>}{latest && <div className="mb-4 rounded-xl bg-black/20 p-3 text-sm"><div className="flex items-center justify-between"><strong className="text-white">{latest.label}</strong><StatusPill tone="green">{latest.published ? "Gepubliceerd" : "Concept"}</StatusPill></div>{confirmation && <div className="mt-3 flex flex-wrap items-center gap-2"><span className="text-gray-400">Jouw status: {confirmation.status}</span><PrimaryButton disabled={busy || team?.plan_needs_review} onClick={() => void perform(() => confirm.mutateAsync({ versionId: latest.id, userId: actorId, status: "accepted" }), "Je hebt de planning bevestigd.")} className="min-h-8 px-3 py-1 text-xs">Akkoord</PrimaryButton><SecondaryButton disabled={busy} onClick={() => void perform(() => confirm.mutateAsync({ versionId: latest.id, userId: actorId, status: "change_requested", note: "Neem contact op over mijn planning." }), "Je wijzigingsverzoek is opgeslagen.")} className="min-h-8 px-3 py-1 text-xs">Wijziging vragen</SecondaryButton></div>}</div>}<div className="space-y-2">{versions.map((version) => <div key={version.id} className="flex items-center justify-between rounded-xl bg-white/[0.035] p-3 text-sm"><div><strong className="text-gray-200">{version.label}</strong><p className="text-xs text-gray-500">{new Date(version.created_at).toLocaleString("nl-NL")}</p></div></div>)}</div>{!versions.length && <p className="text-sm text-gray-500">Nog geen gepubliceerde versies. Voeg stints toe en publiceer.</p>}</Panel></div></div>;
 };

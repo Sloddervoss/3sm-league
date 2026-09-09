@@ -22,15 +22,6 @@ export interface PracticePaceAggregate {
 const mean = (values: number[]) => values.reduce((s, v) => s + v, 0) / values.length;
 const median = (values: number[]) => { const s = [...values].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const variance = (values: number[]) => mean(values.map((v) => (v - mean(values)) ** 2));
-/** Zoveelste percentage-consistency: 1 = perfect gelijk, 0 = grote spreiding. */
-const consistencyScore = (values: number[]) => {
-  if (values.length < 2) return 0;
-  const sd = Math.sqrt(variance(values));
-  const avg = mean(values);
-  if (avg <= 0 || !Number.isFinite(sd)) return 0;
-  return Math.max(0, Math.min(1, 1 - sd / avg));
-};
-
 /**
  * Agregeert de laps van één coureur tot pace-statistieken.
  * Negeert laps zonder geldige tijd én (optioneel) uitbijters >3σ maak niet
@@ -51,7 +42,7 @@ export function aggregatePracticeLaps(laps: PracticeLapRow[]): PracticePaceAggre
     medianLapSeconds: median(times),
     bestLapSeconds: sorted[0],
     bestFiveAverageSeconds: mean(bestFive),
-    consistencySeconds: consistencyScore(times),
+    consistencySeconds: Math.sqrt(variance(times)),
     validLaps: times.length,
     incidents: laps.reduce((s, lap) => s + (lap.incident_count ?? 0), 0),
     fuelPerLapLitres: fuels.length ? mean(fuels) : null,

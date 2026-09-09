@@ -17,6 +17,9 @@ export type EnduranceTeamRow = {
   car_number: string | null;
   manager_id: string | null;
   livery: string | null;
+  target_size?: number | null;
+  team_approach?: "competitive" | "fun" | "either";
+  plan_needs_review?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -28,7 +31,7 @@ export type EnduranceTeamMemberRow = {
   role: "manager" | "driver" | "reserve";
 };
 
-const teamColumns = "id,event_id,name,car_id,car_number,manager_id,livery,created_at,updated_at";
+const teamColumns = "id,event_id,name,car_id,car_number,manager_id,livery,target_size,team_approach,plan_needs_review,created_at,updated_at";
 const memberColumns = "id,team_id,user_id,role";
 
 /** Plain: alle teams voor een event. */

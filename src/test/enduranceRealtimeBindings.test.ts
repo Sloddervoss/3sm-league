@@ -13,6 +13,7 @@ describe("endurance realtime bindings", () => {
     expect(byTable("endurance_events")?.queryKeys).toEqual([
       ["endurance", "events"],
       ["endurance", "events", "evt-123"],
+      ["endurance", "team-workflow", "evt-123"],
     ]);
 
     // stints: invalidateert het event-scoped stints-query én het overzicht
@@ -25,15 +26,18 @@ describe("endurance realtime bindings", () => {
     expect(byTable("endurance_teams")?.queryKeys).toEqual([
       ["endurance", "teams", "evt-123"],
       ["endurance", "teams", "all"],
+      ["endurance", "team-workflow", "evt-123"],
     ]);
     expect(byTable("endurance_team_members")?.queryKeys).toEqual([
       ["endurance", "teams", "evt-123"],
       ["endurance", "teams", "all"],
+      ["endurance", "team-workflow", "evt-123"],
     ]);
 
     // stint-planner: beschikbaarheid + geplande versies (Versies & bevestiging)
     expect(byTable("endurance_availability")?.queryKeys).toEqual([
       ["endurance", "availability", "evt-123"],
+      ["endurance", "team-workflow", "evt-123"],
     ]);
     expect(byTable("endurance_planning_versions")?.queryKeys).toEqual([
       ["endurance", "plans", "evt-123"],

@@ -727,6 +727,8 @@ export type Database = {
 
       endurance_registrations: {
         Row: {
+          team_approach?: "competitive" | "fun" | "either"
+          preferred_team_size?: number | null
           id: string
           event_id: string
           user_id: string
@@ -746,6 +748,8 @@ export type Database = {
           registered_at: string
         }
         Insert: {
+          team_approach?: "competitive" | "fun" | "either"
+          preferred_team_size?: number | null
           id?: string
           event_id: string
           user_id: string
@@ -765,6 +769,8 @@ export type Database = {
           registered_at?: string
         }
         Update: {
+          team_approach?: "competitive" | "fun" | "either"
+          preferred_team_size?: number | null
           id?: string
           event_id?: string
           user_id?: string
@@ -889,6 +895,7 @@ export type Database = {
 
       endurance_practice_sessions: {
         Row: {
+          conditions?: "dry" | "wet"
           id: string
           event_id: string
           team_id: string | null
@@ -901,6 +908,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          conditions?: "dry" | "wet"
           id?: string
           event_id: string
           team_id?: string | null
@@ -913,6 +921,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          conditions?: "dry" | "wet"
           id?: string
           event_id?: string
           team_id?: string | null
@@ -954,6 +963,9 @@ export type Database = {
 
       endurance_teams: {
         Row: {
+          target_size?: number | null
+          team_approach?: "competitive" | "fun" | "either"
+          plan_needs_review?: boolean
           id: string
           event_id: string
           name: string
@@ -965,6 +977,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          target_size?: number | null
+          team_approach?: "competitive" | "fun" | "either"
+          plan_needs_review?: boolean
           id?: string
           event_id: string
           name: string
@@ -976,6 +991,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          target_size?: number | null
+          team_approach?: "competitive" | "fun" | "either"
+          plan_needs_review?: boolean
           id?: string
           event_id?: string
           name?: string
@@ -2162,6 +2180,11 @@ export type Database = {
       }
     }
     Functions: {
+      endurance_sync_practice_pace: { Args: { p_session_id: string; p_car_alias: string }; Returns: number }
+      endurance_team_workspace: { Args: { p_event_id: string }; Returns: Json }
+      endurance_apply_team_proposal: { Args: { p_event_id: string; p_revision: string; p_teams: Json }; Returns: Json }
+      endurance_manage_team: { Args: { p_event_id: string; p_revision: string; p_action: Json }; Returns: Json }
+
       endurance_activate_iracing_slot: {
         Args: {
           p_catalog_event_id: string

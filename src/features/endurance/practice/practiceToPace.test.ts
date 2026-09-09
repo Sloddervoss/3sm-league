@@ -39,6 +39,6 @@ describe("aggregatePracticeLaps", () => {
 
   it("returns perfect consistency for identical laps", () => {
     const result = aggregatePracticeLaps([lap(100), lap(100), lap(100)]);
-    expect(result.consistencySeconds).toBe(1);
+    expect(result.consistencySeconds).toBe(0);
   });
 });

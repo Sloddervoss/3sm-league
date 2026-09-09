@@ -24,6 +24,7 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
   const { data: registrations = [] } = useEnduranceRegistrations(event.id);
   const { data } = useEndurancePracticeWorkspace(event.id);
   const { start, close } = useEndurancePracticeMutations(event.id);
+  const [conditions, setConditions] = useState<"dry" | "wet">("dry");
   const [label, setLabel] = useState("Practice");
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -31,7 +32,7 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
 
   const selectedCar = getEnduranceCar(event.selectedCarId);
   const pushToPace = async (sessionId: string) => {
-    if (!sessionId) return;
+    if (!sessionId || syncing || !selectedCar) return;
     setSyncing(sessionId);
     setSyncMessage("");
     try {
@@ -42,8 +43,9 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
         car: selectedCar ? selectedCar.name : "Onbekend",
       });
       await queryClient.invalidateQueries({ queryKey: ["endurance", "pace", event.id] });
+      await queryClient.invalidateQueries({ queryKey: ["endurance", "team-workflow", event.id] });
       if (written > 0) onPaceSynced?.();
-      setSyncMessage(written > 0 ? `Pace berekend voor ${written} coureur(s) uit practice.` : "Geen ronden gevonden om door te voeren naar pace.");
+      setSyncMessage(written > 0 ? `Pace berekend voor ${written} coureur(s) uit practice.` : "Geen geldige ronden met de juiste auto en baan gevonden.");
     } catch (caught) {
       setSyncMessage(caught instanceof Error ? `Pace doorvoeren mislukt: ${caught.message}` : "Pace doorvoeren mislukt.");
     } finally {
@@ -54,7 +56,7 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
   const sessions = data?.sessions ?? [];
   const lapsBySession = useMemo(() => data?.lapsBySession ?? {}, [data?.lapsBySession]);
   const active = sessions.find((session) => !session.ended_at) ?? null;
-  const manager = Boolean(user?.id && (isSuperAdmin || isEnduranceManager));
+  const manager = Boolean(user?.id && (isSuperAdmin || isEnduranceManager || event.managerIds.includes(user.id)));
   const registeredCount = registrations.filter((r) => !["rejected", "withdrawn"].includes(r.status)).length;
 
   // Per-sessie: snelste rondetijd per coureur (als de opname-laag later laps levert).
@@ -72,9 +74,9 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
 
   const startSession = () => {
     setError("");
-    if (!manager) return;
+    if (!manager || !selectedCar) return;
     if (active) { setError("Er is al een actieve practice-sessie. Beëindig die eerst."); return; }
-    void start.mutateAsync({ label: label || "Practice", requires_registered: true, created_by: user?.id ?? null })
+    void start.mutateAsync({ label: label || "Practice", conditions, requires_registered: true, created_by: user?.id ?? null })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Practice-sessie kon niet worden gestart."));
   };
   const closeSession = () => {
@@ -90,7 +92,8 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
       {error && <p role="alert" className="mb-4 rounded-xl bg-red-500/10 p-3 text-sm text-red-200 ring-1 ring-red-500/20">{error}</p>}
       {manager && !active && <form onSubmit={(e) => { e.preventDefault(); startSession(); }} className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto]">
         <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wide text-gray-500">Sessienaam <input className="rounded-xl bg-black/20 px-3 py-2 text-sm text-white ring-1 ring-white/10" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Training 1" /></label>
-        <div className="flex items-end"><PrimaryButton type="submit" disabled={start.isPending}><Play className="h-4 w-4" /> Sessie starten</PrimaryButton></div>
+        <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wide text-gray-500">Omstandigheden<select className="min-h-11 rounded-xl bg-black/20 px-3 py-2 text-sm text-white ring-1 ring-white/10" value={conditions} onChange={e => setConditions(e.target.value as "dry" | "wet")}><option value="dry">Droog</option><option value="wet">Nat</option></select></label>
+        <div className="flex items-end"><PrimaryButton type="submit" disabled={start.isPending || !selectedCar}><Play className="h-4 w-4" /> Sessie starten</PrimaryButton></div>
       </form>}
       {active && <div className="mb-5 flex flex-wrap items-center gap-2">
         <StatusPill tone="red"><Timer className="mr-1 inline h-3 w-3" /> Gestart {formatAmsterdam(active.started_at)}</StatusPill>
@@ -104,7 +107,7 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
     <Panel>
       <SectionHeading title="Eerdere sessies" description="Opgenomen trainingsmomenten blijven per race bewaard." />
       {syncMessage && <p className="mb-3 rounded-xl bg-white/[0.04] p-3 text-sm text-gray-200">{syncMessage}</p>}
-      {sessions.length ? <div className="space-y-2">{sessions.map((session) => { const laps = lapsBySession[session.id] ?? []; return <div key={session.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/[0.035] p-3 text-sm"><div><strong className="text-gray-200">{session.label}</strong><p className="text-xs text-gray-500">{formatAmsterdam(session.started_at)}{session.ended_at ? ` – ${formatAmsterdam(session.ended_at)}` : " · open"}</p></div><div className="flex items-center gap-2"><span className="text-xs text-gray-500">{laps.length} ronden</span>{manager && session.ended_at && laps.length > 0 && <SecondaryButton onClick={() => void pushToPace(session.id)} disabled={syncing === session.id}><Gauge className="h-3.5 w-3.5" /> {syncing === session.id ? "Doorvoeren..." : "Doorvoeren naar pace"}</SecondaryButton>}</div></div>; })}</div> : <p className="text-sm text-gray-500">Nog geen practice-sessies voor deze race.</p>}
+      {sessions.length ? <div className="space-y-2">{sessions.map((session) => { const laps = lapsBySession[session.id] ?? []; return <div key={session.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/[0.035] p-3 text-sm"><div><strong className="text-gray-200">{session.label} · {session.conditions === "wet" ? "Nat" : "Droog"}</strong><p className="text-xs text-gray-500">{formatAmsterdam(session.started_at)}{session.ended_at ? ` – ${formatAmsterdam(session.ended_at)}` : " · open"}</p></div><div className="flex items-center gap-2"><span className="text-xs text-gray-500">{laps.length} ronden</span>{manager && session.ended_at && laps.length > 0 && <SecondaryButton onClick={() => void pushToPace(session.id)} disabled={Boolean(syncing) || !selectedCar}><Gauge className="h-3.5 w-3.5" /> {syncing === session.id ? "Doorvoeren..." : "Doorvoeren naar pace"}</SecondaryButton>}</div></div>; })}</div> : <p className="text-sm text-gray-500">Nog geen practice-sessies voor deze race.</p>}
     </Panel>
   </div>;
 };

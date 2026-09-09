@@ -41,6 +41,10 @@ describe("endurance repository data-access contract (Fase 3)", () => {
       "endurance_iracing_manager_interest_overview",
       "endurance_current_capabilities",
       "endurance_publish_plan",
+      "endurance_team_workspace",
+      "endurance_manage_team",
+      "endurance_apply_team_proposal",
+      "endurance_sync_practice_pace",
       "get_pitwall_data",
       "get_pitwall_teams",
     ].includes(rpc))).toBe(true);

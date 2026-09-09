@@ -43,8 +43,9 @@ describe("endurance integration and isolation (super-admin-only canary)", () => 
   });
 
   it("keeps the planning core free of data-platform escape hatches", () => {
+    expect(coreSource).not.toMatch(/\bfetch\s*\(/);
     // Kernel/planning mag nooit netwerk of het Supabase-datapatform aanraken buiten de relay-panel.
-    for (const forbidden of ["@/integrations/supabase", "@supabase/supabase-js", "supabase.from(", "supabase.functions", "supabase.channel", "fetch(", "XMLHttpRequest", "new WebSocket", "sendBeacon("]) {
+    for (const forbidden of ["@/integrations/supabase", "@supabase/supabase-js", "supabase.from(", "supabase.functions", "supabase.channel", "XMLHttpRequest", "new WebSocket", "sendBeacon("]) {
       expect(coreSource).not.toContain(forbidden);
     }
   });

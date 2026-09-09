@@ -29,7 +29,7 @@ with zipfile.ZipFile(out_file, "w") as archive:
             archive.writestr(info, source.read())
 print(f"OK: {len(files)} files")
 `;
-  execFileSync("python3", ["-c", py, extDir, outFile], { stdio: "inherit" });
+  execFileSync(process.platform === "win32" ? "python" : "python3", ["-c", py, extDir, outFile], { stdio: "inherit" });
 
   const size = statSync(outFile).size;
   console.log(`Extension ZIP: ${(size / 1024).toFixed(1)} KB`);

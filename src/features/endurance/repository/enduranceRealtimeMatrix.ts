@@ -42,6 +42,9 @@ export const enduranceRealtimeBindingsForEvent = (
       queryKeys: [["endurance", "notifications"]],
     });
   }
+  for (const binding of bindings) {
+    if (["endurance_events", "endurance_registrations", "endurance_availability", "endurance_pace_entries", "endurance_teams", "endurance_team_members"].includes(binding.table)) binding.queryKeys.push(["endurance", "team-workflow", eventId]);
+  }
   return bindings;
 };
 
