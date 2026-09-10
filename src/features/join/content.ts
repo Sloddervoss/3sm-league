@@ -166,7 +166,7 @@ const nl: JoinCopy = {
     items: [
       { status: "now", title: "GT3 als hoofdfocus", text: "De eigen league richt zich momenteel voornamelijk op GT3 in iRacing." },
       { status: "interest", title: "Ruimte voor andere klassen", text: "Andere klassen en raceformats kunnen worden toegevoegd wanneer daar genoeg animo voor is." },
-      { status: "development", title: "Endurance-planningslaag", text: "3SM bouwt aan een eigen planningslaag rond bestaande iRacing endurance-events. Die omgeving is nog niet volledig af." },
+      { status: "development", title: "Endurance-planningslaag", text: "De endurance-planningslaag is open als bèta: beschikbaarheid, teams, stints en telemetry rond bestaande iRacing endurance-events." },
     ],
   },
   faq: {
@@ -184,7 +184,7 @@ const nl: JoinCopy = {
       { question: "Komen er andere klassen?", answer: "Dat kan. Andere klassen en formats kunnen worden toegevoegd wanneer daar binnen de community voldoende interesse voor is." },
       { question: "Hoe werkt aanmelden?", answer: "Join Discord, maak je siteprofiel compleet, koppel je Discord-account en schrijf je daarna via de kalender in voor een race of seizoen." },
       { question: "Wat heb ik nodig om mee te doen?", answer: "Een iRacing-account, Discord, een compleet 3SM-profiel en de bereidheid om voorbereid, clean en respectvol te racen." },
-      { question: "Hoe zit het met endurance?", answer: "3SM werkt aan een eigen planningslaag voor bestaande iRacing endurance-events. Die omgeving is actief in ontwikkeling en nog niet volledig beschikbaar." },
+      { question: "Hoe zit het met endurance?", answer: "Die omgeving is sinds september open bèta: iedereen met een account kan meedoen." },
     ],
   },
   closing: {
@@ -297,7 +297,7 @@ const en: JoinCopy = {
     items: [
       { status: "now", title: "GT3 as the main focus", text: "The in-house league currently focuses mainly on GT3 in iRacing." },
       { status: "interest", title: "Room for other classes", text: "Other classes and race formats can be added when there is enough community interest." },
-      { status: "development", title: "Endurance planning layer", text: "3SM is building its own planning layer around existing iRacing endurance events. That environment is not complete yet." },
+      { status: "development", title: "Endurance planning layer", text: "The endurance planning layer is open as a beta: availability, teams, stints and telemetry around existing iRacing endurance events." },
     ],
   },
   faq: {
@@ -315,7 +315,7 @@ const en: JoinCopy = {
       { question: "Will other classes be added?", answer: "Possibly. Other classes and formats can be added when there is enough interest within the community." },
       { question: "How do I register?", answer: "Join Discord, complete your site profile, link your Discord account and then register for a race or season through the calendar." },
       { question: "What do I need to participate?", answer: "An iRacing account, Discord, a complete 3SM profile and a willingness to prepare and race cleanly and respectfully." },
-      { question: "What is happening with endurance racing?", answer: "3SM is building its own planning layer for existing iRacing endurance events. It is actively being developed and is not fully available yet." },
+      { question: "What is happening with endurance racing?", answer: "That environment has been in open beta since September: anyone with an account can join." },
     ],
   },
   closing: {
