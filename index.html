@@ -24,6 +24,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
+    <!-- Supabase API preconnect: de site doet per pageload 4-40 API-calls naar dit domein -->
+    <link rel="preconnect" href="https://api.3stripemotorsport.cc" crossorigin />
+    <link rel="dns-prefetch" href="https://api.3stripemotorsport.cc" />
+
     <!-- LCP hero preload: maakt de juiste responsive hero al vindbaar vanuit de HTML -->
     <link rel="preload" as="image" href="/src/assets/hero-bg-mobile.webp" media="(max-width: 768px)" type="image/webp" fetchpriority="high" />
     <link rel="preload" as="image" href="/src/assets/hero-bg-desktop.webp" media="(min-width: 769px) and (max-width: 1400px)" type="image/webp" fetchpriority="high" />
