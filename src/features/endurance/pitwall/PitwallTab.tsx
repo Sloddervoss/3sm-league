@@ -39,7 +39,7 @@ const useTeams = (eventId: string, actorId: string, staff: boolean, enabled: boo
 export const PitwallTab = ({ event }: Props) => {
   const [controlOpen, setControlOpen] = useState(false);
   const { actorId, displayName } = useEnduranceActor();
-  const { isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const { isSuperAdmin, isEnduranceManager } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -69,7 +69,7 @@ export const PitwallTab = ({ event }: Props) => {
     navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
   }, [location.pathname, location.search, navigate]);
 
-  const teamQuery = useTeams(event.id, actorId, isSuperAdmin || isEnduranceManager || isTester, !demoScenario);
+  const teamQuery = useTeams(event.id, actorId, isSuperAdmin || isEnduranceManager, !demoScenario);
   const myTeamId = teamQuery.data?.[0]?.id ?? null;
 
   const real = usePitwallData(

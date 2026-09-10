@@ -21,8 +21,8 @@ const navItems = [
 const Navbar = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, isEnduranceManager, isTester, signOut } = useAuth();
-  const { capabilities: enduranceCapabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
+  const { user, isAdmin, isSuperAdmin, isSteward, isEditor, isEnduranceManager, signOut } = useAuth();
+  const { capabilities: enduranceCapabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager });
   const { language, setLanguage } = useLanguage();
 
   const canEditNews = isAdmin || isSuperAdmin || isEditor;

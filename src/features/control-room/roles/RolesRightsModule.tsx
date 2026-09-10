@@ -7,7 +7,9 @@ import type { Database } from "@/integrations/supabase/types";
 
 type Profile = Database["public"]["Functions"]["admin_get_all_profiles"]["Returns"][number];
 type UserRole = Database["public"]["Functions"]["admin_get_user_roles"]["Returns"][number];
-type ManagedRole = "admin" | "moderator" | "editor" | "tester" | "endurance_manager";
+// "tester" is er met de open beta uit: de rol bestaat nog in de database voor
+// bestaande toekenningen, maar is hier niet meer toe te kennen of in te trekken.
+type ManagedRole = "admin" | "moderator" | "editor" | "endurance_manager";
 
 type RoleDefinition = {
   id: ManagedRole;
@@ -20,7 +22,6 @@ const managedRoles: RoleDefinition[] = [
   { id: "admin", label: "Admin", description: "Volledige operationele toegang", activeClass: "border-emerald-400/35 bg-emerald-400/10 text-emerald-100" },
   { id: "moderator", label: "Steward", description: "Stewarding en uitslagbeoordeling", activeClass: "border-sky-400/35 bg-sky-400/10 text-sky-100" },
   { id: "editor", label: "Editor", description: "Nieuwsredactie beheren", activeClass: "border-violet-400/35 bg-violet-400/10 text-violet-100" },
-  { id: "tester", label: "Tester", description: "Bèta Endurance: live data + profielkoppeling", activeClass: "border-teal-400/35 bg-teal-400/10 text-teal-100" },
   { id: "endurance_manager", label: "Endurance-manager", description: "Endurance-events, teams en Race Control beheren", activeClass: "border-orange-400/35 bg-orange-400/10 text-orange-100" },
 ];
 
@@ -29,10 +30,10 @@ const displayName = (profile: Profile) => profile.display_name || profile.iracin
 const roleBoundaryReason = ({ role, targetIsSuperAdmin, isAdmin, isSuperAdmin }: { role: ManagedRole; targetIsSuperAdmin: boolean; isAdmin: boolean; isSuperAdmin: boolean }) => {
   if (targetIsSuperAdmin) return "Super-adminaccounts zijn beschermd.";
   if (role === "editor" && (isAdmin || isSuperAdmin)) return null;
-  if ((role === "admin" || role === "moderator" || role === "tester" || role === "endurance_manager") && isSuperAdmin) return null;
+  if ((role === "admin" || role === "moderator" || role === "endurance_manager") && isSuperAdmin) return null;
   return role === "editor"
     ? "Alleen Admin en Super-admin kunnen Editors beheren."
-    : "Alleen Super-admin kan Admin-, Steward-, Tester- en Endurance-managerrollen beheren.";
+    : "Alleen Super-admin kan Admin-, Steward- en Endurance-managerrollen beheren.";
 };
 
 export type RolesRightsModuleProps = {
@@ -146,6 +147,6 @@ export function RolesRightsModule({ className = "" }: RolesRightsModuleProps) {
       </div></div>
     </section>
 
-    <p className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-4 text-sm leading-relaxed text-amber-100"><b>Beheergrenzen:</b> Admin en Super-admin beheren Editors. Alleen Super-admin beheert Admin-, Steward-, Tester- en Endurance-managerrollen. Super-adminaccounts zijn beschermd en kunnen hier niet worden aangepast.</p>
+    <p className="rounded-xl border border-amber-400/20 bg-amber-400/[0.06] p-4 text-sm leading-relaxed text-amber-100"><b>Beheergrenzen:</b> Admin en Super-admin beheren Editors. Alleen Super-admin beheert Admin-, Steward- en Endurance-managerrollen. Super-adminaccounts zijn beschermd en kunnen hier niet worden aangepast.</p>
   </section>;
 }
