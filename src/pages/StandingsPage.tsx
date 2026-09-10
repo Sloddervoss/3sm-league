@@ -45,12 +45,14 @@ const StandingsPage = () => {
   const { data: seasonRaces = [], isLoading: seasonRacesLoading } = useQuery({
     queryKey: ["standings-season-schedule"],
     queryFn: async (): Promise<StandingsSeasonRace[]> => {
+      // race_results(count) laat de default-keuze zien welk seizoen al uitslagen
+      // heeft, zonder alle uitslagrijen op te halen.
       const { data, error } = await supabase
         .from("races")
-        .select("league_id, race_date, status")
+        .select("league_id, race_date, status, race_results(count)")
         .not("league_id", "is", null);
       if (error) throw error;
-      return (data || []) as StandingsSeasonRace[];
+      return (data || []) as unknown as StandingsSeasonRace[];
     },
   });
 
