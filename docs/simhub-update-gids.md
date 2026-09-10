@@ -27,6 +27,10 @@ De overgang `0.3.8.0 → 0.3.9.0` moet door het bekende 0.3.8.0 self-update-defe
 handmatig worden uitgevoerd. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer via
 de normale automatische updater.
 
+**Huidige versie: `0.4.2.1`.** Zowel de automatische updater als de ZIP op de site leveren
+die versie. Wie een oudere plugin heeft, krijgt de update vanzelf aangeboden; een handmatige
+installatie is alleen nodig als UAC of lokale beveiligingssoftware de helper blokkeert.
+
 De eerste installatie van een versie van vóór `0.3.0.0` naar de updater-bootstrap blijft
 eenmalig handmatig: sluit SimHub, hernoem een versioned download zoals
 `3SM.EnduranceConnector-0.3.0.0.dll` eerst naar exact `3SM.EnduranceConnector.dll`, en plaats
