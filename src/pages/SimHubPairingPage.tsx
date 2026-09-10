@@ -149,8 +149,8 @@ const SimHubPairingPage = () => {
             <div className="rounded-xl bg-orange-500/10 p-2.5"><Download className="h-5 w-5 text-orange-400" /></div>
             <div>
               <h2 className="text-xl font-bold text-white">Download 3SM Endurance Connector</h2>
-              <p className="mt-1 text-sm text-gray-300">Versie 0.3.9.0 · Handmatige installatie</p>
-              <p className="mt-2 max-w-xl text-xs leading-5 text-gray-500">Sluit SimHub, pak de ZIP uit en volg INSTALLEREN.txt. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer automatisch.</p>
+              <p className="mt-1 text-sm text-gray-300">Versie 0.4.2.1 · Handmatige installatie</p>
+              <p className="mt-2 max-w-xl text-xs leading-5 text-gray-500">Sluit SimHub, pak de ZIP uit en volg INSTALLEREN.txt. Daarna verlopen updates automatisch.</p>
             </div>
           </div>
           <a href="/downloads/3SM.EnduranceConnector-latest.zip" download className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-black text-black transition hover:bg-orange-400">
@@ -158,7 +158,7 @@ const SimHubPairingPage = () => {
           </a>
         </section>
 
-        {(loading || rolesLoading) ? <div className="rounded-2xl border border-border bg-card p-8 text-center"><Loader2 className="mx-auto h-7 w-7 animate-spin text-orange-400" /><p className="mt-3 text-sm text-muted-foreground">Account laden…</p></div> : !user ? <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.07] p-8 text-center"><Cable className="mx-auto h-10 w-10 text-orange-400" /><h2 className="mt-4 text-xl font-bold text-white">Log eerst in</h2><p className="mt-2 text-sm text-gray-400">Pairingcodes zijn kort geldig en accountgebonden.</p><Link to="/auth?redirect=/simhub-koppelen" className="mt-6 inline-flex rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-bold text-black hover:bg-orange-400">Inloggen</Link></div> : !canPair && !devices.data?.length ? <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-8 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-amber-300" /><h2 className="mt-4 text-xl font-bold text-white">Besloten omgeving</h2><p className="mt-2 text-sm text-gray-400">Nieuwe SimHub-koppelingen staan nu uitsluitend open voor de betrokken alpha-rollen.</p></div> : <div className="space-y-5">
+        {(loading || rolesLoading) ? <div className="rounded-2xl border border-border bg-card p-8 text-center"><Loader2 className="mx-auto h-7 w-7 animate-spin text-orange-400" /><p className="mt-3 text-sm text-muted-foreground">Account laden…</p></div> : !user ? <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.07] p-8 text-center"><Cable className="mx-auto h-10 w-10 text-orange-400" /><h2 className="mt-4 text-xl font-bold text-white">Log eerst in</h2><p className="mt-2 text-sm text-gray-400">Pairingcodes zijn kort geldig en accountgebonden.</p><Link to="/auth?redirect=/simhub-koppelen" className="mt-6 inline-flex rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-bold text-black hover:bg-orange-400">Inloggen</Link></div> : !canPair && !devices.data?.length ? <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-8 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-amber-300" /><h2 className="mt-4 text-xl font-bold text-white">Besloten omgeving</h2><p className="mt-2 text-sm text-gray-400">SimHub-koppelen is op dit moment niet beschikbaar voor je account. Bestaande koppelingen blijven zichtbaar.</p></div> : <div className="space-y-5">
           {devices.error && <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">Gekoppelde installaties konden niet worden geladen: {devices.error instanceof Error ? devices.error.message : "onbekende fout"}</p>}
 
           {canPair && <section className="rounded-2xl border border-border bg-card p-6 shadow-lg">
