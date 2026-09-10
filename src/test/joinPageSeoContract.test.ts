@@ -83,6 +83,8 @@ describe("join page redesign contracts", () => {
     expect(content).toContain('development: "In beta",');
     expect(content).not.toContain('development: "In ontwikkeling"');
     expect(content).not.toContain('development: "In development"');
+    expect(content).not.toContain("nog niet volledig beschikbaar");
+    expect(content).not.toContain("not fully available yet");
     expect(content).toContain('title: "Alles over meedoen."');
     expect(content).toContain('title: "Solo of eigen team"');
     expect(content).not.toContain('title: "Teams en solo coureurs"');
