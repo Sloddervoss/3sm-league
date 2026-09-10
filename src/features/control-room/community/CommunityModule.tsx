@@ -20,7 +20,6 @@ type Team = Database["public"]["Tables"]["teams"]["Row"];
 type TeamRequest = Database["public"]["Tables"]["team_creation_requests"]["Row"];
 type Driver = Database["public"]["Functions"]["admin_get_all_profiles"]["Returns"][number];
 type UserRole = Database["public"]["Functions"]["admin_get_user_roles"]["Returns"][number];
-type ManagedRole = "admin" | "moderator" | "editor";
 
 type RequestWithProfile = TeamRequest & { profiles: { display_name: string | null; iracing_name: string | null } | null };
 type TeamWithMembers = Team & { team_memberships: Array<{ id: string; user_id: string; role: string }> };
@@ -35,10 +34,17 @@ export type CommunityModuleProps = {
 
 const blankTeam = (): TeamDraft => ({ name: "", color: "#f97316", description: "", logoUrl: "" });
 const displayName = (profile: { display_name: string | null; iracing_name: string | null }) => profile.display_name || profile.iracing_name || "Onbekende coureur";
-const roleLabel = (role: string) => ({ moderator: "Steward", super_admin: "Super-admin", admin: "Admin", editor: "Editor" }[role] || role);
-const roleClass = (role: ManagedRole, active: boolean) => active
-  ? role === "admin" ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-200" : role === "moderator" ? "border-sky-400/35 bg-sky-400/10 text-sky-200" : "border-violet-400/35 bg-violet-400/10 text-violet-200"
-  : "border-white/10 bg-white/[0.035] text-gray-400";
+const roleLabel = (role: string) => ({ moderator: "Steward", super_admin: "Super-admin", admin: "Admin", editor: "Editor", endurance_manager: "Endurance-manager" }[role] || role);
+/** Alleen weergave: deze module kent geen actieve/inactieve stand meer. */
+const roleClass = (role: string) => {
+  switch (role) {
+    case "admin": return "border-emerald-400/35 bg-emerald-400/10 text-emerald-200";
+    case "moderator": return "border-sky-400/35 bg-sky-400/10 text-sky-200";
+    case "editor": return "border-violet-400/35 bg-violet-400/10 text-violet-200";
+    case "endurance_manager": return "border-orange-400/35 bg-orange-400/10 text-orange-200";
+    default: return "border-white/10 bg-white/[0.035] text-gray-400";
+  }
+};
 
 const resizeImageToDataUrl = (file: File, max = 256): Promise<string> => new Promise((resolve, reject) => {
   const image = new Image();
@@ -135,14 +141,6 @@ export function CommunityModule(_: CommunityModuleProps) {
     onSuccess: () => { toast.success("Team verwijderd."); invalidateCommunity(); setDeleteTeam(null); },
     onError: (error: Error) => toast.error(error.message),
   });
-  const changeRole = useMutation({
-    mutationFn: async ({ userId, role, grant }: { userId: string; role: ManagedRole; grant: boolean }) => {
-      const { error } = await supabase.rpc(grant ? "admin_grant_role" : "admin_revoke_role", { target_user_id: userId, target_role: role });
-      if (error) throw error;
-    },
-    onSuccess: (_, variables) => { toast.success(`${roleLabel(variables.role)} ${variables.grant ? "toegekend" : "ingetrokken"}.`); invalidateCommunity(); },
-    onError: (error: Error) => toast.error(error.message),
-  });
   const removeDriver = useMutation({
     mutationFn: async (userId: string) => { const { error } = await supabase.rpc("admin_delete_user", { target_user_id: userId }); if (error) throw error; },
     onSuccess: () => { toast.success("Coureur verwijderd."); invalidateCommunity(); setDeleteDriver(null); },
@@ -158,7 +156,7 @@ export function CommunityModule(_: CommunityModuleProps) {
   const teams = teamsQuery.data || [];
   const drivers = driversQuery.data || [];
   const unsyncedTeams = teams.filter((team) => !team.discord_role_id || !team.discord_category_id);
-  const isBusy = approveRequest.isPending || denyRequest.isPending || saveTeam.isPending || removeTeam.isPending || changeRole.isPending || removeDriver.isPending;
+  const isBusy = approveRequest.isPending || denyRequest.isPending || saveTeam.isPending || removeTeam.isPending || removeDriver.isPending;
   const startEdit = (team: Team) => { setEditingTeam(team); setTeamDraft({ name: team.name, color: team.color || "#f97316", description: team.description || "", logoUrl: team.logo_url || "" }); setShowCreate(false); };
   const loadLogo = async (file?: File, destination: "new" | "edit" = "edit") => {
     if (!file) return;
@@ -183,9 +181,9 @@ export function CommunityModule(_: CommunityModuleProps) {
       {unsyncedTeams.length > 0 && <p className="mt-4 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-3 text-xs text-amber-100">{unsyncedTeams.length} team{unsyncedTeams.length === 1 ? " heeft" : "s hebben"} geen complete Discord rol/categorie-koppeling.</p>}
     </section>
 
-    <section className="overflow-x-auto rounded-2xl border border-white/[0.07] bg-white/[0.025]"><div className="min-w-[560px] grid grid-cols-[minmax(13rem,1fr)_minmax(15rem,auto)_auto] gap-3 bg-white/[0.035] px-5 py-3 text-[11px] font-black uppercase tracking-wider text-gray-500"><span>Coureur</span><span>Site-rollen</span><span>Beheer</span></div>{driversQuery.isLoading && <p className="p-5 text-sm text-gray-500">Coureurs laden…</p>}{drivers.map((driver) => { const roles = rolesByUser.get(driver.user_id) || []; const targetSuperAdmin = roles.includes("super_admin"); const isMe = driver.user_id === user?.id; const canDelete = isAdmin && !targetSuperAdmin && !isMe; const canToggle = (role: ManagedRole) => !targetSuperAdmin && ((role === "editor" && (isAdmin || isSuperAdmin)) || ((role === "admin" || role === "moderator") && isSuperAdmin)); return <div key={driver.user_id} className="grid grid-cols-[minmax(13rem,1fr)_minmax(15rem,auto)_auto] gap-3 border-t border-white/[0.06] px-5 py-3.5 text-sm"><span><span className="block font-bold text-white">{displayName(driver)}</span><span className="text-xs text-gray-500">iRacing: {driver.iracing_id || "niet gekoppeld"} · Discord: {driver.discord_id ? "gekoppeld" : "niet gekoppeld"}</span></span><span className="flex flex-wrap items-center gap-1.5">{targetSuperAdmin ? <span className="rounded-md border border-yellow-400/30 bg-yellow-400/10 px-2 py-1 text-xs font-bold text-yellow-200">★ Super-admin</span> : (["admin", "moderator", "editor"] as ManagedRole[]).map((role) => { const active = roles.includes(role); return <button key={role} onClick={() => canToggle(role) && changeRole.mutate({ userId: driver.user_id, role, grant: !active })} disabled={!canToggle(role) || changeRole.isPending} title={canToggle(role) ? `${active ? "Trek in" : "Ken toe"}: ${roleLabel(role)}` : "Onvoldoende rechten voor deze rol"} className={`rounded-md border px-2 py-1 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${roleClass(role, active)}`}>{active ? roleLabel(role) : `+ ${roleLabel(role)}`}</button>; })}</span><span className="flex items-center"><button onClick={() => setDeleteDriver(driver)} disabled={!canDelete || removeDriver.isPending} title={canDelete ? "Coureur definitief verwijderen" : "Super-admins en je eigen account kunnen hier niet worden verwijderd"} className="rounded-lg p-2 text-gray-400 hover:bg-red-400/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-25"><Trash2 className="h-4 w-4" /></button></span></div>; })}{!driversQuery.isLoading && !drivers.length && <p className="p-5 text-sm text-gray-500">Geen coureurs gevonden.</p>}</section>
+    <section className="overflow-x-auto rounded-2xl border border-white/[0.07] bg-white/[0.025]"><div className="min-w-[560px] grid grid-cols-[minmax(13rem,1fr)_minmax(15rem,auto)_auto] gap-3 bg-white/[0.035] px-5 py-3 text-[11px] font-black uppercase tracking-wider text-gray-500"><span>Coureur</span><span>Site-rollen (alleen weergave)</span><span>Beheer</span></div>{driversQuery.isLoading && <p className="p-5 text-sm text-gray-500">Coureurs laden…</p>}{drivers.map((driver) => { const roles = rolesByUser.get(driver.user_id) || []; const targetSuperAdmin = roles.includes("super_admin"); const isMe = driver.user_id === user?.id; const canDelete = isAdmin && !targetSuperAdmin && !isMe; return <div key={driver.user_id} className="grid grid-cols-[minmax(13rem,1fr)_minmax(15rem,auto)_auto] gap-3 border-t border-white/[0.06] px-5 py-3.5 text-sm"><span><span className="block font-bold text-white">{displayName(driver)}</span><span className="text-xs text-gray-500">iRacing: {driver.iracing_id || "niet gekoppeld"} · Discord: {driver.discord_id ? "gekoppeld" : "niet gekoppeld"}</span></span><span className="flex flex-wrap items-center gap-1.5">{targetSuperAdmin ? <span className="rounded-md border border-yellow-400/30 bg-yellow-400/10 px-2 py-1 text-xs font-bold text-yellow-200">★ Super-admin</span> : (roles.length > 0 ? roles.map((role) => <span key={role} className={`rounded-md border px-2 py-1 text-xs font-bold ${roleClass(role)}`}>{roleLabel(role)}</span>) : <span className="text-xs text-gray-500">geen site-rollen</span>)}</span><span className="flex items-center"><button onClick={() => setDeleteDriver(driver)} disabled={!canDelete || removeDriver.isPending} aria-label={`${displayName(driver)} definitief verwijderen`} title={canDelete ? "Coureur definitief verwijderen (niet hetzelfde als een rol intrekken)" : "Super-admins en je eigen account kunnen hier niet worden verwijderd"} className="rounded-lg p-2 text-gray-400 hover:bg-red-400/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-25"><Trash2 className="h-4 w-4" /></button></span></div>; })}{!driversQuery.isLoading && !drivers.length && <p className="p-5 text-sm text-gray-500">Geen coureurs gevonden.</p>}</section>
 
-    <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5"><div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-orange-300" /><div><p className="text-xs font-black uppercase tracking-wider text-gray-500">Rollen zijn site-rechten</p><h3 className="font-heading text-xl font-black text-white">Beheergrenzen</h3></div></div><p className="mt-3 text-sm leading-relaxed text-gray-400">Admin en Super-admin kunnen Editors beheren. Alleen Super-admin kan Admin- en Stewardrollen beheren. Super-adminaccounts zijn beschermd. Discord-teamrollen zijn geen website-permissies.</p></section>
+    <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5"><div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-orange-300" /><div><p className="text-xs font-black uppercase tracking-wider text-gray-500">Rollen zijn site-rechten</p><h3 className="font-heading text-xl font-black text-white">Beheergrenzen</h3></div></div><p className="mt-3 text-sm leading-relaxed text-gray-400">Deze lijst toont alleen welke site-rollen iemand heeft. Toekennen en intrekken gebeurt op één plek: <b className="text-white">Control Room &middot; Rollen &amp; rechten</b>. Daar staan ook de Endurance-managerrol en de beheergrenzen. Super-adminaccounts zijn beschermd, en Discord-teamrollen zijn geen website-permissies.</p></section>
 
     <AlertDialog open={Boolean(deleteTeam)} onOpenChange={(open) => !open && setDeleteTeam(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Team verwijderen?</AlertDialogTitle><AlertDialogDescription>{deleteTeam && <>Je verwijdert <strong>{deleteTeam.name}</strong>. Dit team heeft momenteel <strong>{deleteTeam.team_memberships.length}</strong> lid{deleteTeam.team_memberships.length === 1 ? "" : "den"}. Controleer de impact op lidmaatschappen en Discord-koppelingen voordat je doorgaat.</>}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Annuleren</AlertDialogCancel><AlertDialogAction onClick={(event) => { event.preventDefault(); if (deleteTeam) removeTeam.mutate(deleteTeam.id); }} disabled={removeTeam.isPending} className="bg-red-600 hover:bg-red-500">{removeTeam.isPending ? "Verwijderen…" : "Team verwijderen"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     <AlertDialog open={Boolean(deleteDriver)} onOpenChange={(open) => !open && setDeleteDriver(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Coureur verwijderen?</AlertDialogTitle><AlertDialogDescription>{deleteDriver && <>Dit verwijdert <strong>{displayName(deleteDriver)}</strong> via de bestaande admin-RPC. Deze actie kan niet ongedaan worden gemaakt.</>}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Annuleren</AlertDialogCancel><AlertDialogAction onClick={(event) => { event.preventDefault(); if (deleteDriver) removeDriver.mutate(deleteDriver.user_id); }} disabled={removeDriver.isPending} className="bg-red-600 hover:bg-red-500">{removeDriver.isPending ? "Verwijderen…" : "Coureur verwijderen"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
