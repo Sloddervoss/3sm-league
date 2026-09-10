@@ -78,7 +78,11 @@ describe("join page redesign contracts", () => {
     expect(experience).toContain('id="join-steps"');
     expect(experience).toContain("lg:grid-cols-4");
     expect(content).toContain('title: "Meer dan alleen een Discord."');
-    expect(content).toContain('title: "Nu en in ontwikkeling."');
+    expect(content).toContain('title: "Nu en in bèta."');
+    expect(content).toContain('development: "In bèta",');
+    expect(content).toContain('development: "In beta",');
+    expect(content).not.toContain('development: "In ontwikkeling"');
+    expect(content).not.toContain('development: "In development"');
     expect(content).toContain('title: "Alles over meedoen."');
     expect(content).toContain('title: "Solo of eigen team"');
     expect(content).not.toContain('title: "Teams en solo coureurs"');

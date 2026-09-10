@@ -58,6 +58,8 @@ export type JoinCopy = {
     now: string;
     interest: string;
     development: string;
+    // De sleutel "development" is historisch; de zichtbare tekst staat in
+    // formats.development en luidt sinds de open bèta "In bèta" / "In beta".
     items: Array<{ status: "now" | "interest" | "development"; title: string; text: string }>;
   };
   faq: { eyebrow: string; title: string; items: JoinFaqItem[] };
@@ -156,11 +158,11 @@ const nl: JoinCopy = {
   },
   formats: {
     eyebrow: "Klassen en langere races",
-    title: "Nu en in ontwikkeling.",
+    title: "Nu en in bèta.",
     lead: "Geen harde roadmap en geen verzonnen releasedata. Alleen de actuele richting van de community.",
     now: "Nu",
     interest: "Bij voldoende interesse",
-    development: "In ontwikkeling",
+    development: "In bèta",
     items: [
       { status: "now", title: "GT3 als hoofdfocus", text: "De eigen league richt zich momenteel voornamelijk op GT3 in iRacing." },
       { status: "interest", title: "Ruimte voor andere klassen", text: "Andere klassen en raceformats kunnen worden toegevoegd wanneer daar genoeg animo voor is." },
@@ -287,11 +289,11 @@ const en: JoinCopy = {
   },
   formats: {
     eyebrow: "Classes and longer races",
-    title: "Now and in development.",
+    title: "Now and in beta.",
     lead: "No hard roadmap and no invented release dates. Only the current direction of the community.",
     now: "Now",
     interest: "When there is enough interest",
-    development: "In development",
+    development: "In beta",
     items: [
       { status: "now", title: "GT3 as the main focus", text: "The in-house league currently focuses mainly on GT3 in iRacing." },
       { status: "interest", title: "Room for other classes", text: "Other classes and race formats can be added when there is enough community interest." },
