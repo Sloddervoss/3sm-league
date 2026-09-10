@@ -152,8 +152,11 @@ describe("iRacing Endurance event-card flow", () => {
 
   it("houdt de taalbediening bereikbaar bij de brede ingelogde navigatie", () => {
     const navbar = read("src/components/Navbar.tsx");
-    expect(navbar).toContain('const showDesktop = "2xl:flex"');
-    expect(navbar).toContain('const hideDesktop = "2xl:hidden"');
+    // Let op: dit was een stale test. De navigatie schakelt al langer op
+    // 1800px (min-[1800px]) in plaats van de oude 2xl-trap (1536px), maar de
+    // assertie was nooit meegewijzigd. Hij faalde daardoor al vóór de open beta.
+    expect(navbar).toContain('const showDesktop = "min-[1800px]:flex"');
+    expect(navbar).toContain('const hideDesktop = "min-[1800px]:hidden"');
   });
 
   it("inlined slots niet meer in de kaarten maar verplaatst ze naar de modal-popup", () => {

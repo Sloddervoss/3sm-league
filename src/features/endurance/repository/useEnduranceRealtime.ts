@@ -76,9 +76,11 @@ export function useEnduranceRealtime(
 
 /** Eventworkspace: alpha-staff blijft live; gewone leden alleen via runtimeflag. */
 export function useEnduranceEventRealtime(eventId?: string) {
-  const { user, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
-  const { capabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
-  const enabled = Boolean(eventId && (isSuperAdmin || isEnduranceManager || isTester || capabilities.multi_user_realtime_enabled));
+  const { user, isSuperAdmin, isEnduranceManager } = useAuth();
+  const { capabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager });
+  // De server (carrier-RLS in 20260820180000) bepaalt de echte toegang:
+  // beheerders altijd, gewone leden alleen als de realtime-schakelaar aanstaat.
+  const enabled = Boolean(eventId && (isSuperAdmin || isEnduranceManager || (capabilities.can_access && capabilities.multi_user_realtime_enabled)));
   const bindings = useMemo(
     () => eventId ? enduranceRealtimeBindingsForEvent(eventId, { userId: user?.id }) : [],
     [eventId, user?.id],

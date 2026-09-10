@@ -44,13 +44,34 @@ describe("endurance alpha-rollen (tester + endurance_manager)", () => {
   });
 
   it("exposeert de rollen in AuthContext en past ze toe in gates", () => {
-    expect(auth).toContain("isTester");
+    // Met de open beta is tester functioneel uit de frontend verdwenen. De rol
+    // bestaat nog in de database (bestaande toekenningen blijven), maar
+    // AuthContext geeft er geen vlag meer voor en niets stuurt er nog op.
+    expect(auth).not.toContain("isTester");
+    expect(auth).not.toContain('roles.has("tester")');
     expect(auth).toContain("isEnduranceManager");
-    expect(auth).toContain('roles.has("tester")');
     expect(auth).toContain('roles.has("endurance_manager")');
     expect(page).toContain("useEnduranceCapabilities(user?.id");
     expect(page).toContain("capabilities.can_access");
     expect(navbar).toContain("enduranceCapabilities.can_access");
+    // De wachtstand mag niet meer overgeslagen worden door staff: voorheen
+    // zagen zij op basis van de fallback al toegang vóór de server antwoordde.
+    expect(page).not.toContain("legacyStaff");
+  });
+
+  it("maakt tester niet meer toekenbaar in het rolbeheer", () => {
+    const rolesModule = readFileSync("src/features/control-room/roles/RolesRightsModule.tsx", "utf8");
+    expect(rolesModule).toContain('type ManagedRole = "admin" | "moderator" | "editor" | "endurance_manager";');
+    expect(rolesModule).not.toContain('{ id: "tester"');
+  });
+
+  it("valt bij een kapotte capabilities-RPC niet terug op tester-toegang", () => {
+    const capabilities = readFileSync("src/features/endurance/repository/capabilitiesRepository.ts", "utf8");
+    // De noodfallback mag nooit ruimer zijn dan wat de server toestaat: geen
+    // tester, en gewone leden krijgen niets tot de server antwoordt.
+    expect(capabilities).not.toContain("isTester");
+    expect(capabilities).toContain("staffFallbackCapabilities");
+    expect(capabilities).toContain("usingFallback");
   });
 
   it("staat endurance-managers toe de definitieve auto te bevestigen (niet alleen super-admin)", () => {

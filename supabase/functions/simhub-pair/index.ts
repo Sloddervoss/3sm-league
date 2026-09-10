@@ -57,17 +57,18 @@ const isSuperAdmin = async (userId: string): Promise<boolean> => {
   return (data || []).some((row: { role: string }) => row.role === "super_admin");
 };
 
-// Endurance-ster: super_admin, endurance_manager of tester. Testers mogen hun
-// EIGEN device koppelen (paar-code aanmaken), maar niet beheren/intrekken.
+// Noodfallback voor als de capabilities-RPC onbereikbaar is. De normale route
+// loopt via endurance_capabilities_for_user; deze lijst mag daarom niet ruimer
+// zijn dan de server toestaat. "tester" is er met de open beta uit.
 const isEnduranceStaff = async (userId: string): Promise<boolean> => {
   const { data, error } = await service.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw error;
-  return (data || []).some((row: { role: string }) => ["super_admin", "endurance_manager", "tester"].includes(row.role));
+  return (data || []).some((row: { role: string }) => ["super_admin", "endurance_manager"].includes(row.role));
 };
 
 // Device->race/-team-binding (assign/clear) is beheer: super_admin of
-// endurance_manager. Testers kunnen hun eigen device wel koppelen op de
-// SimHub-pagina, maar géén apparaten aan event/team toewijzen.
+// endurance_manager. Gewone leden kunnen hun eigen device wél koppelen op de
+// SimHub-pagina, maar géén apparaten aan een event of team toewijzen.
 const isEnduranceManager = async (userId: string): Promise<boolean> => {
   const { data, error } = await service.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw error;

@@ -9,7 +9,6 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isSteward: boolean;
   isEditor: boolean;
-  isTester: boolean;
   isEnduranceManager: boolean;
   loading: boolean;
   rolesLoading: boolean;
@@ -23,7 +22,6 @@ const AuthContext = createContext<AuthContextType>({
   isSuperAdmin: false,
   isSteward: false,
   isEditor: false,
-  isTester: false,
   isEnduranceManager: false,
   loading: true,
   rolesLoading: true,
@@ -41,7 +39,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isSteward, setIsSteward] = useState(false);
   const [isEditor, setIsEditor] = useState(false);
-  const [isTester, setIsTester] = useState(false);
   const [isEnduranceManager, setIsEnduranceManager] = useState(false);
   const roleRequestRef = useRef(0);
   const resolvedRoleUserRef = useRef<string | null>(null);
@@ -57,7 +54,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsSuperAdmin(false);
       setIsSteward(false);
       setIsEditor(false);
-      setIsTester(false);
       setIsEnduranceManager(false);
       return;
     }
@@ -79,8 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setIsSuperAdmin(false);
             setIsSteward(false);
             setIsEditor(false);
-            setIsTester(false);
-            setIsEnduranceManager(false);
+                  setIsEnduranceManager(false);
           }
           setRolesLoading(false);
           return;
@@ -91,7 +86,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsSuperAdmin(roles.has("super_admin"));
         setIsSteward(roles.has("moderator"));
         setIsEditor(roles.has("editor"));
-        setIsTester(roles.has("tester"));
         setIsEnduranceManager(roles.has("endurance_manager"));
         resolvedRoleUserRef.current = userId;
         setRolesLoading(false);
@@ -121,14 +115,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsSuperAdmin(false);
     setIsSteward(false);
     setIsEditor(false);
-    setIsTester(false);
     setIsEnduranceManager(false);
     setRolesLoading(false);
     await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, isAdmin, isSuperAdmin, isSteward, isEditor, isTester, isEnduranceManager, loading, rolesLoading, signOut }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, isAdmin, isSuperAdmin, isSteward, isEditor, isEnduranceManager, loading, rolesLoading, signOut }}>
       {children}
     </AuthContext.Provider>
   );
