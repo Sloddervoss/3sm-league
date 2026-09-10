@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/i18n/useLanguage";
 import { useEnduranceCapabilities } from "@/features/endurance/repository/capabilitiesRepository";
+import { EnduranceBetaBadge } from "@/components/EnduranceBetaBadge";
 
 const navItems = [
   { label: "Home", path: "/", icon: Flag },
@@ -31,10 +32,9 @@ const Navbar = () => {
   const visibleNavItems = canUseEndurance
     ? [...navItems, { label: "Endurance", path: "/endurance/", icon: TimerReset }]
     : navItems;
-  // Authenticated navigation can exceed a 1440px viewport. Keep the existing
-  // menu variant active until 2xl so the language control remains reachable.
-  const showDesktop = "2xl:flex";
-  const hideDesktop = "2xl:hidden";
+  // Include the beta label and all staff actions without clipping account controls.
+  const showDesktop = "min-[1800px]:flex";
+  const hideDesktop = "min-[1800px]:hidden";
   const LanguageSwitch = ({ className = "" }: { className?: string }) => (
     <div
       className={`inline-flex h-8 items-center rounded-md border border-border bg-card/40 p-0.5 ${className}`}
@@ -61,7 +61,7 @@ const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
-      <div className="container mx-auto flex items-center justify-between h-16 px-4">
+      <div className="mx-auto flex h-16 max-w-[1920px] items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <div className="w-9 h-9 rounded bg-gradient-racing flex items-center justify-center shadow-lg shadow-primary/30">
             <span className="font-heading font-black text-white text-[11px] tracking-tight">3SM</span>
@@ -79,13 +79,14 @@ const Navbar = () => {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`relative px-3.5 py-2 rounded-md text-[15.5px] font-semibold transition-colors ${
+                className={`relative px-2 py-2 rounded-md text-sm font-semibold transition-colors ${
                   active ? "bg-white/[0.035] text-white" : "text-gray-300 hover:bg-white/[0.025] hover:text-white"
                 }`}
               >
-                <span className="relative flex items-center gap-1.5 leading-none">
+                <span className="relative flex items-center gap-1.5 whitespace-nowrap leading-none">
                   <item.icon className="w-3.5 h-3.5 shrink-0" />
                   {item.label}
+                  {item.path === "/endurance/" && <EnduranceBetaBadge />}
                 </span>
                 {active && <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-orange-500 rounded-full" />}
               </Link>
@@ -177,7 +178,7 @@ const Navbar = () => {
       {/* Mobile menu */}
       {mobileOpen && (
         <div
-          className={`${hideDesktop} bg-card border-b border-border px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-150`}
+          className={`${hideDesktop} max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain bg-card border-b border-border px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-150`}
         >
           <div className="flex items-center justify-between py-3">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">Taal</span>
@@ -196,6 +197,7 @@ const Navbar = () => {
               >
                 <item.icon className="w-4 h-4" />
                 {item.label}
+                {item.path === "/endurance/" && <EnduranceBetaBadge />}
               </Link>
             );
           })}
