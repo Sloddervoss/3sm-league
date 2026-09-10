@@ -61,7 +61,10 @@ describe("Endurance runtime capabilities", () => {
   it("waits for a future member capability before redirecting the route", () => {
     const page = readFileSync("src/features/endurance/shell/EndurancePage.tsx", "utf8");
     expect(page).toContain("capabilitiesPending");
-    expect(page).toContain("!legacyStaff && capabilitiesPending");
-    expect(page.indexOf("!legacyStaff && capabilitiesPending")).toBeLessThan(page.indexOf("if (!canUseEndurance)"));
+    // De wachtstand geldt nu voor iedereen. Voorheen sloegen staff en testers hem
+    // over en zagen zij op basis van de noodfallback al toegang voordat de
+    // server antwoord gaf; die bypass is eruit.
+    expect(page).not.toContain("legacyStaff");
+    expect(page.indexOf("if (capabilitiesPending)")).toBeLessThan(page.indexOf("if (!canUseEndurance)"));
   });
 });
