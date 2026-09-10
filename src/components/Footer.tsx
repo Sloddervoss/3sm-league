@@ -1,6 +1,7 @@
 import type { SVGProps } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { EnduranceBetaBadge } from "@/components/EnduranceBetaBadge";
 import { canViewCommunitySupport } from "@/features/community-support/model";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
@@ -99,7 +100,7 @@ const Footer = () => {
                 ...(canUseEndurance ? [{ label: "Endurance", path: "/endurance/" }] : []),
               ].map((link) => (
                 <Link key={link.path} to={link.path} className="text-xs text-gray-300 hover:text-primary transition-colors py-0.5">
-                  {link.label}
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">{link.label}{link.path === "/endurance/" && <EnduranceBetaBadge />}</span>
                 </Link>
               ))}
             </div>
