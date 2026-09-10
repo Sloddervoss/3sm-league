@@ -26,14 +26,14 @@ const ArchivePanel = () => {
 };
 
 const EnduranceContent = () => {
-  const { user, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
-  const { capabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
+  const { user, isSuperAdmin, isEnduranceManager } = useAuth();
+  const { capabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager });
   const { data: dbEvents = [] } = useEnduranceEvents();
   const location = useLocation();
   const navigate = useNavigate();
   const [section, setSection] = useState<EnduranceSection>("upcoming");
-  // Beheer (events aanmaken) is voor super_admin + endurance_manager; testers
-  // en managers mogen de suite zien/gebruiken, testers zien geen beheer-tab.
+  // Beheer (events aanmaken) is voor super_admin + endurance_manager.
+  // Gewone leden zien de suite wel, maar geen beheer-tab.
   const showManage = capabilities.can_manage_events;
   useEffect(() => { if (!showManage && section === "manage") setSection("upcoming"); }, [showManage, section]);
 
@@ -56,15 +56,20 @@ const EnduranceContent = () => {
 };
 
 const EndurancePage = () => {
-  const { loading, rolesLoading, user, isSuperAdmin, isTester, isEnduranceManager } = useAuth();
-  const { capabilities, isPending: capabilitiesPending } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
+  const { loading, rolesLoading, user, isSuperAdmin, isEnduranceManager } = useAuth();
+  const { capabilities, isPending: capabilitiesPending, usingFallback } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager });
   const profileNames = useDriverNameMap();
-  const legacyStaff = Boolean(isSuperAdmin || isTester || isEnduranceManager);
   const canUseEndurance = capabilities.can_access;
   useEffect(() => { document.title = "3Stripe Endurance Control Center"; const description = document.querySelector('meta[name="description"]'); description?.setAttribute("content", "Plan 3Stripe endurance-races, beschikbaarheid, teams, stints en Race Control in één besloten omgeving."); }, []);
   if (loading || rolesLoading) return <div className="flex min-h-screen items-center justify-center bg-background text-sm text-gray-400">Account laden…</div>;
   if (!user) return <Navigate to="/auth?redirect=/endurance" replace />;
-  if (!legacyStaff && capabilitiesPending) return <div className="p-8 text-gray-400">Toegang laden…</div>;
+  // De wachtstand geldt nu voor iedereen: voorheen sloegen staff en testers hem
+  // over en zagen zij op basis van de fallback al toegang voordat de server
+  // antwoord gaf.
+  if (capabilitiesPending) return <div className="p-8 text-gray-400">Toegang laden…</div>;
+  if (!canUseEndurance && usingFallback) {
+    return <><Navbar /><main className="flex min-h-[70vh] flex-col items-center justify-center gap-4 bg-background px-4 pt-20 text-center"><Lock className="h-10 w-10 text-orange-400" /><h1 className="font-heading text-3xl font-black text-white">Toegang kon niet geladen worden</h1><p className="max-w-md text-sm text-gray-400">We konden je rechten niet ophalen. Dit is geen weigering — probeer het zo opnieuw.</p></main><Footer /></>;
+  }
   if (!canUseEndurance) {
     return <><Navbar /><main className="flex min-h-[70vh] flex-col items-center justify-center gap-4 bg-background px-4 pt-20 text-center"><Lock className="h-10 w-10 text-orange-400" /><h1 className="font-heading text-3xl font-black text-white">Besloten omgeving</h1><p className="max-w-md text-sm text-gray-400">Het Endurance Control Center is een besloten, niet-openbare omgeving. Hier is niets zichtbaar voor jou.</p></main><Footer /></>;
   }

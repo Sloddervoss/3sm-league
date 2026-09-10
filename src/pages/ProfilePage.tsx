@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import { Navigate, Link as RouterLink } from "react-router-dom";
+import { useEnduranceCapabilities } from "@/features/endurance/repository/capabilitiesRepository";
 
 type ProfileRow = {
   user_id: string;
@@ -46,8 +47,10 @@ type MyResult = {
 };
 
 const ProfilePage = () => {
-  const { user, session, loading, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
-  const canUseSimhub = Boolean(isSuperAdmin || isEnduranceManager || isTester);
+  const { user, session, loading, isSuperAdmin, isEnduranceManager } = useAuth();
+  const { capabilities: enduranceCapabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager });
+  // SimHub-koppelen volgt de capabilities, net als SimHubPairingPage.
+  const canUseSimhub = Boolean(enduranceCapabilities.can_pair_own_device);
   const queryClient = useQueryClient();
 
   const { data: profile } = useQuery({

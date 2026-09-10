@@ -11,8 +11,8 @@ import { centralRowToBridgeResponse, createCentralSimHubPairingCode, listOwnCent
 import { getSimHubTelemetryState, type SimHubBridgeResponse } from "@/lib/localSimHubBridge";
 
 const SimHubPairingPage = () => {
-  const { user, loading, rolesLoading, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
-  const { capabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager, isTester });
+  const { user, loading, rolesLoading, isSuperAdmin, isEnduranceManager } = useAuth();
+  const { capabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager });
   const canPair = capabilities.can_pair_own_device;
   const [pairing, setPairing] = useState<SimHubPairingCode | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
