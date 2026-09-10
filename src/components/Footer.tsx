@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { EnduranceBetaBadge } from "@/components/EnduranceBetaBadge";
 import { canViewCommunitySupport } from "@/features/community-support/model";
+import { useEnduranceCapabilities } from "@/features/endurance/repository/capabilitiesRepository";
 
 const DISCORD_URL = "https://discord.gg/H7tZVuzBgT";
 const INSTAGRAM_URL = "https://www.instagram.com/3stripemotorsport";
@@ -60,9 +61,11 @@ const socialLinks = [
 ];
 
 const Footer = () => {
-  const { isAdmin, isSuperAdmin, isEnduranceManager, isTester } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isEnduranceManager } = useAuth();
+  const { capabilities: enduranceCapabilities } = useEnduranceCapabilities(user?.id, { isSuperAdmin, isEnduranceManager });
   const showCommunitySupport = canViewCommunitySupport(isAdmin, isSuperAdmin);
-  const canUseEndurance = Boolean(isSuperAdmin || isEnduranceManager || isTester);
+  // Consistent met Navbar: de capabilities-RPC beslist, niet de losse rollen.
+  const canUseEndurance = Boolean(user && enduranceCapabilities.can_access);
 
   return (
     <footer className="relative overflow-hidden border-t border-orange-500/12 bg-racing-dark py-10">
