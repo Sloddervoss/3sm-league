@@ -136,6 +136,53 @@ Risks:
 - Extension has client-side upload/API behavior; treat embedded keys as sensitive-ish.
 - Matching uploads to profiles by name/candidate can be ambiguous.
 
+### Pitwall trackmap assets: provenance and licensing
+
+Files:
+
+- `public/tracks/projections/track-<id>.json`
+- `scripts/road-track-centerlines.mjs`
+- `src/lib/pitwallTrackGeometry.ts`
+
+Risks:
+
+- Trackmap geometry derives from the pinned public snapshot of
+  `meowmachine/racing-track-maps-vector`, `from-iracing/` only, commit
+  `b182cb7faeda236cce740530e52f3774364f3c0b`. Never mix real-world
+  AIM/RaceStudio circuits into the iRacing catalog.
+- iRacing grants third parties no explicit authorization (11-08-2026 support
+  reply referring to Terms of Use/EULA, Conditions of Use and Privacy
+  Policy); those documents restrict copying, modifying, derivative works,
+  downloading and scraping. Public reachability of
+  `members-assets.iracing.com/public/track-maps/...` is not a redistribution
+  licence, so official iRacing trackmap SVG's are deliberately not fetched,
+  cached or shipped.
+- Asset regeneration stays offline; never on the production request path.
+
+### iRacing official series and special-event logos
+
+Files:
+
+- `public/endurance-assets/official/` (series logos, coupled per `source_key` prefix)
+- official special-event artwork per event, e.g. `iRSE-2026-Portimao-1000.png`
+- `scripts/generate-endurance-card.mjs` (own 3SM card, fallback only)
+
+Risks:
+
+- Owner decision (13-08-2026): official iRacing logo resources
+  (`https://www.iracing.com/resources/logos/`) are the source for series and
+  special-event artwork; never guess or redraw a missing logo. The 2026 series
+  package is kept at
+  `https://s100.iracing.com/wp-content/uploads/2026/03/Official_Series_Logos_2026_S2-031626.zip`.
+- Licence estimate: the package is published for download and iRacing mentions
+  fan/partner use, but the same page states "personal use only / not
+  commercially". Use for 3SM's non-commercial event calendar is defensible;
+  it is not a general commercial licence. Re-check before paid or
+  redistributed use.
+- Assets are used unmodified with visible attribution; the generated 3SM card
+  stays the fallback when no official asset is linked. Nothing is fetched or
+  regenerated at runtime.
+
 ## Medium-risk areas
 
 ### i18n DOM translation
