@@ -38,6 +38,21 @@ gecombineerde Nürburgring-kaart) worden verborgen zolang het event actief is. H
 geselecteerde/geactiveerde slot blijft altijd zichtbaar zodat een kaart waarop teams
 zijn geregistreerd nooit leeg raakt. Zie `upcomingCatalogSlots()`.
 
+## Timeslot-semantiek (bewezen 13-08-2026)
+
+Het officiële iRacing-timeslot (`race_time_descriptors[].session_times`) is de
+**sessiestart**, niet de groene vlag: practice, kwalificatie en een korte
+overgang volgen daarna. Er is **geen vaste voorlooptijd**; de API geeft de
+onderdelen per evenement (`practice_length`, `qualify_length`, `warmup_length`).
+Geverifieerd tegen de geauthenticeerde iRacing Data API:
+
+- Portimão 1000 (season 6578): practice 30 min, kwalificatie 8 min, ~3 min
+  overgang → racestart circa 41 min na sessiestart.
+- Nürburgring Endurance: practice 10 min + kwalificatie 30 min.
+
+Events zonder exacte sessietijden van iRacing blijven `date_only`; er wordt
+nooit een starttijd gegokt.
+
 Events met een expliciete mapping worden geïmporteerd. Sinds de dagelijkse-refresh-reparatie
 worden ook al bestaande actieve catalogusevents opnieuw gecontroleerd. Voor die goedgekeurde
 events wordt een nieuw gepubliceerd season alleen gebruikt bij een unieke exacte naam/jaar-match
