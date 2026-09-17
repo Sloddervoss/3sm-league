@@ -1,6 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { parseLapMs, formatIRacingLapTime, matchProfileForImportRow, parseCsvRows, parseIRacingJsonRows } from "./importHelpers";
+import { parseLapMs, formatIRacingLapTime, matchProfileForImportRow, parseCsvRows, parseIRacingJsonRows, isDisqualifiedResult } from "./importHelpers";
 import type { ImportRow, ProfileRow } from "./importHelpers";
+
+// ---------------------------------------------------------------------------
+// isDisqualifiedResult
+// ---------------------------------------------------------------------------
+
+describe("isDisqualifiedResult", () => {
+  it("herkent de iRacing-DQ-reden en laat andere redenen met rust", () => {
+    expect(isDisqualifiedResult("Disqualified")).toBe(true);
+    expect(isDisqualifiedResult("disqualified")).toBe(true);
+    expect(isDisqualifiedResult("Disconnected")).toBe(false);
+    expect(isDisqualifiedResult("Running")).toBe(false);
+    expect(isDisqualifiedResult(undefined)).toBe(false);
+    expect(isDisqualifiedResult(null)).toBe(false);
+  });
+});
+
 
 // ---------------------------------------------------------------------------
 // parseLapMs

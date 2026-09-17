@@ -129,4 +129,31 @@ describe("classifyImportParticipants", () => {
       { userId: "fastest", points: 21, fastestLap: true, isDq: false },
     ]);
   });
+
+  it("geeft een iRacing-diskwalificatie nul punten zonder de rest van de uitslag te verschuiven", () => {
+    const dqRow = (bestLap: string, fastestLap = false): ResultImportParticipant => {
+      const base = participant("iracing-dq", 2, bestLap, fastestLap);
+      return { ...base, row: { ...base.row, reason_out: "Disqualified", incidents: 25, dnf: true } };
+    };
+    const classified = classifyImportParticipants([
+      participant("winner", 1, "1:20.000"),
+      dqRow("1:21.500"),
+      participant("third", 3, "1:22.000"),
+    ], [], [25, 20, 16]);
+
+    expect(classified.map(({ profile, position, points, fastestLap, isDq }) => ({ userId: profile?.user_id, position, points, fastestLap, isDq }))).toEqual([
+      { userId: "winner", position: 1, points: 25, fastestLap: false, isDq: false },
+      { userId: "iracing-dq", position: 2, points: 0, fastestLap: false, isDq: true },
+      { userId: "third", position: 3, points: 16, fastestLap: false, isDq: false },
+    ]);
+
+    const withFastestDq = classifyImportParticipants([
+      participant("winner", 1, "1:20.000"),
+      dqRow("1:19.000", true),
+      participant("third", 3, "1:22.000"),
+    ], [], [25, 20, 16]);
+
+    expect(withFastestDq.find((entry) => entry.profile?.user_id === "winner")).toMatchObject({ fastestLap: true, points: 26 });
+    expect(withFastestDq.find((entry) => entry.profile?.user_id === "iracing-dq")).toMatchObject({ fastestLap: false, points: 0 });
+  });
 });
