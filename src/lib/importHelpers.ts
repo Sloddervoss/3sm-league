@@ -307,6 +307,15 @@ export function parseIRacingJsonRows(jsonText: string): ParseImportResult {
   }
 }
 
+/**
+ * iRacing schrijft `reason_out: "Disqualified"` bij een diskwalificatie (incidentlimiet,
+ * zwarte vlag). Zo'n coureur is niet geklasseerd en mag dus geen punten krijgen: de import
+ * moet zijn positiepunten op 0 zetten in plaats van de punten van de geklasseerde positie.
+ */
+export function isDisqualifiedResult(reasonOut?: string | null): boolean {
+  return typeof reasonOut === "string" && /disqualif/i.test(reasonOut);
+}
+
 export function matchProfileForImportRow(
   row: ImportRow,
   profiles: ProfileRow[]
