@@ -28,6 +28,7 @@ import {
 } from "@/features/community-support/raceHostingPricing";
 import { useCommunitySupport, type SupportRaceCostDraft } from "@/features/community-support/store";
 import {
+  isDisqualifiedResult,
   matchProfileForImportRow,
   parseIRacingJsonRows,
   type ImportRow,
@@ -243,11 +244,21 @@ const lapMilliseconds = (lap: string) => {
   return ((Number(match[1] || 0) * 60 + Number(match[2])) * 1000) + Number((match[3] || "").padEnd(3, "0"));
 };
 
+/**
+ * Bepaalt positie, snelste ronde en punten per coureur.
+ *
+ * Een coureur ligt uit de scoring als de admin hem aanvinkte (locked-car-DQ) óf als iRacing
+ * zelf `reason_out: "Disqualified"` meegaf (incidentlimiet of zwarte vlag). Zo iemand krijgt
+ * 0 punten en geen snelste-ronde-punt; zijn geklasseerde positie blijft staan zoals iRacing
+ * hem gaf. Alleen bij een aangevinkte locked-car-DQ schuift de rest van de uitslag op.
+ */
 export function classifyImportParticipants(participants: ResultImportParticipant[], dqUserIds: string[], points: readonly number[]) {
   const dqUsers = new Set(dqUserIds);
   const ordered = [...participants].sort((a, b) => a.row.position - b.row.position);
-  const dqHasFastestLap = ordered.some(({ profile, row }) => Boolean(profile && dqUsers.has(profile.user_id) && row.fastest_lap));
-  const eligible = ordered.filter(({ profile }) => Boolean(profile && !dqUsers.has(profile.user_id)));
+  const isOutOfScoring = (participant: ResultImportParticipant) =>
+    Boolean(participant.profile && dqUsers.has(participant.profile.user_id)) || isDisqualifiedResult(participant.row.reason_out);
+  const dqHasFastestLap = ordered.some((participant) => isOutOfScoring(participant) && Boolean(participant.row.fastest_lap));
+  const eligible = ordered.filter((participant) => !isOutOfScoring(participant));
   const promotedFastestUserId = dqHasFastestLap
     ? eligible.reduce<{ userId: string; lap: number } | null>((fastest, participant) => {
       const lap = lapMilliseconds(participant.row.best_lap);
@@ -257,8 +268,9 @@ export function classifyImportParticipants(participants: ResultImportParticipant
     : null;
   let classifiedPosition = 0;
   return ordered.map((participant) => {
-    const isDq = Boolean(participant.profile && dqUsers.has(participant.profile.user_id));
-    const position = isDq ? participant.row.position : ++classifiedPosition;
+    const selectedDq = Boolean(participant.profile && dqUsers.has(participant.profile.user_id));
+    const isDq = isOutOfScoring(participant);
+    const position = selectedDq ? participant.row.position : ++classifiedPosition;
     const fastestLap = isDq ? false : dqHasFastestLap ? participant.profile?.user_id === promotedFastestUserId : Boolean(participant.row.fastest_lap);
     return { ...participant, isDq, position, fastestLap, points: isDq ? 0 : (points[position - 1] ?? 0) + (fastestLap ? 1 : 0) };
   });

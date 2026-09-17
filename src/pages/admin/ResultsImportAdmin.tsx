@@ -9,6 +9,7 @@ import {
   type ProfileRow,
   type RaceOption,
   type SessionImportRow,
+  isDisqualifiedResult,
   parseIRacingJsonRows,
   matchProfileForImportRow,
 } from "@/lib/importHelpers";
@@ -73,7 +74,8 @@ const ResultsImportAdmin = () => {
         if (!row.display_name.trim()) continue;
         const profile = matchProfileForImportRow(row, (profiles ?? []) as ProfileRow[]);
         if (!profile) { toast.error(`Coureur niet gevonden: ${row.display_name}`); continue; }
-        const pts = (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0);
+        const isDq = isDisqualifiedResult(row.reason_out);
+        const pts = isDq ? 0 : (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0);
         const { error } = await supabase.from("race_results").upsert(
           {
             race_id: importRaceId,
@@ -81,14 +83,14 @@ const ResultsImportAdmin = () => {
             position: row.position,
             start_position: row.start_position ?? null,
             points: pts,
-            fastest_lap: row.fastest_lap,
+            fastest_lap: isDq ? false : row.fastest_lap,
             laps: row.laps,
             laps_led: row.laps_led ?? null,
             best_lap: row.best_lap || null,
             best_lap_num: row.best_lap_num ?? null,
             avg_lap: row.avg_lap ?? null,
             incidents: row.incidents,
-            dnf: row.dnf ?? false,
+            dnf: isDq || row.dnf || false,
             irating_snapshot: row.new_irating ?? null,
             gap_to_leader: row.gap_to_leader ?? null,
             car_name: row.car_name ?? null,
@@ -377,7 +379,7 @@ const ResultsImportAdmin = () => {
           <div className="text-xs text-muted-foreground mb-3 flex flex-wrap gap-2">
             <span className="font-bold uppercase tracking-wider">Punten preview:</span>
             {importRows.slice(0, 8).map((row) => (
-              <span key={row.position} className="px-2 py-0.5 rounded bg-secondary">P{row.position}: {(pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0)} pts</span>
+              <span key={row.position} className="px-2 py-0.5 rounded bg-secondary">P{row.position}: {isDisqualifiedResult(row.reason_out) ? 0 : (pointsConfig[row.position - 1] ?? 0) + (row.fastest_lap ? 1 : 0)} pts</span>
             ))}
           </div>
           <button onClick={() => importResults.mutate()} disabled={!importRaceId || importResults.isPending} className="flex items-center gap-2 px-6 py-2.5 rounded-md bg-gradient-racing text-white font-heading font-bold text-sm uppercase tracking-wider hover:opacity-90 disabled:opacity-50 transition-opacity">
