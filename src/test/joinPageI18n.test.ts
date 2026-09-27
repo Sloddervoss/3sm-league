@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { translateText } from "@/i18n/translations";
 
@@ -65,13 +65,18 @@ describe("join page i18n", () => {
 
   it("does not introduce the unrelated low-volume query into public SEO surfaces", () => {
     const unrelatedQuery = ["3x3", "race"].join("");
-    for (const path of [
+    // De losse public/sitemap.xml-stub is verwijderd; de publieke URL-set komt nu
+    // volledig uit de generator. Controleer daarnaast de gegenereerde sitemap
+    // zodra er een build aanwezig is.
+    const surfaces = [
       "src/pages/HomepagePrototype.tsx",
       "src/pages/JoinPage.tsx",
       "scripts/generate-route-html.mjs",
       "index.html",
-      "public/sitemap.xml",
-    ]) {
+    ];
+    expect(surfaces).toContain("scripts/generate-route-html.mjs");
+    if (existsSync("dist/sitemap.xml")) surfaces.push("dist/sitemap.xml");
+    for (const path of surfaces) {
       expect(read(path).toLowerCase()).not.toContain(unrelatedQuery);
     }
   });
