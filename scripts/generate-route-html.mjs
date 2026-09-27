@@ -457,6 +457,98 @@ const summarizeRaceForHub = (race) => {
   };
 };
 
+// B2: de kerninhoud ook in de crawler-HTML zetten. Race-detailpagina's hadden
+// alleen een samenvatting (244 crawl-bare woorden tegen 763 met JS) en
+// nieuwsartikelen alleen een excerpt van 220 tekens — de uitslag en de
+// artikelbody stonden uitsluitend in de JS-render.
+const buildRaceResultTableHtml = (race, limit = 25) => {
+  const all = sortedRaceResults(race);
+  if (!all.length) return '';
+  const rows = all.slice(0, limit).map((result) => {
+    const cells = [
+      result.position ?? '',
+      driverName(result) || '',
+      result.laps ?? '',
+      result.points ?? '',
+      result.fastest_lap ? 'ja' : '',
+    ];
+    return `            <tr>${cells.map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join('')}</tr>`;
+  }).join('\n');
+  const suffix = all.length > limit ? ` (eerste ${limit} van ${all.length})` : '';
+  return `        <h2>Volledige uitslag${suffix}</h2>
+        <table>
+          <thead>
+            <tr><th>Positie</th><th>Coureur</th><th>Rondes</th><th>Punten</th><th>Snelste ronde</th></tr>
+          </thead>
+          <tbody>
+${rows}
+          </tbody>
+        </table>`;
+};
+
+const buildArticleBodyHtml = (post, maxWords = 350) => {
+  const raw = String(post.content_html || '').trim();
+  if (!raw) return '';
+  const withBreaks = raw
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|div|h[1-6]|li|blockquote|tr)>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+  const paragraphs = withBreaks.split(/\n{2,}/).map((part) => part.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const out = [];
+  let words = 0;
+  for (const paragraph of paragraphs) {
+    if (words >= maxWords) break;
+    const slice = paragraph.split(' ').slice(0, maxWords - words).join(' ').trim();
+    if (!slice) continue;
+    out.push(`        <p>${escapeHtml(slice)}</p>`);
+    words += slice.split(' ').length;
+  }
+  if (!out.length) return '';
+  return `        <h2>Het volledige artikel</h2>\n${out.join('\n')}`;
+};
+
+// B4: structured data per pagina in plaats van alleen ItemList op de hubs.
+const buildRaceSportsEventJsonLd = (race) => ({
+  '@context': 'https://schema.org',
+  '@type': 'SportsEvent',
+  name: cleanText(race.name),
+  startDate: race.race_date || undefined,
+  url: absoluteUrl(`/results/${race.id}`),
+  eventStatus: 'https://schema.org/EventScheduled',
+  sport: 'Motorsport',
+  description: truncate(`Uitslag en racegegevens van ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} bij 3 Stripe Motorsport.`),
+  location: race.track ? { '@type': 'Place', name: cleanText(race.track) } : undefined,
+  organizer: { '@type': 'SportsOrganization', name: '3 Stripe Motorsport', url: 'https://3stripemotorsport.cc/' },
+  competitor: sortedRaceResults(race)
+    .slice(0, 10)
+    .map((result) => ({ '@type': 'Person', name: driverName(result) }))
+    .filter((competitor) => competitor.name),
+});
+
+const buildArticleBlogPostingJsonLd = (post) => {
+  const path = `/news/${categoryToSlug(post.category)}/${post.slug}`;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: cleanText(post.title),
+    description: truncate(post.seo_description || post.excerpt || post.content_html || ''),
+    url: absoluteUrl(path),
+    datePublished: post.published_at || undefined,
+    dateModified: post.updated_at || post.published_at || undefined,
+    articleSection: cleanText(post.category) || undefined,
+    mainEntityOfPage: { '@type': 'WebPage', '@id': absoluteUrl(path) },
+    author: { '@type': 'Organization', name: '3 Stripe Motorsport', url: 'https://3stripemotorsport.cc/' },
+    publisher: { '@type': 'Organization', name: '3 Stripe Motorsport', url: 'https://3stripemotorsport.cc/' },
+  };
+};
+
 const buildResultsHubCrawlerHtml = (summaries) => {
   if (!summaries.length) return '';
 
@@ -709,12 +801,16 @@ const fetchDynamicRoutes = async () => {
         title: `${race.name} uitslag - 3 Stripe Motorsport`,
         priority: '0.6',
         changefreq: 'monthly',
-        lastmod: dateOnly(race.updated_at || race.race_date),
+        lastmod: dateOnly(race.race_date),
         description: truncate(`Bekijk de ${carClass}iRacing race-uitslag van ${race.name}${track} op ${raceDate}: klasseringen, rondes, podium en racegegevens van 3SM.`),
         h1: `${race.name} race-uitslag`,
         intro: `Bekijk de race-uitslag van ${race.name}${track}, inclusief klasseringen, rondes en racegegevens.`,
         details: raceDetails.summary,
         facts: raceDetails.facts,
+        crawlerHtml: buildRaceResultTableHtml(race),
+        extraJsonLd: [
+          { id: 'sportsevent-jsonld', data: buildRaceSportsEventJsonLd(race) },
+        ],
         links: [
           ['/results', 'Terug naar race-uitslagen'],
           ['/standings', 'Bekijk standings'],
@@ -751,6 +847,10 @@ const fetchDynamicRoutes = async () => {
         details: [
           `Dit nieuwsartikel hoort bij de 3SM categorie ${post.category || 'Nieuws'} en is gepubliceerd als onderdeel van de 3 Stripe Motorsport community.`,
           articleSummary,
+        ],
+        crawlerHtml: buildArticleBodyHtml(post),
+        extraJsonLd: [
+          { id: 'blogposting-jsonld', data: buildArticleBlogPostingJsonLd(post) },
         ],
         links: [
           ['/news', 'Terug naar nieuws'],
