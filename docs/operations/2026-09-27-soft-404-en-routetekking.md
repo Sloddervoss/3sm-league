@@ -132,6 +132,40 @@ Bewust zonder Supabase bouwen kan met `ALLOW_MISSING_SUPABASE_ENV=1`.
 
 ## Besluiten (27-09-2026)
 
+**C2 — `/admin/` blijft publiek bereikbaar. Besluit: voorlopig laten zoals het is.**
+Vincent: "C2 voor nu lekker zo laten."
+
+De onderbouwing hoort erbij, zodat dit later niet als vergeten gat terugkomt. Gemeten
+tegen de echte grens (niet beredeneerd):
+
+| aanroep | anoniem | hoort zo? |
+| --- | --- | --- |
+| `profiles` | 401 permission denied | ja |
+| `simhub_devices` | 401 permission denied | ja |
+| `get_simhub_fleet` | 401 permission denied | ja |
+| `race_results` | 200 met data | ja, uitslagen zijn openbaar |
+
+In de productie-DB zijn `get_simhub_fleet`, `get_simhub_device_details` en
+`get_pitwall_data` alle drie `SECURITY DEFINER` **en** heeft `anon` er geen
+EXECUTE-recht op. Er lekt via `/admin/` dus niets: de pagina is een client-side app
+en de data komt alleen via Supabase.
+
+Het risico zit niet in wat er nu lekt, maar in het ontbreken van een tweede slot.
+Alles hangt op de Supabase-grens. Een latere migratie die een tabel of RPC toevoegt
+zonder de `can_manage_simhub()`-check is direct vanaf het internet uit te buiten,
+zonder enige drempel. Daarnaast is de JS-bundel een blauwdruk van alle RPC- en
+tabelnamen, en is de login zelf aanvalsoppervlak (credential stuffing).
+
+`noindex` geeft hier valse gerustheid: het houdt de pagina uit Google, maar de route
+is te raden en de bundel adverteert hem.
+
+Latere opties, in volgorde van waarde: (1) Cloudflare Access op `/admin/` met het
+eigen adres op de allowlist — de echte fix, maar kost een extra login tenzij de
+auth-callback als bypass wordt ingericht; (2) MFA verplicht stellen voor
+admin-accounts in Supabase — goedkoop, haalt de credential-stuffing-route eruit.
+Een nginx-IP-beperking is afgeraden: die breekt toegang vanaf mobiel of een
+wisselend IP.
+
 **B5 — SEO-blok blijft verborgen. Besluit: niet aanpassen.**
 Het geprerenderde tekstblok staat in een 1×1px-container met `aria-hidden="true"`.
 Vincent: de pagina's waar dit speelt zijn het minst belangrijk voor bezoekers, het
