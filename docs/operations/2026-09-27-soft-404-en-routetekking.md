@@ -73,6 +73,38 @@ De shell-bestanden moeten **eerst** in de webroot staan, daarna pas de config:
 
 Draai je dit om, dan vallen deep links tijdelijk terug op een ontbrekend bestand.
 
+## Uitrol-valkuil: een verse release-worktree heeft geen .env
+
+Productie draait niet in `/opt/3sm` maar in een eigen **release-worktree**
+(`/opt/3sm-<naam>-<datum>`) met een eigen detached HEAD; de actieve release staat
+in `/etc/systemd/system/3sm-seo-refresh.service.d/active-release.conf` en
+`deploy.sh` draait **binnen** die worktree.
+
+Elke nieuwe worktree is een verse checkout, en `.env` is gitignored — dus **de
+worktree heeft geen Supabase-credentials** (`.env.local`/`.env.production.local`
+staan er ook niet). Gevolg bij een uitrol: de generator meldt
+*"Supabase env ontbreekt; dynamische sitemap-routes worden overgeslagen"*, bouwt
+alleen de 10 statische routes, en de `rsync --delete-after` in `deploy.sh` ruimt
+vervolgens **alle 47 geprerenderde nieuws- en uitslagpagina's** op. De sitemap viel
+zo van 57 naar 10 URL's. Dat is één keer echt gebeurd (27-09-2026) en daarna
+hersteld met `npm run seo:refresh` nadat de `.env` was overgezet.
+
+Drie maatregelen tegen herhaling:
+
+- `deploy.sh` neemt de `.env` automatisch over uit de vorige actieve release
+  (via `active-release.conf`) en breekt af als dat niet lukt — vóór de build.
+- `generate-route-html.mjs` maakt een ontbrekende Supabase-env **fataal**; een
+  build zonder dynamische routes stopt dus voordat er iets gepubliceerd wordt.
+  Bewust bouwen zonder dynamische routes kan met `ALLOW_MISSING_SUPABASE_ENV=1`.
+- Twee vangnetten op de sitemap: een ondergrens (`MIN_SITEMAP_URLS = 25`, ruim
+  onder de normale 57 maar boven de 10 statische) en een **halveringscheck** tegen
+  de sitemap die al in de webroot staat. Die laatste blokkeert ook een build met de
+  allow-vlag, want die vergelijkt met wat er live staat.
+
+Let op bij het beoordelen van een uitrol: `grep -c '<loc>' /var/www/3sm/sitemap.xml`
+moet **57** zijn, niet 10. Zegt de deploy-log "0 dynamic", dan is er niets mis met
+de code maar ontbreekt de `.env`.
+
 ## Verificatie
 
 - `src/test/seoSoft404Coverage.test.ts` koppelt de nginx-routelijst aan de

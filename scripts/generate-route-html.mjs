@@ -631,8 +631,20 @@ const dateOnly = (value) => value ? new Date(value).toISOString().slice(0, 10) :
 const fetchDynamicRoutes = async () => {
   const supabase = getSupabaseClient();
   if (!supabase) {
-    console.warn('Supabase env ontbreekt; dynamische sitemap-routes worden overgeslagen.');
-    return [];
+    // Een build zonder Supabase-env genereert alleen de statische routes. Dat is
+    // eerder stil doorgegaan en ruimde via rsync --delete 47 gepubliceerde nieuws-
+    // en uitslagpagina's op (sitemap 57 -> 10). Breek daarom af VOORDAT er iets
+    // gepubliceerd wordt; een release-worktree heeft geen .env (untracked).
+    if (process.env.ALLOW_MISSING_SUPABASE_ENV === '1') {
+      console.warn('Supabase env ontbreekt; alleen statische routes (ALLOW_MISSING_SUPABASE_ENV=1).');
+      return [];
+    }
+    throw new Error(
+      'Supabase env ontbreekt: nieuws- en uitslagroutes kunnen niet gegenereerd worden. '
+      + 'Afgebroken voordat er iets gepubliceerd wordt. Zet een .env met VITE_SUPABASE_URL en '
+      + 'VITE_SUPABASE_ANON_KEY in de checkout, of zet ALLOW_MISSING_SUPABASE_ENV=1 als je '
+      + 'bewust een build zonder dynamische routes wilt.',
+    );
   }
 
   const dynamicRoutes = [];
@@ -1245,8 +1257,27 @@ const sitemapRoutes = [...routes, ...dynamicRoutes];
 // Vangnet tegen een stille regressie: als de generator ooit minder routes oplevert
 // dan verwacht (bijv. omdat een API faalt), mag er geen kale/verouderde sitemap of
 // halve site online komen. De oude public/sitemap.xml-stub had 9 URL's.
-const MIN_SITEMAP_URLS = 10;
-if (sitemapRoutes.length < MIN_SITEMAP_URLS) {
+// Nooit een sitemap publiceren die (veel) kleiner is dan wat er al live staat.
+// Een ontbrekende .env liet de sitemap eerder van 57 naar 10 URL's vallen en
+// ruimde de bijbehorende pagina's op. Op een dev-machine bestaat de webroot niet,
+// dan slaan we deze controle over.
+const liveWebroot = process.env.WEBROOT || '/var/www/3sm';
+const liveSitemapPath = join(liveWebroot, 'sitemap.xml');
+if (existsSync(liveSitemapPath)) {
+  const liveCount = (readFileSync(liveSitemapPath, 'utf8').match(/<loc>/g) || []).length;
+  if (liveCount > 0 && sitemapRoutes.length < liveCount / 2) {
+    throw new Error(
+      `Sitemap-generatie afgebroken: ${sitemapRoutes.length} URL's terwijl er live ${liveCount} staan `
+      + '(meer dan een halvering). Meestal ontbreekt de Supabase-env. Er is niets weggeschreven.',
+    );
+  }
+}
+
+const MIN_SITEMAP_URLS = 25;
+// De ondergrens vangt een stil half-geslaagde build af. De expliciete
+// ALLOW_MISSING_SUPABASE_ENV=1 mag hem omzeilen; het halveringsvangnet tegen de
+// live sitemap hierboven blijft dan gewoon actief.
+if (sitemapRoutes.length < MIN_SITEMAP_URLS && process.env.ALLOW_MISSING_SUPABASE_ENV !== '1') {
   throw new Error(
     `Sitemap-generatie afgebroken: slechts ${sitemapRoutes.length} URL's (< ${MIN_SITEMAP_URLS}). `
     + 'Waarschijnlijk faalde het ophalen van dynamische routes; niets weggeschreven.',
