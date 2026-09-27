@@ -7,7 +7,9 @@ const migrationPath = join(root, "supabase/migrations/20260712100000_harden_prof
 const source = (path: string) => readFileSync(join(root, path), "utf8");
 const normalize = (value: string) => value.replace(/\s+/g, " ").toLowerCase();
 
-const publicProfileConsumers = [
+// Pagina's die publieke profieldata rechtstreeks opvragen: moeten de veilige view
+// public_profiles lezen en nooit de ruwe tabel profiles.
+const directPublicProfileQueries = [
   "src/hooks/data/useSharedQueries.ts",
   "src/pages/HomepagePrototype.tsx",
   "src/pages/NewsPage.tsx",
@@ -16,7 +18,6 @@ const publicProfileConsumers = [
   "src/pages/ResultsPage.tsx",
   "src/pages/RaceDetailPage.tsx",
   "src/pages/SeasonsPage.tsx",
-  "src/pages/StandingsPage.tsx",
   "src/pages/TeamsPage.tsx",
   "src/components/StandingsStrip.tsx",
   "src/components/RaceRecapPanel.tsx",
@@ -24,6 +25,17 @@ const publicProfileConsumers = [
   "src/features/control-room/season/SeasonCarLockManager.tsx",
   "src/features/control-room/stewarding/UserProtestWorkspace.tsx",
   "src/features/control-room/stewarding/StewardingWorkspace.tsx",
+];
+
+// Pagina's die de profieldata via de gedeelde hook lezen. Die hook staat hierboven
+// in de lijst en leest zelf uit public_profiles; zo'n pagina moet de ruwe tabel
+// profiles nog steeds niet rechtstreeks aanspreken.
+//
+// StandingsPage stond hier eerder zelf in, maar haalt namen en teams nu bij het
+// renderen uit useDrivers()/useTeams() zodat de uitslagquery er niet meer op hoeft
+// te wachten. De veilige bron blijft daarmee dezelfde, alleen via de hook.
+const viaSharedDriversHook = [
+  "src/pages/StandingsPage.tsx",
 ];
 
 describe("profile read hardening", () => {
@@ -64,9 +76,15 @@ describe("profile read hardening", () => {
   });
 
   it("moves every public display query to the safe source", () => {
-    for (const path of publicProfileConsumers) {
+    for (const path of directPublicProfileQueries) {
       const content = source(path);
       expect(content, path).toContain('from("public_profiles")');
+      expect(content, path).not.toMatch(/\.from\("profiles"\)/);
+    }
+
+    for (const path of viaSharedDriversHook) {
+      const content = source(path);
+      expect(content, path).toContain("useDrivers");
       expect(content, path).not.toMatch(/\.from\("profiles"\)/);
     }
   });
