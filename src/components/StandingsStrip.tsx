@@ -23,9 +23,9 @@ const StandingsStrip = () => {
 
   const activeLeagueId = leagues[0]?.id;
 
-  const { data: standings = [] } = useQuery({
+  const { data: standingsRows = [] } = useQuery({
     queryKey: ["standings-preview", activeLeagueId],
-    enabled: !!activeLeagueId && !!teams.length,
+    enabled: !!activeLeagueId,
     queryFn: async (): Promise<StandingRow[]> => {
       const { data: res } = await supabase
         .from("race_results")
@@ -51,18 +51,26 @@ const StandingsStrip = () => {
         .map((uid) => {
           const stats = map.get(uid)!;
           const prof = profiles.find((p) => p.user_id === uid);
-          const team = teams.find((t) => t.id === prof?.team_id);
           return {
             user_id: uid,
             display_name: prof?.display_name || "Unknown",
             total_points: stats.total_points,
             wins: stats.wins,
-            team: team ? { name: team.name, color: team.color } : undefined,
+            team_id: prof?.team_id ?? undefined,
           };
         })
         .sort((a, b) => b.total_points - a.total_points)
         .slice(0, 5);
     },
+  });
+
+  // De teamnaam en -kleur worden pas bij het renderen opgezocht. Ze zijn geen
+  // invoer voor de query zelf: die had alleen het league-id nodig. Door de
+  // opzoeking hier te doen hoeft de uitslagquery niet te wachten op `teams`,
+  // dat een eigen, trage round-trip is.
+  const standings = standingsRows.map((row) => {
+    const team = row.team_id ? teams.find((t) => t.id === row.team_id) : undefined;
+    return { ...row, team: team ? { name: team.name, color: team.color } : undefined };
   });
 
   const leagueName = leagues.find((l) => l.id === activeLeagueId)?.name;
