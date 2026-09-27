@@ -78,22 +78,20 @@ const StandingsPage = () => {
       });
       const userIds = Array.from(map.keys());
       if (!userIds.length) return [];
-      const { data: profs } = await supabase
-        .from("public_profiles")
-        .select("user_id, display_name, team_id")
-        .in("user_id", userIds);
-      const profiles = (profs || []) as StandingsProfile[];
+      // Naam en team worden bij het renderen opgezocht uit useDrivers() en
+      // useTeams(). Deze query haalt alleen de uitslagen op en hoeft dus niet op
+      // die twee te wachten; de profiles-call die hier stond was dubbel werk,
+      // want useDrivers() haalt dezelfde rijen al op (~200 ms, gemeten).
       return userIds.map((uid) => {
         const stats = map.get(uid)!;
-        const prof = profiles.find((p) => p.user_id === uid);
         return {
           user_id: uid,
-          display_name: prof?.display_name || "Unknown",
+          display_name: "",
           total_points: stats.total_points,
           wins: stats.wins,
           podiums: stats.podiums,
           fl: stats.fl,
-          team_id: prof?.team_id ?? undefined,
+          team_id: undefined,
         };
       }).sort((a, b) =>
         b.total_points - a.total_points ||
@@ -108,9 +106,18 @@ const StandingsPage = () => {
   // invoer voor de query zelf: die had alleen het league-id nodig. Door de
   // opzoeking hier te doen hoeft de uitslagquery niet te wachten op `teams`,
   // dat een eigen, trage round-trip is.
+  const profielPerUser = new Map((profiles as { user_id: string; display_name?: string; team_id?: string }[])
+    .map((p) => [p.user_id, p]));
+  const teamPerId = new Map(teams.map((t) => [t.id, t]));
   const standings = standingsRows.map((row) => {
-    const team = row.team_id ? teams.find((t) => t.id === row.team_id) : undefined;
-    return { ...row, team: team ? { name: team.name, color: team.color } : undefined };
+    const prof = profielPerUser.get(row.user_id);
+    const team = teamPerId.get(prof?.team_id ?? "");
+    return {
+      ...row,
+      display_name: prof?.display_name || "Unknown",
+      team_id: prof?.team_id,
+      team: team ? { name: team.name, color: team.color } : undefined,
+    };
   });
 
   const selectedLeague = leagues.find((l) => l.id === selectedId);
