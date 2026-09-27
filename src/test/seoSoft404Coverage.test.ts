@@ -102,6 +102,24 @@ describe("soft-404 dekking en echte 404", () => {
     expect(generator).toContain("Sitemap-generatie afgebroken");
   });
 
+  it("breekt af als de Supabase-env ontbreekt in plaats van stil te degraderen", () => {
+    // Zonder deze rem bouwt een verse release-worktree (geen .env, gitignored)
+    // alleen de statische routes en ruimt de deploy de dynamische pagina's op.
+    expect(generator).toContain("ALLOW_MISSING_SUPABASE_ENV");
+    expect(generator).toContain("Supabase env ontbreekt: nieuws- en uitslagroutes");
+  });
+
+  it("publiceert nooit een sitemap die gehalveerd is t.o.v. wat er live staat", () => {
+    expect(generator).toContain("liveSitemapPath");
+    expect(generator).toContain("meer dan een halvering");
+  });
+
+  it("laat deploy.sh geen release bouwen zonder .env", () => {
+    const deploy = readFileSync("deploy.sh", "utf8");
+    expect(deploy).toContain("active-release.conf");
+    expect(deploy).toContain("Geen .env in deze worktree");
+  });
+
   it("prerendert nieuws-categoriehubs zodat /news/<categorie>/ geen 403 meer geeft", () => {
     expect(generator).toContain("Categorie-hubs");
     expect(generator).toContain("path: `/news/${slug}`");
