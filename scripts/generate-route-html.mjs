@@ -750,6 +750,53 @@ const fetchDynamicRoutes = async () => {
     }
   }
 
+  // Categorie-hubs (/news/<categorie>). Dit zijn geldige app-routes die tot nu toe
+  // HTTP 403 gaven omdat de map wel bestond maar geen index.html had. Ze worden nu
+  // als echte, indexeerbare hub geprerenderd met de artikelen uit die categorie.
+  const categoryGroups = new Map();
+  for (const post of publishedPosts || []) {
+    const slug = categoryToSlug(post.category);
+    if (!slug) continue;
+    if (!categoryGroups.has(slug)) {
+      categoryGroups.set(slug, { label: cleanText(post.category) || 'Nieuws', posts: [] });
+    }
+    categoryGroups.get(slug).posts.push(post);
+  }
+  for (const [slug, group] of categoryGroups) {
+    const summaries = group.posts.map(buildNewsSummarizePost);
+    const latest = group.posts
+      .map((post) => post.updated_at || post.published_at)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    const label = group.label;
+    dynamicRoutes.push({
+      path: `/news/${slug}`,
+      title: truncate(`${label} - 3 Stripe Motorsport nieuws`, 58),
+      priority: '0.7',
+      changefreq: 'weekly',
+      lastmod: dateOnly(latest),
+      description: truncate(
+        `Alle 3SM artikelen in de categorie ${label}: raceverslagen, updates en verhalen uit de 3 Stripe Motorsport paddock.`,
+      ),
+      h1: label,
+      intro: `Overzicht van ${summaries.length} gepubliceerd${summaries.length === 1 ? '' : 'e'} artikel${summaries.length === 1 ? '' : 'en'} in de categorie ${label}.`,
+      details: [
+        `Deze categoriepagina bundelt de 3 Stripemotorsport-artikelen over ${label.toLowerCase()}.`,
+        'Klik door naar een artikel voor het volledige verslag, of ga terug naar het volledige nieuwsoverzicht.',
+      ],
+      links: [
+        ['/news', 'Alle nieuwsartikelen'],
+        ['/results', 'Bekijk uitslagen'],
+        ['/calendar', 'Bekijk racekalender'],
+      ],
+      crawlerHtml: buildNewsHubCrawlerHtml(summaries),
+      extraJsonLd: [
+        { id: 'news-category-itemlist-jsonld', data: buildNewsHubItemListJsonLd(summaries) },
+      ],
+    });
+  }
+
   return dynamicRoutes;
 };
 
@@ -1096,7 +1143,10 @@ const cleanupStaleGeneratedRoutes = (previousManifest, nextDynamicRoutes) => {
 
 const dynamicRoutes = await fetchDynamicRoutes();
 const resultDetailRoutes = dynamicRoutes.filter((route) => route.path.startsWith('/results/'));
-const newsDetailRoutes = dynamicRoutes.filter((route) => route.path.startsWith('/news/'));
+// Detailroutes hebben 3 segmenten (/news/<categorie>/<slug>); categorie-hubs 2.
+const newsDetailRoutes = dynamicRoutes.filter(
+  (route) => route.path.startsWith('/news/') && route.path.split('/').filter(Boolean).length === 3,
+);
 const toCrawlerLinks = (items, limit = 60, excludePath = '') => items
   .filter((item) => item.path !== excludePath)
   .slice(0, limit)
@@ -1191,6 +1241,53 @@ for (const route of dynamicRoutes) {
 const previousManifest = readPreviousManifest();
 cleanupStaleGeneratedRoutes(previousManifest, dynamicRoutes);
 const sitemapRoutes = [...routes, ...dynamicRoutes];
+
+// Vangnet tegen een stille regressie: als de generator ooit minder routes oplevert
+// dan verwacht (bijv. omdat een API faalt), mag er geen kale/verouderde sitemap of
+// halve site online komen. De oude public/sitemap.xml-stub had 9 URL's.
+const MIN_SITEMAP_URLS = 10;
+if (sitemapRoutes.length < MIN_SITEMAP_URLS) {
+  throw new Error(
+    `Sitemap-generatie afgebroken: slechts ${sitemapRoutes.length} URL's (< ${MIN_SITEMAP_URLS}). `
+    + 'Waarschijnlijk faalde het ophalen van dynamische routes; niets weggeschreven.',
+  );
+}
+
+// Twee niet-indexeerbare varianten van de app-shell, beide zonder canonical naar
+// de homepage (anders zou elke deep link als duplicaat van "/" gelden):
+//   404.html               -> via error_page, met HTTP 404
+//   app-shell-fallback.html -> interne fallback voor geldige app-routes die (nog)
+//                              geen geprerenderd bestand hebben, met HTTP 200
+const buildNonCanonicalShell = ({ title, description }) => {
+  let out = template.replace(/<title>[\s\S]*?<\/title>/, `<title>${title}</title>`);
+  out = replaceOrInsertMeta(
+    out,
+    /<meta name="description" content="[^"]*"\s*\/>/,
+    `<meta name="description" content="${description}" />`,
+  );
+  out = replaceOrInsertMeta(
+    out,
+    /<meta name="robots" content="[^"]*"\s*\/>/,
+    '<meta name="robots" content="noindex, follow" />',
+  );
+  out = out.replace(/\s*<link rel="canonical" href="[^"]*"\s*\/>/g, '');
+  out = out.replace(/\s*<meta property="og:url" content="[^"]*"\s*\/>/g, '');
+  out = out.replace(/<noscript>[\s\S]*?<\/noscript>\s*/g, '');
+  return out;
+};
+
+writeFileSync(join(distDir, '404.html'), buildNonCanonicalShell({
+  title: 'Pagina niet gevonden - 3 Stripe Motorsport',
+  description: 'Deze pagina bestaat niet (meer) op 3stripemotorsport.cc. Ga terug naar de homepage of gebruik de navigatie.',
+}));
+
+// Geldige app-route zonder geprerenderde HTML (bijv. /news/author/<naam>, een
+// endurance-deeplink of een net aangemaakte race-uitslag): de SPA moet blijven
+// werken, maar de pagina mag niet als duplicaat van de homepage in de index komen.
+writeFileSync(join(distDir, 'app-shell-fallback.html'), buildNonCanonicalShell({
+  title: '3 Stripe Motorsport - Nederlandse iRacing league',
+  description: '3 Stripe Motorsport is een Nederlandse iRacing league met endurance-races, sprintkampioenschappen en een actieve community.',
+}));
 
 for (const route of sitemapRoutes) {
   const html = applyRouteMeta(template, route);
