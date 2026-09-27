@@ -79,6 +79,8 @@ for (const routePath of nextManifest.publicRoutes || []) copyHtmlRoute(routePath
 for (const routePath of nextManifest.privateRoutes || []) copyHtmlRoute(routePath);
 
 copyFileIfChanged(join(distDir, 'sitemap.xml'), join(webroot, 'sitemap.xml'));
+copyFileIfChanged(join(distDir, '404.html'), join(webroot, '404.html'));
+copyFileIfChanged(join(distDir, 'app-shell-fallback.html'), join(webroot, 'app-shell-fallback.html'));
 copyFileIfChanged(manifestPath, join(webroot, '.route-html-manifest.json'));
 
 console.log(`Refreshed dynamic SEO HTML into ${webroot}: ${updatedFiles} gewijzigde bestanden; ${(nextManifest.publicRoutes || []).length} public routes, ${(nextManifest.dynamicRoutes || []).length} dynamic routes.`);
