@@ -38,7 +38,7 @@ const StandingsPage = () => {
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<DriverModalProfile | null>(null);
 
-  const { data: leagues = [] } = useLeagues();
+  const { data: leagues = [], isLoading: leaguesLoading } = useLeagues();
   const { data: teams = [] } = useTeams();
   const { data: profiles = [] } = useDrivers();
 
@@ -59,7 +59,7 @@ const StandingsPage = () => {
   const defaultLeagueId = seasonRacesLoading ? null : selectDefaultStandingsLeagueId(leagues, seasonRaces);
   const selectedId = activeLeagueId ?? defaultLeagueId;
 
-  const { data: standingsRows = [] } = useQuery({
+  const { data: standingsRows = [], isLoading: standingsLoading } = useQuery({
     queryKey: ["standings-full", selectedId],
     enabled: !!selectedId,
     queryFn: async (): Promise<StandingRow[]> => {
@@ -135,8 +135,10 @@ const StandingsPage = () => {
             <h1 className="mt-2 font-heading text-3xl font-black uppercase leading-none text-white md:text-4xl">Coureurs stand</h1>
           </div>
 
-          {/* League tabs */}
-          {leagues.length > 1 && (
+          {/* League tabs. Het laadskelet staat in dezelfde conditie als de echte
+              balk: staan ze naast elkaar, dan duwt de echte balk het skelet en
+              alles eronder 74 px opzij (gemeten CLS 0,0538). */}
+          {leagues.length > 1 ? (
             <div className="flex gap-2 mb-8 overflow-x-auto pb-1">
               {leagues.map((l) => (
                 <button
@@ -154,10 +156,23 @@ const StandingsPage = () => {
                 </button>
               ))}
             </div>
-          )}
+          ) : (leaguesLoading || seasonRacesLoading || standingsLoading) ? (
+            <div className="mb-8 h-[42px] animate-pulse rounded-xl bg-white/[0.03] ring-1 ring-white/[0.06]" aria-hidden="true" />
+          ) : null}
 
-          {seasonRacesLoading ? (
-            <div className="h-72 animate-pulse rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06]" role="status" aria-label="Standings laden" />
+          {/* Tijdens het laden een skelet met de gemeten hoogte van alles wat er
+              komt: de seizoensbalk (42 px), de tussenruimte (32 px) en de kaart
+              (1026 px mobiel / 1018 px desktop) = 1100 / 1092 px. Zonder dat
+              groeide het vlak na het laden met 738 px. En: de lege staat van de
+              tabel ('Nog geen resultaten beschikbaar') verscheen hier voorheen
+              terwijl de uitslagen nog onderweg waren, want de uitslagenquery had
+              geen laadvlag. */}
+          {/* Kaartskelet op de gemeten hoogte (1026 px mobiel / 1018 px desktop).
+              Ook zichtbaar terwijl de uitslagen zelf nog laden: voorheen viel de
+              pagina terug op de lege staat van de tabel ('Nog geen resultaten
+              beschikbaar') omdat de uitslagenquery geen laadvlag had. */}
+          {seasonRacesLoading || standingsLoading ? (
+            <div className="animate-pulse rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06] min-h-[1026px] lg:min-h-[1018px]" role="status" aria-label="Standings laden" />
           ) : (
             <NewStandingsTable
               standings={standings}
