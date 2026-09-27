@@ -105,6 +105,31 @@ Let op bij het beoordelen van een uitrol: `grep -c '<loc>' /var/www/3sm/sitemap.
 moet **57** zijn, niet 10. Zegt de deploy-log "0 dynamic", dan is er niets mis met
 de code maar ontbreekt de `.env`.
 
+## Tweede faalmodus: een client-bundle zonder Supabase-config
+
+Dezelfde ontbrekende `.env` sloopt niet alleen de sitemap maar ook de **site zelf**,
+en dat is veel erger. Vite bakt `VITE_*` tijdens de build in de client-bundle. Zonder
+env bouwt Vite gewoon door, maar gooit de app bij het opstarten:
+
+> `Uncaught Error: Missing Supabase environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY`
+
+Gevolg: de pagina antwoordt **HTTP 200** en toont de geprerenderde crawler-tekst,
+maar `#root` blijft leeg — React mount nooit. Voor een bezoeker is de site stuk;
+voor een `curl`-controle lijkt alles gezond. Dat is op 27-09-2026 precies zo live
+gegaan.
+
+**Verificatieles: HTTP 200 betekent niet dat de site werkt.** Controleer na een
+uitrol altijd of de app daadwerkelijk opstart, bijvoorbeeld met een browser:
+
+```js
+document.getElementById('root').children.length   // moet > 0 zijn
+window.__errs                                     // geen "Missing Supabase" o.a.
+```
+
+Preventie: `npm run prebuild` draait `scripts/require-supabase-env.mjs` en breekt de
+build af vóórdat Vite begint, met een uitleg die naar deze faalmodus verwijst.
+Bewust zonder Supabase bouwen kan met `ALLOW_MISSING_SUPABASE_ENV=1`.
+
 ## Verificatie
 
 - `src/test/seoSoft404Coverage.test.ts` koppelt de nginx-routelijst aan de
