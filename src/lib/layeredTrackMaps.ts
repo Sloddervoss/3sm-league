@@ -73,7 +73,17 @@ export function resolveLayeredTrackMap(
 let runtimePromise: Promise<LayeredTrackManifest | null> | null = null;
 let manifestPromise: Promise<LayeredTrackManifest | null> | null = null;
 
-async function fetchJson(url: string): Promise<unknown> {
+async function fetchJson(url: string, { revalidate = false }: { revalidate?: boolean } = {}): Promise<unknown> {
+  // De runtime-config is een kill switch: `{"enabled":false}` op de server moet
+  // direct werken, dus die blijft elke keer bij de server navragen (no-store).
+  // De manifest is een build-artefact dat alleen bij een deploy verandert. Die
+  // mag de browser opslaan en met een 304 hervalideren: dat scheelt ~15 KB per
+  // pageload op / en /calendar/, terwijl de inhoud gegarandeerd vers blijft.
+  if (revalidate) {
+    const response = await fetch(url, { cache: "no-cache" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }
   const separator = url.includes("?") ? "&" : "?";
   const response = await fetch(`${url}${separator}t=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -100,7 +110,7 @@ export async function loadLayeredTrackManifest(): Promise<LayeredTrackManifest |
   if (!manifestPromise) {
     manifestPromise = (async () => {
       try {
-        const manifest = await fetchJson(TRACK_MANIFEST_URL);
+        const manifest = await fetchJson(TRACK_MANIFEST_URL, { revalidate: true });
         return isLayeredTrackManifest(manifest) ? manifest : null;
       } catch {
         return null;
