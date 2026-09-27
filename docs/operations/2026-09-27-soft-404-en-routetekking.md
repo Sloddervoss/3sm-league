@@ -130,6 +130,27 @@ Preventie: `npm run prebuild` draait `scripts/require-supabase-env.mjs` en breek
 build af vóórdat Vite begint, met een uitleg die naar deze faalmodus verwijst.
 Bewust zonder Supabase bouwen kan met `ALLOW_MISSING_SUPABASE_ENV=1`.
 
+## Besluiten (27-09-2026)
+
+**B5 — SEO-blok blijft verborgen. Besluit: niet aanpassen.**
+Het geprerenderde tekstblok staat in een 1×1px-container met `aria-hidden="true"`.
+Vincent: de pagina's waar dit speelt zijn het minst belangrijk voor bezoekers, het
+moet blijven zoals het is, en **SEO mag niet boven functie gaan** op deze pagina's.
+Concreet voor de generator: de wrapper en de clip-container blijven staan, er komt
+geen zichtbare "Overzicht"-sectie bij, en het blok wordt niet naar boven verplaatst.
+Een aanpassing is alleen acceptabel als hij voor bezoekers niets verandert aan hoe
+de pagina eruitziet.
+
+Gevolg voor B1: het verrijken van de dunne hubs (seasons, teams, drivers, standings,
+support) met zichtbare data-teasers valt hiermee af — dat zou juist content
+toevoegen aan pagina's die voor bezoekers niet belangrijk zijn. Wat van B1 overblijft
+is uitsluitend intern linken dat geen opmaak verandert.
+
+**Losse constatering (geen actie zonder besluit):** de code-comment bij het blok zegt
+*"visible to Googlebot & screen readers"*, maar `aria-hidden="true"` verbergt het juist
+vóór screenreaders. Het blok is dus alleen voor crawlers leesbaar. Dat is functioneel
+precies de bedoeling; de comment klopt alleen niet.
+
 ## Verificatie
 
 - `src/test/seoSoft404Coverage.test.ts` koppelt de nginx-routelijst aan de
