@@ -1202,12 +1202,19 @@ ${buildRouteDetailsHtml(route)}
     </main>
   </noscript>`;
   const routeSeoBlock = `${routeSeoStart}
-  <div style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)">
+  <div inert aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)">
       ${richContent}
     </div>
   ${noscript}
   ${routeSeoEnd}`;
-  // sr-only div: visible to Googlebot & screen readers, hidden from visual users
+  // sr-only blok: de inhoud staat in de HTML-bytes voor crawlers die geen JS
+  // draaien, maar is onzichtbaar en mag daarom ook niet bedienbaar zijn.
+  // inert + aria-hidden is geen sier: de clip-truc hierboven verbergt het blok
+  // voor het oog maar niet voor het toetsenbord, dus de links erin waren
+  // focusbaar (tabben door onzichtbare links) en axe-core zakte op deze regel
+  // (aria-hidden-focus: een aria-hidden element mag geen focusbare inhoud
+  // bevatten). inert haalt het uit de tab-volgorde en uit de
+  // toegankelijkheidsboom; de HTML-bytes voor crawlers blijven ongewijzigd.
   out = out.replace(
     '<div id="root"></div>',
     `${routeSeoBlock}\n  <div id="root"></div>`,
