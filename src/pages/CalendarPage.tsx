@@ -24,7 +24,7 @@ const CalendarPage = () => {
   const reg = useRegistration();
   const [selectedRace, setSelectedRace] = useState<CalendarRace | null>(null);
 
-  const { data: races = [] } = useQuery({
+  const { data: races = [], isLoading: racesLoading } = useQuery({
     queryKey: ["races-with-leagues"],
     queryFn: async (): Promise<CalendarRace[]> => {
       const { data } = await supabase
@@ -35,7 +35,7 @@ const CalendarPage = () => {
     },
   });
 
-  const { data: leagues = [] } = useQuery({
+  const { data: leagues = [], isLoading: leaguesLoading } = useQuery({
     queryKey: ["leagues-for-standings"],
     queryFn: async () => {
       const { data } = await supabase
@@ -84,17 +84,29 @@ const CalendarPage = () => {
             <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Race Kalender</span>
           </div>
 
-          {/* Hero next race */}
-          {nextRace && (
+          {/* Hero next race.
+              Tijdens het laden staat hier een skelet met dezelfde hoogte als het
+              echte blok (gemeten: 527 px op mobiel, 409 px op desktop). Zonder dat
+              wordt het blok pas ingevoegd als de races binnenkomen en schuift de
+              hele lijst eronder 559 px omlaag (gemeten CLS 0,3381). */}
+          {(nextRace || racesLoading) && (
             <section className="mb-8">
-              <NewHeroRace
-                race={nextRace}
-                countdown={formatCountdown(nextRace.race_date, now)}
-                registrantCount={0}
-                isRegistered={reg.isRegisteredForRace(nextRace.id, nextRace.leagues?.id)}
-                isRegisteredViaSeason={reg.isRegisteredViaSeason(nextRace.leagues?.id)}
-                onSelect={() => setSelectedRace(nextRace)}
-              />
+              {nextRace ? (
+                <NewHeroRace
+                  race={nextRace}
+                  countdown={formatCountdown(nextRace.race_date, now)}
+                  registrantCount={0}
+                  isRegistered={reg.isRegisteredForRace(nextRace.id, nextRace.leagues?.id)}
+                  isRegisteredViaSeason={reg.isRegisteredViaSeason(nextRace.leagues?.id)}
+                  onSelect={() => setSelectedRace(nextRace)}
+                />
+              ) : (
+                <div
+                  role="status"
+                  aria-label="Volgende race laden"
+                  className="w-full animate-pulse rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06] min-h-[527px] lg:min-h-[409px]"
+                />
+              )}
             </section>
           )}
 
@@ -105,7 +117,7 @@ const CalendarPage = () => {
               <span className="text-xs font-black text-orange-500 uppercase tracking-[0.25em]">Alle Races</span>
             </div>
 
-            {activeLeague && (
+            {activeLeague ? (
               <SeasonBanner
                 leagueId={activeLeague.id}
                 leagueName={activeLeague.name}
@@ -119,10 +131,28 @@ const CalendarPage = () => {
                 onRegister={() => reg.registerForSeason.mutate(activeLeague.id)}
                 onUnregister={() => reg.unregisterFromSeason.mutate(activeLeague.id)}
               />
-            )}
+            ) : leaguesLoading ? (
+              <div
+                role="status"
+                aria-label="Seizoen laden"
+                className="animate-pulse rounded-2xl bg-white/[0.03] ring-1 ring-white/[0.06] min-h-[165px]"
+              />
+            ) : null}
 
-            <div className="space-y-3">
-              {races.filter((race) => race.status !== "completed" && race.status !== "cancelled").map((race, i) => {
+            <div className="space-y-3" aria-busy={racesLoading || undefined}>
+              {/* Skelet met de kaarthoogte (gemeten: 195 px mobiel, 102 px desktop)
+                  zodat de eerste kaart op dezelfde plek staat als de echte. */}
+              {racesLoading && (
+                <div role="status" aria-label="Races laden" className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={`race-skeleton-${i}`}
+                      className="animate-pulse rounded-xl bg-white/[0.03] ring-1 ring-white/[0.06] min-h-[195px] lg:min-h-[102px]"
+                    />
+                  ))}
+                </div>
+              )}
+              {!racesLoading && races.filter((race) => race.status !== "completed" && race.status !== "cancelled").map((race, i) => {
                 const leagueId = race.leagues?.id;
                 return (
                   <NewRaceCard
@@ -135,7 +165,7 @@ const CalendarPage = () => {
                   />
                 );
               })}
-              {!races.length && (
+              {!racesLoading && !races.length && (
                 <div className="text-center py-16 text-gray-700 text-sm">Geen races gevonden</div>
               )}
             </div>
