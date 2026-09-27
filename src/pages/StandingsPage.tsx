@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useDrivers, useTeams, useLeagues } from "@/hooks/data/useSharedQueries";
 import { useState, useEffect } from "react";
 import { Trophy } from "lucide-react";
-import type { DriverModalProfile, StandingRow, StandingsProfile, StandingsRaceResult, StandingTeam } from "@/lib/standingsTypes";
+import type { DriverModalProfile, StandingRow, StandingsProfile, StandingsRaceResult } from "@/lib/standingsTypes";
 import { useLanguage } from "@/i18n/useLanguage";
 import { setSeoMeta } from "@/lib/seo";
 import { selectDefaultStandingsLeagueId, type StandingsSeasonRace } from "@/lib/standingsSeason";
@@ -59,9 +59,9 @@ const StandingsPage = () => {
   const defaultLeagueId = seasonRacesLoading ? null : selectDefaultStandingsLeagueId(leagues, seasonRaces);
   const selectedId = activeLeagueId ?? defaultLeagueId;
 
-  const { data: standings = [] } = useQuery({
+  const { data: standingsRows = [] } = useQuery({
     queryKey: ["standings-full", selectedId],
-    enabled: !!selectedId && !!teams.length,
+    enabled: !!selectedId,
     queryFn: async (): Promise<StandingRow[]> => {
       const { data: res } = await supabase
         .from("race_results")
@@ -83,11 +83,9 @@ const StandingsPage = () => {
         .select("user_id, display_name, team_id")
         .in("user_id", userIds);
       const profiles = (profs || []) as StandingsProfile[];
-      const standingTeams = teams as StandingTeam[];
       return userIds.map((uid) => {
         const stats = map.get(uid)!;
         const prof = profiles.find((p) => p.user_id === uid);
-        const team = standingTeams.find((t) => t.id === prof?.team_id);
         return {
           user_id: uid,
           display_name: prof?.display_name || "Unknown",
@@ -95,7 +93,7 @@ const StandingsPage = () => {
           wins: stats.wins,
           podiums: stats.podiums,
           fl: stats.fl,
-          team: team ? { name: team.name, color: team.color } : undefined,
+          team_id: prof?.team_id ?? undefined,
         };
       }).sort((a, b) =>
         b.total_points - a.total_points ||
@@ -104,6 +102,15 @@ const StandingsPage = () => {
         (b.fl || 0) - (a.fl || 0)
       );
     },
+  });
+
+  // De teamnaam en -kleur worden pas bij het renderen opgezocht. Ze zijn geen
+  // invoer voor de query zelf: die had alleen het league-id nodig. Door de
+  // opzoeking hier te doen hoeft de uitslagquery niet te wachten op `teams`,
+  // dat een eigen, trage round-trip is.
+  const standings = standingsRows.map((row) => {
+    const team = row.team_id ? teams.find((t) => t.id === row.team_id) : undefined;
+    return { ...row, team: team ? { name: team.name, color: team.color } : undefined };
   });
 
   const selectedLeague = leagues.find((l) => l.id === selectedId);
