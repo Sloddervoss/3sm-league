@@ -367,15 +367,18 @@ const ResultsPage = () => {
           <div className="container mx-auto max-w-7xl px-4">
 
             {/* Latest Result Spotlight */}
-            {!isLoading && latestRace && (
+            {/* Ook tijdens het laden neerzetten, anders wordt dit paneel pas
+                ingevoegd als de races binnenkomen en schuift het archief eronder
+                op: gemeten +726 px op mobiel en +295 px op desktop. */}
+            {(isLoading || latestRace) && (
               <div className="mb-14">
                 <div className="mb-5 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.24em] text-orange-400 sm:text-xs">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/10 ring-1 ring-orange-400/20"><Flag className="h-3.5 w-3.5" /></span>
                   <span>Laatste Uitslag</span>
                 </div>
 
-                {latestLoading ? (
-                  <div className="h-48 animate-pulse rounded-[1.8rem] bg-white/[0.035] ring-1 ring-white/[0.07]" />
+                {latestLoading || !latestRace ? (
+                  <div className="animate-pulse rounded-[1.8rem] bg-white/[0.035] ring-1 ring-white/[0.07] min-h-[918px] lg:min-h-[487px]" />
                 ) : latestResults.length === 0 ? (
                   <div className="rounded-[1.8rem] bg-white/[0.025] px-6 py-8 text-center text-sm text-gray-400 ring-1 ring-white/[0.07]">
                     Nog geen detailresultaten beschikbaar.
@@ -543,7 +546,7 @@ const ResultsPage = () => {
             {/* Race archive */}
             {isLoading ? (
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-[1.4rem] bg-white/[0.035] ring-1 ring-white/[0.06]" />)}
+                {[1, 2, 3].map((i) => <div key={i} className="animate-pulse rounded-[1.4rem] bg-white/[0.035] ring-1 ring-white/[0.06] min-h-[187px] lg:min-h-[137px]" />)}
               </div>
             ) : !races?.length ? (
               <div className="py-24 text-center text-gray-400">
