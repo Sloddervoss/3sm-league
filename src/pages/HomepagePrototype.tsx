@@ -289,9 +289,9 @@ const StandingsRefresh = () => {
   const { data: leagues = [] } = useQuery({ queryKey: ["leagues-for-standings"], queryFn: async () => { const { data } = await supabase.from("leagues").select("id, name").order("created_at", { ascending: false }); return data || []; } });
   const { data: teams = [] } = useTeams();
   const activeLeagueId = leagues[0]?.id;
-  const { data: standings = [] } = useQuery({
+  const { data: standingsRows = [] } = useQuery({
     queryKey: ["standings-preview", activeLeagueId],
-    enabled: !!activeLeagueId && !!teams.length,
+    enabled: !!activeLeagueId,
     queryFn: async (): Promise<StandingRow[]> => {
       const { data: res } = await supabase.from("race_results").select("user_id, position, points, race_id, races(league_id)");
       const filtered = ((res || []) as StandingsRaceResult[]).filter((r) => r.races?.league_id === activeLeagueId);
@@ -301,9 +301,18 @@ const StandingsRefresh = () => {
       if (!userIds.length) return [];
       const { data: profs } = await supabase.from("public_profiles").select("user_id, display_name, team_id").in("user_id", userIds);
       const profiles = (profs || []) as StandingsProfile[];
-      return userIds.map((uid) => { const stats = map.get(uid)!; const prof = profiles.find((p) => p.user_id === uid); const team = teams.find((t) => t.id === prof?.team_id); return { user_id: uid, display_name: prof?.display_name || "Unknown", total_points: stats.total_points, wins: stats.wins, team: team ? { name: team.name, color: team.color } : undefined }; }).sort((a, b) => b.total_points - a.total_points).slice(0, 5);
+      return userIds.map((uid) => { const stats = map.get(uid)!; const prof = profiles.find((p) => p.user_id === uid); return { user_id: uid, display_name: prof?.display_name || "Unknown", total_points: stats.total_points, wins: stats.wins, team_id: prof?.team_id ?? undefined }; }).sort((a, b) => b.total_points - a.total_points).slice(0, 5);
     },
   });
+  // De teamnaam en -kleur worden pas bij het renderen opgezocht. Ze zijn geen
+  // invoer voor de query zelf: die had alleen het league-id nodig. Door de
+  // opzoeking hier te doen hoeft de uitslagquery niet te wachten op `teams`,
+  // dat een eigen, trage round-trip is.
+  const standings = standingsRows.map((row) => {
+    const team = row.team_id ? teams.find((t) => t.id === row.team_id) : undefined;
+    return { ...row, team: team ? { name: team.name, color: team.color } : undefined };
+  });
+
   if (!standings.length) return null;
   const leagueName = leagues.find((league) => league.id === activeLeagueId)?.name;
 

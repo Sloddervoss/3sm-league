@@ -26,6 +26,7 @@ export type StandingRow = {
   wins: number;
   podiums?: number;
   fl?: number;
+  team_id?: string | null;
   team?: { name: string; color: string | null };
 };
 
