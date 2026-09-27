@@ -15,6 +15,16 @@ const distDir = fileURLToPath(new URL('../dist/', import.meta.url));
 const templatePath = join(distDir, 'index.html');
 const manifestPath = join(distDir, '.route-html-manifest.json');
 const template = readFileSync(templatePath, 'utf8');
+
+// De hero-preload hoort alleen op de routes die de hero werkelijk renderen. De
+// <head> is gedeeld door alle routes, dus zonder deze stap vraagt ELKE route de
+// hero-afbeelding op (14,6 KB, fetchpriority=high) terwijl hij hem nooit toont -
+// en dat concurreert met de kritieke JS. Alleen / (HomepagePrototype) en
+// /homepage-prototype (Index) gebruiken HeroSection.
+const HERO_PRELOAD_ROUTES = new Set(['/', '/homepage-prototype']);
+const HERO_PRELOAD_RE = /\s*<link rel="preload" as="image" href="[^"]*hero-bg-[^"]*"[^>]*>/g;
+const stripHeroPreload = (html, routePath) =>
+  HERO_PRELOAD_ROUTES.has(routePath) ? html : html.replace(HERO_PRELOAD_RE, '');
 const canonicalPath = (path) => {
   if (path === '/') return '/';
   return `/${String(path).replace(/^\/+|\/+$/g, '')}/`;
@@ -1404,7 +1414,7 @@ const buildNonCanonicalShell = ({ title, description }) => {
   out = out.replace(/\s*<link rel="canonical" href="[^"]*"\s*\/>/g, '');
   out = out.replace(/\s*<meta property="og:url" content="[^"]*"\s*\/>/g, '');
   out = out.replace(/<noscript>[\s\S]*?<\/noscript>\s*/g, '');
-  return out;
+  return stripHeroPreload(out, null);
 };
 
 writeFileSync(join(distDir, '404.html'), buildNonCanonicalShell({
@@ -1421,7 +1431,7 @@ writeFileSync(join(distDir, 'app-shell-fallback.html'), buildNonCanonicalShell({
 }));
 
 for (const route of sitemapRoutes) {
-  const html = applyRouteMeta(template, route);
+  const html = stripHeroPreload(applyRouteMeta(template, route), route.path);
   if (route.path === '/') {
     writeFileSync(templatePath, html);
     continue;
@@ -1435,7 +1445,7 @@ for (const route of sitemapRoutes) {
 for (const privatePath of privateRoutes) {
   const privateIndex = routeIndexPath(privatePath);
   mkdirSync(dirname(privateIndex), { recursive: true });
-  writeFileSync(privateIndex, applyNoindexMeta(template, privatePath));
+  writeFileSync(privateIndex, stripHeroPreload(applyNoindexMeta(template, privatePath), privatePath));
 }
 
 writeFileSync(join(distDir, 'sitemap.xml'), generateSitemap());
