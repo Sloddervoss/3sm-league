@@ -8,6 +8,22 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 exec 9>/var/lock/3sm-site.lock
 flock 9
 
+# Een verse release-worktree heeft geen .env (untracked). Zonder .env worden de
+# dynamische nieuws- en uitslagroutes niet gegenereerd en ruimt de rsync hieronder
+# de al gepubliceerde pagina's op (sitemap 57 -> 10). Neem de .env over uit de
+# release die nu actief is, of breek af.
+if [ ! -f .env ]; then
+  active_conf=/etc/systemd/system/3sm-seo-refresh.service.d/active-release.conf
+  previous=$(sed -n 's/^WorkingDirectory=//p' "$active_conf" 2>/dev/null | head -1)
+  if [ -n "${previous:-}" ] && [ -f "$previous/.env" ] && [ "$previous" != "$(pwd)" ]; then
+    echo "→ Geen .env in deze worktree; overgenomen uit $previous"
+    cp "$previous/.env" .env
+  else
+    echo "✗ Geen .env in deze worktree en geen bruikbare vorige release. Afgebroken voordat er iets gepubliceerd wordt." >&2
+    exit 1
+  fi
+fi
+
 echo "→ Pulling latest code..."
 git pull --ff-only
 
