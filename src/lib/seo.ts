@@ -58,6 +58,13 @@ export const setSeoMeta = ({ title, description, canonicalUrl, ogTitle = title, 
 // zorgt dat Google dit als één entiteit ziet in plaats van losse kopieën.
 export const SITE_ORGANIZATION_ID = "https://3stripemotorsport.cc/#organisatie";
 
+export const siteOrganizationRef = (siteUrl = "https://3stripemotorsport.cc") => ({
+  "@type": "SportsOrganization",
+  "@id": SITE_ORGANIZATION_ID,
+  name: "3 Stripe Motorsport",
+  url: `${siteUrl}/`,
+});
+
 export const siteOrganizationJsonLd = (siteUrl = "https://3stripemotorsport.cc") => ({
   "@type": "SportsOrganization",
   "@id": SITE_ORGANIZATION_ID,
