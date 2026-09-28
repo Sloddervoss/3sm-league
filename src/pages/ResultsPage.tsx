@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useLanguage } from "@/i18n/useLanguage";
-import { setSeoMeta } from "@/lib/seo";
+import { setSeoMeta, siteOrganizationRef } from "@/lib/seo";
 
 const positionColors: Record<number, string> = {
   1: "text-yellow-400",
@@ -321,12 +321,7 @@ const ResultsPage = () => {
               name: "3 Stripe Motorsport",
               url: siteUrl,
             },
-            about: {
-              "@type": "SportsOrganization",
-              name: "3 Stripe Motorsport",
-              sport: "Sim racing",
-              url: siteUrl,
-            },
+            about: siteOrganizationRef(siteUrl),
           },
         };
       }),

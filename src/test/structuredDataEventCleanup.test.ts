@@ -25,8 +25,10 @@ describe("structured data event cleanup", () => {
 
     expect(resultsPage).toContain('"@type": "ItemList"');
     expect(resultsPage).toContain('"@type": "WebPage"');
-    expect(resultsPage).toContain('"@type": "SportsOrganization"');
-    expect(resultsPage).toContain('sport: "Sim racing"');
+    expect(resultsPage).toContain("siteOrganizationRef(siteUrl)");
+    const seoLib = readSource("src/lib/seo.ts");
+    expect(seoLib).toContain('"@type": "SportsOrganization"');
+    expect(seoLib).toContain('sport: "Sim racing"');
     expect(resultsPage).toContain('name: language === "en" ? "3 Stripe Motorsport race results"');
     expect(resultsPage).toContain('inLanguage: language === "en" ? "en" : "nl"');
     expect(resultsPage).toContain("[language, races, winners]");
