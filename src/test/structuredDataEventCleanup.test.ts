@@ -25,7 +25,7 @@ describe("structured data event cleanup", () => {
 
     expect(resultsPage).toContain('"@type": "ItemList"');
     expect(resultsPage).toContain('"@type": "WebPage"');
-    expect(resultsPage).toContain("siteOrganizationJsonLd(siteUrl)");
+    expect(resultsPage).toContain("siteOrganizationRef(siteUrl)");
     const seoLib = readSource("src/lib/seo.ts");
     expect(seoLib).toContain('"@type": "SportsOrganization"');
     expect(seoLib).toContain('sport: "Sim racing"');

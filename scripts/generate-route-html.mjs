@@ -341,6 +341,17 @@ const organizationJsonLd = () => ({
   ],
 });
 
+// Compacte verwijzing voor herhaalde vermeldingen in ItemLists (kalender-events,
+// uitslag-items). Houdt de koppeling via hetzelfde @id en behoudt naam en url
+// voor rich-result-geschiktheid, maar herhaalt de volledige node niet tientallen
+// keren per pagina.
+const organizationRefJsonLd = () => ({
+  '@type': 'SportsOrganization',
+  '@id': ORGANIZATION_ID,
+  name: '3 Stripe Motorsport',
+  url: `${SITE_URL}/`,
+});
+
 // Sitemap <lastmod> must reflect real page-content changes, not build time.
 // Static route entries intentionally omit lastmod unless that specific page's
 // crawler-facing content was edited. Dynamic routes below use row timestamps.
@@ -445,7 +456,7 @@ const buildCalendarHubItemListJsonLd = (summaries) => ({
         '@type': 'Place',
         name: race.track,
       } : undefined,
-      organizer: organizationJsonLd(),
+      organizer: organizationRefJsonLd(),
       sport: 'Sim racing',
       eventStatus: 'https://schema.org/EventScheduled',
       description: `${race.name}${race.track ? ` op ${race.track}` : ''}${race.carClass ? ` met ${race.carClass}` : ''}: aankomende iRacing race van 3 Stripe Motorsport.`,
@@ -627,7 +638,7 @@ const buildResultsHubItemListJsonLd = (summaries) => ({
         name: '3 Stripe Motorsport',
         url: SITE_URL,
       },
-      about: organizationJsonLd(),
+      about: organizationRefJsonLd(),
     },
   })),
 });

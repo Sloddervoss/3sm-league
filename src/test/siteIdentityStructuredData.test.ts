@@ -66,11 +66,14 @@ describe("site identity structured data", () => {
   });
 
   it("reuses the shared organization node instead of new bare copies", () => {
-    // Vijf plekken in de prerender: webpage-about, webpage-publisher,
-    // website-publisher en de twee organizers (kalender en uitslagen).
-    const usages = prerender.split("organizationJsonLd()").length - 1;
-    expect(usages).toBeGreaterThanOrEqual(5);
+    // Volledige node op drie plekken: webpage-about, webpage-publisher en de
+    // publisher van de WebSite. Compacte verwijzing op de twee herhaalde
+    // plekken: kalender-events en de uitslag-ItemList.
+    const full = prerender.split("organizationJsonLd()").length - 1;
+    const refs = prerender.split("organizationRefJsonLd()").length - 1;
+    expect(full).toBeGreaterThanOrEqual(3);
+    expect(refs).toBeGreaterThanOrEqual(2);
     expect(prerender).not.toContain("sport: 'Sim racing',\n        url: SITE_URL,");
-    expect(readSource("src/pages/ResultsPage.tsx")).toContain("siteOrganizationJsonLd(siteUrl)");
+    expect(readSource("src/pages/ResultsPage.tsx")).toContain("siteOrganizationRef(siteUrl)");
   });
 });
