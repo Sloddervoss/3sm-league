@@ -317,6 +317,30 @@ const escapeHtml = (value) =>
 
 const absoluteUrl = (path) => `${SITE_URL}${canonicalPath(path)}`;
 
+// Eén canonieke beschrijving van de organisatie. Elk @id verwijst naar hetzelfde
+// knooppunt, zodat Google niet vier losse versies van 3SM te zien krijgt maar
+// één entiteit met één officiële URL en de bijbehorende profielen (sameAs).
+const ORGANIZATION_ID = `${SITE_URL}/#organisatie`;
+
+const organizationJsonLd = () => ({
+  '@type': 'SportsOrganization',
+  '@id': ORGANIZATION_ID,
+  name: '3 Stripe Motorsport',
+  alternateName: '3SM',
+  url: `${SITE_URL}/`,
+  logo: `${SITE_URL}/favicon-192x192.png`,
+  description: '3 Stripe Motorsport is een Nederlandse iRacing league en community met een eigen kalender, uitslagen en standen.',
+  sport: 'Sim racing',
+  foundingDate: '2026',
+  areaServed: { '@type': 'Country', name: 'Nederland' },
+  knowsAbout: ['iRacing', 'sim racing', 'endurance racing'],
+  sameAs: [
+    'https://discord.gg/H7tZVuzBgT',
+    'https://www.instagram.com/3stripemotorsport',
+    'https://www.facebook.com/people/3-Stripe-Motorsport/61589158685020/',
+  ],
+});
+
 // Sitemap <lastmod> must reflect real page-content changes, not build time.
 // Static route entries intentionally omit lastmod unless that specific page's
 // crawler-facing content was edited. Dynamic routes below use row timestamps.
@@ -421,12 +445,7 @@ const buildCalendarHubItemListJsonLd = (summaries) => ({
         '@type': 'Place',
         name: race.track,
       } : undefined,
-      organizer: {
-        '@type': 'SportsOrganization',
-        name: '3 Stripe Motorsport',
-        sport: 'Sim racing',
-        url: SITE_URL,
-      },
+      organizer: organizationJsonLd(),
       sport: 'Sim racing',
       eventStatus: 'https://schema.org/EventScheduled',
       description: `${race.name}${race.track ? ` op ${race.track}` : ''}${race.carClass ? ` met ${race.carClass}` : ''}: aankomende iRacing race van 3 Stripe Motorsport.`,
@@ -535,7 +554,7 @@ const buildRaceSportsEventJsonLd = (race) => ({
   sport: 'Motorsport',
   description: truncate(`Uitslag en racegegevens van ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} bij 3 Stripe Motorsport.`),
   location: race.track ? { '@type': 'Place', name: cleanText(race.track) } : undefined,
-  organizer: { '@type': 'SportsOrganization', name: '3 Stripe Motorsport', url: 'https://3stripemotorsport.cc/' },
+  organizer: organizationJsonLd(),
   competitor: sortedRaceResults(race)
     .slice(0, 10)
     .map((result) => ({ '@type': 'Person', name: driverName(result) }))
@@ -608,12 +627,7 @@ const buildResultsHubItemListJsonLd = (summaries) => ({
         name: '3 Stripe Motorsport',
         url: SITE_URL,
       },
-      about: {
-        '@type': 'SportsOrganization',
-        name: '3 Stripe Motorsport',
-        sport: 'Sim racing',
-        url: SITE_URL,
-      },
+      about: organizationJsonLd(),
     },
   })),
 });
@@ -975,13 +989,9 @@ const buildWebPageJsonLd = (route) => ({
     '@type': 'WebSite',
     name: '3 Stripe Motorsport',
     url: SITE_URL,
+    publisher: organizationJsonLd(),
   },
-  about: {
-    '@type': 'SportsOrganization',
-    name: '3 Stripe Motorsport',
-    sport: 'Sim racing',
-    url: SITE_URL,
-  },
+  about: organizationJsonLd(),
 });
 
 const buildWebSiteJsonLd = () => ({
@@ -991,12 +1001,7 @@ const buildWebSiteJsonLd = () => ({
   alternateName: '3SM',
   url: `${SITE_URL}/`,
   inLanguage: 'nl-NL',
-  publisher: {
-    '@type': 'SportsOrganization',
-    name: '3 Stripe Motorsport',
-    sport: 'Sim racing',
-    url: `${SITE_URL}/`,
-  },
+  publisher: organizationJsonLd(),
 });
 
 const mainNavigationItems = [
