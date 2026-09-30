@@ -153,7 +153,13 @@ const StandingsPage = () => {
                   }
                 >
                   {l.name}
-                  {l.season && <span className="text-xs opacity-60">{l.season}</span>}
+                  {/* Twee competities kunnen dezelfde naam hebben (bijv. dezelfde
+                      beker in een oud en een nieuw seizoen). Staat er geen seizoen
+                      in de database, dan was het verschil niet te zien; de status
+                      maakt ze dan alsnog uit elkaar te houden. */}
+                  {(l.season || l.status === "completed") && (
+                    <span className="text-xs opacity-60">{l.season || "afgelopen"}</span>
+                  )}
                 </button>
               ))}
             </div>
