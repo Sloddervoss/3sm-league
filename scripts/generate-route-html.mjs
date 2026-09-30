@@ -60,6 +60,9 @@ const routes = [
     path: '/meedoen',
     title: 'Meedoen met 3SM – Nederlandse iRacing League',
     priority: '0.8',
+    // Tweetalig paar: /meedoen (NL) en /en/join (EN) verwijzen via hreflang
+    // naar elkaar. Beide routes moeten daarom een alternatePath houden.
+    alternatePath: '/en/join',
     changefreq: 'monthly',
     description:
       'Zoek je een iRacing community in Nederland? Doe mee met 3 Stripe Motorsport: een Nederlandse iRacing league met Discord, kalender, standings en uitslagen.',
@@ -80,6 +83,40 @@ const routes = [
       ['/calendar', 'Bekijk aankomende races'],
       ['/standings', 'Bekijk het kampioenschap'],
       ['/results', 'Bekijk eerdere uitslagen'],
+    ],
+  },
+  {
+    // Engelstalige instappagina: één pagina volledig in het Engels, met een
+    // eigen adres zodat Google hem apart kan indexeren. De inhoud spiegelt
+    // features/join/content.ts (joinCopy.en); die twee moeten gelijk blijven
+    // lopen, net als bij /meedoen.
+    path: '/en/join',
+    lang: 'en',
+    alternatePath: '/meedoen',
+    title: 'Join 3SM – Dutch iRacing League | English spoken',
+    priority: '0.8',
+    changefreq: 'monthly',
+    description:
+      'Looking for an iRacing league? 3 Stripe Motorsport is a Dutch GT3 league racing every other Wednesday at 20:30 CET. Free to enter, Dutch and English spoken.',
+    h1: 'An iRacing community for competition and fun',
+    intro:
+      '3 Stripe Motorsport is a Dutch iRacing league and community, founded in the Netherlands and open to drivers who share the same racing mentality. Participation is free, beginners and experienced drivers are welcome, and Dutch and English are both spoken in our Discord.',
+    details: [
+      'Real calendar and result data show which races are organised, where they are held and how the championship develops.',
+      'A race night starts with the calendar, briefing and preparation, followed by practice, racing hard but fair, and afterwards the results and updated standings.',
+      'To take part you need an active iRacing account, Discord, a complete 3SM profile and your exact iRacing name and Customer ID.',
+      'Preparing well, giving room and handling incidents through the steward process keep the competition strong and accessible.',
+      'Drivers can enter solo or with their own team and do not have to be present at every race.',
+      'GT3 is currently the main class. Other classes and formats can be added when there is enough interest.',
+      'A planning layer for existing iRacing endurance events is in open beta and still being developed.',
+      'Race hard. Race smart. Race respectfully.',
+    ],
+    links: [
+      ['/calendar', 'See upcoming races'],
+      ['/standings', 'See the championship'],
+      ['/results', 'See past results'],
+      ['/drivers', 'See the drivers'],
+      ['/meedoen', 'Nederlandse versie (NL)'],
     ],
   },
   {
@@ -301,6 +338,26 @@ const joinFaq = [
 
 const joinRoute = routes.find((route) => route.path === '/meedoen');
 if (joinRoute) joinRoute.faq = joinFaq;
+
+// Engelstalige tegenhanger van joinFaq. Tekst identiek aan de FAQ in
+// features/join/content.ts (joinCopy.en.faq).
+const joinFaqEn = [
+  { question: 'Does it cost money to race with 3SM?', answer: 'No. Participation in 3SM races and the community is free.' },
+  { question: 'Is there a minimum iRating?', answer: 'No. There is no minimum iRating requirement.' },
+  { question: 'Is there a minimum Safety Rating?', answer: 'No. There is no minimum Safety Rating. Clean and respectful racing remains the foundation.' },
+  { question: 'Are beginners welcome?', answer: 'Yes. Beginners and experienced drivers are welcome. Preparation, respect and safe driving matter more than a particular skill level.' },
+  { question: 'Do I have to attend every race?', answer: 'No. Enter the races that fit your schedule. Attendance at every race is not required.' },
+  { question: 'Can I join without a team?', answer: 'Yes. Solo drivers can register and race like everyone else.' },
+  { question: 'Can my own team take part?', answer: 'Yes. Independent teams are welcome and do not have to race under the 3SM team name.' },
+  { question: 'Which class is currently used?', answer: 'GT3 is currently the main class in the in-house iRacing league.' },
+  { question: 'Will other classes be added?', answer: 'Possibly. Other classes and formats can be added when there is enough interest within the community.' },
+  { question: 'How do I register?', answer: 'Join Discord, complete your site profile, link your Discord account and then register for a race or season through the calendar.' },
+  { question: 'What do I need to participate?', answer: 'An iRacing account, Discord, a complete 3SM profile and a willingness to prepare and race cleanly and respectfully.' },
+  { question: 'What is happening with endurance racing?', answer: 'That environment has been in open beta since September: anyone with an account can join.' },
+];
+
+const joinRouteEn = routes.find((route) => route.path === '/en/join');
+if (joinRouteEn) joinRouteEn.faq = joinFaqEn;
 
 const escapeAttr = (value) =>
   String(value)
@@ -1652,11 +1709,11 @@ const buildSiteNavigationJsonLd = () => ({
   })),
 });
 
-const buildJoinFaqJsonLd = () => ({
+const buildJoinFaqJsonLd = (route) => ({
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
-  inLanguage: 'nl-NL',
-  mainEntity: joinFaq.map(({ question, answer }) => ({
+  inLanguage: route.lang === 'en' ? 'en-US' : 'nl-NL',
+  mainEntity: (route.faq || joinFaq).map(({ question, answer }) => ({
     '@type': 'Question',
     name: question,
     acceptedAnswer: {
@@ -1667,7 +1724,10 @@ const buildJoinFaqJsonLd = () => ({
 });
 
 if (joinRoute) {
-  joinRoute.extraJsonLd = [{ id: 'join-page-faq-schema', data: buildJoinFaqJsonLd() }];
+  joinRoute.extraJsonLd = [{ id: 'join-page-faq-schema', data: buildJoinFaqJsonLd(joinRoute) }];
+}
+if (joinRouteEn) {
+  joinRouteEn.extraJsonLd = [{ id: 'join-page-faq-schema', data: buildJoinFaqJsonLd(joinRouteEn) }];
 }
 
 const buildJsonLdScript = (id, data) =>
@@ -1750,7 +1810,30 @@ ${buildRouteDetailsHtml(route)}
       ${faqHtml}`;
 };
 
+// Vaste teksten rond de joinpagina in beide talen. De pagina-inhoud zelf komt
+// uit de route (h1, intro, details, faq); dit zijn de labels en de vaste
+// alinea's eromheen.
+const joinFallbackText = {
+  nl: {
+    factsHeading: 'Nederlandse iRacing community en league',
+    free: 'Deelname is gratis. Er geldt geen minimum iRating of Safety Rating. Beginners, ervaren coureurs, solo racers en eigen teams zijn welkom.',
+    classes: 'GT3 is momenteel de belangrijkste klasse. Andere klassen kunnen volgen bij voldoende interesse. De endurance-planningslaag is actief in ontwikkeling en nog niet volledig beschikbaar.',
+    faqHeading: 'Veelgestelde vragen over meedoen',
+    navLabel: 'Belangrijke 3SM links',
+    discord: 'Join de 3SM Discord',
+  },
+  en: {
+    factsHeading: 'A Dutch iRacing league for competition and fun',
+    free: 'Participation is free. There is no minimum iRating or Safety Rating. Beginners, experienced drivers, solo racers and independent teams are all welcome.',
+    classes: 'GT3 is currently the main class. Other classes and formats can follow when there is enough interest. The endurance planning layer is in open beta and still being developed.',
+    faqHeading: 'Frequently asked questions about joining 3SM',
+    navLabel: 'Key 3SM links',
+    discord: 'Join the 3SM Discord',
+  },
+};
+
 const buildJoinRootFallback = (route) => {
+  const text = joinFallbackText[route.lang === 'en' ? 'en' : 'nl'];
   const details = (route.details || []).map((detail) => `<p>${escapeHtml(detail)}</p>`).join('\n        ');
   const links = (route.links || []).map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('');
   const faq = (route.faq || []).map(({ question, answer }) => `<details><summary>${escapeHtml(question)}</summary><p>${escapeHtml(answer)}</p></details>`).join('\n        ');
@@ -1761,17 +1844,17 @@ const buildJoinRootFallback = (route) => {
         <p>${escapeHtml(route.intro)}</p>
       </header>
       <section aria-labelledby="join-facts-heading">
-        <h2 id="join-facts-heading">Nederlandse iRacing community en league</h2>
+        <h2 id="join-facts-heading">${escapeHtml(text.factsHeading)}</h2>
         ${details}
-        <p>Deelname is gratis. Er geldt geen minimum iRating of Safety Rating. Beginners, ervaren coureurs, solo racers en eigen teams zijn welkom.</p>
-        <p>GT3 is momenteel de belangrijkste klasse. Andere klassen kunnen volgen bij voldoende interesse. De endurance-planningslaag is actief in ontwikkeling en nog niet volledig beschikbaar.</p>
+        <p>${escapeHtml(text.free)}</p>
+        <p>${escapeHtml(text.classes)}</p>
       </section>
-      <nav aria-label="Belangrijke 3SM links"><ul>${links}</ul></nav>
+      <nav aria-label="${escapeAttr(text.navLabel)}"><ul>${links}</ul></nav>
       <section aria-labelledby="join-faq-heading">
-        <h2 id="join-faq-heading">Veelgestelde vragen over meedoen</h2>
+        <h2 id="join-faq-heading">${escapeHtml(text.faqHeading)}</h2>
         ${faq}
       </section>
-      <p><a href="https://discord.gg/H7tZVuzBgT">Join de 3SM Discord</a></p>
+      <p><a href="https://discord.gg/H7tZVuzBgT">${escapeHtml(text.discord)}</a></p>
     </main>`;
 };
 
@@ -1780,8 +1863,13 @@ const applyRouteMeta = (html, route) => {
   const title = escapeAttr(route.title);
   const description = escapeAttr(route.description);
   const url = escapeAttr(canonical);
+  const lang = route.lang === 'en' ? 'en' : 'nl';
 
   let out = html.replace(/<title>.*?<\/title>/s, `<title>${title}</title>`);
+  out = out.replace(/<html lang="[^"]*"/, `<html lang="${lang}"`);
+  // Eerst eventuele oude hreflang-links weghalen: de generator draait over
+  // dezelfde sjabloon-HTML en anders stapelen ze op bij elke run.
+  out = out.replace(/\s*<link rel="alternate" hreflang="[^"]*" href="[^"]*"\s*\/>/g, '');
   out = replaceOrInsertMeta(out, /<meta name="description" content="[^"]*"\s*\/>/, `<meta name="description" content="${description}" />`);
   out = replaceOrInsertMeta(out, /<link rel="canonical" href="[^"]*"\s*\/>/, `<link rel="canonical" href="${url}" />`);
   out = replaceOrInsertMeta(out, /<meta property="og:title" content="[^"]*"\s*\/>/, `<meta property="og:title" content="${title}" />`);
@@ -1810,12 +1898,21 @@ const applyRouteMeta = (html, route) => {
     ...(route.extraJsonLd || []).map(({ id, data }) => buildJsonLdScript(id, data)),
   ].join('\n    ');
   const extraJsonLd = ''; // FAQPage removed — sr-only workaround not accepted by Google
+  // hreflang alleen op pagina's met een tweetalig paar. x-default wijst naar de
+  // Nederlandse versie: dat is de versie voor iedereen zonder duidelijke taal.
+  const hreflangLinks = route.alternatePath
+    ? [
+        `    <link rel="alternate" hreflang="${lang}" href="${escapeAttr(absoluteUrl(route.path))}" />`,
+        `    <link rel="alternate" hreflang="${lang === 'en' ? 'nl' : 'en'}" href="${escapeAttr(absoluteUrl(route.alternatePath))}" />`,
+        `    <link rel="alternate" hreflang="x-default" href="${escapeAttr(absoluteUrl(lang === 'en' ? route.alternatePath : route.path))}" />`,
+      ].join('\n')
+    : '';
   out = out.replace(
     '</head>',
-    `    ${routeJsonLd}${extraJsonLd}\n  </head>`,
+    `${hreflangLinks}${hreflangLinks ? '\n' : ''}    ${routeJsonLd}${extraJsonLd}\n  </head>`,
   );
   out = stripGeneratedRouteSeo(out);
-  if (route.path === '/meedoen') {
+  if (route.path === '/meedoen' || route.path === '/en/join') {
     return out.replace(
       '<div id="root"></div>',
       `<div id="root">${buildJoinRootFallback(route)}</div>`,

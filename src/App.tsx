@@ -95,6 +95,9 @@ const App = () => (
                     <Route path="/teams/:teamSlug" element={<TeamProfilePage />} />
                     <Route path="/seasons/:seasonSlug" element={<SeasonProfilePage />} />
                     <Route path="/meedoen" element={<JoinPage />} />
+                    {/* Engelstalige instappagina. Zelfde pagina, taal vast op EN,
+                        eigen adres zodat Google hem apart kan indexeren. */}
+                    <Route path="/en/join" element={<JoinPage />} />
                     <Route path="/endurance/*" element={<EndurancePage />} />
                     <Route path="/stewards" element={<StewardPage />} />
                     <Route path="/news-editor" element={<NewsEditorPage />} />
