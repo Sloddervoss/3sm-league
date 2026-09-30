@@ -58,7 +58,7 @@ export function useLeagues() {
     queryFn: async () => {
       const { data } = await supabase
         .from("leagues")
-        .select("id, name, season, car_class")
+        .select("id, name, season, car_class, status")
         .order("created_at", { ascending: false });
       return data || [];
     },
