@@ -103,11 +103,17 @@ const useDomTranslation = (language: Language) => {
   }, [language]);
 };
 
+// De URL bepaalt de taal waar dat expliciet is: /en/... is een Engelstalige
+// pagina. Dat moet vóór de eerste render bekend zijn, anders knippert de pagina
+// eerst Nederlands voordat de taalwissel valt.
+const initialLanguage = (): Language => {
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/en/")) return "en";
+  const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  return stored === "en" ? "en" : "nl";
+};
+
 export const LanguageProvider = ({ children }: { children: ReactNode }) => {
-  const [language, setLanguageState] = useState<Language>(() => {
-    const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-    return stored === "en" ? "en" : "nl";
-  });
+  const [language, setLanguageState] = useState<Language>(initialLanguage);
 
   useDomTranslation(language);
 
