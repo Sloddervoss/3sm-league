@@ -199,8 +199,8 @@ const nl: JoinCopy = {
 
 const en: JoinCopy = {
   meta: {
-    title: "Join 3SM – Dutch iRacing League",
-    description: "Looking for an iRacing community in the Netherlands? Join 3 Stripe Motorsport: a Dutch iRacing league with Discord, calendar, standings and results.",
+    title: "Join 3SM – Dutch iRacing League | English spoken",
+    description: "Looking for an iRacing league? 3 Stripe Motorsport is a Dutch GT3 league racing every other Wednesday at 20:30 CET. Free to enter, Dutch and English spoken.",
     ogTitle: "Join the 3SM iRacing community",
     ogDescription: "Organised iRacing races for beginners, experienced drivers, solo racers and independent teams.",
   },
