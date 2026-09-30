@@ -2,6 +2,7 @@ import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import NewStandingsTable from "@/components/preview/NewStandingsTable";
+import { driverPath } from "@/lib/entityLinks";
 import PreviewModal from "@/components/preview/PreviewModal";
 import DriverModal from "@/components/preview/DriverModal";
 import { useQuery } from "@tanstack/react-query";
@@ -181,6 +182,10 @@ const StandingsPage = () => {
               onSelectDriver={(uid) => {
                 const driver = (profiles as DriverModalProfile[]).find((p) => p.user_id === uid);
                 if (driver) setSelectedDriver(driver);
+              }}
+              driverHref={(uid) => {
+                const driver = (profiles as DriverModalProfile[]).find((p) => p.user_id === uid);
+                return driver ? driverPath(driver) : undefined;
               }}
             />
           )}

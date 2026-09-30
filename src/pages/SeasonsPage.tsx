@@ -6,6 +6,7 @@ import { Trophy, Calendar, Flag, Car, Users, ChevronRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
+import { seasonPath } from "@/lib/entityLinks";
 
 const statusColors: Record<string, string> = {
   active: "bg-green-500/20 text-green-400 border-green-500/30",
@@ -239,12 +240,20 @@ const SeasonsPage = () => {
                         )}
                       </div>
 
-                      <Link
-                        to="/standings/"
-                        className="mt-4 flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
-                      >
-                        Bekijk standings <ChevronRight className="w-3.5 h-3.5" />
-                      </Link>
+                      <div className="mt-4 flex flex-wrap items-center gap-4">
+                        <Link
+                          to="/standings/"
+                          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors font-medium"
+                        >
+                          Bekijk standings <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
+                        <Link
+                          to={seasonPath(league)}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors font-medium"
+                        >
+                          Seizoensoverzicht <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
                     </motion.div>
                   );
                 })}

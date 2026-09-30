@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Users, Trophy, Shield } from "lucide-react";
+import { teamPath } from "@/lib/entityLinks";
 
 interface Team {
   id: string;
@@ -31,14 +32,21 @@ const NewTeamCard = ({ team, members, points, wins, rank, onSelect }: Props) => 
   const reserves = members.filter((m) => m.role === "reserve");
 
   return (
-    <motion.div
+    <motion.a
       initial={{ opacity: 0, y: 28 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.35 }}
       whileHover={{ y: -4, boxShadow: `0 12px 40px ${color}20` }}
-      onClick={onSelect}
-      className="relative rounded-2xl overflow-hidden cursor-pointer"
+      href={teamPath(team)}
+      onClick={(event: React.MouseEvent<HTMLAnchorElement>) => {
+        // Gewone klik: de popup zoals altijd. Ctrl-, cmd-, shift- en middelklik
+        // volgen de link, zodat het teamprofiel in een nieuw tabblad opent.
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+        event.preventDefault();
+        onSelect?.();
+      }}
+      className="relative block rounded-2xl overflow-hidden cursor-pointer"
       style={{
         background: "linear-gradient(160deg, #111118 0%, #0c0c12 100%)",
         border: "1px solid rgba(255,255,255,0.07)",
@@ -147,7 +155,7 @@ const NewTeamCard = ({ team, members, points, wins, rank, onSelect }: Props) => 
           </div>
         )}
       </div>
-    </motion.div>
+    </motion.a>
   );
 };
 

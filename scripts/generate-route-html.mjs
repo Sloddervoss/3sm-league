@@ -413,6 +413,30 @@ const slugify = (value) => normalizeSlugInput(cleanText(value));
 
 const driverLabel = (profile) => cleanText(profile?.iracing_name || profile?.display_name) || 'Onbekende coureur';
 
+// ---------- Entiteitspagina's ----------
+// Coureurs, teams en seizoenen krijgen een eigen URL. Deze helpers spiegelen
+// src/lib/entityLinks.ts: de client bouwt exact dezelfde slugs. Lopen die uit
+// elkaar, dan linkt de statische HTML naar een andere URL dan de SPA opent.
+// Een lege slug levert null op, zodat zo'n entiteit nooit met een hub botst.
+const driverEntityPath = (value) => {
+  const name = typeof value === 'string' ? value : (value?.name || driverLabel(value));
+  const slug = slugify(name);
+  return slug ? `/drivers/${slug}` : null;
+};
+
+const teamEntityPath = (team) => {
+  const slug = slugify(team?.name);
+  return slug ? `/teams/${slug}` : null;
+};
+
+const seasonEntityPath = (league) => {
+  const slug = slugify([cleanText(league?.name), league?.season].filter(Boolean).join(' '));
+  return slug ? `/seasons/${slug}` : null;
+};
+
+const entityLink = (path, label) => (path ? `<a href="${absoluteUrl(path)}">${escapeHtml(label)}</a>` : escapeHtml(label));
+const entityUrl = (path) => (path ? absoluteUrl(path) : undefined);
+
 // De tien publieke hubs. Elke route krijgt ze in zijn statische links, zodat ook
 // een crawler zonder JavaScript van elke pagina bij elke hub kan komen. Zonder
 // dit had /support nul inkomende links en waren /seasons, /teams en /drivers
@@ -457,7 +481,7 @@ const buildStandingsHubCrawlerHtml = () => {
   const sections = leaguesWithStandings().map((league) => {
     const rows = standingsByLeague.get(league.id) || [];
     if (!rows.length) return '';
-    const table = rows.map((row) => `            <tr><td>${row.position}</td><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.teamName || '')}</td><td>${row.points}</td><td>${row.wins}</td><td>${row.podiums}</td></tr>`).join('\n');
+    const table = rows.map((row) => `            <tr><td>${row.position}</td><td>${entityLink(driverEntityPath(row), row.name)}</td><td>${escapeHtml(row.teamName || '')}</td><td>${row.points}</td><td>${row.wins}</td><td>${row.podiums}</td></tr>`).join('\n');
     return `        <h2>Stand ${escapeHtml(league.label)}</h2>
         <p>${rows.length} coureurs met punten in ${escapeHtml(league.label)}${league.season ? ` (${escapeHtml(String(league.season))})` : ''}${league.leaderName ? `, aangevoerd door ${escapeHtml(league.leaderName)} met ${league.leaderPoints} punten` : ''}.</p>
         <table>
@@ -511,7 +535,7 @@ const buildDriversHubCrawlerHtml = () => {
       `${driver.podiums} podiums`,
       `${driver.points} punten`,
     ].filter(Boolean).join(' · ');
-    return `          <li>${escapeHtml(driver.name)}${meta ? ` — ${escapeHtml(meta)}.` : ''}</li>`;
+    return `          <li>${entityLink(driverEntityPath(driver.name), driver.name)}${meta ? ` — ${escapeHtml(meta)}.` : ''}</li>`;
   }).join('\n');
 
   return `<section aria-label="Crawler-zichtbare coureurs">
@@ -535,6 +559,7 @@ const buildDriversItemListJsonLd = () => (driverSummaries.length ? {
     item: {
       '@type': 'Person',
       name: driver.name,
+      url: entityUrl(driverEntityPath(driver.name)),
       description: driver.teamName ? `Coureur bij ${driver.teamName} met ${driver.points} punten in de 3SM iRacing league.` : `Coureur met ${driver.points} punten in de 3SM iRacing league.`,
       memberOf: driver.teamName ? { '@type': 'SportsTeam', name: driver.teamName } : undefined,
     },
@@ -551,7 +576,7 @@ const buildTeamsHubCrawlerHtml = () => {
     const scores = team.points || team.wins || team.podiums
       ? ` Samen goed voor ${team.points} punten, ${team.wins} overwinningen en ${team.podiums} podiums.`
       : '';
-    return `          <li>${escapeHtml(team.name)}${team.description ? ` — ${escapeHtml(team.description)}` : ''}${escapeHtml(members + scores)}</li>`;
+    return `          <li>${entityLink(teamEntityPath(team), team.name)}${team.description ? ` — ${escapeHtml(team.description)}` : ''}${escapeHtml(members + scores)}</li>`;
   }).join('\n');
 
   return `<section aria-label="Crawler-zichtbare teams">
@@ -577,6 +602,7 @@ const buildTeamsItemListJsonLd = () => {
       item: {
         '@type': 'SportsTeam',
         name: team.name,
+        url: entityUrl(teamEntityPath(team)),
         description: team.description || `${team.name} is actief in de 3 Stripe Motorsport iRacing league.`,
         member: team.members.slice(0, 20).map((member) => ({ '@type': 'Person', name: member.name })),
         parentOrganization: organizationRefJsonLd(),
@@ -595,7 +621,7 @@ const buildSeasonsHubCrawlerHtml = () => {
       league.leaderName ? `Aanvoerder: ${league.leaderName} (${league.leaderPoints} punten)` : null,
       league.topThree.length ? `Top 3: ${league.topThree.join(', ')}` : null,
     ].filter(Boolean).join(' · ');
-    return `          <li>${escapeHtml(league.label)}${meta ? ` — ${escapeHtml(meta)}.` : ''}</li>`;
+    return `          <li>${entityLink(seasonEntityPath(league), league.label)}${meta ? ` — ${escapeHtml(meta)}.` : ''}</li>`;
   }).join('\n');
 
   return `<section aria-label="Crawler-zichtbare seizoenen">
@@ -619,6 +645,7 @@ const buildSeasonsItemListJsonLd = () => (leagueSummaries.length ? {
     item: {
       '@type': 'WebPage',
       name: league.label,
+      url: entityUrl(seasonEntityPath(league)),
       description: `${league.label}: ${league.completed} van ${league.total} races verreden${league.leaderName ? `, aanvoerder ${league.leaderName}` : ''}.`,
       isPartOf: { '@type': 'WebSite', name: '3 Stripe Motorsport', url: SITE_URL },
       about: organizationRefJsonLd(),
@@ -1218,6 +1245,11 @@ const fetchDynamicRoutes = async () => {
       const counts = leagueRaceCounts.get(league.id) || { total: 0, completed: 0 };
       return {
         id: league.id,
+        // Let op: 'name' moet er blijven staan. seasonEntityPath() bouwt de
+        // seizoens-URL uit naam + seizoen, precies zoals src/lib/entityLinks.ts
+        // dat doet. Zonder dit veld werd de slug alleen het seizoen ("2026-s2")
+        // en liep de prerender uit de pas met wat de client zelf opent.
+        name: cleanText(league.name),
         label: leagueLabelOf(league) || 'Competitie',
         season: league.season,
         carClass: cleanText(league.car_class) || null,
@@ -1368,6 +1400,161 @@ const fetchDynamicRoutes = async () => {
         ];
       }
     }
+  }
+
+  // ---------- Coureurs, teams en seizoenen als eigen pagina ----------
+  // Deze drie bestonden alleen in een popup: geen URL, dus voor Google geen
+  // entiteit. Elke coureur, elk team en elk seizoen krijgt hier een echte
+  // pagina; de hub-HTML hierboven linkt er al naartoe.
+  const hubSummaryByRaceId = new Map(resultsHubSummaries.map((summary) => [summary.id, summary]));
+  const summaryForRace = (race) => hubSummaryByRaceId.get(race.id) || summarizeRaceForHub(race);
+  const newestFirst = (a, b) => new Date(b.race_date || 0).getTime() - new Date(a.race_date || 0).getTime();
+  const racesForDriver = (userId) => completedRacePool
+    .filter((race) => (race.race_results || []).some((result) => result.user_id === userId))
+    .sort(newestFirst);
+  const racePathTaken = (candidate) => dynamicRoutes.some((route) => route.path === candidate);
+
+  for (const driver of driverSummaries) {
+    const entityPath = driverEntityPath(driver.name);
+    if (!entityPath || racePathTaken(entityPath)) continue;
+
+    const driverRaces = racesForDriver(driver.userId);
+    const ownResults = driverRaces.slice(0, 40).map((race) => {
+      const summary = summaryForRace(race);
+      const own = (race.race_results || []).find((result) => result.user_id === driver.userId) || {};
+      return { summary, position: own.position ?? null, points: own.points ?? 0, fastest: Boolean(own.fastest_lap) };
+    });
+
+    dynamicRoutes.push({
+      path: entityPath,
+      title: truncate(`${driver.name} — 3SM coureur`, 58),
+      description: truncate(`Profiel van ${driver.name}${driver.teamName ? `, coureur bij team ${driver.teamName}` : ''} in de 3 Stripe Motorsport iRacing league: ${driver.points} punten, ${driver.wins} overwinningen en ${driver.podiums} podiums.`),
+      h1: driver.name,
+      priority: '0.5',
+      changefreq: 'weekly',
+      intro: `${driver.name} rijdt in de 3 Stripe Motorsport iRacing league${driver.teamName ? ` voor team ${driver.teamName}` : ''}. Hieronder staan de prestaties en de race-uitslagen waarin deze coureur voorkomt.`,
+      facts: [
+        driver.teamName ? `Team: ${driver.teamName}.` : null,
+        driver.irating ? `iRating: ${driver.irating}.` : null,
+        `${driver.races} gestarte race${driver.races === 1 ? '' : 's'}, ${driver.wins} overwinningen en ${driver.podiums} podiums.`,
+        `${driver.fastestLaps} snelste ronde${driver.fastestLaps === 1 ? '' : 'n'} en ${driver.points} kampioenschapspunten.`,
+      ].filter(Boolean),
+      details: ownResults.slice(0, 8).map((entry) => `${entry.summary.formattedDate || ''} ${entry.summary.linkLabel}: ${entry.position ? `${entry.position}e plaats` : 'geen klassering'}${entry.points ? `, ${entry.points} punten` : ''}${entry.fastest ? ', snelste ronde' : ''}.`.replace(/^\\s+/, '')),
+      crawlerLinksLabel: `Races van ${driver.name}`,
+      crawlerLinks: ownResults.map((entry) => [entry.summary.path, entry.summary.linkLabel]),
+      extraJsonLd: [{
+        id: 'driver-person-jsonld',
+        data: {
+          '@context': 'https://schema.org',
+          '@type': 'Person',
+          name: driver.name,
+          url: absoluteUrl(entityPath),
+          description: `Coureur in de 3 Stripe Motorsport iRacing league${driver.teamName ? ` (team ${driver.teamName})` : ''}.`,
+          knowsAbout: ['iRacing', 'sim racing'],
+          memberOf: driver.teamName
+            ? { '@type': 'SportsTeam', name: driver.teamName, url: entityUrl(teamEntityPath({ name: driver.teamName })) }
+            : undefined,
+          affiliation: organizationRefJsonLd(),
+        },
+      }],
+    });
+  }
+
+  for (const team of teamSummaries) {
+    const entityPath = teamEntityPath(team);
+    if (!entityPath || racePathTaken(entityPath)) continue;
+
+    const memberLinks = team.members
+      .map((member) => [driverEntityPath(member.name), member.name])
+      .filter(([memberPath]) => memberPath);
+
+    dynamicRoutes.push({
+      path: entityPath,
+      title: truncate(`${team.name} — 3SM team`, 58),
+      description: truncate(`Team ${team.name} in de 3 Stripe Motorsport iRacing league: ${team.members.length} coureur${team.members.length === 1 ? '' : 's'}, ${team.points} punten, ${team.wins} overwinningen en ${team.podiums} podiums.`),
+      h1: team.name,
+      priority: '0.5',
+      changefreq: 'weekly',
+      intro: `${team.name} is een team binnen de 3 Stripe Motorsport iRacing league. Hieronder staan de coureurs, hun punten en de races waarin het team uitkwam.`,
+      facts: [
+        team.description || null,
+        `${team.members.length} coureur${team.members.length === 1 ? '' : 's'}: ${team.members.map((member) => `${member.name} (${member.points} punten)`).join(', ') || 'nog geen'}.`,
+        `Samen ${team.points} punten, ${team.wins} overwinningen en ${team.podiums} podiums.`,
+      ].filter(Boolean),
+      crawlerLinksLabel: `Coureurs van ${team.name}`,
+      crawlerLinks: memberLinks,
+      extraJsonLd: [{
+        id: 'team-sportsteam-jsonld',
+        data: {
+          '@context': 'https://schema.org',
+          '@type': 'SportsTeam',
+          name: team.name,
+          url: absoluteUrl(entityPath),
+          description: team.description || `${team.name} is actief in de 3 Stripe Motorsport iRacing league.`,
+          sport: 'Sim racing',
+          member: team.members.slice(0, 20).map((member) => ({
+            '@type': 'Person',
+            name: member.name,
+            url: entityUrl(driverEntityPath(member.name)),
+          })),
+          parentOrganization: organizationRefJsonLd(),
+        },
+      }],
+    });
+  }
+
+  for (const league of leagueSummaries) {
+    const entityPath = seasonEntityPath(league);
+    if (!entityPath || racePathTaken(entityPath)) continue;
+
+    const leagueRaces = completedRacePool.filter((race) => race.league_id === league.id).sort(newestFirst);
+    const rows = standingsByLeague.get(league.id) || [];
+
+    dynamicRoutes.push({
+      path: entityPath,
+      title: truncate(`${league.label} — stand, uitslagen en kalender`, 60),
+      description: truncate(`Seizoen ${league.label} van 3 Stripe Motorsport: ${league.completed} van ${league.total} races verreden${league.leaderName ? `, ${league.leaderName} aan de leiding met ${league.leaderPoints} punten` : ''}.`),
+      h1: league.label,
+      priority: '0.6',
+      changefreq: 'weekly',
+      intro: `Dit is het seizoensoverzicht van ${league.label}${league.carClass ? ` (${league.carClass})` : ''}: de volledige stand en alle ${leagueRaces.length} verreden races met hun uitslagen.`,
+      facts: rows.slice(0, 10).map((row) => `${row.position}. ${row.name}${row.teamName ? ` (${row.teamName})` : ''} — ${row.points} punten, ${row.wins} overwinningen, ${row.podiums} podiums.`),
+      details: [
+        `${league.completed} van ${league.total} races verreden in ${league.label}.`,
+        league.leaderName ? `Aanvoerder: ${league.leaderName} met ${league.leaderPoints} punten.` : null,
+        `${rows.length} coureurs met punten in dit seizoen.`,
+      ].filter(Boolean),
+      crawlerLinksLabel: `Alle races in ${league.label}`,
+      crawlerLinks: leagueRaces.map((race) => {
+        const summary = summaryForRace(race);
+        return [summary.path, summary.linkLabel];
+      }),
+      extraJsonLd: [{
+        id: 'season-races-itemlist-jsonld',
+        data: {
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          name: `Races in ${league.label}`,
+          description: `Alle verreden races van ${league.label} binnen de 3 Stripe Motorsport iRacing league.`,
+          url: absoluteUrl(entityPath),
+          numberOfItems: leagueRaces.length,
+          itemListElement: leagueRaces.map((race, index) => {
+            const summary = summaryForRace(race);
+            return {
+              '@type': 'ListItem',
+              position: index + 1,
+              item: {
+                '@type': 'SportsEvent',
+                name: summary.label || summary.name,
+                url: absoluteUrl(summary.path),
+                startDate: race.race_date || undefined,
+                eventStatus: 'https://schema.org/EventEnded',
+              },
+            };
+          }),
+        },
+      }],
+    });
   }
 
   return dynamicRoutes;
@@ -1710,9 +1897,13 @@ const readPreviousManifest = () => {
 
 const cleanupStaleGeneratedRoutes = (previousManifest, nextDynamicRoutes) => {
   const nextDynamicPaths = new Set(nextDynamicRoutes.map((route) => route.path));
+  // Prefixen van gegenereerde pagina's. Staat hier ook /drivers/<naam> tussen,
+  // dan ruimt het opschonen een verwijderde coureur op; zonder dat blijft zo'n
+  // pagina als spook-URL in de build staan.
+  const generatedPrefixes = ['/news/', '/results/', '/drivers/', '/teams/', '/seasons/'];
   for (const stalePath of previousManifest?.dynamicRoutes || []) {
     if (nextDynamicPaths.has(stalePath)) continue;
-    if (!stalePath.startsWith('/news/') && !stalePath.startsWith('/results/')) continue;
+    if (!generatedPrefixes.some((prefix) => stalePath.startsWith(prefix))) continue;
     rmSync(routeDirectoryPath(stalePath), { recursive: true, force: true });
   }
 };

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { TrendingUp, Shield, Trophy, Zap } from "lucide-react";
+import { driverPath } from "@/lib/entityLinks";
 
 interface Driver {
   user_id: string;
@@ -78,7 +79,21 @@ const NewDriverCard = ({ driver, stats, team, rank, onSelect }: Props) => {
         border: "1px solid rgba(255,255,255,0.07)",
       }}
     >
-      {onSelect && <button onClick={onSelect} className="absolute inset-0 z-10 w-full text-left" aria-label={`Open profiel van ${name}`} />}
+      {onSelect && (
+        <a
+          href={driverPath(driver)}
+          onClick={(event) => {
+            // Een gewone klik opent nog steeds de popup. Alleen ctrl-, cmd- of
+            // shift-klik en middelklik volgen de link, zodat het profiel in een
+            // nieuw tabblad te openen is zonder de popup te verliezen.
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+            event.preventDefault();
+            onSelect();
+          }}
+          className="absolute inset-0 z-10 w-full text-left"
+          aria-label={`Open profiel van ${name}`}
+        />
+      )}
       {/* Team color top bar */}
       <div
         className="h-[3px]"
