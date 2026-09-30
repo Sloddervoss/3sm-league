@@ -13,6 +13,7 @@ const STALE = 5 * 60 * 1000;
 
 type RaceDetailRace = {
   id: string;
+  league_id: string | null;
   name: string;
   track: string;
   race_date: string;
@@ -314,6 +315,14 @@ const SessionResultsCard = ({ title, rows, t }: { title: string; rows: SessionRe
   );
 };
 
+type SiblingRace = {
+  id: string;
+  name: string | null;
+  track: string | null;
+  race_date: string | null;
+  round: number | null;
+};
+
 const RaceDetailPage = () => {
   const { raceId } = useParams<{ raceId: string }>();
   const { language, t } = useLanguage();
@@ -326,7 +335,7 @@ const RaceDetailPage = () => {
     queryFn: async (): Promise<RaceDetailRace | null> => {
       const { data, error } = await supabase
         .from("races")
-        .select("id, name, track, race_date, round, total_laps, race_duration, weather, car, iracing_session_id, sof, cautions, caution_laps, lead_changes, leagues(name, car_class)")
+        .select("id, name, track, race_date, round, total_laps, race_duration, weather, car, iracing_session_id, sof, cautions, caution_laps, lead_changes, league_id, leagues(name, car_class)")
         .eq("id", raceId!)
         .eq("status", "completed")
         .maybeSingle();
@@ -334,6 +343,39 @@ const RaceDetailPage = () => {
       return data as RaceDetailRace | null;
     },
   });
+
+  // Andere races om verder te bladeren. Deze links stonden alleen in een
+  // verborgen blok in de HTML-bytes; hier staan ze zichtbaar, zodat een
+  // bezoeker verder kan en de links als echte links tellen. Hoort de race bij
+  // een competitie, dan zijn het de andere races van dat seizoen; losse races
+  // (28 van de 42) hebben geen competitie en vallen terug op de recente races.
+  const { data: otherRaces } = useQuery({
+    queryKey: ["race-detail-siblings", race?.league_id, raceId],
+    enabled: !!raceId && !!race,
+    staleTime: STALE,
+    queryFn: async (): Promise<{ titel: string; races: SiblingRace[] }> => {
+      const base = () =>
+        supabase
+          .from("races")
+          .select("id, name, track, race_date, round")
+          .eq("status", "completed")
+          .neq("id", raceId!)
+          .order("race_date", { ascending: false })
+          .limit(6);
+
+      if (race?.league_id) {
+        const { data, error } = await base().eq("league_id", race.league_id);
+        if (error) throw error;
+        return { titel: "Andere races in dit seizoen", races: (data || []) as SiblingRace[] };
+      }
+
+      const { data, error } = await base();
+      if (error) throw error;
+      return { titel: "Andere recente races", races: (data || []) as SiblingRace[] };
+    },
+  });
+  const siblingRaces = otherRaces?.races ?? [];
+  const siblingTitel = otherRaces?.titel ?? "";
 
   const { data: results = [], isLoading: resultsLoading } = useQuery({
     queryKey: ["race-results-detail", raceId],
@@ -669,6 +711,34 @@ const RaceDetailPage = () => {
                     </div>
                   </div>
                 </aside>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {siblingRaces.length > 0 && (
+          <section className="border-t border-border bg-card/30 py-10">
+            <div className="container mx-auto px-4">
+              <div className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-orange-500">
+                <Flag className="h-4 w-4" /> {t(siblingTitel)}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {siblingRaces.map((sibling) => (
+                  <Link
+                    key={sibling.id}
+                    to={`/results/${sibling.id}`}
+                    className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-orange-500/40 hover:bg-orange-500/[0.04]"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <span>{sibling.round != null ? `${t("Ronde")} ${sibling.round}` : t("Race")}</span>
+                      <span>{sibling.race_date ? formatRaceDate(sibling.race_date, dateLocale) : ""}</span>
+                    </div>
+                    <div className="mt-1.5 font-heading text-base font-black leading-tight text-foreground transition-colors group-hover:text-orange-400">
+                      {sibling.name}
+                    </div>
+                    {sibling.track && <div className="mt-0.5 truncate text-xs text-muted-foreground">{sibling.track}</div>}
+                  </Link>
+                ))}
               </div>
             </div>
           </section>
