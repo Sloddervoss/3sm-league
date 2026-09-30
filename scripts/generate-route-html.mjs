@@ -1837,7 +1837,7 @@ const buildJoinRootFallback = (route) => {
   const details = (route.details || []).map((detail) => `<p>${escapeHtml(detail)}</p>`).join('\n        ');
   const links = (route.links || []).map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('');
   const faq = (route.faq || []).map(({ question, answer }) => `<details><summary>${escapeHtml(question)}</summary><p>${escapeHtml(answer)}</p></details>`).join('\n        ');
-  return `<main style="max-width:72rem;margin:0 auto;padding:3rem 1.25rem;color:#f5f5f5;background:#080a0f;font-family:system-ui,sans-serif;line-height:1.7">
+  return `<main data-3sm-fallback style="max-width:72rem;margin:0 auto;padding:3rem 1.25rem;color:#f5f5f5;background:#080a0f;font-family:system-ui,sans-serif;line-height:1.7">
       <header>
         <p>3 Stripe Motorsport</p>
         <h1>${escapeHtml(route.h1)}</h1>
@@ -1913,6 +1913,28 @@ const applyRouteMeta = (html, route) => {
   );
   out = stripGeneratedRouteSeo(out);
   if (route.path === '/meedoen' || route.path === '/en/join') {
+    // De terugvaltekst in #root is bedoeld voor crawlers die geen JavaScript
+    // uitvoeren en voor bezoekers zonder JavaScript. Met JavaScript verbergen we
+    // hem meteen, zodat er geen onopgemaakt tekstblok flitst voordat de app
+    // rendert. Het tijdslot van 2,5 seconde zet hem alsnog terug wanneer de app
+    // niet opstart, zodat het vangnet blijft werken.
+    // Eerst een eventuele oude guard weghalen: de generator kan over zijn eigen
+    // uitvoer heen draaien en anders stapelen de regels op.
+    out = out
+      .replace(/\s*<script>document\.documentElement\.classList\.add\("js-enabled"\)[\s\S]*?<\/script>/g, '')
+      .replace(/\s*<style>\.js-enabled #root>main\{visibility:hidden\}<\/style>/g, '');
+    const fallbackGuard =
+      '<script>document.documentElement.classList.add("js-enabled");'
+      // De terugvaltekst blijft verborgen zolang de app normaal opstart, ook op
+      // een trage verbinding. Hij komt terug als de bundel niet laadt (meteen,
+      // via de error-listener) of als de app na 8 seconden nog steeds niet in
+      // #root staat (mislukte uitvoering).
+      + 'function reveal(){document.documentElement.classList.remove("js-enabled")}'
+      + 'window.addEventListener("error",function(e){if(e.target&&e.target.tagName==="SCRIPT"){reveal()}},true);'
+      + 'setTimeout(function(){if(!window.__3smAppStarted||document.querySelector("#root > main[data-3sm-fallback]")){reveal()}},8000);'
+      + '</script>'
+      + '<style>.js-enabled #root>main[data-3sm-fallback]{visibility:hidden}</style>';
+    out = out.replace('</head>', `    ${fallbackGuard}\n  </head>`);
     return out.replace(
       '<div id="root"></div>',
       `<div id="root">${buildJoinRootFallback(route)}</div>`,
