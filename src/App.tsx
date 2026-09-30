@@ -24,6 +24,12 @@ const NewsDetailPage = lazy(() => import("./pages/NewsDetailPage.tsx"));
 const NewsAuthorPage = lazy(() => import("./pages/NewsAuthorPage.tsx"));
 const NewsCategoryOrDetailPage = lazy(() => import("./pages/NewsCategoryOrDetailPage.tsx"));
 const SeasonsPage = lazy(() => import("./pages/SeasonsPage.tsx"));
+// Entiteitspagina's: één echte URL per coureur, team en seizoen. De popups op
+// /drivers/, /teams/ en /standings/ blijven ongewijzigd; deze routes bestaan
+// zodat die entiteiten vindbaar en deelbaar zijn.
+const DriverProfilePage = lazy(() => import("./pages/DriverProfilePage.tsx"));
+const TeamProfilePage = lazy(() => import("./pages/TeamProfilePage.tsx"));
+const SeasonProfilePage = lazy(() => import("./pages/SeasonProfilePage.tsx"));
 const JoinPage = lazy(() => import("./pages/JoinPage.tsx"));
 const EndurancePage = lazy(() => import("./features/endurance/shell/EndurancePage.tsx"));
 const StewardPage = lazy(() => import("./pages/StewardPage.tsx"));
@@ -85,6 +91,9 @@ const App = () => (
                     <Route path="/news/:categorySlug" element={<NewsCategoryOrDetailPage />} />
                     <Route path="/news/:slug" element={<NewsDetailPage />} />
                     <Route path="/seasons" element={<SeasonsPage />} />
+                    <Route path="/drivers/:driverSlug" element={<DriverProfilePage />} />
+                    <Route path="/teams/:teamSlug" element={<TeamProfilePage />} />
+                    <Route path="/seasons/:seasonSlug" element={<SeasonProfilePage />} />
                     <Route path="/meedoen" element={<JoinPage />} />
                     <Route path="/endurance/*" element={<EndurancePage />} />
                     <Route path="/stewards" element={<StewardPage />} />

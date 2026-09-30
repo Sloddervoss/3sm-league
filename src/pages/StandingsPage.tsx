@@ -2,6 +2,7 @@ import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import Footer from "@/components/Footer";
 import NewStandingsTable from "@/components/preview/NewStandingsTable";
+import { driverPath } from "@/lib/entityLinks";
 import PreviewModal from "@/components/preview/PreviewModal";
 import DriverModal from "@/components/preview/DriverModal";
 import { useQuery } from "@tanstack/react-query";
@@ -152,7 +153,13 @@ const StandingsPage = () => {
                   }
                 >
                   {l.name}
-                  {l.season && <span className="text-xs opacity-60">{l.season}</span>}
+                  {/* Twee competities kunnen dezelfde naam hebben (bijv. dezelfde
+                      beker in een oud en een nieuw seizoen). Staat er geen seizoen
+                      in de database, dan was het verschil niet te zien; de status
+                      maakt ze dan alsnog uit elkaar te houden. */}
+                  {(l.season || l.status === "completed") && (
+                    <span className="text-xs opacity-60">{l.season || "afgelopen"}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -181,6 +188,10 @@ const StandingsPage = () => {
               onSelectDriver={(uid) => {
                 const driver = (profiles as DriverModalProfile[]).find((p) => p.user_id === uid);
                 if (driver) setSelectedDriver(driver);
+              }}
+              driverHref={(uid) => {
+                const driver = (profiles as DriverModalProfile[]).find((p) => p.user_id === uid);
+                return driver ? driverPath(driver) : undefined;
               }}
             />
           )}

@@ -15,6 +15,11 @@ interface Props {
   leagueName?: string;
   onSelectDriver?: (userId: string) => void;
   variant?: "compact" | "page";
+  /**
+   * Geeft de profiel-URL van een coureur terug. Met deze prop wordt de rij een
+   * echte link (ctrl-klik en crawlers volgen hem); zonder blijft de rij een knop.
+   */
+  driverHref?: (userId: string) => string | undefined;
 }
 
 const PODIUM = [
@@ -23,7 +28,7 @@ const PODIUM = [
   { color: "#d97706", bg: "rgba(217,119,6,0.07)",   border: "rgba(217,119,6,0.15)",  shadow: "rgba(217,119,6,0.1)" },
 ];
 
-const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "compact" }: Props) => {
+const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "compact", driverHref }: Props) => {
   const isPage = variant === "page";
   const tableGridClass = isPage
     ? "grid-cols-[3rem_minmax(0,1fr)_4rem_5rem] md:grid-cols-[3rem_minmax(0,1fr)_minmax(8rem,12rem)_4rem_5rem]"
@@ -148,6 +153,16 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
             const isFirst = i === 0;
             const podiumColor = i < 3 ? PODIUM[i].color : null;
             const teamColor = driver.team?.color;
+            // Is er een profiel-URL bekend, dan is de rij een echte link (goed
+            // voor crawlers en voor ctrl-klik); anders blijft het een knop.
+            const rowHref = driverHref ? driverHref(driver.user_id) : undefined;
+            const RowElement = (rowHref ? "a" : "button") as "a" | "button";
+            const rowExtraProps = rowHref ? { href: rowHref } : { type: "button" as const };
+            const handleRowActivate = (event: React.MouseEvent<HTMLElement>) => {
+              if (rowHref && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) return;
+              event.preventDefault();
+              onSelectDriver?.(driver.user_id);
+            };
 
             return (
               <motion.div
@@ -166,8 +181,9 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                     style={{ background: teamColor, boxShadow: `2px 0 8px ${teamColor}60` }}
                   />
                 )}
-                <button
-                  onClick={() => onSelectDriver ? onSelectDriver(driver.user_id) : undefined}
+                <RowElement
+                  {...rowExtraProps}
+                  onClick={handleRowActivate}
                   className={`group grid gap-2 pl-5 pr-5 items-center w-full text-left ${tableGridClass} ${isPage ? "py-4" : "py-3.5"}`}
                   style={{
                     background: teamColor
@@ -228,7 +244,7 @@ const NewStandingsTable = ({ standings, leagueName, onSelectDriver, variant = "c
                       <div className="text-[10px] text-gray-500">-{gapToLeader}</div>
                     )}
                   </div>
-                </button>
+                </RowElement>
               </motion.div>
             );
           })}
