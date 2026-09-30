@@ -9,6 +9,7 @@ import { useRegistration } from "@/lib/useRegistration";
 import { useNow, formatCountdown } from "@/lib/useCountdown";
 import type { RaceWithLeagueSummary } from "@/lib/raceTypes";
 import { isRaceRegistrationOpen } from "@/lib/raceRegistration";
+import { useLanguage } from "@/i18n/useLanguage";
 
 type StickyRace = RaceWithLeagueSummary;
 
@@ -17,6 +18,10 @@ const SOLO_COLOR = "#818cf8";
 const StickyRaceBar = () => {
   const now = useNow();
   const reg = useRegistration();
+  const { language } = useLanguage();
+  // De datumnotatie volgt de taal van de site; de tijd blijft Amsterdamse tijd
+  // omdat alle races in die tijdzone starten.
+  const dateLocale = language === "en" ? "en-GB" : "nl-NL";
 
   const { data: races = [] } = useQuery({
     queryKey: ["races-with-leagues"],
@@ -42,10 +47,10 @@ const StickyRaceBar = () => {
   const isRegisteredViaSeason = reg.isRegisteredViaSeason(leagueId);
   const countdown = formatCountdown(nextRace.race_date, now);
 
-  const dateStr = new Date(nextRace.race_date).toLocaleDateString("nl-NL", {
+  const dateStr = new Date(nextRace.race_date).toLocaleDateString(dateLocale, {
     weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Amsterdam",
   });
-  const timeStr = new Date(nextRace.race_date).toLocaleTimeString("nl-NL", {
+  const timeStr = new Date(nextRace.race_date).toLocaleTimeString(dateLocale, {
     hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam",
   });
 
