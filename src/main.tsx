@@ -47,4 +47,15 @@ import "./index.css";
   });
 })();
 
+// Signaal voor de terugvaltekst op /meedoen en /en/join: zolang deze vlag niet
+// gezet is, weet de pagina in de HTML-bytes dat de app-bundel nooit is
+// uitgevoerd en dat de leesbare terugvaltekst alsnog getoond moet worden.
+// Zie scripts/generate-route-html.mjs (fallbackGuard).
+declare global {
+  interface Window {
+    __3smAppStarted?: boolean;
+  }
+}
+window.__3smAppStarted = true;
+
 createRoot(document.getElementById("root")!).render(<App />);
