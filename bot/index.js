@@ -98,6 +98,10 @@ const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
 const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
 const DISCORD_LOGIN_TIMEOUT_MS = 60 * 1000;
+// Discord geeft een bot 3 seconden om op een interactie te antwoorden. Alles
+// daarboven is een bijna-fout, en hoort ook in de log als het nog net goed ging:
+// dan zie je het probleem voordat er een klik mislukt.
+const INTERACTION_SLOW_MS = 1500;
 
 function networkStatusLog(...args) {
   const message = redactSensitiveText(args.map(formatLogArg).join(' '));
@@ -2374,7 +2378,48 @@ async function requireDiscordAdmin(interaction) {
 }
 
 // ── Interaction handler ───────────────────────────────────────────────────────
+// Een logregel als "[interaction] DiscordAPIError[10062]" is niet te herleiden:
+// je weet dan niet wie er klikte, waarop, en of het de aanmeldknop was. Deze
+// helpers maken van elke interactie een leesbaar label voor de log.
+function interactionKind(interaction) {
+  if (interaction.isChatInputCommand()) return `commando /${interaction.commandName}`;
+  if (interaction.isAutocomplete()) return `autocomplete /${interaction.commandName}`;
+  if (interaction.isButton()) return `knop ${interaction.customId}`;
+  if (interaction.isModalSubmit()) return `formulier ${interaction.customId}`;
+  if (typeof interaction.isAnySelectMenu === 'function' && interaction.isAnySelectMenu()) return `keuzemenu ${interaction.customId}`;
+  if (interaction.isUserContextMenuCommand?.() || interaction.isMessageContextMenuCommand?.()) return `contextmenu ${interaction.commandName}`;
+  return `interactie type ${interaction.type}`;
+}
+
+function interactionWho(interaction) {
+  const user = interaction.user?.tag
+    || (interaction.user?.username ? `${interaction.user.username} (${interaction.user.id})` : null)
+    || interaction.user?.id
+    || 'onbekend';
+  const where = interaction.guild
+    ? `${interaction.guild.name}${interaction.channel?.name ? ` / #${interaction.channel.name}` : ''}`
+    : 'DM';
+  return `${user} in ${where}`;
+}
+
+// De databasefunctie geeft een resultaatcode terug. Zonder deze vertaling zegt de
+// bot bij elke code hetzelfde ("je bent aangemeld"), ook als er niets gebeurde.
+function registrationReplyFor(result, raceName) {
+  switch (result) {
+    case 'registered':          return `✅ Je bent aangemeld voor **${raceName}**!`;
+    case 'unregistered':        return `✅ Je bent afgemeld voor **${raceName}**.`;
+    case 'not_linked':          return '❌ Je Discord is nog niet gekoppeld. Typ `/koppel` om een koppellink te ontvangen.';
+    case 'registration_closed': return `⛔ De inschrijving voor **${raceName}** is gesloten.`;
+    case 'race_not_found':      return '❌ Deze race bestaat niet (meer).';
+    case 'unknown_action':      return '❌ Onbekende actie.';
+    default:                    return `❌ Onbekend resultaat van de inschrijving: \`${result}\``;
+  }
+}
+
 client.on('interactionCreate', async (interaction) => {
+  const startedAt = Date.now();
+  const label = `${interactionKind(interaction)} door ${interactionWho(interaction)}`;
+  let failed = false;
   try {
     if (interaction.isAutocomplete()) {
       if (['setprofile', 'deleteprofile'].includes(interaction.commandName)) {
@@ -2432,7 +2477,19 @@ client.on('interactionCreate', async (interaction) => {
       const paymentAction = parsePaymentActionId(interaction.customId);
       if (paymentAction?.action === 'confirm' || paymentAction?.action === 'not_found') await handleSupportPaymentModal(interaction, paymentAction);
     }
-  } catch (e) { botLog('[interaction]', describeError(e)); }
+  } catch (e) {
+    failed = true;
+    const ms = Date.now() - startedAt;
+    const hint = e?.code === 10062
+      ? ' | het antwoord kwam te laat bij Discord (limiet 3 seconden), dus deze klik is niet uitgevoerd'
+      : '';
+    await botLog(`❌ interactie mislukt: ${label} | na ${ms}ms${hint} | ${describeError(e)}`);
+  } finally {
+    const ms = Date.now() - startedAt;
+    if (!failed && ms >= INTERACTION_SLOW_MS) {
+      await botLog(`⏳ trage interactie: ${label} | ${ms}ms (limiet 3000ms)`);
+    }
+  }
 });
 
 // /setprofile → streamer-profiel aanmaken/updaten
@@ -2631,6 +2688,10 @@ async function handleRaces(interaction) {
 
 // /aanmelden of /afmelden
 async function handleRegister(interaction, action) {
+  // Eerst "ik ben ermee bezig" sturen. Discord geeft een bot 3 seconden om te
+  // antwoorden; de databasevraag hoeft daar niet in te passen.
+  await interaction.deferReply({ flags: 64 });
+
   const { data: race, error } = await supabase
     .from('races').select('id, name').eq('status', 'upcoming')
     .gte('race_date', new Date().toISOString())
@@ -2638,14 +2699,15 @@ async function handleRegister(interaction, action) {
 
   if (error) {
     await throttledBotLog(`register-race:${describeError(error)}`, '[register:race]', describeError(error));
-    return interaction.reply({ content: '❌ Race kon niet worden opgehaald. Probeer het later opnieuw.', flags: 64 });
+    return interaction.editReply({ content: '❌ Race kon niet worden opgehaald. Probeer het later opnieuw.' });
   }
-  if (!race) return interaction.reply({ content: 'Geen aankomende race gevonden.', flags: 64 });
+  if (!race) return interaction.editReply({ content: 'Geen aankomende race gevonden.' });
   await doRegistration(interaction, race.id, race.name, action);
 }
 
 // Button aanmelden/afmelden
 async function handleButtonReg(interaction, raceId, action) {
+  await interaction.deferReply({ flags: 64 });
   const { data: race, error } = await supabase.from('races').select('name').eq('id', raceId).maybeSingle();
   if (error) await throttledBotLog(`button-race:${describeError(error)}`, '[button:race]', describeError(error));
   await doRegistration(interaction, raceId, race?.name || 'race', action);
@@ -2660,21 +2722,18 @@ async function doRegistration(interaction, raceId, raceName, action) {
 
   if (error) {
     await throttledBotLog(`registration-rpc:${describeError(error)}`, '[registration:rpc]', describeError(error));
-    return interaction.reply({ content: '❌ Er ging iets mis.', flags: 64 });
+    return interaction.editReply({ content: '❌ Er ging iets mis.' });
   }
 
-  if (data === 'not_linked') {
-    return interaction.reply({
-      content: '❌ Je Discord is nog niet gekoppeld. Typ `/koppel` om een koppellink te ontvangen.',
-      flags: 64,
-    });
-  }
+  // Altijd vastleggen wat er gebeurde: wie, welke race, welke actie en wat de
+  // database terugzei. Dit is de regel waarmee je achteraf kunt zien of iemand
+  // wilde aanmelden en waarom het niet lukte.
+  await botLog(
+    `📋 inschrijving: **${interaction.user?.tag || interaction.user?.id}** (${interaction.user?.id})`
+    + ` → **${raceName}** | actie: ${action} | resultaat: ${data}`,
+  );
 
-  const msg = data === 'registered'
-    ? `✅ Je bent aangemeld voor **${raceName}**!`
-    : `✅ Je bent afgemeld voor **${raceName}**.`;
-
-  await interaction.reply({ content: msg, flags: 64 });
+  await interaction.editReply({ content: registrationReplyFor(data, raceName) });
   deleteReplyLater(interaction, 2_000);
 }
 
