@@ -98,10 +98,6 @@ const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
 const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
 const DISCORD_LOGIN_TIMEOUT_MS = 60 * 1000;
-// Discord geeft een bot 3 seconden om op een interactie te antwoorden. Alles
-// daarboven is een bijna-fout, en hoort ook in de log als het nog net goed ging:
-// dan zie je het probleem voordat er een klik mislukt.
-const INTERACTION_SLOW_MS = 1500;
 
 function networkStatusLog(...args) {
   const message = redactSensitiveText(args.map(formatLogArg).join(' '));
@@ -2419,7 +2415,6 @@ function registrationReplyFor(result, raceName) {
 client.on('interactionCreate', async (interaction) => {
   const startedAt = Date.now();
   const label = `${interactionKind(interaction)} door ${interactionWho(interaction)}`;
-  let failed = false;
   try {
     if (interaction.isAutocomplete()) {
       if (['setprofile', 'deleteprofile'].includes(interaction.commandName)) {
@@ -2478,17 +2473,11 @@ client.on('interactionCreate', async (interaction) => {
       if (paymentAction?.action === 'confirm' || paymentAction?.action === 'not_found') await handleSupportPaymentModal(interaction, paymentAction);
     }
   } catch (e) {
-    failed = true;
     const ms = Date.now() - startedAt;
     const hint = e?.code === 10062
       ? ' | het antwoord kwam te laat bij Discord (limiet 3 seconden), dus deze klik is niet uitgevoerd'
       : '';
     await botLog(`❌ interactie mislukt: ${label} | na ${ms}ms${hint} | ${describeError(e)}`);
-  } finally {
-    const ms = Date.now() - startedAt;
-    if (!failed && ms >= INTERACTION_SLOW_MS) {
-      await botLog(`⏳ trage interactie: ${label} | ${ms}ms (limiet 3000ms)`);
-    }
   }
 });
 
@@ -2725,13 +2714,14 @@ async function doRegistration(interaction, raceId, raceName, action) {
     return interaction.editReply({ content: '❌ Er ging iets mis.' });
   }
 
-  // Altijd vastleggen wat er gebeurde: wie, welke race, welke actie en wat de
-  // database terugzei. Dit is de regel waarmee je achteraf kunt zien of iemand
-  // wilde aanmelden en waarom het niet lukte.
-  await botLog(
-    `📋 inschrijving: **${interaction.user?.tag || interaction.user?.id}** (${interaction.user?.id})`
-    + ` → **${raceName}** | actie: ${action} | resultaat: ${data}`,
-  );
+  // Alleen loggen als het níet gelukt is. Een geslaagde aanmelding hoeft de log
+  // niet te vullen; een poging die niet doorkwam moet juist wel zichtbaar zijn.
+  if (data !== 'registered' && data !== 'unregistered') {
+    await botLog(
+      `⚠️ inschrijving niet uitgevoerd: **${interaction.user?.tag || interaction.user?.id}**`
+      + ` (${interaction.user?.id}) → **${raceName}** | actie: ${action} | resultaat: ${data}`,
+    );
+  }
 
   await interaction.editReply({ content: registrationReplyFor(data, raceName) });
   deleteReplyLater(interaction, 2_000);
