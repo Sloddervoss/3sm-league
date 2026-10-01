@@ -24,10 +24,16 @@ test('aanmelden antwoordt eerst en raadpleegt daarna pas de database', () => {
   }
 });
 
-test('de inschrijving wordt altijd gelogd met wie, welke race, welke actie en het resultaat', () => {
+test('een geslaagde inschrijving komt niet in de log, een mislukte wel', () => {
   const registratie = slice('async function doRegistration', '// ── Bot ready');
 
-  assert.match(registratie, /botLog\(/);
+  // De logregel staat binnen een controle op het resultaat: alleen als het niet
+  // "registered" of "unregistered" is, wordt er gelogd.
+  assert.match(registratie, /if \(data !== 'registered' && data !== 'unregistered'\) \{/);
+  const log = registratie.indexOf('botLog(');
+  const controle = registratie.indexOf("if (data !== 'registered'");
+  assert.ok(controle < log, 'de logregel moet binnen de foutcontrole staan');
+
   assert.match(registratie, /actie: \$\{action\}/);
   assert.match(registratie, /resultaat: \$\{data\}/);
   assert.match(registratie, /interaction\.user\?\.id/);
@@ -87,20 +93,66 @@ test('het label van een klik noemt de knop, de gebruiker en het kanaal', () => {
   assert.match(interactionWho(zonderTag), /marnix \(407898030772322304\)/);
 });
 
-test('een mislukte of trage interactie is herleidbaar tot persoon en knop', () => {
+test('een mislukte interactie is herleidbaar tot persoon en knop', () => {
   const handler = slice("client.on('interactionCreate'", '// /setprofile');
 
   assert.match(handler, /const label = `\$\{interactionKind\(interaction\)\} door \$\{interactionWho\(interaction\)\}`/);
   assert.match(handler, /interactie mislukt: \$\{label\}/);
   assert.match(handler, /10062/, 'de te-laat-fout hoort een eigen uitleg te krijgen');
-  assert.match(handler, /trage interactie: \$\{label\}/);
+  assert.doesNotMatch(handler, /trage interactie/, 'geslaagde interacties horen niet in de log');
   assert.match(botSource, /function interactionKind\(interaction\)/);
   assert.match(botSource, /function interactionWho\(interaction\)/);
-  assert.match(botSource, /const INTERACTION_SLOW_MS = 1500;/);
 });
 
 test('een knop-id met underscores wordt niet verkeerd gesplitst', () => {
   const handler = slice("client.on('interactionCreate'", '// /setprofile');
 
   assert.match(handler, /const \[action, raceId\] = interaction\.customId\.split\('_'\);/);
+});
+
+// Deze test voert de echte doRegistration uit met namaak-Supabase en namaak-Discord,
+// zodat "alleen loggen bij fouten" ook echt gedrag is en niet alleen een regel code.
+test('doRegistration logt niets bij succes en wel bij een mislukte inschrijving', async () => {
+  const vertaling = slice('function registrationReplyFor', 'client.on(\'interactionCreate\'');
+  const registrationReplyFor = new Function(`${vertaling}; return registrationReplyFor;`)();
+  const registratieBron = slice('async function doRegistration', '// ── Bot ready');
+
+  const maakDoRegistration = (rpcResultaat) => {
+    const logs = [];
+    const antwoorden = [];
+    const interaction = {
+      user: { id: '123456789012345678', tag: 'han.' },
+      editReply: async (payload) => { antwoorden.push(payload.content); },
+    };
+    const fn = new Function(
+      'supabase', 'botLog', 'throttledBotLog', 'describeError', 'deleteReplyLater', 'registrationReplyFor',
+      `${registratieBron}; return doRegistration;`,
+    )(
+      { rpc: async () => ({ data: rpcResultaat, error: null }) },
+      async (bericht) => { logs.push(bericht); },
+      async () => {},
+      (e) => String(e),
+      () => {},
+      registrationReplyFor,
+    );
+    return { fn, logs, antwoorden, interaction };
+  };
+
+  for (const geslaagd of ['registered', 'unregistered']) {
+    const run = maakDoRegistration(geslaagd);
+    await run.fn(run.interaction, 'race-1', 'Free Race 2', geslaagd === 'registered' ? 'register' : 'unregister');
+    assert.deepEqual(run.logs, [], `${geslaagd} mag geen logregel opleveren`);
+    assert.equal(run.antwoorden.length, 1);
+  }
+
+  for (const mislukt of ['not_linked', 'registration_closed', 'race_not_found', 'iets_raars']) {
+    const run = maakDoRegistration(mislukt);
+    await run.fn(run.interaction, 'race-1', 'Free Race 2', 'register');
+    assert.equal(run.logs.length, 1, `${mislukt} moet één logregel opleveren`);
+    assert.match(run.logs[0], /inschrijving niet uitgevoerd/);
+    assert.match(run.logs[0], /han\./);
+    assert.match(run.logs[0], /123456789012345678/);
+    assert.match(run.logs[0], /Free Race 2/);
+    assert.match(run.logs[0], new RegExp(`resultaat: ${mislukt}`));
+  }
 });
