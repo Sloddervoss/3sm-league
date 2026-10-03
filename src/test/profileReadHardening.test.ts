@@ -82,7 +82,7 @@ describe("profile read hardening", () => {
       expect(content, path).not.toMatch(/\.from\("profiles"\)/);
     }
 
-    for (const path of viaSharedDriversHook) {
+    for (const path of [...viaSharedDriversHook, "src/components/preview/TeamModal.tsx"]) {
       const content = source(path);
       expect(content, path).toContain("useDrivers");
       expect(content, path).not.toMatch(/\.from\("profiles"\)/);

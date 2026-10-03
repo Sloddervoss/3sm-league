@@ -46,4 +46,11 @@ rsync -a --delete-after --exclude='assets/' --exclude='downloads/' dist/ /var/ww
 
 bash scripts/pin-seo-release.sh
 
+# Nieuwe en gewijzigde pagina's aanmelden bij Bing via IndexNow (de sleutel staat
+# in de webroot). Mislukt dit, dan staat de site gewoon live: de melding is een
+# versnelling, geen voorwaarde. De SEO-refresh meldt later nieuwe losse pagina's aan.
+if ! node scripts/submit-indexnow.mjs; then
+  echo "⚠ IndexNow-overdracht mislukt; de site is wel uitgerold." >&2
+fi
+
 echo "✓ Deploy done!"
