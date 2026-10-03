@@ -60,7 +60,12 @@ describe("P3 — levering, caching en indexatie", () => {
     it("stuurt diepe paden onder een bladpagina naar 404", () => {
       const line = nginx.split("\n").find((l) => l.includes("calendar|standings|meedoen|support|homepage-prototype")) ?? "";
       expect(line, "404-location voor secties zonder subpagina's ontbreekt").not.toBe("");
-      expect(nginx.split(line)[1].split("\n}")[0]).toContain("return 404;");
+      // [^.]+ en niet .+: met .+ matcht ook /meedoen/index.html, en dat is precies
+      // het bestand waar de map bij een verzoek aan /meedoen/ intern naar wijst.
+      // Zonder deze grens geeft de hub zelf een 404 (in de praktijk getest).
+      expect(line).toContain("/[^.]+$");
+      expect(line).not.toContain("/.+$");
+      expect(nginx.split(line)[1].split("\n    }")[0]).toContain("return 404;");
     });
 
     it("laat de datagedreven secties juist op de shell terugvallen", () => {
