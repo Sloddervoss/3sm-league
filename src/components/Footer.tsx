@@ -145,14 +145,15 @@ const Footer = () => {
           <div className="text-center md:text-right">
             <p className="text-xs text-gray-300">
               Powered by Sloddervos — Niet geaffilieerd met iRacing.com
-            </p>
-            <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
-              Circuitkaarten:{" "}
+              <span aria-hidden="true" className="mx-1.5 text-gray-500">
+                ·
+              </span>
               <a
                 href="/tracks/wiki/ATTRIBUTION.txt"
-                className="underline decoration-dotted hover:text-primary transition-colors"
+                title="Circuitkaarten: Wikimedia Commons-bijdragers (CC BY / CC BY-SA)"
+                className="underline decoration-dotted underline-offset-2 hover:text-primary transition-colors"
               >
-                Wikimedia Commons-bijdragers (CC BY / CC BY-SA)
+                Beeldcredits
               </a>
             </p>
           </div>
