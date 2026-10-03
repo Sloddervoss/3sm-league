@@ -153,3 +153,24 @@ describe("P3 — levering, caching en indexatie", () => {
     });
   });
 });
+
+describe("content-types van de nieuwe bestanden", () => {
+  const nginx = readFileSync("nginx.conf", "utf8");
+
+  it("geeft de feed het rss-type in een eigen locatie", () => {
+    const blok = nginx.split("location = /feed.xml {")[1]?.split("}")[0] ?? "";
+    expect(blok, "eigen locatie voor /feed.xml ontbreekt").not.toBe("");
+    expect(blok).toContain("application/rss+xml");
+  });
+
+  it("geeft fonts hun eigen type buiten de algemene asset-locatie", () => {
+    // Een types-blok binnen een location geldt voor die location. Zetten we de
+    // fonttypes in de algemene asset-regex, dan lopen de Content-Types van JS en
+    // CSS het risico om te vallen — en zonder text/javascript laadt een ES-module
+    // niet meer, dus dan is de site stuk. Daarom een eigen locatie.
+    expect(nginx).toContain("location ~* \\.(woff2|woff|ttf)$ {");
+    expect(nginx).toContain("font/woff2 woff2");
+    const algemeen = nginx.split("Cache hashed static assets")[1]?.split("}")[0] ?? "";
+    expect(algemeen, "fonttypes horen niet in de algemene asset-locatie").not.toContain("woff2");
+  });
+});
