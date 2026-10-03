@@ -1,9 +1,14 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from "vitest";
 import type { LayeredTrackManifest } from '@/lib/layeredTrackMaps';
 import { applySvgTransform, inferArrowDirection, orientProjectionPoints, parseSvgPointList, resolvePitwallTrackPath } from '@/lib/pitwallTrackGeometry';
 
 const manifest = JSON.parse(readFileSync('public/tracks/layered/manifest.json', 'utf8')) as LayeredTrackManifest;
+
+// Deze tests lopen de volledige catalogus door (424 layouts) en deden gemeten
+// ~5,4s: net over de standaardlimiet van 5s, waardoor de suite af en toe rood
+// werd zonder dat er iets mis was. Ruimer zetten, niet de asserties versoepelen.
+vi.setConfig({ testTimeout: 30_000 });
 
 describe('Pitwall projection for the complete official track catalog', () => {
   it('selects all 424 layouts by authoritative ID regardless of display labels', () => {
