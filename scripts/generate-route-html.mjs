@@ -1092,6 +1092,11 @@ const getSupabaseClient = () => {
   return createClient(url, anonKey);
 };
 
+// Datum van deze build. Stond eerder nergens gedeclareerd terwijl dateOnly() hem
+// als terugvalwaarde gebruikte: een route zonder lastmod liet de generator
+// daardoor crashen met "buildDate is not defined" in plaats van vandaag te pakken.
+const buildDate = new Date().toISOString().slice(0, 10);
+
 const dateOnly = (value) => value ? new Date(value).toISOString().slice(0, 10) : buildDate;
 
 const fetchDynamicRoutes = async () => {
@@ -2035,10 +2040,15 @@ const LLMS_HUB_SECTIONS = [
   },
 ];
 
-const routeByPath = new Map(sitemapRoutes.map((route) => [route.path, route]));
 const displayTitle = (route, fallback) => cleanText(route?.h1 || route?.title) || fallback;
 
 const generateLlmsTxt = () => {
+  // Pas hier opbouwen: sitemapRoutes wordt verderop in dit bestand samengesteld,
+  // dus op moduleniveau zou dit een TDZ-fout geven.
+  // De routes in de manifest staan zonder trailing slash (/meedoen), terwijl de
+  // canonicals en deze lijst er één hebben: daarom aan beide kanten normaliseren.
+  const normalize = (path) => (path === '/' ? path : path.replace(/\/+$/, ''));
+  const routeByPath = new Map(sitemapRoutes.map((route) => [normalize(route.path), route]));
   const lines = [
     '# 3 Stripe Motorsport',
     '',
@@ -2049,11 +2059,11 @@ const generateLlmsTxt = () => {
   ];
 
   for (const section of LLMS_HUB_SECTIONS) {
-    const present = section.items.filter(([path]) => routeByPath.has(path));
+    const present = section.items.filter(([path]) => routeByPath.has(normalize(path)));
     if (present.length === 0) continue;
     lines.push(`## ${section.heading}`, '');
     for (const [path, fallback] of present) {
-      const route = routeByPath.get(path);
+      const route = routeByPath.get(normalize(path));
       const description = truncate(cleanText(route?.description), 150);
       lines.push(`- [${displayTitle(route, fallback)}](${absoluteUrl(path)})${description ? `: ${description}` : ''}`);
     }
