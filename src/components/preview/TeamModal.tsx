@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import { Users, Trophy, Shield, Flag, TrendingUp } from "lucide-react";
 import type { MembershipWithProfile, ResultWithRace } from "@/lib/modalTypes";
+import { useDrivers } from "@/hooks/data/useSharedQueries";
 
 interface Team {
   id: string;
@@ -21,15 +22,26 @@ const PODIUM = ["#facc15", "#94a3b8", "#d97706"];
 const TeamModal = ({ team }: Props) => {
   const color = team.color || "#f97316";
 
-  const { data: memberships = [] } = useQuery({
-    queryKey: ["team-memberships-full"],
-    queryFn: async (): Promise<MembershipWithProfile[]> => {
-      const { data } = await supabase
-        .from("team_memberships")
-        .select("*, profiles(user_id, display_name, iracing_name, irating, safety_rating)");
-      return (data || []) as MembershipWithProfile[];
+  // Leden en profielgegevens komen uit twee publieke bronnen. Hier stond eerder
+  // een koppeling naar de afgeschermde tabel: sinds de profielharding komt dat
+  // verzoek met een 401 terug, waardoor deze popup altijd nul leden, nul punten en
+  // "Nog geen resultaten" toonde. useDrivers leest de publieke view die hiervoor
+  // openstaat, dezelfde bron die het coureursoverzicht gebruikt.
+  const { data: membershipRows = [] } = useQuery({
+    queryKey: ["team-memberships-basic"],
+    queryFn: async () => {
+      const { data } = await supabase.from("team_memberships").select("id, team_id, user_id, role");
+      return (data || []) as Array<{ id: string; team_id: string; user_id: string; role?: string | null }>;
     },
   });
+
+  const { data: profileRows = [] } = useDrivers();
+
+  const profileByUser = new Map(profileRows.map((row) => [row.user_id, row]));
+  const memberships: MembershipWithProfile[] = membershipRows.map((row) => ({
+    ...row,
+    profiles: profileByUser.get(row.user_id) ?? null,
+  }));
 
   const { data: allResults = [] } = useQuery({
     queryKey: ["all-results-with-profiles"],
