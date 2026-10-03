@@ -20,9 +20,11 @@
     <link rel="manifest" href="/site.webmanifest?v=3sm-20260530" />
     <meta name="theme-color" content="#0F1117" />
 
-    <!-- Google Fonts preconnect -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Self-hosted fonts: geen externe verbinding meer nodig. De twee gewichten
+         die het eerst zichtbaar zijn (koppen in Rajdhani 700, broodtekst in Exo 2)
+         worden voorgeladen zodat ze niet na de eerste paint binnenkomen. -->
+    <link rel="preload" href="/fonts/rajdhani-700-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/exo-2-300-latin.woff2" as="font" type="font/woff2" crossorigin />
 
     <!-- Supabase API preconnect: de site doet per pageload 4-40 API-calls naar dit domein -->
     <link rel="preconnect" href="https://api.3stripemotorsport.cc" crossorigin />
@@ -31,6 +33,9 @@
     <!-- LCP hero preload: maakt de juiste responsive hero al vindbaar vanuit de HTML -->
     <link rel="preload" as="image" href="/src/assets/hero-bg-mobile.webp" media="(max-width: 768px)" type="image/webp" fetchpriority="high" />
     <link rel="preload" as="image" href="/src/assets/hero-bg-desktop.webp" media="(min-width: 769px) and (max-width: 1400px)" type="image/webp" fetchpriority="high" />
+
+    <!-- Feed-autodiscovery: nieuwslezers en crawlers vinden de RSS-feed zo zelf. -->
+    <link rel="alternate" type="application/rss+xml" title="3 Stripe Motorsport — nieuws" href="/feed.xml" />
 
     <!-- Open Graph -->
     <meta property="og:title" content="3 Stripe Motorsport - iRacing League" />

@@ -142,9 +142,21 @@ const Footer = () => {
           <span className="font-heading font-bold text-sm text-gray-300">
             3 Stripe Motorsport © 2026
           </span>
-          <p className="text-xs text-gray-300">
-            Powered by Sloddervos — Niet geaffilieerd met iRacing.com
-          </p>
+          <div className="text-center md:text-right">
+            <p className="text-xs text-gray-300">
+              Powered by Sloddervos — Niet geaffilieerd met iRacing.com
+              <span aria-hidden="true" className="mx-1.5 text-gray-500">
+                ·
+              </span>
+              <a
+                href="/tracks/wiki/ATTRIBUTION.txt"
+                title="Circuitkaarten: Wikimedia Commons-bijdragers (CC BY / CC BY-SA)"
+                className="underline decoration-dotted underline-offset-2 hover:text-primary transition-colors"
+              >
+                Beeldcredits
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </footer>

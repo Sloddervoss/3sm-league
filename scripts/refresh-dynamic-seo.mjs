@@ -68,19 +68,42 @@ for (const stalePath of previousManifest?.dynamicRoutes || []) {
   rmSync(routeDirectoryPath(stalePath, webroot), { recursive: true, force: true });
 }
 
+const changedRoutes = [];
 const copyHtmlRoute = (routePath) => {
   const from = routePath === '/' ? join(distDir, 'index.html') : routeIndexPath(routePath, distDir);
   const to = routePath === '/' ? join(webroot, 'index.html') : routeIndexPath(routePath, webroot);
   assertReadableFile(from, `Generated HTML voor ${routePath}`);
-  copyFileIfChanged(from, to);
+  if (copyFileIfChanged(from, to)) changedRoutes.push(routePath);
 };
 
 for (const routePath of nextManifest.publicRoutes || []) copyHtmlRoute(routePath);
 for (const routePath of nextManifest.privateRoutes || []) copyHtmlRoute(routePath);
 
 copyFileIfChanged(join(distDir, 'sitemap.xml'), join(webroot, 'sitemap.xml'));
+copyFileIfChanged(join(distDir, 'llms.txt'), join(webroot, 'llms.txt'));
+copyFileIfChanged(join(distDir, 'feed.xml'), join(webroot, 'feed.xml'));
 copyFileIfChanged(join(distDir, '404.html'), join(webroot, '404.html'));
 copyFileIfChanged(join(distDir, 'app-shell-fallback.html'), join(webroot, 'app-shell-fallback.html'));
 copyFileIfChanged(manifestPath, join(webroot, '.route-html-manifest.json'));
+
+// Nieuwe en gewijzigde nieuws- en uitslagpagina's meteen aanmelden bij Bing via
+// IndexNow: dat is precies waarom die sleutel in de webroot staat. Alleen echte
+// wijzigingen worden verstuurd, dus een rustige refresh meldt niets aan.
+// Uitzetten kan met SKIP_INDEXNOW=1.
+const indexableRoutes = changedRoutes.filter(
+  (routePath) => routePath.startsWith('/news/') || routePath.startsWith('/results/'),
+);
+if (process.env.SKIP_INDEXNOW !== '1' && indexableRoutes.length > 0) {
+  const urls = indexableRoutes.map((routePath) =>
+    `https://3stripemotorsport.cc${routePath.endsWith('/') ? routePath : `${routePath}/`}`);
+  const submit = spawnSync(process.execPath, [join(repoRoot, 'scripts/submit-indexnow.mjs'), ...urls], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
+  if (submit.status !== 0) {
+    // Geen harde fout: de site staat live en de volgende refresh probeert het opnieuw.
+    console.warn(`⚠ IndexNow-melding mislukt voor ${urls.length} gewijzigde pagina('s); de site is wel bijgewerkt.`);
+  }
+}
 
 console.log(`Refreshed dynamic SEO HTML into ${webroot}: ${updatedFiles} gewijzigde bestanden; ${(nextManifest.publicRoutes || []).length} public routes, ${(nextManifest.dynamicRoutes || []).length} dynamic routes.`);
