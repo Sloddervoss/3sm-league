@@ -2002,6 +2002,137 @@ ${urls}
 `;
 };
 
+// ---------------------------------------------------------------------------
+// llms.txt — korte route-index voor AI-assistenten en crawlers
+// ---------------------------------------------------------------------------
+// Vaste kernpagina's in een bewuste volgorde; de rest (nieuws, uitslagen) komt
+// uit de gegenereerde routes. Alleen pagina's die ook echt bestaan belanden erin.
+const LLMS_HUB_SECTIONS = [
+  {
+    heading: 'Meedoen',
+    items: [
+      ['/meedoen/', 'Meedoen aan 3SM: stappen, kosten en vereisten'],
+      ['/en/join/', 'How to join 3 Stripe Motorsport (English)'],
+      ['/support/', 'Community support en transparante kosten'],
+    ],
+  },
+  {
+    heading: 'Competitie',
+    items: [
+      ['/calendar/', 'Racekalender met alle aankomende races'],
+      ['/standings/', 'Standen per competitie'],
+      ['/results/', 'Alle race-uitslagen'],
+      ['/seasons/', 'Seizoenen en competities'],
+      ['/teams/', 'Teams en hun coureurs'],
+      ['/drivers/', 'Coureurs met iRating en resultaten'],
+    ],
+  },
+  {
+    heading: 'Nieuws',
+    items: [
+      ['/news/', 'Nieuws en raceverslagen'],
+    ],
+  },
+];
+
+const routeByPath = new Map(sitemapRoutes.map((route) => [route.path, route]));
+const displayTitle = (route, fallback) => cleanText(route?.h1 || route?.title) || fallback;
+
+const generateLlmsTxt = () => {
+  const lines = [
+    '# 3 Stripe Motorsport',
+    '',
+    '> 3 Stripe Motorsport (3SM) is een Nederlandse iRacing league en community. De site toont '
+      + 'de racekalender, uitslagen, standen, teams, coureurs en nieuws, plus hoe je zelf meedoet. '
+      + `Talen: Nederlands (hoofdsite) en Engels (/en/join/). Laatst bijgewerkt: ${buildDate}.`,
+    '',
+  ];
+
+  for (const section of LLMS_HUB_SECTIONS) {
+    const present = section.items.filter(([path]) => routeByPath.has(path));
+    if (present.length === 0) continue;
+    lines.push(`## ${section.heading}`, '');
+    for (const [path, fallback] of present) {
+      const route = routeByPath.get(path);
+      const description = truncate(cleanText(route?.description), 150);
+      lines.push(`- [${displayTitle(route, fallback)}](${absoluteUrl(path)})${description ? `: ${description}` : ''}`);
+    }
+    lines.push('');
+  }
+
+  const byLastmod = (a, b) => String(b.lastmod || '').localeCompare(String(a.lastmod || ''));
+  const newsRoutes = sitemapRoutes
+    .filter((route) => /^\/news\/[^/]+\/[^/]+/.test(route.path))
+    .sort(byLastmod)
+    .slice(0, 15);
+  if (newsRoutes.length > 0) {
+    lines.push('## Recente artikelen', '');
+    for (const route of newsRoutes) {
+      lines.push(`- [${displayTitle(route, route.path)}](${absoluteUrl(route.path)})`);
+    }
+    lines.push('');
+  }
+
+  const recentResults = sitemapRoutes
+    .filter((route) => /^\/results\/[^/]+/.test(route.path))
+    .sort(byLastmod)
+    .slice(0, 10);
+  if (recentResults.length > 0) {
+    lines.push('## Recente uitslagen', '');
+    for (const route of recentResults) {
+      lines.push(`- [${displayTitle(route, route.path)}](${absoluteUrl(route.path)})`);
+    }
+    lines.push('');
+  }
+
+  lines.push('## Optioneel', '');
+  for (const [path, label] of [['/sitemap.xml', 'Volledige sitemap'], ['/feed.xml', 'RSS-feed van nieuws']]) {
+    lines.push(`- [${label}](${absoluteUrl(path)})`);
+  }
+  lines.push('');
+
+  return lines.join('\n');
+};
+
+// ---------------------------------------------------------------------------
+// feed.xml — RSS 2.0 met het nieuws
+// ---------------------------------------------------------------------------
+// De generator kent alleen een datum (lastmod), geen publicatietijd; daarom
+// krijgt elk item 12:00 als tijd. Datum is wel exact wat in de site staat.
+const generateFeed = () => {
+  const items = sitemapRoutes
+    .filter((route) => /^\/news\/[^/]+\/[^/]+/.test(route.path))
+    .sort((a, b) => String(b.lastmod || '').localeCompare(String(a.lastmod || '')))
+    .slice(0, 30)
+    .map((route) => {
+      const link = absoluteUrl(route.path);
+      const published = route.lastmod ? `${route.lastmod}T12:00:00+02:00` : `${buildDate}T12:00:00+02:00`;
+      return `    <item>
+      <title>${escapeHtml(displayTitle(route, route.path))}</title>
+      <link>${link}</link>
+      <guid isPermaLink="true">${link}</guid>
+      <pubDate>${new Date(published).toUTCString()}</pubDate>
+      <description>${escapeHtml(truncate(cleanText(route.description) || displayTitle(route, route.path), 300))}</description>
+    </item>`;
+    })
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>3 Stripe Motorsport — nieuws</title>
+    <link>${absoluteUrl('/news/')}</link>
+    <description>Nieuws en raceverslagen van 3 Stripe Motorsport, een Nederlandse iRacing league en community.</description>
+    <language>nl-NL</language>
+    <lastBuildDate>${new Date(`${buildDate}T12:00:00+02:00`).toUTCString()}</lastBuildDate>
+    <atom:link href="${absoluteUrl('/feed.xml')}" rel="self" type="application/rss+xml" />
+${items}
+  </channel>
+</rss>
+`;
+};
+
+
 const routeIndexPath = (routePath, baseDir = distDir) => join(baseDir, routePath.replace(/^\//, ''), 'index.html');
 const routeDirectoryPath = (routePath, baseDir = distDir) => dirname(routeIndexPath(routePath, baseDir));
 
@@ -2302,6 +2433,10 @@ for (const privatePath of privateRoutes) {
 }
 
 writeFileSync(join(distDir, 'sitemap.xml'), generateSitemap());
+// llms.txt en feed.xml komen uit dezelfde routelijst als de sitemap, zodat ze
+// niet kunnen afwijken van wat er echt gegenereerd is.
+writeFileSync(join(distDir, 'llms.txt'), generateLlmsTxt());
+writeFileSync(join(distDir, 'feed.xml'), generateFeed());
 writeFileSync(manifestPath, `${JSON.stringify({
   generatedAt: new Date().toISOString(),
   publicRoutes: sitemapRoutes.map((route) => route.path),
