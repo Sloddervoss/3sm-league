@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { findPublishedSpecialSeason } from "../../supabase/functions/iracing-special-events-sync/discovery";
 import { discoverUpcomingSpecialEvents, normalizeSpecialEvent } from "../../supabase/functions/iracing-special-events-sync/normalize";
 import { findApprovedSpecialEvent, shouldImportSpecialEvent } from "../../supabase/functions/iracing-special-events-sync/allowlist";
 
@@ -98,6 +99,25 @@ describe("discovery op de echte iRacing-pagina (fixture 8 oktober 2026)", () => 
     // dus elke volgende syncronde werkt dezelfde rij bij in plaats van te dupliceren.
     const nogmaals = await normalizeSpecialEvent(daytona, null);
     expect(nogmaals.sourceHash).toBe(normalised.sourceHash);
+  });
+
+  it("neemt nooit de tijden van een ander jaar over", () => {
+    // De tijdsloten van een event komen uit iRacings gepubliceerde seizoen van
+    // datzelfde jaar. Een seizoen met dezelfde naam maar een ander jaar mag nooit
+    // matchen: anders zouden de tijden van vorig jaar op de kaart van dit jaar
+    // belanden. Deze controle zit op het jaar én op de naam.
+    const seizoenen = [
+      { season_id: 6310, season_year: 2026, season_name: "2026 Daytona 24" },
+      { season_id: 7001, season_year: 2027, season_name: "2027 Bathurst 12" },
+    ];
+    const ditJaar = { sourceKey: "iracing:2027:daytona-24", year: 2027, name: "Daytona 24" };
+    expect(findPublishedSpecialSeason(ditJaar, seizoenen)).toBeNull();
+    const metEigenSeizoen = { sourceKey: "iracing:2027:bathurst-12", year: 2027, name: "Bathurst 12" };
+    expect(findPublishedSpecialSeason(metEigenSeizoen, seizoenen)?.season_id).toBe(7001);
+    // En de tijdsloten van een nieuw event worden opgehaald met het seizoen van
+    // het event zelf — nooit met dat van een vorig jaar.
+    const vorigJaar = { sourceKey: "iracing:2026:daytona-24", year: 2026, name: "Daytona 24" };
+    expect(findPublishedSpecialSeason(vorigJaar, seizoenen)?.season_id).toBe(6310);
   });
 
   it("verandert niets aan events die al in de catalogus staan", () => {
