@@ -54,9 +54,13 @@ dat jaar. Zodra iRacing de nieuwe seizoenen publiceert:
 1. Zoek de nieuwe `seasonId` op voor de acht endurance-series en werk
    `ENDURANCE_IRACING_SEASON_MAP_JSON` bij (de omgeving van de edge functions op
    3sm-docker). Zonder dit stopt de serie-import; het signaal hierboven meldt het.
-2. Controleer of de zestien events uit `allowlist.ts` in het nieuwe seizoen op
+2. Controleer of de vijftien events uit `allowlist.ts` in het nieuwe seizoen op
    de pagina staan. Nieuwe namen toevoegen doe je alleen op besluit van de
-   eigenaar, met de spelling van de officiële pagina.
+   eigenaar, met de spelling van de officiële pagina. **Eis: alleen teamevents.**
+   De pagina zet bij zo'n event het label "TEAM EVENT" boven de naam; staat dat
+   label er niet, dan is het een solo-race en hoort hij niet in de lijst. Zo viel
+   iRacing ROAR af (solo-voorbereidingsrace op Daytona) en bleef IMSA Classic 500
+   staan (wel "TEAM EVENT", 10-11 april 2026, Nissan GTP / Audi 90).
 3. Laat de sync één keer lopen en controleer `events_inserted` en
    `upcoming_events` in het antwoord.
 4. Zet per nieuw endurance-event de **lokale klassen en auto's** in de catalogus.
