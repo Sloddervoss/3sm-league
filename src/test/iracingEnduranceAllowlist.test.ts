@@ -32,6 +32,8 @@ describe("endurance-allowlist voor iRacing special events", () => {
       ["Petit Le Mans", "petit-le-mans"],
       ["Bathurst 1000", "bathurst-1000"],
       ["8 Hours of Indianapolis", "8-hours-of-indianapolis"],
+      ["iRacing ROAR", "iracing-roar"],
+      ["IMSA Classic 500", "imsa-classic-500"],
     ];
     for (const [naam, slug] of pagina) {
       const gevonden = findApprovedSpecialEvent({ name: naam, sourceKey: `iracing:2027:${slug}` });
@@ -68,12 +70,43 @@ describe("endurance-allowlist voor iRacing special events", () => {
       "Crandon Championship",
       "Southern 500",
       "Dale Jr Charity Event",
-      "iRacing ROAR",
-      "IMSA Classic 500",
     ];
     for (const naam of nietGoedgekeurd) {
       expect(findApprovedSpecialEvent({ name: naam, sourceKey: "iracing:2027:onbekend" }), naam).toBeNull();
     }
+  });
+
+  it("dekt alle endurance-races die de eigenaar wil volgen", () => {
+    // Peildatum 8 oktober 2026. Zes races stonden al in de catalogus, tien
+    // ontbraken; deze lijst is het besluit van de eigenaar: alles wat endurance is
+    // moet opgehaald worden zodra iRacing het publiceert. Alleen de éénklasse-races
+    // (992 Endurance Cup, THE Production Car Challenge @ViR) vallen er bewust
+    // buiten. Valt hier een naam weg, dan verdwijnt die race stil uit de kalender —
+    // deze test is de plek waar dat opvalt.
+    const gewenst = [
+      "Daytona 24",
+      "Bathurst 12",
+      "Sebring 12HR",
+      "Nürburgring 24h",
+      "4 Hours at Thruxton",
+      "Watkins Glen 6 Hour",
+      "Spa 24HR",
+      "6 Hours Of Road America",
+      "Portimao 1000",
+      "Suzuka 1000km",
+      "Britcar 24HR",
+      "Petit Le Mans",
+      "Bathurst 1000",
+      "8 Hours of Indianapolis",
+      "iRacing ROAR",
+      "IMSA Classic 500",
+    ];
+    const gedekt = new Set(APPROVED_ENDURANCE_SPECIAL_EVENTS.map((entry) => entry.name));
+    for (const naam of gewenst) {
+      expect(gedekt.has(naam), `${naam} ontbreekt in de goedkeurlijst`).toBe(true);
+    }
+    // En niets erbij dat er niet hoort: de lijst is exact deze set.
+    expect([...gedekt].sort()).toEqual([...gewenst].sort());
   });
 
   it("negeert het jaartal in de sleutel, want dat wisselt elk seizoen", () => {
