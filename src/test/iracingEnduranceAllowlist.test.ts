@@ -32,7 +32,6 @@ describe("endurance-allowlist voor iRacing special events", () => {
       ["Petit Le Mans", "petit-le-mans"],
       ["Bathurst 1000", "bathurst-1000"],
       ["8 Hours of Indianapolis", "8-hours-of-indianapolis"],
-      ["iRacing ROAR", "iracing-roar"],
       ["IMSA Classic 500", "imsa-classic-500"],
     ];
     for (const [naam, slug] of pagina) {
@@ -55,6 +54,8 @@ describe("endurance-allowlist voor iRacing special events", () => {
     const nietGoedgekeurd = [
       "992 Endurance Cup",
       "THE Production Car Challenge @ViR",
+      // Solo-race (geen "TEAM EVENT"-label op de pagina), dus geen team-endurance.
+      "iRacing ROAR",
       "iRacing FF1600 Festival",
       "Homestead Championship",
       "SFL Mountain Showdown",
@@ -77,12 +78,12 @@ describe("endurance-allowlist voor iRacing special events", () => {
   });
 
   it("dekt alle endurance-races die de eigenaar wil volgen", () => {
-    // Peildatum 8 oktober 2026. Zes races stonden al in de catalogus, tien
-    // ontbraken; deze lijst is het besluit van de eigenaar: alles wat endurance is
-    // moet opgehaald worden zodra iRacing het publiceert. Alleen de éénklasse-races
-    // (992 Endurance Cup, THE Production Car Challenge @ViR) vallen er bewust
-    // buiten. Valt hier een naam weg, dan verdwijnt die race stil uit de kalender —
-    // deze test is de plek waar dat opvalt.
+    // Besluit eigenaar, peildatum 8 oktober 2026: alleen TEAMEVENTS tellen mee
+    // (de pagina zet bij zo'n event het label "TEAM EVENT"). Zes races stonden al
+    // in de catalogus, tien ontbraken. Wat er bewust buiten blijft: iRacing ROAR
+    // (solo-race, geen teamevent) en de éénklasse-races 992 Endurance Cup en THE
+    // Production Car Challenge @ViR. Valt hier een naam weg, dan verdwijnt die
+    // race stil uit de kalender; deze test is de plek waar dat opvalt.
     const gewenst = [
       "Daytona 24",
       "Bathurst 12",
@@ -98,7 +99,6 @@ describe("endurance-allowlist voor iRacing special events", () => {
       "Petit Le Mans",
       "Bathurst 1000",
       "8 Hours of Indianapolis",
-      "iRacing ROAR",
       "IMSA Classic 500",
     ];
     const gedekt = new Set(APPROVED_ENDURANCE_SPECIAL_EVENTS.map((entry) => entry.name));
