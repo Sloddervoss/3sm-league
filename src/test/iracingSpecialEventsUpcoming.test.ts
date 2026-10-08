@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { findPublishedSpecialSeason } from "../../supabase/functions/iracing-special-events-sync/discovery";
 import { discoverUpcomingSpecialEvents, normalizeSpecialEvent } from "../../supabase/functions/iracing-special-events-sync/normalize";
-import { findApprovedSpecialEvent, shouldImportSpecialEvent } from "../../supabase/functions/iracing-special-events-sync/allowlist";
+import { countAdmittedUpcomingEvents, findApprovedSpecialEvent, shouldImportSpecialEvent } from "../../supabase/functions/iracing-special-events-sync/allowlist";
 
 const pagina = readFileSync(
   join(process.cwd(), "supabase/functions/iracing-special-events-sync/fixtures/special-events-page-2026-10-08.html"),
@@ -99,6 +99,33 @@ describe("discovery op de echte iRacing-pagina (fixture 8 oktober 2026)", () => 
     // dus elke volgende syncronde werkt dezelfde rij bij in plaats van te dupliceren.
     const nogmaals = await normalizeSpecialEvent(daytona, null);
     expect(nogmaals.sourceHash).toBe(normalised.sourceHash);
+  });
+
+  it("telt voor het leegloop-signaal alleen importeerbare aankomende events", () => {
+    // De pagina biedt tien aankomende events, waarvan er negen door 3SM bewust niet
+    // gevolgd worden (Winter Derby, Chili Bowl, FF1600-festival). Zou het signaal
+    // die meetellen, dan zwijgt het juist op het moment dat de endurance-kalender
+    // leegloopt — dat was de fout in een eerdere poging.
+    const vandaag = "2026-10-08";
+    const leeg = new Set<string>();
+    const allesAankomend = seeds.filter((seed) => (seed.dateEnd ?? seed.dateStart ?? "") >= vandaag).length;
+    expect(allesAankomend).toBeGreaterThan(1);
+    expect(countAdmittedUpcomingEvents(seeds, vandaag, leeg, leeg)).toBe(1);
+  });
+
+  it("telt niets mee als de pagina alleen events biedt die 3SM niet volgt", () => {
+    // Zonder de Indianapolis-kaart blijft er op deze pagina niets over dat 3SM
+    // volgt: een lege endurance-kalender is dan een echt signaal.
+    const zonderIndianapolis = pagina.replace(/>\s*8 Hours of Indianapolis\s*</, ">Winter Derby<");
+    const gewijzigd = discoverUpcomingSpecialEvents(zonderIndianapolis);
+    expect(countAdmittedUpcomingEvents(gewijzigd, "2026-10-08", new Set(), new Set())).toBe(0);
+  });
+
+  it("telt een event dat al in de catalogus staat mee, ook zonder goedkeuring", () => {
+    // Een bestaande rij wordt altijd bijgewerkt; zo'n event is dus geen leegloop.
+    const vandaag = "2026-10-08";
+    const bestaand = new Set(["iracing:2026:winter-derby"]);
+    expect(countAdmittedUpcomingEvents(seeds, vandaag, new Set(), bestaand)).toBe(2);
   });
 
   it("neemt nooit de tijden van een ander jaar over", () => {

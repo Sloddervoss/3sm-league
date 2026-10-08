@@ -103,20 +103,22 @@ describe("iRacing Special Events sync security contract", () => {
 
   it("meldt een verouderde seizoenskoppeling en een lege aankomende kalender", () => {
     // Deze twee signalen bestaan omdat de kalender eerder stil leegliep.
-    expect(source).toContain("season_mapping: geen koppeling voor");
+    expect(source).toContain("season_mapping: geen serie-seizoen voor");
     expect(source).toContain("geen aankomend endurance-event in de catalogus");
     expect(source).toContain("upcoming_events: upcomingEvents");
     expect(source).toContain("new Date().getUTCFullYear()");
-    // Het jaartalsignaal gaat uitsluitend over de series. Zou het naar alle
-    // koppelingen kijken, dan laat één los event voor het nieuwe jaar het signaal
-    // zwijgen terwijl juist de series stilvallen — precies de stille leegloop die
-    // het moet vangen.
-    expect(source).toContain('const seriesMappings = mapping.filter((entry) => entry.kind === "series");');
-    expect(source).toContain("seriesMappings.length > 0 && !seriesYears.has(currentYear)");
+    // Het jaartalsignaal toetst het SEIZOEN zelf (welk jaar meldt iRacing bij het
+    // gekoppelde seasonId) en niet het jaartal in de eventsleutel. De serie-import
+    // werkt met seasonId; een afwijkende sleutelvorm zou het signaal laten liegen.
+    expect(source).toContain("seasonYear: seasonYearById.get(Number(entry.seasonId)) ?? null");
+    expect(source).toContain("staleSeries.length === seriesSeasonYears.length");
     expect(source).not.toContain("mappingYears");
-    // En de waarschuwing over een lege kalender mag niet afgaan op de momentopname
-    // van vóór de ronde, omdat die de zojuist toegevoegde events nog niet kent.
-    expect(source).toContain("upcomingEvents === 0 && upcomingOnPage === 0");
+    expect(source).not.toContain('sourceKey.split(":")[1]');
+    // De waarschuwing over een lege kalender telt alleen wat deze ronde zou
+    // importeren: de pagina staat vol events die 3SM bewust niet volgt, en die
+    // mogen het signaal niet muisstil maken.
+    expect(source).toContain("const upcomingImportable = countAdmittedUpcomingEvents(");
+    expect(source).toContain("upcomingEvents === 0 && upcomingImportable === 0");
   });
 
   it("laat serie-buckets niet als losse actieve kaart verschijnen naast hun week-rijen", () => {
