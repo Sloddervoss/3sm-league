@@ -27,6 +27,11 @@
  *   klasse en geen GT3 — vallen buiten het 3SM-programma.
  * - De overige iRacing-special-events (ovals, sprints, off-road, één-type-races,
  *   week-format-evenementen) zijn geen endurance.
+ *
+ * WEL OP DEZE LIJST, ook al is het geen 24-uursrace: iRacing ROAR (de
+ * voorbereidingsrace op Daytona) en IMSA Classic 500. Die hoorden bij de tien
+ * races die in de catalogus ontbraken en moeten dus gewoon opgehaald worden; ze
+ * waren eerder per abuis weggelaten zonder dat als besluit vast te leggen.
  */
 
 import { sourceSlug } from "./normalize.ts";
@@ -53,6 +58,8 @@ export const APPROVED_ENDURANCE_SPECIAL_EVENTS: readonly ApprovedSpecialEvent[] 
   { name: "Petit Le Mans", slugs: ["petit-le-mans"] },
   { name: "Bathurst 1000", slugs: ["bathurst-1000"] },
   { name: "8 Hours of Indianapolis", slugs: ["8-hours-of-indianapolis"] },
+  { name: "iRacing ROAR", slugs: ["iracing-roar"] },
+  { name: "IMSA Classic 500", slugs: ["imsa-classic-500"] },
 ];
 
 /** Het slugdeel van een eventsleutel: `iracing:2027:daytona-24` -> `daytona-24`. */
