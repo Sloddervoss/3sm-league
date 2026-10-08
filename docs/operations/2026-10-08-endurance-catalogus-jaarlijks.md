@@ -31,12 +31,20 @@ en Watkins Glen 6 Hour.
    klassen, poster) als `date_only`, via dezelfde functies die de 8 Hours of
    Indianapolis al gebruikten. Zodra het seizoen verschijnt vult de bestaande
    seizoensopzoeking de exacte tijden aan op dezelfde rij.
-3. **Twee signalen in de runuitkomst** (het antwoord staat in het journaal van de
+3. **Drie signalen in de runuitkomst** (het antwoord staat in het journaal van de
    timer):
-   - `season_mapping: geen koppeling voor <jaar>` → **fout**, de run wordt
-     `partial`. Dit betekent dat de series niet meer aanvullen.
-   - `upcoming_events` plus de waarschuwing `geen aankomend endurance-event in de
-     catalogus` → zichtbaar, niet fataal.
+   - `season_mapping: geen serie-seizoen voor <jaar>` → **fout**, de run wordt
+     `partial`. Getoetst wordt het seizoen dat iRacing zelf meldt bij het
+     gekoppelde `seasonId`; staat geen enkele serie meer op het huidige jaar, dan
+     vult niets meer aan en loopt de catalogus leeg.
+   - `season_mapping: N van M series nog niet op <jaar>` → **waarschuwing**.
+     iRacing publiceert niet alle seizoenen tegelijk; dit is zichtbaarheid zonder
+     alarm.
+   - `upcoming_events` in het antwoord, plus de waarschuwing `geen aankomend
+     endurance-event in de catalogus` → zichtbaar, niet fataal. Er wordt alleen
+     gewaarschuwd als er in de catalogus én op de pagina niets importeerbaars
+     aankomends is. De pagina staat vol events die 3SM bewust niet volgt; die
+     mogen dit signaal niet muisstil maken.
 
 ## Wat er jaarlijks moet gebeuren
 
