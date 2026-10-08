@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
 import { findPublishedSpecialSeason, type PublishedSeason } from "./discovery.ts";
 import {
+  countAdmittedUpcomingEvents,
   findApprovedSpecialEvent,
   shouldImportSpecialEvent,
 } from "./allowlist.ts";
@@ -268,6 +269,10 @@ Deno.serve(async (request) => {
     // Officiële klassen+auto's: één keer per serie de season car_class_ids
     // laden en via /data/carclass/get + /data/car/get naar namen resolven.
     let roster: Map<number, Awaited<ReturnType<typeof resolveSeriesRoster>>> | null = null;
+    // Voor het jaartalsignaal verderop: welk seizoen meldt iRacing bij elke
+    // serie-koppeling? Dit wordt gevuld uit dezelfde seizoenslijst die de
+    // tijdsloten levert, dus zonder aanname over de vorm van de sleutel.
+    let seriesSeasonYears: Array<{ sourceKey: string; seasonYear: number | null }> = [];
     const seriesEntries = mapping.filter((entry) => entry.kind === "series");
     if (seriesEntries.length) {
       try {
@@ -275,6 +280,13 @@ Deno.serve(async (request) => {
         const seasonsRaw = await client.fetchData("/data/series/seasons") as unknown;
         const seasonsArr = Array.isArray(seasonsRaw) ? seasonsRaw : seasonsRaw ? Object.values(seasonsRaw) : [];
         publishedSeasons = seasonsArr as PublishedSeason[];
+        const seasonYearById = new Map<number, number | null>(publishedSeasons
+          .filter((season) => Number.isInteger(Number(season?.season_id)))
+          .map((season) => [Number(season.season_id), Number.isInteger(Number(season?.season_year)) ? Number(season.season_year) : null]));
+        seriesSeasonYears = seriesEntries.map((entry) => ({
+          sourceKey: entry.seed.sourceKey,
+          seasonYear: seasonYearById.get(Number(entry.seasonId)) ?? null,
+        }));
         const seasonBySeasonId = new Map(seasonsArr
           .filter((s): s is { season_id: number } => Boolean(s && typeof s === "object" && (s as { season_id?: unknown }).season_id))
           .map((s) => [Number((s as { season_id: number }).season_id), s as { season_id: number; car_class_ids?: number[] }]));
@@ -397,30 +409,42 @@ Deno.serve(async (request) => {
         errors.push(`${discoveredSeed.sourceKey}: ${cleanError(error)}`);
       }
     }
-    // De seizoenskoppelingen bevatten het jaartal. Ontbreekt het huidige jaar bij de
-    // SERIES, dan stopt de serie-import en loopt de catalogus leeg — dat mag nooit
-    // stil gaan, dus dit is een echte fout: de run wordt "partial" en de timer logt
-    // hem. Alleen naar serie-koppelingen kijken: een los event dat iemand voor het
-    // nieuwe jaar toevoegt mag dit signaal niet laten zwijgen, want dan blijft juist
-    // de stille leegloop van de series onopgemerkt.
-    const seriesMappings = mapping.filter((entry) => entry.kind === "series");
-    const seriesYears = new Set(seriesMappings.map((entry) => Number(entry.seed.sourceKey.split(":")[1])));
+    // Vervalt de koppeling, dan blijft de serie het OUDE seizoen importeren en loopt
+    // de catalogus stil leeg. Daarom toetsen we niet het jaartal in de sleutel maar
+    // het seizoen zelf: welk jaar meldt iRacing bij het gekoppelde seasonId? Dat is
+    // dezelfde bron die de tijdsloten levert, dus geen aanname over de vorm van de
+    // sleutel. Staan ALLE serie-koppelingen nog op een ander jaar, dan vult niets
+    // meer aan: dat is een echte fout, de run wordt "partial" en de timer logt hem.
+    // Loopt een deel achter (iRacing publiceert niet alle seizoenen tegelijk), dan
+    // is dat een waarschuwing en geen alarm. Een los event dat iemand voor het
+    // nieuwe jaar toevoegt mag dit signaal niet laten zwijgen, vandaar dat alleen
+    // de series tellen.
     const currentYear = new Date().getUTCFullYear();
-    if (seriesMappings.length > 0 && !seriesYears.has(currentYear)) {
-      errors.push(`season_mapping: geen koppeling voor ${currentYear}; de series vullen niet meer aan`
-        + ` (aanwezig: ${[...seriesYears].filter(Number.isInteger).sort().join(", ") || "geen"})`);
+    const staleSeries = seriesSeasonYears.filter((entry) => entry.seasonYear !== currentYear);
+    const beschrijfSeries = (entries: typeof staleSeries) =>
+      entries.map((entry) => `${entry.sourceKey}=${entry.seasonYear ?? "onbekend"}`).join(", ");
+    if (seriesSeasonYears.length > 0 && staleSeries.length === seriesSeasonYears.length) {
+      errors.push(`season_mapping: geen serie-seizoen voor ${currentYear}; de series vullen niet meer aan`
+        + ` (gevonden: ${beschrijfSeries(staleSeries)})`);
+    } else if (staleSeries.length > 0) {
+      warnings.push(`season_mapping: ${staleSeries.length} van ${seriesSeasonYears.length} series nog niet op`
+        + ` ${currentYear} (${beschrijfSeries(staleSeries)})`);
     }
     // Zichtbaarheid zonder ruis: hoeveel aankomende endurance-events staan er nog
     // in de catalogus? Een lege aankomende kalender is het signaal dat er iets
-    // misgaat, en dat is precies wat eerder onopgemerkt bleef. Alleen waarschuwen
-    // als er ook op de pagina zelf niets meer aankomend is: een run die de eerste
-    // aankomende events net heeft toegevoegd leest nog de oude momentopname.
+    // misgaat, en dat is precies wat eerder onopgemerkt bleef. Er wordt alleen
+    // gewaarschuwd als de pagina deze ronde ook niets importeerbaars aankomends
+    // biedt: de pagina staat vol events die 3SM bewust niet volgt, en die mogen dit
+    // signaal niet muisstil maken.
     const today = new Date().toISOString().slice(0, 10);
     const upcomingEvents = ((knownEvents ?? []) as Array<{ event_end_date: string | null }>)
       .filter((event) => event.event_end_date && event.event_end_date >= today).length;
-    const upcomingOnPage = discoveredSeeds
-      .filter((seed) => (seed.dateEnd ?? seed.dateStart ?? "") >= today).length;
-    if (upcomingEvents === 0 && upcomingOnPage === 0) warnings.push("geen aankomend endurance-event in de catalogus");
+    const mappingsleutels = new Set<string>();
+    for (const sleutel of mappingBySourceKey.keys()) mappingsleutels.add(String(sleutel));
+    const catalogussleutels = new Set<string>();
+    for (const sleutel of knownByKey.keys()) catalogussleutels.add(String(sleutel));
+    const upcomingImportable = countAdmittedUpcomingEvents(discoveredSeeds, today, mappingsleutels, catalogussleutels);
+    if (upcomingEvents === 0 && upcomingImportable === 0) warnings.push("geen aankomend endurance-event in de catalogus");
 
     const status = errors.length === 0 ? "success" : counts.events_seen > 0 ? "partial" : "failed";
     const finishedAt = new Date().toISOString();

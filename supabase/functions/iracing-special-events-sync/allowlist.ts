@@ -82,3 +82,38 @@ export const findApprovedSpecialEvent = (seed: { name: string; sourceKey: string
  */
 export const shouldImportSpecialEvent = (input: { mapped: boolean; known: boolean; approved: boolean }): boolean =>
   input.mapped || input.known || input.approved;
+
+/** Een event van de pagina, met alleen de velden die deze telling nodig heeft. */
+export type UpcomingCandidate = {
+  readonly name: string;
+  readonly sourceKey: string;
+  readonly dateStart?: string | null;
+  readonly dateEnd?: string | null;
+};
+
+/**
+ * Hoeveel events biedt de pagina die deze ronde daadwerkelijk in de catalogus
+ * kunnen komen én die nog moeten plaatsvinden?
+ *
+ * Alleen die tellen mee voor het signaal "de endurance-kalender loopt leeg". De
+ * pagina staat namelijk vol events die 3SM bewust niet volgt (Winter Derby, Chili
+ * Bowl, FF1600-festival). Zou je die meetellen — zoals een eerdere versie deed —
+ * dan zwijgt het signaal juist op het moment dat de endurance-kalender leegloopt,
+ * en is de waarschuwing niets meer waard. Andersom telt een event dat deze ronde
+ * nieuw binnenkomt wél mee, zodat de waarschuwing niet afgaat op de momentopname
+ * van vóór de ronde.
+ */
+export const countAdmittedUpcomingEvents = (
+  seeds: readonly UpcomingCandidate[],
+  today: string,
+  mappedKeys: ReadonlySet<string>,
+  knownKeys: ReadonlySet<string>,
+): number => seeds.filter((seed) => {
+  // Geen datum betekent: staat (nog) niet in de aankomende kalender.
+  if ((seed.dateEnd ?? seed.dateStart ?? "") < today) return false;
+  return shouldImportSpecialEvent({
+    mapped: mappedKeys.has(seed.sourceKey),
+    known: knownKeys.has(seed.sourceKey),
+    approved: Boolean(findApprovedSpecialEvent(seed)),
+  });
+}).length;
