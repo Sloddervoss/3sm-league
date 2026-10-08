@@ -397,22 +397,30 @@ Deno.serve(async (request) => {
         errors.push(`${discoveredSeed.sourceKey}: ${cleanError(error)}`);
       }
     }
-    // De seizoenskoppelingen bevatten het jaartal. Ontbreekt het huidige jaar, dan
-    // stopt de serie-import en loopt de catalogus leeg — dat mag nooit stil gaan,
-    // dus dit is een echte fout: de run wordt "partial" en de timer logt hem.
-    const mappingYears = new Set(mapping.map((entry) => Number(entry.seed.sourceKey.split(":")[1])));
+    // De seizoenskoppelingen bevatten het jaartal. Ontbreekt het huidige jaar bij de
+    // SERIES, dan stopt de serie-import en loopt de catalogus leeg — dat mag nooit
+    // stil gaan, dus dit is een echte fout: de run wordt "partial" en de timer logt
+    // hem. Alleen naar serie-koppelingen kijken: een los event dat iemand voor het
+    // nieuwe jaar toevoegt mag dit signaal niet laten zwijgen, want dan blijft juist
+    // de stille leegloop van de series onopgemerkt.
+    const seriesMappings = mapping.filter((entry) => entry.kind === "series");
+    const seriesYears = new Set(seriesMappings.map((entry) => Number(entry.seed.sourceKey.split(":")[1])));
     const currentYear = new Date().getUTCFullYear();
-    if (!mappingYears.has(currentYear)) {
+    if (seriesMappings.length > 0 && !seriesYears.has(currentYear)) {
       errors.push(`season_mapping: geen koppeling voor ${currentYear}; de series vullen niet meer aan`
-        + ` (aanwezig: ${[...mappingYears].filter(Number.isInteger).sort().join(", ") || "geen"})`);
+        + ` (aanwezig: ${[...seriesYears].filter(Number.isInteger).sort().join(", ") || "geen"})`);
     }
     // Zichtbaarheid zonder ruis: hoeveel aankomende endurance-events staan er nog
     // in de catalogus? Een lege aankomende kalender is het signaal dat er iets
-    // misgaat, en dat is precies wat eerder onopgemerkt bleef.
+    // misgaat, en dat is precies wat eerder onopgemerkt bleef. Alleen waarschuwen
+    // als er ook op de pagina zelf niets meer aankomend is: een run die de eerste
+    // aankomende events net heeft toegevoegd leest nog de oude momentopname.
     const today = new Date().toISOString().slice(0, 10);
     const upcomingEvents = ((knownEvents ?? []) as Array<{ event_end_date: string | null }>)
       .filter((event) => event.event_end_date && event.event_end_date >= today).length;
-    if (upcomingEvents === 0) warnings.push("geen aankomend endurance-event in de catalogus");
+    const upcomingOnPage = discoveredSeeds
+      .filter((seed) => (seed.dateEnd ?? seed.dateStart ?? "") >= today).length;
+    if (upcomingEvents === 0 && upcomingOnPage === 0) warnings.push("geen aankomend endurance-event in de catalogus");
 
     const status = errors.length === 0 ? "success" : counts.events_seen > 0 ? "partial" : "failed";
     const finishedAt = new Date().toISOString();
