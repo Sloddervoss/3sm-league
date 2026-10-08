@@ -2,6 +2,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
 import { findPublishedSpecialSeason, type PublishedSeason } from "./discovery.ts";
 import {
+  findApprovedSpecialEvent,
+  shouldImportSpecialEvent,
+} from "./allowlist.ts";
+import {
   discoverCombinedSeriesEvent,
   discoverSeriesRaces,
   discoverUpcomingSpecialEvents,
@@ -96,6 +100,9 @@ Deno.serve(async (request) => {
 
   const counts: Counts = { events_seen: 0, events_inserted: 0, events_updated: 0, slots_seen: 0, slots_inserted: 0, slots_updated: 0 };
   const errors: string[] = [];
+  // Niet-fatale signalen: ze veranderen de runstatus niet, maar staan wel in het
+  // antwoord en daarmee in het journaal van de timer. Stilte is het echte risico.
+  const warnings: string[] = [];
   try {
     const mapping = parseSeasonMap();
     let calendarHtml = "";
@@ -315,13 +322,21 @@ Deno.serve(async (request) => {
       }
     }
 
-    // Losse special events: gemapte of al bestaande goedgekeurde catalogusrijen.
-    // Onbekende/ongemapte events worden niet geïmporteerd.
+    // Losse special events: gemapte events, al bestaande goedgekeurde catalogusrijen
+    // of events van de expliciete endurance-lijst (allowlist.ts). Al het andere
+    // wordt niet geïmporteerd — nooit gokken op basis van de kalender alleen.
     for (const discoveredSeed of discoveredSeeds) {
       try {
         let entry = mappingBySourceKey.get(discoveredSeed.sourceKey);
         const known = knownByKey.get(discoveredSeed.sourceKey);
-        if (!entry && !known) continue;
+        // Dit is de kern van de reparatie. De eventsleutel bevat het jaartal, dus
+        // zonder deze uitzondering is élk nieuw seizoen "onbekend" en wordt het
+        // overgeslagen: de kalender liep daardoor stil leeg. Een event dat nog niet
+        // in de catalogus staat en niet in de seizoenslijst staat, komt er nu in
+        // als het op de expliciete endurance-lijst staat (allowlist.ts) — een
+        // besluit van de eigenaar, geen afleiding.
+        const approved = findApprovedSpecialEvent(discoveredSeed);
+        if (!shouldImportSpecialEvent({ mapped: Boolean(entry), known: Boolean(known), approved: Boolean(approved) })) continue;
         if (!entry) {
           if (!publishedSeasons) {
             const raw = await (await dataClient()).fetchData("/data/series/seasons");
@@ -329,11 +344,22 @@ Deno.serve(async (request) => {
           }
           const season = findPublishedSpecialSeason(discoveredSeed, publishedSeasons);
           if (season) {
+            // `known` mag hier ontbreken: een goedgekeurd event uit de allowlist
+            // dat voor het eerst langskomt heeft nog geen catalogusrij.
             entry = { kind: "special", seasonId: season.season_id, seriesId: season.series_id,
-              seed: discoveredSeed, localClassIds: known.local_class_ids ?? [],
-              localCarMap: Object.fromEntries((known.cars ?? []).filter((car: { localCarId?: string }) => car.localCarId)
+              seed: discoveredSeed, localClassIds: known?.local_class_ids ?? [],
+              localCarMap: Object.fromEntries((known?.cars ?? []).filter((car: { localCarId?: string }) => car.localCarId)
                 .map((car: { sourceKey: string; localCarId: string }) => [car.sourceKey, car.localCarId])),
             };
+          } else if (!known) {
+            // Nieuw goedgekeurd endurance-event waarvan iRacing de tijdsloten nog
+            // niet heeft gepubliceerd. Alleen de kalendergegevens vastleggen (naam,
+            // datums, klassen, poster): geen slots en geen verzonnen tijden. Zodra
+            // het seizoen verschijnt vult de bestaande seizoensopzoeking de exacte
+            // tijden aan op dezelfde rij, want de eventsleutel blijft gelijk.
+            // Dit gebruikt exact dezelfde, al bewezen functies als de andere events.
+            await upsertEventAndSlots(await normalizeSpecialEvent(discoveredSeed, null), undefined);
+            continue;
           } else {
             // Refresh verified calendar fields only. Preserve existing API data,
             // car mappings and slots; no fabricated times or cleared links.
@@ -371,6 +397,23 @@ Deno.serve(async (request) => {
         errors.push(`${discoveredSeed.sourceKey}: ${cleanError(error)}`);
       }
     }
+    // De seizoenskoppelingen bevatten het jaartal. Ontbreekt het huidige jaar, dan
+    // stopt de serie-import en loopt de catalogus leeg — dat mag nooit stil gaan,
+    // dus dit is een echte fout: de run wordt "partial" en de timer logt hem.
+    const mappingYears = new Set(mapping.map((entry) => Number(entry.seed.sourceKey.split(":")[1])));
+    const currentYear = new Date().getUTCFullYear();
+    if (!mappingYears.has(currentYear)) {
+      errors.push(`season_mapping: geen koppeling voor ${currentYear}; de series vullen niet meer aan`
+        + ` (aanwezig: ${[...mappingYears].filter(Number.isInteger).sort().join(", ") || "geen"})`);
+    }
+    // Zichtbaarheid zonder ruis: hoeveel aankomende endurance-events staan er nog
+    // in de catalogus? Een lege aankomende kalender is het signaal dat er iets
+    // misgaat, en dat is precies wat eerder onopgemerkt bleef.
+    const today = new Date().toISOString().slice(0, 10);
+    const upcomingEvents = ((knownEvents ?? []) as Array<{ event_end_date: string | null }>)
+      .filter((event) => event.event_end_date && event.event_end_date >= today).length;
+    if (upcomingEvents === 0) warnings.push("geen aankomend endurance-event in de catalogus");
+
     const status = errors.length === 0 ? "success" : counts.events_seen > 0 ? "partial" : "failed";
     const finishedAt = new Date().toISOString();
     await service.from("endurance_iracing_sync_runs").update({
@@ -380,7 +423,7 @@ Deno.serve(async (request) => {
       error_summary: errors.length ? errors.join(" | ").slice(0, 1000) : null,
       source_modified_at: calendarModifiedAt,
     }).eq("id", run.id);
-    return json({ status, ...counts, finished_at: finishedAt }, status === "success" ? 200 : 502);
+    return json({ status, ...counts, upcoming_events: upcomingEvents, warnings, finished_at: finishedAt }, status === "success" ? 200 : 502);
   } catch (error) {
     const finishedAt = new Date().toISOString();
     await service.from("endurance_iracing_sync_runs").update({
