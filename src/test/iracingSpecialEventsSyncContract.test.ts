@@ -81,10 +81,32 @@ describe("iRacing Special Events sync security contract", () => {
     expect(normalizer).toContain("formatWeekLabel");
   });
 
-  it("ververst ook bestaande goedgekeurde events zonder onbekende events toe te voegen", () => {
-    expect(source).toContain("if (!entry && !known) continue;");
+  it("importeert alleen gemapte, bekende of expliciet goedgekeurde events", () => {
+    // De oorspronkelijke regel (`if (!entry && !known) continue;`) sloeg elk nieuw
+    // seizoen over, omdat de eventsleutel het jaartal bevat. Sinds de reparatie is
+    // er één expliciete uitzondering: de endurance-lijst in allowlist.ts.
+    expect(source).not.toContain("if (!entry && !known) continue;");
+    expect(source).toContain("findApprovedSpecialEvent(discoveredSeed)");
+    expect(source).toContain("shouldImportSpecialEvent({ mapped: Boolean(entry), known: Boolean(known), approved: Boolean(approved) })");
     expect(source).toContain("findPublishedSpecialSeason(discoveredSeed, publishedSeasons)");
-    expect(source).toContain("Onbekende/ongemapte events worden niet geïmporteerd");
+    expect(source).toContain("allowlist.ts");
+  });
+
+  it("legt een nieuw goedgekeurd event zonder gepubliceerde tijden vast als datum-event", () => {
+    // Zelfde, al bewezen functies als de andere events: geen nieuwe insert-logica.
+    expect(source).toContain("await upsertEventAndSlots(await normalizeSpecialEvent(discoveredSeed, null), undefined);");
+    expect(source).toContain("known?.local_class_ids ?? []");
+    // De bestaande verversingsroute voor bekende events blijft ongewijzigd bestaan.
+    expect(source).toContain("gepubliceerde season ontbreekt; oude slots behouden");
+    expect(source).toContain('}).eq("id", known.id);');
+  });
+
+  it("meldt een verouderde seizoenskoppeling en een lege aankomende kalender", () => {
+    // Deze twee signalen bestaan omdat de kalender eerder stil leegliep.
+    expect(source).toContain("season_mapping: geen koppeling voor");
+    expect(source).toContain("geen aankomend endurance-event in de catalogus");
+    expect(source).toContain("upcoming_events: upcomingEvents");
+    expect(source).toContain("new Date().getUTCFullYear()");
   });
 
   it("laat serie-buckets niet als losse actieve kaart verschijnen naast hun week-rijen", () => {
