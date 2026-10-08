@@ -22,16 +22,17 @@
  * er omdat dezelfde race in de wandelgangen anders genoemd wordt (Sebring 12 vs
  * Sebring 12HR); beide vormen komen op hetzelfde event uit.
  *
+ * EIS: alleen TEAMEVENTS. De officiële pagina zet bij zo'n event het label
+ * "TEAM EVENT" boven de naam; staat dat label er niet, dan is het een solo-race
+ * en hoort hij hier niet. Controleer dat label bij elk event dat je toevoegt en
+ * bij de jaarlijkse controle.
+ *
  * NIET OP DEZE LIJST (bewust, besluit eigenaar):
  * - 992 Endurance Cup en THE Production Car Challenge @ViR: endurance, maar één
  *   klasse en geen GT3 — vallen buiten het 3SM-programma.
+ * - iRacing ROAR (de voorbereidingsrace op Daytona): solo-race, geen teamevent.
  * - De overige iRacing-special-events (ovals, sprints, off-road, één-type-races,
  *   week-format-evenementen) zijn geen endurance.
- *
- * WEL OP DEZE LIJST, ook al is het geen 24-uursrace: iRacing ROAR (de
- * voorbereidingsrace op Daytona) en IMSA Classic 500. Die hoorden bij de tien
- * races die in de catalogus ontbraken en moeten dus gewoon opgehaald worden; ze
- * waren eerder per abuis weggelaten zonder dat als besluit vast te leggen.
  */
 
 import { sourceSlug } from "./normalize.ts";
@@ -58,7 +59,6 @@ export const APPROVED_ENDURANCE_SPECIAL_EVENTS: readonly ApprovedSpecialEvent[] 
   { name: "Petit Le Mans", slugs: ["petit-le-mans"] },
   { name: "Bathurst 1000", slugs: ["bathurst-1000"] },
   { name: "8 Hours of Indianapolis", slugs: ["8-hours-of-indianapolis"] },
-  { name: "iRacing ROAR", slugs: ["iracing-roar"] },
   { name: "IMSA Classic 500", slugs: ["imsa-classic-500"] },
 ];
 
