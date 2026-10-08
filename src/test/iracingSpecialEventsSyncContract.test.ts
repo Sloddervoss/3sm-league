@@ -107,6 +107,16 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).toContain("geen aankomend endurance-event in de catalogus");
     expect(source).toContain("upcoming_events: upcomingEvents");
     expect(source).toContain("new Date().getUTCFullYear()");
+    // Het jaartalsignaal gaat uitsluitend over de series. Zou het naar alle
+    // koppelingen kijken, dan laat één los event voor het nieuwe jaar het signaal
+    // zwijgen terwijl juist de series stilvallen — precies de stille leegloop die
+    // het moet vangen.
+    expect(source).toContain('const seriesMappings = mapping.filter((entry) => entry.kind === "series");');
+    expect(source).toContain("seriesMappings.length > 0 && !seriesYears.has(currentYear)");
+    expect(source).not.toContain("mappingYears");
+    // En de waarschuwing over een lege kalender mag niet afgaan op de momentopname
+    // van vóór de ronde, omdat die de zojuist toegevoegde events nog niet kent.
+    expect(source).toContain("upcomingEvents === 0 && upcomingOnPage === 0");
   });
 
   it("laat serie-buckets niet als losse actieve kaart verschijnen naast hun week-rijen", () => {
