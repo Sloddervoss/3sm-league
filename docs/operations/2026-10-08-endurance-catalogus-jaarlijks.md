@@ -72,6 +72,27 @@ dat jaar. Zodra iRacing de nieuwe seizoenen publiceert:
   veiligheidsklep dat partial failures nooit goede slots verwijderen, zijn
   onaangeroerd.
 
+## Hoe dit bewaakt wordt (en waar de grens ligt)
+
+De lijst, het herkennen van namen en varianten, het lezen van de pagina en het
+vastleggen van een datum-event zijn behavioristisch getest op de **echte**
+iRacing-pagina (`src/test/iracingSpecialEventsUpcoming.test.ts`,
+`iracingEnduranceAllowlist.test.ts`), met de pagina van 8 oktober 2026 als
+fixture. De dekkingscontrole in de allowlist-test is de plek waar opvalt dat een
+race uit de lijst verdwijnt.
+
+Wat **niet** in de testsuite kan: de syncloop in `index.ts` zelf. Dat is een
+Deno-functie met `Deno.serve` en netwerk-IO; die is niet los te importeren in de
+testomgeving. De koppeling tussen die loop en de geteste functies leunt daarom op
+contractassertions op de brontekst. Een mutatietest (de fix expres stukmaken en
+kijken of de tests klagen) laat zien dat elke realistische regressie wordt
+gevangen, maar een slimme wijziging die de letterlijke regels intact laat, glipt
+er in theorie doorheen.
+
+Praktische conclusie: **houd de wijziging aan deze functie klein** en verifieer
+na elke uitrol met een handmatige run dat de runstatus en de tellers kloppen met
+de verwachting. Dat is de echte controle op de loop zelf.
+
 ## Uitrollen en terugdraaien
 
 De edge functions draaien op 3sm-docker vanuit een **bind-mount**; de repo is daar
