@@ -88,6 +88,8 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "carName", Order = 4)] public string CarName { get; set; }
         [DataMember(Name = "trackName", Order = 5)] public string TrackName { get; set; }
         [DataMember(Name = "trackConfig", Order = 6)] public string TrackConfig { get; set; }
+        // Officiële iRacing-track-id voor de Pitwall-kaartkoppeling (op main sinds 8913ba3).
+        [DataMember(Name = "trackId", Order = 7, EmitDefaultValue = false)] public int? TrackId { get; set; }
     }
 
     [DataContract]

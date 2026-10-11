@@ -986,6 +986,7 @@ namespace ThreeSM.EnduranceConnector
                 TransportSessionId = _sessionId,
                 Identity = new V3Identity
                 {
+                    TrackId = TrackIdentityReader.Read(snapshot),
                     CurrentDriverId = currentDriverId,
                     CurrentDriverName = currentDriverName,
                     CarId = carId,
