@@ -36,6 +36,7 @@
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="UpdaterStateStore.cs" />
     <Compile Include="SessionTelemetryReader.cs" />
+    <Compile Include="TrackIdentityReader.cs" />
     <Compile Include="DiagnosticsClient.cs" />
     <Compile Include="ConnectorSettings.cs" />
     <Compile Include="SettingsControl.cs" />
@@ -44,6 +45,7 @@
     <Compile Include="TelemetryContracts.cs" />
     <Compile Include="TelemetryContractsV3.cs" />
     <Compile Include="FlagModels.cs" />
+    <Compile Include="FlagPanelRenderer.cs" />
     <Compile Include="FlagService.cs" />
     <Compile Include="FlagPropertyPublisher.cs" />
     <Compile Include="SimHubDeviceLister.cs" />
