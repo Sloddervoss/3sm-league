@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const pluginRoot = "tools/simhub-plugin/3SM.EnduranceConnector";
 const plugin = readFileSync(`${pluginRoot}/EnduranceConnectorPlugin.cs`, "utf8");
+const flagService = readFileSync(`${pluginRoot}/FlagService.cs`, "utf8");
 const contracts = readFileSync(`${pluginRoot}/TelemetryContracts.cs`, "utf8");
 const settings = readFileSync(`${pluginRoot}/ConnectorSettings.cs`, "utf8");
 const project = readFileSync(`${pluginRoot}/3SM.EnduranceConnector.csproj`, "utf8");
@@ -17,7 +18,12 @@ describe("3SM SimHub connector spike contract", () => {
     expect(plugin).toContain("IPlugin, IDataPlugin, IWPFSettingsV2");
     expect(plugin).toContain("public void DataUpdate(PluginManager pluginManager, ref GameData data)");
     expect(plugin).toContain("Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token)");
-    expect(plugin).not.toContain("GameRawData");
+    // De kerntelemetrie komt uit de SimHub SDK. De vlaggenmodule (0.5.6.0) leest daarnaast
+    // bewust spel-specifieke ruwe paden, net als DNR — die horen daar thuis, niet in de
+    // telemetrieroute, en het aantal ruwe lezers in de plugin blijft begrensd.
+    expect(plugin).toContain("snapshot.PlayerName");
+    expect(flagService).toContain("GameRawData");
+    expect((plugin.match(/GameRawData/g) ?? []).length).toBeLessThanOrEqual(8);
     expect(plugin).not.toContain("async void DataUpdate");
   });
 

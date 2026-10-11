@@ -88,6 +88,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "carName", Order = 4)] public string CarName { get; set; }
         [DataMember(Name = "trackName", Order = 5)] public string TrackName { get; set; }
         [DataMember(Name = "trackConfig", Order = 6)] public string TrackConfig { get; set; }
+        // Officiële iRacing-track-id voor de Pitwall-kaartkoppeling (op main sinds 8913ba3).
         [DataMember(Name = "trackId", Order = 7, EmitDefaultValue = false)] public int? TrackId { get; set; }
     }
 
@@ -100,6 +101,15 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "sessionLapsRemaining", Order = 4)] public int? SessionLapsRemaining { get; set; }
         [DataMember(Name = "flags", Order = 5)] public string[] Flags { get; set; }
         [DataMember(Name = "sessionState", Order = 6)] public string SessionState { get; set; }
+        // 0.5.0 additive: rijke vlag-presentatie. EmitDefaultValue=false zodat oude
+        // receivers (en het bestaande schema) onveranderd blijven als de module uit staat.
+        [DataMember(Name = "primaryFlag", Order = 7, EmitDefaultValue = false)] public string PrimaryFlag { get; set; }
+        [DataMember(Name = "flagColour", Order = 8, EmitDefaultValue = false)] public string FlagColour { get; set; }
+        [DataMember(Name = "flagSeverity", Order = 9, EmitDefaultValue = false)] public int FlagSeverity { get; set; }
+        // Additive: genormaliseerde fase + startlichten + pitlane-open (null/null/false als onbekend).
+        [DataMember(Name = "startLights", Order = 10, EmitDefaultValue = false)] public int? StartLights { get; set; }
+        [DataMember(Name = "pitLaneOpen", Order = 11, EmitDefaultValue = false)] public bool? PitLaneOpen { get; set; }
+        [DataMember(Name = "isStartSequence", Order = 12, EmitDefaultValue = false)] public bool IsStartSequence { get; set; }
     }
 
     [DataContract]
@@ -132,12 +142,16 @@ namespace ThreeSM.EnduranceConnector
     {
         [DataMember(Name = "fuelLitres", Order = 1)] public double? FuelLitres { get; set; }
         [DataMember(Name = "fuelPct", Order = 2)] public double? FuelPct { get; set; }
+        // Additive: stint-berekening (null tot er minstens één ronde data is).
+        [DataMember(Name = "fuelPerLapLitres", Order = 3, EmitDefaultValue = false)] public double? FuelPerLapLitres { get; set; }
+        [DataMember(Name = "lapsRemaining", Order = 4, EmitDefaultValue = false)] public double? LapsRemaining { get; set; }
     }
 
     [DataContract]
     public sealed class V3RaceState
     {
         [DataMember(Name = "incidents", Order = 1)] public int? Incidents { get; set; }
+        [DataMember(Name = "incidentLimit", Order = 2, EmitDefaultValue = false)] public int? IncidentLimit { get; set; }
     }
 
     [DataContract]

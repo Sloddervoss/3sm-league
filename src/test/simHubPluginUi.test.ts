@@ -7,8 +7,10 @@ const project = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector/3SM.End
 
 describe("SimHub plugin settings UI resources", () => {
   it("legt per navigatieknop een stabiele paneelindex vast", () => {
-    expect(settings).toContain("var paneIndex = i;");
-    expect(settings).toContain("SelectPane(paneIndex)");
+    // De lusvariabele mag nooit zelf in de lambda belanden (sluitingsfout: elke knop
+    // zou dan het laatste paneel openen). Sinds 0.5.6.0 heet de kopie 'index'.
+    expect(settings).toMatch(/var \w+ = i;/);
+    expect(settings).toMatch(/SelectPane\(\w+\)/);
     expect(settings).not.toContain("SelectPane(i);");
   });
 
@@ -36,12 +38,13 @@ describe("SimHub plugin settings UI resources", () => {
   });
 
   it("maakt de koppeling met de 3SM-site dominant en dynamisch zichtbaar", () => {
-    expect(settings).toContain('Text = "APPARAATSTATUS"');
+    // Sinds 0.5.6.0 via UiKit.Eyebrow (dat de tekst zelf naar hoofdletters omzet).
+    expect(settings).toMatch(/Eyebrow\("Apparaatstatus"\)/i);
     expect(settings).toContain('"✓ Gekoppeld met de 3SM-site"');
     expect(settings).toContain('"Nog niet gekoppeld aan de 3SM-site"');
     expect(settings).toContain("pairingCode.IsEnabled = !paired");
     expect(settings).toContain("pairButton.IsEnabled = !paired");
-    expect(settings).toContain('new Binding("IsPaired")');
+    expect(settings).toContain('Binding("IsPaired")');
     expect(settings).toContain('"✓ Gekoppeld met de 3SM-site"');
   });
 
@@ -51,11 +54,12 @@ describe("SimHub plugin settings UI resources", () => {
     expect(plugin).toContain("SetLastTelemetrySummary(envelope)");
     expect(plugin).toContain("public Task CheckForUpdateNowAsync()");
     expect(plugin).toContain("CheckForUpdateAsync(_shutdown.Token, true)");
-    expect(settings).toContain('StyleSecondary("Nu op updates controleren")');
-    expect(settings).toContain('StyleAction("Update installeren en SimHub herstarten")');
-    expect(settings).toContain('new Binding("UpdateAvailable")');
-    expect(settings).toContain('new Binding("LastTelemetrySummary")');
-    expect(settings).toContain('new Binding("UpdateStatus")');
+    // Sinds 0.5.6.0 heten de stijlen UiKit.Secondary/Primary; de knoppen zelf blijven.
+    expect(settings).toContain('"Nu op updates controleren"');
+    expect(settings).toContain('"Update installeren en SimHub herstarten"');
+    expect(settings).toContain('Binding("UpdateAvailable")');
+    expect(settings).toContain('Binding("LastTelemetrySummary")');
+    expect(settings).toContain('Binding("UpdateStatus")');
     expect(plugin).toContain("InstallAvailableUpdateAsync");
     expect(plugin).toContain('Verb = "runas"');
     expect(plugin).not.toMatch(/File\.(Copy|Move|Replace)\(/);

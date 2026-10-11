@@ -22,6 +22,7 @@
     <Reference Include="log4net"><HintPath>$(SIMHUB_INSTALL_PATH)log4net.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="SimHub.Logging"><HintPath>$(SIMHUB_INSTALL_PATH)SimHub.Logging.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="SimHub.Plugins"><HintPath>$(SIMHUB_INSTALL_PATH)SimHub.Plugins.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(SIMHUB_INSTALL_PATH)Newtonsoft.Json.dll</HintPath><Private>False</Private></Reference>
     <Reference Include="System" /><Reference Include="System.Core" /><Reference Include="System.Net.Http" /><Reference Include="System.Runtime.Serialization" /><Reference Include="System.Security" /><Reference Include="System.Xml" />
     <Reference Include="PresentationCore" /><Reference Include="PresentationFramework" /><Reference Include="System.Xaml" /><Reference Include="WindowsBase" />
   </ItemGroup>
@@ -39,8 +40,17 @@
     <Compile Include="DiagnosticsClient.cs" />
     <Compile Include="ConnectorSettings.cs" />
     <Compile Include="SettingsControl.cs" />
+    <Compile Include="UiKit.cs" />
+    <Compile Include="Theme.cs" />
     <Compile Include="TelemetryContracts.cs" />
     <Compile Include="TelemetryContractsV3.cs" />
+    <Compile Include="FlagModels.cs" />
+    <Compile Include="FlagPanelRenderer.cs" />
+    <Compile Include="FlagService.cs" />
+    <Compile Include="FlagPropertyPublisher.cs" />
+    <Compile Include="SimHubDeviceLister.cs" />
+    <Compile Include="FlagProfileInstaller.cs" />
+    <Compile Include="SimHubLedProfileHost.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />
   </ItemGroup>
   <ItemGroup>
