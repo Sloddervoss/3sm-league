@@ -31,7 +31,7 @@ namespace ThreeSM.EnduranceConnector
         // Release channel for the version check. TEST/canary builds append "?channel=canary"
         // so designated testers receive TEST manifest releases; STABLE builds leave this
         // empty (plain GET, stable manifest). Set per release branch — never user-facing.
-        private const string ReleaseChannelQuery = "?channel=canary";
+        private const string ReleaseChannelQuery = "";
         // 0.4.1: hard cap on opponents per snapshot (bounded payload; proven grid headroom).
         private const int MaxOpponentsPerSnapshot = 40;
         private const long MaxUpdateBytes = 5 * 1024 * 1024;
