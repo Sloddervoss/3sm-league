@@ -192,6 +192,13 @@ export type NormalizedTelemetryEnvelope = {
     sessionLapsRemaining: number | null;
     flags: SimHubRaceFlag[] | null;
     sessionState: SimHubSessionState;
+    /** 0.5.6 additief: rijke vlagpresentatie en startprocedure. Niet gepersisteerd. */
+    primaryFlag?: string | null;
+    flagColour?: string | null;
+    flagSeverity?: number | null;
+    startLights?: number | null;
+    pitLaneOpen?: boolean | null;
+    isStartSequence?: boolean;
   };
   timing: {
     currentLapElapsedSeconds: number | null;
@@ -212,9 +219,14 @@ export type NormalizedTelemetryEnvelope = {
   fuel: {
     fuelLitres: number | null;
     fuelPct: number | null;
+    /** 0.5.6 additief: stintberekening. Niet gepersisteerd. */
+    fuelPerLapLitres?: number | null;
+    lapsRemaining?: number | null;
   };
   raceState: {
     incidents: number | null;
+    /** 0.5.6 additief: incidentlimiet van de sessie. Niet gepersisteerd. */
+    incidentLimit?: number | null;
   };
   pitService: {
     pitServiceFlagsRaw: number | null;
@@ -267,6 +279,18 @@ const v3Boolean = (value: unknown, path: string): boolean | null => {
   return value;
 };
 
+  // 0.5.6 additief: optionele velden mogen volledig ONTBREKEN; v3Number/v3Boolean
+  // laten alleen null door, geen undefined.
+
+  const v3OptionalNumber = (value: unknown, path: string, rule: V3NumberRule = {}): number | null =>
+    value === undefined || value === null ? null : v3Number(value, path, rule);
+
+  const v3OptionalText = (value: unknown, path: string, max = 32): string | null =>
+    value === undefined || value === null ? null : text(value, path, max);
+
+  const v3OptionalBoolean = (value: unknown, path: string): boolean | null =>
+    value === undefined || value === null ? null : v3Boolean(value, path);
+
 export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnvelope => {
   const root = asRecord(input, "payload");
   exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle"], "payload");
@@ -279,7 +303,9 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   const identity = asRecord(root.identity, "identity");
   exactKeysAllowExtra(identity, ["currentDriverId", "currentDriverName", "carId", "carName", "trackName", "trackConfig"], ["trackId"], "identity");
   const session = asRecord(root.session, "session");
-  exactKeys(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], "session");
+  // 0.5.6: de vlaggenmodule stuurt extra sessievelden mee. Ze zijn optioneel, zodat een
+  // bestaande connector (zonder die sleutels) exact hetzelfde blijft werken.
+  exactKeysAllowExtra(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], ["primaryFlag", "flagColour", "flagSeverity", "startLights", "pitLaneOpen", "isStartSequence"], "session");
   const timing = asRecord(root.timing, "timing");
   exactKeys(timing, ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds", "completedLaps"], "timing");
   const position = asRecord(root.position, "position");
@@ -287,9 +313,9 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   const track = asRecord(root.track, "track");
   exactKeys(track, ["lapDistancePct", "trackSurface", "onPitRoad"], "track");
   const fuel = asRecord(root.fuel, "fuel");
-  exactKeys(fuel, ["fuelLitres", "fuelPct"], "fuel");
+  exactKeysAllowExtra(fuel, ["fuelLitres", "fuelPct"], ["fuelPerLapLitres", "lapsRemaining"], "fuel");
   const raceState = asRecord(root.raceState, "raceState");
-  exactKeys(raceState, ["incidents"], "raceState");
+  exactKeysAllowExtra(raceState, ["incidents"], ["incidentLimit"], "raceState");
   const pitService = asRecord(root.pitService, "pitService");
   exactKeys(pitService, ["pitServiceFlagsRaw", "requiredRepairSeconds", "optionalRepairSeconds"], "pitService");
 
@@ -321,6 +347,14 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
       sessionLapsRemaining: v3Number(session.sessionLapsRemaining, "session.sessionLapsRemaining", { nullable: true, integer: true, min: 0, max: 100000, sentinels: [-1, 32767] }),
       flags: v3Flags(session.flags, "session.flags"),
       sessionState: v3Enum(session.sessionState, sessionStateValues, "session.sessionState"),
+      primaryFlag: v3OptionalText(session.primaryFlag, "session.primaryFlag", 32),
+      flagColour: v3OptionalText(session.flagColour, "session.flagColour", 16),
+      flagSeverity: v3OptionalNumber(session.flagSeverity, "session.flagSeverity", { integer: true, min: 0, max: 99 }),
+      startLights: v3OptionalNumber(session.startLights, "session.startLights", { integer: true, min: 0, max: 10 }),
+      pitLaneOpen: v3OptionalBoolean(session.pitLaneOpen, "session.pitLaneOpen"),
+      isStartSequence: session.isStartSequence === undefined || session.isStartSequence === null
+        ? false
+        : booleanValue(session.isStartSequence, "session.isStartSequence"),
     },
     timing: {
       currentLapElapsedSeconds: v3Number(timing.currentLapElapsedSeconds, "timing.currentLapElapsedSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
@@ -341,9 +375,12 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
     fuel: {
       fuelLitres: v3Number(fuel.fuelLitres, "fuel.fuelLitres", { nullable: true, min: 0, max: 250, sentinels: [-1] }),
       fuelPct: v3Number(fuel.fuelPct, "fuel.fuelPct", { nullable: true, min: 0, max: 1, sentinels: [-1] }),
+      fuelPerLapLitres: v3OptionalNumber(fuel.fuelPerLapLitres, "fuel.fuelPerLapLitres", { min: 0, max: 100, sentinels: [-1] }),
+      lapsRemaining: v3OptionalNumber(fuel.lapsRemaining, "fuel.lapsRemaining", { min: 0, max: 100000, sentinels: [-1] }),
     },
     raceState: {
       incidents: v3Number(raceState.incidents, "raceState.incidents", { nullable: true, integer: true, min: 0, max: 100000, sentinels: [-1] }),
+      incidentLimit: v3OptionalNumber(raceState.incidentLimit, "raceState.incidentLimit", { integer: true, min: 0, max: 1000, sentinels: [-1] }),
     },
     pitService: {
       pitServiceFlagsRaw: v3Number(pitService.pitServiceFlagsRaw, "pitService.pitServiceFlagsRaw", { nullable: true, integer: true, min: 0, max: 2147483647, sentinels: [-1] }),
