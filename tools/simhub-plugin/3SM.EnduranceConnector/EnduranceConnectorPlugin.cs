@@ -986,6 +986,7 @@ namespace ThreeSM.EnduranceConnector
                 TransportSessionId = _sessionId,
                 Identity = new V3Identity
                 {
+                    // Officiële iRacing-track-id voor de Pitwall-kaartkoppeling (op main sinds 8913ba3).
                     TrackId = TrackIdentityReader.Read(snapshot),
                     CurrentDriverId = currentDriverId,
                     CurrentDriverName = currentDriverName,
@@ -1532,6 +1533,8 @@ namespace ThreeSM.EnduranceConnector
                     SimHub.Logging.Current.Info("3SM flags: " + universal.Primary);
                 }
 
+                FlagProfileWatch(manager);
+
                 if (flagSettings == null || !flagSettings.PublishProperties || _flagPublisher == null) return;
 
                 var now = _sendClock.ElapsedMilliseconds;
@@ -1548,6 +1551,7 @@ namespace ThreeSM.EnduranceConnector
                     var slot = flagSettings.Boxes != null && i < flagSettings.Boxes.Length ? flagSettings.Boxes[i] : null;
                     deviceNames[i] = slot == null ? string.Empty : (slot.EffectiveDevice() ?? string.Empty);
                 }
+                _flagPublisher.PublishSettings(flagSettings);
                 _flagPublisher.Publish(universal, boxes, deviceNames,
                     FlagText(universal),
                     BlueText(data, flagSettings, universal),
@@ -1602,7 +1606,57 @@ namespace ThreeSM.EnduranceConnector
             return text;
         }
 
-        // Rev-percentage t.o.v. de echte auto-redline (RPM) uit de sim, zoals DNR.
+        // Watch: houdt het LED-profiel up-to-date (elke ~5 s) als het al bestaat.
+        private string _flagWatchSignature;
+        private long _flagWatchLastMs;
+
+        private void FlagProfileWatch(PluginManager manager)
+        {
+            try
+            {
+                var flags = Settings == null ? null : Settings.Flags;
+                if (flags == null || !flags.Enabled || !flags.AutoUpdateProfile) return;
+                var now = _sendClock.ElapsedMilliseconds;
+                if (now - _flagWatchLastMs < 5000) return;
+                _flagWatchLastMs = now;
+
+                var box = Math.Max(1, Math.Min(8, flags.ProfileBoxIndex));
+                var slot = flags.Box(box - 1);
+                var device = slot.EffectiveDevice();
+                var kind = string.IsNullOrEmpty(flags.ProfileKind) ? "matrix" : flags.ProfileKind;
+                var file = FlagProfileInstaller.SettingsFileFor(kind);
+                // Alleen bijwerken als ons profiel al bestaat (nooit ongevraagd aanmaken).
+                if (!SimHubLedProfileHost.HasProfile(manager, device, FlagProfileInstaller.ProfileName) && !FileHasProfile(file, FlagProfileInstaller.ProfileName)) return;
+
+                var signature = InstalledVersion + "|" + kind + "|" + flags.BoxCount + "|" + flags.MldCount + "|" + flags.ProfileLedCount;
+                for (var i = 0; i < 8; i++)
+                {
+                    var b = flags.Box(i);
+                    signature += "|" + (b.TargetKey ?? string.Empty) + ":" + b.MatrixPosition;
+                }
+                if (string.Equals(signature, _flagWatchSignature, StringComparison.Ordinal)) return;
+                _flagWatchSignature = signature;
+
+                var profile = FlagProfileInstaller.BuildProfile(flags, kind, box);
+                string message;
+                if (!SimHubLedProfileHost.InstallForDevice(manager, device, profile, out message))
+                    FlagProfileInstaller.InstallProfile(file, profile, out message);
+                SimHub.Logging.Current.Info("3SM flags: profiel automatisch bijgewerkt");
+            }
+            catch { /* de watch mag nooit de plugin breken */ }
+        }
+
+        private static bool FileHasProfile(string path, string name)
+        {
+            try
+            {
+                return !string.IsNullOrEmpty(path) && System.IO.File.Exists(path)
+                    && System.IO.File.ReadAllText(path).IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch { return false; }
+        }
+
+        // Rev-percentage t.o.v. de echte auto-redline (RPM) uit de sim.
         private double RevPercent(PluginManager manager, FlagSettings flags)
         {
             var percent = GetDouble(manager, "DataCorePlugin.GameData.NewData.RpmsPercent", 0);
