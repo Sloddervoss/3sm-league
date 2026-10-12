@@ -112,6 +112,26 @@ namespace ThreeSM.EnduranceConnector
             return Install(driver, profile, out message);
         }
 
+        // Bestaat er al een profiel met deze naam op het device? (voor auto-update)
+        public static bool HasProfile(PluginManager pluginManager, string deviceName, string profileName)
+        {
+            try
+            {
+                var drivers = ReadDrivers(pluginManager);
+                var driver = PickDriver(drivers, deviceName);
+                var profiles = driver == null ? null : GetMember(driver.Settings, "Profiles") as IEnumerable;
+                if (profiles == null) return false;
+                foreach (var p in profiles)
+                {
+                    if (p == null) continue;
+                    var name = Convert.ToString(GetMember(p, "Name"));
+                    if (string.Equals(name, profileName, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
         public static bool Install(LedDriverSettings driver, JObject profile, out string message)
         {
             message = null;
