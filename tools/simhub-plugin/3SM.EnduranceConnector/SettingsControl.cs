@@ -312,7 +312,8 @@ namespace ThreeSM.EnduranceConnector
             boxCard.Children.Add(HoldRow("Rev-bar startpunt (%)", b.RedlineBarStartPct, 0, 100, v => SetBox(_selectedBoxIndex, x => x.RedlineBarStartPct = v)));
             boxCard.Children.Add(UiKit.Toggle("Rev-bar tonen", b.ShowRedline, v => SetBox(_selectedBoxIndex, x => x.ShowRedline = v)));
             boxCard.Children.Add(UiKit.Toggle("Spotter", b.Spotters, v => SetBox(_selectedBoxIndex, x => x.Spotters = v)));
-            boxCard.Children.Add(ComboRow("Spotter-zijde", new[] { "Beide (dubbelpijl)", "Links (pijl links)", "Rechts (pijl rechts)" }, b.SpotterSide - 1, v => SetBox(_selectedBoxIndex, x => x.SpotterSide = v + 1)));
+            boxCard.Children.Add(SegmentedRow("Spotter-zijde", new[] { "Beide", "Links", "Rechts" }, b.SpotterSide - 1, v => SetBox(_selectedBoxIndex, x => x.SpotterSide = v + 1),
+                "Welke kant deze box kijkt. Monteer één box links en één rechts van het stuur en zet de ene op Links en de andere op Rechts; elke box licht dan voor auto's aan zijn eigen kant. Eén box laat je normaal op Beide."));
             boxCard.Children.Add(ComboRow("Spotter-modus", new[] { "Vervangt gear", "Over de gear", "Wisselt met gear (knipperend)" }, b.SpotterMode, v => SetBox(_selectedBoxIndex, x => x.SpotterMode = v)));
             boxCard.Children.Add(UiKit.Toggle("Gear wijkt voor de spotterpijl", b.SpotterShiftsGear, v => SetBox(_selectedBoxIndex, x => x.SpotterShiftsGear = v)));
             boxCard.Children.Add(ComboRow("Spotter-animatie", new[] { "Statisch (hoek)", "Glijdt van links naar rechts / rechts naar links" }, b.SpotterAnimation, v => SetBox(_selectedBoxIndex, x => x.SpotterAnimation = v)));
@@ -356,13 +357,34 @@ namespace ThreeSM.EnduranceConnector
                 });
             };
             boxCard.Children.Add(UiKit.Row("Device", targetCombo));
-            stack.Children.Add(UiKit.Card(boxCard, (b.IsMld ? "MLD Box " + (_selectedBoxIndex - 3) : "Flag Box " + (_selectedBoxIndex + 1)) + " — weergave"));
+            stack.Children.Add(UiKit.Card(boxCard, (b.IsMld ? "MLD Box " + (_selectedBoxIndex - 3) : "Flag Box " + (_selectedBoxIndex + 1)) + " - weergave"));
+
+            // Per-box overzicht: welke kant kijkt welke box (één rij per box, zoals de referentie-UI).
+            var configured = new List<int>();
+            for (var ci = 0; ci < Math.Min(4, f.BoxCount); ci++) configured.Add(ci);
+            for (var ci = 0; ci < Math.Min(4, f.MldCount); ci++) configured.Add(4 + ci);
+            if (configured.Count > 1)
+            {
+                var sideCard = new StackPanel();
+                sideCard.Children.Add(UiKit.Sub("Per box: welke kant kijkt hij? (Beide / Links / Rechts)"));
+                for (var ci = 0; ci < configured.Count; ci++)
+                {
+                    var slotIndex = configured[ci];
+                    var slot = f.Box(slotIndex);
+                    var slotLabel = slotIndex >= 4 ? "MLD Box " + (slotIndex - 3) : "Flag Box " + (slotIndex + 1);
+                    sideCard.Children.Add(new Border { Child = UiKit.RowControl(slotLabel, UiKit.Segmented(new[] { "Beide", "Links", "Rechts" }, slot.SpotterSide - 1, v => SetBoxDevice(slotIndex, x => x.SpotterSide = v + 1))) });
+                }
+                stack.Children.Add(UiKit.Card(sideCard, "Spotter-zijde per box"));
+            }
 
             // Globaal: drempels + penalty
             var glob = new StackPanel();
-            glob.Children.Add(HoldRow("Water-waarschuwing (°C)", f.TempWarnWater, 0, 200, v => SetFlag(x => x.TempWarnWater = v)));
-            glob.Children.Add(HoldRow("Olie-waarschuwing (°C)", f.TempWarnOil, 0, 250, v => SetFlag(x => x.TempWarnOil = v)));
-            glob.Children.Add(HoldRow("Low-fuel drempel (%)", f.LowFuelPercent, 0, 100, v => SetFlag(x => x.LowFuelPercent = v)));
+            glob.Children.Add(SliderPreviewRow("Water-waarschuwing (°C)", f.TempWarnWater, 0, 200, v => SetFlag(x => x.TempWarnWater = v), TempGlyph, "#FFA500"));
+            glob.Children.Add(SliderPreviewRow("Olie-waarschuwing (°C)", f.TempWarnOil, 0, 250, v => SetFlag(x => x.TempWarnOil = v), OilGlyph, FlagPanelRenderer.OilWarningColour));
+            var unitNote = UiKit.Caption("Eenheid = je SimHub temperatuur-instelling.");
+            unitNote.Margin = new Thickness(0, 0, 0, 8);
+            glob.Children.Add(unitNote);
+            glob.Children.Add(SliderPreviewRow("Low-fuel drempel (%)", f.LowFuelPercent, 0, 100, v => SetFlag(x => x.LowFuelPercent = v), LowFuelGlyph, "#FF0000"));
             glob.Children.Add(HoldRow("Penalty-waarschuwing vasthouden (s)", f.PenaltyWarningDuration, 1, 60, v => SetFlag(x => x.PenaltyWarningDuration = v)));
             glob.Children.Add(ColourRow("Spotter-kleur", f.SpotterColour, v => SetFlag(x => x.SpotterColour = v)));
             glob.Children.Add(UiKit.Toggle("Redline alleen knipperen in de hoogste versnelling", f.LastGearRedlineOnly, v => SetFlag(x => x.LastGearRedlineOnly = v)));
@@ -376,14 +398,21 @@ namespace ThreeSM.EnduranceConnector
             // SimHub / flagbox publicatie
             var pub = new StackPanel();
             pub.Children.Add(UiKit.Toggle("Publiceer vlag-properties", f.PublishProperties, v => SetFlag(x => x.PublishProperties = v)));
+            var pubWarn = UiKit.Sub("Uit = geen updates meer: je flagbox-LED's en eigen SimHub-dashboards lezen deze properties, dus die blijven dan op hun laatste waarde staan.");
+            pubWarn.Foreground = UiKit.Warn;
+            pubWarn.Margin = new Thickness(0, 2, 0, 10);
+            pub.Children.Add(pubWarn);
             var prefixBox = UiKit.Field(220);
             prefixBox.Text = f.PropertyPrefix ?? string.Empty;
             prefixBox.LostFocus += delegate { SetFlag(x => x.PropertyPrefix = (prefixBox.Text ?? string.Empty).Trim()); };
             pub.Children.Add(UiKit.Row("Property-prefix", prefixBox));
-            var pubNote = UiKit.Sub("Voorbeeld: THREESM.Flags.Red, .Primary, .Colour. Prefix-wijziging werkt na een SimHub-herstart.");
+            var pubNote = UiKit.Sub("Voorbeeld: THREESM.Flags.Red, .Primary, .Colour, .Box1.Green. Een andere prefix werkt na een SimHub-herstart; het LED-profiel wordt dan automatisch opnieuw opgebouwd.");
             pubNote.Margin = new Thickness(0, 2, 0, 10);
             pub.Children.Add(pubNote);
             pub.Children.Add(UiKit.Toggle("Rijke vlagvelden naar de server sturen (alleen na relay-update)", f.SendFlagFields, v => SetFlag(x => x.SendFlagFields = v)));
+            var sendNote = UiKit.Sub("Stuurt per snapshot ook PrimaryFlag, FlagColour en FlagSeverity mee aan de server. Lokaal en in de box verandert er niets; de server gebruikt ze pas na de relay-update.");
+            sendNote.Margin = new Thickness(0, 2, 0, 0);
+            pub.Children.Add(sendNote);
             stack.Children.Add(UiKit.Card(pub, "SimHub / flagbox"));
 
             // Flagboxen
@@ -488,7 +517,8 @@ namespace ThreeSM.EnduranceConnector
             pairingState.Style = style;
             conn.Children.Add(pairingState);
             conn.Children.Add(new Border { Height = 1, Background = UiKit.Border, Margin = new Thickness(0, 12, 0, 10) });
-            conn.Children.Add(UiKit.InfoRow("Route", "Centrale 3SM-relay via HTTPS"));
+            conn.Children.Add(UiKit.InfoRow("Route", "Centrale 3SM-relay via HTTPS · api.3stripemotorsport.cc"));
+            conn.Children.Add(UiKit.InfoRow("Zonder koppeling", "Lokaal op deze pc · 127.0.0.1:8787 (verlaat het apparaat niet)"));
             conn.Children.Add(UiKit.InfoRow("Authenticatie", "Beveiligd apparaat-token"));
             conn.Children.Add(UiKit.InfoRow("Updates", "RSA-ondertekend en SHA-256 gecontroleerd"));
             stack.Children.Add(UiKit.Card(conn, "Centrale verbinding"));
@@ -523,6 +553,15 @@ namespace ThreeSM.EnduranceConnector
             check.Click += async delegate { check.IsEnabled = false; try { await _plugin.CheckForUpdateNowAsync(); } finally { check.IsEnabled = true; } };
             buttons.Children.Add(check);
             updateStack.Children.Add(buttons);
+            var autoWrap = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
+            autoWrap.Children.Add(UiKit.Toggle(
+                "Automatisch bijwerken (download op de achtergrond, installeren op een veilig moment)",
+                _plugin.Settings == null || _plugin.Settings.AutoUpdateEnabled,
+                v => _plugin.UpdateSettings(s => s.AutoUpdateEnabled = v)));
+            updateStack.Children.Add(autoWrap);
+            var autoNote = UiKit.Sub("Downloadt stil op de achtergrond en installeert nooit tijdens een game: bij het starten van SimHub of pas na 30 minuten zonder game, met maximaal één automatische herstart per 24 uur. Windows vraagt nog om bevestiging.");
+            autoNote.Margin = new Thickness(0, 2, 0, 0);
+            updateStack.Children.Add(autoNote);
             stack.Children.Add(UiKit.Card(updateStack, "Pluginupdate"));
 
             return stack;
@@ -1211,16 +1250,47 @@ namespace ThreeSM.EnduranceConnector
 
         private static Border HoldRow(string label, int value, int min, int max, Action<int> set)
         {
-            var box = UiKit.Field(90);
-            box.Text = value.ToString();
-            box.LostFocus += delegate
-            {
-                int parsed;
-                if (int.TryParse(box.Text, out parsed) && parsed >= min && parsed <= max) set(parsed);
-                else box.Text = value.ToString();
-            };
-            return new Border { Child = UiKit.Row(label, box) };
+            return new Border { Child = UiKit.SliderRow(label, value, min, max, set) };
         }
+
+        // Slider-rij met een klein LED-previewtje van het bijbehorende icoon.
+        // Het paneeltje staat in een eigen kolom achter de waarde; de glyph-plaatsing
+        // binnen het paneel blijft gelijk aan de echte box (FlagPanelRenderer.GlyphCentered).
+        private static Border SliderPreviewRow(string label, int value, int min, int max, Action<int> set, string[] art, string colour)
+        {
+            var preview = UiKit.MiniPanel(RenderArt(art, colour), 8, 8, 4);
+            preview.VerticalAlignment = VerticalAlignment.Center;
+            preview.ToolTip = UiKit.Tip("Zo ziet dit waarschuwingsicoon er op de box uit.");
+            return new Border { Child = UiKit.SliderRow(label, value, min, max, set, string.Empty, 190, preview) };
+        }
+
+        private static Border SegmentedRow(string label, string[] options, int selectedIndex, Action<int> set, string hint = null)
+        {
+            return new Border { Child = UiKit.RowControl(label, UiKit.Segmented(options, selectedIndex, set), hint) };
+        }
+
+        // Tekent een glyph (5x7-kunst) gecentreerd in een paneel, voor inline previews.
+        private static string[] RenderArt(string[] art, string colour, int columns = 8, int rows = 8)
+        {
+            var leds = new string[columns * rows];
+            for (var i = 0; i < leds.Length; i++) leds[i] = "#000000";
+            if (art == null) return leds;
+            var w = 0;
+            foreach (var line in art) if (line.Length > w) w = line.Length;
+            var ox = (columns - w) / 2;
+            var oy = (rows - art.Length) / 2;
+            if (oy < 0) oy = 0;
+            for (var y = 0; y < art.Length; y++)
+                for (var x = 0; x < art[y].Length; x++)
+                    if (art[y][x] == '#' && ox + x >= 0 && ox + x < columns && oy + y >= 0 && oy + y < rows)
+                        leds[(oy + y) * columns + ox + x] = colour;
+            return leds;
+        }
+
+        private static readonly string[] LowFuelGlyph = { "####.", "#..##", "#..##", "####.", "####.", "####.", "####." };
+        private static readonly string[] TempGlyph = { "..##.", "..#..", "..##.", "..#..", ".###.", "#####", ".###." };
+        // Gelijk aan FlagPanelRenderer.OilArt, zodat de preview toont wat de box doet.
+        private static readonly string[] OilGlyph = { "...##", "..##.", ".####", "##..#", "##..#", "##..#", ".####" };
 
         private static Border FieldRow(string label, string value, double width, Action<string> set)
         {
