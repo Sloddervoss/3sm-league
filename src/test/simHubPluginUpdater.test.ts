@@ -3,6 +3,7 @@ import { createHash, createPublicKey, verify } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 const plugin = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector/EnduranceConnectorPlugin.cs", "utf8");
+const settings = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector/ConnectorSettings.cs", "utf8");
 const updater = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector.Updater/Program.cs", "utf8");
 const project = readFileSync("tools/simhub-plugin/3SM.EnduranceConnector/3SM.EnduranceConnector.csproj", "utf8");
 const endpoint = readFileSync("supabase/functions/simhub-version/index.ts", "utf8");
@@ -23,8 +24,8 @@ describe("SimHub plugin one-click updater contract", () => {
     expect(plugin).toContain('string.Equals(uri.Host, "3stripemotorsport.cc"');
     expect(plugin).toContain('"/downloads/3SM.EnduranceConnector-" + version + ".dll"');
     expect(plugin).toContain("NormalizeSha256");
-    expect(plugin).toContain("FileVersionInfo.GetVersionInfo(stagedDll).FileVersion");
-    expect(plugin).toContain("AssemblyName.GetAssemblyName(stagedDll).Version");
+    expect(plugin).toContain("FileVersionInfo.GetVersionInfo(file).FileVersion");
+    expect(plugin).toContain("AssemblyName.GetAssemblyName(file).Version");
     expect(plugin).toContain("ValidateReleaseManifest");
     expect(plugin).toContain("ReleasePublicKeyXml");
     expect(plugin).toContain("rsa.VerifyData");
@@ -57,13 +58,39 @@ describe("SimHub plugin one-click updater contract", () => {
     expect(project).toContain("BuildEmbeddedUpdater");
     expect(project).toContain("3SM.EnduranceConnector.Updater.exe");
     expect(plugin).toContain("ExtractUpdater(updaterExe)");
-    expect(plugin).toContain("ComputeSha256(stagedDll)");
+    expect(plugin).toContain("ComputeSha256(file)");
     expect(plugin).toContain("FileShare.Read");
     expect(plugin).toContain("readyEvent.WaitOne");
     expect(plugin).toContain("--ready-event");
     expect(plugin).toContain('Verb = "runas"');
     expect(plugin).toContain("Application.Current.MainWindow.Close()");
     expect(plugin).not.toMatch(/File\.(Copy|Move|Replace)\(/);
+  });
+
+  it("laat de auto-update nooit tijdens een game installeren en houdt het herstartbudget aan", () => {
+    // Schakelaar bestaat, staat standaard aan en is uit te zetten.
+    expect(settings).toContain("public bool AutoUpdateEnabled = true;");
+    expect(settings).toContain("LastAutoUpdateRestartUtcTicks");
+    expect(plugin).toContain("AutoUpdateOn()");
+
+    // Nooit tijdens een game; bij idle pas nadat er 30 minuten geen game is geweest.
+    expect(plugin).toContain("if (!AutoUpdateOn() || gameIsAround) return;");
+    expect(plugin).toContain("TimeSpan.FromMinutes(30)");
+
+    // Maximaal één automatische herstart per 24 uur, vastgelegd in de instellingen.
+    expect(plugin).toContain("TimeSpan.FromHours(24)");
+    expect(plugin).toContain("LastAutoUpdateRestartUtcTicks = now.Ticks");
+
+    // Weggeklikte Windows-bevestiging: 30 minuten rust in plaats van een lus.
+    expect(plugin).toContain("_autoApplyBlockedUntilUtcTicks, now.AddMinutes(30).Ticks");
+
+    // De automatische route deelt de gecontroleerde route met de handmatige knop:
+    // geen tweede download- of installatiepad, en dezelfde verificatie.
+    expect(plugin).toContain("StageUpdateAutoAsync");
+    expect(plugin).toContain("await StageUpdateAsync(remote)");
+    expect(plugin).toContain("FixedTimeEquals(ComputeSha256(file), expectedHash)");
+    expect(plugin).toContain("ValidateReleaseManifest(manifest, remoteVersion)");
+    expect(plugin).toContain("LaunchUpdaterAndExit(remote, staged, out message, out failure)");
   });
 
   it("waits for SimHub exit, replaces atomically, verifies and rolls back", () => {
