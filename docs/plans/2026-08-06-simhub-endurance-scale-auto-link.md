@@ -159,6 +159,15 @@
 **Boundaries (fail-closed):** de plugin **vervangt nooit zelf** de DLL; endpoint is read-only en gepingd aan exacte production-origin; geen credentials naar het versie-endpoint.
 **Commit:** `feat(simhub): safe update-availability notice in plugin`.
 
+> **Update (huidige stand, 0.5.x):** de plugin is inmiddels verder dan deze taak: er is een
+> gecontroleerde éénklik-updater (RSA-ondertekend manifest + SHA-256 + externe verhoogde
+> helper, zie `docs/simhub-update-gids.md`). Sinds de nieuwste versie is daar **auto-update**
+> bijgekomen, op verzoek van de projecteigenaar: stil downloaden op de achtergrond en
+> toepassen op een veilig moment (nooit tijdens een game, max. 1 herstart per 24 uur),
+> met een instelling om het uit te zetten. De oorspronkelijke grens blijft overeind: de
+> geladen DLL vervangt zichzelf nooit — dat doet uitsluitend de externe helper, na
+> dezelfde verificatie als de handmatige knop.
+
 ### Task 4.3: Distributie & release-doc voor ~30 man
 **Files:**
 - Modify: `docs/plans/2026-08-06-simhub-endurance-scale-auto-link.md` → bijlage "Update-gids voor deelnemers"

@@ -85,5 +85,10 @@ namespace ThreeSM.EnduranceConnector
         public long LastKnownRemoteByteLength = 0;
         public string LastKnownRemoteSignature = string.Empty;
         public DateTime? LastVersionCheckUtc;
+
+        // Auto-update: op de achtergrond downloaden en op een veilig moment toepassen
+        // (nooit tijdens een game; maximaal één automatische herstart per 24 uur).
+        public bool AutoUpdateEnabled = true;
+        public long LastAutoUpdateRestartUtcTicks = 0L;
     }
 }

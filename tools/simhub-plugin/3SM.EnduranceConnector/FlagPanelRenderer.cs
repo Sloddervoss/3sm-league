@@ -146,7 +146,10 @@ namespace ThreeSM.EnduranceConnector
             if (showPit && input.PitLimiter) PitLimiter(leds, columns, rows, input, box, phase);
             if (showWarn && (input.NowMs / 1000) % 2 == 0)
             {
-                if (WarnIsTemp(box, global, input)) GlyphCentered(leds, columns, rows, TempArt, "#FFA500");
+                // Water en olie hebben een eigen icoon: thermometer voor koelwater,
+                // oliekan voor oliedruk/-temperatuur; anders lezen ze hetzelfde.
+                if (WarnIsWater(box, global, input)) GlyphCentered(leds, columns, rows, TempArt, "#FFA500");
+                else if (WarnIsOil(box, global, input)) GlyphCentered(leds, columns, rows, OilArt, OilWarningColour);
                 else if (WarnActive(box, global, input)) GlyphCentered(leds, columns, rows, LowFuelArt, "#FF0000");
             }
 
@@ -194,12 +197,16 @@ namespace ThreeSM.EnduranceConnector
 
         // ---- helpers ----
 
-        private static bool WarnIsTemp(FlagBoxSlot box, FlagSettings global, PanelInput input)
+        private static bool WarnIsWater(FlagBoxSlot box, FlagSettings global, PanelInput input)
         {
             if (box != null && !box.TemperatureWarning) return false;
-            if (input.WaterTemp > 0 && input.WaterTemp >= (global != null ? global.TempWarnWater : 110)) return true;
-            if (input.OilTemp > 0 && input.OilTemp >= (global != null ? global.TempWarnOil : 120)) return true;
-            return false;
+            return input.WaterTemp > 0 && input.WaterTemp >= (global != null ? global.TempWarnWater : 110);
+        }
+
+        private static bool WarnIsOil(FlagBoxSlot box, FlagSettings global, PanelInput input)
+        {
+            if (box != null && !box.TemperatureWarning) return false;
+            return input.OilTemp > 0 && input.OilTemp >= (global != null ? global.TempWarnOil : 120);
         }
 
         private static bool WarnActive(FlagBoxSlot box, FlagSettings global, PanelInput input)
@@ -515,6 +522,11 @@ namespace ThreeSM.EnduranceConnector
         private static readonly string[] DebrisStripes = { "#..#.", "..#..", ".#..#", "#..#.", "..#..", ".#..#", "#..#." };
         private static readonly string[] LowFuelArt = { "####.", "#..##", "#..##", "####.", "####.", "####.", "####." };
         private static readonly string[] TempArt = { "..##.", "..#..", "..##.", "..#..", ".###.", "#####", ".###." };
+        // Kleur van de oliewaarschuwing: het 3SM-oranje, zodat olie te onderscheiden is van
+        // water (helder oranje) en van brandstof (rood). Eén bron voor box én UI-preview.
+        public const string OilWarningColour = "#FF6B1A";
+        // Oliekan met tuit en open hart: duidelijk anders dan de thermometer (water) en de jerrycan (brandstof).
+        private static readonly string[] OilArt = { "...##", "..##.", ".####", "##..#", "##..#", "##..#", ".####" };
         private static readonly string[] EngineStartArt = { "...##", "..##.", ".##..", "####.", "..##.", ".##..", "##..." };
 
         private static void GlyphCentered(string[] leds, int columns, int rows, string[] art, string colour)
