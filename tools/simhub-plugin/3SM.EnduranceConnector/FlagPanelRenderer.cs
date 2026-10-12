@@ -451,7 +451,7 @@ namespace ThreeSM.EnduranceConnector
                 return;
             }
             if (Has(f, RaceFlags.Orange)) { index = FlagSlotIndex.Orange; colour = "#FF8C00"; defPattern = 0; return; }
-            if (Has(f, RaceFlags.Debris)) { index = FlagSlotIndex.Debris; colour = "#FF0000"; colour2 = "#FFFF00"; defPattern = 0; glyph = "DEBRIS"; return; }
+            if (Has(f, RaceFlags.Debris)) { index = FlagSlotIndex.Debris; colour = "#FF0000"; colour2 = "#FFFF00"; defPattern = 2; return; }
             if (Has(f, RaceFlags.Blue)) { index = FlagSlotIndex.Blue; colour = "#0000FF"; defPattern = 0; return; }
             if (Has(f, RaceFlags.Green)) { index = FlagSlotIndex.Green; colour = "#00FF00"; defPattern = 0; return; }
             if (Has(f, RaceFlags.Checkered)) { index = FlagSlotIndex.Checkered; colour = "#FFFFFF"; defPattern = 1; return; }
@@ -462,7 +462,7 @@ namespace ThreeSM.EnduranceConnector
         {
             var c1 = Lift(colour);
             var c2 = Lift(colour2);
-            if (glyph == "DEBRIS") { Solid(leds, Lift("#FFFF00")); if (glyphPage) GlyphCentered(leds, columns, rows, DebrisStripes, "#FF0000"); return; }
+            if (pattern == 3) { Solid(leds, c2); if (!blink || ph) GlyphCentered(leds, columns, rows, DebrisStripes, c1); return; }
             if (pattern == 0) Solid(leds, blink && !ph ? "#000000" : c1);
             else if (pattern == 1) Checker2(leds, columns, rows, c1, c2, blink ? ph : true);
             else Rows2(leds, columns, rows, c1, c2, blink ? ph : true);

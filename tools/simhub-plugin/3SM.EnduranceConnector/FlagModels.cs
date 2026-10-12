@@ -515,6 +515,7 @@ namespace ThreeSM.EnduranceConnector
         public bool PublishProperties = true;
         public string PropertyPrefix = "THREESM.Flags";
         public bool SendFlagFields = false;
+        public bool AutoUpdateProfile = true;      // profiel automatisch bijwerken als het al bestaat
 
         // Idle-ontwerp bibliotheek (machine-breed) + gekozen ontwerp (per preset).
         public List<FlagIdleDesign> IdleDesigns = new List<FlagIdleDesign>();

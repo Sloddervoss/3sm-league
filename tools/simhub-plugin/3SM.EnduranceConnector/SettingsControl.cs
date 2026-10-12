@@ -407,6 +407,7 @@ namespace ThreeSM.EnduranceConnector
             };
             boxes.Children.Add(UiKit.Row("Profielsoort", kindCombo));
             boxes.Children.Add(HoldRow("LEDs per strip (rgb/tm1638)", f.ProfileLedCount, 1, 300, v => { SetFlag(x => x.ProfileLedCount = v); RefreshFlagsPane(); }));
+            boxes.Children.Add(UiKit.Toggle("Profiel automatisch bijwerken (watch)", f.AutoUpdateProfile, v => SetFlag(x => x.AutoUpdateProfile = v)));
             var installButton = UiKit.Primary("Installeer flagbox-profiel");
             installButton.HorizontalAlignment = HorizontalAlignment.Left;
             installButton.Click += delegate { InstallFlagProfile(); };
@@ -826,8 +827,8 @@ namespace ThreeSM.EnduranceConnector
                 row.Children.Add(new TextBlock { Text = names[i], Width = 82, Foreground = UiKit.Muted, VerticalAlignment = VerticalAlignment.Center });
 
                 var pat = UiKit.Combo();
-                pat.Items.Add("Patroon: standaard"); pat.Items.Add("Effen"); pat.Items.Add("Checker"); pat.Items.Add("Rijen");
-                pat.SelectedIndex = Math.Max(0, Math.Min(3, style.Pattern + 1));
+                pat.Items.Add("Patroon: standaard"); pat.Items.Add("Effen"); pat.Items.Add("Checker"); pat.Items.Add("Rijen"); pat.Items.Add("Strepen");
+                pat.SelectedIndex = Math.Max(0, Math.Min(4, style.Pattern + 1));
                 pat.SelectionChanged += delegate { SetBox(boxIndex, x => x.StyleOf(idx).Pattern = pat.SelectedIndex - 1); };
                 row.Children.Add(pat);
 
