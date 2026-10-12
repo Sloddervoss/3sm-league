@@ -30,6 +30,10 @@ namespace ThreeSM.EnduranceConnector
             _prefix = string.IsNullOrWhiteSpace(prefix) ? "THREESM.Flags" : prefix.Trim();
         }
 
+        // De prefix zoals die bij het starten van SimHub is aangemeld. Een gewijzigde
+        // instelling werkt pas na een herstart, dus het profiel mag daar niet op vooruitlopen.
+        public string Prefix { get { return _prefix; } }
+
         public bool Register()
         {
             if (_manager == null) return false;
