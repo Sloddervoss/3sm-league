@@ -2,6 +2,11 @@ import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 import StickyRaceBar from "@/components/StickyRaceBar";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  buildRaceResultDescription,
+  buildRaceResultTitle,
+} from "@/lib/seoTitle.mjs";
+import { setMetaTag } from "@/lib/seo";
 import { formatRaceGapDisplay, getRaceDetailStats, type RaceDetailStatsResult } from "@/lib/raceDetailStats";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUp, Car, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, Flag, List, Share2, Sun, Thermometer, Trophy, Zap } from "lucide-react";
@@ -451,7 +456,28 @@ const RaceDetailPage = () => {
 
   useEffect(() => {
     if (!race) return;
-    document.title = `${race.name} uitslag - 3 Stripe Motorsport`;
+    // Tabtitel en meta-omschrijving komen uit dezelfde helper als de
+    // crawler-HTML (scripts/generate-route-html.mjs). Ze horen LETTERLIJK gelijk
+    // te zijn: wijkt de tabtitel af van de <title> die de crawler ziet, dan
+    // herschrijft Google de titel. De titel wordt uit gerangschikte delen
+    // opgebouwd en er wordt nooit midden in een woord geknipt.
+    document.title = buildRaceResultTitle({
+      raceName: race.name,
+      circuit: race.track,
+      carClass: race.leagues?.car_class,
+      date: race.race_date,
+    });
+    setMetaTag(
+      'meta[name="description"]',
+      "content",
+      buildRaceResultDescription({
+        raceName: race.name,
+        circuit: race.track,
+        carClass: race.leagues?.car_class,
+        leagueName: race.leagues?.name,
+        date: race.race_date,
+      }),
+    );
   }, [race]);
 
   return (

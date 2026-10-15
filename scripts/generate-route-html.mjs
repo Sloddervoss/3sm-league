@@ -3,6 +3,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { createPrivateSeoRoutes } from './route-classification.mjs';
+import {
+  buildRaceResultDescription,
+  buildRaceResultTitle,
+  cleanText,
+  formatDateNl,
+  titleish,
+  truncate,
+} from '../src/lib/seoTitle.mjs';
 
 const SITE_URL = 'https://3stripemotorsport.cc';
 const communitySupportConfig = JSON.parse(readFileSync(new URL('../community-support.config.json', import.meta.url), 'utf8'));
@@ -435,36 +443,11 @@ const categorySlugMap = new Map([
 
 const categoryToSlug = (category) => categorySlugMap.get(category) || normalizeSlugInput(category);
 
-const stripHtml = (value) => String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-const truncate = (value, max = 155) => {
-  const clean = stripHtml(value);
-  if (clean.length <= max) return clean;
-  return `${clean.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
-};
-
-const formatDateNl = (value) => {
-  if (!value) return null;
-  try {
-    return new Intl.DateTimeFormat('nl-NL', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(new Date(value));
-  } catch {
-    return dateOnly(value);
-  }
-};
-
-const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-
-// Weergavenaam: alleen opschonen (spaties, trim) en een beginnende kleine letter
-// kapitaliseren. Geen title-casing: "gt3" of "3SM" mag niet veranderen. De echte
-// spelfouten in racenamen horen in de database te worden gecorrigeerd, niet hier.
-const titleish = (value) => {
-  const clean = cleanText(value);
-  if (!clean) return clean;
-  return /^[a-z]/.test(clean) ? `${clean[0].toUpperCase()}${clean.slice(1)}` : clean;
-};
+// Titel- en omschrijvingsopbouw staat in src/lib/seoTitle.mjs. Dat bestand wordt
+// ook door de frontend gebruikt, zodat de tabtitel en de <title> in de HTML
+// hetzelfde zeggen: wijkt dat af, dan herschrijft Google de titel.
+// De oude, plaatselijke afkapfunctie knipte midden in een woord ("Circuit de…",
+// "Okayam…") en liet losse streepjes staan; die is hier weg.
 
 const slugify = (value) => normalizeSlugInput(cleanText(value));
 
@@ -718,7 +701,7 @@ const summarizeCalendarRaceForHub = (race) => ({
   name: cleanText(race.name),
   track: cleanText(race.track),
   raceDate: race.race_date,
-  formattedDate: formatDateNl(race.race_date) || dateOnly(race.race_date),
+  formattedDate: formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date),
   round: race.round,
   leagueName: cleanText(race.leagues?.name) || null,
   carClass: cleanText(race.leagues?.car_class) || null,
@@ -788,7 +771,7 @@ const summarizeRaceForHub = (race) => {
   const displayName = titleish(race.name);
   const trackName = cleanText(race.track);
   const className = cleanText(race.leagues?.car_class);
-  const dateLabel = formatDateNl(race.race_date) || dateOnly(race.race_date);
+  const dateLabel = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
   // Beschrijvend en uniek: naam alléén gaf duplicaten (twee keer "Race 1", twee
   // keer "daytona") en ankerteksten zonder context. Met circuit, klasse en datum
   // erbij is elke titel en elk anker uniek en zegt hij waar de link over gaat.
@@ -987,7 +970,7 @@ const buildNewsSummarizePost = (post) => ({
   title: cleanText(post.title),
   category: cleanText(post.category) || null,
   excerpt: truncate(post.excerpt || post.content_html || '', 220) || null,
-  formattedDate: formatDateNl(post.published_at) || dateOnly(post.published_at),
+  formattedDate: formatDateNl(post.published_at, { style: 'long' }) || dateOnly(post.published_at),
   publishedDate: dateOnly(post.published_at),
   updatedDate: dateOnly(post.updated_at || post.published_at),
 });
@@ -1031,7 +1014,7 @@ const buildNewsHubItemListJsonLd = (summaries) => ({
 });
 
 const buildRaceDetails = (race) => {
-  const raceDate = formatDateNl(race.race_date) || dateOnly(race.race_date);
+  const raceDate = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
   const leagueName = race.leagues?.name;
   const carClass = race.leagues?.car_class;
   const results = [...(race.race_results || [])]
@@ -1172,29 +1155,46 @@ const fetchDynamicRoutes = async () => {
     completedRacePool = completedRacesWithPublicProfiles;
 
     for (const race of completedRacesWithPublicProfiles) {
-      const raceDate = dateOnly(race.race_date);
       const raceName = titleish(race.name);
       const trackName = cleanText(race.track);
       const track = trackName ? ` op ${trackName}` : '';
       const className = cleanText(race.leagues?.car_class);
-      const carClass = className ? `${className} ` : '';
       const leagueName = cleanText(race.leagues?.name);
       // Titel en h1 met circuit, klasse en datum: zonder die context waren er zes
       // pagina's met een identieke titel (twee keer "Race 1 uitslag", twee keer
       // "Race 2 uitslag", twee keer "daytona uitslag") en 19 titels die niets
       // meer zeiden dan het racenummer.
-      const dateLabel = formatDateNl(race.race_date) || raceDate;
-      const routeLabel = [raceName, dateLabel, trackName, className, leagueName].filter(Boolean).join(' · ');
+      //
+      // De titel wordt nu uit gerangschikte delen opgebouwd (race, circuit,
+      // klasse, datum) en er vallen HELE delen van achteren af tot hij past.
+      // Er wordt nooit binnen een deel geknipt, dus het circuit — precies het
+      // deel dat twee races op hetzelfde circuit onderscheidt — blijft staan.
+      // Eerder knipte de titel op 62 tekens midden in de circuitnaam af, waardoor
+      // Daytona Road Course en Oval dezelfde titel kregen.
+      const title = buildRaceResultTitle({
+        raceName: race.name,
+        circuit: trackName,
+        carClass: className,
+        date: race.race_date,
+      });
+      // De omschrijving begint met een belofte die op zichzelf staat (de eerste
+      // ~70 tekens blijven meestal staan) en krijgt daarna hele zinnen erbij.
+      // Datums staan in woorden: 'op 2026-10-01' is voor een lezer onbruikbaar.
+      const description = buildRaceResultDescription({
+        raceName: race.name,
+        circuit: trackName,
+        carClass: className,
+        leagueName,
+        date: race.race_date,
+      });
       const raceDetails = buildRaceDetails(race);
       dynamicRoutes.push({
         path: `/results/${race.id}`,
-        // Datum direct na de naam: het circuit opslokte de 62 tekens en dan vielen
-        // twee races op hetzelfde circuit samen in één titel (Daytona, twee keer).
-        title: truncate(`Uitslag ${raceName} · ${dateLabel} · ${trackName}${className ? ` · ${className}` : ''}`, 62),
+        title,
         priority: '0.6',
         changefreq: 'monthly',
         lastmod: dateOnly(race.race_date),
-        description: truncate(`Bekijk de ${carClass}iRacing race-uitslag van ${raceName}${track}${leagueName ? ` in ${leagueName}` : ''} op ${raceDate}: klasseringen, rondes, podium en racegegevens van 3SM.`),
+        description,
         h1: `Uitslag ${raceName}${track}${className ? ` (${className})` : ''}`,
         intro: `Bekijk de race-uitslag van ${raceName}${track}${className ? ` in de ${className} klasse` : ''}, inclusief klasseringen, rondes en racegegevens.`,
         details: raceDetails.summary,
