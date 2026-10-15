@@ -3,6 +3,22 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { createPrivateSeoRoutes } from './route-classification.mjs';
+import {
+  driverRouteLastmod,
+  lastmodXml,
+  resultRouteLastmod,
+  seasonRouteLastmod,
+  teamRouteLastmod,
+} from './sitemap-lastmod.mjs';
+import {
+  assignUniqueRaceResultTitles,
+  buildRaceResultDescription,
+  buildRaceResultTitle,
+  cleanText,
+  formatDateNl,
+  titleish,
+  truncate,
+} from '../src/lib/seoTitle.mjs';
 
 const SITE_URL = 'https://3stripemotorsport.cc';
 const communitySupportConfig = JSON.parse(readFileSync(new URL('../community-support.config.json', import.meta.url), 'utf8'));
@@ -411,8 +427,12 @@ const organizationRefJsonLd = () => ({
 
 // Sitemap <lastmod> must reflect real page-content changes, not build time.
 // Static route entries intentionally omit lastmod unless that specific page's
-// crawler-facing content was edited. Dynamic routes below use row timestamps.
-const lastmodXml = (route) => route.lastmod ? `\n    <lastmod>${route.lastmod}</lastmod>` : '';
+// crawler-facing content was edited. Dynamic routes get their date from the
+// database row itself (scripts/sitemap-lastmod.mjs): races.updated_at,
+// leagues.updated_at, teams.updated_at en team_memberships.created_at. Routes
+// zonder echte rijdatum (bijv. een coureur zonder race) laten het element weg.
+// De bouwtijd (buildDate) gaat mee als harde bovengrens: een <lastmod> in de
+// toekomst valt weg in plaats van dat er een onmogelijke datum in komt.
 
 const normalizeSlugInput = (value) =>
   String(value || '')
@@ -435,36 +455,12 @@ const categorySlugMap = new Map([
 
 const categoryToSlug = (category) => categorySlugMap.get(category) || normalizeSlugInput(category);
 
-const stripHtml = (value) => String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-const truncate = (value, max = 155) => {
-  const clean = stripHtml(value);
-  if (clean.length <= max) return clean;
-  return `${clean.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
-};
-
-const formatDateNl = (value) => {
-  if (!value) return null;
-  try {
-    return new Intl.DateTimeFormat('nl-NL', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(new Date(value));
-  } catch {
-    return dateOnly(value);
-  }
-};
-
-const cleanText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-
-// Weergavenaam: alleen opschonen (spaties, trim) en een beginnende kleine letter
-// kapitaliseren. Geen title-casing: "gt3" of "3SM" mag niet veranderen. De echte
-// spelfouten in racenamen horen in de database te worden gecorrigeerd, niet hier.
-const titleish = (value) => {
-  const clean = cleanText(value);
-  if (!clean) return clean;
-  return /^[a-z]/.test(clean) ? `${clean[0].toUpperCase()}${clean.slice(1)}` : clean;
-};
+// Titel- en omschrijvingsopbouw staat in src/lib/seoTitle.mjs. Dat bestand wordt
+// ook door de frontend gebruikt, zodat de tabtitel en de <title> in de HTML
+// hetzelfde zeggen: wijkt dat af, dan herschrijft Google de titel.
+// De oude, plaatselijke afkapfunctie maakte van het circuit een nietszeggend stuk
+// ('Circuit de…', 'Daytona International…') en liet losse streepjes staan; die is
+// hier weg.
 
 const slugify = (value) => normalizeSlugInput(cleanText(value));
 
@@ -718,7 +714,7 @@ const summarizeCalendarRaceForHub = (race) => ({
   name: cleanText(race.name),
   track: cleanText(race.track),
   raceDate: race.race_date,
-  formattedDate: formatDateNl(race.race_date) || dateOnly(race.race_date),
+  formattedDate: formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date),
   round: race.round,
   leagueName: cleanText(race.leagues?.name) || null,
   carClass: cleanText(race.leagues?.car_class) || null,
@@ -788,7 +784,7 @@ const summarizeRaceForHub = (race) => {
   const displayName = titleish(race.name);
   const trackName = cleanText(race.track);
   const className = cleanText(race.leagues?.car_class);
-  const dateLabel = formatDateNl(race.race_date) || dateOnly(race.race_date);
+  const dateLabel = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
   // Beschrijvend en uniek: naam alléén gaf duplicaten (twee keer "Race 1", twee
   // keer "daytona") en ankerteksten zonder context. Met circuit, klasse en datum
   // erbij is elke titel en elk anker uniek en zegt hij waar de link over gaat.
@@ -987,7 +983,7 @@ const buildNewsSummarizePost = (post) => ({
   title: cleanText(post.title),
   category: cleanText(post.category) || null,
   excerpt: truncate(post.excerpt || post.content_html || '', 220) || null,
-  formattedDate: formatDateNl(post.published_at) || dateOnly(post.published_at),
+  formattedDate: formatDateNl(post.published_at, { style: 'long' }) || dateOnly(post.published_at),
   publishedDate: dateOnly(post.published_at),
   updatedDate: dateOnly(post.updated_at || post.published_at),
 });
@@ -1031,7 +1027,7 @@ const buildNewsHubItemListJsonLd = (summaries) => ({
 });
 
 const buildRaceDetails = (race) => {
-  const raceDate = formatDateNl(race.race_date) || dateOnly(race.race_date);
+  const raceDate = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
   const leagueName = race.leagues?.name;
   const carClass = race.leagues?.car_class;
   const results = [...(race.race_results || [])]
@@ -1171,31 +1167,73 @@ const fetchDynamicRoutes = async () => {
     resultsHubSummaries = completedRacesWithPublicProfiles.map(summarizeRaceForHub);
     completedRacePool = completedRacesWithPublicProfiles;
 
+    // Titels in één keer voor de HELE set, niet per race. Twee races met dezelfde
+    // naam op hetzelfde circuit (twee keer 'Race 3' op Daytona) zouden per race
+    // dezelfde titel krijgen; assignUniqueRaceResultTitles laat de tweede dan
+    // terugvallen op de circuitvariant of de datum, precies het deel dat de twee
+    // races onderscheidt. Wat er wijkt, wordt gemeld en niet stil opgelost.
+    const resultTitles = assignUniqueRaceResultTitles(completedRacesWithPublicProfiles.map((race) => ({
+      id: race.id,
+      raceName: race.name,
+      circuit: cleanText(race.track),
+      carClass: cleanText(race.leagues?.car_class),
+      date: race.race_date,
+    })));
+    const resultTitleByRaceId = new Map(resultTitles.map((entry) => [entry.id, entry.title]));
+    for (const entry of resultTitles) {
+      if (!entry.demoted) continue;
+      console.warn(
+        `Titel van race ${entry.id} botste met een andere race: "${entry.richest}" was al bezet, `
+        + `deze pagina krijgt "${entry.title}".`,
+      );
+    }
+
     for (const race of completedRacesWithPublicProfiles) {
-      const raceDate = dateOnly(race.race_date);
       const raceName = titleish(race.name);
       const trackName = cleanText(race.track);
       const track = trackName ? ` op ${trackName}` : '';
       const className = cleanText(race.leagues?.car_class);
-      const carClass = className ? `${className} ` : '';
       const leagueName = cleanText(race.leagues?.name);
-      // Titel en h1 met circuit, klasse en datum: zonder die context waren er zes
-      // pagina's met een identieke titel (twee keer "Race 1 uitslag", twee keer
-      // "Race 2 uitslag", twee keer "daytona uitslag") en 19 titels die niets
-      // meer zeiden dan het racenummer.
-      const dateLabel = formatDateNl(race.race_date) || raceDate;
-      const routeLabel = [raceName, dateLabel, trackName, className, leagueName].filter(Boolean).join(' · ');
+      // De titel komt uit de set-brede toewijzing hierboven (max 60 tekens, uniek
+      // binnen de site). buildRaceResultTitle is hetzelfde pad voor één race en is
+      // hier de terugval; de SPA bouwt de tabtitel met precies die functie, zodat
+      // tabtitel en crawler-HTML gelijk blijven.
+      //
+      // De h1 is de RACENAAM, niet de titel: Google mag de h1 als SERP-titel
+      // gebruiken, dus die moet kort zijn en in de titel passen (de titel begint met
+      // de h1). Het circuit staat als eigen kop (h2) op de pagina; de klasse en de
+      // datum staan in de intro en de feitenlijst.
+      const title = resultTitleByRaceId.get(race.id) || buildRaceResultTitle({
+        raceName: race.name,
+        circuit: trackName,
+        carClass: className,
+        date: race.race_date,
+      });
+      // De omschrijving begint met een belofte die op zichzelf staat (de eerste
+      // ~70 tekens blijven meestal staan) en krijgt daarna hele zinnen erbij.
+      // Datums staan in woorden: 'op 2026-10-01' is voor een lezer onbruikbaar.
+      const description = buildRaceResultDescription({
+        raceName: race.name,
+        circuit: trackName,
+        carClass: className,
+        leagueName,
+        date: race.race_date,
+      });
       const raceDetails = buildRaceDetails(race);
       dynamicRoutes.push({
         path: `/results/${race.id}`,
-        // Datum direct na de naam: het circuit opslokte de 62 tekens en dan vielen
-        // twee races op hetzelfde circuit samen in één titel (Daytona, twee keer).
-        title: truncate(`Uitslag ${raceName} · ${dateLabel} · ${trackName}${className ? ` · ${className}` : ''}`, 62),
+        title,
         priority: '0.6',
         changefreq: 'monthly',
-        lastmod: dateOnly(race.race_date),
-        description: truncate(`Bekijk de ${carClass}iRacing race-uitslag van ${raceName}${track}${leagueName ? ` in ${leagueName}` : ''} op ${raceDate}: klasseringen, rondes, podium en racegegevens van 3SM.`),
-        h1: `Uitslag ${raceName}${track}${className ? ` (${className})` : ''}`,
+        lastmod: resultRouteLastmod(race),
+        description,
+        h1: raceName,
+        // Het circuit als eigen kop: de h1 is alleen de racenaam (kort, en de kop die
+        // Google mag gebruiken), het circuit hoort daar niet in gepropt.
+        h2: trackName ? `Circuit: ${trackName}` : null,
+        // Ankertekst voor de links naar deze pagina vanaf /results en vanaf de
+        // zusterlinks. Zonder dit werd elk anker 'Race 3'.
+        anchorLabel: `${raceName}${track} race-uitslag`,
         intro: `Bekijk de race-uitslag van ${raceName}${track}${className ? ` in de ${className} klasse` : ''}, inclusief klasseringen, rondes en racegegevens.`,
         details: raceDetails.summary,
         facts: raceDetails.facts,
@@ -1217,12 +1255,12 @@ const fetchDynamicRoutes = async () => {
   // stand, de coureurs en de teams kwamen uitsluitend na hydratatie uit de API.
   const { data: allRaceRows, error: allRaceError } = await supabase
     .from('races')
-    .select('id,league_id,status');
+    .select('id,league_id,status,updated_at,race_date');
   if (allRaceError) console.warn(`Kon alle races niet ophalen voor hubdata: ${allRaceError.message}`);
 
   const { data: leagueRows, error: leagueError } = await supabase
     .from('leagues')
-    .select('id,name,season,car_class,description,status,created_at')
+    .select('id,name,season,car_class,description,status,created_at,updated_at')
     .order('created_at', { ascending: false });
   if (leagueError) console.warn(`Kon competities niet ophalen voor hubdata: ${leagueError.message}`);
 
@@ -1233,17 +1271,27 @@ const fetchDynamicRoutes = async () => {
 
   const { data: teamRowData, error: teamRowError } = await supabase
     .from('teams')
-    .select('id,name,color,description')
+    .select('id,name,color,description,updated_at')
     .order('name');
   if (teamRowError) console.warn(`Kon teams niet ophalen voor hubdata: ${teamRowError.message}`);
 
   const { data: membershipData, error: membershipError } = await supabase
     .from('team_memberships')
-    .select('team_id,user_id,role');
+    .select('team_id,user_id,role,created_at');
   if (membershipError) console.warn(`Kon teamleden niet ophalen voor hubdata: ${membershipError.message}`);
 
   const profileByUserId = new Map((profileRows || []).map((profile) => [profile.user_id, profile]));
   const teamById = new Map((teamRowData || []).map((team) => [team.id, team]));
+
+  // Lidmaatschapsrijen per team. Hun created_at is een echte wijzigingstijd voor
+  // de teampagina: een nieuw lid verandert de ledenlijst op die pagina, terwijl
+  // teams.updated_at daar niets van ziet.
+  const membershipsByTeamId = new Map();
+  for (const membership of membershipData || []) {
+    const rows = membershipsByTeamId.get(membership.team_id) || [];
+    rows.push(membership);
+    membershipsByTeamId.set(membership.team_id, rows);
+  }
 
   const teamNameFor = (userId) => {
     const teamId = profileByUserId.get(userId)?.team_id;
@@ -1316,6 +1364,7 @@ const fetchDynamicRoutes = async () => {
         season: league.season,
         carClass: cleanText(league.car_class) || null,
         description: cleanText(league.description) || null,
+        updatedAt: league.updated_at || null,
         total: counts.total,
         completed: counts.completed,
         standingsCount: rows.length,
@@ -1350,6 +1399,8 @@ const fetchDynamicRoutes = async () => {
       name: cleanText(team.name),
       description: cleanText(team.description) || null,
       color: cleanText(team.color) || null,
+      updatedAt: team.updated_at || null,
+      memberUserIds: [...memberIds],
       members: members.map((member) => ({ name: member.name, points: member.points, wins: member.wins })),
       points: members.reduce((sum, member) => sum + member.points, 0),
       wins: members.reduce((sum, member) => sum + member.wins, 0),
@@ -1494,6 +1545,7 @@ const fetchDynamicRoutes = async () => {
       h1: driver.name,
       priority: '0.5',
       changefreq: 'weekly',
+      lastmod: driverRouteLastmod(driverRaces),
       intro: `${driver.name} rijdt in de 3 Stripe Motorsport iRacing league${driver.teamName ? ` voor team ${driver.teamName}` : ''}. Hieronder staan de prestaties en de race-uitslagen waarin deze coureur voorkomt.`,
       facts: [
         driver.teamName ? `Team: ${driver.teamName}.` : null,
@@ -1530,6 +1582,14 @@ const fetchDynamicRoutes = async () => {
       .map((member) => [driverEntityPath(member.name), member.name])
       .filter(([memberPath]) => memberPath);
 
+    // De teampagina toont de ledenlijst en hun punten, overwinningen en podiums.
+    // Die veranderen bij een nieuw lid (team_memberships.created_at) en bij elke
+    // race waarin een lid voorkomt - niet bij teams.updated_at alleen.
+    const teamMemberIds = new Set(team.memberUserIds);
+    const teamMemberRaces = teamMemberIds.size
+      ? completedRacePool.filter((race) => (race.race_results || []).some((result) => teamMemberIds.has(result.user_id)))
+      : [];
+
     dynamicRoutes.push({
       path: entityPath,
       title: truncate(`${team.name} — 3SM team`, 58),
@@ -1537,6 +1597,11 @@ const fetchDynamicRoutes = async () => {
       h1: team.name,
       priority: '0.5',
       changefreq: 'weekly',
+      lastmod: teamRouteLastmod({
+        updatedAt: team.updatedAt,
+        membershipTimestamps: (membershipsByTeamId.get(team.id) || []).map((membership) => membership.created_at),
+        memberRaces: teamMemberRaces,
+      }),
       intro: `${team.name} is een team binnen de 3 Stripe Motorsport iRacing league. Hieronder staan de coureurs, hun punten en de races waarin het team uitkwam.`,
       facts: [
         team.description || null,
@@ -1571,6 +1636,9 @@ const fetchDynamicRoutes = async () => {
 
     const leagueRaces = completedRacePool.filter((race) => race.league_id === league.id).sort(newestFirst);
     const rows = standingsByLeague.get(league.id) || [];
+    // Ook de nog niet verreden en geannuleerde races van deze competitie: die
+    // bepalen het "x van y verreden" op de seizoenspagina.
+    const leagueAllRaces = (allRaceRows || []).filter((race) => race.league_id === league.id);
 
     dynamicRoutes.push({
       path: entityPath,
@@ -1579,6 +1647,7 @@ const fetchDynamicRoutes = async () => {
       h1: league.label,
       priority: '0.6',
       changefreq: 'weekly',
+      lastmod: seasonRouteLastmod({ updatedAt: league.updatedAt, races: leagueAllRaces }),
       intro: `Dit is het seizoensoverzicht van ${league.label}${league.carClass ? ` (${league.carClass})` : ''}: de volledige stand en alle ${leagueRaces.length} verreden races met hun uitslagen.`,
       facts: rows.slice(0, 10).map((row) => `${row.position}. ${row.name}${row.teamName ? ` (${row.teamName})` : ''} — ${row.points} punten, ${row.wins} overwinningen, ${row.podiums} podiums.`),
       details: [
@@ -1790,6 +1859,16 @@ const buildRichContent = (route, faq) => {
       </ol>
     </nav>`;
 
+  // De kop van de pagina staat hier één keer. Routes met een eigen subkop (de
+  // uitslagpagina's: h1 = racenaam, h2 = circuit) kregen eerst de volledige titeltekst
+  // in een <p><strong> én in de broodkruimel én als <h1> in de noscript: dezelfde lange
+  // regel drie keer in hetzelfde document. Dat is precies het soort herhaling waarop
+  // Google kan besluiten dat de titel niet bij de pagina hoort. De racenaam staat nu
+  // in de broodkruimel en in de noscript-h1, het circuit in zijn eigen kop.
+  const heading = route.h2
+    ? `        <h2>${escapeHtml(route.h2)}</h2>`
+    : `        <p><strong>${escapeHtml(route.h1)}</strong></p>`;
+
   // Use generic tags (strong/span) instead of semantic FAQ tags (section/article/h3)
   // to avoid Google detecting a duplicate FAQPage from HTML alongside JSON-LD
   const faqHtml = faq
@@ -1808,7 +1887,7 @@ ${faq
 
   return `${breadcrumb}
       <div aria-hidden="true" aria-label="3SM pagina-informatie">
-        <p><strong>${escapeHtml(route.h1)}</strong></p>
+${heading}
         <p>${escapeHtml(route.intro)}</p>
 ${buildRouteDetailsHtml(route)}
       </div>
@@ -1948,10 +2027,15 @@ const applyRouteMeta = (html, route) => {
   const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
   const noscriptLinks = route.links || [];
   const noscriptCrawlerLinks = route.crawlerLinks?.length ? buildCrawlerLinksHtml(route) : '';
+  // Zelfde opbouw als het crawlerblok hierboven: op de uitslagpagina's is de h1 de
+  // racenaam en staat het circuit in een eigen h2. De lange titeltekst ("Uitslag X op
+  // Y (Z)") stond hier eerst als h1, waardoor dezelfde lange regel drie keer in het
+  // document voorkwam (broodkruimel, <p><strong> en deze h1).
+  const noscriptSubheading = route.h2 ? `      <h2>${escapeHtml(route.h2)}</h2>\n` : '';
   const noscript = `<noscript>
     <main>
       <h1>${escapeHtml(route.h1)}</h1>
-      <p>${escapeHtml(route.intro)}</p>
+${noscriptSubheading}      <p>${escapeHtml(route.intro)}</p>
 ${buildRouteDetailsHtml(route)}
       <nav aria-label="Belangrijke 3SM links">
         <ul>${noscriptLinks.map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('')}</ul>
@@ -1993,7 +2077,7 @@ const generateSitemap = () => {
   const urls = sitemapRoutes
     .map(
       (route) => `  <url>
-    <loc>${absoluteUrl(route.path)}</loc>${lastmodXml(route)}
+    <loc>${absoluteUrl(route.path)}</loc>${lastmodXml(route, buildDate)}
     <changefreq>${route.changefreq || 'monthly'}</changefreq>
     <priority>${route.priority}</priority>
   </url>`,
@@ -2040,7 +2124,9 @@ const LLMS_HUB_SECTIONS = [
   },
 ];
 
-const displayTitle = (route, fallback) => cleanText(route?.h1 || route?.title) || fallback;
+// Label voor llms.txt en feed.xml: de beschrijvende ankertekst als die er is — een
+// kale racenaam als 'Race 3' zegt in een lijst niets — anders de h1 en anders de titel.
+const displayTitle = (route, fallback) => cleanText(route?.anchorLabel || route?.h1 || route?.title) || fallback;
 
 const generateLlmsTxt = () => {
   // Pas hier opbouwen: sitemapRoutes wordt verderop in dit bestand samengesteld,
@@ -2174,10 +2260,13 @@ const resultDetailRoutes = dynamicRoutes.filter((route) => route.path.startsWith
 const newsDetailRoutes = dynamicRoutes.filter(
   (route) => route.path.startsWith('/news/') && route.path.split('/').filter(Boolean).length === 3,
 );
+// Ankertekst voor de statische links: bij een uitslag de racenaam MET circuit. De h1
+// is sinds de titelherziening de racenaam alleen ('Race 3'), en tientallen bijna
+// identieke ankers als 'Race 3' zeggen een crawler niets.
 const toCrawlerLinks = (items, limit = 60, excludePath = '') => items
   .filter((item) => item.path !== excludePath)
   .slice(0, limit)
-  .map((item) => [item.path, item.h1 || item.title]);
+  .map((item) => [item.path, item.anchorLabel || item.h1 || item.title]);
 
 const calendarRoute = routes.find((route) => route.path === '/calendar');
 if (calendarRoute && calendarHubSummaries.length) {
