@@ -4,6 +4,13 @@ import { dirname, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { createPrivateSeoRoutes } from './route-classification.mjs';
 import {
+  driverRouteLastmod,
+  lastmodXml,
+  resultRouteLastmod,
+  seasonRouteLastmod,
+  teamRouteLastmod,
+} from './sitemap-lastmod.mjs';
+import {
   buildRaceResultDescription,
   buildRaceResultTitle,
   cleanText,
@@ -419,8 +426,10 @@ const organizationRefJsonLd = () => ({
 
 // Sitemap <lastmod> must reflect real page-content changes, not build time.
 // Static route entries intentionally omit lastmod unless that specific page's
-// crawler-facing content was edited. Dynamic routes below use row timestamps.
-const lastmodXml = (route) => route.lastmod ? `\n    <lastmod>${route.lastmod}</lastmod>` : '';
+// crawler-facing content was edited. Dynamic routes get their date from the
+// database row itself (scripts/sitemap-lastmod.mjs): races.updated_at,
+// leagues.updated_at, teams.updated_at en team_memberships.created_at. Routes
+// zonder echte rijdatum (bijv. een coureur zonder race) laten het element weg.
 
 const normalizeSlugInput = (value) =>
   String(value || '')
@@ -1194,7 +1203,7 @@ const fetchDynamicRoutes = async () => {
         title,
         priority: '0.6',
         changefreq: 'monthly',
-        lastmod: dateOnly(race.race_date),
+        lastmod: resultRouteLastmod(race),
         description,
         h1: `Uitslag ${raceName}${track}${className ? ` (${className})` : ''}`,
         intro: `Bekijk de race-uitslag van ${raceName}${track}${className ? ` in de ${className} klasse` : ''}, inclusief klasseringen, rondes en racegegevens.`,
@@ -1218,12 +1227,12 @@ const fetchDynamicRoutes = async () => {
   // stand, de coureurs en de teams kwamen uitsluitend na hydratatie uit de API.
   const { data: allRaceRows, error: allRaceError } = await supabase
     .from('races')
-    .select('id,league_id,status');
+    .select('id,league_id,status,updated_at,race_date');
   if (allRaceError) console.warn(`Kon alle races niet ophalen voor hubdata: ${allRaceError.message}`);
 
   const { data: leagueRows, error: leagueError } = await supabase
     .from('leagues')
-    .select('id,name,season,car_class,description,status,created_at')
+    .select('id,name,season,car_class,description,status,created_at,updated_at')
     .order('created_at', { ascending: false });
   if (leagueError) console.warn(`Kon competities niet ophalen voor hubdata: ${leagueError.message}`);
 
@@ -1234,17 +1243,27 @@ const fetchDynamicRoutes = async () => {
 
   const { data: teamRowData, error: teamRowError } = await supabase
     .from('teams')
-    .select('id,name,color,description')
+    .select('id,name,color,description,updated_at')
     .order('name');
   if (teamRowError) console.warn(`Kon teams niet ophalen voor hubdata: ${teamRowError.message}`);
 
   const { data: membershipData, error: membershipError } = await supabase
     .from('team_memberships')
-    .select('team_id,user_id,role');
+    .select('team_id,user_id,role,created_at');
   if (membershipError) console.warn(`Kon teamleden niet ophalen voor hubdata: ${membershipError.message}`);
 
   const profileByUserId = new Map((profileRows || []).map((profile) => [profile.user_id, profile]));
   const teamById = new Map((teamRowData || []).map((team) => [team.id, team]));
+
+  // Lidmaatschapsrijen per team. Hun created_at is een echte wijzigingstijd voor
+  // de teampagina: een nieuw lid verandert de ledenlijst op die pagina, terwijl
+  // teams.updated_at daar niets van ziet.
+  const membershipsByTeamId = new Map();
+  for (const membership of membershipData || []) {
+    const rows = membershipsByTeamId.get(membership.team_id) || [];
+    rows.push(membership);
+    membershipsByTeamId.set(membership.team_id, rows);
+  }
 
   const teamNameFor = (userId) => {
     const teamId = profileByUserId.get(userId)?.team_id;
@@ -1317,6 +1336,7 @@ const fetchDynamicRoutes = async () => {
         season: league.season,
         carClass: cleanText(league.car_class) || null,
         description: cleanText(league.description) || null,
+        updatedAt: league.updated_at || null,
         total: counts.total,
         completed: counts.completed,
         standingsCount: rows.length,
@@ -1351,6 +1371,8 @@ const fetchDynamicRoutes = async () => {
       name: cleanText(team.name),
       description: cleanText(team.description) || null,
       color: cleanText(team.color) || null,
+      updatedAt: team.updated_at || null,
+      memberUserIds: [...memberIds],
       members: members.map((member) => ({ name: member.name, points: member.points, wins: member.wins })),
       points: members.reduce((sum, member) => sum + member.points, 0),
       wins: members.reduce((sum, member) => sum + member.wins, 0),
@@ -1495,6 +1517,7 @@ const fetchDynamicRoutes = async () => {
       h1: driver.name,
       priority: '0.5',
       changefreq: 'weekly',
+      lastmod: driverRouteLastmod(driverRaces),
       intro: `${driver.name} rijdt in de 3 Stripe Motorsport iRacing league${driver.teamName ? ` voor team ${driver.teamName}` : ''}. Hieronder staan de prestaties en de race-uitslagen waarin deze coureur voorkomt.`,
       facts: [
         driver.teamName ? `Team: ${driver.teamName}.` : null,
@@ -1531,6 +1554,14 @@ const fetchDynamicRoutes = async () => {
       .map((member) => [driverEntityPath(member.name), member.name])
       .filter(([memberPath]) => memberPath);
 
+    // De teampagina toont de ledenlijst en hun punten, overwinningen en podiums.
+    // Die veranderen bij een nieuw lid (team_memberships.created_at) en bij elke
+    // race waarin een lid voorkomt - niet bij teams.updated_at alleen.
+    const teamMemberIds = new Set(team.memberUserIds);
+    const teamMemberRaces = teamMemberIds.size
+      ? completedRacePool.filter((race) => (race.race_results || []).some((result) => teamMemberIds.has(result.user_id)))
+      : [];
+
     dynamicRoutes.push({
       path: entityPath,
       title: truncate(`${team.name} — 3SM team`, 58),
@@ -1538,6 +1569,11 @@ const fetchDynamicRoutes = async () => {
       h1: team.name,
       priority: '0.5',
       changefreq: 'weekly',
+      lastmod: teamRouteLastmod({
+        updatedAt: team.updatedAt,
+        membershipTimestamps: (membershipsByTeamId.get(team.id) || []).map((membership) => membership.created_at),
+        memberRaces: teamMemberRaces,
+      }),
       intro: `${team.name} is een team binnen de 3 Stripe Motorsport iRacing league. Hieronder staan de coureurs, hun punten en de races waarin het team uitkwam.`,
       facts: [
         team.description || null,
@@ -1572,6 +1608,9 @@ const fetchDynamicRoutes = async () => {
 
     const leagueRaces = completedRacePool.filter((race) => race.league_id === league.id).sort(newestFirst);
     const rows = standingsByLeague.get(league.id) || [];
+    // Ook de nog niet verreden en geannuleerde races van deze competitie: die
+    // bepalen het "x van y verreden" op de seizoenspagina.
+    const leagueAllRaces = (allRaceRows || []).filter((race) => race.league_id === league.id);
 
     dynamicRoutes.push({
       path: entityPath,
@@ -1580,6 +1619,7 @@ const fetchDynamicRoutes = async () => {
       h1: league.label,
       priority: '0.6',
       changefreq: 'weekly',
+      lastmod: seasonRouteLastmod({ updatedAt: league.updatedAt, races: leagueAllRaces }),
       intro: `Dit is het seizoensoverzicht van ${league.label}${league.carClass ? ` (${league.carClass})` : ''}: de volledige stand en alle ${leagueRaces.length} verreden races met hun uitslagen.`,
       facts: rows.slice(0, 10).map((row) => `${row.position}. ${row.name}${row.teamName ? ` (${row.teamName})` : ''} — ${row.points} punten, ${row.wins} overwinningen, ${row.podiums} podiums.`),
       details: [
