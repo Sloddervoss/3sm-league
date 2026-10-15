@@ -1,0 +1,16 @@
+Deze map wordt door de site geserveerd op https://3stripemotorsport.cc/auth-templates/
+
+WAAROM HIER EN NIET IN DE CONTAINER:
+De auth-dienst haalt de mailtemplates niet van de schijf maar via HTTP. Een
+relatief pad in de configuratie (zoals /auth-templates/recovery.html) wordt
+voor de site-URL geplakt en met een gewone GET opgehaald. Staan de bestanden
+niet in de webroot, dan geeft dat een 404 en valt de dienst stil terug op de
+Engelse standaardmail — zonder dat iemand het merkt.
+
+DAAROM: de bestanden horen in de repo (public/auth-templates/), zodat elke
+bouw ze meeneemt. Zet ze NIET alleen op de server: een uitrol ruimt de webroot
+op en dan verdwijnen ze.
+
+De variabelen in de sjablonen moeten exact kloppen ({{ .ConfirmationURL }},
+{{ .Token }}, {{ .NewEmail }}); een verkeerde naam wordt leeg weergegeven
+zonder foutmelding.
