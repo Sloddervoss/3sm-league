@@ -11,6 +11,7 @@ import {
   teamRouteLastmod,
 } from './sitemap-lastmod.mjs';
 import {
+  assignUniqueRaceResultTitles,
   buildRaceResultDescription,
   buildRaceResultTitle,
   cleanText,
@@ -1166,24 +1167,43 @@ const fetchDynamicRoutes = async () => {
     resultsHubSummaries = completedRacesWithPublicProfiles.map(summarizeRaceForHub);
     completedRacePool = completedRacesWithPublicProfiles;
 
+    // Titels in één keer voor de HELE set, niet per race. Twee races met dezelfde
+    // naam op hetzelfde circuit (twee keer 'Race 3' op Daytona) zouden per race
+    // dezelfde titel krijgen; assignUniqueRaceResultTitles laat de tweede dan
+    // terugvallen op de circuitvariant of de datum, precies het deel dat de twee
+    // races onderscheidt. Wat er wijkt, wordt gemeld en niet stil opgelost.
+    const resultTitles = assignUniqueRaceResultTitles(completedRacesWithPublicProfiles.map((race) => ({
+      id: race.id,
+      raceName: race.name,
+      circuit: cleanText(race.track),
+      carClass: cleanText(race.leagues?.car_class),
+      date: race.race_date,
+    })));
+    const resultTitleByRaceId = new Map(resultTitles.map((entry) => [entry.id, entry.title]));
+    for (const entry of resultTitles) {
+      if (!entry.demoted) continue;
+      console.warn(
+        `Titel van race ${entry.id} botste met een andere race: "${entry.richest}" was al bezet, `
+        + `deze pagina krijgt "${entry.title}".`,
+      );
+    }
+
     for (const race of completedRacesWithPublicProfiles) {
       const raceName = titleish(race.name);
       const trackName = cleanText(race.track);
       const track = trackName ? ` op ${trackName}` : '';
       const className = cleanText(race.leagues?.car_class);
       const leagueName = cleanText(race.leagues?.name);
-      // Titel en h1 met circuit, klasse en datum: zonder die context waren er zes
-      // pagina's met een identieke titel (twee keer "Race 1 uitslag", twee keer
-      // "Race 2 uitslag", twee keer "daytona uitslag") en 19 titels die niets
-      // meer zeiden dan het racenummer.
+      // De titel komt uit de set-brede toewijzing hierboven (max 60 tekens, uniek
+      // binnen de site). buildRaceResultTitle is hetzelfde pad voor één race en is
+      // hier de terugval; de SPA bouwt de tabtitel met precies die functie, zodat
+      // tabtitel en crawler-HTML gelijk blijven.
       //
-      // De titel wordt nu uit gerangschikte delen opgebouwd (race, circuit,
-      // klasse, datum) en er vallen HELE delen van achteren af tot hij past.
-      // Er wordt nooit binnen een deel geknipt, dus het circuit — precies het
-      // deel dat twee races op hetzelfde circuit onderscheidt — blijft staan.
-      // Eerder knipte de titel op 62 tekens midden in de circuitnaam af, waardoor
-      // Daytona Road Course en Oval dezelfde titel kregen.
-      const title = buildRaceResultTitle({
+      // De h1 is de RACENAAM, niet de titel: Google mag de h1 als SERP-titel
+      // gebruiken, dus die moet kort zijn en in de titel passen (de titel begint met
+      // de h1). Het circuit staat als eigen kop (h2) op de pagina; de klasse en de
+      // datum staan in de intro en de feitenlijst.
+      const title = resultTitleByRaceId.get(race.id) || buildRaceResultTitle({
         raceName: race.name,
         circuit: trackName,
         carClass: className,
@@ -1207,7 +1227,13 @@ const fetchDynamicRoutes = async () => {
         changefreq: 'monthly',
         lastmod: resultRouteLastmod(race),
         description,
-        h1: `Uitslag ${raceName}${track}${className ? ` (${className})` : ''}`,
+        h1: raceName,
+        // Het circuit als eigen kop: de h1 is alleen de racenaam (kort, en de kop die
+        // Google mag gebruiken), het circuit hoort daar niet in gepropt.
+        h2: trackName ? `Circuit: ${trackName}` : null,
+        // Ankertekst voor de links naar deze pagina vanaf /results en vanaf de
+        // zusterlinks. Zonder dit werd elk anker 'Race 3'.
+        anchorLabel: `${raceName}${track} race-uitslag`,
         intro: `Bekijk de race-uitslag van ${raceName}${track}${className ? ` in de ${className} klasse` : ''}, inclusief klasseringen, rondes en racegegevens.`,
         details: raceDetails.summary,
         facts: raceDetails.facts,
@@ -1833,6 +1859,16 @@ const buildRichContent = (route, faq) => {
       </ol>
     </nav>`;
 
+  // De kop van de pagina staat hier één keer. Routes met een eigen subkop (de
+  // uitslagpagina's: h1 = racenaam, h2 = circuit) kregen eerst de volledige titeltekst
+  // in een <p><strong> én in de broodkruimel én als <h1> in de noscript: dezelfde lange
+  // regel drie keer in hetzelfde document. Dat is precies het soort herhaling waarop
+  // Google kan besluiten dat de titel niet bij de pagina hoort. De racenaam staat nu
+  // in de broodkruimel en in de noscript-h1, het circuit in zijn eigen kop.
+  const heading = route.h2
+    ? `        <h2>${escapeHtml(route.h2)}</h2>`
+    : `        <p><strong>${escapeHtml(route.h1)}</strong></p>`;
+
   // Use generic tags (strong/span) instead of semantic FAQ tags (section/article/h3)
   // to avoid Google detecting a duplicate FAQPage from HTML alongside JSON-LD
   const faqHtml = faq
@@ -1851,7 +1887,7 @@ ${faq
 
   return `${breadcrumb}
       <div aria-hidden="true" aria-label="3SM pagina-informatie">
-        <p><strong>${escapeHtml(route.h1)}</strong></p>
+${heading}
         <p>${escapeHtml(route.intro)}</p>
 ${buildRouteDetailsHtml(route)}
       </div>
@@ -1991,10 +2027,15 @@ const applyRouteMeta = (html, route) => {
   const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
   const noscriptLinks = route.links || [];
   const noscriptCrawlerLinks = route.crawlerLinks?.length ? buildCrawlerLinksHtml(route) : '';
+  // Zelfde opbouw als het crawlerblok hierboven: op de uitslagpagina's is de h1 de
+  // racenaam en staat het circuit in een eigen h2. De lange titeltekst ("Uitslag X op
+  // Y (Z)") stond hier eerst als h1, waardoor dezelfde lange regel drie keer in het
+  // document voorkwam (broodkruimel, <p><strong> en deze h1).
+  const noscriptSubheading = route.h2 ? `      <h2>${escapeHtml(route.h2)}</h2>\n` : '';
   const noscript = `<noscript>
     <main>
       <h1>${escapeHtml(route.h1)}</h1>
-      <p>${escapeHtml(route.intro)}</p>
+${noscriptSubheading}      <p>${escapeHtml(route.intro)}</p>
 ${buildRouteDetailsHtml(route)}
       <nav aria-label="Belangrijke 3SM links">
         <ul>${noscriptLinks.map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('')}</ul>
@@ -2083,7 +2124,9 @@ const LLMS_HUB_SECTIONS = [
   },
 ];
 
-const displayTitle = (route, fallback) => cleanText(route?.h1 || route?.title) || fallback;
+// Label voor llms.txt en feed.xml: de beschrijvende ankertekst als die er is — een
+// kale racenaam als 'Race 3' zegt in een lijst niets — anders de h1 en anders de titel.
+const displayTitle = (route, fallback) => cleanText(route?.anchorLabel || route?.h1 || route?.title) || fallback;
 
 const generateLlmsTxt = () => {
   // Pas hier opbouwen: sitemapRoutes wordt verderop in dit bestand samengesteld,
@@ -2217,10 +2260,13 @@ const resultDetailRoutes = dynamicRoutes.filter((route) => route.path.startsWith
 const newsDetailRoutes = dynamicRoutes.filter(
   (route) => route.path.startsWith('/news/') && route.path.split('/').filter(Boolean).length === 3,
 );
+// Ankertekst voor de statische links: bij een uitslag de racenaam MET circuit. De h1
+// is sinds de titelherziening de racenaam alleen ('Race 3'), en tientallen bijna
+// identieke ankers als 'Race 3' zeggen een crawler niets.
 const toCrawlerLinks = (items, limit = 60, excludePath = '') => items
   .filter((item) => item.path !== excludePath)
   .slice(0, limit)
-  .map((item) => [item.path, item.h1 || item.title]);
+  .map((item) => [item.path, item.anchorLabel || item.h1 || item.title]);
 
 const calendarRoute = routes.find((route) => route.path === '/calendar');
 if (calendarRoute && calendarHubSummaries.length) {

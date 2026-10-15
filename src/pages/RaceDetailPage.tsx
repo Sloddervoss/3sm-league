@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   buildRaceResultDescription,
   buildRaceResultTitle,
+  titleish,
 } from "@/lib/seoTitle.mjs";
 import { setMetaTag } from "@/lib/seo";
 import { formatRaceGapDisplay, getRaceDetailStats, type RaceDetailStatsResult } from "@/lib/raceDetailStats";
@@ -460,7 +461,11 @@ const RaceDetailPage = () => {
     // crawler-HTML (scripts/generate-route-html.mjs). Ze horen LETTERLIJK gelijk
     // te zijn: wijkt de tabtitel af van de <title> die de crawler ziet, dan
     // herschrijft Google de titel. De titel wordt uit gerangschikte delen
-    // opgebouwd en er wordt nooit midden in een woord geknipt.
+    // opgebouwd (racenaam, circuit, datum, klasse, merk), past binnen 60 tekens en
+    // er wordt nooit midden in een woord geknipt. De generator bouwt de titels van
+    // een hele set in één keer (assignUniqueRaceResultTitles) om dubbele titels te
+    // voorkomen; op alle 44 uitslagroutes geeft dat dezelfde titel als deze
+    // per-race-opbouw, en scripts/measure-result-titles.mjs controleert dat verschil.
     document.title = buildRaceResultTitle({
       raceName: race.name,
       circuit: race.track,
@@ -523,11 +528,16 @@ const RaceDetailPage = () => {
                       {race.round != null && <span className="text-xs uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">{t("Ronde")} {race.round}</span>}
                     </div>
                     <h1 className="font-heading text-4xl md:text-6xl font-black tracking-tight">
-                      <span className="text-gradient-racing">{race.name}</span>
+                      <span className="text-gradient-racing">{titleish(race.name)}</span>
                     </h1>
-                    <p className="text-lg md:text-xl text-muted-foreground font-heading font-semibold mt-1">
+                    {/* Het circuit als eigen kop (h2), niet als tweede regel onder de h1.
+                        Dit is dezelfde kop die scripts/generate-route-html.mjs in de
+                        crawler-HTML zet: de h1 is alleen de racenaam (Google mag de h1
+                        als SERP-titel gebruiken en de titel begint met die racenaam), het
+                        circuit en de datum staan er los onder. */}
+                    <h2 className="text-lg md:text-xl text-muted-foreground font-heading font-semibold mt-1">
                       {race.track} · {formatRaceDate(race.race_date, dateLocale)}
-                    </p>
+                    </h2>
                   </div>
                   <div className="text-left lg:text-right text-muted-foreground">
                     <div className="font-heading text-2xl font-black">{race.iracing_session_id ? `#${race.iracing_session_id}` : race.total_laps ? `${race.total_laps} ${t("ronden")}` : "3SM"}</div>

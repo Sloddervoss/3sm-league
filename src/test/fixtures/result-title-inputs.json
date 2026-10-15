@@ -1,0 +1,310 @@
+[
+  {
+    "id": "0283cced-4632-4144-920f-6d8cd5bf0e13",
+    "raceName": "navarra gt3",
+    "circuit": "Circuito de Navarra - Speed Circuit - Medium",
+    "carClass": null,
+    "date": "2026-04-29T20:20:00+00:00"
+  },
+  {
+    "id": "03d0802e-f905-434b-88e3-78f650101c16",
+    "raceName": "Zandvoort",
+    "circuit": "Circuit Park Zandvoort",
+    "carClass": null,
+    "date": "2026-06-21T18:30:00+00:00"
+  },
+  {
+    "id": "10954bc2-aa9a-4f15-a03d-29ceddfc3826",
+    "raceName": "Race 7",
+    "circuit": "Virginia International Raceway - Full Course",
+    "carClass": "GT3",
+    "date": "2026-06-24T18:30:00+00:00"
+  },
+  {
+    "id": "12fb4f54-ada4-47c4-9df5-23b409f0841a",
+    "raceName": "Race 3",
+    "circuit": "Daytona International Speedway - Road Course",
+    "carClass": null,
+    "date": "2026-10-07T18:30:00+00:00"
+  },
+  {
+    "id": "1736c39c-83aa-485d-bf6a-66b57286daea",
+    "raceName": "monay funday",
+    "circuit": "Circuit de Spa-Francorchamps - Grand Prix Pits",
+    "carClass": null,
+    "date": "2026-03-30T20:25:00+00:00"
+  },
+  {
+    "id": "1a3824cb-db55-4271-aeec-8d7e487ccaed",
+    "raceName": "Spa blauw cup",
+    "circuit": "Circuit de Spa-Francorchamps",
+    "carClass": null,
+    "date": "2026-04-06T20:10:00+00:00"
+  },
+  {
+    "id": "3b107d0a-fb1b-4962-8d62-cf57feda3d43",
+    "raceName": "Race 2",
+    "circuit": "Miami International Autodrome - Grand Prix",
+    "carClass": null,
+    "date": "2026-09-23T18:30:00+00:00"
+  },
+  {
+    "id": "40941a01-c8c0-4301-9fb2-c0a486a0459a",
+    "raceName": "Race 4",
+    "circuit": "Oulton Park Circuit - International",
+    "carClass": "GT3",
+    "date": "2026-05-13T18:30:00+00:00"
+  },
+  {
+    "id": "40fdf666-b922-4fb7-a05f-2788d92f419a",
+    "raceName": "oran park pre race",
+    "circuit": "Oran Park Raceway - Grand Prix",
+    "carClass": null,
+    "date": "2026-05-26T19:01:00+00:00"
+  },
+  {
+    "id": "4277bcbc-bd0a-482d-921c-33ecd1ce4145",
+    "raceName": "pre race monday",
+    "circuit": "Summit Point Raceway",
+    "carClass": null,
+    "date": "2026-03-30T19:20:00+00:00"
+  },
+  {
+    "id": "432873bb-d094-4de1-8aa4-3cc095c02e77",
+    "raceName": "dinsdag fun dag",
+    "circuit": "Summit Point Raceway",
+    "carClass": null,
+    "date": "2026-03-24T20:15:00+00:00"
+  },
+  {
+    "id": "4da721b2-f64b-408d-8187-9716b254f51a",
+    "raceName": "daytona",
+    "circuit": "Daytona International Speedway - Road Course",
+    "carClass": null,
+    "date": "2026-05-18T19:40:00+00:00"
+  },
+  {
+    "id": "4f285e28-64ad-427a-b674-4df55aa4eba7",
+    "raceName": "Zandvoort Gt3",
+    "circuit": "Circuit Park Zandvoort",
+    "carClass": null,
+    "date": "2026-04-20T18:30:00+00:00"
+  },
+  {
+    "id": "518d0dfd-9fca-4ad9-ad44-2dc6623ebd9e",
+    "raceName": "Saturday fun day race 1",
+    "circuit": "Circuit de Spa-Francorchamps - Grand Prix Pits",
+    "carClass": null,
+    "date": "2026-03-21T20:00:00+00:00"
+  },
+  {
+    "id": "525e2628-b868-4776-8e35-d4b8e2b955c4",
+    "raceName": "Free Race 2",
+    "circuit": "Okayama International Circuit - Full Course",
+    "carClass": "GT3",
+    "date": "2026-10-01T18:30:00+00:00"
+  },
+  {
+    "id": "54dc7e71-1182-45f4-88d7-89a613786748",
+    "raceName": "Race 2",
+    "circuit": "Okayama International Circuit - Full Course",
+    "carClass": "GT3",
+    "date": "2026-04-15T18:30:00+00:00"
+  },
+  {
+    "id": "57d010f8-747f-4c2a-9424-5d1ca4c7f8bd",
+    "raceName": "Saturday fun day race 3",
+    "circuit": "Circuit de Spa-Francorchamps - Grand Prix Pits",
+    "carClass": null,
+    "date": "2026-03-21T22:59:00+00:00"
+  },
+  {
+    "id": "5c587879-5946-4e6d-a042-c6f5e68214f8",
+    "raceName": "Oran park saterday",
+    "circuit": "Oran Park Raceway - Grand Prix",
+    "carClass": null,
+    "date": "2026-04-11T18:30:00+00:00"
+  },
+  {
+    "id": "5fc388f1-524d-45cc-9b9b-701b30730692",
+    "raceName": "Race 5",
+    "circuit": "Oran Park Raceway - Grand Prix",
+    "carClass": "GT3",
+    "date": "2026-05-27T19:00:00+00:00"
+  },
+  {
+    "id": "6056e181-4fd2-4a4d-b3a8-28739e42b488",
+    "raceName": "Race 11",
+    "circuit": "Circuit de Lédenon",
+    "carClass": "GT3",
+    "date": "2026-08-19T18:30:00+00:00"
+  },
+  {
+    "id": "61c1c9a8-551f-40d5-8004-e8001e096e6b",
+    "raceName": "Green Hell 2",
+    "circuit": "Nürburgring Nordschleife - Industriefahrten",
+    "carClass": null,
+    "date": "2026-06-12T19:15:00+00:00"
+  },
+  {
+    "id": "631bcf5c-fff6-47a5-9177-b1bc52faaab8",
+    "raceName": "daytona",
+    "circuit": "Daytona International Speedway - Road Course - 2008",
+    "carClass": null,
+    "date": "2026-08-03T18:30:00+00:00"
+  },
+  {
+    "id": "69232172-b6b6-4a68-9f0f-d4e9d89d8d43",
+    "raceName": "winton",
+    "circuit": "Winton Motor Raceway",
+    "carClass": null,
+    "date": "2026-05-18T21:00:00+00:00"
+  },
+  {
+    "id": "6e451ffa-4ae5-475f-be98-aa3de081f792",
+    "raceName": "Green Hell",
+    "circuit": "Nürburgring Nordschleife - Industriefahrten",
+    "carClass": null,
+    "date": "2026-06-04T19:00:00+00:00"
+  },
+  {
+    "id": "6ede7ff8-f05d-4e5e-af93-7ab924baaa82",
+    "raceName": "Temple of speed",
+    "circuit": "Autodromo Nazionale Monza",
+    "carClass": null,
+    "date": "2026-06-15T18:30:00+00:00"
+  },
+  {
+    "id": "6f6e346d-3e79-4ecb-af5f-c31fe5448949",
+    "raceName": "funday dinsdag",
+    "circuit": "Nürburgring Nordschleife - Industriefahrten",
+    "carClass": null,
+    "date": "2026-03-24T21:40:00+00:00"
+  },
+  {
+    "id": "71498b95-b144-4559-b784-3e9d375e67d1",
+    "raceName": "Race 10",
+    "circuit": "Tsukuba Circuit - 2000 - Full",
+    "carClass": "GT3",
+    "date": "2026-08-05T18:30:00+00:00"
+  },
+  {
+    "id": "787476a7-57e3-49bf-b5ca-966ca03ee147",
+    "raceName": "Saturday fun day race 2",
+    "circuit": "Circuit de Spa-Francorchamps - Grand Prix Pits",
+    "carClass": null,
+    "date": "2026-03-21T21:30:00+00:00"
+  },
+  {
+    "id": "875514cc-3d8b-4714-8800-3de5f4cf7f36",
+    "raceName": "Race 12",
+    "circuit": "Circuit de Spa-Francorchamps - Grand Prix Pits",
+    "carClass": "GT3",
+    "date": "2026-09-02T18:30:00+00:00"
+  },
+  {
+    "id": "93f22945-b2e9-4a47-abec-144830e0716f",
+    "raceName": "Race 3",
+    "circuit": "Lime Rock Park - Grand Prix",
+    "carClass": "GT3",
+    "date": "2026-04-29T18:30:00+00:00"
+  },
+  {
+    "id": "98752c4e-31c6-4142-a6a5-83955693802c",
+    "raceName": "oulton park gt3",
+    "circuit": "Oulton Park Circuit - Intl w/out Chicane",
+    "carClass": null,
+    "date": "2026-04-30T20:00:00+00:00"
+  },
+  {
+    "id": "98c62255-c278-41d8-bb35-6679169c2bf5",
+    "raceName": "Race 1",
+    "circuit": "Summit Point Raceway",
+    "carClass": "GT3",
+    "date": "2026-04-01T19:00:00+00:00"
+  },
+  {
+    "id": "a3136a03-7dfe-418f-822b-f6c06dc6012c",
+    "raceName": "Race 8",
+    "circuit": "Circuito de Navarra - Speed Circuit",
+    "carClass": "GT3",
+    "date": "2026-07-08T18:30:00+00:00"
+  },
+  {
+    "id": "ab9e307c-993c-45cb-93b4-5df5970e7d3a",
+    "raceName": "Pre Season Daytona",
+    "circuit": "Daytona International Speedway - Road Course",
+    "carClass": null,
+    "date": "2026-05-19T18:30:00+00:00"
+  },
+  {
+    "id": "be703591-dbc5-40e0-b897-b783a8ab3941",
+    "raceName": "gt3 spa",
+    "circuit": "Circuit de Spa-Francorchamps",
+    "carClass": null,
+    "date": "2026-05-13T20:15:00+00:00"
+  },
+  {
+    "id": "c85aedad-9c9d-489b-9e12-5bbb020d86da",
+    "raceName": "Race 1",
+    "circuit": "Hungaroring",
+    "carClass": null,
+    "date": "2026-09-09T18:30:00+00:00"
+  },
+  {
+    "id": "cf9512ec-6107-41c8-985f-fb1fa8702e33",
+    "raceName": "Winton motor raceway",
+    "circuit": "Winton Motor Raceway",
+    "carClass": null,
+    "date": "2026-04-11T20:30:00+00:00"
+  },
+  {
+    "id": "e97773ff-0dfe-4263-8335-73389b460c7e",
+    "raceName": "Night race Zandvoort",
+    "circuit": "Circuit Park Zandvoort",
+    "carClass": null,
+    "date": "2026-04-21T18:30:00+00:00"
+  },
+  {
+    "id": "e99cc85f-ad7a-4909-a51c-832f94f117ba",
+    "raceName": "GT3 Pre Race",
+    "circuit": "Circuit Park Zandvoort",
+    "carClass": null,
+    "date": "2026-05-07T18:30:00+00:00"
+  },
+  {
+    "id": "ee53df4c-fdc8-4a61-938f-555748d00634",
+    "raceName": "Charlotte GT 3",
+    "circuit": "Charlotte Motor Speedway - Roval",
+    "carClass": null,
+    "date": "2026-04-20T19:45:00+00:00"
+  },
+  {
+    "id": "f82607c5-ea22-4bd7-b956-1fd78cd32763",
+    "raceName": "Free Race 1",
+    "circuit": "Summit Point Raceway - Summit Point Raceway",
+    "carClass": "GT3",
+    "date": "2026-09-17T18:30:00+00:00"
+  },
+  {
+    "id": "f8adb40c-fbb7-47cd-be73-e6524a733c6d",
+    "raceName": "Race 6",
+    "circuit": "Snetterton Circuit - 300",
+    "carClass": "GT3",
+    "date": "2026-06-10T18:30:00+00:00"
+  },
+  {
+    "id": "facf19f2-5583-49c1-a0c4-3722571dbb18",
+    "raceName": "Green hell GT3",
+    "circuit": "Nürburgring Nordschleife - Industriefahrten",
+    "carClass": null,
+    "date": "2026-04-06T18:00:00+00:00"
+  },
+  {
+    "id": "fd7d34da-af09-4301-96b9-814aeba42e71",
+    "raceName": "Night Race GT3 Showdown",
+    "circuit": "Circuit de Spa-Francorchamps",
+    "carClass": null,
+    "date": "2026-04-05T19:15:00+00:00"
+  }
+]

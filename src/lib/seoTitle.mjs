@@ -9,13 +9,31 @@
 // Twee harde regels voor alles wat hier wordt opgebouwd:
 //   1. Nooit midden in een woord knippen en nooit eindigen op een scheidingsteken.
 //   2. Een beletselteken alleen als er werkelijk iets is weggelaten.
+//
+// De uitslagtitel begint met de RACENAAM en niet met het woord 'Uitslag'. Drie
+// redenen: dat woord staat op alle 44 uitslagpagina's (herhaalde boilerplate is
+// precies een van de redenen waarom Google een titel vervangt), het kost 8 van de
+// 60 tekens, en met dat woord erbij zou het circuit bij de langste racenamen
+// ('Saturday fun day race 1' op Spa) sneuvelen — terwijl het circuit juist is wat
+// twee uitslagpagina's onderscheidt. De h1 van de pagina is de racenaam, dus de
+// h1 is een voorvoegsel van de titel: gebruikt Google de h1 als titel, dan belooft
+// hij nog steeds hetzelfde.
 
-// Streeflengte uit het onderzoek: 51-55 tekens wordt het minst herschreven,
-// boven de 70 bijna altijd. De band is het doel; de harde grens is waar wij
-// hele delen laten vallen.
-export const TITLE_TARGET_MIN = 51;
-export const TITLE_TARGET_MAX = 57;
-export const TITLE_HARD_MAX = 70;
+// Harde tekensgrens voor de titel. Google kapt op PIXELBREEDTE af, niet op tekens.
+// In het onderzoek van oktober 2026 (504 echte Google-titellinks) was geen enkele
+// titel van 60 tekens of minder breder dan 600px, en niets boven 577px werd ooit
+// volledig getoond. In 20px Arial-metrics — de corpsgrootte van de titellink in de
+// SERP — blijft 60 tekens daaronder. De oude streefband (51-57) keek alleen naar
+// tekens en liet titels van 80 tekens en 720px door.
+// scripts/measure-result-titles.mjs meet de werkelijke breedte na.
+export const TITLE_MAX = 60;
+// Bovengrens voor de titel MET het merk erachter. Het merk is versiering, geen
+// inhoud: mag het alleen mee als de titel daarmee in de band blijft waar Google
+// vrijwel nooit herschrijft. Zo blijft in 20px Arial-metrics elke titel onder
+// 577px — de breedte waarvan het onderzoek laat zien dat niets daar boven ooit
+// volledig werd getoond (gemeten: max 593px met een grens van 60, max 559px met
+// deze grens).
+export const TITLE_BRAND_MAX = 57;
 export const TITLE_SEPARATOR = ' · ';
 export const TITLE_BRAND_SEPARATOR = ' | ';
 
@@ -107,50 +125,115 @@ export const formatDateNl = (value, { style = 'short' } = {}) => {
   return `${Number(day)} ${monthName} ${year}`;
 };
 
-// Titel uit gerangschikte delen. De delen staan op volgorde van belangrijkheid
-// (het meest onderscheidende deel vooraan); wat niet past valt van achteren af,
-// als HEEL deel. Er wordt nooit binnen een deel geknipt, dus het circuit — het
-// deel dat twee races op hetzelfde circuit onderscheidt — blijft altijd staan.
-//
-// De twee drempels:
-//   - TITLE_HARD_MAX: hierboven laten we hele delen vallen (gemeten grens waar
-//     Google vrijwel altijd herschrijft). De datum valt dan als eerste af, want
-//     die is minder onderscheidend dan het circuit en de klasse.
-//   - TITLE_TARGET_MAX: de streefband. Past de titel binnen de band, dan mag het
-//     merk erachter; anders sneuvelt het merk als eerste (Google bepaalt de
-//     sitenaam tegenwoordig zelf).
-export const buildRankedTitle = (parts, {
-  brand = null,
-  max = TITLE_HARD_MAX,
-  targetMax = TITLE_TARGET_MAX,
-  separator = TITLE_SEPARATOR,
-} = {}) => {
-  const ranked = (parts || []).map((part) => cleanText(part)).filter(Boolean);
-  if (!ranked.length) return '';
+// Circuitnaam splitsen in een basis en een variant: 'Daytona International
+// Speedway - Road Course' wordt basis 'Daytona International Speedway' en variant
+// 'Road Course'. Alleen een omstreken streepje telt (' - ', ' – ', ' — '); het
+// streepje in 'Spa-Francorchamps' hoort bij de naam en splitst niets.
+const CIRCUIT_VARIANT_SEPARATOR = /\s+[-–—]\s+/;
 
-  const join = (list) => list.join(separator);
-  let kept = ranked;
-  while (kept.length > 2 && join(kept).length > max) kept = kept.slice(0, -1);
-
-  const title = join(kept);
-  const brandText = cleanText(brand);
-  if (brandText && `${title}${TITLE_BRAND_SEPARATOR}${brandText}`.length <= targetMax) {
-    return `${title}${TITLE_BRAND_SEPARATOR}${brandText}`;
-  }
-  return title;
+export const splitCircuit = (value) => {
+  const clean = cleanText(value);
+  const match = clean.match(CIRCUIT_VARIANT_SEPARATOR);
+  if (!match) return { base: clean, variant: '' };
+  return {
+    base: clean.slice(0, match.index),
+    variant: clean.slice(match.index + match[0].length),
+  };
 };
 
-// Rangorde voor een uitslagtitel: race-identificatie, circuit, klasse, datum.
-// Het circuit blijft dus staan wanneer de datum of de klasse moet wijken.
-export const buildRaceResultTitle = ({ raceName, circuit, carClass, date, brand = '3SM' }) => {
-  const name = titleish(raceName);
-  const dateLabel = formatDateNl(date, { style: 'short' });
-  return buildRankedTitle([
-    name ? `Uitslag ${name}` : 'Race-uitslag',
-    cleanText(circuit),
-    cleanText(carClass),
-    dateLabel,
-  ], { brand });
+// De delen van een uitslagtitel, in volgorde van belangrijkheid:
+//   1. de racenaam (deze staat er altijd in)
+//   2. het circuit: eerst de hele naam (basis + variant), anders alleen de basis
+//   3. de datum in woorden
+//   4. de klasse
+// Daarachter hangt het merk (zie withTitleBrand) — als het nog past.
+//
+// De functie geeft ALLE titelvormen terug die binnen de tekensgrens passen, van
+// rijk naar arm. De rijke vormen staan vooraan; de kale racenaam staat er altijd
+// bij. De bitwaarde van een vorm IS de rangorde (het hoogste bit is het
+// belangrijkste deel), dus van hoog naar laag proberen betekent letterlijk: wat het
+// belangrijkst is, blijft het langst staan. Er wordt nooit binnen een deel geknipt,
+// dus het circuit blijft heel of valt in zijn geheel weg.
+export const raceResultTitleCandidates = ({ raceName, circuit, carClass, date }, { max = TITLE_MAX } = {}) => {
+  const name = titleish(raceName) || 'Race-uitslag';
+  const circuitText = cleanText(circuit);
+  const { base } = splitCircuit(circuitText);
+  const dateLabel = formatDateNl(date, { style: 'short' }) || '';
+  const classe = cleanText(carClass);
+
+  const FORM_BITS = { circuitFull: 8, circuitBase: 4, date: 2, carClass: 1 };
+  const candidates = [];
+  for (let mask = 15; mask >= 0; mask -= 1) {
+    const hasFull = (mask & FORM_BITS.circuitFull) !== 0;
+    const hasBase = (mask & FORM_BITS.circuitBase) !== 0;
+    // Precies één circuitvorm (of geen): de hele naam en de basis sluiten elkaar uit.
+    if (hasFull && hasBase) continue;
+
+    const parts = [name];
+    if (hasFull && circuitText) parts.push(circuitText);
+    else if (hasBase && base) parts.push(base);
+    if ((mask & FORM_BITS.date) && dateLabel) parts.push(dateLabel);
+    if ((mask & FORM_BITS.carClass) && classe) parts.push(classe);
+
+    const title = parts.join(TITLE_SEPARATOR);
+    if (!candidates.includes(title)) candidates.push(title);
+  }
+
+  // De kale racenaam is het vangnet: die past altijd (of is zelf al te lang, en
+  // dan blijft hij heel in plaats van afgekapt).
+  const fitting = candidates.filter((title) => title.length <= max);
+  return fitting.length ? fitting : [name];
+};
+
+// Het merk is geen onderscheider: '| 3SM' staat op elke uitslagpagina en zegt niets
+// over deze race. Het hangt daarom achter de gekozen titel zolang de titel MET merk
+// binnen TITLE_BRAND_MAX blijft, en vervalt anders. Google toont de sitenaam
+// tegenwoordig zelf boven de URL, dus dat kost niets; in de browsertab blijft hij
+// staan zolang er ruimte is.
+//
+// `max` is de harde grens waarbinnen de TITEL moet passen; het merk mag daar nooit
+// doorheen duwen, dus het merkbudget is het minimum van die grens en TITLE_BRAND_MAX.
+// De inhoud zelf is op dat moment allang gekozen en blijft staan.
+export const withTitleBrand = (title, brand = '3SM', max = TITLE_MAX) => {
+  const clean = cleanText(title);
+  const brandText = cleanText(brand);
+  if (!brandText) return clean;
+  const decorated = `${clean}${TITLE_BRAND_SEPARATOR}${brandText}`;
+  return decorated.length <= Math.min(max, TITLE_BRAND_MAX) ? decorated : clean;
+};
+
+// Eén uitslagtitel: de rijkste vorm die binnen TITLE_MAX past, met het merk erachter
+// als dat nog past. Dit is wat de generator én de SPA voor één race gebruiken; de
+// twee moeten letterlijk hetzelfde zeggen, anders herschrijft Google de titel.
+export const buildRaceResultTitle = ({ raceName, circuit, carClass, date, brand = '3SM' }, { max = TITLE_MAX } = {}) => {
+  const [richest] = raceResultTitleCandidates({ raceName, circuit, carClass, date }, { max });
+  return withTitleBrand(richest, brand, max);
+};
+
+// Titels voor een hele SET races, met de garantie dat ze onderling uniek zijn.
+//
+// Twee races met dezelfde naam op hetzelfde circuit (twee keer 'Race 3' op Daytona)
+// zouden dezelfde titel krijgen. In dat geval schuift de tweede door naar de
+// eerstvolgende vorm die nog vrij is — de circuitvariant of anders de datum, precies
+// het deel dat de twee races onderscheidt. Het merk doet aan die keuze niet mee: dat
+// zou de botsing alleen maar verbergen achter boilerplate.
+//
+// `demoted` vertelt welke race niet zijn rijkste titel kreeg, zodat de generator dat
+// kan melden in plaats van het stil te laten gebeuren.
+export const assignUniqueRaceResultTitles = (races, { max = TITLE_MAX, brand = '3SM' } = {}) => {
+  const used = new Set();
+  return (races || []).map((race) => {
+    const candidates = raceResultTitleCandidates(race, { max });
+    const distinguishing = candidates.find((candidate) => !used.has(candidate)) || candidates[0];
+    used.add(distinguishing);
+    return {
+      ...race,
+      distinguishing,
+      richest: candidates[0],
+      title: withTitleBrand(distinguishing, brand, max),
+      demoted: distinguishing !== candidates[0],
+    };
+  });
 };
 
 // Omschrijving van een uitslagpagina. De eerste zin is een belofte die op
