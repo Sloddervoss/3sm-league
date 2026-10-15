@@ -171,6 +171,31 @@ describe("sitemap-lastmod: de datum komt uit de rij, niet uit de klok", () => {
   });
 });
 
+describe("sitemap-lastmod: de bouwtijd is een harde bovengrens", () => {
+  const BOUWDAG = "2026-10-15";
+
+  it("laat een <lastmod> voorbij de bouwtijd weg in plaats van hem te knippen", async () => {
+    const { dropFutureLastmod, lastmodXml } = await sitemapLastmod();
+
+    expect(dropFutureLastmod("2027-02-18", BOUWDAG)).toBeNull();
+    expect(dropFutureLastmod("2026-10-16", BOUWDAG)).toBeNull();
+    expect(dropFutureLastmod("2026-10-15", BOUWDAG)).toBe("2026-10-15"); // vandaag mag nog
+    expect(dropFutureLastmod("2026-10-14", BOUWDAG)).toBe("2026-10-14");
+    expect(dropFutureLastmod(null, BOUWDAG)).toBeNull();
+    expect(dropFutureLastmod("2026-01-05", null)).toBe("2026-01-05"); // geen grens: ongemoeid
+
+    // Weglaten, niet naar de bouwtijd toe knippen: er komt niets te staan.
+    expect(lastmodXml({ path: "/seasons/later", lastmod: "2027-02-18" }, BOUWDAG)).toBe("");
+    expect(lastmodXml({ path: "/results/race-1", lastmod: "2026-09-08" }, BOUWDAG)).toBe("\n    <lastmod>2026-09-08</lastmod>");
+  });
+
+  it("hanteert de grens ook op een volledige ISO-bouwtijd", async () => {
+    const { dropFutureLastmod } = await sitemapLastmod();
+    expect(dropFutureLastmod("2027-02-18", "2026-10-15T23:59:59+02:00")).toBeNull();
+    expect(dropFutureLastmod("2026-10-15", "2026-10-15T23:59:59+02:00")).toBe("2026-10-15");
+  });
+});
+
 describe("generator: de dynamische lastmod komt uit de rijen", () => {
   const generator = readFileSync("scripts/generate-route-html.mjs", "utf8");
 
@@ -185,6 +210,11 @@ describe("generator: de dynamische lastmod komt uit de rijen", () => {
     expect(generator).not.toContain("lastmod: dateOnly(race.race_date)");
     expect(generator).not.toContain("lastmod: buildDate");
     expect(generator).not.toMatch(/lastmod:\s*new Date\(/);
+  });
+
+  it("geeft de bouwtijd mee aan lastmodXml, zodat de bovengrens actief is", () => {
+    // Zonder buildTime kan lastmodXml niet weten wat 'toekomst' is.
+    expect(generator).toContain("lastmodXml(route, buildDate)");
   });
 
   it("vraagt de tijdstempelkolommen echt op", () => {

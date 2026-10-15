@@ -430,6 +430,8 @@ const organizationRefJsonLd = () => ({
 // database row itself (scripts/sitemap-lastmod.mjs): races.updated_at,
 // leagues.updated_at, teams.updated_at en team_memberships.created_at. Routes
 // zonder echte rijdatum (bijv. een coureur zonder race) laten het element weg.
+// De bouwtijd (buildDate) gaat mee als harde bovengrens: een <lastmod> in de
+// toekomst valt weg in plaats van dat er een onmogelijke datum in komt.
 
 const normalizeSlugInput = (value) =>
   String(value || '')
@@ -2034,7 +2036,7 @@ const generateSitemap = () => {
   const urls = sitemapRoutes
     .map(
       (route) => `  <url>
-    <loc>${absoluteUrl(route.path)}</loc>${lastmodXml(route)}
+    <loc>${absoluteUrl(route.path)}</loc>${lastmodXml(route, buildDate)}
     <changefreq>${route.changefreq || 'monthly'}</changefreq>
     <priority>${route.priority}</priority>
   </url>`,

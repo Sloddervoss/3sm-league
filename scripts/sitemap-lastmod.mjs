@@ -72,5 +72,22 @@ export const teamRouteLastmod = ({ updatedAt, membershipTimestamps = [], memberR
 export const seasonRouteLastmod = ({ updatedAt, races = [] } = {}) =>
   lastmodDate(updatedAt, raceUpdatedTimestamps(races));
 
-// Sitemap-regel voor het element. Zonder rijdatum komt er niets te staan.
-export const lastmodXml = (route) => (route?.lastmod ? `\n    <lastmod>${route.lastmod}</lastmod>` : '');
+// Harde bovengrens: de bouwtijd. Geen enkele <lastmod> mag in de toekomst liggen
+// - een pagina kan niet gewijzigd zijn voordat hij bestond, en Google negeert
+// zo'n datum. We knippen niet naar de bouwtijd toe (dat zou de bouwdatum als
+// wijzigingstijd presenteren en bij elke build verschuiven - precies de leugen
+// die deze module wil vermijden) maar laten het element WEG. Zonder datum is de
+// waarheid 'onbekend'. buildTime komt van buiten, zodat deze helper puur blijft.
+export const dropFutureLastmod = (lastmod, buildTime) => {
+  if (!lastmod) return null;
+  const build = toIsoString(buildTime)?.slice(0, 10);
+  if (!build) return lastmod;
+  return lastmod.slice(0, 10) > build ? null : lastmod;
+};
+
+// Sitemap-regel voor het element. Zonder rijdatum komt er niets te staan, en een
+// datum voorbij de bouwtijd (buildTime) valt weg.
+export const lastmodXml = (route, buildTime) => {
+  const lastmod = dropFutureLastmod(route?.lastmod, buildTime);
+  return lastmod ? `\n    <lastmod>${lastmod}</lastmod>` : '';
+};
