@@ -19,9 +19,9 @@ import {
  *
  * Aanleiding (gemeten op de live site, 15 oktober):
  *   - 'Uitslag Race 3 · 7 oktober 2026 · Daytona International…' en
- *     '… · Circuit de…', '… · Tsukuba Circuit - 2000 -…': de afkapfunctie knipte
- *     midden in een woord en liet losse streepjes staan. 33 van de 44
- *     uitslagroutes waren zo beschadigd.
+ *     '… · Circuit de…', '… · Tsukuba Circuit - 2000 -…': de afkapfunctie brak de
+ *     circuitnaam af tot een nietszeggend stuk en liet losse streepjes staan. Van
+ *     de 43 gegenereerde uitslagroutes verloren er 31 de volledige circuitnaam.
  *   - '…klasseringen, rondes,…' en 'Bekijk de … op Okayam…' in de omschrijvingen.
  *   - ISO-datums ('op 2026-10-01') in plaats van woorden.
  *
@@ -75,9 +75,10 @@ describe("seoTitle — afkappen op woordgrens", () => {
   });
 
   it("laat de circuitnaam niet als 'Circuit de…' of '… -…' staan", () => {
-    // Dit is exact wat de oude functie deed: de staart sneuvelde midden in de
-    // circuitnaam, of er bleef een los streepje achter ('Tsukuba Circuit - 2000 -…').
-    // De knip hoort hier op het laatste hele woord te vallen.
+    // De oude functie liet hier 'Circuit de Spa-Francorchamps -…' achter: het
+    // halve woord ('Gra') werd weggehaald, maar het streepje ervoor bleef als
+    // laatste teken staan. De knip hoort op het laatste hele woord te vallen,
+    // zonder los scheidingsteken erachter.
     const output = truncate(LIVE_TITLE, 70);
     expect(output).toBe("Uitslag Race 3 · 7 oktober 2026 · Circuit de Spa-Francorchamps…");
     expect(output).not.toMatch(/[-–—·|]\s*…$/u);

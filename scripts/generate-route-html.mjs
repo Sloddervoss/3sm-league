@@ -446,8 +446,9 @@ const categoryToSlug = (category) => categorySlugMap.get(category) || normalizeS
 // Titel- en omschrijvingsopbouw staat in src/lib/seoTitle.mjs. Dat bestand wordt
 // ook door de frontend gebruikt, zodat de tabtitel en de <title> in de HTML
 // hetzelfde zeggen: wijkt dat af, dan herschrijft Google de titel.
-// De oude, plaatselijke afkapfunctie knipte midden in een woord ("Circuit de…",
-// "Okayam…") en liet losse streepjes staan; die is hier weg.
+// De oude, plaatselijke afkapfunctie maakte van het circuit een nietszeggend stuk
+// ('Circuit de…', 'Daytona International…') en liet losse streepjes staan; die is
+// hier weg.
 
 const slugify = (value) => normalizeSlugInput(cleanText(value));
 

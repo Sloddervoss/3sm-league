@@ -45,9 +45,12 @@ export const titleish = (value) => {
 const TRAILING_SEPARATORS = /[\s·•|,;:/\\\-–—]+$/u;
 
 // Knippen op woordgrens. De vorige versie knipte op `max - 1` tekens en haalde
-// daarna alleen een open einde weg wanneer daar een SPATIE voor stond; viel de
-// knip midden in een woord, dan bleef het halve woord staan ("Circuit de…",
-// "Tsukuba Circuit - 2000 -…", "Okayam…").
+// daarna alleen een open einde weg als daar een SPATIE voor stond. Op de 43
+// gegenereerde uitslagroutes bracht dat de circuitnaam terug tot een nietszeggend
+// stuk ('Circuit de…', 'Daytona International…', 'Tsukuba Circuit - 2000 -…') en
+// bleef er een los streepje staan als de knip op een scheidingsteken viel. Deze
+// versie knipt op de laatste hele woordgrens en laat een scheidingsteken nooit als
+// laatste teken staan.
 export const truncate = (value, max = 155) => {
   const clean = stripHtml(value);
   if (clean.length <= max) return clean;
