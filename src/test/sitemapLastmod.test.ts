@@ -112,7 +112,7 @@ describe("sitemap-lastmod: de datum komt uit de rij, niet uit de klok", () => {
     expect(teamRouteLastmod({})).toBeNull();
   });
 
-  it("neemt voor een seizoen de competitierij en de races in die competitie", async () => {
+  it("negeert race_date voor een seizoen: het raceschema loopt vooruit", async () => {
     const { seasonRouteLastmod } = await sitemapLastmod();
     fakeKlokOp(BOOTDAG);
 
@@ -122,15 +122,39 @@ describe("sitemap-lastmod: de datum komt uit de rij, niet uit de klok", () => {
         { race_date: "2026-06-07T19:00:00+00:00", updated_at: null },
         { race_date: "2026-02-02T19:00:00+00:00", updated_at: "2026-02-03T10:00:00+00:00" },
       ],
-    })).toBe("2026-06-07");
+    })).toBe("2026-02-03");
 
-    // Een nieuw ingeplande race verandert het "x van y verreden" op de pagina.
+    // Een nieuw ingeplande race verandert het "x van y verreden" op de pagina,
+    // maar de wijzigingstijd is het moment van inplannen (updated_at) - niet de
+    // (toekomstige) racedatum. race_date mag hier nooit winnen.
     expect(seasonRouteLastmod({
       updatedAt: "2026-01-02T10:00:00+00:00",
-      races: [{ race_date: "2026-09-09T19:00:00+00:00", updated_at: "2026-08-01T12:00:00+00:00" }],
-    })).toBe("2026-09-09");
+      races: [{ race_date: "2027-02-18T19:30:00+00:00", updated_at: "2026-08-01T12:00:00+00:00" }],
+    })).toBe("2026-08-01");
 
     expect(seasonRouteLastmod({})).toBeNull();
+  });
+
+  it("een race met een toekomstdatum levert nooit een <lastmod> in de toekomst", async () => {
+    const { lastmodXml, seasonRouteLastmod } = await sitemapLastmod();
+    fakeKlokOp(BOOTDAG);
+
+    // Exact het productiegeval: de eerstvolgende races staan op 2027-02-18
+    // (3SM GT3 Free Track Challenge) en 2027-02-10 (GT Master Challenge Cup
+    // 2026 s2), terwijl de race-rijen op 2026-09-04 zijn bijgewerkt.
+    const lastmod = seasonRouteLastmod({
+      updatedAt: "2026-08-20T09:00:00+00:00",
+      races: [
+        { race_date: "2027-02-18T19:30:00+00:00", updated_at: "2026-09-04T16:15:08+00:00" },
+        { race_date: "2027-02-10T19:30:00+00:00", updated_at: "2026-09-04T18:06:42+00:00" },
+      ],
+    });
+
+    expect(lastmod).toBe("2026-09-04");
+    const xml = lastmodXml({ path: "/seasons/gt-master-challenge-cup-2026-s2", lastmod }, BOOTDAG);
+    expect(xml).toBe("\n    <lastmod>2026-09-04</lastmod>");
+    expect(xml).not.toContain("2027");
+    expect(xml).not.toContain("2026-10-15");
   });
 
   it("zet de rijdatum in de sitemap-XML en nooit de bouwdatum", async () => {

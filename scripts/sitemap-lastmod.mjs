@@ -9,7 +9,9 @@
 //   /drivers/<slug> de nieuwste race waarin de coureur voorkomt
 //   /teams/<slug>   teams.updated_at, team_memberships.created_at en de races van
 //                   de leden (punten, overwinningen en podiums komen daaruit)
-//   /seasons/<slug> leagues.updated_at en alle races in die competitie
+//   /seasons/<slug> leagues.updated_at en de nieuwste wijziging (updated_at) van
+//                   de races in die competitie - bewust NIET race_date, want het
+//                   raceschema loopt vooruit (zie verderop)
 //
 // De profielrij levert géén tijdstempel: public_profiles is met opzet een
 // kolomveilige view zonder auditvelden en public.profiles is met de anon-key
@@ -47,7 +49,18 @@ export const lastmodDate = (...values) => {
   return latest ? latest.slice(0, 10) : null;
 };
 
+// Voor coureurs, teams en uitslagen mag race_date als terugval dienen: die
+// pagina's gaan over verreden races, dus race_date ligt in het verleden en de
+// terugval vuurt in de praktijk nooit (elke races-rij heeft een updated_at).
 const raceTimestamps = (races = []) => races.map((race) => [race?.updated_at, race?.race_date]);
+
+// Voor een seizoen mag race_date GEEN rol spelen. De seizoenspagina bundelt alle
+// races van de competitie, inclusief de nog te rijden races; hun race_date ligt
+// bewust in de toekomst (het raceschema). Zo'n datum als <lastmod> is onwaar -
+// de pagina is dan niet gewijzigd - en Google negeert hem. De wijzigingstijd van
+// de pagina is wanneer de rij zelf veranderde (updated_at), en een nieuw
+// ingeplande race krijgt die tijd op het moment dat hij wordt toegevoegd.
+const raceUpdatedTimestamps = (races = []) => races.map((race) => race?.updated_at);
 
 export const resultRouteLastmod = (race) => lastmodDate(race?.updated_at, race?.race_date);
 
@@ -57,7 +70,7 @@ export const teamRouteLastmod = ({ updatedAt, membershipTimestamps = [], memberR
   lastmodDate(updatedAt, membershipTimestamps, raceTimestamps(memberRaces));
 
 export const seasonRouteLastmod = ({ updatedAt, races = [] } = {}) =>
-  lastmodDate(updatedAt, raceTimestamps(races));
+  lastmodDate(updatedAt, raceUpdatedTimestamps(races));
 
 // Sitemap-regel voor het element. Zonder rijdatum komt er niets te staan.
 export const lastmodXml = (route) => (route?.lastmod ? `\n    <lastmod>${route.lastmod}</lastmod>` : '');
