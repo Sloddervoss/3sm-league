@@ -300,3 +300,128 @@ export const buildRaceResultDescription = ({ raceName, circuit, carClass, league
   // knippen we — op woordgrens, dus nooit midden in een woord.
   return best.length > DESCRIPTION_MAX ? truncate(best, DESCRIPTION_MAX) : best;
 };
+
+// ---------- Nieuws ----------
+// Dezelfde behandeling als de uitslagpagina's, nu voor de nieuwsroutes (/news, de
+// rubriekhubs /news/<rubriek> en de artikelen /news/<rubriek>/<slug>): harde
+// tekengrens, gerangschikte delen, nooit midden in een woord, nooit een
+// scheidingsteken achteraan en alle titels onderling uniek.
+//
+// Het verschil met een race is het ONDERWERP zelf. Een racenaam is kort ('Race 3');
+// een nieuwsKOP kan 90 tekens zijn ('Jaimy Peters pakt de overwinning na
+// spectaculaire raceavond bij 3 Stripe Motorsport'). De kop wordt daarom heel
+// woord voor heel woord ingekort tot hij past. Die korte kop is de h1 van de
+// pagina en de titel begint ermee, zodat een SERP-titel die Google uit de h1 haalt
+// nog steeds hetzelfde belooft — precies de afspraak die de uitslagpagina's al
+// hebben (daar is de h1 de racenaam). Google mag de h1 als SERP-titel gebruiken,
+// dus een lange kop als h1 is een tweede kans om de titel te laten herschrijven.
+
+// Korte kopregel: laat hele woorden vallen tot de kop binnen de ruimte past. Nooit
+// midden in een woord, nooit een scheidingsteken achteraan en géén beletselteken —
+// dit is de kopregel van de pagina, geen afgekapte samenvatting (bij de uitslagen
+// valt er ook geen deel half weg). Past zelfs het eerste woord niet, dan blijft dat
+// ene woord heel: een half woord is erger dan een paar tekens te veel, dezelfde
+// regel als in truncate.
+export const shortenHeadline = (value, max = TITLE_MAX) => {
+  const clean = stripHtml(value);
+  if (!clean || clean.length <= max) return clean;
+  const words = clean.split(' ').filter(Boolean);
+  let kept = '';
+  for (const word of words) {
+    const next = kept ? `${kept} ${word}` : word;
+    if (next.length > max) break;
+    kept = next;
+  }
+  if (!kept) kept = words[0] || clean;
+  return kept.replace(TRAILING_SEPARATORS, '');
+};
+
+// De delen van een nieuwsartikeltitel, van belangrijk naar minder belangrijk:
+//   1. de korte kop (het onderwerp van de pagina — staat er altijd in)
+//   2. de datum in woorden
+//   3. de rubriek
+// Daarachter hangt het merk (withTitleBrand) — als het nog past.
+//
+// De rubriek staat bewust LAAG. 'Race Recaps' zou op elk artikel uit die rubriek
+// dezelfde tekst zijn, en herhaalde sjabloontekst over een deelverzameling pagina's
+// is precies een van de redenen waarom Google een titel vervangt. De datum
+// onderscheidt wél: twee artikelen met dezelfde kop vallen op hun publicatiedatum
+// uiteen. Rangorde (hoog bit = blijft het langst staan): datum (2), rubriek (1). De
+// korte kop is het vangnet en past altijd.
+export const newsArticleTitleCandidates = ({ headline, category, date }, { max = TITLE_MAX } = {}) => {
+  const subject = shortenHeadline(headline, max) || 'Nieuws van 3SM';
+  const dateLabel = formatDateNl(date, { style: 'short' }) || '';
+  const rubriek = cleanText(category);
+  const FORM_BITS = { date: 2, category: 1 };
+  const candidates = [];
+  for (let mask = 3; mask >= 0; mask -= 1) {
+    const parts = [subject];
+    if ((mask & FORM_BITS.date) && dateLabel) parts.push(dateLabel);
+    if ((mask & FORM_BITS.category) && rubriek) parts.push(rubriek);
+    const title = parts.join(TITLE_SEPARATOR);
+    if (!candidates.includes(title)) candidates.push(title);
+  }
+  const fitting = candidates.filter((title) => title.length <= max);
+  return fitting.length ? fitting : [subject];
+};
+
+// Eén nieuwsartikeltitel: de rijkste vorm die binnen TITLE_MAX past, met het merk
+// erachter als dat nog past. Dit is exact het pad dat de generator én de SPA voor
+// één artikel gebruiken; de twee moeten letterlijk hetzelfde zeggen.
+export const buildNewsArticleTitle = ({ headline, category, date, brand = '3SM' }, { max = TITLE_MAX } = {}) => {
+  const [richest] = newsArticleTitleCandidates({ headline, category, date }, { max });
+  return withTitleBrand(richest, brand, max);
+};
+
+// De kopregel (h1) die bij die titel hoort: dezelfde korte kop, zodat de titel
+// ermee begint. De generator zet dit als h1 in de crawler-HTML en de SPA toont
+// precies dezelfde regel als kop van het artikel.
+export const buildNewsArticleH1 = ({ headline }, { max = TITLE_MAX } = {}) => shortenHeadline(headline, max) || 'Nieuws van 3SM';
+
+// Titels voor een hele SET nieuwsartikelen, met de garantie dat ze onderling uniek
+// zijn — dezelfde set-brede aanpak als assignUniqueRaceResultTitles. Twee artikelen
+// met dezelfde (ingekorte) kop zouden dezelfde titel krijgen; in dat geval schuift
+// de tweede door naar de eerstvolgende vorm die nog vrij is: eerst de datum, anders
+// de rubriek. `demoted` vertelt welk artikel niet zijn rijkste titel kreeg.
+export const assignUniqueNewsArticleTitles = (articles, { max = TITLE_MAX, brand = '3SM' } = {}) => {
+  const used = new Set();
+  return (articles || []).map((article) => {
+    const candidates = newsArticleTitleCandidates(article, { max });
+    const distinguishing = candidates.find((candidate) => !used.has(candidate)) || candidates[0];
+    used.add(distinguishing);
+    return {
+      ...article,
+      distinguishing,
+      richest: candidates[0],
+      h1: buildNewsArticleH1(article, { max }),
+      title: withTitleBrand(distinguishing, brand, max),
+      demoted: distinguishing !== candidates[0],
+    };
+  });
+};
+
+// Titel van de nieuwshub (/news). Delen: het onderwerp ('3SM nieuws') en wat er
+// staat ('raceverslagen en updates'). Zonder merk: '3SM' staat al in het onderwerp
+// en de sitenaam toont Google tegenwoordig zelf boven de URL.
+export const buildNewsHubTitle = ({ subject = '3SM nieuws', detail = 'raceverslagen en updates', brand = '' } = {}, { max = TITLE_MAX } = {}) => {
+  const herkenning = cleanText(subject);
+  const varianten = [
+    [herkenning, cleanText(detail)].filter(Boolean).join(TITLE_SEPARATOR),
+    herkenning,
+  ].filter((title) => title && title.length <= max);
+  const [richest] = varianten.length ? varianten : [herkenning];
+  return withTitleBrand(richest, brand, max);
+};
+
+// Titel van een rubriekhub (/news/<rubriek>). Delen: de rubriek (onderwerp) en het
+// woord 'nieuws' (wat de pagina is); daarachter het merk. De kop van die hub is de
+// rubriek zelf ('Race Recaps') en is dus een voorvoegsel van de titel.
+export const buildNewsCategoryTitle = ({ category, brand = '3SM' }, { max = TITLE_MAX } = {}) => {
+  const subject = titleish(category) || 'Nieuws';
+  const varianten = [
+    [subject, 'nieuws'].join(TITLE_SEPARATOR),
+    subject,
+  ].filter((title) => title.length <= max);
+  const [richest] = varianten.length ? varianten : [subject];
+  return withTitleBrand(richest, brand, max);
+};
