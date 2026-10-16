@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { getMockNewsPost, mockNewsPosts } from "@/lib/mockNewsPosts";
 import { articlePath, authorPath, authorSlug, categoryToSlug } from "@/lib/newsTaxonomy";
+import { buildNewsArticleH1, buildNewsArticleTitle } from "@/lib/seoTitle.mjs";
 
 const STALE = 5 * 60 * 1000;
 
@@ -162,9 +163,25 @@ const NewsDetailPage = () => {
   const sanitizedContentHtml = useMemo(() => sanitizeNewsHtml(post?.content_html || ""), [post?.content_html]);
   const showHeroImage = Boolean(post?.hero_image_url && !contentContainsImageSrc(sanitizedContentHtml, post.hero_image_url));
 
+  // De kopregel (h1) en de tabtitel komen uit dezelfde helper als de crawler-HTML
+  // (scripts/generate-route-html.mjs): een harde grens van 60 tekens, gerangschikte
+  // delen en nooit midden in een woord. Wijkt de tabtitel af van de <title> die de
+  // crawler ziet, dan herschrijft Google de titel; daarom bouwen beide kanten de
+  // titel met dezelfde functie. De h1 is de KORTE kop: Google mag de h1 als
+  // SERP-titel gebruiken, dus die moet net zo kort zijn en met de titel
+  // overeenkomen — dezelfde behandeling als op de uitslagpagina's.
+  const articleHeadline = useMemo(
+    () => (post ? buildNewsArticleH1({ headline: post.seo_title || post.title }) : ""),
+    [post],
+  );
+
   useEffect(() => {
     if (!post) return;
-    const title = post.seo_title || `${post.title} - 3 Stripe Motorsport`;
+    const title = buildNewsArticleTitle({
+      headline: post.seo_title || post.title,
+      category: post.category,
+      date: post.published_at,
+    });
     const description = post.seo_description || post.excerpt || "Nieuws van 3 Stripe Motorsport.";
     document.title = title;
 
@@ -212,7 +229,7 @@ const NewsDetailPage = () => {
                   {post.authorName && <Link to={withMockSuffix(authorPath(post.authorName), isMockPreview)} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-orange-300"><UserRound className="h-4 w-4" /> Door {post.authorName}</Link>}
                   {post.seasonName && <Link to={withMockSuffix(`/news?season=${post.season_id}`, isMockPreview)} className="text-sm text-muted-foreground hover:text-orange-300">Meer nieuws uit dit seizoen: {post.seasonName}</Link>}
                 </div>
-                <h1 className="font-heading text-4xl font-black leading-tight md:text-6xl">{post.title}</h1>
+                <h1 className="font-heading text-4xl font-black leading-tight md:text-6xl">{articleHeadline}</h1>
                 {post.excerpt && <p className="mt-5 max-w-4xl text-lg leading-relaxed text-muted-foreground">{post.excerpt}</p>}
               </div>
             </section>

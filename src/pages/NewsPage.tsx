@@ -17,6 +17,7 @@ import {
   categoryToSlug,
   filterNewsPosts,
 } from "@/lib/newsTaxonomy";
+import { buildNewsCategoryTitle, buildNewsHubTitle } from "@/lib/seoTitle.mjs";
 
 const STALE = 5 * 60 * 1000;
 
@@ -136,7 +137,12 @@ const NewsPage = () => {
   const activeSeasonId = searchParams.get("season");
 
   useEffect(() => {
-    const title = activeCategoryInfo ? `${activeCategoryInfo.label} - Nieuws - 3 Stripe Motorsport` : "Nieuws - 3 Stripe Motorsport";
+    // Zelfde helper als de crawler-HTML (scripts/generate-route-html.mjs): de
+    // tabtitel van de nieuwshub en van een rubriekhub moet LETTERLIJK gelijk zijn
+    // aan de <title> in de geprerenderde HTML, anders herschrijft Google hem.
+    const title = activeCategoryInfo
+      ? buildNewsCategoryTitle({ category: activeCategoryInfo.label })
+      : buildNewsHubTitle();
     const description = activeCategoryInfo?.description || "Lees het laatste nieuws van 3 Stripe Motorsport: verhalen uit de paddock, raceverslagen en updates van de iRacing league.";
     document.title = title;
     let tag = document.head.querySelector('meta[name="description"]') as HTMLMetaElement | null;
