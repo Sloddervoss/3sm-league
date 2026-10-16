@@ -11,7 +11,12 @@ import {
   teamRouteLastmod,
 } from './sitemap-lastmod.mjs';
 import {
+  assignUniqueNewsArticleTitles,
   assignUniqueRaceResultTitles,
+  buildNewsArticleH1,
+  buildNewsArticleTitle,
+  buildNewsCategoryTitle,
+  buildNewsHubTitle,
   buildRaceResultDescription,
   buildRaceResultTitle,
   cleanText,
@@ -198,7 +203,11 @@ const routes = [
   },
   {
     path: '/news',
-    title: 'Nieuws - 3 Stripe Motorsport',
+    // Titel van de nieuwshub uit dezelfde helper als de artikelen en de
+    // rubriekhubs (src/lib/seoTitle.mjs): binnen de 60 tekens, opgebouwd uit
+    // gerangschikte delen en geen losse afkapping. De h1 ('3SM nieuws') is het
+    // eerste deel van de titel, zodat een SERP-titel uit de h1 klopt.
+    title: buildNewsHubTitle(),
     priority: '0.8',
     changefreq: 'weekly',
     description:
@@ -513,6 +522,10 @@ const driverName = (result) =>
 let resultsHubSummaries = [];
 let calendarHubSummaries = [];
 let newsHubSummaries = [];
+// De set-brede nieuwsartikeltitels (pad -> { title, h1 }), gevuld zodra de
+// nieuwsberichten zijn opgehaald. Zowel de artikelroute als de hub-HTML en de
+// JSON-LD halen hun kop hieruit, zodat alles hetzelfde zegt.
+let newsTitleByPath = new Map();
 let standingsByLeague = new Map();
 let leagueSummaries = [];
 let driverSummaries = [];
@@ -901,13 +914,17 @@ const buildRaceSportsEventJsonLd = (race) => ({
 const articleImages = (post) => [post?.hero_image_url, post?.og_image_url]
   .filter((url) => typeof url === 'string' && url.startsWith('http'));
 
-const buildArticleBlogPostingJsonLd = (post) => {
+const buildArticleBlogPostingJsonLd = (post, headline) => {
   const path = `/news/${categoryToSlug(post.category)}/${post.slug}`;
   const images = articleImages(post);
   return {
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
-    headline: cleanText(post.title),
+    // De kop in de structured data is dezelfde korte kopregel als de h1 en als het
+    // eerste deel van de titel. Een BlogPosting.headline hoort te kloppen met wat
+    // de pagina toont; een lange kop hier terwijl de h1 kort is, is precies het
+    // soort tegenspraak waarop Google de titel vervangt.
+    headline: cleanText(headline) || cleanText(post.title),
     description: truncate(post.seo_description || post.excerpt || post.content_html || ''),
     url: absoluteUrl(path),
     datePublished: post.published_at || undefined,
@@ -978,15 +995,27 @@ const buildResultsHubItemListJsonLd = (summaries) => ({
   })),
 });
 
-const buildNewsSummarizePost = (post) => ({
-  path: `/news/${categoryToSlug(post.category)}/${post.slug}`,
-  title: cleanText(post.title),
-  category: cleanText(post.category) || null,
-  excerpt: truncate(post.excerpt || post.content_html || '', 220) || null,
-  formattedDate: formatDateNl(post.published_at, { style: 'long' }) || dateOnly(post.published_at),
-  publishedDate: dateOnly(post.published_at),
-  updatedDate: dateOnly(post.updated_at || post.published_at),
-});
+const buildNewsSummarizePost = (post) => {
+  const path = `/news/${categoryToSlug(post.category)}/${post.slug}`;
+  const assigned = newsTitleByPath.get(path);
+  const headline = cleanText(post.seo_title) || cleanText(post.title);
+  return {
+    path,
+    // De VOLLEDIGE kop blijft de ankertekst in de hub-HTML: 'Jaimy Peters pakt de
+    // overwinning na spectaculaire raceavond bij 3 Stripe Motorsport' als linktekst
+    // zegt meer dan de ingekorte kopregel. Kopregel en titel komen uit de gedeelde
+    // helper (src/lib/seoTitle.mjs), zodat ze niet kunnen afwijken van de
+    // artikelpagina zelf.
+    title: cleanText(post.title),
+    headline: assigned?.h1 || buildNewsArticleH1({ headline }),
+    pageTitle: assigned?.title || buildNewsArticleTitle({ headline, category: post.category, date: post.published_at }),
+    category: cleanText(post.category) || null,
+    excerpt: truncate(post.excerpt || post.content_html || '', 220) || null,
+    formattedDate: formatDateNl(post.published_at, { style: 'long' }) || dateOnly(post.published_at),
+    publishedDate: dateOnly(post.published_at),
+    updatedDate: dateOnly(post.updated_at || post.published_at),
+  };
+};
 
 const buildNewsHubCrawlerHtml = (summaries) => {
   if (!summaries.length) return '';
@@ -1016,7 +1045,9 @@ const buildNewsHubItemListJsonLd = (summaries) => ({
     position: index + 1,
     item: {
       '@type': 'BlogPosting',
-      headline: post.title,
+      // Kop uit de gedeelde helper: dezelfde titel als de artikelpagina zelf
+      // (<title>) en niet de rauwe, langere kop uit de database.
+      headline: post.pageTitle || post.headline || post.title,
       datePublished: post.publishedDate,
       dateModified: post.updatedDate,
       description: post.excerpt || undefined,
@@ -1418,20 +1449,55 @@ const fetchDynamicRoutes = async () => {
   if (newsError) {
     console.warn(`Kon nieuws-routes niet ophalen voor sitemap: ${newsError.message}`);
   } else {
+    // Titels in één keer voor de HELE set, niet per artikel. De kopregel en de titel
+    // komen uit de gedeelde helper (src/lib/seoTitle.mjs): een harde grens van 60
+    // tekens, gerangschikte delen en nooit midden in een woord. De oude,
+    // plaatselijke truncate(post.title, 58) knipte een lange kop midden in een
+    // meerwoordige naam af en had geen lengtebudget. Twee artikelen met dezelfde
+    // ingekorte kop zouden dezelfde titel krijgen; assignUniqueNewsArticleTitles
+    // laat de tweede dan terugvallen op de datum of de rubriek, precies het deel dat
+    // ze onderscheidt. Wat wijkt, wordt gemeld en niet stil opgelost.
+    newsTitleByPath = new Map(assignUniqueNewsArticleTitles((publishedPosts || []).map((post) => ({
+      path: `/news/${categoryToSlug(post.category)}/${post.slug}`,
+      headline: cleanText(post.seo_title) || cleanText(post.title),
+      category: cleanText(post.category),
+      date: post.published_at,
+    }))).map((entry) => [entry.path, entry]));
+    for (const entry of newsTitleByPath.values()) {
+      if (!entry.demoted) continue;
+      console.warn(
+        `Titel van nieuwsartikel ${entry.path} botste met een ander artikel: "${entry.richest}" was al bezet, `
+        + `deze pagina krijgt "${entry.title}".`,
+      );
+    }
+
     newsHubSummaries = (publishedPosts || []).map(buildNewsSummarizePost);
     for (const post of publishedPosts || []) {
       const categorySlug = categoryToSlug(post.category);
       const isRaceRecap = categorySlug === 'race-recaps';
       const articleSummary = truncate(post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.', 220);
+      const articlePath = `/news/${categorySlug}/${post.slug}`;
+      const articleTitle = newsTitleByPath.get(articlePath);
+      // De h1 is de KORTE kopregel, niet de volledige kop: Google mag de h1 als
+      // SERP-titel gebruiken, dus die moet net zo kort zijn als de titel en ermee
+      // overeenkomen (de titel begint ermee) — dezelfde behandeling als de
+      // uitslagpagina's, waar de h1 de racenaam is en niet de hele titelregel.
+      const articleHeadline = articleTitle?.h1
+        || buildNewsArticleH1({ headline: cleanText(post.seo_title) || cleanText(post.title) });
       dynamicRoutes.push({
-        path: `/news/${categorySlug}/${post.slug}`,
-        title: truncate(post.seo_title || post.title, 58),
+        path: articlePath,
+        title: articleTitle?.title
+          || buildNewsArticleTitle({
+            headline: cleanText(post.seo_title) || cleanText(post.title),
+            category: post.category,
+            date: post.published_at,
+          }),
         priority: '0.6',
         changefreq: 'monthly',
         image: articleImages(post)[0],
         lastmod: dateOnly(post.updated_at || post.published_at),
         description: truncate(post.seo_description || post.excerpt || post.content_html || 'Nieuws van 3 Stripe Motorsport.'),
-        h1: post.title,
+        h1: articleHeadline,
         intro: articleSummary,
         details: [
           `Dit nieuwsartikel hoort bij de 3SM categorie ${post.category || 'Nieuws'} en is gepubliceerd als onderdeel van de 3 Stripe Motorsport community.`,
@@ -1439,7 +1505,7 @@ const fetchDynamicRoutes = async () => {
         ],
         crawlerHtml: buildArticleBodyHtml(post),
         extraJsonLd: [
-          { id: 'blogposting-jsonld', data: buildArticleBlogPostingJsonLd(post) },
+          { id: 'blogposting-jsonld', data: buildArticleBlogPostingJsonLd(post, articleHeadline) },
         ],
         links: [
           ['/news', 'Terug naar nieuws'],
@@ -1473,7 +1539,10 @@ const fetchDynamicRoutes = async () => {
     const label = group.label;
     dynamicRoutes.push({
       path: `/news/${slug}`,
-      title: truncate(`${label} - 3 Stripe Motorsport nieuws`, 58),
+      // Titel van de rubriekhub uit dezelfde helper als de artikelen en de
+      // nieuwshub: rubriek vooraan (dat is ook de h1), het woord 'nieuws' als
+      // detail en het merk achteraan — binnen de 60 tekens en zonder afkapping.
+      title: buildNewsCategoryTitle({ category: label }),
       priority: '0.7',
       changefreq: 'weekly',
       lastmod: dateOnly(latest),
