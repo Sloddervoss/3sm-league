@@ -195,3 +195,24 @@ export const sortCatalogByNextStart = (
   now: Date = new Date(),
 ): IRacingCatalogEvent[] =>
   [...events].sort((a, b) => nextCatalogStart(a, now) - nextCatalogStart(b, now));
+
+/**
+ * Een catalogusrij is pas een race als er iets te rijden valt.
+ *
+ * Serie-regels (`availability_status` = `tbd`) beschrijven een heel seizoen: ze
+ * hebben een begin- en einddatum maanden uit elkaar en geen tijdsloten. Zo'n rij
+ * komt anders als "aankomende race" in de lijst te staan terwijl er niets aan te
+ * melden valt. Een al gekozen slot blijft altijd zichtbaar, ook als het event
+ * inmiddels voorbij is, zodat een bestaande koppeling nooit uit het zicht raakt.
+ */
+export const isRaceableCatalogEvent = (
+  event: Pick<IRacingCatalogEvent, "active" | "availability_status" | "event_end_date"> & {
+    selectedEventId: string | null;
+  },
+  today: string = catalogTodayAmsterdam(),
+): boolean => {
+  if (!event.active) return false;
+  if (event.availability_status === "tbd") return false;
+  if (!event.event_end_date) return true;
+  return event.event_end_date >= today || Boolean(event.selectedEventId);
+};

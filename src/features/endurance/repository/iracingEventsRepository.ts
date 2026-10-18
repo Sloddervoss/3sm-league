@@ -41,7 +41,7 @@ export async function listIRacingEnduranceCatalog(): Promise<IRacingCatalogEvent
   assertEnduranceTable("endurance_iracing_events");
   assertEnduranceTable("endurance_iracing_event_slots");
   const [eventsResult, slotsResult, linksResult] = await Promise.all([
-    enduranceClient().from("endurance_iracing_events").select(EVENT_COLUMNS).eq("active", true).order("event_start_date", { ascending: true }),
+    enduranceClient().from("endurance_iracing_events").select(EVENT_COLUMNS).eq("active", true).neq("availability_status", "tbd").order("event_start_date", { ascending: true }),
     enduranceClient().from("endurance_iracing_event_slots").select(SLOT_COLUMNS).eq("active", true).order("session_start_at", { ascending: true }),
     enduranceClient().from("endurance_events").select(LOCAL_LINK_COLUMNS).not("iracing_catalog_event_id", "is", null),
   ]);
