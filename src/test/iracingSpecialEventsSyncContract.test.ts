@@ -103,16 +103,16 @@ describe("iRacing Special Events sync security contract", () => {
 
   it("meldt een verouderde seizoenskoppeling en een lege aankomende kalender", () => {
     // Deze twee signalen bestaan omdat de kalender eerder stil leegliep.
-    expect(source).toContain("season_mapping: geen serie-seizoen voor");
+    expect(source).toContain("geen lopend seizoen gevonden");
     expect(source).toContain("geen aankomend endurance-event in de catalogus");
     expect(source).toContain("upcoming_events: upcomingEvents");
-    expect(source).toContain("new Date().getUTCFullYear()");
-    // Het jaartalsignaal toetst het SEIZOEN zelf (welk jaar meldt iRacing bij het
-    // seizoen dat nu voor deze serie loopt) en niet het jaartal in de eventsleutel.
-    // De serie-import werkt met het opgezochte seizoen; een afwijkende sleutelvorm
-    // zou het signaal laten liegen.
-    expect(source).toContain("seasonYear: seasonYearById.get(seasonIdFor(entry, publishedSeasons)) ?? null");
-    expect(source).toContain("staleSeries.length === seriesSeasonYears.length");
+    // Het signaal hangt aan het SEIZOEN, niet aan het kalenderjaar: een seizoen
+    // loopt over de jaarwisseling heen, dus vergelijken met new Date() zou in
+    // januari onterecht alarm slaan terwijl de import gewoon werkt.
+    expect(source).toContain("followsSeason");
+    expect(source).toContain("seasonYear: seasonYearById.get(effective) ?? null");
+    expect(source).toContain("notFollowed.length === seriesSeasonYears.length");
+    expect(source).not.toContain("new Date().getUTCFullYear()");
     expect(source).not.toContain("mappingYears");
     expect(source).not.toContain('sourceKey.split(":")[1]');
     // De waarschuwing over een lege kalender telt alleen wat deze ronde zou

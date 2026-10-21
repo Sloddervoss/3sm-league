@@ -108,3 +108,8 @@ worden — een vergeten bestand laat de functie stukgaan op een ontbrekende impo
 Terugdraaien: zet de vorige `index.ts` terug (er is geen `allowlist.ts` nodig in de
 oude versie), herstart de container, en controleer met een handmatige run dat de
 runstatus weer `success` is en `events_seen` gelijk blijft.
+
+> **Achterhaald sinds 21-10-2026:** het handmatig bijwerken van de `seasonId`'s is
+> niet meer nodig. De synchronisatie zoekt zelf het lopende seizoen op via de
+> `seriesId`. Zie `iracing-endurance-weekly-sync.md`, sectie "Het lopende seizoen
+> wordt automatisch gevolgd". Alleen combined-series vragen nog handwerk.

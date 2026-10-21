@@ -274,7 +274,11 @@ const NewsEditorPage = () => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ horizontalRule: false }),
+      // StarterKit brengt sinds versie 3 zelf een Link-extensie mee. Die staat hier
+      // uit, want de eigen LinkExtension verderop configureert het gedrag (niet
+      // openen bij klikken, https forceren). Zonder deze regel staan er twee Link-
+      // extensies naast elkaar en wint de een soms van de ander.
+      StarterKit.configure({ horizontalRule: false, link: false }),
       ResizableImageExtension.configure({ inline: false, allowBase64: false }),
       LinkExtension.configure({ openOnClick: false, autolink: true, defaultProtocol: "https" }),
       Placeholder.configure({ placeholder: "Begin hier met schrijven. De titel hierboven wordt automatisch als H1 boven het artikel getoond." }),

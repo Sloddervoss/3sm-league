@@ -87,6 +87,16 @@ const seasonIdFor = (entry: SeasonMapEntry, seasons: readonly PublishedSeason[] 
     ? entry.seasonId
     : resolveCurrentSeriesSeasonId(entry.seasonId, entry.seriesId, seasons ?? []);
 
+/**
+ * Het jaar dat iRacing bij dit seizoen meldt. Zonder deze waarde zou een race uit
+ * een seizoen dat over de jaarwisseling loopt onder het jaar van de configuratie
+ * worden weggeschreven — met een verkeerd jaarlabel en een sleutel die kan botsen.
+ */
+const yearForSeason = (seasonId: number, seasons: readonly PublishedSeason[] | null): number | null => {
+  const season = seasons?.find((candidate) => Number(candidate?.season_id) === seasonId);
+  return Number.isInteger(Number(season?.season_year)) ? Number(season?.season_year) : null;
+};
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -316,7 +326,7 @@ Deno.serve(async (request) => {
     // Voor het jaartalsignaal verderop: welk seizoen meldt iRacing bij elke
     // serie-koppeling? Dit wordt gevuld uit dezelfde seizoenslijst die de
     // tijdsloten levert, dus zonder aanname over de vorm van de sleutel.
-    let seriesSeasonYears: Array<{ sourceKey: string; seasonYear: number | null }> = [];
+    let seriesSeasonYears: Array<{ sourceKey: string; seasonYear: number | null; followsSeason: boolean }> = [];
     const seriesEntries = mapping.filter((entry) => entry.kind === "series");
     if (seriesEntries.length) {
       try {
@@ -327,10 +337,16 @@ Deno.serve(async (request) => {
         const seasonYearById = new Map<number, number | null>(publishedSeasons
           .filter((season) => Number.isInteger(Number(season?.season_id)))
           .map((season) => [Number(season.season_id), Number.isInteger(Number(season?.season_year)) ? Number(season.season_year) : null]));
-        seriesSeasonYears = seriesEntries.map((entry) => ({
-          sourceKey: entry.seed.sourceKey,
-          seasonYear: seasonYearById.get(seasonIdFor(entry, publishedSeasons)) ?? null,
-        }));
+        seriesSeasonYears = seriesEntries.map((entry) => {
+          const effective = seasonIdFor(entry, publishedSeasons);
+          return {
+            sourceKey: entry.seed.sourceKey,
+            seasonYear: seasonYearById.get(effective) ?? null,
+            // Een combined-serie volgt bewust niet (zie seasonIdFor); die telt
+            // hier als gevolgd, anders waarschuwt het signaal elke ronde.
+            followsSeason: entry.combined === true || effective !== entry.seasonId,
+          };
+        });
         const seasonBySeasonId = new Map(seasonsArr
           .filter((s): s is { season_id: number } => Boolean(s && typeof s === "object" && (s as { season_id?: unknown }).season_id))
           .map((s) => [Number((s as { season_id: number }).season_id), s as { season_id: number; car_class_ids?: number[] }]));
@@ -359,6 +375,7 @@ Deno.serve(async (request) => {
         const seriesSeed: SeriesSeed = {
           ...seriesEntry.seed,
           seasonId: effectiveSeasonId,
+          year: yearForSeason(effectiveSeasonId, publishedSeasons) ?? seriesEntry.seed.year,
           seriesId: seriesEntry.seriesId ?? null,
           seriesName: seriesEntry.seed.name,
           combined: seriesEntry.combined === true,
@@ -468,16 +485,18 @@ Deno.serve(async (request) => {
     // is dat een waarschuwing en geen alarm. Een los event dat iemand voor het
     // nieuwe jaar toevoegt mag dit signaal niet laten zwijgen, vandaar dat alleen
     // de series tellen.
-    const currentYear = new Date().getUTCFullYear();
-    const staleSeries = seriesSeasonYears.filter((entry) => entry.seasonYear !== currentYear);
-    const beschrijfSeries = (entries: typeof staleSeries) =>
+    // Een serie die nog op zijn vaste seizoen staat, is niet gevolgd: er is geen
+    // lopend seizoen voor gevonden en de kalender veroudert. Dat is het signaal —
+    // ongeacht het kalenderjaar, want een seizoen loopt over de jaarwisseling heen.
+    const notFollowed = seriesSeasonYears.filter((entry) => !entry.followsSeason);
+    const beschrijfSeries = (entries: typeof notFollowed) =>
       entries.map((entry) => `${entry.sourceKey}=${entry.seasonYear ?? "onbekend"}`).join(", ");
-    if (seriesSeasonYears.length > 0 && staleSeries.length === seriesSeasonYears.length) {
-      errors.push(`season_mapping: geen serie-seizoen voor ${currentYear}; de series vullen niet meer aan`
-        + ` (gevonden: ${beschrijfSeries(staleSeries)})`);
-    } else if (staleSeries.length > 0) {
-      warnings.push(`season_mapping: ${staleSeries.length} van ${seriesSeasonYears.length} series nog niet op`
-        + ` ${currentYear} (${beschrijfSeries(staleSeries)})`);
+    if (seriesSeasonYears.length > 0 && notFollowed.length === seriesSeasonYears.length) {
+      errors.push(`season_mapping: geen lopend seizoen gevonden voor ${notFollowed.length} series; de kalender vult niet meer aan`
+        + ` (${beschrijfSeries(notFollowed)})`);
+    } else if (notFollowed.length > 0) {
+      warnings.push(`season_mapping: ${notFollowed.length} van ${seriesSeasonYears.length} series volgt het lopende seizoen niet`
+        + ` (${beschrijfSeries(notFollowed)})`);
     }
     // Zichtbaarheid zonder ruis: hoeveel aankomende endurance-events staan er nog
     // in de catalogus? Een lege aankomende kalender is het signaal dat er iets

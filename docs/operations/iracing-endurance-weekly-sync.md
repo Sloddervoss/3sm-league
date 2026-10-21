@@ -180,3 +180,31 @@ Voorkeur op de bestaande host: de meegeleverde systemd-timer draait **dagelijks*
 - timer stoppen/disable; de laatste goede catalogus blijft beschikbaar;
 - `ENDURANCE_IRACING_SYNC_TOKEN` in Edge-runtime en host-env tegelijk roteren;
 - nooit Authorization-headers of envbestanden loggen.
+
+## Het lopende seizoen wordt automatisch gevolgd (sinds 21-10-2026)
+
+De synchronisatie gebruikt het `seasonId` uit de seizoenskaart niet meer als vast
+nummer, maar als **terugval**. Per ronde zoekt hij via de `seriesId` van dezelfde
+kaart op welk seizoen iRacing nu publiceert, en gebruikt dat voor de kalender, het
+rooster en het jaartal van de rijen.
+
+Wat dat betekent voor het onderhoud:
+
+- **Het jaarlijkse bijwerken van de `seasonId`'s is niet meer nodig.** De kaart
+  wijst na een seizoenswissel vanzelf naar het nieuwe seizoen.
+- **`seriesId` is verplicht** voor elke entry met `"kind": "series"`. Ontbreekt
+  die, dan weigert de functie te starten met `seriesId ontbreekt bij een
+  serie-mapping` — dat is bewust: zonder anker zou de kalender stil verouderen.
+- **Combined-series volgen bewust niet.** Die beschrijven één seizoensbreed event
+  met een begin- en einddatum uit de kaart; een kalender uit een ander seizoen
+  valt buiten dat venster. Voor die series blijft handmatig onderhoud nodig.
+- **Een rij waar al een 3SM-event aan hangt wordt nooit overschreven.** De
+  eventsleutel bevat week en circuit, niet het seizoen, dus bij een herhaling
+  blijft de bestaande rij staan en verschijnt er een waarschuwing in de run. Dat
+  is geen fout: de run blijft `success`. Lost het op door het oude event te
+  ontkoppelen of de sleutel te herbouwen.
+
+Het signaal `season_mapping: ... series volgt het lopende seizoen niet` betekent
+dat er voor die serie geen lopend seizoen gevonden is. Dat hangt aan het seizoen
+en niet aan het kalenderjaar, zodat een seizoen dat over de jaarwisseling loopt
+geen valse melding geeft.
