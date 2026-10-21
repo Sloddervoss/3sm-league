@@ -113,3 +113,16 @@ Deno.test("kiest over de jaarwissel het nieuwe jaar, niet het hoogste kwartaal",
   const seasons = [season(7000, 331, 2026, 1, false), season(6307, 331, 2025, 4, false)];
   check("jaarwissel", resolveCurrentSeriesSeasonId(6307, 331, seasons), 7000);
 });
+
+Deno.test("een niet-officieel seizoen verliest van een ouder officieel seizoen", () => {
+  const seasons = [
+    { ...season(5000, 331, 2026, 4, true), official: false },
+    { ...season(4000, 331, 2026, 3, true), official: true },
+  ];
+  check("official wint", resolveCurrentSeriesSeasonId(5000, 331, seasons), 4000);
+});
+
+Deno.test("valt terug als het enige seizoen van de serie niet-officieel is", () => {
+  const seasons = [{ ...season(5000, 331, 2026, 4, true), official: false }];
+  check("niet-officieel enkel", resolveCurrentSeriesSeasonId(6307, 331, seasons), 6307);
+});

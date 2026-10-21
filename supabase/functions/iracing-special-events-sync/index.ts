@@ -75,9 +75,17 @@ const parseSeasonMap = (): SeasonMapEntry[] => {
  * Het seizoen dat iRacing nu voor deze serie publiceert, met het vaste nummer uit
  * de kaart als terugval. Per ronde opnieuw bepaald, zodat een nieuw
  * iRacing-seizoen zonder handmatige ingreep wordt gevolgd.
+ *
+ * Combined-series blijven bewust op hun vaste seizoen: die worden als één
+ * seizoensbreed event beschreven met begin- en einddatum uit de configuratie, en
+ * een kalender uit een ander seizoen valt buiten dat venster. Ze zouden de hele
+ * run laten stuklopen op de datumcontrole. Zodra iRacing zo'n seizoen opnieuw
+ * indeelt, hoort daar een bewuste aanpassing van de kaart bij.
  */
 const seasonIdFor = (entry: SeasonMapEntry, seasons: readonly PublishedSeason[] | null): number =>
-  resolveCurrentSeriesSeasonId(entry.seasonId, entry.seriesId, seasons ?? []);
+  entry.combined === true
+    ? entry.seasonId
+    : resolveCurrentSeriesSeasonId(entry.seasonId, entry.seriesId, seasons ?? []);
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -175,8 +183,6 @@ Deno.serve(async (request) => {
       const localCarMap = entry?.localCarMap ?? {};
       const cars = normalized.cars.map((car) => ({ ...car, localCarId: localCarMap[car.sourceKey] ?? null }));
       const localCarIds = [...new Set(cars.flatMap((car) => car.localCarId ? [car.localCarId] : []))];
-      counts.events_seen += 1;
-      counts.slots_seen += normalized.slots.length;
 
       const { data: existing, error: existingError } = await service.from("endurance_iracing_events")
         .select("id,source_hash,source_payload,iracing_season_id").eq("source_key", normalized.sourceKey).maybeSingle();
@@ -194,10 +200,17 @@ Deno.serve(async (request) => {
           .select("id,name").eq("iracing_catalog_event_id", existing.id).limit(1).maybeSingle();
         if (linkedError) throw linkedError;
         if (linked) {
-          errors.push(`${normalized.sourceKey}: rij is gekoppeld aan 3SM-event "${linked.name}"; seizoenswissel niet doorgevoerd`);
+          // Een bewust overgeslagen rij is geen fout: de run is geslaagd, er is
+          // alleen een rij die handmatig aandacht vraagt. Als fout melden zou elke
+          // run 502 geven en echte fouten onzichtbaar maken.
+          warnings.push(`${normalized.sourceKey}: rij is gekoppeld aan 3SM-event "${linked.name}"; seizoenswissel niet doorgevoerd`);
           return;
         }
       }
+      // Pas tellen als vaststaat dat deze rij ook echt geschreven gaat worden.
+      counts.events_seen += 1;
+      counts.slots_seen += normalized.slots.length;
+
       const eventPayload = {
         source_key: normalized.sourceKey,
         iracing_series_id: entry?.seriesId ?? null,

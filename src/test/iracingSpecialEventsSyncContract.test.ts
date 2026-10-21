@@ -122,6 +122,16 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).toContain("upcomingEvents === 0 && upcomingImportable === 0");
   });
 
+  it("beschermt een gekoppelde catalogusrij tegen stil overschrijven bij een seizoenswissel", () => {
+    // De eventsleutel bevat week en circuit, niet het seizoen. Zonder deze controle
+    // zou een nieuwe race de rij van een bestaande 3SM-inschrijving overschrijven.
+    expect(source).toContain('eq("iracing_catalog_event_id", existing.id)');
+    expect(source).toContain("seizoenswissel niet doorgevoerd");
+    // Een bewust overgeslagen rij mag de run niet als mislukt laten eindigen.
+    expect(source).toContain("warnings.push(");
+    expect(source).toContain("rij is gekoppeld aan 3SM-event");
+  });
+
   it("laat serie-buckets niet als losse actieve kaart verschijnen naast hun week-rijen", () => {
     // De special-events-loop mag geen `kind === "series"`-entry importeren: de
     // series-loop maakt al de week-rijen (niet-combined) of één combined-event.
