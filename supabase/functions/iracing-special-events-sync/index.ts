@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
-import { findPublishedSpecialSeason, type PublishedSeason } from "./discovery.ts";
+import { findPublishedSpecialSeason, resolveCurrentSeriesSeasonId, type PublishedSeason } from "./discovery.ts";
 import {
   countAdmittedUpcomingEvents,
   findApprovedSpecialEvent,
@@ -61,9 +61,31 @@ const parseSeasonMap = (): SeasonMapEntry[] => {
     if (value.kind !== undefined && value.kind !== "special" && value.kind !== "series") {
       throw new Error("Ongeldig mappingtype");
     }
+    // De seriesId is het anker waarmee het lopende seizoen wordt opgezocht. Zonder
+    // dat anker valt de sync stil terug op het vaste seizoen en veroudert de
+    // kalender zonder melding — daarom hier hard falen in plaats van doorgaan.
+    if (value.kind === "series" && !Number.isInteger(value.seriesId)) {
+      throw new Error("seriesId ontbreekt bij een serie-mapping");
+    }
     return value as SeasonMapEntry;
   });
 };
+
+/**
+ * Het seizoen dat iRacing nu voor deze serie publiceert, met het vaste nummer uit
+ * de kaart als terugval. Per ronde opnieuw bepaald, zodat een nieuw
+ * iRacing-seizoen zonder handmatige ingreep wordt gevolgd.
+ *
+ * Combined-series blijven bewust op hun vaste seizoen: die worden als één
+ * seizoensbreed event beschreven met begin- en einddatum uit de configuratie, en
+ * een kalender uit een ander seizoen valt buiten dat venster. Ze zouden de hele
+ * run laten stuklopen op de datumcontrole. Zodra iRacing zo'n seizoen opnieuw
+ * indeelt, hoort daar een bewuste aanpassing van de kaart bij.
+ */
+const seasonIdFor = (entry: SeasonMapEntry, seasons: readonly PublishedSeason[] | null): number =>
+  entry.combined === true
+    ? entry.seasonId
+    : resolveCurrentSeriesSeasonId(entry.seasonId, entry.seriesId, seasons ?? []);
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -161,12 +183,34 @@ Deno.serve(async (request) => {
       const localCarMap = entry?.localCarMap ?? {};
       const cars = normalized.cars.map((car) => ({ ...car, localCarId: localCarMap[car.sourceKey] ?? null }));
       const localCarIds = [...new Set(cars.flatMap((car) => car.localCarId ? [car.localCarId] : []))];
+
+      const { data: existing, error: existingError } = await service.from("endurance_iracing_events")
+        .select("id,source_hash,source_payload,iracing_season_id").eq("source_key", normalized.sourceKey).maybeSingle();
+      if (existingError) throw existingError;
+
+      // De eventsleutel bevat het weeknummer en het circuit, niet het seizoen. Komt
+      // dezelfde week+baan in een volgend seizoen terug, dan wijst de sleutel naar
+      // dezelfde rij. Hangt daar een echte 3SM-race aan, dan mag de sync die rij
+      // niet stil vervangen: de kaart zou dan een andere race tonen dan waar de
+      // inschrijving bij hoort, en de nieuwe race wordt door de unieke index
+      // bovendien onactiveerbaar. Overslaan en melden is beter dan overschrijven.
+      if (existing && entry?.seasonId != null && existing.iracing_season_id != null
+        && Number(existing.iracing_season_id) !== Number(entry.seasonId)) {
+        const { data: linked, error: linkedError } = await service.from("endurance_events")
+          .select("id,name").eq("iracing_catalog_event_id", existing.id).limit(1).maybeSingle();
+        if (linkedError) throw linkedError;
+        if (linked) {
+          // Een bewust overgeslagen rij is geen fout: de run is geslaagd, er is
+          // alleen een rij die handmatig aandacht vraagt. Als fout melden zou elke
+          // run 502 geven en echte fouten onzichtbaar maken.
+          warnings.push(`${normalized.sourceKey}: rij is gekoppeld aan 3SM-event "${linked.name}"; seizoenswissel niet doorgevoerd`);
+          return;
+        }
+      }
+      // Pas tellen als vaststaat dat deze rij ook echt geschreven gaat worden.
       counts.events_seen += 1;
       counts.slots_seen += normalized.slots.length;
 
-      const { data: existing, error: existingError } = await service.from("endurance_iracing_events")
-        .select("id,source_hash,source_payload").eq("source_key", normalized.sourceKey).maybeSingle();
-      if (existingError) throw existingError;
       const eventPayload = {
         source_key: normalized.sourceKey,
         iracing_series_id: entry?.seriesId ?? null,
@@ -285,7 +329,7 @@ Deno.serve(async (request) => {
           .map((season) => [Number(season.season_id), Number.isInteger(Number(season?.season_year)) ? Number(season.season_year) : null]));
         seriesSeasonYears = seriesEntries.map((entry) => ({
           sourceKey: entry.seed.sourceKey,
-          seasonYear: seasonYearById.get(Number(entry.seasonId)) ?? null,
+          seasonYear: seasonYearById.get(seasonIdFor(entry, publishedSeasons)) ?? null,
         }));
         const seasonBySeasonId = new Map(seasonsArr
           .filter((s): s is { season_id: number } => Boolean(s && typeof s === "object" && (s as { season_id?: unknown }).season_id))
@@ -294,14 +338,15 @@ Deno.serve(async (request) => {
         const carData = await client.fetchData("/data/car/get").catch(() => null);
         roster = new Map();
         for (const entry of seriesEntries) {
-          const season = seasonBySeasonId.get(entry.seasonId);
+          const effectiveSeasonId = seasonIdFor(entry, publishedSeasons);
+          const season = seasonBySeasonId.get(effectiveSeasonId);
           if (!season) continue;
           const resolved = resolveSeriesRoster(
             season.car_class_ids,
             (carClassData ?? null) as Record<string | number, unknown> | unknown[] | null | undefined,
             (carData ?? null) as Record<string | number, unknown> | unknown[] | null | undefined,
           );
-          roster.set(entry.seasonId, resolved);
+          roster.set(effectiveSeasonId, resolved);
         }
       } catch (error) {
         errors.push(`series_roster: ${cleanError(error)}`);
@@ -309,24 +354,28 @@ Deno.serve(async (request) => {
     }
     for (const seriesEntry of seriesEntries) {
       try {
-        const rosterForSeries = roster?.get(seriesEntry.seasonId);
+        const effectiveSeasonId = seasonIdFor(seriesEntry, publishedSeasons);
+        const rosterForSeries = roster?.get(effectiveSeasonId);
         const seriesSeed: SeriesSeed = {
           ...seriesEntry.seed,
-          seasonId: seriesEntry.seasonId,
+          seasonId: effectiveSeasonId,
           seriesId: seriesEntry.seriesId ?? null,
           seriesName: seriesEntry.seed.name,
           combined: seriesEntry.combined === true,
           classIds: rosterForSeries?.classIds ?? seriesEntry.seed.classIds ?? [],
           cars: rosterForSeries?.cars ?? seriesEntry.seed.cars ?? [],
         };
-        const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${seriesEntry.seasonId}`);
+        const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${effectiveSeasonId}`);
+        // Het effectieve seizoen gaat mee de upsert in, zodat iracing_season_id en
+        // de bronpayload het seizoen noemen waaruit de rij echt is opgebouwd.
+        const catalogEntry: SeasonMapEntry = { ...seriesEntry, seasonId: effectiveSeasonId };
         if (seriesSeed.combined) {
           const combined = await discoverCombinedSeriesEvent(seriesSeed, schedule as never);
-          if (combined) await upsertEventAndSlots(combined, seriesEntry);
+          if (combined) await upsertEventAndSlots(combined, catalogEntry);
         } else {
           const races = await discoverSeriesRaces(seriesSeed, schedule as never);
           for (const race of races) {
-            await upsertEventAndSlots(race, seriesEntry);
+            await upsertEventAndSlots(race, catalogEntry);
           }
         }
       } catch (error) {

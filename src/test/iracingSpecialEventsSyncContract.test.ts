@@ -108,9 +108,10 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).toContain("upcoming_events: upcomingEvents");
     expect(source).toContain("new Date().getUTCFullYear()");
     // Het jaartalsignaal toetst het SEIZOEN zelf (welk jaar meldt iRacing bij het
-    // gekoppelde seasonId) en niet het jaartal in de eventsleutel. De serie-import
-    // werkt met seasonId; een afwijkende sleutelvorm zou het signaal laten liegen.
-    expect(source).toContain("seasonYear: seasonYearById.get(Number(entry.seasonId)) ?? null");
+    // seizoen dat nu voor deze serie loopt) en niet het jaartal in de eventsleutel.
+    // De serie-import werkt met het opgezochte seizoen; een afwijkende sleutelvorm
+    // zou het signaal laten liegen.
+    expect(source).toContain("seasonYear: seasonYearById.get(seasonIdFor(entry, publishedSeasons)) ?? null");
     expect(source).toContain("staleSeries.length === seriesSeasonYears.length");
     expect(source).not.toContain("mappingYears");
     expect(source).not.toContain('sourceKey.split(":")[1]');
@@ -119,6 +120,16 @@ describe("iRacing Special Events sync security contract", () => {
     // mogen het signaal niet muisstil maken.
     expect(source).toContain("const upcomingImportable = countAdmittedUpcomingEvents(");
     expect(source).toContain("upcomingEvents === 0 && upcomingImportable === 0");
+  });
+
+  it("beschermt een gekoppelde catalogusrij tegen stil overschrijven bij een seizoenswissel", () => {
+    // De eventsleutel bevat week en circuit, niet het seizoen. Zonder deze controle
+    // zou een nieuwe race de rij van een bestaande 3SM-inschrijving overschrijven.
+    expect(source).toContain('eq("iracing_catalog_event_id", existing.id)');
+    expect(source).toContain("seizoenswissel niet doorgevoerd");
+    // Een bewust overgeslagen rij mag de run niet als mislukt laten eindigen.
+    expect(source).toContain("warnings.push(");
+    expect(source).toContain("rij is gekoppeld aan 3SM-event");
   });
 
   it("laat serie-buckets niet als losse actieve kaart verschijnen naast hun week-rijen", () => {
