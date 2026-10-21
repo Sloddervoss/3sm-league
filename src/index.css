@@ -1134,7 +1134,9 @@
   }
 }
 
-@utility ProseMirror {
+/* ProseMirror is een editor-class van buiten Tailwind; @utility eist een
+   lowercase naam, dus dit blijft een gewone regel. */
+.ProseMirror {
   .news-editor-prose & .selectedCell {
     background: hsl(var(--primary) / 0.12);
     outline: 2px solid hsl(var(--primary) / 0.5);
@@ -1299,5 +1301,17 @@ select optgroup {
   select,
   textarea {
     font-size: 16px !important;
+  }
+}
+
+/*
+ * Tailwind 4 zet geen cursor:pointer meer op buttons in de preflight; Tailwind 3
+ * deed dat wel. Zonder deze regel voelt elke knop op de site dood aan bij hover.
+ * disabled knoppen houden de default, zodat een uitgezette knop dat ook toont.
+ */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
   }
 }

@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { dropColorMixFallback } from './vite-plugin-drop-colormix-fallback.mjs';
 
 export default defineConfig({
   server: {
@@ -35,6 +36,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    dropColorMixFallback(),
     react(),
     // Non-render-blocking CSS: ~950ms besparing op mobiel
     {
