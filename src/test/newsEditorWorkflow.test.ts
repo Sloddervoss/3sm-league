@@ -124,11 +124,11 @@ describe("news editor workflow", () => {
     expect(page).toContain("33%");
     expect(page).toContain("50%");
     expect(page).toContain("100%");
-    expect(css).toContain('.news-editor-prose .news-image-block[data-width="33%"]');
+    expect(css).toContain("& .news-image-block[data-width='33%']");
     expect(css).toContain("width: calc(33.333% - 0.75rem);");
-    expect(css).toContain('.news-editor-prose .news-image-block[data-width="50%"]');
+    expect(css).toContain("& .news-image-block[data-width='50%']");
     expect(css).toContain("width: calc(50% - 0.75rem);");
-    expect(css).toContain('.news-editor-prose .news-image-block[data-width="100%"]');
+    expect(css).toContain("& .news-image-block[data-width='100%']");
     expect(css).toContain("display: block;");
     expect(css).toContain("width: 100%;");
     expect(css).toContain("@media (max-width: 640px)");

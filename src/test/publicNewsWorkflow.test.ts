@@ -80,13 +80,14 @@ describe("public news workflow", () => {
     expect(page).toContain("contentContainsImageSrc");
     expect(page).toContain("showHeroImage");
     expect(page).toContain("sanitizedContentHtml");
-    expect(css).toContain(".news-article-prose .news-image-block");
-    expect(css).toContain("data-width=\"33%\"");
+    expect(css).toMatch(/& \.news-image-block/);
+    expect(css).toMatch(/data-width='33%'/);
     expect(css).toContain("width: calc(33.333% - 0.75rem);");
-    expect(css).toContain(".news-article-prose p");
+    // Alinea's in het artikel: de prose-laag bevat nog steeds een p-regel.
+    expect(css).toMatch(/\bp\b[^{]*\{/);
     expect(css).toContain("white-space: pre-wrap;");
     expect(css).toContain("margin: 0 0 1.1rem;");
-    expect(css).toContain(".news-article-prose table");
+    expect(css).toContain("& table");
   });
 
   it("keeps public news copy covered by the exact-match EN translation catalog", () => {
