@@ -48,6 +48,20 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
+  /*
+   * De racing-UI staat op een bijna-zwarte achtergrond; Tailwind's standaard
+   * gray-600 en gray-700 zijn daar te donker voor metadata. In versie 3 gebeurde
+   * dit met een eigen @utility die de core-regel overschreef; in versie 4 wint de
+   * core-regel en moet het via de themawaarde. Zo werkt de /70-variant ook.
+   */
+  --color-gray-600: rgb(156 163 175);
+  --color-gray-700: rgb(107 114 128);
+
+  /* Tailwind 4 koos nieuwe oklch-waarden voor het kernpalet; dit houdt het merk-
+     oranje gelijk aan wat de site altijd had. */
+  --color-orange-400: rgb(251 146 60);
+  --color-orange-500: rgb(249 115 22);
+
   --color-racing-red: hsl(var(--racing-red));
   --color-racing-orange: hsl(var(--racing-orange));
   --color-racing-dark: hsl(var(--racing-dark));
@@ -127,17 +141,9 @@
   }
 }
 
-@utility text-gray-600 {
-  /*
-   * The racing UI lives on a near-black surface. Tailwind's default gray-600
-   * and gray-700 are too quiet there, so lift them for better metadata contrast.
-   */
-  color: rgb(156 163 175);
-}
 
-@utility text-gray-700 {
-  color: rgb(107 114 128);
-}
+
+
 
 @utility text-gradient-racing {
   @apply bg-clip-text text-transparent;
@@ -1315,3 +1321,9 @@ select optgroup {
     cursor: pointer;
   }
 }
+
+/*
+ * Deze class staat in een template literal en wordt door de Tailwind 4-scanner
+ * niet gezien; los gecompileerd genereert hij wel correct. Expliciet aanmelden.
+ */
+@source inline("hover:before:opacity-100");
