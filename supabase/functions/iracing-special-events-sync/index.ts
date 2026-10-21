@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
-import { findPublishedSpecialSeason, type PublishedSeason } from "./discovery.ts";
+import { findPublishedSpecialSeason, resolveCurrentSeriesSeasonId, type PublishedSeason } from "./discovery.ts";
 import {
   countAdmittedUpcomingEvents,
   findApprovedSpecialEvent,
@@ -64,6 +64,14 @@ const parseSeasonMap = (): SeasonMapEntry[] => {
     return value as SeasonMapEntry;
   });
 };
+
+/**
+ * Het seizoen dat iRacing nu als actief meldt binnen dezelfde serie, met het
+ * vaste nummer uit de kaart als terugval. Per ronde opnieuw bepaald, zodat een
+ * nieuw iRacing-seizoen zonder handmatige ingreep wordt gevolgd.
+ */
+const seasonIdFor = (entry: SeasonMapEntry, seasons: readonly PublishedSeason[] | null): number =>
+  resolveCurrentSeriesSeasonId(entry.seasonId, seasons ?? []);
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -285,7 +293,7 @@ Deno.serve(async (request) => {
           .map((season) => [Number(season.season_id), Number.isInteger(Number(season?.season_year)) ? Number(season.season_year) : null]));
         seriesSeasonYears = seriesEntries.map((entry) => ({
           sourceKey: entry.seed.sourceKey,
-          seasonYear: seasonYearById.get(Number(entry.seasonId)) ?? null,
+          seasonYear: seasonYearById.get(seasonIdFor(entry, publishedSeasons)) ?? null,
         }));
         const seasonBySeasonId = new Map(seasonsArr
           .filter((s): s is { season_id: number } => Boolean(s && typeof s === "object" && (s as { season_id?: unknown }).season_id))
@@ -294,14 +302,15 @@ Deno.serve(async (request) => {
         const carData = await client.fetchData("/data/car/get").catch(() => null);
         roster = new Map();
         for (const entry of seriesEntries) {
-          const season = seasonBySeasonId.get(entry.seasonId);
+          const effectiveSeasonId = seasonIdFor(entry, publishedSeasons);
+          const season = seasonBySeasonId.get(effectiveSeasonId);
           if (!season) continue;
           const resolved = resolveSeriesRoster(
             season.car_class_ids,
             (carClassData ?? null) as Record<string | number, unknown> | unknown[] | null | undefined,
             (carData ?? null) as Record<string | number, unknown> | unknown[] | null | undefined,
           );
-          roster.set(entry.seasonId, resolved);
+          roster.set(effectiveSeasonId, resolved);
         }
       } catch (error) {
         errors.push(`series_roster: ${cleanError(error)}`);
@@ -309,17 +318,18 @@ Deno.serve(async (request) => {
     }
     for (const seriesEntry of seriesEntries) {
       try {
-        const rosterForSeries = roster?.get(seriesEntry.seasonId);
+        const effectiveSeasonId = seasonIdFor(seriesEntry, publishedSeasons);
+        const rosterForSeries = roster?.get(effectiveSeasonId);
         const seriesSeed: SeriesSeed = {
           ...seriesEntry.seed,
-          seasonId: seriesEntry.seasonId,
+          seasonId: effectiveSeasonId,
           seriesId: seriesEntry.seriesId ?? null,
           seriesName: seriesEntry.seed.name,
           combined: seriesEntry.combined === true,
           classIds: rosterForSeries?.classIds ?? seriesEntry.seed.classIds ?? [],
           cars: rosterForSeries?.cars ?? seriesEntry.seed.cars ?? [],
         };
-        const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${seriesEntry.seasonId}`);
+        const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${effectiveSeasonId}`);
         if (seriesSeed.combined) {
           const combined = await discoverCombinedSeriesEvent(seriesSeed, schedule as never);
           if (combined) await upsertEventAndSlots(combined, seriesEntry);
