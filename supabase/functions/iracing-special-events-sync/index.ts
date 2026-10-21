@@ -94,7 +94,10 @@ const seasonIdFor = (entry: SeasonMapEntry, seasons: readonly PublishedSeason[] 
  */
 const yearForSeason = (seasonId: number, seasons: readonly PublishedSeason[] | null): number | null => {
   const season = seasons?.find((candidate) => Number(candidate?.season_id) === seasonId);
-  return Number.isInteger(Number(season?.season_year)) ? Number(season?.season_year) : null;
+  // Number(null) en Number("") zijn 0 en Number.isInteger(0) is true; zonder de
+  // > 0-eis zou een ontbrekend veld als jaar 0 in de database belanden.
+  const year = Number(season?.season_year);
+  return Number.isInteger(year) && year > 0 ? year : null;
 };
 
 Deno.serve(async (request) => {
@@ -326,7 +329,16 @@ Deno.serve(async (request) => {
     // Voor het jaartalsignaal verderop: welk seizoen meldt iRacing bij elke
     // serie-koppeling? Dit wordt gevuld uit dezelfde seizoenslijst die de
     // tijdsloten levert, dus zonder aanname over de vorm van de sleutel.
-    let seriesSeasonYears: Array<{ sourceKey: string; seasonYear: number | null; followsSeason: boolean }> = [];
+    let seriesSeasonYears: Array<{
+      sourceKey: string;
+      mappedSeasonId: number;
+      seasonYear: number | null;
+      followsSeason: boolean;
+    }> = [];
+    // Als de seizoenslijst niet opgehaald kan worden, valt de import terug op de
+    // vaste seizoenen. Dat is precies de veroudering waarvoor het signaal bestaat,
+    // dus dat mag niet stil blijven.
+    let seasonsUnavailable = false;
     const seriesEntries = mapping.filter((entry) => entry.kind === "series");
     if (seriesEntries.length) {
       try {
@@ -341,10 +353,14 @@ Deno.serve(async (request) => {
           const effective = seasonIdFor(entry, publishedSeasons);
           return {
             sourceKey: entry.seed.sourceKey,
+            mappedSeasonId: entry.seasonId,
             seasonYear: seasonYearById.get(effective) ?? null,
-            // Een combined-serie volgt bewust niet (zie seasonIdFor); die telt
-            // hier als gevolgd, anders waarschuwt het signaal elke ronde.
-            followsSeason: entry.combined === true || effective !== entry.seasonId,
+            // Gevolgd betekent: er is een gepubliceerd seizoen voor deze serie
+            // gevonden. Niet: 'het nummer is anders dan in de kaart' — staat de
+            // kaart al op het lopende seizoen, dan is dat juist de goede situatie.
+            // Combined-series volgen bewust niet (zie seasonIdFor).
+            followsSeason: entry.combined === true
+              || (publishedSeasons ?? []).some((season) => Number(season?.season_id) === effective),
           };
         });
         const seasonBySeasonId = new Map(seasonsArr
@@ -365,6 +381,7 @@ Deno.serve(async (request) => {
           roster.set(effectiveSeasonId, resolved);
         }
       } catch (error) {
+        seasonsUnavailable = true;
         errors.push(`series_roster: ${cleanError(error)}`);
       }
     }
@@ -490,8 +507,11 @@ Deno.serve(async (request) => {
     // ongeacht het kalenderjaar, want een seizoen loopt over de jaarwisseling heen.
     const notFollowed = seriesSeasonYears.filter((entry) => !entry.followsSeason);
     const beschrijfSeries = (entries: typeof notFollowed) =>
-      entries.map((entry) => `${entry.sourceKey}=${entry.seasonYear ?? "onbekend"}`).join(", ");
-    if (seriesSeasonYears.length > 0 && notFollowed.length === seriesSeasonYears.length) {
+      entries.map((entry) => `${entry.sourceKey}=seizoen ${entry.mappedSeasonId} niet gevonden`).join(", ");
+    if (seasonsUnavailable) {
+      errors.push("season_mapping: de seizoenslijst van iRacing kon niet worden opgehaald;"
+        + " de kalender is niet ververst en draait op de vaste seizoenen");
+    } else if (seriesSeasonYears.length > 0 && notFollowed.length === seriesSeasonYears.length) {
       errors.push(`season_mapping: geen lopend seizoen gevonden voor ${notFollowed.length} series; de kalender vult niet meer aan`
         + ` (${beschrijfSeries(notFollowed)})`);
     } else if (notFollowed.length > 0) {
