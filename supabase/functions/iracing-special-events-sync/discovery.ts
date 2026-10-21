@@ -5,42 +5,46 @@ export type PublishedSeason = {
   series_id?: number;
   season_year: number;
   season_name: string;
-  /** iRacing meldt hier welk seizoen binnen de serie nu loopt. */
-  active?: boolean;
   /** Kwartaal binnen het jaar (1-4); nodig om het nieuwste seizoen te kiezen. */
   season_quarter?: number;
+  /** iRacing meldt hier welk seizoen binnen de serie nu loopt. */
+  active?: boolean;
   official?: boolean;
 };
 
 /**
- * Het seizoen dat nu loopt binnen dezelfde serie als de gekoppelde kaart.
+ * Het seizoen dat iRacing nu voor deze serie publiceert.
  *
- * De seizoenskaart (`ENDURANCE_IRACING_SEASON_MAP_JSON`) bevat een vast
- * `seasonId`. Zodra iRacing een nieuw seizoen start hoort daarbij een nieuw
- * `season_id`, maar de kaart blijft naar het oude wijzen. De synchronisatie vroeg
- * daardoor elke ronde opnieuw de kalender van een afgelopen seizoen op en zag de
- * nieuwe races nooit — de endurance-kalender liep stil leeg zonder foutmelding.
+ * `/data/series/seasons` zonder parameters geeft per serie alleen het seizoen dat
+ * nu loopt — de historie zit er niet in. Het vaste `seasonId` uit de seizoenskaart
+ * staat daar na een seizoenswissel dus niet meer tussen. Daarom wordt hier op de
+ * `seriesId` uit de kaart gematcht en niet op het oude seizoen.
  *
- * Daarom zoeken we hier het seizoen op dat iRacing zelf als actief meldt binnen
- * dezelfde serie. Valt er niets te kiezen (geen actief seizoen, serie onbekend,
- * of een onverwachte vorm van de lijst), dan blijft het gekoppelde nummer staan.
- * Zo kan deze stap nooit een werkende koppeling breken.
+ * Valt er niets te kiezen (serie onbekend, geen seizoen in de lijst), dan blijft
+ * het vaste nummer staan: deze stap kan een werkende koppeling nooit breken.
  */
-export function resolveCurrentSeriesSeasonId(mappedSeasonId: number, seasons: readonly PublishedSeason[]): number {
-  const mapped = seasons.find((season) => Number(season?.season_id) === mappedSeasonId);
-  const seriesId = Number(mapped?.series_id);
-  if (!Number.isInteger(seriesId) || seriesId <= 0) return mappedSeasonId;
+export function resolveCurrentSeriesSeasonId(
+  mappedSeasonId: number,
+  seriesId: number | null | undefined,
+  seasons: readonly PublishedSeason[],
+): number {
+  const series = Number(seriesId);
+  if (!Number.isInteger(series) || series <= 0) return mappedSeasonId;
 
-  const candidates = seasons.filter((season) => Number(season?.series_id) === seriesId
-    && season?.active === true
-    && season?.official !== false
+  const candidates = seasons.filter((season) => Number(season?.series_id) === series
     && Number.isInteger(Number(season?.season_id))
-    && Number(season.season_id) > 0);
+    && Number(season?.season_id) > 0);
   if (!candidates.length) return mappedSeasonId;
+
+  // Meestal staat er één seizoen per serie in de lijst. Staan er meer, dan is het
+  // actieve seizoen leidend en anders het nieuwste.
+  const active = candidates.filter((season) => season?.active === true);
+  const pool = active.length ? active : candidates;
 
   const rank = (season: PublishedSeason) => (Number.isInteger(Number(season.season_year)) ? Number(season.season_year) : 0) * 10
     + (Number.isInteger(Number(season.season_quarter)) ? Number(season.season_quarter) : 0);
-  return [...candidates].sort((a, b) => rank(b) - rank(a))[0].season_id;
+  const best = [...pool].sort((a, b) => rank(b) - rank(a))[0];
+  return Number(best.season_id);
 }
 
 // Only remove explicit year/sponsor decorations. No fuzzy track/name matching:

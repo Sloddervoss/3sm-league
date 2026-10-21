@@ -66,12 +66,12 @@ const parseSeasonMap = (): SeasonMapEntry[] => {
 };
 
 /**
- * Het seizoen dat iRacing nu als actief meldt binnen dezelfde serie, met het
- * vaste nummer uit de kaart als terugval. Per ronde opnieuw bepaald, zodat een
- * nieuw iRacing-seizoen zonder handmatige ingreep wordt gevolgd.
+ * Het seizoen dat iRacing nu voor deze serie publiceert, met het vaste nummer uit
+ * de kaart als terugval. Per ronde opnieuw bepaald, zodat een nieuw
+ * iRacing-seizoen zonder handmatige ingreep wordt gevolgd.
  */
 const seasonIdFor = (entry: SeasonMapEntry, seasons: readonly PublishedSeason[] | null): number =>
-  resolveCurrentSeriesSeasonId(entry.seasonId, seasons ?? []);
+  resolveCurrentSeriesSeasonId(entry.seasonId, entry.seriesId, seasons ?? []);
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -330,13 +330,16 @@ Deno.serve(async (request) => {
           cars: rosterForSeries?.cars ?? seriesEntry.seed.cars ?? [],
         };
         const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${effectiveSeasonId}`);
+        // Het effectieve seizoen gaat mee de upsert in, zodat iracing_season_id en
+        // de bronpayload het seizoen noemen waaruit de rij echt is opgebouwd.
+        const catalogEntry: SeasonMapEntry = { ...seriesEntry, seasonId: effectiveSeasonId };
         if (seriesSeed.combined) {
           const combined = await discoverCombinedSeriesEvent(seriesSeed, schedule as never);
-          if (combined) await upsertEventAndSlots(combined, seriesEntry);
+          if (combined) await upsertEventAndSlots(combined, catalogEntry);
         } else {
           const races = await discoverSeriesRaces(seriesSeed, schedule as never);
           for (const race of races) {
-            await upsertEventAndSlots(race, seriesEntry);
+            await upsertEventAndSlots(race, catalogEntry);
           }
         }
       } catch (error) {

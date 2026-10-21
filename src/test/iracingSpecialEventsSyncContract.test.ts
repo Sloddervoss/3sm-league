@@ -108,9 +108,10 @@ describe("iRacing Special Events sync security contract", () => {
     expect(source).toContain("upcoming_events: upcomingEvents");
     expect(source).toContain("new Date().getUTCFullYear()");
     // Het jaartalsignaal toetst het SEIZOEN zelf (welk jaar meldt iRacing bij het
-    // gekoppelde seasonId) en niet het jaartal in de eventsleutel. De serie-import
-    // werkt met seasonId; een afwijkende sleutelvorm zou het signaal laten liegen.
-    expect(source).toContain("seasonYear: seasonYearById.get(Number(entry.seasonId)) ?? null");
+    // seizoen dat nu voor deze serie loopt) en niet het jaartal in de eventsleutel.
+    // De serie-import werkt met het opgezochte seizoen; een afwijkende sleutelvorm
+    // zou het signaal laten liegen.
+    expect(source).toContain("seasonYear: seasonYearById.get(seasonIdFor(entry, publishedSeasons)) ?? null");
     expect(source).toContain("staleSeries.length === seriesSeasonYears.length");
     expect(source).not.toContain("mappingYears");
     expect(source).not.toContain('sourceKey.split(":")[1]');
