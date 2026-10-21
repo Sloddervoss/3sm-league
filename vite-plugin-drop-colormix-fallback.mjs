@@ -59,9 +59,17 @@ export function dropColorMixFallback() {
           const allesGedekt = regels.every((regel, index) => {
             let vorige = index === 0 ? voorafgaand : regel.prev();
             while (vorige && vorige.type === 'comment') vorige = vorige.prev();
-            return Boolean(vorige)
-              && vorige.type === 'rule'
-              && vorige.selector === regel.selector;
+            if (!vorige || vorige.type !== 'rule' || vorige.selector !== regel.selector) {
+              return false;
+            }
+            // De voorganger moet dezelfde eigenschappen kennen; anders is het geen
+            // fallback van deze regel maar een losse regel met toevallig dezelfde
+            // selector, en zou verwijderen een echte declaratie kosten.
+            const props = new Set();
+            vorige.walkDecls((decl) => props.add(decl.prop));
+            let gedekt = true;
+            regel.walkDecls((decl) => { if (!props.has(decl.prop)) gedekt = false; });
+            return gedekt;
           });
 
           if (!allesGedekt) {
@@ -73,7 +81,10 @@ export function dropColorMixFallback() {
           // @supports-wrapper gaat eraf. Dat is render-neutraal: de fallback was
           // zelf ook color-mix, dus wie het blok niet haalt, kreeg hem al niet.
           regels.forEach((regel, index) => {
-            const vorige = index === 0 ? voorafgaand : regel.prev();
+            let vorige = index === 0 ? voorafgaand : regel.prev();
+            // Dezelfde comment-sprong als bij de controle hierboven; anders
+            // verdwijnt de comment en blijft de fallback staan.
+            while (vorige && vorige.type === 'comment') vorige = vorige.prev();
             vorige.remove();
             verwijderd += 1;
           });

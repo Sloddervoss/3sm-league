@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { translateText } from "@/i18n/translations";
 
+/** Pakt het volledige blok van een @utility, zodat een assertie niet slaagt op
+ *  een gelijknamige regel ergens anders in het bestand. */
+function cssBlock(css: string, naam: string): string {
+  const start = css.indexOf(`@utility ${naam} {`);
+  if (start === -1) return "";
+  const open = css.indexOf("{", start);
+  let diepte = 0;
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === "{") diepte++;
+    else if (css[i] === "}") {
+      diepte--;
+      if (diepte === 0) return css.slice(start, i + 1);
+    }
+  }
+  return "";
+}
+
+
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("news editor workflow", () => {
@@ -105,30 +123,34 @@ describe("news editor workflow", () => {
   it("renders resized images as gallery items whose wrapper controls the width", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
     const css = read("src/index.css");
+    const editorCss = cssBlock(css, "news-editor-prose");
+    expect(editorCss).not.toBe("");
 
     expect(page).toContain('class: "news-image-block"');
     expect(page).toContain('wrapper.className = "resizable-image-node news-image-block"');
     expect(page).toContain('style: "width: 100%; max-width: 100%; height: auto;"');
     expect(page).toContain("applyImageWidth");
-    expect(css).toContain("display: inline-block;");
-    expect(css).toContain("vertical-align: top;");
-    expect(css).not.toContain("width: fit-content;");
-    expect(css).not.toContain("clear: both;");
+    expect(editorCss).toContain("display: inline-block;");
+    expect(editorCss).toContain("vertical-align: top;");
+    expect(editorCss).not.toContain("width: fit-content;");
+    expect(editorCss).not.toContain("clear: both;");
   });
 
   it("supports automatic gallery rows for thirds, halves and full-width images", () => {
     const page = read("src/pages/NewsEditorPage.tsx");
     const css = read("src/index.css");
+    const editorCss = cssBlock(css, "news-editor-prose");
+    expect(editorCss).not.toBe("");
 
     expect(page).toContain("setImageWidth");
     expect(page).toContain("33%");
     expect(page).toContain("50%");
     expect(page).toContain("100%");
-    expect(css).toContain("& .news-image-block[data-width='33%']");
-    expect(css).toContain("width: calc(33.333% - 0.75rem);");
-    expect(css).toContain("& .news-image-block[data-width='50%']");
-    expect(css).toContain("width: calc(50% - 0.75rem);");
-    expect(css).toContain("& .news-image-block[data-width='100%']");
+    expect(editorCss).toContain("& .news-image-block[data-width='33%']");
+    expect(editorCss).toContain("width: calc(33.333% - 0.75rem);");
+    expect(editorCss).toContain("& .news-image-block[data-width='50%']");
+    expect(editorCss).toContain("width: calc(50% - 0.75rem);");
+    expect(editorCss).toContain("& .news-image-block[data-width='100%']");
     expect(css).toContain("display: block;");
     expect(css).toContain("width: 100%;");
     expect(css).toContain("@media (max-width: 640px)");
