@@ -39,3 +39,6 @@ bot/sent_notifications.json
 bot/streamers.json
 bot/node_modules/
 bot/.cache/
+
+# Hermes-werkbestanden
+.hermes/

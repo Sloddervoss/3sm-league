@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 
+/** Pakt het volledige blok van een @utility, zodat een assertie niet slaagt op
+ *  een gelijknamige regel ergens anders in het bestand. */
+function cssBlock(css: string, naam: string): string {
+  const start = css.indexOf(`@utility ${naam} {`);
+  if (start === -1) return "";
+  const open = css.indexOf("{", start);
+  let diepte = 0;
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === "{") diepte++;
+    else if (css[i] === "}") {
+      diepte--;
+      if (diepte === 0) return css.slice(start, i + 1);
+    }
+  }
+  return "";
+}
+
+
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("public news workflow", () => {
@@ -80,13 +98,16 @@ describe("public news workflow", () => {
     expect(page).toContain("contentContainsImageSrc");
     expect(page).toContain("showHeroImage");
     expect(page).toContain("sanitizedContentHtml");
-    expect(css).toContain(".news-article-prose .news-image-block");
-    expect(css).toContain("data-width=\"33%\"");
-    expect(css).toContain("width: calc(33.333% - 0.75rem);");
-    expect(css).toContain(".news-article-prose p");
-    expect(css).toContain("white-space: pre-wrap;");
-    expect(css).toContain("margin: 0 0 1.1rem;");
-    expect(css).toContain(".news-article-prose table");
+    // Alle regels hieronder worden binnen het article-prose-blok gecontroleerd.
+    // Zonder die afbakening slagen ze ook als het blok zelf verdwenen is.
+    const artikelCss = cssBlock(css, "news-article-prose");
+    expect(artikelCss).not.toBe("");
+    expect(artikelCss).toContain(".news-image-block");
+    expect(artikelCss).toContain("data-width='33%'");
+    expect(artikelCss).toContain("width: calc(33.333% - 0.75rem);");
+    expect(artikelCss).toContain("white-space: pre-wrap;");
+    expect(artikelCss).toContain("margin: 0 0 1.1rem;");
+    expect(artikelCss).toContain("table");
   });
 
   it("keeps public news copy covered by the exact-match EN translation catalog", () => {
