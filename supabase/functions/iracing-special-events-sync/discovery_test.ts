@@ -90,3 +90,26 @@ Deno.test("slaat rijen zonder bruikbaar season_id over", () => {
   ];
   check("ongeldige rijen", resolveCurrentSeriesSeasonId(6307, 331, seasons as never), 6483);
 });
+
+Deno.test("slaat ongeldige season_id-rijen ook over als ze actief zijn", () => {
+  // Zonder deze variant maskeert de active-voorkeur het geldigheidsfilter.
+  const seasons = [
+    { season_id: null, series_id: 331, season_year: 2026, season_quarter: 4, active: true },
+    { season_id: 0, series_id: 331, season_year: 2026, season_quarter: 4, active: true },
+    season(6483, 331, 2026, 4, true),
+  ];
+  check("ongeldig maar actief", resolveCurrentSeriesSeasonId(6307, 331, seasons as never), 6483);
+});
+
+Deno.test("laat het actieve seizoen winnen, ook als het ouder is dan een niet-actief seizoen", () => {
+  // Hier is het actieve seizoen NIET het nieuwste, zodat de active-voorkeur
+  // onderscheiden wordt van 'kies gewoon het hoogste'.
+  const seasons = [season(5000, 331, 2026, 4, false), season(4000, 331, 2026, 3, true)];
+  check("actief boven rang", resolveCurrentSeriesSeasonId(5000, 331, seasons), 4000);
+});
+
+Deno.test("kiest over de jaarwissel het nieuwe jaar, niet het hoogste kwartaal", () => {
+  // Q1 van het nieuwe jaar is het lopende seizoen, Q4 van het oude jaar is ouder.
+  const seasons = [season(7000, 331, 2026, 1, false), season(6307, 331, 2025, 4, false)];
+  check("jaarwissel", resolveCurrentSeriesSeasonId(6307, 331, seasons), 7000);
+});

@@ -32,6 +32,7 @@ export function resolveCurrentSeriesSeasonId(
   if (!Number.isInteger(series) || series <= 0) return mappedSeasonId;
 
   const candidates = seasons.filter((season) => Number(season?.series_id) === series
+    && season?.official !== false
     && Number.isInteger(Number(season?.season_id))
     && Number(season?.season_id) > 0);
   if (!candidates.length) return mappedSeasonId;

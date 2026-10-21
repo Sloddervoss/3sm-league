@@ -61,6 +61,12 @@ const parseSeasonMap = (): SeasonMapEntry[] => {
     if (value.kind !== undefined && value.kind !== "special" && value.kind !== "series") {
       throw new Error("Ongeldig mappingtype");
     }
+    // De seriesId is het anker waarmee het lopende seizoen wordt opgezocht. Zonder
+    // dat anker valt de sync stil terug op het vaste seizoen en veroudert de
+    // kalender zonder melding — daarom hier hard falen in plaats van doorgaan.
+    if (value.kind === "series" && !Number.isInteger(value.seriesId)) {
+      throw new Error("seriesId ontbreekt bij een serie-mapping");
+    }
     return value as SeasonMapEntry;
   });
 };
@@ -173,8 +179,25 @@ Deno.serve(async (request) => {
       counts.slots_seen += normalized.slots.length;
 
       const { data: existing, error: existingError } = await service.from("endurance_iracing_events")
-        .select("id,source_hash,source_payload").eq("source_key", normalized.sourceKey).maybeSingle();
+        .select("id,source_hash,source_payload,iracing_season_id").eq("source_key", normalized.sourceKey).maybeSingle();
       if (existingError) throw existingError;
+
+      // De eventsleutel bevat het weeknummer en het circuit, niet het seizoen. Komt
+      // dezelfde week+baan in een volgend seizoen terug, dan wijst de sleutel naar
+      // dezelfde rij. Hangt daar een echte 3SM-race aan, dan mag de sync die rij
+      // niet stil vervangen: de kaart zou dan een andere race tonen dan waar de
+      // inschrijving bij hoort, en de nieuwe race wordt door de unieke index
+      // bovendien onactiveerbaar. Overslaan en melden is beter dan overschrijven.
+      if (existing && entry?.seasonId != null && existing.iracing_season_id != null
+        && Number(existing.iracing_season_id) !== Number(entry.seasonId)) {
+        const { data: linked, error: linkedError } = await service.from("endurance_events")
+          .select("id,name").eq("iracing_catalog_event_id", existing.id).limit(1).maybeSingle();
+        if (linkedError) throw linkedError;
+        if (linked) {
+          errors.push(`${normalized.sourceKey}: rij is gekoppeld aan 3SM-event "${linked.name}"; seizoenswissel niet doorgevoerd`);
+          return;
+        }
+      }
       const eventPayload = {
         source_key: normalized.sourceKey,
         iracing_series_id: entry?.seriesId ?? null,
