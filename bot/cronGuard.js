@@ -19,6 +19,20 @@ export class TimeoutError extends Error {
   }
 }
 
+/**
+ * Fout voor de harde grens van een hele taak, los van een time-out op één
+ * aanroep. Zonder dit onderscheid meldt een Discord-aanroep die na 20 seconden
+ * afbreekt dat de hele taak na 15 minuten is afgebroken, en verdwijnt de echte
+ * fout uit het log.
+ */
+export class TaskTimeoutError extends TimeoutError {
+  constructor(label, ms) {
+    super(label, ms);
+    this.name = 'TaskTimeoutError';
+    this.code = 'ETIMEOUT_TASK';
+  }
+}
+
 export function formatDuration(ms) {
   if (!Number.isFinite(ms) || ms < 0) return 'onbekend';
   const totalSeconds = Math.floor(ms / 1000);
@@ -37,14 +51,14 @@ export function formatDuration(ms) {
  * De aanroeper gaat verder in plaats van oneindig te wachten. Een late reject
  * is veilig: Promise.race heeft de promise dan al van een handler voorzien.
  */
-export async function withTimeout(promise, ms, label) {
+export async function withTimeout(promise, ms, label, ErrorClass = TimeoutError) {
   if (!Number.isFinite(ms) || ms <= 0) {
     throw new TypeError(`withTimeout: ongeldige termijn ${ms}`);
   }
 
   let timeoutId = null;
   const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new TimeoutError(label, ms)), ms);
+    timeoutId = setTimeout(() => reject(new ErrorClass(label, ms)), ms);
   });
 
   try {
@@ -141,10 +155,12 @@ export function createJobGuard({
       };
 
       try {
-        await withTimeout(task(ctx), maxRuntimeMs, 'taak');
+        await withTimeout(task(ctx), maxRuntimeMs, 'taak', TaskTimeoutError);
         return { ok: true, skipped: false, error: null, timedOut: false };
       } catch (error) {
-        const timedOut = error instanceof TimeoutError;
+        // Alleen de harde taakgrens is een taak-time-out. Een aanroep die zijn
+        // eigen termijn heeft bereikt is een gewone fout van de taak.
+        const timedOut = error instanceof TaskTimeoutError;
         if (timedOut) safeCall(onTimeout, { error, generation: runState.generation });
         return { ok: false, skipped: false, error, timedOut };
       } finally {

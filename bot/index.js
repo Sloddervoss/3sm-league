@@ -2291,7 +2291,7 @@ async function handleSetupServer(interaction) {
 
   // ── Kalender + team rollen ────────────────────────────────────────────────
   await updateCalendarEmbed().catch(e => log('Kalender fout: ' + describeError(e)));
-  await runGuarded('setupServer', () => syncTeamRoles()).catch(e => log('Sync fout: ' + describeError(e)));
+  await runGuarded('setupServer', (ctx) => syncTeamRoles(ctx)).catch(e => log('Sync fout: ' + describeError(e)));
 
   botLog(`🛠️ \`/setup-server\` uitgevoerd door **${interaction.user.tag}**`);
 

@@ -2,12 +2,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  TaskTimeoutError,
   TimeoutError,
   createGuardedRunner,
   createJobGuard,
   formatDuration,
   withTimeout,
 } from './cronGuard.js';
+
+const leesIndex = () => readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+/**
+ * Comments strippen voordat we op broncode matchen. Zonder dit kan een
+ * regel `// assertActive()` een ontbrekende echte check vervangen en blijft
+ * de suite groen op kapotte code.
+ */
+const stripComments = (bron) =>
+  bron
+    .split('\n')
+    .filter((regel) => {
+      const kaal = regel.trim();
+      return !kaal.startsWith('//') && !kaal.startsWith('*') && !kaal.startsWith('/*');
+    })
+    .join('\n');
 
 // ---------------------------------------------------------------------------
 // formatDuration
@@ -259,7 +276,7 @@ test('twee verschillende taken blokkeren elkaar niet', async () => {
 // ---------------------------------------------------------------------------
 
 test('index.js gebruikt de geteste planner en niet een eigen kopie', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
 
   assert.match(
     bron,
@@ -279,7 +296,7 @@ test('index.js gebruikt de geteste planner en niet een eigen kopie', () => {
 });
 
 test('de tijdsgrenzen in index.js zijn begrensd en zinvol', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
 
   const taakgrens = bron.match(/const JOB_MAX_RUNTIME_MS = ([^;]+);/);
   const discordgrens = bron.match(/const DISCORD_CALL_TIMEOUT_MS = ([^;]+);/);
@@ -292,12 +309,16 @@ test('de tijdsgrenzen in index.js zijn begrensd en zinvol', () => {
   // eslint-disable-next-line no-eval
   const discordMs = eval(discordgrens[1]);
 
-  assert.ok(taakMs > 0 && taakMs <= 15 * 60 * 1000, 'de taakgrens moet hooguit 15 minuten zijn');
-  assert.ok(discordMs > 0 && discordMs <= 60 * 1000, 'de Discord-grens moet hooguit 60 seconden zijn');
+  // Zowel onder- als bovengrens: 1 seconde of 1 milliseconde breekt elke taak
+  // of elke Discord-aanroep af, en is net zo fout als een grens van een jaar.
+  assert.ok(taakMs >= 60 * 1000, `de taakgrens van ${taakMs} ms is te kort voor een taak van 7-8 seconden`);
+  assert.ok(taakMs <= 15 * 60 * 1000, 'de taakgrens moet hooguit 15 minuten zijn');
+  assert.ok(discordMs >= 5 * 1000, `de Discord-grens van ${discordMs} ms is te kort voor een normale API-aanroep`);
+  assert.ok(discordMs <= 60 * 1000, 'de Discord-grens moet hooguit 60 seconden zijn');
 });
 
 test('elke kanaal- en rolcreatie in index.js loopt via discordCall', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
   const regels = bron.split('\n');
 
   const onbeschermd = [];
@@ -321,7 +342,7 @@ test('elke kanaal- en rolcreatie in index.js loopt via discordCall', () => {
 });
 
 test('discordCall begrenst echt met de constante', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
 
   const bodies = [...bron.matchAll(/function discordCall\(promise, label\) \{([\s\S]*?)\n\}/g)];
   assert.equal(bodies.length, 1, 'er moet precies één discordCall zijn');
@@ -332,7 +353,7 @@ test('discordCall begrenst echt met de constante', () => {
 });
 
 test('syncTeamRoles breekt af op een stale run voordat hij schrijft', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
   const start = bron.indexOf('async function syncTeamRoles');
   const eind = bron.indexOf('async function ', start + 10);
   const body = bron.slice(start, eind > start ? eind : undefined);
@@ -350,7 +371,7 @@ test('syncTeamRoles breekt af op een stale run voordat hij schrijft', () => {
 });
 
 test('elke cron-taak loopt via scheduleGuarded en dus via de planner', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
 
   // Er mag precies één cron.schedule zijn, en die moet via runGuarded lopen.
   const losseCronCalls = (bron.match(/cron\.schedule\(/g) || []).length;
@@ -364,7 +385,7 @@ test('elke cron-taak loopt via scheduleGuarded en dus via de planner', () => {
 });
 
 test('een time-out gaat ook naar het Discord-botlog', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
   const start = bron.indexOf('logTimeout: (name) => {');
   assert.ok(start > 0, 'logTimeout moet bestaan');
   const blok = bron.slice(start, start + 600);
@@ -373,7 +394,7 @@ test('een time-out gaat ook naar het Discord-botlog', () => {
 });
 
 test('een time-out gebruikt aparte throttle-sleutels voor console en Discord', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
   const start = bron.indexOf('logTimeout: (name) => {');
   const blok = bron.slice(start, start + 600);
 
@@ -392,23 +413,26 @@ test('een time-out gebruikt aparte throttle-sleutels voor console en Discord', (
   );
 });
 
-test('/setup-server loopt via de bewaking', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+test('/setup-server loopt via de bewaking en geeft de ctx door', () => {
+  const bron = stripComments(leesIndex());
 
   assert.doesNotMatch(
     bron,
     /await syncTeamRoles\(\)\.catch/,
-    'syncTeamRoles mag niet meer direct worden aangeroepen; die route omzeilt de tijdgrens en de overlapweigering'
+    'syncTeamRoles mag niet direct worden aangeroepen; die route omzeilt de tijdgrens en de overlapweigering'
   );
+
+  // Zonder ctx valt isStale terug op 'altijd actief' en staan alle
+  // afbreekpunten in syncTeamRoles op deze route uit.
   assert.match(
     bron,
-    /runGuarded\('setupServer', \(\) => syncTeamRoles\(\)\)/,
-    '/setup-server moet via runGuarded lopen'
+    /runGuarded\('setupServer', \(ctx\) => syncTeamRoles\(ctx\)\)/,
+    '/setup-server moet de ctx doorgeven aan syncTeamRoles'
   );
 });
 
 test('de opruimlussen zijn beschermd tegen een afgebroken run', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
 
   // De delete-lussen zijn de gevaarlijkste schrijfacties: ze verwijderen rollen
   // en hele kanalen. Een stale run mag daar nooit aankomen.
@@ -422,16 +446,15 @@ test('de opruimlussen zijn beschermd tegen een afgebroken run', () => {
     assert.match(nasleep, /assertActive\(\)/, `de lus ${anker} moet een afbreekpunt hebben`);
   }
 
-  const deleteBlok = bron.slice(
-    bron.indexOf('Verwijder Discord rollen'),
-    bron.indexOf('Verwijder Discord rollen') + 3000
-  );
+  const start = bron.indexOf('for (const [roleId, role] of guild.roles.cache)');
+  const eind = bron.indexOf('saveConfig({', start);
+  const deleteBlok = bron.slice(start, eind > start ? eind : start + 3000);
   const checks = (deleteBlok.match(/assertActive\(\)/g) || []).length;
   assert.ok(checks >= 3, `het opruimblok heeft ${checks} afbreekpunten, verwacht minstens drie`);
 });
 
 test('syncTeamRoles houdt de bewaking actief bij een directe aanroep', () => {
-  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const bron = stripComments(leesIndex());
   const start = bron.indexOf('async function syncTeamRoles');
   const body = bron.slice(start, start + 900);
 
@@ -448,4 +471,50 @@ test('een taakfout met "timeout" in de tekst telt niet als time-out', async () =
   });
 
   assert.equal(result.timedOut, false, 'alleen een echte TimeoutError is een time-out');
+});
+
+
+test('een time-out van een enkele aanroep geldt niet als taak-time-out', async () => {
+  const guard = createJobGuard({ maxRuntimeMs: 500, onTimeout: () => { throw new Error('mag niet'); } });
+
+  const result = await guard.run(async () => {
+    // Een Discord-aanroep die zijn eigen termijn raakt: dat is een gewone fout
+    // van de taak, niet het bewijs dat de hele taak is afgebroken.
+    await withTimeout(new Promise(() => {}), 20, '[discord] test');
+  });
+
+  assert.equal(result.timedOut, false, 'alleen de harde taakgrens is een taak-time-out');
+  assert.ok(result.error instanceof TimeoutError);
+  assert.ok(!(result.error instanceof TaskTimeoutError));
+});
+
+test('de harde taakgrens gooit wel een TaskTimeoutError', async () => {
+  const guard = createJobGuard({ maxRuntimeMs: 20 });
+  const result = await guard.run(() => new Promise(() => {}));
+
+  assert.equal(result.timedOut, true);
+  assert.ok(result.error instanceof TaskTimeoutError);
+});
+
+test('withTimeout ruimt zijn timer op', async () => {
+  const voor = process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
+
+  await withTimeout(Promise.resolve(1), 60_000, 'test');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const na = process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
+  assert.ok(na <= voor, `timer lekt: ${voor} voor, ${na} na`);
+});
+
+test('comments kunnen een ontbrekende check niet vervangen', () => {
+  const bron = stripComments(leesIndex());
+  const start = bron.indexOf('async function syncTeamRoles');
+  const eind = bron.indexOf('\n  async function ', start + 10);
+  const body = bron.slice(start, eind > start ? eind : undefined);
+
+  // Als iemand de echte checks weghaalt en er `// assertActive()` voor in de
+  // plaats zet, blijft er na het strippen niets van over. Daarom tellen we
+  // alleen echte if-statements.
+  const echteChecks = (body.match(/if \(!assertActive\(\)\)/g) || []).length;
+  assert.ok(echteChecks >= 3, `syncTeamRoles heeft ${echteChecks} echte afbreekpunten, verwacht minstens drie`);
 });
