@@ -42,8 +42,15 @@ if [ -z "$SKIP_BUILD" ]; then
   scp "$SCRIPT_DIR/create-dirs.ps1" "vdevo@192.168.50.119:C:/Users/vdevo/3sm/create-dirs.ps1"
   $SSH_WIN "powershell -NoP -Exec Bypass -File C:\\Users\\vdevo\\3sm\\create-dirs.ps1"
 
-  scp "$SCRIPT_DIR"/3SM.EnduranceConnector/{AssemblyInfo.cs,ConnectorSettings.cs,EnduranceConnectorPlugin.cs,SettingsControl.cs,TelemetryContracts.cs,3SM.EnduranceConnector.csproj} \
+  # Let op: deze lijst moet ALLE Compile-items uit de csproj dekken die op de
+  # bouw-PC nodig zijn. Ontbreekt er een, dan bouwt Beest tegen een oude bron
+  # en lijkt de release groen terwijl de wijziging er niet in zit.
+  scp "$SCRIPT_DIR"/3SM.EnduranceConnector/{AssemblyInfo.cs,ConnectorSettings.cs,EnduranceConnectorPlugin.cs,SettingsControl.cs,TelemetryContracts.cs,TelemetryContractsV3.cs,OverlayContracts.cs,OverlayClient.cs,OverlayPropertyPublisher.cs,OverlayTemplateInstaller.cs,FlagModels.cs,FlagPanelRenderer.cs,FlagService.cs,FlagPropertyPublisher.cs,FlagProfileInstaller.cs,SimHubLedProfileHost.cs,SimHubDeviceLister.cs,DiagnosticsClient.cs,SessionTelemetryReader.cs,UpdaterStateStore.cs,UiKit.cs,Theme.cs,3SM.EnduranceConnector.csproj} \
     "vdevo@192.168.50.119:$WS_WIN/3SM.EnduranceConnector/"
+  # Het overlay-dashboard wordt als EmbeddedResource meegebouwd; zonder deze
+  # map bouwt de plugin zonder .djson en installeert hij niets.
+  scp -r "$SCRIPT_DIR"/overlay \
+    "vdevo@192.168.50.119:$WS_WIN/"
   scp "$SCRIPT_DIR"/3SM.EnduranceConnector/Assets/* \
     "vdevo@192.168.50.119:$WS_WIN/3SM.EnduranceConnector/Assets/"
   scp "$SCRIPT_DIR"/3SM.EnduranceConnector.Updater/{AssemblyInfo.cs,Program.cs,3SM.EnduranceConnector.Updater.csproj} \

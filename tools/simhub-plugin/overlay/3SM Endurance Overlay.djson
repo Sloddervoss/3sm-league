@@ -1,0 +1,456 @@
+{
+ "DashboardDebugManager": {
+  "Maximized": false
+ },
+ "Version": 2,
+ "Id": "a670fa30-b91f-4c16-a426-ed5a592c770f",
+ "BaseHeight": 286,
+ "BaseWidth": 800,
+ "BackgroundColor": "#00000000",
+ "Screens": [
+  {
+   "Name": "Screen1",
+   "InGameScreen": true,
+   "IdleScreen": false,
+   "PitScreen": false,
+   "ScreenId": "5523fafd-18c1-40e6-a6d5-47b8fe9935c0",
+   "IsForegroundLayer": false,
+   "IsBackgroundLayer": false,
+   "BackgroundColor": "#00000000",
+   "Items": [
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.ImageItem, SimHub.Plugins",
+     "Image": "3SMOverlayBackground",
+     "AutoSize": false,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 286,
+     "Left": 0,
+     "Top": 0,
+     "Visible": true,
+     "Width": 800,
+     "Name": "BackgroundImage"
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.RectangleItem, SimHub.Plugins",
+     "IsRectangleItem": true,
+     "BackgroundColor": "#FFFF6A00",
+     "Height": 7,
+     "Left": 40,
+     "Top": 248,
+     "Visible": true,
+     "Width": 76,
+     "Name": "RaceProgress"
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold Condensed",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 34,
+     "Text": "VINCENT DE VOS",
+     "TextColor": "#FFF2F5F8",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 46,
+     "Left": 40,
+     "Top": 86,
+     "Visible": true,
+     "Width": 250,
+     "Name": "CurrentDriver",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Current.DriverNameUpper]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 13,
+     "Text": "03",
+     "TextColor": "#FFF2F5F8",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 18,
+     "Left": 80,
+     "Top": 145,
+     "Visible": true,
+     "Width": 24,
+     "Name": "CurrentStint",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Current.StintIndex]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text",
+       "FormatString": "00"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold Condensed",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 20,
+     "Text": "JAIMY VAN DIJK",
+     "TextColor": "#FFF2F5F8",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 52,
+     "Left": 395,
+     "Top": 92,
+     "Visible": true,
+     "Width": 210,
+     "Name": "NextDriver",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Next.DriverNameUpper]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 40,
+     "Text": "1:48.372",
+     "TextColor": "#FFF2F5F8",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 52,
+     "Left": 545,
+     "Top": 86,
+     "Visible": true,
+     "Width": 230,
+     "Name": "AverageLap",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Current.AverageLap]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 14,
+     "Text": "1:47.991",
+     "TextColor": "#FFF2F5F8",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 20,
+     "Left": 587,
+     "Top": 152,
+     "Visible": true,
+     "Width": 100,
+     "Name": "BestLap",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Current.BestLap]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 14,
+     "Text": "+0.381",
+     "TextColor": "#FFFF6A00",
+     "HorizontalAlignment": 2,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 20,
+     "Left": 705,
+     "Top": 152,
+     "Visible": true,
+     "Width": 45,
+     "Name": "AverageDelta",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Current.AverageDelta]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 18,
+     "Text": "00:00:00",
+     "TextColor": "#FFF2F5F8",
+     "HorizontalAlignment": 2,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 24,
+     "Left": 710,
+     "Top": 13,
+     "Visible": true,
+     "Width": 76,
+     "Name": "RaceTime",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[DataCorePlugin.GameData.NewData.SessionTime]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text",
+       "FormatString": "hh\\:mm\\:ss"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold Condensed",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 12,
+     "Text": "VINCENT",
+     "TextColor": "#FFB8C0CC",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 18,
+     "Left": 320,
+     "Top": 242,
+     "Visible": true,
+     "Width": 78,
+     "Name": "OrderDriver1",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Order.Driver1]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold Condensed",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 12,
+     "Text": "JAIMY",
+     "TextColor": "#FFB8C0CC",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 18,
+     "Left": 420,
+     "Top": 242,
+     "Visible": true,
+     "Width": 78,
+     "Name": "OrderDriver2",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Order.Driver2]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold Condensed",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 12,
+     "Text": "MARNIX",
+     "TextColor": "#FFB8C0CC",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 18,
+     "Left": 520,
+     "Top": 242,
+     "Visible": true,
+     "Width": 88,
+     "Name": "OrderDriver3",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Order.Driver3]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold Condensed",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 12,
+     "Text": "VINCENT",
+     "TextColor": "#FFB8C0CC",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 18,
+     "Left": 642,
+     "Top": 242,
+     "Visible": true,
+     "Width": 100,
+     "Name": "OrderDriver4",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Order.Driver4]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold Condensed",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 8,
+     "Text": "",
+     "TextColor": "#FFFFC857",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 11,
+     "Left": 40,
+     "Top": 261,
+     "Visible": true,
+     "Width": 700,
+     "Name": "Warnings",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "[THREESM.Overlay.Warnings]"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    },
+    {
+     "$type": "SimHub.Plugins.OutputPlugins.GraphicalDash.Models.TextItem, SimHub.Plugins",
+     "IsTextItem": true,
+     "Font": "Bahnschrift SemiBold Condensed",
+     "FontWeight": "Normal",
+     "FontStyle": "Normal",
+     "FontSize": 14,
+     "Text": "JIJ RIJDT",
+     "TextColor": "#FFFF6A00",
+     "HorizontalAlignment": 0,
+     "VerticalAlignment": 1,
+     "BackgroundColor": "#00FFFFFF",
+     "Height": 20,
+     "Left": 395,
+     "Top": 148,
+     "Visible": true,
+     "Width": 210,
+     "Name": "RoleHint",
+     "Bindings": {
+      "Text": {
+       "Formula": {
+        "Expression": "if([THREESM.Overlay.Self.IsDriving],'JIJ RIJDT',if([THREESM.Overlay.Next.IsSelf],'JIJ NEEMT OVER',''))"
+       },
+       "Mode": 2,
+       "TargetPropertyName": "Text"
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "SnapToGrid": true,
+ "HideLabels": false,
+ "ShowForeground": true,
+ "ForegroundOpacity": 50,
+ "ShowBackground": true,
+ "BackgroundOpacity": 50,
+ "ShowBoundingRectangles": false,
+ "GridSize": 10,
+ "Images": [
+  {
+   "Name": "3SMOverlayBackground",
+   "Extension": ".png",
+   "Modified": false,
+   "Optimized": true,
+   "Width": 1600,
+   "Height": 572,
+   "Length": 32869,
+   "MD5": "81b9c065306e63403540815ed46bdd41"
+  }
+ ],
+ "Metadata": {
+  "Category": "3SM",
+  "Title": "3SM Endurance Overlay",
+  "Description": "Stintplanning, rijderswissel en racetijd",
+  "Author": "3Stripe Motorsport",
+  "ScreenCount": 1,
+  "InGameScreensIndexs": [
+   0
+  ],
+  "IdleScreensIndexs": [],
+  "MainPreviewIndex": 0,
+  "IsOverlay": true,
+  "Width": 800,
+  "Height": 286,
+  "OverlaySizeWarning": false,
+  "MetadataVersion": 2,
+  "EnableOnDashboardMessaging": true,
+  "PitScreensIndexs": []
+ },
+ "ShowOnScreenControls": true,
+ "IsOverlay": true,
+ "EnableClickThroughOverlay": true,
+ "EnableOnDashboardMessaging": true
+}
