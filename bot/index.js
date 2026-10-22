@@ -91,7 +91,6 @@ async function botLog(...args) {
   } catch {}
 }
 
-const runningJobs = new Map();
 const throttledLogs = new Map();
 const missingSchemaWarnings = new Set();
 const active_notifications = new Set();
@@ -221,10 +220,9 @@ const guardedRunner = createGuardedRunner({
     );
   },
   logTimeout: (name) => {
-    throttledConsoleLog(
-      `cron:${name}:timeout`,
-      `[cron:${name}] afgebroken na ${formatDuration(JOB_MAX_RUNTIME_MS)}; de volgende run mag weer starten`
-    );
+    const bericht = `[cron:${name}] afgebroken na ${formatDuration(JOB_MAX_RUNTIME_MS)}; de volgende run mag weer starten`;
+    throttledConsoleLog(`cron:${name}:timeout`, bericht);
+    throttledBotLog(`cron:${name}:timeout`, bericht).catch(() => {});
   },
   logError: (name, error) => {
     const beschrijving = describeError(error);
@@ -1701,6 +1699,11 @@ async function checkAnnouncements() {
 // ── Cron: team rol sync ───────────────────────────────────────────────────────
 async function syncTeamRoles(ctx = {}) {
   const setStep = ctx.setStep || (() => {});
+  // Een run die na de tijdsgrens is afgebroken mag geen rollen, kanalen of
+  // config meer wegschrijven; anders werkt hij door terwijl de volgende al
+  // loopt en ontstaan dubbele rollen en een overschreven beheerlijst.
+  const isStale = typeof ctx.isStale === 'function' ? ctx.isStale : () => false;
+  const assertActive = () => !isStale();
   const startedAt = Date.now();
   const stats = {
     teams: 0,
@@ -1736,6 +1739,7 @@ async function syncTeamRoles(ctx = {}) {
 
   // Maak ontbrekende team-rollen + categorie + kanalen aan
   for (const team of teams) {
+  if (!assertActive()) { setStep('afgebroken'); return; }
     setStep(`team setup: ${team.name}`);
     const colorInt = team.color ? parseInt(team.color.replace('#', ''), 16) : 0xf97316;
 
@@ -1894,6 +1898,7 @@ async function syncTeamRoles(ctx = {}) {
     }
   }
 
+  if (!assertActive()) { setStep('afgebroken'); return; }
   saveConfig({
     managed_team_role_ids: [...managedRoleIds].filter(id => teamRoleIds.includes(id)),
     managed_team_category_ids: [...managedCategoryIds].filter(id => teamCategoryIds.includes(id)),
@@ -1944,6 +1949,7 @@ async function syncTeamRoles(ctx = {}) {
   }
 
   for (const profile of profiles) {
+    if (!assertActive()) { setStep('afgebroken'); return; }
     try {
       setStep(`Discord lid ophalen: ${profile.display_name || profile.iracing_name || profile.discord_id}`);
       const member = await guild.members.fetch(profile.discord_id).catch(() => null);

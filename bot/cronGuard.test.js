@@ -126,6 +126,8 @@ test('jobGuard laat een eigen fout van de taak niet als time-out tellen', async 
 test('een achtergebleven run kan de stap van de nieuwe run niet overschrijven', async () => {
   const guard = createJobGuard({ maxRuntimeMs: 30 });
   let lateCtx = null;
+  let stapNaZombie = null;
+  let staleVanZombie = null;
 
   await guard.run(async (ctx) => {
     lateCtx = ctx;
@@ -133,12 +135,18 @@ test('een achtergebleven run kan de stap van de nieuwe run niet overschrijven', 
     await new Promise(() => {}); // hangt, wordt na 30 ms afgebroken
   });
 
-  await guard.run(async (ctx) => {
+  // Asserties buiten de taakcallback: fouten binnen de callback worden door
+  // run() opgevangen en als result teruggegeven, waardoor ze onzichtbaar zijn.
+  const resultaat = await guard.run(async (ctx) => {
     ctx.setStep('run B: leden verwerken');
     lateCtx.setStep('run A: zombie');
-    assert.equal(ctx.isStale(), false);
-    assert.equal(guard.getState().step, 'run B: leden verwerken');
+    stapNaZombie = guard.getState().step;
+    staleVanZombie = lateCtx.isStale();
   });
+
+  assert.equal(resultaat.ok, true, 'run B moet slagen');
+  assert.equal(stapNaZombie, 'run B: leden verwerken', 'de zombie mag de stap niet overschrijven');
+  assert.equal(staleVanZombie, true, 'de zombie moet zichzelf als stale zien');
 });
 
 test('isStale vertelt een afgebroken run dat hij moet stoppen', async () => {
@@ -310,4 +318,65 @@ test('elke kanaal- en rolcreatie in index.js loopt via discordCall', () => {
   });
 
   assert.deepEqual(onbeschermd, [], `onbeschermde creaties:\n${onbeschermd.join('\n')}`);
+});
+
+test('discordCall begrenst echt met de constante', () => {
+  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+  const bodies = [...bron.matchAll(/function discordCall\(promise, label\) \{([\s\S]*?)\n\}/g)];
+  assert.equal(bodies.length, 1, 'er moet precies één discordCall zijn');
+  const body = bodies[0][1];
+
+  assert.match(body, /withTimeout\(/, 'discordCall moet withTimeout gebruiken');
+  assert.match(body, /DISCORD_CALL_TIMEOUT_MS/, 'discordCall moet de constante gebruiken, geen los getal');
+});
+
+test('syncTeamRoles breekt af op een stale run voordat hij schrijft', () => {
+  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const start = bron.indexOf('async function syncTeamRoles');
+  const eind = bron.indexOf('async function ', start + 10);
+  const body = bron.slice(start, eind > start ? eind : undefined);
+
+  assert.match(body, /ctx\.isStale/, 'syncTeamRoles moet ctx.isStale lezen');
+  assert.match(body, /const assertActive = \(\) => !isStale\(\)/);
+
+  const aantalChecks = (body.match(/assertActive\(\)/g) || []).length;
+  assert.ok(aantalChecks >= 3, `verwacht minstens drie afbreekpunten, gevonden ${aantalChecks}`);
+
+  // De check moet vóór saveConfig staan, anders schrijft een zombie alsnog config.
+  const savePos = body.indexOf('saveConfig({');
+  const checkVoorSave = body.lastIndexOf('assertActive()', savePos);
+  assert.ok(checkVoorSave > 0 && checkVoorSave < savePos, 'saveConfig moet achter een actief-check staan');
+});
+
+test('elke cron-taak loopt via scheduleGuarded en dus via de planner', () => {
+  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+  // Er mag precies één cron.schedule zijn, en die moet via runGuarded lopen.
+  const losseCronCalls = (bron.match(/cron\.schedule\(/g) || []).length;
+  assert.equal(losseCronCalls, 1, 'er mag maar één cron.schedule zijn, in scheduleGuarded');
+
+  assert.match(
+    bron,
+    /cron\.schedule\(pattern, \(\) => runGuarded\(name, task\)\)/,
+    'scheduleGuarded moet de taak via runGuarded starten, niet direct aanroepen'
+  );
+});
+
+test('een time-out gaat ook naar het Discord-botlog', () => {
+  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const start = bron.indexOf('logTimeout: (name) => {');
+  assert.ok(start > 0, 'logTimeout moet bestaan');
+  const blok = bron.slice(start, start + 400);
+
+  assert.match(blok, /throttledBotLog\(/, 'een time-out moet ook in Discord zichtbaar zijn, niet alleen in journald');
+});
+
+test('een taakfout met "timeout" in de tekst telt niet als time-out', async () => {
+  const guard = createJobGuard({ maxRuntimeMs: 1000 });
+  const result = await guard.run(async () => {
+    throw new Error('Discord API timeout na 3 pogingen');
+  });
+
+  assert.equal(result.timedOut, false, 'alleen een echte TimeoutError is een time-out');
 });
