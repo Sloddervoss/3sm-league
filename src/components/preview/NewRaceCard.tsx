@@ -84,7 +84,7 @@ const NewRaceCard = ({ race, index = 0, countdown, isRegistered, onSelect }: Pro
         <img
           src={trackPhoto}
           alt={race.track}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover brightness-[1.7] saturate-[95%]"
           style={{ opacity: race.status === "completed" || race.status === "cancelled" ? 0.25 : 0.55, filter: "saturate(0.6) brightness(0.7)" }}
         />
         <div
