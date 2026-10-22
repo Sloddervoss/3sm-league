@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -44,6 +44,10 @@
     <Compile Include="Theme.cs" />
     <Compile Include="TelemetryContracts.cs" />
     <Compile Include="TelemetryContractsV3.cs" />
+    <Compile Include="OverlayContracts.cs" />
+    <Compile Include="OverlayClient.cs" />
+    <Compile Include="OverlayPropertyPublisher.cs" />
+    <Compile Include="OverlayTemplateInstaller.cs" />
     <Compile Include="FlagModels.cs" />
     <Compile Include="FlagPanelRenderer.cs" />
     <Compile Include="FlagService.cs" />
@@ -63,6 +67,15 @@
     <EmbeddedResource Include="Assets\plugin-icon.png" />
     <EmbeddedResource Include="Assets\plugin-icon-64.png" />
     <EmbeddedResource Include="Assets\wordmark.png" />
+    <EmbeddedResource Include="..\overlay\3SM Endurance Overlay.djson">
+      <LogicalName>ThreeSM.EnduranceConnector.Overlay.Dashboard.djson</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\overlay\3SM Endurance Overlay.djson.metadata">
+      <LogicalName>ThreeSM.EnduranceConnector.Overlay.Dashboard.djson.metadata</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\overlay\3SM Endurance Overlay.djson.ressources">
+      <LogicalName>ThreeSM.EnduranceConnector.Overlay.Dashboard.djson.ressources</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="..\3SM.EnduranceConnector.Updater\bin\$(Configuration)\3SM.EnduranceConnector.Updater.exe">
       <LogicalName>ThreeSM.EnduranceConnector.Assets.3SM.EnduranceConnector.Updater.exe</LogicalName>
     </EmbeddedResource>

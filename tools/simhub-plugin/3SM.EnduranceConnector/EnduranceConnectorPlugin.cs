@@ -1,4 +1,4 @@
-using GameReaderCommon;
+﻿using GameReaderCommon;
 using SimHub.Plugins;
 using System;
 using System.Collections.Generic;
@@ -69,6 +69,8 @@ namespace ThreeSM.EnduranceConnector
         private DiagnosticsClient _diagnostics;
         private readonly FlagService _flagService = new FlagService();
         private FlagPropertyPublisher _flagPublisher;
+        private OverlayPropertyPublisher _overlayPublisher;
+        private OverlayClient _overlayClient;
         private FlagState _lastFlagState = FlagState.Empty();
         private RaceFlags _publishedFlags = RaceFlags.None;
         private readonly RaceFlags[] _publishedBoxFlags = new RaceFlags[4];
@@ -141,6 +143,26 @@ namespace ThreeSM.EnduranceConnector
             SimHub.Logging.Current.Info("3SM flags: enabled=" + Settings.Flags.Enabled + ", properties=" + flagPropertiesRegistered);
             InitUpdaterStateStore();
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
+
+            // Overlay: properties publiceren en het Dash Studio-template installeren.
+            _overlayPublisher = new OverlayPropertyPublisher(pluginManager, GetType(), "THREESM.Overlay");
+            var overlayPropertiesRegistered = _overlayPublisher.Register();
+            SimHub.Logging.Current.Info("3SM overlay: properties=" + overlayPropertiesRegistered);
+            InstallOverlayTemplate(pluginManager);
+            try
+            {
+                _overlayClient = new OverlayClient(
+                    BuildRelayEndpoint("simhub-overlay"),
+                    Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "3SM", "endurance-overlay.json"));
+                _overlayClient.SetToken(_deviceToken);
+            }
+            catch (Exception overlayError)
+            {
+                _overlayClient = null;
+                SimHub.Logging.Current.Warn("3SM overlay: client kon niet worden gestart: " + overlayError.Message);
+            }
             if (!string.IsNullOrWhiteSpace(Settings.DeviceTokenProtected) && string.IsNullOrWhiteSpace(_deviceToken))
             {
                 SimHub.Logging.Current.Warn("3SM Endurance: opgeslagen DPAPI-device-token is onleesbaar en wordt lokaal verwijderd.");
@@ -643,6 +665,7 @@ namespace ThreeSM.EnduranceConnector
                 // Vlaggen elke tick oplossen/publiceren (los van het verzendinterval),
                 // zodat een flagbox/overlay direct reageert.
                 PublishFlags(pluginManager, data, isInCar);
+                PublishOverlay(running, isInCar);
                 // Auto-update op een veilig moment: nooit tijdens een game en bij idle
                 // pas na 30 minuten zonder game (verder max. één herstart per 24 uur).
                 if (running || data.GameRunning || data.GameInMenu)
@@ -1730,6 +1753,46 @@ namespace ThreeSM.EnduranceConnector
             foreach (var value in values)
                 if (!string.IsNullOrWhiteSpace(value) && !string.Equals(value.Trim(), "unknown", StringComparison.OrdinalIgnoreCase)) return value.Trim();
             return null;
+        }
+
+        private void InstallOverlayTemplate(PluginManager manager)
+        {
+            try
+            {
+                var simHubDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                if (string.IsNullOrWhiteSpace(simHubDirectory))
+                    simHubDirectory = Path.GetDirectoryName(typeof(EnduranceConnectorPlugin).Assembly.Location);
+                bool installed;
+                var dashboardPath = OverlayTemplateInstaller.Install(simHubDirectory, out installed);
+                if (string.IsNullOrWhiteSpace(dashboardPath)) return;
+                SimHub.Logging.Current.Info("3SM overlay: template " + (installed ? "geinstalleerd" : "aanwezig") + " (" + dashboardPath + ")");
+                if (installed && manager != null)
+                {
+                    try { manager.ReloadDashboardFromPath(dashboardPath); }
+                    catch { /* de dashboardlijst ververst zichzelf bij de volgende start */ }
+                }
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM overlay: template kon niet worden geinstalleerd: " + error.Message);
+            }
+        }
+
+        private void PublishOverlay(bool iRacingRunning, bool isInCar)
+        {
+            try
+            {
+                var client = _overlayClient;
+                if (client == null) return;
+                client.Tick(iRacingRunning, isInCar);
+                var publisher = _overlayPublisher;
+                if (publisher != null)
+                    publisher.Publish(client.Snapshot, client.PlanAgeSeconds, client.LastError);
+            }
+            catch
+            {
+                // De overlay mag de telemetry/DataUpdate nooit onderbreken.
+            }
         }
 
         // Detecteert de vlag één keer en publiceert (getthrottled) universeel + per flagbox.
