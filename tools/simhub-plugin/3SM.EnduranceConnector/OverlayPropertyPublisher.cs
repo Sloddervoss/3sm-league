@@ -262,8 +262,12 @@ namespace ThreeSM.EnduranceConnector
                 Set("Order.Summary", orderSummary);
                 var order = snapshot == null || snapshot.Order == null ? new OverlayStint[0] : snapshot.Order;
                 Set("Order.Count", order.Length);
+                // Lege slots blijven leeg: een streepje leest als 'onbekend',
+                // terwijl er gewoon niemand meer volgt.
                 for (var slot = 1; slot <= 8; slot++)
-                    Set("Order.Driver" + slot, slot <= order.Length ? Text(order[slot - 1] == null ? null : order[slot - 1].DriverName) : "\u2014");
+                    Set("Order.Driver" + slot, slot <= order.Length
+                        ? Text(order[slot - 1] == null ? null : order[slot - 1].DriverName, string.Empty)
+                        : string.Empty);
                 Set("Pace.Summary", paceSummary);
                 Set("Warnings", warnings);
             }
