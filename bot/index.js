@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 import { createClient } from '@supabase/supabase-js';
 import cron from 'node-cron';
+import { formatDuration, withTimeout } from './cronGuard.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -97,6 +98,13 @@ const active_notifications = new Set();
 const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
 const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
+// Harde bovengrens: een taak die hier overheen gaat komt vrij, zodat een
+// hangende aanroep de keten niet voor altijd blokkeert (syncTeamRoles,
+// 2026-10-22). Normaal doet die taak er 7-8 seconden over.
+const JOB_MAX_RUNTIME_MS = 15 * 60 * 1000;
+// Discord-aanroepen mogen nooit oneindig wachten. Zonder deze grens blijft een
+// hangende rol- of kanaalaanroep de hele cron-taak bezet.
+const DISCORD_CALL_TIMEOUT_MS = 20 * 1000;
 const DISCORD_LOGIN_TIMEOUT_MS = 60 * 1000;
 
 function networkStatusLog(...args) {
@@ -115,17 +123,8 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function withTimeout(promise, ms, label) {
-  let timeoutId = null;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`${label} timeout na ${formatDuration(ms)}`)), ms);
-  });
-
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    clearTimeout(timeoutId);
-  }
+function discordCall(promise, label) {
+  return withTimeout(promise, DISCORD_CALL_TIMEOUT_MS, `[discord] ${label}`);
 }
 
 async function throttledBotLog(key, ...args) {
@@ -155,13 +154,6 @@ function throttledConsoleLog(key, message, throttleMs = ERROR_LOG_THROTTLE_MS) {
   if (now - last < throttleMs) return;
   throttledLogs.set(key, now);
   console.warn(message);
-}
-
-function formatDuration(ms) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
 async function retrySupabase(label, operation, attempts = 3) {
@@ -235,11 +227,15 @@ async function runGuarded(name, task) {
 
   runningJobs.set(name, jobState);
   try {
-    await task({
-      setStep(step) {
-        jobState.step = step || jobState.step;
-      },
-    });
+    await withTimeout(
+      task({
+        setStep(step) {
+          jobState.step = step || jobState.step;
+        },
+      }),
+      JOB_MAX_RUNTIME_MS,
+      `[cron:${name}] taak`
+    );
   } catch (e) {
     await throttledBotLog(`cron:${name}:${describeError(e)}`, `[cron:${name}] ${describeError(e)}`);
   } finally {
@@ -1765,7 +1761,10 @@ async function syncTeamRoles(ctx = {}) {
         botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
       } else {
         try {
-          const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+          const role = await discordCall(
+            guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' }),
+            `rol aanmaken ${team.name}`
+          );
           if (rijderRole) await role.setPosition(rijderRole.position + 1).catch(() => {});
           await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
           team.discord_role_id = role.id;
@@ -1813,12 +1812,15 @@ async function syncTeamRoles(ctx = {}) {
       await existingCat.edit({ name: `━━━━━━━| ${team.name} |━━━━━━━`, permissionOverwrites: permOverwrites }).catch(() => {});
     } else {
       try {
-        const cat = await guild.channels.create({
-          name: `━━━━━━━| ${team.name} |━━━━━━━`,
-          type: ChannelType.GuildCategory,
-          permissionOverwrites: permOverwrites,
-          reason: '3SM team sectie',
-        });
+        const cat = await discordCall(
+          guild.channels.create({
+            name: `━━━━━━━| ${team.name} |━━━━━━━`,
+            type: ChannelType.GuildCategory,
+            permissionOverwrites: permOverwrites,
+            reason: '3SM team sectie',
+          }),
+          `sectie aanmaken ${team.name}`
+        );
         categoryId = cat.id;
         managedCategoryIds.add(cat.id);
         botLog(`➕ Team sectie aangemaakt: **${team.name}**`);
