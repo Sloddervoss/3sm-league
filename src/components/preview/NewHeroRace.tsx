@@ -74,8 +74,8 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
       />
 
       {/* Gradient overlay */}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(8,8,15,0.92) 0%, rgba(8,8,15,0.7) 50%, rgba(8,8,15,0.3) 100%)" }} />
-      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(8,8,15,0.4) 0%, transparent 60%)" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(8,8,15,0.72) 0%, rgba(8,8,15,0.42) 50%, rgba(8,8,15,0.12) 100%)" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(8,8,15,0.18) 0%, transparent 60%)" }} />
       <div className="absolute inset-0" style={{ background: `linear-gradient(90deg, ${accentColor}1a 0%, transparent 45%)` }} />
       {/* Top accent bar */}
       <div
