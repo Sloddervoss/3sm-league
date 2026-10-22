@@ -4,6 +4,7 @@ BEGIN;
 DO $$
 DECLARE
   owner uuid;
+  mate uuid;
   iracing text := 'overlay-test-iracing';
   eid uuid := '77777777-7777-4777-8777-777777777777';
   tid uuid := '88888888-8888-4888-8888-888888888888';
@@ -18,18 +19,22 @@ BEGIN
   SELECT p.user_id INTO owner FROM public.profiles p WHERE p.user_id IS NOT NULL LIMIT 1;
   IF owner IS NULL THEN RAISE EXCEPTION 'Test needs an existing profile'; END IF;
   UPDATE public.profiles SET iracing_id = iracing WHERE user_id = owner;
+  -- Een tweede coureur, zodat 'next' echt een ANDERE rijder kan zijn.
+  SELECT p.user_id INTO mate FROM public.profiles p
+   WHERE p.user_id IS NOT NULL AND p.user_id <> owner LIMIT 1;
+  IF mate IS NULL THEN RAISE EXCEPTION 'Test needs two profiles'; END IF;
 
   INSERT INTO public.endurance_events (id, name, circuit, configuration, start_at, end_at, visibility, status)
   VALUES (eid, 'Overlay snapshot test', 'Test', '', now() - interval '4 hours', now() + interval '4 hours', 'hidden', 'draft');
 
   INSERT INTO public.endurance_registrations (event_id, user_id, status)
-  VALUES (eid, owner, 'confirmed');
+  VALUES (eid, owner, 'confirmed'), (eid, mate, 'confirmed');
 
   INSERT INTO public.endurance_teams (id, event_id, name, car_number)
   VALUES (tid, eid, 'Overlay test team', '999');
 
   INSERT INTO public.endurance_team_members (team_id, user_id, role)
-  VALUES (tid, owner, 'driver');
+  VALUES (tid, owner, 'driver'), (tid, mate, 'driver');
 
   INSERT INTO public.endurance_stints
     (id, event_id, team_id, driver_id, original_start_at, original_end_at, actual_start_at, expected_laps, status)
@@ -38,8 +43,8 @@ BEGIN
     (gen_random_uuid(), eid, tid, owner, now() - interval '3 hours 30 minutes', now() - interval '3 hours', now() - interval '3 hours 30 minutes', 20, 'completed'),
     (gen_random_uuid(), eid, tid, owner, now() - interval '3 hours', now() - interval '2 hours 30 minutes', now() - interval '3 hours', 20, 'completed'),
     ('99999999-9999-4999-8999-999999999994', eid, tid, owner, now() - interval '30 minutes', now() + interval '30 minutes', now() - interval '30 minutes', 20, 'in_car'),
-    (gen_random_uuid(), eid, tid, owner, now() + interval '30 minutes', now() + interval '1 hour', NULL, 20, 'confirmed'),
-    (gen_random_uuid(), eid, tid, owner, now() + interval '1 hour', now() + interval '1 hour 30 minutes', NULL, 20, 'confirmed'),
+    (gen_random_uuid(), eid, tid, mate, now() + interval '30 minutes', now() + interval '1 hour', NULL, 20, 'confirmed'),
+    (gen_random_uuid(), eid, tid, mate, now() + interval '1 hour', now() + interval '1 hour 30 minutes', NULL, 20, 'confirmed'),
     (gen_random_uuid(), eid, tid, owner, now() + interval '1 hour 30 minutes', now() + interval '2 hours', NULL, 20, 'confirmed'),
     (gen_random_uuid(), eid, tid, owner, now() + interval '2 hours', now() + interval '2 hours 30 minutes', NULL, 20, 'confirmed');
 
@@ -59,7 +64,14 @@ BEGIN
   IF snapshot->>'contract' <> '3sm-overlay.v1' THEN RAISE EXCEPTION 'Wrong contract: %', snapshot; END IF;
   IF snapshot->'current' IS NULL OR snapshot->'current'->>'stintIndex' <> '4' THEN RAISE EXCEPTION 'Wrong current stint: %', snapshot->'current'; END IF;
   IF snapshot->'next' IS NULL OR snapshot->'next'->>'stintIndex' <> '5' THEN RAISE EXCEPTION 'Wrong next stint: %', snapshot->'next'; END IF;
-  IF jsonb_array_length(snapshot->'order') <> 8 THEN RAISE EXCEPTION 'Order must contain all 8 stints'; END IF;
+  -- Order bevat alleen de komende wissels (max 6), niet de afgeronde stints.
+  IF jsonb_array_length(snapshot->'order') > 6 THEN RAISE EXCEPTION 'Order must only contain upcoming stints: %', jsonb_array_length(snapshot->'order'); END IF;
+  IF jsonb_array_length(snapshot->'order') < 1 THEN RAISE EXCEPTION 'Order is empty'; END IF;
+  IF snapshot->'self'->>'isDriving' <> 'true' THEN RAISE EXCEPTION 'Self must be driving: %', snapshot->'self'; END IF;
+  IF snapshot->'current'->>'isSelf' <> 'true' THEN RAISE EXCEPTION 'Current must be self'; END IF;
+  IF snapshot->'next'->>'driverId' = snapshot->'current'->>'driverId' THEN
+    RAISE EXCEPTION 'Next must be a different driver';
+  END IF;
   IF jsonb_array_length(snapshot->'warnings') <> 0 THEN RAISE EXCEPTION 'Unexpected warnings: %', snapshot->'warnings'; END IF;
   IF jsonb_array_length(snapshot->'pace') <> 1 THEN RAISE EXCEPTION 'Pace must contain one driver'; END IF;
   IF (snapshot->'pace'->0->>'laps')::int <> 2 OR (snapshot->'pace'->0->>'averageSeconds')::numeric <> 102.175 THEN
