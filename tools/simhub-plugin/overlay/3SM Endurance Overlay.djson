@@ -62,7 +62,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Current.DriverNameUpper]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Current.DriverNameUpper]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -90,7 +90,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Current.StintIndex]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Current.StintIndex]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text",
@@ -119,7 +119,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Next.DriverNameUpper]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Next.DriverNameUpper]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -147,7 +147,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Current.AverageLap]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Current.AverageLap]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -175,7 +175,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Current.BestLap]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Current.BestLap]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -203,7 +203,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Current.AverageDelta]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Current.AverageDelta]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -260,7 +260,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Order.Driver1]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Order.Driver1]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -288,7 +288,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Order.Driver2]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Order.Driver2]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -316,7 +316,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Order.Driver3]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Order.Driver3]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -344,7 +344,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Order.Driver4]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Order.Driver4]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -372,7 +372,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "[THREESM.Overlay.Warnings]"
+        "Expression": "[EnduranceConnectorPlugin.THREESM.Overlay.Warnings]"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"
@@ -400,7 +400,7 @@
      "Bindings": {
       "Text": {
        "Formula": {
-        "Expression": "if([THREESM.Overlay.Self.IsDriving],'JIJ RIJDT',if([THREESM.Overlay.Next.IsSelf],'JIJ NEEMT OVER',''))"
+        "Expression": "if([EnduranceConnectorPlugin.THREESM.Overlay.Self.IsDriving],'JIJ RIJDT',if([EnduranceConnectorPlugin.THREESM.Overlay.Next.IsSelf],'JIJ NEEMT OVER',''))"
        },
        "Mode": 2,
        "TargetPropertyName": "Text"

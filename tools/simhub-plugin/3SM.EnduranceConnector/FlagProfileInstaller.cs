@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -39,6 +39,12 @@ namespace ThreeSM.EnduranceConnector
         public static JObject BuildProfile(FlagSettings settings, string kind, int box)
         {
             var prefix = settings == null ? "THREESM.Flags" : settings.PropertyPrefix;
+            // SimHub zet de pluginnaam voor elke eigenschap: de volledige naam is
+            // EnduranceConnectorPlugin.<prefix>. Zonder deze toevoeging leest het
+            // LED-profiel een niet-bestaande eigenschap en valt terug op
+            // standaardwaarden, zonder enige melding.
+            if (!prefix.StartsWith("EnduranceConnectorPlugin.", StringComparison.OrdinalIgnoreCase))
+                prefix = "EnduranceConnectorPlugin." + prefix;
             var slot = settings == null ? new FlagBoxSlot() : settings.Box(box - 1);
             var mld = slot != null && slot.IsMld;
             var columns = mld ? 25 : 8;

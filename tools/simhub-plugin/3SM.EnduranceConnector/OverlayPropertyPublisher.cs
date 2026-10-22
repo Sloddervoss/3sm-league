@@ -19,6 +19,10 @@ namespace ThreeSM.EnduranceConnector
         private readonly Type _pluginType;
         private readonly string _prefix;
         private bool _registered;
+        private int _addCount;
+        private int _addFailures;
+        private int _setFailures;
+        private bool _probed;
         private string _lastSignature;
 
         public OverlayPropertyPublisher(PluginManager manager, Type pluginType, string prefix)
@@ -84,7 +88,14 @@ namespace ThreeSM.EnduranceConnector
                 Add("Warnings", string.Empty);
 
                 _registered = true;
-                return true;
+                try
+                {
+                    SimHub.Logging.Current.Info(
+                        "3SM overlay: properties aangemeld=" + _addCount
+                        + ", mislukt=" + _addFailures);
+                }
+                catch { }
+                return _addFailures == 0;
             }
             catch
             {
@@ -95,6 +106,7 @@ namespace ThreeSM.EnduranceConnector
         public void Publish(OverlaySnapshot snapshot, int planAgeSeconds, string lastError)
         {
             if (_manager == null || !_registered) return;
+            var setFailuresBefore = _setFailures;
             try
             {
                 var current = snapshot == null ? null : snapshot.Current;
@@ -123,6 +135,80 @@ namespace ThreeSM.EnduranceConnector
                 });
                 if (string.Equals(signature, _lastSignature, StringComparison.Ordinal)) return;
                 _lastSignature = signature;
+                SimHub.Logging.Current.Info(
+                    "3SM overlay: publish current=" + (current == null ? "GEEN" : current.DriverName)
+                    + " next=" + (next == null ? "GEEN" : next.DriverName)
+                    + " order=" + (snapshot == null || snapshot.Order == null ? 0 : snapshot.Order.Length)
+                    + " planAge=" + planAgeSeconds + "s"
+                    + (_setFailures > setFailuresBefore ? " ZETFOUTEN=" + (_setFailures - setFailuresBefore) : ""));
+
+                // Eenmalig terugvragen wat SimHub nu werkelijk heeft. Zo is het
+                // verschil tussen "de property bestaat niet" en "het dashboard
+                // leest hem niet" hard te bewijzen.
+                if (!_probed)
+                {
+                    _probed = true;
+                    // SimHub zelf laten vertellen welke eigenschappen hij kent.
+                    // Zo is te zien of AddProperty echt iets toevoegt of stil
+                    // niets doet.
+                    try
+                    {
+                        var alle = _manager.GetAllPropertiesNames();
+                        var trois = new System.Collections.Generic.List<string>();
+                        if (alle != null)
+                        {
+                            foreach (var naam in alle)
+                            {
+                                if (!string.IsNullOrEmpty(naam) &&
+                                    naam.StartsWith("THREESM", StringComparison.OrdinalIgnoreCase))
+                                    trois.Add(naam);
+                            }
+                        }
+                        SimHub.Logging.Current.Info(
+                            "3SM overlay: SimHub kent " + (alle == null ? 0 : alle.Count)
+                            + " properties, waarvan " + trois.Count + " van 3SM"
+                            + (trois.Count > 0
+                                ? ": " + string.Join(", ", trois.GetRange(0, Math.Min(6, trois.Count)).ToArray())
+                                : string.Empty));
+
+                        // Kennen andere plugins er wel in te staan? Dat bepaalt of
+                        // AddProperty stuk is of alleen de namenlijst onvolledig.
+                        foreach (var bron in new[] { "DataCorePlugin", "IRacingExtraProperties", "ExtraInputProperties", "DahlDesign" })
+                        {
+                            var aantal = 0;
+                            if (alle != null)
+                            {
+                                foreach (var naam in alle)
+                                {
+                                    if (!string.IsNullOrEmpty(naam) &&
+                                        naam.StartsWith(bron, StringComparison.OrdinalIgnoreCase))
+                                        aantal++;
+                                }
+                            }
+                            SimHub.Logging.Current.Info("3SM overlay: bron " + bron + " = " + aantal);
+                        }
+                        var metOverlay = new System.Collections.Generic.List<string>();
+                        if (alle != null)
+                        {
+                            foreach (var naam in alle)
+                            {
+                                if (!string.IsNullOrEmpty(naam) &&
+                                    (naam.IndexOf("Overlay", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                     naam.IndexOf("DriverName", StringComparison.OrdinalIgnoreCase) >= 0))
+                                    metOverlay.Add(naam);
+                            }
+                        }
+                        SimHub.Logging.Current.Info(
+                            "3SM overlay: namen met Overlay/DriverName = " + metOverlay.Count
+                            + (metOverlay.Count > 0
+                                ? ": " + string.Join(", ", metOverlay.GetRange(0, Math.Min(8, metOverlay.Count)).ToArray())
+                                : string.Empty));
+                    }
+                    catch (Exception probeError)
+                    {
+                        SimHub.Logging.Current.Warn("3SM overlay: eigenschappenlijst mislukt: " + probeError.Message);
+                    }
+                }
 
                 var self = snapshot == null ? null : snapshot.Self;
                 Set("Self.IsDriving", self != null && self.IsDriving == true);
@@ -181,9 +267,12 @@ namespace ThreeSM.EnduranceConnector
                 Set("Pace.Summary", paceSummary);
                 Set("Warnings", warnings);
             }
-            catch
+            catch (Exception publishError)
             {
-                // Publiceren mag de plugin nooit breken.
+                // Publiceren mag de plugin nooit breken, maar zwijgen mag niet:
+                // zonder deze regel zie je alleen lege velden en niets wijst
+                // naar de plugin.
+                SimHub.Logging.Current.Warn("3SM overlay: publiceren mislukt: " + publishError.Message);
             }
         }
 
@@ -303,12 +392,33 @@ namespace ThreeSM.EnduranceConnector
 
         private void Add<T>(string suffix, T defaultValue)
         {
-            try { _manager.AddProperty<T>(_prefix + "." + suffix, _pluginType, defaultValue, (string)null); } catch { }
+            _addCount++;
+            try { _manager.AddProperty(_prefix + "." + suffix, _pluginType, defaultValue); }
+            catch (Exception error)
+            {
+                _addFailures++;
+                try
+                {
+                    SimHub.Logging.Current.Warn(
+                        "3SM overlay: property " + _prefix + "." + suffix + " niet aangemeld: " + error.Message);
+                }
+                catch { }
+            }
         }
 
         private void Set(string suffix, object value)
         {
-            try { _manager.SetPropertyValue(_prefix + "." + suffix, _pluginType, value); } catch { }
+            try { _manager.SetPropertyValue(_prefix + "." + suffix, _pluginType, value); }
+            catch (Exception error)
+            {
+                _setFailures++;
+                try
+                {
+                    SimHub.Logging.Current.Warn(
+                        "3SM overlay: property " + _prefix + "." + suffix + " niet gezet: " + error.Message);
+                }
+                catch { }
+            }
         }
     }
 }
