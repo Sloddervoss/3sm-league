@@ -116,8 +116,7 @@ const HomeNewsSection = () => {
               ) : (
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_22%,rgba(249,115,22,0.20),transparent_28%),linear-gradient(135deg,rgba(249,115,22,0.12),rgba(15,18,24,0.96))]" />
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 h-[72%] bg-[radial-gradient(ellipse_at_bottom_left,rgba(0,0,0,0.94),rgba(0,0,0,0.66)_50%,transparent_84%)]" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/25 to-transparent" />
               <div className="absolute left-5 right-5 bottom-5 z-10">
                 <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
                   <span>{featured.category}</span>
