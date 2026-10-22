@@ -309,7 +309,7 @@ const RaceModal = ({ race, registration }: Props) => {
           src={trackPhoto}
           alt=""
           className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-          style={{ opacity: 0.45, filter: "saturate(0.6) brightness(0.7)", objectPosition: "center right" }}
+          style={{ opacity: 0.8, filter: "saturate(0.95) brightness(1.5)", objectPosition: "center right" }}
         />
         <TrackMap
           track={race.track}

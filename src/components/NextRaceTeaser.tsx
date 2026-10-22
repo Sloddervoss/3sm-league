@@ -148,8 +148,8 @@ const NextRaceTeaser = () => {
               <img
                 src={trackPhoto}
                 alt={nextRace.track}
-                className="absolute inset-0 w-full h-full object-cover brightness-[1.7] saturate-[95%]"
-                style={{ opacity: 0.5, filter: "saturate(0.6) brightness(0.7)" }}
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ opacity: 0.85, filter: "saturate(0.95) brightness(1.5)" }}
                 width="288"
                 height="192"
                 loading="lazy"

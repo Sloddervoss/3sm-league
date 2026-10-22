@@ -60,8 +60,8 @@ const NewHeroRace = ({ race, countdown, registrantCount = 0, isRegistered, isReg
       <img
         src={trackPhoto}
         alt=""
-        className="absolute inset-0 w-full h-full object-cover brightness-[1.7] saturate-[95%] select-none pointer-events-none"
-        style={{ opacity: 0.5, filter: "saturate(0.7) brightness(0.75)", objectPosition: "center right" }}
+        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+        style={{ opacity: 0.85, filter: "saturate(0.95) brightness(1.5)", objectPosition: "center right" }}
       />
 
       {/* Track map (circuit layout) rechts */}
