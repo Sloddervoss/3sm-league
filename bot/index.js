@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 import { createClient } from '@supabase/supabase-js';
 import cron from 'node-cron';
+import { createGuardedRunner, formatDuration, withTimeout } from './cronGuard.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -90,13 +91,19 @@ async function botLog(...args) {
   } catch {}
 }
 
-const runningJobs = new Map();
 const throttledLogs = new Map();
 const missingSchemaWarnings = new Set();
 const active_notifications = new Set();
 const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
 const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
+// Harde bovengrens: een taak die hier overheen gaat komt vrij, zodat een
+// hangende aanroep de keten niet voor altijd blokkeert (syncTeamRoles,
+// 2026-10-22). Normaal doet die taak er 7-8 seconden over.
+const JOB_MAX_RUNTIME_MS = 15 * 60 * 1000;
+// Discord-aanroepen mogen nooit oneindig wachten. Zonder deze grens blijft een
+// hangende rol- of kanaalaanroep de hele cron-taak bezet.
+const DISCORD_CALL_TIMEOUT_MS = 20 * 1000;
 const DISCORD_LOGIN_TIMEOUT_MS = 60 * 1000;
 
 function networkStatusLog(...args) {
@@ -115,17 +122,8 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function withTimeout(promise, ms, label) {
-  let timeoutId = null;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`${label} timeout na ${formatDuration(ms)}`)), ms);
-  });
-
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    clearTimeout(timeoutId);
-  }
+function discordCall(promise, label) {
+  return withTimeout(promise, DISCORD_CALL_TIMEOUT_MS, `[discord] ${label}`);
 }
 
 async function throttledBotLog(key, ...args) {
@@ -155,13 +153,6 @@ function throttledConsoleLog(key, message, throttleMs = ERROR_LOG_THROTTLE_MS) {
   if (now - last < throttleMs) return;
   throttledLogs.set(key, now);
   console.warn(message);
-}
-
-function formatDuration(ms) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
 async function retrySupabase(label, operation, attempts = 3) {
@@ -211,41 +202,39 @@ function cleanupPosterFile(filePath) {
   fs.promises.unlink(filePath).catch(() => {});
 }
 
-async function runGuarded(name, task) {
-  const existingJob = runningJobs.get(name);
-  if (existingJob) {
+// De planner komt uit cronGuard.js, zodat de bewaking die getest wordt ook
+// echt draait. Logfuncties zijn hier ingeplugd.
+const guardedRunner = createGuardedRunner({
+  maxRuntimeMs: JOB_MAX_RUNTIME_MS,
+  stuckWarningMs: JOB_STUCK_WARNING_MS,
+  logOverlap: (name, state) => {
     throttledConsoleLog(
       `cron:${name}:overlap`,
-      `[cron:${name}] vorige run loopt nog sinds ${existingJob.startedAt.toISOString()} (${formatDuration(Date.now() - existingJob.startedAt.getTime())}); stap: ${existingJob.step}; deze run overgeslagen`
+      `[cron:${name}] vorige run loopt nog sinds ${new Date(state.startedAt).toISOString()} (${formatDuration(Date.now() - state.startedAt)}); stap: ${state.step}; deze run overgeslagen`
     );
-    return;
-  }
-
-  const jobState = {
-    startedAt: new Date(),
-    step: 'gestart',
-    warningTimer: null,
-  };
-  jobState.warningTimer = setTimeout(() => {
+  },
+  logStuck: (name, info) => {
     throttledConsoleLog(
-      `cron:${name}:stuck:${jobState.step}`,
-      `[cron:${name}] draait al ${formatDuration(Date.now() - jobState.startedAt.getTime())}; huidige stap: ${jobState.step}`
+      `cron:${name}:stuck:${info.step}`,
+      `[cron:${name}] draait al ${formatDuration(info.elapsedMs)}; huidige stap: ${info.step}`
     );
-  }, JOB_STUCK_WARNING_MS);
+  },
+  logTimeout: (name) => {
+    const bericht = `[cron:${name}] afgebroken na ${formatDuration(JOB_MAX_RUNTIME_MS)}; de volgende run mag weer starten`;
+    throttledConsoleLog(`cron:${name}:timeout`, bericht);
+    // Eigen sleutel: throttledConsoleLog en throttledBotLog delen dezelfde
+    // throttle-map. Met dezelfde sleutel ziet de tweede aanroep de eerste
+    // als 'net gelogd' en verstuurt niets naar Discord.
+    throttledBotLog(`cron:${name}:timeout:discord`, bericht).catch(() => {});
+  },
+  logError: (name, error) => {
+    const beschrijving = describeError(error);
+    throttledBotLog(`cron:${name}:${beschrijving}`, `[cron:${name}] ${beschrijving}`).catch(() => {});
+  },
+});
 
-  runningJobs.set(name, jobState);
-  try {
-    await task({
-      setStep(step) {
-        jobState.step = step || jobState.step;
-      },
-    });
-  } catch (e) {
-    await throttledBotLog(`cron:${name}:${describeError(e)}`, `[cron:${name}] ${describeError(e)}`);
-  } finally {
-    clearTimeout(jobState.warningTimer);
-    runningJobs.delete(name);
-  }
+function runGuarded(name, task) {
+  return guardedRunner.runGuarded(name, task);
 }
 
 function scheduleGuarded(pattern, name, task) {
@@ -1713,6 +1702,11 @@ async function checkAnnouncements() {
 // ── Cron: team rol sync ───────────────────────────────────────────────────────
 async function syncTeamRoles(ctx = {}) {
   const setStep = ctx.setStep || (() => {});
+  // Een run die na de tijdsgrens is afgebroken mag geen rollen, kanalen of
+  // config meer wegschrijven; anders werkt hij door terwijl de volgende al
+  // loopt en ontstaan dubbele rollen en een overschreven beheerlijst.
+  const isStale = typeof ctx.isStale === 'function' ? ctx.isStale : () => false;
+  const assertActive = () => !isStale();
   const startedAt = Date.now();
   const stats = {
     teams: 0,
@@ -1748,6 +1742,7 @@ async function syncTeamRoles(ctx = {}) {
 
   // Maak ontbrekende team-rollen + categorie + kanalen aan
   for (const team of teams) {
+  if (!assertActive()) { setStep('afgebroken'); return; }
     setStep(`team setup: ${team.name}`);
     const colorInt = team.color ? parseInt(team.color.replace('#', ''), 16) : 0xf97316;
 
@@ -1765,7 +1760,10 @@ async function syncTeamRoles(ctx = {}) {
         botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
       } else {
         try {
-          const role = await guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' });
+          const role = await discordCall(
+            guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' }),
+            `rol aanmaken ${team.name}`
+          );
           if (rijderRole) await role.setPosition(rijderRole.position + 1).catch(() => {});
           await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
           team.discord_role_id = role.id;
@@ -1813,12 +1811,15 @@ async function syncTeamRoles(ctx = {}) {
       await existingCat.edit({ name: `━━━━━━━| ${team.name} |━━━━━━━`, permissionOverwrites: permOverwrites }).catch(() => {});
     } else {
       try {
-        const cat = await guild.channels.create({
-          name: `━━━━━━━| ${team.name} |━━━━━━━`,
-          type: ChannelType.GuildCategory,
-          permissionOverwrites: permOverwrites,
-          reason: '3SM team sectie',
-        });
+        const cat = await discordCall(
+          guild.channels.create({
+            name: `━━━━━━━| ${team.name} |━━━━━━━`,
+            type: ChannelType.GuildCategory,
+            permissionOverwrites: permOverwrites,
+            reason: '3SM team sectie',
+          }),
+          `sectie aanmaken ${team.name}`
+        );
         categoryId = cat.id;
         managedCategoryIds.add(cat.id);
         botLog(`➕ Team sectie aangemaakt: **${team.name}**`);
@@ -1848,13 +1849,16 @@ async function syncTeamRoles(ctx = {}) {
         // Update permissies van bestaande kanalen
         await exists.permissionOverwrites.set(permOverwrites).catch(() => {});
       } else {
-        await guild.channels.create({
-          name: chDef.name,
-          type: chDef.type,
-          parent: categoryId,
-          permissionOverwrites: permOverwrites,
-          reason: '3SM team kanaal',
-        }).catch(e => botLog(`❌ Kanaal aanmaken fout (${chDef.name}): ${describeError(e)}`));
+        await discordCall(
+          guild.channels.create({
+            name: chDef.name,
+            type: chDef.type,
+            parent: categoryId,
+            permissionOverwrites: permOverwrites,
+            reason: '3SM team kanaal',
+          }),
+          `kanaal ${chDef.name}`
+        ).catch(e => botLog(`❌ Kanaal aanmaken fout (${chDef.name}): ${describeError(e)}`));
       }
     }
   }
@@ -1864,6 +1868,7 @@ async function syncTeamRoles(ctx = {}) {
   const teamRoleIds     = teams.map(t => t.discord_role_id).filter(Boolean);
   const teamCategoryIds = teams.map(t => t.discord_category_id).filter(Boolean);
   for (const [roleId, role] of guild.roles.cache) {
+    if (!assertActive()) { setStep('afgebroken'); return; }
     if (managedRoleIds.has(roleId) && !teamRoleIds.includes(role.id)) {
       const wasTeamRole = await supabase.from('teams').select('id').eq('discord_role_id', role.id).maybeSingle();
       if (!wasTeamRole.data) {
@@ -1879,11 +1884,13 @@ async function syncTeamRoles(ctx = {}) {
   }
 
   for (const [categoryId, ch] of guild.channels.cache) {
+    if (!assertActive()) { setStep('afgebroken'); return; }
     if (managedCategoryIds.has(categoryId) && ch.type === ChannelType.GuildCategory && !teamCategoryIds.includes(ch.id)) {
       const wasTeamCat = await supabase.from('teams').select('id').eq('discord_category_id', ch.id).maybeSingle();
       if (wasTeamCat.data === null && ch.name.includes('━━━') && !ch.name.includes('INFORMATIE') && !ch.name.includes('RACING') && !ch.name.includes('COMMUNITY') && !ch.name.includes('SPRAAK') && !ch.name.includes('ADMIN')) {
         // Verwijder eerst alle kanalen in de categorie
         for (const [, child] of guild.channels.cache) {
+          if (!assertActive()) { setStep('afgebroken'); return; }
           if (child.parentId === ch.id) await child.delete('3SM team verwijderd').catch(() => {});
         }
         const deleted = await ch.delete('3SM team verwijderd').then(() => true).catch(e => {
@@ -1897,6 +1904,7 @@ async function syncTeamRoles(ctx = {}) {
     }
   }
 
+  if (!assertActive()) { setStep('afgebroken'); return; }
   saveConfig({
     managed_team_role_ids: [...managedRoleIds].filter(id => teamRoleIds.includes(id)),
     managed_team_category_ids: [...managedCategoryIds].filter(id => teamCategoryIds.includes(id)),
@@ -1947,6 +1955,7 @@ async function syncTeamRoles(ctx = {}) {
   }
 
   for (const profile of profiles) {
+    if (!assertActive()) { setStep('afgebroken'); return; }
     try {
       setStep(`Discord lid ophalen: ${profile.display_name || profile.iracing_name || profile.discord_id}`);
       const member = await guild.members.fetch(profile.discord_id).catch(() => null);
@@ -1959,7 +1968,7 @@ async function syncTeamRoles(ctx = {}) {
       // Nickname instellen op iRacing naam (of display_name als fallback)
       const nickname = profile.iracing_name || profile.display_name;
       if (nickname && member.displayName !== nickname) {
-        const result = await member.setNickname(nickname).catch(e => e);
+        const result = await discordCall(member.setNickname(nickname), 'nickname zetten').catch(e => e);
         if (result instanceof Error) {
           if (result.message !== 'Missing Permissions') console.error(`[syncTeamRoles] Nickname fout voor ${member.user.tag}: ${result.message}`);
         } else {
@@ -1977,11 +1986,11 @@ async function syncTeamRoles(ctx = {}) {
         const shouldHave = expectedRoleIds.includes(team.discord_role_id);
         const hasIt = member.roles.cache.has(team.discord_role_id);
         if (shouldHave && !hasIt) {
-          const updated = await member.roles.add(team.discord_role_id).then(() => true).catch(() => false);
+          const updated = await discordCall(member.roles.add(team.discord_role_id), 'rol aanpassen').then(() => true).catch(() => false);
           if (updated) stats.rolesAdded += 1;
         }
         if (!shouldHave && hasIt) {
-          const updated = await member.roles.remove(team.discord_role_id).then(() => true).catch(() => false);
+          const updated = await discordCall(member.roles.remove(team.discord_role_id), 'rol aanpassen').then(() => true).catch(() => false);
           if (updated) stats.rolesRemoved += 1;
         }
       }
@@ -1992,11 +2001,11 @@ async function syncTeamRoles(ctx = {}) {
         const isAdmin = userRoles.some(role => ['admin', 'super_admin'].includes(role));
         const hasAdminRole = member.roles.cache.has(syncCfg.admin_role_id);
         if (isAdmin && !hasAdminRole) {
-          const updated = await member.roles.add(syncCfg.admin_role_id).then(() => true).catch(() => false);
+          const updated = await discordCall(member.roles.add(syncCfg.admin_role_id), 'rol aanpassen').then(() => true).catch(() => false);
           if (updated) stats.rolesAdded += 1;
         }
         if (!isAdmin && hasAdminRole) {
-          const updated = await member.roles.remove(syncCfg.admin_role_id).then(() => true).catch(() => false);
+          const updated = await discordCall(member.roles.remove(syncCfg.admin_role_id), 'rol aanpassen').then(() => true).catch(() => false);
           if (updated) stats.rolesRemoved += 1;
         }
       }
@@ -2007,11 +2016,11 @@ async function syncTeamRoles(ctx = {}) {
         const isSteward = userRoles.includes('moderator');
         const hasStewardRole = member.roles.cache.has(syncCfg.steward_role_id);
         if (isSteward && !hasStewardRole) {
-          const updated = await member.roles.add(syncCfg.steward_role_id).then(() => true).catch(() => false);
+          const updated = await discordCall(member.roles.add(syncCfg.steward_role_id), 'rol aanpassen').then(() => true).catch(() => false);
           if (updated) stats.rolesAdded += 1;
         }
         if (!isSteward && hasStewardRole) {
-          const updated = await member.roles.remove(syncCfg.steward_role_id).then(() => true).catch(() => false);
+          const updated = await discordCall(member.roles.remove(syncCfg.steward_role_id), 'rol aanpassen').then(() => true).catch(() => false);
           if (updated) stats.rolesRemoved += 1;
         }
       }
@@ -2098,7 +2107,7 @@ async function handleSetupServer(interaction) {
   async function getOrCreateRole(name, options) {
     const existing = guild.roles.cache.find(r => r.name === name);
     if (existing) { log(`Rol bestaat al: ${name}`); return existing; }
-    const role = await guild.roles.create({ name, ...options, reason: '3SM setup' });
+    const role = await discordCall(guild.roles.create({ name, ...options, reason: '3SM setup' }), `rol ${name}`);
     log(`Rol aangemaakt: ${name}`);
     return role;
   }
@@ -2107,7 +2116,7 @@ async function handleSetupServer(interaction) {
   async function getOrCreateCategory(name, overwrites) {
     const existing = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name === name);
     if (existing) { log(`Categorie bestaat al: ${name}`); return existing; }
-    const cat = await guild.channels.create({ name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites, reason: '3SM setup' });
+    const cat = await discordCall(guild.channels.create({ name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites, reason: '3SM setup' }), `categorie ${name}`);
     log(`Categorie aangemaakt: ${name}`);
     return cat;
   }
@@ -2116,7 +2125,7 @@ async function handleSetupServer(interaction) {
   async function getOrCreateChannel(name, type, parentId, overwrites) {
     const existing = guild.channels.cache.find(c => c.name === name && c.parentId === parentId);
     if (existing) { log(`Kanaal bestaat al: ${name}`); return existing; }
-    const ch = await guild.channels.create({ name, type, parent: parentId, permissionOverwrites: overwrites, reason: '3SM setup' });
+    const ch = await discordCall(guild.channels.create({ name, type, parent: parentId, permissionOverwrites: overwrites, reason: '3SM setup' }), `kanaal ${name}`);
     log(`Kanaal aangemaakt: ${name}`);
     return ch;
   }
@@ -2282,7 +2291,7 @@ async function handleSetupServer(interaction) {
 
   // ── Kalender + team rollen ────────────────────────────────────────────────
   await updateCalendarEmbed().catch(e => log('Kalender fout: ' + describeError(e)));
-  await syncTeamRoles().catch(e => log('Sync fout: ' + describeError(e)));
+  await runGuarded('setupServer', (ctx) => syncTeamRoles(ctx)).catch(e => log('Sync fout: ' + describeError(e)));
 
   botLog(`🛠️ \`/setup-server\` uitgevoerd door **${interaction.user.tag}**`);
 
