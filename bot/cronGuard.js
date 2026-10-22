@@ -1,17 +1,27 @@
 // Tijdsbewaking voor cron-taken en netwerkaanroepen.
 //
 // Aanleiding: op 2026-10-22 bleef `syncTeamRoles` vanaf 06:00 hangen op een
-// Discord-aanroep die nooit antwoord gaf. Omdat `runningJobs` gevuld bleef,
-// sloeg elke volgende run twaalf uur lang over. Twee gaten:
+// Discord-aanroep die nooit antwoord gaf. Omdat de lock gevuld bleef, sloeg
+// elke volgende run twaalf uur lang over.
 //
-//   1. geen time-out op individuele Discord-aanroepen;
-//   2. geen harde bovengrens op de looptijd van een taak.
+// Dit bestand is de ENIGE implementatie van de bewaking. De planner die de bot
+// gebruikt (createGuardedRunner) staat hier ook, zodat wat getest wordt precies
+// is wat draait.
 //
-// Dit bestand levert beide. Het is bewust dependency-vrij zodat het los te
-// testen is zonder Discord-client of database.
+// Dependency-vrij: geen discord.js, geen Supabase, geen env.
+
+/** Fout die alleen door withTimeout wordt gegooid. */
+export class TimeoutError extends Error {
+  constructor(label, ms) {
+    super(`${label} timeout na ${formatDuration(ms)}`);
+    this.name = 'TimeoutError';
+    this.code = 'ETIMEOUT';
+  }
+}
 
 export function formatDuration(ms) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  if (!Number.isFinite(ms) || ms < 0) return 'onbekend';
+  const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
@@ -21,19 +31,20 @@ export function formatDuration(ms) {
 }
 
 /**
- * Wacht op `promise`, maar geeft na `ms` op met een fout.
+ * Wacht op `promise`, maar geeft na `ms` op met een TimeoutError.
  *
  * De onderliggende promise wordt niet geannuleerd — dat kan niet in JavaScript.
- * Wat er wel gebeurt: de aanroeper gaat verder in plaats van oneindig te wachten.
- * Bij een hangende socket is dat precies wat nodig is.
+ * De aanroeper gaat verder in plaats van oneindig te wachten. Een late reject
+ * is veilig: Promise.race heeft de promise dan al van een handler voorzien.
  */
 export async function withTimeout(promise, ms, label) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    throw new TypeError(`withTimeout: ongeldige termijn ${ms}`);
+  }
+
   let timeoutId = null;
   const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(
-      () => reject(new Error(`${label} timeout na ${formatDuration(ms)}`)),
-      ms
-    );
+    timeoutId = setTimeout(() => reject(new TimeoutError(label, ms)), ms);
   });
 
   try {
@@ -43,66 +54,157 @@ export async function withTimeout(promise, ms, label) {
   }
 }
 
+/** Roep een callback aan zonder de aanroeper te laten vallen. */
+function safeCall(callback, ...args) {
+  if (typeof callback !== 'function') return;
+  try {
+    callback(...args);
+  } catch (error) {
+    console.warn(`[cronGuard] callback faalde: ${error?.message || error}`);
+  }
+}
+
 /**
- * Bouwt een bewaker voor één cron-taak.
+ * Bewaker voor één taaknaam.
  *
- * `state` wordt gevuld zolang de taak loopt en geleegd als hij klaar is of
- * vastloopt. `isRunning()` vertelt de planner of een nieuwe run mag starten.
- *
- * De harde grens is het vangnet: ook als een aanroep geen eigen time-out heeft,
- * komt `state` nooit permanent vast te staan.
+ * De staat is per run, niet per bewaker. Daardoor kan een achtergebleven run de
+ * staat van een nieuwe run niet overschrijven, en vertelt isRunning() altijd de
+ * waarheid.
  */
-export function createJobGuard({ maxRuntimeMs, stuckWarningMs, onStuck, onTimeout }) {
-  let state = null;
+export function createJobGuard({
+  maxRuntimeMs,
+  stuckWarningMs = 0,
+  onStuck,
+  onTimeout,
+} = {}) {
+  if (!Number.isFinite(maxRuntimeMs) || maxRuntimeMs <= 0) {
+    throw new TypeError('createJobGuard: maxRuntimeMs moet een positief getal zijn');
+  }
+
+  let currentRun = null;
+  let generation = 0;
 
   return {
-    getState() {
-      return state;
-    },
-
     isRunning() {
-      return state !== null;
+      return currentRun !== null;
     },
 
-    /**
-     * Voert `task` uit met tijdsbewaking. Geeft `{ ok, error, timedOut }` terug
-     * in plaats van te gooien, zodat de planner altijd verder kan.
-     */
-    async run(task) {
-      state = { startedAt: Date.now(), step: 'gestart' };
+    getState() {
+      return currentRun ? { ...currentRun } : null;
+    },
 
-      const warningTimer = stuckWarningMs
+    getGeneration() {
+      return generation;
+    },
+
+    async run(task) {
+      if (typeof task !== 'function') {
+        throw new TypeError('createJobGuard.run: task moet een functie zijn');
+      }
+      if (currentRun !== null) {
+        return { ok: false, skipped: true, error: null, timedOut: false };
+      }
+
+      generation += 1;
+      const runState = {
+        generation,
+        startedAt: Date.now(),
+        step: 'gestart',
+        finished: false,
+      };
+      currentRun = runState;
+
+      const warningTimer = stuckWarningMs > 0
         ? setTimeout(() => {
-            if (!state) return;
-            onStuck?.({
-              step: state.step,
-              elapsedMs: Date.now() - state.startedAt,
+            if (runState.finished) return;
+            safeCall(onStuck, {
+              step: runState.step,
+              elapsedMs: Date.now() - runState.startedAt,
+              generation: runState.generation,
             });
           }, stuckWarningMs)
         : null;
 
+      const ctx = {
+        generation: runState.generation,
+        get step() {
+          return runState.step;
+        },
+        setStep(step) {
+          if (runState.finished) return;
+          if (step) runState.step = step;
+        },
+        /** True als deze run niet meer de actieve is. */
+        isStale() {
+          return runState.finished || currentRun !== runState;
+        },
+      };
+
       try {
-        await withTimeout(
-          task({
-            setStep(step) {
-              if (state && step) state.step = step;
-            },
-            get step() {
-              return state ? state.step : null;
-            },
-          }),
-          maxRuntimeMs,
-          'taak'
-        );
-        return { ok: true, error: null, timedOut: false };
+        await withTimeout(task(ctx), maxRuntimeMs, 'taak');
+        return { ok: true, skipped: false, error: null, timedOut: false };
       } catch (error) {
-        const timedOut = /timeout na/.test(error?.message || '');
-        if (timedOut) onTimeout?.({ error });
-        return { ok: false, error, timedOut };
+        const timedOut = error instanceof TimeoutError;
+        if (timedOut) safeCall(onTimeout, { error, generation: runState.generation });
+        return { ok: false, skipped: false, error, timedOut };
       } finally {
         if (warningTimer) clearTimeout(warningTimer);
-        state = null;
+        runState.finished = true;
+        if (currentRun === runState) currentRun = null;
       }
+    },
+  };
+}
+
+/**
+ * De planner: één bewaker per taaknaam, met overlap-afwijzing.
+ *
+ * Dit is wat de bot gebruikt. De logfuncties zijn injecteerbaar, zodat het
+ * gedrag te testen is zonder Discord.
+ */
+export function createGuardedRunner({
+  maxRuntimeMs,
+  stuckWarningMs = 0,
+  logOverlap,
+  logStuck,
+  logTimeout,
+  logError,
+} = {}) {
+  const guards = new Map();
+
+  function guardFor(name) {
+    let guard = guards.get(name);
+    if (!guard) {
+      guard = createJobGuard({
+        maxRuntimeMs,
+        stuckWarningMs,
+        onStuck: (info) => safeCall(logStuck, name, info),
+        onTimeout: () => safeCall(logTimeout, name),
+      });
+      guards.set(name, guard);
+    }
+    return guard;
+  }
+
+  return {
+    isRunning(name) {
+      return guardFor(name).isRunning();
+    },
+
+    async runGuarded(name, task) {
+      const guard = guardFor(name);
+      const state = guard.getState();
+
+      if (state) {
+        safeCall(logOverlap, name, state);
+        return { ok: false, skipped: true, error: null, timedOut: false };
+      }
+
+      const result = await guard.run(task);
+      if (!result.ok && !result.skipped && !result.timedOut) {
+        safeCall(logError, name, result.error);
+      }
+      return result;
     },
   };
 }
