@@ -222,7 +222,10 @@ const guardedRunner = createGuardedRunner({
   logTimeout: (name) => {
     const bericht = `[cron:${name}] afgebroken na ${formatDuration(JOB_MAX_RUNTIME_MS)}; de volgende run mag weer starten`;
     throttledConsoleLog(`cron:${name}:timeout`, bericht);
-    throttledBotLog(`cron:${name}:timeout`, bericht).catch(() => {});
+    // Eigen sleutel: throttledConsoleLog en throttledBotLog delen dezelfde
+    // throttle-map. Met dezelfde sleutel ziet de tweede aanroep de eerste
+    // als 'net gelogd' en verstuurt niets naar Discord.
+    throttledBotLog(`cron:${name}:timeout:discord`, bericht).catch(() => {});
   },
   logError: (name, error) => {
     const beschrijving = describeError(error);
@@ -1865,6 +1868,7 @@ async function syncTeamRoles(ctx = {}) {
   const teamRoleIds     = teams.map(t => t.discord_role_id).filter(Boolean);
   const teamCategoryIds = teams.map(t => t.discord_category_id).filter(Boolean);
   for (const [roleId, role] of guild.roles.cache) {
+    if (!assertActive()) { setStep('afgebroken'); return; }
     if (managedRoleIds.has(roleId) && !teamRoleIds.includes(role.id)) {
       const wasTeamRole = await supabase.from('teams').select('id').eq('discord_role_id', role.id).maybeSingle();
       if (!wasTeamRole.data) {
@@ -1880,11 +1884,13 @@ async function syncTeamRoles(ctx = {}) {
   }
 
   for (const [categoryId, ch] of guild.channels.cache) {
+    if (!assertActive()) { setStep('afgebroken'); return; }
     if (managedCategoryIds.has(categoryId) && ch.type === ChannelType.GuildCategory && !teamCategoryIds.includes(ch.id)) {
       const wasTeamCat = await supabase.from('teams').select('id').eq('discord_category_id', ch.id).maybeSingle();
       if (wasTeamCat.data === null && ch.name.includes('━━━') && !ch.name.includes('INFORMATIE') && !ch.name.includes('RACING') && !ch.name.includes('COMMUNITY') && !ch.name.includes('SPRAAK') && !ch.name.includes('ADMIN')) {
         // Verwijder eerst alle kanalen in de categorie
         for (const [, child] of guild.channels.cache) {
+          if (!assertActive()) { setStep('afgebroken'); return; }
           if (child.parentId === ch.id) await child.delete('3SM team verwijderd').catch(() => {});
         }
         const deleted = await ch.delete('3SM team verwijderd').then(() => true).catch(e => {
@@ -2285,7 +2291,7 @@ async function handleSetupServer(interaction) {
 
   // ── Kalender + team rollen ────────────────────────────────────────────────
   await updateCalendarEmbed().catch(e => log('Kalender fout: ' + describeError(e)));
-  await syncTeamRoles().catch(e => log('Sync fout: ' + describeError(e)));
+  await runGuarded('setupServer', () => syncTeamRoles()).catch(e => log('Sync fout: ' + describeError(e)));
 
   botLog(`🛠️ \`/setup-server\` uitgevoerd door **${interaction.user.tag}**`);
 

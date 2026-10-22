@@ -367,9 +367,78 @@ test('een time-out gaat ook naar het Discord-botlog', () => {
   const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
   const start = bron.indexOf('logTimeout: (name) => {');
   assert.ok(start > 0, 'logTimeout moet bestaan');
-  const blok = bron.slice(start, start + 400);
+  const blok = bron.slice(start, start + 600);
 
   assert.match(blok, /throttledBotLog\(/, 'een time-out moet ook in Discord zichtbaar zijn, niet alleen in journald');
+});
+
+test('een time-out gebruikt aparte throttle-sleutels voor console en Discord', () => {
+  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const start = bron.indexOf('logTimeout: (name) => {');
+  const blok = bron.slice(start, start + 600);
+
+  const consoleSleutel = blok.match(/throttledConsoleLog\(`([^`]+)`/);
+  const discordSleutel = blok.match(/throttledBotLog\(`([^`]+)`/);
+
+  assert.ok(consoleSleutel, 'console-aanroep moet een letterlijke sleutel hebben');
+  assert.ok(discordSleutel, 'Discord-aanroep moet een letterlijke sleutel hebben');
+
+  // Beide functies delen dezelfde throttle-map. Dezelfde sleutel betekent dat
+  // de tweede aanroep de eerste als 'net gelogd' ziet en niets verstuurt.
+  assert.notEqual(
+    consoleSleutel[1],
+    discordSleutel[1],
+    'console en Discord mogen niet dezelfde throttle-sleutel delen, anders komt de time-out nooit in Discord'
+  );
+});
+
+test('/setup-server loopt via de bewaking', () => {
+  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(
+    bron,
+    /await syncTeamRoles\(\)\.catch/,
+    'syncTeamRoles mag niet meer direct worden aangeroepen; die route omzeilt de tijdgrens en de overlapweigering'
+  );
+  assert.match(
+    bron,
+    /runGuarded\('setupServer', \(\) => syncTeamRoles\(\)\)/,
+    '/setup-server moet via runGuarded lopen'
+  );
+});
+
+test('de opruimlussen zijn beschermd tegen een afgebroken run', () => {
+  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+  // De delete-lussen zijn de gevaarlijkste schrijfacties: ze verwijderen rollen
+  // en hele kanalen. Een stale run mag daar nooit aankomen.
+  for (const anker of [
+    'for (const [roleId, role] of guild.roles.cache)',
+    'for (const [categoryId, ch] of guild.channels.cache)',
+  ]) {
+    const start = bron.indexOf(anker);
+    assert.ok(start > 0, `lus niet gevonden: ${anker}`);
+    const nasleep = bron.slice(start, start + 200);
+    assert.match(nasleep, /assertActive\(\)/, `de lus ${anker} moet een afbreekpunt hebben`);
+  }
+
+  const deleteBlok = bron.slice(
+    bron.indexOf('Verwijder Discord rollen'),
+    bron.indexOf('Verwijder Discord rollen') + 3000
+  );
+  const checks = (deleteBlok.match(/assertActive\(\)/g) || []).length;
+  assert.ok(checks >= 3, `het opruimblok heeft ${checks} afbreekpunten, verwacht minstens drie`);
+});
+
+test('syncTeamRoles houdt de bewaking actief bij een directe aanroep', () => {
+  const bron = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const start = bron.indexOf('async function syncTeamRoles');
+  const body = bron.slice(start, start + 900);
+
+  // Zonder ctx.isStale valt de functie terug op 'altijd actief'. Dat mag alleen
+  // als noodpad bestaan, niet als enige pad: de guard moet de ctx leveren.
+  assert.match(body, /typeof ctx\.isStale === 'function'/);
+  assert.match(body, /const assertActive = \(\) => !isStale\(\)/);
 });
 
 test('een taakfout met "timeout" in de tekst telt niet als time-out', async () => {
