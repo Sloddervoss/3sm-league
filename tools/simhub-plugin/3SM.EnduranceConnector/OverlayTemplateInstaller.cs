@@ -54,7 +54,10 @@ namespace ThreeSM.EnduranceConnector
 
             var replaceDashboard = outdated || !dashboardExists;
             if (replaceDashboard) { WriteResource(assembly, DashboardResource, dashboardPath); installed = true; }
-            if (!metadataExists) { WriteResource(assembly, MetadataResource, metadataPath); installed = true; }
+            // De metadata moet mee: SimHub zet IsOverlay daarin, en een
+            // verkeerde waarde laat het dashboard bij 'Dashboards' staan in
+            // plaats van bij 'Overlays', hoe goed het .djson zelf ook is.
+            if (!metadataExists || outdated) { WriteResource(assembly, MetadataResource, metadataPath); installed = true; }
             if (!resourcesExist) { WriteResource(assembly, ResourcesResource, resourcesPath); installed = true; }
 
             if (installed)

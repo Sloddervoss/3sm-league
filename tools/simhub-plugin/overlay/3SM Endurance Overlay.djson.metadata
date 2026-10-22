@@ -1,23 +1,19 @@
 {
-    "Category":  "3SM",
-    "Title":  "3SM Endurance Overlay",
-    "Description":  "Stintplanning, rijderswissel en racetijd",
-    "Author":  "3Stripe Motorsport",
-    "ScreenCount":  1,
-    "InGameScreensIndexs":  [
-                                0
-                            ],
-    "IdleScreensIndexs":  [
-
-                          ],
-    "MainPreviewIndex":  0,
-    "IsOverlay":  true,
-    "Width":  800,
-    "Height":  286,
-    "OverlaySizeWarning":  false,
-    "MetadataVersion":  2,
-    "EnableOnDashboardMessaging":  true,
-    "PitScreensIndexs":  [
-
-                         ]
+ "Category": "3SM",
+ "Title": "3SM Endurance Overlay",
+ "Description": "Stintplanning, rijderswissel en racetijd",
+ "Author": "3Stripe Motorsport",
+ "ScreenCount": 1,
+ "InGameScreensIndexs": [
+  0
+ ],
+ "IdleScreensIndexs": [],
+ "MainPreviewIndex": 0,
+ "IsOverlay": true,
+ "Width": 800,
+ "Height": 286,
+ "OverlaySizeWarning": false,
+ "MetadataVersion": 2,
+ "EnableOnDashboardMessaging": true,
+ "PitScreensIndexs": []
 }
