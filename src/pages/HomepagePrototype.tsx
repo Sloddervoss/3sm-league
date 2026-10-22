@@ -158,8 +158,8 @@ const NextRaceRefresh = () => {
           <div className="pointer-events-none absolute -top-28 left-1/2 h-80 w-[115%] -translate-x-1/2 rounded-full bg-orange-500/[0.045] blur-[72px]" />
           <div className="relative grid lg:grid-cols-[0.9fr_1.15fr_0.55fr]">
             <div className="relative min-h-[260px] overflow-hidden lg:min-h-full [clip-path:inset(0)]">
-              <img src={trackPhoto} alt={nextRace.track} className="absolute inset-0 h-full w-full object-cover object-[50%_65%] opacity-100 saturate-[95%] brightness-[1.35] scale-[1.08]" loading="lazy" />
-              <div className="absolute inset-0 bg-gradient-to-b from-background/45 via-transparent to-card/10" />
+              <img src={trackPhoto} alt={nextRace.track} className="absolute inset-0 h-full w-full object-cover object-[50%_65%] opacity-100 saturate-[95%] brightness-[1.7] scale-[1.08]" loading="lazy" />
+              <div className="absolute inset-0 bg-gradient-to-b from-background/20 via-transparent to-transparent" />
               <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent lg:bg-gradient-to-r lg:from-card/20 lg:via-card/8 lg:to-card/28" />
 
               <div className="absolute bottom-3 left-4 right-4">
