@@ -26,6 +26,7 @@ const createSupabaseChannel = (name: string): EnduranceRealtimeChannel => {
         },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
+          (window as unknown as Record<string, unknown>).__rtRow = row;
           if (row.source_table === binding.table) onRow();
         },
       );
@@ -62,6 +63,9 @@ export function useEnduranceRealtime(
       bindings: stableBindings,
       createChannel: createSupabaseChannel,
       invalidate: (keys) => {
+        (window as unknown as Record<string, unknown>).__rtInv = keys;
+        const cache = queryClient.getQueryCache().getAll().map((query) => query.queryKey);
+        (window as unknown as Record<string, unknown>).__rtCache = cache;
         for (const queryKey of keys) void queryClient.invalidateQueries({ queryKey });
       },
       scheduleReconnect: (delayMs, fire) => {
