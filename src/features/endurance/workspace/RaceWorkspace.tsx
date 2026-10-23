@@ -14,7 +14,7 @@ import { PrimaryButton, SecondaryButton, StatusPill, Panel } from "../shared/ui"
 import { OverviewPanel } from "./OverviewPanel";
 import { PitwallTab } from "../pitwall/PitwallTab";
 import { useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 const tabs = [
   { id: "overview", label: "Overzicht", icon: LayoutDashboard },
@@ -54,6 +54,7 @@ export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack
   const { isSuperAdmin, isEnduranceManager } = useAuth();
   const { actorId } = useEnduranceActor();
   const location = useLocation();
+  const [, setSearchParams] = useSearchParams();
   const isFocus = useMemo(() => {
     try { return new URLSearchParams(location.search).get("pitwallFocus") === "1"; }
     catch { return false; }
@@ -61,7 +62,19 @@ export const RaceWorkspace = ({ event, onBack }: { event: EnduranceEvent; onBack
   const { data: registrations = [], isLoading } = useEnduranceRegistrations(event.id);
   const accept = useUpsertEnduranceRegistration();
   const [acceptError, setAcceptError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabId>("overview");
+  const [tab, setTabState] = useState<TabId>(() => {
+    const gevraagd = new URLSearchParams(location.search).get("tab");
+    return tabs.some((item) => item.id === gevraagd) ? (gevraagd as TabId) : "overview";
+  });
+  // De tab hoort in de URL: anders val je bij een refresh terug op Overzicht en
+  // ben je je practice- of pitwallweergave kwijt.
+  const setTab = (next: TabId) => {
+    setTabState(next);
+    const params = new URLSearchParams(location.search);
+    if (next === "overview") params.delete("tab");
+    else params.set("tab", next);
+    setSearchParams(params, { replace: true });
+  };
   const myRegistration = registrations.find((r) => r.user_id === actorId);
   const access = isSuperAdmin || isEnduranceManager || (myRegistration ? ACTIVE.includes(myRegistration.status) : false);
 
