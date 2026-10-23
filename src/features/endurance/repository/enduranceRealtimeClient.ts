@@ -4,7 +4,12 @@ export type FilteredEnduranceRealtimeBinding = EnduranceRealtimeBinding;
 export type EnduranceChannelStatus = "SUBSCRIBED" | "CHANNEL_ERROR" | "TIMED_OUT" | "CLOSED" | string;
 
 export interface EnduranceRealtimeChannel {
-  onPostgresChanges(binding: FilteredEnduranceRealtimeBinding, onRow: () => void): void;
+  /**
+   * Registreert één abonnement voor een groep bindings die dezelfde
+   * streamfilter delen. supabase-js negeert een tweede `postgres_changes` met
+   * een identiek filter, dus de dispatch op `source_table` moet client-side.
+   */
+  onPostgresChanges(bindings: FilteredEnduranceRealtimeBinding[], onRow: (sourceTable: string) => void): void;
   subscribe(callback: (status: EnduranceChannelStatus) => void): void;
   remove(): void;
 }
@@ -82,8 +87,24 @@ export class EnduranceRealtimeSubscription {
     this.reconnectCancel = undefined;
     const channel = this.createChannel(this.channelName);
     this.channel = channel;
+    // Eén abonnement per unieke streamfilter. De server levert alle tabellen
+    // door elkaar op dezelfde filter, dus de verdeling gebeurt hier op
+    // source_table. Los per binding registreren laat supabase-js de tweede en
+    // derde stilzwijgend vallen (identiek filter), waardoor alleen de eerste
+    // tabel ooit een invalidatie kreeg.
+    const groups = new Map<string, FilteredEnduranceRealtimeBinding[]>();
     for (const binding of this.bindings) {
-      channel.onPostgresChanges(binding, () => this.invalidate(binding.queryKeys));
+      const key = `${binding.subscriptionTable}|${binding.filter.column}|${binding.filter.value}`;
+      const existing = groups.get(key);
+      if (existing) existing.push(binding);
+      else groups.set(key, [binding]);
+    }
+    for (const group of groups.values()) {
+      channel.onPostgresChanges(group, (sourceTable) => {
+        for (const binding of group) {
+          if (binding.table === sourceTable) this.invalidate(binding.queryKeys);
+        }
+      });
     }
     channel.subscribe((status) => {
       if (this.closed || channel !== this.channel) return;

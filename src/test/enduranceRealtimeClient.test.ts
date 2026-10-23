@@ -14,14 +14,15 @@ class FakeChannel implements EnduranceRealtimeChannel {
   name: string;
   removed = false;
   subscriber: ((status: EnduranceChannelStatus) => void) | null = null;
-  changes: Array<{ table: string; filter: string | null; onRow: () => void }> = [];
+  changes: Array<{ tables: string[]; filter: string | null; onRow: (sourceTable: string) => void }> = [];
   constructor(name: string) {
     this.name = name;
   }
-  onPostgresChanges(binding: FilteredEnduranceRealtimeBinding, onRow: () => void): void {
+  onPostgresChanges(bindings: FilteredEnduranceRealtimeBinding[], onRow: (sourceTable: string) => void): void {
+    const head = bindings[0];
     this.changes.push({
-      table: binding.table,
-      filter: binding.filter ? `${binding.filter.column}=eq.${binding.filter.value}` : null,
+      tables: bindings.map((b) => b.table),
+      filter: head.filter ? `${head.filter.column}=eq.${head.filter.value}` : null,
       onRow,
     });
   }
@@ -52,7 +53,7 @@ const captureScheduler = (captured: Array<{ delayMs: number; fire: () => void; c
 const silent = { scheduleReconnect: () => ({ cancel: () => {} }) };
 
 describe("EnduranceRealtimeSubscription (client lifecycle)", () => {
-  it("opens one channel, narrow-subscribes every table, and invalidates on a row change", () => {
+  it("registers one subscription per unique filter and dispatches on source_table", () => {
     const factory = vi.fn((name: string) => new FakeChannel(name));
     const invalidated: unknown[][] = [];
     const sub = new EnduranceRealtimeSubscription({
@@ -66,12 +67,28 @@ describe("EnduranceRealtimeSubscription (client lifecycle)", () => {
 
     expect(factory).toHaveBeenCalledTimes(1);
     const channel = factory.mock.results[0].value as FakeChannel;
-    expect(channel.changes.map((c) => c.table)).toEqual(["endurance_stints", "endurance_teams"]);
-    // Every table is narrow-subscribed — never an unfiltered broad subscription.
-    expect(channel.changes.every((c) => c.filter === "event_id=eq.evt-123")).toBe(true);
+    // Beide tabellen delen dezelfde streamfilter. supabase-js negeert een
+    // tweede postgres_changes met identiek filter, dus dit moet één abonnement
+    // zijn dat zelf op source_table splitst. Los registreren liet de tweede
+    // tabel stilzwijgend vallen.
+    expect(channel.changes).toHaveLength(1);
+    expect(channel.changes[0].tables).toEqual(["endurance_stints", "endurance_teams"]);
+    // Elke tabel is narrow-subscribed — nooit een ongefIlterd breed abonnement.
+    expect(channel.changes[0].filter).toBe("event_id=eq.evt-123");
     expect(invalidated).toEqual([]);
-    channel.changes[0].onRow();
-    expect(invalidated).toEqual([["endurance", "endurance_stints", "evt-123"]]);
+
+    channel.changes[0].onRow("endurance_teams");
+    expect(invalidated).toEqual([["endurance", "endurance_teams", "evt-123"]]);
+
+    channel.changes[0].onRow("endurance_stints");
+    expect(invalidated).toEqual([
+      ["endurance", "endurance_teams", "evt-123"],
+      ["endurance", "endurance_stints", "evt-123"],
+    ]);
+
+    // Een tabel die niet in deze groep zit levert geen invalidatie op.
+    channel.changes[0].onRow("endurance_pace_entries");
+    expect(invalidated).toHaveLength(2);
   });
 
   it("reconnects with bounded exponential backoff, always on a fresh channel, and gives up at the cap", () => {

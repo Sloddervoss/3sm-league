@@ -15,19 +15,20 @@ const nextInstanceId = () => `instance-${++realtimeInstanceSequence}`;
 const createSupabaseChannel = (name: string): EnduranceRealtimeChannel => {
   const channel = supabase.channel(name);
   return {
-    onPostgresChanges(binding, onRow) {
+    onPostgresChanges(bindings, onRow) {
+      const head = bindings[0];
+      if (!head) return;
       channel.on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
-          table: binding.subscriptionTable,
-          filter: `${binding.filter.column}=eq.${binding.filter.value}`,
+          table: head.subscriptionTable,
+          filter: `${head.filter.column}=eq.${head.filter.value}`,
         },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
-          (window as unknown as Record<string, unknown>).__rtRow = row;
-          if (row.source_table === binding.table) onRow();
+          onRow(String(row.source_table ?? ""));
         },
       );
     },
@@ -63,9 +64,6 @@ export function useEnduranceRealtime(
       bindings: stableBindings,
       createChannel: createSupabaseChannel,
       invalidate: (keys) => {
-        (window as unknown as Record<string, unknown>).__rtInv = keys;
-        const cache = queryClient.getQueryCache().getAll().map((query) => query.queryKey);
-        (window as unknown as Record<string, unknown>).__rtCache = cache;
         for (const queryKey of keys) void queryClient.invalidateQueries({ queryKey });
       },
       scheduleReconnect: (delayMs, fire) => {
