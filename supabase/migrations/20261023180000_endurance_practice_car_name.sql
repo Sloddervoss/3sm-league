@@ -150,7 +150,7 @@ BEGIN
 
     IF v_practice_session_id IS NOT NULL THEN
       INSERT INTO public.endurance_practice_laps (
-        session_id, event_id, user_id, car_id, circuit, car_name,
+        session_id, event_id, user_id, car_id, car_name, circuit,
         lap_seconds, fuel_used_litres, fuel_per_lap_litres,
         incident_count, recorded_at,
         source_session_id, source_device_id, completed_laps
