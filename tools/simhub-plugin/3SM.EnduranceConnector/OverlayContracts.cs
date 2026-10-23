@@ -55,6 +55,9 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "isDriving", Order = 3)] public bool? IsDriving { get; set; }
     }
 
+    // Zonder [DataContract] negeert DataContractJsonSerializer deze klasse en
+    // blijven alle velden stil leeg -- geen exception, geen logregel.
+    [DataContract]
     public sealed class OverlayPace
     {
         [DataMember(Name = "driverId", Order = 1)] public string DriverId { get; set; }

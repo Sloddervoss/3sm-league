@@ -986,6 +986,8 @@ namespace ThreeSM.EnduranceConnector
                 }
                 _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
                 Interlocked.Exchange(ref _sequence, -1);
+                // Nieuw device = nieuw team: het oude plan en de oude cache zijn ongeldig.
+                SyncOverlayAuth(true);
                 Status = "Gekoppeld · wacht op iRacing";
                 OnPropertyChanged("IsPaired");
                 ApplyDiagnosticsSettings();
@@ -1042,8 +1044,32 @@ namespace ThreeSM.EnduranceConnector
                 }
             }
             ApplyDiagnosticsSettings();
+            // Token is nu leeg: stop het pollen en wis het plan van dit device, anders
+            // blijft het dashboard de oude stint tonen.
+            SyncOverlayAuth(true);
             Status = "Lokaal vergeten · trek het device ook op de 3SM-site in";
             OnPropertyChanged("IsPaired");
+        }
+
+        // De overlay-client wordt één keer in Init gemaakt; pair/unpair wijzigen alleen
+        // _deviceToken. Zonder deze sync blijft de overlay met het oude token (of zonder
+        // token) pollen: na pair komt er nooit data, na unpair blijft het plan van het
+        // vorige device staan. Lockorde: _settingsGate -> OverlayClient._gate (nooit omgekeerd).
+        private void SyncOverlayAuth(bool resetPlanning)
+        {
+            var client = _overlayClient;
+            if (client == null) return;
+            string token;
+            lock (_settingsGate) token = _deviceToken;
+            try
+            {
+                if (resetPlanning) client.Clear();
+                client.SetToken(token);
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM overlay: token kon niet worden bijgewerkt: " + error.Message);
+            }
         }
 
         private TelemetryEnvelope Capture(PluginManager manager, GameData data, bool central, bool isInCar, out DiagnosticsObservation diagnosticObservation)

@@ -19,8 +19,13 @@ Vink af en noteer afwijkingen.
 ## 1. Properties verschijnen
 - [ ] Open in SimHub een formule/property-verkenner (bv. de LED-editor of dashboard-formule-editor → "beschikbare properties").
 - [ ] Zoek op `THREESM`.
-**Verwacht** (universeel): `THREESM.Flags.Active`, `.Primary`, `.Colour`, `.Layout`, `.Bits`, `.Severity`, `.Green/.Yellow/.Red/.Blue/.White/.Checkered/.Black/.Orange/.Debris/.SafetyCar/.VirtualSafetyCar`.
-En per box: `THREESM.Flags.Box1.*` … `THREESM.Flags.Box4.*` (+ `.DeviceName`).
+**Verwacht** (universeel), met de pluginnaam ervoor:
+`EnduranceConnectorPlugin.THREESM.Flags.Active`, `.Primary`, `.Colour`, `.Layout`, `.Bits`, `.Severity`, `.Green/.Yellow/.Red/.Blue/.White/.Checkered/.Black/.Orange/.Debris/.SafetyCar/.VirtualSafetyCar`.
+En per box: `EnduranceConnectorPlugin.THREESM.Flags.Box1.*` … `Box4.*` (+ `.DeviceName`).
+
+> De prefix alleen (`THREESM.Flags`) is niet genoeg: SimHub zet de pluginnaam
+> ervoor. Een binding zonder `EnduranceConnectorPlugin.` bestaat niet en blijft
+> stil leeg.
 
 > Niet zichtbaar? → SimHub herstarten; controleer het log op een exceptie in `Init`.
 
@@ -28,7 +33,7 @@ En per box: `THREESM.Flags.Box1.*` … `THREESM.Flags.Box4.*` (+ `.DeviceName`).
 
 ## 2. Vlaggen oplossen zonder hardware (iRacing)
 - [ ] Ga de baan op in iRacing (of een sessie met vlaggen).
-- [ ] Laat in de property-verkenner `THREESM.Flags.Primary` en `.Green/.Yellow/...` live meelopen.
+- [ ] Laat in de property-verkenner `EnduranceConnectorPlugin.THREESM.Flags.Primary` en `.Green/.Yellow/...` live meelopen.
 **Verwacht:**
 - [ ] Groen bij een groene vlag → `Primary = "green"`, `.Green = True`.
 - [ ] Geel (of laat een gele vlag triggeren) → `Primary = "yellow"`.
@@ -44,7 +49,7 @@ En per box: `THREESM.Flags.Box1.*` … `THREESM.Flags.Box4.*` (+ `.DeviceName`).
 
 ## 3. SimHub-property publicatie (de brug naar de flagbox)
 - [ ] Vlaggen → **"Publiceer vlag-properties"** aan.
-- [ ] Verander een vlag en kijk of `THREESM.Flags.Box1.Primary` meeloopt.
+- [ ] Verander een vlag en kijk of `EnduranceConnectorPlugin.THREESM.Flags.Box1.Primary` meeloopt.
 **Verwacht:** de properties volgen de opgeloste vlag (bij wijziging, max elke 250 ms).
 
 ---

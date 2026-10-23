@@ -646,20 +646,26 @@ git commit -m "feat(overlay): ophaaldienst met schijfcache en leeftijd"
 - Modify: `tools/simhub-plugin/3SM.EnduranceConnector/FlagPropertyPublisher.cs`
 - Modify: `tools/simhub-plugin/3SM.EnduranceConnector/EnduranceConnectorPlugin.cs` (aanroep in `DataUpdate`)
 
-**Stap 1:** publiceer deze properties, met prefix `THREESM.Overlay.`:
+**Stap 1:** publiceer deze properties, met prefix `THREESM.Overlay.`
+
+> **Correctie (na implementatie):** de plugin meldt aan als `THREESM.Overlay.<naam>`,
+> maar SimHub zet de pluginnaam ervoor. Elke binding in een dashboard moet dus
+> `EnduranceConnectorPlugin.THREESM.Overlay.<naam>` gebruiken. De tabel hieronder
+> geeft de naam **zonder** die pluginnaam; de uiteindelijke eigenschap is
+> `EnduranceConnectorPlugin.` + de kolom Property.
 
 | Property | Type | Bron |
 |---|---|---|
-| `Overlay.Current.DriverName` | string | snapshot.current.driverName |
-| `Overlay.Current.StintIndex` | int | snapshot.current.stintIndex |
-| `Overlay.Current.IsOverdue` | bool | snapshot.current.isOverdue |
-| `Overlay.Next.DriverName` | string | snapshot.next.driverName |
-| `Overlay.Next.MinutesUntilStart` | int | snapshot.next.minutesUntilStart |
-| `Overlay.Race.PlannedMinutes` | int | snapshot.race.plannedDurationMinutes |
-| `Overlay.Plan.AgeSeconds` | int | PlanAgeSeconds |
-| `Overlay.Plan.Revision` | string | snapshot.revision |
-| `Overlay.Order.Summary` | string | "Vincent > Jaimy > Marnix > Vincent" |
-| `Overlay.Warnings` | string | kommagescheiden |
+| `THREESM.Overlay.Current.DriverName` | string | snapshot.current.driverName |
+| `THREESM.Overlay.Current.StintIndex` | int | snapshot.current.stintIndex |
+| `THREESM.Overlay.Current.IsOverdue` | bool | snapshot.current.isOverdue |
+| `THREESM.Overlay.Next.DriverName` | string | snapshot.next.driverName |
+| `THREESM.Overlay.Next.MinutesUntilStart` | int | snapshot.next.minutesUntilStart |
+| `THREESM.Overlay.Race.PlannedMinutes` | int | snapshot.race.plannedDurationMinutes |
+| `THREESM.Overlay.Plan.AgeSeconds` | int | PlanAgeSeconds |
+| `THREESM.Overlay.Plan.Revision` | string | snapshot.revision |
+| `THREESM.Overlay.Order.Summary` | string | "Vincent > Jaimy > Marnix > Vincent" |
+| `THREESM.Overlay.Warnings` | string | kommagescheiden |
 
 **Stap 2:** roep `overlayClient.Tick(isInCar)` aan vanuit `DataUpdate`, na `PublishFlags`, binnen de bestaande try/catch.
 
@@ -687,19 +693,21 @@ git commit -m "feat(overlay): publiceer de stintplanning als SimHub-properties"
 
 **Stap 3:** houd het oppervlak onder **800×600** (harde SimHub-limiet).
 
-**Stap 4:** bind de velden:
+**Stap 4:** bind de velden. Let op de pluginnaam: zonder
+`EnduranceConnectorPlugin.` ervoor bestaat de eigenschap niet in SimHub en blijft
+het veld leeg.
 
 | Veld | Binding |
 |---|---|
-| Huidige rijder | `$prop('THREESM.Overlay.Current.DriverName')` |
-| Stint | `$prop('THREESM.Overlay.Current.StintIndex')` |
-| Volgende rijder | `$prop('THREESM.Overlay.Next.DriverName')` |
-| Minuten tot wissel | `$prop('THREESM.Overlay.Next.MinutesUntilStart')` |
+| Huidige rijder | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Current.DriverName')` |
+| Stint | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Current.StintIndex')` |
+| Volgende rijder | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Next.DriverName')` |
+| Minuten tot wissel | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Next.MinutesUntilStart')` |
 | Racetijd | `$prop('DataCorePlugin.GameData.NewData.SessionTime')` |
 | Laatste ronde | `$prop('DataCorePlugin.GameData.NewData.LastLapTime')` |
 | Beste ronde | `$prop('DataCorePlugin.GameData.NewData.BestLapTime')` |
-| Rijdersvolgorde | `$prop('THREESM.Overlay.Order.Summary')` |
-| Plan-leeftijd | `$prop('THREESM.Overlay.Plan.AgeSeconds')` |
+| Rijdersvolgorde | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Order.Summary')` |
+| Plan-leeftijd | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Plan.AgeSeconds')` |
 
 **Stap 5:** test met een lopende iRacing-sessie en een gevulde planning.
 
@@ -707,7 +715,8 @@ git commit -m "feat(overlay): publiceer de stintplanning als SimHub-properties"
 
 ### Taak 3.2: de afwijkingsmarkering
 
-**Stap 1:** voeg een waarschuwingsregel toe die verschijnt als `Overlay.Warnings` niet leeg is.
+**Stap 1:** voeg een waarschuwingsregel toe die verschijnt als
+`EnduranceConnectorPlugin.THREESM.Overlay.Warnings` niet leeg is.
 
 **Stap 2:** toon in plaats van een streepje altijd "—" bij een ontbrekende waarde, nooit `NaN` of een leeg vlak.
 
@@ -732,7 +741,8 @@ Elke regel moet aantoonbaar kloppen voordat dit "klaar" heet.
 - [ ] Database onbereikbaar: 503, geen crash
 
 **Plugin:**
-- [ ] Properties verschijnen in SimHub's property-lijst
+- [ ] Properties verschijnen in SimHub's property-lijst als `EnduranceConnectorPlugin.THREESM.Overlay.*`
+- [ ] Elke binding in het dashboard verwijst naar een bestaande property (startcontrole `OverlayBindingAudit`, melding in het log)
 - [ ] Bij weggevallen netwerk blijven de laatste waarden staan en loopt `AgeSeconds` op
 - [ ] Na een herstart van SimHub komen de waarden binnen 20 seconden terug
 - [ ] Geen exception in het SimHub-log tijdens een sessie van 30 minuten
