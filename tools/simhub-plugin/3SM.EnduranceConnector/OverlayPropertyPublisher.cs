@@ -159,8 +159,12 @@ namespace ThreeSM.EnduranceConnector
                         {
                             foreach (var naam in alle)
                             {
+                                // SimHub registreert elke eigenschap onder de pluginnaam:
+                                //   EnduranceConnectorPlugin.THREESM.Overlay.Pace.Summary
+                                // Een StartsWith op "THREESM" matcht daarom nooit en logde
+                                // altijd "0 van 3SM", ook als alle eigenschappen bestonden.
                                 if (!string.IsNullOrEmpty(naam) &&
-                                    naam.StartsWith("THREESM", StringComparison.OrdinalIgnoreCase))
+                                    naam.IndexOf("THREESM.", StringComparison.OrdinalIgnoreCase) >= 0)
                                     trois.Add(naam);
                             }
                         }
