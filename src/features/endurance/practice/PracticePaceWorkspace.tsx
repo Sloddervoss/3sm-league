@@ -1,11 +1,27 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Gauge, TimerReset } from "lucide-react";
 import type { EnduranceEvent } from "../core/types";
 import { PacePanel } from "../pace/PacePanel";
 import { PracticeSessionPanel } from "./PracticeSessionPanel";
+import { enduranceRealtimeBindingsForEvent } from "../repository/enduranceRealtimeMatrix";
+import { useEnduranceRealtime } from "../repository/useEnduranceRealtime";
+
+const PRACTICE_TABLES = new Set([
+  "endurance_practice_sessions",
+  "endurance_practice_laps",
+  "endurance_pace_entries",
+]);
 
 export const PracticePaceWorkspace = ({ event }: { event: EnduranceEvent }) => {
   const [view, setView] = useState<"pace" | "sessions">("pace");
+  // Zonder deze bindings ververst de tab alleen bij een handmatige reload.
+  // De rijen komen al binnen via endurance_realtime_stream; hier wordt de
+  // querycache ongeldig gemaakt zodra er een sessie of ronde bijkomt.
+  const bindings = useMemo(
+    () => enduranceRealtimeBindingsForEvent(event.id).filter((binding) => PRACTICE_TABLES.has(binding.table)),
+    [event.id],
+  );
+  useEnduranceRealtime(bindings, [bindings], { kind: "event", identity: `practice-${event.id}` });
   return <div className="space-y-5">
     <div className="flex flex-col gap-4 rounded-2xl border border-orange-500/15 bg-gradient-to-br from-orange-500/10 to-transparent p-5 sm:flex-row sm:items-center sm:justify-between">
       <div><h2 className="font-heading text-xl font-black text-white">Practice & Pace</h2><p className="mt-1 text-sm text-gray-400">Train samen, vergelijk je tempo en bereid je race voor.</p></div>
