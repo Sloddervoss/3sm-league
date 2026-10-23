@@ -14,10 +14,21 @@ In `tools/simhub-plugin/overlay/` staat een voorbeelddashboard met de 3SM-look:
 - `3SMOverlayBackground.png` (bron van de achtergrond)
 - `3SM Endurance Overlay.preview.png` (visuele preview met voorbeeldnamen)
 
-De plugin installeert dit template automatisch bij de eerste start als de map
-`DashTemplates\3SM Endurance Overlay` nog niet bestaat. Bestaande templates
-worden niet overschreven, zodat eigen aanpassingen blijven staan. Verwijder de
-map en herstart SimHub om opnieuw te laten installeren.
+De plugin installeert dit template automatisch in
+`DashTemplates\3SM Endurance Overlay`. Naast het dashboard schrijft hij een
+versiemarker (`3SM Endurance Overlay.djson.3smversion`) met de pluginversie.
+
+- **Marker gelijk aan de pluginversie** → het dashboard blijft staan, ook als je
+  het zelf hebt aangepast.
+- **Marker ontbreekt of wijkt af** → het dashboard wordt vervangen en je oude
+  bestand wordt als `3SM Endurance Overlay.djson.3smbak` bewaard (één generatie;
+  een volgende upgrade overschrijft die back-up).
+- **Metadata of ressources ontbreken** → die worden bijgeschreven zonder het
+  dashboard aan te raken.
+
+Een eigen aanpassing overleeft dus elke herstart, maar niet een pluginupdate.
+Wil je zeker weten dat je versie blijft: bewaar je `.djson` buiten de pluginmap
+en zet hem na een update terug.
 
 Handmatig importeren kan ook via **Dash Studio → Import dashboard** (of door de
 bestanden naar een map onder `DashTemplates` te kopiëren). Het template is
@@ -40,7 +51,18 @@ posities aan.
 
 ## 2. Properties
 
-Alles hieronder staat in SimHub onder de prefix `THREESM.Overlay.`.
+De plugin meldt zijn eigenschappen aan onder de prefix `THREESM.Overlay`, maar
+SimHub zet daar de **pluginnaam** voor. De volledige naam — de naam die je in
+formules, bindingen en de property-verkenner ziet — is dus:
+
+```
+EnduranceConnectorPlugin.THREESM.Overlay.<naam>
+```
+
+Zonder `EnduranceConnectorPlugin.` erbij wijst een binding naar een
+eigenschap die niet bestaat. SimHub meldt dat nergens: het veld blijft leeg.
+De namen in de tabel hieronder zijn relatief; zet er in SimHub altijd
+`EnduranceConnectorPlugin.THREESM.Overlay.` voor.
 
 | Property | Type | Betekenis |
 |---|---|---|
@@ -77,6 +99,12 @@ Alles hieronder staat in SimHub onder de prefix `THREESM.Overlay.`.
 | `Pace.Summary` | string | Gemiddelde rondetijd per coureur |
 | `Warnings` | string | Kommagescheiden waarschuwingen; leeg = alles goed |
 
+Het meegeleverde template gebruikt hiervan dertien: `Current.DriverNameUpper`,
+`Current.StintIndex`, `Next.DriverNameUpper`, `Current.AverageLap`, `Current.BestLap`,
+`Current.AverageDelta`, `Order.Driver1` … `Order.Driver4`, `Warnings`, `Self.IsDriving`
+en `Next.IsSelf`. De overige eigenschappen zijn er voor eigen dashboards; ze worden wél
+gepubliceerd, maar door het template niet gelezen.
+
 `Plan.Error` kan onder meer `not_bound`, `invalid_device`, `network_error`,
 `rate_limited`, `db_unavailable` of `http_<status>` zijn. De property `Warnings`
 toont daarvan een korte Nederlandse tekst (bijvoorbeeld `geen actief event`).
@@ -89,38 +117,55 @@ en elke **60 seconden** daarbuiten.
 
 ## 3. Velden binden
 
-Voeg in Dash Studio een **Text**-item toe en gebruik in de binding-editor
-`$prop('…')` (of `[THREESM.Overlay.…]` in een formule).
+Voeg in Dash Studio een **Text**-item toe en gebruik in de binding-editor een
+van deze twee vormen — let op de pluginnaam en op de aanhalingstekens:
+
+| Vorm | Voorbeeld |
+|---|---|
+| Property-binding (`$prop`) | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Current.DriverName')` |
+| Formule (tussen rechte haken, **geen** quotes) | `[EnduranceConnectorPlugin.THREESM.Overlay.Current.DriverName]` |
+
+Beide vormen verwijzen naar dezelfde eigenschap. `$prop('THREESM.Overlay.…')`
+werkt **niet**: SimHub kent alleen de volledige naam met pluginnaam.
 
 | Veld | Binding |
 |---|---|
-| Huidige rijder | `$prop('THREESM.Overlay.Current.DriverName')` |
-| Stint | `$prop('THREESM.Overlay.Current.StintIndex')` |
-| Volgende rijder | `$prop('THREESM.Overlay.Next.DriverName')` |
-| Minuten tot wissel | `$prop('THREESM.Overlay.Next.MinutesUntilStart')` |
+| Huidige rijder | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Current.DriverName')` |
+| Stint | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Current.StintIndex')` |
+| Volgende rijder | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Next.DriverName')` |
+| Minuten tot wissel | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Next.MinutesUntilStart')` |
 | Racetijd | `$prop('DataCorePlugin.GameData.NewData.SessionTime')` |
 | Laatste ronde | `$prop('DataCorePlugin.GameData.NewData.LastLapTime')` |
 | Beste ronde | `$prop('DataCorePlugin.GameData.NewData.BestLapTime')` |
-| Gemiddelde ronde (planning) | `$prop('THREESM.Overlay.Current.AverageLap')` |
-| Beste ronde (planning) | `$prop('THREESM.Overlay.Current.BestLap')` |
-| Rijdersvolgorde | `$prop('THREESM.Overlay.Order.Summary')` |
-| Plan-leeftijd | `$prop('THREESM.Overlay.Plan.AgeSeconds')` |
-| Waarschuwingen | `$prop('THREESM.Overlay.Warnings')` |
+| Gemiddelde ronde (planning) | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Current.AverageLap')` |
+| Beste ronde (planning) | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Current.BestLap')` |
+| Rijdersvolgorde | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Order.Summary')` |
+| Plan-leeftijd | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Plan.AgeSeconds')` |
+| Waarschuwingen | `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Warnings')` |
 
 Voor `SessionTime`, `LastLapTime` en `BestLapTime` zet je in Dash Studio een
 tijdnotatie zoals `hh\:mm\:ss` of `m\:ss\.fff`. Laat een ontbrekende waarde nooit
 als `NaN` of leeg vlak zien: gebruik een `NoDataText` of een formule met `—`.
 
+Twee waarden hebben een sentinel in plaats van een lege waarde: `Next.MinutesUntilStart`
+en `Current.MinutesRemaining` zijn `-1` als de wachttijd onbekend is, en
+`Plan.AgeSeconds` is `-1` als er nog geen planning is. Vang dat af in de binding,
+bijvoorbeeld `if([EnduranceConnectorPlugin.THREESM.Overlay.Next.MinutesUntilStart] < 0, '—', [EnduranceConnectorPlugin.THREESM.Overlay.Next.MinutesUntilStart])`.
+
 ## 4. Afwijkingsmarkering
 
 Maak een apart Text-item voor de waarschuwingen:
 
-- **Text**: `$prop('THREESM.Overlay.Warnings')`
-- **Visible**: `!isnull($prop('THREESM.Overlay.Warnings')) && $prop('THREESM.Overlay.Warnings') != ''`
+- **Text**: `$prop('EnduranceConnectorPlugin.THREESM.Overlay.Warnings')`
+- **Visible**: `[EnduranceConnectorPlugin.THREESM.Overlay.Warnings] != ''`
 - **Kleur**: amber/rood
 
+`Warnings` bestaat altijd (de plugin meldt hem aan met een lege string), dus een
+vergelijking met `''` is genoeg; `isnull()` is niet nodig en werkt alleen als de
+gebruikte formule-omgeving die functie kent.
+
 Zo verschijnt de regel alleen als er iets aan de hand is. Gebruik daarnaast
-`$prop('THREESM.Overlay.Current.IsOverdue')` om de huidige rijder of stint
+`$prop('EnduranceConnectorPlugin.THREESM.Overlay.Current.IsOverdue')` om de huidige rijder of stint
 amber te kleuren als de planning achterloopt.
 
 ## 5. Automatisch starten
@@ -145,8 +190,10 @@ achtergrond zitten al in het template.
 ## 6. Testen
 
 1. Start SimHub met de nieuwe plugin-DLL en activeer **3SM Endurance Connector**.
-2. Controleer in SimHub → **Available properties** dat de
-   `THREESM.Overlay.*`-properties bestaan.
+2. Controleer in SimHub onder **Available properties** dat de
+   `EnduranceConnectorPlugin.THREESM.Overlay.*`-properties bestaan. Zoek in de
+   verkenner op `THREESM` — de pluginnaam staat ervoor, dus zoeken op
+   `THREESM.Overlay` aan het begin van de naam vindt niets.
 3. Zorg dat het device gekoppeld is en dat je lid bent van precies één team in
    een lopend event (de lidmaatschap-fallback; een handmatige device-binding is
    niet nodig).
@@ -158,3 +205,24 @@ achtergrond zitten al in het template.
      blijven staan;
    - `Warnings` leeg is bij een gezonde planning;
    - alle velden een waarde of `—` tonen, nooit `NaN`.
+
+## 7. Als een veld leeg blijft
+
+SimHub meldt een binding naar een niet-bestaande eigenschap niet. Je ziet alleen
+een leeg veld. Loop dit na, in deze volgorde:
+
+1. **Staat de pluginnaam ervoor?** `$prop('THREESM.Overlay.…')` bestaat niet.
+   Gebruik `EnduranceConnectorPlugin.THREESM.Overlay.…`.
+2. **Spelling van het achtervoegsel.** `Current.DriverNameUpper` is een andere
+   eigenschap dan `Current.DriverName`; `Driver1` gaat tot en met `Driver8`.
+3. **Is het dashboard het bestand dat de plugin installeerde?** Controleer of
+   `DashTemplates\3SM Endurance Overlay\3SM Endurance Overlay.djson.3smversion`
+   dezelfde versie bevat als de DLL. Wijkt hij af, herstart SimHub: dan wordt het
+   dashboard bijgewerkt.
+4. **Zijn de properties überhaupt aangemeld?** In het SimHub-log staat bij de
+   eerste publicatie `3SM overlay: properties aangemeld=<n>, mislukt=<m>`.
+   `mislukt` moet `0` zijn.
+
+Vanaf de eerstvolgende pluginversie doet de plugin stap 1 en 2 zelf en meldt het
+resultaat in het log als `3SM overlay: ONBEKENDE BINDING <item>.<target> -> [naam]`.
+Zie `docs/plans/2026-10-22-endurance-overlay.md` voor de controle zelf.

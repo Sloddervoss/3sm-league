@@ -19,6 +19,9 @@ namespace ThreeSM.EnduranceConnector
     internal sealed class OverlayClient : IDisposable
     {
         private const int MaxResponseBytes = 64 * 1024;
+        // Eén bron van waarheid: FetchAsync en LoadCache moeten hetzelfde contract
+        // accepteren, anders kan een oude cache als geldig plan doorgaan.
+        internal const string ExpectedContract = "3sm-overlay.v1";
         private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
         private readonly object _gate = new object();
@@ -168,7 +171,7 @@ namespace ThreeSM.EnduranceConnector
 
                         var snapshot = Deserialize<OverlaySnapshot>(body);
                         if (snapshot == null ||
-                            !string.Equals(snapshot.Contract, "3sm-overlay.v1", StringComparison.Ordinal))
+                            !string.Equals(snapshot.Contract, ExpectedContract, StringComparison.Ordinal))
                         {
                             SetError("invalid_contract");
                             return;
@@ -239,12 +242,27 @@ namespace ThreeSM.EnduranceConnector
                 var cache = Deserialize<OverlayCacheFile>(File.ReadAllText(_cachePath, Encoding.UTF8));
                 if (cache == null || cache.Snapshot == null) return;
 
+                // De cache is geschreven door een eerdere build. Zonder contractcheck
+                // komt een verouderd of vreemd schema ongecontroleerd in _cached en
+                // publiceert de plugin velden die dit contract niet kent (of mist ze).
+                if (!string.Equals(cache.Snapshot.Contract, ExpectedContract, StringComparison.Ordinal))
+                {
+                    TryDeleteCache();
+                    return;
+                }
+
                 DateTime cachedAtUtc;
                 if (!DateTime.TryParse(cache.CachedAtUtc, CultureInfo.InvariantCulture,
                     DateTimeStyles.RoundtripKind, out cachedAtUtc))
                     cachedAtUtc = info.LastWriteTimeUtc;
                 else
                     cachedAtUtc = cachedAtUtc.ToUniversalTime();
+
+                // Een tijdstempel in de toekomst (klokfout of handmatig bewerkte cache)
+                // maakt PlanAgeSeconds negatief. Val dan terug op de bestandstijd.
+                var now = _utcNow();
+                if (cachedAtUtc > now.AddMinutes(5))
+                    cachedAtUtc = info.LastWriteTimeUtc > now ? now : info.LastWriteTimeUtc;
 
                 lock (_gate)
                 {
@@ -255,6 +273,19 @@ namespace ThreeSM.EnduranceConnector
             catch
             {
                 // Een beschadigde cache mag de plugin niet tegenhouden.
+            }
+        }
+
+        private void TryDeleteCache()
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(_cachePath) && File.Exists(_cachePath))
+                    File.Delete(_cachePath);
+            }
+            catch
+            {
+                // Opruimen is best-effort; de volgende fetch overschrijft het bestand.
             }
         }
 
