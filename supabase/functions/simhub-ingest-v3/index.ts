@@ -103,6 +103,11 @@ Deno.serve(async (request) => {
       if (result === "not_authority" || result === "not_bound" || result === "not_registered") return jsonResponse(request, { error: result }, 403);
       if (result === "invalid_device" || result === "revoked") return jsonResponse(request, { error: "invalid_device" }, 401);
       if (result === "replayed") return jsonResponse(request, { error: "replayed" }, 409);
+      // Een vol sessieregister is een throttle-toestand, geen serverfout. Zonder
+      // deze twee regels belandde session_limit op de generieke 500 hieronder en
+      // leek de plugin kapot terwijl hij alleen zijn sessieplafond raakte.
+      if (result === "session_limit") return jsonResponse(request, { error: "device_session_limit" }, 409);
+      if (result === "rate_limited") return jsonResponse(request, { error: "rate_limited" }, 429);
       if (result === "invalid_payload") return jsonResponse(request, { error: result }, 422);
       if (result !== "accepted") return jsonResponse(request, { error: "internal_error" }, 500);
 
