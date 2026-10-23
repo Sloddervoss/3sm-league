@@ -31,6 +31,7 @@ export type PracticeLapRow = {
   event_id: string;
   user_id: string | null;
   car_id: string | null;
+  car_name: string | null;
   circuit: string | null;
   lap_seconds: number;
   fuel_used_litres: number | null;
@@ -40,7 +41,7 @@ export type PracticeLapRow = {
 };
 
 const sessionColumns = "id,event_id,team_id,label,conditions,started_at,ended_at,requires_registered,created_by,created_at,updated_at";
-const lapColumns = "id,session_id,event_id,user_id,car_id,circuit,lap_seconds,fuel_used_litres,fuel_per_lap_litres,incident_count,recorded_at";
+const lapColumns = "id,session_id,event_id,user_id,car_id,car_name,circuit,lap_seconds,fuel_used_litres,fuel_per_lap_litres,incident_count,recorded_at";
 
 /** Plain: de actiefste (niet gesloten) practice-sessies voor een event. */
 export async function listEndurancePracticeSessions(eventId: string): Promise<PracticeSessionRow[]> {

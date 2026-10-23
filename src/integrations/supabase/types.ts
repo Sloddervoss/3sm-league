@@ -857,6 +857,7 @@ export type Database = {
           event_id: string
           user_id: string | null
           car_id: string | null
+          car_name: string | null
           circuit: string | null
           lap_seconds: number
           fuel_used_litres: number | null
@@ -870,6 +871,7 @@ export type Database = {
           event_id: string
           user_id?: string | null
           car_id?: string | null
+          car_name?: string | null
           circuit?: string | null
           lap_seconds: number
           fuel_used_litres?: number | null
@@ -883,6 +885,7 @@ export type Database = {
           event_id?: string
           user_id?: string | null
           car_id?: string | null
+          car_name?: string | null
           circuit?: string | null
           lap_seconds?: number
           fuel_used_litres?: number | null

@@ -59,17 +59,22 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
   const manager = Boolean(user?.id && (isSuperAdmin || isEnduranceManager || event.managerIds.includes(user.id)));
   const registeredCount = registrations.filter((r) => !["rejected", "withdrawn"].includes(r.status)).length;
 
-  // Per-sessie: snelste rondetijd per coureur (als de opname-laag later laps levert).
-  const fastestPerDriver = useMemo(() => {
-    if (!active) return new Map<string, number>();
+  // Per sessie: snelste rondetijd per coureur én auto. Twee auto's van dezelfde
+  // coureur zijn twee regels; pace tussen verschillende auto's vergelijken zegt niets.
+  type Fastest = { userId: string; carId: string | null; carName: string | null; seconds: number };
+  const fastestPerDriverCar = useMemo<Fastest[]>(() => {
+    if (!active) return [];
     const laps = lapsBySession[active.id] ?? [];
-    const map = new Map<string, number>();
+    const map = new Map<string, Fastest>();
     for (const lap of laps) {
       if (!lap.user_id) continue;
-      const best = map.get(lap.user_id) ?? Number.POSITIVE_INFINITY;
-      if (lap.lap_seconds < best) map.set(lap.user_id, lap.lap_seconds);
+      const key = `${lap.user_id}::${lap.car_id ?? ""}`;
+      const current = map.get(key);
+      if (!current || lap.lap_seconds < current.seconds) {
+        map.set(key, { userId: lap.user_id, carId: lap.car_id, carName: lap.car_name, seconds: lap.lap_seconds });
+      }
     }
-    return map;
+    return [...map.values()].sort((a, b) => a.seconds - b.seconds);
   }, [active, lapsBySession]);
 
   const startSession = () => {
@@ -100,8 +105,8 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
         <StatusPill tone="orange"><UserRound className="mr-1 inline h-3 w-3" /> {registeredCount} ingeschreven coureurs volgen</StatusPill>
         {manager && <SecondaryButton onClick={closeSession} disabled={close.isPending}><Flag className="h-4 w-4" /> Sessie beëindigen</SecondaryButton>}
       </div>}
-      {fastestPerDriver.size > 0 && <div className="mb-5"><h3 className="mb-2 font-heading font-black text-white">Snelste rondetijd per coureur</h3><div className="space-y-1">{[...fastestPerDriver.entries()].sort((a, b) => a[1] - b[1]).map(([userId, seconds]) => <div key={userId} className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2 text-sm"><span className="text-gray-200">{displayName(userId)}</span><strong className="text-white">{formatLapTime(seconds)}</strong></div>)}</div></div>}
-      {!active && !fastestPerDriver.size && <p className="text-sm text-gray-400">Wacht op een trainingssessie van de manager. Je opgenomen ronden verschijnen hier zodra de sessie loopt.</p>}
+      {fastestPerDriverCar.length > 0 && <div className="mb-5"><h3 className="mb-2 font-heading font-black text-white">Snelste rondetijd per coureur</h3><div className="space-y-1">{fastestPerDriverCar.map((row) => <div key={`${row.userId}-${row.carId ?? ""}`} className="flex items-center justify-between gap-3 rounded-xl bg-black/20 px-3 py-2 text-sm"><span className="min-w-0 text-gray-200"><span className="block truncate">{displayName(row.userId)}</span><span className="block truncate text-xs text-gray-500">{row.carName ?? row.carId ?? "Onbekende auto"}</span></span><strong className="shrink-0 text-white">{formatLapTime(row.seconds)}</strong></div>)}</div></div>}
+      {!active && !fastestPerDriverCar.length && <p className="text-sm text-gray-400">Wacht op een trainingssessie van de manager. Je opgenomen ronden verschijnen hier zodra de sessie loopt.</p>}
     </Panel>
 
     <Panel>
