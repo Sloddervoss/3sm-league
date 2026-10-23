@@ -24,6 +24,7 @@ const car = (id: string, classId: EnduranceClassId, name: string, slug: string):
  */
 export const IRACING_ENDURANCE_CARS: readonly IRacingEnduranceCar[] = [
   car("acura-arx-06", "GTP", "Acura ARX-06", "acura-arx-06"),
+  car("aston-martin-valkyrie-amr-lmh", "GTP", "Aston Martin Valkyrie AMR-LMH", "aston-martin-valkyrie-amr-lmh"),
   car("bmw-m-hybrid-v8", "GTP", "BMW M Hybrid V8", "bmw-m-hybrid-v8"),
   car("cadillac-v-series-r", "GTP", "Cadillac V-Series.R", "cadillac-v-series-r-gtp"),
   car("ferrari-499p", "GTP", "Ferrari 499P", "ferrari-499p"),
