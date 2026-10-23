@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEnduranceActor } from "../core/ActorContext";
 import { useEnduranceRegistrations } from "../repository/registrationsRepository";
 import { useEndurancePracticeWorkspace, useEndurancePracticeMutations, syncPracticeSessionToPace } from "../repository/practiceRepository";
-import { formatAmsterdam } from "../core/selectors";
+import { formatAmsterdam, formatLapTime } from "../core/selectors";
 import type { EnduranceEvent } from "../core/types";
 import { Panel, PrimaryButton, SecondaryButton, SectionHeading, StatusPill } from "../shared/ui";
 import { getEnduranceCar } from "../core/carCatalog";
@@ -100,7 +100,7 @@ export const PracticeSessionPanel = ({ event, onPaceSynced }: { event: Endurance
         <StatusPill tone="orange"><UserRound className="mr-1 inline h-3 w-3" /> {registeredCount} ingeschreven coureurs volgen</StatusPill>
         {manager && <SecondaryButton onClick={closeSession} disabled={close.isPending}><Flag className="h-4 w-4" /> Sessie beëindigen</SecondaryButton>}
       </div>}
-      {fastestPerDriver.size > 0 && <div className="mb-5"><h3 className="mb-2 font-heading font-black text-white">Snelste rondetijd per coureur</h3><div className="space-y-1">{[...fastestPerDriver.entries()].sort((a, b) => a[1] - b[1]).map(([userId, seconds]) => <div key={userId} className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2 text-sm"><span className="text-gray-200">{displayName(userId)}</span><strong className="text-white">{seconds.toFixed(3)}s</strong></div>)}</div></div>}
+      {fastestPerDriver.size > 0 && <div className="mb-5"><h3 className="mb-2 font-heading font-black text-white">Snelste rondetijd per coureur</h3><div className="space-y-1">{[...fastestPerDriver.entries()].sort((a, b) => a[1] - b[1]).map(([userId, seconds]) => <div key={userId} className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2 text-sm"><span className="text-gray-200">{displayName(userId)}</span><strong className="text-white">{formatLapTime(seconds)}</strong></div>)}</div></div>}
       {!active && !fastestPerDriver.size && <p className="text-sm text-gray-400">Wacht op een trainingssessie van de manager. Je opgenomen ronden verschijnen hier zodra de sessie loopt.</p>}
     </Panel>
 
