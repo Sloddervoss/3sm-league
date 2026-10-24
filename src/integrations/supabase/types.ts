@@ -315,6 +315,42 @@ export type Database = {
         Relationships: []
       }
 
+      endurance_car_specs: {
+        Row: {
+          car_id: string
+          display_name: string
+          tank_capacity_litres: number | null
+          fuel_per_lap_prior_litres: number | null
+          source: string
+          verified_at: string | null
+          verified_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          car_id: string
+          display_name?: string
+          tank_capacity_litres?: number | null
+          fuel_per_lap_prior_litres?: number | null
+          source?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          car_id?: string
+          display_name?: string
+          tank_capacity_litres?: number | null
+          fuel_per_lap_prior_litres?: number | null
+          source?: string
+          verified_at?: string | null
+          verified_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       endurance_events: {
         Row: {
           id: string
@@ -341,6 +377,9 @@ export type Database = {
           race_id: string | null
           iracing_catalog_event_id: string | null
           iracing_catalog_slot_id: string | null
+          planned_laps: number | null
+          planned_duration_minutes: number | null
+          race_distance_source: string
           created_at: string
           updated_at: string
         }
@@ -369,6 +408,9 @@ export type Database = {
           race_id: string | null
           iracing_catalog_event_id?: string | null
           iracing_catalog_slot_id?: string | null
+          planned_laps?: number | null
+          planned_duration_minutes?: number | null
+          race_distance_source?: string
           created_at?: string
           updated_at?: string
         }
@@ -397,6 +439,9 @@ export type Database = {
           race_id?: string | null
           iracing_catalog_event_id?: string | null
           iracing_catalog_slot_id?: string | null
+          planned_laps?: number | null
+          planned_duration_minutes?: number | null
+          race_distance_source?: string
           created_at?: string
           updated_at?: string
         }
