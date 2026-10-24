@@ -38,6 +38,17 @@ interface PitwallRpcResponse {
     lap_time: number | null;
     captured_at?: string | null;
   }> | null;
+  /** Bandenslijtage per ronde, vier hoeken; nieuwste eerst. */
+  tyre_samples?: Array<{
+    lap: number;
+    lap_time: number | null;
+    fuel: number | null;
+    fl: number | null;
+    fr: number | null;
+    rl: number | null;
+    rr: number | null;
+    captured_at?: string | null;
+  }> | null;
   timeline: PitwallTimelineEvent[];
   planned_stints: PitwallPlannedStint[];
   pace_targets: Array<{
