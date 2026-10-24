@@ -1,0 +1,114 @@
+/**
+ * Types voor de pitwall-rekenkern.
+ *
+ * De kern is puur: geen fetch, geen React, geen Supabase. Invoer is een
+ * momentopname, uitvoer is een advies met een reason_code. Daardoor is elke
+ * regel te testen en kan dezelfde motor later ook in een edge function draaien.
+ */
+
+export type Confidence = "high" | "medium" | "low" | "none";
+
+/** De gesloten set adviezen. Er komt niets bij zonder dit type aan te passen. */
+export type Decision = "STAY_OUT" | "PIT_THIS_LAP" | "PIT_IN_LAPS" | "NO_ADVICE";
+
+export interface FuelEstimate {
+  /** Liter per ronde, pessimistisch (mediaan + 2σ/√n). */
+  perLap: number | null;
+  /** Onzekerheid op perLap, in liter per ronde. */
+  sigma: number | null;
+  /** Aantal gebruikte monsters na uitbijterverwijdering. */
+  samples: number;
+  /** Aantal verworpen monsters. */
+  rejected: number;
+  source: "measured" | "prior" | "none";
+}
+
+export interface PitServiceInput {
+  /** Tijd van pit-entry tot pit-exit zonder tanken of banden, in seconden. */
+  pitLaneSeconds: number | null;
+  /** Liters die getankt moeten worden. */
+  fuelLitres: number | null;
+  /** Tanktijd per liter, in seconden per liter. */
+  secondsPerLitre: number | null;
+  /** Tijd voor vier banden, in seconden. */
+  tyreSeconds: number | null;
+  /** Tijd voor eventuele reparatie, in seconden. */
+  repairSeconds?: number | null;
+}
+
+export interface PitLossBreakdown {
+  total: number | null;
+  pitLane: number | null;
+  fuel: number | null;
+  tyre: number | null;
+  repair: number | null;
+  /** Welke bewerking de stop bepaalde; de rest valt er in iRacing parallel onder. */
+  boundedBy: "pitLane" | "fuel" | "tyre" | "repair" | null;
+}
+
+export interface PitWindow {
+  /** Eerste ronde waarin je mag stoppen; in de praktijk: nu. */
+  earliestLap: number;
+  /** Laatste ronde waarin de finish nog haalbaar is. */
+  latestLap: number;
+  /** Aantal stops dat nog nodig is om de finish te halen. */
+  stopsRequired: number;
+  /** Rondes die de huidige tank meegaat. */
+  lapsOnFuel: number;
+  /** True als je moet sparen om met dit aantal stops uit te komen. */
+  saveRequired: boolean;
+  /** Aantal rondes dat je dan zou moeten sparen. */
+  lapsToSave: number;
+}
+
+export interface TyreEvaluation {
+  /** Helling van brandstofgecorrigeerde rondetijd tegen bandleeftijd, s/ronde. */
+  slopeSecondsPerLap: number | null;
+  /** Halve breedte van het betrouwbaarheidsinterval. */
+  halfWidth: number | null;
+  /** Aantal rondes dat meewoog. */
+  samples: number;
+  /** Of de helling betrouwbaar genoeg is om een wissel op te baseren. */
+  reliable: boolean;
+  reasonCode: string;
+}
+
+export interface StrategySnapshot {
+  raceClockSeconds: number;
+  lapsCompleted: number;
+  currentLapSeconds: number | null;
+  fuelLitres: number | null;
+  tankCapacityLitres: number | null;
+  plannedLaps: number | null;
+  plannedDurationMinutes: number | null;
+  /** Gemeten verbruik per ronde, één waarde per afgeronde ronde. */
+  fuelPerLapSamples: number[];
+  /** Waarde uit de vorige sessie of het vorige event, als startpunt. */
+  fuelPerLapPrior: number | null;
+  /** Leeftijd van de laatste telemetrie in seconden. */
+  sampleAgeSeconds: number;
+  /** Basismeting van het pitverlies, bijvoorbeeld uit eerdere stops. */
+  pitLaneSeconds: number | null;
+  secondsPerLitre: number | null;
+  tyreSeconds: number | null;
+  reserveLaps?: number;
+}
+
+export interface Advice {
+  decision: Decision;
+  /** Rondes tot de stop; 0 bij PIT_THIS_LAP, null als onbekend. */
+  lapsUntilPit: number | null;
+  /** Liters die bij die stop bij moeten. */
+  fuelToAddLitres: number | null;
+  confidence: Confidence;
+  reasonCode: string;
+  /** Eén zin die de UI letterlijk kan tonen. */
+  reason: string;
+  window: PitWindow | null;
+  fuel: FuelEstimate;
+  pitLoss: PitLossBreakdown | null;
+  /** Rondes die de huidige tank nog meegaat. */
+  lapsOnFuel: number | null;
+  /** Rondes tot de finish; null als de afstand onbekend is (tijdrace zonder duur). */
+  lapsToFinish: number | null;
+}
