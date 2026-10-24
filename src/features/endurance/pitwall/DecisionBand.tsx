@@ -54,11 +54,11 @@ export function DecisionBand({ advice }: { advice: Advice }) {
   return (
     <section className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${rand}`}>
       <div className="min-w-0">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-500">Advies</p>
-        <p className={`mt-1 text-2xl font-black leading-tight tracking-tight ${actieKleur}`}>{decisionLabel(advice)}</p>
+        <p className={`text-2xl font-black leading-tight tracking-tight ${actieKleur}`}>{decisionLabel(advice)}</p>
         <p className="mt-1 max-w-2xl text-sm leading-5 text-gray-400">{advice.reason}</p>
       </div>
 
+      {!rustig && (
       <div className="flex shrink-0 items-stretch gap-2">
         <Stat
           icon={<Gauge className="h-4 w-4" />}
@@ -72,7 +72,7 @@ export function DecisionBand({ advice }: { advice: Advice }) {
           waarde={advice.fuelToAddLitres == null ? "—" : `${Math.round(advice.fuelToAddLitres)} L`}
           onbekend={advice.fuelToAddLitres == null}
         />
-        <div className="flex min-w-[92px] flex-col justify-center rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+        <div className="flex min-w-[104px] flex-col justify-center rounded-xl border border-white/5 bg-black/20 px-3 py-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">zekerheid</span>
           <span className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-gray-200">
             {advice.confidence === "none" && <TriangleAlert className="h-3.5 w-3.5 text-amber-300" />}
@@ -80,6 +80,7 @@ export function DecisionBand({ advice }: { advice: Advice }) {
           </span>
         </div>
       </div>
+      )}
     </section>
   );
 }
@@ -96,7 +97,7 @@ function Stat({
   onbekend: boolean;
 }) {
   return (
-    <div className="flex min-w-[92px] flex-col justify-center rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+    <div className="flex min-w-[104px] flex-col justify-center rounded-xl border border-white/5 bg-black/20 px-3 py-2">
       <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
         <span className="text-gray-400">{icon}</span>
         {label}

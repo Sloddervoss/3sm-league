@@ -49,7 +49,9 @@ describe("DecisionBand", () => {
     );
     expect(screen.getByText("GEEN ADVIES")).toBeInTheDocument();
     expect(screen.getByText(/12 s oud/)).toBeInTheDocument();
-    expect(screen.getByText("onvoldoende data")).toBeInTheDocument();
+    // Geen lege vakjes bij een lege meting: de reden is dan de hele boodschap.
+    expect(screen.queryByText("in de tank")).not.toBeInTheDocument();
+    expect(screen.queryByText("zekerheid")).not.toBeInTheDocument();
   });
 
   it("toont een streepje in plaats van een verzonnen getal", () => {
