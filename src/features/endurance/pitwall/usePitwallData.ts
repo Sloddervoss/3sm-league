@@ -31,6 +31,13 @@ interface PitwallRpcResponse {
   v3_normalized: V3Normalized | null;
   opponent_trends?: Record<string, { closing_rate_s_per_min: number | null; sample_count: number; window_seconds: number }> | null;
   strategy: PitwallStrategyRow | null;
+  /** Laatste geldige verbruiksmetingen per ronde; nieuwste eerst. */
+  fuel_samples?: Array<{
+    lap: number;
+    used: number | null;
+    lap_time: number | null;
+    captured_at?: string | null;
+  }> | null;
   timeline: PitwallTimelineEvent[];
   planned_stints: PitwallPlannedStint[];
   pace_targets: Array<{

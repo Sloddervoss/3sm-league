@@ -76,3 +76,17 @@ function firstNumber(...waarden: Array<number | null | undefined>): number | nul
   }
   return null;
 }
+
+/**
+ * De server levert samples als rijen met een lap-nummer en een verbruik. De
+ * motor wil alleen de getallen, en alleen de bruikbare: een rij zonder waarde
+ * of met nul is geen meting maar een gat.
+ */
+export function fuelPerLapFromSamples(
+  rows: Array<{ used: number | null }> | null | undefined,
+): number[] {
+  if (!rows) return [];
+  return rows
+    .map((rij) => rij.used)
+    .filter((waarde): waarde is number => typeof waarde === "number" && Number.isFinite(waarde) && waarde > 0);
+}

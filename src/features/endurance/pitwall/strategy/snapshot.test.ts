@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advise } from "./advise";
-import { buildStrategySnapshot } from "./snapshot";
+import { buildStrategySnapshot, fuelPerLapFromSamples } from "./snapshot";
 import type { PitwallStrategyRow, V3Normalized } from "../pitwallHelpers";
 
 const strategy = (overrides: Partial<PitwallStrategyRow> = {}): PitwallStrategyRow => ({
@@ -92,5 +92,23 @@ describe("buildStrategySnapshot", () => {
     expect(advice.decision).not.toBe("NO_ADVICE");
     expect(advice.confidence).toBe("low");
     expect(advice.lapsOnFuel).toBeGreaterThan(0);
+  });
+});
+
+describe("fuelPerLapFromSamples", () => {
+  it("houdt alleen echte metingen over", () => {
+    const rijen = [
+      { used: 2.95 },
+      { used: null },
+      { used: 0 },
+      { used: 3.1 },
+      { used: Number.NaN },
+    ];
+    expect(fuelPerLapFromSamples(rijen)).toEqual([2.95, 3.1]);
+  });
+
+  it("geeft een lege lijst als de server nog niets heeft", () => {
+    expect(fuelPerLapFromSamples(null)).toEqual([]);
+    expect(fuelPerLapFromSamples(undefined)).toEqual([]);
   });
 });
