@@ -1232,6 +1232,7 @@ namespace ThreeSM.EnduranceConnector
             var lapDistancePct = GetNullableDouble(manager, Settings.LapDistancePctProperty, false)
                 ?? (player == null ? null : Clamp01(NullableSeconds(player.TrackPositionPercent)));
             var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
+            var fuelCapacity = ResolveFuelCapacity(manager);
             UpdateFuelStint(fuel, completedLaps);
             var incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty));
             var inPitLane = GetBool(manager, Settings.PitLaneProperty, false);
@@ -1314,11 +1315,14 @@ namespace ThreeSM.EnduranceConnector
                 Fuel = new V3Fuel
                 {
                     FuelLitres = fuel,
-                    FuelPct = null,
+                    FuelPct = fuelCapacity.HasValue && fuelCapacity.Value > 0 && fuel >= 0
+                        ? (double?)Math.Round(Math.Min(1, fuel / fuelCapacity.Value), 4)
+                        : null,
                     FuelPerLapLitres = _fuelPerLap > 0 ? (double?)Math.Round(_fuelPerLap, 3) : null,
                     LapsRemaining = _fuelPerLap > 0 && fuel > 0
                         ? (double?)Math.Round(fuel / _fuelPerLap, 1)
                         : (snapshot != null ? snapshot.EstimatedFuelRemaingLaps : null),
+                    FuelCapacityLitres = fuelCapacity,
                 },
                 RaceState = new V3RaceState
                 {
@@ -1340,6 +1344,26 @@ namespace ThreeSM.EnduranceConnector
         {
             var value = GetNullableDouble(manager, "DataCorePlugin.GameData.NewData." + name, positive);
             return value.HasValue && value.Value <= maximum ? value : null;
+        }
+
+        // Tankinhoud: iRacing publiceert DriverCarFuelMaxLtr in de sessiegegevens.
+        // SimHub's generieke laag noemt het per game anders, dus we proberen de
+        // bekende paden in volgorde en nemen de eerste plausibele waarde.
+        private static double? ResolveFuelCapacity(PluginManager manager)
+        {
+            var paths = new[]
+            {
+                "DataCorePlugin.GameRawData.SessionData.DriverInfo.DriverCarFuelMaxLtr",
+                "DataCorePlugin.GameData.NewData.FuelCapacity",
+                "DataCorePlugin.GameData.NewData.FuelMax",
+            };
+            foreach (var path in paths)
+            {
+                var value = GetNullableDouble(manager, path, true);
+                if (value.HasValue && value.Value > 0 && value.Value <= 300)
+                    return (double?)Math.Round(value.Value, 2);
+            }
+            return null;
         }
 
         private static V3Tyre CaptureTyre(PluginManager manager, string corner)
