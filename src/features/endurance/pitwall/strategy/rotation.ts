@@ -106,9 +106,10 @@ export function planRotation(input: RotationInput): RotationPlan {
     const beschikbaar = drivers.filter((d) => {
       const vanaf = d.availableFromMinute ?? 0;
       const tot = d.availableUntilMinute ?? Number.POSITIVE_INFINITY;
-      const max = d.maxStintMinutes ?? Number.POSITIVE_INFINITY;
-      const magNog = gereden[d.id] < max;
-      return klok >= vanaf && klok < tot && magNog;
+      // maxStintMinutes begrenst één stint, niet de hele race. Wie hem als
+      // totaalplafond leest, sluit een coureur na zijn eerste stint voorgoed
+      // uit — en dan klopt de eerlijke verdeling niet meer.
+      return klok >= vanaf && klok < tot;
     });
 
     if (beschikbaar.length === 0) return leeg("no_available_driver");
