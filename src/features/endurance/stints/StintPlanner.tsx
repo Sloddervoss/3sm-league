@@ -1,6 +1,8 @@
 import { stintEditPayload } from "./stintEdits";
 import { validatePlan } from "./planValidation";
 import { useEndurancePace } from "../repository/paceRepository";
+import { useEnduranceCarSpecs } from "../repository/carSpecRepository";
+import { matchCarSpec, representativeLapSeconds, tankMinutesFromSpec } from "./tankDuration";
 import { useMemo, useState, useRef } from "react";
 import { AlertTriangle, CheckCircle2, History, Play, WandSparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,6 +36,7 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
   const { data: teamWorkspace, isLoading: teamsLoading, error: teamsError } = useEnduranceTeamWorkspace(event.id);
   const { data: stintRows = [], isLoading: stintsLoading, error: stintsError } = useEnduranceStints(event.id);
   const { data: paceRows = [] } = useEndurancePace(event.id);
+  const { data: carSpecs = [] } = useEnduranceCarSpecs();
   const { upsert, remove, replaceDraft } = useEnduranceStintMutations(event.id);
   const { data: registrations = [], isLoading: registrationsLoading, error: registrationsError } = useEnduranceRegistrations(event.id);
   const { data: availabilityRows = [], isLoading: availabilityLoading, error: availabilityError } = useEnduranceAvailability(event.id);
@@ -75,7 +78,17 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
 
   const [selectedTeamId, setTeamId] = useState("");
   const teamId = accessibleTeams.some(t => t.id === selectedTeamId) ? selectedTeamId : accessibleTeams[0]?.id ?? "";
-  const [tankMinutes, setTankMinutes] = useState(90);
+  // Tankduur komt uit de auto en de gemeten pace, niet uit een vast rijtje.
+  // Met 104 liter en 2,947 liter per ronde is één tank 35,3 rondes; bij 95,7
+  // seconden per ronde is dat 56 minuten. De 90 die hier stond was een default
+  // die voor geen enkele GT3 klopt.
+  const derivedTankMinutes = useMemo(() => {
+    const spec = matchCarSpec(carSpecs, event.selectedCarId);
+    const lapSeconds = representativeLapSeconds(paceRows.map((row) => row.best_lap_seconds));
+    return tankMinutesFromSpec(spec, lapSeconds);
+  }, [carSpecs, event.selectedCarId, paceRows]);
+  const [tankOverride, setTankOverride] = useState<number | null>(null);
+  const tankMinutes = tankOverride ?? derivedTankMinutes ?? 90;
   const [snap, setSnap] = useState(15);
 
   // Echte coureur-labels voor de tijdlijn: toon hun profielnaam (i.p.v. kale
@@ -289,7 +302,7 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
   if (teamsError) return <Panel><p role="alert" className="text-sm text-red-300">Teams laden mislukt. Vernieuw de pagina.</p></Panel>;
   if (!accessibleTeams.length) return <Panel><SectionHeading title="Stintplanner" description="Je bent nog niet aan een auto gekoppeld. Een manager kan je via Team Builder indelen." /></Panel>;
   return <div className="space-y-5"><Panel><SectionHeading eyebrow="Centrale planning" title="Stintplanner" description="Sleep, vergroot, verklein en publiceer stints. Originele en actuele tijden blijven afzonderlijk bewaard." action={canManage && <div className="flex flex-wrap gap-2"><PrimaryButton onClick={generate} disabled={!editable}><WandSparkles className="h-4 w-4" /> Voorstel genereren</PrimaryButton><PrimaryButton onClick={() => void optimize()} disabled={!editable}><WandSparkles className="h-4 w-4" /> Optimaal berekenen</PrimaryButton><SecondaryButton onClick={publishPlan} disabled={!editable || plansLoading || Boolean(plansError) || validationErrors.length > 0}><Play className="h-4 w-4" /> Publiceren</SecondaryButton></div>} />
-    <div className="mb-4 grid gap-3 sm:grid-cols-3"><Field label="Auto / team"><select className={inputClass} value={teamId} disabled={busy} onChange={(e) => { setTeamId(e.target.value); setMessage(""); }}>{accessibleTeams.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} #{candidate.car_number}</option>)}</select></Field>{editable && <><Field label="Tankduur"><select className={inputClass} value={tankMinutes} onChange={(e) => setTankMinutes(Number(e.target.value))}><option value={45}>45 minuten</option><option value={60}>60 minuten</option><option value={90}>90 minuten</option></select></Field><Field label="Tijdstap"><select className={inputClass} value={snap} onChange={(e) => setSnap(Number(e.target.value))}><option value={5}>5 minuten</option><option value={10}>10 minuten</option><option value={15}>15 minuten</option></select></Field></>}</div>
+    <div className="mb-4 grid gap-3 sm:grid-cols-3"><Field label="Auto / team"><select className={inputClass} value={teamId} disabled={busy} onChange={(e) => { setTeamId(e.target.value); setMessage(""); }}>{accessibleTeams.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} #{candidate.car_number}</option>)}</select></Field>{editable && <><Field label="Tankduur"><input type="number" min={20} max={120} step={1} className={inputClass} value={tankMinutes} disabled={busy} onChange={(e) => setTankOverride(Number(e.target.value))} /><span className="mt-1 block text-xs text-gray-400">{derivedTankMinutes ? `Berekend uit tankinhoud en pace: ${derivedTankMinutes} minuten per tank.` : "Tankinhoud of pace nog niet bekend; controleer dit zelf."}</span></Field><Field label="Tijdstap"><select className={inputClass} value={snap} onChange={(e) => setSnap(Number(e.target.value))}><option value={5}>5 minuten</option><option value={10}>10 minuten</option><option value={15}>15 minuten</option></select></Field></>}</div>
     {editable && <div className="mb-4 rounded-2xl bg-black/20 p-4 ring-1 ring-white/5"><Field label="Stints achter elkaar per coureur"><div className="flex flex-wrap gap-2">{personas.map((persona) => <label key={persona.id} className="flex items-center gap-2 rounded-xl bg-white/[0.045] px-3 py-2 text-sm text-gray-200 ring-1 ring-white/10"><span className="font-bold">{persona.name}</span><select className={`${inputClass} max-w-20`} value={consecutiveOverride[persona.id] ?? registrations.find((r) => r.user_id === persona.id)?.max_consecutive_stints ?? 1} onChange={(e) => setConsecutiveOverride((prev) => ({ ...prev, [persona.id]: Number(e.target.value) }))}><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select></label>)}</div><p className="mt-2 text-xs text-gray-500">De planner houdt een coureur vast tot dit aantal stints achter elkaar. Wijzigt alleen het voorstel, niet de inschrijving.</p></Field></div>}
     {inputsLoading && <p role="status" className="mb-4 text-sm text-gray-400">Planning laden…</p>}
     {inputsError && <p role="alert" className="mb-4 text-sm text-red-300">Planning of coureursgegevens laden mislukt. Vernieuw de pagina.</p>}

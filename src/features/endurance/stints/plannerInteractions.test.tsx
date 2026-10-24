@@ -9,6 +9,7 @@ vi.mock("../repository/teamsRepository", () => ({ useEnduranceTeamWorkspace: () 
 vi.mock("../repository/registrationsRepository", () => ({useEnduranceRegistrations:()=>({data:[{user_id:"a",status:"provisional"}]})}));
 vi.mock("../repository/availabilityRepository", () => ({useEnduranceAvailability:()=>({data:[{id:"av",user_id:"a",start_at:"2026-09-08T12:00:00.000Z",end_at:"2026-09-08T13:00:00.000Z",type:"available"}]})}));
 vi.mock("../repository/paceRepository", () => ({useEndurancePace:()=>({data:[]})}));
+vi.mock("../repository/carSpecRepository", () => ({useEnduranceCarSpecs:()=>({data:[{car_id:"lamborghinievogt3",display_name:"Lamborghini Huracán GT3 EVO",tank_capacity_litres:104,fuel_per_lap_prior_litres:2.947}]})}));
 vi.mock("../repository/stintsRepository", () => ({useEnduranceStints:()=>({data:mocks.rows}),useEnduranceStintMutations:()=>({upsert:{mutateAsync:mocks.upsert},remove:{mutateAsync:vi.fn()},replaceDraft:{mutateAsync:vi.fn()}})}));
 vi.mock("../repository/planRepository", () => ({ useEndurancePlanWorkspace:()=>({data:{versions:[],confirmations:[]}}),useEndurancePlanMutations:()=>({publish:{mutateAsync:mocks.publish},confirm:{mutateAsync:vi.fn()}})}));
 const event = { id:"race",startAt:"2026-09-08T12:00:00.000Z",endAt:"2026-09-08T13:00:00.000Z" } as EnduranceEvent;
