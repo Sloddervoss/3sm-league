@@ -149,7 +149,7 @@ const SimHubPairingPage = () => {
             <div className="rounded-xl bg-orange-500/10 p-2.5"><Download className="h-5 w-5 text-orange-400" /></div>
             <div>
               <h2 className="text-xl font-bold text-white">Download 3SM Endurance Connector</h2>
-              <p className="mt-1 text-sm text-gray-300">Versie 0.5.11.0 · Handmatige installatie</p>
+              <p className="mt-1 text-sm text-gray-300">Versie 0.6.1.0 · Handmatige installatie</p>
               <p className="mt-2 max-w-xl text-xs leading-5 text-gray-500">Sluit SimHub, pak de ZIP uit en volg INSTALLEREN.txt. Daarna verlopen updates automatisch.</p>
             </div>
           </div>
