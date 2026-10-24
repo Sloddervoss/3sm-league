@@ -21,7 +21,7 @@ export const useEnduranceCarSpecs = () =>
     queryFn: async (): Promise<EnduranceCarSpecRow[]> => {
       assertEnduranceTable(TABLE);
       const { data, error } = await enduranceClient()
-        .from(TABLE)
+        .from("endurance_car_specs")
         .select("car_id,display_name,tank_capacity_litres,fuel_per_lap_prior_litres")
         .limit(500);
       if (error) throw new Error(error.message);
