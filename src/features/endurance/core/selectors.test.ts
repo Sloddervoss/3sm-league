@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEnduranceSeed } from "./seed";
 import { canAccessWorkspace, canSeeEventCard, paceConfidence, planningWarnings } from "./selectors";
 
@@ -6,6 +6,10 @@ const state = createEnduranceSeed();
 const event = state.events[0];
 
 const persona = (id: string) => state.personas.find((candidate) => candidate.id === id)!;
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("endurance access rules", () => {
   it("keeps the private workspace hidden from a non-registered member", () => {
@@ -29,7 +33,16 @@ describe("endurance access rules", () => {
 
 describe("planning rules", () => {
   it("marks mature pace data as reliable", () => {
-    expect(paceConfidence(state.paceEntries[0])).toBe("Hoog");
+    // De seed heeft vaste datums, maar de regel kijkt naar leeftijd ten opzichte
+    // van nu. Zonder bevroren klok veroudert deze test vanzelf en keurt hij op
+    // een gegeven moment een correcte meting af.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-01T12:00:00.000Z"));
+    try {
+      expect(paceConfidence(state.paceEntries[0])).toBe("Hoog");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("detects availability conflicts", () => {
