@@ -145,6 +145,9 @@ namespace ThreeSM.EnduranceConnector
         // Additive: stint-berekening (null tot er minstens één ronde data is).
         [DataMember(Name = "fuelPerLapLitres", Order = 3, EmitDefaultValue = false)] public double? FuelPerLapLitres { get; set; }
         [DataMember(Name = "lapsRemaining", Order = 4, EmitDefaultValue = false)] public double? LapsRemaining { get; set; }
+        // Additive (0.6.0.1): tankinhoud uit de sessiegegevens, zodat de pitwall
+        // liters kan rekenen zonder dat iemand de catalogus met de hand vult.
+        [DataMember(Name = "fuelCapacityLitres", Order = 5, EmitDefaultValue = false)] public double? FuelCapacityLitres { get; set; }
     }
 
     [DataContract]
