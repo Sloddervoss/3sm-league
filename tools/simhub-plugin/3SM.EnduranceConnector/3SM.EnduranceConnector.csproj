@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -49,11 +49,8 @@
     <Compile Include="OverlayPropertyPublisher.cs" />
     <Compile Include="OverlayTemplateInstaller.cs" />
     <Compile Include="FlagModels.cs" />
-    <Compile Include="FlagPanelRenderer.cs" />
     <Compile Include="FlagService.cs" />
-    <Compile Include="FlagPropertyPublisher.cs" />
     <Compile Include="SimHubDeviceLister.cs" />
-    <Compile Include="FlagProfileInstaller.cs" />
     <Compile Include="SimHubLedProfileHost.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />
   </ItemGroup>

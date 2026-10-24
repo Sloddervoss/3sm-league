@@ -1,4 +1,4 @@
-﻿using GameReaderCommon;
+using GameReaderCommon;
 using SimHub.Plugins;
 using System;
 using System.Collections.Generic;
@@ -68,13 +68,9 @@ namespace ThreeSM.EnduranceConnector
         private readonly object _diagnosticsGate = new object();
         private DiagnosticsClient _diagnostics;
         private readonly FlagService _flagService = new FlagService();
-        private FlagPropertyPublisher _flagPublisher;
         private OverlayPropertyPublisher _overlayPublisher;
         private OverlayClient _overlayClient;
         private FlagState _lastFlagState = FlagState.Empty();
-        private RaceFlags _publishedFlags = RaceFlags.None;
-        private readonly RaceFlags[] _publishedBoxFlags = new RaceFlags[4];
-        private long _lastFlagPublishMs;
         private string _lastLoggedFlagPrimary;
         private RaceFlags _lastDetectedFlags;
         private long _pitLimiterSinceMs;
@@ -138,9 +134,6 @@ namespace ThreeSM.EnduranceConnector
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
             // Vlag-properties aanmelden zodat SimHub LED-profielen erop kunnen binden.
-            _flagPublisher = new FlagPropertyPublisher(pluginManager, GetType(), Settings.Flags.PropertyPrefix);
-            var flagPropertiesRegistered = _flagPublisher.Register();
-            SimHub.Logging.Current.Info("3SM flags: enabled=" + Settings.Flags.Enabled + ", properties=" + flagPropertiesRegistered);
             InitUpdaterStateStore();
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
 
@@ -1820,254 +1813,28 @@ namespace ThreeSM.EnduranceConnector
                 // De overlay mag de telemetry/DataUpdate nooit onderbreken.
             }
         }
-
-        // Detecteert de vlag één keer en publiceert (getthrottled) universeel + per flagbox.
+        // Leest de actuele vlag voor de telemetrie. De zichtbare vlaggenfunctie
+        // (paneel, LED-flagboxes, SimHub-properties) is verwijderd; session.flags
+        // blijft onderdeel van het V3-contract en wordt hier nog steeds bepaald.
         private void PublishFlags(PluginManager manager, GameData data, bool isInCar)
         {
             try
             {
-                var settings = Settings;
-                var flagSettings = settings == null ? null : settings.Flags;
-                var enabled = flagSettings != null && flagSettings.Enabled && _flagService != null;
-
-                FlagState universal;
-                var boxes = new FlagState[4];
-                var detected = RaceFlags.None;
-                if (enabled)
-                {
-                    var context = BuildFlagContext(manager, settings, data, isInCar);
-                    detected = _flagService.Detect(context, flagSettings);
-                    universal = FlagService.Present(detected, FlagService.MaskOf(flagSettings));
-                    var count = Math.Max(0, Math.Min(boxes.Length, flagSettings.BoxCount));
-                    for (var i = 0; i < boxes.Length; i++)
-                    {
-                        if (i >= count) { boxes[i] = FlagState.Empty(); continue; }
-                        var slot = flagSettings.Boxes != null && i < flagSettings.Boxes.Length ? flagSettings.Boxes[i] : null;
-                        var mask = slot == null || slot.FollowUniversal ? FlagService.MaskOf(flagSettings) : FlagService.MaskOf(slot);
-                        boxes[i] = FlagService.Present(detected, mask);
-                    }
-                }
-                else
-                {
-                    universal = FlagState.Empty();
-                    for (var i = 0; i < boxes.Length; i++) boxes[i] = FlagState.Empty();
-                }
-
-                // De V3-payload leest de universele vlag (CaptureV3 -> _lastFlagState).
-                _lastFlagState = universal;
+                var flagSettings = Settings != null ? Settings.Flags : null;
+                var context = BuildFlagContext(manager, Settings, data, isInCar);
+                var detected = _flagService != null ? _flagService.Detect(context, flagSettings) : RaceFlags.None;
+                _lastFlagState = FlagService.Present(detected, FlagService.MaskOf(flagSettings));
                 _lastDetectedFlags = detected;
-                if (!string.Equals(universal.Primary, _lastLoggedFlagPrimary, StringComparison.Ordinal))
+                if (!string.Equals(_lastFlagState.Primary, _lastLoggedFlagPrimary, StringComparison.Ordinal))
                 {
-                    _lastLoggedFlagPrimary = universal.Primary;
-                    SimHub.Logging.Current.Info("3SM flags: " + universal.Primary);
+                    _lastLoggedFlagPrimary = _lastFlagState.Primary;
+                    SimHub.Logging.Current.Info("3SM flags: " + _lastFlagState.Primary);
                 }
-
-                FlagProfileWatch(manager);
-
-                if (flagSettings == null || !flagSettings.PublishProperties || _flagPublisher == null) return;
-
-                var now = _sendClock.ElapsedMilliseconds;
-                var changed = universal.Flags != _publishedFlags;
-                for (var i = 0; i < boxes.Length && !changed; i++) if (boxes[i].Flags != _publishedBoxFlags[i]) changed = true;
-                if (!changed && now - _lastFlagPublishMs < 250) return;
-
-                _publishedFlags = universal.Flags;
-                for (var i = 0; i < boxes.Length; i++) _publishedBoxFlags[i] = boxes[i].Flags;
-                _lastFlagPublishMs = now;
-                var deviceNames = new string[boxes.Length];
-                for (var i = 0; i < boxes.Length; i++)
-                {
-                    var slot = flagSettings.Boxes != null && i < flagSettings.Boxes.Length ? flagSettings.Boxes[i] : null;
-                    deviceNames[i] = slot == null ? string.Empty : (slot.EffectiveDevice() ?? string.Empty);
-                }
-                _flagPublisher.PublishSettings(flagSettings);
-                _flagPublisher.Publish(universal, boxes, deviceNames,
-                    FlagText(universal),
-                    BlueText(data, flagSettings, universal),
-                    flagSettings != null ? flagSettings.BlueFlagStyle : 0,
-                    flagSettings != null ? flagSettings.OverlayTheme : 0,
-                    flagSettings == null || flagSettings.OverlayDarkMode,
-                    flagSettings == null || flagSettings.OverlayShowAnimation);
             }
-            catch { /* vlag-publicatie mag de telemetry nooit breken */ }
-        }
-
-        // Leesbare vlagtekst voor overlays.
-        private static string FlagText(FlagState s)
-        {
-            if (s == null || !s.Active) return string.Empty;
-            switch (s.Primary)
-            {
-                case "red": return "Rode vlag";
-                case "black": return "Zwarte vlag";
-                case "safetycar": return "Safety Car";
-                case "vsc": return "Virtual Safety Car";
-                case "fcy": return "Full Course Yellow";
-                case "doubleyellow": return "Dubbelgeel";
-                case "yellow": return "Gele vlag";
-                case "white": return "Witte vlag";
-                case "whitefinal": return "Laatste ronde";
-                case "orange": return "Oranje vlag";
-                case "debris": return "Debris";
-                case "blue": return "Blauwe vlag";
-                case "green": return "Groene vlag";
-                case "checkered": return "Geruit";
-                default: return s.Primary ?? string.Empty;
-            }
-        }
-
-        // Blauwe-vlag tekst per stijl: klassiek / met klasse / met klasse+positie.
-        private static string BlueText(GameData data, FlagSettings flags, FlagState universal)
-        {
-            if (universal == null || !universal.Active || !string.Equals(universal.Primary, "blue", StringComparison.Ordinal)) return string.Empty;
-            var style = flags != null ? flags.BlueFlagStyle : 0;
-            if (style <= 0) return "Blauwe vlag";
-            var snapshot = data == null ? null : data.NewData;
-            var carClass = snapshot == null ? null : snapshot.CarClass;
-            var position = 0;
-            if (snapshot != null && snapshot.Opponents != null)
-            {
-                var player = snapshot.Opponents.FirstOrDefault(o => o != null && o.IsPlayer);
-                if (player != null) position = player.PositionInClass;
-            }
-            var text = string.IsNullOrEmpty(carClass) ? "Blauwe vlag" : ("Blauwe vlag · " + carClass);
-            if (style >= 2 && position > 0) text += " · P" + position;
-            return text;
+            catch { /* vlagdetectie mag de telemetry nooit breken */ }
         }
 
         // Watch: houdt het LED-profiel up-to-date (elke ~5 s) als het al bestaat.
-        private string _flagWatchSignature;
-        private long _flagWatchLastMs;
-
-        private void FlagProfileWatch(PluginManager manager)
-        {
-            try
-            {
-                var flags = Settings == null ? null : Settings.Flags;
-                if (flags == null || !flags.Enabled || !flags.AutoUpdateProfile) return;
-                var now = _sendClock.ElapsedMilliseconds;
-                if (now - _flagWatchLastMs < 5000) return;
-                _flagWatchLastMs = now;
-
-                var box = Math.Max(1, Math.Min(8, flags.ProfileBoxIndex));
-                var slot = flags.Box(box - 1);
-                var device = slot.EffectiveDevice();
-                var kind = string.IsNullOrEmpty(flags.ProfileKind) ? "matrix" : flags.ProfileKind;
-                var file = FlagProfileInstaller.SettingsFileFor(kind);
-                // Alleen bijwerken als ons profiel al bestaat (nooit ongevraagd aanmaken).
-                if (!SimHubLedProfileHost.HasProfile(manager, device, FlagProfileInstaller.ProfileName) && !FileHasProfile(file, FlagProfileInstaller.ProfileName)) return;
-
-                // Een gewijzigde prefix werkt pas na een SimHub-herstart (de properties worden
-                // bij het starten aangemeld). Zolang de instelling en de aangemelde prefix
-                // verschillen, laten we het bestaande profiel met rust — anders zou de box
-                // property-namen lezen die nog niet bestaan.
-                var registeredPrefix = _flagPublisher == null ? flags.PropertyPrefix : _flagPublisher.Prefix;
-                if (!string.Equals(registeredPrefix ?? string.Empty, flags.PropertyPrefix ?? string.Empty, StringComparison.Ordinal)) return;
-
-                var signature = InstalledVersion + "|" + kind + "|" + flags.BoxCount + "|" + flags.MldCount + "|" + flags.ProfileLedCount + "|" + registeredPrefix;
-                for (var i = 0; i < 8; i++)
-                {
-                    var b = flags.Box(i);
-                    signature += "|" + (b.TargetKey ?? string.Empty) + ":" + b.MatrixPosition;
-                }
-                if (string.Equals(signature, _flagWatchSignature, StringComparison.Ordinal)) return;
-                _flagWatchSignature = signature;
-
-                var profile = FlagProfileInstaller.BuildProfile(flags, kind, box);
-                string message;
-                if (!SimHubLedProfileHost.InstallForDevice(manager, device, profile, out message))
-                    FlagProfileInstaller.InstallProfile(file, profile, out message);
-                SimHub.Logging.Current.Info("3SM flags: profiel automatisch bijgewerkt");
-            }
-            catch { /* de watch mag nooit de plugin breken */ }
-        }
-
-        private static bool FileHasProfile(string path, string name)
-        {
-            try
-            {
-                return !string.IsNullOrEmpty(path) && System.IO.File.Exists(path)
-                    && System.IO.File.ReadAllText(path).IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0;
-            }
-            catch { return false; }
-        }
-
-        // Rev-percentage t.o.v. de echte auto-redline (RPM) uit de sim.
-        private double RevPercent(PluginManager manager, FlagSettings flags)
-        {
-            var percent = GetDouble(manager, "DataCorePlugin.GameData.NewData.RpmsPercent", 0);
-            if (percent <= 1) percent *= 100;
-            if (flags != null && flags.UseGameRedline)
-            {
-                var redline = GetNullableDouble(manager, "DataCorePlugin.GameData.CarSettings_RedLineRPM", false) ?? 0;
-                var rpm = GetDouble(manager, "DataCorePlugin.GameData.Rpms", 0);
-                if (redline > 0 && rpm > 0) return Math.Max(0, Math.Min(120, rpm / redline * 100.0));
-            }
-            return percent;
-        }
-
-        // Live preview voor de instellingen-UI: matrix of strip, voor de gekozen box.
-        internal string[] BuildFlagPreview(out int columns, out int rows)
-        {
-            return BuildFlagPreview(0, out columns, out rows);
-        }
-
-        internal string[] BuildFlagPreview(int boxIndex, out int columns, out int rows)
-        {
-            columns = 8; rows = 8;
-            try
-            {
-                var flags = Settings != null ? Settings.Flags : null;
-                var kind = flags != null && !string.IsNullOrEmpty(flags.ProfileKind) ? flags.ProfileKind : "matrix";
-                var box = boxIndex > 0 ? Math.Max(1, Math.Min(8, boxIndex)) : (flags != null ? Math.Max(1, Math.Min(8, flags.ProfileBoxIndex)) : 1);
-                var slot = flags != null && flags.Boxes != null && box - 1 < flags.Boxes.Length ? flags.Boxes[box - 1] : null;
-                var mask = flags == null ? RaceFlags.None : (slot == null || slot.FollowUniversal ? FlagService.MaskOf(flags) : FlagService.MaskOf(slot));
-                var state = FlagService.Present(_lastDetectedFlags, mask);
-                var manager = PluginManager;
-                var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                var pct = RevPercent(manager, flags);
-                var pitOn = GetBool(manager, "DataCorePlugin.GameData.NewData.PitLimiterOn", false);
-                if (pitOn) { if (_pitLimiterSinceMs == 0) _pitLimiterSinceMs = nowMs; } else _pitLimiterSinceMs = 0;
-                var fuelPct = GetNullableDouble(manager, "DataCorePlugin.GameData.NewData.FuelPercent", false) ?? -1;
-                if (fuelPct >= 0 && fuelPct <= 1) fuelPct *= 100;
-                var maxGears = GetDouble(manager, "DataCorePlugin.GameData.CarSettings_MaxGears", 0);
-                int gearNum;
-                var isLastGear = int.TryParse(Convert.ToString(GetRaw(manager, "DataCorePlugin.GameData.NewData.Gear")), out gearNum) && maxGears > 0 && gearNum >= (int)maxGears;
-                var input = new FlagPanelRenderer.PanelInput
-                {
-                    Flags = state.Flags,
-                    InGame = _gameWasRunning,
-                    Gear = Convert.ToString(GetRaw(manager, "DataCorePlugin.GameData.NewData.Gear")),
-                    RpmsPercent = pct,
-                    PitLimiter = pitOn,
-                    PitLimiterSeconds = _pitLimiterSinceMs == 0 ? 0 : (nowMs - _pitLimiterSinceMs) / 1000.0,
-                    SpotterLeft = GetBool(manager, "DataCorePlugin.GameData.NewData.SpotterCarLeft", false),
-                    SpotterRight = GetBool(manager, "DataCorePlugin.GameData.NewData.SpotterCarRight", false),
-                    Warn = GetBool(manager, "DataCorePlugin.GameData.NewData.LowFuelAlert", false),
-                    FuelPercent = fuelPct,
-                    WaterTemp = GetNullableDouble(manager, "DataCorePlugin.GameData.NewData.WaterTemperature", false) ?? 0,
-                    OilTemp = GetNullableDouble(manager, "DataCorePlugin.GameData.NewData.OilTemperature", false) ?? 0,
-                    EngineOff = _gameWasRunning && pct <= 0.5,
-                    IsLastGear = isLastGear,
-                    NowMs = nowMs,
-                };
-
-                if (string.Equals(kind, "matrix", StringComparison.OrdinalIgnoreCase))
-                {
-                    columns = 8; rows = 8;
-                    return FlagPanelRenderer.Frame(columns, rows, input, slot ?? (flags != null ? flags.Box(box - 1) : null), flags);
-                }
-
-                var count = flags != null ? Math.Max(1, flags.ProfileLedCount) : 8;
-                columns = Math.Min(count, 24);
-                rows = (count + columns - 1) / columns;
-                var strip = FlagPanelRenderer.FrameStrip(count, input, slot ?? (flags != null ? flags.Box(box - 1) : null), flags);
-                var padded = new string[columns * rows];
-                for (var i = 0; i < padded.Length; i++) padded[i] = i < strip.Length ? strip[i] : "#000000";
-                return padded;
-            }
-            catch { return null; }
-        }
 
         private FlagContext BuildFlagContext(PluginManager manager, ConnectorSettings settings, GameData data, bool isInCar)
         {
