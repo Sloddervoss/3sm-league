@@ -222,6 +222,8 @@ export type NormalizedTelemetryEnvelope = {
     /** 0.5.6 additief: stintberekening. Niet gepersisteerd. */
     fuelPerLapLitres?: number | null;
     lapsRemaining?: number | null;
+    /** 0.6.0.1 additief: tankinhoud uit de sessiegegevens (iRacing DriverCarFuelMaxLtr). */
+    fuelCapacityLitres?: number | null;
   };
   raceState: {
     incidents: number | null;
@@ -313,7 +315,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   const track = asRecord(root.track, "track");
   exactKeys(track, ["lapDistancePct", "trackSurface", "onPitRoad"], "track");
   const fuel = asRecord(root.fuel, "fuel");
-  exactKeysAllowExtra(fuel, ["fuelLitres", "fuelPct"], ["fuelPerLapLitres", "lapsRemaining"], "fuel");
+  exactKeysAllowExtra(fuel, ["fuelLitres", "fuelPct"], ["fuelPerLapLitres", "lapsRemaining", "fuelCapacityLitres"], "fuel");
   const raceState = asRecord(root.raceState, "raceState");
   exactKeysAllowExtra(raceState, ["incidents"], ["incidentLimit"], "raceState");
   const pitService = asRecord(root.pitService, "pitService");
@@ -377,6 +379,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
       fuelPct: v3Number(fuel.fuelPct, "fuel.fuelPct", { nullable: true, min: 0, max: 1, sentinels: [-1] }),
       fuelPerLapLitres: v3OptionalNumber(fuel.fuelPerLapLitres, "fuel.fuelPerLapLitres", { min: 0, max: 100, sentinels: [-1] }),
       lapsRemaining: v3OptionalNumber(fuel.lapsRemaining, "fuel.lapsRemaining", { min: 0, max: 100000, sentinels: [-1] }),
+      fuelCapacityLitres: v3OptionalNumber(fuel.fuelCapacityLitres, "fuel.fuelCapacityLitres", { min: 0, max: 300, sentinels: [-1] }),
     },
     raceState: {
       incidents: v3Number(raceState.incidents, "raceState.incidents", { nullable: true, integer: true, min: 0, max: 100000, sentinels: [-1] }),
