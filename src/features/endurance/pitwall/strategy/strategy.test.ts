@@ -123,26 +123,38 @@ describe("pitWindow", () => {
       stintCapacityLaps: 20,
       lapsCompleted: 10,
     });
+    // 79 te gaan, 19 in de tank: nog 60 rondes tanken, 20 per stop -> 3 stops.
     expect(venster).toMatchObject({
-      stopsRequired: 4,
+      stopsRequired: 3,
       earliestLap: 10,
       latestLap: 29,
       lapsOnFuel: 19,
-      saveRequired: false,
+      finalStintLaps: 20,
     });
   });
 
-  it("vraagt om sparen als de tank te klein is voor het stopplan", () => {
-    // Om met 4 stops uit te komen moet deze tank 19 rondes dragen; hij haalt er 10.
+  it("telt de brandstof die er al in zit mee in het aantal stops", () => {
+    // 79 te gaan met 10 in de tank: 69 tanken, 20 per stop -> 4 stops (niet 5).
     const venster = computePitWindow({
       lapsToFinish: 79,
       lapsOnFuel: 10,
       stintCapacityLaps: 20,
       lapsCompleted: 10,
     });
-    expect(venster!.saveRequired).toBe(true);
-    expect(venster!.lapsToSave).toBe(9);
+    expect(venster!.stopsRequired).toBe(4);
     expect(windowIsInfeasible(venster)).toBe(false);
+  });
+
+  it("weet wanneer de laatste stop maar half gevuld hoeft", () => {
+    // 50 te gaan met 25 in de tank: 25 tanken, 20 per stop -> 2 stops, laatste 5.
+    const venster = computePitWindow({
+      lapsToFinish: 50,
+      lapsOnFuel: 25,
+      stintCapacityLaps: 20,
+      lapsCompleted: 5,
+    });
+    expect(venster!.stopsRequired).toBe(2);
+    expect(venster!.finalStintLaps).toBe(5);
   });
 
   it("geeft geen venster zonder afstand", () => {
@@ -230,12 +242,13 @@ describe("advise", () => {
     expect(advies.window).not.toBeNull();
   });
 
-  it("zegt het als er gespaard moet worden", () => {
-    // Zelfde afstand, maar een half lege tank: 20 L haalt 6 rondes van de 24 die nodig zijn.
+  it("telt bij een half lege tank het juiste aantal stops", () => {
+    // 90 te gaan, 20 L = 6 rondes, 33 rondes per volle tank.
     const advies = advise(basisSnapshot({ fuelLitres: 20, plannedLaps: 100, lapsCompleted: 10 }));
     expect(advies.decision).toBe("PIT_IN_LAPS");
-    expect(advies.reasonCode).toBe("fuel_save_required");
-    expect(advies.window!.lapsToSave).toBeGreaterThan(0);
+    expect(advies.window).not.toBeNull();
+    // 84 rondes tanken / 33 per stop = 3 stops, niet 4.
+    expect(advies.window!.stopsRequired).toBe(3);
   });
 
   it("geeft geen advies zonder verbruik", () => {

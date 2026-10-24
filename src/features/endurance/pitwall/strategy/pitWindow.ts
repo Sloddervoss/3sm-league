@@ -11,9 +11,10 @@ import type { PitWindow } from "./types";
  *     je hem nog kunt uitstellen.
  *   - latest: de ronde waarin je droogvalt.
  *
- * Daarnaast is er een aparte waarschuwing: `saveRequired`. Die zegt dat je,
- * om met dit aantal stops uit te komen, meer rondes op deze tank moet rijden dan
- * hij aankan. Dat is geen onmogelijk venster maar een spaaropdracht.
+ * Het aantal stops telt vanaf nu, dus de brandstof die er nog in zit doet mee.
+ * Dat was eerder niet zo: het venster deelde de hele restafstand door de
+ * tankinhoud en kwam daardoor één stop te hoog uit. Bij een halfvolle tank in
+ * een zesuurrace betekent dat een stop die je niet hoeft te maken.
  */
 export interface PitWindowInput {
   /** Resterende rondes tot de finish. Null bij een tijdrace zonder duur. */
@@ -32,18 +33,28 @@ export function computePitWindow(input: PitWindowInput): PitWindow | null {
   if (stintCapacityLaps == null || stintCapacityLaps <= 0) return null;
   if (lapsToFinish <= 0) return null;
 
-  const stopsRequired = Math.ceil(lapsToFinish / stintCapacityLaps);
-  // Rondes die deze tank moet dragen om met ditzelfde aantal stops uit te komen.
-  const requiredThisStint = lapsToFinish - (stopsRequired - 1) * stintCapacityLaps;
   const capaciteit = Math.floor(lapsOnFuel);
+
+  // Rondes die nog uit tanks gevuld moeten worden, dus zonder wat er nu in zit.
+  const teTankenRondes = Math.max(0, lapsToFinish - capaciteit);
+  const stopsRequired = Math.ceil(teTankenRondes / stintCapacityLaps);
+
+  // De laatste stop hoeft zelden vol: dat is de short-fill waarmee je gewicht
+  // en dus rondetijd spaart.
+  const finalStintLaps =
+    stopsRequired <= 0 ? 0 : teTankenRondes - (stopsRequired - 1) * stintCapacityLaps;
 
   return {
     earliestLap: lapsCompleted,
     latestLap: lapsCompleted + capaciteit,
     stopsRequired,
     lapsOnFuel: capaciteit,
-    saveRequired: requiredThisStint > capaciteit,
-    lapsToSave: Math.max(0, Math.ceil(requiredThisStint - capaciteit)),
+    // Sparen kan het aantal stops niet verlagen: het verlengt een stint, maar
+    // een stint kan nooit langer dan een volle tank. Wat wél kan is de laatste
+    // stop gedeeltelijk vullen; dat staat in finalStintLaps.
+    saveRequired: false,
+    lapsToSave: 0,
+    finalStintLaps,
   };
 }
 
