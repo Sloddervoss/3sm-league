@@ -18,6 +18,7 @@ import { generateStints, type StintMode } from "./stintGenerator";
 import { runOptimize, type OptimizerFetcher } from "./jresOptimizer";
 import { defaultOptimizerFetcher } from "../repository/optimizerRepository";
 import { StintTimeline } from "./StintTimeline";
+import { rotationSummaryLine, summariseRotation } from "../pitwall/strategy";
 
 const shift = (iso: string, minutes: number) => new Date(new Date(iso).getTime() + minutes * 60_000).toISOString();
 
@@ -266,6 +267,24 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
     void perform(() => upsert.mutateAsync({ event_id: event.id, team_id: teamId, driver_id: stint.driverId, original_start_at: startAt, original_end_at: endAt, actual_start_at: startAt, actual_end_at: endAt, status: "draft", notes: "Verlengd (zelfde coureur)", double_stint: true }), "Extra stint toegevoegd.");
   };
 
+  // Verdeling van de planning zoals hij er nu staat. De generator maakt een
+  // voorstel, maar daarna schuift een manager nog met de tijdlijn; dit is de
+  // controle dat niemand onder zijn minimumdeel is gezakt.
+  const raceMinutes = (Date.parse(event.endAt) - Date.parse(event.startAt)) / 60_000;
+  const rotation = useMemo(
+    () =>
+      summariseRotation({
+        drivers: personas.map((p) => ({ id: p.id, name: p.name })),
+        totalMinutes: raceMinutes,
+        stints: stints.map((stint) => ({
+          driverId: stint.driverId,
+          startMinute: (Date.parse(stint.actualStartAt) - Date.parse(event.startAt)) / 60_000,
+          endMinute: (Date.parse(stint.actualEndAt) - Date.parse(event.startAt)) / 60_000,
+        })),
+      }),
+    [personas, stints, event.startAt, raceMinutes],
+  );
+
   if (teamsLoading) return <Panel><p role="status" className="text-sm text-gray-400">Teams laden…</p></Panel>;
   if (teamsError) return <Panel><p role="alert" className="text-sm text-red-300">Teams laden mislukt. Vernieuw de pagina.</p></Panel>;
   if (!accessibleTeams.length) return <Panel><SectionHeading title="Stintplanner" description="Je bent nog niet aan een auto gekoppeld. Een manager kan je via Team Builder indelen." /></Panel>;
@@ -280,6 +299,11 @@ export const StintPlanner = ({ event, optimizerFetcher = defaultOptimizerFetcher
     <StintTimeline key={`${event.id}:${teamId}`} event={event} stints={stints} personas={personas} availability={availability} editable={editable} snapMinutes={snap} onMove={move} onResize={resize} onResizeEdge={resizeEdge} onDelete={(id) => { if (editable) void perform(() => remove.mutateAsync(id), "Stint verwijderd."); }} onCopy={copy} onExtend={extend} onAssign={assign} />
     {message && <p role="status" className="mt-3 text-sm text-orange-200">{message}</p>}
   </Panel>
-  <div className="grid gap-5 lg:grid-cols-2"><Panel><SectionHeading title="Waarschuwingen" description="Harde conflicten moeten vóór publicatie worden opgelost." />{warnings.length ? <div className="space-y-2">{warnings.map((warning) => <div key={warning.id} className={`flex gap-2 rounded-xl p-3 text-sm ring-1 ${warning.level === "hard" ? "bg-red-500/10 text-red-200 ring-red-500/20" : "bg-amber-500/10 text-amber-200 ring-amber-500/20"}`}><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{warning.message}</div>)}</div> : stints.length && !validationErrors.length ? <div className="flex items-center gap-2 text-sm text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Geen planningsconflicten.</div> : <p className="text-sm text-gray-400">{stints.length ? "Los de aangegeven rijlimieten op voordat je publiceert." : "Nog geen planning. Racedekking is nog niet gecontroleerd."}</p>}</Panel>
+  <div className="grid gap-5 lg:grid-cols-2"><Panel><SectionHeading title="Waarschuwingen" description="Harde conflicten moeten vóór publicatie worden opgelost." />
+    {personas.length > 0 && <div className="mb-3 rounded-xl bg-white/[0.035] p-3 text-sm">
+      <p className={rotation.fairShareSatisfied ? "text-emerald-300" : "text-red-200"}>{rotationSummaryLine(rotation, raceMinutes)}</p>
+      <p className="mt-1 text-xs text-gray-400">{rotation.perDriver.map((d) => `${d.name} ${Math.round(d.minutes)} min`).join(" · ")} · gelijk deel {Math.round(rotation.equalShareMinutes)} min</p>
+    </div>}
+    {warnings.length ? <div className="space-y-2">{warnings.map((warning) => <div key={warning.id} className={`flex gap-2 rounded-xl p-3 text-sm ring-1 ${warning.level === "hard" ? "bg-red-500/10 text-red-200 ring-red-500/20" : "bg-amber-500/10 text-amber-200 ring-amber-500/20"}`}><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{warning.message}</div>)}</div> : stints.length && !validationErrors.length ? <div className="flex items-center gap-2 text-sm text-emerald-300"><CheckCircle2 className="h-4 w-4" /> Geen planningsconflicten.</div> : <p className="text-sm text-gray-400">{stints.length ? "Los de aangegeven rijlimieten op voordat je publiceert." : "Nog geen planning. Racedekking is nog niet gecontroleerd."}</p>}</Panel>
   <Panel><SectionHeading title="Versies & bevestiging" description="Coureurs bevestigen de laatst gepubliceerde versie. Eerdere versies blijven bewaard." />{plansError && <p role="alert" className="mb-3 text-sm text-red-300">Gepubliceerde versies laden mislukt. Vernieuw de pagina.</p>}{latest && <div className="mb-4 rounded-xl bg-black/20 p-3 text-sm"><div className="flex items-center justify-between"><strong className="text-white">{latest.label}</strong><StatusPill tone="green">{latest.published ? "Gepubliceerd" : "Concept"}</StatusPill></div>{confirmation && <div className="mt-3 flex flex-wrap items-center gap-2"><span className="text-gray-400">Jouw status: {confirmation.status}</span><PrimaryButton disabled={busy || team?.plan_needs_review} onClick={() => void perform(() => confirm.mutateAsync({ versionId: latest.id, userId: actorId, status: "accepted" }), "Je hebt de planning bevestigd.")} className="min-h-8 px-3 py-1 text-xs">Akkoord</PrimaryButton><SecondaryButton disabled={busy} onClick={() => void perform(() => confirm.mutateAsync({ versionId: latest.id, userId: actorId, status: "change_requested", note: "Neem contact op over mijn planning." }), "Je wijzigingsverzoek is opgeslagen.")} className="min-h-8 px-3 py-1 text-xs">Wijziging vragen</SecondaryButton></div>}</div>}<div className="space-y-2">{versions.map((version) => <div key={version.id} className="flex items-center justify-between rounded-xl bg-white/[0.035] p-3 text-sm"><div><strong className="text-gray-200">{version.label}</strong><p className="text-xs text-gray-500">{new Date(version.created_at).toLocaleString("nl-NL")}</p></div></div>)}</div>{!versions.length && <p className="text-sm text-gray-500">Nog geen gepubliceerde versies. Voeg stints toe en publiceer.</p>}</Panel></div></div>;
 };

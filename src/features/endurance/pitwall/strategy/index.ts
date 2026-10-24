@@ -4,5 +4,6 @@ export * from "./pitLoss";
 export * from "./pitWindow";
 export * from "./tyreModel";
 export * from "./rotation";
+export * from "./rotationSummary";
 export * from "./advise";
 export * from "./snapshot";
