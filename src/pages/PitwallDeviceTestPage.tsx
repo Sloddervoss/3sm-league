@@ -16,6 +16,8 @@ import {
   deviceTrackLabel,
   isTelemetryLive,
 } from "@/features/endurance/pitwall/devicePitwallAdapters";
+import { DecisionBand } from "@/features/endurance/pitwall/DecisionBand";
+import { usePitwallStrategy } from "@/features/endurance/pitwall/usePitwallStrategy";
 import { TopRaceBar } from "@/features/endurance/pitwall/TopRaceBar";
 import { RaceTelemetryStrip } from "@/features/endurance/pitwall/RaceTelemetryStrip";
 import { LiveTrackPanel } from "@/features/endurance/pitwall/LiveTrackPanel";
@@ -115,6 +117,7 @@ export default function PitwallDeviceTestPage() {
   const tele = detail?.telemetry;
 
   const strategy = useMemo(() => deviceStrategyRow(live ? v3 : null), [v3, live]);
+  const strategyAdvice = usePitwallStrategy({ strategy, v3, nowMs: Date.now() });
   const position = devicePosition(v3);
   const pace = devicePace(v3);
   const raceClock = deviceRaceClock(v3);
@@ -250,6 +253,7 @@ export default function PitwallDeviceTestPage() {
 
                 {/* Track auto-detect + telemetry strip */}
                 <TopRaceBar strategy={strategy} position={position} raceClock={raceClock} offlineMode={!live} />
+                <DecisionBand advice={strategyAdvice} />
                 <RaceTelemetryStrip v3={v3} live={live} />
 
                 <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">

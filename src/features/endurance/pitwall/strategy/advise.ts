@@ -107,7 +107,10 @@ export function advise(snapshot: StrategySnapshot): Advice {
     tyreSeconds: snapshot.tyreSeconds,
   });
 
-  const confidence = confidenceFor(snapshot, fuel.samples, fuel.sigma, perLap);
+  // Een serverzijdig gemeten prior is bruikbaar, maar niet "hoog": het is geen
+  // eigen meting van deze stint.
+  const ruwe = confidenceFor(snapshot, fuel.samples, fuel.sigma, perLap);
+  const confidence = ruwe === "none" && fuel.source === "prior" ? "low" : ruwe;
 
   const basis = {
     window,

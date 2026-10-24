@@ -80,6 +80,10 @@ export interface V3Normalized {
   fuel?: {
     fuelLitres?: number;
     fuelPct?: number;
+    /** Sinds 0.6.1.0: tankinhoud uit de sessiegegevens. */
+    fuelCapacityLitres?: number;
+    fuelPerLapLitres?: number;
+    lapsRemaining?: number;
   };
   raceState?: {
     incidents?: number;
