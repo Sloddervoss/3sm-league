@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>3SM.EnduranceConnector.ResearchTests</AssemblyName>
+    <RootNamespace>ThreeSM.EnduranceConnector.ResearchTests</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <WarningLevel>4</WarningLevel>
+    <!-- De plugin bouwt met .NET Framework 4.8 (C# 7.3). Deze harness dwingt dezelfde
+         taalversie af, zodat een test hier ook een build op Beest voorspelt. -->
+    <LangVersion>7.3</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ResearchTests.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ResearchProvenance.cs" Link="plugin\ResearchProvenance.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ResearchObservations.cs" Link="plugin\ResearchObservations.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ResearchJsonl.cs" Link="plugin\ResearchJsonl.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ResearchQueue.cs" Link="plugin\ResearchQueue.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ResearchEvents.cs" Link="plugin\ResearchEvents.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ResearchIdentity.cs" Link="plugin\ResearchIdentity.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ResearchContextSampler.cs" Link="plugin\ResearchContextSampler.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ResearchRecorder.cs" Link="plugin\ResearchRecorder.cs" />
+  </ItemGroup>
+</Project>

@@ -37,6 +37,12 @@ namespace ThreeSM.EnduranceConnector
         // want een oude receiver weigert een onbekende root-key met 422. Default uit.
         public bool TyreTelemetryEnabled = false;
 
+        // Research-opname (lokaal, standaard uit). Schrijft JSONL naar deze pc en verlaat
+        // het apparaat nooit vanzelf; exporteren is een expliciete gebruikersactie.
+        // Leeg pad = %LOCALAPPDATA%\3SM\EnduranceConnector\research.
+        public bool ResearchEnabled = false;
+        public string ResearchDirectory = string.Empty;
+
         public string SpeedProperty = "DataCorePlugin.GameData.NewData.SpeedKmh";
         public string LapProperty = "DataCorePlugin.GameData.NewData.CurrentLap";
         public string CompletedLapsProperty = "DataCorePlugin.GameData.NewData.CompletedLaps";

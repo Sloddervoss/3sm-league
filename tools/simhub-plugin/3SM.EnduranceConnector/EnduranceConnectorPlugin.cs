@@ -80,6 +80,11 @@ namespace ThreeSM.EnduranceConnector
         private string _lastLoggedFlagPrimary;
         private RaceFlags _lastDetectedFlags;
         private long _pitLimiterSinceMs;
+        // Lokale research-opname (opt-in). Staat hij uit, dan blijft _research inert en
+        // verandert er niets aan de bestaande capture of het verzenden.
+        private ResearchRecorder _research;
+        private string _researchStatusText = "Research staat uit · er wordt niets opgenomen";
+        private long _lastResearchStatusUnixMs;
 
         public PluginManager PluginManager { get; set; }
         public ConnectorSettings Settings { get; internal set; }
@@ -139,6 +144,14 @@ namespace ThreeSM.EnduranceConnector
                 Settings.SchemaVersion = 6;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
+            if (Settings.SchemaVersion < 7)
+            {
+                // 0.7.x: lokale research-opname. Opt-in: bestaande installaties houden hem uit,
+                // dus er verandert niets aan de bestaande capture of het verzenden.
+                Settings.ResearchEnabled = false;
+                Settings.SchemaVersion = 7;
+                this.SaveCommonSettings("ConnectorSettings", Settings);
+            }
             // Vlag-properties aanmelden zodat SimHub LED-profielen erop kunnen binden.
             InitUpdaterStateStore();
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
@@ -176,6 +189,7 @@ namespace ThreeSM.EnduranceConnector
             ApplyDiagnosticsSettings();
             _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
             _tyreTracker.Reset();
+            InitResearchRecorder();
             Status = Settings.UseCentralRelay
                 ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
                 : "Lokale fallback · wacht op iRacing";
@@ -661,12 +675,33 @@ namespace ThreeSM.EnduranceConnector
                     _tyreTracker.Reset();
                     Interlocked.Exchange(ref _sequence, -1);
                 }
-                if (!running && _gameWasRunning) _stintClock.Stop();
+                if (!running && _gameWasRunning)
+                {
+                    _stintClock.Stop();
+                    // Research: één sessie per bestand. Stopt iRacing, dan sluiten we het
+                    // bestand netjes af; de volgende sessie begint een nieuw bestand.
+                    if (Settings != null && Settings.ResearchEnabled)
+                    {
+                        try
+                        {
+                            var research = _research;
+                            if (research != null) research.EndSession("game_stopped");
+                        }
+                        catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: sessie-einde mislukt: " + researchError.Message); }
+                    }
+                }
                 _gameWasRunning = running;
                 // Vlaggen elke tick oplossen/publiceren (los van het verzendinterval),
                 // zodat een flagbox/overlay direct reageert.
                 PublishFlags(pluginManager, data, isInCar);
                 PublishOverlay(running, isInCar);
+                // Research (opt-in): 1 Hz context + protocolmarkers. Staat hij uit, dan
+                // gebeurt hier niets en blijft de bestaande capture/verzending identiek.
+                if (Settings != null && Settings.ResearchEnabled)
+                {
+                    try { ObserveResearch(pluginManager, data, isIRacing, running, isInCar); }
+                    catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: tick mislukt: " + researchError.Message); }
+                }
                 // Auto-update op een veilig moment: nooit tijdens een game en bij idle
                 // pas na 30 minuten zonder game (verder max. één herstart per 24 uur).
                 if (running || data.GameRunning || data.GameInMenu)
@@ -740,6 +775,13 @@ namespace ThreeSM.EnduranceConnector
                     else localEnvelope = Capture(pluginManager, data, false, isInCar, out observation);
                     ObserveDiagnostics(observation);
                 }
+                // Research: bewaar wat de capture zojuist al opleverde. Geen extra SDK-reads:
+                // de 1 Hz-sampler hergebruikt dit beeld, inclusief de originele tijdstempels.
+                if (Settings != null && Settings.ResearchEnabled && (envelope != null || localEnvelope != null))
+                {
+                    try { ObserveResearchCapture(envelope, localEnvelope); }
+                    catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: capture bijwerken mislukt: " + researchError.Message); }
+                }
                 lock (_sendGate)
                 {
                     if (Volatile.Read(ref _ending) != 0)
@@ -772,6 +814,15 @@ namespace ThreeSM.EnduranceConnector
                 activePairing = _activePairing;
             }
             DisposeDiagnostics();
+            // Research: afsluitregel + flush van de wachtrij. Duurt nooit lang (timeout 3 s)
+            // en raakt de bestaande verzend-/shutdownpaden niet.
+            try
+            {
+                var research = _research;
+                _research = null;
+                if (research != null) research.Dispose();
+            }
+            catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: afsluiten mislukt: " + researchError.Message); }
             try { Task.WaitAll(new[] { activeSend, activePairing }, TimeSpan.FromSeconds(5)); } catch { }
             lock (_settingsGate)
             {
@@ -1670,6 +1721,412 @@ namespace ThreeSM.EnduranceConnector
         private static double? PositiveSeconds(TimeSpan value) { return value > TimeSpan.Zero ? (double?)value.TotalSeconds : null; }
         private static double? PositiveNullable(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value > 0 ? (double?)value.Value : null; }
         private static double? NullableSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)value.Value : null; }
+
+        // ===================== Lokale research-opname (opt-in) =====================
+
+        public string ResearchStatusText { get { return _researchStatusText; } }
+        public bool IsResearchRecording { get { var recorder = _research; return recorder != null && recorder.IsRecording; } }
+        public bool IsResearchEnabled { get { lock (_settingsGate) return Settings != null && Settings.ResearchEnabled; } }
+        public bool IsResearchPaused { get { var recorder = _research; return recorder != null && recorder.Paused; } }
+
+        /// <summary>Aan/uit-schakelaar. Default uit; de keuze wordt lokaal bewaard.</summary>
+        public void SetResearchEnabled(bool enabled)
+        {
+            lock (_settingsGate)
+            {
+                if (Settings == null) return;
+                Settings.ResearchEnabled = enabled;
+                this.SaveCommonSettings("ConnectorSettings", Settings);
+            }
+            if (!enabled)
+            {
+                var recorder = _research;
+                if (recorder != null)
+                {
+                    try { recorder.Disable("user_disabled"); }
+                    catch (Exception error) { SimHub.Logging.Current.Warn("3SM research: stoppen mislukt: " + error.Message); }
+                }
+                SetResearchStatusText("Research staat uit · er wordt niets opgenomen");
+            }
+            else
+            {
+                SetResearchStatusText("Research wacht op iRacing · opname start zodra er telemetrie is");
+            }
+            OnPropertyChanged("IsResearchRecording");
+            OnPropertyChanged("IsResearchPaused");
+            OnPropertyChanged("IsResearchEnabled");
+        }
+
+        public void SetResearchPaused(bool paused)
+        {
+            var recorder = _research;
+            if (recorder == null) return;
+            try
+            {
+                if (paused) recorder.Pause();
+                else recorder.Resume();
+            }
+            catch (Exception error) { SimHub.Logging.Current.Warn("3SM research: pauzeren mislukt: " + error.Message); }
+            Interlocked.Exchange(ref _lastResearchStatusUnixMs, 0);
+            RefreshResearchStatus();
+            OnPropertyChanged("IsResearchPaused");
+        }
+
+        /// <summary>Handmatige, herhaalbare protocolmarker vanuit de UI.</summary>
+        public void MarkResearch(ResearchEventKind kind, string note)
+        {
+            var recorder = _research;
+            if (recorder == null) return;
+            bool marked;
+            try { marked = recorder.Mark(kind, note); }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM research: marker mislukt: " + error.Message);
+                return;
+            }
+            if (!marked) SetResearchStatusText("Research staat uit · marker niet opgeslagen");
+            else
+            {
+                Interlocked.Exchange(ref _lastResearchStatusUnixMs, 0);
+                RefreshResearchStatus();
+            }
+        }
+
+        /// <summary>Verwijdert alle lokale researchdata, inclusief de salt.</summary>
+        public void DeleteResearchData()
+        {
+            var recorder = _research;
+            if (recorder == null) return;
+            string error;
+            var deleted = 0;
+            try { deleted = recorder.DeleteLocalData(out error); }
+            catch (Exception failure) { error = failure.Message; }
+            lock (_settingsGate)
+            {
+                if (Settings != null)
+                {
+                    Settings.ResearchEnabled = false;
+                    this.SaveCommonSettings("ConnectorSettings", Settings);
+                }
+            }
+            SetResearchStatusText(error == null
+                ? "Researchdata verwijderd · " + deleted + " bestand(en)"
+                : "Verwijderen mislukt · " + error);
+            OnPropertyChanged("IsResearchRecording");
+            OnPropertyChanged("IsResearchEnabled");
+        }
+
+        /// <summary>Export is een expliciete gebruikersactie; het bestand bevat een pseudonieme ID.</summary>
+        public string ExportResearchSession(string destinationFile)
+        {
+            var recorder = _research;
+            if (recorder == null) return "Research is niet beschikbaar.";
+            if (string.IsNullOrWhiteSpace(destinationFile)) return "Geen exportpad opgegeven.";
+            string error;
+            string exportedFrom;
+            bool exported;
+            try { exported = recorder.Export(destinationFile.Trim(), out error, out exportedFrom); }
+            catch (Exception failure) { exported = false; error = failure.Message; exportedFrom = null; }
+            if (!exported) return "Exporteren mislukt · " + error;
+            return "Geëxporteerd naar " + destinationFile.Trim() + "\nBron: " + exportedFrom
+                + "\nHet bestand bevat alleen een pseudonieme rijders-ID; de salt blijft op deze pc.";
+        }
+
+        private void InitResearchRecorder()
+        {
+            try
+            {
+                string root;
+                string speedProperty;
+                lock (_settingsGate)
+                {
+                    root = Settings == null || string.IsNullOrWhiteSpace(Settings.ResearchDirectory)
+                        ? ResearchRecorder.DefaultRootDirectory()
+                        : Settings.ResearchDirectory.Trim();
+                    speedProperty = Settings == null ? null : Settings.SpeedProperty;
+                }
+                _research = new ResearchRecorder(root,
+                    new ResearchRecorderOptions { SpeedPropertyPath = speedProperty },
+                    ResearchLog, () => DateTime.UtcNow);
+                if (Settings != null && Settings.ResearchEnabled)
+                    SetResearchStatusText("Research wacht op iRacing · opname start zodra er telemetrie is");
+            }
+            catch (Exception error)
+            {
+                _research = null;
+                SimHub.Logging.Current.Warn("3SM research: recorder kon niet worden gemaakt: " + error.Message);
+            }
+        }
+
+        private static void ResearchLog(Exception error)
+        {
+            if (error == null) return;
+            try { SimHub.Logging.Current.Warn("3SM research: " + error.Message); } catch { }
+        }
+
+        private void SetResearchStatusText(string value)
+        {
+            value = value ?? string.Empty;
+            if (string.Equals(_researchStatusText, value, StringComparison.Ordinal)) return;
+            _researchStatusText = value;
+            OnPropertyChanged("ResearchStatusText");
+        }
+
+        private void RefreshResearchStatus()
+        {
+            var nowMs = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+            if (nowMs - Interlocked.Read(ref _lastResearchStatusUnixMs) < 900) return;
+            Interlocked.Exchange(ref _lastResearchStatusUnixMs, nowMs);
+            var recorder = _research;
+            SetResearchStatusText(recorder == null ? "Research niet beschikbaar" : recorder.Status().Describe());
+        }
+
+        // 1 Hz tick: markers + context. Leest alleen wat de capture niet heeft.
+        private void ObserveResearch(PluginManager manager, GameData data, bool isIRacing, bool running, bool isInCar)
+        {
+            var recorder = _research;
+            if (recorder == null) return;
+            if (!recorder.IsRecording)
+            {
+                if (!running || !isIRacing || data == null || data.NewData == null) return;
+                TryStartResearch(manager, data);
+                return;
+            }
+            if (!running) return;
+            var snapshot = data.NewData;
+            IResearchChannelReader channels = snapshot == null
+                ? null
+                : new ResearchChannelAdapter(new RawChannelReader(snapshot, property => GetRaw(manager, property)), manager);
+            bool dropped;
+            recorder.OnTick(DateTime.UtcNow, true, isInCar, channels, out dropped);
+            RefreshResearchStatus();
+        }
+
+        private void TryStartResearch(PluginManager manager, GameData data)
+        {
+            var recorder = _research;
+            if (recorder == null || data == null || data.NewData == null) return;
+            var snapshot = data.NewData;
+            var player = snapshot.Opponents == null ? null : snapshot.Opponents.FirstOrDefault(opponent => opponent != null && opponent.IsPlayer);
+            int interval;
+            lock (_settingsGate) interval = Math.Max(500, Settings.SendIntervalMilliseconds);
+            var start = new ResearchSessionStart
+            {
+                PluginVersion = InstalledVersion,
+                SimHubVersion = typeof(PluginManager).Assembly.GetName().Version.ToString(),
+                Simulator = "iRacing",
+                // iRacing zet zijn buildversie in de sessie-YAML; ontbreekt die, dan null.
+                SimulatorVersion = GetNullableString(manager, "DataCorePlugin.GameRawData.SessionData.WeekendInfo.BuildVersion"),
+                TrackName = FirstNonEmpty(snapshot.TrackName, GetNullableString(manager, Settings.TrackNameProperty)),
+                TrackConfig = FirstNonEmpty(snapshot.TrackConfig, GetNullableString(manager, Settings.TrackConfigProperty)),
+                TrackId = TrackIdentityReader.Read(snapshot),
+                CarId = FirstNonEmpty(snapshot.CarId, GetNullableString(manager, Settings.CarIdProperty)),
+                CarName = FirstNonEmpty(snapshot.CarModel, player == null ? null : player.CarName, GetNullableString(manager, Settings.CarNameProperty)),
+                TransportSessionId = _sessionId,
+                DriverId = FirstNonEmpty(player == null ? null : player.Id, GetNullableString(manager, Settings.CurrentDriverIdProperty)),
+                CaptureIntervalMs = interval,
+            };
+            string error;
+            if (!recorder.Enable(start, out error))
+            {
+                SetResearchStatusText("Research kon niet starten · " + error);
+                SimHub.Logging.Current.Warn("3SM research: start mislukt: " + error);
+                return;
+            }
+            Interlocked.Exchange(ref _lastResearchStatusUnixMs, 0);
+            RefreshResearchStatus();
+            SimHub.Logging.Current.Info("3SM research: opname gestart (" + recorder.CurrentFilePath + ")");
+        }
+
+        private void ObserveResearchCapture(TelemetryEnvelopeV3 v3, TelemetryEnvelope v2)
+        {
+            var recorder = _research;
+            if (recorder == null) return;
+            ResearchCaptureView view = null;
+            if (v3 != null) view = BuildResearchView(v3);
+            else if (v2 != null) view = BuildResearchView(v2);
+            if (view != null) recorder.ObserveCapture(view);
+        }
+
+        private static DateTime ParseResearchTimestamp(string text)
+        {
+            DateTime parsed;
+            if (!string.IsNullOrEmpty(text)
+                && DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out parsed))
+                return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+            return DateTime.UtcNow;
+        }
+
+        /// <summary>Wat de bestaande capture al had, één-op-één naar de researchlaag.</summary>
+        private static ResearchCaptureView BuildResearchView(TelemetryEnvelopeV3 envelope)
+        {
+            var view = new ResearchCaptureView
+            {
+                Present = true,
+                CapturedAtUtc = ParseResearchTimestamp(envelope.CapturedAt),
+                Sequence = envelope.Sequence,
+                SessionPhase = envelope.Session == null ? null : envelope.Session.SessionState,
+            };
+            if (envelope.Session != null) view.SessionTimeSeconds = envelope.Session.SessionTimeSeconds;
+            if (envelope.Track != null)
+            {
+                view.OnPitRoad = envelope.Track.OnPitRoad;
+                view.LapDistancePct = envelope.Track.LapDistancePct;
+            }
+            if (envelope.Position != null)
+            {
+                view.Position = envelope.Position.Position;
+                view.ClassPosition = envelope.Position.ClassPosition;
+            }
+            if (envelope.Timing != null)
+            {
+                view.LastLapSeconds = envelope.Timing.LastLapTimeSeconds;
+                view.BestLapSeconds = envelope.Timing.BestLapTimeSeconds;
+                view.CurrentLapElapsedSeconds = envelope.Timing.CurrentLapElapsedSeconds;
+                view.CompletedLaps = envelope.Timing.CompletedLaps;
+            }
+            if (envelope.Fuel != null)
+            {
+                view.FuelLitres = envelope.Fuel.FuelLitres;
+                view.FuelPerLapLitres = envelope.Fuel.FuelPerLapLitres;
+                view.LapsRemaining = envelope.Fuel.LapsRemaining;
+            }
+            if (envelope.RaceState != null) view.Incidents = envelope.RaceState.Incidents;
+            if (envelope.Vehicle != null)
+            {
+                view.HasVehicle = true;
+                view.ThrottlePct = envelope.Vehicle.ThrottlePct;
+                view.BrakePct = envelope.Vehicle.BrakePct;
+                view.SpeedKph = envelope.Vehicle.SpeedKph;
+                view.Rpm = envelope.Vehicle.Rpm;
+                view.Gear = envelope.Vehicle.Gear;
+            }
+            if (envelope.Tyres != null)
+            {
+                view.Tyres = BuildResearchTyres(envelope.Tyres);
+                if (envelope.Tyres.PitEntry != null) view.PitEntryTyres = BuildResearchPitEntry(envelope.Tyres.PitEntry);
+            }
+            return view;
+        }
+
+        private static ResearchCaptureView BuildResearchView(TelemetryEnvelope envelope)
+        {
+            var view = new ResearchCaptureView
+            {
+                Present = true,
+                CapturedAtUtc = ParseResearchTimestamp(envelope.CapturedAt),
+                Sequence = envelope.Sequence,
+            };
+            var telemetry = envelope.Telemetry;
+            if (telemetry != null)
+            {
+                view.SessionTimeSeconds = telemetry.SessionTimeSeconds;
+                view.SpeedKph = telemetry.SpeedKph;
+                view.FuelLitres = telemetry.FuelLitres;
+                view.FuelPerLapLitres = telemetry.FuelPerLapLitres;
+                view.LapsRemaining = telemetry.EstimatedLapsRemaining;
+                view.CompletedLaps = telemetry.CompletedLaps;
+                view.LastLapSeconds = telemetry.LapTimeSeconds;
+                view.Position = telemetry.Position;
+                view.ClassPosition = telemetry.ClassPosition;
+                view.Incidents = telemetry.Incidents;
+                view.OnPitRoad = telemetry.InPitLane;
+            }
+            return view;
+        }
+
+        private static ResearchTyreObservation BuildResearchTyres(V3Tyres tyres)
+        {
+            return new ResearchTyreObservation
+            {
+                HasWear = tyres.WearPercent != null,
+                HasCarcass = tyres.CarcassTempC != null,
+                HasSets = tyres.Sets != null,
+                HasCompound = tyres.CompoundId.HasValue,
+                HasEnvironment = tyres.Environment != null,
+                WearPercent = ResearchZones(tyres.WearPercent),
+                CarcassTempC = ResearchZones(tyres.CarcassTempC),
+                SetsUsed = tyres.Sets == null ? null : tyres.Sets.Used,
+                CompoundId = tyres.CompoundId,
+                TrackTempC = tyres.Environment == null ? null : tyres.Environment.TrackTempC,
+                AirTempC = tyres.Environment == null ? null : tyres.Environment.AirTempC,
+                RubberState = tyres.Environment == null ? null : tyres.Environment.RubberState,
+                Trigger = tyres.Trigger,
+                ObservedAtUtc = string.IsNullOrEmpty(tyres.ObservedAt) ? (DateTime?)null : ParseResearchTimestamp(tyres.ObservedAt),
+                Frozen = false,
+            };
+        }
+
+        // Het pit-entry-anker is de bevroren stand van vóór de bandenwissel: altijd Frozen,
+        // zodat de researchlaag hem nooit als Measured wegschrijft.
+        private static ResearchTyreObservation BuildResearchPitEntry(V3TyrePitEntry entry)
+        {
+            return new ResearchTyreObservation
+            {
+                HasWear = entry.WearPercent != null,
+                HasCarcass = entry.CarcassTempC != null,
+                HasSets = entry.SetsUsed.HasValue,
+                WearPercent = ResearchZones(entry.WearPercent),
+                CarcassTempC = ResearchZones(entry.CarcassTempC),
+                SetsUsed = entry.SetsUsed,
+                Trigger = "pit_entry",
+                ObservedAtUtc = string.IsNullOrEmpty(entry.ObservedAt) ? (DateTime?)null : ParseResearchTimestamp(entry.ObservedAt),
+                FrozenAtUtc = string.IsNullOrEmpty(entry.ObservedAt) ? (DateTime?)null : ParseResearchTimestamp(entry.ObservedAt),
+                Frozen = true,
+            };
+        }
+
+        private static double?[][] ResearchZones(V3TyreZones zones)
+        {
+            if (zones == null) return null;
+            var result = new double?[4][];
+            result[0] = CopyZones(zones.FrontLeft);
+            result[1] = CopyZones(zones.FrontRight);
+            result[2] = CopyZones(zones.RearLeft);
+            result[3] = CopyZones(zones.RearRight);
+            return result;
+        }
+
+        private static double?[] CopyZones(double?[] source)
+        {
+            var result = new double?[3];
+            if (source == null) return result;
+            for (var zone = 0; zone < 3 && zone < source.Length; zone++)
+            {
+                var value = source[zone];
+                if (value.HasValue && (double.IsNaN(value.Value) || double.IsInfinity(value.Value))) continue;
+                result[zone] = value;
+            }
+            return result;
+        }
+
+        // De researchlaag leest via deze adapter uitsluitend de kanalen/properties die de
+        // bestaande capture niet al levert.
+        private sealed class ResearchChannelAdapter : IResearchChannelReader
+        {
+            private readonly RawChannelReader _channels;
+            private readonly PluginManager _manager;
+
+            public ResearchChannelAdapter(RawChannelReader channels, PluginManager manager)
+            {
+                _channels = channels;
+                _manager = manager;
+            }
+
+            public double? ReadNumber(string channel, double minimum, double maximum)
+            {
+                return _channels == null ? null : _channels.ReadNumber(channel, minimum, maximum);
+            }
+
+            public double? ReadProperty(string property, double minimum, double maximum)
+            {
+                var value = GetNullableDouble(_manager, property, false);
+                if (!value.HasValue) return null;
+                if (value.Value < minimum || value.Value > maximum) return null;
+                return value;
+            }
+        }
 
         private async Task SendAsync(TelemetryEnvelope envelope, Uri endpoint, string token, CancellationToken cancellationToken)
         {
