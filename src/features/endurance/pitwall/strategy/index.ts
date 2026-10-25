@@ -8,5 +8,6 @@ export * from "./tyreModel";
 export * from "./rotation";
 export * from "./rotationSummary";
 export * from "./tyreWear";
+export * from "./tyreGrade";
 export * from "./advise";
 export * from "./snapshot";

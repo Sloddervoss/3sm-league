@@ -1,4 +1,6 @@
 import type { V3Normalized } from './pitwallHelpers';
+import type { TyreEstimate } from './strategy/tyreGrade';
+import { TyreAdviceLine } from './TyreAdviceLine';
 
 const value = (n: number | null | undefined, digits = 0) => typeof n === 'number' && Number.isFinite(n) ? n.toFixed(digits) : null;
 const amount = (n: number | null | undefined, digits = 0) => value(n, digits) ?? '—';
@@ -11,7 +13,23 @@ const wearTone = (pct: number | null): string => {
   return 'border-red-400/30 bg-red-400/[0.08] text-red-300';
 };
 
-export function VehicleTelemetryPanel({ v3, live }: { v3: V3Normalized | null; live: boolean }) {
+/**
+ * De vier hoeken met hun stand.
+ *
+ * `tyreEstimate` is optioneel: is het er, dan staat onder de hoekgrid de ene
+ * regel die bij de graad hoort (puntgetal, getal met marge, bereik of oorzaak).
+ * Is het er niet, dan blijft de oude voetnoot staan — die is waar, maar zegt
+ * niets over de beslissing.
+ */
+export function VehicleTelemetryPanel({
+  v3,
+  live,
+  tyreEstimate,
+}: {
+  v3: V3Normalized | null;
+  live: boolean;
+  tyreEstimate?: TyreEstimate | null;
+}) {
   const inCar = v3?.session?.isInCar !== false;
   const car = live && inCar ? v3?.vehicle : null;
   const status = !live ? 'Telemetrie offline' : !inCar ? 'Niet in de auto' : car ? 'Laatst beschikbare bandenmeting' : 'Niet aangeleverd';
@@ -71,7 +89,13 @@ export function VehicleTelemetryPanel({ v3, live }: { v3: V3Normalized | null; l
         </div>
         <p className="pl-[3.25rem] text-[8px] uppercase tracking-widest text-gray-600">slicks</p>
       </div>
-      <p className="mt-1.5 text-[9px] text-gray-600">Stand van SimHub; verspringt alleen bij een stop.</p>
+      {tyreEstimate ? (
+        <div className="mt-1.5 border-t border-white/5 pt-1.5">
+          <TyreAdviceLine estimate={tyreEstimate} />
+        </div>
+      ) : (
+        <p className="mt-1.5 text-[9px] text-gray-600">Stand van SimHub; verspringt alleen bij een stop.</p>
+      )}
     </section>
   );
 }

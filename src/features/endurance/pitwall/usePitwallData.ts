@@ -9,6 +9,7 @@ import type {
 import { extractRaceClock } from "./pitwallHelpers";
 import { OpponentHistory } from "./opponentHistory";
 import { resolvePitStopMeasurement } from "./strategy/pitStops";
+import { parseTyreEstimate } from "./strategy/tyreGrade";
 
 /* ==========================================================================
  * REAL MODE: uses get_pitwall_data() RPC.
@@ -50,6 +51,12 @@ interface PitwallRpcResponse {
     rr: number | null;
     captured_at?: string | null;
   }> | null;
+  /**
+   * Het bandenbeeld uit `pitwall_tyre_estimate_v1` (S2), onder de sleutel
+   * `tyre_estimate`. Optioneel: een oudere server stuurt het veld niet en dan is
+   * het `null` — geen leeg object dat als meting leest.
+   */
+  tyre_estimate?: unknown;
   timeline: PitwallTimelineEvent[];
   /** Punt 9: gemeten pitlanetijd uit endurance_pit_stops; null zonder meting. */
   pit_loss?: {
@@ -139,6 +146,12 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
   const raceClock = extractRaceClock(v3);
   const plannedStints = rpcData?.planned_stints ?? [];
 
+  /* S4: het bandenbeeld met zijn graad. De RPC levert één jsonb-blok; wat er
+   * niet in staat wordt niet verzonnen. Ontbreekt het blok, dan valt de motor
+   * terug op de live reeks (`clientTyreEstimate`) met dezelfde vorm en een
+   * voorzichtiger graad. */
+  const tyreEstimate = useMemo(() => parseTyreEstimate(rpcData?.tyre_estimate), [rpcData]);
+
   /* Punt 9: de gemeten tijd in de pitstraat. De server meet uit de opgeslagen
    * stops; alleen als die niets heeft leiden we het hier uit de tijdlijn af.
    * Zonder in_pit_lane-vlaggen blijft dit null — geen schatting. */
@@ -222,6 +235,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
     trends,
     v3,
     isLive,
+    tyreEstimate,
     pitStopMeasurement,
     pitLaneSeconds: pitStopMeasurement.pitLaneSeconds,
   };

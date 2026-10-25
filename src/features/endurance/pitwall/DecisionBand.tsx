@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
-import { Disc3, Fuel, Gauge, TriangleAlert } from "lucide-react";
+import { Disc3, Fuel, TriangleAlert } from "lucide-react";
 import type { Advice } from "./strategy/types";
 import type { TyreAdvice } from "./strategy/tyreWear";
+import { TyreAdviceLine } from "./TyreAdviceLine";
+import { TyreFuelCompare } from "./TyreFuelCompare";
+import { stayOutLine } from "./tyreCopy";
 
 /**
  * De beslissingsband.
@@ -10,14 +13,18 @@ import type { TyreAdvice } from "./strategy/tyreWear";
  * tweede getal dat het eerste tegenspreekt: de band is de enige plek waar een
  * advies staat, de panelen eronder tonen de onderbouwing.
  *
- * Het bandenadvies staat er als tweede regel onder, want het is de enige andere
- * reden om naar binnen te gaan. Haalt de band de geplande stop niet, dan is de
- * hoofdregel al meegeschoven en zegt deze regel waarom.
+ * Wat hier sinds S4 staat en wat er niet meer staat:
  *
- * "Geen advies" is bewust grijs en rustig. Het is geen fout, het is een meting
- * die nog niet genoeg houvast geeft — en de band zegt dan welke. Voor de banden
- * geldt dat net zo hard: staat de slijtage stil of springt ze, dan staat er
- * "geen bandenadvies" met de oorzaak en geen rondes-tot-nu-toe.
+ * - De bandenrij is een **graad**, geen getal: A toont een puntgetal, B een getal
+ *   met marge, C een bereik en D één oorzaakregel. Die regel staat in
+ *   `TyreAdviceLine`; dit component kiest hem niet.
+ * - De vakjes `in de tank` en `banden` zijn weg. Daarvoor in de plaats staat
+ *   `TyreFuelCompare`: twee grenzen in dezelfde eenheid, met dezelfde getallen
+ *   als `lapsUntilPit`. Eén tank, één getal.
+ * - `tanken` (liters) blijft: dat is de enige plek met liters bij de stop. Het
+ *   label `zekerheid` heet nu `zekerheid tank`, want de banden hebben hun eigen
+ *   graad en twee soorten zekerheid onder één kop is precies hoe dit paneel
+ *   eerder ongeloofwaardig werd.
  */
 
 const decisionLabel = (advice: Advice): string => {
@@ -42,7 +49,7 @@ const confidenceLabel: Record<Advice["confidence"], string> = {
   none: "onvoldoende data",
 };
 
-/** Het label boven de bandenreden: wat je met de band moet doen. */
+/** Het label boven de bandenregel: wat je met de band moet doen. */
 const tyreLabel: Record<TyreAdvice["action"], string> = {
   NO_CHANGE: "banden ok",
   CHANGE_AT_PLANNED_STOP: "wisselen bij stop",
@@ -57,10 +64,25 @@ const tyreTone: Record<TyreAdvice["action"], string> = {
   NO_ADVICE: "border-white/10 bg-white/[0.03] text-gray-400",
 };
 
+/** `A · gemeten`: de letter alleen is nooit genoeg. */
+const gradeLabel = (grade: string): string => {
+  switch (grade) {
+    case "A":
+      return "gemeten";
+    case "B":
+      return "geschat";
+    case "C":
+      return "alleen bereik";
+    default:
+      return "geen meting";
+  }
+};
+
 export function DecisionBand({ advice }: { advice: Advice }) {
   const rustig = advice.decision === "NO_ADVICE";
   const naarBinnen = advice.decision === "PIT_THIS_LAP";
   const banden = advice.tyres ?? null;
+  const estimate = advice.tyreEstimate ?? null;
 
   const rand = rustig
     ? "border-white/10 bg-white/[0.03]"
@@ -75,59 +97,84 @@ export function DecisionBand({ advice }: { advice: Advice }) {
       : "text-emerald-300";
 
   return (
-    <section className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${rand}`}>
-      <div className="min-w-0">
-        <p className={`text-2xl font-black leading-tight tracking-tight ${actieKleur}`}>{decisionLabel(advice)}</p>
+    <section
+      className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-start sm:justify-between ${rand}`}
+      data-pitwall-decision-band="true"
+    >
+      <div className="min-w-0 flex-1">
+        {/* Alleen de korte beslissing zit in de live region: één keer per ronde
+            voorlezen, niet elke seconde. De onderbouwing staat eronder. */}
+        <p
+          className={`text-2xl font-black leading-tight tracking-tight ${actieKleur}`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {decisionLabel(advice)}
+        </p>
         <p className="mt-1 max-w-2xl text-sm leading-5 text-gray-400">{advice.reason}</p>
 
         {banden && (
-          <p
-            className="mt-2 flex max-w-2xl flex-wrap items-baseline gap-x-2 gap-y-1 text-sm leading-5"
-            data-pitwall-tyre-action={banden.action}
-          >
-            <span
-              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${tyreTone[banden.action]}`}
-            >
-              <Disc3 className="h-3 w-3" />
-              {tyreLabel[banden.action]}
-            </span>
-            <span className={banden.action === "NO_ADVICE" ? "text-gray-500" : "text-gray-300"}>
-              {banden.reason}
-            </span>
+          <div className="mt-2 space-y-1.5" data-pitwall-tyre-action={banden.action}>
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm leading-5">
+              <span
+                className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${tyreTone[banden.action]}`}
+              >
+                <Disc3 className="h-3 w-3" />
+                {tyreLabel[banden.action]}
+              </span>
+              {estimate ? (
+                <span
+                  className="text-[10px] font-bold uppercase tracking-wider text-gray-500"
+                  data-pitwall-tyre-grade-label={estimate.grade}
+                >
+                  {estimate.grade} · {gradeLabel(estimate.grade)}
+                </span>
+              ) : (
+                <span className={banden.action === "NO_ADVICE" ? "text-gray-500" : "text-gray-300"}>
+                  {banden.reason}
+                </span>
+              )}
+            </p>
+            {estimate && <TyreAdviceLine estimate={estimate} />}
+          </div>
+        )}
+
+        {advice.decision === "STAY_OUT" && (
+          <p className="mt-3 font-mono text-[12px] tabular-nums text-gray-300" data-pitwall-stay-out>
+            {stayOutLine({
+              restPct: estimate?.restPct ?? null,
+              fuelLaps: advice.tyreFuel?.fuel.laps ?? null,
+              lapsToFinish: advice.lapsToFinish,
+            })}
           </p>
         )}
+
+        <div className="mt-3">
+          <TyreFuelCompare
+            comparison={advice.tyreFuel ?? null}
+            binding={advice.binding ?? null}
+            laps={advice.lapsUntilPit}
+          />
+        </div>
       </div>
 
       {!rustig && (
-      <div className="flex shrink-0 items-stretch gap-2">
-        <Stat
-          icon={<Gauge className="h-4 w-4" />}
-          label="in de tank"
-          waarde={advice.lapsOnFuel == null ? "—" : `${advice.lapsOnFuel} r`}
-          onbekend={advice.lapsOnFuel == null}
-        />
-        <Stat
-          icon={<Fuel className="h-4 w-4" />}
-          label="tanken"
-          waarde={advice.fuelToAddLitres == null ? "—" : `${Math.round(advice.fuelToAddLitres)} L`}
-          onbekend={advice.fuelToAddLitres == null}
-        />
-        {banden?.lapsRemaining != null && (
+        <div className="flex shrink-0 items-stretch gap-2">
           <Stat
-            icon={<Disc3 className="h-4 w-4" />}
-            label="banden"
-            waarde={`${banden.lapsRemaining} r`}
-            onbekend={false}
+            icon={<Fuel className="h-4 w-4" />}
+            label="tanken"
+            waarde={advice.fuelToAddLitres == null ? "—" : `${Math.round(advice.fuelToAddLitres)} L`}
+            onbekend={advice.fuelToAddLitres == null}
           />
-        )}
-        <div className="flex min-w-[104px] flex-col justify-center rounded-xl border border-white/5 bg-black/20 px-3 py-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">zekerheid</span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-gray-200">
-            {advice.confidence === "none" && <TriangleAlert className="h-3.5 w-3.5 text-amber-300" />}
-            {confidenceLabel[advice.confidence]}
-          </span>
+          <div className="flex min-w-[104px] flex-col justify-center rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">zekerheid tank</span>
+            <span className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-gray-200">
+              {advice.confidence === "none" && <TriangleAlert className="h-3.5 w-3.5 text-amber-300" />}
+              {confidenceLabel[advice.confidence]}
+            </span>
+          </div>
         </div>
-      </div>
       )}
     </section>
   );
