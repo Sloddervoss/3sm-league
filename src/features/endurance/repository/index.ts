@@ -7,3 +7,4 @@ export * from "./availabilityRepository";
 export * from "./paceRepository";
 export * from "./planRepository";
 export * from "./notificationsRepository";
+export * from "./learningRepository";
