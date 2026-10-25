@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { StandingsDerivation, StandingsRow } from "./standings";
 import { renderGap, renderPosition } from "./standings";
 import type { V3Opponent } from "./pitwallHelpers";
@@ -58,13 +59,13 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
           <span className="w-10 font-black text-sky-300">AHEAD</span>
           {ahead ? (
             <>
-              <span className="font-bold text-white">{renderPosition(ahead.position)}</span>
+              <span className="font-bold text-white">P{renderPosition(ahead.position)}</span>
               {typeof ahead.classPosition === "number" && <span className="text-gray-500">K{ahead.classPosition}</span>}
               {ahead.carNumber && <span className="text-gray-400">#{ahead.carNumber}</span>}
               <span className="truncate text-gray-300">{rowLabel(ahead)}</span>
               <span className="ml-auto flex items-center gap-1.5">
                 <LayoutMark rate={aheadTrend} />
-                <span className="text-orange-300">{ahead.inPit ? "PIT" : renderGap(ahead)}</span>
+                <span className="text-sm font-black text-orange-300">{ahead.inPit ? "PIT" : renderGap(ahead)}</span>
               </span>
             </>
           ) : (
@@ -73,22 +74,27 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
         </div>
         <div className="flex items-center gap-2 rounded bg-orange-500/10 px-1.5 py-1 font-bold text-white ring-1 ring-orange-500/20">
           <span className="w-10 font-black text-orange-300">YOU</span>
-          <span>{renderPosition(overallPosition)}</span>
+          <span>P{renderPosition(overallPosition)}</span>
           {typeof classPosition === "number" && <span className="font-semibold text-gray-300">K{classPosition}</span>}
           {ownCarNumber && <span className="text-gray-400">#{ownCarNumber}</span>}
           <span className="truncate">{ownCarLabel ?? "Mijn auto"}</span>
+          {ahead && (
+            <span className="ml-auto text-sm font-black text-orange-300">
+              {ahead.inPit ? "PIT" : renderGap(ahead)}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 rounded px-1.5 py-1 text-gray-300">
           <span className="w-10 font-black text-rose-300">BEHIND</span>
           {behind ? (
             <>
-              <span className="font-bold text-white">{renderPosition(behind.position)}</span>
+              <span className="font-bold text-white">P{renderPosition(behind.position)}</span>
               {typeof behind.classPosition === "number" && <span className="text-gray-500">K{behind.classPosition}</span>}
               {behind.carNumber && <span className="text-gray-400">#{behind.carNumber}</span>}
               <span className="truncate text-gray-300">{rowLabel(behind)}</span>
               <span className="ml-auto flex items-center gap-1.5">
                 <LayoutMark rate={behindTrend} />
-                <span className="text-orange-300">{behind.inPit ? "PIT" : renderGap(behind)}</span>
+                <span className="text-sm font-black text-orange-300">{behind.inPit ? "PIT" : renderGap(behind)}</span>
               </span>
             </>
           ) : (
@@ -116,10 +122,18 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className={`border-t border-white/5 ${r.isPlayer ? "bg-orange-500/10 font-bold text-white" : "text-gray-300"}`}>
-                  <td className="px-1.5 py-1">{renderPosition(r.position)}</td>
-                  <td className="px-1 py-1 text-gray-500">{renderPosition(r.classPosition)}</td>
+              {rows.map((r, index) => (
+                <Fragment key={r.id}>
+                  {(index === 0 || rows[index - 1].carClass !== r.carClass) && (
+                    <tr className="border-t border-white/10 bg-white/[0.04]">
+                      <td colSpan={10} className="px-1.5 py-1 text-[9px] font-black uppercase tracking-wider text-sky-300">
+                        {r.carClass ?? "Zonder klasse"}
+                      </td>
+                    </tr>
+                  )}
+                <tr className={`border-t border-white/5 ${r.isPlayer ? "bg-orange-500/10 font-bold text-white" : "text-gray-300"}`}>
+                  <td className="px-1.5 py-1">{r.position != null ? `P${renderPosition(r.position)}` : "—"}</td>
+                  <td className="px-1 py-1 text-gray-500">{r.classPosition != null ? `K${renderPosition(r.classPosition)}` : "—"}</td>
                   <td className="px-1 py-1 text-gray-400">{r.carNumber ?? "—"}</td>
                   <td className="px-1 py-1 truncate max-w-[7rem]">{rowLabel(r)}</td>
                   <td className="px-1 py-1 text-sky-300">{r.carClass ?? '—'}</td>
@@ -129,6 +143,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
                   <td className="px-1 py-1 text-right text-orange-300">{renderGap(r, false)}</td>
                   <td className="px-1 py-1 text-center text-yellow-400">{r.inPit ? "PIT" : "—"}</td>
                 </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

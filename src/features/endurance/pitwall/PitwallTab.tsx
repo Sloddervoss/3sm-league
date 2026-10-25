@@ -87,6 +87,9 @@ export const PitwallTab = ({ event }: Props) => {
 
   const strategy = isDemo ? demo.strategy : real.strategy;
   const events = isDemo ? demo.events : real.events;
+  const lapTimes = events
+    .map((event) => event.lap_time_from_deltas_s ?? Number(event.payload?.lastLapTimeSeconds))
+    .filter((n) => Number.isFinite(n) && n > 0) as number[];
   const teams = isDemo ? demo.teams : teamQuery.data ?? [];
   const plannedStints = isDemo ? demo.plannedStints : real.plannedStints;
   const alerts = isDemo ? demo.alerts : real.alerts;
@@ -267,46 +270,47 @@ export const PitwallTab = ({ event }: Props) => {
       )}
 
       <RaceTelemetryStrip v3={isDemo ? null : real.v3 ?? null} live={isLive} />
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.6fr)]">
-        <div className="min-w-0 space-y-3">
-            <LiveTrackPanel v3={isDemo ? null : real.v3 ?? null} live={isLive} fallbackTrack={[event.circuit, event.configuration].filter(Boolean).join(' - ')} />
-            <VehicleTelemetryPanel key={`${event.id}:${selectedTeamId}`} v3={isDemo ? null : real.v3 ?? null} live={isLive} />
+
+      {/* Het klassement is het grootste paneel: daar kijkt een pitwall het eerst naar. */}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <StandingsWidget
+            standings={standings}
+            ownCarLabel={teams.find((t) => t.id === selectedTeamId)?.name ?? "Mijn auto"}
+            ownCarNumber={null}
+          />
         </div>
         <div className="min-w-0 space-y-3">
-              <StandingsWidget
-                standings={standings}
-                ownCarLabel={teams.find((t) => t.id === selectedTeamId)?.name ?? "Mijn auto"}
-                ownCarNumber={null}
-              />
-          {strategy && <div className="grid gap-3 md:grid-cols-2">
-            <FuelPanel strategy={strategy} />
-              <PitStrategyBlock
-                strategy={strategy}
-                currentFuel={strategy.current_fuel_litres}
-                driverName={driverName}
-                nextDriverName={nextDriverName}
-              />
-          </div>}
-          {strategy && <RacePositionPanel strategy={strategy} position={position} />}
+          <LiveTrackPanel v3={isDemo ? null : real.v3 ?? null} live={isLive} fallbackTrack={[event.circuit, event.configuration].filter(Boolean).join(' - ')} />
+          <VehicleTelemetryPanel key={`${event.id}:${selectedTeamId}`} v3={isDemo ? null : real.v3 ?? null} live={isLive} />
         </div>
       </div>
+
       {strategy && (
         <>
           <div className="grid gap-3 lg:grid-cols-3">
+            <FuelPanel strategy={strategy} />
+            <PitStrategyBlock
+              strategy={strategy}
+              currentFuel={strategy.current_fuel_litres}
+              driverName={driverName}
+              nextDriverName={nextDriverName}
+            />
+            <RacePositionPanel strategy={strategy} position={position} />
+          </div>
+
+          {/* Strategie is het tweede grote paneel; pace en stint zijn naslag. */}
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+            <StrategyForecast
+              strategy={strategy}
+              position={position}
+              pace={pace}
+              plannedStints={plannedStints}
+              nextDriverName={nextDriverName}
+            />
             <div className="space-y-3">
+              <PacePanel strategy={strategy} pace={pace} lapTimes={lapTimes} />
               <StintDriverPanel strategy={strategy} plannedStints={nextStints.map((s) => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))} currentStint={currentStint} driverName={driverName} />
-            </div>
-            <div className="space-y-3">
-              <StrategyForecast
-                strategy={strategy}
-                position={position}
-                pace={pace}
-                plannedStints={plannedStints}
-                nextDriverName={nextDriverName}
-              />
-            </div>
-            <div className="space-y-3">
-              <PacePanel strategy={strategy} pace={pace} />
             </div>
           </div>
 
