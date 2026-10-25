@@ -2242,6 +2242,23 @@ export type Database = {
           drivers: string[]
         }[]
       }
+      endurance_learning_summary: {
+        Args: { p_car_id: string; p_track_id: string | null }
+        Returns: {
+          car_id: string | null
+          track_id: string | null
+          tank_capacity_litres: number | null
+          sample_laps: number
+          avg_fuel_per_lap_litres: number | null
+          avg_lap_seconds: number | null
+          laps_per_tank: number | null
+          tank_minutes: number | null
+          fuel_per_lap_source: string
+          lap_seconds_source: string
+          first_lap_at: string | null
+          last_lap_at: string | null
+        }[]
+      }
       endurance_apply_team_proposal: { Args: { p_event_id: string; p_revision: string; p_teams: Json }; Returns: Json }
       endurance_manage_team: { Args: { p_event_id: string; p_revision: string; p_action: Json }; Returns: Json }
 
