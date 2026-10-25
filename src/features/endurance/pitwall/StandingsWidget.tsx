@@ -44,6 +44,12 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
 
   const { overallPosition, classPosition, ahead, behind, aheadTrend, behindTrend, rows } = standings;
 
+  const perClass = rows.reduce<Record<string, number>>((acc, r) => {
+    const key = r.carClass ?? "Zonder klasse";
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
   return (
     <section data-pitwall-slot="standings" className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
       <div className="mb-2 flex items-center justify-between">
@@ -106,19 +112,19 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
       {/* COMPACT TABLE */}
       {rows.length > 1 && (
         <div className="mt-2 overflow-x-auto rounded border border-white/5">
-          <table className="w-full min-w-[620px] text-left text-[10px]">
+          <table className="w-full min-w-[620px] text-left text-[10px] tabular-nums">
             <thead className="bg-black/30 text-[9px] font-black uppercase tracking-wider text-gray-500">
               <tr>
-                <th className="px-1.5 py-1">P</th>
-                <th className="px-1 py-1">K</th>
-                <th className="px-1 py-1">#</th>
-                <th className="px-1 py-1">Team</th>
-                <th className="px-1 py-1">Klasse</th>
-                <th className="px-1 py-1 text-right">Laatste</th>
-                <th className="px-1 py-1 text-right">Beste</th>
-                <th className="px-1 py-1 text-right">Ronde</th>
-                <th className="px-1 py-1 text-right">Gap</th>
-                <th className="px-1 py-1 text-center">Pit</th>
+                <th className="px-1.5 py-0.5">P</th>
+                <th className="px-1 py-0.5">K</th>
+                <th className="px-1 py-0.5">#</th>
+                <th className="px-1 py-0.5">Team</th>
+                <th className="px-1 py-0.5">Klasse</th>
+                <th className="px-1 py-0.5 text-right">Laatste</th>
+                <th className="px-1 py-0.5 text-right">Beste</th>
+                <th className="px-1 py-0.5 text-right">Ronde</th>
+                <th className="px-1 py-0.5 text-right">Gap</th>
+                <th className="px-1 py-0.5 text-center">Pit</th>
               </tr>
             </thead>
             <tbody>
@@ -128,20 +134,21 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
                     <tr className="border-t border-white/10 bg-white/[0.04]">
                       <td colSpan={10} className="px-1.5 py-1 text-[9px] font-black uppercase tracking-wider text-sky-300">
                         {r.carClass ?? "Zonder klasse"}
+                        <span className="ml-2 font-normal normal-case tracking-normal text-gray-500">{perClass[r.carClass ?? "Zonder klasse"]} auto's</span>
                       </td>
                     </tr>
                   )}
-                <tr className={`border-t border-white/5 ${r.isPlayer ? "bg-orange-500/10 font-bold text-white" : "text-gray-300"}`}>
-                  <td className="px-1.5 py-1">{r.position != null ? `P${renderPosition(r.position)}` : "—"}</td>
-                  <td className="px-1 py-1 text-gray-500">{r.classPosition != null ? `K${renderPosition(r.classPosition)}` : "—"}</td>
-                  <td className="px-1 py-1 text-gray-400">{r.carNumber ?? "—"}</td>
-                  <td className="px-1 py-1 truncate max-w-[7rem]">{rowLabel(r)}</td>
-                  <td className="px-1 py-1 text-sky-300">{r.carClass ?? '—'}</td>
-                  <td className="px-1 py-1 text-right font-mono text-amber-200">{preciseLapTime(r.lastLapSeconds)}</td>
-                  <td className="px-1 py-1 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
-                  <td className="px-1 py-1 text-right">{r.lap ?? "—"}</td>
-                  <td className="px-1 py-1 text-right text-orange-300">{renderGap(r, false)}</td>
-                  <td className="px-1 py-1 text-center text-yellow-400">{r.inPit ? "PIT" : "—"}</td>
+                <tr className={`h-7 border-t border-white/5 ${r.isPlayer ? "bg-orange-500/[0.06] font-semibold text-white shadow-[inset_2px_0_0_#FF7417]" : "text-gray-300"}`}>
+                  <td className="px-1.5 py-0.5">{r.position != null ? `P${renderPosition(r.position)}` : "—"}</td>
+                  <td className="px-1 py-0.5 text-gray-500">{r.classPosition != null ? `K${renderPosition(r.classPosition)}` : "—"}</td>
+                  <td className="px-1 py-0.5 text-gray-400">{r.carNumber ?? "—"}</td>
+                  <td className="px-1 py-0.5 truncate max-w-[7rem]">{rowLabel(r)}</td>
+                  <td className="px-1 py-0.5 text-sky-300">{r.carClass ?? '—'}</td>
+                  <td className="px-1 py-0.5 text-right font-mono text-amber-200">{preciseLapTime(r.lastLapSeconds)}</td>
+                  <td className="px-1 py-0.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
+                  <td className="px-1 py-0.5 text-right">{r.lap ?? "—"}</td>
+                  <td className="px-1 py-0.5 text-right text-orange-300">{renderGap(r, false)}</td>
+                  <td className="px-1 py-0.5 text-center text-yellow-400">{r.inPit ? "PIT" : "—"}</td>
                 </tr>
                 </Fragment>
               ))}

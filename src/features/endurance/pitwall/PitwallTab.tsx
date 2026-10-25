@@ -21,6 +21,7 @@ import { StandingsWidget } from "./StandingsWidget";
 import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
 import { LiveTrackPanel } from "./LiveTrackPanel";
 import { RaceTelemetryStrip } from "./RaceTelemetryStrip";
+import { PaceGraph } from "./PaceGraph";
 import { deriveStandings } from "./standings";
 import { useMemo, useCallback, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -90,6 +91,19 @@ export const PitwallTab = ({ event }: Props) => {
   const lapTimes = events
     .map((event) => event.lap_time_from_deltas_s ?? Number(event.payload?.lastLapTimeSeconds))
     .filter((n) => Number.isFinite(n) && n > 0) as number[];
+
+  const pitLaps = new Set(
+    events.filter((event) => event.event_type === 'pit_entry').map((event) => event.completed_laps),
+  );
+  const pacePoints = events
+    .filter((event) => event.event_type === 'lap_completed')
+    .map((event) => ({
+      lap: event.completed_laps ?? 0,
+      seconds: event.lap_time_from_deltas_s ?? Number(event.payload?.lastLapTimeSeconds),
+    }))
+    .filter((point) => Number.isFinite(point.seconds) && point.seconds > 0)
+    .slice(-60)
+    .map((point) => ({ ...point, marker: pitLaps.has(point.lap) ? ('pit' as const) : undefined }));
   const teams = isDemo ? demo.teams : teamQuery.data ?? [];
   const plannedStints = isDemo ? demo.plannedStints : real.plannedStints;
   const alerts = isDemo ? demo.alerts : real.alerts;
@@ -282,13 +296,13 @@ export const PitwallTab = ({ event }: Props) => {
         </div>
         <div className="min-w-0 space-y-3">
           <LiveTrackPanel v3={isDemo ? null : real.v3 ?? null} live={isLive} fallbackTrack={[event.circuit, event.configuration].filter(Boolean).join(' - ')} />
-          <VehicleTelemetryPanel key={`${event.id}:${selectedTeamId}`} v3={isDemo ? null : real.v3 ?? null} live={isLive} />
+          <PaceGraph points={pacePoints} />
         </div>
       </div>
 
       {strategy && (
         <>
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
             <FuelPanel strategy={strategy} />
             <PitStrategyBlock
               strategy={strategy}
@@ -297,6 +311,7 @@ export const PitwallTab = ({ event }: Props) => {
               nextDriverName={nextDriverName}
             />
             <RacePositionPanel strategy={strategy} position={position} />
+            <VehicleTelemetryPanel key={`${event.id}:${selectedTeamId}`} v3={isDemo ? null : real.v3 ?? null} live={isLive} />
           </div>
 
           {/* Strategie is het tweede grote paneel; pace en stint zijn naslag. */}
