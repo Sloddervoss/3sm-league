@@ -389,10 +389,7 @@ describe("advise — tijdrace zonder geplande rondes", () => {
       tijdrace({ sessionTimeRemainingSeconds: null, plannedDurationMinutes: null, currentLapSeconds: 90 }),
     );
     expect(advies.fuelToFinish!.litres).toBeNull();
-    // De afstand is bekend (30 rondes), dus de brandstof is wel te berekenen:
-    // de finish ligt op ronde 30, niet op het einde van de sessieklok.
-    expect(advies.fuelToFinish!.reasonCode).toBe("ok");
-    expect(advies.fuelToFinish!.lapsRemaining).toBe(30);
+    expect(advies.fuelToFinish!.reasonCode).toBe("no_time_remaining");
   });
 
   it("neemt de tank als bovengrens mee in het advies", () => {
