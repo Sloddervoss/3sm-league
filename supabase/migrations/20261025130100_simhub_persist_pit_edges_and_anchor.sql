@@ -23,10 +23,10 @@
 -- Contract dat dit blok leest (S1, supabase/functions/_shared/vehicleTelemetry.ts;
 -- alle sleutels optioneel, ontbrekend = null en dan wordt er GEEN anker geschreven):
 --   vehicle.<corner>.wearPercent                 bestaat al
---   vehicle.<corner>.wearZones.{l,m,r}           nieuw  (12 zones)
---   vehicle.tyreSets.used                        nieuw  (TireSetsUsed, 0-based)
+--   tyres.wearPercent.<fl|fr|rl|rr>.{l,m,r}       nieuw  (12 zones)
+--   tyres.sets.used                               nieuw  (TireSetsUsed, 0-based)
 --   vehicle.tyreDataMode                         bestaat al ('last_available' | 'live')
---   environment.{trackTempCrew,airTemp,rubberState}  nieuw root-blok
+--   tyres.environment.{trackTempC,airTempC,rubberState}  nieuw
 --
 -- Hangt af van 20261025130000 (de tabel). Zonder die tabel faalt de eerste
 -- ronde met 42P01 binnen het exception-blok: het anker valt stil weg en
@@ -440,39 +440,39 @@ BEGIN
                                   THEN (p_v3_normalized#>>'{vehicle,rearLeft,wearPercent}')::numeric END;
               v_anchor_rr := CASE WHEN (p_v3_normalized#>>'{vehicle,rearRight,wearPercent}') ~ '^[0-9]+([.][0-9]+)?$'
                                   THEN (p_v3_normalized#>>'{vehicle,rearRight,wearPercent}')::numeric END;
-              v_zone_fl_l := CASE WHEN (p_v3_normalized#>>'{vehicle,frontLeft,wearZones,l}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,frontLeft,wearZones,l}')::numeric END;
-              v_zone_fl_m := CASE WHEN (p_v3_normalized#>>'{vehicle,frontLeft,wearZones,m}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,frontLeft,wearZones,m}')::numeric END;
-              v_zone_fl_r := CASE WHEN (p_v3_normalized#>>'{vehicle,frontLeft,wearZones,r}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,frontLeft,wearZones,r}')::numeric END;
-              v_zone_fr_l := CASE WHEN (p_v3_normalized#>>'{vehicle,frontRight,wearZones,l}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,frontRight,wearZones,l}')::numeric END;
-              v_zone_fr_m := CASE WHEN (p_v3_normalized#>>'{vehicle,frontRight,wearZones,m}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,frontRight,wearZones,m}')::numeric END;
-              v_zone_fr_r := CASE WHEN (p_v3_normalized#>>'{vehicle,frontRight,wearZones,r}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,frontRight,wearZones,r}')::numeric END;
-              v_zone_rl_l := CASE WHEN (p_v3_normalized#>>'{vehicle,rearLeft,wearZones,l}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,rearLeft,wearZones,l}')::numeric END;
-              v_zone_rl_m := CASE WHEN (p_v3_normalized#>>'{vehicle,rearLeft,wearZones,m}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,rearLeft,wearZones,m}')::numeric END;
-              v_zone_rl_r := CASE WHEN (p_v3_normalized#>>'{vehicle,rearLeft,wearZones,r}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,rearLeft,wearZones,r}')::numeric END;
-              v_zone_rr_l := CASE WHEN (p_v3_normalized#>>'{vehicle,rearRight,wearZones,l}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,rearRight,wearZones,l}')::numeric END;
-              v_zone_rr_m := CASE WHEN (p_v3_normalized#>>'{vehicle,rearRight,wearZones,m}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,rearRight,wearZones,m}')::numeric END;
-              v_zone_rr_r := CASE WHEN (p_v3_normalized#>>'{vehicle,rearRight,wearZones,r}') ~ '^[0-9]+([.][0-9]+)?$'
-                                    THEN (p_v3_normalized#>>'{vehicle,rearRight,wearZones,r}')::numeric END;
-              v_anchor_track := CASE WHEN (p_v3_normalized#>>'{environment,trackTempCrew}') ~ '^-?[0-9]+([.][0-9]+)?$'
-                                     THEN (p_v3_normalized#>>'{environment,trackTempCrew}')::numeric END;
-              v_anchor_air   := CASE WHEN (p_v3_normalized#>>'{environment,airTemp}') ~ '^-?[0-9]+([.][0-9]+)?$'
-                                     THEN (p_v3_normalized#>>'{environment,airTemp}')::numeric END;
-              v_anchor_rubber := CASE WHEN char_length(btrim(coalesce(p_v3_normalized#>>'{environment,rubberState}',''))) BETWEEN 1 AND 64
-                                      THEN btrim(p_v3_normalized#>>'{environment,rubberState}') END;
+              v_zone_fl_l := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,fl,l}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,fl,l}')::numeric END;
+              v_zone_fl_m := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,fl,m}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,fl,m}')::numeric END;
+              v_zone_fl_r := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,fl,r}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,fl,r}')::numeric END;
+              v_zone_fr_l := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,fr,l}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,fr,l}')::numeric END;
+              v_zone_fr_m := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,fr,m}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,fr,m}')::numeric END;
+              v_zone_fr_r := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,fr,r}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,fr,r}')::numeric END;
+              v_zone_rl_l := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,rl,l}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,rl,l}')::numeric END;
+              v_zone_rl_m := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,rl,m}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,rl,m}')::numeric END;
+              v_zone_rl_r := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,rl,r}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,rl,r}')::numeric END;
+              v_zone_rr_l := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,rr,l}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,rr,l}')::numeric END;
+              v_zone_rr_m := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,rr,m}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,rr,m}')::numeric END;
+              v_zone_rr_r := CASE WHEN (p_v3_normalized#>>'{tyres,wearPercent,rr,r}') ~ '^[0-9]+([.][0-9]+)?$'
+                                    THEN (p_v3_normalized#>>'{tyres,wearPercent,rr,r}')::numeric END;
+              v_anchor_track := CASE WHEN (p_v3_normalized#>>'{tyres,environment,trackTempC}') ~ '^-?[0-9]+([.][0-9]+)?$'
+                                     THEN (p_v3_normalized#>>'{tyres,environment,trackTempC}')::numeric END;
+              v_anchor_air   := CASE WHEN (p_v3_normalized#>>'{tyres,environment,airTempC}') ~ '^-?[0-9]+([.][0-9]+)?$'
+                                     THEN (p_v3_normalized#>>'{tyres,environment,airTempC}')::numeric END;
+              v_anchor_rubber := CASE WHEN char_length(btrim(coalesce(p_v3_normalized#>>'{tyres,environment,rubberState}',''))) BETWEEN 1 AND 64
+                                      THEN btrim(p_v3_normalized#>>'{tyres,environment,rubberState}') END;
               v_anchor_source := p_v3_normalized#>>'{vehicle,tyreDataMode}';
-              v_anchor_sets   := CASE WHEN (p_v3_normalized#>>'{vehicle,tyreSets,used}') ~ '^[0-9]+$'
-                                      THEN (p_v3_normalized#>>'{vehicle,tyreSets,used}')::integer END;
+              v_anchor_sets   := CASE WHEN (p_v3_normalized#>>'{tyres,sets,used}') ~ '^[0-9]+$'
+                                      THEN (p_v3_normalized#>>'{tyres,sets,used}')::integer END;
 
               -- stint_no en tyre_set_no komen uit het vorige anker van DEZELFDE
               -- run, niet uit de lap-samples: de lap-sample heeft geen setbegrip
