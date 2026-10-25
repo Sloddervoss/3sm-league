@@ -1,6 +1,7 @@
 import { averageLapSecondsFromLaps } from "./fuelToFinish";
 import type { PitwallStrategyRow, V3Normalized } from "../pitwallHelpers";
 import type { TyreSample } from "./tyreWear";
+import type { TyreEstimate } from "./tyreGrade";
 import type { StrategySnapshot } from "./types";
 
 /**
@@ -31,6 +32,12 @@ export interface SnapshotInput {
   averageLapSeconds?: number | null;
   /** Bandenslijtage per ronde, oud naar nieuw; leeg als er nog geen reeks is. */
   tyreSamples?: TyreSample[];
+  /**
+   * Het bandenbeeld uit de RPC (`tyre_estimate`, S2). Ontbreekt het veld — oude
+   * server, of een event zonder ankertabel — dan blijft het null en valt de
+   * motor terug op de live reeks. Nooit een leeg object dat als meting leest.
+   */
+  tyreEstimate?: TyreEstimate | null;
 }
 
 export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
@@ -93,6 +100,7 @@ export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
     tyreSeconds: input.tyreSeconds ?? null,
     reserveLaps: input.reserveLaps,
     tyreSamples: input.tyreSamples ?? [],
+    tyreEstimate: input.tyreEstimate ?? null,
   };
 }
 

@@ -3,6 +3,7 @@ import type { PitwallStrategyRow, V3Normalized } from "./pitwallHelpers";
 import { advise, buildStrategySnapshot } from "./strategy";
 import type { Advice } from "./strategy/types";
 import { recordTyreSample, type TyreSample } from "./strategy/tyreWear";
+import type { TyreEstimate } from "./strategy/tyreGrade";
 
 /**
  * Dunne laag tussen de bestaande pitwalldata en de rekenkern.
@@ -22,6 +23,8 @@ export interface PitwallStrategyInput {
   fuelPerLapSamples?: number[];
   /** Bandenslijtage per ronde uit de server, als die er al is. */
   tyreSamples?: TyreSample[];
+  /** Het bandenbeeld uit de pitwall-RPC (`tyre_estimate`, S2); null als het er niet is. */
+  tyreEstimate?: TyreEstimate | null;
   nowMs?: number;
 }
 
@@ -36,6 +39,7 @@ export function usePitwallStrategy(input: PitwallStrategyInput): Advice {
     tyreSeconds,
     fuelPerLapSamples,
     tyreSamples,
+    tyreEstimate,
     nowMs,
   } = input;
 
@@ -58,6 +62,7 @@ export function usePitwallStrategy(input: PitwallStrategyInput): Advice {
         tyreSeconds,
         fuelPerLapSamples,
         tyreSamples: samples,
+        tyreEstimate: tyreEstimate ?? null,
       }),
     );
   }, [
@@ -70,6 +75,7 @@ export function usePitwallStrategy(input: PitwallStrategyInput): Advice {
     tyreSeconds,
     fuelPerLapSamples,
     tyreSamples,
+    tyreEstimate,
     nowMs,
   ]);
 }

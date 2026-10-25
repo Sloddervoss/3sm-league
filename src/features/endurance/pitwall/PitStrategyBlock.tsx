@@ -1,17 +1,28 @@
 import type { PitwallStrategyRow } from "./pitwallHelpers";
-import { strategyStatusInfo, formatFuel, formatLaps, calcPitLap } from "./pitwallHelpers";
+import { strategyStatusInfo, formatFuel } from "./pitwallHelpers";
 import type { PitStopMeasurement } from "./strategy/types";
 
 interface Props {
   strategy: PitwallStrategyRow | null;
-  currentFuel: number | null;
   driverName: string | null;
   nextDriverName?: string | null;
   /** Punt 9: gemeten pitlanetijd; null zolang er geen stop gemeten is. */
   pitLoss?: PitStopMeasurement | null;
 }
 
-export const PitStrategyBlock = ({ strategy, currentFuel, driverName, nextDriverName, pitLoss }: Props) => {
+/**
+ * De pitactie van deze stint.
+ *
+ * Dit blok telt niets meer af en noemt geen tweede brandstofgetal. `PIT IN n`,
+ * `fuelLaps.toFixed(1) ronden` en `formatLaps(fuelLaps) over` waren drie
+ * formuleringen van dezelfde tank, uit een andere formule dan `advise()`
+ * gebruikt; de aftelling staat nu in `DecisionBand` en nergens anders.
+ *
+ * `Banden: wisselen` is er ook uit: dat was een vast label dat bij een verse set
+ * gewoon onwaar was. Wat een band moet doen hangt aan zijn graad en staat in de
+ * beslissingsband. Wat hier overblijft is pitstraat, pitactie en coureurwissel.
+ */
+export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss }: Props) => {
   if (!strategy) {
     return (
       <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
@@ -23,10 +34,7 @@ export const PitStrategyBlock = ({ strategy, currentFuel, driverName, nextDriver
   const status = strategyStatusInfo(strategy.strategy_status, strategy.strategy_reason);
   const isLowData = strategy.strategy_status === "low_sample";
   const isInsufficient = strategy.strategy_status === "insufficient_data";
-  const completedLaps = strategy.last_completed_laps;
   const fuelLaps = strategy.fuel_laps_remaining;
-  const pitLap = calcPitLap(completedLaps, fuelLaps);
-  const pitInLaps = pitLap != null && completedLaps != null ? Math.max(0, pitLap - completedLaps) : null;
   const isPitThisLap = fuelLaps != null && fuelLaps < 1.5;
 
   const fuelToAdd = strategy.fuel_to_add_litres ?? null;
@@ -45,9 +53,7 @@ export const PitStrategyBlock = ({ strategy, currentFuel, driverName, nextDriver
         <div className="text-center mb-3">
           <div className="text-[10px] font-black uppercase tracking-widest text-red-400">PIT ACTIE</div>
           <div className="mt-0.5 text-2xl font-black text-red-300 tracking-tight">PIT DEZE RONDE</div>
-          <div className="mt-0.5 text-xs text-gray-400">
-            {formatFuel(strategy.current_fuel_litres ?? 0)} — {fuelLaps != null ? `${fuelLaps.toFixed(1)} ronden` : "—"}
-          </div>
+          <div className="mt-0.5 text-xs text-gray-400">Deadline en aftelling staan in de beslissingsband.</div>
         </div>
       ) : isLowData ? (
         <div className="mb-3">
@@ -66,16 +72,8 @@ export const PitStrategyBlock = ({ strategy, currentFuel, driverName, nextDriver
       ) : (
         <div className="mb-3">
           <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">PIT ACTIE</div>
-          {pitInLaps != null && (
-            <div className="mt-0.5 text-3xl font-black text-white tracking-tight leading-none">
-              PIT IN {pitInLaps}
-            </div>
-          )}
-          {pitLap != null && (
-            <div className="mt-0.5 text-xs text-gray-500">
-              Ronde {pitLap}{fuelLaps != null ? ` — ${formatLaps(fuelLaps)} over` : ""}
-            </div>
-          )}
+          <div className="mt-0.5 text-lg font-bold text-white tracking-tight">{status.label}</div>
+          <div className="mt-0.5 text-xs text-gray-500">Deadline en aftelling staan in de beslissingsband.</div>
         </div>
       )}
 
@@ -83,7 +81,6 @@ export const PitStrategyBlock = ({ strategy, currentFuel, driverName, nextDriver
       {!isLowData && !isInsufficient && (
         <div className="flex gap-2 text-sm mb-3">
           <ActionItem label="Brandstof" value={showFuelToAdd ? `+${formatFuel(fuelToAdd)}` : "—"} />
-          <ActionItem label="Banden" value="wisselen" />
           <ActionItem
             label="Coureur"
             value={

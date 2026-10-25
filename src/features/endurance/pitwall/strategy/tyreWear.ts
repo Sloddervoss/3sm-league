@@ -48,8 +48,26 @@ export interface TyreWearRate {
   reliable: boolean;
   /** Het wiel dat de levensduur bepaalt; null als er geen meting is. */
   weakestCorner: TyreCorner | null;
+  /** Restpercentage van dat wiel bij de laatste meting; null zonder meting. */
+  weakestRestPct: number | null;
   /** Langste reeks opeenvolgende metingen met exact dezelfde waarde. */
   stalledLaps: number;
+  /**
+   * Ronde waarin die stilstaande reeks begon; null als er geen stilstand is.
+   * Zonder dit getal kan de UI alleen zeggen "het staat stil", niet sinds wanneer.
+   */
+  stalledFromLap: number | null;
+  /**
+   * Onzekerheid van de wear-schatting in procentpunten.
+   *
+   * Uit de residuen van de reeks tegen de gefitte mediaanhelling, met de vloer
+   * uit `plan-03` (`SIGMA_ANKER_4 = 0,30` pp): een resolutie van 0,1 pp plus één
+   * ronde transport is de kleinste fout die we durven te claimen. Nooit null
+   * zodra er een helling is — een getal zonder die onzekerheid is een belofte.
+   */
+  sigmaWear: number | null;
+  /** Diezelfde onzekerheid in rondes: `sigmaWear / wearPerLap`. */
+  sigmaLaps: number | null;
   reasonCode:
     | "ok"
     | "too_few_samples"
@@ -72,6 +90,14 @@ const MAX_PLAUSIBLE_WEAR_PER_LAP = 5;
  * hooguit twee keer gelijk blijven; drie keer is stilstand.
  */
 const STALLED_RUN = 3;
+/** Mediaan absolute afwijking naar standaardafwijking. */
+const MAD_SCALE = 1.4826;
+/**
+ * Kleinste meetfout die we durven te claimen: 0,1 pp resolutie plus één ronde
+ * transport. Dit is `SIGMA_ANKER_4` uit plan-03 en de ondergrens van elke
+ * bandbreedte — ook als de residuen toevallig nul zijn.
+ */
+const SIGMA_ANKER_FLOOR_PP = 0.3;
 
 export function tyreWearRate(input: TyreSample[]): TyreWearRate {
   const bruikbaar = dedupeByLap(
@@ -90,7 +116,11 @@ export function tyreWearRate(input: TyreSample[]): TyreWearRate {
     samples,
     reliable: false,
     weakestCorner: null,
+    weakestRestPct: null,
     stalledLaps: 0,
+    stalledFromLap: null,
+    sigmaWear: null,
+    sigmaLaps: null,
     reasonCode,
     ...extra,
   });
@@ -112,15 +142,24 @@ export function tyreWearRate(input: TyreSample[]): TyreWearRate {
   const reeks = laatsteSet.map((s) => s[hoek]);
 
   const stilstaand = longestEqualRun(reeks);
+  const stilStart = stilstaand.length >= STALLED_RUN ? laatsteSet[stilstaand.start].lap : null;
   // Een reeks die helemaal niet beweegt is geen kapotte meting maar een band die
   // (nog) niet slijt. Staat de waarde een paar rondes stil en verspringt hij
   // daarna wél, dan ververst de bron niet per ronde — en dan is elke snelheid
   // per ronde een gemiddelde van de update, niet van de slijtage.
-  if (stilstaand === reeks.length) {
-    return leeg("not_wearing", laatsteSet.length, { weakestCorner: hoek, stalledLaps: stilstaand });
+  if (stilstaand.length === reeks.length) {
+    return leeg("not_wearing", laatsteSet.length, {
+      weakestCorner: hoek,
+      stalledLaps: stilstaand.length,
+      stalledFromLap: laatsteSet[0].lap,
+    });
   }
-  if (stilstaand >= STALLED_RUN) {
-    return leeg("stalled_values", laatsteSet.length, { weakestCorner: hoek, stalledLaps: stilstaand });
+  if (stilstaand.length >= STALLED_RUN) {
+    return leeg("stalled_values", laatsteSet.length, {
+      weakestCorner: hoek,
+      stalledLaps: stilstaand.length,
+      stalledFromLap: stilStart,
+    });
   }
 
   const rates: number[] = [];
@@ -135,12 +174,12 @@ export function tyreWearRate(input: TyreSample[]): TyreWearRate {
   }
 
   if (rates.length < 3) {
-    return leeg("not_wearing", laatsteSet.length, { weakestCorner: hoek, stalledLaps: stilstaand });
+    return leeg("not_wearing", laatsteSet.length, { weakestCorner: hoek, stalledLaps: stilstaand.length });
   }
 
   const mediaan = median(rates);
   if (mediaan <= 0 || mediaan > MAX_PLAUSIBLE_WEAR_PER_LAP) {
-    return leeg("implausible", laatsteSet.length, { weakestCorner: hoek, stalledLaps: stilstaand });
+    return leeg("implausible", laatsteSet.length, { weakestCorner: hoek, stalledLaps: stilstaand.length });
   }
 
   // Eén stap die ver uit de pas loopt met de rest is geen slijtage maar een
@@ -148,8 +187,15 @@ export function tyreWearRate(input: TyreSample[]): TyreWearRate {
   // boven al afgevangen: dan is de mediaan zelf onmogelijk.
   const uitschieter = Math.max(TYRE_DROP_JUMP, mediaan * 4);
   if (rates.some((rate) => rate > uitschieter)) {
-    return leeg("jump", laatsteSet.length, { weakestCorner: hoek, stalledLaps: stilstaand });
+    return leeg("jump", laatsteSet.length, { weakestCorner: hoek, stalledLaps: stilstaand.length });
   }
+
+  // Hoeveel de meting zelf kan afwijken. De residuen tegen de gefitte lijn zijn
+  // de meetruis; de vloer is de resolutie van de bron (0,1 pp) plus één ronde
+  // transport, precies de σ_anker uit plan-03. Zonder deze term zou een perfect
+  // rechte reeks een band van 0 rondes krijgen en dat is geen meting maar een
+  // aanname.
+  const sigmaWear = Math.max(SIGMA_ANKER_FLOOR_PP, residualSigma(laatsteSet, reeks, mediaan));
 
   return {
     wearPerLap: round(mediaan, 4),
@@ -158,9 +204,26 @@ export function tyreWearRate(input: TyreSample[]): TyreWearRate {
     // Vier metingen en een mediaan die niet op één uitschieter rust.
     reliable: laatsteSet.length >= 4 && rates.length >= 3,
     weakestCorner: hoek,
-    stalledLaps: stilstaand,
+    weakestRestPct: reeks[reeks.length - 1],
+    stalledLaps: stilstaand.length,
+    stalledFromLap: stilStart,
+    sigmaWear: round(sigmaWear, 3),
+    sigmaLaps: round(sigmaWear / mediaan, 3),
     reasonCode: "ok",
   };
+}
+
+/**
+ * Meetruis van de wear-reeks rond de gefitte helling, als MAD.
+ *
+ * De mediaanhelling is robuust, maar zegt niets over hoe goed de punten op die
+ * lijn liggen. Dat is precies wat de graad nodig heeft: twee reeksen met dezelfde
+ * helling kunnen een heel verschillende bandbreedte hebben.
+ */
+function residualSigma(samples: TyreSample[], values: number[], rate: number): number {
+  const intercept = median(samples.map((s, i) => values[i] + rate * s.lap));
+  const residuen = samples.map((s, i) => Math.abs(values[i] - (intercept - rate * s.lap)));
+  return median(residuen) * MAD_SCALE;
 }
 
 export type TyreAction = "NO_CHANGE" | "CHANGE_AT_PLANNED_STOP" | "CHANGE_BEFORE_PLANNED_STOP" | "NO_ADVICE";
@@ -315,14 +378,20 @@ export function weakestCorner(sample: TyreSample): TyreCorner {
   return hoeken.reduce((zwak, nu) => (nu[1] < zwak[1] ? nu : zwak))[0];
 }
 
-function longestEqualRun(values: number[]): number {
-  let langste = values.length > 0 ? 1 : 0;
-  let huidig = 1;
+function longestEqualRun(values: number[]): { length: number; start: number } {
+  let beste = { length: values.length > 0 ? 1 : 0, start: 0 };
+  let lengte = 1;
+  let start = 0;
   for (let i = 1; i < values.length; i += 1) {
-    huidig = values[i] === values[i - 1] ? huidig + 1 : 1;
-    if (huidig > langste) langste = huidig;
+    if (values[i] === values[i - 1]) {
+      lengte += 1;
+    } else {
+      lengte = 1;
+      start = i;
+    }
+    if (lengte > beste.length) beste = { length: lengte, start };
   }
-  return langste;
+  return beste;
 }
 
 function dedupeByLap(samples: TyreSample[]): TyreSample[] {

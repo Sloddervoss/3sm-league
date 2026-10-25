@@ -7,6 +7,7 @@
  */
 
 import type { TyreAdvice, TyreSample } from "./tyreWear";
+import type { LapRange, TyreEstimate } from "./tyreGrade";
 
 export type Confidence = "high" | "medium" | "low" | "none";
 
@@ -166,6 +167,39 @@ export interface StrategySnapshot {
    * dan is er geen bandenadvies en zegt de band dat ook.
    */
   tyreSamples?: TyreSample[];
+  /**
+   * Het bandenbeeld uit de pitwall-RPC (`tyre_estimate`, S2). Ontbreekt het —
+   * bijvoorbeeld bij een oudere server — dan valt de motor terug op de live
+   * reeks, met dezelfde vorm maar een voorzichtiger graad.
+   */
+  tyreEstimate?: TyreEstimate | null;
+}
+
+/** Wie de stop bepaalt: de band, de tank, of geen van beide. */
+export type BindingConstraint = "tyres" | "fuel" | "both";
+
+/**
+ * Eén grens in dezelfde eenheid als de andere: rondes tot de grens.
+ *
+ * `range` is de onzekerheid in diezelfde eenheid, niet in procentpunten — anders
+ * staan er weer twee eenheden naast elkaar.
+ */
+export interface TyreFuelRow {
+  /** Rondes tot de grens, in hele rondes en naar beneden afgerond. */
+  laps: number | null;
+  /** Bereik in rondes, als de onzekerheid bekend is. */
+  range: LapRange | null;
+  /** Waar de grens ligt: 40 (restpercentage) of 0 (kaal). Null als onbekend. */
+  limitPct: number | null;
+}
+
+/**
+ * De twee grenzen naast elkaar. `TyreFuelCompare` rendert dit en rekent niets:
+ * de getallen hier zijn exact de getallen waarmee `advise()` beslist.
+ */
+export interface TyreFuelComparison {
+  tyres: TyreFuelRow;
+  fuel: TyreFuelRow;
 }
 
 export interface Advice {
@@ -196,4 +230,10 @@ export interface Advice {
    * staat er een reden in plaats van een getal.
    */
   tyres?: TyreAdvice | null;
+  /** Wie de stop bepaalt; de harde invariant is `lapsUntilPit === min(band, tank)`. */
+  binding?: BindingConstraint | null;
+  /** De twee grenzen in dezelfde eenheid, voor `TyreFuelCompare`. */
+  tyreFuel?: TyreFuelComparison | null;
+  /** Het bandenbeeld met zijn graad; null als er niets gemeten is. */
+  tyreEstimate?: TyreEstimate | null;
 }

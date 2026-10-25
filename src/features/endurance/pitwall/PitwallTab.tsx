@@ -9,6 +9,8 @@ import type { EnduranceEvent } from "../core/types";
 import { usePitwallData } from "./usePitwallData";
 import { getDemoData, DEMO_SCENARIO_LIST, type DemoScenario, type DemoData } from "./pitwallDemoData";
 import { TopRaceBar } from "./TopRaceBar";
+import { DecisionBand } from "./DecisionBand";
+import { usePitwallStrategy } from "./usePitwallStrategy";
 import { PitStrategyBlock } from "./PitStrategyBlock";
 import { FuelPanel } from "./FuelPanel";
 import { StintDriverPanel } from "./StintDriverPanel";
@@ -161,6 +163,23 @@ export const PitwallTab = ({ event }: Props) => {
     void document.documentElement.requestFullscreen?.().catch(() => { /* browser denied fullscreen */ });
   }, []);
 
+  /* De beslissingsband rekent met dezelfde motor als het advies: één snapshot,
+   * één grens. `lapsUntilPit` komt hier vandaan en wordt in de panelen niet
+   * opnieuw uitgerekend — anders staan er twee getallen over dezelfde tank.
+   *
+   * Het aantal geplande rondes is de som van wat er gereden is en wat de server
+   * nog als resterend meldt; is één van beide onbekend, dan blijft het null en
+   * rekent de motor met de sessieklok. */
+  const advice = usePitwallStrategy({
+    strategy,
+    v3: isDemo ? null : real.v3 ?? null,
+    tyreEstimate: isDemo ? null : real.tyreEstimate,
+    plannedLaps:
+      strategy?.session_laps_remaining != null && strategy?.last_completed_laps != null
+        ? strategy.session_laps_remaining + strategy.last_completed_laps
+        : null,
+  });
+
   return (
     /* data-pitwall + data-pitwall-focus for CSS targeting */
     <div className={isFocusMode ? "space-y-2 w-full" : "space-y-3"} data-pitwall="true" data-pitwall-focus={isFocusMode ? "true" : undefined}>
@@ -282,6 +301,9 @@ export const PitwallTab = ({ event }: Props) => {
         />
       )}
 
+      {/* === BESLISSINGSBAND — de enige plek met een advies en met rondes === */}
+      {strategy && <DecisionBand advice={advice} />}
+
       {loading && !strategy && (
         <p className="text-sm text-gray-500">Pitwall laden…</p>
       )}
@@ -317,13 +339,17 @@ export const PitwallTab = ({ event }: Props) => {
             <FuelPanel strategy={strategy} />
             <PitStrategyBlock
               strategy={strategy}
-              currentFuel={strategy.current_fuel_litres}
               driverName={driverName}
               nextDriverName={nextDriverName}
               pitLoss={isDemo ? null : real.pitStopMeasurement}
             />
             <RacePositionPanel strategy={strategy} position={position} />
-            <VehicleTelemetryPanel key={`${event.id}:${selectedTeamId}`} v3={isDemo ? null : real.v3 ?? null} live={isLive} />
+            <VehicleTelemetryPanel
+              key={`${event.id}:${selectedTeamId}`}
+              v3={isDemo ? null : real.v3 ?? null}
+              live={isLive}
+              tyreEstimate={isDemo ? null : real.tyreEstimate}
+            />
           </div>
 
           {/* Strategie is het tweede grote paneel; pace en stint zijn naslag. */}

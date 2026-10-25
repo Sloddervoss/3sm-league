@@ -6,8 +6,15 @@ import {
 } from "./fuelModel";
 import { computePitLoss } from "./pitLoss";
 import { computePitWindow } from "./pitWindow";
+import { clientTyreEstimate, type TyreEstimate } from "./tyreGrade";
 import { adviseTyreChange, type TyreAdvice } from "./tyreWear";
-import type { Advice, Confidence, StrategySnapshot } from "./types";
+import type {
+  Advice,
+  BindingConstraint,
+  Confidence,
+  StrategySnapshot,
+  TyreFuelComparison,
+} from "./types";
 
 /**
  * Het advies.
@@ -16,10 +23,23 @@ import type { Advice, Confidence, StrategySnapshot } from "./types";
  * wordt gekozen, en elke uitkomst draagt een reason_code zodat de UI kan uitleggen
  * waarom. Liever "geen advies" met een oorzaak dan een getal dat niet te
  * onderbouwen is.
+ *
+ * Er is één grens en die wordt hier één keer getrokken. Banden en tank staan
+ * allebei in dezelfde eenheid — rondes tot hun grens — en `lapsUntilPit` is per
+ * definitie de kleinste van de twee (`bindingConstraint`). Wie dat getal in de
+ * UI opnieuw uitrekent, krijgt twee getallen die het niet eens zijn; dat is de
+ * duurste faalvorm van dit paneel.
  */
 
 /** Boven deze leeftijd is de meting te oud om op te sturen. */
 const MAX_SAMPLE_AGE_SECONDS = 5;
+
+/**
+ * Twee grenzen die minder dan een halve ronde verschillen zijn in hele rondes
+ * dezelfde grens. Dan is de eerlijke uitspraak "beide", niet een pijltje dat
+ * elke ronde van kant wisselt.
+ */
+const BINDING_TIE_LAPS = 0.5;
 
 function confidenceFor(snapshot: StrategySnapshot, samples: number, sigma: number | null, perLap: number | null): Confidence {
   if (snapshot.sampleAgeSeconds > MAX_SAMPLE_AGE_SECONDS) return "none";
@@ -74,6 +94,41 @@ export function lapsToFinish(snapshot: StrategySnapshot): number | null {
   return Math.ceil(resterend / rondetijd);
 }
 
+export interface BindingInput {
+  /** Rondes tot de bandengrens; null als de graad geen getal toelaat (C/D). */
+  tyreLaps: number | null;
+  /** Rondes tot de tankgrens; null als de tankinhoud onbekend is. */
+  fuelLaps: number | null;
+}
+
+export interface BindingResult {
+  binding: BindingConstraint | null;
+  /** De bindende grens; altijd `min(tyreLaps, fuelLaps)` van wat bekend is. */
+  laps: number | null;
+}
+
+/**
+ * De enige selector tussen de twee grenzen.
+ *
+ * Harde invariant, en de hele reden dat deze functie bestaat:
+ * `laps === min(band, tank)`. Onbekend telt niet als oneindig en ook niet als
+ * nul — is één van de twee onbekend, dan is de ander de grens en zegt `binding`
+ * welke dat is. Zijn ze allebei onbekend, dan is er geen grens en geen advies.
+ */
+export function bindingConstraint(input: BindingInput): BindingResult {
+  const { tyreLaps, fuelLaps } = input;
+  if (tyreLaps == null && fuelLaps == null) return { binding: null, laps: null };
+  if (tyreLaps == null) return { binding: "fuel", laps: fuelLaps };
+  if (fuelLaps == null) return { binding: "tyres", laps: tyreLaps };
+
+  if (Math.abs(tyreLaps - fuelLaps) < BINDING_TIE_LAPS) {
+    return { binding: "both", laps: Math.min(tyreLaps, fuelLaps) };
+  }
+  return tyreLaps < fuelLaps
+    ? { binding: "tyres", laps: tyreLaps }
+    : { binding: "fuel", laps: fuelLaps };
+}
+
 export function advise(snapshot: StrategySnapshot): Advice {
   const reserve = snapshot.reserveLaps ?? 0.5;
   const fuel = estimateFuelPerLap(snapshot.fuelPerLapSamples, snapshot.fuelPerLapPrior);
@@ -81,6 +136,20 @@ export function advise(snapshot: StrategySnapshot): Advice {
   const resterend = lapsToFinish(snapshot);
   const voorraad = computeLapsOnFuel(snapshot.fuelLitres, perLap, reserve);
   const tyreSamples = snapshot.tyreSamples ?? [];
+
+  /**
+   * Het bandenbeeld: de servermeting als die er is, anders de live reeks met
+   * dezelfde vorm en een voorzichtiger graad. Nooit een getal zonder graad.
+   */
+  const tyreEstimate: TyreEstimate = snapshot.tyreEstimate ?? clientTyreEstimate(tyreSamples);
+
+  /**
+   * De bandengrens in rondes. Alleen graad A en B mogen een getal leveren; C en
+   * D leveren een bereik of een oorzaak, en dan is de tank de enige grens.
+   */
+  const tyreLapsRaw =
+    tyreEstimate.grade === "A" || tyreEstimate.grade === "B" ? tyreEstimate.lapsToThreshold : null;
+  const tyreLaps = tyreLapsRaw == null ? null : Math.max(0, Math.floor(tyreLapsRaw));
 
   // Dezelfde invoer, maar dan in tijd: dit is het getal dat een tijdrace wél
   // kan geven terwijl `session_laps_remaining` leeg blijft.
@@ -128,6 +197,9 @@ export function advise(snapshot: StrategySnapshot): Advice {
     lapsToFinish: resterend,
     fuelToFinish: brandstofTotFinish,
     tyres,
+    binding: null,
+    tyreFuel: null,
+    tyreEstimate,
   });
 
   if (snapshot.sampleAgeSeconds > MAX_SAMPLE_AGE_SECONDS) {
@@ -196,40 +268,48 @@ export function advise(snapshot: StrategySnapshot): Advice {
     return leeg("no_range", "Brandstofvoorraad in rondes is niet te bepalen.");
   }
 
-  const laatsteMoment = window
-    ? window.latestLap - snapshot.lapsCompleted
-    : voorraad - 1;
+  // De tankgrens: één ronde marge op wat de tank meegaat, en nooit negatief.
+  const tankLaps = Math.max(0, voorraad - 1);
+  const binding = bindingConstraint({ tyreLaps, fuelLaps: tankLaps });
 
-  const totStop = Math.max(0, Math.min(laatsteMoment, voorraad - 1));
-  const blijftBuiten = resterend != null && voorraad >= resterend;
+  // Het bereik op de tank: dezelfde σ die de zekerheid bepaalt, in rondes.
+  const fuelRange =
+    snapshot.fuelLitres != null && fuel.sigma != null && fuel.sigma > 0 && perLap - fuel.sigma > 0
+      ? {
+          low: Math.max(0, Math.floor(snapshot.fuelLitres / (perLap + fuel.sigma) - reserve)),
+          high: Math.max(0, Math.floor(snapshot.fuelLitres / (perLap - fuel.sigma) - reserve)),
+        }
+      : null;
+  const fuelRangeNet =
+    fuelRange && fuelRange.high < fuelRange.low
+      ? { low: fuelRange.high, high: fuelRange.low }
+      : fuelRange;
 
-  // Het bandenadvies hangt aan dezelfde horizon als het advies zelf: haalt de
-  // tank de finish, dan moeten de banden dat ook; anders moeten ze de geplande
-  // stop halen en bepaalt de band of die stop naar voren moet.
+  const tyreFuel: TyreFuelComparison = {
+    tyres: { laps: tyreLaps, range: tyreEstimate.lapsRange, limitPct: tyreEstimate.limitPct },
+    fuel: { laps: tankLaps, range: fuelRangeNet, limitPct: 0 },
+  };
+
+  // Haalt de tank de finish? Dat is de vraag die het bandenadvies zijn horizon
+  // geeft: haalt de tank het, dan moeten de banden dat ook.
+  const haaltFinishOpTank = resterend != null && voorraad >= resterend;
   const tyres = adviseTyreChange({
     samples: tyreSamples,
-    horizon: blijftBuiten ? "finish" : "planned_stop",
-    mustSurviveLaps: blijftBuiten ? resterend : totStop,
+    horizon: haaltFinishOpTank ? "finish" : "planned_stop",
+    mustSurviveLaps: haaltFinishOpTank ? resterend : tankLaps,
   });
 
-  // De band is eerder op dan de geplande stop: dan wint de band, want een stop
-  // die je te laat plant is een stop die je alsnog moet maken.
-  const bandRondes = tyres.action === "CHANGE_BEFORE_PLANNED_STOP" ? tyres.lapsRemaining : null;
+  const blijftBuiten =
+    haaltFinishOpTank && (tyreLaps == null || tyreLaps >= resterend);
 
-  const bandStop = (laps: number) => ({
-    ...basis,
-    tyres,
-    decision: laps <= 0 ? ("PIT_THIS_LAP" as const) : ("PIT_IN_LAPS" as const),
-    lapsUntilPit: Math.max(0, laps),
-    reasonCode: "tyre_life",
-    reason: tyres.reason,
-  });
-
-  // De finish halen zonder te stoppen.
-  if (blijftBuiten && bandRondes == null) {
+  // De finish halen zonder te stoppen. Geen vergelijking nodig: één feit, één regel.
+  if (blijftBuiten) {
     return {
       ...basis,
       tyres,
+      binding: null,
+      tyreFuel,
+      tyreEstimate,
       decision: "STAY_OUT",
       lapsUntilPit: null,
       reasonCode: "fuel_to_finish",
@@ -237,32 +317,55 @@ export function advise(snapshot: StrategySnapshot): Advice {
     };
   }
 
-  if (blijftBuiten && bandRondes != null) {
-    return bandStop(bandRondes);
+  const laps = binding.laps;
+
+  if (laps == null) {
+    return leeg("no_range", "Brandstofvoorraad in rondes is niet te bepalen.");
   }
 
-  // Droogvallen: nu naar binnen.
-  if (voorraad <= 1) {
+  // De bindende grens is bereikt: nu naar binnen. Welke grens dat is, bepaalt de
+  // reden — de tank is pas "kritiek" als de tank het is.
+  if (laps <= 0) {
     return {
       ...basis,
       tyres,
+      binding: binding.binding,
+      tyreFuel,
+      tyreEstimate,
       decision: "PIT_THIS_LAP",
       lapsUntilPit: 0,
-      reasonCode: "fuel_critical",
-      reason: `Nog ${voorraad} ronde brandstof; wachten kan niet.`,
+      reasonCode: binding.binding === "tyres" ? "tyre_life" : "fuel_critical",
+      reason:
+        binding.binding === "tyres"
+          ? bandenZin(tyres, tyreEstimate, 0, binding.binding)
+          : `Nog ${voorraad} ronde brandstof; wachten kan niet.`,
     };
   }
 
-  if (bandRondes != null && bandRondes < totStop) {
-    return bandStop(bandRondes);
+  // De band is de grens (of allebei): de stop schuift naar voren.
+  if (binding.binding === "tyres" || binding.binding === "both") {
+    return {
+      ...basis,
+      tyres,
+      binding: binding.binding,
+      tyreFuel,
+      tyreEstimate,
+      decision: "PIT_IN_LAPS",
+      lapsUntilPit: laps,
+      reasonCode: "tyre_life",
+      reason: bandenZin(tyres, tyreEstimate, laps, binding.binding),
+    };
   }
 
   if (window?.saveRequired) {
     return {
       ...basis,
       tyres,
-      decision: totStop === 0 ? "PIT_THIS_LAP" : "PIT_IN_LAPS",
-      lapsUntilPit: totStop,
+      binding: binding.binding,
+      tyreFuel,
+      tyreEstimate,
+      decision: "PIT_IN_LAPS",
+      lapsUntilPit: laps,
       reasonCode: "fuel_save_required",
       reason: `Om met ${window.stopsRequired} stops te finish te halen moet je ${window.lapsToSave} ${window.lapsToSave === 1 ? "ronde" : "rondes"} sparen, of een extra stop accepteren.`,
     };
@@ -271,12 +374,35 @@ export function advise(snapshot: StrategySnapshot): Advice {
   return {
     ...basis,
     tyres,
-    decision: totStop === 0 ? "PIT_THIS_LAP" : "PIT_IN_LAPS",
-    lapsUntilPit: totStop,
+    binding: binding.binding,
+    tyreFuel,
+    tyreEstimate,
+    decision: "PIT_IN_LAPS",
+    lapsUntilPit: laps,
     reasonCode: window ? "in_window" : "fuel_based",
-    reason:
-      totStop === 0
-        ? "Deze ronde is het laatste redelijke moment."
-        : `Over ${totStop} ${totStop === 1 ? "ronde" : "rondes"} naar binnen voor brandstof.`,
+    reason: `Over ${laps} ${laps === 1 ? "ronde" : "rondes"} naar binnen voor brandstof.`,
   };
+}
+
+/**
+ * De zin bij een bandengrens.
+ *
+ * Als het bandenadvies zelf al een zin heeft, is dat de zin — één formulering per
+ * oorzaak. Anders zegt de motor het hier, met de graad erbij, zodat een A-getal
+ * en een B-getal niet als hetzelfde klinken.
+ */
+function bandenZin(
+  tyres: TyreAdvice,
+  estimate: TyreEstimate,
+  laps: number,
+  binding: BindingConstraint,
+): string {
+  if (binding === "both") {
+    return `Banden en tank zijn allebei op hun grens; wissel bij de stop van r${laps}.`;
+  }
+  if (tyres.action === "CHANGE_BEFORE_PLANNED_STOP") return tyres.reason;
+
+  const grens = estimate.limitPct === 0 ? "kaal" : `${estimate.limitPct ?? 40}%`;
+  const schatting = estimate.grade === "A" ? "" : " (geschat)";
+  return `Banden zijn over ${laps} ${laps === 1 ? "ronde" : "rondes"} op de grens van ${grens}${schatting}; de band bepaalt de stop.`;
 }
