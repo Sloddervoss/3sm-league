@@ -1,14 +1,17 @@
 import type { PitwallStrategyRow } from "./pitwallHelpers";
 import { strategyStatusInfo, formatFuel, formatLaps, calcPitLap } from "./pitwallHelpers";
+import type { PitStopMeasurement } from "./strategy/types";
 
 interface Props {
   strategy: PitwallStrategyRow | null;
   currentFuel: number | null;
   driverName: string | null;
   nextDriverName?: string | null;
+  /** Punt 9: gemeten pitlanetijd; null zolang er geen stop gemeten is. */
+  pitLoss?: PitStopMeasurement | null;
 }
 
-export const PitStrategyBlock = ({ strategy, currentFuel, driverName, nextDriverName }: Props) => {
+export const PitStrategyBlock = ({ strategy, currentFuel, driverName, nextDriverName, pitLoss }: Props) => {
   if (!strategy) {
     return (
       <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
@@ -92,6 +95,24 @@ export const PitStrategyBlock = ({ strategy, currentFuel, driverName, nextDriver
           />
         </div>
       )}
+
+      {/* Punt 9: gemeten tijd in de pitstraat. Geen meting = geen getal. */}
+      <div className="mb-2 flex items-baseline justify-between gap-2 text-[11px]">
+        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-500">Pitstraat</span>
+        {pitLoss?.pitLaneSeconds != null ? (
+          <span
+            className="font-bold text-white"
+            title={`Mediaan van ${pitLoss.sampleCount} gemeten ${pitLoss.sampleCount === 1 ? "stop" : "stops"}`}
+          >
+            {pitLoss.pitLaneSeconds.toFixed(1)} s
+            <span className="ml-1 font-normal text-gray-500">
+              ({pitLoss.sampleCount} {pitLoss.sampleCount === 1 ? "stop" : "stops"})
+            </span>
+          </span>
+        ) : (
+          <span className="text-gray-500">nog niet gemeten</span>
+        )}
+      </div>
 
       {/* STATUS */}
       <div className="flex items-center gap-1.5 text-[11px] pt-2 border-t border-white/5">

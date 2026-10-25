@@ -8,6 +8,7 @@ import type {
 } from "./pitwallHelpers";
 import { extractRaceClock } from "./pitwallHelpers";
 import { OpponentHistory } from "./opponentHistory";
+import { resolvePitStopMeasurement } from "./strategy/pitStops";
 
 /* ==========================================================================
  * REAL MODE: uses get_pitwall_data() RPC.
@@ -50,6 +51,14 @@ interface PitwallRpcResponse {
     captured_at?: string | null;
   }> | null;
   timeline: PitwallTimelineEvent[];
+  /** Punt 9: gemeten pitlanetijd uit endurance_pit_stops; null zonder meting. */
+  pit_loss?: {
+    pitLaneSeconds: number | null;
+    sampleCount: number;
+    source: "measured" | "none" | string;
+    lastStopAt: string | null;
+  } | null;
+  pit_lane_seconds?: number | null;
   planned_stints: PitwallPlannedStint[];
   pace_targets: Array<{
     user_id: string;
@@ -130,6 +139,11 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
   const raceClock = extractRaceClock(v3);
   const plannedStints = rpcData?.planned_stints ?? [];
 
+  /* Punt 9: de gemeten tijd in de pitstraat. De server meet uit de opgeslagen
+   * stops; alleen als die niets heeft leiden we het hier uit de tijdlijn af.
+   * Zonder in_pit_lane-vlaggen blijft dit null — geen schatting. */
+  const pitStopMeasurement = useMemo(() => resolvePitStopMeasurement(rpcData), [rpcData]);
+
   /** 0.4.2: opponents from the V3 normalized snapshot (connected + player rows). */
   const opponents: V3Opponent[] = useMemo(() => {
     const list = v3?.opponents;
@@ -208,5 +222,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
     trends,
     v3,
     isLive,
+    pitStopMeasurement,
+    pitLaneSeconds: pitStopMeasurement.pitLaneSeconds,
   };
 }
