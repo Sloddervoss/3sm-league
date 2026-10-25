@@ -153,7 +153,15 @@ export function advise(snapshot: StrategySnapshot): Advice {
 
   // Dezelfde invoer, maar dan in tijd: dit is het getal dat een tijdrace wél
   // kan geven terwijl `session_laps_remaining` leeg blijft.
+  // Loopt de race op afstand, dan is de finish het aantal geplande rondes min
+  // wat er al gereden is. Anders blijft de klok de bron.
+  const rondesTotFinish =
+    snapshot.plannedLaps != null && snapshot.lapsCompleted != null
+      ? Math.max(0, snapshot.plannedLaps - snapshot.lapsCompleted)
+      : null;
+
   const brandstofTotFinish = estimateFuelToFinish({
+    lapsRemaining: rondesTotFinish,
     remainingSeconds: remainingSessionSeconds(snapshot),
     averageLapSeconds: referenceLapSeconds(snapshot),
     fuelPerLap: perLap,

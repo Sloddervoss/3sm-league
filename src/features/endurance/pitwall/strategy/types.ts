@@ -108,6 +108,12 @@ export interface FuelToFinishInput {
   remainingSeconds: number | null;
   /** Gemiddelde rondetijd in seconden. */
   averageLapSeconds: number | null;
+  /**
+   * Resterende afstand in rondes, als de race op afstand loopt in plaats van
+   * op tijd. Gaat vóór de klok: bij een wedstrijd over 30 rondes is de finish
+   * na 30 rondes, ook als de sessietijd nog uren toelaat.
+   */
+  lapsRemaining?: number | null;
   /** Verbruik per ronde in liters (pessimistische schatting). */
   fuelPerLap: number | null;
   /** Huidige inhoud van de tank; alleen nodig voor het oordeel "voldoende". */

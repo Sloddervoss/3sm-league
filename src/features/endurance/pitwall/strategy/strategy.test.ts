@@ -402,7 +402,10 @@ describe("advise — tijdrace zonder geplande rondes", () => {
   it("rekent niets uit tijd als er geen klok en geen duur is", () => {
     const advies = advise(basisSnapshot());
     expect(advies.lapsToFinish).toBe(30);
-    expect(advies.fuelToFinish!.reasonCode).toBe("no_time_remaining");
+    // De afstand is bekend (30 rondes), dus de brandstof is wel te berekenen:
+    // de finish ligt op ronde 30, niet op het einde van de sessieklok.
+    expect(advies.fuelToFinish!.reasonCode).toBe("ok");
+    expect(advies.fuelToFinish!.lapsRemaining).toBe(30);
   });
 });
 
