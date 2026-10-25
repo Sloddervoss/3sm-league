@@ -98,6 +98,10 @@ const App = () => (
                     {/* Engelstalige instappagina. Zelfde pagina, taal vast op EN,
                         eigen adres zodat Google hem apart kan indexeren. */}
                     <Route path="/en/join" element={<JoinPage />} />
+                    {/* Archiefdetail van één afgeronde endurance-race. Dezelfde
+                        besloten shell als /endurance/*, zodat de toegangscontrole
+                        op één plek blijft staan. */}
+                    <Route path="/endurance/archief/:eventId" element={<EndurancePage />} />
                     <Route path="/endurance/*" element={<EndurancePage />} />
                     <Route path="/stewards" element={<StewardPage />} />
                     <Route path="/news-editor" element={<NewsEditorPage />} />
