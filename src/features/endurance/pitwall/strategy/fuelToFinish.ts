@@ -91,7 +91,18 @@ export function estimateFuelToFinish(input: FuelToFinishInput): FuelToFinishEsti
     return leeg("no_consumption", "Geen verbruik per ronde; brandstof tot de finish is niet te berekenen.");
   }
 
-  const rondes = opAfstand ? (afstand as number) : (remainingSeconds as number) / (averageLapSeconds as number);
+  // iRacing stopt de race voor iedereen op het moment dat de leider de
+  // finish bereikt: wie een ronde achterligt rijdt die ronde niet meer.
+  // Daarom zijn er twee grenzen en telt de kortste:
+  //   - de sessieklok (wat de leider nog te gaan heeft)
+  //   - je eigen resterende afstand (alleen bindend als je op de kop rijdt)
+  const rondesUitTijd =
+    typeof remainingSeconds === "number" && Number.isFinite(remainingSeconds) && positief(averageLapSeconds)
+      ? remainingSeconds / averageLapSeconds
+      : null;
+  const rondes = opAfstand
+    ? Math.min(afstand as number, rondesUitTijd ?? Number.POSITIVE_INFINITY)
+    : (rondesUitTijd as number);
   const litres = afronden(rondes * fuelPerLap);
   const tank = input.tankCapacityLitres;
 
