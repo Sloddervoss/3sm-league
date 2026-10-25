@@ -26,6 +26,78 @@ namespace ThreeSM.EnduranceConnector
         // compatible (validator allows when present). Cap enforced in the connector.
         [DataMember(Name = "opponents", Order = 13)] public V3Opponent[] Opponents { get; set; }
         [DataMember(Name = "vehicle", Order = 14, EmitDefaultValue = false)] public V3Vehicle Vehicle { get; set; }
+        // 0.7.0 additive: optional root block for the tyre measurement (12 wear zones,
+        // 12 carcass temperatures, set counters, compound, environment, pit-entry anchor).
+        // EmitDefaultValue=false: no tyres block at all when there is nothing to report, so a
+        // 0.6.1.1 payload stays byte-identical. protocolVersion stays 3 (framing unchanged).
+        [DataMember(Name = "tyres", Order = 15, EmitDefaultValue = false)] public V3Tyres Tyres { get; set; }
+    }
+
+    // Tyre measurement root block (optional, additive under protocolVersion 3).
+    // Every member is nullable: null means "SimHub did not deliver it", never a fake 0.
+    [DataContract]
+    public sealed class V3Tyres
+    {
+        // Moment waarop de connector de wear/karkaswaarde voor het eerst zag (niet het
+        // verzendmoment; dat is envelope.capturedAt). De leeftijd is capturedAt - observedAt.
+        [DataMember(Name = "observedAt", Order = 1)] public string ObservedAt { get; set; }
+        [DataMember(Name = "sessionTimeSeconds", Order = 2, EmitDefaultValue = false)] public double? SessionTimeSeconds { get; set; }
+        [DataMember(Name = "lap", Order = 3, EmitDefaultValue = false)] public int? Lap { get; set; }
+        // session_start (eerste waarneming deze sessie) of sim_refresh (de sim heeft de
+        // wear-kanalen bijgewerkt; dat gebeurt alleen in de pitstraat).
+        [DataMember(Name = "trigger", Order = 4, EmitDefaultValue = false)] public string Trigger { get; set; }
+        [DataMember(Name = "wearPercent", Order = 5, EmitDefaultValue = false)] public V3TyreZones WearPercent { get; set; }
+        [DataMember(Name = "carcassTempC", Order = 6, EmitDefaultValue = false)] public V3TyreZones CarcassTempC { get; set; }
+        [DataMember(Name = "sets", Order = 7, EmitDefaultValue = false)] public V3TyreSets Sets { get; set; }
+        [DataMember(Name = "compoundId", Order = 8, EmitDefaultValue = false)] public int? CompoundId { get; set; }
+        [DataMember(Name = "environment", Order = 9, EmitDefaultValue = false)] public V3TyreEnvironment Environment { get; set; }
+        // De stand van vóór de pit-refresh: het stint-anker. Sticky, 120 s na pit-entry.
+        [DataMember(Name = "pitEntry", Order = 10, EmitDefaultValue = false)] public V3TyrePitEntry PitEntry { get; set; }
+    }
+
+    // Vier hoeken, elk drie zones in de volgorde [left, middle, right]. De zonenaam staat
+    // in de key, niet in de array. Lengte is altijd 3; een lege hoek valt weg.
+    [DataContract]
+    public sealed class V3TyreZones
+    {
+        [DataMember(Name = "frontLeft", Order = 1, EmitDefaultValue = false)] public double?[] FrontLeft { get; set; }
+        [DataMember(Name = "frontRight", Order = 2, EmitDefaultValue = false)] public double?[] FrontRight { get; set; }
+        [DataMember(Name = "rearLeft", Order = 3, EmitDefaultValue = false)] public double?[] RearLeft { get; set; }
+        [DataMember(Name = "rearRight", Order = 4, EmitDefaultValue = false)] public double?[] RearRight { get; set; }
+    }
+
+    // iRacing-tellers. available=255 betekent "onbeperkt" (SDK-tekst), geen aantal;
+    // de plugin interpreteert dat niet, de lezer doet dat.
+    [DataContract]
+    public sealed class V3TyreSets
+    {
+        [DataMember(Name = "used", Order = 1, EmitDefaultValue = false)] public int? Used { get; set; }
+        [DataMember(Name = "available", Order = 2, EmitDefaultValue = false)] public int? Available { get; set; }
+        [DataMember(Name = "frontLeft", Order = 3, EmitDefaultValue = false)] public int? FrontLeft { get; set; }
+        [DataMember(Name = "frontRight", Order = 4, EmitDefaultValue = false)] public int? FrontRight { get; set; }
+        [DataMember(Name = "rearLeft", Order = 5, EmitDefaultValue = false)] public int? RearLeft { get; set; }
+        [DataMember(Name = "rearRight", Order = 6, EmitDefaultValue = false)] public int? RearRight { get; set; }
+    }
+
+    [DataContract]
+    public sealed class V3TyreEnvironment
+    {
+        [DataMember(Name = "trackTempC", Order = 1, EmitDefaultValue = false)] public double? TrackTempC { get; set; }
+        [DataMember(Name = "airTempC", Order = 2, EmitDefaultValue = false)] public double? AirTempC { get; set; }
+        // Ruwe sessie-YAML tekst (bv. "moderate usage"); geen enum, geen gok.
+        [DataMember(Name = "rubberState", Order = 3, EmitDefaultValue = false)] public string RubberState { get; set; }
+    }
+
+    // Bevroren stand op de pit-entry-flank: de set die eraf ging.
+    [DataContract]
+    public sealed class V3TyrePitEntry
+    {
+        [DataMember(Name = "observedAt", Order = 1)] public string ObservedAt { get; set; }
+        [DataMember(Name = "sessionTimeSeconds", Order = 2, EmitDefaultValue = false)] public double? SessionTimeSeconds { get; set; }
+        [DataMember(Name = "lap", Order = 3, EmitDefaultValue = false)] public int? Lap { get; set; }
+        [DataMember(Name = "setsUsed", Order = 4, EmitDefaultValue = false)] public int? SetsUsed { get; set; }
+        [DataMember(Name = "wearPercent", Order = 5, EmitDefaultValue = false)] public V3TyreZones WearPercent { get; set; }
+        [DataMember(Name = "carcassTempC", Order = 6, EmitDefaultValue = false)] public V3TyreZones CarcassTempC { get; set; }
     }
 
     [DataContract]

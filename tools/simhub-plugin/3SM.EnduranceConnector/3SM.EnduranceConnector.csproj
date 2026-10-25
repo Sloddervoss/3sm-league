@@ -36,6 +36,8 @@
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="UpdaterStateStore.cs" />
     <Compile Include="SessionTelemetryReader.cs" />
+    <Compile Include="RawChannelReader.cs" />
+    <Compile Include="TyreSnapshotTracker.cs" />
     <Compile Include="TrackIdentityReader.cs" />
     <Compile Include="DiagnosticsClient.cs" />
     <Compile Include="ConnectorSettings.cs" />

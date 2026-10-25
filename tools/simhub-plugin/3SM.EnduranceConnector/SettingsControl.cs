@@ -140,6 +140,8 @@ namespace ThreeSM.EnduranceConnector
             optionsStack.Children.Add(diagnostics);
             var extended = UiKit.Toggle("Uitgebreide Pitwall-telemetrie (na relay-update)", _plugin.Settings != null && _plugin.Settings.ExtendedPitwallTelemetryEnabled, v => _plugin.UpdateSettings(s => s.ExtendedPitwallTelemetryEnabled = v));
             optionsStack.Children.Add(extended);
+            var tyres = UiKit.Toggle("Bandenmeting meesturen (na relay-update)", _plugin.Settings != null && _plugin.Settings.TyreTelemetryEnabled, v => _plugin.UpdateSettings(s => s.TyreTelemetryEnabled = v));
+            optionsStack.Children.Add(tyres);
             var unpairButton = UiKit.DangerButton("Koppeling verwijderen");
             unpairButton.HorizontalAlignment = HorizontalAlignment.Left;
             optionsStack.Children.Add(unpairButton);
