@@ -1222,7 +1222,10 @@ namespace ThreeSM.EnduranceConnector
             var sendFlagFields = Settings.Flags != null && Settings.Flags.SendFlagFields;
             var completedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0));
             var lapTimeSeconds = GetNullableSeconds(manager, Settings.LastLapTimeProperty);
-            var gapToLeader = GetNullableSeconds(manager, Settings.GapToLeaderProperty);
+            // Eerst de ingestelde property; die blijkt leeg (F2Time is een rondetijd, geen achterstand).
+            // Valt terug op de spelersrij uit de tegenstanderlijst: dezelfde bron die bij de rest werkt.
+            var gapToLeader = GetNullableSeconds(manager, Settings.GapToLeaderProperty)
+                ?? (player == null ? null : SignedSeconds(player.GaptoLeader));
             // V3/0.4.0: populatie van bestaande nullable eigen-auto velden (NULL-tolerant).
             var sessionTimeRemaining = GetNullableSeconds(manager, Settings.SessionTimeRemainingProperty);
             var sessionLapsRemaining = GetNullableInt(manager, Settings.SessionLapsRemainingProperty);
@@ -1424,8 +1427,9 @@ namespace ThreeSM.EnduranceConnector
                     ClassPosition = opponent.PositionInClass > 0 ? (int?)opponent.PositionInClass : null,
                     Lap = opponent.CurrentLap.HasValue && opponent.CurrentLap.Value > 0 ? (int?)opponent.CurrentLap.Value : null,
                     LapDistancePct = Clamp01(NullableSeconds(opponent.TrackPositionPercent)),
-                    GapToPlayerSeconds = ClampNonNegative(opponent.GaptoPlayer),
-                    GapToLeaderSeconds = ClampNonNegative(opponent.GaptoLeader),
+                    // Het gat naar de speler is negatief zodra die auto voor ons zit.
+                    // Niet naar nul knijpen: dan verdwijnt precies de helft van het veld.
+                    GapToPlayerSeconds = SignedSeconds(opponent.GaptoPlayer),
                     LastLapSeconds = PositiveSeconds(opponent.LastLapTime),
                     BestLapSeconds = PositiveSeconds(opponent.BestLapTime),
                     InPit = opponent.IsCarInPitLane || opponent.IsCarInPit,
@@ -1445,7 +1449,9 @@ namespace ThreeSM.EnduranceConnector
         }
 
         private static double? Clamp01(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)Math.Max(0, Math.Min(1, value.Value)) : null; }
-        private static double? ClampNonNegative(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value >= 0 ? (double?)value.Value : null; }
+        private static double? SignedSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? value : null; }
+
+          private static double? ClampNonNegative(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value >= 0 ? (double?)value.Value : null; }
         private static double? PositiveSeconds(TimeSpan value) { return value > TimeSpan.Zero ? (double?)value.TotalSeconds : null; }
         private static double? PositiveNullable(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value > 0 ? (double?)value.Value : null; }
         private static double? NullableSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)value.Value : null; }
