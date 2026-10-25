@@ -107,6 +107,37 @@ export default function PitwallDeviceTestPage() {
     refetchInterval: () => Date.now() - realtimeAt.current < 3_000 ? 5_000 : 1_000,
   });
 
+  /* Rondes en coureurs van dit apparaat, ook zonder event. */
+  const sandboxQuery = useQuery({
+    queryKey: ["pitwall-test", "sandbox", deviceId],
+    enabled: Boolean(user) && Boolean(isSuperAdmin) && Boolean(deviceId),
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("pitwall_sandbox_v1", { p_device_id: deviceId });
+      if (error) throw error;
+      return data as {
+        drivers?: { name: string }[];
+        lap_samples?: { lap: number; seconds: number | null; driver: string | null }[];
+        pace?: { fastest: number | null; median: number | null; count: number };
+      };
+    },
+    refetchInterval: 5_000,
+  });
+
+  const coureurs = (() => {
+    const laps = sandboxQuery.data?.lap_samples ?? [];
+    const perRijder = new Map<string, { ronden: number; snelste: number | null }>();
+    for (const r of laps) {
+      const naam = r.driver ?? "Onbekend";
+      const huidig = perRijder.get(naam) ?? { ronden: 0, snelste: null };
+      huidig.ronden += 1;
+      if (typeof r.seconds === "number" && (huidig.snelste == null || r.seconds < huidig.snelste)) {
+        huidig.snelste = r.seconds;
+      }
+      perRijder.set(naam, huidig);
+    }
+    return [...perRijder.entries()].map(([naam, w]) => ({ naam, ...w }));
+  })();
+
   const detail = detailQuery.data ?? null;
   const online = isOnline(detail);
   const live = !detailQuery.error && isTelemetryLive(detail?.telemetry?.received_at);
@@ -178,6 +209,33 @@ export default function PitwallDeviceTestPage() {
           <div className="flex items-center gap-2">
             {fleetQuery.isFetching && <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-500" />}
           </div>
+        </section>
+
+        {/* Coureurs op dit apparaat — ook zonder event, uit het rondearchief. */}
+        <section className="mb-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-5 py-4">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Coureurs op dit apparaat</h2>
+            <span className="text-[11px] text-gray-500">
+              {sandboxQuery.data?.pace?.count ?? 0} rondes vastgelegd
+              {sandboxQuery.data?.pace?.fastest != null ? ` · snelste ${sandboxQuery.data.pace.fastest.toFixed(2)} s` : ""}
+            </span>
+          </div>
+          {coureurs.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Nog niemand gereden in deze sessie. Zodra er een ronde wordt afgerond, verschijnt de coureur hier.
+            </p>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {coureurs.map((c) => (
+                <li key={c.naam} className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                  <span className="text-sm text-white">{c.naam}</span>
+                  <span className="text-xs text-gray-400">
+                    {c.ronden} rondes{c.snelste != null ? ` · ${c.snelste.toFixed(2)} s` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <div className="grid gap-4 lg:grid-cols-[300px_1fr]">

@@ -156,8 +156,8 @@ export function advise(snapshot: StrategySnapshot): Advice {
   // Loopt de race op afstand, dan is de finish het aantal geplande rondes min
   // wat er al gereden is. Anders blijft de klok de bron.
   const rondesTotFinish =
-    snapshot.plannedLaps != null && snapshot.completedLaps != null
-      ? Math.max(0, snapshot.plannedLaps - snapshot.completedLaps)
+    snapshot.plannedLaps != null && snapshot.lapsCompleted != null
+      ? Math.max(0, snapshot.plannedLaps - snapshot.lapsCompleted)
       : null;
 
   const brandstofTotFinish = estimateFuelToFinish({
