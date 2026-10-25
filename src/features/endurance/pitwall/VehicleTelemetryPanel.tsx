@@ -54,19 +54,22 @@ export function VehicleTelemetryPanel({ v3, live }: { v3: V3Normalized | null; l
         <span className="text-gray-300">{amount(car?.rpm)}</span> rpm
       </p>
 
-      <div className="mt-2 grid grid-cols-3 gap-1.5">
-        <div />
-        {tyre('frontLeft', 'LV')}
-        <div />
-        {tyre('rearLeft', 'LA')}
-        <div className="flex flex-col items-center justify-center rounded-lg border border-white/5 text-center">
-          <span className="text-[8px] uppercase tracking-widest text-gray-600">banden</span>
-          <span className="font-heading text-[10px] font-black text-gray-400">SLICKS</span>
+      <div className="mt-2 space-y-1">
+        <div className="flex items-center gap-1.5">
+          <span className="w-11 shrink-0 text-[8px] uppercase tracking-widest text-gray-600">voor</span>
+          <div className="grid flex-1 grid-cols-2 gap-1.5">
+            {tyre('frontLeft', 'LV')}
+            {tyre('frontRight', 'RV')}
+          </div>
         </div>
-        {tyre('rearRight', 'RA')}
-        <div />
-        {tyre('frontRight', 'RV')}
-        <div />
+        <div className="flex items-center gap-1.5">
+          <span className="w-11 shrink-0 text-[8px] uppercase tracking-widest text-gray-600">achter</span>
+          <div className="grid flex-1 grid-cols-2 gap-1.5">
+            {tyre('rearLeft', 'LA')}
+            {tyre('rearRight', 'RA')}
+          </div>
+        </div>
+        <p className="pl-[3.25rem] text-[8px] uppercase tracking-widest text-gray-600">slicks</p>
       </div>
       <p className="mt-1.5 text-[9px] text-gray-600">Stand van SimHub; verspringt alleen bij een stop.</p>
     </section>
