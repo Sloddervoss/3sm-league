@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./fuelModel";
+export * from "./fuelToFinish";
 export * from "./pitLoss";
 export * from "./pitStops";
 export * from "./pitWindow";

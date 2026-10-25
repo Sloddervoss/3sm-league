@@ -1,5 +1,6 @@
 /* Pitwall V1 — types & helpers */
 import type { VehicleTelemetry } from "../../../../supabase/functions/_shared/vehicleTelemetry";
+import { estimateFuelToFinish } from "./strategy/fuelToFinish";
 export interface PitwallPositionData {
   overallPosition: number | null;
   classPosition: number | null;
@@ -246,6 +247,57 @@ export const estimateRemainingLaps = (
   if (remainingTimeSeconds == null || avgLapSeconds == null || avgLapSeconds <= 0) return null;
   return Math.ceil(remainingTimeSeconds / avgLapSeconds);
 };
+
+/**
+ * Brandstof tot de finish uit de sessieklok, voor de plek waar de pitwall al
+ * een strategierij en telemetrie heeft.
+ *
+ * De server vult `fuel_to_finish_litres` alleen als `sessionLapsRemaining`
+ * bekend is; bij een tijdrace is dat veld leeg en bleef het getal null. Hier
+ * rekenen we het uit de resterende seconden en de gemiddelde rondetijd:
+ *
+ *     liters = (resterende seconden / gemiddelde rondetijd) * verbruik per ronde
+ *
+ * De tank is de bovengrens voor wat er bij kan (`tank_capacity_litres`), niet
+ * voor de resterende afstand: een race van vier uur vraagt meer dan één tank.
+ * Daarom wordt het totaal getoond en past de tank alleen de tankbeurt.
+ *
+ * Een serverwaarde wint altijd: die is gemeten, niet teruggerekend. En
+ * ontbreekt er invoer, dan blijft het veld null — geen geschat getal.
+ */
+export interface FuelToFinishMergeInput {
+  /** Gemiddelde rondetijd in seconden; mediaan van de gemeten rondes. */
+  averageLapSeconds: number | null;
+  /** Tankinhoud in liters, als bovengrens voor één tankbeurt. */
+  tankCapacityLitres?: number | null;
+}
+
+export function mergeFuelToFinish(
+  strategy: PitwallStrategyRow | null,
+  v3: V3Normalized | null,
+  input: FuelToFinishMergeInput,
+): PitwallStrategyRow | null {
+  if (!strategy) return null;
+  if (strategy.fuel_to_finish_litres != null) return strategy;
+
+  const klok = extractRaceClock(v3);
+  const perLap = strategy.fuel_per_lap_litres ?? strategy.race_fuel_per_lap_litres;
+  const schatting = estimateFuelToFinish({
+    remainingSeconds: klok?.remainingSeconds ?? null,
+    averageLapSeconds: input.averageLapSeconds,
+    fuelPerLap: perLap,
+    fuelLitres: strategy.current_fuel_litres,
+    tankCapacityLitres: input.tankCapacityLitres ?? null,
+  });
+
+  if (schatting.litres == null) return strategy;
+
+  return {
+    ...strategy,
+    fuel_to_finish_litres: schatting.litres,
+    fuel_sufficient_to_finish: schatting.sufficient,
+  };
+}
 
 export const formatSeconds = (seconds: number | null | undefined): string => {
   if (seconds == null) return "—";

@@ -95,6 +95,77 @@ describe("buildStrategySnapshot", () => {
   });
 });
 
+describe("buildStrategySnapshot — tijdrace", () => {
+  const tijdraceV3: V3Normalized = {
+    capturedAt: "2026-10-24T14:00:01.000Z",
+    timing: { completedLaps: 23, lastLapTimeSeconds: 120 },
+    session: { sessionTimeSeconds: 3600, sessionTimeRemainingSeconds: 3600 },
+    fuel: { fuelLitres: 38.2, fuelCapacityLitres: 100 },
+  };
+
+  it("neemt de resterende sessietijd over uit de telemetrie", () => {
+    const snapshot = buildStrategySnapshot({
+      strategy: strategy(),
+      v3: tijdraceV3,
+      nowMs: Date.parse("2026-10-24T14:00:02.000Z"),
+    });
+    expect(snapshot.sessionTimeRemainingSeconds).toBe(3600);
+  });
+
+  it("rekent de gemiddelde rondetijd uit de gemeten rondes", () => {
+    const snapshot = buildStrategySnapshot({
+      strategy: strategy(),
+      v3: tijdraceV3,
+      nowMs: Date.parse("2026-10-24T14:00:02.000Z"),
+      lapTimeSamples: [90, 90.4, 363.6],
+    });
+    expect(snapshot.averageLapSeconds).toBe(90.4);
+  });
+
+  it("laat een aangeleverde gemiddelde rondetijd voorgaan", () => {
+    const snapshot = buildStrategySnapshot({
+      strategy: strategy(),
+      v3: tijdraceV3,
+      nowMs: Date.parse("2026-10-24T14:00:02.000Z"),
+      lapTimeSamples: [90, 91],
+      averageLapSeconds: 95,
+    });
+    expect(snapshot.averageLapSeconds).toBe(95);
+  });
+
+  it("geeft null als er geen rondetijden zijn", () => {
+    const snapshot = buildStrategySnapshot({
+      strategy: strategy(),
+      v3: tijdraceV3,
+      nowMs: Date.parse("2026-10-24T14:00:02.000Z"),
+    });
+    expect(snapshot.averageLapSeconds).toBeNull();
+  });
+
+  it("negeert een onbruikbare klok in plaats van erop te rekenen", () => {
+    const snapshot = buildStrategySnapshot({
+      strategy: strategy(),
+      v3: { session: { sessionTimeSeconds: 10, sessionTimeRemainingSeconds: -1 } },
+      nowMs: Date.parse("2026-10-24T14:00:02.000Z"),
+    });
+    expect(snapshot.sessionTimeRemainingSeconds).toBeNull();
+  });
+
+  it("levert een advies met liters tot de finish op een tijdrace", () => {
+    const advice = advise(
+      buildStrategySnapshot({
+        strategy: strategy({ fuel_to_finish_litres: null, current_fuel_litres: 38.2 }),
+        v3: tijdraceV3,
+        nowMs: Date.parse("2026-10-24T14:00:02.000Z"),
+        lapTimeSamples: [90, 90.2, 90.4],
+      }),
+    );
+    expect(advice.fuelToFinish!.reasonCode).toBe("ok");
+    // Rondetijd is de mediaan van de gemeten rondes (90,2 s), niet de laatste.
+    expect(advice.fuelToFinish!.litres).toBeCloseTo((3600 / 90.2) * advice.fuel.perLap!, 2);
+  });
+});
+
 describe("fuelPerLapFromSamples", () => {
   it("houdt alleen echte metingen over", () => {
     const rijen = [

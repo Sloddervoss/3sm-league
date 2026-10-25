@@ -100,10 +100,50 @@ export interface TyreEvaluation {
   reasonCode: string;
 }
 
+export interface FuelToFinishInput {
+  /** Resterende sessietijd in seconden (de klok, niet de verstreken tijd). */
+  remainingSeconds: number | null;
+  /** Gemiddelde rondetijd in seconden. */
+  averageLapSeconds: number | null;
+  /** Verbruik per ronde in liters (pessimistische schatting). */
+  fuelPerLap: number | null;
+  /** Huidige inhoud van de tank; alleen nodig voor het oordeel "voldoende". */
+  fuelLitres?: number | null;
+  /** Tankinhoud in liters; bovengrens voor één tankbeurt. */
+  tankCapacityLitres?: number | null;
+}
+
+export type FuelToFinishReason =
+  | "ok"
+  | "no_time_remaining"
+  | "no_average_lap"
+  | "no_consumption";
+
+export interface FuelToFinishEstimate {
+  /** Rondes tot de finish, naar boven afgerond (de laatste halve ronde telt). */
+  lapsRemaining: number | null;
+  /** Liters voor de hele resterende afstand; null als de invoer ontbreekt. */
+  litres: number | null;
+  /** Liters die in één tank passen (de tank als bovengrens). */
+  litresWithinTank: number | null;
+  /** Haalt de huidige inhoud de finish? null als inhoud of liters ontbreekt. */
+  sufficient: boolean | null;
+  reasonCode: FuelToFinishReason;
+  /** Eén zin die de UI letterlijk kan tonen. */
+  reason: string;
+}
+
 export interface StrategySnapshot {
   raceClockSeconds: number;
   lapsCompleted: number;
   currentLapSeconds: number | null;
+  /** Resterende sessietijd zoals de connector hem meldt; null als hij ontbreekt. */
+  sessionTimeRemainingSeconds?: number | null;
+  /**
+   * Gemiddelde rondetijd. Bij een tijdrace bepaalt die de resterende afstand;
+   * zonder dit getal is er geen brandstof-tot-finish.
+   */
+  averageLapSeconds?: number | null;
   fuelLitres: number | null;
   tankCapacityLitres: number | null;
   plannedLaps: number | null;
@@ -138,4 +178,10 @@ export interface Advice {
   lapsOnFuel: number | null;
   /** Rondes tot de finish; null als de afstand onbekend is (tijdrace zonder duur). */
   lapsToFinish: number | null;
+  /**
+   * Brandstof tot de finish uit resterende sessietijd en gemiddelde rondetijd.
+   * Ontbreekt een van beide, dan staan de getallen op null en zegt
+   * `reasonCode` waarom.
+   */
+  fuelToFinish?: FuelToFinishEstimate | null;
 }

@@ -10,7 +10,9 @@ import {
   formatLapTime,
   formatDelta,
   extractRaceClock,
+  mergeFuelToFinish,
 } from "./pitwallHelpers";
+import type { PitwallStrategyRow } from "./pitwallHelpers";
 
 describe("strategyStatusInfo", () => {
   it("returns ready state", () => {
@@ -196,6 +198,70 @@ describe("formatDelta", () => {
   it("returns null for null/undefined", () => {
     expect(formatDelta(null)).toBeNull();
     expect(formatDelta(undefined)).toBeNull();
+  });
+});
+
+describe("mergeFuelToFinish", () => {
+  const rij = (overrides: Partial<PitwallStrategyRow> = {}): PitwallStrategyRow => ({
+    race_run_id: "run",
+    event_id: "event",
+    team_id: "team",
+    fuel_per_lap_litres: 3,
+    race_fuel_per_lap_litres: 3.1,
+    fuel_laps_remaining: 13,
+    valid_fuel_sample_count: 9,
+    current_stint_valid_sample_count: 5,
+    current_fuel_stint: 2,
+    last_completed_laps: 22,
+    current_fuel_litres: 38.2,
+    session_laps_remaining: null,
+    fuel_to_finish_litres: null,
+    fuel_sufficient_to_finish: null,
+    strategy_status: "ready",
+    strategy_reason: null,
+    updated_at: "2026-10-24T14:00:00.000Z",
+    fuel_to_add_litres: null,
+    ...overrides,
+  });
+
+  const tijdrace = { session: { sessionTimeRemainingSeconds: 3600 } };
+
+  it("vult de liters uit de resterende sessietijd als de server niets heeft", () => {
+    const uitkomst = mergeFuelToFinish(rij(), tijdrace, { averageLapSeconds: 90 });
+    // 3600 s / 90 s = 40 rondes x 3,0 L (huidige stint) = 120 L.
+    expect(uitkomst!.fuel_to_finish_litres).toBe(120);
+    expect(uitkomst!.fuel_sufficient_to_finish).toBe(false); // 38,2 L in de tank
+  });
+
+  it("laat de serverwaarde staan als die er is", () => {
+    const metWaarde = rij({ fuel_to_finish_litres: 54, fuel_sufficient_to_finish: true });
+    const uitkomst = mergeFuelToFinish(metWaarde, tijdrace, { averageLapSeconds: 90 });
+    expect(uitkomst).toBe(metWaarde);
+  });
+
+  it("valt terug op het raceverbruik zonder meting uit deze stint", () => {
+    const uitkomst = mergeFuelToFinish(
+      rij({ fuel_per_lap_litres: null, current_fuel_litres: 200 }),
+      tijdrace,
+      { averageLapSeconds: 90 },
+    );
+    expect(uitkomst!.fuel_to_finish_litres).toBe(124); // 40 x 3,1
+    expect(uitkomst!.fuel_sufficient_to_finish).toBe(true);
+  });
+
+  it("geeft geen getal zonder sessieklok", () => {
+    const uitkomst = mergeFuelToFinish(rij(), { session: {} }, { averageLapSeconds: 90 });
+    expect(uitkomst!.fuel_to_finish_litres).toBeNull();
+    expect(uitkomst!.fuel_sufficient_to_finish).toBeNull();
+  });
+
+  it("geeft geen getal zonder gemiddelde rondetijd", () => {
+    const uitkomst = mergeFuelToFinish(rij(), tijdrace, { averageLapSeconds: null });
+    expect(uitkomst!.fuel_to_finish_litres).toBeNull();
+  });
+
+  it("geeft null als er geen strategierij is", () => {
+    expect(mergeFuelToFinish(null, tijdrace, { averageLapSeconds: 90 })).toBeNull();
   });
 });
 
