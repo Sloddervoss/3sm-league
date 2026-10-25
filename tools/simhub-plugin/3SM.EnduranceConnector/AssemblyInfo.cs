@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.InteropServices;
 
 [assembly: AssemblyTitle("3SM Endurance Connector")]
@@ -8,5 +8,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("3Stripe Motorsport")]
 [assembly: ComVisible(false)]
 [assembly: Guid("74d7436b-e986-4f2c-91c3-e5344f30ac33")]
-[assembly: AssemblyVersion("0.6.1.0")]
-[assembly: AssemblyFileVersion("0.6.1.0")]
+[assembly: AssemblyVersion("0.6.1.1")]
+[assembly: AssemblyFileVersion("0.6.1.1")]
