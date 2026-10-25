@@ -17,6 +17,7 @@ import {
   isTelemetryLive,
 } from "@/features/endurance/pitwall/devicePitwallAdapters";
 import { DecisionBand } from "@/features/endurance/pitwall/DecisionBand";
+import type { TyreEstimate } from "@/features/endurance/pitwall/strategy/tyreGrade";
 import { usePitwallStrategy } from "@/features/endurance/pitwall/usePitwallStrategy";
 import { TopRaceBar } from "@/features/endurance/pitwall/TopRaceBar";
 import { RaceTelemetryStrip } from "@/features/endurance/pitwall/RaceTelemetryStrip";
@@ -118,6 +119,23 @@ export default function PitwallDeviceTestPage() {
 
   const strategy = useMemo(() => deviceStrategyRow(live ? v3 : null), [v3, live]);
   const strategyAdvice = usePitwallStrategy({ strategy, v3, nowMs: Date.now() });
+
+  // Het bandenbeeld komt uit de servermeting (ankers), niet uit de live payload:
+  // alleen de RPC weet wat er bij de laatste stop gemeten is.
+  const [tyreEstimate, setTyreEstimate] = useState<TyreEstimate | null>(null);
+  const eventId = ((detail?.endurance_event ?? {}) as Record<string, unknown>)["id"] as string | undefined;
+  const teamId = ((detail?.endurance_team ?? {}) as Record<string, unknown>)["id"] as string | undefined;
+  useEffect(() => {
+    let actief = true;
+    if (!eventId || !teamId) { setTyreEstimate(null); return; }
+    void supabase
+      .rpc("pitwall_tyre_estimate_v1", { p_event_id: eventId, p_team_id: teamId })
+      .then(({ data, error }) => {
+        if (!actief) return;
+        setTyreEstimate(error ? null : ((data as unknown as TyreEstimate | null) ?? null));
+      });
+    return () => { actief = false; };
+  }, [eventId, teamId]);
   const position = devicePosition(v3);
   const pace = devicePace(v3);
   const raceClock = deviceRaceClock(v3);
@@ -253,7 +271,7 @@ export default function PitwallDeviceTestPage() {
 
                 {/* Track auto-detect + telemetry strip */}
                 <TopRaceBar strategy={strategy} position={position} raceClock={raceClock} offlineMode={!live} />
-                <DecisionBand advice={strategyAdvice} />
+                <DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />
                 <RaceTelemetryStrip v3={v3} live={live} />
 
                 <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">

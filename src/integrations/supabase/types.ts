@@ -2228,6 +2228,10 @@ export type Database = {
       }
     }
     Functions: {
+      pitwall_tyre_estimate_v1: {
+        Args: { p_event_id: string; p_team_id: string };
+        Returns: Json;
+      };
       endurance_sync_practice_pace: { Args: { p_session_id: string; p_car_alias: string }; Returns: number }
       endurance_team_workspace: { Args: { p_event_id: string }; Returns: Json }
       get_endurance_archive_summary: {

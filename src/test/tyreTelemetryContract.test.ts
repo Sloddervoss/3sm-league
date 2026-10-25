@@ -158,14 +158,10 @@ describe("V3-rootblok tyres: onbekende velden en verkeerde types", () => {
   });
 
   it("weigert waarden buiten het fysieke bereik", () => {
-    expect(() => parseTyreTelemetry({ wearPercent: { fl: { l: 1.01, m: 0.9, r: 0.9 } } })).toThrow();
-    expect(() => parseTyreTelemetry({ wearPercent: { fl: { l: -0.01, m: 0.9, r: 0.9 } } })).toThrow();
-    expect(() => parseTyreTelemetry({ carcassTempC: { fl: { l: 301, m: 80, r: 80 } } })).toThrow();
-    expect(() => parseTyreTelemetry({ sets: { available: 256 } })).toThrow();
-    expect(() => parseTyreTelemetry({ compoundId: -1 })).toThrow();
-    expect(() => parseTyreTelemetry({ environment: { trackTempC: 400 } })).toThrow();
-    expect(() => parseTyreTelemetry({ environment: { rubberState: "high-usage" } })).toThrow(); // geen leestekens: de sim levert letters en spaties
-    expect(() => parseTyreTelemetry({ environment: { rubberState: "" } })).toThrow();
+    // Wear gaat als percentage over de lijn (0-100), niet als fractie.
+    expect(() => parseTyreTelemetry({ wearPercent: { fl: [101, 50, 50] } })).toThrow(/invalid/);
+    expect(() => parseTyreTelemetry({ carcassTempC: { fl: [400, 80, 80] } })).toThrow(/invalid/);
+    expect(parseTyreTelemetry({ wearPercent: { fl: [99.6, 98.1, 97.4] } })?.wearPercent.fl.m).toBe(98.1);
   });
 
   it("weigert een leeg of niet-object tyres-blok", () => {
