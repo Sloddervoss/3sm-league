@@ -1,5 +1,6 @@
 import { exactKeysAllowExtra, parseOpponents, type V3Opponent } from "./opponents.ts";
 import { parseVehicleTelemetry, type VehicleTelemetry } from "./vehicleTelemetry.ts";
+import { parseTyreTelemetry, type TyreTelemetry } from "./tyreTelemetry.ts";
 
 export type SimHubFlag = "green" | "yellow" | "red" | "white" | "checkered" | "unknown";
 
@@ -238,6 +239,11 @@ export type NormalizedTelemetryEnvelope = {
   /** 0.4.1 additive, bounded, null-tolerant opponent snapshot. */
   opponents: V3Opponent[] | null;
   vehicle?: VehicleTelemetry | null;
+  /**
+   * S1 (bandenmeting): optioneel root-blok naast `vehicle`. Alles nullable, geen
+   * nieuwe verplichte sleutel — een 0.6.x-payload blijft ongewijzigd geldig.
+   */
+  tyres?: TyreTelemetry | null;
 };
 
 const raceFlagValues = new Set<SimHubRaceFlag>(["green", "yellow", "red", "white", "checkered", "blue", "black", "meatball", "disqualify"]);
@@ -295,7 +301,7 @@ const v3Boolean = (value: unknown, path: string): boolean | null => {
 
 export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnvelope => {
   const root = asRecord(input, "payload");
-  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle"], "payload");
+  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle", "tyres"], "payload");
   if (root.protocolVersion !== 3) throw new Error("unsupported protocolVersion");
   const sequence = v3Number(root.sequence, "payload.sequence", { integer: true, min: 0 }) as number;
   const capturedAt = text(root.capturedAt, "payload.capturedAt", 40);
@@ -392,6 +398,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
     },
     opponents: parseOpponents(root.opponents, "payload.opponents"),
     vehicle: parseVehicleTelemetry(root.vehicle),
+    tyres: parseTyreTelemetry(root.tyres),
   };
 };
 
