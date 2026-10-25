@@ -1,4 +1,5 @@
 import type { PitwallStrategyRow, V3Normalized } from "../pitwallHelpers";
+import type { TyreSample } from "./tyreWear";
 import type { StrategySnapshot } from "./types";
 
 /**
@@ -23,6 +24,8 @@ export interface SnapshotInput {
   reserveLaps?: number;
   /** Verbruik per ronde uit eerdere rondes, indien beschikbaar. */
   fuelPerLapSamples?: number[];
+  /** Bandenslijtage per ronde, oud naar nieuw; leeg als er nog geen reeks is. */
+  tyreSamples?: TyreSample[];
 }
 
 export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
@@ -67,6 +70,7 @@ export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
     secondsPerLitre: input.secondsPerLitre ?? null,
     tyreSeconds: input.tyreSeconds ?? null,
     reserveLaps: input.reserveLaps,
+    tyreSamples: input.tyreSamples ?? [],
   };
 }
 

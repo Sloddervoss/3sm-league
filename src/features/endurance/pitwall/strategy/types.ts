@@ -6,6 +6,8 @@
  * regel te testen en kan dezelfde motor later ook in een edge function draaien.
  */
 
+import type { TyreAdvice, TyreSample } from "./tyreWear";
+
 export type Confidence = "high" | "medium" | "low" | "none";
 
 /** De gesloten set adviezen. Er komt niets bij zonder dit type aan te passen. */
@@ -92,6 +94,11 @@ export interface StrategySnapshot {
   secondsPerLitre: number | null;
   tyreSeconds: number | null;
   reserveLaps?: number;
+  /**
+   * Bandenslijtage per ronde, oud naar nieuw. Leeg als er nog geen reeks is:
+   * dan is er geen bandenadvies en zegt de band dat ook.
+   */
+  tyreSamples?: TyreSample[];
 }
 
 export interface Advice {
@@ -111,4 +118,9 @@ export interface Advice {
   lapsOnFuel: number | null;
   /** Rondes tot de finish; null als de afstand onbekend is (tijdrace zonder duur). */
   lapsToFinish: number | null;
+  /**
+   * Het bandenadvies. Altijd gevuld, ook als er niets te adviseren valt — dan
+   * staat er een reden in plaats van een getal.
+   */
+  tyres?: TyreAdvice | null;
 }
