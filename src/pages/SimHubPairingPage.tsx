@@ -153,7 +153,7 @@ const SimHubPairingPage = () => {
               <p className="mt-2 max-w-xl text-xs leading-5 text-gray-500">Sluit SimHub, pak de ZIP uit en volg INSTALLEREN.txt. Daarna verlopen updates automatisch.</p>
             </div>
           </div>
-          <a href="/downloads/3SM.EnduranceConnector-latest.zip?v=0.7.0" download className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-black text-black transition hover:bg-orange-400">
+          <a href="/downloads/3SM.EnduranceConnector-0.7.0.zip" download className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-black text-black transition hover:bg-orange-400">
             <Download className="h-4 w-4" /> ZIP downloaden
           </a>
         </section>
