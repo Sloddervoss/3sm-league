@@ -53,7 +53,13 @@ export function averageLapSecondsFromLaps(
   if (!lapSeconds) return null;
   const bruikbaar = lapSeconds.filter(positief);
   if (bruikbaar.length === 0) return null;
-  return median(bruikbaar);
+
+  // Relatief weren, niet absoluut: een in-lap van 363 s komt door een grens van
+  // 600 s heen en trekt de mediaan dan naar 399 s. De server gebruikt dezelfde
+  // regel (1,25 × de snelste ronde).
+  const snelste = Math.min(...bruikbaar);
+  const representatief = bruikbaar.filter((s) => s <= snelste * 1.25);
+  return median(representatief.length >= 2 ? representatief : bruikbaar);
 }
 
 export function estimateFuelToFinish(input: FuelToFinishInput): FuelToFinishEstimate {

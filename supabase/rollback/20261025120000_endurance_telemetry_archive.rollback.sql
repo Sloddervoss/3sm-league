@@ -21,6 +21,10 @@ SELECT cron.unschedule('endurance-archive')
 DROP FUNCTION IF EXISTS public.endurance_archive_tick();
 DROP FUNCTION IF EXISTS public.endurance_archive_run_identity(uuid);
 
+-- De leesfunctie uit 121000 noemt de tabel in zijn body; een SQL-functie houdt
+-- die afhankelijkheid vast, dus zonder deze regel weigert de drop.
+DROP FUNCTION IF EXISTS public.endurance_learning_summary(text, text);
+
 -- De policies en indexen hangen aan de tabel en verdwijnen mee.
 DROP TABLE IF EXISTS public.endurance_telemetry_archive;
 

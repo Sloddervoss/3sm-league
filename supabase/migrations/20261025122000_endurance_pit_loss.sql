@@ -71,6 +71,7 @@ create policy endurance_pit_stops_service_role_all
   with check (true);
 
 revoke all on public.endurance_pit_stops from public, anon, authenticated;
+grant all on public.endurance_pit_stops to service_role;
 
 -- ---------------------------------------------------------------------------
 -- 2. Afleiden uit de vlaggen
@@ -189,7 +190,13 @@ begin
          d.o_pit_exit_at,
          d.o_pit_lane_seconds,
          d.o_laps_in_pit
-    from public.derive_pit_stops(p_event_id) d;
+    from public.derive_pit_stops(p_event_id) d
+    -- Een pit-in en pit-uit met dezelfde tijd levert 0,000 s en zou de
+    -- duration-check laten klappen; zo'n glitch mag het hele event niet
+    -- bevriezen, dus valt hij hier af.
+    where d.o_pit_exit_at is null
+       or d.o_pit_lane_seconds is null
+       or d.o_pit_lane_seconds > 0;
 
   get diagnostics v_aantal = row_count;
   return v_aantal;

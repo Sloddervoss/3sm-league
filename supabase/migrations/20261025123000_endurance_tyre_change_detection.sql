@@ -37,6 +37,28 @@
 -- hij idempotent en mag hij elke twee minuten draaien, ook over een race die
 -- al afgelopen is. Bestaande tyre_change-events worden niet gedupliceerd.
 
+-- De event-tabel staat alleen 'tyre_change' toe als de check hem kent.
+-- Zonder deze stap klapt elke insert met 23514 en valt de hele detectie om.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'endurance_telemetry_events_event_type_check'
+       and conrelid = 'public.endurance_telemetry_events'::regclass
+  ) then
+    alter table public.endurance_telemetry_events
+      drop constraint endurance_telemetry_events_event_type_check;
+  end if;
+
+  alter table public.endurance_telemetry_events
+    add constraint endurance_telemetry_events_event_type_check
+    check (event_type = any (array[
+      'sample', 'lap_completed', 'pit_entry', 'pit_exit', 'fuel_added',
+      'driver_change', 'stint_start', 'stint_end', 'flag_change',
+      'car_state_change', 'incident_count_changed', 'tyre_change'
+    ]));
+end $$;
+
 alter table public.endurance_strategy_lap_samples
   add column if not exists wear_delta_fl numeric(6,2),
   add column if not exists wear_delta_fr numeric(6,2),
@@ -342,8 +364,8 @@ $function$;
 
 -- Schrijft events en markeert samples: alleen de service-role en de klok-taak
 -- horen dit te doen. Geen grant aan authenticated.
-revoke all on function public.endurance_detect_tyre_changes(uuid, uuid) from public;
-revoke all on function public.endurance_tick_tyre_changes() from public;
+revoke all on function public.endurance_detect_tyre_changes(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.endurance_tick_tyre_changes() from public, anon, authenticated;
 grant execute on function public.endurance_detect_tyre_changes(uuid, uuid) to service_role;
 grant execute on function public.endurance_tick_tyre_changes() to service_role;
 

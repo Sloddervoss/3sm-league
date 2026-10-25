@@ -216,6 +216,7 @@ COMMENT ON FUNCTION public.endurance_learning_summary(text, text) IS
   'Leert tankduur en stintlengte per auto en baan uit endurance_telemetry_archive: gemiddeld verbruik per ronde, gemiddelde rondetijd en daaruit de tankduur in minuten. Eén rij, altijd; leeg wanneer er te weinig bruikbare rondes zijn.';
 
 -- Alleen-lezen, alleen aggregaten: geen team- of rijdergegevens in de uitvoer.
+REVOKE ALL ON FUNCTION public.endurance_learning_summary(text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.endurance_learning_summary(text, text) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.endurance_normalise_key(text) FROM PUBLIC, anon;

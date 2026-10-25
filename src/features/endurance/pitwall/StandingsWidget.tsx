@@ -34,7 +34,7 @@ const LayoutMark = ({ rate }: { rate: number | null }) => (
   <span className="flex items-center gap-1"><TrendMark rate={rate} /></span>
 );
 
-export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props) => {
+export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = true }: Props) => {
   if (standings.noData) {
     return (
       <section data-pitwall-slot="standings" className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
@@ -56,9 +56,10 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber }: Props)
     <section data-pitwall-slot="standings" className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-[10px] font-black uppercase tracking-wider text-gray-500">Live-stand</h3>
-        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />Live
-        </span>
+        <span className={`flex items-center gap-1 text-[10px] font-bold ${live ? "text-emerald-400" : "text-gray-500"}`}>
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${live ? "bg-emerald-400" : "bg-gray-600"}`} />
+            {live ? "Live" : "Offline"}
+          </span>
       </div>
 
       {/* AHEAD / YOU / BEHIND */}

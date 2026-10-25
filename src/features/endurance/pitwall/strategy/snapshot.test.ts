@@ -119,7 +119,7 @@ describe("buildStrategySnapshot — tijdrace", () => {
       nowMs: Date.parse("2026-10-24T14:00:02.000Z"),
       lapTimeSamples: [90, 90.4, 363.6],
     });
-    expect(snapshot.averageLapSeconds).toBe(90.4);
+    expect(snapshot.averageLapSeconds).toBe(90.2);
   });
 
   it("laat een aangeleverde gemiddelde rondetijd voorgaan", () => {

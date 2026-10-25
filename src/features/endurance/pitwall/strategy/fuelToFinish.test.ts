@@ -152,7 +152,8 @@ describe("estimateFuelToFinish", () => {
 
 describe("averageLapSecondsFromLaps", () => {
   it("neemt de mediaan, zodat een uitloopronde de maat niet bepaalt", () => {
-    expect(averageLapSecondsFromLaps([90, 90.5, 363.6, 89.9])).toBe(90.25);
+    // 363,6 s valt buiten 1,25 × de snelste ronde (89,9) en telt niet mee.
+    expect(averageLapSecondsFromLaps([90, 90.5, 363.6, 89.9])).toBe(90);
   });
 
   it("negeert lege en onbruikbare waarden", () => {
