@@ -269,6 +269,68 @@ describe("advise", () => {
     );
     expect(advies.lapsToFinish).toBe(20);
   });
+
+  describe("met een gemeten bandenreeks", () => {
+    /** Linksvoor zakt met `stap` per ronde; de andere wielen blijven hoger. */
+    const banden = (start: number, stap: number, aantal = 10) =>
+      Array.from({ length: aantal }, (_, i) => ({
+        lap: 10 + i,
+        lapTime: 90,
+        fl: start - i * stap,
+        fr: start - i * stap + 3,
+        rl: start - i * stap + 5,
+        rr: start - i * stap + 6,
+      }));
+
+    it("schuift de stop naar voren als de band eerder op is dan de tank", () => {
+      // De tank haalt de finish (100 L bij 3 L/ronde = 33 rondes, 30 te gaan),
+      // maar de banden zijn over 24 rondes op. Dan wint de band.
+      const advies = advise(basisSnapshot({ fuelLitres: 100, tyreSamples: banden(16.5, 0.5) }));
+
+      expect(advies.decision).toBe("PIT_IN_LAPS");
+      expect(advies.lapsUntilPit).toBe(24);
+      expect(advies.reasonCode).toBe("tyre_life");
+      expect(advies.reason).toContain("zonder wissel haal je het niet");
+      expect(advies.tyres?.action).toBe("CHANGE_BEFORE_PLANNED_STOP");
+    });
+
+    it("laat de stop staan als de band de geplande stop wel haalt", () => {
+      const advies = advise(basisSnapshot({ fuelLitres: 80, plannedLaps: 100, tyreSamples: banden(90, 0.2) }));
+
+      expect(advies.reasonCode).toBe("in_window");
+      expect(advies.tyres?.action).toBe("CHANGE_AT_PLANNED_STOP");
+      expect(advies.tyres?.lapsRemaining).toBeGreaterThan(100);
+    });
+
+    it("geeft geen bandenadvies als de slijtwaarde stilstaat, en verandert de beslissing niet", () => {
+      // De race van 24-10: zeven rondes dezelfde waarde, daarna een sprong.
+      const stil = [
+        ...Array.from({ length: 7 }, (_, i) => ({
+          lap: 40 + i,
+          lapTime: 90,
+          fl: 81.3,
+          fr: 85.3,
+          rl: 88.9,
+          rr: 89.2,
+        })),
+        { lap: 47, lapTime: 90, fl: 79.9, fr: 84.1, rl: 87.6, rr: 88.0 },
+      ];
+
+      const advies = advise(basisSnapshot({ fuelLitres: 100, tyreSamples: stil }));
+
+      expect(advies.decision).toBe("STAY_OUT");
+      expect(advies.tyres?.action).toBe("NO_ADVICE");
+      expect(advies.tyres?.reasonCode).toBe("stalled_values");
+      expect(advies.tyres?.lapsRemaining).toBeNull();
+      expect(advies.tyres?.reason).toContain("Geen bandenadvies");
+    });
+
+    it("zegt geen bandenadvies als er nog geen reeks is", () => {
+      const advies = advise(basisSnapshot({ fuelLitres: 100 }));
+      expect(advies.tyres?.action).toBe("NO_ADVICE");
+      expect(advies.tyres?.reason).toContain("nog te weinig rondes");
+    });
+  });
 });
 
 describe("advise — tijdrace zonder geplande rondes", () => {

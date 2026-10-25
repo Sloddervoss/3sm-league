@@ -1,5 +1,6 @@
 import { averageLapSecondsFromLaps } from "./fuelToFinish";
 import type { PitwallStrategyRow, V3Normalized } from "../pitwallHelpers";
+import type { TyreSample } from "./tyreWear";
 import type { StrategySnapshot } from "./types";
 
 /**
@@ -28,6 +29,8 @@ export interface SnapshotInput {
   lapTimeSamples?: number[];
   /** Al berekende gemiddelde rondetijd, als de aanroeper die zelf heeft. */
   averageLapSeconds?: number | null;
+  /** Bandenslijtage per ronde, oud naar nieuw; leeg als er nog geen reeks is. */
+  tyreSamples?: TyreSample[];
 }
 
 export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
@@ -89,6 +92,7 @@ export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
     secondsPerLitre: input.secondsPerLitre ?? null,
     tyreSeconds: input.tyreSeconds ?? null,
     reserveLaps: input.reserveLaps,
+    tyreSamples: input.tyreSamples ?? [],
   };
 }
 

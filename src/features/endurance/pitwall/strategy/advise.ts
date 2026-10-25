@@ -6,6 +6,7 @@ import {
 } from "./fuelModel";
 import { computePitLoss } from "./pitLoss";
 import { computePitWindow } from "./pitWindow";
+import { adviseTyreChange, type TyreAdvice } from "./tyreWear";
 import type { Advice, Confidence, StrategySnapshot } from "./types";
 
 /**
@@ -79,6 +80,7 @@ export function advise(snapshot: StrategySnapshot): Advice {
   const perLap = fuel.perLap;
   const resterend = lapsToFinish(snapshot);
   const voorraad = computeLapsOnFuel(snapshot.fuelLitres, perLap, reserve);
+  const tyreSamples = snapshot.tyreSamples ?? [];
 
   // Dezelfde invoer, maar dan in tijd: dit is het getal dat een tijdrace wél
   // kan geven terwijl `session_laps_remaining` leeg blijft.
@@ -90,7 +92,29 @@ export function advise(snapshot: StrategySnapshot): Advice {
     tankCapacityLitres: snapshot.tankCapacityLitres,
   });
 
-  const leeg = (reasonCode: string, reason: string, confidence: Confidence = "none"): Advice => ({
+  /** Geen bandenadvies, met de reden die de band letterlijk toont. */
+  const geenBandAdvies = (reasonCode: string, reason: string): TyreAdvice => ({
+    action: "NO_ADVICE",
+    wearPerLap: null,
+    lapsRemaining: null,
+    weakestCorner: null,
+    mustSurviveLaps: null,
+    horizon: "planned_stop",
+    reliable: false,
+    samples: tyreSamples.length,
+    reasonCode,
+    reason,
+  });
+
+  const leeg = (
+    reasonCode: string,
+    reason: string,
+    confidence: Confidence = "none",
+    tyres: TyreAdvice = geenBandAdvies(
+      "no_baseline",
+      "Geen bandenadvies: zonder brandstof- en afstandsbeeld is niet te bepalen hoever de banden moeten komen.",
+    ),
+  ): Advice => ({
     decision: "NO_ADVICE",
     lapsUntilPit: null,
     fuelToAddLitres: null,
@@ -103,12 +127,18 @@ export function advise(snapshot: StrategySnapshot): Advice {
     lapsOnFuel: voorraad,
     lapsToFinish: resterend,
     fuelToFinish: brandstofTotFinish,
+    tyres,
   });
 
   if (snapshot.sampleAgeSeconds > MAX_SAMPLE_AGE_SECONDS) {
     return leeg(
       "stale_telemetry",
       `Telemetrie is ${Math.round(snapshot.sampleAgeSeconds)} s oud; geen advies op verouderde cijfers.`,
+      "none",
+      geenBandAdvies(
+        "stale_telemetry",
+        `Geen bandenadvies: de bandenmeting is ${Math.round(snapshot.sampleAgeSeconds)} s oud.`,
+      ),
     );
   }
 
@@ -166,10 +196,40 @@ export function advise(snapshot: StrategySnapshot): Advice {
     return leeg("no_range", "Brandstofvoorraad in rondes is niet te bepalen.");
   }
 
+  const laatsteMoment = window
+    ? window.latestLap - snapshot.lapsCompleted
+    : voorraad - 1;
+
+  const totStop = Math.max(0, Math.min(laatsteMoment, voorraad - 1));
+  const blijftBuiten = resterend != null && voorraad >= resterend;
+
+  // Het bandenadvies hangt aan dezelfde horizon als het advies zelf: haalt de
+  // tank de finish, dan moeten de banden dat ook; anders moeten ze de geplande
+  // stop halen en bepaalt de band of die stop naar voren moet.
+  const tyres = adviseTyreChange({
+    samples: tyreSamples,
+    horizon: blijftBuiten ? "finish" : "planned_stop",
+    mustSurviveLaps: blijftBuiten ? resterend : totStop,
+  });
+
+  // De band is eerder op dan de geplande stop: dan wint de band, want een stop
+  // die je te laat plant is een stop die je alsnog moet maken.
+  const bandRondes = tyres.action === "CHANGE_BEFORE_PLANNED_STOP" ? tyres.lapsRemaining : null;
+
+  const bandStop = (laps: number) => ({
+    ...basis,
+    tyres,
+    decision: laps <= 0 ? ("PIT_THIS_LAP" as const) : ("PIT_IN_LAPS" as const),
+    lapsUntilPit: Math.max(0, laps),
+    reasonCode: "tyre_life",
+    reason: tyres.reason,
+  });
+
   // De finish halen zonder te stoppen.
-  if (resterend != null && voorraad >= resterend) {
+  if (blijftBuiten && bandRondes == null) {
     return {
       ...basis,
+      tyres,
       decision: "STAY_OUT",
       lapsUntilPit: null,
       reasonCode: "fuel_to_finish",
@@ -177,10 +237,15 @@ export function advise(snapshot: StrategySnapshot): Advice {
     };
   }
 
+  if (blijftBuiten && bandRondes != null) {
+    return bandStop(bandRondes);
+  }
+
   // Droogvallen: nu naar binnen.
   if (voorraad <= 1) {
     return {
       ...basis,
+      tyres,
       decision: "PIT_THIS_LAP",
       lapsUntilPit: 0,
       reasonCode: "fuel_critical",
@@ -188,15 +253,14 @@ export function advise(snapshot: StrategySnapshot): Advice {
     };
   }
 
-  const laatsteMoment = window
-    ? window.latestLap - snapshot.lapsCompleted
-    : voorraad - 1;
-
-  const totStop = Math.max(0, Math.min(laatsteMoment, voorraad - 1));
+  if (bandRondes != null && bandRondes < totStop) {
+    return bandStop(bandRondes);
+  }
 
   if (window?.saveRequired) {
     return {
       ...basis,
+      tyres,
       decision: totStop === 0 ? "PIT_THIS_LAP" : "PIT_IN_LAPS",
       lapsUntilPit: totStop,
       reasonCode: "fuel_save_required",
@@ -206,6 +270,7 @@ export function advise(snapshot: StrategySnapshot): Advice {
 
   return {
     ...basis,
+    tyres,
     decision: totStop === 0 ? "PIT_THIS_LAP" : "PIT_IN_LAPS",
     lapsUntilPit: totStop,
     reasonCode: window ? "in_window" : "fuel_based",
