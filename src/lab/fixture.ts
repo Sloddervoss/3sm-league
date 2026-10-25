@@ -36,6 +36,11 @@ export type PitwallFixture = {
   pace: number[];
   rotation: { current: string; next: string; nextInMinutes: number; after: string; afterInMinutes: number };
   weather: { airC: number; trackC: number; rubber: string };
+  trackMap: {
+    viewBox: string;
+    path: string;
+    cars: { x: number; y: number; cls: string; self: boolean; label: string }[];
+  };
 };
 
 export const fixture: PitwallFixture = {
@@ -64,4 +69,22 @@ export const fixture: PitwallFixture = {
   pace: [96.4, 96.1, 95.9, 96.3, 96.0, 95.7, 96.2, 96.6, 96.1, 95.8, 96.4, 96.9, 97.2, 96.5, 96.2, 96.0, 96.3, 96.7, 96.1, 96.4],
   rotation: { current: "Vincent de Vos", next: "Jaimy Peters", nextInMinutes: 34, after: "Bart Tonkes", afterInMinutes: 92 },
   weather: { airC: 18.7, trackC: 26.1, rubber: "moderately low usage" },
+  trackMap: {
+    viewBox: "0 0 420 190",
+    path:
+      "M28 118 L28 74 Q28 58 44 58 L96 58 Q112 58 112 74 L112 86 Q112 100 128 100 L196 100 " +
+      "Q212 100 212 84 L212 52 Q212 36 228 36 L268 36 Q284 36 284 52 L284 92 Q284 108 300 108 " +
+      "L348 108 Q368 108 372 128 L376 150 Q378 166 362 166 L96 166 Q78 166 74 150 L62 132 " +
+      "Q58 122 44 122 Z",
+    cars: [
+      { x: 150, y: 100, cls: "GT3", self: false, label: "P1" },
+      { x: 196, y: 100, cls: "GT4", self: false, label: "P2" },
+      { x: 226, y: 88, cls: "GT3", self: true, label: "JIJ" },
+      { x: 262, y: 60, cls: "GT3", self: false, label: "P4" },
+      { x: 300, y: 108, cls: "GT4", self: false, label: "P5" },
+      { x: 340, y: 150, cls: "GT3", self: false, label: "P6" },
+      { x: 210, y: 166, cls: "GT3", self: false, label: "P7" },
+      { x: 90, y: 150, cls: "GT4", self: false, label: "P8" },
+    ],
+  },
 };

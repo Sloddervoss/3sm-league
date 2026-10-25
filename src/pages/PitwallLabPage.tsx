@@ -42,9 +42,9 @@ export default function PitwallLabPage() {
   return (
     <div data-lab="pitwall" data-design={gekozen.id} className="min-h-screen bg-black">
       <Component f={fixture} />
-      <div className="pointer-events-none fixed bottom-1 left-1 z-50 rounded bg-black/70 px-2 py-1 text-[10px] font-mono text-white/50">
+      <footer className="border-t border-white/10 bg-black px-4 py-2 text-[10px] font-mono text-white/40">
         ontwerp {gekozen.id} · {title}{note ? ` · ${note}` : ""}
-      </div>
+      </footer>
     </div>
   );
 }
