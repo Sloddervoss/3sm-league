@@ -34,6 +34,10 @@ namespace ThreeSM.EnduranceConnector
         private const string ReleaseChannelQuery = "";
         // 0.4.1: hard cap on opponents per snapshot (bounded payload; proven grid headroom).
         private const int MaxOpponentsPerSnapshot = 40;
+        // 0.7.0: harde payloadgrens voor één frame. Het bandenblok duwt een vol veld richting
+        // de 24.576-grens van de relay, dus boven deze drempel snoeien we in vaste volgorde
+        // (zie SerializeWithinBudget). Server en plugin delen dezelfde marge.
+        private const int MaxPayloadBytes = 24000;
         private const long MaxUpdateBytes = 5 * 1024 * 1024;
         private const string ReleasePublicKeyXml = "<RSAKeyValue><Modulus>623ziGDiaH7x+n1WwVv4lp+CswGiM4b/+h410wt1IBXZc+xeIoJbS2GnSU+wCgsUD1Ek4Eup0XKumuyuEvkZYUJ7zzLuIV5qBj9jk1lSnZmp4ibMyanmhJOIxsuSzylpNV9ru2QAuJQLpK9Jahk8vbOjSaNaaO1ZxKP0U0Xxy79N/9vutjdO6dW9r2MzQUP5KNGCTBlgHwm5Kn3KujtyV3EB5jeFbwl0L1G5R2taan6wzrcSLtNKrJACbm/bLvOijAvUAjpVH7+ThUPY/w9womXuxtWCPFT0cp7wq9rBieOEFjWxFLSkr9uZ/Z+gWyuBINrGJ7gLGuONvNq3TbqkwRmnPu91hstTQR5EfLDduohdfsRW6g+BHUNgZFo9cheM/NpJx6vpZ61Rzjw46Bu8QVCInRW7W43u4e/Xb9CjlPEf6ou8jnEeUY9ZgDOKhs7oHbDg3072GIPTc/8HJjATN6YlnTU0tqB43zElN2BrWc/aFqqTdrXce9vEEqPclWVT</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
         private readonly HttpClient _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(4) };
@@ -43,6 +47,8 @@ namespace ThreeSM.EnduranceConnector
         private readonly Stopwatch _sendClock = Stopwatch.StartNew();
         private readonly Stopwatch _stintClock = new Stopwatch();
         private readonly SessionTelemetryReader _sessionTime = new SessionTelemetryReader();
+        // 0.7.0: onthoudt de laatst gezien wear/karkas en bevriest die op de pit-entry-flank.
+        private readonly TyreSnapshotTracker _tyreTracker = new TyreSnapshotTracker();
         private long _sequence = -1;
         private long _lastQueuedMilliseconds;
         private int _sendBusy;
@@ -169,6 +175,7 @@ namespace ThreeSM.EnduranceConnector
             }
             ApplyDiagnosticsSettings();
             _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
+            _tyreTracker.Reset();
             Status = Settings.UseCentralRelay
                 ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
                 : "Lokale fallback · wacht op iRacing";
@@ -651,6 +658,7 @@ namespace ThreeSM.EnduranceConnector
                 {
                     _stintClock.Restart();
                     _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
+                    _tyreTracker.Reset();
                     Interlocked.Exchange(ref _sequence, -1);
                 }
                 if (!running && _gameWasRunning) _stintClock.Stop();
@@ -979,6 +987,7 @@ namespace ThreeSM.EnduranceConnector
                 }
                 _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
                 Interlocked.Exchange(ref _sequence, -1);
+                _tyreTracker.Reset();
                 // Nieuw device = nieuw team: het oude plan en de oude cache zijn ongeldig.
                 SyncOverlayAuth(true);
                 Status = "Gekoppeld · wacht op iRacing";
@@ -1264,6 +1273,10 @@ namespace ThreeSM.EnduranceConnector
             var pitsOpen = GetNullableDouble(manager, "DataCorePlugin.GameRawData.Telemetry.PitsOpen", false);
             if (pitsOpen.HasValue) pitLaneOpen = pitsOpen.Value != 0;
 
+            // 0.7.0: één lezer voor alle ruwe iRacing-kanalen (property-pad, dan reflectie).
+            // Wordt pas gebruikt als het bijbehorende blok aan staat; de lezer doet zelf niets.
+            var rawChannels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
+
             return new TelemetryEnvelopeV3
             {
                 ProtocolVersion = 3,
@@ -1334,12 +1347,18 @@ namespace ThreeSM.EnduranceConnector
                 },
                 PitService = new V3PitService
                 {
-                    PitServiceFlagsRaw = null,
+                    // 0.7.0: het ruwe bitfield stond in het contract maar werd hard op null gezet.
+                    // Het is de INTENTIE van de rijder (wat hij aanvinkte), niet de uitkomst; de
+                    // plugin interpreteert geen bits. Ontbreekt het kanaal, dan blijft het null.
+                    PitServiceFlagsRaw = rawChannels.ReadInt("PitSvFlags", 0, int.MaxValue),
                     RequiredRepairSeconds = null,
                     OptionalRepairSeconds = null,
                 },
                 Opponents = BuildOpponentSnapshot(snapshot),
                 Vehicle = Settings.ExtendedPitwallTelemetryEnabled ? CaptureVehicle(manager) : null,
+                // 0.7.0: optioneel root-blok, alleen gevuld als de instelling aan staat (de
+                // server moet het blok kennen; een oude receiver geeft 422 op een nieuwe key).
+                Tyres = Settings.TyreTelemetryEnabled ? CaptureTyres(rawChannels, sessionTimeSeconds, completedLaps, inPitLane) : null,
             };
         }
 
@@ -1403,6 +1422,202 @@ namespace ThreeSM.EnduranceConnector
                 FrontLeft = CaptureTyre(manager, "FrontLeft"), FrontRight = CaptureTyre(manager, "FrontRight"),
                 RearLeft = CaptureTyre(manager, "RearLeft"), RearRight = CaptureTyre(manager, "RearRight")
             };
+        }
+
+        // 0.7.0: iRacing-wearzones, 4 hoeken × 3 zones in de volgorde [left, middle, right].
+        private static readonly string[] TyreWearChannels =
+        {
+            "LFwearL", "LFwearM", "LFwearR",
+            "RFwearL", "RFwearM", "RFwearR",
+            "LRwearL", "LRwearM", "LRwearR",
+            "RRwearL", "RRwearM", "RRwearR",
+        };
+
+        // Karkastemperaturen: dit is de garage-/pyrometerwaarde, NIET de oppervlaktetemperatuur.
+        private static readonly string[] TyreCarcassChannels =
+        {
+            "LFtempCL", "LFtempCM", "LFtempCR",
+            "RFtempCL", "RFtempCM", "RFtempCR",
+            "LRtempCL", "LRtempCM", "LRtempCR",
+            "RRtempCL", "RRtempCM", "RRtempCR",
+        };
+
+        private const double MinTyreTempC = -40.0;
+        private const double MaxTyreTempC = 300.0;
+        private const double MinAmbientTempC = -40.0;
+        private const double MaxAmbientTempC = 100.0;
+
+        /// <summary>
+        /// Leest de 12 wear-zones en 12 karkastemperaturen. Wear komt binnen als fractie
+        /// (0–1) en gaat ×100 de deur uit; de waarde blijft onafgerond zodat de
+        /// refresh-detectie op de ruwe waarde werkt. raw 0 = "geen meting" (dezelfde guard
+        /// als CaptureTyre), dus dat wordt null en nooit 0,00 %.
+        /// </summary>
+        private static TyreZoneReading ReadTyreZones(RawChannelReader channels)
+        {
+            var wear = new double?[4][];
+            var carcass = new double?[4][];
+            for (var corner = 0; corner < 4; corner++)
+            {
+                wear[corner] = new double?[3];
+                carcass[corner] = new double?[3];
+                for (var zone = 0; zone < 3; zone++)
+                {
+                    var fraction = channels.ReadNumber(TyreWearChannels[corner * 3 + zone], 0, 1.001);
+                    if (fraction.HasValue && fraction.Value > 0) wear[corner][zone] = fraction.Value * 100.0;
+                    carcass[corner][zone] = channels.ReadNumber(TyreCarcassChannels[corner * 3 + zone], MinTyreTempC, MaxTyreTempC);
+                }
+            }
+            return new TyreZoneReading(wear, carcass);
+        }
+
+        /// <summary>
+        /// Bouwt het optionele bandenblok. Geeft null terug als er niets te melden is: een
+        /// leeg blok is duurder dan geen blok (EmitDefaultValue=false doet de rest).
+        /// </summary>
+        private V3Tyres CaptureTyres(RawChannelReader channels, double? sessionTimeSeconds, int? lap, bool onPitRoadFallback)
+        {
+            var reading = ReadTyreZones(channels);
+            var setsUsed = channels.ReadInt("TireSetsUsed", 0, 255);
+            // De pit-entry-flank hangt aan de ruwe OnPitRoad; de bestaande pitlane-property is
+            // het vangnet als dat kanaal ontbreekt.
+            var onPitRoad = channels.ReadBool("OnPitRoad");
+            _tyreTracker.Update(reading, sessionTimeSeconds, lap, setsUsed, onPitRoad.HasValue ? onPitRoad.Value : onPitRoadFallback, DateTime.UtcNow);
+
+            var last = _tyreTracker.Last;
+            var wear = ToTyreZones(last == null ? null : last.WearPercent, 2);
+            var carcass = ToTyreZones(last == null ? null : last.CarcassTempC, 1);
+
+            var sets = new V3TyreSets
+            {
+                Used = setsUsed,
+                // 255 = onbeperkt volgens de SDK; de plugin interpreteert dat niet.
+                Available = channels.ReadInt("TireSetsAvailable", 0, 255),
+                FrontLeft = channels.ReadInt("LFTiresUsed", 0, 255),
+                FrontRight = channels.ReadInt("RFTiresUsed", 0, 255),
+                RearLeft = channels.ReadInt("LRTiresUsed", 0, 255),
+                RearRight = channels.ReadInt("RRTiresUsed", 0, 255),
+            };
+            if (!sets.Used.HasValue && !sets.Available.HasValue && !sets.FrontLeft.HasValue
+                && !sets.FrontRight.HasValue && !sets.RearLeft.HasValue && !sets.RearRight.HasValue) sets = null;
+
+            // TrackTempCrew is de bron; TrackTemp is de gedeprecieerde naam met dezelfde waarde.
+            var trackTemp = RoundTyreValue(channels.ReadNumber("TrackTempCrew", MinAmbientTempC, MaxAmbientTempC), 1);
+            if (!trackTemp.HasValue) trackTemp = RoundTyreValue(channels.ReadNumber("TrackTemp", MinAmbientTempC, MaxAmbientTempC), 1);
+            var airTemp = RoundTyreValue(channels.ReadNumber("AirTemp", MinAmbientTempC, MaxAmbientTempC), 1);
+            var rubberState = ReadRubberState(channels);
+            V3TyreEnvironment environment = null;
+            if (trackTemp.HasValue || airTemp.HasValue || rubberState != null)
+                environment = new V3TyreEnvironment { TrackTempC = trackTemp, AirTempC = airTemp, RubberState = rubberState };
+
+            var compoundId = channels.ReadInt("PlayerTireCompound", 0, 255);
+            var pitEntry = BuildTyrePitEntry(_tyreTracker.PitEntry);
+
+            if (wear == null && carcass == null && sets == null && environment == null && compoundId == null && pitEntry == null) return null;
+            return new V3Tyres
+            {
+                ObservedAt = last != null ? last.ObservedAt : TyreSnapshotTracker.UtcText(DateTime.UtcNow),
+                SessionTimeSeconds = last != null ? last.SessionTimeSeconds : sessionTimeSeconds,
+                Lap = last != null ? last.Lap : lap,
+                Trigger = last != null ? last.Trigger : "session_start",
+                WearPercent = wear,
+                CarcassTempC = carcass,
+                Sets = sets,
+                CompoundId = compoundId,
+                Environment = environment,
+                PitEntry = pitEntry,
+            };
+        }
+
+        /// <summary>
+        /// Rubber state komt uit de sessie-YAML, niet uit de telemetrie: property-pad met
+        /// SessionNum als index, dan reflectie op dezelfde lijst.
+        /// </summary>
+        private static string ReadRubberState(RawChannelReader channels)
+        {
+            var sessionIndex = channels.ReadInt("SessionNum", 0, 1000);
+            if (!sessionIndex.HasValue) sessionIndex = 0;
+            // Route A gebeurt in de lezer zelf niet voor dit pad (het is geen kanaal), dus
+            // hier bewust via ReadSessionText (route B) en dat is de bewezen route voor YAML.
+            return NormalizeRubberState(channels.ReadSessionText(sessionIndex.Value, "SessionTrackRubberState"));
+        }
+
+        /// <summary>
+        /// De validator accepteert 1–24 tekens uit [A-Za-z ] en geen vaste lijst: een
+        /// verkeerde enum zou het hele frame laten vallen. We toetsen dus de vorm.
+        /// </summary>
+        private static string NormalizeRubberState(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var text = value.Trim();
+            if (text.Length < 1 || text.Length > 24) return null;
+            foreach (var character in text)
+            {
+                var letter = (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z');
+                if (!letter && character != ' ') return null;
+            }
+            return text;
+        }
+
+        private static V3TyrePitEntry BuildTyrePitEntry(TyreSnapshot snapshot)
+        {
+            if (snapshot == null) return null;
+            var wear = ToTyreZones(snapshot.WearPercent, 2);
+            var carcass = ToTyreZones(snapshot.CarcassTempC, 1);
+            if (wear == null && carcass == null) return null;
+            return new V3TyrePitEntry
+            {
+                ObservedAt = snapshot.ObservedAt,
+                SessionTimeSeconds = snapshot.SessionTimeSeconds,
+                Lap = snapshot.Lap,
+                SetsUsed = snapshot.SetsUsed,
+                WearPercent = wear,
+                CarcassTempC = carcass,
+            };
+        }
+
+        /// <summary>
+        /// Vier hoeken naar de draadvorm. Een hoek zonder enkele waarde vervalt (EmitDefaultValue),
+        /// een zone zonder waarde blijft null; de array is altijd lengte 3.
+        /// </summary>
+        private static V3TyreZones ToTyreZones(double?[][] zones, int decimals)
+        {
+            if (zones == null) return null;
+            var frontLeft = RoundTyreZone(zones, 0, decimals);
+            var frontRight = RoundTyreZone(zones, 1, decimals);
+            var rearLeft = RoundTyreZone(zones, 2, decimals);
+            var rearRight = RoundTyreZone(zones, 3, decimals);
+            if (frontLeft == null && frontRight == null && rearLeft == null && rearRight == null) return null;
+            return new V3TyreZones { FrontLeft = frontLeft, FrontRight = frontRight, RearLeft = rearLeft, RearRight = rearRight };
+        }
+
+        private static double?[] RoundTyreZone(double?[][] zones, int corner, int decimals)
+        {
+            if (zones == null || corner >= zones.Length || zones[corner] == null) return null;
+            var source = zones[corner];
+            var result = new double?[3];
+            var any = false;
+            for (var zone = 0; zone < 3; zone++)
+            {
+                if (zone >= source.Length || !source[zone].HasValue) continue;
+                result[zone] = RoundTyreValue(source[zone], decimals);
+                any = any || result[zone].HasValue;
+            }
+            return any ? result : null;
+        }
+
+        /// <summary>
+        /// Afronden op decimalen, maar via decimal: Math.Round(double, 2) levert doubles die
+        /// de serializer als 95.80999999999999 uitschrijft (17 significante cijfers), en dat
+        /// kost 130 B per frame plus onvoorspelbare delta's. Via decimal is de waarde exact
+        /// 95.81 en blijft de payload klein en stabiel.
+        /// </summary>
+        private static double? RoundTyreValue(double? value, int decimals)
+        {
+            if (!value.HasValue) return null;
+            if (double.IsNaN(value.Value) || double.IsInfinity(value.Value)) return null;
+            try { return (double?)Math.Round((decimal)value.Value, decimals); }
+            catch (OverflowException) { return null; }
         }
 
         /// <summary>Build a bounded, null-tolerant opponent snapshot from SimHub Opponents.</summary>
@@ -1504,7 +1719,7 @@ namespace ThreeSM.EnduranceConnector
             if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestAttempt(attemptUtc);
             try
             {
-                var body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
+                var body = SerializeWithinBudget(envelope);
                 using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
                 {
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1530,6 +1745,48 @@ namespace ThreeSM.EnduranceConnector
             {
                 Volatile.Write(ref _sendBusy, 0);
             }
+        }
+
+        // Budgetcheck (0.7.0). Het bandenblok duwt een vol veld richting de 24.576-grens van
+        // de relay, dus we meten het echte frame en snoeien in vaste volgorde: eerst karkas
+        // (ook in pitEntry), dan het pitEntry-anker. Wat weg is blijft weg in dit frame; de
+        // volgende tick begint weer met een verse capture, dus dit is geen blijvende schade.
+        private static string SerializeWithinBudget(TelemetryEnvelopeV3 envelope)
+        {
+            var body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
+            var bytes = Encoding.UTF8.GetByteCount(body);
+            if (bytes <= MaxPayloadBytes) return body;
+
+            var trimmed = false;
+            if (envelope.Tyres != null && (envelope.Tyres.CarcassTempC != null
+                || (envelope.Tyres.PitEntry != null && envelope.Tyres.PitEntry.CarcassTempC != null)))
+            {
+                envelope.Tyres.CarcassTempC = null;
+                if (envelope.Tyres.PitEntry != null) envelope.Tyres.PitEntry.CarcassTempC = null;
+                body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
+                trimmed = true;
+                if (Encoding.UTF8.GetByteCount(body) <= MaxPayloadBytes)
+                {
+                    LogBudgetTrim(bytes, Encoding.UTF8.GetByteCount(body), "karkas");
+                    return body;
+                }
+            }
+            if (envelope.Tyres != null && envelope.Tyres.PitEntry != null)
+            {
+                envelope.Tyres.PitEntry = null;
+                body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
+                LogBudgetTrim(bytes, Encoding.UTF8.GetByteCount(body), trimmed ? "karkas+pitEntry" : "pitEntry");
+            }
+            return body;
+        }
+
+        private static void LogBudgetTrim(int before, int after, string stage)
+        {
+            try
+            {
+                SimHub.Logging.Current.Info("3SM payloadbudget: " + before + " B > " + MaxPayloadBytes + " B, gesnoeid (" + stage + ") naar " + after + " B");
+            }
+            catch { }
         }
 
         private static Uri BuildRelayEndpoint(string functionName)

@@ -32,6 +32,11 @@ namespace ThreeSM.EnduranceConnector
         // reject new fields; default off also preserves existing installations.
         public bool ExtendedPitwallTelemetryEnabled = false;
 
+        // 0.7.0: optioneel root-blok `tyres` (12 wear-zones, karkas, sets, omgeving).
+        // Zelfde regel als hierboven: pas aanzetten als de relay/validator het blok kent,
+        // want een oude receiver weigert een onbekende root-key met 422. Default uit.
+        public bool TyreTelemetryEnabled = false;
+
         public string SpeedProperty = "DataCorePlugin.GameData.NewData.SpeedKmh";
         public string LapProperty = "DataCorePlugin.GameData.NewData.CurrentLap";
         public string CompletedLapsProperty = "DataCorePlugin.GameData.NewData.CompletedLaps";
