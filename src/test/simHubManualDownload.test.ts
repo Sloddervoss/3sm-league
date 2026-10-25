@@ -7,7 +7,7 @@ const guide = readFileSync("docs/simhub-update-gids.md", "utf8");
 const runbook = readFileSync("docs/runbooks/simhub-plugin-release.md", "utf8");
 const versionedPath = "public/downloads/3SM.EnduranceConnector-0.7.0.0.zip";
 const latestPath = "public/downloads/3SM.EnduranceConnector-latest.zip";
-const expectedZipSha = "a54fe3f5664137cc";
+const expectedZipSha = "a54fe3f5664137cccda779e062bc33763c10ca980a8cb5df063bea80e4b31264";
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
 describe("public SimHub connector human download", () => {
@@ -32,6 +32,6 @@ describe("public SimHub connector human download", () => {
     expect(runbook).toContain("The public-facing website button points to the HUMAN ZIP.");
     expect(guide).toContain("3SM.EnduranceConnector-latest.zip");
     expect(guide).toContain("0.3.8.0 → 0.3.9.0");
-    expect(guide).toContain("Huidige versie: `0.7.0`");
+    expect(guide).toContain("Huidige versie: `0.7.0.0`");
   });
 });
