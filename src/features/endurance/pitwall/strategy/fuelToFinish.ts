@@ -65,14 +65,22 @@ export function averageLapSecondsFromLaps(
 export function estimateFuelToFinish(input: FuelToFinishInput): FuelToFinishEstimate {
   const { remainingSeconds, averageLapSeconds, fuelPerLap } = input;
 
-  if (typeof remainingSeconds !== "number" || !Number.isFinite(remainingSeconds) || remainingSeconds < 0) {
+  // Afstandsrace: het aantal rondes is dan de bron, niet de klok.
+  const afstand = input.lapsRemaining;
+
+  const opAfstand = positief(afstand);
+
+  if (
+    !opAfstand &&
+    (typeof remainingSeconds !== "number" || !Number.isFinite(remainingSeconds) || remainingSeconds < 0)
+  ) {
     return leeg(
       "no_time_remaining",
       "Geen resterende sessietijd; brandstof tot de finish is niet te berekenen.",
     );
   }
 
-  if (!positief(averageLapSeconds)) {
+  if (!opAfstand && !positief(averageLapSeconds)) {
     return leeg(
       "no_average_lap",
       "Geen gemiddelde rondetijd; brandstof tot de finish is niet te berekenen.",
@@ -83,12 +91,12 @@ export function estimateFuelToFinish(input: FuelToFinishInput): FuelToFinishEsti
     return leeg("no_consumption", "Geen verbruik per ronde; brandstof tot de finish is niet te berekenen.");
   }
 
-  const rondes = remainingSeconds / averageLapSeconds;
+  const rondes = opAfstand ? (afstand as number) : (remainingSeconds as number) / (averageLapSeconds as number);
   const litres = afronden(rondes * fuelPerLap);
   const tank = input.tankCapacityLitres;
 
   return {
-    lapsRemaining: Math.ceil(rondes),
+    lapsRemaining: opAfstand ? Math.ceil(rondes) : Math.ceil(rondes),
     litres,
     litresWithinTank: positief(tank) ? Math.min(litres, tank) : null,
     // Nul liter is een geldige meting (lege tank) en dus "niet voldoende",
@@ -99,7 +107,9 @@ export function estimateFuelToFinish(input: FuelToFinishInput): FuelToFinishEsti
         : null,
     reasonCode: "ok",
     reason:
-      remainingSeconds === 0
+      opAfstand
+        ? `${Math.ceil(rondes)} ${Math.ceil(rondes) === 1 ? "ronde" : "rondes"} tot de finish: ${litres.toFixed(1)} L nodig.`
+        : remainingSeconds === 0
         ? "De sessie is afgelopen; er hoeft geen brandstof meer bij."
         : `${Math.ceil(rondes)} ${Math.ceil(rondes) === 1 ? "ronde" : "rondes"} te gaan bij ${Math.round(averageLapSeconds)} s per ronde: ${litres.toFixed(1)} L nodig.`,
   };
