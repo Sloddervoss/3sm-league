@@ -1,6 +1,7 @@
 import { makeId } from "../core/actions";
 import type { EnduranceEvent, EnduranceStint, StintPlanningState } from "../core/types";
 import { availableUntil, coversAvailability } from "../core/availabilityCoverage";
+import { buildRotationOrder, fastestFirstFromPace, rotationCounts } from "./rotation";
 
 /**
  * Per-coureur planningsbeperkingen (alle optioneel als de coureur niks kiest).
@@ -95,13 +96,28 @@ export const generateStints = (
     return coversAvailability(ownBlocks, userId, new Date(fromMs).toISOString(), new Date(toMs).toISOString());
   };
 
-  // Startcoureur: expliciet doorgegeven, anders de eerste willingToStart-coureur.
+  // Startcoureur: expliciet doorgegeven (het keuzeveld "wie start"), anders de
+  // eerste willingToStart-coureur.
   const firstStintDriver = options.firstStintDriver || members.find((userId) => limits[userId]?.willingToStart);
+
+  // Rotatie in plaats van restjes: een vaste rijvolgorde vanaf de startcoureur,
+  // waarbij de extra stint naar de snelste coureur gaat. Zie rotation.ts.
+  const rotationOrder = buildRotationOrder(members, firstStintDriver ?? null);
+  const fastestFirst = fastestFirstFromPace(
+    state.paceEntries.filter((entry) => entry.eventId === event.id),
+    rotationOrder
+  );
+  // Verwacht aantal stints uit raceduur en tankduur. Wijken de echte stints
+  // hiervan af (kortere stints door een rijlimiet of beschikbaarheid), dan
+  // begint de generator gewoon een nieuwe ronde met gelijke delen.
+  const expectedStints = Math.max(1, Math.ceil((endMs - startMs) / (tankMinutes * 60_000)));
+  const rotationRemaining = rotationCounts(rotationOrder, expectedStints, fastestFirst);
 
   while (cursor < endMs) {
     const defaultEndMs = Math.min(endMs, cursor + tankMinutes * 60_000);
 
-    // Kies de minst-belaste coureur die aan alle constraints voldoet (fair-share plust).
+    // Wie mag deze stint rijden? Beschikbaarheid, rijlimieten, rusttijd en het
+    // maximum aantal stints achter elkaar. De volgorde zelf komt uit de rotatie.
     const candidateEnds: Record<string, number> = {};
     const candidatesForThisStint = members.filter((userId) => {
       const c = run[userId];
@@ -128,11 +144,10 @@ export const generateStints = (
 
     // Vast-houden: als de coureur die net reed expliciet een maxConsecutiveStints
     // > 1 heeft ingesteld en nog binnen die grens zit (en beschikbaar blijft),
-    // laat hem de volgende stint rijden i.p.v. altijd naar de minst-belaste door
-    // te roteren. Zo respecteert de planner de wens om 2/3 stints achter elkaar
-    // te rijden, en iedereen zonder die instelling blijft gewoon 1-om-1 wisselen.
-    // Wanneer de coureur op zijn grens zit (of net pas gereden heeft zonder
-    // ingestelde grens, of niet meer beschikbaar) valt hij terug op fair-share.
+    // laat hem de volgende stint rijden. Zo respecteert de planner de wens om
+    // 2/3 stints achter elkaar te rijden, en iedereen zonder die instelling
+    // blijft gewoon 1-om-1 wisselen. Zit hij op zijn grens (of is hij niet meer
+    // beschikbaar), dan gaat de beurt gewoon naar de rotatie.
     let driverId: string | null = null;
     if (prevDriverId) {
       const prev = run[prevDriverId];
@@ -141,16 +156,38 @@ export const generateStints = (
       if (wantsContinue && pool.includes(prevDriverId)) driverId = prevDriverId;
     }
 
-    // Fair-share (of vastgehouden coureur): kies de coureur met de minste totale rijtijd.
+    // Rotatie (of vastgehouden coureur): wie volgens de rijvolgorde aan de beurt
+    // is. Geen restjes meer op basis van resterende rijtijd.
     if (!driverId) {
-      let candidate = pool[0];
-      let minTotal = Infinity;
-      for (const userId of pool) {
-        const t = run[userId].totalMinutes;
-        if (t < minTotal) { minTotal = t; candidate = userId; }
+      // Rotatie: de coureur die volgens de rijvolgorde aan de beurt is, met de
+      // meeste nog openstaande stints. Wie niet beschikbaar is of zijn limiet
+      // heeft bereikt zit niet in de pool en wordt dus automatisch
+      // overgeslagen.
+      let live = pool.filter((userId) => (rotationRemaining[userId] ?? 0) > 0);
+      if (!live.length) {
+        // Meer stints dan vooraf berekend: nieuwe ronde, gelijke delen.
+        for (const userId of rotationOrder) rotationRemaining[userId] = (rotationRemaining[userId] ?? 0) + 1;
+        live = pool.filter((userId) => (rotationRemaining[userId] ?? 0) > 0);
+      }
+      const candidates = (live.length ? live : pool).filter((userId) => userId !== prevDriverId);
+      const finalPool = candidates.length ? candidates : live.length ? live : pool;
+      const distance = (userId: string) => {
+        const index = rotationOrder.indexOf(userId);
+        const prevIndex = prevDriverId ? rotationOrder.indexOf(prevDriverId) : -1;
+        if (index < 0) return rotationOrder.length;
+        if (prevIndex < 0) return index;
+        return (index - prevIndex + rotationOrder.length) % rotationOrder.length;
+      };
+      let candidate = finalPool[0];
+      for (const userId of finalPool) {
+        if (userId === candidate) continue;
+        const mine = rotationRemaining[userId] ?? 0;
+        const theirs = rotationRemaining[candidate] ?? 0;
+        if (mine > theirs || (mine === theirs && distance(userId) < distance(candidate))) candidate = userId;
       }
       driverId = candidate;
     }
+    rotationRemaining[driverId] = Math.max(0, (rotationRemaining[driverId] ?? 0) - 1);
 
     const stintEndMsCapped = candidateEnds[driverId];
 
