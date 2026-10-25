@@ -87,6 +87,9 @@ export const PitwallTab = ({ event }: Props) => {
 
   const strategy = isDemo ? demo.strategy : real.strategy;
   const events = isDemo ? demo.events : real.events;
+  const lapTimes = events
+    .map((event) => event.lap_time_from_deltas_s ?? Number(event.payload?.lastLapTimeSeconds))
+    .filter((n) => Number.isFinite(n) && n > 0) as number[];
   const teams = isDemo ? demo.teams : teamQuery.data ?? [];
   const plannedStints = isDemo ? demo.plannedStints : real.plannedStints;
   const alerts = isDemo ? demo.alerts : real.alerts;
@@ -306,7 +309,7 @@ export const PitwallTab = ({ event }: Props) => {
               />
             </div>
             <div className="space-y-3">
-              <PacePanel strategy={strategy} pace={pace} />
+              <PacePanel strategy={strategy} pace={pace} lapTimes={lapTimes} />
             </div>
           </div>
 

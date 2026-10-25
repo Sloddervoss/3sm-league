@@ -4,16 +4,21 @@ import { formatLapTime } from "./pitwallHelpers";
 interface Props {
   strategy: PitwallStrategyRow | null;
   pace: PitwallPaceData | null;
+  /** Rondetijden uit dezelfde bron als de tijdlijn, voor als het pace-blok leeg is. */
+  lapTimes?: number[];
 }
 
-export const PacePanel = ({ strategy, pace }: Props) => {
+export const PacePanel = ({ strategy, pace, lapTimes = [] }: Props) => {
   if (!strategy) {
     return <PanelShell title="PACE"><p className="text-xs text-gray-500">Geen data</p></PanelShell>;
   }
 
-  const lastLap = pace?.lastLapSeconds;
-  const bestLap = pace?.bestLapSeconds;
-  const stintAvg = pace?.stintAvgSeconds;
+  // Uitlooprondes (pit, spin, herstart) mogen het gemiddelde niet bepalen.
+  const eigen = lapTimes.filter((n) => Number.isFinite(n) && n > 0 && n < 600);
+
+  const lastLap = pace?.lastLapSeconds ?? (eigen.length ? eigen[eigen.length - 1] : null);
+  const bestLap = pace?.bestLapSeconds ?? (eigen.length ? Math.min(...eigen) : null);
+  const stintAvg = pace?.stintAvgSeconds ?? (eigen.length ? eigen.reduce((a, b) => a + b, 0) / eigen.length : null);
   const target = pace?.targetSeconds;
   const delta = (lastLap != null && target != null) ? lastLap - target : null;
 
@@ -22,7 +27,7 @@ export const PacePanel = ({ strategy, pace }: Props) => {
   if (!showAny) {
     return (
       <PanelShell title="PACE">
-        <p className="text-xs text-gray-500">Geen rondetijd data</p>
+        <p className="text-xs text-gray-500">Nog geen rondetijd in deze stint</p>
       </PanelShell>
     );
   }
