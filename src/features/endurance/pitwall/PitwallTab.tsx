@@ -18,6 +18,8 @@ import { AlertZone } from "./AlertZone";
 import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
 import { StandingsWidget } from "./StandingsWidget";
+import { mergeFuelToFinish } from "./pitwallHelpers";
+import { median } from "./strategy/fuelModel";
 import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
 import { LiveTrackPanel } from "./LiveTrackPanel";
 import { RaceTelemetryStrip } from "./RaceTelemetryStrip";
@@ -86,11 +88,19 @@ export const PitwallTab = ({ event }: Props) => {
 
   const isDemo = import.meta.env.DEV && demo !== null;
 
-  const strategy = isDemo ? demo.strategy : real.strategy;
+  const strategyBase = isDemo ? demo.strategy : real.strategy;
   const events = isDemo ? demo.events : real.events;
   const lapTimes = events
     .map((event) => event.lap_time_from_deltas_s ?? Number(event.payload?.lastLapTimeSeconds))
     .filter((n) => Number.isFinite(n) && n > 0) as number[];
+
+  // De server laat brandstof-tot-finish leeg bij een tijdrace; hier rekenen we
+  // hem uit de resterende sessietijd. Een bestaande serverwaarde wint altijd.
+  const strategy = isDemo
+    ? strategyBase
+    : mergeFuelToFinish(strategyBase, real.v3 ?? null, {
+        averageLapSeconds: median(lapTimes.filter((n) => n < 600)),
+      });
 
   const pitLaps = new Set(
     events.filter((event) => event.event_type === 'pit_entry').map((event) => event.completed_laps),
@@ -289,6 +299,7 @@ export const PitwallTab = ({ event }: Props) => {
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="min-w-0">
           <StandingsWidget
+            live={isLive}
             standings={standings}
             ownCarLabel={teams.find((t) => t.id === selectedTeamId)?.name ?? "Mijn auto"}
             ownCarNumber={null}

@@ -11,6 +11,8 @@ interface Props {
   ownCarLabel: string | null;
   /** Own car number. */
   ownCarNumber: string | null;
+  /** Valse feed mag niet als live staan. */
+  live?: boolean;
 }
 
 const rowLabel = (r: V3Opponent): string => {
