@@ -12,7 +12,7 @@ const sha256 = (path: string) => createHash("sha256").update(readFileSync(path))
 
 describe("public SimHub connector human download", () => {
   it("routes the public-facing button to the stable ZIP, never the updater DLL", () => {
-    expect(page).toContain('href="/downloads/3SM.EnduranceConnector-latest.zip"');
+    expect(page).toContain('href="/downloads/3SM.EnduranceConnector-latest.zip?v=0.6.1.1"');
     expect(page).toContain("Versie 0.6.1.1 · Handmatige installatie");
     expect(page).not.toContain('href="/downloads/3SM.EnduranceConnector-0.3.9.0.dll"');
   });
