@@ -2230,6 +2230,18 @@ export type Database = {
     Functions: {
       endurance_sync_practice_pace: { Args: { p_session_id: string; p_car_alias: string }; Returns: number }
       endurance_team_workspace: { Args: { p_event_id: string }; Returns: Json }
+      get_endurance_archive_summary: {
+        Args: { p_event_id: string }
+        Returns: {
+          team_id: string
+          team_name: string
+          car_number: string | null
+          laps: number
+          best_lap_seconds: number | null
+          stops: number
+          drivers: string[]
+        }[]
+      }
       endurance_apply_team_proposal: { Args: { p_event_id: string; p_revision: string; p_teams: Json }; Returns: Json }
       endurance_manage_team: { Args: { p_event_id: string; p_revision: string; p_action: Json }; Returns: Json }
 

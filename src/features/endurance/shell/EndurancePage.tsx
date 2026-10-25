@@ -18,11 +18,53 @@ import { EnduranceNav, type EnduranceSection } from "./EnduranceNav";
 import { useEnduranceEvents } from "../repository/eventsRepository";
 import { enduranceEventRowToAppModel } from "../repository/mappers";
 import { useEnduranceCapabilities } from "../repository/capabilitiesRepository";
+import { useEnduranceArchiveSummary } from "../repository/archiveRepository";
+import { formatAmsterdam } from "../core/selectors";
+
+const ARCHIVE_STAT = ({ label, value }: { label: string; value: string }) => (
+  <div>
+    <p className="text-[10px] uppercase tracking-widest text-gray-500">{label}</p>
+    <p className="mt-0.5 font-heading text-lg font-black text-white">{value}</p>
+  </div>
+);
+
+const formatLapTime = (seconds: number | null): string => {
+  if (seconds == null || !Number.isFinite(seconds)) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds - m * 60;
+  return `${m}:${s.toFixed(2).padStart(5, "0")}`;
+};
+
+const ArchiveCard = ({ event }: { event: ReturnType<typeof enduranceEventRowToAppModel> }) => {
+  const { data: teams = [] } = useEnduranceArchiveSummary(event.id);
+  const main = teams[0];
+  return (
+    <Panel>
+      <StatusPill tone="green">Afgerond</StatusPill>
+      <h3 className="mt-3 font-heading text-xl font-black text-white">{event.name}</h3>
+      <p className="mt-1 text-sm text-gray-400">{event.circuit} · {formatAmsterdam(event.startAt)}</p>
+      {main ? (
+        <>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <ARCHIVE_STAT label="Rondes" value={String(main.laps)} />
+            <ARCHIVE_STAT label="Snelste" value={formatLapTime(main.best_lap_seconds)} />
+            <ARCHIVE_STAT label="Stops" value={String(main.stops)} />
+          </div>
+          <p className="mt-3 text-xs text-gray-500">{main.team_name}{main.drivers?.length ? ` · ${main.drivers.join(" · ")}` : ""}</p>
+        </>
+      ) : (
+        <p className="mt-4 text-sm text-gray-500">Geen telemetrie bewaard voor deze race.</p>
+      )}
+    </Panel>
+  );
+};
 
 const ArchivePanel = () => {
   const { data: dbEvents = [] } = useEnduranceEvents();
-  const completed = dbEvents.filter((event) => event.status === "completed");
-  return <div><SectionHeading eyebrow="Historie" title="Endurance-archief" description="Afgeronde races bewaren planningversies, auditgeschiedenis en evaluatiegegevens als basis voor de volgende race." /><div className="grid gap-4 lg:grid-cols-2">{completed.map((event) => <Panel key={event.id}><StatusPill tone="green">Afgerond</StatusPill><h3 className="mt-3 font-heading text-xl font-black text-white">{event.name}</h3><p className="mt-1 text-sm text-gray-400">{event.circuit} · Afgerond</p></Panel>)}</div>{!completed.length && <Panel><p className="text-sm text-gray-400">Nog geen afgeronde endurance-races. Zodra een race wordt afgesloten verschijnt hij hier met zijn bewaarde planning en auditgeschiedenis.</p></Panel>}</div>;
+  const completed = dbEvents
+    .filter((event) => event.status === "completed")
+    .map(enduranceEventRowToAppModel);
+  return <div><SectionHeading eyebrow="Historie" title="Endurance-archief" description="Afgeronde races met hun uitslag, rondes en stops." /><div className="grid gap-4 lg:grid-cols-2">{completed.map((event) => <ArchiveCard key={event.id} event={event} />)}</div>{!completed.length && <Panel><p className="text-sm text-gray-400">Nog geen afgeronde endurance-races. Zodra een race wordt afgesloten verschijnt hij hier.</p></Panel>}</div>;
 };
 
 const EnduranceContent = () => {
