@@ -11,6 +11,7 @@ import {
   lapsOnFuel,
   median,
   planRotation,
+  remainingSessionSeconds,
   theilSen,
   windowIsInfeasible,
 } from "./index";
@@ -267,6 +268,101 @@ describe("advise", () => {
       }),
     );
     expect(advies.lapsToFinish).toBe(20);
+  });
+});
+
+describe("advise — tijdrace zonder geplande rondes", () => {
+  /**
+   * Punt 2 uit de lijst na de race: de race loopt op tijd, `planned_laps` is
+   * leeg, en daardoor bleef brandstof-tot-finish null. Deze tests leggen vast
+   * dat de resterende sessietijd dan de bron is.
+   */
+  const tijdrace = (overrides: Partial<StrategySnapshot> = {}): StrategySnapshot =>
+    basisSnapshot({
+      plannedLaps: null,
+      plannedDurationMinutes: null,
+      raceClockSeconds: 3600,
+      currentLapSeconds: 90,
+      sessionTimeRemainingSeconds: 3600,
+      ...overrides,
+    });
+
+  it("rekent de resterende rondes uit de sessieklok zonder geplande duur", () => {
+    const advies = advise(tijdrace());
+    expect(advies.lapsToFinish).toBe(40); // 3600 s / 90 s
+  });
+
+  it("rekent de liters tot de finish uit tijd en gemiddelde rondetijd", () => {
+    const advies = advise(tijdrace());
+    expect(advies.fuelToFinish!.reasonCode).toBe("ok");
+    expect(advies.fuelToFinish!.lapsRemaining).toBe(40);
+    expect(advies.fuelToFinish!.litres).toBeCloseTo(40 * advies.fuel.perLap!, 2);
+  });
+
+  it("gebruikt de gemiddelde rondetijd boven de laatste ronde", () => {
+    // Laatste ronde was een uitloop van 120 s, gemiddeld is 100 s: 3600/100 = 36.
+    const advies = advise(tijdrace({ currentLapSeconds: 120, averageLapSeconds: 100 }));
+    expect(advies.lapsToFinish).toBe(36);
+    expect(advies.fuelToFinish!.lapsRemaining).toBe(36);
+    expect(advies.fuelToFinish!.litres).toBeCloseTo(36 * advies.fuel.perLap!, 2);
+  });
+
+  it("valt terug op de geplande duur als de klok ontbreekt", () => {
+    const advies = advise(
+      tijdrace({ sessionTimeRemainingSeconds: null, plannedDurationMinutes: 120, raceClockSeconds: 3600 }),
+    );
+    expect(advies.fuelToFinish!.reasonCode).toBe("ok");
+    expect(advies.fuelToFinish!.lapsRemaining).toBe(40); // 3600 s resterend
+  });
+
+  it("geeft geen liters als de rondetijd ontbreekt, en zegt waarom", () => {
+    const advies = advise(tijdrace({ currentLapSeconds: null, averageLapSeconds: null }));
+    expect(advies.fuelToFinish!.litres).toBeNull();
+    expect(advies.fuelToFinish!.reasonCode).toBe("no_average_lap");
+    expect(advies.lapsToFinish).toBeNull();
+  });
+
+  it("geeft geen liters als de klok ontbreekt", () => {
+    const advies = advise(
+      tijdrace({ sessionTimeRemainingSeconds: null, plannedDurationMinutes: null, currentLapSeconds: 90 }),
+    );
+    expect(advies.fuelToFinish!.litres).toBeNull();
+    expect(advies.fuelToFinish!.reasonCode).toBe("no_time_remaining");
+  });
+
+  it("neemt de tank als bovengrens mee in het advies", () => {
+    const advies = advise(tijdrace({ fuelLitres: 40, tankCapacityLitres: 100 }));
+    expect(advies.fuelToFinish!.litres).toBeGreaterThan(100); // vier uur race
+    expect(advies.fuelToFinish!.litresWithinTank).toBe(100);
+    expect(advies.fuelToFinish!.sufficient).toBe(false);
+  });
+
+  it("rekent niets uit tijd als er geen klok en geen duur is", () => {
+    const advies = advise(basisSnapshot());
+    expect(advies.lapsToFinish).toBe(30);
+    expect(advies.fuelToFinish!.reasonCode).toBe("no_time_remaining");
+  });
+});
+
+describe("remainingSessionSeconds", () => {
+  it("kiest de klok boven de geplande duur", () => {
+    expect(
+      remainingSessionSeconds(basisSnapshot({ sessionTimeRemainingSeconds: 900, plannedDurationMinutes: 60 })),
+    ).toBe(900);
+  });
+
+  it("rekent de geplande duur terug als de klok ontbreekt", () => {
+    expect(
+      remainingSessionSeconds(
+        basisSnapshot({ sessionTimeRemainingSeconds: null, plannedDurationMinutes: 60, raceClockSeconds: 1800 }),
+      ),
+    ).toBe(1800);
+  });
+
+  it("geeft null zonder klok en zonder duur", () => {
+    expect(
+      remainingSessionSeconds(basisSnapshot({ sessionTimeRemainingSeconds: null, plannedDurationMinutes: null })),
+    ).toBeNull();
   });
 });
 

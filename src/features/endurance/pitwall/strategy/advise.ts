@@ -1,3 +1,4 @@
+import { estimateFuelToFinish } from "./fuelToFinish";
 import {
   estimateFuelPerLap,
   fuelToAddForFinish,
@@ -29,20 +30,47 @@ function confidenceFor(snapshot: StrategySnapshot, samples: number, sigma: numbe
   return "none";
 }
 
+/**
+ * Resterende sessietijd in seconden.
+ *
+ * Eerst de klok die de connector zelf meestuurt. Pas als die ontbreekt, de
+ * geplande duur min de verstreken tijd. Zo werkt een tijdrace ook als het event
+ * geen duur in de catalogus heeft: `sessionLapsRemaining` is daar leeg, maar de
+ * klok is er wel.
+ */
+export function remainingSessionSeconds(snapshot: StrategySnapshot): number | null {
+  const direct = snapshot.sessionTimeRemainingSeconds;
+  if (typeof direct === "number" && Number.isFinite(direct) && direct >= 0) return direct;
+
+  const { plannedDurationMinutes, raceClockSeconds } = snapshot;
+  if (plannedDurationMinutes != null && plannedDurationMinutes > 0 && Number.isFinite(raceClockSeconds)) {
+    const resterend = plannedDurationMinutes * 60 - raceClockSeconds;
+    return resterend > 0 ? resterend : 0;
+  }
+  return null;
+}
+
+/** Rondetijd waarmee de resterende tijd naar rondes gaat: gemiddelde, anders de laatste ronde. */
+export function referenceLapSeconds(snapshot: StrategySnapshot): number | null {
+  const gemiddeld = snapshot.averageLapSeconds;
+  if (typeof gemiddeld === "number" && Number.isFinite(gemiddeld) && gemiddeld > 0) return gemiddeld;
+  return snapshot.currentLapSeconds != null && snapshot.currentLapSeconds > 0
+    ? snapshot.currentLapSeconds
+    : null;
+}
+
 /** Resterende rondes tot de finish, of null als de afstand onbekend is. */
 export function lapsToFinish(snapshot: StrategySnapshot): number | null {
   const { plannedLaps, lapsCompleted } = snapshot;
   if (plannedLaps != null && plannedLaps > 0) {
     return Math.max(0, plannedLaps - lapsCompleted);
   }
-  const { plannedDurationMinutes, raceClockSeconds, currentLapSeconds } = snapshot;
-  if (plannedDurationMinutes != null && plannedDurationMinutes > 0 && currentLapSeconds != null && currentLapSeconds > 0) {
-    const resterend = plannedDurationMinutes * 60 - raceClockSeconds;
-    if (resterend <= 0) return 0;
-    // Naar boven afronden: de laatste halve ronde telt ook.
-    return Math.ceil(resterend / currentLapSeconds);
-  }
-  return null;
+
+  const resterend = remainingSessionSeconds(snapshot);
+  const rondetijd = referenceLapSeconds(snapshot);
+  if (resterend == null || resterend <= 0 || rondetijd == null) return resterend === 0 ? 0 : null;
+  // Naar boven afronden: de laatste halve ronde telt ook.
+  return Math.ceil(resterend / rondetijd);
 }
 
 export function advise(snapshot: StrategySnapshot): Advice {
@@ -51,6 +79,16 @@ export function advise(snapshot: StrategySnapshot): Advice {
   const perLap = fuel.perLap;
   const resterend = lapsToFinish(snapshot);
   const voorraad = computeLapsOnFuel(snapshot.fuelLitres, perLap, reserve);
+
+  // Dezelfde invoer, maar dan in tijd: dit is het getal dat een tijdrace wél
+  // kan geven terwijl `session_laps_remaining` leeg blijft.
+  const brandstofTotFinish = estimateFuelToFinish({
+    remainingSeconds: remainingSessionSeconds(snapshot),
+    averageLapSeconds: referenceLapSeconds(snapshot),
+    fuelPerLap: perLap,
+    fuelLitres: snapshot.fuelLitres,
+    tankCapacityLitres: snapshot.tankCapacityLitres,
+  });
 
   const leeg = (reasonCode: string, reason: string, confidence: Confidence = "none"): Advice => ({
     decision: "NO_ADVICE",
@@ -64,6 +102,7 @@ export function advise(snapshot: StrategySnapshot): Advice {
     pitLoss: null,
     lapsOnFuel: voorraad,
     lapsToFinish: resterend,
+    fuelToFinish: brandstofTotFinish,
   });
 
   if (snapshot.sampleAgeSeconds > MAX_SAMPLE_AGE_SECONDS) {
@@ -120,6 +159,7 @@ export function advise(snapshot: StrategySnapshot): Advice {
     lapsToFinish: resterend,
     confidence,
     fuelToAddLitres: tanken,
+    fuelToFinish: brandstofTotFinish,
   } as const;
 
   if (voorraad == null) {

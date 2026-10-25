@@ -1,3 +1,4 @@
+import { averageLapSecondsFromLaps } from "./fuelToFinish";
 import type { PitwallStrategyRow, V3Normalized } from "../pitwallHelpers";
 import type { StrategySnapshot } from "./types";
 
@@ -23,6 +24,10 @@ export interface SnapshotInput {
   reserveLaps?: number;
   /** Verbruik per ronde uit eerdere rondes, indien beschikbaar. */
   fuelPerLapSamples?: number[];
+  /** Gemeten rondetijden; de mediaan daarvan is de gemiddelde rondetijd. */
+  lapTimeSamples?: number[];
+  /** Al berekende gemiddelde rondetijd, als de aanroeper die zelf heeft. */
+  averageLapSeconds?: number | null;
 }
 
 export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
@@ -51,10 +56,27 @@ export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
     v3?.fuel?.fuelPerLapLitres,
   );
 
+  const resterendeSeconden = firstNumber(v3?.session?.sessionTimeRemainingSeconds);
+
+  // Voorkeur voor een aangeleverde gemiddelde rondetijd; anders de mediaan van
+  // de gemeten rondetijden. Zonder beide blijft het null en rekent de motor
+  // niets uit.
+  const gemiddeldeRonde =
+    input.averageLapSeconds != null &&
+    Number.isFinite(input.averageLapSeconds) &&
+    input.averageLapSeconds > 0
+      ? input.averageLapSeconds
+      : averageLapSecondsFromLaps(input.lapTimeSamples ?? []);
+
   return {
     raceClockSeconds: firstNumber(v3?.session?.sessionTimeSeconds) ?? 0,
     lapsCompleted,
     currentLapSeconds: firstNumber(v3?.timing?.lastLapTimeSeconds) ?? null,
+    // De klok die de connector zelf meestuurt is de enige bron die ook bij een
+    // tijdrace zonder geplande duur bestaat.
+    sessionTimeRemainingSeconds:
+      resterendeSeconden != null && resterendeSeconden >= 0 ? resterendeSeconden : null,
+    averageLapSeconds: gemiddeldeRonde,
     fuelLitres: fuelLitres ?? null,
     tankCapacityLitres: tankCapacity ?? null,
     plannedLaps: input.plannedLaps ?? null,
