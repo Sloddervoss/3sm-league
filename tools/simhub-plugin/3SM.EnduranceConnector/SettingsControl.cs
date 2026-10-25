@@ -35,7 +35,7 @@ namespace ThreeSM.EnduranceConnector
             sidebarStack.Children.Add(wordmark);
             sidebarStack.Children.Add(new TextBlock { Text = "v" + _plugin.InstalledVersion, Foreground = UiKit.Muted, FontSize = 11, Margin = new Thickness(18, 0, 16, 14) });
 
-            var navDefs = new[] { ("⛓", "Koppeling"), ("◉", "Status"), ("↑", "Updates") };
+            var navDefs = new[] { ("⛓", "Koppeling"), ("◉", "Status"), ("▣", "Research"), ("↑", "Updates") };
             for (var i = 0; i < navDefs.Length; i++)
             {
                 var index = i;
@@ -49,6 +49,7 @@ namespace ThreeSM.EnduranceConnector
             _content = new Grid { Background = UiKit.Bg };
             _panes.Add(ScrollPane(BuildKoppelingPane()));
             _panes.Add(ScrollPane(BuildStatusPane()));
+            _panes.Add(ScrollPane(BuildResearchPane()));
             _panes.Add(ScrollPane(BuildUpdatesPane()));
             foreach (var pane in _panes) { Grid.SetColumn(pane, 1); _content.Children.Add(pane); }
             for (var i = 1; i < _panes.Count; i++) _panes[i].Visibility = Visibility.Collapsed;
@@ -214,6 +215,97 @@ namespace ThreeSM.EnduranceConnector
             stack.Children.Add(UiKit.Card(tel, "Laatst verzonden telemetry"));
 
             return stack;
+        }
+
+        // ================= Research =================
+        // Lokale opname, standaard uit. Alles wat hier staat is bediening van de recorder;
+        // de opname zelf draait op de telemetrythread en schrijft via een eigen wachtrij.
+        private StackPanel BuildResearchPane()
+        {
+            var stack = new StackPanel();
+            stack.Children.Add(UiKit.Header("Research-opname",
+                "Legt telemetrie lokaal vast voor onderzoek. Standaard uit; niets verlaat dit apparaat vanzelf."));
+
+            var record = new StackPanel();
+            record.Children.Add(UiKit.Toggle("Research-opname inschakelen (lokaal)",
+                _plugin.Settings != null && _plugin.Settings.ResearchEnabled,
+                value => _plugin.SetResearchEnabled(value)));
+
+            var statusText = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 12.5,
+                LineHeight = 19,
+                Foreground = UiKit.Text,
+                Margin = new Thickness(0, 10, 0, 0),
+            };
+            statusText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("ResearchStatusText") { Source = _plugin });
+            record.Children.Add(statusText);
+
+            var buttons = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
+            var pause = UiKit.Secondary("Pauzeren");
+            pause.Click += delegate { _plugin.SetResearchPaused(true); };
+            var resume = UiKit.Secondary("Hervatten");
+            resume.Click += delegate { _plugin.SetResearchPaused(false); };
+            var export = UiKit.Secondary("Exporteren…");
+            export.Click += delegate { ExportResearchSession(); };
+            var remove = UiKit.DangerButton("Researchdata verwijderen");
+            remove.Click += delegate
+            {
+                var answer = MessageBox.Show(
+                    "Alle lokale researchbestanden op deze pc worden verwijderd, inclusief de salt waarmee de pseudonieme ID wordt gemaakt.\n\nDoorgaan?",
+                    "Researchdata verwijderen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (answer == MessageBoxResult.Yes) _plugin.DeleteResearchData();
+            };
+            buttons.Children.Add(pause);
+            buttons.Children.Add(resume);
+            buttons.Children.Add(export);
+            buttons.Children.Add(remove);
+            record.Children.Add(buttons);
+            stack.Children.Add(UiKit.Card(record, "Opname"));
+
+            var markers = new StackPanel();
+            var combo = UiKit.Combo(false, 260);
+            foreach (var name in ResearchEventNames.All) combo.Items.Add(name);
+            combo.SelectedIndex = 0;
+            markers.Children.Add(UiKit.RowControl("Protocolmarker", combo, "Zet een herhaalbare marker in hetzelfde JSONL-bestand."));
+            var mark = UiKit.Primary("MARKER PLAATSEN");
+            mark.HorizontalAlignment = HorizontalAlignment.Left;
+            mark.Click += delegate
+            {
+                ResearchEventKind kind;
+                if (!ResearchEventNames.TryParse(combo.SelectedItem as string, out kind)) return;
+                _plugin.MarkResearch(kind, "handmatig vanuit SimHub");
+            };
+            markers.Children.Add(mark);
+            var markerNote = UiKit.Sub("Markers worden ook automatisch gezet op de flanken: garage, stint, pit entry, pitbox, bandenwissel, reset en sessie-einde.");
+            markerNote.Margin = new Thickness(0, 8, 0, 0);
+            markers.Children.Add(markerNote);
+            stack.Children.Add(UiKit.Card(markers, "Protocol"));
+
+            var privacy = new StackPanel();
+            var privacyText = UiKit.Sub(
+                "Er worden geen rijders- of teamnamen opgeslagen. De kopregel bevat een pseudonieme ID (SHA-256 van de rijders-ID met een lokale salt). " +
+                "Die salt gaat nooit mee met een export. Bestanden staan lokaal en worden alleen gekopieerd als je zelf op Exporteren klikt.");
+            privacy.Children.Add(privacyText);
+            stack.Children.Add(UiKit.Card(privacy, "Privacy"));
+
+            return stack;
+        }
+
+        private void ExportResearchSession()
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Research-sessie exporteren",
+                Filter = "JSONL-bestand (*.jsonl)|*.jsonl|Alle bestanden (*.*)|*.*",
+                FileName = "research-sessie.jsonl",
+                OverwritePrompt = true,
+            };
+            if (dialog.ShowDialog() != true) return;
+            var message = _plugin.ExportResearchSession(dialog.FileName);
+            MessageBox.Show(message, "Research exporteren", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         // ================= Updates =================

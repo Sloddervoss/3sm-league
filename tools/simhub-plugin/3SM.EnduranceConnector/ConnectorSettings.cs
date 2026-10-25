@@ -35,7 +35,13 @@ namespace ThreeSM.EnduranceConnector
         // 0.7.0: optioneel root-blok `tyres` (12 wear-zones, karkas, sets, omgeving).
         // Zelfde regel als hierboven: pas aanzetten als de relay/validator het blok kent,
         // want een oude receiver weigert een onbekende root-key met 422. Default uit.
-        public bool TyreTelemetryEnabled = false;
+        public bool TyreTelemetryEnabled = true;
+
+        // Research-opname (lokaal, standaard uit). Schrijft JSONL naar deze pc en verlaat
+        // het apparaat nooit vanzelf; exporteren is een expliciete gebruikersactie.
+        // Leeg pad = %LOCALAPPDATA%\3SM\EnduranceConnector\research.
+        public bool ResearchEnabled = false;
+        public string ResearchDirectory = string.Empty;
 
         public string SpeedProperty = "DataCorePlugin.GameData.NewData.SpeedKmh";
         public string LapProperty = "DataCorePlugin.GameData.NewData.CurrentLap";

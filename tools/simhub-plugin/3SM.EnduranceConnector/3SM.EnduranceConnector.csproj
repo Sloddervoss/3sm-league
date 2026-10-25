@@ -46,6 +46,16 @@
     <Compile Include="Theme.cs" />
     <Compile Include="TelemetryContracts.cs" />
     <Compile Include="TelemetryContractsV3.cs" />
+    <!-- Research-opname (opt-in, lokale JSONL). Pure logica: geen SimHub-referentie; de
+         tests in 3SM.EnduranceConnector.ResearchTests compileren dezelfde bestanden. -->
+    <Compile Include="ResearchProvenance.cs" />
+    <Compile Include="ResearchObservations.cs" />
+    <Compile Include="ResearchJsonl.cs" />
+    <Compile Include="ResearchQueue.cs" />
+    <Compile Include="ResearchEvents.cs" />
+    <Compile Include="ResearchIdentity.cs" />
+    <Compile Include="ResearchContextSampler.cs" />
+    <Compile Include="ResearchRecorder.cs" />
     <Compile Include="OverlayContracts.cs" />
     <Compile Include="OverlayClient.cs" />
     <Compile Include="OverlayPropertyPublisher.cs" />
