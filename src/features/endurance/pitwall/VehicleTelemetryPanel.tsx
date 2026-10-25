@@ -14,24 +14,27 @@ const wearTone = (pct: number | null): string => {
 export function VehicleTelemetryPanel({ v3, live }: { v3: V3Normalized | null; live: boolean }) {
   const inCar = v3?.session?.isInCar !== false;
   const car = live && inCar ? v3?.vehicle : null;
-  const status = !live ? 'Telemetrie offline' : !inCar ? 'Niet in de auto' : car ? 'Laatste meting' : 'Niet aangeleverd';
+  const status = !live ? 'Telemetrie offline' : !inCar ? 'Niet in de auto' : car ? 'Laatst beschikbare bandenmeting' : 'Niet aangeleverd';
 
   const tyre = (key: 'frontLeft' | 'frontRight' | 'rearLeft' | 'rearRight', label: string) => {
     const t = car?.[key];
     const pct = value(t?.wearPercent);
     const temp = value(t?.temperature, 1);
     const press = value(t?.pressure, 1);
-    const detail = [
-      temp != null && car?.temperatureUnit ? `${temp}°${car.temperatureUnit}` : null,
-      press != null && car?.pressureUnit ? `${press} ${car.pressureUnit}` : null,
-    ].filter(Boolean).join(' · ');
+    const hasTemp = temp != null && Boolean(car?.temperatureUnit);
+    const hasPress = press != null && Boolean(car?.pressureUnit);
     return (
       <div className={`rounded-lg border px-2 py-1.5 font-mono ${wearTone(pct != null ? Number(pct) : null)}`}>
         <div className="flex items-baseline justify-between gap-1">
           <b className="text-[10px] tracking-wider opacity-80">{label}</b>
           <span className="text-base font-black leading-none">{pct != null ? `${pct}%` : '—'}</span>
         </div>
-        {detail && <p className="mt-0.5 text-[9px] text-gray-500">{detail}</p>}
+        {(hasTemp || hasPress) && (
+          <p className="mt-0.5 flex gap-1 text-[9px] text-gray-500">
+            {hasTemp && <span>{temp} °{car?.temperatureUnit}</span>}
+            {hasPress && <span>{press} {car?.pressureUnit}</span>}
+          </p>
+        )}
       </div>
     );
   };
@@ -65,6 +68,7 @@ export function VehicleTelemetryPanel({ v3, live }: { v3: V3Normalized | null; l
         {tyre('frontRight', 'RV')}
         <div />
       </div>
+      <p className="mt-1.5 text-[9px] text-gray-600">Stand van SimHub; verspringt alleen bij een stop.</p>
     </section>
   );
 }

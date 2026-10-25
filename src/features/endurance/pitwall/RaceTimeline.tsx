@@ -80,7 +80,10 @@ const EventItem = ({ event, prominent }: { event: PitwallTimelineEvent; prominen
   switch (event.event_type) {
     case "lap_completed": {
       const lapTime = event.lap_time_from_deltas_s ?? (event.payload?.lastLapTimeSeconds ? Number(event.payload.lastLapTimeSeconds) : null);
-      detail = `L${event.completed_laps ?? "?"}${lapTime != null && lapTime > 0 ? ` ${lapTime.toFixed(1)}s` : ""}`;
+      // Een pit- of uitloopronde van 6 minuten is geen rondetijd: die mag de lijst
+      // niet domineren, dus tonen we hem als uitloop in plaats van als getal.
+      const outlier = lapTime != null && lapTime > 600;
+      detail = `L${event.completed_laps ?? "?"}${lapTime != null && lapTime > 0 ? (outlier ? " uitloop" : ` ${lapTime.toFixed(1)}s`) : ""}`;
       break;
     }
     case "pit_entry":
