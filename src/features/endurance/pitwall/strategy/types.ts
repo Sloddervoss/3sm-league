@@ -46,6 +46,33 @@ export interface PitLossBreakdown {
   boundedBy: "pitLane" | "fuel" | "tyre" | "repair" | null;
 }
 
+/** Eén gemeten pitstay: van de pit-in-vlag tot de eerstvolgende pit-uit-vlag. */
+export interface MeasuredPitStop {
+  /** Moment van pit-in (in_pit_lane false -> true). */
+  entryAt: string;
+  /** Moment van pit-uit; null zolang de auto bij het einde van de data nog binnen staat. */
+  exitAt: string | null;
+  /** Werkelijk gemeten seconden in de pitstraat; null als de pit-uit ontbreekt. */
+  seconds: number | null;
+}
+
+/**
+ * Wat er aan pitverlies gemeten is.
+ *
+ * `pitLaneSeconds` is de mediaan van de bruikbare stops, niet een vaste waarde
+ * en niet een schatting. Zonder in_pit_lane-vlaggen is er niets gemeten en staat
+ * het veld op null; de UI hoort dan "nog niet gemeten" te zeggen.
+ */
+export interface PitStopMeasurement {
+  pitLaneSeconds: number | null;
+  /** Aantal stops dat in de mediaan meewoog. */
+  sampleCount: number;
+  source: "measured" | "none";
+  /** Moment van de laatst gemeten pit-uit, indien bekend. */
+  lastStopAt: string | null;
+  stops: MeasuredPitStop[];
+}
+
 export interface PitWindow {
   /** Eerste ronde waarin je mag stoppen; in de praktijk: nu. */
   earliestLap: number;

@@ -309,6 +309,7 @@ export const PitwallTab = ({ event }: Props) => {
               currentFuel={strategy.current_fuel_litres}
               driverName={driverName}
               nextDriverName={nextDriverName}
+              pitLoss={isDemo ? null : real.pitStopMeasurement}
             />
             <RacePositionPanel strategy={strategy} position={position} />
             <VehicleTelemetryPanel key={`${event.id}:${selectedTeamId}`} v3={isDemo ? null : real.v3 ?? null} live={isLive} />
