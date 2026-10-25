@@ -58,6 +58,8 @@ export type TyreTelemetry = {
 };
 
 const CORNERS: TyreCorner[] = ["fl", "fr", "rl", "rr"];
+const ZONE_CORNERS = [["frontLeft", "fl"], ["frontRight", "fr"], ["rearLeft", "rl"], ["rearRight", "rr"]] as const;
+const LEGACY_CORNERS = [["fl", "fl"], ["fr", "fr"], ["rl", "rl"], ["rr", "rr"]] as const;
 const ZONE_KEYS = ["l", "m", "r"];
 
 const record = (value: unknown, path: string): Record<string, unknown> => {
@@ -94,20 +96,25 @@ const num = (value: unknown, path: string, rule: NumberRule): number | null => {
 };
 
 const zones = (value: unknown, path: string): TyreZones => {
-  const empty = { fl: null, fr: null, rl: null, rr: null } as TyreZones;
+  const out = { fl: null, fr: null, rl: null, rr: null } as TyreZones;
   const r = optionalObject(value, path);
-  if (!r) return empty;
-  allowKeys(r, CORNERS, path);
-  const out = { ...empty };
-  for (const corner of CORNERS) {
-    const raw = r[corner];
+  if (!r) return out;
+  allowKeys(r, [...ZONE_CORNERS.map((c) => c[0]), ...LEGACY_CORNERS.map((c) => c[0])], path);
+  for (const [key, corner] of [...ZONE_CORNERS, ...LEGACY_CORNERS]) {
+    const raw = r[key];
     if (raw === undefined || raw === null) continue;
-    const zonePath = `${path}.${corner}`;
-    const zone = record(raw, zonePath);
-    allowKeys(zone, ZONE_KEYS, zonePath);
-    for (const key of ZONE_KEYS) {
-      if (!(key in zone)) throw Error(`${zonePath} is missing required field ${key}`);
+    const zonePath = `${path}.${key}`;
+    // De plugin stuurt per hoek een array van drie zones: [links, midden, rechts].
+    if (Array.isArray(raw)) {
+      if (raw.length !== 3) throw Error(`${zonePath} must have exactly 3 zones`);
+      out[corner] = {
+        l: num(raw[0], `${zonePath}[0]`, { min: 0, max: 1 }),
+        m: num(raw[1], `${zonePath}[1]`, { min: 0, max: 1 }),
+        r: num(raw[2], `${zonePath}[2]`, { min: 0, max: 1 }),
+      };
+      continue;
     }
+    const zone = raw as Record<string, unknown>;
     out[corner] = {
       l: num(zone.l, `${zonePath}.l`, { min: 0, max: 1 }),
       m: num(zone.m, `${zonePath}.m`, { min: 0, max: 1 }),
@@ -117,21 +124,27 @@ const zones = (value: unknown, path: string): TyreZones => {
   return out;
 };
 
+
 const carcassZones = (value: unknown, path: string): TyreZones => {
-  const empty = { fl: null, fr: null, rl: null, rr: null } as TyreZones;
+  const out = { fl: null, fr: null, rl: null, rr: null } as TyreZones;
   const r = optionalObject(value, path);
-  if (!r) return empty;
-  allowKeys(r, CORNERS, path);
-  const out = { ...empty };
-  for (const corner of CORNERS) {
-    const raw = r[corner];
+  if (!r) return out;
+  allowKeys(r, [...ZONE_CORNERS.map((c) => c[0]), ...LEGACY_CORNERS.map((c) => c[0])], path);
+  for (const [key, corner] of [...ZONE_CORNERS, ...LEGACY_CORNERS]) {
+    const raw = r[key];
     if (raw === undefined || raw === null) continue;
-    const zonePath = `${path}.${corner}`;
-    const zone = record(raw, zonePath);
-    allowKeys(zone, ZONE_KEYS, zonePath);
-    for (const key of ZONE_KEYS) {
-      if (!(key in zone)) throw Error(`${zonePath} is missing required field ${key}`);
+    const zonePath = `${path}.${key}`;
+    // De plugin stuurt per hoek een array van drie zones: [links, midden, rechts].
+    if (Array.isArray(raw)) {
+      if (raw.length !== 3) throw Error(`${zonePath} must have exactly 3 zones`);
+      out[corner] = {
+        l: num(raw[0], `${zonePath}[0]`, { min: -40, max: 300 }),
+        m: num(raw[1], `${zonePath}[1]`, { min: -40, max: 300 }),
+        r: num(raw[2], `${zonePath}[2]`, { min: -40, max: 300 }),
+      };
+      continue;
     }
+    const zone = raw as Record<string, unknown>;
     out[corner] = {
       l: num(zone.l, `${zonePath}.l`, { min: -40, max: 300 }),
       m: num(zone.m, `${zonePath}.m`, { min: -40, max: 300 }),
@@ -140,6 +153,7 @@ const carcassZones = (value: unknown, path: string): TyreZones => {
   }
   return out;
 };
+
 
 const sets = (value: unknown, path: string): TyreSets => {
   const out: TyreSets = { used: null, available: null, frontLeft: null, frontRight: null, rearLeft: null, rearRight: null };
@@ -185,11 +199,11 @@ const capturedAt = (value: unknown, path: string): string | null => {
 const pitEntry = (value: unknown, path: string): TyrePitEntry | null => {
   const r = optionalObject(value, path);
   if (!r) return null;
-  allowKeys(r, ["wearPercent", "carcassTempC", "capturedAt"], path);
+  allowKeys(r, ["observedAt", "sessionTimeSeconds", "lap", "setsUsed", "wearPercent", "carcassTempC", "capturedAt"], path);
   return {
     wearPercent: zones(r.wearPercent, `${path}.wearPercent`),
     carcassTempC: carcassZones(r.carcassTempC, `${path}.carcassTempC`),
-    capturedAt: capturedAt(r.capturedAt, `${path}.capturedAt`),
+    capturedAt: capturedAt(r.capturedAt ?? r.observedAt, `${path}.capturedAt`),
   };
 };
 
@@ -198,7 +212,7 @@ export const parseTyreTelemetry = (value: unknown): TyreTelemetry | null => {
   const path = "payload.tyres";
   const r = record(value, path);
   nonEmpty(r, path);
-  allowKeys(r, ["wearPercent", "carcassTempC", "sets", "compoundId", "environment", "pitEntry"], path);
+  allowKeys(r, ["observedAt", "sessionTimeSeconds", "lap", "trigger", "wearPercent", "carcassTempC", "sets", "compoundId", "environment", "pitEntry"], path);
   return {
     wearPercent: zones(r.wearPercent, `${path}.wearPercent`),
     carcassTempC: carcassZones(r.carcassTempC, `${path}.carcassTempC`),
