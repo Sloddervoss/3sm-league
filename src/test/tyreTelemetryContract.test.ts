@@ -32,7 +32,7 @@ const volTyreBlok = () => ({
     rl: { l: 71.2, m: 73.8, r: 76.1 },
     rr: { l: 70.4, m: 72.9, r: 75.3 },
   },
-  sets: { used: 3, available: 255, perCorner: { fl: 1, fr: 1, rl: 1, rr: 1 } },
+  sets: { used: 3, available: 255, frontLeft: 1, frontRight: 1, rearLeft: 1, rearRight: 1 },
   compoundId: 0,
   environment: { trackTempC: 31.4, airTempC: 22.1, rubberState: "moderate usage" },
   pitEntry: {
@@ -112,7 +112,7 @@ describe("V3-rootblok tyres: additief contract", () => {
     const tyres = {
       wearPercent: { fl: { l: null, m: null, r: null }, fr: null, rl: { l: 0, m: null, r: null }, rr: null },
       carcassTempC: { fl: null, fr: null, rl: null, rr: null },
-      sets: { used: null, available: 255, perCorner: { fl: null, fr: null, rl: null, rr: null } },
+      sets: { used: null, available: 255, frontLeft: null, frontRight: null, rearLeft: null, rearRight: null },
       compoundId: null,
       environment: { trackTempC: null, airTempC: null, rubberState: null },
       pitEntry: null,
@@ -141,7 +141,7 @@ describe("V3-rootblok tyres: onbekende velden en verkeerde types", () => {
       { ...volTyreBlok(), wearPercent: { ...volTyreBlok().wearPercent, fm: { l: 1, m: 1, r: 1 } } },
       { ...volTyreBlok(), wearPercent: { ...volTyreBlok().wearPercent, fl: { l: 1, m: 1, r: 1, x: 1 } } },
       { ...volTyreBlok(), sets: { ...volTyreBlok().sets, tyresChanged: true } },
-      { ...volTyreBlok(), sets: { used: 3, available: 255, perCorner: { fl: 1, fr: 1, rl: 1, rr: 1, fl2: 1 } } },
+      { ...volTyreBlok(), sets: { used: 3, available: 255, frontLeft: 1, frontRight: 1, rearLeft: 1, rearRight: 1, extra: 1 } },
       { ...volTyreBlok(), environment: { trackTempC: 30, airTempC: 20, rubberState: "high usage", humidityPct: 40 } },
       { ...volTyreBlok(), pitEntry: { ...volTyreBlok().pitEntry, sessionTimeSeconds: 6501.7 } },
       // Het generieke `vehicle`-veld mag niet als achterdeur werken.

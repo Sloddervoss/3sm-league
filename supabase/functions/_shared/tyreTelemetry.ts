@@ -29,7 +29,10 @@ export type TyreSets = {
   used: number | null;
   /** 255 = onbeperkt (iRacing-sentinel). De validator interpreteert niets. */
   available: number | null;
-  perCorner: Record<TyreCorner, number | null>;
+  frontLeft: number | null;
+  frontRight: number | null;
+  rearLeft: number | null;
+  rearRight: number | null;
 };
 
 export type TyreEnvironment = {
@@ -139,18 +142,16 @@ const carcassZones = (value: unknown, path: string): TyreZones => {
 };
 
 const sets = (value: unknown, path: string): TyreSets => {
-  const out: TyreSets = { used: null, available: null, perCorner: { fl: null, fr: null, rl: null, rr: null } };
+  const out: TyreSets = { used: null, available: null, frontLeft: null, frontRight: null, rearLeft: null, rearRight: null };
   const r = optionalObject(value, path);
   if (!r) return out;
-  allowKeys(r, ["used", "available", "perCorner"], path);
+  allowKeys(r, ["used", "available", "frontLeft", "frontRight", "rearLeft", "rearRight"], path);
   out.used = num(r.used, `${path}.used`, { integer: true, min: 0, max: 255 });
   out.available = num(r.available, `${path}.available`, { integer: true, min: 0, max: 255 });
-  const perCorner = optionalObject(r.perCorner, `${path}.perCorner`);
-  if (!perCorner) return out;
-  allowKeys(perCorner, CORNERS, `${path}.perCorner`);
-  for (const corner of CORNERS) {
-    out.perCorner[corner] = num(perCorner[corner], `${path}.perCorner.${corner}`, { integer: true, min: 0, max: 255 });
+  for (const [corner, key] of [["fl", "frontLeft"], ["fr", "frontRight"], ["rl", "rearLeft"], ["rr", "rearRight"]] as const) {
+    out[key] = num(r[key], `${path}.${key}`, { integer: true, min: 0, max: 255 });
   }
+
   return out;
 };
 
