@@ -38,6 +38,14 @@ const positionKey = (o: V3Opponent): number =>
 
 const playerRank = (o: V3Opponent): number => (o.isPlayer ? 0 : 1);
 
+/** Sorteersleutel voor de klasse. Onbekend sorteert achteraan. */
+const classKey = (o: V3Opponent): string =>
+  String(o.carClassId ?? o.carClass ?? "zzz").toLowerCase();
+
+/** Binnen de klasse op klassepositie; zonder klassepositie op algemene positie. */
+const classPositionKey = (o: V3Opponent): number =>
+  typeof o.classPosition === "number" ? o.classPosition : positionKey(o);
+
 const fallbackOwnPosition = (rows: V3Opponent[]): number | null => {
   const player = rows.find((o) => o.isPlayer);
   return typeof player?.position === "number" ? player.position : null;
@@ -55,8 +63,12 @@ export function deriveStandings(
 
   const rows = [...opponents]
     .sort((a, b) => {
-      const pos = positionKey(a) - positionKey(b);
-      return pos !== 0 ? pos : playerRank(a) - playerRank(b);
+      // Eerst per klasse, anders lopen GT3 en de andere klasses door elkaar.
+      const cls = classKey(a).localeCompare(classKey(b));
+      if (cls !== 0) return cls;
+      const inClass = classPositionKey(a) - classPositionKey(b);
+      if (inClass !== 0) return inClass;
+      return playerRank(a) - playerRank(b);
     })
     .slice(0, maxRows + 1)
     .map((o) => ({ ...o, isPlayer: !!o.isPlayer }));

@@ -99,4 +99,30 @@ describe("0.4.2 standings derivation", () => {
     expect(d.aheadTrend).toBeNull();
     expect(d.behindTrend).toBeNull();
   });
+
+  it("groepeert per klasse en sorteert binnen de klasse op klassepositie", () => {
+    const d = deriveStandings(mkV3([
+      opp({ id: "gt3-2", position: 3, carClass: "GT3", classPosition: 2 }),
+      opp({ id: "lmp-1", position: 1, carClass: "LMP2", classPosition: 1 }),
+      opp({ id: "gt3-1", position: 4, carClass: "GT3", classPosition: 1 }),
+      opp({ id: "lmp-2", position: 2, carClass: "LMP2", classPosition: 2 }),
+    ]));
+    expect(d.rows.map((r) => r.id)).toEqual(["gt3-1", "gt3-2", "lmp-1", "lmp-2"]);
+  });
+
+  it("valt binnen een klasse terug op de algemene positie zonder klassepositie", () => {
+    const d = deriveStandings(mkV3([
+      opp({ id: "gt3-b", position: 6, carClass: "GT3" }),
+      opp({ id: "gt3-a", position: 5, carClass: "GT3" }),
+    ]));
+    expect(d.rows.map((r) => r.id)).toEqual(["gt3-a", "gt3-b"]);
+  });
+
+  it("zet rijen zonder klasse achteraan", () => {
+    const d = deriveStandings(mkV3([
+      opp({ id: "geen-klasse", position: 1 }),
+      opp({ id: "gt3", position: 2, carClass: "GT3", classPosition: 1 }),
+    ]));
+    expect(d.rows.map((r) => r.id)).toEqual(["gt3", "geen-klasse"]);
+  });
 });
