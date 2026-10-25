@@ -38,6 +38,22 @@ export type SimHubTelemetryEnvelope = {
 const flagValues = new Set<SimHubFlag>(["green", "yellow", "red", "white", "checkered", "unknown"]);
 const encoder = new TextEncoder();
 
+
+/**
+ * Een optioneel blok mag nooit een heel frame laten vallen. Faalt het parsen,
+ * dan gaat de rest van de telemetrie gewoon door en blijft alleen dit blok leeg.
+ * De fout wordt gelogd zodat we de vorm kunnen bijstellen.
+ */
+const parseTyresNeverFatal = (value: unknown): ReturnType<typeof parseTyreTelemetry> => {
+  if (value === undefined || value === null) return null;
+  try {
+    return parseTyreTelemetry(value);
+  } catch (error) {
+    console.warn("tyres block rejected:", (error as Error).message);
+    return null;
+  }
+};
+
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const asRecord = (value: unknown, path: string): Record<string, unknown> => {

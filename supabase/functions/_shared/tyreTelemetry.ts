@@ -108,17 +108,17 @@ const zones = (value: unknown, path: string): TyreZones => {
     if (Array.isArray(raw)) {
       if (raw.length !== 3) throw Error(`${zonePath} must have exactly 3 zones`);
       out[corner] = {
-        l: num(raw[0], `${zonePath}[0]`, { min: 0, max: 1 }),
-        m: num(raw[1], `${zonePath}[1]`, { min: 0, max: 1 }),
-        r: num(raw[2], `${zonePath}[2]`, { min: 0, max: 1 }),
+        l: num(raw[0], `${zonePath}[0]`, { min: 0, max: 100 }),
+        m: num(raw[1], `${zonePath}[1]`, { min: 0, max: 100 }),
+        r: num(raw[2], `${zonePath}[2]`, { min: 0, max: 100 }),
       };
       continue;
     }
     const zone = raw as Record<string, unknown>;
     out[corner] = {
-      l: num(zone.l, `${zonePath}.l`, { min: 0, max: 1 }),
-      m: num(zone.m, `${zonePath}.m`, { min: 0, max: 1 }),
-      r: num(zone.r, `${zonePath}.r`, { min: 0, max: 1 }),
+      l: num(zone.l, `${zonePath}.l`, { min: 0, max: 100 }),
+      m: num(zone.m, `${zonePath}.m`, { min: 0, max: 100 }),
+      r: num(zone.r, `${zonePath}.r`, { min: 0, max: 100 }),
     };
   }
   return out;
