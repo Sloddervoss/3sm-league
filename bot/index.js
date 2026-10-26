@@ -1700,6 +1700,16 @@ async function checkAnnouncements() {
 }
 
 // ── Cron: team rol sync ───────────────────────────────────────────────────────
+// Een enkele Discord- of database-aanroep mag de hele sync niet gijzelen.
+// Zonder deze grens bleef een run 15 minuten op één team staan.
+function metTimeout(promise, ms, label) {
+  let timer;
+  const grens = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timeout na ${ms} ms: ${label}`)), ms);
+  });
+  return Promise.race([promise, grens]).finally(() => clearTimeout(timer));
+}
+
 async function syncTeamRoles(ctx = {}) {
   const setStep = ctx.setStep || (() => {});
   // Een run die na de tijdsgrens is afgebroken mag geen rollen, kanalen of
@@ -1750,11 +1760,11 @@ async function syncTeamRoles(ctx = {}) {
     if (!team.discord_role_id) {
       const existing = guild.roles.cache.find(r => r.name === team.name);
       if (existing) {
-        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+        await metTimeout(existing.edit({ color: colorInt, hoist: true }), 8000, `rol bewerken ${team.name}`).catch(() => {});
         if (rijderRole && existing.position < rijderRole.position) {
-          await existing.setPosition(rijderRole.position + 1).catch(() => {});
+          await metTimeout(existing.setPosition(rijderRole.position + 1), 8000, `rol verplaatsen ${team.name}`).catch(() => {});
         }
-        await supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id);
+        await metTimeout(supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id), 8000, `db update ${team.name}`).catch(() => {});
         team.discord_role_id = existing.id;
         managedRoleIds.add(existing.id);
         botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
@@ -1764,8 +1774,8 @@ async function syncTeamRoles(ctx = {}) {
             guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' }),
             `rol aanmaken ${team.name}`
           );
-          if (rijderRole) await role.setPosition(rijderRole.position + 1).catch(() => {});
-          await supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id);
+          if (rijderRole) await metTimeout(role.setPosition(rijderRole.position + 1), 8000, `rol verplaatsen ${team.name}`).catch(() => {});
+          await metTimeout(supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id), 8000, `db update ${team.name}`).catch(() => {});
           team.discord_role_id = role.id;
           managedRoleIds.add(role.id);
           botLog(`➕ Teamrol aangemaakt: **${team.name}**`);
@@ -1777,9 +1787,9 @@ async function syncTeamRoles(ctx = {}) {
     } else {
       const existing = guild.roles.cache.get(team.discord_role_id);
       if (existing) {
-        await existing.edit({ color: colorInt, hoist: true }).catch(() => {});
+        await metTimeout(existing.edit({ color: colorInt, hoist: true }), 8000, `rol bewerken ${team.name}`).catch(() => {});
         if (rijderRole && existing.position < rijderRole.position) {
-          await existing.setPosition(rijderRole.position + 1).catch(() => {});
+          await metTimeout(existing.setPosition(rijderRole.position + 1), 8000, `rol verplaatsen ${team.name}`).catch(() => {});
         }
       }
       managedRoleIds.add(team.discord_role_id);
