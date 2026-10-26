@@ -140,9 +140,18 @@ serve(async (req) => {
       const groupName: string = license.group_name ?? "R";
       const safetyRating = `${groupName} ${Number(license.safety_rating).toFixed(2)}`;
 
+      // Service role mag de kolomgrant omzeilen, dus deze schrijver moet zelf de
+      // herkomst zetten: dit is import-werk, geen self-service. Zonder deze twee
+      // velden zou update_own_racing_profile de waarde daarna weer mogen
+      // overschrijven.
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ irating, safety_rating: safetyRating } as unknown as never)
+        .update({
+          irating,
+          safety_rating: safetyRating,
+          rating_source: "imported",
+          rating_updated_at: new Date().toISOString(),
+        } as unknown as never)
         .eq("user_id", profile.user_id);
 
       if (updateError) {

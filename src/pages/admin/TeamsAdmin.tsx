@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Plus, Car, Trash2, Check, X, ImagePlus, Pencil, Save, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { adminSetTeamRpc, profileWriteErrorMessage } from "@/features/profile/profileRpc";
 
 type TeamMember = {
   id: string;
@@ -133,10 +134,9 @@ const TeamsAdmin = () => {
         logo_url: req.logo_url || null,
       }).select().single();
       if (teamErr) throw teamErr;
-      const { error: profileErr } = await supabase.from("profiles").update({ team_id: team.id }).eq("user_id", req.user_id);
-      if (profileErr) throw profileErr;
-      const { error: memberErr } = await supabase.from("team_memberships").insert({ user_id: req.user_id, team_id: team.id, role: "driver" });
-      if (memberErr) throw memberErr;
+      // Teamtoewijzing loopt via de RPC: profiles.team_id en team_memberships
+      // worden samen geschreven, dus een fout laat geen half toegewezen team achter.
+      await adminSetTeamRpc(req.user_id, team.id);
       const { error: deleteErr } = await supabase.from("team_creation_requests").delete().eq("id", req.id);
       if (deleteErr) throw deleteErr;
     },
@@ -146,7 +146,7 @@ const TeamsAdmin = () => {
       invalidateTeams();
       queryClient.invalidateQueries({ queryKey: ["all-profiles"] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: unknown) => toast.error(profileWriteErrorMessage(err, "Team toewijzen mislukt")),
   });
 
   const denyCreationRequest = useMutation({

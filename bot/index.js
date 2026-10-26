@@ -10,6 +10,18 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import cron from 'node-cron';
 import { createGuardedRunner, formatDuration, withTimeout } from './cronGuard.js';
+import {
+  Afgebroken,
+  alleenAlsActief,
+  begrensd,
+  dbStap,
+  draaiMetEindverslag,
+  metTimeout,
+  normaliseerNick,
+  schrijfStilUit,
+  TEAM_SYNC_TIMEOUT_MS,
+  voerPerEntiteitUit,
+} from './teamSync.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -88,6 +100,18 @@ async function botLog(...args) {
     if (!cfg.bot_logs_channel_id) return;
     const ch = await client.channels.fetch(cfg.bot_logs_channel_id).catch(() => null);
     if (ch) await ch.send(`\`${new Date().toISOString()}\` ${message}`).catch(() => {});
+  } catch {}
+}
+
+// Alleen naar Discord, zonder de console-echo van botLog. Het eindverslag is
+// al één keer naar de console gegaan en hoort daar niet dubbel te staan.
+async function botLogDiscordOnly(message) {
+  const tekst = redactSensitiveText(String(message));
+  try {
+    const cfg = loadConfig();
+    if (!cfg.bot_logs_channel_id) return;
+    const ch = await client.channels.fetch(cfg.bot_logs_channel_id).catch(() => null);
+    if (ch) await ch.send(`\`${new Date().toISOString()}\` ${tekst}`).catch(() => {});
   } catch {}
 }
 
@@ -178,8 +202,14 @@ async function retrySupabase(label, operation, attempts = 3) {
 }
 
 async function supabaseStep(label, queryPromise) {
+  let timer;
   try {
-    const result = await queryPromise;
+    // Zonder eigen grens kan een stilstaande socket de hele sync laten wachten:
+    // de Supabase-client heeft geen timeout op een doodgeslagen verbinding.
+    const grens = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`timeout na 10000 ms: ${label}`)), 10000);
+    });
+    const result = await Promise.race([queryPromise, grens]);
     if (result?.error) {
       await throttledBotLog(`${label}:${describeError(result.error)}`, `${label} fout:`, describeError(result.error));
     } else {
@@ -189,6 +219,8 @@ async function supabaseStep(label, queryPromise) {
   } catch (e) {
     await throttledBotLog(`${label}:${describeError(e)}`, `${label} fout:`, describeError(e));
     return { data: null, error: e };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -1700,15 +1732,10 @@ async function checkAnnouncements() {
 }
 
 // ── Cron: team rol sync ───────────────────────────────────────────────────────
-// Een enkele Discord- of database-aanroep mag de hele sync niet gijzelen.
-// Zonder deze grens bleef een run 15 minuten op één team staan.
-function metTimeout(promise, ms, label) {
-  let timer;
-  const grens = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`timeout na ${ms} ms: ${label}`)), ms);
-  });
-  return Promise.race([promise, grens]).finally(() => clearTimeout(timer));
-}
+// De begrenzing (metTimeout), de nickname-normalisatie, de isolatie per
+// team/lid, de databasecontrole en het eindverslag staan in teamSync.js, zodat
+// ze zonder Discord-client te testen zijn. Hier blijft alleen de volgorde van
+// het werk over.
 
 async function syncTeamRoles(ctx = {}) {
   const setStep = ctx.setStep || (() => {});
@@ -1717,7 +1744,14 @@ async function syncTeamRoles(ctx = {}) {
   // loopt en ontstaan dubbele rollen en een overschreven beheerlijst.
   const isStale = typeof ctx.isStale === 'function' ? ctx.isStale : () => false;
   const assertActive = () => !isStale();
-  const startedAt = Date.now();
+
+  // Schrijfacties: de controle staat vlak vóór de aanroep zelf, want
+  // metTimeout annuleert een lopend Discord- of databaseverzoek niet. Zonder
+  // deze controle schreef een run die na zijn tijdsgrens was afgebroken
+  // vrolijk door in de guild van de volgende run.
+  const schrijf = (wat, maakAanroep) => alleenAlsActief(assertActive, wat, maakAanroep);
+  const schrijfStil = (wat, maakAanroep) => schrijfStilUit(assertActive, wat, maakAanroep);
+
   const stats = {
     teams: 0,
     profiles: 0,
@@ -1727,326 +1761,482 @@ async function syncTeamRoles(ctx = {}) {
     rolesAdded: 0,
     rolesRemoved: 0,
     memberErrors: 0,
+    membersSkipped: 0,
+    teamErrors: 0,
+    teamsSkipped: 0,
+    cleanupErrors: 0,
   };
 
-  setStep('config/guild laden');
-  const cfg = loadConfig();
-  const guild = await getConfiguredGuild();
-  if (!guild) return;
-
-  setStep('teams ophalen uit Supabase');
-  const { data: teams, error: teamsError } = await supabaseStep(
-    '[syncTeamRoles] teams',
-    supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id')
-  );
-  if (teamsError) return;
-  if (!teams?.length) return;
-  stats.teams = teams.length;
-
-  const everyoneId = guild.roles.everyone.id;
-  const managedRoleIds = new Set(cfg.managed_team_role_ids || []);
-  const managedCategoryIds = new Set(cfg.managed_team_category_ids || []);
-
-  // Vind Rijder rol — teamrollen moeten erboven staan voor kleurprioriteit
-  const rijderRole = guild.roles.cache.find(r => r.name === 'Rijder');
-
-  // Maak ontbrekende team-rollen + categorie + kanalen aan
-  for (const team of teams) {
-  if (!assertActive()) { setStep('afgebroken'); return; }
-    setStep(`team setup: ${team.name}`);
-    const colorInt = team.color ? parseInt(team.color.replace('#', ''), 16) : 0xf97316;
-
-    // ── Rol ──────────────────────────────────────────────────────────────────
-    if (!team.discord_role_id) {
-      const existing = guild.roles.cache.find(r => r.name === team.name);
-      if (existing) {
-        await metTimeout(existing.edit({ color: colorInt, hoist: true }), 8000, `rol bewerken ${team.name}`).catch(() => {});
-        if (rijderRole && existing.position < rijderRole.position) {
-          await metTimeout(existing.setPosition(rijderRole.position + 1), 8000, `rol verplaatsen ${team.name}`).catch(() => {});
-        }
-        await metTimeout(supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id), 8000, `db update ${team.name}`).catch(() => {});
-        team.discord_role_id = existing.id;
-        managedRoleIds.add(existing.id);
-        botLog(`✅ Teamrol gevonden en bijgewerkt: **${team.name}**`);
-      } else {
-        try {
-          const role = await discordCall(
-            guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' }),
-            `rol aanmaken ${team.name}`
-          );
-          if (rijderRole) await metTimeout(role.setPosition(rijderRole.position + 1), 8000, `rol verplaatsen ${team.name}`).catch(() => {});
-          await metTimeout(supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id), 8000, `db update ${team.name}`).catch(() => {});
-          team.discord_role_id = role.id;
-          managedRoleIds.add(role.id);
-          botLog(`➕ Teamrol aangemaakt: **${team.name}**`);
-        } catch (e) {
-          botLog(`❌ Kon rol niet aanmaken voor ${team.name}: ${describeError(e)}`);
-          continue;
-        }
-      }
-    } else {
-      const existing = guild.roles.cache.get(team.discord_role_id);
-      if (existing) {
-        await metTimeout(existing.edit({ color: colorInt, hoist: true }), 8000, `rol bewerken ${team.name}`).catch(() => {});
-        if (rijderRole && existing.position < rijderRole.position) {
-          await metTimeout(existing.setPosition(rijderRole.position + 1), 8000, `rol verplaatsen ${team.name}`).catch(() => {});
-        }
-      }
-      managedRoleIds.add(team.discord_role_id);
-    }
-
-    // ── Categorie + kanalen ───────────────────────────────────────────────────
-    if (!team.discord_role_id) continue;
-
-    const syncCfgTeam = loadConfig();
-    const permOverwrites = [
-      { id: everyoneId,             deny:  [PermissionFlagsBits.ViewChannel] },
-      { id: team.discord_role_id,   allow: [PermissionFlagsBits.ViewChannel] },
-      ...(syncCfgTeam.admin_role_id   ? [{ id: syncCfgTeam.admin_role_id,   allow: [PermissionFlagsBits.ViewChannel] }] : []),
-      ...(syncCfgTeam.steward_role_id ? [{ id: syncCfgTeam.steward_role_id, allow: [PermissionFlagsBits.ViewChannel] }] : []),
-    ];
-
-    let categoryId = team.discord_category_id;
-
-    // Zoek altijd op ID of naam — update altijd naam + permissies
-    let existingCat = categoryId
-      ? guild.channels.cache.get(categoryId)
-      : guild.channels.cache.find(c =>
-          c.type === ChannelType.GuildCategory &&
-          (c.name === team.name || c.name === `━━━━━━━| ${team.name} |━━━━━━━`)
-        );
-
-    if (existingCat) {
-      categoryId = existingCat.id;
-      await existingCat.edit({ name: `━━━━━━━| ${team.name} |━━━━━━━`, permissionOverwrites: permOverwrites }).catch(() => {});
-    } else {
+  // Het eindverslag staat in een finally in draaiMetEindverslag: ook een vroege
+  // return hieronder (geen guild, geen teams, leesfout) levert precies één
+  // console.log-regel op, en bij fouten gaat dat verslag één keer naar Discord.
+  await draaiMetEindverslag({
+    stats,
+    isActief: assertActive,
+    log: (regel) => console.log(regel),
+    meld: (regel) => botLogDiscordOnly(regel),
+    werk: async ({ markeer }) => {
+      setStep('config/guild laden');
+      const cfg = loadConfig();
+      // De fout gaat mee in het eindverslag in plaats van als losse melding:
+      // één bericht per mislukte run.
+      let guild = null;
+      let guildFout = null;
       try {
-        const cat = await discordCall(
-          guild.channels.create({
-            name: `━━━━━━━| ${team.name} |━━━━━━━`,
-            type: ChannelType.GuildCategory,
-            permissionOverwrites: permOverwrites,
-            reason: '3SM team sectie',
-          }),
-          `sectie aanmaken ${team.name}`
-        );
-        categoryId = cat.id;
-        managedCategoryIds.add(cat.id);
-        botLog(`➕ Team sectie aangemaakt: **${team.name}**`);
-      } catch (e) {
-        botLog(`❌ Kon sectie niet aanmaken voor ${team.name}: ${describeError(e)}`);
-        continue;
+        guild = await metTimeout(getConfiguredGuild(), TEAM_SYNC_TIMEOUT_MS, 'guild laden');
+      } catch (fout) {
+        guildFout = fout;
       }
-    }
+      if (!guild) return markeer(`guild laden: ${describeError(guildFout || 'geen guild geconfigureerd')}`);
 
-    if (categoryId !== team.discord_category_id) {
-      await supabase.from('teams').update({ discord_category_id: categoryId }).eq('id', team.id);
-      team.discord_category_id = categoryId;
-    }
-    if (categoryId) managedCategoryIds.add(categoryId);
-
-    // Maak ontbrekende kanalen aan binnen de team-categorie
-    const teamChannels = [
-      { name: '💬・team-chat',        type: ChannelType.GuildText  },
-      { name: '🏁・race-lobby',        type: ChannelType.GuildVoice },
-      { name: '🏎️・endurance-lobby',  type: ChannelType.GuildVoice },
-      { name: '🔧・pit-wall',          type: ChannelType.GuildVoice },
-    ];
-
-    for (const chDef of teamChannels) {
-      const exists = guild.channels.cache.find(c => c.name === chDef.name && c.parentId === categoryId);
-      if (exists) {
-        // Update permissies van bestaande kanalen
-        await exists.permissionOverwrites.set(permOverwrites).catch(() => {});
-      } else {
-        await discordCall(
-          guild.channels.create({
-            name: chDef.name,
-            type: chDef.type,
-            parent: categoryId,
-            permissionOverwrites: permOverwrites,
-            reason: '3SM team kanaal',
-          }),
-          `kanaal ${chDef.name}`
-        ).catch(e => botLog(`❌ Kanaal aanmaken fout (${chDef.name}): ${describeError(e)}`));
+      setStep('teams ophalen uit Supabase');
+      const { data: teams, error: teamsError } = await metTimeout(
+        supabaseStep(
+          '[syncTeamRoles] teams',
+          supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id')
+        ),
+        TEAM_SYNC_TIMEOUT_MS,
+        'teams ophalen'
+      ).catch(fout => ({ data: null, error: fout }));
+      if (teamsError) {
+        return markeer(`teams ophalen: ${describeError(teamsError)}`);
       }
-    }
-  }
+      if (!teams?.length) return;
+      stats.teams = teams.length;
 
-  // Verwijder Discord rollen + categorie + kanalen van verwijderde teams
-  setStep('oude teamrollen opruimen');
-  const teamRoleIds     = teams.map(t => t.discord_role_id).filter(Boolean);
-  const teamCategoryIds = teams.map(t => t.discord_category_id).filter(Boolean);
-  for (const [roleId, role] of guild.roles.cache) {
-    if (!assertActive()) { setStep('afgebroken'); return; }
-    if (managedRoleIds.has(roleId) && !teamRoleIds.includes(role.id)) {
-      const wasTeamRole = await supabase.from('teams').select('id').eq('discord_role_id', role.id).maybeSingle();
-      if (!wasTeamRole.data) {
-        const deleted = await role.delete('3SM team verwijderd').then(() => true).catch(e => {
-          botLog(`❌ Teamrol verwijderen fout (${role.name}): ${describeError(e)}`);
-          return false;
-        });
-        if (!deleted) continue;
-        managedRoleIds.delete(role.id);
-        botLog(`🗑️ Teamrol verwijderd: **${role.name}**`);
-      }
-    }
-  }
+      const everyoneId = guild.roles.everyone.id;
+      const managedRoleIds = new Set(cfg.managed_team_role_ids || []);
+      const managedCategoryIds = new Set(cfg.managed_team_category_ids || []);
 
-  for (const [categoryId, ch] of guild.channels.cache) {
-    if (!assertActive()) { setStep('afgebroken'); return; }
-    if (managedCategoryIds.has(categoryId) && ch.type === ChannelType.GuildCategory && !teamCategoryIds.includes(ch.id)) {
-      const wasTeamCat = await supabase.from('teams').select('id').eq('discord_category_id', ch.id).maybeSingle();
-      if (wasTeamCat.data === null && ch.name.includes('━━━') && !ch.name.includes('INFORMATIE') && !ch.name.includes('RACING') && !ch.name.includes('COMMUNITY') && !ch.name.includes('SPRAAK') && !ch.name.includes('ADMIN')) {
-        // Verwijder eerst alle kanalen in de categorie
-        for (const [, child] of guild.channels.cache) {
-          if (!assertActive()) { setStep('afgebroken'); return; }
-          if (child.parentId === ch.id) await child.delete('3SM team verwijderd').catch(() => {});
+      // Vind Rijder rol — teamrollen moeten erboven staan voor kleurprioriteit
+      const rijderRole = guild.roles.cache.find(r => r.name === 'Rijder');
+
+      // Maak ontbrekende team-rollen + categorie + kanalen aan
+      // Elk team staat op zichzelf: een fout of time-out bij het ene team slaat de
+      // andere teams niet meer over. Alleen fouten worden gemeld, successes gaan
+      // naar de console.
+      const teamUitkomst = await voerPerEntiteitUit({
+        items: teams,
+        label: 'team',
+        isActief: assertActive,
+        onFout: (team, fout) => {
+          stats.teamErrors += 1;
+          console.error(`[syncTeamRoles] team fout (${team?.name || team?.id}): ${describeError(fout)}`);
+        },
+        onOvergeslagen: (team, reden) => {
+          stats.teamsSkipped += 1;
+          console.warn(`[syncTeamRoles] team overgeslagen (${team?.name || team?.id}): ${reden}`);
+        },
+        taak: async (team, { overslaan, isActief: entiteitActief }) => {
+          setStep(`team setup: ${team.name}`);
+          // Binnen dit team geldt de run-status én het budget van dit team. Zo
+          // schrijft het achtergebleven werk van een team dat zijn budget al
+          // overschreed niets meer, ook als die promise later alsnog afrondt.
+          const schrijfTeam = (wat, maakAanroep) => alleenAlsActief(entiteitActief, wat, maakAanroep);
+          const schrijfTeamStil = (wat, maakAanroep) => schrijfStilUit(entiteitActief, wat, maakAanroep);
+          const dbSchrijfTeam = (label, maakQuery) => dbStap(label, maakQuery, { isActief: entiteitActief });
+          const colorInt = team.color ? parseInt(team.color.replace('#', ''), 16) : 0xf97316;
+
+          // ── Rol ────────────────────────────────────────────────────────────────
+          // Een rol-id die niet meer in de guild bestaat is een dode verwijzing:
+          // leden kunnen die rol nooit krijgen en de sync probeert elk kwartier
+          // dezelfde mislukte bewerking. Zet hem op null, zodat de tak hieronder
+          // een nieuwe rol aanmaakt in plaats van met de dode id door te gaan.
+          if (team.discord_role_id && !guild.roles.cache.has(team.discord_role_id)) {
+            const dodeRolId = team.discord_role_id;
+            await dbSchrijfTeam(`db dode rol-id wissen ${team.name}`, () =>
+              supabase.from('teams').update({ discord_role_id: null }).eq('id', team.id)
+            );
+            team.discord_role_id = null;
+            managedRoleIds.delete(dodeRolId);
+            console.warn(`[syncTeamRoles] dode rol-id gewist voor ${team.name}: ${dodeRolId}`);
+          }
+
+          if (!team.discord_role_id) {
+            const existing = guild.roles.cache.find(r => r.name === team.name);
+            if (existing) {
+              await schrijfTeamStil(`rol bewerken ${team.name}`, () => existing.edit({ color: colorInt, hoist: true }));
+              if (rijderRole && existing.position < rijderRole.position) {
+                await schrijfTeamStil(`rol verplaatsen ${team.name}`, () => existing.setPosition(rijderRole.position + 1));
+              }
+              await dbSchrijfTeam(`db rol-id ${team.name}`, () =>
+                supabase.from('teams').update({ discord_role_id: existing.id }).eq('id', team.id)
+              );
+              team.discord_role_id = existing.id;
+              managedRoleIds.add(existing.id);
+              console.log(`[syncTeamRoles] teamrol gevonden en bijgewerkt: ${team.name}`);
+            } else {
+              try {
+                const role = await discordCall(
+                  schrijfTeam(`rol aanmaken ${team.name}`, () =>
+                    guild.roles.create({ name: team.name, color: colorInt, hoist: true, mentionable: false, reason: '3SM team rol auto-aanmaak' })
+                  ),
+                  `rol aanmaken ${team.name}`
+                );
+                if (rijderRole) await schrijfTeamStil(`rol verplaatsen ${team.name}`, () => role.setPosition(rijderRole.position + 1));
+                await dbSchrijfTeam(`db rol-id ${team.name}`, () =>
+                  supabase.from('teams').update({ discord_role_id: role.id }).eq('id', team.id)
+                );
+                team.discord_role_id = role.id;
+                managedRoleIds.add(role.id);
+                console.log(`[syncTeamRoles] teamrol aangemaakt: ${team.name}`);
+              } catch (e) {
+                if (e instanceof Afgebroken) throw e;
+                botLog(`❌ Kon rol niet aanmaken voor ${team.name}: ${describeError(e)}`);
+                throw e;
+              }
+            }
+          } else {
+            const existing = guild.roles.cache.get(team.discord_role_id);
+            await schrijfTeamStil(`rol bewerken ${team.name}`, () => existing.edit({ color: colorInt, hoist: true }));
+            if (rijderRole && existing.position < rijderRole.position) {
+              await schrijfTeamStil(`rol verplaatsen ${team.name}`, () => existing.setPosition(rijderRole.position + 1));
+            }
+            managedRoleIds.add(team.discord_role_id);
+          }
+
+          // ── Categorie + kanalen ─────────────────────────────────────────────────
+          if (!team.discord_role_id) overslaan('geen teamrol bekend');
+
+          const syncCfgTeam = loadConfig();
+          const permOverwrites = [
+            { id: everyoneId,             deny:  [PermissionFlagsBits.ViewChannel] },
+            { id: team.discord_role_id,   allow: [PermissionFlagsBits.ViewChannel] },
+            ...(syncCfgTeam.admin_role_id   ? [{ id: syncCfgTeam.admin_role_id,   allow: [PermissionFlagsBits.ViewChannel] }] : []),
+            ...(syncCfgTeam.steward_role_id ? [{ id: syncCfgTeam.steward_role_id, allow: [PermissionFlagsBits.ViewChannel] }] : []),
+          ];
+
+          let categoryId = team.discord_category_id;
+
+          // Zoek altijd op ID of naam — update altijd naam + permissies
+          let existingCat = categoryId
+            ? guild.channels.cache.get(categoryId)
+            : guild.channels.cache.find(c =>
+                c.type === ChannelType.GuildCategory &&
+                (c.name === team.name || c.name === `━━━━━━━| ${team.name} |━━━━━━━`)
+              );
+
+          if (existingCat) {
+            categoryId = existingCat.id;
+            await schrijfTeamStil(`categorie bijwerken ${team.name}`, () =>
+              existingCat.edit({ name: `━━━━━━━| ${team.name} |━━━━━━━`, permissionOverwrites: permOverwrites })
+            );
+          } else {
+            try {
+              const cat = await discordCall(
+                schrijfTeam(`sectie aanmaken ${team.name}`, () =>
+                  guild.channels.create({
+                    name: `━━━━━━━| ${team.name} |━━━━━━━`,
+                    type: ChannelType.GuildCategory,
+                    permissionOverwrites: permOverwrites,
+                    reason: '3SM team sectie',
+                  })
+                ),
+                `sectie aanmaken ${team.name}`
+              );
+              categoryId = cat.id;
+              managedCategoryIds.add(cat.id);
+              console.log(`[syncTeamRoles] team sectie aangemaakt: ${team.name}`);
+            } catch (e) {
+              if (e instanceof Afgebroken) throw e;
+              botLog(`❌ Kon sectie niet aanmaken voor ${team.name}: ${describeError(e)}`);
+              throw e;
+            }
+          }
+
+          if (categoryId !== team.discord_category_id) {
+            await dbSchrijfTeam(`db categorie-id ${team.name}`, () =>
+              supabase.from('teams').update({ discord_category_id: categoryId }).eq('id', team.id)
+            );
+            team.discord_category_id = categoryId;
+          }
+          if (categoryId) managedCategoryIds.add(categoryId);
+
+          // Maak ontbrekende kanalen aan binnen de team-categorie
+          const teamChannels = [
+            { name: '💬・team-chat',        type: ChannelType.GuildText  },
+            { name: '🏁・race-lobby',        type: ChannelType.GuildVoice },
+            { name: '🏎️・endurance-lobby',  type: ChannelType.GuildVoice },
+            { name: '🔧・pit-wall',          type: ChannelType.GuildVoice },
+          ];
+
+          for (const chDef of teamChannels) {
+            const exists = guild.channels.cache.find(c => c.name === chDef.name && c.parentId === categoryId);
+            if (exists) {
+              // Update permissies van bestaande kanalen
+              await schrijfTeamStil(`kanaalrechten ${team.name}`, () => exists.permissionOverwrites.set(permOverwrites));
+            } else {
+              try {
+                await discordCall(
+                  schrijfTeam(`kanaal ${chDef.name}`, () =>
+                    guild.channels.create({
+                      name: chDef.name,
+                      type: chDef.type,
+                      parent: categoryId,
+                      permissionOverwrites: permOverwrites,
+                      reason: '3SM team kanaal',
+                    })
+                  ),
+                  `kanaal ${chDef.name}`
+                );
+              } catch (e) {
+                if (e instanceof Afgebroken) throw e;
+                botLog(`❌ Kanaal aanmaken fout (${chDef.name}): ${describeError(e)}`);
+              }
+            }
+          }
+        },
+      });
+      if (teamUitkomst.afgebroken) throw new Afgebroken(teamUitkomst.reden || 'teamlus afgebroken');
+
+      // Verwijder Discord rollen + categorie + kanalen van verwijderde teams
+      setStep('oude teamrollen opruimen');
+      const teamRoleIds     = teams.map(t => t.discord_role_id).filter(Boolean);
+      const teamCategoryIds = teams.map(t => t.discord_category_id).filter(Boolean);
+      for (const [roleId, role] of guild.roles.cache) {
+        if (!assertActive()) throw new Afgebroken('run afgebroken');
+        if (managedRoleIds.has(roleId) && !teamRoleIds.includes(role.id)) {
+          const wasTeamRole = await begrensd(
+            supabase.from('teams').select('id').eq('discord_role_id', role.id).maybeSingle(),
+            `db controle rol ${role.name}`
+          );
+          // Zonder geslaagde controle niet verwijderen: de rol kan nog bij een
+          // team horen dat nu buiten bereik is.
+          if (!wasTeamRole.ok || wasTeamRole.waarde?.error) {
+            stats.cleanupErrors += 1;
+            console.warn(`[syncTeamRoles] rolcontrole overgeslagen (${role.name}): ${describeError(wasTeamRole.ok ? wasTeamRole.waarde.error : wasTeamRole.fout)}`);
+            continue;
+          }
+          if (!wasTeamRole.waarde?.data) {
+            let deleted = false;
+            try {
+              await metTimeout(schrijf(`rol verwijderen ${role.name}`, () => role.delete('3SM team verwijderd')), TEAM_SYNC_TIMEOUT_MS, `rol verwijderen ${role.name}`);
+              deleted = true;
+            } catch (e) {
+              if (e instanceof Afgebroken) throw e;
+              botLog(`❌ Teamrol verwijderen fout (${role.name}): ${describeError(e)}`);
+            }
+            if (!deleted) continue;
+            managedRoleIds.delete(role.id);
+            console.log(`[syncTeamRoles] teamrol verwijderd: ${role.name}`);
+          }
         }
-        const deleted = await ch.delete('3SM team verwijderd').then(() => true).catch(e => {
-          botLog(`❌ Team sectie verwijderen fout (${ch.name}): ${describeError(e)}`);
-          return false;
-        });
-        if (!deleted) continue;
-        managedCategoryIds.delete(ch.id);
-        botLog(`🗑️ Team sectie verwijderd: **${ch.name}**`);
       }
-    }
-  }
 
-  if (!assertActive()) { setStep('afgebroken'); return; }
-  saveConfig({
-    managed_team_role_ids: [...managedRoleIds].filter(id => teamRoleIds.includes(id)),
-    managed_team_category_ids: [...managedCategoryIds].filter(id => teamCategoryIds.includes(id)),
+      for (const [categoryId, ch] of guild.channels.cache) {
+        if (!assertActive()) throw new Afgebroken('run afgebroken');
+        if (managedCategoryIds.has(categoryId) && ch.type === ChannelType.GuildCategory && !teamCategoryIds.includes(ch.id)) {
+          const wasTeamCat = await begrensd(
+            supabase.from('teams').select('id').eq('discord_category_id', ch.id).maybeSingle(),
+            `db controle sectie ${ch.name}`
+          );
+          if (!wasTeamCat.ok || wasTeamCat.waarde?.error) {
+            stats.cleanupErrors += 1;
+            console.warn(`[syncTeamRoles] sectiecontrole overgeslagen (${ch.name}): ${describeError(wasTeamCat.ok ? wasTeamCat.waarde.error : wasTeamCat.fout)}`);
+            continue;
+          }
+          if (wasTeamCat.waarde.data === null && ch.name.includes('━━━') && !ch.name.includes('INFORMATIE') && !ch.name.includes('RACING') && !ch.name.includes('COMMUNITY') && !ch.name.includes('SPRAAK') && !ch.name.includes('ADMIN')) {
+            // Verwijder eerst alle kanalen in de categorie
+            for (const [, child] of guild.channels.cache) {
+              if (!assertActive()) throw new Afgebroken('run afgebroken');
+              if (child.parentId === ch.id) {
+                await schrijfStil(`kanaal verwijderen ${child.name}`, () => child.delete('3SM team verwijderd'));
+              }
+            }
+            let deleted = false;
+            try {
+              await metTimeout(schrijf(`sectie verwijderen ${ch.name}`, () => ch.delete('3SM team verwijderd')), TEAM_SYNC_TIMEOUT_MS, `sectie verwijderen ${ch.name}`);
+              deleted = true;
+            } catch (e) {
+              if (e instanceof Afgebroken) throw e;
+              botLog(`❌ Team sectie verwijderen fout (${ch.name}): ${describeError(e)}`);
+            }
+            if (!deleted) continue;
+            managedCategoryIds.delete(ch.id);
+            console.log(`[syncTeamRoles] team sectie verwijderd: ${ch.name}`);
+          }
+        }
+      }
+
+      // Config is ook een schrijfactie: pas opslaan als deze run nog loopt.
+      alleenAlsActief(assertActive, 'config opslaan', () => saveConfig({
+        managed_team_role_ids: [...managedRoleIds].filter(id => teamRoleIds.includes(id)),
+        managed_team_category_ids: [...managedCategoryIds].filter(id => teamCategoryIds.includes(id)),
+      }));
+
+      // Sync Discord-rollen voor alle gekoppelde leden
+      setStep('profiles ophalen uit Supabase');
+      const { data: profiles, error: profilesError } = await metTimeout(
+        supabaseStep(
+          '[syncTeamRoles] profiles',
+          supabase
+            .from('profiles').select('user_id, discord_id, iracing_name, display_name')
+            .not('discord_id', 'is', null)
+        ),
+        TEAM_SYNC_TIMEOUT_MS,
+        'profiles ophalen'
+      ).catch(fout => ({ data: null, error: fout }));
+      if (profilesError) {
+        return markeer(`profiles ophalen: ${describeError(profilesError)}`);
+      }
+
+      if (!profiles?.length) return;
+      stats.profiles = profiles.length;
+
+      setStep('team memberships ophalen uit Supabase');
+      const { data: memberships, error: membershipsError } = await metTimeout(
+        supabaseStep(
+          '[syncTeamRoles] memberships',
+          supabase.from('team_memberships').select('user_id, team_id')
+        ),
+        TEAM_SYNC_TIMEOUT_MS,
+        'memberships ophalen'
+      ).catch(fout => ({ data: null, error: fout }));
+      if (membershipsError) {
+        return markeer(`memberships ophalen: ${describeError(membershipsError)}`);
+      }
+
+      setStep('admin/steward rollen ophalen uit Supabase');
+      const { data: adminRoles, error: adminRolesError } = await metTimeout(
+        supabaseStep(
+          '[syncTeamRoles] user_roles',
+          supabase
+            .from('user_roles').select('user_id, role')
+            .in('role', ['admin', 'super_admin', 'moderator'])
+        ),
+        TEAM_SYNC_TIMEOUT_MS,
+        'user_roles ophalen'
+      ).catch(fout => ({ data: null, error: fout }));
+      if (adminRolesError) {
+        return markeer(`user_roles ophalen: ${describeError(adminRolesError)}`);
+      }
+
+      const syncCfg = loadConfig();
+      const teamsById = new Map(teams.map(team => [team.id, team]));
+      const membershipsByUserId = new Map();
+      for (const membership of memberships || []) {
+        const current = membershipsByUserId.get(membership.user_id) || [];
+        current.push(membership);
+        membershipsByUserId.set(membership.user_id, current);
+      }
+      const rolesByUserId = new Map();
+      for (const role of adminRoles || []) {
+        const current = rolesByUserId.get(role.user_id) || [];
+        current.push(role.role);
+        rolesByUserId.set(role.user_id, current);
+      }
+
+      // Elk lid staat op zichzelf: een fout of time-out bij het ene lid slaat de
+      // rest van de leden niet meer over.
+      const lidUitkomst = await voerPerEntiteitUit({
+        items: profiles,
+        label: 'lid',
+        isActief: assertActive,
+        onFout: (profiel, fout) => {
+          stats.memberErrors += 1;
+          console.error(`[syncTeamRoles] lid fout (${profiel?.display_name || profiel?.iracing_name || profiel?.discord_id}): ${describeError(fout)}`);
+        },
+        onOvergeslagen: (profiel, reden) => {
+          stats.membersSkipped += 1;
+          console.warn(`[syncTeamRoles] lid overgeslagen (${profiel?.display_name || profiel?.iracing_name || profiel?.discord_id}): ${reden}`);
+        },
+        taak: async (profile, { overslaan, isActief: entiteitActief }) => {
+          setStep(`Discord lid ophalen: ${profile.display_name || profile.iracing_name || profile.discord_id}`);
+          // Binnen dit lid geldt de run-status én het budget van dit lid: laat
+          // afgerond werk van een lid dat zijn budget overschreed schrijft niets.
+          const schrijfLid = (wat, maakAanroep) => alleenAlsActief(entiteitActief, wat, maakAanroep);
+          // Eén rolwijziging. Een Discord-fout telt als mislukt, een afgebroken
+          // run stopt dit lid meteen in plaats van de volgende rol te zetten.
+          const pasRolAan = async (wat, maakAanroep) => {
+            try {
+              await discordCall(schrijfLid(wat, maakAanroep), 'rol aanpassen');
+              return true;
+            } catch (e) {
+              if (e instanceof Afgebroken) throw e;
+              return false;
+            }
+          };
+          // Onbekend lid en time-out zijn niet hetzelfde: een onbekend lid telt als
+          // 'niet gevonden', een hangende aanroep als fout.
+          const opgehaald = await begrensd(
+            guild.members.fetch(profile.discord_id).catch(() => null),
+            `lid ophalen ${profile.discord_id}`
+          );
+          if (!opgehaald.ok) throw opgehaald.fout;
+          const member = opgehaald.waarde;
+          if (!member) {
+            stats.membersMissing += 1;
+            overslaan('lid niet gevonden');
+          }
+          stats.membersProcessed += 1;
+
+          // Nickname instellen op iRacing naam (of display_name als fallback)
+          const nickname = normaliseerNick(profile.iracing_name || profile.display_name);
+          const isEigenaar = member.id === guild.ownerId;
+          if (nickname && !isEigenaar && normaliseerNick(member.displayName) !== nickname) {
+            const result = await discordCall(
+              schrijfLid(`nickname zetten ${member.user.tag}`, () => member.setNickname(nickname)),
+              'nickname zetten'
+            ).catch(e => e);
+            if (result instanceof Afgebroken) throw result;
+            if (result instanceof Error) {
+              console.error(`[syncTeamRoles] Nickname fout voor ${member.user.tag}: ${result.message}`);
+            } else {
+              stats.nicknamesUpdated += 1;
+              console.log(`[syncTeamRoles] Nickname gezet: ${member.user.tag} → ${nickname}`);
+            }
+          }
+
+          // Team rollen
+          const userTeams = membershipsByUserId.get(profile.user_id) || [];
+          const expectedRoleIds = userTeams.map(m => teamsById.get(m.team_id)?.discord_role_id).filter(Boolean);
+
+          for (const team of teams) {
+            if (!team.discord_role_id) continue;
+            const shouldHave = expectedRoleIds.includes(team.discord_role_id);
+            const hasIt = member.roles.cache.has(team.discord_role_id);
+            if (shouldHave && !hasIt) {
+              if (await pasRolAan(`rol toevoegen ${team.name}`, () => member.roles.add(team.discord_role_id))) stats.rolesAdded += 1;
+            }
+            if (!shouldHave && hasIt) {
+              if (await pasRolAan(`rol verwijderen ${team.name}`, () => member.roles.remove(team.discord_role_id))) stats.rolesRemoved += 1;
+            }
+          }
+
+          // Admin rol sync
+          if (syncCfg.admin_role_id) {
+            const userRoles = rolesByUserId.get(profile.user_id) || [];
+            const isAdmin = userRoles.some(role => ['admin', 'super_admin'].includes(role));
+            const hasAdminRole = member.roles.cache.has(syncCfg.admin_role_id);
+            if (isAdmin && !hasAdminRole) {
+              if (await pasRolAan('adminrol toevoegen', () => member.roles.add(syncCfg.admin_role_id))) stats.rolesAdded += 1;
+            }
+            if (!isAdmin && hasAdminRole) {
+              if (await pasRolAan('adminrol verwijderen', () => member.roles.remove(syncCfg.admin_role_id))) stats.rolesRemoved += 1;
+            }
+          }
+
+          // Steward rol sync
+          if (syncCfg.steward_role_id) {
+            const userRoles = rolesByUserId.get(profile.user_id) || [];
+            const isSteward = userRoles.includes('moderator');
+            const hasStewardRole = member.roles.cache.has(syncCfg.steward_role_id);
+            if (isSteward && !hasStewardRole) {
+              if (await pasRolAan('stewardrol toevoegen', () => member.roles.add(syncCfg.steward_role_id))) stats.rolesAdded += 1;
+            }
+            if (!isSteward && hasStewardRole) {
+              if (await pasRolAan('stewardrol verwijderen', () => member.roles.remove(syncCfg.steward_role_id))) stats.rolesRemoved += 1;
+            }
+          }
+        },
+      });
+      if (lidUitkomst.afgebroken) throw new Afgebroken(lidUitkomst.reden || 'ledenlus afgebroken');
+
+      if (!assertActive()) throw new Afgebroken('run afgebroken');
+
+      setStep('klaar');
+    },
   });
-
-  // Sync Discord-rollen voor alle gekoppelde leden
-  setStep('profiles ophalen uit Supabase');
-  const { data: profiles, error: profilesError } = await supabaseStep(
-    '[syncTeamRoles] profiles',
-    supabase
-      .from('profiles').select('user_id, discord_id, iracing_name, display_name')
-      .not('discord_id', 'is', null)
-  );
-  if (profilesError) return;
-
-  if (!profiles?.length) return;
-  stats.profiles = profiles.length;
-
-  setStep('team memberships ophalen uit Supabase');
-  const { data: memberships, error: membershipsError } = await supabaseStep(
-    '[syncTeamRoles] memberships',
-    supabase.from('team_memberships').select('user_id, team_id')
-  );
-  if (membershipsError) return;
-
-  setStep('admin/steward rollen ophalen uit Supabase');
-  const { data: adminRoles, error: adminRolesError } = await supabaseStep(
-    '[syncTeamRoles] user_roles',
-    supabase
-      .from('user_roles').select('user_id, role')
-      .in('role', ['admin', 'super_admin', 'moderator'])
-  );
-  if (adminRolesError) return;
-
-  const syncCfg = loadConfig();
-  const teamsById = new Map(teams.map(team => [team.id, team]));
-  const membershipsByUserId = new Map();
-  for (const membership of memberships || []) {
-    const current = membershipsByUserId.get(membership.user_id) || [];
-    current.push(membership);
-    membershipsByUserId.set(membership.user_id, current);
-  }
-  const rolesByUserId = new Map();
-  for (const role of adminRoles || []) {
-    const current = rolesByUserId.get(role.user_id) || [];
-    current.push(role.role);
-    rolesByUserId.set(role.user_id, current);
-  }
-
-  for (const profile of profiles) {
-    if (!assertActive()) { setStep('afgebroken'); return; }
-    try {
-      setStep(`Discord lid ophalen: ${profile.display_name || profile.iracing_name || profile.discord_id}`);
-      const member = await guild.members.fetch(profile.discord_id).catch(() => null);
-      if (!member) {
-        stats.membersMissing += 1;
-        continue;
-      }
-      stats.membersProcessed += 1;
-
-      // Nickname instellen op iRacing naam (of display_name als fallback)
-      const nickname = profile.iracing_name || profile.display_name;
-      if (nickname && member.displayName !== nickname) {
-        const result = await discordCall(member.setNickname(nickname), 'nickname zetten').catch(e => e);
-        if (result instanceof Error) {
-          if (result.message !== 'Missing Permissions') console.error(`[syncTeamRoles] Nickname fout voor ${member.user.tag}: ${result.message}`);
-        } else {
-          stats.nicknamesUpdated += 1;
-          console.log(`[syncTeamRoles] Nickname gezet: ${member.user.tag} → ${nickname}`);
-        }
-      }
-
-      // Team rollen
-      const userTeams = membershipsByUserId.get(profile.user_id) || [];
-      const expectedRoleIds = userTeams.map(m => teamsById.get(m.team_id)?.discord_role_id).filter(Boolean);
-
-      for (const team of teams) {
-        if (!team.discord_role_id) continue;
-        const shouldHave = expectedRoleIds.includes(team.discord_role_id);
-        const hasIt = member.roles.cache.has(team.discord_role_id);
-        if (shouldHave && !hasIt) {
-          const updated = await discordCall(member.roles.add(team.discord_role_id), 'rol aanpassen').then(() => true).catch(() => false);
-          if (updated) stats.rolesAdded += 1;
-        }
-        if (!shouldHave && hasIt) {
-          const updated = await discordCall(member.roles.remove(team.discord_role_id), 'rol aanpassen').then(() => true).catch(() => false);
-          if (updated) stats.rolesRemoved += 1;
-        }
-      }
-
-      // Admin rol sync
-      if (syncCfg.admin_role_id) {
-        const userRoles = rolesByUserId.get(profile.user_id) || [];
-        const isAdmin = userRoles.some(role => ['admin', 'super_admin'].includes(role));
-        const hasAdminRole = member.roles.cache.has(syncCfg.admin_role_id);
-        if (isAdmin && !hasAdminRole) {
-          const updated = await discordCall(member.roles.add(syncCfg.admin_role_id), 'rol aanpassen').then(() => true).catch(() => false);
-          if (updated) stats.rolesAdded += 1;
-        }
-        if (!isAdmin && hasAdminRole) {
-          const updated = await discordCall(member.roles.remove(syncCfg.admin_role_id), 'rol aanpassen').then(() => true).catch(() => false);
-          if (updated) stats.rolesRemoved += 1;
-        }
-      }
-
-      // Steward rol sync
-      if (syncCfg.steward_role_id) {
-        const userRoles = rolesByUserId.get(profile.user_id) || [];
-        const isSteward = userRoles.includes('moderator');
-        const hasStewardRole = member.roles.cache.has(syncCfg.steward_role_id);
-        if (isSteward && !hasStewardRole) {
-          const updated = await discordCall(member.roles.add(syncCfg.steward_role_id), 'rol aanpassen').then(() => true).catch(() => false);
-          if (updated) stats.rolesAdded += 1;
-        }
-        if (!isSteward && hasStewardRole) {
-          const updated = await discordCall(member.roles.remove(syncCfg.steward_role_id), 'rol aanpassen').then(() => true).catch(() => false);
-          if (updated) stats.rolesRemoved += 1;
-        }
-      }
-    } catch (e) {
-      stats.memberErrors += 1;
-      botLog('[syncTeamRoles] lid fout:', describeError(e));
-    }
-  }
-
-  setStep('klaar');
-  const summary = `[syncTeamRoles] klaar in ${formatDuration(Date.now() - startedAt)}: teams=${stats.teams}, profiles=${stats.profiles}, verwerkt=${stats.membersProcessed}, niet_gevonden=${stats.membersMissing}, nicknames=${stats.nicknamesUpdated}, rollen_plus=${stats.rolesAdded}, rollen_min=${stats.rolesRemoved}, fouten=${stats.memberErrors}`;
-  if (stats.memberErrors) {
-    await botLog(summary);
-  } else if (stats.nicknamesUpdated || stats.rolesAdded || stats.rolesRemoved || Date.now() - startedAt > 60_000) {
-    console.log(summary);
-  }
 }
 
 // ── guildMemberAdd: Rijder rol + team rollen ──────────────────────────────────

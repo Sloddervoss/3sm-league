@@ -1235,6 +1235,8 @@ export type Database = {
           iracing_name: string | null
           irating: number | null
           safety_rating: string | null
+          rating_source: string
+          rating_updated_at: string | null
           team_id: string | null
           updated_at: string
           user_id: string
@@ -1249,6 +1251,8 @@ export type Database = {
           iracing_name?: string | null
           irating?: number | null
           safety_rating?: string | null
+          rating_source?: string
+          rating_updated_at?: string | null
           team_id?: string | null
           updated_at?: string
           user_id: string
@@ -1263,6 +1267,8 @@ export type Database = {
           iracing_name?: string | null
           irating?: number | null
           safety_rating?: string | null
+          rating_source?: string
+          rating_updated_at?: string | null
           team_id?: string | null
           updated_at?: string
           user_id?: string
@@ -2557,6 +2563,18 @@ export type Database = {
             Args: { target_role: string; target_user_id: string }
             Returns: undefined
           }
+      admin_set_team: {
+        Args: { p_team_id: string | null; p_user_id: string }
+        Returns: undefined
+      }
+      admin_update_driver_ratings: {
+        Args: {
+          p_irating: number | null
+          p_safety_rating: string | null
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       discord_claim_token: { Args: { p_token: string }; Returns: string }
       discord_link_account: {
         Args: { p_code: string; p_discord_id: string }
@@ -2598,12 +2616,23 @@ export type Database = {
         }
         Returns: boolean
       }
+      join_team: { Args: { p_team_id: string }; Returns: undefined }
+      leave_team: { Args: never; Returns: undefined }
       recalculate_3sr_all: { Args: never; Returns: undefined }
       recalculate_3sr_for_race: {
         Args: { p_race_id: string }
         Returns: undefined
       }
       uid: { Args: never; Returns: string }
+      unlink_own_discord: { Args: never; Returns: undefined }
+      update_own_racing_profile: {
+        Args: {
+          p_iracing_id: string | null
+          p_irating: number | null
+          p_safety_rating: string | null
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user" | "super_admin" | "editor" | "tester" | "endurance_manager"

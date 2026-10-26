@@ -118,11 +118,17 @@ describe("profile read hardening", () => {
     const profilePage = source("src/pages/ProfilePage.tsx");
     expect(profilePage).toContain('.from("profiles")');
     expect(profilePage).toContain('.eq("user_id", user!.id)');
-    expect(profilePage).toContain(".upsert(({");
+    // Sinds 20261027090000 is de tabelwrite een kolomgebonden update; de
+    // iRacing-velden lopen via update_own_racing_profile.
+    expect(profilePage).toContain(".update(({");
+    expect(profilePage).toContain("updateOwnRacingProfileRpc(");
 
     const adminImport = source("src/pages/admin/ResultsImportAdmin.tsx");
     expect(adminImport).toContain('.from("profiles")');
-    expect(adminImport).toContain(".update({ irating:");
+    // Sinds 20261027090000_profile_team_assignment_rpc staat de kolomgrant geen
+    // directe iRating-update meer toe; de import gebruikt de beheerders-RPC.
+    expect(adminImport).toContain("adminUpdateDriverRatingsRpc(");
+    expect(adminImport).not.toContain(".update({ irating:");
   });
 
   it("keeps a source-controlled classification for every remaining raw profile call", () => {

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { adminSetTeamRpc, profileWriteErrorMessage } from "@/features/profile/profileRpc";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,15 +113,13 @@ export function CommunityModule(_: CommunityModuleProps) {
     mutationFn: async (request: RequestWithProfile) => {
       const { data: team, error: teamError } = await supabase.from("teams").insert({ name: request.team_name, description: request.team_description || null, color: request.team_color || "#f97316", logo_url: request.logo_url || null }).select().single();
       if (teamError) throw teamError;
-      const { error: profileError } = await supabase.from("profiles").update({ team_id: team.id }).eq("user_id", request.user_id);
-      if (profileError) throw profileError;
-      const { error: membershipError } = await supabase.from("team_memberships").insert({ user_id: request.user_id, team_id: team.id, role: "driver" });
-      if (membershipError) throw membershipError;
+      // Eén transactie voor profiles.team_id + team_memberships.
+      await adminSetTeamRpc(request.user_id, team.id);
       const { error: requestError } = await supabase.from("team_creation_requests").delete().eq("id", request.id);
       if (requestError) throw requestError;
     },
     onSuccess: () => { toast.success("Team aangemaakt en aanvraag goedgekeurd."); invalidateCommunity(); },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: unknown) => toast.error(profileWriteErrorMessage(error, "Team toewijzen mislukt")),
   });
   const denyRequest = useMutation({
     mutationFn: async (requestId: string) => { const { error } = await supabase.from("team_creation_requests").delete().eq("id", requestId); if (error) throw error; },

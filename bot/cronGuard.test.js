@@ -326,12 +326,19 @@ test('elke kanaal- en rolcreatie in index.js loopt via discordCall', () => {
     const isCreatie = /guild\.(roles|channels)\.create\(/.test(regel);
     if (!isCreatie) return;
 
-    // Beschermd als discordCall op dezelfde regel ervoor staat, of op de regel
-    // erboven (de meerregelige vorm).
+    // Beschermd als discordCall op dezelfde regel ervoor staat, of op een van
+    // de regels erboven (de meerregelige vorm). Tussen discordCall( en de
+    // creatie mag een wrapper staan zoals schrijfTeam(...), zolang de aanroep
+    // maar doorloopt: een regel die een statement afsluit met ';' stopt het
+    // zoeken, zodat een losse discordCall van een vorige regel niet telt.
     const voorDeCreatie = regel.slice(0, regel.indexOf('guild.'));
-    const isAlBeschermd =
-      /discordCall\(/.test(voorDeCreatie) ||
-      /discordCall\(\s*$/.test(regels[index - 1] || '');
+    let isAlBeschermd = /discordCall\(/.test(voorDeCreatie);
+
+    for (let i = index - 1; !isAlBeschermd && i >= Math.max(0, index - 3); i -= 1) {
+      const boven = regels[i] || '';
+      if (/discordCall\(/.test(boven)) isAlBeschermd = true;
+      if (boven.includes(';')) break;
+    }
 
     if (!isAlBeschermd) {
       onbeschermd.push(`${index + 1}: ${regel.trim()}`);

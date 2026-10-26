@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BarChart2, Upload, X, Trash2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { adminUpdateDriverRatingsRpc, profileWriteErrorMessage } from "@/features/profile/profileRpc";
 import {
   type ImportRow,
   type IRacingRaceMetadata,
@@ -105,9 +106,14 @@ const ResultsImportAdmin = () => {
           const licLetters = ["", "R", "D", "C", "B", "A"];
           const licIdx = Math.min(Math.ceil(row.new_license_level / 4), 5);
           const safetyRating = `${licLetters[licIdx]} ${(row.new_license_sub_level / 100).toFixed(2)}`;
-          const { error: profErr } = await supabase.from("profiles").update({ irating: row.new_irating, safety_rating: safetyRating }).eq("user_id", profile.user_id);
-          if (profErr) toast.error(`iRating update mislukt voor ${row.display_name}: ${profErr.message}`);
-          else iRatingUpdates++;
+          // irating/safety_rating vallen buiten de kolomgrant; de RPC doet de
+          // beheerderscheck en de write.
+          try {
+            await adminUpdateDriverRatingsRpc(profile.user_id, { irating: row.new_irating, safetyRating });
+            iRatingUpdates++;
+          } catch (profErr: unknown) {
+            toast.error(`iRating update mislukt voor ${row.display_name}: ${profileWriteErrorMessage(profErr, "onbekende fout")}`);
+          }
         }
       }
       await supabase.from("races").update({

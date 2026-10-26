@@ -18,6 +18,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { adminUpdateDriverRatingsRpc, profileWriteErrorMessage } from "@/features/profile/profileRpc";
 import { isSupportedCommunitySupportRace } from "@/features/community-support/raceEligibility";
 import {
   calculateRaceHostingAmountUsd,
@@ -311,8 +312,13 @@ async function executeResultImport(confirmation: ResultImportConfirmation, point
     if (!profile || !row.new_irating || !row.new_license_level || row.new_license_sub_level === undefined) continue;
     const licLetters = ["", "R", "D", "C", "B", "A"];
     const safetyRating = `${licLetters[Math.min(Math.ceil(row.new_license_level / 4), 5)]} ${(row.new_license_sub_level / 100).toFixed(2)}`;
-    const { error } = await supabase.from("profiles").update({ irating: row.new_irating, safety_rating: safetyRating }).eq("user_id", profile.user_id);
-    if (error) throw new Error(`iRating update mislukt voor ${row.display_name}: ${error.message}`);
+    // irating/safety_rating vallen buiten de kolomgrant van profiles; de RPC
+    // doet de beheerderscheck en de write.
+    try {
+      await adminUpdateDriverRatingsRpc(profile.user_id, { irating: row.new_irating, safetyRating });
+    } catch (error: unknown) {
+      throw new Error(`iRating update mislukt voor ${row.display_name}: ${profileWriteErrorMessage(error, "onbekende fout")}`);
+    }
     iRatingUpdates++;
   }
   onProgress("race afronden");

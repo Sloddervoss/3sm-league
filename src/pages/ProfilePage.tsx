@@ -3,12 +3,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, UserPlus, X, Clock, ImagePlus, Plus, Camera, Loader2, MessageSquare, Link, CheckCircle2, RefreshCw } from "lucide-react";
+import { User, Save, Gamepad2, TrendingUp, Shield, Info, Trophy, Flag, Car, UserPlus, X, Clock, ImagePlus, Plus, Camera, Loader2, MessageSquare, Link, CheckCircle2, RefreshCw, Lock } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
 import { Navigate, Link as RouterLink } from "react-router-dom";
 import { useEnduranceCapabilities } from "@/features/endurance/repository/capabilitiesRepository";
+import { profileWriteErrorMessage, unlinkOwnDiscordRpc, updateOwnRacingProfileRpc } from "@/features/profile/profileRpc";
+import { canEditRatingsFromSource, ownRacingProfilePayload, ratingSourceLabel } from "@/features/profile/ratingOwnership";
+import { useJoinTeam, useLeaveTeam } from "@/features/profile/useTeamAssignment";
 
 type ProfileRow = {
   user_id: string;
@@ -20,6 +23,9 @@ type ProfileRow = {
   avatar_url: string | null;
   discord_id: string | null;
   team_id: string | null;
+  /** 'self' = zelf ingevuld, 'imported' = gezet door de resultatenimport/iRacing-sync. */
+  rating_source: string | null;
+  rating_updated_at: string | null;
 };
 
 
@@ -120,16 +126,30 @@ const ProfilePage = () => {
   const [safetyRating, setSafetyRating] = useState("");
   const hydratedProfileRef = useRef<string | null>(null);
 
+  // De resultatenimport is eigenaar van de ratings zodra rating_source
+  // 'imported' is; de RPC negeert self-service-waarden dan ook. De velden zijn
+  // hier daarom alleen-lezen, met uitleg — anders lijkt opslaan te werken
+  // terwijl er niets verandert.
+  const canEditRatings = canEditRatingsFromSource(profile?.rating_source);
+  const ratingsFromImport = !canEditRatings;
+  const ratingsLabel = ratingSourceLabel(profile?.rating_source);
+  const ratingsUpdatedAt = profile?.rating_updated_at
+    ? new Date(profile.rating_updated_at).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" })
+    : null;
+
   // Avatar upload
   const [avatarUploading, setAvatarUploading] = useState(false);
 
 
   const unlinkDiscord = async () => {
     if (!user) return;
-    const { error } = await supabase.from("profiles").update(({ discord_id: null })).eq("user_id", user.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Discord ontkoppeld");
-    queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
+    try {
+      await unlinkOwnDiscordRpc();
+      toast.success("Discord ontkoppeld");
+      queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
+    } catch (err: unknown) {
+      toast.error(profileWriteErrorMessage(err, "Discord ontkoppelen mislukt"));
+    }
   };
 
   const uploadAvatar = async (file: File) => {
@@ -164,7 +184,8 @@ const ProfilePage = () => {
 
       const { error: updateError } = await supabase
         .from("profiles")
-        .upsert(({ user_id: user.id, avatar_url: avatarUrl }), { onConflict: "user_id" });
+        .update({ avatar_url: avatarUrl })
+        .eq("user_id", user.id);
       if (updateError) throw updateError;
 
       toast.success("Profielfoto opgeslagen!");
@@ -189,56 +210,44 @@ const ProfilePage = () => {
 
   const updateProfile = useMutation({
     mutationFn: async () => {
+      // Alleen de kolommen die authenticated nog zelf mag schrijven. Een update
+      // in plaats van een upsert: PostgREST zet bij een upsert ook user_id in de
+      // DO UPDATE SET, en daar is bewust geen kolomrecht meer voor.
       const { error } = await supabase
         .from("profiles")
-        .upsert(({
-          user_id: user!.id,
+        .update(({
           display_name: displayName,
-          iracing_id: iracingId || null,
           iracing_name: iracingName || null,
-          irating: irating ? parseInt(irating) : null,
-          safety_rating: safetyRating || null,
-        }), { onConflict: "user_id" });
+        }))
+        .eq("user_id", user!.id);
       if (error) throw error;
+
+      // iracing_id, irating en safety_rating vallen buiten de kolomgrant en
+      // gaan via de RPC, zodat een weigering zichtbaar wordt. Bij een
+      // geïmporteerde rating gaan de bestaande waarden mee: de RPC laat
+      // ratings met herkomst 'imported' staan, dus alleen de koppeling wijzigt.
+      await updateOwnRacingProfileRpc(ownRacingProfilePayload({
+        ratingSource: profile?.rating_source,
+        iracingId,
+        iratingInput: irating,
+        safetyRatingInput: safetyRating,
+        currentIrating: profile?.irating ?? null,
+        currentSafetyRating: profile?.safety_rating ?? null,
+      }));
     },
     onSuccess: () => {
       toast.success("Profiel opgeslagen!");
       queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: unknown) => toast.error(profileWriteErrorMessage(err, "Profiel opslaan mislukt")),
   });
 
-  // Instant join existing team (free choice, no approval)
-  const joinTeam = useMutation({
-    mutationFn: async (teamId: string) => {
-      await supabase.from("profiles").update(({ team_id: teamId })).eq("user_id", user!.id);
-      await supabase.from("team_memberships").insert({ user_id: user!.id, team_id: teamId, role: "driver" });
-    },
-    onSuccess: () => {
-      toast.success("Team gejoint!");
-      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["teams-list"] });
-      setSelectedTeamId("");
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  // Direct team joinen: de RPC schrijft profiles.team_id én team_memberships in
+  // één transactie, dus een mislukking laat geen half toegewezen team achter.
+  const joinTeam = useJoinTeam(() => setSelectedTeamId(""));
 
-  // Leave current team
-  const leaveTeam = useMutation({
-    mutationFn: async () => {
-      await supabase.from("team_memberships").delete().eq("user_id", user!.id);
-      const { error } = await supabase.from("profiles").update(({ team_id: null })).eq("user_id", user!.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Team verlaten.");
-      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["teams"] });
-      queryClient.invalidateQueries({ queryKey: ["team-memberships-with-profiles"] });
-      queryClient.invalidateQueries({ queryKey: ["team-memberships-full"] });
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
+  // Team verlaten: zelfde RPC-route, geen losse delete/update meer.
+  const leaveTeam = useLeaveTeam();
 
   // Request creation of a brand-new team
   const submitCreationRequest = useMutation({
@@ -458,6 +467,16 @@ const ProfilePage = () => {
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card border border-border rounded-lg p-6 racing-stripe-left md:col-span-2">
                 <h2 className="font-heading font-bold text-lg mb-4 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-blue-400" /> iRacing Rating
+                  <span
+                    className={`ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${
+                      ratingsFromImport
+                        ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
+                        : "border-border bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {ratingsFromImport && <Lock className="w-3 h-3" />}
+                    {ratingsLabel}
+                  </span>
                 </h2>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -468,10 +487,23 @@ const ProfilePage = () => {
                       type="number"
                       value={irating}
                       onChange={(e) => setIrating(e.target.value)}
+                      readOnly={ratingsFromImport}
+                      aria-readonly={ratingsFromImport}
                       placeholder="bv. 3450"
-                      className="w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className={`w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50 ${ratingsFromImport ? "opacity-60 cursor-not-allowed" : ""}`}
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Jouw huidige iRating van iRacing</p>
+                    {ratingsFromImport ? (
+                      <p className="text-xs text-blue-300/90 mt-1 flex items-start gap-1.5">
+                        <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                        <span>
+                          Deze waarde komt uit de resultatenimport{ratingsUpdatedAt ? ` (${ratingsUpdatedAt})` : ""} en kan hier niet worden aangepast. Klopt hij niet? Vraag een beheerder om de import opnieuw te draaien.
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Jouw huidige iRating van iRacing (0–5000). Zodra de import je rating bijwerkt, wordt dit veld alleen-lezen.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-sm font-medium text-muted-foreground mb-1.5 block flex items-center gap-1.5">
@@ -481,10 +513,16 @@ const ProfilePage = () => {
                       type="text"
                       value={safetyRating}
                       onChange={(e) => setSafetyRating(e.target.value)}
+                      readOnly={ratingsFromImport}
+                      aria-readonly={ratingsFromImport}
                       placeholder="bv. A 4.50"
-                      className="w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className={`w-full px-4 py-2.5 rounded-md bg-secondary border border-border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50 ${ratingsFromImport ? "opacity-60 cursor-not-allowed" : ""}`}
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Format: letter + getal (A 4.50, B 3.20)</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {ratingsFromImport
+                        ? "Ook de Safety Rating komt uit de import en is hier alleen-lezen."
+                        : "Format: letter + getal (A 4.50, B 3.20), waarde 0.00–5.00."}
+                    </p>
                   </div>
                 </div>
               </motion.div>
