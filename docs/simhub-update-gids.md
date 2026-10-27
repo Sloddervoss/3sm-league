@@ -47,10 +47,12 @@ De overgang `0.3.8.0 → 0.3.9.0` moet door het bekende 0.3.8.0 self-update-defe
 handmatig worden uitgevoerd. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer via
 de normale automatische updater.
 
-**Huidige versie: `0.7.1.1`.** Zowel de automatische updater als de ZIP op de site leveren
-die versie. Nieuw sinds `0.7.0.0`: reparatietijd in de pitstraat, de meatball-vlag, een gevulde
-achterstand tot de leider, remdruk per wiel, stuurhoek en langs-/dwarsversnelling. Wie een oudere plugin heeft, krijgt de update vanzelf aangeboden; een handmatige
-installatie is alleen nodig als UAC of lokale beveiligingssoftware de helper blokkeert.
+**Huidige versie: `0.7.1.2`.** Zowel de automatische updater als de ZIP op de site leveren
+die versie. `0.7.1.2` is inhoudelijk gelijk aan `0.7.1.1`; alleen het versienummer is opgehoogd
+om de automatische updater te testen. Nieuw sinds `0.7.0.0`: reparatietijd in de pitstraat, de
+meatball-vlag, een gevulde achterstand tot de leider, remdruk per wiel, stuurhoek en
+langs-/dwarsversnelling. Wie een oudere plugin heeft, krijgt de update vanzelf aangeboden; een
+handmatige installatie is alleen nodig als UAC of lokale beveiligingssoftware de helper blokkeert.
 
 De eerste installatie van een versie van vóór `0.3.0.0` naar de updater-bootstrap blijft
 eenmalig handmatig: sluit SimHub, hernoem een versioned download zoals
