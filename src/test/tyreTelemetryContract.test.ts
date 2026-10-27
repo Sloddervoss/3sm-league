@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parseTelemetryV3Envelope } from "../../supabase/functions/_shared/simhub";
+import { normalizeTelemetryEnvelope, parseTelemetryV3Envelope } from "../../supabase/functions/_shared/simhub";
 import { parseTyreTelemetry } from "../../supabase/functions/_shared/tyreTelemetry";
 import { resolveTelemetryContext } from "../../supabase/functions/simhub-ingest-v3/context";
 
@@ -10,12 +10,13 @@ import { resolveTelemetryContext } from "../../supabase/functions/simhub-ingest-
  * Twee dingen worden hier bewezen:
  *  1. een bestaande payload (zonder `tyres`) verandert niet — de harde eis uit
  *     3sm-bandenplan.md §2, want de plugin rolt later uit dan de server;
- *  2. een payload mét `tyres` wordt gecontroleerd en levert bij een verkeerd type een
- *     422 op, geen 500 en geen stil weggeschreven half blok.
+ *  2. een payload mét `tyres` wordt gecontroleerd; een verkeerd type kost alleen het
+ *     bandenblok — het frame zelf komt binnen (202 met `tyres: null`, zie
+ *     `parseTyresNeverFatal`), en nooit een 500 of een stil half weggeschreven blok.
  *
  * De 202/422-toets loopt via de echte ingest-context (`resolveTelemetryContext`), niet
  * via een nagebouwde regex: zonder `tyres` komt er `accepted_device_context` uit (de tak
- * die in `simhub-ingest-v3/index.ts` met 202 antwoordt), met een verkeerd type
+ * die in `simhub-ingest-v3/index.ts` met 202 antwoordt), met een fout elders in het frame
  * `invalid_payload` (die tak antwoordt 422).
  */
 
@@ -50,6 +51,8 @@ const volTyreBlok = () => ({
     },
     capturedAt: "2026-10-25T20:44:12.002Z",
   },
+  // Additief: spanning per hoek in bar.
+  pressuresBar: { fl: 1.72, fr: 1.74, rl: 1.68, rr: 1.69 },
 });
 
 /** Minimale geldige V3-envelope; verder niets aan veranderen (legacy-compatibiliteit). */
@@ -135,10 +138,9 @@ describe("V3-rootblok tyres: additief contract", () => {
 });
 
 describe("V3-rootblok tyres: onbekende velden en verkeerde types", () => {
-
-
-
-
+  // Deze controles lopen via parseTyreTelemetry zelf. Sinds het blok niet-fataal
+  // is, slikt de envelope-parser de fout in (zie de tests hieronder); de
+  // vormcontrole moet dus op de parser worden getest, niet op het frame.
   it.each([
     ["string in plaats van getal", { wearPercent: { fl: { l: "0.9", m: 0.9, r: 0.9 } } }],
     ["getal als string", { compoundId: "0" }],
@@ -149,7 +151,7 @@ describe("V3-rootblok tyres: onbekende velden en verkeerde types", () => {
     ["ongeldige tijd", { pitEntry: { wearPercent: null, carcassTempC: null, capturedAt: "gisteren" } }],
     ["fractionele set-teller", { sets: { used: 2.5 } }],
   ])("weigert %s", (_naam, tyres) => {
-    expect(() => parseTelemetryV3Envelope(metTyres(tyres))).toThrow();
+    expect(() => parseTyreTelemetry(tyres)).toThrow();
   });
 
   it("weigert NaN en Infinity als wear-waarde", () => {
@@ -165,14 +167,52 @@ describe("V3-rootblok tyres: onbekende velden en verkeerde types", () => {
   });
 
   it("weigert een leeg of niet-object tyres-blok", () => {
-    expect(() => parseTelemetryV3Envelope(metTyres({}))).toThrow(/at least one field/);
-    expect(() => parseTelemetryV3Envelope(metTyres([]))).toThrow(/must be an object/);
-    expect(() => parseTelemetryV3Envelope(metTyres("tyres"))).toThrow(/must be an object/);
+    expect(() => parseTyreTelemetry({})).toThrow(/at least one field/);
+    expect(() => parseTyreTelemetry([])).toThrow(/must be an object/);
+    expect(() => parseTyreTelemetry("tyres")).toThrow(/must be an object/);
     expect(() => parseTyreTelemetry({ sets: {} })).toThrow(/at least one field/);
+  });
+
+  it("weigert een onbekend veld in tyres", () => {
+    expect(() => parseTyreTelemetry({ ...volTyreBlok(), pitExit: {} })).toThrow(/unknown fields/);
   });
 });
 
-describe("ingest-poort: 202 zonder tyres, 422 bij een verkeerd type", () => {
+describe("tyres is nooit fataal: één fout blok kost het frame niet", () => {
+  it("levert het frame zonder bandenblok in plaats van een afwijzing", () => {
+    const parsed = parseTelemetryV3Envelope(metTyres({ wearPercent: { fl: { l: "0.9", m: 0.9, r: 0.9 } } }));
+    expect(parsed.tyres).toBeNull();
+    // De rest van het frame is er wél, en is identiek aan een frame zonder tyres.
+    const zonder = parseTelemetryV3Envelope(envelope());
+    expect({ ...parsed, tyres: undefined }).toEqual({ ...zonder, tyres: undefined });
+    expect(parsed.identity.currentDriverName).toBe("Vincent");
+    expect(parsed.timing.completedLaps).toBe(0);
+    expect(parsed.fuel.fuelLitres).toBe(50);
+  });
+
+  it("houdt een geldig bandenblok gewoon overeind", () => {
+    const parsed = parseTelemetryV3Envelope(metTyres(volTyreBlok()));
+    expect(parsed.tyres).not.toBeNull();
+    expect(parsed.tyres!.compoundId).toBe(0);
+    expect(parsed.tyres!.pressuresBar.fl).toBe(1.72);
+  });
+
+  it("geldt ook voor een leeg of niet-object blok", () => {
+    for (const tyres of [{}, [], "tyres", { pitExit: {} }]) {
+      const parsed = parseTelemetryV3Envelope(metTyres(tyres));
+      expect(parsed.tyres).toBeNull();
+      expect(parsed.sequence).toBe(1);
+    }
+  });
+
+  it("geldt ook via normalizeTelemetryEnvelope (de route die de ingest gebruikt)", () => {
+    const parsed = normalizeTelemetryEnvelope(metTyres({ compoundId: "0" }));
+    expect(parsed.tyres).toBeNull();
+    expect(parsed.protocolVersion).toBe(3);
+  });
+});
+
+describe("ingest-poort: 202 met en zonder tyres", () => {
   const deviceRow = {
     id: "device-1",
     owner_user_id: "user-1",
@@ -205,15 +245,24 @@ describe("ingest-poort: 202 zonder tyres, 422 bij een verkeerd type", () => {
     expect(context.normalized!.tyres).toBeNull();
   });
 
-  it("geeft 422 voor een payload met een verkeerd type in tyres", async () => {
+  it("houdt 202 voor een payload met een verkeerd type in tyres", async () => {
     const context = await resolve(metTyres({ wearPercent: { fl: { l: "0.9", m: 0.9, r: 0.9 } } }));
-    expect(context.result).toBe("invalid_payload");
-    expect(context.normalized).toBeNull();
+    expect(context.result).toBe("accepted_device_context");
+    expect(context.normalized!.tyres).toBeNull();
   });
 
-  it("geeft 422 voor een onbekend veld in tyres", async () => {
+  it("houdt 202 voor een onbekend veld in tyres", async () => {
     const context = await resolve(metTyres({ ...volTyreBlok(), pitExit: {} }));
+    expect(context.result).toBe("accepted_device_context");
+    expect(context.normalized!.tyres).toBeNull();
+  });
+
+  it("geeft nog steeds 422 voor een fout buiten de optionele blokken", async () => {
+    const kapot = envelope();
+    kapot.timing.completedLaps = "tien" as unknown as number;
+    const context = await resolve(kapot);
     expect(context.result).toBe("invalid_payload");
+    expect(context.normalized).toBeNull();
   });
 
   it("houdt de 202/422-takken in de edge-functie vast", () => {

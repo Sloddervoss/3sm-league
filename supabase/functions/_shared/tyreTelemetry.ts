@@ -16,14 +16,23 @@
  *    het plugin-ontwerp altijd lengte 3 heeft). Een halve hoek is een zendfout;
  *  - een leeg blok is geen meting: `tyres: {}` wordt geweigerd.
  *
- * Alle foutmeldingen beginnen met `payload.tyres…`, zodat de ingest-route ze als
- * `invalid_payload` (422) kan indelen en niet als interne fout (500).
+ * Additief sinds 0.7.x: `pressuresBar` (bar per hoek, één getal per hoek). Het is
+ * optioneel en verandert geen bestaand veld; een payload zonder druk blijft geldig.
+ *
+ * Alle foutmeldingen beginnen met `payload.tyres…`, zodat de reden herkenbaar is in
+ * het log. Het frame zelf gaat door: simhub.ts vangt een fout in dit blok af en laat
+ * alleen `tyres` leeg (zie parseTyresNeverFatal daar).
  */
 
 /** Eén zone-driehoek [left, middle, right] in de volgorde die de sim hanteert. */
 export type TyreZone = { l: number | null; m: number | null; r: number | null };
 export type TyreCorner = "fl" | "fr" | "rl" | "rr";
 export type TyreZones = Record<TyreCorner, TyreZone | null>;
+/**
+ * Bandenspanning per hoek, in bar. Eén getal per hoek: de sim levert geen
+ * binnen/midden/buiten-verdeling voor druk, dus geen zones hier.
+ */
+export type TyrePressuresBar = Record<TyreCorner, number | null>;
 
 export type TyreSets = {
   used: number | null;
@@ -55,6 +64,8 @@ export type TyreTelemetry = {
   compoundId: number | null;
   environment: TyreEnvironment;
   pitEntry: TyrePitEntry | null;
+  /** Additief (0.7.x): spanning per hoek in bar. Ontbreekt het blok, dan is alles null. */
+  pressuresBar: TyrePressuresBar;
 };
 
 const CORNERS: TyreCorner[] = ["fl", "fr", "rl", "rr"];
@@ -169,6 +180,22 @@ const sets = (value: unknown, path: string): TyreSets => {
   return out;
 };
 
+const pressuresBar = (value: unknown, path: string): TyrePressuresBar => {
+  const out = { fl: null, fr: null, rl: null, rr: null } as TyrePressuresBar;
+  const r = optionalObject(value, path);
+  if (!r) return out;
+  allowKeys(r, [...ZONE_CORNERS.map((c) => c[0]), ...LEGACY_CORNERS.map((c) => c[0])], path);
+  for (const [key, corner] of [...ZONE_CORNERS, ...LEGACY_CORNERS]) {
+    // Ontbrekende alias overslaan: anders wist de korte hoeknaam de lange.
+    if (r[key] === undefined) continue;
+    // Bar, niet psi of kPa: 1,2-2,5 is een koude/harde slickspanning. De marge is
+    // bewust ruim (0,3-5,0) zodat een hete band of een luchtdruksensor niet wegvalt,
+    // maar een eenheidfout (180 kPa) nog steeds een 422 oplevert.
+    out[corner] = num(r[key], `${path}.${key}`, { min: 0.3, max: 5 });
+  }
+  return out;
+};
+
 const environment = (value: unknown, path: string): TyreEnvironment => {
   const out: TyreEnvironment = { trackTempC: null, airTempC: null, rubberState: null };
   const r = optionalObject(value, path);
@@ -212,7 +239,7 @@ export const parseTyreTelemetry = (value: unknown): TyreTelemetry | null => {
   const path = "payload.tyres";
   const r = record(value, path);
   nonEmpty(r, path);
-  allowKeys(r, ["observedAt", "sessionTimeSeconds", "lap", "trigger", "wearPercent", "carcassTempC", "sets", "compoundId", "environment", "pitEntry"], path);
+  allowKeys(r, ["observedAt", "sessionTimeSeconds", "lap", "trigger", "wearPercent", "carcassTempC", "sets", "compoundId", "environment", "pitEntry", "pressuresBar"], path);
   return {
     wearPercent: zones(r.wearPercent, `${path}.wearPercent`),
     carcassTempC: carcassZones(r.carcassTempC, `${path}.carcassTempC`),
@@ -220,5 +247,6 @@ export const parseTyreTelemetry = (value: unknown): TyreTelemetry | null => {
     compoundId: num(r.compoundId, `${path}.compoundId`, { integer: true, min: 0, max: 255 }),
     environment: environment(r.environment, `${path}.environment`),
     pitEntry: pitEntry(r.pitEntry, `${path}.pitEntry`),
+    pressuresBar: pressuresBar(r.pressuresBar, `${path}.pressuresBar`),
   };
 };

@@ -1,6 +1,8 @@
 import { exactKeysAllowExtra, parseOpponents, type V3Opponent } from "./opponents.ts";
 import { parseVehicleTelemetry, type VehicleTelemetry } from "./vehicleTelemetry.ts";
 import { parseTyreTelemetry, type TyreTelemetry } from "./tyreTelemetry.ts";
+import { parseBrakesTelemetry, type BrakesTelemetry } from "./brakesTelemetry.ts";
+import { parseWeatherTelemetry, type WeatherTelemetry } from "./weatherTelemetry.ts";
 
 export type SimHubFlag = "green" | "yellow" | "red" | "white" | "checkered" | "unknown";
 
@@ -43,16 +45,25 @@ const encoder = new TextEncoder();
  * Een optioneel blok mag nooit een heel frame laten vallen. Faalt het parsen,
  * dan gaat de rest van de telemetrie gewoon door en blijft alleen dit blok leeg.
  * De fout wordt gelogd zodat we de vorm kunnen bijstellen.
+ *
+ * Waarom dit aan staat: één verkeerd bandenveld (bijvoorbeeld wear als fractie in
+ * plaats van procent) kostte eerder het hele frame, inclusief ronde, brandstof en
+ * positie. Een optioneel blok hoort dat niet te kunnen.
  */
-const parseTyresNeverFatal = (value: unknown): ReturnType<typeof parseTyreTelemetry> => {
-  if (value === undefined || value === null) return null;
-  try {
-    return parseTyreTelemetry(value);
-  } catch (error) {
-    console.warn("tyres block rejected:", (error as Error).message);
-    return null;
-  }
-};
+const neverFatalBlock = <T>(label: string, parse: (value: unknown) => T): ((value: unknown) => T | null) =>
+  (value: unknown): T | null => {
+    if (value === undefined || value === null) return null;
+    try {
+      return parse(value);
+    } catch (error) {
+      console.warn(`${label} block rejected:`, (error as Error).message);
+      return null;
+    }
+  };
+
+const parseTyresNeverFatal = neverFatalBlock("tyres", parseTyreTelemetry);
+const parseBrakesNeverFatal = neverFatalBlock("brakes", parseBrakesTelemetry);
+const parseWeatherNeverFatal = neverFatalBlock("weather", parseWeatherTelemetry);
 
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -222,6 +233,13 @@ export type NormalizedTelemetryEnvelope = {
     lastLapTimeSeconds: number | null;
     bestLapTimeSeconds: number | null;
     completedLaps: number | null;
+    /**
+     * Additief: sectorsnelheden van de laatste ronde. Optioneel en nullable, zodat
+     * een connector zonder sectoruitbreiding dezelfde payload blijft sturen.
+     */
+    sector1Seconds?: number | null;
+    sector2Seconds?: number | null;
+    sector3Seconds?: number | null;
   };
   position: {
     position: number | null;
@@ -251,6 +269,16 @@ export type NormalizedTelemetryEnvelope = {
     pitServiceFlagsRaw: number | null;
     requiredRepairSeconds: number | null;
     optionalRepairSeconds: number | null;
+    /**
+     * Additief: de gevraagde reparatie (iRacing PitSvRep/PitSvOptRep) en de
+     * fast-repair-teller. `requiredRepairSeconds`/`optionalRepairSeconds` zijn sinds
+     * 0.7.1 de nog resterende tijd (PitRepairLeft/PitOptRepairLeft); dit is wat er
+     * is aangevraagd. Het verschil tussen die twee is de pitstall-tijd.
+     */
+    repairSecondsRequested?: number | null;
+    optionalRepairSecondsRequested?: number | null;
+    fastRepairAvailable?: number | null;
+    fastRepairUsed?: number | null;
   };
   /** 0.4.1 additive, bounded, null-tolerant opponent snapshot. */
   opponents: V3Opponent[] | null;
@@ -260,6 +288,13 @@ export type NormalizedTelemetryEnvelope = {
    * nieuwe verplichte sleutel — een 0.6.x-payload blijft ongewijzigd geldig.
    */
   tyres?: TyreTelemetry | null;
+  /**
+   * S2: remdruk per hoek. Optioneel root-blok, alles nullable, geen nieuwe
+   * verplichte sleutel — een payload zonder `brakes` blijft ongewijzigd geldig.
+   */
+  brakes?: BrakesTelemetry | null;
+  /** S3: baanvocht, regen en luchtdruk. Zelfde afspraak: optioneel, alles nullable. */
+  weather?: WeatherTelemetry | null;
 };
 
 const raceFlagValues = new Set<SimHubRaceFlag>(["green", "yellow", "red", "white", "checkered", "blue", "black", "meatball", "disqualify"]);
@@ -317,7 +352,7 @@ const v3Boolean = (value: unknown, path: string): boolean | null => {
 
 export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnvelope => {
   const root = asRecord(input, "payload");
-  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle", "tyres"], "payload");
+  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle", "tyres", "brakes", "weather"], "payload");
   if (root.protocolVersion !== 3) throw new Error("unsupported protocolVersion");
   const sequence = v3Number(root.sequence, "payload.sequence", { integer: true, min: 0 }) as number;
   const capturedAt = text(root.capturedAt, "payload.capturedAt", 40);
@@ -331,7 +366,9 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   // bestaande connector (zonder die sleutels) exact hetzelfde blijft werken.
   exactKeysAllowExtra(session, ["isInCar", "sessionTimeSeconds", "sessionTimeRemainingSeconds", "sessionLapsRemaining", "flags", "sessionState"], ["primaryFlag", "flagColour", "flagSeverity", "startLights", "pitLaneOpen", "isStartSequence"], "session");
   const timing = asRecord(root.timing, "timing");
-  exactKeys(timing, ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds", "completedLaps"], "timing");
+  // S4: sectorsnelheden zijn additief. Ze staan naast de vier bevroren velden en
+  // mogen ontbreken; de vier bestaande blijven verplicht.
+  exactKeysAllowExtra(timing, ["currentLapElapsedSeconds", "lastLapTimeSeconds", "bestLapTimeSeconds", "completedLaps"], ["sector1Seconds", "sector2Seconds", "sector3Seconds"], "timing");
   const position = asRecord(root.position, "position");
   exactKeys(position, ["position", "classPosition", "gapToLeaderSeconds"], "position");
   const track = asRecord(root.track, "track");
@@ -341,7 +378,9 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   const raceState = asRecord(root.raceState, "raceState");
   exactKeysAllowExtra(raceState, ["incidents"], ["incidentLimit"], "raceState");
   const pitService = asRecord(root.pitService, "pitService");
-  exactKeys(pitService, ["pitServiceFlagsRaw", "requiredRepairSeconds", "optionalRepairSeconds"], "pitService");
+  // S5: gevraagde reparatie en fast-repair-tellers zijn additief; de drie
+  // bestaande velden blijven verplicht zodat een oude connector niets merkt.
+  exactKeysAllowExtra(pitService, ["pitServiceFlagsRaw", "requiredRepairSeconds", "optionalRepairSeconds"], ["repairSecondsRequested", "optionalRepairSecondsRequested", "fastRepairAvailable", "fastRepairUsed"], "pitService");
 
   return {
     protocolVersion: 3,
@@ -385,6 +424,9 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
       lastLapTimeSeconds: v3Number(timing.lastLapTimeSeconds, "timing.lastLapTimeSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
       bestLapTimeSeconds: v3Number(timing.bestLapTimeSeconds, "timing.bestLapTimeSeconds", { nullable: true, min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
       completedLaps: v3Number(timing.completedLaps, "timing.completedLaps", { nullable: true, integer: true, min: 0, max: 100000, sentinels: [-1] }),
+      sector1Seconds: v3OptionalNumber(timing.sector1Seconds, "timing.sector1Seconds", { min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
+      sector2Seconds: v3OptionalNumber(timing.sector2Seconds, "timing.sector2Seconds", { min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
+      sector3Seconds: v3OptionalNumber(timing.sector3Seconds, "timing.sector3Seconds", { min: Number.EPSILON, max: 86400, sentinels: [0, -1] }),
     },
     position: {
       position: v3Number(position.position, "position.position", { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] }),
@@ -411,10 +453,18 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
       pitServiceFlagsRaw: v3Number(pitService.pitServiceFlagsRaw, "pitService.pitServiceFlagsRaw", { nullable: true, integer: true, min: 0, max: 2147483647, sentinels: [-1] }),
       requiredRepairSeconds: v3Number(pitService.requiredRepairSeconds, "pitService.requiredRepairSeconds", { nullable: true, min: 0, max: 86400, sentinels: [-1] }),
       optionalRepairSeconds: v3Number(pitService.optionalRepairSeconds, "pitService.optionalRepairSeconds", { nullable: true, min: 0, max: 86400, sentinels: [-1] }),
+      repairSecondsRequested: v3OptionalNumber(pitService.repairSecondsRequested, "pitService.repairSecondsRequested", { min: 0, max: 86400, sentinels: [-1] }),
+      optionalRepairSecondsRequested: v3OptionalNumber(pitService.optionalRepairSecondsRequested, "pitService.optionalRepairSecondsRequested", { min: 0, max: 86400, sentinels: [-1] }),
+      fastRepairAvailable: v3OptionalNumber(pitService.fastRepairAvailable, "pitService.fastRepairAvailable", { integer: true, min: 0, max: 255, sentinels: [-1] }),
+      fastRepairUsed: v3OptionalNumber(pitService.fastRepairUsed, "pitService.fastRepairUsed", { integer: true, min: 0, max: 255, sentinels: [-1] }),
     },
     opponents: parseOpponents(root.opponents, "payload.opponents"),
     vehicle: parseVehicleTelemetry(root.vehicle),
-    tyres: parseTyreTelemetry(root.tyres),
+    // De drie optionele meetblokken zijn nooit fataal: een fout in één blok kost
+    // alleen dat blok, niet het frame met ronde, brandstof en positie.
+    tyres: parseTyresNeverFatal(root.tyres),
+    brakes: parseBrakesNeverFatal(root.brakes),
+    weather: parseWeatherNeverFatal(root.weather),
   };
 };
 
