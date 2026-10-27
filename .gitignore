@@ -42,3 +42,7 @@ bot/.cache/
 
 # Hermes-werkbestanden
 .hermes/
+
+# Python-bytecode van release-tooling (release-gate.py importeert clrpe)
+__pycache__/
+*.pyc
