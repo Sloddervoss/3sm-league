@@ -284,10 +284,12 @@ export type NormalizedTelemetryEnvelope = {
   opponents: V3Opponent[] | null;
   /**
    * Optioneel voertuigblok. Sinds de directe-SDK-lezer bevat het naast de
-   * SimHub-kanalen ook `wheelSpeedKph` en `brakeLinePressureBar` per hoek, plus
-   * `steeringWheelAngleDeg`, `latAccelG` en `longAccelG`. Die vijf zijn
+   * SimHub-kanalen ook `brakeLinePressureBar` per hoek, plus
+   * `steeringWheelAngleDeg`, `latAccelG` en `longAccelG`. Die vier zijn
    * optioneel; zonder een connector met SDK-lezer blijven ze null en houdt een
    * 0.7.x-payload exact dezelfde vorm. Zie vehicleTelemetry.ts voor de bereiken.
+   * `wheelSpeedKph` bestaat niet in de iRacing-live-telemetrie: een oude
+   * connector die het nog stuurt wordt geaccepteerd, maar het veld valt weg.
    */
   vehicle?: VehicleTelemetry | null;
   /**

@@ -4,8 +4,13 @@
  * Twee soorten velden staan hier naast elkaar:
  *  - de oorspronkelijke SimHub-kanalen (speedKph, pedalen, rpm, versnelling, sectoren,
  *    bandentemperaturen). Die zijn verplicht zodra `vehicle` aanwezig is;
- *  - de directe-SDK-kanalen (0.8.x): wielsnelheid en remleidingdruk per hoek, plus
+ *  - de directe-SDK-kanalen (0.8.x): remleidingdruk per hoek, plus
  *    stuurwielhoek en langs-/dwarsversnelling. Die zijn optioneel en nullable.
+ *
+ * `wheelSpeedKph` hoort daar NIET bij: iRacing publiceert geen snelheidskanaal per
+ * wiel in de live-telemetrie, dus een connector die het toch stuurt levert vier
+ * nullen. Het veld wordt aan de serverkant nog geaccepteerd (anders kost een
+ * 0.7.1.1-frame onnodig een 422) maar verder genegeerd en niet doorgegeven.
  *
  * Waarom optioneel en niet verplicht: de plugin rolt later uit dan de server. Een
  * connector zonder directe-SDK-lezer moet byte-voor-byte dezelfde payload kunnen
@@ -16,9 +21,6 @@
  * geen eenheid te raden, en een connector die m/s of kPa stuurt valt op als waarde
  * buiten bereik in plaats van als een plausibel maar fout getal. De bereiken zijn
  * ruim genoeg voor elke auto in iRacing en krap genoeg om een eenheidfout te vangen:
- *  - wheelSpeedKph 0-600 (een m/s-zender geeft ~40-90 en blijft dus binnen bereik;
- *    daarom leunt de controle op het bereik, niet op een cross-check met speedKph —
- *    een geblokkeerd wiel is een echte 0 en mag nooit een frame kosten);
  *  - brakeLinePressureBar 0-250 (kPa of psi geeft 1000+, dat is een 422);
  *  - steeringWheelAngleDeg -900..900 (een radiaal-zender blijft binnen bereik; de
  *    hoek is vooral een kwaliteitsmeter, geen eenheidscontrole);
@@ -66,8 +68,6 @@ export type VehicleTelemetry = {
   frontRight: TyreReading | null;
   rearLeft: TyreReading | null;
   rearRight: TyreReading | null;
-  /** Additief (directe SDK): wielsnelheid per hoek in km/h. Ontbreekt het blok, dan alles null. */
-  wheelSpeedKph?: CornerValues | null;
   /** Additief (directe SDK): remleidingdruk per hoek in bar. */
   brakeLinePressureBar?: CornerValues | null;
   /** Additief (directe SDK): stuurwielhoek in graden; teken volgt de sim. */
@@ -85,8 +85,16 @@ const REQUIRED_KEYS = [
   'frontLeft', 'frontRight', 'rearLeft', 'rearRight',
 ];
 const OPTIONAL_KEYS = [
-  'wheelSpeedKph', 'brakeLinePressureBar', 'steeringWheelAngleDeg', 'latAccelG', 'longAccelG',
+  'brakeLinePressureBar', 'steeringWheelAngleDeg', 'latAccelG', 'longAccelG',
 ];
+/**
+ * Sleutels die een oudere connector nog stuurt, maar die geen meting zijn en dus
+ * genegeerd worden: `wheelSpeedKph` (0.7.1.1/0.8.0) bestaat niet in de
+ * iRacing-live-telemetrie. Ze staan niet in het resultaat en niet in
+ * `VehicleTelemetry`; alleen de sleutelcontrole laat ze door, zodat een bestaand
+ * frame 202 blijft en niet op een verwijderd veld stukloopt.
+ */
+const IGNORED_KEYS = ['wheelSpeedKph'];
 
 const CORNER_ALIASES = [
   ['frontLeft', 'fl'],
@@ -155,7 +163,7 @@ export const parseVehicleTelemetry = (value: unknown): VehicleTelemetry | null =
   if (value === undefined || value === null) return null;
   const path = 'payload.vehicle';
   const r = record(value, path);
-  keysAllowExtra(r, REQUIRED_KEYS, OPTIONAL_KEYS, path);
+  keysAllowExtra(r, REQUIRED_KEYS, [...OPTIONAL_KEYS, ...IGNORED_KEYS], path);
   if (r.tyreDataMode !== 'last_available') throw Error(`${path}.tyreDataMode makes an unjustified freshness claim`);
   if (r.gear !== null && r.gear !== undefined && (typeof r.gear !== 'string' || !/^(R|N|[0-9]{1,2})$/.test(r.gear))) {
     throw Error(`${path}.gear is invalid`);
@@ -177,7 +185,6 @@ export const parseVehicleTelemetry = (value: unknown): VehicleTelemetry | null =
     rearLeft: tyre(r.rearLeft, `${path}.rearLeft`),
     rearRight: tyre(r.rearRight, `${path}.rearRight`),
     // Directe SDK: altijd aanwezig in het resultaat, null als de connector ze niet levert.
-    wheelSpeedKph: cornerValues(r.wheelSpeedKph, `${path}.wheelSpeedKph`, 0, 600),
     brakeLinePressureBar: cornerValues(r.brakeLinePressureBar, `${path}.brakeLinePressureBar`, 0, 250),
     steeringWheelAngleDeg: num(r.steeringWheelAngleDeg, `${path}.steeringWheelAngleDeg`, -900, 900),
     latAccelG: num(r.latAccelG, `${path}.latAccelG`, -10, 10),

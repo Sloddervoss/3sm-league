@@ -1439,7 +1439,7 @@ namespace ThreeSM.EnduranceConnector
                     OptionalRepairSeconds = ReadRepairSeconds(rawChannels, "PitOptRepairLeft"),
                 },
                 Opponents = BuildOpponentSnapshot(snapshot),
-                Vehicle = CaptureVehicle(manager, ReadDirectSdk()),  // altijd: de vijf SDK-velden zijn de reden dat we direct lezen
+                Vehicle = CaptureVehicle(manager, ReadDirectSdk()),  // altijd: de vier SDK-velden zijn de reden dat we direct lezen
                 // 0.7.0: optioneel root-blok, alleen gevuld als de instelling aan staat (de
                 // server moet het blok kennen; een oude receiver geeft 422 op een nieuwe key).
                 // 0.7.1: niet meer elk frame — zie PublishTyres (wijziging of 30 s-hartslag).
@@ -1540,8 +1540,8 @@ namespace ThreeSM.EnduranceConnector
                 // 0.8.0: alleen uit de directe SDK-lezer. Zonder lezer, zonder iRacing of
                 // met de instelling uit blijven deze velden null en valt het blok volledig
                 // weg (EmitDefaultValue=false) — de payload blijft dan byte-identiek.
-                // De SDK levert m/s, rad en m/s²; de wire-contracten zijn km/h, graden en g.
-                WheelSpeedKph = CaptureWheelValues(directSdk, IrSdkChannels.WheelSpeed, IrSdkUnits.MetersPerSecondToKph, 0, 600, 1),
+                // De SDK levert rad en m/s²; de wire-contracten zijn graden en g.
+                // Geen wielsnelheid: iRacing heeft geen snelheidskanaal per wiel.
                 BrakeLinePressureBar = CaptureWheelValues(directSdk, IrSdkChannels.BrakeLinePressure, 1, 0, 250, 1),
                 SteeringWheelAngleDeg = DirectSdkNumber(directSdk, IrSdkChannels.SteeringWheelAngle, IrSdkUnits.RadiansToDegrees, -900, 900, 1),
                 LatAccelG = DirectSdkNumber(directSdk, IrSdkChannels.LatAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),

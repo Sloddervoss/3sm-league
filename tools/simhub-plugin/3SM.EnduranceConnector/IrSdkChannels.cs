@@ -13,6 +13,10 @@ namespace ThreeSM.EnduranceConnector
     /// </summary>
     public static class IrSdkChannels
     {
+        // LET OP: LFspeed/RFspeed/LRspeed/RRspeed staan NIET in de live-telemetrie van
+        // iRacing (gecontroleerd tegen alle 334 variabelen). Ze zijn hier alleen nog
+        // gedocumenteerd omdat de researchsampler ze leest; het vehicle-blok in de
+        // plugin stuurt geen wielsnelheid meer mee.
         public const string LfSpeed = "LFspeed";
         public const string RfSpeed = "RFspeed";
         public const string LrSpeed = "LRspeed";
@@ -32,7 +36,8 @@ namespace ThreeSM.EnduranceConnector
         /// <summary>Longitudinale versnelling in m/s² (iRacing-eenheid "m/s^2").</summary>
         public const string LongAccel = "LongAccel";
 
-        /// <summary>Wielsnelheid per hoek, m/s.</summary>
+        /// <summary>Wielsnelheid per hoek, m/s. Bestaat niet in de iRacing-live-telemetrie;
+        /// alleen de researchsampler leest deze namen nog.</summary>
         public static readonly string[] WheelSpeed = { LfSpeed, RfSpeed, LrSpeed, RrSpeed };
 
         /// <summary>Remleidingdruk per hoek, bar.</summary>

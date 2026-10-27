@@ -130,10 +130,14 @@ namespace ThreeSM.EnduranceConnector
         // 0.8.0 additief: kanalen die SimHub's GameRawData niet doorgeeft en die de plugin
         // rechtstreeks uit de iRacing-shared-memory leest (IrSdkMemoryReader). Alles nullable
         // en EmitDefaultValue=false: zonder lezer (of zonder rijdende sim) verandert de
-        // payload byte-voor-byte niet. Eenheid staat in de naam (Kph/Bar/Deg/G), zodat de
+        // payload byte-voor-byte niet. Eenheid staat in de naam (Bar/Deg/G), zodat de
         // server geen eenheid hoeft te raden; de plugin rekent de SDK-eenheden om
-        // (m/s -> km/h, rad -> deg, m/s² -> g).
-        [DataMember(Name = "wheelSpeedKph", EmitDefaultValue = false)] public V3WheelValues WheelSpeedKph { get; set; }
+        // (rad -> deg, m/s² -> g).
+        //
+        // Geen `wheelSpeedKph`: iRacing publiceert in de live-telemetrie geen
+        // LFspeed/RFspeed/LRspeed/RRspeed (gecontroleerd tegen alle 334 variabelen), dus
+        // dat veld zou altijd vier nullen zijn. De server negeert het nog wel voor oude
+        // connectors die het sturen.
         [DataMember(Name = "brakeLinePressureBar", EmitDefaultValue = false)] public V3WheelValues BrakeLinePressureBar { get; set; }
         [DataMember(Name = "steeringWheelAngleDeg", EmitDefaultValue = false)] public double? SteeringWheelAngleDeg { get; set; }
         [DataMember(Name = "latAccelG", EmitDefaultValue = false)] public double? LatAccelG { get; set; }

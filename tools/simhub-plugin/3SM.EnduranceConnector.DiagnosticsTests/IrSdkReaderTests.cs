@@ -100,7 +100,6 @@ internal static class IrSdkReaderTests
         var filled = Serialize(new V3Vehicle
         {
             SpeedKph = 100,
-            WheelSpeedKph = new V3WheelValues { FrontLeft = 208.6, RearRight = 207.4 },
             BrakeLinePressureBar = new V3WheelValues { FrontLeft = 0, FrontRight = 87.5 },
             SteeringWheelAngleDeg = -70.7,
             LatAccelG = 1.274,
@@ -113,7 +112,7 @@ internal static class IrSdkReaderTests
             empty ?? "null");
         check("SDK-17 populated vehicle fields are additive and keep the corner names",
             filled != null
-            && filled.IndexOf("\"wheelSpeedKph\":{\"frontLeft\":208.6,\"rearRight\":207.4}", StringComparison.Ordinal) >= 0
+            && filled.IndexOf("wheelSpeedKph", StringComparison.Ordinal) < 0
             && filled.IndexOf("\"brakeLinePressureBar\":{\"frontLeft\":0,\"frontRight\":87.5}", StringComparison.Ordinal) >= 0
             && filled.IndexOf("\"steeringWheelAngleDeg\":-70.7", StringComparison.Ordinal) >= 0
             && filled.IndexOf("\"latAccelG\":1.274", StringComparison.Ordinal) >= 0
@@ -128,14 +127,15 @@ internal static class IrSdkReaderTests
             + " g=" + IrSdkUnits.Mps2ToG(9.80665).ToString(System.Globalization.CultureInfo.InvariantCulture));
 
         // De kanaalnamen zijn de naad met iRacing: een typefout hier is een stille null.
+        // (wheelSpeedKph staat bewust niet in het contract: iRacing heeft geen kanaal
+        // per wiel; IrSdkChannels.WheelSpeed is alleen nog documentatie voor de
+        // researchsampler.)
         check("SDK-19 channel names and corner order match the iRacing SDK",
-            IrSdkChannels.WheelSpeed.Length == 4 && IrSdkChannels.BrakeLinePressure.Length == 4
-            && IrSdkChannels.WheelSpeed[0] == "LFspeed" && IrSdkChannels.WheelSpeed[1] == "RFspeed"
-            && IrSdkChannels.WheelSpeed[2] == "LRspeed" && IrSdkChannels.WheelSpeed[3] == "RRspeed"
+            IrSdkChannels.BrakeLinePressure.Length == 4
             && IrSdkChannels.BrakeLinePressure[0] == "LFbrakeLinePress" && IrSdkChannels.BrakeLinePressure[3] == "RRbrakeLinePress"
             && IrSdkChannels.SteeringWheelAngle == "SteeringWheelAngle"
             && IrSdkChannels.LatAccel == "LatAccel" && IrSdkChannels.LongAccel == "LongAccel",
-            string.Join(",", IrSdkChannels.WheelSpeed));
+            string.Join(",", IrSdkChannels.BrakeLinePressure));
 
         return 19;
     }

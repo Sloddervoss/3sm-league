@@ -49,7 +49,6 @@ begin;
 -- 1. Kolommen op de rondesamenvatting
 -- ---------------------------------------------------------------------------
 alter table public.simhub_tyre_lap_samples
-  add column if not exists wheel_kph jsonb,
   add column if not exists brake_bar jsonb,
   add column if not exists motion_samples integer;
 
@@ -148,15 +147,13 @@ begin
 
   insert into public.simhub_tyre_lap_samples (
     device_id, connector_id, session_key, lap_number,
-    wheel_kph, brake_bar, motion_samples, captured_at
+    brake_bar, motion_samples, captured_at
   ) values (
     p_rij.device_id, p_rij.connector_id, p_rij.session_key, p_rij.lap_number,
-    public.simhub_motion_stat_summary(p_rij.wheel),
     public.simhub_motion_stat_summary(p_rij.brake),
     p_rij.n, p_rij.last_frame_at
   )
   on conflict (device_id, session_key, lap_number) do update set
-    wheel_kph = excluded.wheel_kph,
     brake_bar = excluded.brake_bar,
     motion_samples = excluded.motion_samples;
 end;

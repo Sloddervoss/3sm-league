@@ -6,9 +6,13 @@ import { resolveTelemetryContext } from "../../supabase/functions/simhub-ingest-
 /**
  * Directe iRacing-SDK-kanalen in het optionele `vehicle`-blok.
  *
- * De plugin krijgt een eigen SDK-lezer die vijf kanalen kan toevoegen:
- *   wheelSpeedKph (per hoek), brakeLinePressureBar (per hoek),
- *   steeringWheelAngleDeg, latAccelG en longAccelG.
+ * De plugin leest vier kanalen rechtstreeks uit de SDK-memory:
+ *   brakeLinePressureBar (per hoek), steeringWheelAngleDeg, latAccelG en longAccelG.
+ *
+ * `wheelSpeedKph` hoort daar niet bij: iRacing publiceert geen snelheidskanaal per
+ * wiel, dus de plugin stuurt het niet meer. Een oudere connector (0.7.1.1) die het
+ * nog wél stuurt, mag daar geen 422 van krijgen: de server accepteert de sleutel en
+ * gooit hem weg.
  *
  * De eis is additief en achterwaarts compatibel:
  *  1. een frame zonder die velden blijft ongewijzigd geldig (202);
@@ -75,7 +79,6 @@ const legacyVehicle = () => ({
 /** Dezelfde meting, nu met de directe-SDK-kanalen erbij (lange hoeknamen). */
 const sdkVehicle = () => ({
   ...legacyVehicle(),
-  wheelSpeedKph: { frontLeft: 208.6, frontRight: 209.1, rearLeft: 212.4, rearRight: 212.2 },
   brakeLinePressureBar: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
   steeringWheelAngleDeg: -12.4,
   latAccelG: 1.42,
@@ -123,7 +126,6 @@ describe("vehicle: bestaand frame zonder SDK-velden blijft 202", () => {
     expect(vehicle.gear).toBe("5");
     expect(vehicle.frontLeft!.wearPercent).toBe(93);
     // Ontbreken = null, geen 0.
-    expect(vehicle.wheelSpeedKph).toEqual(allNullCorners);
     expect(vehicle.brakeLinePressureBar).toEqual(allNullCorners);
     expect(vehicle.steeringWheelAngleDeg).toBeNull();
     expect(vehicle.latAccelG).toBeNull();
@@ -151,7 +153,6 @@ describe("vehicle: frame met SDK-velden wordt geaccepteerd", () => {
     expect(context.result).toBe("accepted_device_context");
 
     const vehicle = context.normalized!.vehicle!;
-    expect(vehicle.wheelSpeedKph).toEqual({ fl: 208.6, fr: 209.1, rl: 212.4, rr: 212.2 });
     expect(vehicle.brakeLinePressureBar).toEqual({ fl: 0, fr: 0, rl: 0, rr: 0 });
     expect(vehicle.steeringWheelAngleDeg).toBe(-12.4);
     expect(vehicle.latAccelG).toBe(1.42);
@@ -163,7 +164,7 @@ describe("vehicle: frame met SDK-velden wordt geaccepteerd", () => {
     const nieuw = parseTelemetryV3Envelope(metVehicle(sdkVehicle())).vehicle!;
     const zonderSdk = (v: Record<string, unknown>) => {
       const kopie = { ...v };
-      for (const sleutel of ["wheelSpeedKph", "brakeLinePressureBar", "steeringWheelAngleDeg", "latAccelG", "longAccelG"]) {
+      for (const sleutel of ["brakeLinePressureBar", "steeringWheelAngleDeg", "latAccelG", "longAccelG"]) {
         delete kopie[sleutel];
       }
       return kopie;
@@ -174,10 +175,8 @@ describe("vehicle: frame met SDK-velden wordt geaccepteerd", () => {
   it("accepteert korte hoeknamen net als in tyres en brakes", () => {
     const vehicle = parseVehicleTelemetry({
       ...legacyVehicle(),
-      wheelSpeedKph: { fl: 100.1, fr: 101.2, rl: 102.3, rr: 103.4 },
       brakeLinePressureBar: { fl: 0, fr: 12.5, rl: 0, rr: 0 },
     })!;
-    expect(vehicle.wheelSpeedKph).toEqual({ fl: 100.1, fr: 101.2, rl: 102.3, rr: 103.4 });
     expect(vehicle.brakeLinePressureBar).toEqual({ fl: 0, fr: 12.5, rl: 0, rr: 0 });
   });
 
@@ -185,13 +184,11 @@ describe("vehicle: frame met SDK-velden wordt geaccepteerd", () => {
     const vehicle = parseVehicleTelemetry({
       ...legacyVehicle(),
       speedKph: 0,
-      wheelSpeedKph: { fl: 0, fr: 0, rl: 0, rr: 0 },
       brakeLinePressureBar: { fl: 0, fr: 0, rl: 0, rr: 0 },
       steeringWheelAngleDeg: 0,
       latAccelG: 0,
       longAccelG: 0,
     })!;
-    expect(vehicle.wheelSpeedKph!.fl).toBe(0);
     expect(vehicle.brakeLinePressureBar!.fl).toBe(0);
     expect(vehicle.steeringWheelAngleDeg).toBe(0);
     expect(vehicle.latAccelG).toBe(0);
@@ -200,15 +197,51 @@ describe("vehicle: frame met SDK-velden wordt geaccepteerd", () => {
   it("accepteert een half gevulde hoek en een lege hoek (null)", () => {
     const vehicle = parseVehicleTelemetry({
       ...legacyVehicle(),
-      wheelSpeedKph: { fl: 150.5, fr: null, rl: undefined, rr: 0 },
+      brakeLinePressureBar: { fl: 12.5, fr: null, rl: undefined, rr: 0 },
     })!;
-    expect(vehicle.wheelSpeedKph).toEqual({ fl: 150.5, fr: null, rl: null, rr: 0 });
+    expect(vehicle.brakeLinePressureBar).toEqual({ fl: 12.5, fr: null, rl: null, rr: 0 });
   });
 
   it("geeft de velden door aan de genormaliseerde envelope die in v3_normalized belandt", () => {
     const normalized = normalizeTelemetryEnvelope(metVehicle(sdkVehicle()));
-    expect(normalized.vehicle!.wheelSpeedKph).toEqual({ fl: 208.6, fr: 209.1, rl: 212.4, rr: 212.2 });
+    expect(normalized.vehicle!.brakeLinePressureBar).toEqual({ fl: 0, fr: 0, rl: 0, rr: 0 });
     expect(normalized.vehicle!.latAccelG).toBe(1.42);
+  });
+});
+
+/**
+ * `wheelSpeedKph` is een dood spoor: iRacing heeft geen kanaal per wiel. De plugin
+ * stuurt het niet meer, maar 0.7.1.1 deed dat wel. Zo'n frame mag geen 422 kosten;
+ * de sleutel wordt geaccepteerd en het veld verdwijnt uit het genormaliseerde blok.
+ */
+describe("vehicle: het oude wheelSpeedKph-blok wordt genegeerd, niet geweigerd", () => {
+  it("accepteert een 0.7.1.1-frame met wielsnelheid en laat het veld vallen", async () => {
+    const context = await resolve(metVehicle({
+      ...legacyVehicle(),
+      wheelSpeedKph: { frontLeft: 208.6, frontRight: 209.1, rearLeft: 212.4, rearRight: 212.2 },
+      brakeLinePressureBar: { frontLeft: 0, frontRight: 0, rearLeft: 0, rearRight: 0 },
+    }));
+    expect(context.result).toBe("accepted_device_context");
+    expect(context.normalized!.vehicle).not.toHaveProperty("wheelSpeedKph");
+    expect(context.normalized!.vehicle!.brakeLinePressureBar).toEqual({ fl: 0, fr: 0, rl: 0, rr: 0 });
+  });
+
+  it("negeert het blok ook als de waarden onmogelijk zijn (geen enkele pluginversie levert ze nog echt)", () => {
+    const vehicle = parseVehicleTelemetry({
+      ...legacyVehicle(),
+      wheelSpeedKph: { frontLeft: "208.6", rearRight: 9999, midden: null },
+    })!;
+    expect(vehicle).not.toHaveProperty("wheelSpeedKph");
+    expect(vehicle.speedKph).toBe(212.4);
+  });
+
+  it("houdt de vorm van v3_normalized gelijk met en zonder het oude blok", () => {
+    const met = parseTelemetryV3Envelope(metVehicle({
+      ...legacyVehicle(),
+      wheelSpeedKph: { fl: null, fr: null, rl: null, rr: null },
+    })).vehicle!;
+    const zonder = parseTelemetryV3Envelope(metVehicle(legacyVehicle())).vehicle!;
+    expect(met).toEqual(zonder);
   });
 });
 
@@ -216,14 +249,6 @@ describe("vehicle: foute waarden en eenheden worden geweigerd", () => {
   const kapot = (extra: Record<string, unknown>) => ({ ...legacyVehicle(), ...extra });
 
   it.each([
-    ["wielsnelheid boven het fysieke bereik (mph of schaalfout)", { wheelSpeedKph: { fl: 700 } }],
-    ["wielsnelheid als tekst", { wheelSpeedKph: { fl: "208.6" } }],
-    ["wielsnelheid NaN", { wheelSpeedKph: { fl: NaN } }],
-    ["wielsnelheid Infinity", { wheelSpeedKph: { fr: Infinity } }],
-    ["negatieve wielsnelheid", { wheelSpeedKph: { rl: -1 } }],
-    ["onbekende hoek in het wielsnelheidsblok", { wheelSpeedKph: { fl: 200, midden: 200 } }],
-    ["leeg wielsnelheidsblok", { wheelSpeedKph: {} }],
-    ["wielsnelheidsblok als array", { wheelSpeedKph: [200, 200, 200, 200] }],
     ["remdruk in kPa in plaats van bar", { brakeLinePressureBar: { fl: 6500 } }],
     ["remdruk in psi in plaats van bar", { brakeLinePressureBar: { fr: 1500 } }],
     ["negatieve remdruk", { brakeLinePressureBar: { rl: -2 } }],
@@ -251,7 +276,7 @@ describe("vehicle: foute waarden en eenheden worden geweigerd", () => {
   });
 
   it("noemt het pad van het geweigerde veld in de foutmelding", () => {
-    expect(() => parseVehicleTelemetry(kapot({ wheelSpeedKph: { fl: 700 } }))).toThrow(/payload\.vehicle\.wheelSpeedKph\.fl/);
     expect(() => parseVehicleTelemetry(kapot({ brakeLinePressureBar: { rr: 6500 } }))).toThrow(/payload\.vehicle\.brakeLinePressureBar\.rr/);
+    expect(() => parseVehicleTelemetry(kapot({ steeringWheelAngleDeg: 1800 }))).toThrow(/payload\.vehicle\.steeringWheelAngleDeg/);
   });
 });
