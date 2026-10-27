@@ -101,6 +101,11 @@ export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
     reserveLaps: input.reserveLaps,
     tyreSamples: input.tyreSamples ?? [],
     tyreEstimate: input.tyreEstimate ?? null,
+    // Pitbox-fase: nodig voor de reparatiestrook, en alleen daar. Ontbreekt de
+    // meting, dan blijft het null en toont de band geen strook.
+    onPitRoad: typeof v3?.track?.onPitRoad === "boolean" ? v3.track.onPitRoad : null,
+    requiredRepairSeconds: firstNumber(v3?.pitService?.requiredRepairSeconds),
+    optionalRepairSeconds: firstNumber(v3?.pitService?.optionalRepairSeconds),
   };
 }
 

@@ -5,6 +5,7 @@ import {
   lapsOnFuel as computeLapsOnFuel,
 } from "./fuelModel";
 import { computePitLoss } from "./pitLoss";
+import { pitBoxRepair } from "./pitService";
 import { computePitWindow } from "./pitWindow";
 import { clientTyreEstimate, type TyreEstimate } from "./tyreGrade";
 import { adviseTyreChange, type TyreAdvice } from "./tyreWear";
@@ -144,6 +145,19 @@ export function advise(snapshot: StrategySnapshot): Advice {
   const tyreEstimate: TyreEstimate = snapshot.tyreEstimate ?? clientTyreEstimate(tyreSamples);
 
   /**
+   * De reparatiestrook. Alleen bij verse telemetrie: een reparatieverplichting
+   * uit een meting van een halve minuut oud is geschiedenis, geen mededeling.
+   */
+  const inBox =
+    snapshot.sampleAgeSeconds > MAX_SAMPLE_AGE_SECONDS
+      ? null
+      : pitBoxRepair({
+          onPitRoad: snapshot.onPitRoad ?? null,
+          requiredRepairSeconds: snapshot.requiredRepairSeconds ?? null,
+          optionalRepairSeconds: snapshot.optionalRepairSeconds ?? null,
+        });
+
+  /**
    * De bandengrens in rondes. Alleen graad A en B mogen een getal leveren; C en
    * D leveren een bereik of een oorzaak, en dan is de tank de enige grens.
    */
@@ -208,6 +222,7 @@ export function advise(snapshot: StrategySnapshot): Advice {
     binding: null,
     tyreFuel: null,
     tyreEstimate,
+    inBox,
   });
 
   if (snapshot.sampleAgeSeconds > MAX_SAMPLE_AGE_SECONDS) {
@@ -270,6 +285,7 @@ export function advise(snapshot: StrategySnapshot): Advice {
     confidence,
     fuelToAddLitres: tanken,
     fuelToFinish: brandstofTotFinish,
+    inBox,
   } as const;
 
   if (voorraad == null) {

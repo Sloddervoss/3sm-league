@@ -5,6 +5,7 @@ import {
   causeLine,
   gradeLabel,
   gradeWord,
+  lapsAdvice,
   lapsLabel,
   limitLabel,
   marginAria,
@@ -20,6 +21,10 @@ import type { TyreEstimate } from "./strategy/tyreGrade";
  * Deze tests eisen de letterlijke regels uit 3sm-bandenplan §4 en plan-04 §3a.
  * Zo kan een latere "verduidelijking" de betekenis niet stilzwijgend veranderen:
  * "wacht op stop" is een instructie, "onbekend" is een schouderophalen.
+ *
+ * Sinds de eerlijke bandenstrook is de vorm overal hetzelfde: een bereik in
+ * rondes, geen percentage rest. Wat een percentage wél mag zijn is de naam van
+ * de drempel ("tot 40%") — dat is geen voorspelling maar een grens.
  */
 
 const estimate = (overrides: Partial<TyreEstimate> = {}): TyreEstimate => ({
@@ -42,12 +47,16 @@ const estimate = (overrides: Partial<TyreEstimate> = {}): TyreEstimate => ({
 });
 
 describe("graadwoorden", () => {
-  it("koppelt elke graad aan één woord", () => {
+  it("koppelt elke graad aan één betrouwbaarheidswoord", () => {
     expect(gradeLabel("A")).toBe("A · gemeten");
-    expect(gradeLabel("B")).toBe("B · geschat");
-    expect(gradeLabel("C")).toBe("C · alleen bereik");
-    expect(gradeLabel("D")).toBe("D · geen meting");
-    expect(gradeWord("D")).toBe("geen meting");
+    expect(gradeLabel("B")).toBe("B · voorlopig");
+    expect(gradeLabel("C")).toBe("C · schatting");
+    expect(gradeLabel("D")).toBe("D · plan");
+  });
+
+  it("gebruikt geen woord twee keer voor twee graden", () => {
+    const woorden = (["A", "B", "C", "D"] as const).map((graad) => gradeWord(graad));
+    expect(new Set(woorden).size).toBe(4);
   });
 
   it("noemt de grens bij naam: 40% of kaal, nooit door elkaar", () => {
@@ -58,32 +67,67 @@ describe("graadwoorden", () => {
   });
 });
 
+describe("het bereik in rondes", () => {
+  it("gebruikt het bereik als de band bekend is", () => {
+    expect(lapsAdvice(estimate())).toEqual({ rangeText: "11–14", range: { low: 11, high: 14 }, limit: "tot 40%" });
+  });
+
+  it("valt terug op het puntgetal zonder band", () => {
+    // Eén getal is eerlijker dan een bereik dat de UI zelf verbreedt.
+    expect(lapsAdvice(estimate({ lapsRange: null }))).toEqual({
+      rangeText: "12",
+      range: null,
+      limit: "tot 40%",
+    });
+  });
+
+  it("zegt onbekend als er geen rondes zijn in plaats van een nul", () => {
+    expect(lapsAdvice(estimate({ lapsRange: null, lapsToThreshold: null, limitPct: null }))).toEqual({
+      rangeText: null,
+      range: null,
+      limit: null,
+    });
+  });
+});
+
 describe("adviesregel per graad", () => {
-  it("A: puntgetal, helling en rondes tot 40%", () => {
-    expect(adviceLine(estimate())).toBe("62% · −1,8/r · nog 12 rondes tot 40%");
+  it("A: het bereik in rondes tot de drempel, zonder percentage rest", () => {
+    expect(adviceLine(estimate())).toBe("11–14 rondes tot 40%");
+    expect(adviceLine(estimate())).not.toContain("62%");
   });
 
-  it("B: getal met marge, rondes als bereik", () => {
-    expect(adviceLine(estimate({ grade: "B" }))).toBe("62% ±4 · 11–14 rondes (geschat)");
+  it("B: dezelfde vorm, met een bredere band", () => {
+    // Het woord verschilt (voorlopig), niet de vorm: twee verschillende zinnen
+    // voor hetzelfde getal is precies hoe dit paneel eerder ongeloofwaardig werd.
+    expect(adviceLine(estimate({ grade: "B" }))).toBe("11–14 rondes tot 40%");
   });
 
-  it("C: bereik en een instructie, geen tempo", () => {
-    expect(adviceLine(estimate({ grade: "C", ratePerLap: null, lapsToThreshold: null, pctRange: { low: 55, high: 70 } }))).toBe(
-      "55–70% · geschat · wacht op stop",
+  it("laat de grens weg als hij onbekend is, maar houdt de rondes", () => {
+    expect(adviceLine(estimate({ limitPct: null }))).toBe("11–14 rondes");
+  });
+
+  it("noemt de kaal-grens bij kaal, niet 40%", () => {
+    expect(adviceLine(estimate({ limitPct: 0 }))).toBe("11–14 rondes tot kaal");
+  });
+
+  it("zegt rondes onbekend als de band er wel is maar de rondes niet", () => {
+    expect(adviceLine(estimate({ lapsRange: null, lapsToThreshold: null, limitPct: null }))).toBe(
+      "rondes onbekend",
     );
   });
 
-  it("D: een streepje en de oorzaak", () => {
-    expect(
-      adviceLine(
-        estimate({ grade: "D", restPct: null, cause: "stalled_values", causeLap: 7 }),
-      ),
-    ).toBe("— · waarde staat stil sinds r7");
+  it("C: geen rondes, geen tempo, wel de instructie", () => {
+    const regel = adviceLine(
+      estimate({ grade: "C", ratePerLap: null, lapsToThreshold: null, lapsRange: null, pctRange: { low: 55, high: 70 }, limitPct: null }),
+    );
+    expect(regel).toBe("rondes onbekend · wacht op stop");
+    expect(regel).not.toContain("/r");
+    expect(regel).not.toContain("55");
   });
 
-  it("zegt het als de grens onbekend is in plaats van een getal te verzinnen", () => {
-    expect(adviceLine(estimate({ lapsToThreshold: null, limitPct: null }))).toBe(
-      "62% · −1,8/r · grens onbekend",
+  it("D: een streepje en de oorzaak", () => {
+    expect(adviceLine(estimate({ grade: "D", restPct: null, cause: "stalled_values", causeLap: 7 }))).toBe(
+      "— · waarde staat stil sinds r7",
     );
   });
 });

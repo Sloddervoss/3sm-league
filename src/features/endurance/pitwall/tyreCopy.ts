@@ -1,39 +1,49 @@
 /**
  * Alle Nederlandse teksten van het bandenblok op één plek.
  *
- * Waarom een apart bestand: de tests eisen de letterlijke regel ("nog 12 rondes
- * tot 40%"), en als dezelfde zin in drie componenten staat, verandert er op een
- * dag één van de drie. Hier is er één formule per zin, en de drempel is een
- * parameter — nooit het cijfer 40 in een string.
+ * Waarom een apart bestand: de tests eisen de letterlijke regel, en als dezelfde
+ * zin in drie componenten staat, verandert er op een dag één van de drie. Hier
+ * is er één formule per zin, en de drempel is een parameter — nooit het cijfer
+ * 40 in een string.
  *
- * Regel die boven alles staat (plan-04 §8): geen tempo bij graad C of D, geen
- * getal zonder graad, geen bereik met een `±` erop, en geen streepje waar een
- * getal hoort behalve bij graad D.
+ * Regel die boven alles staat (plan-04 §8): de bandenstrook toont een bereik in
+ * rondes, geen percentage. Een percentage rest zegt niets over hoeveel rondes je
+ * er nog mee doet, en dat is de enige vraag die een pitwall stelt. Het woord
+ * erboven zegt waar dat bereik vandaan komt: gemeten, voorlopig, schatting of
+ * plan. Geen tempo bij graad C of D, geen `±` naast een bereik, en geen streepje
+ * waar een getal hoort behalve bij graad D.
  */
 
 import {
   formatDecimal,
   formatLapsRange,
-  formatPct,
-  formatPctRange,
-  formatRate,
   TYRE_CHANGE_THRESHOLD_PCT,
+  type LapRange,
   type TyreCause,
   type TyreEstimate,
   type TyreGrade,
 } from "./strategy/tyreGrade";
 
-/** `A · gemeten`: de letter alleen is nooit genoeg, het woord doet het werk. */
+/**
+ * `A · gemeten`: de letter alleen is nooit genoeg, het woord doet het werk.
+ *
+ * Vier graden, vier woorden, en ze zijn niet inwisselbaar:
+ *
+ *   A  gemeten     twee ankers in dezelfde run, helling en bereik
+ *   B  voorlopig   één anker of de live reeks: een getal met een brede band
+ *   C  schatting   alleen een bereik, geen tempo
+ *   D  plan        geen bandenmeting; de stop komt uit het plan (tank/afstand)
+ */
 export function gradeWord(grade: TyreGrade): string {
   switch (grade) {
     case "A":
       return "gemeten";
     case "B":
-      return "geschat";
+      return "voorlopig";
     case "C":
-      return "alleen bereik";
+      return "schatting";
     default:
-      return "geen meting";
+      return "plan";
   }
 }
 
@@ -59,32 +69,54 @@ function rondes(n: number): string {
 }
 
 /**
+ * Het bereik in rondes, in de vorm die de strook nodig heeft.
+ *
+ * `rangeText` is `11–14` als er een echte band is, `12` als alleen het puntgetal
+ * bekend is, en null als er geen rondes te noemen zijn. `limit` zegt waar de
+ * grens ligt (`tot 40%` of `tot kaal`) — dat is geen percentage rest, het is de
+ * naam van de drempel.
+ */
+export interface TyreLapsAdvice {
+  rangeText: string | null;
+  /** Alleen gevuld bij een echt bereik; een puntgetal is geen band. */
+  range: LapRange | null;
+  limit: string | null;
+}
+
+export function lapsAdvice(estimate: TyreEstimate): TyreLapsAdvice {
+  const bereik = estimate.lapsRange;
+  // Zonder σ in rondes blijft het puntgetal staan: één getal is eerlijker dan
+  // een bereik dat we zelf zouden verbreden.
+  const punt =
+    bereik == null && estimate.lapsToThreshold != null
+      ? Math.max(0, Math.floor(estimate.lapsToThreshold))
+      : null;
+
+  return {
+    rangeText: bereik != null ? formatLapsRange(bereik) : punt == null ? null : `${punt}`,
+    range: bereik != null && bereik.low !== bereik.high ? bereik : null,
+    limit: limitLabel(estimate.limitPct, true),
+  };
+}
+
+/**
  * De regel onder de hoekgrid. Vier graden, vier vormen — en de functie gooit
- * niets weg: wat ontbreekt wordt een streepje, niet een nul.
+ * niets weg: wat ontbreekt wordt "rondes onbekend", niet een nul.
+ *
+ * De vorm is overal dezelfde: een bereik in rondes, eventueel met de grens
+ * erachter. Het woord (gemeten/voorlopig/schatting/plan) staat in het label
+ * erboven, zodat dezelfde mededeling niet twee keer in hetzelfde blok staat.
  */
 export function adviceLine(estimate: TyreEstimate): string {
-  const pct = formatPct(estimate.restPct);
-
   switch (estimate.grade) {
-    case "A": {
-      const rate = formatRate(estimate.ratePerLap);
-      const laps = estimate.lapsToThreshold == null ? null : Math.floor(estimate.lapsToThreshold);
-      const grens = limitLabel(estimate.limitPct) ?? `${TYRE_CHANGE_THRESHOLD_PCT}%`;
-      if (pct == null || rate == null) return "— · geen bandenmeting sinds de vorige stop";
-      if (laps == null) return `${pct}% · ${rate} · grens onbekend`;
-      return `${pct}% · ${rate} · nog ${rondes(laps)} tot ${grens}`;
-    }
+    case "A":
     case "B": {
-      const marge = estimate.marginPp == null ? null : Math.round(estimate.marginPp);
-      const bereik = formatLapsRange(estimate.lapsRange);
-      const getal = pct == null ? "—" : marge == null ? `${pct}%` : `${pct}% ±${marge}`;
-      if (bereik == null) return `${getal} · rondes onbekend (geschat)`;
-      return `${getal} · ${bereik} rondes (geschat)`;
+      const { rangeText, limit } = lapsAdvice(estimate);
+      if (rangeText == null) return limit == null ? "rondes onbekend" : `rondes onbekend ${limit}`;
+      return limit == null ? `${rangeText} rondes` : `${rangeText} rondes ${limit}`;
     }
-    case "C": {
-      const bereik = formatPctRange(estimate.pctRange);
-      return `${bereik ?? "—"} · geschat · wacht op stop`;
-    }
+    case "C":
+      return "rondes onbekend · wacht op stop";
     default:
       return `— · ${causeLine(estimate)}`;
   }

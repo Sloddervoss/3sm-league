@@ -248,7 +248,14 @@ export function parseTyreEstimate(raw: unknown): TyreEstimate | null {
   const ratePerLap = rawRate != null ? Math.abs(rawRate) : null;
   const sigmaPp = num(get(hoek, "sigma"));
   const marginPp = sigmaPp != null ? 1.96 * sigmaPp : null;
-  const sigmaLaps = num(get(raw, "sigma_laps"));
+  // De server stuurt σ in procentpunten (1,6 bij A, 6,0 bij B) en geen σ in
+  // rondes. Delen door de helling geeft dezelfde onzekerheid in de eenheid
+  // waarin de pitwall praat: rondes. Zonder die deling zou graad A geen bereik
+  // hebben en dus terugvallen op één getal, terwijl de band er wel is.
+  const sigmaLapsRaw = num(get(raw, "sigma_laps"));
+  const sigmaLaps =
+    sigmaLapsRaw ??
+    (sigmaPp != null && ratePerLap != null && ratePerLap > 0 ? sigmaPp / ratePerLap : null);
   const threshold = num(get(estimate, "threshold_pct")) ?? TYRE_CHANGE_THRESHOLD_PCT;
   const serverLaps = num(get(hoek, "laps_to_threshold"));
 
@@ -278,7 +285,10 @@ export function parseTyreEstimate(raw: unknown): TyreEstimate | null {
     marginPp: grade === "B" ? marginPp : null,
     sigmaLaps,
     lapsToThreshold: grade === "A" || grade === "B" ? laps : null,
-    lapsRange: grade === "B" ? lapsRange(laps, sigmaLaps) : null,
+    // Een bereik in rondes is de vorm waarin dit paneel een levensduur toont,
+    // voor A én B. Zonder σ in rondes blijft het null en zegt de UI "rondes
+    // onbekend" in plaats van een marge te verzinnen.
+    lapsRange: grade === "A" || grade === "B" ? lapsRange(laps, sigmaLaps) : null,
     pctRange: grade === "C" ? pctRange(restPct, marginPp) : null,
     cause,
     causeLap: num(get(anchor, "lap")),
