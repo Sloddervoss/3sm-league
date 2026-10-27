@@ -52,12 +52,10 @@ alter table public.simhub_tyre_lap_samples
   add column if not exists brake_bar jsonb,
   add column if not exists motion_samples integer;
 
-comment on column public.simhub_tyre_lap_samples.wheel_kph is
-  'Wielsnelheid per hoek in km/h over deze ronde: {"fl":{"min":..,"avg":..,"max":..}, ...}. NULL als de connector geen directe-SDK-wielsnelheid stuurde.';
 comment on column public.simhub_tyre_lap_samples.brake_bar is
   'Remleidingdruk per hoek in bar over deze ronde: {"fl":{"min":..,"avg":..,"max":..}, ...}. NULL als de connector geen remdruk stuurde.';
 comment on column public.simhub_tyre_lap_samples.motion_samples is
-  'Aantal frames met wielsnelheid/remdruk in deze ronde. NULL bij rijen van vóór deze migratie.';
+  'Aantal frames met remdruk in deze ronde. NULL bij rijen van vóór deze migratie.';
 
 -- ---------------------------------------------------------------------------
 -- 2. Eigen accumulator, los van simhub_tyre_lap_accum
