@@ -19,10 +19,13 @@ import {
  *
  * - Het antwoord is een bereik in rondes. Een percentage rest zegt niets over
  *   het aantal rondes dat je ermee doet; dit blok toont er daarom geen.
- * - Zolang `voorlopig` waar is, staat dat er als woord bij. Een bereik zonder die
- *   waarschuwing leest als een belofte.
+ * - Zolang `voorlopig` waar is, staat dat er als woord bij — maar alleen bij een
+ *   bereik dat er echt is. Een waarschuwing over een bereik dat niet bestaat,
+ *   waarschuwt nergens voor.
  * - De herkomst (gemeten / laatst bekend / geschat / geen data) is een woord,
  *   geen kleur: kleur alleen is voor een deel van de lezers geen informatie.
+ *   Valt dat woord samen met het graadwoord (A · gemeten), dan staat het er één
+ *   keer: dezelfde mededeling twee keer is geen nadruk maar ruis.
  */
 
 const provenanceTone: Record<string, string> = {
@@ -43,11 +46,17 @@ export function TyreModelPanel({
   bron,
   coverage,
   coverageLoading = false,
+  coverageError = null,
+  modelLoading = false,
+  v2Error = null,
 }: {
   estimate: TyreEstimateV2 | null;
   bron: TyreModelSource;
   coverage: TyreCoverageRow[];
   coverageLoading?: boolean;
+  coverageError?: string | null;
+  modelLoading?: boolean;
+  v2Error?: string | null;
 }) {
   return (
     <section
@@ -63,15 +72,44 @@ export function TyreModelPanel({
         <span className="font-mono text-[10px] text-gray-500">{sourceLabel[bron]}</span>
       </div>
 
-      <BereikRegel estimate={estimate} />
-      <DekkingLijst rows={coverage} loading={coverageLoading} />
+      <BereikRegel estimate={estimate} loading={modelLoading} v2Error={v2Error} />
+      <DekkingLijst rows={coverage} loading={coverageLoading} error={coverageError} />
     </section>
   );
 }
 
-/** Graad, bereik en herkomst — of één regel die zegt dat er niets te zeggen is. */
-function BereikRegel({ estimate }: { estimate: TyreEstimateV2 | null }) {
+/**
+ * Graad, bereik en herkomst — of één regel die zegt dat er niets te zeggen is.
+ *
+ * Drie lege staten, en ze zijn niet inwisselbaar: `laden` betekent dat het
+ * antwoord nog komt, `fout` betekent dat het antwoord er niet komt (met de reden
+ * erbij), en pas als geen van beide waar is, is "nog geen model" een uitkomst.
+ * Een mislukte call als "nog geen meting" tonen is de pagina laten liegen.
+ */
+function BereikRegel({
+  estimate,
+  loading,
+  v2Error,
+}: {
+  estimate: TyreEstimateV2 | null;
+  loading: boolean;
+  v2Error: string | null;
+}) {
   if (estimate == null) {
+    if (loading) {
+      return (
+        <p className="text-sm text-gray-500" data-pitwall-tyre-range="laden">
+          Bandenmodel laden…
+        </p>
+      );
+    }
+    if (v2Error != null) {
+      return (
+        <p className="text-sm text-red-300" role="alert" data-pitwall-tyre-range="fout">
+          Bandenmodel niet geladen: {v2Error}
+        </p>
+      );
+    }
     return (
       <p className="text-sm text-gray-500" data-pitwall-tyre-range="onbekend">
         Nog geen bandenmodel voor dit apparaat. Zodra er een stop is gemeten, staat hier het bereik in rondes.
@@ -84,14 +122,27 @@ function BereikRegel({ estimate }: { estimate: TyreEstimateV2 | null }) {
   // Het label is de uitleg van de server ("één stint, ruime marge"), geen graad:
   // de graad staat als letter met woord in de badge ernaast.
   const uitleg = estimate.gradeLabel;
+  const woord = gradeWord(estimate.grade);
+  // `{0, 0}` is geen bereik maar een uitkomst: de band is op. "0–0 rondes"
+  // leest als een rekenfout en verbergt het enige dat er staat.
+  const geenRondes = bereik != null && bereik.low === 0 && bereik.high === 0;
+  // Een bereik dat de server zelf buiten advies zet, is het antwoord niet. Het
+  // staat er alleen als gedempte regel bij: "295–1181 rondes" bovenaan leest als
+  // een advies dat niemand mag opvolgen.
+  const toonBereik = bereik != null && !geenRondes && estimate.usable;
+  const rangeAttr = toonBereik
+    ? formatLapsRange(bereik) ?? "onbekend"
+    : geenRondes && estimate.usable
+      ? "geen"
+      : "onbekend";
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
         <div className="min-w-0">
           {/* Het bereik in rondes is het antwoord; geen percentage ernaast. */}
-          <p className="flex items-baseline gap-1.5" data-pitwall-tyre-range={bereik ? formatLapsRange(bereik) ?? "onbekend" : "onbekend"}>
-            {bereik ? (
+          <p className="flex items-baseline gap-1.5" data-pitwall-tyre-range={rangeAttr}>
+            {toonBereik ? (
               <>
                 <span
                   className="font-heading text-2xl font-black tabular-nums text-white"
@@ -101,6 +152,8 @@ function BereikRegel({ estimate }: { estimate: TyreEstimateV2 | null }) {
                 </span>
                 <span className="text-xs font-bold uppercase tracking-wider text-gray-400">rondes</span>
               </>
+            ) : geenRondes && estimate.usable ? (
+              <span className="text-lg font-bold text-gray-300">geen rondes over</span>
             ) : (
               <span className="text-lg font-bold text-gray-400">rondes onbekend</span>
             )}
@@ -110,29 +163,45 @@ function BereikRegel({ estimate }: { estimate: TyreEstimateV2 | null }) {
             {estimate.usable ? "" : " · niet bruikbaar voor een advies"}
             {uitleg ? ` · ${uitleg}` : ""}
           </p>
+          {bereik != null && !estimate.usable && (
+            <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-range-raw={formatLapsRange(bereik) ?? undefined}>
+              {geenRondes
+                ? "Het model telt nul rondes, maar dat is geen advies."
+                : `Het model rekent ${formatLapsRange(bereik)} rondes, maar dat bereik is niet bruikbaar als advies.`}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-300"
             data-pitwall-tyre-grade-label={estimate.grade}
-          >
-            {estimate.grade} · {gradeWord(estimate.grade)}
-          </span>
-          <span
-            className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-              provenanceTone[herkomst] ?? provenanceTone["geen data"]
-            }`}
             data-pitwall-tyre-provenance={estimate.provenance}
           >
-            {herkomst}
+            {estimate.grade} · {woord}
           </span>
+          {herkomst !== woord && (
+            <span
+              className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                provenanceTone[herkomst] ?? provenanceTone["geen data"]
+              }`}
+              data-pitwall-tyre-provenance-label={estimate.provenance}
+            >
+              {herkomst}
+            </span>
+          )}
         </div>
       </div>
 
+      {v2Error != null && (
+        <p className="text-[11px] leading-4 text-amber-200/80" data-pitwall-tyre-v2-error={v2Error}>
+          v2 gaf geen antwoord: {v2Error}
+        </p>
+      )}
+
       <BasisRegel estimate={estimate} />
 
-      {estimate.voorlopig && (
+      {estimate.voorlopig && bereik != null && estimate.usable && (
         <p className="flex items-start gap-1.5 text-[11px] leading-4 text-amber-200/90" data-pitwall-tyre-provisional="true">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" aria-hidden />
           <span>
@@ -153,7 +222,10 @@ function BasisRegel({ estimate }: { estimate: TyreEstimateV2 }) {
   if (basis.trackTempC != null) delen.push(`${Math.round(basis.trackTempC)} °C`);
   if (basis.rondesInBasis != null) delen.push(`${Math.round(basis.rondesInBasis)} rondes in de basis`);
 
-  const slijtage = formatRate(estimate.wearPerLapPp);
+  // Geen tempo bij C en D (zie `tyreCopy`): een slijtagesnelheid suggereert een
+  // helling die er bij een schatting of een plan niet is.
+  const metTempo = estimate.grade === "A" || estimate.grade === "B";
+  const slijtage = metTempo ? formatRate(estimate.wearPerLapPp) : null;
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-400">
@@ -183,8 +255,27 @@ function BasisRegel({ estimate }: { estimate: TyreEstimateV2 }) {
  * De lege staat is geen foutmelding maar een uitleg, want de reden dat hier niets
  * staat is het model zelf: één stop levert één meting op. Zonder die zin leest een
  * lege lijst als "stuk", en dan gaat iemand zoeken naar een bug die er niet is.
+ * Een míslukte dekking is het omgekeerde en krijgt dus een eigen regel: "nog
+ * leeg" zou de lezer dezelfde uitleg geven bij een rechtenfout.
  */
-function DekkingLijst({ rows, loading }: { rows: TyreCoverageRow[]; loading: boolean }) {
+function DekkingLijst({
+  rows,
+  loading,
+  error,
+}: {
+  rows: TyreCoverageRow[];
+  loading: boolean;
+  error: string | null;
+}) {
+  const status =
+    error != null
+      ? "mislukt"
+      : loading && rows.length === 0
+        ? "laden…"
+        : rows.length === 0
+          ? "nog leeg"
+          : `${rows.length} ${rows.length === 1 ? "combinatie" : "combinaties"}`;
+
   return (
     <div className="mt-3 border-t border-white/[0.07] pt-3" data-pitwall-tyre-coverage={rows.length}>
       <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -192,20 +283,26 @@ function DekkingLijst({ rows, loading }: { rows: TyreCoverageRow[]; loading: boo
           <Layers className="h-3 w-3" aria-hidden />
           Dekking
         </h3>
-        <span className="text-[10px] text-gray-500">
-          {loading && rows.length === 0
-            ? "laden…"
-            : rows.length === 0
-              ? "nog leeg"
-              : `${rows.length} ${rows.length === 1 ? "combinatie" : "combinaties"}`}
-        </span>
+        <span className="text-[10px] text-gray-500">{status}</span>
       </div>
 
-      {rows.length === 0 ? (
-        <p className="text-[12px] leading-5 text-gray-500">
-          Nog geen dekking. Eén stop levert één meting op: na de eerste bandenwissel staat hier per auto en
-          circuit hoeveel stints er in de basis zitten.
+      {error != null && (
+        <p
+          className="text-[12px] leading-5 text-red-300/90"
+          role="alert"
+          data-pitwall-tyre-coverage-error={error}
+        >
+          Dekking laden mislukt: {error}
         </p>
+      )}
+
+      {rows.length === 0 ? (
+        error == null && (
+          <p className="text-[12px] leading-5 text-gray-500">
+            Nog geen dekking. Eén stop levert één meting op: na de eerste bandenwissel staat hier per auto en
+            circuit hoeveel stints er in de basis zitten.
+          </p>
+        )
       ) : (
         <ul className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((rij) => (

@@ -214,7 +214,10 @@ export function vanV1(estimate: TyreEstimate): TyreEstimateV2 {
 export function naarTyreEstimate(estimate: TyreEstimateV2 | null): TyreEstimate | null {
   if (estimate == null || estimate.grade === "C") return null;
   const { grade } = estimate;
-  const metRondes = grade === "A" || grade === "B";
+  // Een bereik dat de server zelf onbruikbaar noemt, gaat niet naar de band: de
+  // band is het blok dat zegt wat je moet doen, en "295–1181 rondes" is daar een
+  // advies dat niemand mag opvolgen. Het modelpaneel toont het getal gedempt.
+  const metRondes = (grade === "A" || grade === "B") && estimate.usable;
   return {
     grade,
     source: "server",
@@ -320,11 +323,13 @@ export interface TyreCoverageRow {
 /**
  * Leest `tyre_coverage`: per auto en circuit hoeveel stints en wear-labels er
  * zijn, met de graad die dat oplevert. PostgREST geeft een set terug als array;
- * een RPC die `jsonb` levert kan ook `{ rows: [...] }` sturen. Beide mogen.
+ * een RPC die `jsonb` levert kan ook `{ rows: [...] }` sturen, en de client kan
+ * het antwoord als `{ data: [...] }` of `{ data: { rows: [...] } }` inpakken.
+ * Alle vier mogen — een vorm die we niet lezen is een dekking die leeg lijkt.
  */
 export function parseTyreCoverage(raw: unknown): TyreCoverageRow[] {
-  const rijen = Array.isArray(raw) ? raw : get(get(raw, "data") ?? raw, "rows");
-  if (!Array.isArray(rijen)) return [];
+  const rijen = coverageRows(raw);
+  if (rijen == null) return [];
 
   return rijen
     .map((rij) => {
@@ -342,6 +347,17 @@ export function parseTyreCoverage(raw: unknown): TyreCoverageRow[] {
     .filter((rij): rij is TyreCoverageRow => rij != null)
     // Meest gemeten eerst: de bovenste regel is de basis die je het vaakst hebt.
     .sort((a, b) => b.stints - a.stints || b.wearLabels - a.wearLabels);
+}
+
+/** De vier vormen waarin de dekking kan binnenkomen, of null als het geen lijst is. */
+function coverageRows(raw: unknown): unknown[] | null {
+  if (Array.isArray(raw)) return raw;
+  for (const kandidaat of [get(raw, "rows"), get(raw, "data")]) {
+    if (Array.isArray(kandidaat)) return kandidaat;
+    const genest = get(kandidaat, "rows");
+    if (Array.isArray(genest)) return genest;
+  }
+  return null;
 }
 
 export async function loadTyreCoverage(

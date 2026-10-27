@@ -19,12 +19,8 @@ import {
 import { DecisionBand } from "@/features/endurance/pitwall/DecisionBand";
 import { TyreModelPanel } from "@/features/endurance/pitwall/TyreModelPanel";
 import type { TyreEstimate } from "@/features/endurance/pitwall/strategy/tyreGrade";
-import {
-  loadTyreCoverage,
-  loadTyreModel,
-  naarTyreEstimate,
-  type TyreRpcClient,
-} from "@/features/endurance/pitwall/strategy/tyreEstimateV2";
+import { naarTyreEstimate, type TyreRpcClient } from "@/features/endurance/pitwall/strategy/tyreEstimateV2";
+import { useTyreModel } from "@/features/endurance/pitwall/useTyreModel";
 import { usePitwallStrategy } from "@/features/endurance/pitwall/usePitwallStrategy";
 import { TopRaceBar } from "@/features/endurance/pitwall/TopRaceBar";
 import { RaceTelemetryStrip } from "@/features/endurance/pitwall/RaceTelemetryStrip";
@@ -164,21 +160,17 @@ export default function PitwallDeviceTestPage() {
   // dan valt de loader terug op v1 zodat deze dev-pagina nooit stuk gaat.
   const eventId = ((detail?.endurance_event ?? {}) as Record<string, unknown>)["id"] as string | undefined;
   const teamId = ((detail?.endurance_team ?? {}) as Record<string, unknown>)["id"] as string | undefined;
-  const tyreModelQuery = useQuery({
-    queryKey: ["pitwall-test", "tyre-model", deviceId, eventId, teamId],
-    enabled: Boolean(user) && Boolean(isSuperAdmin) && Boolean(deviceId),
-    queryFn: () =>
-      loadTyreModel(supabase as unknown as TyreRpcClient, { deviceId: deviceId!, eventId, teamId }),
-    refetchInterval: 15_000,
+  /* Model en dekking: de twee servervragen van het bandenblok, met de sleutel op
+   * het apparaat. Event en team gaan mee in de fetch (v1-terugval), niet in de
+   * sleutel — die zijn immers undefined tot de detail-RPC terug is. */
+  const tyre = useTyreModel({
+    client: supabase as unknown as TyreRpcClient,
+    deviceId,
+    eventId,
+    teamId,
+    enabled: Boolean(user) && Boolean(isSuperAdmin),
   });
-  /* Dekking van het model: per auto en circuit hoeveel stints er gemeten zijn. */
-  const tyreCoverageQuery = useQuery({
-    queryKey: ["pitwall-test", "tyre-coverage"],
-    enabled: Boolean(user) && Boolean(isSuperAdmin) && Boolean(deviceId),
-    queryFn: () => loadTyreCoverage(supabase as unknown as TyreRpcClient, 50),
-    refetchInterval: 60_000,
-  });
-  const tyreModel = tyreModelQuery.data?.estimate ?? null;
+  const tyreModel = tyre.estimate;
   // Graad C gaat bewust niet naar de beslissingsband: die zegt bij C "rondes
   // onbekend" terwijl v2 juist een bereik heeft. Zie `naarTyreEstimate`.
   const tyreEstimate: TyreEstimate | null = useMemo(() => naarTyreEstimate(tyreModel), [tyreModel]);
@@ -347,9 +339,12 @@ export default function PitwallDeviceTestPage() {
                 <DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />
                 <TyreModelPanel
                   estimate={tyreModel}
-                  bron={tyreModelQuery.data?.source ?? "geen"}
-                  coverage={tyreCoverageQuery.data?.rows ?? []}
-                  coverageLoading={tyreCoverageQuery.isFetching}
+                  bron={tyre.bron}
+                  coverage={tyre.coverage}
+                  coverageLoading={tyre.coverageLoading}
+                  coverageError={tyre.coverageError}
+                  modelLoading={tyre.modelLoading}
+                  v2Error={tyre.v2Error}
                 />
                 <RaceTelemetryStrip v3={v3} live={live} />
 

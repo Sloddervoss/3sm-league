@@ -1,8 +1,11 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { TyreModelPanel } from "@/features/endurance/pitwall/TyreModelPanel";
+import { useTyreModel, tyreModelQueryKey } from "@/features/endurance/pitwall/useTyreModel";
 import {
   loadTyreModel,
+  naarTyreEstimate,
   parseTyreCoverage,
   parseTyreEstimateV2,
   provenanceLabel,
@@ -152,6 +155,319 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
     expect(screen.getByText("2 combinaties")).toBeVisible();
     // Een gevulde lijst hoeft de uitleg niet meer te tonen.
     expect(screen.queryByText(/Eén stop levert één meting op/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * De fouten en randen die de eerste versie van dit paneel inslikte: een
+ * mislukte call die als "nog geen meting" las, een waarschuwing over een bereik
+ * dat niet bestond, en getallen die als advies lazen terwijl de server ze zelf
+ * buiten advies had gezet.
+ */
+describe("fouten en randen van het bandenmodel", () => {
+  it.each([
+    ["42501: permission denied for function pitwall_tyre_estimate_v2"],
+    ["PGRST202: Could not find the function public.pitwall_tyre_estimate_v2"],
+    ["TypeError: fetch failed"],
+  ])("toont de fout %s als foutregel in plaats van 'nog geen meting'", (fout) => {
+    const view = render(<TyreModelPanel estimate={null} bron="geen" coverage={[]} v2Error={fout} />);
+
+    const regel = view.container.querySelector('[data-pitwall-tyre-range="fout"]');
+    expect(regel).not.toBeNull();
+    expect(regel).toHaveTextContent("Bandenmodel niet geladen");
+    expect(regel).toHaveTextContent(fout);
+    expect(regel).toHaveAttribute("role", "alert");
+    expect(screen.queryByText(/Nog geen bandenmodel/)).not.toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("houdt de fout zichtbaar als de v1-terugval wél een antwoord had", async () => {
+    const result = await loadTyreModel(
+      {
+        rpc: vi.fn(async (fn: string) =>
+          fn === "pitwall_tyre_estimate_v2"
+            ? { data: null, error: { code: "42501", message: "permission denied" } }
+            : { data: { grade: "B", estimate: { weakest: "fl", per_corner: { fl: { value: 61, rate_per_lap: -1.8, sigma: 1.2 } } } }, error: null },
+        ),
+      } as unknown as TyreRpcClient,
+      { deviceId: "device-1", eventId: "event-1", teamId: "team-1" },
+    );
+
+    const view = render(
+      <TyreModelPanel estimate={result.estimate} bron={result.source} coverage={[]} v2Error={result.v2Error} />,
+    );
+
+    expect(screen.getByText("v1 · terugval")).toBeVisible();
+    const regel = view.container.querySelector("[data-pitwall-tyre-v2-error]");
+    expect(regel).toHaveTextContent("42501");
+    view.unmount();
+  });
+
+  it("leest een mislukte dekking niet als een lege dekking", () => {
+    const view = render(
+      <TyreModelPanel
+        estimate={null}
+        bron="geen"
+        coverage={[]}
+        coverageError="42501: permission denied for table tyre_coverage"
+      />,
+    );
+
+    const regel = view.container.querySelector("[data-pitwall-tyre-coverage-error]");
+    expect(regel).toHaveTextContent("Dekking laden mislukt");
+    expect(regel).toHaveAttribute("role", "alert");
+    expect(screen.getByText("mislukt")).toBeVisible();
+    expect(screen.queryByText("nog leeg")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nog geen dekking/)).not.toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("waarschuwt alleen over een voorlopig bereik dat er echt is", () => {
+    const zonderBereik = parseTyreEstimateV2({ grade: "D", voorlopig: true, stints: 0, range_laps: null });
+    const eerste = render(<TyreModelPanel estimate={zonderBereik} bron="v2" coverage={[]} />);
+    expect(eerste.container.querySelector("[data-pitwall-tyre-provisional]")).toBeNull();
+    eerste.unmount();
+
+    const metBereik = parseTyreEstimateV2({ grade: "B", usable: true, voorlopig: true, range_laps: { low: 10, high: 12 } });
+    const tweede = render(<TyreModelPanel estimate={metBereik} bron="v2" coverage={[]} />);
+    expect(tweede.container.querySelector("[data-pitwall-tyre-provisional]")).not.toBeNull();
+    tweede.unmount();
+  });
+
+  it("toont 'laden' tot de eerste uitslag er is", () => {
+    const view = render(<TyreModelPanel estimate={null} bron="geen" coverage={[]} modelLoading />);
+
+    expect(view.container.querySelector('[data-pitwall-tyre-range="laden"]')).toHaveTextContent("Bandenmodel laden");
+    expect(screen.queryByText(/Nog geen bandenmodel/)).not.toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("zegt bij graad A één keer 'gemeten' in plaats van twee keer", () => {
+    const estimate = parseTyreEstimateV2({
+      grade: "A",
+      usable: true,
+      stints: 4,
+      wear_per_lap: 1.1,
+      range_laps: { low: 11, high: 14 },
+      basis: { car_key: "bmw_m4_gt3", track_key: "spa", track_temp_c: 21, rondes_in_basis: 30 },
+      provenance: "measured",
+      voorlopig: false,
+    });
+
+    const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
+
+    const badges = view.container.querySelector("[data-pitwall-tyre-grade-label]")!.parentElement!;
+    expect(within(badges).getAllByText(/gemeten/)).toHaveLength(1);
+    expect(badges.querySelector("[data-pitwall-tyre-provenance-label]")).toBeNull();
+    // De herkomst blijft wel machineleesbaar aanwezig.
+    expect(badges.querySelector("[data-pitwall-tyre-provenance]")).toHaveAttribute(
+      "data-pitwall-tyre-provenance",
+      "measured",
+    );
+    view.unmount();
+  });
+
+  it("toont bij graad C geen tempo, ook niet als de server een helling meestuurt", () => {
+    const c = parseTyreEstimateV2({ grade: "C", stints: 2, wear_per_lap: 1.2, range_laps: { low: 8, high: 12 } });
+    const eerste = render(<TyreModelPanel estimate={c} bron="v2" coverage={[]} />);
+    expect(eerste.container.textContent).not.toContain("/r");
+    eerste.unmount();
+
+    const b = parseTyreEstimateV2({ grade: "B", usable: true, stints: 2, wear_per_lap: 1.2, range_laps: { low: 8, high: 12 } });
+    const tweede = render(<TyreModelPanel estimate={b} bron="v2" coverage={[]} />);
+    expect(tweede.container.textContent).toContain("−1,2/r");
+    tweede.unmount();
+  });
+
+  it("leest een bereik van 0–0 rondes als 'geen rondes over'", () => {
+    const estimate = parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      stints: 3,
+      range_laps: { low: 0, high: 0 },
+      voorlopig: true,
+    });
+
+    const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
+
+    expect(screen.getByText("geen rondes over")).toBeVisible();
+    expect(screen.queryByText("0–0")).not.toBeInTheDocument();
+    expect(screen.queryByText("rondes onbekend")).not.toBeInTheDocument();
+    expect(view.container.querySelector("[data-pitwall-tyre-range]")).toHaveAttribute(
+      "data-pitwall-tyre-range",
+      "geen",
+    );
+    view.unmount();
+  });
+
+  it("toont een bereik dat de server zelf onbruikbaar noemt niet als antwoord", () => {
+    const estimate = parseTyreEstimateV2({
+      grade: "B",
+      usable: false,
+      voorlopig: true,
+      stints: 1,
+      wear_per_lap: 0.1,
+      range_laps: { low: 295, high: 1181 },
+      provenance: "estimated",
+    });
+
+    const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
+
+    const kop = view.container.querySelector("[data-pitwall-tyre-range]")!;
+    expect(kop).toHaveAttribute("data-pitwall-tyre-range", "onbekend");
+    expect(kop).toHaveTextContent("rondes onbekend");
+    expect(kop).not.toHaveTextContent("295");
+
+    // Het getal staat er nog wel, maar gedempt en met de reden erbij.
+    const ruw = view.container.querySelector("[data-pitwall-tyre-range-raw]")!;
+    expect(ruw).toHaveTextContent("295–1181");
+    expect(ruw.className).toContain("text-gray-500");
+    expect(ruw).toHaveTextContent("niet bruikbaar als advies");
+    // Een onbruikbaar bereik is geen voorlopig advies.
+    expect(view.container.querySelector("[data-pitwall-tyre-provisional]")).toBeNull();
+    view.unmount();
+  });
+
+  it("geeft een onbruikbaar bereik niet door aan de beslissingsband", () => {
+    const bruikbaar = naarTyreEstimate(
+      parseTyreEstimateV2({ grade: "B", usable: true, wear_per_lap: 1.2, range_laps: { low: 10, high: 12 } }),
+    );
+    expect(bruikbaar?.lapsRange).toEqual({ low: 10, high: 12 });
+
+    const onbruikbaar = naarTyreEstimate(
+      parseTyreEstimateV2({ grade: "B", usable: false, wear_per_lap: 0.1, range_laps: { low: 295, high: 1181 } }),
+    );
+    expect(onbruikbaar?.grade).toBe("B");
+    expect(onbruikbaar?.lapsRange).toBeNull();
+    expect(onbruikbaar?.ratePerLap).toBeNull();
+    expect(onbruikbaar?.lapsToThreshold).toBeNull();
+  });
+
+  it("leest de dekking uit alle vier de vormen die de client kan teruggeven", () => {
+    const rij = { car_key: "bmw_m4_gt3", track_key: "spa", stints: 2, wear_labels: 6, grade: "B" };
+
+    expect(parseTyreCoverage([rij])).toHaveLength(1);
+    expect(parseTyreCoverage({ rows: [rij] })).toHaveLength(1);
+    expect(parseTyreCoverage({ data: [rij] })).toHaveLength(1);
+    expect(parseTyreCoverage({ data: { rows: [rij] } })).toHaveLength(1);
+    expect(parseTyreCoverage({ data: [rij] })[0]).toMatchObject({ carKey: "bmw_m4_gt3", stints: 2, grade: "B" });
+
+    // Alles wat geen lijst is blijft leeg, en liegt niet over een rij.
+    expect(parseTyreCoverage({ data: null })).toEqual([]);
+    expect(parseTyreCoverage(null)).toEqual([]);
+  });
+});
+
+/**
+ * De query's zelf: de sleutel hangt aan het apparaat, en de v1-terugval krijgt
+ * event en team via de fetch. Stond de binding in de sleutel, dan vroeg de
+ * pagina v2 twee keer — de tweede keer alleen omdat de detail-RPC terugkwam.
+ */
+describe("de query's van het bandenmodel", () => {
+  const wrapper = (client: QueryClient) =>
+    ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+  it("vraagt v2 één keer, ook als event en team pas later binnenkomen", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const rpc = vi.fn(async (fn: string, _args?: Record<string, unknown>) =>
+      fn === "tyre_coverage"
+        ? { data: [], error: null }
+        : { data: { grade: "B", usable: true, range_laps: { low: 10, high: 12 } }, error: null },
+    );
+
+    const hook = renderHook(
+      ({ eventId, teamId }: { eventId: string | null; teamId: string | null }) =>
+        useTyreModel({
+          client: { rpc } as unknown as TyreRpcClient,
+          deviceId: "device-1",
+          eventId,
+          teamId,
+          enabled: true,
+        }),
+      { initialProps: { eventId: null as string | null, teamId: null as string | null }, wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(hook.result.current.estimate?.grade).toBe("B"));
+    hook.rerender({ eventId: "event-1", teamId: "team-1" });
+    await waitFor(() => expect(hook.result.current.bron).toBe("v2"));
+
+    const v2Calls = rpc.mock.calls.filter(([fn]) => fn === "pitwall_tyre_estimate_v2");
+    expect(v2Calls).toHaveLength(1);
+    expect(v2Calls[0][1]).toEqual({ p_device_id: "device-1" });
+    // De sleutel noemt het apparaat en niets anders.
+    expect(tyreModelQueryKey("device-1")).toEqual(["pitwall-test", "tyre-model", "device-1"]);
+
+    hook.unmount();
+    client.clear();
+  });
+
+  it("geeft event en team aan de v1-terugval mee vanuit de fetch", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const rpc = vi.fn(async (fn: string) => {
+      if (fn === "pitwall_tyre_estimate_v2") return { data: null, error: { code: "PGRST202", message: "not found" } };
+      if (fn === "pitwall_tyre_estimate_v1") {
+        return {
+          data: { grade: "B", estimate: { weakest: "fl", per_corner: { fl: { value: 61, rate_per_lap: -1.8, sigma: 1.2 } } } },
+          error: null,
+        };
+      }
+      return { data: [], error: null };
+    });
+
+    const hook = renderHook(
+      () =>
+        useTyreModel({
+          client: { rpc } as unknown as TyreRpcClient,
+          deviceId: "device-1",
+          eventId: "event-1",
+          teamId: "team-1",
+          enabled: true,
+        }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(hook.result.current.bron).toBe("v1"));
+
+    expect(rpc).toHaveBeenCalledWith("pitwall_tyre_estimate_v1", { p_event_id: "event-1", p_team_id: "team-1" });
+    expect(hook.result.current.v2Error).toContain("PGRST202");
+    expect(hook.result.current.estimate?.rangeLaps).not.toBeNull();
+
+    hook.unmount();
+    client.clear();
+  });
+
+  it("houdt 'laden' aan tot de eerste uitslag en meldt daarna de fout", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let antwoord: (value: { data: unknown; error: unknown }) => void = () => {};
+    const rpc = vi.fn(async (fn: string) => {
+      if (fn === "tyre_coverage") return { data: [], error: null };
+      return new Promise<{ data: unknown; error: unknown }>((resolve) => {
+        antwoord = resolve;
+      });
+    });
+
+    const hook = renderHook(
+      () => useTyreModel({ client: { rpc } as unknown as TyreRpcClient, deviceId: "device-1", enabled: true }),
+      { wrapper: wrapper(client) },
+    );
+
+    expect(rpc).toHaveBeenCalledWith("pitwall_tyre_estimate_v2", { p_device_id: "device-1" });
+    expect(hook.result.current.modelLoading).toBe(true);
+    expect(hook.result.current.v2Error).toBeNull();
+
+    await act(async () => {
+      antwoord({ data: null, error: { code: "PGRST202", message: "Could not find the function" } });
+    });
+
+    await waitFor(() => expect(hook.result.current.modelLoading).toBe(false));
+    expect(hook.result.current.estimate).toBeNull();
+    expect(hook.result.current.bron).toBe("geen");
+    expect(hook.result.current.v2Error).toContain("PGRST202");
+
+    hook.unmount();
+    client.clear();
   });
 });
 
