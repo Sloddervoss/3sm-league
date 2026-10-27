@@ -72,6 +72,7 @@ namespace ThreeSM.EnduranceConnector
                     if (Latched("checkered", RawCheckered(), checkeredHoldMs)) flags |= RaceFlags.Checkered;
                     if (ShowOrange()) flags |= RaceFlags.Orange;
                     if (ShowDebris()) flags |= RaceFlags.Debris;
+                    if (ShowMeatball()) flags |= RaceFlags.Meatball;
                     if (ShowBlue()) flags |= RaceFlags.Blue;
                     if (ShowGreen()) flags |= RaceFlags.Green;
                     return Debounce(flags);
@@ -107,6 +108,7 @@ namespace ThreeSM.EnduranceConnector
             else if (Has(flags, RaceFlags.WhiteSlow)) Set(state, "white", "#FFFFFF", "solid", FlagSeverity.Info);
             else if (Has(flags, RaceFlags.WhiteFinal)) Set(state, "whitefinal", "#FFFFFF", "solid", FlagSeverity.Info);
             else if (Has(flags, RaceFlags.Orange)) Set(state, "orange", "#FF8C00", "solid", FlagSeverity.Caution);
+            else if (Has(flags, RaceFlags.Meatball)) Set(state, "meatball", "#FF8C00", "solid", FlagSeverity.Caution);
             else if (Has(flags, RaceFlags.Debris)) Set(state, "debris", "#FF0000", "rows", FlagSeverity.Caution);
             else if (Has(flags, RaceFlags.Blue)) Set(state, "blue", "#0000FF", "solid", FlagSeverity.Info);
             else if (Has(flags, RaceFlags.Green)) Set(state, "green", "#00FF00", "solid", FlagSeverity.Info);
@@ -129,6 +131,7 @@ namespace ThreeSM.EnduranceConnector
             if (s.ShowBlack) m |= RaceFlags.Black;
             if (s.ShowOrange) m |= RaceFlags.Orange;
             if (s.ShowDebris) m |= RaceFlags.Debris;
+            if (s.ShowMeatball) m |= RaceFlags.Meatball;
             if (s.ShowSafetyCar) m |= RaceFlags.SafetyCar;
             if (s.ShowVirtualSafetyCar) m |= RaceFlags.VirtualSafetyCar;
             if (s.ShowFullCourseYellow) m |= RaceFlags.FullCourseYellow;
@@ -152,6 +155,7 @@ namespace ThreeSM.EnduranceConnector
             if (slot.ShowBlack) m |= RaceFlags.Black;
             if (slot.ShowOrange) m |= RaceFlags.Orange;
             if (slot.ShowDebris) m |= RaceFlags.Debris;
+            if (slot.ShowMeatball) m |= RaceFlags.Meatball;
             if (slot.ShowSafetyCar) m |= RaceFlags.SafetyCar;
             if (slot.ShowVirtualSafetyCar) m |= RaceFlags.VirtualSafetyCar;
             if (slot.ShowFullCourseYellow) m |= RaceFlags.FullCourseYellow;
@@ -167,8 +171,10 @@ namespace ThreeSM.EnduranceConnector
             return Present(Detect(context, settings), MaskOf(settings));
         }
 
-        // Alleen de vlaggen die de bestaande V3 `flags`-vocabulaire (checkered/yellow/
-        // white/green/red) kent — de rijkere set gaat via de aparte kolommen naar de server.
+        // Alleen de vlaggen die de bestaande V3 `flags`-vocabulaire kent — de rijkere set gaat
+        // via de aparte kolommen naar de server. 0.7.1: meatball toegevoegd; hij stond wel in
+        // de detectie maar niet in deze lijst, dus de server zag hem nooit. Achteraan
+        // toegevoegd zodat de indexen van de bestaande namen niet verschuiven.
         public static string[] ToLegacyNames(FlagState state)
         {
             if (state == null || !state.Active) return null;
@@ -178,6 +184,7 @@ namespace ThreeSM.EnduranceConnector
             if ((state.Flags & RaceFlags.Yellow) != 0) names.Add("yellow");
             if ((state.Flags & RaceFlags.White) != 0 || (state.Flags & RaceFlags.WhiteSlow) != 0 || (state.Flags & RaceFlags.WhiteFinal) != 0) names.Add("white");
             if ((state.Flags & RaceFlags.Green) != 0) names.Add("green");
+            if ((state.Flags & RaceFlags.Meatball) != 0) names.Add("meatball");
             return names.Count == 0 ? null : names.ToArray();
         }
 
@@ -315,6 +322,17 @@ namespace ThreeSM.EnduranceConnector
             return Game() == "IRacing" && B("GameRawData.Telemetry.SessionFlagsDetails.Isdebris");
         }
 
+        // Meatball (zwart/oranje): iRacing zet SessionFlags.servicible (0x40000) als de auto
+        // schade heeft die in de pits gerepareerd moet worden. De losse boolean is het vangnet
+        // voor SimHub-builds die het bitmasker niet doorgeven.
+        private bool ShowMeatball()
+        {
+            if (Game() != "IRacing") return false;
+            uint bf;
+            if (SessionFlags(out bf)) return (bf & 0x40000u) != 0u;
+            return B("GameRawData.Telemetry.SessionFlagsDetails.Isservicible");
+        }
+
         private bool ShowGreen()
         {
             uint bf;
@@ -356,6 +374,7 @@ namespace ThreeSM.EnduranceConnector
             if (Has(f, RaceFlags.Yellow)) return 6;
             if (Has(f, RaceFlags.White) || Has(f, RaceFlags.WhiteSlow) || Has(f, RaceFlags.WhiteFinal)) return 5;
             if (Has(f, RaceFlags.Orange)) return 4;
+            if (Has(f, RaceFlags.Meatball)) return 4;
             if (Has(f, RaceFlags.Debris)) return 3;
             if (Has(f, RaceFlags.Blue)) return 2;
             if (Has(f, RaceFlags.Green)) return 1;

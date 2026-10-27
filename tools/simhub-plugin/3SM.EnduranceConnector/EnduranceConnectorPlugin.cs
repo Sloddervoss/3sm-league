@@ -1,4 +1,4 @@
-using GameReaderCommon;
+﻿using GameReaderCommon;
 using SimHub.Plugins;
 using System;
 using System.Collections.Generic;
@@ -79,6 +79,11 @@ namespace ThreeSM.EnduranceConnector
         private FlagState _lastFlagState = FlagState.Empty();
         private string _lastLoggedFlagPrimary;
         private RaceFlags _lastDetectedFlags;
+        // 0.7.1: hek voor het bandenblok (wijziging of één keer per interval).
+        private readonly TyrePublishGate _tyreGate = new TyrePublishGate();
+        // 0.8.0: directe lezer van de iRacing-shared-memory, read-only. Lazy: zonder
+        // iRacing bestaat de map niet en blijft elke waarde null; de plugin werkt door.
+        private IrSdkMemoryReader _irSdk;
         private long _pitLimiterSinceMs;
         // Lokale research-opname (opt-in). Staat hij uit, dan blijft _research inert en
         // verandert er niets aan de bestaande capture of het verzenden.
@@ -152,6 +157,18 @@ namespace ThreeSM.EnduranceConnector
                 Settings.SchemaVersion = 7;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
+            if (Settings.SchemaVersion < 8)
+            {
+                // 0.7.1: meatball is nieuw en staat standaard aan. Een bestaand
+                // configuratiebestand heeft de sleutel niet, en een deserializer die
+                // ontbrekende leden overslaat laat het veld op false staan. Daarom hier
+                // expliciet aanzetten (ontbrekend = aan), net als de bandenmeting.
+                var flagSettings = Settings.Flags ?? (Settings.Flags = new FlagSettings());
+                flagSettings.ShowMeatball = true;
+                for (var i = 0; i < 8; i++) flagSettings.Box(i).ShowMeatball = true;
+                Settings.SchemaVersion = 8;
+                this.SaveCommonSettings("ConnectorSettings", Settings);
+            }
             // Vlag-properties aanmelden zodat SimHub LED-profielen erop kunnen binden.
             InitUpdaterStateStore();
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
@@ -189,6 +206,8 @@ namespace ThreeSM.EnduranceConnector
             ApplyDiagnosticsSettings();
             _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
             _tyreTracker.Reset();
+            _tyreGate.Reset();
+            _irSdk = new IrSdkMemoryReader();
             InitResearchRecorder();
             Status = Settings.UseCentralRelay
                 ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
@@ -673,6 +692,7 @@ namespace ThreeSM.EnduranceConnector
                     _stintClock.Restart();
                     _sessionId = "simhub-" + Guid.NewGuid().ToString("N");
                     _tyreTracker.Reset();
+                    _tyreGate.Reset();
                     Interlocked.Exchange(ref _sequence, -1);
                 }
                 if (!running && _gameWasRunning)
@@ -823,6 +843,15 @@ namespace ThreeSM.EnduranceConnector
                 if (research != null) research.Dispose();
             }
             catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: afsluiten mislukt: " + researchError.Message); }
+            // Directe SDK-lezer: alleen de eigen read-only handle vrijgeven. Nooit een
+            // exception laten ontsnappen tijdens SimHub-shutdown.
+            try
+            {
+                var irSdk = _irSdk;
+                _irSdk = null;
+                if (irSdk != null) irSdk.Dispose();
+            }
+            catch (Exception irSdkError) { SimHub.Logging.Current.Warn("3SM iRacing-SDK: sluiten mislukt: " + irSdkError.Message); }
             try { Task.WaitAll(new[] { activeSend, activePairing }, TimeSpan.FromSeconds(5)); } catch { }
             lock (_settingsGate)
             {
@@ -1402,14 +1431,21 @@ namespace ThreeSM.EnduranceConnector
                     // Het is de INTENTIE van de rijder (wat hij aanvinkte), niet de uitkomst; de
                     // plugin interpreteert geen bits. Ontbreekt het kanaal, dan blijft het null.
                     PitServiceFlagsRaw = rawChannels.ReadInt("PitSvFlags", 0, int.MaxValue),
-                    RequiredRepairSeconds = null,
-                    OptionalRepairSeconds = null,
+                    // 0.7.1: de resterende reparatietijd stond óók in het contract en werd
+                    // genegeerd. iRacing publiceert hem per kanaal (seconden). 0 is een echte
+                    // meting ("niets open"); ontbreekt het kanaal, dan blijft het null en
+                    // verzint de plugin niets.
+                    RequiredRepairSeconds = ReadRepairSeconds(rawChannels, "PitRepairLeft"),
+                    OptionalRepairSeconds = ReadRepairSeconds(rawChannels, "PitOptRepairLeft"),
                 },
                 Opponents = BuildOpponentSnapshot(snapshot),
-                Vehicle = Settings.ExtendedPitwallTelemetryEnabled ? CaptureVehicle(manager) : null,
+                Vehicle = CaptureVehicle(manager, ReadDirectSdk()),  // altijd: de vijf SDK-velden zijn de reden dat we direct lezen
                 // 0.7.0: optioneel root-blok, alleen gevuld als de instelling aan staat (de
                 // server moet het blok kennen; een oude receiver geeft 422 op een nieuwe key).
-                Tyres = Settings.TyreTelemetryEnabled ? CaptureTyres(rawChannels, sessionTimeSeconds, completedLaps, inPitLane) : null,
+                // 0.7.1: niet meer elk frame — zie PublishTyres (wijziging of 30 s-hartslag).
+                Tyres = Settings.TyreTelemetryEnabled
+                    ? PublishTyres(CaptureTyres(rawChannels, sessionTimeSeconds, completedLaps, inPitLane), Settings.TyreSnapshotIntervalMilliseconds, inPitLane)
+                    : null,
             };
         }
 
@@ -1439,6 +1475,35 @@ namespace ThreeSM.EnduranceConnector
             return null;
         }
 
+        // Resterende reparatietijd (seconden) uit één ruw kanaal. De validator accepteert
+        // 0..86400 en gebruikt -1 als "onbekend"; alles daarbuiten of onleesbaar wordt null.
+        // Eén decimaal: het kanaal is een float en de ruwe waarde schrijft anders 17 cijfers uit.
+        // 0 blijft 0 — dat is "er staat niets meer open", geen ontbrekende meting.
+        private static double? ReadRepairSeconds(RawChannelReader channels, string channel)
+        {
+            return RoundTyreValue(channels.ReadNumber(channel, 0, 86400), 1);
+        }
+
+        /// <summary>
+        /// 0.7.1: het bandenblok hoeft niet elk frame mee. De tracker wordt elke tick
+        /// bijgewerkt (daar zit de detectie van een nieuwe set en van de pit-entry), maar
+        /// het blok gaat alleen de deur uit als de inhoud verandert of als het interval
+        /// (standaard 30 s) verstreken is. Tussen die momenten blijft het veld weg
+        /// (EmitDefaultValue=false) en is het frame dus kleiner. Het hek onthoudt de
+        /// laatst verzonden stand, zodat de hartslag altijd dezelfde volledige meting
+        /// stuurt in plaats van een half gevuld blok.
+        ///
+        /// In de pitstraat gaat het blok altijd mee: daar schrijft de server bij pit-exit
+        /// het banden-anker (de wear van de set die eraf ging). Een gedempt frame op precies
+        /// die flank zou dat anker stil laten vallen.
+        /// </summary>
+        private V3Tyres PublishTyres(V3Tyres fresh, int intervalMilliseconds, bool inPitLane)
+        {
+            if (fresh == null) return null;
+            var now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+            return _tyreGate.ShouldPublish(TyreSignature.Of(fresh), now, intervalMilliseconds, inPitLane) ? fresh : null;
+        }
+
         private static V3Tyre CaptureTyre(PluginManager manager, string corner)
         {
             var pressure = VehicleNumber(manager, "TyrePressure" + corner, 2000, true);
@@ -1449,7 +1514,7 @@ namespace ThreeSM.EnduranceConnector
             return new V3Tyre { Pressure = pressure, Temperature = temperature, WearPercent = wear };
         }
 
-        private static V3Vehicle CaptureVehicle(PluginManager manager)
+        private static V3Vehicle CaptureVehicle(PluginManager manager, IrSdkImage directSdk)
         {
             const string prefix = "DataCorePlugin.GameData.NewData.";
             var pressureUnit = GetNullableString(manager, prefix + "TyrePressureUnit");
@@ -1471,8 +1536,72 @@ namespace ThreeSM.EnduranceConnector
                 Sector3Seconds = NormalizeTiming(GetNullableSeconds(manager, prefix + "Sector3LastLapTime")),
                 TyreDataMode = "last_available", PressureUnit = pressureUnit, TemperatureUnit = temperatureUnit,
                 FrontLeft = CaptureTyre(manager, "FrontLeft"), FrontRight = CaptureTyre(manager, "FrontRight"),
-                RearLeft = CaptureTyre(manager, "RearLeft"), RearRight = CaptureTyre(manager, "RearRight")
+                RearLeft = CaptureTyre(manager, "RearLeft"), RearRight = CaptureTyre(manager, "RearRight"),
+                // 0.8.0: alleen uit de directe SDK-lezer. Zonder lezer, zonder iRacing of
+                // met de instelling uit blijven deze velden null en valt het blok volledig
+                // weg (EmitDefaultValue=false) — de payload blijft dan byte-identiek.
+                // De SDK levert m/s, rad en m/s²; de wire-contracten zijn km/h, graden en g.
+                WheelSpeedKph = CaptureWheelValues(directSdk, IrSdkChannels.WheelSpeed, IrSdkUnits.MetersPerSecondToKph, 0, 600, 1),
+                BrakeLinePressureBar = CaptureWheelValues(directSdk, IrSdkChannels.BrakeLinePressure, 1, 0, 250, 1),
+                SteeringWheelAngleDeg = DirectSdkNumber(directSdk, IrSdkChannels.SteeringWheelAngle, IrSdkUnits.RadiansToDegrees, -900, 900, 1),
+                LatAccelG = DirectSdkNumber(directSdk, IrSdkChannels.LatAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
+                LongAccelG = DirectSdkNumber(directSdk, IrSdkChannels.LongAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3)
             };
+        }
+
+        /// <summary>
+        /// Snapshot van de iRacing-shared-memory voor deze tick, of null. Eén snapshot per
+        /// aanroep; de instelling staat standaard aan (ontbrekende sleutel = aan). Elke
+        /// fout (map weg, sim uit, geen rechten) wordt hier afgevangen: nooit een exception
+        /// in het verzendpad.
+        /// </summary>
+        private IrSdkImage ReadDirectSdk()
+        {
+            var reader = _irSdk;
+            if (reader == null) return null;
+            try
+            {
+                bool enabled;
+                lock (_settingsGate) enabled = Settings == null || Settings.IrSdkDirectRead;
+                if (!enabled) return null;
+                return reader.Snapshot();
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM iRacing-SDK: lezing mislukt (niet-blokkerend): " + error.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Eén numeriek SDK-kanaal, omgerekend naar de wire-eenheid en binnen
+        /// [minimum, maximum] van die eenheid. Buiten de grens of onleesbaar = null;
+        /// 0 blijft een echte meting (stilstaand wiel, geen remdruk).
+        /// </summary>
+        private static double? DirectSdkNumber(IrSdkImage image, string channel, double factor, double minimum, double maximum, int decimals)
+        {
+            if (image == null || string.IsNullOrEmpty(channel)) return null;
+            var value = image.ReadNumber(channel);
+            if (!value.HasValue) return null;
+            var converted = value.Value * factor;
+            if (double.IsNaN(converted) || double.IsInfinity(converted)) return null;
+            if (converted < minimum || converted > maximum) return null;
+            return RoundTyreValue(converted, decimals);
+        }
+
+        /// <summary>Vier hoeken uit vier kanalen; null als geen enkele hoek een meting had.</summary>
+        private static V3WheelValues CaptureWheelValues(IrSdkImage image, string[] channels, double factor, double minimum, double maximum, int decimals)
+        {
+            if (image == null || channels == null || channels.Length < 4) return null;
+            var values = new V3WheelValues
+            {
+                FrontLeft = DirectSdkNumber(image, channels[0], factor, minimum, maximum, decimals),
+                FrontRight = DirectSdkNumber(image, channels[1], factor, minimum, maximum, decimals),
+                RearLeft = DirectSdkNumber(image, channels[2], factor, minimum, maximum, decimals),
+                RearRight = DirectSdkNumber(image, channels[3], factor, minimum, maximum, decimals),
+            };
+            if (!values.FrontLeft.HasValue && !values.FrontRight.HasValue && !values.RearLeft.HasValue && !values.RearRight.HasValue) return null;
+            return values;
         }
 
         // 0.7.0: iRacing-wearzones, 4 hoeken × 3 zones in de volgorde [left, middle, right].
@@ -1696,6 +1825,10 @@ namespace ThreeSM.EnduranceConnector
                     // Het gat naar de speler is negatief zodra die auto voor ons zit.
                     // Niet naar nul knijpen: dan verdwijnt precies de helft van het veld.
                     GapToPlayerSeconds = SignedSeconds(opponent.GaptoPlayer),
+                    // 0.7.1: het gat naar de leider stond in het contract maar bleef null.
+                    // De validator staat alleen 0..86400 toe (-1 = onbekend), dus een
+                    // negatieve of ontbrekende waarde wordt null en nooit een gok.
+                    GapToLeaderSeconds = ClampNonNegative(SignedSeconds(opponent.GaptoLeader)),
                     LastLapSeconds = PositiveSeconds(opponent.LastLapTime),
                     BestLapSeconds = PositiveSeconds(opponent.BestLapTime),
                     InPit = opponent.IsCarInPitLane || opponent.IsCarInPit,
@@ -1896,7 +2029,7 @@ namespace ThreeSM.EnduranceConnector
             var snapshot = data.NewData;
             IResearchChannelReader channels = snapshot == null
                 ? null
-                : new ResearchChannelAdapter(new RawChannelReader(snapshot, property => GetRaw(manager, property)), manager);
+                : new ResearchChannelAdapter(new RawChannelReader(snapshot, property => GetRaw(manager, property)), manager, ReadDirectSdk);
             bool dropped;
             recorder.OnTick(DateTime.UtcNow, true, isInCar, channels, out dropped);
             RefreshResearchStatus();
@@ -2102,21 +2235,50 @@ namespace ThreeSM.EnduranceConnector
         }
 
         // De researchlaag leest via deze adapter uitsluitend de kanalen/properties die de
-        // bestaande capture niet al levert.
+        // bestaande capture niet al levert. 0.8.0: SimHub geeft een aantal iRacing-kanalen
+        // niet door (stuurhoek, lat/long-versnelling, wielsnelheid, remdruk per wiel); die
+        // vallen terug op de directe SDK-lezer. De volgorde blijft: SimHub eerst, dan SDK —
+        // nooit twee bronnen door elkaar in één waarde.
         private sealed class ResearchChannelAdapter : IResearchChannelReader
         {
             private readonly RawChannelReader _channels;
             private readonly PluginManager _manager;
+            private readonly Func<IrSdkImage> _directSdk;
+            private IrSdkImage _directFrame;
+            private bool _directFrameTaken;
 
-            public ResearchChannelAdapter(RawChannelReader channels, PluginManager manager)
+            public ResearchChannelAdapter(RawChannelReader channels, PluginManager manager, Func<IrSdkImage> directSdk)
             {
                 _channels = channels;
                 _manager = manager;
+                _directSdk = directSdk;
+            }
+
+            /// <summary>Hoogstens één snapshot per tick, ook bij tien kanalen.</summary>
+            private IrSdkImage DirectFrame
+            {
+                get
+                {
+                    if (!_directFrameTaken)
+                    {
+                        _directFrameTaken = true;
+                        try { _directFrame = _directSdk == null ? null : _directSdk(); }
+                        catch { _directFrame = null; }
+                    }
+                    return _directFrame;
+                }
             }
 
             public double? ReadNumber(string channel, double minimum, double maximum)
             {
-                return _channels == null ? null : _channels.ReadNumber(channel, minimum, maximum);
+                var value = _channels == null ? null : _channels.ReadNumber(channel, minimum, maximum);
+                if (value.HasValue) return value;
+                var frame = DirectFrame;
+                if (frame == null) return null;
+                var direct = frame.ReadNumber(channel);
+                if (!direct.HasValue) return null;
+                if (direct.Value < minimum || direct.Value > maximum) return null;
+                return direct;
             }
 
             public double? ReadProperty(string property, double minimum, double maximum)

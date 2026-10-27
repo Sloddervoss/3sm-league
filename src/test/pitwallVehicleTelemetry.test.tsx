@@ -5,6 +5,9 @@ import { VehicleTelemetryPanel } from '../features/endurance/pitwall/VehicleTele
 import { parseTelemetryV3Envelope } from '../../supabase/functions/_shared/simhub';
 afterEach(cleanup);
 const vehicle: VehicleTelemetry = { speedKph:210,throttlePct:70,brakePct:0,rpm:7000,gear:'4',sector1Seconds:20,sector2Seconds:30,sector3Seconds:25,tyreDataMode:'last_available',pressureUnit:'psi',temperatureUnit:'C',frontLeft:{wearPercent:93,temperature:83,pressure:26},frontRight:null,rearLeft:null,rearRight:null };
+// Directe-SDK-velden zijn optioneel: zonder die kanalen vult de parser ze met null
+// in plaats van ze weg te laten, zodat de vorm van v3_normalized voorspelbaar blijft.
+const metSdkNullen = (v: VehicleTelemetry): VehicleTelemetry => ({...v, wheelSpeedKph:{fl:null,fr:null,rl:null,rr:null}, brakeLinePressureBar:{fl:null,fr:null,rl:null,rr:null}, steeringWheelAngleDeg:null, latAccelG:null, longAccelG:null});
 const envelope = () => ({protocolVersion:3,sequence:1,capturedAt:'2026-09-05T12:00:00Z',transportSessionId:'test-session',identity:{currentDriverId:null,currentDriverName:null,carId:null,carName:null,trackName:'Road Atlanta',trackConfig:'Full Course'},session:{isInCar:true,sessionTimeSeconds:10,sessionTimeRemainingSeconds:100,sessionLapsRemaining:null,flags:null,sessionState:'racing'},timing:{currentLapElapsedSeconds:10,lastLapTimeSeconds:null,bestLapTimeSeconds:null,completedLaps:0},position:{position:null,classPosition:null,gapToLeaderSeconds:null},track:{lapDistancePct:0,trackSurface:'on_track',onPitRoad:false},fuel:{fuelLitres:50,fuelPct:null},raceState:{incidents:0},pitService:{pitServiceFlagsRaw:null,requiredRepairSeconds:null,optionalRepairSeconds:null}});
 describe('optional Pitwall vehicle telemetry', () => {
   it('accepts optional official track IDs without breaking legacy payloads', () => {
@@ -16,9 +19,9 @@ describe('optional Pitwall vehicle telemetry', () => {
     }
   });
   it('keeps older plugin payloads compatible', () => { expect(parseVehicleTelemetry(undefined)).toBeNull(); expect(parseVehicleTelemetry(null)).toBeNull(); });
-  it('accepts old and extended V3 envelopes through the actual ingest parser', () => { expect(parseTelemetryV3Envelope(envelope()).vehicle).toBeNull(); expect(parseTelemetryV3Envelope({...envelope(),vehicle}).vehicle).toEqual(vehicle); });
+  it('accepts old and extended V3 envelopes through the actual ingest parser', () => { expect(parseTelemetryV3Envelope(envelope()).vehicle).toBeNull(); expect(parseTelemetryV3Envelope({...envelope(),vehicle}).vehicle).toEqual(metSdkNullen(vehicle)); });
   it('does not let optional telemetry change server-owned identity', () => { const parsed=parseTelemetryV3Envelope({...envelope(),vehicle}); expect(parsed.deviceId).toBeNull(); expect(parsed.authority).toBeNull(); expect(() => parseTelemetryV3Envelope({...envelope(),vehicle,eventId:'injected'})).toThrow(); });
-  it('preserves real zero pedal values and unknown corners', () => { expect(parseVehicleTelemetry(vehicle)).toEqual(vehicle); });
+  it('preserves real zero pedal values and unknown corners', () => { expect(parseVehicleTelemetry(vehicle)).toEqual(metSdkNullen(vehicle)); });
   it.each([NaN,Infinity,-1,101,'50'])('rejects malformed throttle %s', value => { expect(() => parseVehicleTelemetry({...vehicle,throttlePct:value})).toThrow(); });
   it('rejects server identity injection and unjustified live tyre claims', () => { expect(() => parseVehicleTelemetry({...vehicle,deviceId:'x'})).toThrow(); expect(() => parseVehicleTelemetry({...vehicle,tyreDataMode:'live'})).toThrow(); });
   it('shows real tyre values with their source units and freshness caveat', () => { render(<VehicleTelemetryPanel v3={{vehicle}} live />); expect(screen.getByText('93%')).toBeTruthy(); expect(screen.getByText('83.0 °C')).toBeTruthy(); expect(screen.getByText('Laatst beschikbare bandenmeting')).toBeTruthy(); });

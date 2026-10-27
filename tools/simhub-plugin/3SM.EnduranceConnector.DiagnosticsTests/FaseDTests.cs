@@ -340,9 +340,12 @@ internal static class FaseDTests
 
     public static int Main()
     {
+        var irSdkChecks = 0;
         try
         {
             BasicMatrix().GetAwaiter().GetResult();
+            TyreGateTests.Run(Check);
+            irSdkChecks = IrSdkReaderTests.Run(Check);
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
@@ -353,6 +356,6 @@ internal static class FaseDTests
             Console.WriteLine("HARNESS_EXCEPTION_TYPE=" + error.GetType().FullName);
         }
         Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
-        return failed == 0 && passed == 27 ? 0 : 1;
+        return failed == 0 && passed == 38 + irSdkChecks ? 0 : 1;
     }
 }

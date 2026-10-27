@@ -37,6 +37,8 @@
     <Compile Include="UpdaterStateStore.cs" />
     <Compile Include="SessionTelemetryReader.cs" />
     <Compile Include="RawChannelReader.cs" />
+    <Compile Include="IrSdkChannels.cs" />
+    <Compile Include="IrSdkMemoryReader.cs" />
     <Compile Include="TyreSnapshotTracker.cs" />
     <Compile Include="TrackIdentityReader.cs" />
     <Compile Include="DiagnosticsClient.cs" />
@@ -62,6 +64,9 @@
     <Compile Include="OverlayTemplateInstaller.cs" />
     <Compile Include="FlagModels.cs" />
     <Compile Include="FlagService.cs" />
+    <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
+         tests hetzelfde bestand kunnen compileren. -->
+    <Compile Include="TyrePublishGate.cs" />
     <Compile Include="SimHubDeviceLister.cs" />
     <Compile Include="SimHubLedProfileHost.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />

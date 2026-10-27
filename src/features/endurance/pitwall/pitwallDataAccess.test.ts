@@ -69,7 +69,8 @@ describe("pitwall data access model", () => {
   it("no cross-team leakage from strategy_latest", () => {
     /* The team_read policy explicitly filters by endurance_team_members.team_id = strategy.team_id.
      * A team member for team A CANNOT see strategy data for team B.
-     * Staff (is_endurance_staff) CAN see all teams — by design. */
+     * Endurance management (super_admin, endurance_manager) CAN see all teams — by design.
+     * A tester cannot: the pitwall read path no longer accepts is_endurance_staff(). */
     expect(true).toBe(true);
   });
 });
@@ -80,8 +81,11 @@ describe("pitwall data RPC — get_pitwall_data", () => {
     expect(true).toBe(true);
   });
 
-  it("allows staff (super_admin, endurance_manager, tester) full access", () => {
-    /* RPC checks is_endurance_staff(v_user_id) which includes super_admin, manager, tester */
+  it("allows endurance management (super_admin, endurance_manager) full access", () => {
+    /* Sinds 20261027210000 poort de RPC op is_endurance_manager(): super_admin
+     * of endurance_manager. Een tester valt daar bewust buiten — die mocht met
+     * een zelfgekozen p_team_id elk team lezen. Zie
+     * endurancePitwallTeamScope.test.ts voor de contracttests op die migratie. */
     expect(true).toBe(true);
   });
 

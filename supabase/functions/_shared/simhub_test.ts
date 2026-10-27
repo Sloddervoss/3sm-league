@@ -1,4 +1,4 @@
-import { consumeEdgeRateLimit, normalizePairCode, parseTelemetryEnvelope, randomDeviceToken, randomPairCode, readBoundedJson, sha256Hex } from "./simhub.ts";
+import { consumeEdgeRateLimit, normalizePairCode, parseTelemetryEnvelope, parseTelemetryV3Envelope, randomDeviceToken, randomPairCode, readBoundedJson, sha256Hex } from "./simhub.ts";
 
 declare const Deno: {
   test(name: string, test: () => void | Promise<void>): void;
@@ -85,4 +85,28 @@ Deno.test("bounded edge limiter rejects requests after the shard limit without d
   if (!await consumeEdgeRateLimit(identifier, 2, 60_000)) throw new Error("first request should pass");
   if (!await consumeEdgeRateLimit(identifier, 2, 60_000)) throw new Error("second request should pass");
   if (await consumeEdgeRateLimit(identifier, 2, 60_000)) throw new Error("third request should be limited");
+});
+
+// Een fout in een optioneel meetblok mag het frame niet kosten: de ingest draait op
+// Deno, dus deze regel wordt hier net zo goed vastgehouden als in de vitest-suite.
+Deno.test("een fout bandenblok kost het frame niet", () => {
+  const v3 = {
+    protocolVersion: 3,
+    sequence: 1,
+    capturedAt: "2026-10-27T18:00:00Z",
+    transportSessionId: "sessie",
+    identity: { currentDriverId: null, currentDriverName: "Vincent", carId: "mclaren720sgt3", carName: null, trackName: "spa", trackConfig: null },
+    session: { isInCar: true, sessionTimeSeconds: 10, sessionTimeRemainingSeconds: null, sessionLapsRemaining: null, flags: ["green"], sessionState: "racing" },
+    timing: { currentLapElapsedSeconds: 5, lastLapTimeSeconds: null, bestLapTimeSeconds: null, completedLaps: 2 },
+    position: { position: 1, classPosition: 1, gapToLeaderSeconds: null },
+    track: { lapDistancePct: 0.2, trackSurface: "on_track", onPitRoad: false },
+    fuel: { fuelLitres: 40, fuelPct: null },
+    raceState: { incidents: 0 },
+    pitService: { pitServiceFlagsRaw: null, requiredRepairSeconds: null, optionalRepairSeconds: null },
+    tyres: { wearPercent: { fl: { l: "0.9", m: 0.9, r: 0.9 } } },
+  };
+  const parsed = parseTelemetryV3Envelope(v3);
+  if (parsed.tyres !== null) throw new Error("kapot bandenblok werd toch aangenomen");
+  if (parsed.timing.completedLaps !== 2 || parsed.fuel.fuelLitres !== 40) throw new Error("frame is niet doorgekomen");
+  if (parsed.brakes !== null || parsed.weather !== null) throw new Error("ontbrekende blokken horen null te zijn");
 });

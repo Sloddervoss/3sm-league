@@ -16,6 +16,13 @@ $exe = Join-Path $outDir '3SM.EnduranceConnector.DiagnosticsTests.exe'
   (Join-Path $connector 'UpdaterStateStore.cs') `
   (Join-Path $connector 'SessionTelemetryReader.cs') `
   (Join-Path $connector 'ConnectorSettings.cs') `
+  (Join-Path $connector 'FlagModels.cs') `
+  (Join-Path $connector 'TelemetryContractsV3.cs') `
+  (Join-Path $connector 'TyrePublishGate.cs') `
+  (Join-Path $connector 'IrSdkChannels.cs') `
+  (Join-Path $connector 'IrSdkMemoryReader.cs') `
+  (Join-Path $PSScriptRoot 'TyreGateTests.cs') `
+  (Join-Path $PSScriptRoot 'IrSdkReaderTests.cs') `
   (Join-Path $PSScriptRoot 'FaseDTests.cs')
 if ($LASTEXITCODE -ne 0) { throw "Fase D harness compile faalde: $LASTEXITCODE" }
 & $exe

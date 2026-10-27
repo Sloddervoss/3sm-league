@@ -126,6 +126,31 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "frontRight")] public V3Tyre FrontRight { get; set; }
         [DataMember(Name = "rearLeft")] public V3Tyre RearLeft { get; set; }
         [DataMember(Name = "rearRight")] public V3Tyre RearRight { get; set; }
+
+        // 0.8.0 additief: kanalen die SimHub's GameRawData niet doorgeeft en die de plugin
+        // rechtstreeks uit de iRacing-shared-memory leest (IrSdkMemoryReader). Alles nullable
+        // en EmitDefaultValue=false: zonder lezer (of zonder rijdende sim) verandert de
+        // payload byte-voor-byte niet. Eenheid staat in de naam (Kph/Bar/Deg/G), zodat de
+        // server geen eenheid hoeft te raden; de plugin rekent de SDK-eenheden om
+        // (m/s -> km/h, rad -> deg, m/s² -> g).
+        [DataMember(Name = "wheelSpeedKph", EmitDefaultValue = false)] public V3WheelValues WheelSpeedKph { get; set; }
+        [DataMember(Name = "brakeLinePressureBar", EmitDefaultValue = false)] public V3WheelValues BrakeLinePressureBar { get; set; }
+        [DataMember(Name = "steeringWheelAngleDeg", EmitDefaultValue = false)] public double? SteeringWheelAngleDeg { get; set; }
+        [DataMember(Name = "latAccelG", EmitDefaultValue = false)] public double? LatAccelG { get; set; }
+        [DataMember(Name = "longAccelG", EmitDefaultValue = false)] public double? LongAccelG { get; set; }
+    }
+
+    /// <summary>
+    /// Vier hoeken met één nullable getal per hoek. Ontbrekende hoeken vallen weg
+    /// (EmitDefaultValue=false), zodat een half gevulde meting geen nullen suggereert.
+    /// </summary>
+    [DataContract]
+    public sealed class V3WheelValues
+    {
+        [DataMember(Name = "frontLeft", EmitDefaultValue = false)] public double? FrontLeft { get; set; }
+        [DataMember(Name = "frontRight", EmitDefaultValue = false)] public double? FrontRight { get; set; }
+        [DataMember(Name = "rearLeft", EmitDefaultValue = false)] public double? RearLeft { get; set; }
+        [DataMember(Name = "rearRight", EmitDefaultValue = false)] public double? RearRight { get; set; }
     }
 
     [DataContract]

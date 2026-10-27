@@ -2,6 +2,7 @@ export * from "./types";
 export * from "./fuelModel";
 export * from "./fuelToFinish";
 export * from "./pitLoss";
+export * from "./pitService";
 export * from "./pitStops";
 export * from "./pitWindow";
 export * from "./tyreModel";

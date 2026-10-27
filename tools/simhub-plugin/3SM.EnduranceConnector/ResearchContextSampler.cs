@@ -76,6 +76,18 @@ namespace ThreeSM.EnduranceConnector
             return "pitEntry.carcassTempC." + Corner(corner) + "." + zone;
         }
 
+        /// <summary>Wielsnelheid per hoek (m/s), uit de directe iRacing-SDK-lezer.</summary>
+        public static string WheelSpeedMps(int corner)
+        {
+            return "wheelSpeedMps." + Corner(corner);
+        }
+
+        /// <summary>Remleidingdruk per hoek (bar), uit de directe iRacing-SDK-lezer.</summary>
+        public static string BrakeLinePressureBar(int corner)
+        {
+            return "brakeLinePressureBar." + Corner(corner);
+        }
+
         public static string Corner(int corner)
         {
             switch (corner)
@@ -181,6 +193,17 @@ namespace ThreeSM.EnduranceConnector
                 Channel(channels, "LatAccel", ResearchLimits.AccelMps2Min, ResearchLimits.AccelMps2Max, sampleAtUtc));
             Add(fields, ResearchFieldKeys.LongAccelMps2,
                 Channel(channels, "LongAccel", ResearchLimits.AccelMps2Min, ResearchLimits.AccelMps2Max, sampleAtUtc));
+            // 0.8.0: wielsnelheid en remdruk per hoek. SimHub geeft deze kanalen niet door;
+            // de plugin-adapter valt voor deze namen terug op de directe iRacing-SDK-lezer.
+            for (var corner = 0; corner < 4; corner++)
+            {
+                Add(fields, ResearchFieldKeys.WheelSpeedMps(corner),
+                    Channel(channels, IrSdkChannels.WheelSpeed[corner],
+                        ResearchLimits.WheelSpeedMpsMin, ResearchLimits.WheelSpeedMpsMax, sampleAtUtc));
+                Add(fields, ResearchFieldKeys.BrakeLinePressureBar(corner),
+                    Channel(channels, IrSdkChannels.BrakeLinePressure[corner],
+                        ResearchLimits.BrakePressureBarMin, ResearchLimits.BrakePressureBarMax, sampleAtUtc));
+            }
 
             // --- uit de bestaande capture (nooit opnieuw uit de SDK) ---
             // Snelheid zit alleen in het optionele vehicle-blok; staat dat uit, dan lezen we

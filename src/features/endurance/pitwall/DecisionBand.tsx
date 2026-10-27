@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
-import { Disc3, Fuel, TriangleAlert } from "lucide-react";
-import type { Advice } from "./strategy/types";
+import { Disc3, Fuel, TriangleAlert, Wrench } from "lucide-react";
+import type { Advice, RepairState } from "./strategy/types";
 import type { TyreAdvice } from "./strategy/tyreWear";
 import { TyreAdviceLine } from "./TyreAdviceLine";
 import { TyreFuelCompare } from "./TyreFuelCompare";
-import { stayOutLine } from "./tyreCopy";
+import { gradeWord, stayOutLine } from "./tyreCopy";
 
 /**
  * De beslissingsband.
@@ -25,6 +25,10 @@ import { stayOutLine } from "./tyreCopy";
  *   label `zekerheid` heet nu `zekerheid tank`, want de banden hebben hun eigen
  *   graad en twee soorten zekerheid onder één kop is precies hoe dit paneel
  *   eerder ongeloofwaardig werd.
+ * - In de pitbox komt er één strook bij: `reparatie verplicht / optioneel /
+ *   onbekend`, met de tijd ernaast. Die hangt aan `advice.inBox` en verdwijnt
+ *   zodra de auto weer buiten staat — het is een toestand van dit moment, geen
+ *   geschiedenis. Geen paneel, geen tabel: dezelfde regelmaat als de bandenrij.
  */
 
 const decisionLabel = (advice: Advice): string => {
@@ -64,18 +68,22 @@ const tyreTone: Record<TyreAdvice["action"], string> = {
   NO_ADVICE: "border-white/10 bg-white/[0.03] text-gray-400",
 };
 
-/** `A · gemeten`: de letter alleen is nooit genoeg. */
-const gradeLabel = (grade: string): string => {
-  switch (grade) {
-    case "A":
-      return "gemeten";
-    case "B":
-      return "geschat";
-    case "C":
-      return "alleen bereik";
-    default:
-      return "geen meting";
-  }
+/**
+ * De reparatiestrook: drie woorden, en ze zijn niet inwisselbaar. "verplicht"
+ * betekent dat de auto er niet zonder wegkomt; "optioneel" dat het tijdwinst is;
+ * "onbekend" dat de connector geen reparatietijd gaf. Zwijgen zou het derde
+ * geval als het tweede laten lezen.
+ */
+const repairLabel: Record<RepairState, string> = {
+  mandatory: "reparatie verplicht",
+  optional: "reparatie optioneel",
+  unknown: "reparatie onbekend",
+};
+
+const repairTone: Record<RepairState, string> = {
+  mandatory: "border-orange-400/40 bg-orange-400/[0.10] text-orange-300",
+  optional: "border-sky-400/30 bg-sky-400/[0.08] text-sky-200",
+  unknown: "border-white/10 bg-white/[0.03] text-gray-400",
 };
 
 export function DecisionBand({ advice }: { advice: Advice }) {
@@ -83,6 +91,9 @@ export function DecisionBand({ advice }: { advice: Advice }) {
   const naarBinnen = advice.decision === "PIT_THIS_LAP";
   const banden = advice.tyres ?? null;
   const estimate = advice.tyreEstimate ?? null;
+  // De pitbox-fase komt uit de motor en is alleen gevuld zolang de auto binnen
+  // staat; buiten de stop is er geen strook en geen reparatievraag.
+  const inBox = advice.inBox ?? null;
 
   const rand = rustig
     ? "border-white/10 bg-white/[0.03]"
@@ -114,6 +125,32 @@ export function DecisionBand({ advice }: { advice: Advice }) {
         </p>
         <p className="mt-1 max-w-2xl text-sm leading-5 text-gray-400">{advice.reason}</p>
 
+        {/* Reparatiestrook: één regel over wat er in de box moet gebeuren. Geen
+            paneel en geen tabel — dezelfde strook als de bandenrij eronder. */}
+        {inBox && (
+          <div
+            className={`mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-2.5 py-1.5 ${repairTone[inBox.repair]}`}
+            data-pitwall-in-box={inBox.repair}
+          >
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider">
+              <Wrench className="h-3 w-3" aria-hidden />
+              in de box
+            </span>
+            <span className="text-[12px] font-bold">{repairLabel[inBox.repair]}</span>
+            <span
+              className="ml-auto font-mono text-[12px] tabular-nums"
+              data-pitwall-repair-seconds={inBox.repairSeconds == null ? "unknown" : Math.round(inBox.repairSeconds)}
+              aria-label={
+                inBox.repairSeconds == null
+                  ? "reparatietijd onbekend"
+                  : `reparatietijd ${Math.round(inBox.repairSeconds)} seconden`
+              }
+            >
+              {inBox.repairSeconds == null ? "—" : `${Math.round(inBox.repairSeconds)} s`}
+            </span>
+          </div>
+        )}
+
         {banden && (
           <div className="mt-2 space-y-1.5" data-pitwall-tyre-action={banden.action}>
             <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm leading-5">
@@ -128,7 +165,7 @@ export function DecisionBand({ advice }: { advice: Advice }) {
                   className="text-[10px] font-bold uppercase tracking-wider text-gray-500"
                   data-pitwall-tyre-grade-label={estimate.grade}
                 >
-                  {estimate.grade} · {gradeLabel(estimate.grade)}
+                  {estimate.grade} · {gradeWord(estimate.grade)}
                 </span>
               ) : (
                 <span className={banden.action === "NO_ADVICE" ? "text-gray-500" : "text-gray-300"}>
