@@ -76,6 +76,24 @@ export interface PitStopMeasurement {
   stops: MeasuredPitStop[];
 }
 
+/** Wat er aan reparatie in de pitbox bekend is. */
+export type RepairState = "mandatory" | "optional" | "unknown";
+
+/**
+ * De pitbox-fase.
+ *
+ * Alleen gevuld zolang de auto in de pitstraat staat (`track.onPitRoad`). De
+ * strook zegt wat de auto zelf over reparatie meldt: verplicht (de auto komt er
+ * niet zonder weg), optioneel (tijdwinst) of onbekend (de connector gaf geen
+ * reparatietijd). Zonder melding is er geen strook — geen "waarschijnlijk niets".
+ */
+export interface PitBoxRepair {
+  phase: "IN_BOX";
+  repair: RepairState;
+  /** Reparatietijd in seconden; null als de bron die niet gaf. */
+  repairSeconds: number | null;
+}
+
 export interface PitWindow {
   /** Eerste ronde waarin je mag stoppen; in de praktijk: nu. */
   earliestLap: number;
@@ -179,6 +197,17 @@ export interface StrategySnapshot {
    * reeks, met dezelfde vorm maar een voorzichtiger graad.
    */
   tyreEstimate?: TyreEstimate | null;
+  /**
+   * Staat de auto in de pitstraat volgens de laatste meting? De reparatiestrook
+   * hangt hieraan: buiten de stop valt er niets te repareren.
+   */
+  onPitRoad?: boolean | null;
+  /**
+   * Reparatietijd uit `v3_normalized.pitService`. Nul is een meting ("niets
+   * verplicht"), null is onbekend — die twee mogen niet op één hoop.
+   */
+  requiredRepairSeconds?: number | null;
+  optionalRepairSeconds?: number | null;
 }
 
 /** Wie de stop bepaalt: de band, de tank, of geen van beide. */
@@ -242,4 +271,9 @@ export interface Advice {
   tyreFuel?: TyreFuelComparison | null;
   /** Het bandenbeeld met zijn graad; null als er niets gemeten is. */
   tyreEstimate?: TyreEstimate | null;
+  /**
+   * De reparatiestrook. Alleen gevuld als de auto in de pitbox staat én er
+   * reparatiedata is; anders null en dan is er ook geen strook.
+   */
+  inBox?: PitBoxRepair | null;
 }

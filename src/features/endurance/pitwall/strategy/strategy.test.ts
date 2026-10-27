@@ -220,6 +220,24 @@ describe("advise", () => {
     expect(advies.reasonCode).toBe("stale_telemetry");
   });
 
+  it("zet de reparatiestrook alleen als de auto in de box staat", () => {
+    const binnen = advise(
+      basisSnapshot({ onPitRoad: true, requiredRepairSeconds: 42, optionalRepairSeconds: 0 }),
+    );
+    expect(binnen.inBox).toEqual({ phase: "IN_BOX", repair: "mandatory", repairSeconds: 42 });
+
+    const buiten = advise(basisSnapshot({ onPitRoad: false, requiredRepairSeconds: 42 }));
+    expect(buiten.inBox).toBeNull();
+  });
+
+  it("toont geen reparatiestrook op een meting die te oud is", () => {
+    // Een reparatieverplichting uit een meting van 12 s oud is geschiedenis.
+    const advies = advise(
+      basisSnapshot({ sampleAgeSeconds: 12, onPitRoad: true, requiredRepairSeconds: 42 }),
+    );
+    expect(advies.inBox).toBeNull();
+  });
+
   it("zegt blijven buiten als de tank de finish haalt", () => {
     // 30 rondes te gaan, 40 liter bij 3,0 L/ronde = 12 rondes? Nee: 40/3 = 13.
     // Dus met een volle tank van 100 liter haalt hij het wel.

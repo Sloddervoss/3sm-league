@@ -126,13 +126,15 @@ describe("DecisionBand", () => {
     expect(screen.getAllByText("—")).toHaveLength(1);
   });
 
-  it("toont de bandenrij met de graad en de regel die bij die graad hoort", () => {
+  it("toont de bandenrij met de graad, het woord en het bereik in rondes", () => {
     const { container } = render(<DecisionBand advice={advice({ tyres: tyres(), tyreEstimate: estimate() })} />);
     expect(screen.getByText("wisselen bij stop")).toBeInTheDocument();
     expect(screen.getByText("A · gemeten")).toBeInTheDocument();
+    // Geen percentage rest meer: het bereik in rondes is de mededeling.
     expect(container.querySelector("[data-pitwall-tyre-grade='A']")?.textContent).toContain(
-      "62% · −1,8/r · nog 12 rondes tot 40%",
+      "11–14 rondes tot 40%",
     );
+    expect(container.textContent).not.toContain("62%");
   });
 
   it("toont bij graad D alleen de oorzaak en geen percentage", () => {
@@ -154,7 +156,8 @@ describe("DecisionBand", () => {
       />,
     );
     expect(screen.getByText("geen bandenadvies")).toBeInTheDocument();
-    expect(screen.getByText("D · geen meting")).toBeInTheDocument();
+    // Graad D heet "plan": de stop komt dan uit het plan, niet uit de band.
+    expect(screen.getByText("D · plan")).toBeInTheDocument();
     expect(container.querySelector("[data-pitwall-tyre-grade='D']")?.textContent).toContain(
       "— · waarde staat stil sinds r7",
     );
@@ -205,5 +208,74 @@ describe("DecisionBand", () => {
       "tank is de grens; banden onbekend",
     );
     expect(screen.queryByText("banden ok")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * De reparatiestrook.
+ *
+ * Alleen bij IN_BOX (de auto staat in de pitbox) en met drie woorden die niet
+ * inwisselbaar zijn. De strook is een regel in de band, geen paneel: geen extra
+ * sectie, geen tabel.
+ */
+describe("DecisionBand — reparatiestrook in de box", () => {
+  const inBox = (repair: "mandatory" | "optional" | "unknown", repairSeconds: number | null) =>
+    ({ phase: "IN_BOX" as const, repair, repairSeconds });
+
+  it("zegt verplicht met de tijd als de auto gerepareerd moet worden", () => {
+    const { container } = render(<DecisionBand advice={advice({ inBox: inBox("mandatory", 42) })} />);
+    const strook = container.querySelector("[data-pitwall-in-box]");
+    expect(strook?.getAttribute("data-pitwall-in-box")).toBe("mandatory");
+    expect(strook?.textContent).toContain("in de box");
+    expect(strook?.textContent).toContain("reparatie verplicht");
+    expect(strook?.textContent).toContain("42 s");
+  });
+
+  it("zegt optioneel als het tijdwinst is en geen voorwaarde", () => {
+    const { container } = render(<DecisionBand advice={advice({ inBox: inBox("optional", 8) })} />);
+    const strook = container.querySelector("[data-pitwall-in-box]");
+    expect(strook?.getAttribute("data-pitwall-in-box")).toBe("optional");
+    expect(strook?.textContent).toContain("reparatie optioneel");
+    expect(strook?.textContent).toContain("8 s");
+  });
+
+  it("zegt onbekend met een streepje in plaats van een verzonnen tijd", () => {
+    const { container } = render(<DecisionBand advice={advice({ inBox: inBox("unknown", null) })} />);
+    const strook = container.querySelector("[data-pitwall-in-box]");
+    expect(strook?.getAttribute("data-pitwall-in-box")).toBe("unknown");
+    expect(strook?.textContent).toContain("reparatie onbekend");
+    expect(strook?.querySelector("[data-pitwall-repair-seconds='unknown']")?.textContent).toBe("—");
+    // En de voorlezer krijgt "onbekend", geen streepje.
+    expect(strook?.querySelector("[data-pitwall-repair-seconds]")?.getAttribute("aria-label")).toBe(
+      "reparatietijd onbekend",
+    );
+  });
+
+  it("laat de strook weg buiten de pitbox", () => {
+    const { container } = render(<DecisionBand advice={advice({ inBox: null })} />);
+    expect(container.querySelector("[data-pitwall-in-box]")).toBeNull();
+    expect(container.textContent).not.toContain("in de box");
+  });
+
+  it("leest in één oogopslag: eerst de reparatie, dan de band", () => {
+    const { container } = render(
+      <DecisionBand
+        advice={advice({ inBox: inBox("mandatory", 42), tyres: tyres(), tyreEstimate: estimate() })}
+      />,
+    );
+    const tekst = container.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    const reparatie = tekst.indexOf("reparatie verplicht");
+    const band = tekst.indexOf("wisselen bij stop");
+    // De strook staat vóór de bandenrij: in de box is de reparatie het nieuws.
+    expect(reparatie).toBeGreaterThan(-1);
+    expect(band).toBeGreaterThan(reparatie);
+  });
+
+  it("blijft binnen de bestaande band: geen tweede sectie of tabel", () => {
+    const { container } = render(<DecisionBand advice={advice({ inBox: inBox("mandatory", 42) })} />);
+    expect(container.querySelectorAll("section")).toHaveLength(1);
+    expect(container.querySelectorAll("table")).toHaveLength(0);
+    const band = container.querySelector("[data-pitwall-decision-band]");
+    expect(band?.querySelector("[data-pitwall-in-box]")).not.toBeNull();
   });
 });

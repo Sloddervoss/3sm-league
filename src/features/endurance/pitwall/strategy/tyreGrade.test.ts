@@ -151,11 +151,27 @@ describe("parseTyreEstimate", () => {
     expect(estimate.weakest).toBe("fl");
     expect(estimate.restPct).toBe(62.1);
     expect(estimate.ratePerLap).toBeCloseTo(1.42, 4);
-    // De marge hoort bij graad B; A toont een puntgetal zonder ±.
+    // De marge hoort bij graad B; A toont geen ±.
     expect(estimate.marginPp).toBeNull();
     expect(estimate.lapsToThreshold).toBe(12);
+    // Graad A levert ook een bereik in rondes: de pitwall toont geen percentage
+    // rest meer, dus zonder bereik zou A terugvallen op één getal.
+    expect(estimate.lapsRange).toEqual({ low: 10, high: 14 });
     expect(estimate.limitPct).toBe(40);
     expect(estimate.cause).toBeNull();
+  });
+
+  it("rekent σ in rondes uit σ in procentpunten als de server die niet stuurt", () => {
+    // De RPC stuurt sigma_pct (1,6 bij A) en geen sigma_laps. Delen door de
+    // helling geeft dezelfde onzekerheid in rondes, zonder een nieuwe aanname.
+    const zonderSigmaLaps = {
+      ...blok,
+      sigma_laps: null,
+      estimate: { ...blok.estimate, per_corner: { fl: { value: 62, rate_per_lap: -1.6, sigma: 1.6, laps_to_threshold: 13 } } },
+    };
+    const estimate = parseTyreEstimate(zonderSigmaLaps)!;
+    expect(estimate.sigmaLaps).toBeCloseTo(1.0, 4);
+    expect(estimate.lapsRange).toEqual({ low: 12, high: 14 });
   });
 
   it("leest graad D als oorzaak, zonder getal", () => {
