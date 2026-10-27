@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
@@ -118,8 +118,8 @@ namespace ThreeSM.EnduranceConnector
 
             // varBuf[0] is de buffer die de sim voor lezers klaarzet; tickCount dient alleen
             // als bewijs dat er een frame is.
-            var tickCount = ReadInt32(image, length, 40);
-            var bufOffset = ReadInt32(image, length, 44);
+            var tickCount = ReadInt32(image, length, 48);
+            var bufOffset = ReadInt32(image, length, 52);
             if (bufOffset < 0 || (long)bufOffset + bufLen > length) return null;
 
             var variables = new Dictionary<string, IrSdkVariable>(numVars, StringComparer.Ordinal);

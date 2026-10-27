@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.Serialization.Json;
 using System.Text;
@@ -70,7 +70,7 @@ internal static class IrSdkReaderTests
             IrSdkImage.Parse(badVarOffset, badVarOffset.Length) == null, "parse=null");
 
         var badBuffer = (byte[])image.Clone();
-        WriteInt32(badBuffer, 44, ImageLength - 4);
+        WriteInt32(badBuffer, 52, ImageLength - 4);
         check("SDK-12 data buffer outside the image is rejected",
             IrSdkImage.Parse(badBuffer, badBuffer.Length) == null, "parse=null");
 
@@ -150,8 +150,8 @@ internal static class IrSdkReaderTests
         WriteInt32(image, 28, VarHeaderOffset);   // varHeaderOffset
         WriteInt32(image, 32, 1);                 // numBuf
         WriteInt32(image, 36, BufferLength);      // bufLen
-        WriteInt32(image, 40, 4242);              // varBuf[0].tickCount
-        WriteInt32(image, 44, BufferOffset);      // varBuf[0].bufOffset
+        WriteInt32(image, 48, 4242);              // varBuf[0].tickCount
+        WriteInt32(image, 52, BufferOffset);      // varBuf[0].bufOffset
 
         WriteVarHeader(image, 0, IrSdkImage.TypeFloat, 0, "LFspeed");
         WriteVarHeader(image, 1, IrSdkImage.TypeFloat, 4, "RFspeed");
