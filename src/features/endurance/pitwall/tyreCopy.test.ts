@@ -48,9 +48,9 @@ const estimate = (overrides: Partial<TyreEstimate> = {}): TyreEstimate => ({
 
 describe("graadwoorden", () => {
   it("koppelt elke graad aan één betrouwbaarheidswoord", () => {
-    expect(gradeLabel("A")).toBe("A · gemeten");
-    expect(gradeLabel("B")).toBe("B · voorlopig");
-    expect(gradeLabel("C")).toBe("C · schatting");
+    expect(gradeLabel("A")).toBe("A · sterk");
+    expect(gradeLabel("B")).toBe("B · matig");
+    expect(gradeLabel("C")).toBe("C · zwak");
     expect(gradeLabel("D")).toBe("D · plan");
   });
 

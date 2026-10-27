@@ -1,7 +1,9 @@
-import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { TyreModelPanel } from "@/features/endurance/pitwall/TyreModelPanel";
+import { RawTelemetryDetails } from "@/features/endurance/pitwall/RawTelemetryDetails";
+import { gradeWord } from "@/features/endurance/pitwall/tyreCopy";
 import { useTyreModel, tyreModelQueryKey } from "@/features/endurance/pitwall/useTyreModel";
 import {
   loadTyreModel,
@@ -42,8 +44,10 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
 
     expect(screen.getByText("8–12")).toBeVisible();
     expect(screen.getByText("8–12")).toHaveAttribute("aria-label", "8 tot 12 rondes");
-    // Graad en herkomst staan als twee losse woorden, geen kleur: C · schatting.
-    expect(screen.getByText("C · schatting")).toBeVisible();
+    // Graad en herkomst staan als twee losse woorden, geen kleur: C · zwak
+    // naast geschat. Het graadwoord zegt hoe sterk de basis is, het
+    // herkomstwoord waar het getal vandaan komt — ze zijn nooit elkaars gelijke.
+    expect(screen.getByText("C · zwak")).toBeVisible();
     expect(screen.getByText("geschat")).toBeVisible();
     expect(screen.getByText(/voorlopig bereik/)).toBeVisible();
     expect(screen.getByText(/één stint, ruime marge/)).toBeVisible();
@@ -234,15 +238,103 @@ describe("fouten en randen van het bandenmodel", () => {
     tweede.unmount();
   });
 
-  it("toont 'laden' tot de eerste uitslag er is", () => {
+  it("toont 'laden' tot de eerste uitslag er is, in de kop én in de regel", () => {
     const view = render(<TyreModelPanel estimate={null} bron="geen" coverage={[]} modelLoading />);
 
     expect(view.container.querySelector('[data-pitwall-tyre-range="laden"]')).toHaveTextContent("Bandenmodel laden");
+    // De kop mag tijdens de eerste load geen conclusie trekken: "geen model"
+    // is een uitslag, niet een tussenstand.
+    expect(screen.getByText("laden")).toBeVisible();
+    expect(screen.queryByText("geen model")).not.toBeInTheDocument();
     expect(screen.queryByText(/Nog geen bandenmodel/)).not.toBeInTheDocument();
     view.unmount();
   });
 
-  it("zegt bij graad A één keer 'gemeten' in plaats van twee keer", () => {
+  it("noemt het bereik pas voorlopig als dat bereik er ook staat", () => {
+    // Graad B zonder bereik: de kop zegt "rondes onbekend", dus een ondertitel
+    // over een voorlopig bereik waarschuwt voor een getal dat er niet is.
+    const zonderBereik = parseTyreEstimateV2({ grade: "B", usable: true, range_laps: null });
+    const eerste = render(<TyreModelPanel estimate={zonderBereik} bron="v2" coverage={[]} />);
+
+    expect(screen.getByText("rondes onbekend")).toBeVisible();
+    expect(screen.queryByText(/voorlopig bereik/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gemeten bereik/)).not.toBeInTheDocument();
+    expect(eerste.container.querySelector("[data-pitwall-tyre-subtitle]")).toBeNull();
+    eerste.unmount();
+
+    const metBereik = parseTyreEstimateV2({ grade: "B", usable: true, range_laps: { low: 10, high: 12 } });
+    const tweede = render(<TyreModelPanel estimate={metBereik} bron="v2" coverage={[]} />);
+    expect(screen.getByText(/voorlopig bereik/)).toBeVisible();
+    tweede.unmount();
+  });
+
+  it("opent het raw-paneel: het details-element krijgt echt [open]", () => {
+    const view = render(<RawTelemetryDetails value={{ speed: 212, gear: 5 }} />);
+    const details = view.container.querySelector("details")!;
+    const summary = screen.getByText(/Toon raw telemetrie/);
+
+    // Dicht: geen [open], en dus geen inhoud — dezelfde staat als voor de fix.
+    expect(details).not.toHaveAttribute("open");
+    expect(view.container.querySelector("pre")).toBeNull();
+
+    fireEvent.click(summary);
+
+    // De kern van de bevinding: zonder [open] blijft de inhoud in een echte
+    // browser verborgen, ook als de state al op "open" staat.
+    expect(details).toHaveAttribute("open");
+    expect(view.container.querySelector("pre")).toHaveTextContent("212");
+    expect(screen.getByText(/Verberg raw telemetrie/)).toBeVisible();
+
+    fireEvent.click(screen.getByText(/Verberg raw telemetrie/));
+
+    expect(details).not.toHaveAttribute("open");
+    expect(view.container.querySelector("pre")).toBeNull();
+    view.unmount();
+  });
+
+  it("zet naast de graad nooit een tweede woord dat de herkomst tegenspreekt", () => {
+    // De drie gevallen uit de keuring: PCBART (A met herkomst geschat), DESKTOP
+    // (C met herkomst gemeten) en CAT-PC (A met een onbekend bereik). Het
+    // graadwoord zegt hoe sterk de basis is, de herkomst waar het getal vandaan
+    // komt; ze zijn nooit elkaars gelijke en dus nooit elkaars tegendeel.
+    const gevallen = [
+      { grade: "A", provenance: "estimated", label: "A · sterk", herkomst: "geschat" },
+      { grade: "C", provenance: "measured", label: "C · zwak", herkomst: "gemeten" },
+      { grade: "A", provenance: "measured", label: "A · sterk", herkomst: "gemeten" },
+    ] as const;
+
+    for (const geval of gevallen) {
+      const estimate = parseTyreEstimateV2({
+        grade: geval.grade,
+        usable: true,
+        stints: 3,
+        wear_per_lap: 1.1,
+        range_laps: geval.grade === "A" ? { low: 11, high: 14 } : { low: 8, high: 12 },
+        provenance: geval.provenance,
+      });
+
+      const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
+      const badges = view.container.querySelector("[data-pitwall-tyre-grade-label]")!.parentElement!;
+
+      expect(within(badges).getByText(geval.label)).toBeVisible();
+      expect(badges.querySelector("[data-pitwall-tyre-provenance-label]")).toHaveTextContent(geval.herkomst);
+      // De herkomst wint: hij staat er altijd, ook als de graad sterk is.
+      expect(geval.label).not.toContain(geval.herkomst);
+      view.unmount();
+    }
+  });
+
+  it("deelt geen enkel woord tussen de vier graden en de vier herkomsten", () => {
+    const graadWoorden = (["A", "B", "C", "D"] as const).map((graad) => gradeWord(graad));
+    const herkomstWoorden = (["measured", "last_known", "estimated", "none"] as const).map((herkomst) =>
+      provenanceLabel(herkomst),
+    );
+
+    expect(new Set(graadWoorden).size).toBe(4);
+    expect(graadWoorden.filter((woord) => herkomstWoorden.includes(woord))).toEqual([]);
+  });
+
+  it("zegt bij graad A één keer 'gemeten': als herkomst, niet als graad", () => {
     const estimate = parseTyreEstimateV2({
       grade: "A",
       usable: true,
@@ -256,10 +348,13 @@ describe("fouten en randen van het bandenmodel", () => {
 
     const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
 
-    const badges = view.container.querySelector("[data-pitwall-tyre-grade-label]")!.parentElement!;
+    const badge = view.container.querySelector("[data-pitwall-tyre-grade-label]")!;
+    expect(badge).toHaveTextContent("A · sterk");
+    expect(badge).not.toHaveTextContent("gemeten");
+
+    const badges = badge.parentElement!;
     expect(within(badges).getAllByText(/gemeten/)).toHaveLength(1);
-    expect(badges.querySelector("[data-pitwall-tyre-provenance-label]")).toBeNull();
-    // De herkomst blijft wel machineleesbaar aanwezig.
+    // De herkomst blijft ook machineleesbaar aanwezig.
     expect(badges.querySelector("[data-pitwall-tyre-provenance]")).toHaveAttribute(
       "data-pitwall-tyre-provenance",
       "measured",
@@ -397,6 +492,50 @@ describe("de query's van het bandenmodel", () => {
     expect(v2Calls).toHaveLength(1);
     expect(v2Calls[0][1]).toEqual({ p_device_id: "device-1" });
     // De sleutel noemt het apparaat en niets anders.
+    expect(tyreModelQueryKey("device-1")).toEqual(["pitwall-test", "tyre-model", "device-1"]);
+
+    hook.unmount();
+    client.clear();
+  });
+
+  it("probeert v1 opnieuw zodra event en team voor het eerst binnenkomen", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const rpc = vi.fn(async (fn: string, _args?: Record<string, unknown>) => {
+      if (fn === "tyre_coverage") return { data: [], error: null };
+      if (fn === "pitwall_tyre_estimate_v2") {
+        return { data: null, error: { code: "PGRST202", message: "Could not find the function" } };
+      }
+      return {
+        data: { grade: "B", estimate: { weakest: "fl", per_corner: { fl: { value: 61, rate_per_lap: -1.8, sigma: 1.2 } } } },
+        error: null,
+      };
+    });
+
+    const hook = renderHook(
+      ({ eventId, teamId }: { eventId: string | null; teamId: string | null }) =>
+        useTyreModel({
+          client: { rpc } as unknown as TyreRpcClient,
+          deviceId: "device-1",
+          eventId,
+          teamId,
+          enabled: true,
+        }),
+      { initialProps: { eventId: null as string | null, teamId: null as string | null }, wrapper: wrapper(client) },
+    );
+
+    // Eerste fetch: v2 stuk en nog geen binding, dus v1 is niet eens geprobeerd.
+    await waitFor(() => expect(hook.result.current.bron).toBe("geen"));
+    expect(rpc.mock.calls.filter(([fn]) => fn === "pitwall_tyre_estimate_v1")).toHaveLength(0);
+
+    hook.rerender({ eventId: "event-1", teamId: "team-1" });
+
+    // Zonder de refetch zou dit pas bij de verversing van 15 s gebeuren.
+    await waitFor(() => expect(hook.result.current.bron).toBe("v1"));
+
+    const v1Calls = rpc.mock.calls.filter(([fn]) => fn === "pitwall_tyre_estimate_v1");
+    expect(v1Calls).toHaveLength(1);
+    expect(v1Calls[0][1]).toEqual({ p_event_id: "event-1", p_team_id: "team-1" });
+    // De sleutel is niet veranderd: het blijft één query op het apparaat.
     expect(tyreModelQueryKey("device-1")).toEqual(["pitwall-test", "tyre-model", "device-1"]);
 
     hook.unmount();

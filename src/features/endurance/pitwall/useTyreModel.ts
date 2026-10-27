@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   loadTyreCoverage,
@@ -18,8 +19,15 @@ import {
  * timing van een andere call.
  *
  * De v1-terugval leest event en team daarom uit de fetch zelf: de zoekfunctie
- * sluit over de actuele waarden en elke verversing (15 s) ziet ze. Wat de sleutel
- * niet kent, kan de sleutel ook niet laten verspringen.
+ * sluit over de actuele waarden en elke verversing (15 s) ziet ze. Wat de
+ * sleutel niet kent, kan de sleutel ook niet laten verspringen.
+ *
+ * De prijs van die keuze is timing: bij de eerste fetch kunnen event en team er
+ * nog niet zijn (de detail-RPC loopt), en dan slaat `loadTyreModel` de v1-stap
+ * over. Wachten op de verversing van 15 s is te lang voor een apparaat waarvan
+ * v2 stuk is. Daarom verzoekt de hook één keer om een refetch zodra event en
+ * team voor het eerst gevuld zijn én de vorige uitslag "geen model" was — nog
+ * steeds zonder de sleutel te veranderen.
  */
 export const tyreModelQueryKey = (deviceId: string | null) =>
   ["pitwall-test", "tyre-model", deviceId] as const;
@@ -55,6 +63,35 @@ export function useTyreModel(input: {
     queryFn: () => loadTyreModel(client, { deviceId: deviceId!, eventId, teamId }),
     refetchInterval: 15_000,
   });
+  // Losse velden, zodat de refetch-effect hieronder geen object als
+  // afhankelijkheid heeft.
+  const { data: modelData, isFetching: modelBezig, refetch: refetchModel } = model;
+
+  // Kwam de binding (event + team) pas ná de eerste fetch binnen? Dan heeft die
+  // fetch de v1-terugval overgeslagen, en is "geen model" het voorlopige gevolg
+  // van timing in plaats van van een leeg model. Eén refetch lost dat op; de
+  // sleutel blijft die van het apparaat, dus dit is geen tweede query.
+  const hadBinding = useRef(Boolean(eventId && teamId));
+  const refetchNodig = useRef(false);
+  useEffect(() => {
+    const gebonden = Boolean(eventId && teamId);
+    if (!gebonden) {
+      hadBinding.current = false;
+      return;
+    }
+    if (hadBinding.current) return;
+    hadBinding.current = true;
+    refetchNodig.current = true;
+  }, [eventId, teamId]);
+
+  useEffect(() => {
+    if (!refetchNodig.current || modelData == null) return;
+    // De vlag gaat er af vóór de refetch: één poging, nooit een lus.
+    refetchNodig.current = false;
+    // v2 is een volledig antwoord; alleen een mislukte v2 zonder v1-antwoord
+    // vraagt om een nieuwe poging met de binding erbij.
+    if (modelData.source === "geen" && !modelBezig) void refetchModel();
+  }, [modelData, modelBezig, refetchModel]);
 
   const coverage = useQuery({
     queryKey: tyreCoverageQueryKey,

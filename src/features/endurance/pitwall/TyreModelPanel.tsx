@@ -24,8 +24,10 @@ import {
  *   waarschuwt nergens voor.
  * - De herkomst (gemeten / laatst bekend / geschat / geen data) is een woord,
  *   geen kleur: kleur alleen is voor een deel van de lezers geen informatie.
- *   Valt dat woord samen met het graadwoord (A · gemeten), dan staat het er één
- *   keer: dezelfde mededeling twee keer is geen nadruk maar ruis.
+ *   De herkomst wint en staat er dus altijd. Het graadlabel ernaast is een
+ *   graadwoord (sterk/matig/zwak/plan) en nooit een herkomstwoord, zodat er
+ *   nooit twee woorden naast elkaar staan die hetzelfde lijken te zeggen en het
+ *   toch oneens zijn (`A · gemeten` naast `geschat`, enzovoort).
  */
 
 const provenanceTone: Record<string, string> = {
@@ -58,6 +60,10 @@ export function TyreModelPanel({
   modelLoading?: boolean;
   v2Error?: string | null;
 }) {
+  // Tijdens de eerste load is er nog geen uitslag: "geen model" is dan een
+  // conclusie die de pagina niet kan trekken. "laden" is de eerlijke staat.
+  const bronTekst = modelLoading && bron === "geen" ? "laden" : sourceLabel[bron];
+
   return (
     <section
       className="rounded-2xl border border-white/[0.07] bg-white/[0.025] px-5 py-4"
@@ -69,7 +75,9 @@ export function TyreModelPanel({
           <Disc3 className="h-3.5 w-3.5 text-gray-500" aria-hidden />
           Bandenmodel
         </h2>
-        <span className="font-mono text-[10px] text-gray-500">{sourceLabel[bron]}</span>
+        <span className="font-mono text-[10px] text-gray-500" data-pitwall-tyre-source={bronTekst === "laden" ? "laden" : bron}>
+          {bronTekst}
+        </span>
       </div>
 
       <BereikRegel estimate={estimate} loading={modelLoading} v2Error={v2Error} />
@@ -120,7 +128,7 @@ function BereikRegel({
   const herkomst = provenanceLabel(estimate.provenance);
   const bereik = estimate.rangeLaps;
   // Het label is de uitleg van de server ("één stint, ruime marge"), geen graad:
-  // de graad staat als letter met woord in de badge ernaast.
+  // de graad staat als letter met graadwoord in de badge ernaast.
   const uitleg = estimate.gradeLabel;
   const woord = gradeWord(estimate.grade);
   // `{0, 0}` is geen bereik maar een uitkomst: de band is op. "0–0 rondes"
@@ -135,6 +143,16 @@ function BereikRegel({
     : geenRondes && estimate.usable
       ? "geen"
       : "onbekend";
+  // Alleen zeggen dat het bereik voorlopig (of gemeten) is als dat bereik er
+  // staat. "voorlopig bereik" boven "rondes onbekend" waarschuwt voor een getal
+  // dat de lezer nergens ziet.
+  const ondertitel = [
+    toonBereik ? (estimate.voorlopig ? "voorlopig bereik" : "gemeten bereik") : null,
+    estimate.usable ? null : "niet bruikbaar voor een advies",
+    uitleg,
+  ]
+    .filter((deel): deel is string => deel != null)
+    .join(" · ");
 
   return (
     <div className="space-y-2">
@@ -158,11 +176,11 @@ function BereikRegel({
               <span className="text-lg font-bold text-gray-400">rondes onbekend</span>
             )}
           </p>
-          <p className="mt-0.5 text-[11px] text-gray-500">
-            {estimate.voorlopig ? "voorlopig bereik" : "gemeten bereik"}
-            {estimate.usable ? "" : " · niet bruikbaar voor een advies"}
-            {uitleg ? ` · ${uitleg}` : ""}
-          </p>
+          {ondertitel !== "" && (
+            <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-subtitle>
+              {ondertitel}
+            </p>
+          )}
           {bereik != null && !estimate.usable && (
             <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-range-raw={formatLapsRange(bereik) ?? undefined}>
               {geenRondes
@@ -176,20 +194,23 @@ function BereikRegel({
           <span
             className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-300"
             data-pitwall-tyre-grade-label={estimate.grade}
+            data-pitwall-tyre-grade-word={woord}
             data-pitwall-tyre-provenance={estimate.provenance}
           >
             {estimate.grade} · {woord}
           </span>
-          {herkomst !== woord && (
-            <span
-              className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                provenanceTone[herkomst] ?? provenanceTone["geen data"]
-              }`}
-              data-pitwall-tyre-provenance-label={estimate.provenance}
-            >
-              {herkomst}
-            </span>
-          )}
+          {/* De herkomst wint en staat er altijd, ook als de graad "sterk" is:
+              het graadwoord zegt hoe sterk de basis is, dit woord waar het getal
+              vandaan komt. Ze delen geen enkel woord, dus ze kunnen elkaar niet
+              tegenspreken. */}
+          <span
+            className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+              provenanceTone[herkomst] ?? provenanceTone["geen data"]
+            }`}
+            data-pitwall-tyre-provenance-label={estimate.provenance}
+          >
+            {herkomst}
+          </span>
         </div>
       </div>
 

@@ -18,6 +18,7 @@ import {
 } from "@/features/endurance/pitwall/devicePitwallAdapters";
 import { DecisionBand } from "@/features/endurance/pitwall/DecisionBand";
 import { TyreModelPanel } from "@/features/endurance/pitwall/TyreModelPanel";
+import { RawTelemetryDetails } from "@/features/endurance/pitwall/RawTelemetryDetails";
 import type { TyreEstimate } from "@/features/endurance/pitwall/strategy/tyreGrade";
 import { naarTyreEstimate, type TyreRpcClient } from "@/features/endurance/pitwall/strategy/tyreEstimateV2";
 import { useTyreModel } from "@/features/endurance/pitwall/useTyreModel";
@@ -53,7 +54,6 @@ const relTime = (iso?: string | null): string => {
 export default function PitwallDeviceTestPage() {
   const { user, isSuperAdmin, loading, rolesLoading } = useAuth();
   const [deviceId, setDeviceId] = useState<string | null>(null);
-  const [showRaw, setShowRaw] = useState(false);
   const queryClient = useQueryClient();
   const realtimeAt = useRef(0);
   useEffect(() => {
@@ -364,19 +364,7 @@ export default function PitwallDeviceTestPage() {
                 </div>
 
                 {/* Raw telemetry toggle for debugging */}
-                <details className="rounded-lg border border-white/10 bg-white/[0.02]">
-                  <summary
-                    className="cursor-pointer px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-400 select-none"
-                    onClick={(e) => { e.preventDefault(); setShowRaw((s) => !s); }}
-                  >
-                    {showRaw ? "Verberg" : "Toon"} raw telemetrie (JSON)
-                  </summary>
-                  {showRaw && (
-                    <pre className="max-h-[420px] overflow-auto border-t border-white/10 px-4 py-3 text-[10px] leading-relaxed text-gray-300">
-                      {JSON.stringify(v3, null, 2)}
-                    </pre>
-                  )}
-                </details>
+                <RawTelemetryDetails value={v3} />
 
                 {detailQuery.isFetching && (
                   <p className="flex items-center gap-1.5 text-[10px] text-gray-500">

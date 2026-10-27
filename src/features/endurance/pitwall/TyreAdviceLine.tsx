@@ -9,15 +9,15 @@ import { adviceLine, causeLine, gradeWord, lapsAdvice, rangeAria } from "./tyreC
  * uit `TyreEstimate` en de woorden uit `tyreCopy`. Daarmee is er één plek waar
  * een graad een getal wordt en één plek waar een getal een zin wordt.
  *
- *   A  `11–14 rondes tot 40%`   gemeten: bereik uit twee ankers
- *   B  `10–14 rondes tot 40%`   voorlopig: bereik met een brede band
- *   C  `rondes onbekend · wacht op stop`   schatting: geen tempo, geen rondes
+ *   A  `11–14 rondes tot 40%`   sterk: bereik uit drie of meer metingen
+ *   B  `10–14 rondes tot 40%`   matig: bereik met een brede band
+ *   C  `rondes onbekend · wacht op stop`   zwak: geen tempo, geen rondes
  *   D  `— · <oorzaak>`          plan: de stop komt uit het plan, niet uit de band
  *
  * Het percentage rest is hier bewust weg: het zegt niets over het aantal rondes
- * dat je ermee doet, en dat is de enige vraag aan een pitwall. Het woord
- * (gemeten/voorlopig/schatting/plan) staat één keer in het label erboven; deze
- * regel zegt het getal, niet nog een keer de herkomst.
+ * dat je ermee doet, en dat is de enige vraag aan een pitwall. Het graadwoord
+ * (sterk/matig/zwak/plan) staat één keer in het label erboven; deze regel zegt
+ * het getal, niet nog een keer de graad of de herkomst.
  *
  * De streep bij D is het antwoord "geen", niet een ontbrekend getal (plan-04 §8
  * punt 7). Kleur is nooit de enige drager: de letter en het woord staan in de kop

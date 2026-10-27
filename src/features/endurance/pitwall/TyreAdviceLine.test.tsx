@@ -47,18 +47,18 @@ describe("TyreAdviceLine", () => {
   it("draagt het betrouwbaarheidswoord als attribuut, zodat de graad leesbaar blijft", () => {
     const { container } = render(<TyreAdviceLine estimate={estimate()} />);
     const regel = container.querySelector("[data-pitwall-tyre-grade]");
-    expect(regel?.getAttribute("data-pitwall-tyre-confidence")).toBe("gemeten");
+    expect(regel?.getAttribute("data-pitwall-tyre-confidence")).toBe("sterk");
     expect(regel?.getAttribute("data-pitwall-tyre-grade")).toBe("A");
     // Het woord staat één keer in de regel: in de voorleesprefix, niet ook nog
     // eens als zichtbare tekst.
-    expect((regel?.textContent?.match(/gemeten/g) ?? []).length).toBe(1);
+    expect((regel?.textContent?.match(/sterk/g) ?? []).length).toBe(1);
   });
 
-  it("gebruikt bij B dezelfde vorm, met het woord voorlopig", () => {
+  it("gebruikt bij B dezelfde vorm, met het graadwoord matig", () => {
     const { container } = render(<TyreAdviceLine estimate={estimate({ grade: "B" })} />);
     expect(tekst(container)).toContain("11–14 rondes tot 40%");
     expect(container.querySelector("[data-pitwall-tyre-confidence]")?.getAttribute("data-pitwall-tyre-confidence")).toBe(
-      "voorlopig",
+      "matig",
     );
     // Geen tempo: bij B is de helling een schatting en geen meting.
     expect(tekst(container)).not.toContain("/r");

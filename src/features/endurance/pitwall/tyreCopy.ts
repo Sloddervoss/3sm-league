@@ -25,23 +25,31 @@ import {
 } from "./strategy/tyreGrade";
 
 /**
- * `A · gemeten`: de letter alleen is nooit genoeg, het woord doet het werk.
+ * `A · sterk`: de letter alleen is nooit genoeg, het woord doet het werk.
  *
  * Vier graden, vier woorden, en ze zijn niet inwisselbaar:
  *
- *   A  gemeten     twee ankers in dezelfde run, helling en bereik
- *   B  voorlopig   één anker of de live reeks: een getal met een brede band
- *   C  schatting   alleen een bereik, geen tempo
- *   D  plan        geen bandenmeting; de stop komt uit het plan (tank/afstand)
+ *   A  sterk   drie of meer gemeten stints: een smalle band
+ *   B  matig   twee gemeten stints: een bredere band, nog geen belofte
+ *   C  zwak    één gemeten stint: alleen een bereik, geen tempo
+ *   D  plan    geen bandenmeting; de stop komt uit het plan (tank/afstand)
+ *
+ * Het graadwoord zegt hoe sterk de basis is, niet waar het getal vandaan komt.
+ * Die herkomst heeft zijn eigen vier woorden (`provenanceLabel` in
+ * `tyreEstimateV2`: gemeten, laatst bekend, geschat, geen data). De twee
+ * woordensets delen daarom bewust geen enkel woord: een badge "A · gemeten"
+ * naast de herkomst "geschat" zei twee keer iets anders over hetzelfde getal,
+ * en de lezer moest raden welke van de twee won. Nu wint de herkomst — die
+ * staat er altijd bij — en zegt de graad alleen nog hoe sterk hij is.
  */
 export function gradeWord(grade: TyreGrade): string {
   switch (grade) {
     case "A":
-      return "gemeten";
+      return "sterk";
     case "B":
-      return "voorlopig";
+      return "matig";
     case "C":
-      return "schatting";
+      return "zwak";
     default:
       return "plan";
   }
@@ -104,8 +112,8 @@ export function lapsAdvice(estimate: TyreEstimate): TyreLapsAdvice {
  * niets weg: wat ontbreekt wordt "rondes onbekend", niet een nul.
  *
  * De vorm is overal dezelfde: een bereik in rondes, eventueel met de grens
- * erachter. Het woord (gemeten/voorlopig/schatting/plan) staat in het label
- * erboven, zodat dezelfde mededeling niet twee keer in hetzelfde blok staat.
+ * erachter. Het graadwoord (sterk/matig/zwak/plan) staat in het label erboven,
+ * zodat dezelfde mededeling niet twee keer in hetzelfde blok staat.
  */
 export function adviceLine(estimate: TyreEstimate): string {
   switch (estimate.grade) {

@@ -129,7 +129,7 @@ describe("DecisionBand", () => {
   it("toont de bandenrij met de graad, het woord en het bereik in rondes", () => {
     const { container } = render(<DecisionBand advice={advice({ tyres: tyres(), tyreEstimate: estimate() })} />);
     expect(screen.getByText("wisselen bij stop")).toBeInTheDocument();
-    expect(screen.getByText("A · gemeten")).toBeInTheDocument();
+    expect(screen.getByText("A · sterk")).toBeInTheDocument();
     // Geen percentage rest meer: het bereik in rondes is de mededeling.
     expect(container.querySelector("[data-pitwall-tyre-grade='A']")?.textContent).toContain(
       "11–14 rondes tot 40%",
