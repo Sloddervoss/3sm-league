@@ -5,6 +5,8 @@ Migratie: `supabase/migrations/20261028090000_tyre_stint_model.sql`
 Rollback: `supabase/rollback/20261028090000_tyre_stint_model.rollback.sql`
 Correctie: `supabase/migrations/20261028120000_tyre_stint_model_fixes.sql`
 Rollback correctie: `supabase/rollback/20261028120000_tyre_stint_model_fixes.rollback.sql`
+Correctie 2: `supabase/migrations/20261028140000_tyre_stint_model_span_and_context.sql`
+Rollback correctie 2: `supabase/rollback/20261028140000_tyre_stint_model_span_and_context.rollback.sql`
 
 ## Waarom
 
@@ -81,15 +83,15 @@ returns jsonb
 | Sleutel | Betekenis |
 |---|---|
 | `grade` / `grade_label` | A (3+ stints met een gemeten helling), B (2), C (1), D (0) |
-| `usable` | het getal mag als getal in de pitwall: er is een helling, graad A of B, een bereik, wear boven de drempel én een meetbasis van minstens acht rondes |
-| `voorlopig` | nog niet bevestigd: geen getal, geen gemeten setgrens, of een basis korter dan 8 rondes |
+| `usable` | het getal mag als getal in de pitwall: er is een helling, graad A of B, een bereik, wear boven de drempel én een meetbasis van minstens acht rondes **van de hoek waar het getal vandaan komt** |
+| `voorlopig` | nog niet bevestigd: geen getal, geen gemeten setgrens, of een basis korter dan 8 rondes van die hoek |
 | `stints` | aantal stints met een gemeten helling (waarop de graad rust) |
 | `stints_totaal` | alle blokken van dit apparaat, ook de blokken zonder helling |
 | `wear_per_lap` | procentpunt per ronde van de zwakste hoek, positief = slijt; NULL zonder bruikbare helling |
 | `zwakste_hoek` | hoek waarop die helling rust |
 | `range_laps` | `{low, high}` resterende rondes tot 40 % wear, marge naar graad én meetbasis: A ±10 %, B ±25 %, C de helft tot het dubbele bij acht rondes — breder bij een kortere basis, smaller bij een langere; NULL zonder helling |
-| `basis` | `{car_key, track_key, track_temp_c, rondes_in_basis, set_number, set_bron, lap_from, lap_to, zwakste_hoek}` — `rondes_in_basis` is de meetbasis, niet de stintlengte |
-| `provenance` | `measured` (eigen helling met teller als setgrens), `estimated` (helling wel gemeten, setgrens afgeleid of auto/baan wijkt af), `last_known` (alleen een wear-stand), `unavailable` (geen stint) |
+| `basis` | `{car_key, track_key, track_temp_c, rondes_in_basis, rondes_in_stint, set_number, set_bron, lap_from, lap_to, zwakste_hoek}` — `rondes_in_basis` is de meetbasis van het getal (de span van de gebruikte hoek), `rondes_in_stint` de span van de hele stint ernaast |
+| `provenance` | `measured` (eigen helling met teller als setgrens), `estimated` (helling wel gemeten maar setgrens afgeleid, of auto/baan van de basis, de context of de wear-stand wijkt af), `last_known` (alleen een wear-stand die bij de basis past), `unavailable` (geen stint) |
 | `wear_now`, `wear_now_car_key`, `wear_now_track_key`, `threshold_pct` | de wear-stand waar het bereik op rust (met de auto en baan van die meting), en de drempel (40) |
 
 De basisstint is de meest recente stint met een gemeten helling over minstens
@@ -120,6 +122,57 @@ vervangt alleen de view en de twee RPC's; de brontabel, de index en
 | 7 | `wear_now` kwam uit de nieuwste meting, ook van een andere auto of baan. | `wear_now` krijgt voorrang voor een meting die bij de basis past; wijkt auto of baan af, dan wordt `provenance` `estimated`. |
 | 8 | De windows ordenden alleen op `lap_number`. | `captured_at` staat in elke window-ordening (en in de array-orders), zodat de volgorde deterministisch is. |
 
+## Correctie 2 (20261028140000)
+
+De herkeuring vond nog twee rekenkundige gaten. Beide zaten in
+`pitwall_tyre_estimate_v2()`; de view, `tyre_coverage()` en de brontabel zijn
+niet gewijzigd.
+
+| # | Fout in 120000 | Correctie |
+|---|---|---|
+| 1 | `usable` en de bandbreedte keken naar `wear_span` van de hele stint, terwijl `wear_per_lap` uit één hoek komt. Een hoek die maar twee rondes meeliep leverde zo een "basis van negen rondes". | `basis.rondes_in_basis` is nu de span van de gebruikte hoek (de echte noemer) en `basis.rondes_in_stint` staat ernaast. `usable`, `voorlopig` en `v_schaal` hangen aan de hoekspan: onder acht rondes van die hoek geen bruikbaar getal. De hoekkeuze zelf is niet veranderd — `zwakste_hoek` blijft de steilste hoek, dus tabel en getal lopen niet uiteen. |
+| 2 | In het last_known-pad werd `wear_now` niet tegen de basisauto/-baan en de context gecontroleerd: basis auto A met de nieuwste wear-meting uit auto B bleef `last_known`. | Dezelfde auto/baancontrole geldt nu voor beide paden; wijkt de wear-rij of de laatst bekende context af van de basis, dan wordt de herkomst `estimated`. Ook de voorkeur voor een wear-rij die bij de basisauto past werkt nu in het last_known-pad (die hing aan `v_best` en deed daar niets). |
+
+**Getallen op de echte data (ongewijzigd).** Op productie heeft elke hoek
+dezelfde span als de stint, dus de nieuwe toets verandert daar niets:
+
+| Apparaat | grade | usable | voorlopig | provenance | wear_per_lap | range_laps | basis (hoek / stint) |
+|---|---|---|---|---|---|---|---|
+| CAT-PC `e90ad2ca` | A | false | true | measured | 0,4833 | 88–153 | 3 / 3 |
+| PCBART `8ea3fe36` | A | true | true | estimated | 0,3429 | 150–169 | 14 / 14 |
+| DESKTOP `7e748fad` | C | false | true | measured | 0,0958 | 393–788 | 36 / 36 |
+| DESKTOP-GR4NN00 `81222914` | D | false | true | unavailable | null | null | — |
+
+**Synthetische randen.** `supabase/tests/20261028140000_tyre_stint_model_span_and_context.sql`
+draait in één transactie met `ROLLBACK` en beslist met 17 assertions. Alles PASS:
+
+- FR zakt 5 pp tussen ronde 1 en 2 en wordt daarna niet gemeten, FL/RL/RR meten
+  negen rondes: view `wear_span 9` / `wear_span_fr 1`, `wear_per_lap 5,0000`,
+  `zwakste_hoek fr`; schatting `rondes_in_basis 1`, `rondes_in_stint 9`,
+  `usable false`, `voorlopig true`. Vóór de fix was dit `rondes_in_basis 9` met
+  `usable true` — de test faalde daar ook op de oude definitie;
+- dezelfde data met een basis van 11 rondes op de gebruikte hoek: `usable true`,
+  `voorlopig false`, bereik met `low < high`;
+- de grens zelf: 7 rondes van de gebruikte hoek is niet bruikbaar, 8 wel;
+- last_known-pad, basis auto A met de wear-meting uit auto B: `provenance
+  estimated` (was `last_known`, apart op de oude definitie bevestigd), geen
+  getal en geen bereik;
+- passende wear-meting bij de basisauto: `last_known` blijft staan;
+- alleen de context wijkt af (nieuwere rijen van een andere auto zonder wear):
+  ook `estimated`, terwijl `wear_now` uit de basisauto komt.
+
+Na afloop: 113 rondes, 3 apparaten, 8 stints (alle acht met een helling), 0
+rijen met een `syn-`-sessie.
+
+**Rechten.** `anon` krijgt `permission denied`; zonder `sub`-claim `42501
+Authentication required`; een eigenaar zonder beheerdersrol die een vreemd
+apparaat opvraagt `42501 Permission denied`; `p_device_id = null` geeft `22023`.
+`security definer` en `stable` zijn bij het vervangen behouden.
+
+**Rollback geoefend.** De rollback van 140000 is op productie gedraaid (functie
+terug op de 120000-definitie, daarna opnieuw toegepast) en gaf daarna weer
+dezelfde getallen als de tabel hierboven.
+
 ## Toepassen
 
 ```bash
@@ -127,6 +180,9 @@ cat supabase/migrations/20261028090000_tyre_stint_model.sql \
   | ssh 3sm-docker "docker exec -i supabase-db psql -U supabase_admin -d postgres -X -q -v ON_ERROR_STOP=1"
 
 cat supabase/migrations/20261028120000_tyre_stint_model_fixes.sql \
+  | ssh 3sm-docker "docker exec -i supabase-db psql -U supabase_admin -d postgres -X -q -v ON_ERROR_STOP=1"
+
+cat supabase/migrations/20261028140000_tyre_stint_model_span_and_context.sql \
   | ssh 3sm-docker "docker exec -i supabase-db psql -U supabase_admin -d postgres -X -q -v ON_ERROR_STOP=1"
 ```
 
@@ -145,6 +201,11 @@ cat supabase/rollback/20261028120000_tyre_stint_model_fixes.rollback.sql \
   | ssh 3sm-docker "docker exec -i supabase-db psql -U supabase_admin -d postgres -X -q -v ON_ERROR_STOP=1"
 ```
 
+```bash
+cat supabase/rollback/20261028140000_tyre_stint_model_span_and_context.rollback.sql \
+  | ssh 3sm-docker "docker exec -i supabase-db psql -U supabase_admin -d postgres -X -q -v ON_ERROR_STOP=1"
+```
+
 De rollback van 090000 verwijdert alleen wat die migratie aanmaakte (twee
 functies, de view, de index). `simhub_tyre_lap_samples`,
 `pitwall_tyre_estimate_v1`, `tyre_rounds_for_device` en `tyre_data_coverage`
@@ -155,6 +216,10 @@ de fouten). Omdat de gecorrigeerde view vijf kolommen meer heeft en
 `create or replace` geen kolommen kan laten vallen, gaan de twee RPC's en de
 view eerst weg en komen daarna in de oude vorm terug. Daarna is opnieuw
 toepassen van 20261028120000 genoeg om weer bij te zijn.
+
+De rollback van 140000 doet hetzelfde voor alleen `pitwall_tyre_estimate_v2()`:
+die functie is de enige die deze migratie raakt, dus de view en het
+dekkingsoverzicht blijven staan.
 
 ## Getest op productie (2026-10-28)
 
@@ -248,5 +313,11 @@ definitie, 8 stints en 113 rondes. Daarna is 20261028120000 opnieuw toegepast
   rondes, breder bij een kortere basis) en kan boven een race-afstand uitkomen.
   Dat is de meting, niet een fout: bij één stint is er geen smallere band te
   verdedigen.
+- `basis.rondes_in_basis` is de span van de gebruikte hoek, niet van de stint.
+  Bij een hoek die maar kort meeliep is dat bewust klein (soms 1) en blijft
+  `usable` false; `rondes_in_stint` laat zien dat de stint zelf langer was.
+- Een `wear_now` zonder passende basis (andere auto of baan, of een afwijkende
+  context) heet `estimated`, ook als er geen helling is. `last_known` betekent
+  daarmee strikt "de laatste stand van dezelfde auto en baan".
 - De view is niet aan `authenticated` gegrond. Een nieuwe lezer hoort via een
   `security definer`-RPC met eigendomscheck, niet met een directe grant.
