@@ -93,6 +93,11 @@ namespace ThreeSM.EnduranceConnector
         public const double SteeringRadMax = 30.0;
         public const double AccelMps2Min = -200.0;
         public const double AccelMps2Max = 200.0;
+        // Wielsnelheid en remleidingdruk: de grenzen die ook de server-validator hanteert.
+        public const double WheelSpeedMpsMin = 0.0;
+        public const double WheelSpeedMpsMax = 200.0;
+        public const double BrakePressureBarMin = 0.0;
+        public const double BrakePressureBarMax = 250.0;
         public const double LapDistancePctMin = 0.0;
         public const double LapDistancePctMax = 1.0;
         public const double SessionTimeSecondsMin = 0.0;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace ThreeSM.EnduranceConnector
@@ -30,12 +30,32 @@ namespace ThreeSM.EnduranceConnector
         public int SendIntervalMilliseconds = 1000;
         // Enable only after the optional vehicle parser is deployed. Old receivers
         // reject new fields; default off also preserves existing installations.
-        public bool ExtendedPitwallTelemetryEnabled = false;
+        public bool ExtendedPitwallTelemetryEnabled = true;
+
+        // 0.8.0: directe lezer van de iRacing-shared-memory (Local\IRSDKMemMapFileName)
+        // voor de kanalen die SimHub's GameRawData niet doorgeeft: wielsnelheid, remdruk
+        // per wiel, stuurhoek en lat/long-versnelling. Read-only, geen ReadProcessMemory
+        // en geen tweede programma.
+        //
+        // Null = de sleutel stond niet in het configuratiebestand. Dat betekent AAN,
+        // zodat een bestaande installatie zonder migratie hetzelfde gedrag krijgt als
+        // een verse. false = de gebruiker heeft hem bewust uitgezet.
+        public bool? IrSdkDirectReadEnabled;
+
+        /// <summary>Effectieve stand van de directe lezer (ontbrekende sleutel = aan).</summary>
+        public bool IrSdkDirectRead { get { return IrSdkDirectReadEnabled != false; } }
 
         // 0.7.0: optioneel root-blok `tyres` (12 wear-zones, karkas, sets, omgeving).
         // Zelfde regel als hierboven: pas aanzetten als de relay/validator het blok kent,
         // want een oude receiver weigert een onbekende root-key met 422. Default uit.
         public bool TyreTelemetryEnabled = true;
+
+        // 0.7.1: het bandenblok hoeft niet elk frame mee. De plugin stuurt het opnieuw zodra
+        // de inhoud verandert en anders één keer per dit interval (hartslag). Zo blijft de
+        // pitwall bij en gaat er niet 1× per seconde een blok van ~0,7 kB over de lijn.
+        // 0 of negatief = de standaardwaarde (30 s), zodat een oud configuratiebestand
+        // zonder deze sleutel hetzelfde gedrag krijgt als een verse installatie.
+        public int TyreSnapshotIntervalMilliseconds = 30000;
 
         // Research-opname (lokaal, standaard uit). Schrijft JSONL naar deze pc en verlaat
         // het apparaat nooit vanzelf; exporteren is een expliciete gebruikersactie.

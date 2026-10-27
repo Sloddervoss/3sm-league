@@ -21,6 +21,7 @@
     <Compile Include="..\3SM.EnduranceConnector\ResearchEvents.cs" Link="plugin\ResearchEvents.cs" />
     <Compile Include="..\3SM.EnduranceConnector\ResearchIdentity.cs" Link="plugin\ResearchIdentity.cs" />
     <Compile Include="..\3SM.EnduranceConnector\ResearchContextSampler.cs" Link="plugin\ResearchContextSampler.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\IrSdkChannels.cs" Link="plugin\IrSdkChannels.cs" />
     <Compile Include="..\3SM.EnduranceConnector\ResearchRecorder.cs" Link="plugin\ResearchRecorder.cs" />
   </ItemGroup>
 </Project>

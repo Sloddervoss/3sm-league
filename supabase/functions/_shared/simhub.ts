@@ -282,6 +282,13 @@ export type NormalizedTelemetryEnvelope = {
   };
   /** 0.4.1 additive, bounded, null-tolerant opponent snapshot. */
   opponents: V3Opponent[] | null;
+  /**
+   * Optioneel voertuigblok. Sinds de directe-SDK-lezer bevat het naast de
+   * SimHub-kanalen ook `wheelSpeedKph` en `brakeLinePressureBar` per hoek, plus
+   * `steeringWheelAngleDeg`, `latAccelG` en `longAccelG`. Die vijf zijn
+   * optioneel; zonder een connector met SDK-lezer blijven ze null en houdt een
+   * 0.7.x-payload exact dezelfde vorm. Zie vehicleTelemetry.ts voor de bereiken.
+   */
   vehicle?: VehicleTelemetry | null;
   /**
    * S1 (bandenmeting): optioneel root-blok naast `vehicle`. Alles nullable, geen

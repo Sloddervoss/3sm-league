@@ -7,11 +7,25 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- CA1416: de gedeelde lezer opent de iRacing-map alleen op Windows; op andere
+         platformen gooit OpenExisting PlatformNotSupportedException, die de lezer zelf
+         afvangt (SDK-14 test dat hier op Linux). De net48-plugin kent deze analyzer niet. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\3SM.EnduranceConnector\DiagnosticsClient.cs" Link="DiagnosticsClient.cs" />
     <Compile Include="..\3SM.EnduranceConnector\UpdaterStateStore.cs" Link="UpdaterStateStore.cs" />
     <Compile Include="..\3SM.EnduranceConnector\SessionTelemetryReader.cs" Link="SessionTelemetryReader.cs" />
     <Compile Include="..\3SM.EnduranceConnector\ConnectorSettings.cs" Link="ConnectorSettings.cs" />
+    <!-- ConnectorSettings verwijst naar FlagSettings/FlagPreset; dat bestand was hier
+         niet gelinkt, waardoor deze harness niet bouwde. FlagModels is SimHub-vrij. -->
+    <Compile Include="..\3SM.EnduranceConnector\FlagModels.cs" Link="FlagModels.cs" />
+    <!-- 0.7.1: bandenhek + vingerafdruk. Beide bestanden zijn SimHub-vrij. -->
+    <Compile Include="..\3SM.EnduranceConnector\TyrePublishGate.cs" Link="TyrePublishGate.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\TelemetryContractsV3.cs" Link="TelemetryContractsV3.cs" />
+    <!-- 0.8.0: directe iRacing-SDK-lezer. Puur op bytes, dus hier met een synthetische
+         memory-image te testen (geen SimHub-DLL, geen iRacing nodig). -->
+    <Compile Include="..\3SM.EnduranceConnector\IrSdkChannels.cs" Link="IrSdkChannels.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\IrSdkMemoryReader.cs" Link="IrSdkMemoryReader.cs" />
   </ItemGroup>
 </Project>

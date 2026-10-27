@@ -24,7 +24,10 @@ namespace ThreeSM.EnduranceConnector
         VirtualSafetyCar = 1u << 11,
         FullCourseYellow = 1u << 12,
         WhiteSlow = 1u << 13,
-        WhiteFinal = 1u << 14
+        WhiteFinal = 1u << 14,
+        // 0.7.1: meatball (zwart/oranje) = iRacing SessionFlags.servicible. De validator
+        // kent "meatball" al in raceFlagValues; de vlag werd alleen nooit doorgegeven.
+        Meatball = 1u << 15
     }
 
     public enum FlagSeverity
@@ -156,6 +159,8 @@ namespace ThreeSM.EnduranceConnector
         public bool ShowBlack = true;
         public bool ShowOrange = true;
         public bool ShowDebris = true;
+        // 0.7.1: meatball standaard aan (ontbrekende sleutel in een oud profiel = aan).
+        public bool ShowMeatball = true;
         public bool ShowSafetyCar = true;
         public bool ShowVirtualSafetyCar = true;
         public bool ShowFullCourseYellow = true;
@@ -238,7 +243,7 @@ namespace ThreeSM.EnduranceConnector
             FollowUniversal = o.FollowUniversal;
             ShowGreen = o.ShowGreen; ShowYellow = o.ShowYellow; ShowDoubleYellow = o.ShowDoubleYellow; ShowRed = o.ShowRed;
             ShowBlue = o.ShowBlue; ShowWhite = o.ShowWhite; ShowCheckered = o.ShowCheckered; ShowBlack = o.ShowBlack;
-            ShowOrange = o.ShowOrange; ShowDebris = o.ShowDebris; ShowSafetyCar = o.ShowSafetyCar;
+            ShowOrange = o.ShowOrange; ShowDebris = o.ShowDebris; ShowMeatball = o.ShowMeatball; ShowSafetyCar = o.ShowSafetyCar;
             ShowVirtualSafetyCar = o.ShowVirtualSafetyCar; ShowFullCourseYellow = o.ShowFullCourseYellow;
             ShowWhiteSlowCar = o.ShowWhiteSlowCar; ShowWhiteFinalLap = o.ShowWhiteFinalLap;
             Brightness = o.Brightness; IdleScreen = o.IdleScreen; IdleAnimationColour = o.IdleAnimationColour;
@@ -465,6 +470,8 @@ namespace ThreeSM.EnduranceConnector
         public bool ShowBlack = true;
         public bool ShowOrange = true;
         public bool ShowDebris = true;
+        // 0.7.1: meatball standaard aan (ontbrekende sleutel in een oud profiel = aan).
+        public bool ShowMeatball = true;
         public bool ShowSafetyCar = true;
         public bool ShowVirtualSafetyCar = true;
         public bool ShowFullCourseYellow = true;
