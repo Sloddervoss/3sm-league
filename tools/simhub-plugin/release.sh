@@ -45,7 +45,7 @@ if [ -z "$SKIP_BUILD" ]; then
   # Let op: deze lijst moet ALLE Compile-items uit de csproj dekken die op de
   # bouw-PC nodig zijn. Ontbreekt er een, dan bouwt Beest tegen een oude bron
   # en lijkt de release groen terwijl de wijziging er niet in zit.
-  scp "$SCRIPT_DIR"/3SM.EnduranceConnector/{AssemblyInfo.cs,ConnectorSettings.cs,EnduranceConnectorPlugin.cs,SettingsControl.cs,TelemetryContracts.cs,TelemetryContractsV3.cs,OverlayContracts.cs,OverlayClient.cs,OverlayPropertyPublisher.cs,OverlayTemplateInstaller.cs,FlagModels.cs,FlagPanelRenderer.cs,FlagService.cs,FlagPropertyPublisher.cs,FlagProfileInstaller.cs,SimHubLedProfileHost.cs,SimHubDeviceLister.cs,DiagnosticsClient.cs,SessionTelemetryReader.cs,TrackIdentityReader.cs,UpdaterStateStore.cs,UiKit.cs,Theme.cs,3SM.EnduranceConnector.csproj} \
+  scp "$SCRIPT_DIR"/3SM.EnduranceConnector/{AssemblyInfo.cs,ConnectorSettings.cs,DiagnosticsClient.cs,EnduranceConnectorPlugin.cs,FlagModels.cs,FlagService.cs,IrSdkChannels.cs,IrSdkMemoryReader.cs,OverlayClient.cs,OverlayContracts.cs,OverlayPropertyPublisher.cs,OverlayTemplateInstaller.cs,RawChannelReader.cs,ResearchContextSampler.cs,ResearchEvents.cs,ResearchIdentity.cs,ResearchJsonl.cs,ResearchObservations.cs,ResearchProvenance.cs,ResearchQueue.cs,ResearchRecorder.cs,SessionTelemetryReader.cs,SettingsControl.cs,SimHubDeviceLister.cs,SimHubLedProfileHost.cs,TelemetryContracts.cs,TelemetryContractsV3.cs,Theme.cs,TrackIdentityReader.cs,TyrePublishGate.cs,TyreSnapshotTracker.cs,UiKit.cs,UpdaterStateStore.cs,3SM.EnduranceConnector.csproj} \
     "vdevo@192.168.50.119:$WS_WIN/3SM.EnduranceConnector/"
   # Het overlay-dashboard wordt als EmbeddedResource meegebouwd; zonder deze
   # map bouwt de plugin zonder .djson en installeert hij niets.
@@ -55,7 +55,7 @@ if [ -z "$SKIP_BUILD" ]; then
     "vdevo@192.168.50.119:$WS_WIN/3SM.EnduranceConnector/Assets/"
   scp "$SCRIPT_DIR"/3SM.EnduranceConnector.Updater/{AssemblyInfo.cs,Program.cs,3SM.EnduranceConnector.Updater.csproj} \
     "vdevo@192.168.50.119:$WS_WIN/3SM.EnduranceConnector.Updater/"
-  scp "$HOME/.hermes/scripts/3sm-build-plugin.ps1" \
+  scp "$SCRIPT_DIR/build-plugin.ps1" \
     "vdevo@192.168.50.119:C:/Users/vdevo/3sm/build-plugin.ps1"
 
   echo "Plugin builden op Beest..."
