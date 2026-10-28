@@ -86,12 +86,18 @@ export interface TyreBasis {
    */
   priorRate: number | null;
   /**
-   * `basis.prior_n` is géén aantal stints maar `n_eff`: de meetbasis in rondes
-   * die het cijfer draagt (`n/(n+8)` gewogen). Daarom zegt de regel op het
-   * scherm "rondes" en nooit "stints" — het aantal stints staat alleen in de
-   * leesbare opbouw van de server (`priorBron`).
+   * `basis.prior_n` is `n_eff`: de meetbasis in rondes die het cijfer draagt
+   * (`n/(n+8)` gewogen). Dat is een gewogen getal en dus geen aantal rondes dat
+   * iemand kan natellen: 1,9 betekent niet "twee rondes". Sinds migratie
+   * 20261029120000 stuurt de server daarom `prior_rondes` (de echte rondes) en
+   * `prior_stints` (het aantal stints) mee. `priorN` blijft de terugval voor een
+   * server die die velden nog niet kent.
    */
   priorN: number | null;
+  /** De echte rondes onder de prior (`basis.prior_rondes`), of null als de server zweeg. */
+  priorRondes: number | null;
+  /** Het aantal stints onder de prior (`basis.prior_stints`), of null. */
+  priorStints: number | null;
   /** De fijnste trap die meedeed (`basis.prior_level`): exact/auto/circuit/algemeen. */
   priorLevel: string | null;
   /**
@@ -260,6 +266,8 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
       bron: priorBronOf(get(basisRuw, "bron")),
       priorRate: num(get(basisRuw, "prior_rate")),
       priorN: num(get(basisRuw, "prior_n")),
+      priorRondes: num(get(basisRuw, "prior_rondes")),
+      priorStints: num(get(basisRuw, "prior_stints")),
       priorLevel: levelOf(get(basisRuw, "prior_level")),
       priorBron: text(get(basisRuw, "prior_bron")),
     },
@@ -275,9 +283,10 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
 /* ──────────────── waar het getal vandaan komt, in gewone taal ──────────────── */
 
 /**
- * Onder hoeveel stints een voorkennis een grove schatting is. Drie is de grens
+ * Onder hoeveel rondes een voorkennis een grove schatting is. Drie is de grens
  * die het model zelf ook aanhoudt voor graad A; daaronder is één tegenvaller
- * genoeg om het bereik te laten kantelen.
+ * genoeg om het bereik te laten kantelen. De grens gaat over rondes, niet over
+ * stints: één stint van drie rondes is nog steeds een dunne basis.
  */
 const DUNNE_BASIS = 3;
 
@@ -291,13 +300,47 @@ export interface TyrePriorUitleg {
 }
 
 /**
- * Rondes met een decimaal eronder de tien, zonder decimaal erboven: bij een dunne
- * basis doet die ene tiende ertoe, bij veertig rondes is het ruis.
+ * Het aantal rondes zoals het op het scherm komt, met het woord erbij.
+ *
+ * Het woord volgt het getal dat de lezer ziet en niet het ruwe getal: 0,96 rondt
+ * af op "1" en heet dan "1 ronde". "1 rondes" is geen afrondingsdetail maar een
+ * taalfout, en die maakt de rest van de regel ook ongeloofwaardig.
  */
-function rondesTekst(value: number): string {
-  if (value >= 10) return String(Math.round(value));
-  const eenDecimaal = value.toFixed(1).replace(".", ",");
-  return eenDecimaal.endsWith(",0") ? String(Math.round(value)) : eenDecimaal;
+function rondesTekst(value: number): { aantal: string; woord: string } {
+  const tienden = Math.round(value * 10) / 10;
+  const aantal =
+    tienden >= 10
+      ? String(Math.round(tienden))
+      : tienden.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  return { aantal, woord: aantal === "1" ? "ronde" : "rondes" };
+}
+
+/** `1 stint` of `7 stints`; dezelfde enkelvoudregel als bij de rondes. */
+function stintsTekst(value: number): string {
+  const aantal = String(Math.round(value));
+  return aantal === "1" ? "1 stint" : `${aantal} stints`;
+}
+
+/**
+ * De opbouw van de server is geschreven voor de ontwikkelaar, niet voor de pit.
+ * De migratie van 20261029090000 noemt de fijnste trap "eigen data: deze auto op
+ * dit circuit", terwijl de regel erboven zegt dat er nog geen eigen meting is;
+ * sinds 20261029120000 heet die trap neutraal "deze auto op dit circuit", maar
+ * een server die nog niet is bijgewerkt stuurt de oude tekst. Die tegenstelling
+ * is erger dan geen titeltip, dus het eigendomswoord gaat eruit; wat overblijft
+ * zijn de aantallen en de plek. "1 stints" en "1 rondes" worden hier ook
+ * enkelvoud — dezelfde tekst staat als titeltip naast de regel.
+ */
+function opschonenOpbouw(tekst: string): string {
+  return tekst
+    .split(" · ")
+    .map((deel) =>
+      deel
+        .replace(/^\s*eigen data:\s*/i, "")
+        .replace(/\b1 stints\b/g, "1 stint")
+        .replace(/\b1 rondes\b/g, "1 ronde"),
+    )
+    .join(" · ");
 }
 
 /**
@@ -312,6 +355,18 @@ function modelBronDetail(estimate: TyreEstimateV2): string | null {
   return label;
 }
 
+/** De aantallen als titeltip, voor een server die geen leesbare opbouw meestuurde. */
+function aantallenDetail(estimate: TyreEstimateV2): string | null {
+  const { priorStints, priorRondes } = estimate.basis;
+  const delen: string[] = [];
+  if (priorStints != null && priorStints > 0) delen.push(stintsTekst(priorStints));
+  if (priorRondes != null && priorRondes > 0) {
+    const telling = rondesTekst(priorRondes);
+    delen.push(`${telling.aantal} ${telling.woord}`);
+  }
+  return delen.length === 0 ? null : delen.join(", ");
+}
+
 /**
  * Eén regel in gewone taal: waar komt dit cijfer vandaan?
  *
@@ -322,21 +377,30 @@ function modelBronDetail(estimate: TyreEstimateV2): string | null {
  * `prior_n`, geen `basis.bron`, geen Engels: de lezer zit in de pit, niet in de
  * database.
  *
- * Waarom rondes en geen stints: `basis.prior_n` is `n_eff`, de gewogen meetbasis
- * in rondes. Het aantal stints staat alleen in de leesbare opbouw van de server
- * (`basis.prior_bron`), en die is te lang voor deze regel — hij gaat mee als
- * `detail`, als titeltip.
+ * Waarom `prior_rondes` en niet `prior_n`: `prior_n` is `n_eff`, de gewogen
+ * meetbasis. Die 1,9 is een rekengetal dat niemand kan natellen en dat de
+ * waarschuwing "minder dan drie rondes" ten onrechte aanzet bij vijf echte
+ * rondes. De server stuurt sinds migratie 20261029120000 de echte rondes en het
+ * aantal stints mee; alleen als die velden ontbreken valt de regel terug op
+ * `prior_n`.
  *
  * De waarschuwing eronder is een tweede zin en geen bijvoeglijk naamwoord in de
  * eerste: onder de drie rondes is het getal een grove schatting, en dat is iets
  * anders dan "gebaseerd op twee rondes".
  */
 export function priorUitleg(estimate: TyreEstimateV2): TyrePriorUitleg {
-  const { bron, priorN } = estimate.basis;
+  const { bron, priorN, priorRondes } = estimate.basis;
   if (bron == null || bron === "eigen") return { regel: null, waarschuwing: null, detail: null };
 
-  const rondes = priorN == null ? null : `${rondesTekst(priorN)} ${priorN === 1 ? "ronde" : "rondes"}`;
-  const noemer = rondes == null ? "een schatting van andere rijders" : `${rondes} van andere rijders`;
+  // De echte rondes als de server ze stuurt; `prior_n` is de terugval. De
+  // migratie stuurt 0 als er geen pool is (coalesce), en nul rondes is geen
+  // meting: dan telt de gewogen basis, net als bij een ontbrekend veld.
+  const rondes = priorRondes != null && priorRondes > 0 ? priorRondes : priorN;
+  const telling = rondes == null ? null : rondesTekst(rondes);
+  const noemer =
+    telling == null
+      ? "een schatting van andere rijders"
+      : `${telling.aantal} ${telling.woord} van andere rijders`;
 
   const zin = {
     exact: `Nog geen eigen meting — gebaseerd op ${noemer} met deze auto op dit circuit`,
@@ -345,14 +409,15 @@ export function priorUitleg(estimate: TyreEstimateV2): TyrePriorUitleg {
     algemeen: `Nog geen eigen meting — gebaseerd op ${noemer}, van andere auto's en circuits`,
   }[bron];
 
-  const dun = priorN != null && priorN < DUNNE_BASIS;
+  const dun = rondes != null && rondes < DUNNE_BASIS;
+  const opbouw = modelBronDetail(estimate) ?? estimate.basis.priorBron;
 
   return {
     regel: zin,
     waarschuwing: dun
       ? "Grove schatting: hier liggen minder dan drie rondes van andere rijders onder. Zie het als een richting, niet als een belofte."
       : null,
-    detail: modelBronDetail(estimate) ?? estimate.basis.priorBron,
+    detail: opbouw != null ? opschonenOpbouw(opbouw) : aantallenDetail(estimate),
   };
 }
 
@@ -381,6 +446,8 @@ export function vanV1(estimate: TyreEstimate): TyreEstimateV2 {
       bron: null,
       priorRate: null,
       priorN: null,
+      priorRondes: null,
+      priorStints: null,
       priorLevel: null,
       priorBron: null,
     },

@@ -653,15 +653,22 @@ describe("herkomst van het bandengetal", () => {
  *
  * De vijf bronnen zijn die van de migratie (`basis.bron`): eigen, exact, auto,
  * circuit, algemeen. `basis.prior_n` is `n_eff` — de gewogen meetbasis in
- * rondes, geen aantal stints — dus zegt de regel "rondes"; het aantal stints
- * staat in de leesbare opbouw van de server, die als titeltip meegaat.
+ * rondes, geen aantal stints — en dus alleen de terugval; de echte aantallen
+ * komen uit `basis.prior_rondes` en `basis.prior_stints` (migratie
+ * 20261029120000). De regel zegt "rondes"; het aantal stints staat in de
+ * leesbare opbouw van de server, die als titeltip meegaat.
  */
 describe("waar het bandencijfer vandaan komt", () => {
   /** Een graad B met bereik, zodat er ook echt een getal staat om uit te leggen. */
   const metBron = (
     bron: "eigen" | "exact" | "auto" | "circuit" | "algemeen",
     priorN: number | null,
-    extra: { modelBron?: string | null; priorBron?: string | null } = {},
+    extra: {
+      modelBron?: string | null;
+      priorBron?: string | null;
+      priorRondes?: number | null;
+      priorStints?: number | null;
+    } = {},
   ) =>
     parseTyreEstimateV2({
       grade: "B",
@@ -679,6 +686,8 @@ describe("waar het bandencijfer vandaan komt", () => {
         bron,
         prior_rate: 1.23,
         prior_n: priorN,
+        prior_rondes: extra.priorRondes ?? null,
+        prior_stints: extra.priorStints ?? null,
         prior_level: bron === "eigen" ? "exact" : bron,
         prior_bron: extra.priorBron ?? null,
       },
@@ -688,11 +697,16 @@ describe("waar het bandencijfer vandaan komt", () => {
   it("leest de velden van de nieuwe migratie, zonder ze te verzinnen", () => {
     const estimate = metBron("auto", 41.37, {
       priorBron: "algemeen: 12 stints, 40 rondes over alle auto's en circuits · deze auto op andere circuits: 7 stints, 90 rondes",
+      priorRondes: 174,
+      priorStints: 9,
     });
 
     expect(estimate?.basis.bron).toBe("auto");
     expect(estimate?.basis.priorRate).toBe(1.23);
     expect(estimate?.basis.priorN).toBe(41.37);
+    // De echte aantallen naast n_eff: rondes om te natellen, stints voor de tip.
+    expect(estimate?.basis.priorRondes).toBe(174);
+    expect(estimate?.basis.priorStints).toBe(9);
     expect(estimate?.basis.priorLevel).toBe("auto");
     expect(estimate?.basis.priorBron).toContain("deze auto op andere circuits");
     expect(estimate?.modelBron).toBeNull();
@@ -701,6 +715,8 @@ describe("waar het bandencijfer vandaan komt", () => {
     const kaal = parseTyreEstimateV2({ grade: "B", basis: { car_key: "bmw_m4_gt3" } });
     expect(kaal?.basis.bron).toBeNull();
     expect(kaal?.basis.priorN).toBeNull();
+    expect(kaal?.basis.priorRondes).toBeNull();
+    expect(kaal?.basis.priorStints).toBeNull();
     expect(kaal?.basis.priorRate).toBeNull();
     expect(kaal?.basis.priorLevel).toBeNull();
     expect(kaal?.basis.priorBron).toBeNull();
@@ -765,6 +781,143 @@ describe("waar het bandencijfer vandaan komt", () => {
     view.unmount();
   });
 
+  it("telt de echte rondes van de prior en niet de gewogen meetbasis", () => {
+    // Precies het geval van de testpagina: n_eff 1,9 naast één stint van vijf
+    // rondes. "1,9 rondes" is geen aantal dat iemand kan natellen, en de
+    // waarschuwing bij vijf rondes is onwaar.
+    const estimate = metBron("exact", 1.9, {
+      priorRondes: 5,
+      priorStints: 1,
+      priorBron: "eigen data: deze auto op dit circuit: 1 stints, 5 rondes",
+    });
+    const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
+
+    const regel = view.container.querySelector("[data-pitwall-tyre-prior]")!;
+    expect(regel).toHaveTextContent(
+      "Nog geen eigen meting — gebaseerd op 5 rondes van andere rijders met deze auto op dit circuit",
+    );
+    expect(regel.textContent).not.toContain("1,9");
+    expect(view.container.querySelector("[data-pitwall-tyre-prior-warning]")).toBeNull();
+    view.unmount();
+  });
+
+  it("valt terug op de gewogen meetbasis als de nieuwe velden ontbreken", () => {
+    // Ontbreken de nieuwe velden, dan telt de gewogen meetbasis. Nul telt ook
+    // als ontbreken: de migratie stuurt 0 als er geen pool is.
+    const zonderVelden = render(<TyreModelPanel estimate={metBron("auto", 1.9)} bron="v2" coverage={[]} />);
+    expect(zonderVelden.container.querySelector("[data-pitwall-tyre-prior]")).toHaveTextContent(
+      "gebaseerd op 1,9 rondes van andere rijders",
+    );
+    zonderVelden.unmount();
+
+    const metNul = render(
+      <TyreModelPanel
+        estimate={metBron("auto", 1.9, { priorRondes: 0, priorStints: 0 })}
+        bron="v2"
+        coverage={[]}
+      />,
+    );
+    expect(metNul.container.querySelector("[data-pitwall-tyre-prior]")).toHaveTextContent(
+      "gebaseerd op 1,9 rondes van andere rijders",
+    );
+    metNul.unmount();
+  });
+
+  it("laat de titeltip geen eigen data beweren die de regel tegenspreekt", () => {
+    const view = render(
+      <TyreModelPanel
+        estimate={metBron("exact", 12, {
+          priorRondes: 12,
+          priorStints: 1,
+          priorBron: "eigen data: deze auto op dit circuit: 1 stints, 12 rondes",
+        })}
+        bron="v2"
+        coverage={[]}
+      />,
+    );
+
+    const titel =
+      view.container.querySelector("[data-pitwall-tyre-prior] p")!.getAttribute("title") ?? "";
+    expect(titel).toBe("deze auto op dit circuit: 1 stint, 12 rondes");
+    expect(titel).not.toMatch(/eigen/i);
+    // De regel zelf zegt dat er nog geen eigen meting is, en dat blijft staan.
+    expect(view.container.querySelector("[data-pitwall-tyre-prior]")).toHaveTextContent(
+      "Nog geen eigen meting",
+    );
+    view.unmount();
+
+    // Zonder leesbare opbouw van de server blijven alleen de aantallen over.
+    const kaal = render(
+      <TyreModelPanel estimate={metBron("auto", 5, { priorRondes: 5, priorStints: 1 })} bron="v2" coverage={[]} />,
+    );
+    expect(kaal.container.querySelector("[data-pitwall-tyre-prior] p")).toHaveAttribute(
+      "title",
+      "1 stint, 5 rondes",
+    );
+    kaal.unmount();
+  });
+
+  it("maakt enkelvoud van het getal dat op het scherm staat, ook na afronding", () => {
+    for (const rondes of [0.96, 1, 1.04]) {
+      const view = render(
+        <TyreModelPanel estimate={metBron("auto", rondes, { priorRondes: rondes })} bron="v2" coverage={[]} />,
+      );
+      const regel = view.container.querySelector("[data-pitwall-tyre-prior]")!;
+      expect(regel).toHaveTextContent("gebaseerd op 1 ronde van andere rijders");
+      expect(regel.textContent).not.toContain("1 rondes");
+      view.unmount();
+    }
+
+    // Boven de afrondingsmarge blijft het meervoud, met de tiende erbij.
+    const twee = render(
+      <TyreModelPanel estimate={metBron("auto", 2.5, { priorRondes: 2.5 })} bron="v2" coverage={[]} />,
+    );
+    expect(twee.container.querySelector("[data-pitwall-tyre-prior]")).toHaveTextContent(
+      "gebaseerd op 2,5 rondes van",
+    );
+    twee.unmount();
+
+    // Tien of meer rondes zijn hele rondes, en dan is "10" geen enkelvoud.
+    const tien = render(
+      <TyreModelPanel estimate={metBron("auto", 10.4, { priorRondes: 10.4 })} bron="v2" coverage={[]} />,
+    );
+    expect(tien.container.querySelector("[data-pitwall-tyre-prior]")).toHaveTextContent(
+      "gebaseerd op 10 rondes van",
+    );
+    tien.unmount();
+  });
+
+  it("legt niets uit als het bereik niet als advies getoond wordt", () => {
+    // Een bereik dat de server zelf buiten advies zet staat er gedempt, maar de
+    // prior-regel hoort er niet bij: dezelfde gate als de voorlopig-regel.
+    const onbruikbaar = parseTyreEstimateV2({
+      grade: "B",
+      usable: false,
+      range_laps: { low: 295, high: 1181 },
+      basis: { bron: "auto", prior_n: 41, prior_rondes: 41, prior_stints: 7 },
+    });
+    const view = render(<TyreModelPanel estimate={onbruikbaar} bron="v2" coverage={[]} />);
+
+    expect(screen.getByText("rondes onbekend")).toBeVisible();
+    expect(view.container.querySelector("[data-pitwall-tyre-prior]")).toBeNull();
+    expect(view.container.querySelector("[data-pitwall-tyre-provisional]")).toBeNull();
+    view.unmount();
+
+    // Nul rondes is een uitkomst, geen bereik: ook dan geen uitleg erbij, en
+    // geen "voorlopig"-waarschuwing over een getal dat er niet staat.
+    const op = parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      range_laps: { low: 0, high: 0 },
+      basis: { bron: "circuit", prior_n: 9, prior_rondes: 9, prior_stints: 3 },
+    });
+    const tweede = render(<TyreModelPanel estimate={op} bron="v2" coverage={[]} />);
+    expect(screen.getByText("geen rondes over")).toBeVisible();
+    expect(tweede.container.querySelector("[data-pitwall-tyre-prior]")).toBeNull();
+    expect(tweede.container.querySelector("[data-pitwall-tyre-provisional]")).toBeNull();
+    tweede.unmount();
+  });
+
   it("waarschuwt onder de drie rondes dat het een grove schatting is", () => {
     const twee = render(<TyreModelPanel estimate={metBron("auto", 2.5)} bron="v2" coverage={[]} />);
 
@@ -825,11 +978,24 @@ describe("waar het bandencijfer vandaan komt", () => {
   });
 
   it("houdt de regel vrij van jargon en Engels, en zegt niets als de bron ontbreekt", () => {
-    const view = render(<TyreModelPanel estimate={metBron("auto", 41)} bron="v2" coverage={[]} />);
+    const view = render(
+      <TyreModelPanel
+        estimate={metBron("auto", 41, {
+          priorRondes: 41,
+          priorStints: 7,
+          priorBron: "algemeen: 12 stints, 40 rondes over alle auto's en circuits · deze auto op andere circuits: 7 stints, 90 rondes",
+        })}
+        bron="v2"
+        coverage={[]}
+      />,
+    );
     const regel = view.container.querySelector("[data-pitwall-tyre-prior]")!;
     const tekst = regel.textContent ?? "";
+    const titel = regel.querySelector("p")!.getAttribute("title") ?? "";
 
     expect(tekst).not.toMatch(/prior|model_bron|\bbron\b|\bbasis\b|\bn_eff\b|\bown\b|\bcar\b|\btrack\b|\bexact\b/i);
+    // Ook de titeltip is voor de lezer: geen veldnamen, geen Engelse woorden.
+    expect(titel).not.toMatch(/prior|model_bron|\bbron\b|\bbasis\b|\bn_eff\b|\bown\b|\bcar\b|\btrack\b|rounds|laps/i);
     view.unmount();
 
     // Zonder bron verzinnen we geen herkomst: dan blijft de regel weg.
