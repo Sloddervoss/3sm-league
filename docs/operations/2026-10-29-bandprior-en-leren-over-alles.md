@@ -1,9 +1,15 @@
 # Bandenprior: leren over alle rijders, per auto en per circuit
 
 Datum: 2026-10-29
-Migratie: `supabase/migrations/20261029090000_tyre_prior_model.sql`
-Rollback: `supabase/rollback/20261029090000_tyre_prior_model.rollback.sql`
-Test: `supabase/tests/20261029090000_tyre_prior_model.sql` (33 PASS, in een transactie met rollback)
+Migratie: `supabase/migrations/20261029090000_tyre_prior_model.sql` (het model) en
+`supabase/migrations/20261029120000_tyre_prior_guard_and_contract.sql` (de keuring:
+truncate-recht, triggerkosten, dubbeltelling en contract)
+Rollback: `supabase/rollback/20261029090000_tyre_prior_model.rollback.sql` en
+`supabase/rollback/20261029120000_tyre_prior_guard_and_contract.rollback.sql`
+Test: `supabase/tests/20261029090000_tyre_prior_model.sql` (33 PASS),
+`supabase/tests/20261029120000_tyre_prior_guard_and_contract.sql` (40 PASS, in een
+transactie met rollback) en `supabase/tests/20261029120000_tyre_prior_lock.sh`
+(lock-timeout met twee sessies)
 
 ## Waarom
 
@@ -89,32 +95,52 @@ Eén rij per (auto, circuit), en verder niets:
 | `bijgewerkt_op` | laatste herberekening |
 
 Geen `device_id`, geen sessie, geen coureur, geen tijdstip per stint. De tabel
-heeft RLS aan, geen policies en geen grants; alleen SECURITY DEFINER-functies
-lezen hem.
+heeft RLS aan, geen policies en **geen enkel recht** voor een clientrol; alleen
+SECURITY DEFINER-functies lezen en schrijven hem.
 
-**Onderhoud: statement-trigger, niet een refresh vanuit de pitwall.** De
-pitwall is een lezer; die mag het model niet onderhouden, want dan kloppen de
-cijfers alleen als iemand de pagina opent en telt een stint die nooit bekeken
-wordt nooit mee. De trigger hangt aan `simhub_tyre_lap_samples` (de tabel waar
-de flush elke afgeronde ronde in schrijft) en herberekent na elke
-schrijfopdracht de groepen. Statement-level en niet per rij: één herberekening
-per flush, en een backfill van duizend rijen kost ook één herberekening. Faalt
-de herberekening, dan gaat de ingest door en staat er een warning in het
-PG-log — een meting mag nooit sneuvelen op een statistiek.
+**Waarom er geen grant meer op staat.** Supabase's default privileges geven elke
+nieuwe tabel in `public` alle rechten aan `anon` en `authenticated`. RLS houdt
+SELECT/INSERT/UPDATE/DELETE tegen als er geen policy is, maar **TRUNCATE valt
+buiten RLS**: `truncate public.tyre_prior_stats` als anon wist de hele pool in één
+statement. Sinds `20261029120000` staan de rechten eraf voor `public`, `anon`,
+`authenticated` én `service_role`, en de migratie controleert dat zelf met
+`has_table_privilege()` — faalt die controle, dan stopt de migratie in plaats van
+een gat open te laten. RLS blijft aan zonder policies: dat is de tweede laag.
 
-Gemeten kosten (transactie met rollback, in deze productie-DB):
+**Onderhoud: per gesloten stint, met een verschil.** De eerste versie hing een
+statement-trigger aan `simhub_tyre_lap_samples` die bij **elke** afgeronde ronde
+de hele pool opnieuw berekende. Dat was bij 20 000 rondes 0,5–1 s per ronde, en
+een ingest die op de lock van die herberekening wachtte stond 11,57 s stil. Nu:
+
+| Laag | Wat het doet |
+|---|---|
+| `tyre_prior_contrib` | één rij per **gesloten** stint: rondes, wear-daling en meetbasis per hoek, met het apparaat erbij (privé, zie §7) |
+| `tyre_prior_sync_session(device, sessie)` | herziet alleen de gesloten stints van die sessie, vergelijkt met de vorige bijdrage en schrijft het **verschil** naar `tyre_prior_stats` |
+| drie statement-triggers (insert/update/delete) | weten via overgangstabellen welke sessies geraakt zijn; de insert-trigger slaat de hele stap over als er geen stint gesloten is |
+| `lock_timeout = 2s`, `statement_timeout = 8s` op de triggerfunctie | de ingest blokkeert nooit: bij een timeout volgt alleen een warning en gaat de ronde door |
+
+Een stint is **gesloten** zodra hij niet meer de lopende stint van het apparaat
+is: er is een volgende bandenset begonnen, of er is een nieuwe sessie gestart.
+Een lopende stint telt dus niet mee — hij is nog geen kennis, en zo hoeft er per
+ronde niets herberekend te worden. De poortwachter kijkt daarvoor naar twee
+dingen: de bandenset van de vorige ronde en de wear (een sprong omhoog is een
+nieuwe set). Alleen als beide tellers bekend en gelijk zijn en de wear daalt,
+gaat de trigger vrijuit; in alle andere gevallen wordt de sessie herzien.
+
+Gemeten kosten (transactie met rollback, in deze productie-DB, 20 743 samples):
 
 | Scenario | Tijd |
 |---|---|
-| 20 000 synthetische rondes in één statement (incl. één herberekening) | 1,34 s |
-| één losse ronde bij 5 114 rijen in de tabel | 0,23 s |
-| één losse ronde bij 20 114 rijen | 0,38 s |
+| normale lap (zelfde sessie, zelfde set) | **0,5–0,6 ms** |
+| lap die een stint sluit (sessie van 100 rondes) | 5,4 ms |
+| 200 sessies × 100 rondes in één statement (incl. trigger) | ~0,5 s, één keer |
+| insert tijdens een ACCESS EXCLUSIVE-lock op de pool | **2 020 ms**, daarna gewoon door (warning) |
 
-Bij de leagueschaal (enkele duizenden rijen per seizoen) is dat verwaarloosbaar.
-Boven ~100 000 samples wordt een gerichte herberekening per groep de moeite
-waard; de functie heeft daar al een filter voor (`tyre_prior_refresh(car, track)`).
+De laatste regel is de lock-timeout: de trigger wacht nooit langer dan 2 s en de
+ingest gaat door. De statistiek loopt dan één stint achter; `tyre_prior_refresh()`
+haalt dat in (zie §10).
 
-## 4. `tyre_prior(car_key, track_key)`: de hiërarchie
+## 4. `tyre_prior(car_key, track_key, exclude_device)`: de hiërarchie
 
 Vier traps, en ze zijn **disjunct**: elke trap bevat alleen wat de fijnere trap
 niet al heeft.
@@ -148,24 +174,43 @@ r = w_auto·r_auto       + (1 − w_auto)·r
 r = w_exact·r_exact     + (1 − w_exact)·r
 ```
 
-`n_eff = Σ w_i · n_i` over de traps die meededen: de rondes die de uitkomst
-daadwerkelijk dragen, niet het ruwe totaal. `level` is de fijnste trap die
-meedeed. `bron` is een zin met aantallen, bijvoorbeeld:
+`n_eff = Σ w_i · n_i` over de traps die meededen: de gewogen meetbasis, niet het
+ruwe totaal. `level` is de fijnste trap die meedeed. Daarnaast geeft de functie
+**`rondes`** (de echte rondes achter de blend: de som van de meetbasis van de
+trap die meedeed) en **`stints`** (het echte aantal stints) — die twee zijn te
+natellen, `n_eff` niet. `bron` is een zin met aantallen, bijvoorbeeld:
 
 ```
-algemeen: 54 stints, 540 rondes over alle auto's en circuits ·
-eigen data: deze auto op dit circuit: 1 stints, 10 rondes
+alle auto's en circuits: 54 stints, 540 rondes (stints van andere apparaten) ·
+deze auto op dit circuit: 1 stints, 10 rondes (stints van andere apparaten)
 ```
+
+**Waarom de eigen stint eruit gaat, en niet eraf.** De pool is per auto en
+circuit, dus de eigen stint van de aanroeper zit erin. De eerste versie telde
+hem in v2 nog eens op bij `n_eigen`; de band werd daardoor 38 % smaller zonder
+dat er één nieuwe meting bij kwam. Sinds `20261029120000` krijgt `tyre_prior()`
+het apparaat mee (`p_exclude_device`) en telt het de bijdragen van dat apparaat
+niet mee:
+
+```sql
+select public.tyre_prior('lamborghinievogt3', '218:', p_device_id);
+```
+
+Gekozen voor **uitsluiten bij de bron**, niet voor aftrekken achteraf. Aftrekken
+werkt alleen zolang de tellingen positief blijven, moet per trap opnieuw worden
+gedaan, en maakt van een som een verschil dat niemand meer kan natellen.
+Uitsluiten is één voorwaarde op dezelfde boekhouding, is exact, en laat de
+drempel van drie rondes op de juiste populatie werken: een trap die alleen uit
+eigen stints bestond valt weg in plaats van "bijna leeg" te blijven en toch
+gezag te suggereren. De eigen stint telt daarna precies één keer mee — als eigen
+meting in v2 (`w_eigen = n_eigen/(n_eigen+8)`).
+
+De trap `exact` heet daarom ook geen "eigen data" meer: hij is per definitie
+andermans data op precies deze combinatie.
 
 **Waarom disjunct.** Zonder die scheiding telt de eigen cel in drie traps mee en
 zou een combinatie met veel eigen data zichzelf naar het groepsgemiddelde
 blijven trekken — precies het tegenovergestelde van "meer data = smaller".
-
-**Waarom de prior de eigen stint van de aanroeper bevat.** De pool is per auto
-en circuit, niet per apparaat; de eigen stint zit er dus in. Dat is bewust: de
-alternative is apparaat-id's in de pool bewaren, en dat botst met §7. Het effect
-is klein en conservatief — bij een pool die alleen uit de eigen stint bestaat
-verandert het getal niet (0,5 in, 0,5 uit).
 
 ## 5. `pitwall_tyre_estimate_v2`: prior als startpunt
 
@@ -180,7 +225,9 @@ Nieuw in `basis`:
 |---|---|
 | `bron` | waar het startpunt vandaan kwam: `eigen` \| `auto` \| `circuit` \| `algemeen` |
 | `prior_rate` | de rate van de prior (pp per ronde), of null |
-| `prior_n` | `n_eff` van de prior |
+| `prior_n` | `n_eff` van de prior: de **gewogen** meetbasis, geen aantal rondes |
+| `prior_rondes` | de **echte** rondes in de pool, exclusief de eigen stints |
+| `prior_stints` | het **echte** aantal stints in de pool, exclusief de eigen |
 | `prior_level` | de fijnste trap met data |
 | `prior_bron` | de mensleesbare bron van de prior |
 | `rondes_effectief` | eigen basis + prior: de maat achter de bandbreedte |
@@ -197,6 +244,12 @@ Met `n_eigen ≥ 8` heeft de eigen meting dus minstens de helft van het gewicht.
 Zonder prior is `w_eigen` het enige gewicht en verandert er niets aan het getal;
 zonder eigen stint is de prior het getal en heet de bron `auto`/`circuit`/
 `algemeen` met herkomst `geschat`.
+
+`n_eff = n_eigen + n_prior` telt de eigen stint **één keer**: `n_prior` komt uit
+een prior waarin de eigen stints van dit apparaat niet meer zitten. Bestaat de
+pool op deze combinatie alleen uit eigen data, dan is `n_prior` nul, blijft
+`rondes_effectief` gelijk aan de eigen basis en verandert de band niet — de
+keuring van de eerste versie liet zien dat hij daar 38 % smaller werd.
 
 **Bandbreedte.** `range_laps` = resterende wear tot 40 % gedeeld door `rate`,
 met een marge uit de graad (A ±10 %, B 25 %, C de helft tot het dubbele) die
@@ -236,11 +289,16 @@ van de lopende ronde niet.
 
 - `tyre_prior_stats` bevat geen apparaat, sessie, coureur of tijdstip per stint;
   alleen sommen per auto en circuit.
-- De tabel heeft geen grants en geen RLS-policies; alleen SECURITY
-  DEFINER-functies lezen hem.
-- `tyre_prior()` geeft exact vier velden: `rate`, `n_eff`, `level`, `bron`. De
-  bron is een zin met aantallen, geen identificatie. De test controleert dat er
-  geen apparaatnaam, apparaat-id of coureur in de uitvoer staat.
+- `tyre_prior_contrib` bevat wél het apparaat, per stint. Dat is onvermijdelijk:
+  zonder die koppeling is de eigen stint niet uit te sluiten (fout 3) en is een
+  stint niet met een verschil bij te werken (fout 2). De tabel is strenger
+  afgeschermd dan de oude: RLS aan, geen policies, en **geen enkel recht** voor
+  `public`, `anon`, `authenticated` of `service_role`. Alleen SECURITY
+  DEFINER-functies komen erbij; er is geen functie die een apparaat teruggeeft.
+- `tyre_prior()` geeft exact zes velden: `rate`, `n_eff`, `rondes`, `stints`,
+  `level` en `bron`. De bron is een zin met aantallen, geen identificatie. De
+  test controleert dat er geen apparaatnaam, apparaat-id of coureur in de
+  uitvoer staat.
 - Wat een gebruiker wél kan leren: dat er op een combinatie is gereden en
   hoeveel rondes er gepoold zijn. Wie dat reed, niet — daar is geen veld voor.
   Bij kleine pools is het getal in feite één iemands stint, maar nog steeds
@@ -254,25 +312,36 @@ van de lopende ronde niet.
    begint leeg; vanaf de eerstvolgende stint vult hij zich. Wil je de oude data
    alsnog meetellen, dan moet de identiteit per sessie bewaard worden (een
    `simhub_telemetry_sessions`-tabel of de identiteit in de samples zelf).
-2. **De eigen stint zit in de pool.** Zonder apparaat-id's in de pool is dat
-   niet te vermijden. Het effect is klein en conservatief, maar het is geen
-   zuivere leave-one-out empirical Bayes.
+2. **De eigen stint zit in de boekhouding.** `tyre_prior_contrib` koppelt een
+   stint aan het apparaat dat hem reed. Dat is nodig voor het uitsluiten (en
+   voor het bijwerken met een verschil) en het is niet publiek: geen grants,
+   RLS aan, en geen functie die een apparaat teruggeeft. Wie met beheerdersrechten
+   in de database kijkt, kan het wel zien — dat was met de samples zelf ook al zo.
 3. **De auto-trap middelt over circuits**, gewogen naar rondes. Tien rondes op
    Monza en vijfhonderd op Spa geven samen bijna Spa. Dat is de bedoeling
    (rondes zijn de eenheid), maar het betekent wel dat één veel gereden circuit
    de auto-trap domineert.
 4. **`track_key` is van vorm veranderd** (`218:` in plaats van `montreal`). De
    bestaande rijen hadden geen sleutel, dus er is geen datamigratie nodig; de
-   dekkingstabel toont nu id's. De UI leest de nieuwe `basis`-velden nog niet —
-   dat is een aparte stap, en de bestaande velden blijven ongewijzigd, dus niets
-   breekt.
-5. **De herberekening is een volledige scan van de stintview** per
-   schrijfopdracht. Bij deze schaal is dat 0,23–0,38 s per ronde; boven ~100 000
-   samples moet dat gericht per groep.
+   dekkingstabel toont nu id's. De pitwall leest de nieuwe `basis`-velden
+   (`prior_rondes`, `prior_stints`) en valt terug op `prior_n` als een oudere
+   server die nog niet stuurt.
+5. **Een stint telt pas mee als hij dicht is.** De lopende stint van het
+   laatst geziene apparaat staat niet in de pool: hij is nog niet af, en zo kost
+   een gewone ronde niets. De laatste stint van een sessie komt erin zodra de
+   volgende sessie begint (of de volgende bandenset). Een apparaat dat nooit
+   meer terugkomt, houdt zijn allerlaatste stint dus buiten de pool; dat is
+   bewust — een halve stint is geen kennis — en `tyre_prior_refresh()` hanteert
+   dezelfde grens, zodat incrementeel en herbouwd altijd gelijk zijn.
 6. **`k = 8` en de vloer 0,5 zijn gekozen, niet gefit.** Acht rondes is de
    bestaande `v_min_basis` uit het model (de grens waaronder een helling een
    indicatie is); de vloer 0,5 is de bestaande ondergrens van de bandbreedte.
    Beide zijn consistent met wat er al stond, maar het zijn aannames.
+7. **Een enorme bulk-insert kan de statistiek één keer overslaan.** De trigger
+   heeft een `statement_timeout` van 8 s; een import van tienduizenden rijen in
+   één statement haalt dat en levert dan een warning op. De rijen zijn dan wel
+   binnen (de ingest gaat altijd door) maar de pool loopt achter tot de volgende
+   stint of een `tyre_prior_refresh()`.
 
 ## 9. Testscenario's en hun uitkomst
 
@@ -288,20 +357,46 @@ van de lopende ronde niet.
 | tegengestelde hellingen (exact 2,0 vs auto 0,4942) | 1,3308 = 10/18·2,0 + 8/18·0,4942, `level` exact |
 | nieuwe combinatie, alleen een wear-stand | `basis.bron = auto`, getal = prior, bereik aanwezig, `geschat`, `voorlopig`, niet `usable` |
 | eigen stint + bevestigende pool | rate = 10/18·0,5 + 8/18·prior, `rondes_effectief` groeit, band op de vloer |
-| **echte CAT-PC-stint met gesimuleerde sleutels** | 0,5360 · **96–113** in plaats van 88–153, eigen meting (112) blijft binnen de band |
+| **echte CAT-PC-stint met gesimuleerde sleutels** | 0,4834 · **106–118** in plaats van 88–153, eigen meting (112) blijft binnen de band |
+| eigen data als enige in de pool | prior leeg, `rondes_effectief` = eigen basis, band 0,670 breed — met de oude dubbeltelling 0,512 (38 % smaller) |
+| andermans stint op dezelfde combinatie | `exact`, 10 rondes, `n_eff` = eigen + 5,56, band smaller (0,500) |
+| lopende stint | telt niet in de pool; na de sluitende ronde wel |
+| 20 000 rondes (200 sessies) | normale lap 0,5 ms, stint-sluitende lap 5,4 ms |
+| lock op de pool tijdens een insert | wacht 2 020 ms (lock_timeout), warning, insert bewaard |
+| incrementeel vs. herbouwd | identiek na insert, update en delete |
 
-De laatste regel is de simulatie die in de testtransactie gebeurt en wordt
+De CAT-PC-regel is de simulatie die in de testtransactie gebeurt en wordt
 teruggedraaid: de 113 rijen krijgen daar tijdelijk `lamborghinievogt3` / `218:`
-plus tien rondes voorkennis. Het laat zien wat er gebeurt zodra de ingest de
-sleutels wél vult — de band gaat van 88–153 naar 96–113, en de gemeten 112
-rondes blijven erin.
+plus tien rondes voorkennis van een ander apparaat. Het laat zien wat er gebeurt
+zodra de ingest de sleutels wél vult — de band gaat van 88–153 naar 106–118, en
+de gemeten 112 rondes blijven erin. De eigen stint van CAT-PC telt daarbij niet
+mee in de prior (die is uitgesloten), alleen als eigen meting.
 
-## 10. Volgende stappen
+## 10. Wat de keuring van 20261029090000 rechtzette
+
+De eerste versie had vier echte fouten. Ze zijn hierboven op hun plek beschreven;
+dit is het overzicht met de reparatie erbij.
+
+| Fout | Wat er misging | Reparatie |
+|---|---|---|
+| **TRUNCATE voor anon** | default privileges gaven `anon` en `authenticated` alle rechten; RLS stopt TRUNCATE niet, dus de pool was in één statement te wissen | alle rechten eraf voor `public`, `anon`, `authenticated` en `service_role`; RLS aan, geen policies; de migratie controleert het zelf met `has_table_privilege()` en stopt als er nog een recht staat |
+| **Kosten per ronde** | de trigger herberekende bij elke afgeronde ronde de hele pool (0,5–1 s bij 20 000 rondes) en een insert wachtte 11,57 s op de lock | alleen gesloten stints, per stint een bijdrage, en de cel bijwerken met het **verschil**; `lock_timeout` 2 s en `statement_timeout` 8 s met alleen een warning |
+| **Dubbeltelling** | de pool bevatte de eigen stint en v2 telde die er met `n_eigen` nog eens bij op: 38 % te smal zonder nieuwe informatie | `tyre_prior(car, track, exclude_device)` sluit de eigen stints bij de bron uit; de eigen stint telt één keer mee, als eigen meting |
+| **Contract** | `prior_n` was `n_eff` (gewogen) maar werd als rondes gepresenteerd, de UI zei "van andere rijders" terwijl de eigen stint meetelde, en de trap `exact` heette "eigen data" | `tyre_prior()` geeft `rondes` en `stints` naast `n_eff`; `basis.prior_rondes` en `basis.prior_stints` staan ernaast; de trap `exact` heet "deze auto op dit circuit (stints van andere apparaten)" |
+
+De vaste getallen zijn niet verschoven: CAT-PC 88–153 (0,4833), PCBART 150–169
+(0,3429), DESKTOP-E2SEMRP 393–788 (0,0958), alle drie met `basis.bron = eigen`
+en `prior_rate = null`, want de pool is in productie leeg (0 van 113 rijen met
+een sleutel).
+
+## 11. Volgende stappen
 
 1. De connector stuurt de identiteit al per frame; vanaf de volgende stint
    vullen de sleutels zich zonder pluginwijziging.
-2. De pitwall de nieuwe `basis`-velden laten tonen (`bron`, `prior_level`,
-   `rondes_effectief`) — nu alleen in de RPC, de UI negeert ze nog.
+2. De pitwall toont sinds `fix(pitwall): toon de echte rondes achter de
+   bandenprior` de echte rondes (`prior_rondes`) en de opbouw als titeltip.
 3. Als de oude oefendata mee moet tellen: sessie-identiteit bewaren
    (`simhub_telemetry_sessions`), dan vult `tyre_backfill_keys()` de 113 rijen
    alsnog.
+4. Na een storing of een overgeslagen trigger: `select public.tyre_prior_refresh();`
+   bouwt de bijdragen en de cellen opnieuw op (idempotent, secondewerk).
