@@ -33,6 +33,7 @@ import { PacePanel } from "@/features/endurance/pitwall/PacePanel";
 import { StandingsWidget } from "@/features/endurance/pitwall/StandingsWidget";
 import { deriveStandings } from "@/features/endurance/pitwall/standings";
 import { newestDeviceTelemetry } from "@/features/endurance/pitwall/deviceTelemetryCache";
+import { devicePresence, devicePresenceLabel } from "@/features/endurance/pitwall/devicePresence";
 
 const ONLINE_WINDOW_MS = 5 * 60_000;
 
@@ -276,13 +277,15 @@ export default function PitwallDeviceTestPage() {
                     <ChevronRight className={`ml-auto h-3.5 w-3.5 shrink-0 ${selected ? "text-orange-400" : "text-gray-600"}`} />
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-gray-400">
-                    <span className="truncate">🏁 {row.telemetry_track_name ?? "geen sessie"}</span>
+                    <span className="truncate">🏁 {rowOnline ? row.telemetry_track_name ?? "geen sessie" : "geen sessie"}</span>
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-gray-500">
                     <span className="font-mono">{row.connector_version ?? "—"}</span>
                     <span className="h-2.5 w-px bg-white/10" />
-                    <span className={row.game_connected ? "text-emerald-400" : ""}>{row.game_connected ? "Game aan" : "Game uit"}</span>
-                    {row.telemetry_driver_name && <span>· {row.telemetry_driver_name}</span>}
+                    <span className={rowOnline && row.game_connected ? "text-emerald-400" : ""}>
+                      {devicePresenceLabel[devicePresence(rowOnline, row.game_connected)]}
+                    </span>
+                    {rowOnline && row.telemetry_driver_name && <span>· {row.telemetry_driver_name}</span>}
                   </div>
                 </button>
               );
