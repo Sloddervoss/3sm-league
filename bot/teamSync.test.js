@@ -6,10 +6,16 @@ import {
   Afgebroken,
   alleenAlsActief,
   begrensd,
+  beschrijfNetwerkFout,
   dbStap,
   draaiMetEindverslag,
+  isOnbekendLidFout,
   maakEindverslag,
+  metNetwerkHerhaling,
   metTimeout,
+  netwerkFoutSoort,
+  NETWERK_POGINGEN,
+  NETWERK_WACHT_MS,
   normaliseerNick,
   Overgeslagen,
   schrijfStilUit,
@@ -585,7 +591,7 @@ test('geen enkele await in syncTeamRoles staat onbegrensd', () => {
     .filter((regel) => /\bawait\b/.test(regel))
     .filter(
       (regel) =>
-        !/metTimeout\(|discordCall\(|begrensd\(|voerPerEntiteitUit\(|supabaseStep\(|botLog\(|schrijfStil\(|schrijfTeamStil\(|dbSchrijfTeam\(|pasRolAan\(|draaiMetEindverslag\(/.test(
+        !/metTimeout\(|metNetwerkHerhaling\(|discordCall\(|begrensd\(|voerPerEntiteitUit\(|supabaseStep\(|botLog\(|schrijfStil\(|schrijfTeamStil\(|dbSchrijfTeam\(|pasRolAan\(|draaiMetEindverslag\(/.test(
           regel
         )
     );
@@ -616,3 +622,232 @@ test('het eindverslag gaat via draaiMetEindverslag en niet via een eigen blok', 
   assert.match(body, /meld: \(regel\) => botLogDiscordOnly\(regel\)/);
   assert.doesNotMatch(body, /console\.log\(summary\)/, 'er mag geen tweede, eigen summary-blok zijn');
 });
+
+// ── Netwerk-hik: korte herhaling en eerlijke logging ─────────────────────────
+
+// Zoals undici hem gooit: AggregateError met de echte code één laag dieper.
+const etimedout = () => {
+  const oorzaak = Object.assign(new Error('connect ETIMEDOUT 1.2.3.4:443'), { code: 'ETIMEDOUT' });
+  return new AggregateError([oorzaak], '');
+};
+
+const snel = { wachtMs: [1, 2] };
+
+test('de herhaling is twee keer met 1s en 3s', () => {
+  assert.equal(NETWERK_POGINGEN, 3, 'eerste poging plus twee herhalingen');
+  assert.deepEqual(NETWERK_WACHT_MS, [1000, 3000]);
+});
+
+test('netwerkFoutSoort herkent AggregateError [ETIMEDOUT] van undici', () => {
+  assert.equal(netwerkFoutSoort(etimedout()), 'ETIMEDOUT');
+  assert.equal(
+    netwerkFoutSoort(Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNRESET' } })),
+    'ECONNRESET'
+  );
+  assert.equal(netwerkFoutSoort(new Error('timeout na 8000 ms: guild laden')), 'timeout');
+  assert.equal(netwerkFoutSoort({ message: 'TypeError: fetch failed', code: '' }), 'netwerkfout');
+});
+
+test('beschrijfNetwerkFout maakt van een AggregateError een leesbare reden', () => {
+  const reden = beschrijfNetwerkFout(etimedout());
+  assert.match(reden, /AggregateError/);
+  assert.match(reden, /ETIMEDOUT/);
+  assert.match(reden, /connect ETIMEDOUT 1\.2\.3\.4:443/, 'het adres en de syscall horen erbij');
+
+  assert.match(beschrijfNetwerkFout(new Error('timeout na 8000 ms: guild laden')), /timeout na 8000 ms/);
+  assert.equal(beschrijfNetwerkFout(null), 'Unknown error');
+});
+
+test('geen rechten of een onbekend lid is geen netwerkfout', () => {
+  assert.equal(netwerkFoutSoort(new Error('Missing Permissions')), null);
+  assert.equal(
+    netwerkFoutSoort(Object.assign(new Error('Unknown Member'), { code: 10007 })),
+    null
+  );
+  assert.equal(isOnbekendLidFout(Object.assign(new Error('Unknown Member'), { code: 10007 })), true);
+  assert.equal(isOnbekendLidFout(etimedout()), false);
+});
+
+test('een netwerk-hik wordt herhaald en de geslaagde poging levert het resultaat', async () => {
+  let pogingen = 0;
+  const regels = [];
+
+  const waarde = await metNetwerkHerhaling(
+    async () => {
+      pogingen += 1;
+      if (pogingen < 3) throw etimedout();
+      return { naam: 'guild' };
+    },
+    { label: 'guild laden', ...snel, log: (regel) => regels.push(regel) }
+  );
+
+  assert.deepEqual(waarde, { naam: 'guild' });
+  assert.equal(pogingen, 3);
+  assert.equal(regels.length, 2, 'elke mislukte poging één regel, de geslaagde geen');
+  assert.match(regels[0], /guild laden: poging 1\/3 mislukt \(ETIMEDOUT\), opnieuw/);
+  assert.match(regels[1], /guild laden: poging 2\/3 mislukt \(ETIMEDOUT\), opnieuw/);
+  assert.ok(!regels.some((regel) => /definitief/.test(regel)), 'een geslaagde run meldt geen definitieve fout');
+});
+
+test('de wachttijd voor de volgende poging staat in de logregel', async () => {
+  const regels = [];
+  let pogingen = 0;
+
+  await metNetwerkHerhaling(
+    async () => {
+      pogingen += 1;
+      if (pogingen === 1) throw etimedout();
+      return 'ok';
+    },
+    { label: 'guild laden', pogingen: 2, wachtMs: [1000], log: (regel) => regels.push(regel) }
+  );
+
+  assert.equal(regels.length, 1);
+  assert.match(regels[0], /poging 1\/2 mislukt \(ETIMEDOUT\), opnieuw over 1s$/);
+});
+
+test('succes wordt niet gelogd', async () => {
+  const regels = [];
+  const waarde = await metNetwerkHerhaling(async () => 42, { ...snel, log: (regel) => regels.push(regel) });
+
+  assert.equal(waarde, 42);
+  assert.deepEqual(regels, []);
+});
+
+test('definitief falen geeft één echte foutregel en gooit de laatste fout door', async () => {
+  let pogingen = 0;
+  const regels = [];
+
+  await assert.rejects(
+    () =>
+      metNetwerkHerhaling(
+        async () => {
+          pogingen += 1;
+          throw etimedout();
+        },
+        { label: 'teams ophalen', ...snel, log: (regel) => regels.push(regel) }
+      ),
+    (fout) => netwerkFoutSoort(fout) === 'ETIMEDOUT'
+  );
+
+  assert.equal(pogingen, 3, 'na drie pogingen is het klaar');
+  assert.equal(regels.length, 3, 'twee hik-regels en één echte foutregel');
+  assert.match(regels[0], /poging 1\/3 mislukt/);
+  assert.match(regels[1], /poging 2\/3 mislukt/);
+  assert.match(regels[2], /teams ophalen: definitief mislukt na 3 pogingen \(ETIMEDOUT\)/);
+});
+
+test('een echte fout wordt niet herhaald en geeft geen eigen logregel', async () => {
+  let pogingen = 0;
+  const regels = [];
+
+  await assert.rejects(
+    () =>
+      metNetwerkHerhaling(
+        async () => {
+          pogingen += 1;
+          throw Object.assign(new Error('Missing Permissions'), { code: 50013 });
+        },
+        { label: 'rol aanpassen', ...snel, log: (regel) => regels.push(regel) }
+      ),
+    /Missing Permissions/
+  );
+
+  assert.equal(pogingen, 1);
+  assert.deepEqual(regels, [], 'de aanroeper logt deze fout, niet de herhaling');
+});
+
+test('een hangende aanroep telt als time-out en wordt herhaald', async () => {
+  const regels = [];
+  let pogingen = 0;
+
+  await assert.rejects(
+    () =>
+      metNetwerkHerhaling(
+        () => {
+          pogingen += 1;
+          return hangt();
+        },
+        { label: 'lid ophalen 1', pogingen: 2, ms: 20, wachtMs: [1], log: (regel) => regels.push(regel) }
+      ),
+    /timeout na 20 ms: lid ophalen 1/
+  );
+
+  assert.equal(pogingen, 2);
+  assert.match(regels[0], /poging 1\/2 mislukt \(timeout\)/);
+  assert.match(regels[1], /definitief mislukt na 2 pogingen \(timeout\)/);
+});
+
+test('een PostgREST-resultaat met error telt als mislukte poging', async () => {
+  let pogingen = 0;
+  const regels = [];
+
+  const uitslag = await metNetwerkHerhaling(
+    async () => {
+      pogingen += 1;
+      if (pogingen === 1) return { data: null, error: { message: 'TypeError: fetch failed' } };
+      return { data: [{ id: 'team-1' }], error: null };
+    },
+    { label: 'teams ophalen', ...snel, log: (regel) => regels.push(regel), alsFout: (r) => r?.error || null }
+  );
+
+  assert.equal(pogingen, 2);
+  assert.deepEqual(uitslag.data, [{ id: 'team-1' }]);
+  assert.match(regels[0], /poging 1\/3 mislukt \(netwerkfout\)/);
+});
+
+test('een afgebroken run wacht niet nog eens en doet geen tweede poging', async () => {
+  let pogingen = 0;
+  let actief = true;
+
+  await assert.rejects(
+    () =>
+      metNetwerkHerhaling(
+        async () => {
+          pogingen += 1;
+          actief = false; // de run wordt tijdens deze poging afgebroken
+          throw etimedout();
+        },
+        { label: 'guild laden', ...snel, log: () => {}, isActief: () => actief || pogingen === 0 }
+      ),
+    (fout) => fout instanceof Afgebroken
+  );
+
+  assert.equal(pogingen, 1, 'na de afbreking volgt geen nieuwe poging');
+});
+
+test('de sync herhaalt de eerste fetch en het leden ophalen, met eerlijke logging', () => {
+  const body = syncTeamRolesBody();
+
+  assert.match(
+    body,
+    /metNetwerkHerhaling\(\(\) => getConfiguredGuild\(\{ gooiFout: true \}\)/,
+    'de guild-load (eerste fetch) moet herhaald worden en zijn fout doorgeven'
+  );
+  assert.match(body, /label: 'guild laden'/);
+  assert.match(body, /label: 'teams ophalen'[\s\S]{0,200}alsFout:/);
+  assert.match(
+    body,
+    /metNetwerkHerhaling\(\s*\(\) => guild\.members\.fetch\(profile\.discord_id\)/,
+    'het lid ophalen moet herhaald worden'
+  );
+  assert.match(body, /isOnbekendLidFout\(fout\)/, 'een onbekend lid blijft "niet gevonden"');
+  assert.doesNotMatch(
+    body,
+    /members\.fetch\(profile\.discord_id\)\.catch\(\(\) => null\)/,
+    'een netwerkfout mag niet als ontbrekend lid verdwijnen'
+  );
+  assert.match(body, /geen guild geconfigureerd/, 'de reden moet guild-fout en geen-guild onderscheiden');
+});
+
+test('getConfiguredGuild geeft de fout alleen door als de sync erom vraagt', () => {
+  const bron = leesIndex();
+  const start = bron.indexOf('async function getConfiguredGuild');
+  const eind = bron.indexOf('async function fetchProfilesByUserIds', start);
+  assert.ok(start > 0 && eind > start, 'getConfiguredGuild niet gevonden');
+
+  const body = bron.slice(start, eind);
+  assert.match(body, /\{ gooiFout = false \} = \{\}/);
+  assert.match(body, /return gooiFout \? ophalen : ophalen\.catch\(\(\) => null\)/);
+});
+

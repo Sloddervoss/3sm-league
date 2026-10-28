@@ -14,8 +14,11 @@ import {
   Afgebroken,
   alleenAlsActief,
   begrensd,
+  beschrijfNetwerkFout,
   dbStap,
   draaiMetEindverslag,
+  isOnbekendLidFout,
+  metNetwerkHerhaling,
   metTimeout,
   normaliseerNick,
   schrijfStilUit,
@@ -482,11 +485,17 @@ async function getCalendarChannel() {
   return client.channels.fetch(cfg.kalender_channel_id).catch(() => null);
 }
 
-async function getConfiguredGuild() {
+// `gooiFout: true` laat een netwerkfout door naar de aanroeper. De team-sync
+// heeft dat nodig om 'geen guild geconfigureerd' te onderscheiden van 'de guild
+// kon niet geladen worden' (tot 2026-10-28 werd een ETIMEDOUT hier als 'geen
+// guild' gerapporteerd, met alle tellers op nul). Alle andere aanroepers houden
+// het oude gedrag (null), zodat een hik daar geen listener of cron-taak klapt.
+async function getConfiguredGuild({ gooiFout = false } = {}) {
   const cfg = loadConfig();
   const guildId = cfg.guild_id;
   if (!guildId) return null;
-  return client.guilds.fetch(guildId).catch(() => null);
+  const ophalen = client.guilds.fetch(guildId);
+  return gooiFout ? ophalen : ophalen.catch(() => null);
 }
 
 async function fetchProfilesByUserIds(userIds, columns = 'user_id, display_name, iracing_name, discord_id') {
@@ -1782,22 +1791,46 @@ async function syncTeamRoles(ctx = {}) {
       // één bericht per mislukte run.
       let guild = null;
       let guildFout = null;
+      // De guild laden is de allereerste netwerkaanroep van de run en dus de
+      // kwetsbaarste: hier moet de verbinding nog worden opgezet. Twee korte
+      // herhalingen (1s/3s) overbruggen een hik; pas daarna is het een fout.
       try {
-        guild = await metTimeout(getConfiguredGuild(), TEAM_SYNC_TIMEOUT_MS, 'guild laden');
+        guild = await metNetwerkHerhaling(() => getConfiguredGuild({ gooiFout: true }), {
+          label: 'guild laden',
+          isActief: assertActive,
+        });
       } catch (fout) {
         guildFout = fout;
       }
-      if (!guild) return markeer(`guild laden: ${describeError(guildFout || 'geen guild geconfigureerd')}`);
+      if (!guild) {
+        return markeer(
+          guildFout
+            ? `guild laden: ${beschrijfNetwerkFout(guildFout)}`
+            : 'guild laden: geen guild geconfigureerd'
+        );
+      }
 
       setStep('teams ophalen uit Supabase');
-      const { data: teams, error: teamsError } = await metTimeout(
-        supabaseStep(
-          '[syncTeamRoles] teams',
-          supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id')
-        ),
-        TEAM_SYNC_TIMEOUT_MS,
-        'teams ophalen'
-      ).catch(fout => ({ data: null, error: fout }));
+      let teams = null;
+      let teamsError = null;
+      try {
+        const teamsUitslag = await metNetwerkHerhaling(
+          () => supabaseStep(
+            '[syncTeamRoles] teams',
+            supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id')
+          ),
+          {
+            label: 'teams ophalen',
+            isActief: assertActive,
+            // PostgREST gooit niet maar resolve't met { error }; dat is ook een
+            // mislukte poging en moet dus herhaald worden.
+            alsFout: (uitslag) => uitslag?.error || null,
+          }
+        );
+        teams = teamsUitslag?.data ?? null;
+      } catch (fout) {
+        teamsError = fout;
+      }
       if (teamsError) {
         return markeer(`teams ophalen: ${describeError(teamsError)}`);
       }
@@ -2157,13 +2190,20 @@ async function syncTeamRoles(ctx = {}) {
             }
           };
           // Onbekend lid en time-out zijn niet hetzelfde: een onbekend lid telt als
-          // 'niet gevonden', een hangende aanroep als fout.
-          const opgehaald = await begrensd(
-            guild.members.fetch(profile.discord_id).catch(() => null),
-            `lid ophalen ${profile.discord_id}`
-          );
-          if (!opgehaald.ok) throw opgehaald.fout;
-          const member = opgehaald.waarde;
+          // 'niet gevonden', een hangende of mislukte aanroep als fout. Een
+          // netwerk-hik mag een bestaand lid niet als 'niet gevonden' wegzetten,
+          // dus eerst twee korte herhalingen (1s/3s) en pas daarna een fout.
+          let member = null;
+          try {
+            member = await metNetwerkHerhaling(
+              () => guild.members.fetch(profile.discord_id),
+              { label: `lid ophalen ${profile.discord_id}`, isActief: entiteitActief }
+            );
+          } catch (fout) {
+            // Discord gooit hier alleen bij een lid dat écht niet in de guild
+            // zit; dat is geen fout en wordt hieronder als overgeslagen geteld.
+            if (!isOnbekendLidFout(fout)) throw fout;
+          }
           if (!member) {
             stats.membersMissing += 1;
             overslaan('lid niet gevonden');

@@ -6,6 +6,8 @@
 // Discord-server.
 
 import { formatDuration } from './cronGuard.js';
+import { describeError, redactSensitiveText } from './logging.js';
+import { isTransientNetworkErrorText } from './network.js';
 
 // Eén Discord- of database-aanroep binnen de sync mag nooit langer duren.
 export const TEAM_SYNC_TIMEOUT_MS = 8_000;
@@ -63,6 +65,150 @@ export class Afgebroken extends Error {
     super(reden || 'run afgebroken');
     this.name = 'Afgebroken';
     this.reden = reden || 'run afgebroken';
+  }
+}
+
+// ── Netwerk-hik ──────────────────────────────────────────────────────────────
+// De eerste fetch van een run is het kwetsbaarst: de verbinding moet dan nog
+// worden opgezet. Eén ETIMEDOUT van een seconde brak de hele sync af en werd als
+// 'fout in 0s' met alle tellers op nul gelogd (2026-10-28 16:03:01). Twee korte
+// herhalingen (1s en 3s) overbruggen zo'n hik. Een echte fout (geen rechten,
+// onbekend lid) wordt niet herhaald: dat is geen netwerkprobleem.
+export const NETWERK_POGINGEN = 3; // eerste poging + twee herhalingen
+export const NETWERK_WACHT_MS = [1_000, 3_000];
+
+const NETWERK_CODE_PATROON =
+  /\b(ETIMEDOUT|ETIMEOUT|ECONNRESET|ECONNREFUSED|ECONNABORTED|EPIPE|EAI_AGAIN|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|ENETDOWN|UND_ERR_[A-Z_]+)\b/;
+
+// Alle foutlagen op één hoop: undici verstopt de echte code in cause/errors
+// (AggregateError [ETIMEDOUT]), PostgREST in een error-object.
+function verzamelFouttekst(fout) {
+  const gezien = new Set();
+  const delen = [];
+  const bezoek = (item) => {
+    if (!item || gezien.has(item)) return;
+    if (typeof item === 'string') {
+      delen.push(item);
+      return;
+    }
+    if (typeof item !== 'object') return;
+    gezien.add(item);
+    for (const sleutel of ['name', 'message', 'code', 'errno', 'syscall', 'hostname']) {
+      if (item[sleutel]) delen.push(String(item[sleutel]));
+    }
+    for (const sleutel of ['cause', 'error', 'errors']) {
+      const volgende = item[sleutel];
+      if (Array.isArray(volgende)) volgende.forEach(bezoek);
+      else bezoek(volgende);
+    }
+  };
+  bezoek(fout);
+  return delen.join(' ');
+}
+
+// Geeft de netwerkcoden terug (ETIMEDOUT, ECONNRESET, …) of null als dit geen
+// tijdelijke netwerkfout is. Alleen bij een code wordt er herhaald.
+export function netwerkFoutSoort(fout) {
+  const tekst = verzamelFouttekst(fout);
+  if (!tekst) return null;
+  if (/\btimeout na \d+ ms\b/i.test(tekst)) return 'timeout';
+  const code = tekst.match(NETWERK_CODE_PATROON);
+  if (code) return code[1];
+  // Zelfde lijst als de netwerkbewaker: fetch failed, time-outs en 5xx.
+  if (isTransientNetworkErrorText(tekst)) {
+    return /\btimeout\b/i.test(tekst) ? 'timeout' : 'netwerkfout';
+  }
+  return null;
+}
+
+// Discord gooit bij een lid dat niet (meer) in de guild zit een DiscordAPIError
+// met code 10007. Dat is geen fout maar 'lid niet gevonden', en mag dus niet
+// opnieuw geprobeerd worden (en al helemaal niet als netwerkfout tellen).
+export function isOnbekendLidFout(fout) {
+  if (!fout) return false;
+  if (String(fout.code ?? '') === '10007') return true;
+  return /unknown (member|user)\b|\b10007\b/i.test(verzamelFouttekst(fout));
+}
+
+const wacht = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Eerlijke omschrijving van een netwerkfout voor log en eindverslag.
+// describeError laat een undici-AggregateError als 'AggregateError' achter,
+// terwijl juist de code en het adres het enige nuttige zijn. Zonder dit stond er
+// in het verslag alleen 'fout in 0s' met een lege reden.
+export function beschrijfNetwerkFout(fout) {
+  const eigen = describeError(fout);
+  const soort = netwerkFoutSoort(fout);
+  const diepste = fout?.cause?.[0] ?? fout?.errors?.[0] ?? fout?.cause ?? fout;
+  const kern = typeof diepste?.message === 'string' ? diepste.message : '';
+
+  const delen = [eigen];
+  if (soort && !eigen.includes(soort)) delen.push(soort);
+  if (kern && !eigen.includes(kern)) delen.push(kern);
+
+  return redactSensitiveText(delen.filter(Boolean).join(' | '));
+}
+
+// Voert `maakAanroep` uit met twee korte herhalingen bij een netwerkfout.
+//
+// Succes wordt niet gelogd (de sync logt alleen fouten). Een mislukte poging
+// wél, als 'poging 1/3 mislukt (ETIMEDOUT), opnieuw': anders is achteraf niet
+// te zien dat de run een hik overbrugde. Pas als alle pogingen falen komt er
+// één echte foutregel en gaat de fout door naar de aanroeper, zodat het
+// eindverslag de juiste reden krijgt in plaats van alle tellers op nul.
+//
+// `alsFout` keurt een geslaagde aanroep alsnog af (PostgREST gooit niet maar
+// resolve't met { error }). `isActief` wordt vóór elke poging gecontroleerd,
+// zodat een afgebroken run niet nog twee keer een seconde blijft wachten.
+export async function metNetwerkHerhaling(maakAanroep, {
+  label = 'aanroep',
+  pogingen = NETWERK_POGINGEN,
+  wachtMs = NETWERK_WACHT_MS,
+  ms = TEAM_SYNC_TIMEOUT_MS,
+  isActief = () => true,
+  log = (regel) => console.warn(regel),
+  alsFout = null,
+} = {}) {
+  const aantal = Math.max(1, Number(pogingen) || 1);
+
+  for (let poging = 1; poging <= aantal; poging += 1) {
+    if (typeof isActief === 'function' && !isActief()) {
+      throw new Afgebroken(`run afgebroken vóór ${label}`);
+    }
+
+    try {
+      const waarde = await metTimeout(Promise.resolve().then(maakAanroep), ms, label);
+      const fout = typeof alsFout === 'function' ? alsFout(waarde) : null;
+      if (!fout) return waarde;
+      throw fout;
+    } catch (fout) {
+      if (fout instanceof Afgebroken) throw fout;
+
+      // Geen netwerkfout: meteen doorgeven, zonder eigen logregel. De aanroeper
+      // meldt dit al als echte fout (team-, lid- of db-fout).
+      const soort = netwerkFoutSoort(fout);
+      if (!soort) throw fout;
+
+      if (poging >= aantal) {
+        veiligAanroepen(
+          log,
+          `[teamSync] ${label}: definitief mislukt na ${poging} pogingen (${soort}): ${beschrijfNetwerkFout(fout)}`
+        );
+        throw fout;
+      }
+
+      const pauze = Number(wachtMs[Math.min(poging - 1, wachtMs.length - 1)]) || 0;
+      // Een run die tijdens de mislukte poging is afgebroken hoeft niet nog
+      // seconden te wachten op een poging die toch niet meer mag.
+      if (typeof isActief === 'function' && !isActief()) {
+        throw new Afgebroken(`run afgebroken vóór poging ${poging + 1} van ${label}`);
+      }
+      veiligAanroepen(
+        log,
+        `[teamSync] ${label}: poging ${poging}/${aantal} mislukt (${soort}), opnieuw over ${formatDuration(pauze)}`
+      );
+      await wacht(pauze);
+    }
   }
 }
 
