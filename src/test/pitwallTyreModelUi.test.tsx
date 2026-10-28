@@ -642,3 +642,220 @@ describe("herkomst van het bandengetal", () => {
     expect(parseTyreEstimateV2(null)).toBeNull();
   });
 });
+
+/**
+ * Waar het bandencijfer vandaan komt, in gewone taal onder het bereik.
+ *
+ * Deze regel bestaat omdat een bereik zonder herkomst een getal is waar niemand
+ * iets mee kan: "9–13 rondes" uit je eigen stint is iets anders dan hetzelfde
+ * bereik uit de gedeelde stints van andere rijders. De eis is daarom letterlijk:
+ * één regel, geen jargon, geen Engels, en bij een eigen meting helemaal niets.
+ *
+ * De vijf bronnen zijn die van de migratie (`basis.bron`): eigen, exact, auto,
+ * circuit, algemeen. `basis.prior_n` is `n_eff` — de gewogen meetbasis in
+ * rondes, geen aantal stints — dus zegt de regel "rondes"; het aantal stints
+ * staat in de leesbare opbouw van de server, die als titeltip meegaat.
+ */
+describe("waar het bandencijfer vandaan komt", () => {
+  /** Een graad B met bereik, zodat er ook echt een getal staat om uit te leggen. */
+  const metBron = (
+    bron: "eigen" | "exact" | "auto" | "circuit" | "algemeen",
+    priorN: number | null,
+    extra: { modelBron?: string | null; priorBron?: string | null } = {},
+  ) =>
+    parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      stints: 2,
+      wear_per_lap: 1.1,
+      range_laps: { low: 9, high: 13 },
+      provenance: "estimated",
+      basis: {
+        car_key: "bmw_m4_gt3",
+        track_key: "spa",
+        track_temp_c: 21,
+        rondes_in_basis: 18,
+        rondes_effectief: 59,
+        bron,
+        prior_rate: 1.23,
+        prior_n: priorN,
+        prior_level: bron === "eigen" ? "exact" : bron,
+        prior_bron: extra.priorBron ?? null,
+      },
+      model_bron: extra.modelBron ?? null,
+    });
+
+  it("leest de velden van de nieuwe migratie, zonder ze te verzinnen", () => {
+    const estimate = metBron("auto", 41.37, {
+      priorBron: "algemeen: 12 stints, 40 rondes over alle auto's en circuits · deze auto op andere circuits: 7 stints, 90 rondes",
+    });
+
+    expect(estimate?.basis.bron).toBe("auto");
+    expect(estimate?.basis.priorRate).toBe(1.23);
+    expect(estimate?.basis.priorN).toBe(41.37);
+    expect(estimate?.basis.priorLevel).toBe("auto");
+    expect(estimate?.basis.priorBron).toContain("deze auto op andere circuits");
+    expect(estimate?.modelBron).toBeNull();
+
+    // Zonder die velden blijft alles leeg; geen bron betekent geen bewering.
+    const kaal = parseTyreEstimateV2({ grade: "B", basis: { car_key: "bmw_m4_gt3" } });
+    expect(kaal?.basis.bron).toBeNull();
+    expect(kaal?.basis.priorN).toBeNull();
+    expect(kaal?.basis.priorRate).toBeNull();
+    expect(kaal?.basis.priorLevel).toBeNull();
+    expect(kaal?.basis.priorBron).toBeNull();
+    expect(kaal?.modelBron).toBeNull();
+    // Een onbekend token wordt geen verzonnen bron.
+    expect(parseTyreEstimateV2({ grade: "B", basis: { bron: "iets-nieuws" } })?.basis.bron).toBeNull();
+  });
+
+  it("zegt bij een eigen meting niets extra's: dat is de gewone situatie", () => {
+    const view = render(<TyreModelPanel estimate={metBron("eigen", 4, { modelBron: "eigen stint" })} bron="v2" coverage={[]} />);
+
+    expect(view.container.querySelector("[data-pitwall-tyre-prior]")).toBeNull();
+    expect(view.container.textContent).not.toContain("andere rijders");
+    // Het bereik zelf staat er gewoon, ongewijzigd.
+    expect(screen.getByText("9–13")).toBeVisible();
+    view.unmount();
+  });
+
+  it("zegt bij bron auto op welk circuit je nog niets zelf hebt", () => {
+    const view = render(<TyreModelPanel estimate={metBron("auto", 41)} bron="v2" coverage={[]} />);
+
+    const regel = view.container.querySelector("[data-pitwall-tyre-prior]")!;
+    expect(regel).toHaveAttribute("data-pitwall-tyre-prior", "auto");
+    expect(regel).toHaveTextContent(
+      "Nog geen eigen meting op dit circuit — gebaseerd op 41 rondes van andere rijders met deze auto",
+    );
+    // Eenenveertig rondes is geen dunne basis: geen waarschuwing erbij.
+    expect(view.container.querySelector("[data-pitwall-tyre-prior-warning]")).toBeNull();
+    view.unmount();
+  });
+
+  it("zegt bij bron circuit dat de auto nog niet meedoet", () => {
+    const view = render(<TyreModelPanel estimate={metBron("circuit", 7)} bron="v2" coverage={[]} />);
+
+    const regel = view.container.querySelector("[data-pitwall-tyre-prior]")!;
+    expect(regel).toHaveAttribute("data-pitwall-tyre-prior", "circuit");
+    expect(regel).toHaveTextContent(
+      "Nog geen eigen meting met deze auto — gebaseerd op 7 rondes van andere rijders op dit circuit",
+    );
+    view.unmount();
+  });
+
+  it("zegt bij bron exact dat het om deze auto op dit circuit gaat", () => {
+    const view = render(<TyreModelPanel estimate={metBron("exact", 12)} bron="v2" coverage={[]} />);
+
+    const regel = view.container.querySelector("[data-pitwall-tyre-prior]")!;
+    expect(regel).toHaveAttribute("data-pitwall-tyre-prior", "exact");
+    expect(regel).toHaveTextContent(
+      "Nog geen eigen meting — gebaseerd op 12 rondes van andere rijders met deze auto op dit circuit",
+    );
+    view.unmount();
+  });
+
+  it("zegt bij bron algemeen dat het van allerlei auto's en circuits komt", () => {
+    const view = render(<TyreModelPanel estimate={metBron("algemeen", 40)} bron="v2" coverage={[]} />);
+
+    const regel = view.container.querySelector("[data-pitwall-tyre-prior]")!;
+    expect(regel).toHaveAttribute("data-pitwall-tyre-prior", "algemeen");
+    expect(regel).toHaveTextContent(
+      "Nog geen eigen meting — gebaseerd op 40 rondes van andere rijders, van andere auto's en circuits",
+    );
+    view.unmount();
+  });
+
+  it("waarschuwt onder de drie rondes dat het een grove schatting is", () => {
+    const twee = render(<TyreModelPanel estimate={metBron("auto", 2.5)} bron="v2" coverage={[]} />);
+
+    expect(twee.container.querySelector("[data-pitwall-tyre-prior]")).toHaveTextContent(
+      "gebaseerd op 2,5 rondes",
+    );
+    expect(twee.container.querySelector("[data-pitwall-tyre-prior-warning]")).toHaveTextContent(
+      "Grove schatting: hier liggen minder dan drie rondes van andere rijders onder. Zie het als een richting, niet als een belofte.",
+    );
+    twee.unmount();
+
+    // Eén ronde is enkelvoud, en nog steeds een grove schatting.
+    const een = render(<TyreModelPanel estimate={metBron("circuit", 1)} bron="v2" coverage={[]} />);
+    expect(een.container.querySelector("[data-pitwall-tyre-prior]")).toHaveTextContent("gebaseerd op 1 ronde van");
+    expect(een.container.querySelector("[data-pitwall-tyre-prior-warning]")).not.toBeNull();
+    een.unmount();
+
+    // Drie rondes is de grens: daar houdt de waarschuwing op.
+    const drie = render(<TyreModelPanel estimate={metBron("auto", 3)} bron="v2" coverage={[]} />);
+    expect(drie.container.querySelector("[data-pitwall-tyre-prior-warning]")).toBeNull();
+    drie.unmount();
+  });
+
+  it("zet de opbouw van de server als titeltip bij de regel, niet als tweede zin", () => {
+    const opbouw =
+      "algemeen: 12 stints, 40 rondes over alle auto's en circuits · andere auto's op dit circuit: 7 stints, 90 rondes";
+    const view = render(
+      <TyreModelPanel estimate={metBron("circuit", 7, { priorBron: opbouw })} bron="v2" coverage={[]} />,
+    );
+
+    const regel = view.container.querySelector("[data-pitwall-tyre-prior] p")!;
+    expect(regel).toHaveAttribute("title", opbouw);
+    expect(regel).toHaveTextContent(
+      "Nog geen eigen meting met deze auto — gebaseerd op 7 rondes van andere rijders op dit circuit",
+    );
+    view.unmount();
+
+    // De korte omschrijving van de server wint van de lange opbouw; een lege
+    // omschrijving ("algemeen beeld") herhaalt de regel en valt terug op de opbouw.
+    const kort = render(
+      <TyreModelPanel
+        estimate={metBron("auto", 41, { modelBron: "Spa + Lamborghini Huracan GT3", priorBron: opbouw })}
+        bron="v2"
+        coverage={[]}
+      />,
+    );
+    expect(kort.container.querySelector("[data-pitwall-tyre-prior] p")).toHaveAttribute(
+      "title",
+      "Spa + Lamborghini Huracan GT3",
+    );
+    kort.unmount();
+
+    const leeg = render(
+      <TyreModelPanel estimate={metBron("algemeen", 40, { modelBron: "algemeen beeld", priorBron: opbouw })} bron="v2" coverage={[]} />,
+    );
+    expect(leeg.container.querySelector("[data-pitwall-tyre-prior] p")).toHaveAttribute("title", opbouw);
+    leeg.unmount();
+  });
+
+  it("houdt de regel vrij van jargon en Engels, en zegt niets als de bron ontbreekt", () => {
+    const view = render(<TyreModelPanel estimate={metBron("auto", 41)} bron="v2" coverage={[]} />);
+    const regel = view.container.querySelector("[data-pitwall-tyre-prior]")!;
+    const tekst = regel.textContent ?? "";
+
+    expect(tekst).not.toMatch(/prior|model_bron|\bbron\b|\bbasis\b|\bn_eff\b|\bown\b|\bcar\b|\btrack\b|\bexact\b/i);
+    view.unmount();
+
+    // Zonder bron verzinnen we geen herkomst: dan blijft de regel weg.
+    const zonder = parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      range_laps: { low: 9, high: 13 },
+      basis: { car_key: "bmw_m4_gt3", prior_n: 41 },
+    });
+    const tweede = render(<TyreModelPanel estimate={zonder} bron="v2" coverage={[]} />);
+    expect(tweede.container.querySelector("[data-pitwall-tyre-prior]")).toBeNull();
+    tweede.unmount();
+  });
+
+  it("legt niets uit over een bereik dat er niet staat", () => {
+    const zonderBereik = parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      range_laps: null,
+      basis: { car_key: "bmw_m4_gt3", track_key: "spa", bron: "auto", prior_n: 41 },
+    });
+
+    const view = render(<TyreModelPanel estimate={zonderBereik} bron="v2" coverage={[]} />);
+
+    expect(screen.getByText("rondes onbekend")).toBeVisible();
+    expect(view.container.querySelector("[data-pitwall-tyre-prior]")).toBeNull();
+    view.unmount();
+  });
+});

@@ -16,6 +16,10 @@
  *    ook niet per ongeluk op het scherm komen.
  * 2. Ontbreekt een veld, dan wordt het `null` — nooit een nul. Alleen `grade` is
  *    verplicht; zonder geldige graad is er geen model en zegt de UI dat.
+ * 3. Waar het getal vandaan komt (`basis.bron`) is geen technisch detail maar
+ *    een zin voor de lezer: `priorUitleg` zet de bronnen om in gewone taal, met
+ *    de meetbasis erbij en zonder jargon. Bij een eigen meting zegt hij niets —
+ *    dat is de gewone situatie.
  */
 
 import {
@@ -50,11 +54,53 @@ export function provenanceLabel(provenance: TyreProvenance | null): string {
   return provenance == null ? PROVENANCE_LABEL.none : PROVENANCE_LABEL[provenance];
 }
 
+/**
+ * Waar de voorkennis vandaan komt — de niveaus die de server kent:
+ *
+ *   eigen     een eigen stint op deze auto en dit circuit; de gewone situatie
+ *   exact     gedeelde stints van anderen met precies deze auto op dit circuit
+ *   auto      stints van anderen met deze auto, op andere circuits
+ *   circuit   stints van anderen op dit circuit, met andere auto's
+ *   algemeen  alles wat er is, ongeacht auto en circuit
+ *
+ * `exact` staat erbij omdat de migratie hem stuurt: het is de fijnste trap van
+ * de prior en dus een eigen geval — wel andermans data, maar voor precies deze
+ * combinatie. `eigen` is geen bijzonder geval maar de norm: zodra er één eigen
+ * meting is, hoeft de pitwall niets over anderen te zeggen. `null` betekent dat
+ * de server niets over de herkomst zei; dan verzinnen we er geen.
+ */
+export type TyrePriorBron = "eigen" | "exact" | "auto" | "circuit" | "algemeen";
+
 export interface TyreBasis {
   carKey: string | null;
   trackKey: string | null;
   trackTempC: number | null;
   rondesInBasis: number | null;
+  /** Waar de voorkennis vandaan komt (`basis.bron`), of null als de server zweeg. */
+  bron: TyrePriorBron | null;
+  /**
+   * De helling uit de voorkennis in procentpunten per ronde, positief = slijt.
+   * Wordt bewaard zodat niemand hem opnieuw hoeft te lezen, maar staat niet als
+   * eigen getal op het scherm: het bereik in rondes is het antwoord, dit is de
+   * rekenondergrond. Twee hellingen naast elkaar is één te veel.
+   */
+  priorRate: number | null;
+  /**
+   * `basis.prior_n` is géén aantal stints maar `n_eff`: de meetbasis in rondes
+   * die het cijfer draagt (`n/(n+8)` gewogen). Daarom zegt de regel op het
+   * scherm "rondes" en nooit "stints" — het aantal stints staat alleen in de
+   * leesbare opbouw van de server (`priorBron`).
+   */
+  priorN: number | null;
+  /** De fijnste trap die meedeed (`basis.prior_level`): exact/auto/circuit/algemeen. */
+  priorLevel: string | null;
+  /**
+   * De leesbare opbouw van de prior (`basis.prior_bron`), met aantallen per trap:
+   * "algemeen: 12 stints, 40 rondes over alle auto's en circuits · andere auto's
+   * op dit circuit: 7 stints, 90 rondes". Te lang voor de regel zelf, dus die
+   * staat als detail (titeltip) bij de regel.
+   */
+  priorBron: string | null;
 }
 
 export interface TyreEstimateV2 {
@@ -72,6 +118,14 @@ export interface TyreEstimateV2 {
   provenance: TyreProvenance;
   /** Zolang dit waar is, is het bereik een schatting en geen belofte. */
   voorlopig: boolean;
+  /**
+   * De omschrijving van de basis in gewone taal, zoals de server hem meegaf
+   * (`model_bron`: `eigen stint`, `Spa + Lamborghini Huracan GT3`, `algemeen
+   * beeld`). De migratie van 20261029090000 stuurt die korte vorm nog niet; daar
+   * heet de leesbare opbouw `basis.prior_bron` (met aantallen per trap) en die
+   * staat in `basis`. null betekent: niets meegestuurd, en dan zwijgt de regel.
+   */
+  modelBron: string | null;
 }
 
 /* ─────────────────────────── lezers ─────────────────────────── */
@@ -138,6 +192,37 @@ function provenanceOf(value: unknown, grade: TyreGrade): TyreProvenance {
   }
 }
 
+/**
+ * De bron van de voorkennis (`basis.bron`). Onbekend of ontbrekend? Dan `null`:
+ * "eigen" verzinnen zou de pitwall laten zeggen dat het cijfer van deze auto
+ * komt, en dat is precies de bewering die dit veld moet onderbouwen.
+ */
+function priorBronOf(value: unknown): TyrePriorBron | null {
+  const token = typeof value === "string" ? value.trim().toLowerCase() : null;
+  switch (token) {
+    case "eigen":
+      return "eigen";
+    case "exact":
+      return "exact";
+    case "auto":
+      return "auto";
+    case "circuit":
+      return "circuit";
+    case "algemeen":
+      return "algemeen";
+    default:
+      return null;
+  }
+}
+
+/** Een niveau dat de server als tekst óf als getal mag sturen; altijd als tekst. */
+function levelOf(value: unknown): string | null {
+  const alsTekst = text(value);
+  if (alsTekst != null) return alsTekst;
+  const alsGetal = num(value);
+  return alsGetal == null ? null : String(alsGetal);
+}
+
 /** `{low, high}` of `[low, high]`; altijd naar buiten afgerond, nooit negatief. */
 function rangeOf(value: unknown): LapRange | null {
   const bron = Array.isArray(value) ? { low: value[0], high: value[1] } : value;
@@ -172,10 +257,102 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
       trackKey: text(get(basisRuw, "track_key")),
       trackTempC: num(get(basisRuw, "track_temp_c")),
       rondesInBasis: num(get(basisRuw, "rondes_in_basis")),
+      bron: priorBronOf(get(basisRuw, "bron")),
+      priorRate: num(get(basisRuw, "prior_rate")),
+      priorN: num(get(basisRuw, "prior_n")),
+      priorLevel: levelOf(get(basisRuw, "prior_level")),
+      priorBron: text(get(basisRuw, "prior_bron")),
     },
     provenance: provenanceOf(get(raw, "provenance"), grade),
     // Alleen A is gemeten; zonder veld is alles daarboven voorlopig.
     voorlopig: typeof voorlopigRuw === "boolean" ? voorlopigRuw : grade !== "A",
+    // De omschrijving mag naast `basis` staan (zoals de migratie hem stuurt) of
+    // erin; beide vormen lezen we, want een gemiste vorm is een lege regel.
+    modelBron: text(get(raw, "model_bron")) ?? text(get(basisRuw, "model_bron")),
+  };
+}
+
+/* ──────────────── waar het getal vandaan komt, in gewone taal ──────────────── */
+
+/**
+ * Onder hoeveel stints een voorkennis een grove schatting is. Drie is de grens
+ * die het model zelf ook aanhoudt voor graad A; daaronder is één tegenvaller
+ * genoeg om het bereik te laten kantelen.
+ */
+const DUNNE_BASIS = 3;
+
+export interface TyrePriorUitleg {
+  /** De regel onder het bereik, of null als er niets extra's te zeggen is. */
+  regel: string | null;
+  /** De waarschuwing bij een te dunne basis, of null. */
+  waarschuwing: string | null;
+  /** De opbouw die de server zelf meestuurde, als titeltip onder de regel. */
+  detail: string | null;
+}
+
+/**
+ * Rondes met een decimaal eronder de tien, zonder decimaal erboven: bij een dunne
+ * basis doet die ene tiende ertoe, bij veertig rondes is het ruis.
+ */
+function rondesTekst(value: number): string {
+  if (value >= 10) return String(Math.round(value));
+  const eenDecimaal = value.toFixed(1).replace(".", ",");
+  return eenDecimaal.endsWith(",0") ? String(Math.round(value)) : eenDecimaal;
+}
+
+/**
+ * De omschrijving die de server meegaf, tenzij hij alleen maar herhaalt wat de
+ * regel al zegt (`eigen stint`, `algemeen beeld`).
+ */
+function modelBronDetail(estimate: TyreEstimateV2): string | null {
+  const label = estimate.modelBron?.trim();
+  if (label == null || label === "") return null;
+  const kaal = label.toLowerCase();
+  if (kaal === "eigen stint" || kaal === "algemeen beeld" || kaal === "algemeen") return null;
+  return label;
+}
+
+/**
+ * Eén regel in gewone taal: waar komt dit cijfer vandaan?
+ *
+ * Bij een eigen meting staat er niets — dat is de gewone situatie en de rest van
+ * het paneel zegt daar al alles over. Zodra het getal op andermans stints rust,
+ * zegt deze regel dat hardop, met de meetbasis erbij: "nog geen eigen meting op
+ * dit circuit — gebaseerd op 41 rondes van andere rijders met deze auto". Geen
+ * `prior_n`, geen `basis.bron`, geen Engels: de lezer zit in de pit, niet in de
+ * database.
+ *
+ * Waarom rondes en geen stints: `basis.prior_n` is `n_eff`, de gewogen meetbasis
+ * in rondes. Het aantal stints staat alleen in de leesbare opbouw van de server
+ * (`basis.prior_bron`), en die is te lang voor deze regel — hij gaat mee als
+ * `detail`, als titeltip.
+ *
+ * De waarschuwing eronder is een tweede zin en geen bijvoeglijk naamwoord in de
+ * eerste: onder de drie rondes is het getal een grove schatting, en dat is iets
+ * anders dan "gebaseerd op twee rondes".
+ */
+export function priorUitleg(estimate: TyreEstimateV2): TyrePriorUitleg {
+  const { bron, priorN } = estimate.basis;
+  if (bron == null || bron === "eigen") return { regel: null, waarschuwing: null, detail: null };
+
+  const rondes = priorN == null ? null : `${rondesTekst(priorN)} ${priorN === 1 ? "ronde" : "rondes"}`;
+  const noemer = rondes == null ? "een schatting van andere rijders" : `${rondes} van andere rijders`;
+
+  const zin = {
+    exact: `Nog geen eigen meting — gebaseerd op ${noemer} met deze auto op dit circuit`,
+    auto: `Nog geen eigen meting op dit circuit — gebaseerd op ${noemer} met deze auto`,
+    circuit: `Nog geen eigen meting met deze auto — gebaseerd op ${noemer} op dit circuit`,
+    algemeen: `Nog geen eigen meting — gebaseerd op ${noemer}, van andere auto's en circuits`,
+  }[bron];
+
+  const dun = priorN != null && priorN < DUNNE_BASIS;
+
+  return {
+    regel: zin,
+    waarschuwing: dun
+      ? "Grove schatting: hier liggen minder dan drie rondes van andere rijders onder. Zie het als een richting, niet als een belofte."
+      : null,
+    detail: modelBronDetail(estimate) ?? estimate.basis.priorBron,
   };
 }
 
@@ -196,7 +373,18 @@ export function vanV1(estimate: TyreEstimate): TyreEstimateV2 {
     stints: null,
     wearPerLapPp: estimate.ratePerLap,
     rangeLaps: estimate.lapsRange,
-    basis: { carKey: null, trackKey: null, trackTempC: null, rondesInBasis: null },
+    basis: {
+      carKey: null,
+      trackKey: null,
+      trackTempC: null,
+      rondesInBasis: null,
+      bron: null,
+      priorRate: null,
+      priorN: null,
+      priorLevel: null,
+      priorBron: null,
+    },
+    modelBron: null,
     provenance: estimate.grade === "A" ? "measured" : estimate.grade === "D" ? "none" : "estimated",
     voorlopig: estimate.grade !== "A",
   };

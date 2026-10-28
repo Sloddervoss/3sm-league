@@ -2,6 +2,7 @@ import { Disc3, Layers, TriangleAlert } from "lucide-react";
 import { formatLapsRange, formatRate } from "./strategy/tyreGrade";
 import { gradeWord, rangeAria } from "./tyreCopy";
 import {
+  priorUitleg,
   provenanceLabel,
   type TyreCoverageRow,
   type TyreEstimateV2,
@@ -28,6 +29,9 @@ import {
  *   graadwoord (sterk/matig/zwak/plan) en nooit een herkomstwoord, zodat er
  *   nooit twee woorden naast elkaar staan die hetzelfde lijken te zeggen en het
  *   toch oneens zijn (`A · gemeten` naast `geschat`, enzovoort).
+ * - Waar het getal vandaan komt, staat als gewone zin onder het bereik. Niet als
+ *   tweede badge: de herkomst zegt al dát het geschat is, deze regel zegt waaróm
+ *   en hoeveel stints eronder liggen. Bij een eigen meting zwijgt hij.
  */
 
 const provenanceTone: Record<string, string> = {
@@ -181,6 +185,10 @@ function BereikRegel({
               {ondertitel}
             </p>
           )}
+          {/* Eén regel in gewone taal onder het bereik: waar komt dit getal
+              vandaan? Alleen als er ook echt een getal staat — een uitleg over
+              een bereik dat er niet is, legt niets uit. */}
+          {bereik != null && !geenRondes && <PriorRegel estimate={estimate} />}
           {bereik != null && !estimate.usable && (
             <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-range-raw={formatLapsRange(bereik) ?? undefined}>
               {geenRondes
@@ -228,6 +236,44 @@ function BereikRegel({
           <span>
             Nog geen tweede meting: dit bereik is voorlopig. Elke stop die erbij komt, maakt de band smaller.
           </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Eén regel onder het bereik: waar komt dit cijfer vandaan?
+ *
+ * De woorden komen uit `priorUitleg`, niet uit dit bestand: de tests eisen de
+ * letterlijke zin, en een zin die op twee plekken staat verandert op een dag op
+ * één van de twee. Bij een eigen meting is er niets te zeggen en staat er ook
+ * niets — dat is de gewone situatie. Rust het getal op andermans stints, dan
+ * staat het aantal erbij en heet een dunne basis een grove schatting.
+ *
+ * Geen badge, geen kleur, geen `prior_n`: dit is uitleg, geen status. De
+ * waarschuwing eronder krijgt wél hetzelfde driehoekje als de voorlopig-regel,
+ * want dat is dezelfde soort boodschap.
+ */
+function PriorRegel({ estimate }: { estimate: TyreEstimateV2 }) {
+  const { regel, waarschuwing, detail } = priorUitleg(estimate);
+  if (regel == null) return null;
+
+  return (
+    <div data-pitwall-tyre-prior={estimate.basis.bron ?? "onbekend"}>
+      {/* De opbouw van de server (aantallen per trap) is te lang voor de regel
+          zelf en staat daarom als titeltip: zichtbaar voor wie erom vraagt,
+          weg uit de blik van wie het bereik leest. */}
+      <p className="mt-0.5 text-[11px] leading-4 text-gray-400" title={detail ?? undefined}>
+        {regel}
+      </p>
+      {waarschuwing != null && (
+        <p
+          className="mt-0.5 flex items-start gap-1.5 text-[11px] leading-4 text-amber-200/90"
+          data-pitwall-tyre-prior-warning="true"
+        >
+          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" aria-hidden />
+          <span>{waarschuwing}</span>
         </p>
       )}
     </div>
