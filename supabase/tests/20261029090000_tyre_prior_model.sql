@@ -48,6 +48,20 @@ language sql as $$
     from generate_series(1, p_rondes) g;
 $$;
 
+-- Een sessie afsluiten met één ronde in een nieuwe sessie. Sinds
+-- 20261029120000 telt een stint pas mee als hij gesloten is: de lopende stint
+-- van het nieuwste sample is nog geen kennis. Deze ronde maakt de vorige sessie
+-- dicht; zelf heeft hij één ronde (span 0) en levert hij nooit een bijdrage.
+create function pg_temp.sluit(p_device uuid, p_auto text, p_baan text, p_start timestamptz)
+returns void
+language sql as $$
+  insert into public.simhub_tyre_lap_samples
+    (device_id, connector_id, session_key, lap_number, tyre_set,
+     wear_fl, wear_fr, wear_rl, wear_rr, car_key, track_key, captured_at)
+  values (p_device, 'syn', 'sluit-' || gen_random_uuid(), 1, 1,
+          100, 100, 100, 100, p_auto, p_baan, p_start + interval '2 hours');
+$$;
+
 do $test$
 declare
   -- Echte apparaten zonder bandendata, met een eigenaar.
@@ -248,6 +262,7 @@ begin
                       and (public.tyre_prior('lamborghinievogt3', 'spa2022full:gp') ->> 'n_eff')::numeric = 0);
 
   perform pg_temp.stint(v_dev_a, 'spa-1', 1, 'lamborghinievogt3', 'spa2022full:gp', 0.5, 11, v_t);
+  perform pg_temp.sluit(v_dev_a, 'lamborghinievogt3', 'spa2022full:gp', v_t);
   v_p := public.tyre_prior('lamborghinievogt3', 'spa2022full:gp');
   perform pg_temp.eis('1 stint: exact, rate 0,5, n_eff = 10*10/18',
                       (v_p ->> 'level') = 'exact'
@@ -265,6 +280,7 @@ begin
       for i in 1 .. (v_n - v_start) loop
         perform pg_temp.stint(v_dev_a, 'spa-' || v_n || '-' || i, i + 10,
                               'lamborghinievogt3', 'spa2022full:gp', 0.5, 11, v_t);
+        perform pg_temp.sluit(v_dev_a, 'lamborghinievogt3', 'spa2022full:gp', v_t);
       end loop;
       v_p := public.tyre_prior('lamborghinievogt3', 'spa2022full:gp');
       perform pg_temp.eis(format('%s stints: exact, zelfde rate, n_eff %s > %s',
@@ -283,6 +299,7 @@ begin
   -- E. Auto zonder circuit
   -- ========================================================================
   perform pg_temp.stint(v_dev_b, 'lambo-monza', 1, 'lamborghinievogt3', 'monza:gp', 0.4, 11, v_t);
+  perform pg_temp.sluit(v_dev_b, 'lamborghinievogt3', 'monza:gp', v_t);
   v_p := public.tyre_prior('lamborghinievogt3', 'brandsh:gp');
   perform pg_temp.eis('auto zonder circuit: level auto, rate = (250+4)/510',
                       (v_p ->> 'level') = 'auto'
@@ -294,6 +311,7 @@ begin
   -- ========================================================================
   -- Een Porsche die nergens anders reed, met een BMW-stint op Brands Hatch.
   perform pg_temp.stint(v_dev_b, 'bmw-brands', 1, 'bmwm4gt3', 'brandsh:gp', 0.25, 11, v_t);
+  perform pg_temp.sluit(v_dev_b, 'bmwm4gt3', 'brandsh:gp', v_t);
   v_p := public.tyre_prior('porsche992rgt3', 'brandsh:gp');
   v_rate := (v_p ->> 'rate')::numeric;
   perform pg_temp.eis(format('circuit zonder auto: level circuit, rate %s tussen 0,25 en 0,50', v_rate),
@@ -310,6 +328,7 @@ begin
   -- omhoog trekken, maar niet naar 2,0.
   v_p_auto := public.tyre_prior('lamborghinievogt3', 'zandvoort:gp');
   perform pg_temp.stint(v_dev_b, 'lambo-zand', 1, 'lamborghinievogt3', 'zandvoort:gp', 2.0, 11, v_t);
+  perform pg_temp.sluit(v_dev_b, 'lamborghinievogt3', 'zandvoort:gp', v_t);
   v_p := public.tyre_prior('lamborghinievogt3', 'zandvoort:gp');
   v_rate := (v_p ->> 'rate')::numeric;
   perform pg_temp.eis(format('tegenstelling: exact %s tussen auto %s en eigen 2,0',
@@ -326,9 +345,10 @@ begin
   -- H. Privacy
   -- ========================================================================
   v_p := public.tyre_prior('lamborghinievogt3', 'spa2022full:gp');
-  perform pg_temp.eis('alleen rate, n_eff, level en bron',
+  -- Sinds 20261029120000 staan de echte aantallen ernaast: rondes en stints.
+  perform pg_temp.eis('alleen rate, n_eff, rondes, stints, level en bron',
                       (select array_agg(k order by k) from jsonb_object_keys(v_p) k)
-                        = array['bron','level','n_eff','rate']);
+                        = array['bron','level','n_eff','rate','rondes','stints']);
   perform pg_temp.eis('geen apparaatnaam, apparaat-id of coureur in de bron',
                       v_p ->> 'bron' not like '%DESKTOP%'
                       and v_p ->> 'bron' not like '%CAT-PC%'
@@ -343,6 +363,7 @@ begin
   -- De Ferrari heeft data op Imola; een leeg apparaat zet één ronde in Le Mans
   -- neer (wear-stand, geen helling). De auto-trap moet het getal leveren.
   perform pg_temp.stint(v_dev_b, 'ferrari-imola-a', 1, 'ferrari296gt3', 'imola:gp', 0.3, 11, v_t);
+  perform pg_temp.sluit(v_dev_b, 'ferrari296gt3', 'imola:gp', v_t);
   insert into public.simhub_tyre_lap_samples
     (device_id, connector_id, session_key, lap_number, tyre_set,
      wear_fl, wear_fr, wear_rl, wear_rr, car_key, track_key, captured_at)
@@ -369,27 +390,36 @@ begin
   -- J. Eigen stint + prior: eigen meting weegt mee, band wordt smaller
   -- ========================================================================
   -- De eigen stint van RICKY (0,5 pp, tien rondes basis) op een combinatie die
-  -- nog nergens anders gemeten is. De prior bevat die eigen stint al (de pool
-  -- is per auto en baan, niet per apparaat), dus de exacte trap bestaat meteen
-  -- en de blend houdt het getal vrijwel op 0,5.
+  -- nog nergens anders gemeten is. Sinds 20261029120000 sluit tyre_prior() de
+  -- eigen stints uit: de pool bevat die stint wel, maar de prior van dit
+  -- apparaat is leeg. Er is dus geen nieuwe informatie en de band is precies
+  -- die van de eigen meting — de oude versie telde de eigen stint dubbel en
+  -- maakte de band daardoor smaller dan de meting rechtvaardigt.
   perform pg_temp.stint(v_dev_b, 'merc-zolder-own', 1, 'mercedesamggt3', 'zolder:gp', 0.5, 11,
                         v_t + interval '7 hours');
+  perform pg_temp.sluit(v_dev_b, 'mercedesamggt3', 'zolder:gp', v_t + interval '7 hours');
   perform set_config('request.jwt.claim.sub', v_owner_b::text, true);
-  v_p := public.tyre_prior('mercedesamggt3', 'zolder:gp');
+  v_p := public.tyre_prior('mercedesamggt3', 'zolder:gp', v_dev_b);
   v_est_eerder := public.pitwall_tyre_estimate_v2(v_dev_b);
   v_breed_eerder := ((v_est_eerder #>> '{range_laps,high}')::numeric
                      - (v_est_eerder #>> '{range_laps,low}')::numeric)
                     / nullif((v_est_eerder #>> '{range_laps,high}')::numeric, 0);
-  perform pg_temp.eis('eigen stint: bron eigen, prior is de eigen cel',
+  -- De eigen stint zit wel in de pool (tien rondes in deze cel), maar niet in
+  -- de prior van dit apparaat: zonder uitsluiting is de trap exact en heeft hij
+  -- tien rondes meer; met uitsluiting valt die trap weg.
+  perform pg_temp.eis('eigen stint: bron eigen, exacte trap leeg (eigen data telt niet dubbel)',
                       v_est_eerder #>> '{basis,bron}' = 'eigen'
-                      and (v_p ->> 'level') = 'exact'
-                      and v_est_eerder #>> '{basis,prior_level}' = 'exact'
+                      and (select rondes from public.tyre_prior_stats
+                            where car_key = 'mercedesamggt3'
+                              and track_key = 'zolder:gp') = 10
+                      and (v_p ->> 'level') is distinct from 'exact'
+                      and (v_p ->> 'bron') not like '%deze auto op dit circuit%'
+                      and (public.tyre_prior('mercedesamggt3', 'zolder:gp') ->> 'level') = 'exact'
+                      and (public.tyre_prior('mercedesamggt3', 'zolder:gp') ->> 'rondes')::integer
+                          > (v_p ->> 'rondes')::integer
+                      and (v_est_eerder ->> 'wear_per_lap')::numeric between 0.49 and 0.51
                       and (v_est_eerder #>> '{basis,rondes_effectief}')::numeric
-                          = 10 + (v_p ->> 'n_eff')::numeric
-                      and (v_est_eerder ->> 'wear_per_lap')::numeric
-                          = round((10.0 / 18) * 0.5
-                                  + (8.0 / 18) * (v_p ->> 'rate')::numeric, 4))
-  ;
+                          = 10 + (v_est_eerder #>> '{basis,prior_n}')::numeric);
   perform pg_temp.eis('de eigen meting ligt binnen de band',
                       (v_est_eerder #>> '{range_laps,low}')::numeric
                         <= floor(((v_est_eerder ->> 'wear_now')::numeric - 40) / 0.5)
@@ -401,14 +431,20 @@ begin
   -- de band wordt niet breder.
   perform pg_temp.stint(v_dev_a, 'merc-zolder-a', 1, 'mercedesamggt3', 'zolder:gp', 0.5, 11, v_t);
   perform pg_temp.stint(v_dev_a, 'merc-zolder-b', 2, 'mercedesamggt3', 'zolder:gp', 0.5, 11, v_t);
-  v_p := public.tyre_prior('mercedesamggt3', 'zolder:gp');
+  perform pg_temp.sluit(v_dev_a, 'mercedesamggt3', 'zolder:gp', v_t);
+  v_p := public.tyre_prior('mercedesamggt3', 'zolder:gp', v_dev_b);
   v_est := public.pitwall_tyre_estimate_v2(v_dev_b);
   v_breed_later := ((v_est #>> '{range_laps,high}')::numeric
                     - (v_est #>> '{range_laps,low}')::numeric)
                    / nullif((v_est #>> '{range_laps,high}')::numeric, 0);
   perform pg_temp.eis('bevestigende pool: level exact, rate blijft rond 0,5',
                       (v_p ->> 'level') = 'exact'
-                      and (v_p ->> 'bron') like '%eigen data: deze auto op dit circuit%'
+                      and (v_p ->> 'bron') like '%deze auto op dit circuit%'
+                      and (v_p ->> 'bron') not like '%eigen data%'
+                      -- de exacte trap heeft de twee stints van het andere
+                      -- apparaat; de rest van de pool zit in de grovere traps
+                      and (v_p ->> 'stints')::integer > 2
+                      and (v_p ->> 'rondes')::integer > 20
                       and (v_p ->> 'rate')::numeric between 0.49 and 0.51);
   perform pg_temp.eis('eigen stint + prior: rate = 10/18*0,5 + 8/18*prior',
                       (v_est ->> 'wear_per_lap')::numeric
@@ -416,6 +452,9 @@ begin
                                 + (8.0 / 18) * (v_p ->> 'rate')::numeric, 4)
                       and v_est #>> '{basis,bron}' = 'eigen'
                       and (v_est #>> '{basis,prior_level}') = 'exact'
+                      and (v_est #>> '{basis,prior_rondes}')::integer
+                          = (v_p ->> 'rondes')::integer
+                      and (v_est #>> '{basis,prior_stints}')::integer > 0
                       and (v_est #>> '{basis,rondes_effectief}')::numeric
                           = 10 + (v_p ->> 'n_eff')::numeric
                       and (v_est #>> '{basis,rondes_effectief}')::numeric
@@ -435,16 +474,21 @@ begin
    where device_id = v_dev_cat;
   -- Tien rondes voorkennis op dezelfde combinatie, 0,45 pp per ronde.
   perform pg_temp.stint(v_dev_a, 'lambo-montreal', 1, 'lamborghinievogt3', '218:', 0.45, 11, v_t);
+  perform pg_temp.sluit(v_dev_a, 'lamborghinievogt3', '218:', v_t);
 
   perform set_config('request.jwt.claim.sub', v_owner_cat::text, true);
   v_est := public.pitwall_tyre_estimate_v2(v_dev_cat);
   raise notice 'INFO: CAT-PC met prior: rate % band % (was 0,4833 / 88-153)',
                v_est ->> 'wear_per_lap', v_est -> 'range_laps';
-  perform pg_temp.eis('echte CAT-PC-stint met prior: band smaller dan 88-153',
-                      (v_est #>> '{range_laps,low}')::integer > 88
-                      and (v_est #>> '{range_laps,high}')::integer < 153
+  -- De prior bestaat uit de tien rondes van het andere apparaat; de eigen stint
+  -- van CAT-PC zit er niet in (uitgesloten) en telt alleen als eigen meting mee.
+  perform pg_temp.eis('echte CAT-PC-stint met prior: band smaller dan 88-153 (breedte)',
+                      ((v_est #>> '{range_laps,high}')::numeric
+                        - (v_est #>> '{range_laps,low}')::numeric) < (153 - 88)
                       and v_est #>> '{basis,bron}' = 'eigen'
-                      and (v_est #>> '{basis,prior_n}')::numeric > 0
+                      and (v_est #>> '{basis,prior_rondes}')::integer >= 10
+                      and (v_est #>> '{basis,prior_stints}')::integer > 0
+                      and (v_est #>> '{basis,prior_rate}')::numeric between 0.44 and 0.50
                       and (v_est #>> '{basis,rondes_effectief}')::numeric > 3);
   perform pg_temp.eis('echte CAT-PC-stint: eigen meting blijft in de band',
                       (v_est #>> '{range_laps,low}')::numeric
