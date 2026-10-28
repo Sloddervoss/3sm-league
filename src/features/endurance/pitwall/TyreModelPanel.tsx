@@ -186,9 +186,10 @@ function BereikRegel({
             </p>
           )}
           {/* Eén regel in gewone taal onder het bereik: waar komt dit getal
-              vandaan? Alleen als er ook echt een getal staat — een uitleg over
-              een bereik dat er niet is, legt niets uit. */}
-          {bereik != null && !geenRondes && <PriorRegel estimate={estimate} />}
+              vandaan? Alleen als er ook echt een bereik staat — dezelfde gate
+              als de voorlopig-regel: een uitleg over een bereik dat er niet is
+              (of dat niet bruikbaar is als advies) legt niets uit. */}
+          {toonBereik && <PriorRegel estimate={estimate} />}
           {bereik != null && !estimate.usable && (
             <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-range-raw={formatLapsRange(bereik) ?? undefined}>
               {geenRondes
@@ -230,7 +231,7 @@ function BereikRegel({
 
       <BasisRegel estimate={estimate} />
 
-      {estimate.voorlopig && bereik != null && estimate.usable && (
+      {estimate.voorlopig && toonBereik && (
         <p className="flex items-start gap-1.5 text-[11px] leading-4 text-amber-200/90" data-pitwall-tyre-provisional="true">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" aria-hidden />
           <span>
@@ -251,9 +252,11 @@ function BereikRegel({
  * niets — dat is de gewone situatie. Rust het getal op andermans stints, dan
  * staat het aantal erbij en heet een dunne basis een grove schatting.
  *
- * Geen badge, geen kleur, geen `prior_n`: dit is uitleg, geen status. De
- * waarschuwing eronder krijgt wél hetzelfde driehoekje als de voorlopig-regel,
- * want dat is dezelfde soort boodschap.
+ * Geen badge, geen kleur, geen veldnaam: dit is uitleg, geen status. De regel
+ * telt de echte rondes uit de basis (`prior_rondes`, met `prior_n` als terugval)
+ * en de titeltip geeft de aantallen zonder te beweren dat het om eigen data
+ * gaat. De waarschuwing eronder krijgt wél hetzelfde driehoekje als de
+ * voorlopig-regel, want dat is dezelfde soort boodschap.
  */
 function PriorRegel({ estimate }: { estimate: TyreEstimateV2 }) {
   const { regel, waarschuwing, detail } = priorUitleg(estimate);
