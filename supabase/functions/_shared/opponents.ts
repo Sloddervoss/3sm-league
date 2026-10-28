@@ -71,15 +71,28 @@ export const parseOpponents = (value: unknown, path = "opponents"): V3Opponent[]
   if (value === null || value === undefined) return null;
   if (!Array.isArray(value)) throw new Error(`${path} must be an array or null`);
   if (value.length > MaxOpponentsPerSnapshot) throw new Error(`${path} exceeds cap ${MaxOpponentsPerSnapshot}`);
-  return value.map((raw, index) => {
+  return value.flatMap((raw, index) => {
     const o = asRecord(raw, `${path}[${index}]`);
     const id = nullableText(o.id, `${path}[${index}].id`);
-    if (!id) throw new Error(`${path}[${index}].id is invalid`);
-    const num = (v: unknown, p: string): number | null => v3Number(v, p, { nullable: true, min: 0, max: 86400, sentinels: [-1] });
-    const lapNum = (v: unknown, p: string): number | null => v3Number(v, p, { nullable: true, integer: true, min: 1, max: 100000, sentinels: [-1, 0] });
-    const posNum = (v: unknown, p: string): number | null => v3Number(v, p, { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] });
-    const lapDist = (v: unknown, p: string): number | null => v3Number(v, p, { nullable: true, min: 0, max: 1, sentinels: [-1] });
-    return {
+    if (!id) {
+      console.error("[ingest] tegenstander zonder id overgeslagen", { pad: `${path}[${index}]` });
+      return [];
+    }
+    // Een tegenstander met een onbruikbaar getal mag nooit het hele frame
+    // kosten: dat veld wordt leeg en de rest van de rij blijft staan.
+    const zacht = (v: unknown, p: string, opties: Parameters<typeof v3Number>[2]): number | null => {
+      try {
+        return v3Number(v, p, opties);
+      } catch {
+        console.error("[ingest] tegenstanderveld ongeldig, veld leeggemaakt", { pad: p, waarde: String(v) });
+        return null;
+      }
+    };
+    const num = (v: unknown, p: string): number | null => zacht(v, p, { nullable: true, min: 0, max: 86400, sentinels: [-1] });
+    const lapNum = (v: unknown, p: string): number | null => zacht(v, p, { nullable: true, integer: true, min: 1, max: 100000, sentinels: [-1, 0] });
+    const posNum = (v: unknown, p: string): number | null => zacht(v, p, { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] });
+    const lapDist = (v: unknown, p: string): number | null => zacht(v, p, { nullable: true, min: 0, max: 1, sentinels: [-1] });
+    const rij: V3Opponent = {
       id,
       carNumber: nullableText(o.carNumber, `${path}[${index}].carNumber`),
       driverName: nullableText(o.driverName, `${path}[${index}].driverName`),
@@ -99,5 +112,6 @@ export const parseOpponents = (value: unknown, path = "opponents"): V3Opponent[]
       connected: o.connected === true,
       isPlayer: o.isPlayer === true,
     };
+    return [rij];
   });
 };

@@ -87,9 +87,16 @@ export const resolveTelemetryContext = async (
     } else if (version === 1 || version === 2) {
       normalized = normalizeTelemetryEnvelope(rawBody);
     } else {
+      console.error("[ingest] onbekende protocolversie", { connector: dev.connector_id, version: String(version) });
       return mkResult("unsupported_version", null, dev.id);
     }
-  } catch {
+  } catch (fout) {
+    console.error("[ingest] payload afgekeurd", {
+      connector: dev.connector_id,
+      reden: fout instanceof Error ? fout.message : String(fout),
+      pad: (fout as { path?: unknown })?.path ?? null,
+      veld: (fout as { field?: unknown })?.field ?? null,
+    });
     return mkResult("invalid_payload", null, dev.id);
   }
 

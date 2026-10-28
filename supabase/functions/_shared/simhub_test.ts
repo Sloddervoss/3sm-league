@@ -110,3 +110,25 @@ Deno.test("een fout bandenblok kost het frame niet", () => {
   if (parsed.timing.completedLaps !== 2 || parsed.fuel.fuelLitres !== 40) throw new Error("frame is niet doorgekomen");
   if (parsed.brakes !== null || parsed.weather !== null) throw new Error("ontbrekende blokken horen null te zijn");
 });
+
+// Een oudere plugin kan hier een ongeldige waarde sturen. Dat mag het frame
+// niet kosten: het veld wordt leeggemaakt, de rest komt door.
+Deno.test("een ongeldige gap kost het frame niet", () => {
+  const v3 = {
+    protocolVersion: 3,
+    sequence: 1,
+    capturedAt: "2026-10-27T18:00:00Z",
+    transportSessionId: "sessie",
+    identity: { currentDriverId: null, currentDriverName: "Vincent", carId: "mclaren720sgt3", carName: null, trackName: "spa", trackConfig: null },
+    session: { isInCar: true, sessionTimeSeconds: 10, sessionTimeRemainingSeconds: null, sessionLapsRemaining: null, flags: ["green"], sessionState: "racing" },
+    timing: { currentLapElapsedSeconds: 5, lastLapTimeSeconds: null, bestLapTimeSeconds: null, completedLaps: 2 },
+    position: { position: 1, classPosition: 1, gapToLeaderSeconds: 999999999 },
+    track: { lapDistancePct: 0.2, trackSurface: "on_track", onPitRoad: false },
+    fuel: { fuelLitres: 40, fuelPct: null },
+    raceState: { incidents: 0 },
+    pitService: { pitServiceFlagsRaw: null, requiredRepairSeconds: null, optionalRepairSeconds: null },
+  };
+  const parsed = parseTelemetryV3Envelope(v3);
+  if (parsed.position.gapToLeaderSeconds !== null) throw new Error("ongeldige gap is niet leeggemaakt");
+  if (parsed.timing.completedLaps !== 2) throw new Error("frame is niet doorgekomen");
+});

@@ -440,7 +440,17 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
     position: {
       position: v3Number(position.position, "position.position", { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] }),
       classPosition: v3Number(position.classPosition, "position.classPosition", { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] }),
-      gapToLeaderSeconds: v3Number(position.gapToLeaderSeconds, "position.gapToLeaderSeconds", { nullable: true, min: 0, max: 86400, sentinels: [-1] }),
+      // Optioneel veld: een oudere plugin kan hier een ongeldige waarde sturen
+      // (bijvoorbeeld een verkeerde eenheid). Dat mag nooit het hele frame kosten;
+      // we laten het veld dan leeg en houden de rest van de telemetrie.
+      gapToLeaderSeconds: (() => {
+        try {
+          return v3Number(position.gapToLeaderSeconds, "position.gapToLeaderSeconds", { nullable: true, min: 0, max: 86400, sentinels: [-1] });
+        } catch {
+          console.error("[ingest] gapToLeaderSeconds ongeldig, veld leeggemaakt", { waarde: String(position.gapToLeaderSeconds) });
+          return null;
+        }
+      })(),
     },
     track: {
       lapDistancePct: v3Number(track.lapDistancePct, "track.lapDistancePct", { nullable: true, min: 0, max: 1, sentinels: [-1] }),
