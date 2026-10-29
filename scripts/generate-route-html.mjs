@@ -1884,11 +1884,19 @@ const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$
 
 const stripGeneratedRouteSeo = (html) => html
   // Current marked route SEO block. This makes repeated generator runs idempotent.
-  .replace(new RegExp(`\\s*${escapeRegex(routeSeoStart)}[\\s\\S]*?${escapeRegex(routeSeoEnd)}\\s*`, 'g'), '\n    ')
+  // Vervangen door niets, niet door een paar spaties: het blok staat tegenwoordig
+  // direct binnen #root, en na het strippen moet er weer exact <div id="root"></div>
+  // staan — anders vindt de volgende run zijn anker niet en verdwijnt de inhoud.
+  .replace(new RegExp(`\\s*${escapeRegex(routeSeoStart)}[\\s\\S]*?${escapeRegex(routeSeoEnd)}\\s*`, 'g'), '')
   // Legacy unmarked block from older builds. Delete everything from the first hidden
   // SEO div until the React root, because nested route content contains many </div>s.
   .replace(new RegExp(`\\s*${escapeRegex(legacyRouteSeoStyle)}[\\s\\S]*?(?=<div id="root"><\\/div>)`, 'g'), '\n    ')
   .replace(/<noscript>[\s\S]*?<\/noscript>\s*/g, '');
+
+// De lege React-root, eventueel met restjes witruimte ertussen (een eerdere run kan
+// daar een newline hebben achtergelaten). Eén plek, zodat de join-tak en de normale
+// tak hetzelfde anker gebruiken.
+const emptyRootPattern = /<div id="root">\s*<\/div>/;
 
 const buildCrawlerLinksHtml = (route) => {
   if (!route.crawlerLinks?.length) return '';
@@ -1918,50 +1926,17 @@ const buildRouteDetailsHtml = (route) => {
   return `${detailParagraphs}${facts ? `\n        <ul>\n${facts}\n        </ul>` : ''}${route.crawlerHtml ? `\n${route.crawlerHtml}` : ''}`;
 };
 
-const buildRichContent = (route, faq) => {
-  const breadcrumb = route.path === '/'
-    ? ''
-    : `<nav aria-label="Breadcrumb">
-      <ol>
-        <li><a href="${SITE_URL}/">3 Stripe Motorsport</a></li>
-        <li aria-current="page">${escapeHtml(route.h1)}</li>
-      </ol>
-    </nav>`;
-
-  // De kop van de pagina staat hier één keer. Routes met een eigen subkop (de
-  // uitslagpagina's: h1 = racenaam, h2 = circuit) kregen eerst de volledige titeltekst
-  // in een <p><strong> én in de broodkruimel én als <h1> in de noscript: dezelfde lange
-  // regel drie keer in hetzelfde document. Dat is precies het soort herhaling waarop
-  // Google kan besluiten dat de titel niet bij de pagina hoort. De racenaam staat nu
-  // in de broodkruimel en in de noscript-h1, het circuit in zijn eigen kop.
-  const heading = route.h2
-    ? `        <h2>${escapeHtml(route.h2)}</h2>`
-    : `        <p><strong>${escapeHtml(route.h1)}</strong></p>`;
-
-  // Use generic tags (strong/span) instead of semantic FAQ tags (section/article/h3)
-  // to avoid Google detecting a duplicate FAQPage from HTML alongside JSON-LD
-  const faqHtml = faq
-    ? `<div>
-${faq
-          .map(
-            ({ question, answer }) =>
-              `        <div style="margin-bottom:1em">
-          <strong>${escapeHtml(question)}</strong><br>
-          <span>${escapeHtml(answer)}</span>
-        </div>`,
-          )
-          .join('\n')}
-      </div>`
-    : '';
-
-  return `${breadcrumb}
-      <div aria-hidden="true" aria-label="3SM pagina-informatie">
-${heading}
-        <p>${escapeHtml(route.intro)}</p>
-${buildRouteDetailsHtml(route)}
-      </div>
-      ${faqHtml}`;
-};
+// Broodkruimel in de zichtbare documentstroom. Stond eerder in het verborgen
+// crawlerblok met aria-hidden eromheen; die wikkel is weg omdat de inhoud nu
+// zichtbaar is en aria-hidden de tekst voor hulpsoftware zou verbergen.
+const buildBreadcrumbNavHtml = (route) => (route.path === '/'
+  ? ''
+  : `      <nav aria-label="Breadcrumb">
+        <ol>
+          <li><a href="${SITE_URL}/">3 Stripe Motorsport</a></li>
+          <li aria-current="page">${escapeHtml(route.h1)}</li>
+        </ol>
+      </nav>\n`);
 
 // Vaste teksten rond de joinpagina in beide talen. De pagina-inhoud zelf komt
 // uit de route (h1, intro, details, faq); dit zijn de labels en de vaste
@@ -2088,48 +2063,59 @@ const applyRouteMeta = (html, route) => {
       + '</script>'
       + '<style>.js-enabled #root>main[data-3sm-fallback]{visibility:hidden}</style>';
     out = out.replace('</head>', `    ${fallbackGuard}\n  </head>`);
+    if (!emptyRootPattern.test(out)) {
+      throw new Error(`Geen lege <div id="root"></div> gevonden voor ${route.path}`);
+    }
     return out.replace(
-      '<div id="root"></div>',
-      `<div id="root">${buildJoinRootFallback(route)}</div>`,
+      emptyRootPattern,
+      () => `<div id="root">${buildJoinRootFallback(route)}</div>`,
     );
   }
-  const richContent = buildRichContent(route, null); // FAQ removed — no JSON-LD to back it
-  const noscriptLinks = route.links || [];
-  const noscriptCrawlerLinks = route.crawlerLinks?.length ? buildCrawlerLinksHtml(route) : '';
-  // Zelfde opbouw als het crawlerblok hierboven: op de uitslagpagina's is de h1 de
-  // racenaam en staat het circuit in een eigen h2. De lange titeltekst ("Uitslag X op
-  // Y (Z)") stond hier eerst als h1, waardoor dezelfde lange regel drie keer in het
-  // document voorkwam (broodkruimel, <p><strong> en deze h1).
-  const noscriptSubheading = route.h2 ? `      <h2>${escapeHtml(route.h2)}</h2>\n` : '';
-  const noscript = `<noscript>
-    <main>
-      <h1>${escapeHtml(route.h1)}</h1>
-${noscriptSubheading}      <p>${escapeHtml(route.intro)}</p>
+  const prerenderLinks = route.links || [];
+  const prerenderCrawlerLinks = route.crawlerLinks?.length ? buildCrawlerLinksHtml(route) : '';
+  // Op de uitslagpagina's is de h1 de racenaam en staat het circuit in een eigen h2.
+  // De lange titeltekst ("Uitslag X op Y (Z)") stond hier eerder als h1, waardoor
+  // dezelfde lange regel drie keer in het document voorkwam (broodkruimel,
+  // <p><strong> en deze h1). De h1 is nu de racenaam; het circuit volgt als h2.
+  const prerenderSubheading = route.h2 ? `      <h2>${escapeHtml(route.h2)}</h2>\n` : '';
+  // Eén kopie van de crawlerinhoud, in de zichtbare documentstroom en binnen #root.
+  //
+  // Waarom #root en niet een eigen container: de SPA mount met createRoot
+  // (src/main.tsx), en createRoot ruimt de inhoud van zijn container bij de eerste
+  // render op. Er staat dus nooit iets dubbel in beeld en er kan geen
+  // hydration-warning ontstaan — hydrateRoot wordt hier niet gebruikt; alleen dan
+  // zou de markup exact moeten matchen en was een aparte container de veilige keuze.
+  //
+  // Waarom niet langer verborgen: de inhoud stond hiervoor twee keer in het document,
+  // één keer in een <noscript> en één keer in een inert/aria-hidden div met de
+  // clip-truc, terwijl #root leeg bleef. Crawlers die <noscript> strippen (GPTBot,
+  // ClaudeBot, PerplexityBot) zagen daardoor vrijwel niets van de pagina. Nu is er
+  // precies één kopie en is die gewoon zichtbaar: bezoekers zien de tekst meteen
+  // (geen leeg scherm tot de bundel is uitgevoerd) en crawlers lezen hem in de
+  // normale documentstroom. De JSON-LD, canonical en meta staan onaangeroerd in
+  // <head>; de zichtbare nav-links en de crawler-links blijven behouden.
+  const prerenderMain = `    <main data-3sm-prerender>
+${buildBreadcrumbNavHtml(route)}      <h1>${escapeHtml(route.h1)}</h1>
+${prerenderSubheading}      <p>${escapeHtml(route.intro)}</p>
 ${buildRouteDetailsHtml(route)}
       <nav aria-label="Belangrijke 3SM links">
-        <ul>${noscriptLinks.map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('')}</ul>
+        <ul>${prerenderLinks.map(([href, label]) => `<li><a href="${absoluteUrl(href)}">${escapeHtml(label)}</a></li>`).join('')}</ul>
       </nav>
-      ${noscriptCrawlerLinks}
-    </main>
-  </noscript>`;
-  const routeSeoBlock = `${routeSeoStart}
-  <div inert aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)">
-      ${richContent}
-    </div>
-  ${noscript}
-  ${routeSeoEnd}`;
-  // sr-only blok: de inhoud staat in de HTML-bytes voor crawlers die geen JS
-  // draaien, maar is onzichtbaar en mag daarom ook niet bedienbaar zijn.
-  // inert + aria-hidden is geen sier: de clip-truc hierboven verbergt het blok
-  // voor het oog maar niet voor het toetsenbord, dus de links erin waren
-  // focusbaar (tabben door onzichtbare links) en axe-core zakte op deze regel
-  // (aria-hidden-focus: een aria-hidden element mag geen focusbare inhoud
-  // bevatten). inert haalt het uit de tab-volgorde en uit de
-  // toegankelijkheidsboom; de HTML-bytes voor crawlers blijven ongewijzigd.
-  out = out.replace(
-    '<div id="root"></div>',
-    `${routeSeoBlock}\n  <div id="root"></div>`,
-  );
+      ${prerenderCrawlerLinks}
+    </main>`;
+  // De markers staan binnen #root, zodat een tweede generatorrun (het script leest
+  // dist/index.html als sjabloon) de oude inhoud kan strippen en er weer exact
+  // <div id="root"></div> overblijft — geen stapelende blokken, geen verdwenen root.
+  const routeSeoBlock = `<div id="root">${routeSeoStart}
+${prerenderMain}
+  ${routeSeoEnd}</div>`;
+  // Zonder lege root geen stille lege pagina: dan stopt de build. Dit is precies mis
+  // gegaan bij de eerste versie van dit blok — de strip liet witruimte achter, de
+  // replace vond zijn anker niet en alle 103 routes verloren hun tekst.
+  if (!emptyRootPattern.test(out)) {
+    throw new Error(`Geen lege <div id="root"></div> gevonden voor ${route.path}`);
+  }
+  out = out.replace(emptyRootPattern, () => routeSeoBlock);
   return out;
 }
 

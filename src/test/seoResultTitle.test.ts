@@ -438,10 +438,10 @@ describe("seoTitle — h1 en het circuit als eigen kop in de crawler-HTML", () =
     // Eerst stond de volledige titeltekst in de broodkruimel, in een <p><strong> én
     // als h1 in de noscript. Routes met een eigen subkop zetten die kop nu één keer,
     // als h2, in plaats van de herhaalde titeltekst.
-    expect(generator).toContain("const heading = route.h2");
-    expect(generator).toContain('? `        <h2>${escapeHtml(route.h2)}</h2>`');
+    expect(generator).toContain("const prerenderSubheading = route.h2 ?");
+    expect(generator).toContain("<h2>${escapeHtml(route.h2)}</h2>");
     expect(generator).not.toContain("        <p><strong>${escapeHtml(route.h1)}</strong></p>\n        <p>${escapeHtml(route.intro)}</p>");
-    expect(generator).toContain("const noscriptSubheading = route.h2 ?");
+    expect(generator).toContain("const prerenderSubheading = route.h2 ?");
   });
 
   it("houdt elke h1 kort: geen racenaam uit de echte set komt boven de 30 tekens", () => {
