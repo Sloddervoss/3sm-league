@@ -347,19 +347,23 @@ export const shortenHeadline = (value, max = TITLE_MAX) => {
 export const NEWS_BRAND = '3SM';
 
 // Tekstbudget voor de kopregel: TITLE_MAX min de merk-suffix (inclusief scheiding).
-const newsHeadlineBudget = (max = TITLE_MAX, brand = NEWS_BRAND) => {
-  const brandText = cleanText(brand);
-  const reserved = brandText ? `${TITLE_BRAND_SEPARATOR}${brandText}`.length : 0;
-  return Math.max(1, max - reserved);
-};
+// Het kopbudget is de volledige titelruimte. Het merk mag de kop niet meer
+// inkorten: de kop is de inhoud, het merk is versiering. Past het merk erachter
+// niet meer bij, dan blijft het weg (withNewsBrand) — nooit andersom.
+const newsHeadlineBudget = (max = TITLE_MAX) => Math.max(1, max);
 
 // Zet het merk achter een nieuwsartikeltitel. De titel is al binnen het
 // kopbudget gekozen, dus dit kan de harde grens niet overschrijden; er is geen
 // 'past het nog'-afweging meer nodig (en die was de bron van de ontbrekende suffix).
-const withNewsBrand = (title, brand = NEWS_BRAND) => {
+// Zet het merk achter de titel als het er nog bij past, anders niet. De kop wordt
+// nooit ingekort om het merk te laten passen: liever een volledige kop zonder
+// suffix dan een afgekapte kop met.
+const withNewsBrand = (title, brand = NEWS_BRAND, max = TITLE_MAX) => {
   const clean = cleanText(title);
   const brandText = cleanText(brand);
-  return brandText ? `${clean}${TITLE_BRAND_SEPARATOR}${brandText}` : clean;
+  if (!brandText) return clean;
+  const withBrand = `${clean}${TITLE_BRAND_SEPARATOR}${brandText}`;
+  return withBrand.length <= max ? withBrand : clean;
 };
 
 // De delen van een nieuwsartikeltitel, van belangrijk naar minder belangrijk:
@@ -378,7 +382,7 @@ const withNewsBrand = (title, brand = NEWS_BRAND) => {
 // Alle delen samen moeten binnen het KOPBUDGET passen (TITLE_MAX min het merk), want
 // het merk komt er daarna nog achter en mag de grens niet doorbreken.
 export const newsArticleTitleCandidates = ({ headline, category, date }, { max = TITLE_MAX, brand = NEWS_BRAND } = {}) => {
-  const budget = newsHeadlineBudget(max, brand);
+  const budget = newsHeadlineBudget(max);
   const subject = shortenHeadline(headline, budget) || 'Nieuws van 3SM';
   const dateLabel = formatDateNl(date, { style: 'short' }) || '';
   const rubriek = cleanText(category);
@@ -391,7 +395,11 @@ export const newsArticleTitleCandidates = ({ headline, category, date }, { max =
     const title = parts.join(TITLE_SEPARATOR);
     if (!candidates.includes(title)) candidates.push(title);
   }
-  const fitting = candidates.filter((title) => title.length <= budget);
+  // Kandidaten moeten mét merksuffix binnen de grens passen. Past geen enkele
+  // vorm met merk, dan wint de volledige kop zonder merk: het merk is versiering,
+  // de kop is de inhoud.
+  const reserved = cleanText(brand) ? `${TITLE_BRAND_SEPARATOR}${cleanText(brand)}`.length : 0;
+  const fitting = candidates.filter((title) => title.length + reserved <= max);
   return fitting.length ? fitting : [subject];
 };
 
@@ -400,7 +408,7 @@ export const newsArticleTitleCandidates = ({ headline, category, date }, { max =
 // de twee moeten letterlijk hetzelfde zeggen.
 export const buildNewsArticleTitle = ({ headline, category, date, brand = NEWS_BRAND }, { max = TITLE_MAX } = {}) => {
   const [richest] = newsArticleTitleCandidates({ headline, category, date }, { max, brand });
-  return withNewsBrand(richest, brand);
+  return withNewsBrand(richest, brand, max);
 };
 
 // De kopregel (h1) die bij die titel hoort: dezelfde korte kop binnen hetzelfde
@@ -425,7 +433,7 @@ export const assignUniqueNewsArticleTitles = (articles, { max = TITLE_MAX, brand
       distinguishing,
       richest: candidates[0],
       h1: buildNewsArticleH1(article, { max, brand }),
-      title: withNewsBrand(distinguishing, brand),
+      title: withNewsBrand(distinguishing, brand, max),
       demoted: distinguishing !== candidates[0],
     };
   });

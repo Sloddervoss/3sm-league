@@ -108,32 +108,36 @@ describe("seoTitle — de echte nieuwsartikelen", () => {
     }
   });
 
-  it("kort de lange kop in tot de kopregel en laat de titel ermee beginnen", () => {
+  it("kort de lange kop in tot de kopregel en laat het merk dan weg", () => {
     const article = findArticle("jaimy-peters-pakt-de-overwinning-na-spectaculaire-raceavond-bij-3-stripe-motorsport");
     // De kop is langer dan de harde grens; de kopregel (h1) past en is een voorvoegsel.
     expect(article.headline.length).toBeGreaterThan(TITLE_MAX);
     const h1 = buildNewsArticleH1({ headline: article.headline });
-    // Het kopbudget is TITLE_MAX min de merksuffix (' | 3SM', 6 tekens): 54. Het merk
-    // staat op elk artikel, dus de kop moet daarvoor wijken — niet andersom.
-    expect(h1).toBe("Jaimy Peters pakt de overwinning na spectaculaire");
+    // Het merk mag de kop niet inkorten. Deze kop houdt de woorden tot de grens en
+    // laat de suffix vallen, want die past er niet meer bij.
+    expect(h1).toBe("Jaimy Peters pakt de overwinning na spectaculaire raceavond");
     expect(h1.length).toBeLessThanOrEqual(TITLE_MAX);
-    expect(titleFor(article)).toBe(`${h1}${TITLE_BRAND_SEPARATOR}3SM`);
+    expect(titleFor(article)).toBe(h1);
+    expect(titleFor(article).length).toBeLessThanOrEqual(TITLE_MAX);
   });
 
-  it("zet het merk op elk artikel, ook als de kop lang is", () => {
+  it("zet het merk alleen als het erbij past", () => {
     // Kop van 41 tekens: het merk past erachter, datum en rubriek niet meer.
     expect(titleFor(findArticle("race-recap-gt-master-challenge-cup-race-6")))
       .toBe("Race Recap GT Master Challenge Cup Race 6 | 3SM");
-    // Kop van 50 tekens: het merk past er nog achter.
+    // Kop van 50 tekens: alleen het merk past er nog achter.
     expect(titleFor(findArticle("strategie-spektakel-en-spanning-tot-aan-de-finish")))
       .toBe("Strategie, spektakel en spanning tot aan de finish | 3SM");
-    // Kop van 52 tekens: viel eerder buiten de merkgrens en stond zonder suffix in de
-    // HTML en de tab; nu eindigt ook dit artikel op '| 3SM'.
+    // Kop van 52 tekens: past met merk binnen de grens, dus de suffix staat erop.
     expect(titleFor(findArticle("ricky-pakt-de-overwinning-na-spectaculaire-wedstrijd")))
       .toBe("Ricky pakt de overwinning na spectaculaire wedstrijd | 3SM");
     for (const article of realArticles) {
-      expect(titleFor(article).endsWith(" | 3SM"), article.slug).toBe(true);
-      expect(titleFor(article).length).toBeLessThanOrEqual(TITLE_MAX);
+      const title = titleFor(article);
+      expect(title.length, article.slug).toBeLessThanOrEqual(TITLE_MAX);
+      // Het merk staat erop als het past, en anders is de kop volledig gebleven.
+      if (title.length + " | 3SM".length <= TITLE_MAX) {
+        expect(title.endsWith(" | 3SM"), article.slug).toBe(true);
+      }
     }
   });
 
