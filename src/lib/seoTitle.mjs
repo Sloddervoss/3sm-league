@@ -336,11 +336,37 @@ export const shortenHeadline = (value, max = TITLE_MAX) => {
   return kept.replace(TRAILING_SEPARATORS, '');
 };
 
+// Het merk staat op ELK nieuwsartikel ("… | 3SM"), net als op de rubriekhubs. Dat
+// is een bewuste keuze boven 'het merk mag alleen mee als het nog past': bij de
+// artikelen viel het merk weg zodra de kop 52+ tekens was, waardoor één artikel
+// zonder merksuffix in de tab en in de HTML stond en de rest met. Omdat het merk
+// geen onderscheider is maar wel de merkherkenning draagt, wordt nu de KOP zo ver
+// ingekort dat kop + merk binnen TITLE_MAX blijft — niet het merk dat sneuvelt.
+// De kopregel (h1) gebruikt exact hetzelfde budget, zodat de titel altijd met de
+// h1 begint en Google de h1 als titel kan gebruiken zonder iets anders te beloven.
+export const NEWS_BRAND = '3SM';
+
+// Tekstbudget voor de kopregel: TITLE_MAX min de merk-suffix (inclusief scheiding).
+const newsHeadlineBudget = (max = TITLE_MAX, brand = NEWS_BRAND) => {
+  const brandText = cleanText(brand);
+  const reserved = brandText ? `${TITLE_BRAND_SEPARATOR}${brandText}`.length : 0;
+  return Math.max(1, max - reserved);
+};
+
+// Zet het merk achter een nieuwsartikeltitel. De titel is al binnen het
+// kopbudget gekozen, dus dit kan de harde grens niet overschrijden; er is geen
+// 'past het nog'-afweging meer nodig (en die was de bron van de ontbrekende suffix).
+const withNewsBrand = (title, brand = NEWS_BRAND) => {
+  const clean = cleanText(title);
+  const brandText = cleanText(brand);
+  return brandText ? `${clean}${TITLE_BRAND_SEPARATOR}${brandText}` : clean;
+};
+
 // De delen van een nieuwsartikeltitel, van belangrijk naar minder belangrijk:
 //   1. de korte kop (het onderwerp van de pagina — staat er altijd in)
 //   2. de datum in woorden
 //   3. de rubriek
-// Daarachter hangt het merk (withTitleBrand) — als het nog past.
+// Daarachter hangt het merk (withNewsBrand) — altijd.
 //
 // De rubriek staat bewust LAAG. 'Race Recaps' zou op elk artikel uit die rubriek
 // dezelfde tekst zijn, en herhaalde sjabloontekst over een deelverzameling pagina's
@@ -348,8 +374,12 @@ export const shortenHeadline = (value, max = TITLE_MAX) => {
 // onderscheidt wél: twee artikelen met dezelfde kop vallen op hun publicatiedatum
 // uiteen. Rangorde (hoog bit = blijft het langst staan): datum (2), rubriek (1). De
 // korte kop is het vangnet en past altijd.
-export const newsArticleTitleCandidates = ({ headline, category, date }, { max = TITLE_MAX } = {}) => {
-  const subject = shortenHeadline(headline, max) || 'Nieuws van 3SM';
+//
+// Alle delen samen moeten binnen het KOPBUDGET passen (TITLE_MAX min het merk), want
+// het merk komt er daarna nog achter en mag de grens niet doorbreken.
+export const newsArticleTitleCandidates = ({ headline, category, date }, { max = TITLE_MAX, brand = NEWS_BRAND } = {}) => {
+  const budget = newsHeadlineBudget(max, brand);
+  const subject = shortenHeadline(headline, budget) || 'Nieuws van 3SM';
   const dateLabel = formatDateNl(date, { style: 'short' }) || '';
   const rubriek = cleanText(category);
   const FORM_BITS = { date: 2, category: 1 };
@@ -361,40 +391,41 @@ export const newsArticleTitleCandidates = ({ headline, category, date }, { max =
     const title = parts.join(TITLE_SEPARATOR);
     if (!candidates.includes(title)) candidates.push(title);
   }
-  const fitting = candidates.filter((title) => title.length <= max);
+  const fitting = candidates.filter((title) => title.length <= budget);
   return fitting.length ? fitting : [subject];
 };
 
-// Eén nieuwsartikeltitel: de rijkste vorm die binnen TITLE_MAX past, met het merk
-// erachter als dat nog past. Dit is exact het pad dat de generator én de SPA voor
-// één artikel gebruiken; de twee moeten letterlijk hetzelfde zeggen.
-export const buildNewsArticleTitle = ({ headline, category, date, brand = '3SM' }, { max = TITLE_MAX } = {}) => {
-  const [richest] = newsArticleTitleCandidates({ headline, category, date }, { max });
-  return withTitleBrand(richest, brand, max);
+// Eén nieuwsartikeltitel: de rijkste vorm die met het merk erachter binnen TITLE_MAX
+// past. Dit is exact het pad dat de generator én de SPA voor één artikel gebruiken;
+// de twee moeten letterlijk hetzelfde zeggen.
+export const buildNewsArticleTitle = ({ headline, category, date, brand = NEWS_BRAND }, { max = TITLE_MAX } = {}) => {
+  const [richest] = newsArticleTitleCandidates({ headline, category, date }, { max, brand });
+  return withNewsBrand(richest, brand);
 };
 
-// De kopregel (h1) die bij die titel hoort: dezelfde korte kop, zodat de titel
-// ermee begint. De generator zet dit als h1 in de crawler-HTML en de SPA toont
-// precies dezelfde regel als kop van het artikel.
-export const buildNewsArticleH1 = ({ headline }, { max = TITLE_MAX } = {}) => shortenHeadline(headline, max) || 'Nieuws van 3SM';
+// De kopregel (h1) die bij die titel hoort: dezelfde korte kop binnen hetzelfde
+// budget, zodat de titel ermee begint. De generator zet dit als h1 in de
+// crawler-HTML en de SPA toont precies dezelfde regel als kop van het artikel.
+export const buildNewsArticleH1 = ({ headline }, { max = TITLE_MAX, brand = NEWS_BRAND } = {}) =>
+  shortenHeadline(headline, newsHeadlineBudget(max, brand)) || 'Nieuws van 3SM';
 
 // Titels voor een hele SET nieuwsartikelen, met de garantie dat ze onderling uniek
 // zijn — dezelfde set-brede aanpak als assignUniqueRaceResultTitles. Twee artikelen
 // met dezelfde (ingekorte) kop zouden dezelfde titel krijgen; in dat geval schuift
 // de tweede door naar de eerstvolgende vorm die nog vrij is: eerst de datum, anders
 // de rubriek. `demoted` vertelt welk artikel niet zijn rijkste titel kreeg.
-export const assignUniqueNewsArticleTitles = (articles, { max = TITLE_MAX, brand = '3SM' } = {}) => {
+export const assignUniqueNewsArticleTitles = (articles, { max = TITLE_MAX, brand = NEWS_BRAND } = {}) => {
   const used = new Set();
   return (articles || []).map((article) => {
-    const candidates = newsArticleTitleCandidates(article, { max });
+    const candidates = newsArticleTitleCandidates(article, { max, brand });
     const distinguishing = candidates.find((candidate) => !used.has(candidate)) || candidates[0];
     used.add(distinguishing);
     return {
       ...article,
       distinguishing,
       richest: candidates[0],
-      h1: buildNewsArticleH1(article, { max }),
-      title: withTitleBrand(distinguishing, brand, max),
+      h1: buildNewsArticleH1(article, { max, brand }),
+      title: withNewsBrand(distinguishing, brand),
       demoted: distinguishing !== candidates[0],
     };
   });

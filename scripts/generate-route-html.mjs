@@ -228,7 +228,7 @@ const routes = [
   },
   {
     path: '/seasons',
-    title: 'Seizoenen - 3 Stripe Motorsport',
+    title: 'iRacing seizoenen & competities | 3SM',
     priority: '0.8',
     changefreq: 'monthly',
     description:

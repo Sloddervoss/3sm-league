@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  TITLE_BRAND_SEPARATOR,
   TITLE_MAX,
   assignUniqueNewsArticleTitles,
   buildNewsArticleH1,
@@ -109,26 +110,31 @@ describe("seoTitle — de echte nieuwsartikelen", () => {
 
   it("kort de lange kop in tot de kopregel en laat de titel ermee beginnen", () => {
     const article = findArticle("jaimy-peters-pakt-de-overwinning-na-spectaculaire-raceavond-bij-3-stripe-motorsport");
-    // De kop is 90 tekens; de kopregel (h1) past binnen de 60 en is een voorvoegsel.
+    // De kop is langer dan de harde grens; de kopregel (h1) past en is een voorvoegsel.
     expect(article.headline.length).toBeGreaterThan(TITLE_MAX);
     const h1 = buildNewsArticleH1({ headline: article.headline });
-    expect(h1).toBe("Jaimy Peters pakt de overwinning na spectaculaire raceavond");
+    // Het kopbudget is TITLE_MAX min de merksuffix (' | 3SM', 6 tekens): 54. Het merk
+    // staat op elk artikel, dus de kop moet daarvoor wijken — niet andersom.
+    expect(h1).toBe("Jaimy Peters pakt de overwinning na spectaculaire");
     expect(h1.length).toBeLessThanOrEqual(TITLE_MAX);
-    // Er is geen ruimte meer voor datum of merk: de kop is het onderwerp en houdt
-    // voorrang op de rest van de titel.
-    expect(titleFor(article)).toBe(h1);
+    expect(titleFor(article)).toBe(`${h1}${TITLE_BRAND_SEPARATOR}3SM`);
   });
 
-  it("zet de datum erbij zodra de kop kort genoeg is en het merk zodra het nog past", () => {
-    // Kop van 42 tekens: de datum past er nog achter, het merk niet meer.
+  it("zet het merk op elk artikel, ook als de kop lang is", () => {
+    // Kop van 41 tekens: het merk past erachter, datum en rubriek niet meer.
     expect(titleFor(findArticle("race-recap-gt-master-challenge-cup-race-6")))
-      .toBe("Race Recap GT Master Challenge Cup Race 6 · 10 jun 2026");
-    // Kop van 50 tekens: de datum past niet meer, het merk nog wel.
+      .toBe("Race Recap GT Master Challenge Cup Race 6 | 3SM");
+    // Kop van 50 tekens: het merk past er nog achter.
     expect(titleFor(findArticle("strategie-spektakel-en-spanning-tot-aan-de-finish")))
       .toBe("Strategie, spektakel en spanning tot aan de finish | 3SM");
-    // Kop van 52 tekens: geen ruimte voor datum en net niet voor het merk.
+    // Kop van 52 tekens: viel eerder buiten de merkgrens en stond zonder suffix in de
+    // HTML en de tab; nu eindigt ook dit artikel op '| 3SM'.
     expect(titleFor(findArticle("ricky-pakt-de-overwinning-na-spectaculaire-wedstrijd")))
-      .toBe("Ricky pakt de overwinning na spectaculaire wedstrijd");
+      .toBe("Ricky pakt de overwinning na spectaculaire wedstrijd | 3SM");
+    for (const article of realArticles) {
+      expect(titleFor(article).endsWith(" | 3SM"), article.slug).toBe(true);
+      expect(titleFor(article).length).toBeLessThanOrEqual(TITLE_MAX);
+    }
   });
 
   it("geeft 4 unieke artikeltitels en houdt het generator- en SPA-pad gelijk", () => {
