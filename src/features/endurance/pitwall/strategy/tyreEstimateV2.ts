@@ -87,6 +87,8 @@ export type TyreReden =
   | "short_basis"
   | "inferred_boundary"
   | "context_mismatch"
+  | "context_onbekend"
+  | "prior_variatie_onbekend"
   | "stale_state"
   | "thin_pool"
   | "zero_slope";
@@ -95,12 +97,16 @@ export type TyreReden =
  * De volgorde waarin de redenen op het scherm komen. Het contract eist dat de
  * server ze gesorteerd stuurt; wij sorteren ze nog eens, zodat een oude of
  * eigenwijze server geen wisselende volgorde op het scherm zet. De zwaarste
- * staan bovenaan: een niet-verse meting gaat vóór een dunne basis.
+ * staan bovenaan: een niet-verse meting en een onbekende of andere context gaan
+ * vóór een dunne basis. `context_onbekend` staat naast `context_mismatch`: het
+ * een zegt "niet deze auto of baan", het ander "geen idee welke".
  */
 export const TYRE_REDEN_VOLGORDE: TyreReden[] = [
   "stale_state",
-  "thin_pool",
+  "context_onbekend",
   "context_mismatch",
+  "prior_variatie_onbekend",
+  "thin_pool",
   "zero_slope",
   "short_basis",
   "inferred_boundary",
@@ -139,6 +145,25 @@ export interface TyreGedeeld {
   stints: number | null;
   /** Aantal verschillende eigenaren; nooit namen of id's. */
   accounts: number | null;
+  /**
+   * De spreiding tussen de priorstints waarop de band rust (`basis.gedeeld.
+   * spreiding`), in procentpunten per ronde. Null als de server hem niet kon
+   * bepalen; `spreidingBekend` zegt of dat "niet gemeten" of "geen antwoord" is.
+   */
+  spreiding: number | null;
+  spreidingBekend: boolean | null;
+}
+
+/**
+ * De actuele identiteit waarop de adviespoort zich baseert (`basis.context`).
+ * Ontbreekt de auto of de baan, dan is `onbekend` waar en geeft de server geen
+ * advies. Dit is geen apparaat, sessie of naam: alleen de sleutels die de
+ * gebruiker zelf in de auto heeft.
+ */
+export interface TyreContext {
+  carKey: string | null;
+  trackKey: string | null;
+  onbekend: boolean;
 }
 
 /** De eigen meting op precies deze auto en baan (`basis.eigen`). */
@@ -195,6 +220,8 @@ export interface TyreBasis {
    * staat als detail (titeltip) bij de regel.
    */
   priorBron: string | null;
+  /** De actuele identiteit waarop de poort zich baseerde (`basis.context`). */
+  context: TyreContext | null;
 }
 
 export interface TyreEstimateV2 {
@@ -341,10 +368,27 @@ function gedeeldOf(value: unknown): TyreGedeeld | null {
     rondes: num(bron.rondes),
     stints: num(bron.stints),
     accounts: num(bron.accounts),
+    spreiding: num(bron.spreiding),
+    spreidingBekend: typeof bron.spreiding_bekend === "boolean" ? bron.spreiding_bekend : null,
   };
   const leeg =
     gedeeld.rate == null && gedeeld.rondes == null && gedeeld.stints == null && gedeeld.accounts == null;
   return leeg ? null : gedeeld;
+}
+
+/**
+ * `basis.context`. Ontbreekt het blok, dan is er niets te zeggen: `null`, geen
+ * verzonnen "bekend". Een server die het blok wel stuurt maar zonder sleutels,
+ * levert `onbekend` en dat is precies de fail-closed-conditie.
+ */
+function contextOf(value: unknown): TyreContext | null {
+  const bron = record(value);
+  if (bron == null) return null;
+  const carKey = text(bron.car_key);
+  const trackKey = text(bron.track_key);
+  const onbekend =
+    typeof bron.onbekend === "boolean" ? bron.onbekend : carKey == null || trackKey == null;
+  return { carKey, trackKey, onbekend };
 }
 
 /** `basis.eigen`. Nul stints is een waarde, geen ontbreken: zie `eigenOf`. */
@@ -438,6 +482,7 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
       priorStints: num(get(basisRuw, "prior_stints")),
       priorLevel: levelOf(get(basisRuw, "prior_level")),
       priorBron: text(get(basisRuw, "prior_bron")),
+      context: contextOf(get(basisRuw, "context")),
     },
     provenance: provenanceOf(get(raw, "provenance"), grade),
     // Alleen A is gemeten; zonder veld is alles daarboven voorlopig.
@@ -629,18 +674,24 @@ export function priorUitleg(estimate: TyreEstimateV2): TyrePriorUitleg {
 /**
  * Hetzelfde beeld uit het v1-antwoord, zodat de rest van de pagina één vorm kent.
  *
- * v1 kent geen basis en geen stints; die blijven leeg. De herkomst volgt uit de
- * graad (zie `provenanceOf`) en `voorlopig` is alles behalve A: v1 had geen veld
- * om dat te zeggen, dus nemen we het voorzichtige antwoord.
+ * v1 kent geen basis en geen stints; die blijven leeg. En v1 kent geen
+ * actualiteit, geen context en geen prior: er is dus geen enkele controle dat
+ * het getal bij de auto, de baan en de set van nu hoort. Daarom is dit antwoord
+ * per definitie NIET bruikbaar en altijd voorlopig, en gaat er geen
+ * rondes-advies uit (`rangeLaps` blijft null). De graad en de helling mogen wel
+ * staan: die zijn wat v1 zegt, zonder dat de pitwall ze als advies opvolgt.
+ *
+ * De herkomst volgt uit de graad (zie `provenanceOf`); `voorlopig` is hier geen
+ * berekening maar een vaste waarde, want v1 had geen veld om het te zeggen.
  */
 export function vanV1(estimate: TyreEstimate): TyreEstimateV2 {
   return {
     grade: estimate.grade,
     gradeLabel: null,
-    usable: estimate.grade !== "D",
+    usable: false,
     stints: null,
     wearPerLapPp: estimate.ratePerLap,
-    rangeLaps: estimate.lapsRange,
+    rangeLaps: null,
     basis: {
       carKey: null,
       trackKey: null,
@@ -657,10 +708,11 @@ export function vanV1(estimate: TyreEstimate): TyreEstimateV2 {
       priorStints: null,
       priorLevel: null,
       priorBron: null,
+      context: null,
     },
     modelBron: null,
     provenance: estimate.grade === "A" ? "measured" : estimate.grade === "D" ? "none" : "estimated",
-    voorlopig: estimate.grade !== "A",
+    voorlopig: true,
   };
 }
 

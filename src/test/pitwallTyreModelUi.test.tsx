@@ -123,12 +123,17 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
     expect(result.source).toBe("v1");
     expect(result.v2Error).toContain("PGRST202");
     expect(result.estimate?.grade).toBe("B");
-    expect(result.estimate?.rangeLaps).toEqual({ low: 10, high: 12 });
-    expect(result.estimate?.provenance).toBe("estimated");
+    // v1 kent geen actualiteit, geen context en geen prior: er is geen enkele
+    // controle dat het getal bij deze auto, baan en set hoort. Daarom geen
+    // rondes-advies en geen bruikbaar antwoord.
+    expect(result.estimate?.usable).toBe(false);
+    expect(result.estimate?.voorlopig).toBe(true);
+    expect(result.estimate?.rangeLaps).toBeNull();
+    expect(naarTyreEstimate(result.estimate ?? null)?.lapsRange).toBeNull();
 
     render(<TyreModelPanel estimate={result.estimate} bron={result.source} coverage={[]} />);
     expect(screen.getByText("v1 · terugval")).toBeVisible();
-    expect(screen.getByText("10–12")).toBeVisible();
+    expect(screen.queryByText("10–12")).not.toBeInTheDocument();
   });
 
   it("toont het lege antwoord van de RPC als geen data, zonder verzonnen getal", () => {
@@ -601,7 +606,10 @@ describe("de query's van het bandenmodel", () => {
 
     expect(rpc).toHaveBeenCalledWith("pitwall_tyre_estimate_v1", { p_event_id: "event-1", p_team_id: "team-1" });
     expect(hook.result.current.v2Error).toContain("PGRST202");
-    expect(hook.result.current.estimate?.rangeLaps).not.toBeNull();
+    // v1 levert geen rondes-advies: de terugval is niet bruikbaar en voorlopig.
+    expect(hook.result.current.estimate?.rangeLaps).toBeNull();
+    expect(hook.result.current.estimate?.usable).toBe(false);
+    expect(hook.result.current.estimate?.voorlopig).toBe(true);
 
     hook.unmount();
     client.clear();
