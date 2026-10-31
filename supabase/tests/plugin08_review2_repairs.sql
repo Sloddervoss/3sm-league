@@ -309,9 +309,14 @@ begin
   perform pg_temp.expect((select exists (select 1 from unnest(v_row.invalid_reasons) r
                                           where r = 'coverage_samples:temperature')),
                          'P4 de reden noemt het ontbrekende sampleaantal');
+  -- Per groep, nooit opgeteld: alle drie de groepen dekken te weinig.
   perform pg_temp.expect((select exists (select 1 from unnest(v_row.invalid_reasons) r
-                                          where r = 'coverage_duration:window')),
-                         'P4 de reden noemt het niet-gemeten deel van het venster');
+                                          where r = 'coverage_duration:temperature')
+                              and exists (select 1 from unnest(v_row.invalid_reasons) r
+                                          where r = 'coverage_duration:fuel')
+                              and exists (select 1 from unnest(v_row.invalid_reasons) r
+                                          where r = 'coverage_duration:load')),
+                         'P4 de reden noemt per groep het niet-gemeten deel van het venster');
 
   -- Een volledige ronde: 120 s venster, 2400 samples per groep, gat 0,1 s.
   v_ack := public.simhub_persist_measurement_batch(
@@ -343,21 +348,46 @@ begin
   perform pg_temp.expect(v_blocked,
                          'P4 de CHECK weigert complete=true zonder rondedekking');
 
-  -- En de grens is echt: 80% van het venster is genoeg, 79% niet.
-  perform pg_temp.expect(
-    public.simhub_coverage_complete(
-      jsonb_build_object('temperature', pg_temp.group_(10, 32, 2),
-                         'fuel', pg_temp.group_(10, 32, 2),
-                         'load', pg_temp.group_(10, 32, 2)),
-      '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z'),
-    'P4 96 van 120 s (80%) is compleet');
+  -- De optelfout van review 3: 3 x 32 s op een venster van 120 s. Elke groep
+  -- dekt 26,7%; de som (96 s) mag die 80% niet halen.
   perform pg_temp.expect(
     not public.simhub_coverage_complete(
-      jsonb_build_object('temperature', pg_temp.group_(10, 32, 2),
-                         'fuel', pg_temp.group_(10, 31, 2),
-                         'load', pg_temp.group_(10, 31, 2)),
+      jsonb_build_object('temperature', pg_temp.group_(10, 32, 0),
+                         'fuel', pg_temp.group_(10, 32, 0),
+                         'load', pg_temp.group_(10, 32, 0)),
+      '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z')
+    and (select array_agg(r order by r) from unnest(public.simhub_coverage_reasons(
+           jsonb_build_object('temperature', pg_temp.group_(10, 32, 0),
+                              'fuel', pg_temp.group_(10, 32, 0),
+                              'load', pg_temp.group_(10, 32, 0)),
+           '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z')) r)
+        = array['coverage_duration:fuel', 'coverage_duration:load',
+                'coverage_duration:temperature']::text[],
+    'P4 3 x 32 s op 120 s is niet compleet, met een reden per groep');
+
+  -- En de grens is echt: 80% per groep is genoeg, 79% niet.
+  perform pg_temp.expect(
+    public.simhub_coverage_complete(
+      jsonb_build_object('temperature', pg_temp.group_(10, 96, 2),
+                         'fuel', pg_temp.group_(10, 96, 2),
+                         'load', pg_temp.group_(10, 96, 2)),
       '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z'),
-    'P4 94 van 120 s is niet compleet');
+    'P4 96 van 120 s per groep (80%) is compleet');
+  perform pg_temp.expect(
+    not public.simhub_coverage_complete(
+      jsonb_build_object('temperature', pg_temp.group_(10, 95.9, 2),
+                         'fuel', pg_temp.group_(10, 96, 2),
+                         'load', pg_temp.group_(10, 96, 2)),
+      '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z'),
+    'P4 95,9 van 120 s in een groep is niet compleet');
+  -- Een ronde waarin elke groep 110 s dekt is wel compleet.
+  perform pg_temp.expect(
+    public.simhub_coverage_complete(
+      jsonb_build_object('temperature', pg_temp.group_(10, 110, 0),
+                         'fuel', pg_temp.group_(10, 110, 0),
+                         'load', pg_temp.group_(10, 110, 0)),
+      '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z'),
+    'P4 110 s per groep op 120 s is compleet');
   perform pg_temp.expect(
     not public.simhub_coverage_complete(
       pg_temp.coverage_full(), null, null),

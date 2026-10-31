@@ -125,8 +125,11 @@ Deno.test("R2-4 complete vereist echte rondedekking", () => {
   if (!(dun.invalidReasons ?? []).includes("coverage_samples:temperature")) {
     throw new Error("de reden voor het sampleaantal ontbreekt");
   }
-  if (!(dun.invalidReasons ?? []).includes("coverage_duration:window")) {
-    throw new Error("de reden voor het venster ontbreekt");
+  // Dekking wordt per groep aan het venster getoetst en nooit opgeteld.
+  for (const g of ["temperature", "fuel", "load"]) {
+    if (!(dun.invalidReasons ?? []).includes(`coverage_duration:${g}`)) {
+      throw new Error(`de reden voor het niet-gemeten deel van ${g} ontbreekt`);
+    }
   }
   // Een volledig gemeten ronde blijft compleet.
   const vol = parseLapSummary({
@@ -135,12 +138,21 @@ Deno.test("R2-4 complete vereist echte rondedekking", () => {
   }, 0);
   if (vol.complete !== true) throw new Error("een volledige ronde werd niet compleet");
   if ((vol.invalidReasons ?? []).length !== 0) throw new Error("een complete ronde kreeg redenen");
-  // 80% van het venster is de grens.
+  // 80% van het venster is de grens, PER GROEP. (3 × 32 s was 80% opgeteld en
+  // daarmee precies de optelfout van review 3; elke groep dekt nu zelf 96 s.)
   const grens = parseLapSummary({
     ...base,
-    coverage: { temperature: group(10, 32, 2), fuel: group(10, 32, 2), load: group(10, 32, 2) },
+    coverage: { temperature: group(10, 96, 2), fuel: group(10, 96, 2), load: group(10, 96, 2) },
   }, 0);
   if (grens.complete !== true) throw new Error("exact 80% werd niet compleet");
+  const netTeKort = parseLapSummary({
+    ...base,
+    coverage: { temperature: group(10, 95.9, 2), fuel: group(10, 96, 2), load: group(10, 96, 2) },
+  }, 0);
+  if (netTeKort.complete !== false) throw new Error("95,9 s op 120 s werd compleet");
+  if (!(netTeKort.invalidReasons ?? []).includes("coverage_duration:temperature")) {
+    throw new Error("de per-groepreden voor 95,9 s ontbreekt");
+  }
 });
 
 Deno.test("R2-7 het bytebudget is een echte grens, niet alleen het aantal", () => {

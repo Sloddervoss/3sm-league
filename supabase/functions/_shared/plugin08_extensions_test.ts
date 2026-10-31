@@ -18,6 +18,7 @@ import {
   MaxLapSummariesPerFrame,
   MaxMeasurementEventsPerFrame,
   coverageComplete,
+  coverageVerdict,
   parseLapSummary,
   parseMeasurementEvent,
   parseMeasurementEventsReport,
@@ -315,6 +316,39 @@ Deno.test("P08-9 dekking: complete en integralen eisen hun eigen groep", () => {
   if (coverageComplete(null, "2026-10-31T11:58:00Z", "2026-10-31T12:00:00Z")) {
     throw new Error("zonder dekking is niets compleet");
   }
+  // --- Dekking wordt per groep getoetst, nooit opgeteld (review 3, punt 4).
+  const start = "2026-10-31T11:58:00Z";
+  const end = "2026-10-31T12:00:00Z"; // 120 s rondevenster.
+  // De probe uit review 3: 3 × 32 s op 120 s is 26,7% per groep en 96 s
+  // opgeteld. Optellen maakte dit "compleet"; per groep mag het niet.
+  const kort = {
+    temperature: group(10, 32, 0),
+    fuel: group(10, 32, 0),
+    load: group(10, 32, 0),
+  };
+  const verdict = coverageVerdict(kort, start, end);
+  if (verdict.complete) throw new Error("32+32+32 s op 120 s werd complete=true");
+  for (const g of ["temperature", "fuel", "load"]) {
+    if (!verdict.reasons.includes(`coverage_duration:${g}`)) {
+      throw new Error(`de reden voor de te korte dekking van ${g} ontbreekt`);
+    }
+  }
+  // Dezelfde probe door de parser: geen fout, wel complete=false met reden.
+  const parsed = parseLapSummary(lap(1, { coverage: kort }), 0);
+  if (parsed.complete !== false) throw new Error("de parser liet complete=true staan");
+  if (!(parsed.invalidReasons ?? []).some((r) => r === "coverage_duration:fuel")) {
+    throw new Error("de parser gaf geen reden per groep");
+  }
+  // Elke groep dekt 110 s van de 120 s: ruim boven 80% en dus wel compleet.
+  const lang = {
+    temperature: group(2400, 110, 0.1),
+    fuel: group(2400, 110, 0.1),
+    load: group(2400, 110, 0.1),
+  };
+  const ruim = coverageVerdict(lang, start, end);
+  if (!ruim.complete) throw new Error(`110 s per groep werd niet compleet: ${ruim.reasons.join(",")}`);
+  const parsedRuim = parseLapSummary(lap(1, { coverage: lang }), 0);
+  if (parsedRuim.complete !== true) throw new Error("de parser maakte 110 s per groep niet compleet");
 });
 
 Deno.test("P08-11 rijdersemantiek: naam van de client, uuid van de server", () => {

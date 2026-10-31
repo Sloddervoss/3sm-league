@@ -17,8 +17,11 @@
 --     reden waarom de dekking de ronde niet aantoont.
 --   * `simhub_coverage_complete` (3 argumenten) is waar als er geen enkele
 --     reden is. Eisen: alle drie de groepen, minimaal 10 samples per groep, gat
---     ≤ 2 s, en de som van de meetduren ≥ 0,8 × (ended_at − started_at).
---     Zonder venster is er geen bewijs en dus geen `complete`.
+--     ≤ 2 s, en PER GROEP minimaal 0,8 × (ended_at − started_at). Zonder
+--     venster is er geen bewijs en dus geen `complete`.
+--   * De meetduren worden nooit opgeteld. De groepen worden parallel gemeten:
+--     3 × 32 s op een ronde van 120 s is 26,7% dekking en geen 80%. Optellen
+--     maakte zo'n ronde onterecht compleet (review 3, punt 4).
 --   * De schrijver WEIGERT de ronde niet: hij zet `complete` op false en zet de
 --     redenen in `invalid_reasons`. De meting zelf blijft bruikbaar.
 --   * De tabel-CHECK gebruikt dezelfde functie met de kolommen van de rij, dus
@@ -68,10 +71,13 @@ as $$
        where public.simhub_coverage_has(p, g.k)
          and (p->g.k->>'maxGapSeconds')::numeric > 2
       union all
-      select 'coverage_duration:window'::text
-       where exists (select 1 from win)
-         and (select coalesce(sum((v.value->>'validDurationSeconds')::numeric), 0)
-                from jsonb_each(case when jsonb_typeof(p) = 'object' then p else '{}'::jsonb end) v)::double precision
+      -- Per groep tegen het venster. Niet opgeteld: parallelle groepen meten
+      -- dezelfde seconden van de ronde.
+      select 'coverage_duration:' || g.k
+        from groepen g
+       where public.simhub_coverage_has(p, g.k)
+         and exists (select 1 from win)
+         and (p->g.k->>'validDurationSeconds')::numeric
              < (select seconds from win) * 0.8 - 1e-6
     ) r;
 $$;
@@ -100,7 +106,7 @@ grant execute on function public.simhub_coverage_reasons(jsonb, timestamptz, tim
 grant execute on function public.simhub_coverage_complete(jsonb, timestamptz, timestamptz) to service_role;
 
 comment on function public.simhub_coverage_complete(jsonb, timestamptz, timestamptz) is
-  'Waar als de dekking de hele ronde aantoont: alle groepen, >=10 samples per groep, gat <=2 s en >=80% van het rondevenster gemeten.';
+  'Waar als de dekking de hele ronde aantoont: alle groepen, >=10 samples per groep, gat <=2 s en PER GROEP >=80% van het rondevenster gemeten (nooit opgeteld).';
 
 alter table public.simhub_lap_summaries
   drop constraint if exists simhub_lap_summaries_complete_needs_coverage;
@@ -118,7 +124,7 @@ alter table public.simhub_lap_summaries
            or public.simhub_coverage_has(coverage, 'fuel'));
 
 comment on column public.simhub_lap_summaries.complete is
-  'Alleen true als de dekking de hele ronde aantoont (>=80% van het venster, >=10 samples per groep, gat <=2 s). Anders false met de reden in invalid_reasons.';
+  'Alleen true als de dekking de hele ronde aantoont (per groep >=80% van het venster, >=10 samples per groep, gat <=2 s). Anders false met de reden in invalid_reasons.';
 
 create or replace function public.simhub_persist_measurement_batch(
   p_device_id uuid,

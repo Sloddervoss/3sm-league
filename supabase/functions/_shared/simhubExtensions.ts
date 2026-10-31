@@ -553,11 +553,16 @@ export type CoverageVerdict = {
 /**
  * Beoordeelt of de dekking een volledige ronde aantoont.
  *
- * Nodig: alle drie de groepen, per groep minimaal 10 samples en een gat van
- * hoogstens 2 s, en samen minstens 80% van het opgegeven rondevenster. Zonder
- * `startedAt`/`endedAt` is er geen venster en dus geen bewijs: dan is de ronde
- * niet compleet. Dat is strenger dan "de groepen zijn aanwezig" en dat is
+ * Nodig: alle drie de groepen, per groep minimaal 10 samples, een gat van
+ * hoogstens 2 s én per groep minstens 80% van het opgegeven rondevenster.
+ * Zonder `startedAt`/`endedAt` is er geen venster en dus geen bewijs: dan is de
+ * ronde niet compleet. Dat is strenger dan "de groepen zijn aanwezig" en dat is
  * precies de bedoeling.
+ *
+ * De dekking wordt PER GROEP aan het venster getoetst, nooit opgeteld. Drie
+ * parallelle groepen met elk 32 s meten dezelfde 32 s van de ronde; die som
+ * (96 s) zegt niets over 120 s rondetijd. Optellen maakte een ronde van 26,7%
+ * dekking "compleet".
  */
 export const coverageVerdict = (
   coverage: LapCoverage | null,
@@ -571,7 +576,8 @@ export const coverageVerdict = (
   if (!Number.isFinite(windowSeconds) || windowSeconds <= 0) {
     reasons.push("coverage_window_missing");
   }
-  let covered = 0;
+  const hasWindow = Number.isFinite(windowSeconds) && windowSeconds > 0;
+  const requiredSeconds = windowSeconds * MinCoveredFraction;
   for (const group of CoverageGroups) {
     const entry = coverage?.[group];
     if (!entry) {
@@ -581,11 +587,11 @@ export const coverageVerdict = (
     if (entry.sampleCount < MinSamplesPerGroup) reasons.push(`coverage_samples:${group}`);
     if (entry.maxGapSeconds > MaxCoverageGapSeconds) reasons.push(`coverage_gap:${group}`);
     if (entry.validDurationSeconds <= 0) reasons.push(`coverage_duration:${group}`);
-    covered += entry.validDurationSeconds;
-  }
-  if (Number.isFinite(windowSeconds) && windowSeconds > 0
-      && covered < windowSeconds * MinCoveredFraction - 1e-6) {
-    reasons.push("coverage_duration:window");
+    // Per groep tegen het venster, niet opgeteld over groepen: parallelle
+    // groepen dekken dezelfde seconden van de ronde.
+    else if (hasWindow && entry.validDurationSeconds < requiredSeconds - 1e-6) {
+      reasons.push(`coverage_duration:${group}`);
+    }
   }
   return { complete: reasons.length === 0, reasons: [...new Set(reasons)] };
 };
