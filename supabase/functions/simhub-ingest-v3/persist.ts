@@ -187,7 +187,12 @@ export const buildV3LatestRow = (ctx: V3SnapshotInput): Record<string, unknown> 
     captured_at: n.capturedAt,
     received_at: ctx.receivedAt ?? new Date().toISOString(),
     connector_id: ctx.device.connectorId,
-    simhub_version: ctx.device.deviceName,
+    // Twee verschillende versies, twee kolommen. Tot 2026-10-31 stond hier
+    // ctx.device.deviceName: een apparaatnaam ("DESKTOP-E2SEMRP") in een kolom die
+    // de control room als SimHub-versie toont. Onbekend blijft null — nooit de
+    // apparaatnaam als terugval.
+    simhub_version: n.source?.simHubVersion ?? null,
+    connector_version: n.source?.connectorVersion ?? null,
     game: "IRacing",
     race_run_id: ctx.raceRunId,
     v3_normalized: n,
@@ -202,7 +207,9 @@ export const buildV3LatestRow = (ctx: V3SnapshotInput): Record<string, unknown> 
   };
 };
 
-const prevFromRow = (row: Record<string, unknown>): V3PrevState | null => {
+// `row` mag undefined zijn: de eerste snapshot van een sessie heeft geen vorige
+// rij. Dat gaf een typefout in `deno check` terwijl de runtime al goed was.
+const prevFromRow = (row: Record<string, unknown> | undefined): V3PrevState | null => {
   if (!row) return null;
   const payload = row.payload as { session?: { flags?: string[] | null } } | null;
   const flagCol = row.flag ? String(row.flag) : null;

@@ -1,4 +1,4 @@
-import { consumeEdgeRateLimit, normalizePairCode, parseTelemetryEnvelope, parseTelemetryV3Envelope, randomDeviceToken, randomPairCode, readBoundedJson, sha256Hex } from "./simhub.ts";
+import { consumeEdgeRateLimit, normalizePairCode, normalizeTelemetryEnvelope, parseTelemetryEnvelope, parseTelemetryV3Envelope, randomDeviceToken, randomPairCode, readBoundedJson, sha256Hex } from "./simhub.ts";
 
 declare const Deno: {
   test(name: string, test: () => void | Promise<void>): void;
@@ -131,6 +131,68 @@ Deno.test("een ongeldige gap kost het frame niet", () => {
   const parsed = parseTelemetryV3Envelope(v3);
   if (parsed.position.gapToLeaderSeconds !== null) throw new Error("ongeldige gap is niet leeggemaakt");
   if (parsed.timing.completedLaps !== 2) throw new Error("frame is niet doorgekomen");
+});
+
+// ---------------------------------------------------------------------------
+// B (middel): versie en apparaatnaam door elkaar.
+//
+// Het v3-contract had geen source-blok, dus de Edge las nooit een versie en de
+// database viel terug op device_name ("DESKTOP-E2SEMRP" in een kolom die de
+// control room als SimHub-versie toont). Sinds 0.8.0 stuurt de connector een
+// optioneel source-blok met twee losse versies: simHubVersion (SimHub zelf) en
+// connectorVersion (deze plug-in). Beide moeten er apart uit komen, en een frame
+// zonder blok moet gewoon doorkomen met source = null.
+// ---------------------------------------------------------------------------
+const v3Frame = (extra: Record<string, unknown> = {}) => ({
+  protocolVersion: 3,
+  sequence: 3,
+  capturedAt: "2026-10-31T11:00:00Z",
+  transportSessionId: "sessie",
+  identity: { currentDriverId: null, currentDriverName: "Vincent", carId: "mclaren720sgt3", carName: null, trackName: "spa", trackConfig: null },
+  session: { isInCar: true, sessionTimeSeconds: 10, sessionTimeRemainingSeconds: null, sessionLapsRemaining: null, flags: ["green"], sessionState: "racing" },
+  timing: { currentLapElapsedSeconds: 5, lastLapTimeSeconds: null, bestLapTimeSeconds: null, completedLaps: 2 },
+  position: { position: 1, classPosition: 1, gapToLeaderSeconds: null },
+  track: { lapDistancePct: 0.2, trackSurface: "on_track", onPitRoad: false },
+  fuel: { fuelLitres: 40, fuelPct: null },
+  raceState: { incidents: 0 },
+  pitService: { pitServiceFlagsRaw: null, requiredRepairSeconds: null, optionalRepairSeconds: null },
+  ...extra,
+});
+
+Deno.test("een frame met source levert connector- en SimHub-versie apart", () => {
+  const parsed = parseTelemetryV3Envelope(v3Frame({
+    source: { simHubVersion: "9.11.21.0", connectorVersion: "0.8.0.1" },
+  }));
+  if (parsed.source?.simHubVersion !== "9.11.21.0") throw new Error("simHubVersion is niet gelezen");
+  if (parsed.source?.connectorVersion !== "0.8.0.1") throw new Error("connectorVersion is niet gelezen");
+});
+
+Deno.test("een frame zonder source komt door met source = null", () => {
+  const parsed = parseTelemetryV3Envelope(v3Frame());
+  if (parsed.source !== null) throw new Error("ontbrekend source-blok is niet null");
+  if (parsed.timing.completedLaps !== 2) throw new Error("frame zonder source is niet doorgekomen");
+});
+
+Deno.test("een half of kapot source-blok kost het frame niet", () => {
+  const alleenConnector = parseTelemetryV3Envelope(v3Frame({ source: { connectorVersion: "0.8.0.1" } }));
+  if (alleenConnector.source?.simHubVersion !== null) throw new Error("ontbrekende simHubVersion is niet null");
+  if (alleenConnector.source?.connectorVersion !== "0.8.0.1") throw new Error("connectorVersion is verloren");
+
+  // Rommel wordt null, niet een 422 en niet een verzonnen versie.
+  const rommel = parseTelemetryV3Envelope(v3Frame({
+    source: { simHubVersion: 91121, connectorVersion: "x".repeat(61) },
+  }));
+  if (rommel.source !== null) throw new Error("ongeldig source-blok is niet leeggemaakt");
+  if (rommel.fuel.fuelLitres !== 40) throw new Error("frame is niet doorgekomen");
+
+  const leeg = parseTelemetryV3Envelope(v3Frame({ source: {} }));
+  if (leeg.source !== null) throw new Error("leeg source-blok is niet null");
+});
+
+Deno.test("v1/v2 houdt zijn eigen simHubVersion en heeft geen connectorVersion", () => {
+  const parsed = normalizeTelemetryEnvelope(validEnvelope());
+  if (parsed.source?.simHubVersion !== "9.11.21.0") throw new Error("v1 simHubVersion is niet bewaard");
+  if (parsed.source?.connectorVersion !== null) throw new Error("v1 heeft ineens een connectorVersion");
 });
 
 // Sinds 2026-10-31 is een gat signed. Een auto vóór de speler heeft een negatief

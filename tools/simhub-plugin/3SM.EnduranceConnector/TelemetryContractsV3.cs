@@ -31,6 +31,34 @@ namespace ThreeSM.EnduranceConnector
         // EmitDefaultValue=false: no tyres block at all when there is nothing to report, so a
         // 0.6.1.1 payload stays byte-identical. protocolVersion stays 3 (framing unchanged).
         [DataMember(Name = "tyres", Order = 15, EmitDefaultValue = false)] public V3Tyres Tyres { get; set; }
+        // 0.8.0 additive: optioneel herkomstblok met de twee versies die tot dusverre
+        // door elkaar liepen. EmitDefaultValue=false: is er niets te melden, dan staat
+        // de sleutel niet in de payload en blijft een 0.7.x-frame byte-identiek.
+        [DataMember(Name = "source", Order = 16, EmitDefaultValue = false)] public V3Source Source { get; set; }
+    }
+
+    // Herkomstblok (optioneel, additief onder protocolVersion 3).
+    //
+    // SimHub en deze plug-in zijn twee losse producten met eigen versienummers. De
+    // server schreef tot 2026-10-31 de apparaatnaam in simhub_version omdat er geen
+    // veld was om de plug-inversie te melden; daardoor stonden "PCBART" en
+    // "DESKTOP-E2SEMRP" in een kolom die de control room als SimHub-versie toont.
+    // Beide velden zijn nullable en hebben EmitDefaultValue=false: een ontbrekende
+    // waarde valt weg in plaats van als lege string op de draad te komen.
+    [DataContract]
+    public sealed class V3Source
+    {
+        // Versie van SimHub zelf (de assembly waar PluginManager in zit).
+        [DataMember(Name = "simHubVersion", Order = 1, EmitDefaultValue = false)] public string SimHubVersion { get; set; }
+        // Versie van deze connector: AssemblyInformationalVersion, met de assemblyversie
+        // als die er niet is (klassieke AssemblyInfo zonder InformationalVersion).
+        [DataMember(Name = "connectorVersion", Order = 2, EmitDefaultValue = false)] public string ConnectorVersion { get; set; }
+
+        /// <summary>Alleen meesturen als er iets te melden is; leeg blok wordt null.</summary>
+        internal bool HasValues
+        {
+            get { return !string.IsNullOrWhiteSpace(SimHubVersion) || !string.IsNullOrWhiteSpace(ConnectorVersion); }
+        }
     }
 
     // Tyre measurement root block (optional, additive under protocolVersion 3).

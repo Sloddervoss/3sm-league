@@ -304,6 +304,20 @@ export type NormalizedTelemetryEnvelope = {
   brakes?: BrakesTelemetry | null;
   /** S3: baanvocht, regen en luchtdruk. Zelfde afspraak: optioneel, alles nullable. */
   weather?: WeatherTelemetry | null;
+  /**
+   * Optioneel herkomstblok (0.8.0). `simHubVersion` is de versie van SimHub zelf,
+   * `connectorVersion` die van de connector; dat zijn twee verschillende dingen en
+   * ze horen in twee verschillende kolommen. Ontbreekt het blok, dan is dit null en
+   * blijft de kolom leeg — nooit de apparaatnaam als terugval.
+   */
+  source?: TelemetrySourceInfo | null;
+};
+
+export type TelemetrySourceInfo = {
+  connectorId: string | null;
+  simHubVersion: string | null;
+  connectorVersion: string | null;
+  game: string | null;
 };
 
 const raceFlagValues = new Set<SimHubRaceFlag>(["green", "yellow", "red", "white", "checkered", "blue", "black", "meatball", "disqualify"]);
@@ -382,7 +396,12 @@ const v3SignedGap = (value: unknown, path: string): number | null => {
 
 export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnvelope => {
   const root = asRecord(input, "payload");
-  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle", "tyres", "brakes", "weather"], "payload");
+  // `source` is optioneel en additief: de connector meldt hier zijn eigen versie
+  // (connectorVersion) naast de SimHub-versie (simHubVersion). Zonder deze sleutel
+  // in de lijst belandde zo'n frame op "payload contains unknown fields" (422) en
+  // kon de connector zijn versie dus nooit kwijt. Een frame zonder het blok
+  // blijft exact hetzelfde werken.
+  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle", "tyres", "brakes", "weather", "source"], "payload");
   if (root.protocolVersion !== 3) throw new Error("unsupported protocolVersion");
   const sequence = v3Number(root.sequence, "payload.sequence", { integer: true, min: 0 }) as number;
   const capturedAt = text(root.capturedAt, "payload.capturedAt", 40);
@@ -497,6 +516,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
     tyres: parseTyresNeverFatal(root.tyres),
     brakes: parseBrakesNeverFatal(root.brakes),
     weather: parseWeatherNeverFatal(root.weather),
+    source: parseSourceBlock(root.source),
   };
 };
 
@@ -565,7 +585,63 @@ const normalizeV12Envelope = (env: SimHubTelemetryEnvelope): NormalizedTelemetry
       optionalRepairSeconds: null,
     },
     opponents: null,
+    // Ook bij v1/v2 is de herkomst bekend (source.simHubVersion zat al in die
+    // payload). connectorVersion bestaat daar niet: dat veld is met 0.8.0 in het
+    // v3-contract gekomen en blijft hier dus null.
+    source: {
+      connectorId: env.source.connectorId,
+      simHubVersion: env.source.simHubVersion,
+      connectorVersion: null,
+      game: env.source.game,
+    },
   };
+};
+
+/**
+ * Eén optionele versietekst uit het herkomstblok. Nooit fataal: dit is
+ * decoratie, geen voorwaarde voor het frame. Leeg of te lang (de kolom eist
+ * 1-60 tekens) wordt null, zodat "onbekend" geen verzonnen versie wordt.
+ */
+const sourceText = (value: unknown, path: string, max: number, label: string): string | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    console.warn(`[ingest] ${label} is geen tekst, veld leeggemaakt`, { pad: path });
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > max) {
+    console.warn(`[ingest] ${label} valt buiten 1-${max} tekens, veld leeggemaakt`, { pad: path });
+    return null;
+  }
+  return trimmed;
+};
+
+/**
+ * Het optionele `source`-blok van een V3-frame.
+ *
+ * `simHubVersion` is de versie van SimHub zelf, `connectorVersion` die van deze
+ * connector. Ze stonden tot 2026-10-31 door elkaar: de v3-payload had geen
+ * herkomstblok, dus de database viel terug op de apparaatnaam. Beide velden zijn
+ * nullable en dit blok is nooit fataal — een kapotte versie kost geen frame.
+ *
+ * Onbekende sleutels in het blok worden genegeerd (niet geweigerd): dit blok is
+ * additief en mag groeien zonder dat een oudere Edge het frame afkeurt.
+ */
+export const parseSourceBlock = (value: unknown): TelemetrySourceInfo | null => {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    console.warn("[ingest] source-blok is geen object, genegeerd");
+    return null;
+  }
+  const source = value as Record<string, unknown>;
+  const info: TelemetrySourceInfo = {
+    connectorId: sourceText(source.connectorId, "source.connectorId", 120, "connectorId"),
+    simHubVersion: sourceText(source.simHubVersion, "source.simHubVersion", 60, "simHubVersion"),
+    connectorVersion: sourceText(source.connectorVersion, "source.connectorVersion", 60, "connectorVersion"),
+    game: sourceText(source.game, "source.game", 32, "game"),
+  };
+  if (!info.connectorId && !info.simHubVersion && !info.connectorVersion && !info.game) return null;
+  return info;
 };
 
 export const normalizeTelemetryEnvelope = (input: unknown): NormalizedTelemetryEnvelope => {

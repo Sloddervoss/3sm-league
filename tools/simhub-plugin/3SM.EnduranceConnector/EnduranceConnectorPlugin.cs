@@ -1363,6 +1363,10 @@ namespace ThreeSM.EnduranceConnector
                 Sequence = nextSequence,
                 CapturedAt = DateTime.UtcNow.ToString("o"),
                 TransportSessionId = _sessionId,
+                // Herkomst: SimHub-versie en plug-inversie zijn twee verschillende dingen.
+                // Null als er niets te melden is; EmitDefaultValue=false laat de sleutel
+                // dan weg en houdt een 0.7.x-frame byte-identiek.
+                Source = BuildV3Source(),
                 Identity = new V3Identity
                 {
                     // Officiële iRacing-track-id voor de Pitwall-kaartkoppeling (op main sinds 8913ba3).
@@ -1798,6 +1802,47 @@ namespace ThreeSM.EnduranceConnector
             if (double.IsNaN(value.Value) || double.IsInfinity(value.Value)) return null;
             try { return (double?)Math.Round((decimal)value.Value, decimals); }
             catch (OverflowException) { return null; }
+        }
+
+        /// <summary>
+        /// Het optionele herkomstblok van het V3-frame. SimHub zelf (de assembly waar
+        /// PluginManager in zit) en deze plug-in zijn twee losse producten met eigen
+        /// versienummers; ze door elkaar halen is precies de fout die de server tot
+        /// 2026-10-31 maakte. AssemblyInformationalVersion is de versie die we
+        /// publiceren; heeft een klassieke AssemblyInfo dat attribuut niet, dan valt
+        /// het terug op de assemblyversie in plaats van leeg te blijven.
+        /// </summary>
+        private static V3Source BuildV3Source()
+        {
+            var source = new V3Source
+            {
+                SimHubVersion = VersionText(typeof(PluginManager).Assembly, 60),
+                ConnectorVersion = VersionText(typeof(EnduranceConnectorPlugin).Assembly, 60),
+            };
+            return source.HasValues ? source : null;
+        }
+
+        /// <summary>
+        /// Versie als tekst binnen de grens die de kolom eist (1-60 tekens). Een
+        /// "+&lt;commit&gt;"-achtervoegsel hoort niet in een versiekolom; te lang of leeg
+        /// wordt null, want "onbekend" mag nooit een verzonnen versie worden.
+        /// </summary>
+        private static string VersionText(Assembly assembly, int maxLength)
+        {
+            if (assembly == null) return null;
+            string text = null;
+            var informational = Attribute.GetCustomAttribute(assembly, typeof(AssemblyInformationalVersionAttribute)) as AssemblyInformationalVersionAttribute;
+            if (informational != null) text = informational.InformationalVersion;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                var version = assembly.GetName().Version;
+                text = version == null ? null : version.ToString();
+            }
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var build = text.IndexOf('+');
+            if (build > 0) text = text.Substring(0, build);
+            text = text.Trim();
+            return text.Length == 0 || text.Length > maxLength ? null : text;
         }
 
         /// <summary>Build a bounded, null-tolerant opponent snapshot from SimHub Opponents.</summary>

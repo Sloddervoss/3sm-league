@@ -56,6 +56,7 @@ const latestRow: CentralSimHubLatestRow = {
   received_at: "2026-07-16T16:00:00.250Z",
   connector_id: "SIM-PC",
   simhub_version: "9.11.21.0",
+  connector_version: "0.7.1.2",
   game: "IRacing",
   telemetry,
 };

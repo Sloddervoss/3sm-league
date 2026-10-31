@@ -1983,6 +1983,7 @@ export type Database = {
           car_id: string | null
           car_name: string | null
           connector_id: string
+          connector_version: string | null
           current_driver_id: string | null
           current_driver_name: string | null
           device_id: string
@@ -1995,7 +1996,7 @@ export type Database = {
           received_at: string
           sequence: number
           session_id: string
-          simhub_version: string
+          simhub_version: string | null
           team_id: string | null
           telemetry: Json
           track_config: string | null
@@ -2006,6 +2007,7 @@ export type Database = {
           car_id?: string | null
           car_name?: string | null
           connector_id: string
+          connector_version?: string | null
           current_driver_id?: string | null
           current_driver_name?: string | null
           device_id: string
@@ -2018,7 +2020,7 @@ export type Database = {
           received_at?: string
           sequence: number
           session_id: string
-          simhub_version: string
+          simhub_version?: string | null
           team_id?: string | null
           telemetry: Json
           track_config?: string | null
@@ -2029,6 +2031,7 @@ export type Database = {
           car_id?: string | null
           car_name?: string | null
           connector_id?: string
+          connector_version?: string | null
           current_driver_id?: string | null
           current_driver_name?: string | null
           device_id?: string
@@ -2041,7 +2044,7 @@ export type Database = {
           received_at?: string
           sequence?: number
           session_id?: string
-          simhub_version?: string
+          simhub_version?: string | null
           team_id?: string | null
           telemetry?: Json
           track_config?: string | null
