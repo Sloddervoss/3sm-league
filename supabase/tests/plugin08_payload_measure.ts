@@ -64,6 +64,7 @@ const eventFixture = (n: number) => ({
   evidence: evidence(),
   confidence: 0.9,
   recordRevision: 1,
+  setGeneration: { version: 1, fl: 3, fr: 3, rl: 3, rr: 3 },
 });
 
 const lapFixture = (n: number) => ({
@@ -87,10 +88,12 @@ const lapFixture = (n: number) => ({
   fuelStartLitres: 42,
   fuelEndLitres: 39.5,
   fuelLevelIntegralLitreSeconds: 4875,
+  fuelAddedLitresObserved: 0,
   absLatAccelIntegralGSeconds: 220,
   latAccelSquaredIntegralG2Seconds: 380,
   maxAbsLatAccelG: 1.85,
   absLongAccelIntegralGSeconds: 60,
+  absLongAccelIntegralG30Seconds: 60,
   sampleCount: 7200,
   pitVisitIds: ["pit-1"],
   wearObservationIds: ["evt-1"],
@@ -123,5 +126,9 @@ console.log(JSON.stringify({
 const budget = 24576;
 for (const [events, laps] of [[24, 3], [20, 3], [20, 2], [16, 2], [12, 2], [10, 1]]) {
   const total = bytes(frame(events, laps));
-  console.log(`${events}/${laps}: ${total} bytes ${total <= budget ? "PAST" : "TE GROOT"}`);
+  const batch = bytes({
+    measurementEvents: Array.from({ length: events }, (_, i) => eventFixture(i + 1)),
+    lapSummaries: Array.from({ length: laps }, (_, i) => lapFixture(i + 1)),
+  });
+  console.log(`${events}/${laps}: frame ${total} bytes, batch ${batch} bytes, ${total <= budget ? "PAST" : "TE GROOT"}`);
 }

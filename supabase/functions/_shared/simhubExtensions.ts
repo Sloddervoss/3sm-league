@@ -32,11 +32,11 @@ export const MaxUnknownDepth = 3;
  * Meetgebeurtenissen per frame; de rest hoort in de volgende batch (outbox).
  *
  * Review 2, punt 7: aantallen zijn geen bytes. De oude 50/5-fixtures kostten
- * 32.751 bytes (compacte JSON) en pasten dus nooit in de HTTP-body van 24.576
- * bytes — de Edge weigerde ze pas op de bodylimiet. Deze aantallen zijn gemeten
- * met supabase/tests/plugin08_payload_measure.ts: 20 events + 3 rondes kosten
- * 14.551 bytes, ruim onder het budget en met ruimte voor de optionele
- * telemetrieblokken.
+ * 35.971 bytes (compacte JSON; de reviewprobe mat 34.221) en pasten dus nooit
+ * in de HTTP-body van 24.576 bytes — de Edge weigerde ze pas op de bodylimiet.
+ * Deze aantallen zijn gemeten met supabase/tests/plugin08_payload_measure.ts:
+ * 20 events + 3 rondes kosten 15.903 bytes, onder het budget en met ruimte voor
+ * de optionele telemetrieblokken.
  */
 export const MaxMeasurementEventsPerFrame = 20;
 /** Rondeaggregaten per frame (gemeten: 3 × 939 bytes). */

@@ -10,9 +10,10 @@
  *  - parser- en database-indexen beschrijven dezelfde, oorspronkelijke reeks,
  *    ook als de parser de middelste rij al had afgekeurd (punt 2).
  */
+import { readBoundedJson } from "./simhub.ts";
 import type { NormalizedTelemetryEnvelope } from "./simhub.ts";
 import { controlWriteOutcome } from "./simhubControl.ts";
-import { mergeMeasurementAck, ackHasRejections } from "./simhubAggregates.ts";
+import { mergeMeasurementAck, ackHasRejections, markSeriesOverBudget } from "./simhubAggregates.ts";
 import {
   MaxFrameBodyBytes,
   MaxLapSummariesPerFrame,
@@ -179,6 +180,82 @@ Deno.test("R2-7 het bytebudget is een echte grens, niet alleen het aantal", () =
   if (max > MaxMeasurementBatchBytes) throw new Error(`maximale batch ${max} > batchbudget ${MaxMeasurementBatchBytes}`);
   if (max > MaxFrameBodyBytes) throw new Error(`maximale batch ${max} > bodylimiet ${MaxFrameBodyBytes}`);
   console.log(`50/5 = ${oud} bytes; gekozen maximum ${MaxMeasurementEventsPerFrame}/${MaxLapSummariesPerFrame} = ${max} bytes`);
+});
+
+Deno.test("R2-8 een 50/5-body wordt op de bodylimiet geweigerd", async () => {
+  const lap = (n: number) => ({
+    summaryUid: uid(1000 + n), summaryId: `lap-${n}`, segmentId: "seg-1",
+    observedSessionId: "sess-1", lapNumber: n,
+    startedAt: "2026-10-31T11:58:00Z", endedAt: "2026-10-31T12:00:00Z",
+    currentDriverName: "Driver One", aggregationVersion: 1, complete: true,
+    pitLap: false, driverChanged: false, trackTempCMean: 32.5,
+    fuelLevelIntegralLitreSeconds: 4875, absLatAccelIntegralGSeconds: 220,
+    maxAbsLatAccelG: 1.85,
+    coverage: {
+      temperature: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+      fuel: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+      load: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+    },
+  });
+  const body = JSON.stringify({
+    protocolVersion: 3,
+    measurementEvents: Array.from({ length: 50 }, (_, i) => event(i + 1)),
+    lapSummaries: Array.from({ length: 5 }, (_, i) => lap(i + 1)),
+  });
+  const bytes = new TextEncoder().encode(body).byteLength;
+  const request = new Request("https://example.invalid/ingest", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  });
+  let rejected = false;
+  try {
+    await readBoundedJson(request);
+  } catch (error) {
+    rejected = (error as Error).message === "payload_too_large";
+  }
+  if (!rejected) throw new Error(`50/5 (${bytes} bytes) werd niet met payload_too_large geweigerd`);
+  console.log(`50/5 = ${bytes} bytes > 24576: payload_too_large`);
+});
+
+Deno.test("R2-9 een batch boven het bytebudget wordt payload_too_large", () => {
+  // Een body die de HTTP-limiet haalt maar waarvan de meetreeks alleen al
+  // boven MaxMeasurementBatchBytes komt: 20 events plus 3 rondes met elk 64
+  // wear-verwijzingen.
+  const langeLap = (n: number) => ({
+    summaryUid: uid(1000 + n), summaryId: `lap-${n}`, segmentId: "seg-1",
+    observedSessionId: "sess-1", lapNumber: n,
+    startedAt: "2026-10-31T11:58:00Z", endedAt: "2026-10-31T12:00:00Z",
+    currentDriverName: "Driver One", aggregationVersion: 1, complete: true,
+    pitLap: false, driverChanged: false, trackTempCMean: 32.5,
+    fuelLevelIntegralLitreSeconds: 4875, absLatAccelIntegralGSeconds: 220,
+    maxAbsLatAccelG: 1.85,
+    pitVisitIds: Array.from({ length: 32 }, (_, i) => `pit-${n}-${i}`),
+    wearObservationIds: Array.from({ length: 64 }, (_, i) => `wear-${n}-${i}`),
+    coverage: {
+      temperature: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+      fuel: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+      load: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+    },
+  });
+  const parser = report(
+    Array.from({ length: MaxMeasurementEventsPerFrame }, (_, i) => event(i + 1)),
+    Array.from({ length: MaxLapSummariesPerFrame }, (_, i) => langeLap(i + 1)),
+  );
+  const bytes = measurementBatchBytes(parser!.events.rows, parser!.laps.rows);
+  if (bytes <= MaxMeasurementBatchBytes) throw new Error(`batch = ${bytes}, had boven ${MaxMeasurementBatchBytes} moeten zijn`);
+  if (bytes > MaxFrameBodyBytes) throw new Error(`testfixture past niet in de body (${bytes}); dan test dit de bodylimiet, niet het batchbudget`);
+
+  const ack = markSeriesOverBudget(
+    mergeMeasurementAck(parser, { ok: true, events: {}, laps: {} }, true),
+    parser,
+  );
+  if (ack.events.stored !== false || ack.events.block_error !== "payload_too_large") {
+    throw new Error("de reeks is niet als payload_too_large gemarkeerd");
+  }
+  if (!ackHasRejections(ack)) throw new Error("een te grote batch moet zichtbaar zijn");
+  if (ack.laps.stored !== false) throw new Error("de rondeaggregaten zijn niet gemarkeerd");
+  console.log(`batch ${bytes} bytes > ${MaxMeasurementBatchBytes} -> payload_too_large`);
 });
 
 Deno.test("R2-6 out_of_range is een invoerfout met reden, geen 503", () => {

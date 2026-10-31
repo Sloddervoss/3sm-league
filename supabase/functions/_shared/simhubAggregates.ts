@@ -314,6 +314,26 @@ export const mergeMeasurementAck = (
   };
 };
 
+/**
+ * Markeert de reeksen die niet verzonden zijn omdat ze samen boven het
+ * bytebudget kwamen (review 2, punt 7). De core-telemetrie is dan al
+ * opgeslagen; alleen de meetserie is niet aangeboden. Expliciet, per reeks,
+ * zodat een outbox hem bewaart in plaats van op te ruimen.
+ */
+export const markSeriesOverBudget = (
+  ack: MeasurementAck,
+  parserReport: NormalizedTelemetryEnvelope["measurementReport"],
+): MeasurementAck => {
+  for (const key of ["events", "laps"] as const) {
+    const parser = parserReport?.[key];
+    if ((parser?.rows.length ?? 0) > 0) {
+      ack[key].stored = false;
+      ack[key].block_error = "payload_too_large";
+    }
+  }
+  return ack;
+};
+
 /** Is er iets misgegaan dat de connector moet zien? */
 export const ackHasRejections = (ack: MeasurementAck): boolean =>
   !ack.events.stored || !ack.laps.stored

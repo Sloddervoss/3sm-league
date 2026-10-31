@@ -279,7 +279,7 @@ waar de DDL wijzigt ook een rollback; het contract staat in
 | 4 | complete | ≥10 samples per groep, gat ≤2 s, ≥80% van het venster; anders `complete=false` met reden | `200200`, SQL P4, Deno R2-4 |
 | 5 | wear | `version` verplicht in SQL (geen coalesce); `evidence:null` al in de Edge geweigerd | `200300`, SQL P5, Deno R2-5 |
 | 6 | control | `out_of_range` → HTTP 400 met `reason`, `invalid_payload` → 422 met reden | Edge `controlWriteOutcome`, Deno R2-6 |
-| 7 | payload | 20/3 als gemeten Edge-maximum (14.551 bytes) + batchbudget 16.384 bytes met `payload_too_large` | `plugin08_payload_measure.ts`, Deno R2-7 |
+| 7 | payload | 20/3 als gemeten Edge-maximum (15.903 bytes) + batchbudget 16.384 bytes met `payload_too_large` | `plugin08_payload_measure.ts`, Deno R2-7 |
 | 8 | prestatie | set-based snelpad (één INSERT, één UPDATE) met rij-lus-terugval; gemeten p50/p95 en WAL | `200400`, SQL P8, `plugin08_load_test.sql` |
 
 ### Meting op het ingestpad (wegwerpdatabase, PostgreSQL 18.6)
@@ -301,8 +301,8 @@ Het set-based snelpad is dus ongeveer twee keer sneller dan de rij-lus op
 dezelfde batch (19 ms tegen 34 ms) en schrijft bijna de helft minder WAL
 (31 kB tegen 57 kB). Het gekozen maximum van 20/3 past met ~19 ms ruim in het
 verzendinterval van 400 ms; 50/5 past daar met ~42 ms ook in, maar die batch
-past niet in de HTTP-body van 24.576 bytes (gemeten 32.751 bytes) en is dus
-geen ondersteund wireprofiel meer.
+past niet in de HTTP-body van 24.576 bytes (gemeten 35.971 bytes; de review
+mat 34.221) en is dus geen ondersteund wireprofiel meer.
 
 Caveat: dit is een wegwerpdatabase op één machine, met de SQL-laag direct
 aangeroepen. De HTTP-bodylimiet, de Edge-parser, gelijktijdige devices en

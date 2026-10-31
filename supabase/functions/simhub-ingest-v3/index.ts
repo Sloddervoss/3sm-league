@@ -12,6 +12,7 @@ import {
   capabilityStatus,
   initialCapability,
   isMissingFunctionError,
+  markSeriesOverBudget,
   mergeMeasurementAck,
   persistArguments,
   shouldAttemptAggregates,
@@ -176,13 +177,7 @@ Deno.serve(async (request) => {
       );
       if (batchOverBudget) {
         // Zichtbaar per reeks, met de maat erbij in de log. Nooit stil.
-        for (const key of ["events", "laps"] as const) {
-          const parser = context.normalized?.measurementReport?.[key];
-          if ((parser?.rows.length ?? 0) > 0) {
-            measurements[key].stored = false;
-            measurements[key].block_error = "payload_too_large";
-          }
-        }
+        markSeriesOverBudget(measurements, context.normalized?.measurementReport ?? null);
         console.warn("simhub-ingest-v3 meetbatch boven bytebudget", JSON.stringify({
           batchBytes, limitBytes: MaxMeasurementBatchBytes,
         }));

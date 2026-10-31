@@ -235,11 +235,11 @@ Een rondeaggregaat draagt de **SimHub-naam** van de rijder:
 | bewijs per object | 4096 jsonb-bytes | databasedrempel |
 
 De Edge-aantallen zijn **gemeten**, niet geschat. De oude 50/5-fixtures kostten
-32.751 bytes compacte JSON (de reviewprobe mat 34.221 bytes met een iets grotere
-rondefixture); dat past niet in de HTTP-body van 24.576 bytes en werd dus pas
-op de bodylimiet geweigerd. Met 20 events en 3 rondes is een maximale batch
-14.551 bytes (`supabase/tests/plugin08_payload_measure.ts`), inclusief de
-kern van 821 bytes. Het batchbudget van 16.384 bytes wordt daarnaast apart
+35.971 bytes compacte JSON (de reviewprobe mat 34.221 bytes met een net andere
+fixture); dat past niet in de HTTP-body van 24.576 bytes en werd dus pas op de
+bodylimiet geweigerd. Met 20 events en 3 rondes is een maximale batch 15.903
+bytes, inclusief de kern van 821 bytes
+(`supabase/tests/plugin08_payload_measure.ts`). Het batchbudget van 16.384 bytes wordt daarnaast apart
 afgedwongen: een batch erboven wordt `payload_too_large` (stored:false met die
 `block_error`); de core-telemetrie wordt dan wel opgeslagen.
 
