@@ -1,10 +1,10 @@
-# Plugin 0.8 — serverkant als voorstel
+# Plugin 0.7.2.0 — serverkant als voorstel (na review 6.1 sol)
 
 **Status: VOORSTEL. Niets toegepast op productie, niets gepusht naar main.**
 Branch: `feat/plugin-08-server`. Datum: 2026-10-31.
 Grondslag: `3sm-plugin-08-gpt61.md`, paragraaf 2 (contractstructuur), 3
 (onderhandeling en validator) en 6 (serverkant), plus de harde eis van Vincent
-over de automatische update van 0.7.1.x naar 0.8.
+over de automatische update van 0.7.1.x naar 0.7.2.0.
 
 ---
 
@@ -120,12 +120,12 @@ geschreven en de fout staat als `RAISE WARNING` in de logboeken.
   `lapSummaries` kost alleen dat blok, met een logregel en zonder de kerntelemetrie
   te raken.
 - **Geen afhankelijkheid van control.** De ingest bepaalt zelf of de database de
-  0.8-signatuur heeft: krijgt de RPC 42883/PGRST202, dan gaat hetzelfde frame
+  0.7.2.0-signatuur heeft: krijgt de RPC 42883/PGRST202, dan gaat hetzelfde frame
   opnieuw weg met vijf argumenten en blijven de meetreeksen in de logboeken. Dat
   werkt ook als het control-endpoint nooit is uitgerold of later wordt
   teruggedraaid.
 
-## 6. Harde eis: de automatische update van 0.7.1.x naar 0.8
+## 6. Harde eis: de automatische update van 0.7.1.x naar 0.7.2.0
 
 **Deze endpoints zijn niet aangeraakt** — geen codewijziging, geen andere vorm,
 geen andere statuscodes:
@@ -141,19 +141,19 @@ geen andere statuscodes:
 | `supabase/functions/simhub-practice/index.ts` | ongewijzigd |
 | `supabase/functions/simhub-ingest-v3/index.ts` | gewijzigd, maar de RPC-aanroep is **identiek** zolang een frame geen meetreeksen bevat |
 
-Waarom 0.8.0.0 als nieuwste wordt aangeboden zonder iets te breken:
+Waarom 0.7.2.0 als nieuwste wordt aangeboden zonder iets te breken:
 `simhub-version` leest `SIMHUB_PLUGIN_VERSION`, `SIMHUB_PLUGIN_DLL_URL`,
 `SIMHUB_PLUGIN_SHA256`, `SIMHUB_PLUGIN_BYTE_LENGTH`, `SIMHUB_PLUGIN_FILE_NAME` en
 `SIMHUB_PLUGIN_SIGNATURE` uit de omgeving en geeft altijd dezelfde acht sleutels
-terug. De release naar 0.8.0.0 is dus een deploy-instelling, geen codewijziging,
+terug. De release naar 0.7.2.0 is dus een deploy-instelling, geen codewijziging,
 en een 0.7.1.x-client leest exact wat hij altijd las. De test
-`P08-I1` zet die omgeving op 0.8.0.0 en controleert de vorm en de waarde; `P08-I2`
+`P08-I1` zet die omgeving op 0.7.2.0 en controleert de vorm en de waarde; `P08-I2`
 controleert dat `simhub-version` en `simhub-control` geen code delen.
 
 `simhub-control` staat daar volledig los van: het leest geen versie, schrijft
 geen versie en verwijst niet naar `SIMHUB_PLUGIN_VERSION`. Bij elke fout geeft
 het een stabiel `503`-antwoord met `{"ok":false,"error":"control_unavailable",
-"compatibility":"v3-base-profile"}`, zodat een 0.8-client terugvalt op het vaste
+"compatibility":"v3-base-profile"}`, zodat een 0.7.2.0-client terugvalt op het vaste
 V3-basisprofiel en een 0.7.1.x-client (die het endpoint niet kent) niets merkt.
 De tests `P08-I3` t/m `P08-I7` dekken dat pad, inclusief de situatie "control
 geeft 500, update- en verzendroute lopen door".
@@ -162,17 +162,26 @@ geeft 500, update- en verzendroute lopen door".
 
 Uitrollen (in deze volgorde, met `psql -1` per bestand):
 
-1. `20261031180000` → `20261031180100` → `20261031180200` → `20261031180300`.
+1. `20261031180000` → `20261031180100` → `20261031180200` → `20261031180300`
+   → `20261031190000` → `…190100` → `…190200` → `…190300` → `…190400`
+   → `…190500` → `…190600` → `…190700` → `…190800`.
 2. Edge deployen (`_shared/*`, `simhub-ingest-v3`, `simhub-control`).
 3. Pas daarna in de configuratie `features.measurementEvents` /
    `features.lapSummaries` aanzetten. Zonder die vlag stuurt de client de blokken
    niet en blijft alles bij het oude.
 
-Terugdraaien (in deze volgorde):
+Terugdraaien (in deze volgorde, van nieuw naar oud):
 
 1. **Eerst** de features uitzetten
    (`simhub_connector_config_apply('{"features":{"measurementEvents":false,"lapSummaries":false}}')`).
-2. `20261031180300.rollback.sql` → `…180200` → `…180100` → `…180000`.
+2. `…190800.rollback.sql` → `…190700` → `…190600` → `…190500` → `…190400`
+   → `…190300` → `…190200` → `…190100` → `…190000` → `20261031180300`
+   → `…180200` → `…180100` → `…180000`.
+
+De hele keten is **gegevensbehoudend**: de oude schrijver komt terug, de tabellen
+en hun inhoud blijven staan. Destructief opruimen staat in
+`supabase/rollback/plugin08_destructive_cleanup.sql` (aparte, gedocumenteerde
+handeling na een export).
 
 Waarom die eerste stap: de rollback van `20261031180300` haalt de
 acht-argumentversie weg. Een Edge die daarna nog `p_events`/`p_laps` meestuurt,
@@ -238,3 +247,64 @@ psql -X -v ON_ERROR_STOP=1 -d plugin08_test \
 node supabase/tests/plugin08_persist_body_diff.mjs
 deno test --allow-env --allow-read supabase/functions/_shared/
 ```
+
+## 10. Reparaties na de review van 6.1 sol
+
+De review (NO-GO) is per punt verwerkt. Elk punt heeft een eigen migratie, en
+waar de DDL wijzigt ook een rollback; het contract staat in
+`docs/contracts/measurement-ids-v1.md`.
+
+| # | Reviewpunt | Reparatie | Bewijs |
+|---|---|---|---|
+| 1 | identiteit | duurzame `event_uid`/`summary_uid`, `observed_session_id` (client) naast `delivered_session_id` (server), uniciteit alleen op de UUID | `190000`, SQL R1 |
+| 2 | revisies | `record_revision`, upsert alleen bij hogere revisie, `revision_conflict`/`stale_revision` in het ACK, `supersedes_*` | `190100`, SQL R2 |
+| 3 | ACK | `simhub_persist_measurement_batch` geeft een rapport per rij; `simhub_persist_v3.measurement_ack`; Edge antwoordt met `measurements` | `190200`, SQL R3, Deno P08-P2/P3 |
+| 4 | wear | `wear_v1` (vier hoeken, 0..100, `scale: remaining_percent`), `evidence_v1`, `setGeneration`; onbekende sleutels en niet-numeriek geweigerd | `190300`, SQL R4, Deno P08-8 |
+| 5 | dekking | `coverage` per groep (temperature/fuel/load), `complete` eist alle drie, integraal zonder dekking geweigerd, `sample_count` bigint | `190400`, SQL R5, Deno P08-9 |
+| 6 | casts | `simhub_jnumeric` als enige getalbron, eindigheid en bereik vóór elke cast, integer via numeric (`1.0` werkt), rij-isolatie | `190500`, SQL R6 |
+| 7 | snapshot | Edge stuurt `snapshotDto` (kernframe) + trigger op `simhub_telemetry_latest` | `190600`, SQL R7, Deno P08-P1 |
+| 8 | grenzen | control 400 ms / 24576 bytes, `out_of_range` met detail, alleen boolean-features, één budgetmaat (jsonb-bytes), expliciete afwijzing bij te groot bewijs | `190700`, SQL R8 |
+| 9 | herstel | capability met TTL en herprobe, degradatie zichtbaar in `aggregates` | Edge, Deno P08-P4 |
+| 10 | rollback | gegevensbehoudende keten + apart destructief script | `rollback/`, SQL rollbackcontrole |
+| 11 | versie | overal 0.7.2.0, `protocolVersion` blijft 3 | Deno P08-P6 |
+| 12 | retentie | 90/400 dagen + `simhub_prune_measurements` (standaard proef, service-role) | `190800`, SQL R12 |
+
+### Meting op het ingestpad (wegwerpdatabase, PostgreSQL 16.2)
+
+`supabase/tests/plugin08_load_test.sql`, 20 frames per variant:
+
+| Variant | p50 | p95 | max |
+|---|---|---|---|
+| frame zonder meetreeks (0.7.1.x-pad) | 0,6–1,2 ms | 3–6 ms | 9–18 ms |
+| Edge-max: 50 gebeurtenissen + 5 rondes | ~150 ms | ~160 ms | ~210 ms |
+| database-max: 200 + 20 | ~780–830 ms | ~970–995 ms | ~1010 ms |
+| 200 + 20, alles duplicaat | ~490 ms | ~560 ms | ~575 ms |
+
+(Twee runs; de spreiding tussen runs is enkele tientallen ms.)
+
+WAL: 272 kB per frame met 220 rijen (≈ 1,2 kB per rij). Geen verlies: 5200
+gebeurtenissen en 520 rondeaggregaten, precies zoals aangeboden.
+
+Conclusie: bij de Edge-grenzen (50/5) kost een frame ~150 ms van het budget van
+400 ms. Op de databasedrempel (200/20) is één frame ~780 ms en dat past niet in
+het verzendinterval; de Edge-grens is dus geen cosmetische keuze. Het profiel
+laat zien waar de tijd zit: losse `INSERT`-statements in een lus kosten hier
+~2 ms per stuk tegen ~0,15 ms set-based. Een set-based snelpad (met de rij-lus
+als terugval) is de eerstvolgende optimalisatie; die is niet in deze set gedaan
+om de rij-isolatie en het bewezen gedrag niet te vermengen met een
+herarchitectuur.
+
+### Restrisico's
+
+1. **Latentie op de databasedrempel** (zie boven): 200/20 haalt het
+   verzendinterval niet. Mitigatie: de Edge stuurt maximaal 50/5 en de outbox
+   spreidt de rest.
+2. **Geen native Deno-runtime in deze omgeving**: de Deno-tests draaien met de
+   echte Deno-binary (45 tests), maar niet tegen een live Supabase-project. De
+   Edge-handlers zijn getest met de echte code en een nagebootste client.
+3. **`device_id` is nog `text`** zonder FK; een verweesd meetgegeven blijft
+   mogelijk staan. Bewust uitgesteld (review noemt dit "kan later").
+4. **`kind` heeft geen CHECK-lijst**; alleen de tekenset wordt afgedwongen.
+5. **De productieomgeving is niet aangeraakt**: geen migratie is uitgevoerd, er
+   is niets gedeployed en de productie-DB is alleen binnen `BEGIN READ ONLY`
+   bevraagd (in de review, niet in dit werk).

@@ -1,14 +1,14 @@
 -- ============================================================================
--- Plugin 0.8 — servervoorstel: SQL-tests
+-- Plugin 0.7.2.0 — structuur, signatuur en terugwaartse compatibiliteit
 -- Datum: 2026-10-31
--- Draai na de fixture en de vier migraties (zie run_plugin08_proposal.sh).
 --
--- Alles draait in één transactie die aan het eind wordt teruggedraaid. Geen
--- enkele test laat iets achter, ook niet als hij faalt: de savepoint per blok
--- zorgt dat een fout niet de volgende test ongeldig maakt.
+-- Draai na de fixture en alle migraties (zie run_plugin08_proposal.sh).
+-- Dit bestand dekt wat er aan de buitenkant niet mag veranderen: de tabellen,
+-- de RLS en rechten, de signatuur van simhub_persist_v3, de configuratie-RPC en
+-- het non-fatale gedrag. De inhoudelijke contracten (identiteit, revisies, ACK,
+-- wear_v1, dekking, casts, retentie) staan in plugin08_review_repairs.sql.
 --
--- Uitkomst: psql drukt per test PASS of FAIL af en eindigt met een foutcode
--- (ON_ERROR_STOP) als er ook maar één FAIL is.
+-- Alles draait in één transactie die aan het eind wordt teruggedraaid.
 -- ============================================================================
 
 begin;
@@ -19,23 +19,17 @@ create temp table t_resultaat (label text primary key, ok boolean not null);
 create temp table t_ctx (device_id uuid, event_id uuid, team_id uuid);
 
 create or replace function pg_temp.expect(p_ok boolean, p_label text)
-returns void
-language plpgsql
-as $$
+returns void language plpgsql as $$
 begin
   insert into t_resultaat (label, ok) values (p_label, coalesce(p_ok, false))
   on conflict (label) do update set ok = excluded.ok;
-end;
-$$;
+end $$;
 
 create or replace function pg_temp.eq(p_actual anyelement, p_expected anyelement, p_label text)
-returns void
-language plpgsql
-as $$
+returns void language plpgsql as $$
 begin
   perform pg_temp.expect(p_actual is not distinct from p_expected, p_label);
-end;
-$$;
+end $$;
 
 insert into t_ctx
 values ('11111111-1111-4111-8111-111111111111'::uuid,
@@ -50,9 +44,7 @@ select device_id, repeat('a', 64), 'PC-TEST', 'SIM-TEST', event_id, team_id,
 from t_ctx;
 
 create or replace function pg_temp.frame(p_lap integer, p_sequence bigint, p_pit boolean)
-returns jsonb
-language sql
-as $$
+returns jsonb language sql as $$
   select jsonb_build_object(
     'protocolVersion', 3,
     'sequence', p_sequence,
@@ -73,17 +65,75 @@ as $$
     'raceState', jsonb_build_object('incidents', 0),
     'pitService', jsonb_build_object('pitServiceFlagsRaw', 0, 'requiredRepairSeconds', 0,
                                      'optionalRepairSeconds', 0)
-  );
+  )
 $$;
 
--- De rate-limit van 400 ms tussen frames is een eigenschap van de functie, niet
--- van deze tests. Daarom zet elke aanroep eerst last_seen_at terug.
 create or replace function pg_temp.ouder_dan_een_minuut()
-returns void
-language sql
-as $$
+returns void language sql as $$
   update public.simhub_devices set last_seen_at = now() - interval '1 minute'
    where id = (select device_id from t_ctx);
+$$;
+
+create or replace function pg_temp.uid(p_n integer)
+returns uuid language sql immutable as $$
+  select ('00000000-0000-4000-8000-' || lpad(p_n::text, 12, '0'))::uuid
+$$;
+
+create or replace function pg_temp.event(p_n integer)
+returns jsonb language sql immutable as $$
+  select jsonb_build_object(
+    'eventUid', pg_temp.uid(p_n),
+    'eventId', 'evt-' || p_n,
+    'kind', 'wear_refresh_confirmed',
+    'segmentId', 'seg-1',
+    'observedSessionId', 'sess-1',
+    'observedAt', '2026-10-31T12:00:00Z',
+    'sessionTimeSeconds', 1000,
+    'sdkTick', 12345,
+    'confidence', 0.9,
+    'evidence', jsonb_build_object('version', 1, 'source', 'tire_sets_used',
+                                   'channels', jsonb_build_array('tire_sets_used')),
+    'wearBefore', jsonb_build_object('version', 1, 'scale', 'remaining_percent',
+                                     'fl', 12.5, 'fr', 12.5, 'rl', 12.5, 'rr', 12.5),
+    'wearAfter', jsonb_build_object('version', 1, 'scale', 'remaining_percent',
+                                    'fl', 0.2, 'fr', 0.2, 'rl', 0.2, 'rr', 0.2),
+    'setGeneration', jsonb_build_object('version', 1, 'fl', 3, 'fr', 3, 'rl', 3, 'rr', 3))
+$$;
+
+create or replace function pg_temp.group_(p_samples integer, p_duration numeric, p_gap numeric)
+returns jsonb language sql immutable as $$
+  select jsonb_build_object('validDurationSeconds', p_duration,
+                            'sampleCount', p_samples, 'maxGapSeconds', p_gap)
+$$;
+
+create or replace function pg_temp.lap(p_n integer)
+returns jsonb language sql immutable as $$
+  select jsonb_build_object(
+    'summaryUid', pg_temp.uid(1000 + p_n),
+    'summaryId', 'lap-' || p_n,
+    'segmentId', 'seg-1',
+    'observedSessionId', 'sess-1',
+    'lapNumber', p_n,
+    'startedAt', '2026-10-31T11:58:00Z',
+    'endedAt', '2026-10-31T12:00:00Z',
+    'currentDriverId', '44444444-4444-4444-8444-444444444444',
+    'aggregationVersion', 1,
+    'complete', true,
+    'invalidReasons', jsonb_build_array(),
+    'pitLap', false,
+    'driverChanged', false,
+    'trackTempCMean', 32.5, 'trackTempCMin', 31, 'trackTempCMax', 34, 'airTempCMean', 21,
+    'fuelStartLitres', 42, 'fuelEndLitres', 39.5,
+    'fuelLevelIntegralLitreSeconds', 4875, 'fuelAddedLitresObserved', null,
+    'absLatAccelIntegralGSeconds', 220, 'latAccelSquaredIntegralG2Seconds', 380,
+    'maxAbsLatAccelG', 1.85, 'absLongAccelIntegralGSeconds', 60,
+    'sampleCount', 7200,
+    'pitVisitIds', jsonb_build_array('pit-1'),
+    'wearObservationIds', jsonb_build_array('evt-1'),
+    'coverage', jsonb_build_object(
+      'temperature', pg_temp.group_(2400, 120.0, 0.1),
+      'fuel', pg_temp.group_(2400, 120.0, 0.1),
+      'load', pg_temp.group_(2400, 120.0, 0.1)))
 $$;
 
 -- ============================================================================
@@ -122,31 +172,34 @@ begin
   perform pg_temp.expect(has_table_privilege('service_role', 'public.simhub_lap_summaries', 'insert'),
                          'T1 service_role mag schrijven in simhub_lap_summaries');
 
-  -- De unieke sleutels zijn de dedupe-sleutels; zonder deze constraints is
-  -- `on conflict do nothing` onmogelijk en faalt de insert met 42P10.
-  perform pg_temp.expect(exists (
-    select 1 from pg_constraint c
-     where c.conrelid = 'public.simhub_measurement_events'::regclass
-       and c.contype = 'u'
-       and array(select a.attname::text from unnest(c.conkey) k
-                   join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k
-                  order by a.attname) = array['device_id', 'event_id']),
-    'T1 unique (device_id, event_id) bestaat');
-  perform pg_temp.expect(exists (
-    select 1 from pg_constraint c
-     where c.conrelid = 'public.simhub_lap_summaries'::regclass
-       and c.contype = 'u'
-       and array(select a.attname::text from unnest(c.conkey) k
-                   join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k
-                  order by a.attname) = array['device_id', 'summary_id']),
-    'T1 unique (device_id, summary_id) bestaat');
+  -- De identiteitskolommen uit het contract bestaan.
+  perform pg_temp.expect(exists (select 1 from pg_attribute
+                                  where attrelid = 'public.simhub_measurement_events'::regclass
+                                    and attname = 'event_uid' and not attisdropped),
+                         'T1 simhub_measurement_events heeft event_uid');
+  perform pg_temp.expect(exists (select 1 from pg_attribute
+                                  where attrelid = 'public.simhub_measurement_events'::regclass
+                                    and attname = 'delivered_session_id' and not attisdropped),
+                         'T1 simhub_measurement_events heeft delivered_session_id');
+  perform pg_temp.expect(exists (select 1 from pg_attribute
+                                  where attrelid = 'public.simhub_measurement_events'::regclass
+                                    and attname = 'observed_session_id' and not attisdropped),
+                         'T1 simhub_measurement_events heeft observed_session_id');
+  perform pg_temp.expect(exists (select 1 from pg_attribute
+                                  where attrelid = 'public.simhub_lap_summaries'::regclass
+                                    and attname = 'coverage' and not attisdropped),
+                         'T1 simhub_lap_summaries heeft coverage');
 
-  -- De index op (device_id, observed_at desc) draagt de leesroute.
   perform pg_temp.expect(exists (
     select 1 from pg_indexes
      where schemaname = 'public' and tablename = 'simhub_measurement_events'
        and indexdef ilike '%(device_id, observed_at DESC)%'),
     'T1 index op (device_id, observed_at desc) bestaat');
+  perform pg_temp.expect(exists (
+    select 1 from pg_indexes
+     where schemaname = 'public' and tablename = 'simhub_measurement_events'
+       and indexdef ilike '%(received_at)%'),
+    'T1 index op received_at bestaat (retentie)');
 
   perform pg_temp.expect(not has_function_privilege('anon',
     'public.simhub_persist_measurement_batch(uuid, text, jsonb, jsonb)', 'execute'),
@@ -157,12 +210,14 @@ begin
   perform pg_temp.expect(not has_function_privilege('anon',
     'public.simhub_connector_config_apply(jsonb, integer)', 'execute'),
     'T1 anon mag de config niet schrijven');
+  perform pg_temp.expect(not has_function_privilege('anon',
+    'public.simhub_prune_measurements(timestamptz, timestamptz, boolean)', 'execute'),
+    'T1 anon mag niet opruimen');
 end
 $$;
 
 -- ============================================================================
--- T2. Signatuur van simhub_persist_v3: één overload, acht parameters,
---     defaultwaarden vanaf de zesde.
+-- T2. Signatuur van simhub_persist_v3 en terugwaartse compatibiliteit
 -- ============================================================================
 do $$
 declare
@@ -170,262 +225,206 @@ declare
   v_args text;
   v_ndefaults integer;
   v_result text;
+  v_ack jsonb;
+  v_ret text;
 begin
   select count(*) into v_count
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = 'simhub_persist_v3';
   perform pg_temp.eq(v_count, 1, 'T2 precies één overload van simhub_persist_v3');
 
-  select pronargs::integer,
-         pg_get_function_identity_arguments(p.oid),
-         pronargdefaults::integer
+  select pronargs::integer, pg_get_function_identity_arguments(p.oid), pronargdefaults::integer
     into v_count, v_args, v_ndefaults
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname = 'simhub_persist_v3';
 
   perform pg_temp.eq(v_count, 8, 'T2 simhub_persist_v3 heeft 8 parameters');
-  -- De eerste vijf zijn de bestaande verplichte argumenten, in de bestaande
-  -- volgorde; daarna de drie optionele.
   perform pg_temp.eq(v_args,
     'p_token_hash text, p_session_id text, p_sequence bigint, p_captured_at timestamp with time zone, '
     || 'p_v3_normalized jsonb, p_simhub_version text, p_events jsonb, p_laps jsonb',
     'T2 de argumentvolgorde is die van nu, met p_events en p_laps achteraan');
-  -- Drie defaults, alle drie NULL: een aanroep met 5 of 6 argumenten resolveert
-  -- naar dezelfde functie.
   perform pg_temp.eq(v_ndefaults, 3, 'T2 de laatste drie parameters hebben een default');
 
-  -- Aanroep met vijf argumenten: het pad van de 0.7.1.x-Edge.
+  -- De retourvorm is (result, received_at, measurement_ack). Een oude client
+  -- leest de eerste twee kolommen en merkt niets van de derde.
+  select pg_get_function_result(p.oid) into v_ret
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'simhub_persist_v3';
+  perform pg_temp.expect(v_ret like '%measurement_ack jsonb%',
+                         'T2 de retourvorm heeft measurement_ack als derde kolom');
+
   perform pg_temp.ouder_dan_een_minuut();
   select r.result into v_result
     from public.simhub_persist_v3(
       repeat('a', 64), 'sess-1', 10, '2026-10-31T12:00:00Z'::timestamptz,
       pg_temp.frame(1, 10, false), null, null, null) r;
-  perform pg_temp.eq(v_result, 'accepted', 'T2 aanroep met 5 argumenten werkt');
+  perform pg_temp.eq(v_result, 'accepted', 'T2 aanroep met 8 argumenten werkt');
 
-  -- Aanroep met zes argumenten: het pad van de huidige main.
   perform pg_temp.ouder_dan_een_minuut();
   select r.result into v_result
     from public.simhub_persist_v3(
       repeat('a', 64), 'sess-1', 20, '2026-10-31T12:01:00Z'::timestamptz,
       pg_temp.frame(2, 20, false), '0.7.1.2') r;
-  perform pg_temp.eq(v_result, 'accepted', 'T2 aanroep met 6 argumenten werkt');
+  perform pg_temp.eq(v_result, 'accepted', 'T2 aanroep met 6 argumenten werkt (pad van main)');
 
-  -- Aanroep met acht argumenten: het pad van de 0.8-Edge.
   perform pg_temp.ouder_dan_een_minuut();
-  select r.result into v_result
-    from public.simhub_persist_v3(
-      repeat('a', 64), 'sess-1', 30, '2026-10-31T12:02:00Z'::timestamptz,
-      pg_temp.frame(3, 30, false), '0.8.0.0', '[]'::jsonb, '[]'::jsonb) r;
-  perform pg_temp.eq(v_result, 'accepted', 'T2 aanroep met 8 argumenten werkt');
-
-  -- En met benoemde argumenten, zoals PostgREST hem aanroept.
-  perform pg_temp.ouder_dan_een_minuut();
-  select r.result into v_result
+  select r.result, r.measurement_ack into v_result, v_ack
     from public.simhub_persist_v3(
       p_token_hash => repeat('a', 64),
       p_session_id => 'sess-1',
       p_sequence => 40,
       p_captured_at => '2026-10-31T12:03:00Z'::timestamptz,
       p_v3_normalized => pg_temp.frame(4, 40, false)) r;
-  perform pg_temp.eq(v_result, 'accepted', 'T2 benoemde aanroep zonder de nieuwe parameters werkt');
+  perform pg_temp.eq(v_result, 'accepted', 'T2 benoemde aanroep met 5 argumenten werkt');
+  perform pg_temp.expect(v_ack is null, 'T2 zonder meetreeksen is het meetrapport null');
 
   perform pg_temp.eq((select count(*)::integer from public.simhub_measurement_events), 0,
                      'T2 zonder p_events worden er geen meetgebeurtenissen geschreven');
   perform pg_temp.eq((select count(*)::integer from public.simhub_lap_summaries), 0,
                      'T2 zonder p_laps worden er geen rondeaggregaten geschreven');
+
+  -- Een frame met meetserie: alles komt aan en het ACK noemt het.
+  perform pg_temp.ouder_dan_een_minuut();
+  select r.result, r.measurement_ack into v_result, v_ack
+    from public.simhub_persist_v3(
+      repeat('a', 64), 'sess-1', 50, '2026-10-31T12:04:00Z'::timestamptz,
+      pg_temp.frame(5, 50, false), '0.7.2.0',
+      jsonb_build_array(pg_temp.event(1)), jsonb_build_array(pg_temp.lap(5))) r;
+  perform pg_temp.eq(v_result, 'accepted', 'T2 aanroep met meetreeksen werkt');
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 1,
+                     'T2 het meetrapport noemt de gebeurtenis');
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,accepted}'), 1,
+                     'T2 het meetrapport noemt de ronde');
 end
 $$;
 
 -- ============================================================================
--- T3. Meetgebeurtenissen: velden, servergezag en afkeuring per rij
+-- T3. Servergezag over apparaat en sessie; idempotentie
 -- ============================================================================
 do $$
 declare
-  v_res record;
+  v_ack jsonb;
   v_row public.simhub_measurement_events%rowtype;
-  v_events jsonb;
 begin
-  v_events := jsonb_build_array(
-    jsonb_build_object(
-      'eventId', 'evt-1', 'kind', 'wear_refresh_confirmed', 'segmentId', 'seg-1',
-      'observedAt', '2026-10-31T12:00:00Z', 'sessionTimeSeconds', 1000, 'sdkTick', 12345,
-      'wearBefore', jsonb_build_object('fl', 12.5),
-      'wearAfter', jsonb_build_object('fl', 0.2),
-      'setGeneration', jsonb_build_object('fl', 3),
-      'evidence', jsonb_build_object('source', 'tire_sets_used'),
-      'confidence', 0.9,
-      -- De client probeert het apparaat en de sessie te bepalen. Dat mag niet.
-      'deviceId', 'client-lie', 'transportSessionId', 'client-sessie'),
-    -- confidence buiten 0..1: leesbaar maar onmogelijk -> afkeuren
-    jsonb_build_object('eventId', 'evt-confidence', 'kind', 'wear_value_changed', 'confidence', 2),
-    -- geen zone in de tijd -> geen waarnemingstijd -> afkeuren
-    jsonb_build_object('eventId', 'evt-nozone', 'kind', 'wear_value_changed',
-                       'observedAt', '2026-10-31T12:00:00'),
-    -- ongeldig ID en hoofdletters in kind -> afkeuren
-    jsonb_build_object('eventId', 'bad id!', 'kind', 'wear_value_changed'),
-    jsonb_build_object('eventId', 'evt-kind', 'kind', 'Wear_Value_Changed'),
-    -- ontbrekende soort -> afkeuren
-    jsonb_build_object('eventId', 'evt-nokind'),
-    -- expliciet null op optionele velden: dat is onbekend, geen fout
-    jsonb_build_object('eventId', 'evt-null', 'kind', 'pit_service_completed',
-                       'observedAt', null, 'confidence', null, 'sessionTimeSeconds', null)
-  );
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device_id from t_ctx), 'sess-1',
+    jsonb_build_array(pg_temp.event(2) || jsonb_build_object(
+      'deviceId', 'client-lie', 'transportSessionId', 'client-sessie')), null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 1,
+                     'T3 een rij met client-device/sessie wordt geaccepteerd');
 
-  select * into v_res
-    from public.simhub_persist_measurement_batch(
-      (select device_id from t_ctx), 'sess-1', v_events, null);
-
-  perform pg_temp.eq(v_res.events_written, 2, 'T3 twee van zeven gebeurtenissen geschreven');
-  perform pg_temp.eq(v_res.rejected, 5, 'T3 vijf gebeurtenissen afgekeurd');
-  perform pg_temp.eq(v_res.duplicates, 0, 'T3 geen duplicaten bij de eerste aanvoer');
-
-  select * into v_row from public.simhub_measurement_events where event_id = 'evt-1';
+  select * into v_row from public.simhub_measurement_events
+   where event_uid = pg_temp.uid(2);
   perform pg_temp.eq(v_row.device_id, (select device_id::text from t_ctx),
                      'T3 device_id komt van de server, niet uit de payload');
-  perform pg_temp.eq(v_row.transport_session_id, 'sess-1',
-                     'T3 transport_session_id komt van de server, niet uit de payload');
+  perform pg_temp.eq(v_row.delivered_session_id, 'sess-1',
+                     'T3 de afleversessie komt van de server, niet uit de payload');
   perform pg_temp.eq(v_row.observed_at, '2026-10-31T12:00:00Z'::timestamptz,
                      'T3 observedAt is als timestamptz opgeslagen');
   perform pg_temp.eq(v_row.sdk_tick, 12345::bigint, 'T3 sdkTick is opgeslagen');
   perform pg_temp.eq(v_row.confidence, 0.9::double precision, 'T3 confidence is opgeslagen');
-  perform pg_temp.eq(v_row.segment_id, 'seg-1', 'T3 segmentId is opgeslagen');
   perform pg_temp.eq(v_row.wear_after->>'fl', '0.2', 'T3 wearAfter is opgeslagen');
   perform pg_temp.eq(v_row.set_generation->>'fl', '3', 'T3 setGeneration is opgeslagen');
   perform pg_temp.eq(v_row.evidence->>'source', 'tire_sets_used', 'T3 evidence is opgeslagen');
 
-  select * into v_row from public.simhub_measurement_events where event_id = 'evt-null';
-  perform pg_temp.expect(v_row.observed_at is null, 'T3 expliciet null observedAt blijft null');
-  perform pg_temp.expect(v_row.confidence is null, 'T3 expliciet null confidence blijft null (niet 0)');
-  perform pg_temp.expect(v_row.id is not null, 'T3 id heeft een default');
-
-  -- Dedupe: dezelfde reeks nog eens, zonder nieuwe rijen.
-  select * into v_res
-    from public.simhub_persist_measurement_batch(
-      (select device_id from t_ctx), 'sess-1', v_events, null);
-  perform pg_temp.eq(v_res.events_written, 0, 'T3 replay schrijft geen nieuwe gebeurtenissen');
-  perform pg_temp.eq(v_res.duplicates, 2, 'T3 replay telt twee duplicaten');
-  perform pg_temp.eq((select count(*)::integer from public.simhub_measurement_events where event_id like 'evt-%'
-                      and event_id in ('evt-1', 'evt-null')), 2,
-                     'T3 replay laat het aantal rijen gelijk');
+  -- Replay van dezelfde rij: duplicaat, geen tweede rij.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device_id from t_ctx), 'sess-1',
+    jsonb_build_array(pg_temp.event(2) || jsonb_build_object(
+      'deviceId', 'client-lie', 'transportSessionId', 'client-sessie')), null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,duplicates}'), 1,
+                     'T3 een replay levert een duplicaat');
+  perform pg_temp.eq((select count(*)::integer from public.simhub_measurement_events
+                       where event_uid = pg_temp.uid(2)), 1,
+                     'T3 een replay laat het aantal rijen gelijk');
 end
 $$;
 
 -- ============================================================================
--- T4. Rondeaggregaten: mapping, dekking en dedupe
+-- T4. Rondeaggregaat: mapping en dekking
 -- ============================================================================
 do $$
 declare
-  v_res record;
+  v_ack jsonb;
   v_row public.simhub_lap_summaries%rowtype;
-  v_laps jsonb;
 begin
-  v_laps := jsonb_build_array(
-    jsonb_build_object(
-      'summaryId', 'lap-17', 'segmentId', 'seg-1', 'lapNumber', 17,
-      'startedAt', '2026-10-31T11:58:00Z', 'endedAt', '2026-10-31T12:00:00Z',
-      'currentDriverId', '44444444-4444-4444-8444-444444444444',
-      'aggregationVersion', 1, 'complete', true, 'invalidReasons', jsonb_build_array(),
-      'pitLap', false, 'driverChanged', false,
-      'trackTempCMean', 32.5, 'trackTempCMin', 31, 'trackTempCMax', 34, 'airTempCMean', 21,
-      'fuelStartLitres', 42, 'fuelEndLitres', 39.5,
-      'fuelLevelIntegralLitreSeconds', 4875, 'fuelAddedLitresObserved', null,
-      'absLatAccelIntegralGSeconds', 220, 'latAccelSquaredIntegralG2Seconds', 380,
-      'maxAbsLatAccelG', 1.85, 'absLongAccelIntegralGSeconds', 60,
-      'validDurationSeconds', 120.5, 'sampleCount', 2410, 'maxGapSeconds', 0.08,
-      'pitVisitIds', jsonb_build_array('pit-1'),
-      'wearObservationIds', jsonb_build_array('evt-1')),
-    -- zonder lapNumber: geen rondeaggregaat
-    jsonb_build_object('summaryId', 'lap-x', 'trackTempCMean', 30),
-    -- ongeldige begin/eind-volgorde
-    jsonb_build_object('summaryId', 'lap-y', 'lapNumber', 18,
-                       'startedAt', '2026-10-31T12:00:00Z', 'endedAt', '2026-10-31T11:00:00Z')
-  );
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device_id from t_ctx), 'sess-1', null, jsonb_build_array(pg_temp.lap(17)));
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,accepted}'), 1,
+                     'T4 een rondeaggregaat wordt geaccepteerd');
 
-  select * into v_res
-    from public.simhub_persist_measurement_batch(
-      (select device_id from t_ctx), 'sess-1', null, v_laps);
-
-  perform pg_temp.eq(v_res.laps_written, 1, 'T4 één rondeaggregaat geschreven');
-  perform pg_temp.eq(v_res.rejected, 2, 'T4 twee rondeaggregaten afgekeurd');
-
-  select * into v_row from public.simhub_lap_summaries where summary_id = 'lap-17';
+  select * into v_row from public.simhub_lap_summaries where summary_uid = pg_temp.uid(1017);
   perform pg_temp.eq(v_row.device_id, (select device_id::text from t_ctx),
                      'T4 device_id komt van de server');
   perform pg_temp.eq(v_row.lap_number, 17, 'T4 lapNumber is opgeslagen');
   perform pg_temp.eq(v_row.current_driver_id, '44444444-4444-4444-8444-444444444444'::uuid,
                      'T4 currentDriverId is als uuid opgeslagen');
-  perform pg_temp.eq(v_row.aggregation_version, 1, 'T4 aggregationVersion is opgeslagen');
   perform pg_temp.eq(v_row.track_temp_c_mean, 32.5::double precision, 'T4 trackTempCMean is opgeslagen');
   perform pg_temp.eq(v_row.fuel_level_integral_litre_seconds, 4875::double precision,
                      'T4 brandstofniveau-integraal is opgeslagen');
   perform pg_temp.eq(v_row.max_abs_lat_accel_g, 1.85::double precision, 'T4 maxAbsLatAccelG is opgeslagen');
-  perform pg_temp.eq(v_row.valid_duration_seconds, 120.5::double precision,
-                     'T4 validDurationSeconds is opgeslagen (dekking, geen aanname)');
-  perform pg_temp.eq(v_row.sample_count, 2410::double precision, 'T4 sampleCount is opgeslagen');
-  perform pg_temp.eq(v_row.max_gap_seconds, 0.08::double precision, 'T4 maxGapSeconds is opgeslagen');
+  perform pg_temp.eq(v_row.sample_count, 7200::bigint, 'T4 sampleCount is als bigint opgeslagen');
   perform pg_temp.eq(v_row.pit_visit_ids, array['pit-1']::text[], 'T4 pitVisitIds is opgeslagen');
-  perform pg_temp.eq(v_row.wear_observation_ids, array['evt-1']::text[], 'T4 wearObservationIds is opgeslagen');
+  perform pg_temp.eq(v_row.wear_observation_ids, array['evt-1']::text[],
+                     'T4 wearObservationIds is opgeslagen');
   perform pg_temp.eq(v_row.invalid_reasons, '{}'::text[],
                      'T4 een lege invalidReasons wordt geen null maar een lege array');
   perform pg_temp.expect(v_row.fuel_added_litres_observed is null,
                          'T4 ontbrekende tankwaarneming blijft null (geen 0)');
   perform pg_temp.eq(v_row.complete, true, 'T4 complete is opgeslagen');
+  perform pg_temp.eq(v_row.coverage->'load'->>'sampleCount', '2400',
+                     'T4 de dekking per groep is opgeslagen');
 
-  select * into v_res
-    from public.simhub_persist_measurement_batch(
-      (select device_id from t_ctx), 'sess-1', null, v_laps);
-  perform pg_temp.eq(v_res.laps_written, 0, 'T4 replay schrijft geen nieuwe rondeaggregaten');
-  perform pg_temp.eq(v_res.duplicates, 1, 'T4 replay telt één duplicaat');
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device_id from t_ctx), 'sess-1', null, jsonb_build_array(pg_temp.lap(17)));
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,duplicates}'), 1,
+                     'T4 een replay levert een duplicaat');
 end
 $$;
 
 -- ============================================================================
--- T5. Vorm- en lengtecontrole op de reeks als geheel, en non-fataal gedrag
+-- T5. Vorm- en lengtecontrole, en non-fataal gedrag
 -- ============================================================================
 do $$
 declare
-  v_res record;
+  v_ack jsonb;
   v_result text;
   v_veel jsonb;
   v_snapshots integer;
 begin
-  -- Geen array.
-  select * into v_res from public.simhub_persist_measurement_batch(
+  v_ack := public.simhub_persist_measurement_batch(
     (select device_id from t_ctx), 'sess-1', '{"not":"an array"}'::jsonb, '"nope"'::jsonb);
-  perform pg_temp.eq(v_res.rejected, 2, 'T5 twee niet-arrays tellen als twee afwijzingen');
-  perform pg_temp.eq(v_res.events_written + v_res.laps_written, 0,
-                     'T5 een niet-array schrijft niets');
+  perform pg_temp.eq(v_ack #>> '{events,block_error}', 'not_an_array',
+                     'T5 een niet-array wordt als block_error gemeld');
+  perform pg_temp.eq(v_ack #>> '{laps,block_error}', 'not_an_array',
+                     'T5 een niet-array ronde wordt als block_error gemeld');
 
-  -- Te lang: 201 gebeurtenissen.
-  select jsonb_agg(jsonb_build_object('eventId', 'evt-bulk-' || g, 'kind', 'wear_value_changed'))
-    into v_veel
-    from generate_series(1, 201) g;
-  select * into v_res from public.simhub_persist_measurement_batch(
+  select jsonb_agg(jsonb_build_object('eventUid', pg_temp.uid(5000 + g), 'kind', 'wear_value_changed'))
+    into v_veel from generate_series(1, 201) g;
+  v_ack := public.simhub_persist_measurement_batch(
     (select device_id from t_ctx), 'sess-1', v_veel, null);
-  perform pg_temp.eq(v_res.rejected, 1, 'T5 een te lange reeks telt als één afwijzing');
-  perform pg_temp.eq(v_res.events_written, 0, 'T5 een te lange reeks schrijft niets');
-  perform pg_temp.expect(not exists (select 1 from public.simhub_measurement_events where event_id like 'evt-bulk%'),
+  perform pg_temp.eq(v_ack #>> '{events,block_error}', 'too_many',
+                     'T5 een te lange reeks wordt als too_many gemeld');
+  perform pg_temp.expect(not exists (select 1 from public.simhub_measurement_events
+                                      where event_uid = pg_temp.uid(5001)),
                          'T5 geen enkele rij uit de te lange reeks is geschreven');
 
-  -- En de harde eis: het frame overleeft een kapotte meetbatch.
+  -- De harde eis: het frame overleeft een kapotte meetbatch.
   perform pg_temp.ouder_dan_een_minuut();
   select r.result into v_result
     from public.simhub_persist_v3(
-      repeat('a', 64), 'sess-1', 50, '2026-10-31T12:05:00Z'::timestamptz,
-      pg_temp.frame(5, 50, false), '0.8.0.0',
+      repeat('a', 64), 'sess-1', 60, '2026-10-31T12:05:00Z'::timestamptz,
+      pg_temp.frame(6, 60, false), '0.7.2.0',
       '{"not":"an array"}'::jsonb,
-      jsonb_build_array(jsonb_build_object('summaryId', 'kapot', 'lapNumber', 'zeventien'))) r;
+      jsonb_build_array(jsonb_build_object('summaryUid', pg_temp.uid(1099), 'lapNumber', 'zeventien'))) r;
   perform pg_temp.eq(v_result, 'accepted', 'T5 kapotte meetblokken kosten het frame niet');
 
   select count(*) into v_snapshots from public.simhub_telemetry_latest
    where device_id = (select device_id from t_ctx);
   perform pg_temp.eq(v_snapshots, 1, 'T5 de snapshot is ondanks de kapotte meetblokken geschreven');
-  perform pg_temp.expect(not exists (select 1 from public.simhub_lap_summaries where summary_id = 'kapot'),
+  perform pg_temp.expect(not exists (select 1 from public.simhub_lap_summaries
+                                      where summary_uid = pg_temp.uid(1099)),
                          'T5 het kapotte rondeaggregaat is niet geschreven');
-
-  -- Ook een exception in de batch zelf mag het frame niet kosten. Een te lange
-  -- standaardwaarde forceren we niet; de vormcontrole hierboven dekt het pad.
-  perform pg_temp.expect(true, 'T5 non-fataal pad gedekt');
 end
 $$;
 
@@ -439,8 +438,8 @@ declare
   v_result record;
   v_before jsonb;
   v_after jsonb;
+  v_ack jsonb;
 begin
-  -- De publieke functie geeft precies deze kolommen en niets anders.
   select array_agg(a.attname order by a.attname) into v_cols
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
@@ -455,7 +454,6 @@ begin
   perform pg_temp.eq(v_row.config_revision, 1, 'T6 er is een configuratieregel met revision 1');
   perform pg_temp.eq(v_row.features, '{}'::jsonb, 'T6 standaard staan er geen features aan');
 
-  -- Singleton.
   begin
     insert into public.simhub_connector_config (id) values (2);
     perform pg_temp.expect(false, 'T6 een tweede configuratieregel wordt geweigerd');
@@ -463,14 +461,12 @@ begin
     perform pg_temp.expect(true, 'T6 een tweede configuratieregel wordt geweigerd');
   end;
 
-  -- Onbekende beleidssleutel: weigeren, geen halve update.
   select to_jsonb(c) into v_before from public.simhub_connector_config c where id = 1;
   select * into v_result from public.simhub_connector_config_apply('{"bogus":1}'::jsonb);
   perform pg_temp.eq(v_result.result, 'unknown_fields', 'T6 een onbekende beleidssleutel wordt geweigerd');
   select to_jsonb(c) into v_after from public.simhub_connector_config c where id = 1;
   perform pg_temp.eq(v_after, v_before, 'T6 een geweigerde patch laat de configuratie ongemoeid');
 
-  -- Geldige patch, met een onbekende feature ernaast.
   select * into v_result from public.simhub_connector_config_apply(
     '{"sendIntervalMs":500,"sampleHz":20,"features":{"lapSummaries":true,"verzonnenFeature":true}}'::jsonb);
   perform pg_temp.eq(v_result.result, 'applied', 'T6 een geldige patch wordt toegepast');
@@ -481,15 +477,14 @@ begin
   perform pg_temp.eq(v_row.features, '{"lapSummaries":true}'::jsonb,
                      'T6 een onbekende feature wordt weggefilterd en dus nooit geactiveerd');
 
-  -- Buiten bereik: de CHECK grijpt in en er blijft niets half staan.
-  select * into v_result from public.simhub_connector_config_apply('{"sendIntervalMs":10}'::jsonb);
-  perform pg_temp.eq(v_result.result, 'invalid_payload', 'T6 een frequentie buiten bereik wordt geweigerd');
+  -- Buiten bereik: expliciet, met reden, en er blijft niets half staan.
+  select * into v_result from public.simhub_connector_config_apply('{"sendIntervalMs":250}'::jsonb);
+  perform pg_temp.eq(v_result.result, 'out_of_range', 'T6 250 ms wordt geweigerd (ingestgrens)');
   perform pg_temp.eq((select send_interval_ms from public.simhub_connector_config where id = 1), 500,
                      'T6 een geweigerde frequentie laat de oude waarde staan');
   perform pg_temp.eq((select config_revision from public.simhub_connector_config where id = 1), 2,
                      'T6 een geweigerde patch verhoogt de revision niet');
 
-  -- Optimistische concurrency.
   select * into v_result from public.simhub_connector_config_apply('{"sampleHz":25}'::jsonb, 2);
   perform pg_temp.eq(v_result.result, 'applied', 'T6 een patch met de juiste verwachte revision wordt toegepast');
   select * into v_result from public.simhub_connector_config_apply('{"sampleHz":30}'::jsonb, 2);
@@ -497,19 +492,16 @@ begin
   perform pg_temp.eq((select sample_hz from public.simhub_connector_config where id = 1), 25,
                      'T6 het conflict laat de waarde staan');
 
-  -- Als anon: de schrijver weigert.
   set local request.jwt.claim.role = 'anon';
   select * into v_result from public.simhub_connector_config_apply('{"sampleHz":40}'::jsonb);
   perform pg_temp.eq(v_result.result, 'unauthorized', 'T6 als anon weigert de schrijver');
   perform pg_temp.eq((select count(*)::integer from public.simhub_connector_config_readonly), 1,
                      'T6 de read-only view is leesbaar voor anon');
-  set local request.jwt.claim.role = 'service_role';
 
-  -- Ook de meetbatch weigert buiten de service-role.
-  set local request.jwt.claim.role = 'anon';
-  select * into v_result from public.simhub_persist_measurement_batch(
-    (select device_id from t_ctx), 'sess-1', jsonb_build_array(jsonb_build_object('eventId','evt-anon','kind','x')), null);
-  perform pg_temp.eq(v_result.events_written, 0, 'T6 als anon schrijft de meetbatch niets');
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device_id from t_ctx), 'sess-1', jsonb_build_array(pg_temp.event(77)), null);
+  perform pg_temp.eq(v_ack #>> '{error}', 'unauthorized',
+                     'T6 als anon schrijft de meetbatch niets');
   set local request.jwt.claim.role = 'service_role';
 end
 $$;

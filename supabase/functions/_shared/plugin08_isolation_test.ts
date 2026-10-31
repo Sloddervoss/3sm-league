@@ -1,18 +1,18 @@
 /**
- * Plugin 0.8 — de isolatietest rond het nieuwe control-endpoint.
+ * Plugin 0.7.2.0 — de isolatietest rond het nieuwe control-endpoint.
  *
- * Harde eis: de automatische update van 0.7.1.x naar 0.8 mag niet breken. Dit
+ * Harde eis: de automatische update van 0.7.1.x naar 0.7.2.0 mag niet breken. Dit
  * bestand bewijst drie dingen met de ECHTE handlers (niet met een nabootsing):
  *
  *   1. `simhub-version` antwoordt ongewijzigd: dezelfde acht sleutels, en met
- *      SIMHUB_PLUGIN_VERSION=0.8.0.0 biedt hij 0.8.0.0 als nieuwste aan. Een
+ *      SIMHUB_PLUGIN_VERSION=0.7.2.0 biedt hij 0.7.2.0 als nieuwste aan. Een
  *      0.7.1.x-client leest precies wat hij altijd las.
  *   2. `simhub-control` geeft bij een ontbrekende of kapotte configuratie een
- *      stabiel 503-antwoord — geen exception, geen lege body. Een 0.8-client
+ *      stabiel 503-antwoord — geen exception, geen lege body. Een 0.7.2.0-client
  *      valt daarmee terug op het vaste V3-basisprofiel.
  *   3. De update- en verzendroute lopen gewoon door terwijl control 503/500
  *      geeft: het versie-antwoord blijft 200 en een bestaand V3-frame parseert
- *      nog steeds. En een database zonder de 0.8-signatuur laat de ingest
+ *      nog steeds. En een database zonder de 0.7.2.0-signatuur laat de ingest
  *      terugvallen op de oude RPC-aanroep in plaats van te falen.
  *
  * Draai met: deno test --allow-env --allow-read supabase/functions/_shared/plugin08_isolation_test.ts
@@ -52,8 +52,8 @@ const captureServe = (slot: string) => {
   }) as typeof Deno.serve;
 };
 
-// 0.8.0.0 als nieuwste release, zoals de deploy hem zet.
-Deno.env.set("SIMHUB_PLUGIN_VERSION", "0.8.0.0");
+// 0.7.2.0 als nieuwste release, zoals de deploy hem zet.
+Deno.env.set("SIMHUB_PLUGIN_VERSION", "0.7.2.0");
 Deno.env.set("SIMHUB_PLUGIN_DLL_URL", "https://downloads.3stripemotorsport.cc/3SM.EnduranceConnector.dll");
 Deno.env.set("SIMHUB_PLUGIN_SHA256", "a".repeat(64));
 Deno.env.set("SIMHUB_PLUGIN_BYTE_LENGTH", "524288");
@@ -107,7 +107,7 @@ const legacyFrame = () => ({
 // ---------------------------------------------------------------------------
 // 1. De updateroute is onaangeroerd
 // ---------------------------------------------------------------------------
-Deno.test("P08-I1 simhub-version biedt 0.8.0.0 aan met exact dezelfde vorm", async () => {
+Deno.test("P08-I1 simhub-version biedt 0.7.2.0 aan met exact dezelfde vorm", async () => {
   const response = await get("version")(new Request("https://3stripemotorsport.cc/functions/v1/simhub-version"));
   if (response.status !== 200) throw new Error(`status ${response.status}`);
   const body = await bodyOf(response);
@@ -117,7 +117,7 @@ Deno.test("P08-I1 simhub-version biedt 0.8.0.0 aan met exact dezelfde vorm", asy
   if (keys.join(",") !== expected.join(",")) {
     throw new Error(`de vorm van simhub-version is veranderd: ${keys.join(",")}`);
   }
-  if (body.version !== "0.8.0.0") throw new Error(`nieuwste versie is ${String(body.version)}`);
+  if (body.version !== "0.7.2.0") throw new Error(`nieuwste versie is ${String(body.version)}`);
   if (!String(body.dllUrl).startsWith("https://downloads.3stripemotorsport.cc/")) {
     throw new Error("download-URL veranderd");
   }
@@ -181,11 +181,11 @@ Deno.test("P08-I6 update- en verzendroute werken terwijl control 500 geeft", asy
   const negotiation = resolveControl({ ok: false, status: 500 });
   if (negotiation.mode !== "compat") throw new Error("geen compat-modus");
 
-  // …de updatecheck gaat gewoon door en ziet 0.8.0.0.
+  // …de updatecheck gaat gewoon door en ziet 0.7.2.0.
   const version = await get("version")(new Request("https://3stripemotorsport.cc/functions/v1/simhub-version"));
   if (version.status !== 200) throw new Error(`versieroute gaf ${version.status}`);
   const versionBody = await bodyOf(version);
-  if (versionBody.version !== "0.8.0.0") throw new Error("versieroute biedt 0.8.0.0 niet meer aan");
+  if (versionBody.version !== "0.7.2.0") throw new Error("versieroute biedt 0.7.2.0 niet meer aan");
 
   // …en de verzendroute parseert hetzelfde frame als altijd.
   const parsed = normalizeTelemetryEnvelope(legacyFrame());
@@ -200,7 +200,7 @@ Deno.test("P08-I6 update- en verzendroute werken terwijl control 500 geeft", asy
   }
 });
 
-Deno.test("P08-I7 een database zonder de 0.8-signatuur laat de ingest terugvallen", () => {
+Deno.test("P08-I7 een database zonder de 0.7.2.0-signatuur laat de ingest terugvallen", () => {
   if (!isMissingFunctionError({ code: "42883" })) throw new Error("42883 niet herkend");
   if (!isMissingFunctionError({ code: "PGRST202" })) throw new Error("PGRST202 niet herkend");
   if (!isMissingFunctionError({ message: "Could not find the function public.simhub_persist_v3(p_events, p_laps) in the schema cache" })) {
