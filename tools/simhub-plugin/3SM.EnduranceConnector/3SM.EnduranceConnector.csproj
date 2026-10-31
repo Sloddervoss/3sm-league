@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -48,27 +48,41 @@
     <Compile Include="Theme.cs" />
     <Compile Include="TelemetryContracts.cs" />
     <Compile Include="TelemetryContractsV3.cs" />
-    <!-- Research-opname (opt-in, lokale JSONL). Pure logica: geen SimHub-referentie; de
-         tests in 3SM.EnduranceConnector.ResearchTests compileren dezelfde bestanden. -->
-    <Compile Include="ResearchProvenance.cs" />
-    <Compile Include="ResearchObservations.cs" />
-    <Compile Include="ResearchJsonl.cs" />
-    <Compile Include="ResearchQueue.cs" />
-    <Compile Include="ResearchEvents.cs" />
-    <Compile Include="ResearchIdentity.cs" />
-    <Compile Include="ResearchContextSampler.cs" />
-    <Compile Include="ResearchRecorder.cs" />
     <Compile Include="OverlayContracts.cs" />
     <Compile Include="OverlayClient.cs" />
     <Compile Include="OverlayPropertyPublisher.cs" />
     <Compile Include="OverlayTemplateInstaller.cs" />
-    <Compile Include="FlagModels.cs" />
-    <Compile Include="FlagService.cs" />
+    <!-- 0.7.2.0: vlaggen zijn een toestandloze meting geworden (session.flags). -->
+    <Compile Include="SessionFlagReader.cs" />
+    <!-- 0.7.2.0: eerlijke nullen. Pure logica (geen SimHub-referentie), zodat de tests
+         dezelfde bestanden compileren. -->
+    <Compile Include="CaptureValueRules.cs" />
+    <Compile Include="TyreZoneReader.cs" />
+    <!-- 0.7.2.0: de updatevergelijking op één testbare plek (zelfde regel als voorheen). -->
+    <Compile Include="UpdateVersionPolicy.cs" />
+    <!-- 0.7.2.0: meetlaag. Duurzame ID's, de wire-DTO's van een meting en een ronde,
+         de sampler en de rondeaccumulator. Allemaal SimHub-vrij, zodat de tests
+         dezelfde bestanden compileren als de plugin. -->
+    <Compile Include="MeasurementIds.cs" />
+    <Compile Include="MeasurementEvent.cs" />
+    <Compile Include="TelemetrySampler.cs" />
+    <Compile Include="LapAccumulator.cs" />
+    <!-- 0.7.2.0: pitbezoeken (intentie vs resultaat) en wear-ankers met bewijs. -->
+    <Compile Include="PitServiceTracker.cs" />
+    <Compile Include="TyreAnchorTracker.cs" />
+    <!-- 0.7.2.0: begrensde persistente outbox met ACK per rij, en het frame/de
+         verzending met de batchgrenzen uit het contract. -->
+    <Compile Include="MeasurementOutbox.cs" />
+    <Compile Include="MeasurementFrame.cs" />
+    <!-- 0.7.2.0: kleine handshake met de server: capabilities, beleid, veilige defaults. -->
+    <Compile Include="ConnectorControlContracts.cs" />
+    <Compile Include="ConnectorControlClient.cs" />
+    <!-- 0.7.2.0: de bedrading: sampler -> pit -> anker -> outbox, met de toewijzing van
+         een pitbezoek aan de ronde waarin de delta is waargenomen. -->
+    <Compile Include="MeasurementPipeline.cs" />
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->
     <Compile Include="TyrePublishGate.cs" />
-    <Compile Include="SimHubDeviceLister.cs" />
-    <Compile Include="SimHubLedProfileHost.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -1,3 +1,4 @@
+﻿using System;
 using System.Runtime.Serialization;
 
 namespace ThreeSM.EnduranceConnector
@@ -31,10 +32,60 @@ namespace ThreeSM.EnduranceConnector
         // EmitDefaultValue=false: no tyres block at all when there is nothing to report, so a
         // 0.6.1.1 payload stays byte-identical. protocolVersion stays 3 (framing unchanged).
         [DataMember(Name = "tyres", Order = 15, EmitDefaultValue = false)] public V3Tyres Tyres { get; set; }
-        // 0.8.0 additive: optioneel herkomstblok met de twee versies die tot dusverre
+        // 0.7.2.0 additive: optioneel herkomstblok met de twee versies die tot dusverre
         // door elkaar liepen. EmitDefaultValue=false: is er niets te melden, dan staat
         // de sleutel niet in de payload en blijft een 0.7.x-frame byte-identiek.
         [DataMember(Name = "source", Order = 16, EmitDefaultValue = false)] public V3Source Source { get; set; }
+        // 0.7.2.0 additief: de meetserie meldt zichzelf in het frame in plaats van alleen in
+        // het antwoord op /simhub-control. protocolVersion blijft 3 — dit zijn leden, geen
+        // nieuwe framing. EmitDefaultValue=false: zonder meetserie staan de sleutels niet in
+        // de payload en blijft een 0.7.x-frame byte-identiek (de gouden fixture bewaakt dat).
+        [DataMember(Name = "schemaRevision", Order = 17, EmitDefaultValue = false)] public int SchemaRevision { get; set; }
+        [DataMember(Name = "capabilities", Order = 18, EmitDefaultValue = false)] public V3Capabilities Capabilities { get; set; }
+    }
+
+    /// <summary>
+    /// Het capabilities-blok van deze connector in de draadvorm van het frame:
+    /// <c>{"revision":1,"pitService":1,"measurementEvents":1,…}</c>.
+    ///
+    /// Waarom expliciete leden en geen dictionary: <c>DataContractJsonSerializer</c> schrijft
+    /// een dictionary als een ARRAY van Key/Value-paren, en op de draad moet dit één object
+    /// zijn. De namen komen één-op-één uit <see cref="ConnectorCapabilities.Implemented"/>;
+    /// de testharnas vergelijkt de leden met die lijst, zodat een feature toevoegen zonder
+    /// lid hier niet stilzwijgend uit het frame verdwijnt.
+    /// </summary>
+    [DataContract]
+    public sealed class V3Capabilities
+    {
+        [DataMember(Name = "revision", Order = 1)] public int Revision { get; set; }
+        [DataMember(Name = "pitService", Order = 2, EmitDefaultValue = false)] public int? PitService { get; set; }
+        [DataMember(Name = "wearObservation", Order = 3, EmitDefaultValue = false)] public int? WearObservation { get; set; }
+        [DataMember(Name = "lapSummary", Order = 4, EmitDefaultValue = false)] public int? LapSummary { get; set; }
+        [DataMember(Name = "directIrSdk", Order = 5, EmitDefaultValue = false)] public int? DirectIrSdk { get; set; }
+        [DataMember(Name = "measurementEvents", Order = 6, EmitDefaultValue = false)] public int? MeasurementEvents { get; set; }
+        [DataMember(Name = "lapSummaries", Order = 7, EmitDefaultValue = false)] public int? LapSummaries { get; set; }
+        [DataMember(Name = "environment", Order = 8, EmitDefaultValue = false)] public int? Environment { get; set; }
+
+        /// <summary>Van de handshake naar de draadvorm; null blijft null (geen leeg blok).</summary>
+        public static V3Capabilities From(ConnectorCapabilities capabilities)
+        {
+            if (capabilities == null) return null;
+            var result = new V3Capabilities { Revision = capabilities.Revision };
+            foreach (var pair in capabilities.Supported)
+            {
+                switch (pair.Key)
+                {
+                    case "pitService": result.PitService = pair.Value; break;
+                    case "wearObservation": result.WearObservation = pair.Value; break;
+                    case "lapSummary": result.LapSummary = pair.Value; break;
+                    case "directIrSdk": result.DirectIrSdk = pair.Value; break;
+                    case "measurementEvents": result.MeasurementEvents = pair.Value; break;
+                    case "lapSummaries": result.LapSummaries = pair.Value; break;
+                    case "environment": result.Environment = pair.Value; break;
+                }
+            }
+            return result;
+        }
     }
 
     // Herkomstblok (optioneel, additief onder protocolVersion 3).
@@ -155,7 +206,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "rearLeft")] public V3Tyre RearLeft { get; set; }
         [DataMember(Name = "rearRight")] public V3Tyre RearRight { get; set; }
 
-        // 0.8.0 additief: kanalen die SimHub's GameRawData niet doorgeeft en die de plugin
+        // 0.7.2.0 additief: kanalen die SimHub's GameRawData niet doorgeeft en die de plugin
         // rechtstreeks uit de iRacing-shared-memory leest (IrSdkMemoryReader). Alles nullable
         // en EmitDefaultValue=false: zonder lezer (of zonder rijdende sim) verandert de
         // payload byte-voor-byte niet. Eenheid staat in de naam (Bar/Deg/G), zodat de
@@ -232,6 +283,11 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "sessionState", Order = 6)] public string SessionState { get; set; }
         // 0.5.0 additive: rijke vlag-presentatie. EmitDefaultValue=false zodat oude
         // receivers (en het bestaande schema) onveranderd blijven als de module uit staat.
+        //
+        // 0.7.2.0: deze drie velden worden NIET meer gevuld. Ze hoorden bij de verwijderde
+        // presentatielaag (kleur/layout/ernst van een flagbox) en die is er niet meer.
+        // De leden blijven in het contract staan zodat een server of oudere client die
+        // ze kent niets hoeft te wijzigen; ze vallen door EmitDefaultValue simpelweg weg.
         [DataMember(Name = "primaryFlag", Order = 7, EmitDefaultValue = false)] public string PrimaryFlag { get; set; }
         [DataMember(Name = "flagColour", Order = 8, EmitDefaultValue = false)] public string FlagColour { get; set; }
         [DataMember(Name = "flagSeverity", Order = 9, EmitDefaultValue = false)] public int FlagSeverity { get; set; }

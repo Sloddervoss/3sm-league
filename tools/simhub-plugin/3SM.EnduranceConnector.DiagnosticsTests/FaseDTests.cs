@@ -104,6 +104,21 @@ internal static class FaseDTests
         using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(body)))
             return (Dictionary<string, object>)serializer.ReadObject(stream);
     }
+    private static int Group(string name, Func<int> body)
+    {
+        var before = passed;
+        try
+        {
+            body();
+        }
+        catch (Exception error)
+        {
+            failed++;
+            Console.WriteLine("FAIL " + name + " HARNESS_EXCEPTION " + error.GetType().Name + ": " + error.Message);
+        }
+        return passed - before;
+    }
+
     private static void Check(string id, bool condition, string evidence)
     {
         if (condition) { passed++; Console.WriteLine("PASS " + id + " " + evidence); }
@@ -338,14 +353,54 @@ internal static class FaseDTests
         if (!(cadence && bounded)) failed++;
     }
 
-    public static int Main()
+    public static int Main(string[] args)
     {
+        // Hulpmode: legt de V3-baseline vast (zie V3PayloadFixtureTests). De
+        // configuratiefixture is eenmalig met de 0.7.1.2-code geschreven en staat vast.
+        // Wordt alleen met de hand gebruikt; de normale run doet niets speciaals.
+        if (args != null && args.Length > 0)
+        {
+            if (string.Equals(args[0], "--dump-v3", StringComparison.Ordinal))
+            {
+                Console.Write(V3PayloadFixtureTests.Serialize(V3PayloadFixtureTests.BuildRepresentativeFrame()));
+                return 0;
+            }
+            // Snelle iteratie op de meetlaag zonder de 60 s-soaktest van de rest.
+            if (string.Equals(args[0], "--only-measurement", StringComparison.Ordinal))
+            {
+                Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
+                Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
+                Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));
+                Group("MeasurementOutboxTests", () => MeasurementOutboxTests.Run(Check));
+                Group("MeasurementTransportTests", () => MeasurementTransportTests.Run(Check));
+                Group("ControlClientTests", () => ControlClientTests.Run(Check));
+                Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+        }
         var irSdkChecks = 0;
+        var baselineChecks = 0;
         try
         {
             BasicMatrix().GetAwaiter().GetResult();
             TyreGateTests.Run(Check);
             irSdkChecks = IrSdkReaderTests.Run(Check);
+            // Elke groep in zijn eigen try: een fout in de ene groep mag de andere groepen
+            // niet verbergen (een fixture die niet meer klopt gooide eerder de hele run om).
+            baselineChecks += Group("FlagMappingTests", () => FlagMappingTests.Run(Check));
+            baselineChecks += Group("CaptureNullSemanticsTests", () => CaptureNullSemanticsTests.Run(Check));
+            baselineChecks += Group("UpdatePathTests", () => UpdatePathTests.Run(Check));
+            baselineChecks += Group("V3PayloadFixtureTests", () => V3PayloadFixtureTests.Run(Check));
+            baselineChecks += Group("SettingsCompatibilityTests", () => SettingsCompatibilityTests.Run(Check));
+            baselineChecks += Group("UpdaterTransitionTests", () => UpdaterTransitionTests.Run(Check));
+            baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
+            baselineChecks += Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
+            baselineChecks += Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));
+            baselineChecks += Group("MeasurementOutboxTests", () => MeasurementOutboxTests.Run(Check));
+            baselineChecks += Group("MeasurementTransportTests", () => MeasurementTransportTests.Run(Check));
+            baselineChecks += Group("ControlClientTests", () => ControlClientTests.Run(Check));
+            baselineChecks += Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
@@ -356,6 +411,6 @@ internal static class FaseDTests
             Console.WriteLine("HARNESS_EXCEPTION_TYPE=" + error.GetType().FullName);
         }
         Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
-        return failed == 0 && passed == 38 + irSdkChecks ? 0 : 1;
+        return failed == 0 && passed == 38 + irSdkChecks + baselineChecks ? 0 : 1;
     }
 }

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
@@ -17,9 +17,27 @@
     <Compile Include="..\3SM.EnduranceConnector\UpdaterStateStore.cs" Link="UpdaterStateStore.cs" />
     <Compile Include="..\3SM.EnduranceConnector\SessionTelemetryReader.cs" Link="SessionTelemetryReader.cs" />
     <Compile Include="..\3SM.EnduranceConnector\ConnectorSettings.cs" Link="ConnectorSettings.cs" />
-    <!-- ConnectorSettings verwijst naar FlagSettings/FlagPreset; dat bestand was hier
-         niet gelinkt, waardoor deze harness niet bouwde. FlagModels is SimHub-vrij. -->
-    <Compile Include="..\3SM.EnduranceConnector\FlagModels.cs" Link="FlagModels.cs" />
+    <!-- 0.8: de vlaggenlezer is SimHub-vrij en dus hier te testen. -->
+    <Compile Include="..\3SM.EnduranceConnector\SessionFlagReader.cs" Link="SessionFlagReader.cs" />
+    <!-- 0.8: eerlijke nullen. Alle drie SimHub-vrij: regels, bandenzones en de tracker. -->
+    <Compile Include="..\3SM.EnduranceConnector\CaptureValueRules.cs" Link="CaptureValueRules.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\TyreZoneReader.cs" Link="TyreZoneReader.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\TyreSnapshotTracker.cs" Link="TyreSnapshotTracker.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\RawChannelReader.cs" Link="RawChannelReader.cs" />
+    <!-- 0.8: versievergelijking van het updatepad, SimHub-vrij. -->
+    <Compile Include="..\3SM.EnduranceConnector\UpdateVersionPolicy.cs" Link="UpdateVersionPolicy.cs" />
+    <!-- 0.7.2.0: meetlaag. ID's, wire-DTO's, sampler en rondeaccumulator. -->
+    <Compile Include="..\3SM.EnduranceConnector\MeasurementIds.cs" Link="MeasurementIds.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\MeasurementEvent.cs" Link="MeasurementEvent.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\TelemetrySampler.cs" Link="TelemetrySampler.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\LapAccumulator.cs" Link="LapAccumulator.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\PitServiceTracker.cs" Link="PitServiceTracker.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\TyreAnchorTracker.cs" Link="TyreAnchorTracker.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\MeasurementOutbox.cs" Link="MeasurementOutbox.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\MeasurementFrame.cs" Link="MeasurementFrame.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ConnectorControlContracts.cs" Link="ConnectorControlContracts.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ConnectorControlClient.cs" Link="ConnectorControlClient.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\MeasurementPipeline.cs" Link="MeasurementPipeline.cs" />
     <!-- 0.7.1: bandenhek + vingerafdruk. Beide bestanden zijn SimHub-vrij. -->
     <Compile Include="..\3SM.EnduranceConnector\TyrePublishGate.cs" Link="TyrePublishGate.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetryContractsV3.cs" Link="TelemetryContractsV3.cs" />
@@ -27,5 +45,9 @@
          memory-image te testen (geen SimHub-DLL, geen iRacing nodig). -->
     <Compile Include="..\3SM.EnduranceConnector\IrSdkChannels.cs" Link="IrSdkChannels.cs" />
     <Compile Include="..\3SM.EnduranceConnector\IrSdkMemoryReader.cs" Link="IrSdkMemoryReader.cs" />
+  </ItemGroup>
+  <!-- Vastgelegde baseline: gouden V3-frame, 0.7.1.2-configuratie en 0.7.1.2-updaterstaten. -->
+  <ItemGroup>
+    <None Include="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

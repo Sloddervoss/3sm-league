@@ -1,4 +1,10 @@
-# 3SM Endurance Connector — vlaggen & flagbox: testchecklist
+﻿# 3SM Endurance Connector — vlaggen & flagbox: testchecklist
+
+> **Vervallen sinds 0.7.2.0.** De flags-module, de flagboxen en de LED-profielhost zijn
+> verwijderd. `session.flags` wordt nog wel gevuld, maar uit een toestandloze lezer
+> (`SessionFlagReader`): ruwe iRacing-vlaggen, vaste namen, geen kleuren/presets/
+> animaties. Deze checklist beschrijft de oude presentatielaag en is alleen nog
+> naslagwerk; gebruik voor de nieuwe situatie `FlagMappingTests` in de harness.
 
 Kort, stap voor stap, om de flags-module (incl. flagbox-profiel) in SimHub te verifiëren.
 Vink af en noteer afwijkingen.

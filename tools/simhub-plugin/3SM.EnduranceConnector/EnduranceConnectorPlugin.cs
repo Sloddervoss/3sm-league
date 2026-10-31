@@ -73,23 +73,24 @@ namespace ThreeSM.EnduranceConnector
         private UpdaterState _updaterState;
         private readonly object _diagnosticsGate = new object();
         private DiagnosticsClient _diagnostics;
-        private readonly FlagService _flagService = new FlagService();
         private OverlayPropertyPublisher _overlayPublisher;
         private OverlayClient _overlayClient;
-        private FlagState _lastFlagState = FlagState.Empty();
-        private string _lastLoggedFlagPrimary;
-        private RaceFlags _lastDetectedFlags;
+        // Laatst opgeloste vlaggen (wire-namen) voor session.flags. Alleen gebruikt om
+        // wijzigingen te loggen; de payload wordt per tick opnieuw bepaald.
+        private string[] _lastFlagNames;
         // 0.7.1: hek voor het bandenblok (wijziging of één keer per interval).
         private readonly TyrePublishGate _tyreGate = new TyrePublishGate();
-        // 0.8.0: directe lezer van de iRacing-shared-memory, read-only. Lazy: zonder
+        // 0.7.2.0: directe lezer van de iRacing-shared-memory, read-only. Lazy: zonder
         // iRacing bestaat de map niet en blijft elke waarde null; de plugin werkt door.
         private IrSdkMemoryReader _irSdk;
         private long _pitLimiterSinceMs;
-        // Lokale research-opname (opt-in). Staat hij uit, dan blijft _research inert en
-        // verandert er niets aan de bestaande capture of het verzenden.
-        private ResearchRecorder _research;
-        private string _researchStatusText = "Research staat uit · er wordt niets opgenomen";
-        private long _lastResearchStatusUnixMs;
+        // Meetlaag (0.7.2.0). Vier velden, één keer gevuld in Init. Blijft het geheel null
+        // (bijvoorbeeld omdat de map niet beschrijfbaar is), dan loopt de gewone telemetrie
+        // gewoon door: meten is een toevoeging, geen voorwaarde.
+        private MeasurementOutbox _measurementOutbox;
+        private MeasurementPipeline _measurementPipeline;
+        private MeasurementSender _measurementSender;
+        private ConnectorControlClient _controlClient;
 
         public PluginManager PluginManager { get; set; }
         public ConnectorSettings Settings { get; internal set; }
@@ -103,7 +104,9 @@ namespace ThreeSM.EnduranceConnector
             }
         }
         public string LeftMenuTitle { get { return "3SM"; } }
-        public string InstalledVersion { get { return this.GetType().Assembly.GetName().Version.ToString(); } }
+        public string InstalledVersion { get { return LocalVersion.ToString(); } }
+        // De geladen assemblyversie: het ijkpunt voor de updatevergelijking.
+        private Version LocalVersion { get { return GetType().Assembly.GetName().Version; } }
         public string Status { get { return _status; } private set { SetStatus(value); } }
         public string LastTelemetrySummary { get { return _lastTelemetrySummary; } }
         public string UpdateStatus { get { return _updateStatus; } }
@@ -122,54 +125,15 @@ namespace ThreeSM.EnduranceConnector
                 Settings.SchemaVersion = 4;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
-            if (Settings.SchemaVersion < 5)
-            {
-                // 0.5.0: vlag-module + SimHub-property publicatie voor flagboxes/overlays.
-                if (Settings.Flags == null) Settings.Flags = new FlagSettings();
-                if (Settings.Flags.Boxes == null || Settings.Flags.Boxes.Length < 4)
-                    Settings.Flags.Boxes = new FlagBoxSlot[] { new FlagBoxSlot(), new FlagBoxSlot(), new FlagBoxSlot(), new FlagBoxSlot() };
-                Settings.SchemaVersion = 5;
-                this.SaveCommonSettings("ConnectorSettings", Settings);
-            }
-            if (Settings.SchemaVersion < 6)
-            {
-                // 1.0.5: racige standaard-rev (groen/geel/rood) + 8 box-slots.
-                var fs = Settings.Flags ?? (Settings.Flags = new FlagSettings());
-                for (var i = 0; i < 8; i++)
-                {
-                    var b = fs.Box(i);
-                    if (b.GearColour == 10 && b.CustomGearColour1 == "#FFFFFF" && b.CustomGearColour2 == "#FFFFFF")
-                    {
-                        b.GearColour = 2; // Racing
-                        b.CustomGearColour1 = "#00E676";
-                        b.CustomGearColour2 = "#FFD400";
-                        b.CustomGearColour3 = "#FF1744";
-                    }
-                }
-                Settings.SchemaVersion = 6;
-                this.SaveCommonSettings("ConnectorSettings", Settings);
-            }
-            if (Settings.SchemaVersion < 7)
-            {
-                // 0.7.x: lokale research-opname. Opt-in: bestaande installaties houden hem uit,
-                // dus er verandert niets aan de bestaande capture of het verzenden.
-                Settings.ResearchEnabled = false;
-                Settings.SchemaVersion = 7;
-                this.SaveCommonSettings("ConnectorSettings", Settings);
-            }
             if (Settings.SchemaVersion < 8)
             {
-                // 0.7.1: meatball is nieuw en staat standaard aan. Een bestaand
-                // configuratiebestand heeft de sleutel niet, en een deserializer die
-                // ontbrekende leden overslaat laat het veld op false staan. Daarom hier
-                // expliciet aanzetten (ontbrekend = aan), net als de bandenmeting.
-                var flagSettings = Settings.Flags ?? (Settings.Flags = new FlagSettings());
-                flagSettings.ShowMeatball = true;
-                for (var i = 0; i < 8; i++) flagSettings.Box(i).ShowMeatball = true;
+                // 0.7.2.0: de vlaggenmodule (panelen, presets, LED-boxen) en de research-opname
+                // zijn vervallen. De oude trappen 5, 6 en 7 pasten alleen instellingen aan
+                // die niet meer bestaan; het schemanummer gaat daarom in één keer naar 8.
+                // Een bestaande configuratie houdt alles wat er nog toe doet.
                 Settings.SchemaVersion = 8;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
-            // Vlag-properties aanmelden zodat SimHub LED-profielen erop kunnen binden.
             InitUpdaterStateStore();
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
 
@@ -208,7 +172,10 @@ namespace ThreeSM.EnduranceConnector
             _tyreTracker.Reset();
             _tyreGate.Reset();
             _irSdk = new IrSdkMemoryReader();
-            InitResearchRecorder();
+            InitMeasurementLayer();
+            // Handshake met de server: beleid, geen voorwaarde. Lukt het niet, dan blijft het
+            // vaste V3-profiel gelden en merkt de rest van de plugin er niets van.
+            RefreshControlPolicy();
             Status = Settings.UseCentralRelay
                 ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
                 : "Lokale fallback · wacht op iRacing";
@@ -269,8 +236,9 @@ namespace ThreeSM.EnduranceConnector
                     expectedSignature = Settings.LastKnownRemoteSignature;
                 }
 
+                // Zelfde regel als altijd (UpdateVersionPolicy): leesbaar én strikt nieuwer.
                 Version remoteVersion;
-                if (!Version.TryParse(versionText, out remoteVersion) || remoteVersion <= this.GetType().Assembly.GetName().Version)
+                if (!UpdateVersionPolicy.TryParseNewer(versionText, LocalVersion, out remoteVersion))
                     throw new InvalidOperationException("Er staat geen nieuwere update klaar.");
 
                 // RSA-verificatie van de opgeslagen releasemetadata vóór enige download/staging.
@@ -484,7 +452,7 @@ namespace ThreeSM.EnduranceConnector
             string text;
             lock (_settingsGate) text = Settings == null ? null : Settings.LastKnownRemoteVersion;
             Version parsed;
-            if (!Version.TryParse(text, out parsed) || parsed <= this.GetType().Assembly.GetName().Version) return false;
+            if (!UpdateVersionPolicy.TryParseNewer(text, LocalVersion, out parsed)) return false;
             remote = parsed;
             return true;
         }
@@ -597,7 +565,7 @@ namespace ThreeSM.EnduranceConnector
                 if (force) SetUpdateStatus("Controleren op updates…");
                 SetUpdaterState(new UpdaterState { state = "CHECKING" });
 
-                var localVersion = this.GetType().Assembly.GetName().Version;
+                var localVersion = LocalVersion;
                 // TEST/canary builds append their release channel so the version check selects
                 // the correct manifest; STABLE builds stay a plain GET (unchanged behavior).
                 var endpoint = new Uri(BuildRelayEndpoint("simhub-version").AbsoluteUri + ReleaseChannelQuery);
@@ -610,7 +578,7 @@ namespace ThreeSM.EnduranceConnector
                     if (info == null || string.IsNullOrWhiteSpace(info.Version)) throw new HttpRequestException("versie-endpoint gaf geen versie terug");
                     var remote = Version.TryParse(info.Version.Trim(), out var parsed) ? parsed : null;
                     if (remote == null) throw new HttpRequestException("serverversie is ongeldig: " + info.Version.Trim());
-                    if (remote > localVersion)
+                    if (UpdateVersionPolicy.IsNewer(remote, localVersion))
                     {
                         var metadataValid = ValidateReleaseManifest(info, remote);
                         lock (_settingsGate)
@@ -698,30 +666,19 @@ namespace ThreeSM.EnduranceConnector
                 if (!running && _gameWasRunning)
                 {
                     _stintClock.Stop();
-                    // Research: één sessie per bestand. Stopt iRacing, dan sluiten we het
-                    // bestand netjes af; de volgende sessie begint een nieuw bestand.
-                    if (Settings != null && Settings.ResearchEnabled)
-                    {
-                        try
-                        {
-                            var research = _research;
-                            if (research != null) research.EndSession("game_stopped");
-                        }
-                        catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: sessie-einde mislukt: " + researchError.Message); }
-                    }
+                    // Einde van de sessie: open pitbezoek, lopende ronde en de laatste ankers
+                    // gaan er met een expliciete reden uit in plaats van te blijven hangen.
+                    EndMeasurementSession("session_end");
                 }
                 _gameWasRunning = running;
+                // Meetlaag: elke tick een monster, vóór de pairing- en intervalpoort. Of er
+                // gemeten wordt hangt niet van IsPaired of _sendBusy af; dat was precies de
+                // fout waardoor de bandentracker pas na de poorten werd bijgewerkt.
+                ObserveMeasurements(pluginManager, data, running, isInCar);
                 // Vlaggen elke tick oplossen/publiceren (los van het verzendinterval),
                 // zodat een flagbox/overlay direct reageert.
-                PublishFlags(pluginManager, data, isInCar);
+                PublishFlags(pluginManager);
                 PublishOverlay(running, isInCar);
-                // Research (opt-in): 1 Hz context + protocolmarkers. Staat hij uit, dan
-                // gebeurt hier niets en blijft de bestaande capture/verzending identiek.
-                if (Settings != null && Settings.ResearchEnabled)
-                {
-                    try { ObserveResearch(pluginManager, data, isIRacing, running, isInCar); }
-                    catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: tick mislukt: " + researchError.Message); }
-                }
                 // Auto-update op een veilig moment: nooit tijdens een game en bij idle
                 // pas na 30 minuten zonder game (verder max. één herstart per 24 uur).
                 if (running || data.GameRunning || data.GameInMenu)
@@ -795,13 +752,6 @@ namespace ThreeSM.EnduranceConnector
                     else localEnvelope = Capture(pluginManager, data, false, isInCar, out observation);
                     ObserveDiagnostics(observation);
                 }
-                // Research: bewaar wat de capture zojuist al opleverde. Geen extra SDK-reads:
-                // de 1 Hz-sampler hergebruikt dit beeld, inclusief de originele tijdstempels.
-                if (Settings != null && Settings.ResearchEnabled && (envelope != null || localEnvelope != null))
-                {
-                    try { ObserveResearchCapture(envelope, localEnvelope); }
-                    catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: capture bijwerken mislukt: " + researchError.Message); }
-                }
                 lock (_sendGate)
                 {
                     if (Volatile.Read(ref _ending) != 0)
@@ -834,15 +784,9 @@ namespace ThreeSM.EnduranceConnector
                 activePairing = _activePairing;
             }
             DisposeDiagnostics();
-            // Research: afsluitregel + flush van de wachtrij. Duurt nooit lang (timeout 3 s)
-            // en raakt de bestaande verzend-/shutdownpaden niet.
-            try
-            {
-                var research = _research;
-                _research = null;
-                if (research != null) research.Dispose();
-            }
-            catch (Exception researchError) { SimHub.Logging.Current.Warn("3SM research: afsluiten mislukt: " + researchError.Message); }
+            // Meetlaag eerst afsluiten: de laatste ronde en een open pitbezoek worden nog
+            // bewaard in de outbox voordat de HTTP-client verdwijnt.
+            EndMeasurementSession("plugin_stop");
             // Directe SDK-lezer: alleen de eigen read-only handle vrijgeven. Nooit een
             // exception laten ontsnappen tijdens SimHub-shutdown.
             try
@@ -865,6 +809,199 @@ namespace ThreeSM.EnduranceConnector
             }
             else SimHub.Logging.Current.Warn("3SM Endurance: shutdowntaak liep na vijf seconden nog; resources worden niet voortijdig disposed.");
             Status = "Gestopt";
+        }
+
+        // ------------------------------------------------------------------- meetlaag 0.7.2.0
+        //
+        // De meetlaag is SimHub-vrij en volledig getest in 3SM.EnduranceConnector.DiagnosticsTests.
+        // Hier staat alleen de bedrading: één keer starten, per tick een monster aanbieden, bij
+        // het einde van de sessie afsluiten, en de meetserie meeschuiven in het frame.
+
+        /// <summary>
+        /// Start de meetlaag één keer. Lukt dat niet, dan blijft de gewone telemetrie werken:
+        /// één regel in het log, geen exception in SimHub's init.
+        /// </summary>
+        private void InitMeasurementLayer()
+        {
+            try
+            {
+                var dataDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "3SM Endurance Connector");
+                _measurementOutbox = new MeasurementOutbox(Path.Combine(dataDirectory, "measurement-outbox.json"));
+                _measurementOutbox.Load();                       // herstel na een herstart
+                _measurementPipeline = new MeasurementPipeline(_measurementOutbox, new MeasurementIdFactory());
+                _measurementSender = new MeasurementSender(_measurementOutbox, _http,
+                    () => ConnectorCapabilities.Implemented().ToJson(), MeasurementLimits.Default());
+                _controlClient = new ConnectorControlClient(new Uri(ProductionRelayBaseUrl), _http, string.Empty,
+                    () => DateTime.UtcNow);
+                _controlClient.LoadCache(Path.Combine(dataDirectory, "connector-control.json"));
+            }
+            catch (Exception error)
+            {
+                _measurementOutbox = null;
+                _measurementPipeline = null;
+                _measurementSender = null;
+                _controlClient = null;
+                SimHub.Logging.Current.Warn("3SM meetlaag: niet gestart, telemetrie loopt door: " + error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Biedt deze tick aan de meetlaag aan. Alleen als er echt gereden wordt: zonder
+        /// in-car data is er niets te meten en zou een rij nullen een meting suggereren.
+        /// </summary>
+        private void ObserveMeasurements(PluginManager manager, GameData data, bool running, bool isInCar)
+        {
+            if (_measurementPipeline == null || !running || !isInCar || data.NewData == null) return;
+            try
+            {
+                var sample = BuildMeasurementSample(manager, data);
+                if (sample != null) _measurementPipeline.Observe(sample);
+            }
+            catch (Exception error)
+            {
+                // Eén onleesbaar kanaal mag de tick niet kosten: dit monster valt weg, de
+                // rest van de plugin merkt er niets van.
+                SimHub.Logging.Current.Warn("3SM meetlaag: monster overgeslagen: " + error.Message);
+            }
+        }
+
+        /// <summary>Sluit de meetsessie af met een expliciete reden; nooit stilzwijgend laten hangen.</summary>
+        private void EndMeasurementSession(string reason)
+        {
+            if (_measurementPipeline == null) return;
+            try { _measurementPipeline.End(reason); }
+            catch (Exception error) { SimHub.Logging.Current.Warn("3SM meetlaag: afsluiten mislukt: " + error.Message); }
+        }
+
+        /// <summary>
+        /// Haalt het beleid van <c>GET /simhub-control</c> op de achtergrond op, één keer per
+        /// start. De client faalt nooit hard en heeft een eigen korte timeout, dus dit blokkeert
+        /// niets; de cache uit de vorige keer geldt tot dit antwoord binnen is.
+        /// </summary>
+        private void RefreshControlPolicy()
+        {
+            if (_controlClient == null) return;
+            try
+            {
+                Task.Run(async () =>
+                {
+                    var state = await _controlClient.RefreshAsync(_shutdown.Token).ConfigureAwait(false);
+                    if (Volatile.Read(ref _ending) == 0)
+                    {
+                        SimHub.Logging.Current.Info("3SM beleid: " + state.Mode + " · interval " + state.SendIntervalMs
+                            + " ms · schema " + state.SchemaRevision + (string.IsNullOrEmpty(state.Reason) ? string.Empty : " · " + state.Reason));
+                    }
+                });
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM beleid: handshake niet gestart: " + error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Eén meetmonster uit dezelfde tick, met dezelfde lezers als het frame: de directe
+        /// iRacing-SDK voor de kanalen die SimHub niet doorgeeft en de ruwe-kanalenlezer voor
+        /// de rest. Ontbreekt een kanaal, dan blijft het veld null — 0 is een meting, null is
+        /// "de sim zei niets".
+        /// </summary>
+        private TelemetrySample BuildMeasurementSample(PluginManager manager, GameData data)
+        {
+            var snapshot = data.NewData;
+            if (snapshot == null) return null;
+            var channels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
+            var sdk = ReadDirectSdk();
+            var player = snapshot.Opponents == null
+                ? null
+                : snapshot.Opponents.FirstOrDefault(opponent => opponent != null && opponent.IsPlayer);
+
+            var trackTemp = RoundTyreValue(channels.ReadNumber("TrackTempCrew", MinAmbientTempC, MaxAmbientTempC), 1);
+            if (!trackTemp.HasValue) trackTemp = RoundTyreValue(channels.ReadNumber("TrackTemp", MinAmbientTempC, MaxAmbientTempC), 1);
+
+            return new TelemetrySample
+            {
+                ObservedAtUtc = DateTime.UtcNow,
+                // De SDK-tick is de harde ontdubbeling: SimHub's DataUpdate kan met ongewijzigde
+                // ruwe data opnieuw vuren en dat is geen tweede meting.
+                SdkTick = sdk == null || !sdk.Connected ? (long?)null : sdk.TickCount,
+                SessionTimeSeconds = _sessionTime.Read(snapshot),
+                // De huidige ronde is het aantal afgeronde rondes plus één; de grens valt dus
+                // precies op de finishlijn en niet op SimHub's eigen teller.
+                LapNumber = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0)) + 1,
+                CurrentDriverName = FirstNonEmpty(snapshot.PlayerName,
+                    player == null ? null : player.Name,
+                    GetNullableString(manager, Settings.CurrentDriverNameProperty)),
+                ObservedSessionId = BuildObservedSessionId(manager, channels),
+                LatAccelG = DirectSdkNumber(sdk, IrSdkChannels.LatAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
+                LongAccelG = DirectSdkNumber(sdk, IrSdkChannels.LongAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
+                // Intentie van de rijder, geen uitkomst; -1 (geen waarde) wordt null.
+                PitServiceFlagsRaw = CaptureValueRules.PitServiceFlags(DirectSdkInt(sdk, "PitSvFlags", int.MinValue, int.MaxValue)),
+                RequestedFuelLitres = DirectSdkNumber(sdk, "PitSvFuel", 1, 0, 300, 2),
+                TyreSetsUsed = DirectSdkInt(sdk, "TireSetsUsed", 0, 255) ?? channels.ReadInt("TireSetsUsed", 0, 255),
+                // Pitstraat: het ruwe SDK-kanaal, zonder SimHub-fallback naar false.
+                OnPitRoad = channels.ReadBool("OnPitRoad"),
+                InPitStall = channels.ReadBool("PlayerCarInPitStall"),
+                TrackTempC = trackTemp,
+                AirTempC = RoundTyreValue(channels.ReadNumber("AirTemp", MinAmbientTempC, MaxAmbientTempC), 1),
+                FuelLitres = CaptureValueRules.FuelLitres(GetNullableDouble(manager, Settings.FuelProperty, false)),
+                Wear = ReadMeasurementWear(channels),
+            };
+        }
+
+        /// <summary>
+        /// De sessie waarin gemeten wordt — niet de transportsessie. iRacing's SessionUniqueID
+        /// plus het sessienummer verandert bij practice → qualify → race, en dan begint de
+        /// meetlaag een nieuw segment zonder dat de plugin herstart.
+        /// </summary>
+        private static string BuildObservedSessionId(PluginManager manager, RawChannelReader channels)
+        {
+            var uniqueId = GetNullableInt(manager, "DataCorePlugin.GameRawData.SessionData.WeekendInfo.SessionUniqueID");
+            var sessionNumber = channels.ReadInt("SessionNum", 0, 1000);
+            if (!uniqueId.HasValue && !sessionNumber.HasValue) return null;
+            var text = "sim"
+                + (uniqueId.HasValue ? "-" + uniqueId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty)
+                + (sessionNumber.HasValue ? "-s" + sessionNumber.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
+            return text;
+        }
+
+        /// <summary>
+        /// De wear-lezing als één waarde per hoek: de laagste van de drie zones, in procenten
+        /// rest. Ontbreekt voor één hoek elk kanaal, dan is er geen lezing — geen halve wear
+        /// met een verzonnen 0.
+        /// </summary>
+        private static WearReading ReadMeasurementWear(RawChannelReader channels)
+        {
+            var reading = TyreZoneReader.Read(channels);
+            var corners = new double[4];
+            for (var corner = 0; corner < 4; corner++)
+            {
+                double? worst = null;
+                for (var zone = 0; zone < 3; zone++)
+                {
+                    var value = reading.WearPercent[corner][zone];
+                    if (!value.HasValue) continue;
+                    if (!worst.HasValue || value.Value < worst.Value) worst = value;
+                }
+                if (!worst.HasValue) return null;
+                corners[corner] = worst.Value;
+            }
+            return new WearReading(corners[0], corners[1], corners[2], corners[3]);
+        }
+
+        /// <summary>
+        /// Eén integer SDK-kanaal binnen [minimum, maximum]; onleesbaar of buiten de grens is
+        /// null. Dezelfde nullable-discipline als <see cref="DirectSdkNumber"/>.
+        /// </summary>
+        private static int? DirectSdkInt(IrSdkImage image, string channel, int minimum, int maximum)
+        {
+            if (image == null || string.IsNullOrEmpty(channel)) return null;
+            var value = image.ReadNumber(channel);
+            if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value)) return null;
+            if (value.Value < int.MinValue || value.Value > int.MaxValue) return null;
+            var rounded = (int)Math.Round(value.Value, MidpointRounding.AwayFromZero);
+            if (rounded < minimum || rounded > maximum) return null;
+            return rounded;
         }
 
         public Control GetWPFSettingsControl(PluginManager pluginManager) { return new SettingsControl(this); }
@@ -1306,9 +1443,8 @@ namespace ThreeSM.EnduranceConnector
             var trackConfig = FirstNonEmpty(snapshot.TrackConfig, GetNullableString(manager, Settings.TrackConfigProperty));
             var position = PositiveOrNull(snapshot.Position) ?? PositiveOrNull(GetInt(manager, Settings.PositionProperty, 0));
             var classPosition = PositiveOrNull(player == null ? 0 : player.PositionInClass) ?? PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0));
-            // Vlag komt uit de per-tick resolutie in DataUpdate (PublishFlags -> _lastFlagState).
-            var flagState = _lastFlagState ?? FlagState.Empty();
-            var sendFlagFields = Settings.Flags != null && Settings.Flags.SendFlagFields;
+            // Vlaggen komen uit de per-tick resolutie in DataUpdate (PublishFlags).
+            var flagNames = _lastFlagNames;
             var completedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0));
             var lapTimeSeconds = GetNullableSeconds(manager, Settings.LastLapTimeProperty);
             // Eerst de ingestelde property; die blijkt leeg (F2Time is een rondetijd, geen achterstand).
@@ -1323,11 +1459,14 @@ namespace ThreeSM.EnduranceConnector
             var bestLapTime = GetNullableSeconds(manager, Settings.BestLapTimeProperty);
             var lapDistancePct = GetNullableDouble(manager, Settings.LapDistancePctProperty, false)
                 ?? (player == null ? null : Clamp01(NullableSeconds(player.TrackPositionPercent)));
-            var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
+            // Ontbrekende brandstof is null, geen 0. 0 is een echte meting (lege tank in
+            // de garage) en blijft 0. Zie CaptureValueRules en CaptureNullSemanticsTests.
+            var fuel = CaptureValueRules.FuelLitres(GetNullableDouble(manager, Settings.FuelProperty, false));
             var fuelCapacity = ResolveFuelCapacity(manager);
-            UpdateFuelStint(fuel, completedLaps);
+            if (fuel.HasValue) UpdateFuelStint(fuel.Value, completedLaps);
             var incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty));
-            var inPitLane = GetBool(manager, Settings.PitLaneProperty, false);
+            // Pitstraat: één nullable waarneming, ruwe SDK eerst. Zonder bron null, niet false.
+            var inPitLaneProperty = GetNullableBool(manager, Settings.PitLaneProperty);
             var nextSequence = Interlocked.Increment(ref _sequence);
 
             bool rawTelemetryAvailable;
@@ -1342,9 +1481,7 @@ namespace ThreeSM.EnduranceConnector
                 Sequence = nextSequence
             };
 
-            var flags = new List<string>();
-            var legacyFlagNames = FlagService.ToLegacyNames(flagState);
-            if (legacyFlagNames != null) foreach (var legacyFlagName in legacyFlagNames) flags.Add(legacyFlagName);
+            var flags = flagNames == null ? null : new List<string>(flagNames);
 
             int? startLights; bool isStartSequence;
             StartLightsFor(manager, out startLights, out isStartSequence);
@@ -1356,6 +1493,7 @@ namespace ThreeSM.EnduranceConnector
             // 0.7.0: één lezer voor alle ruwe iRacing-kanalen (property-pad, dan reflectie).
             // Wordt pas gebruikt als het bijbehorende blok aan staat; de lezer doet zelf niets.
             var rawChannels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
+            var onPitRoad = CaptureValueRules.OnPitRoad(rawChannels.ReadBool("OnPitRoad"), inPitLaneProperty);
 
             return new TelemetryEnvelopeV3
             {
@@ -1363,6 +1501,11 @@ namespace ThreeSM.EnduranceConnector
                 Sequence = nextSequence,
                 CapturedAt = DateTime.UtcNow.ToString("o"),
                 TransportSessionId = _sessionId,
+                // 0.7.2.0 additief: het frame meldt zijn schemarevisie en wat deze connector
+                // kan. protocolVersion blijft 3. De meetsleutels zelf (measurementEvents,
+                // lapSummaries) komen uit de outbox bij het verzenden.
+                SchemaRevision = MeasurementContract.SchemaRevision,
+                Capabilities = V3Capabilities.From(ConnectorCapabilities.Implemented()),
                 // Herkomst: SimHub-versie en plug-inversie zijn twee verschillende dingen.
                 // Null als er niets te melden is; EmitDefaultValue=false laat de sleutel
                 // dan weg en houdt een 0.7.x-frame byte-identiek.
@@ -1384,11 +1527,8 @@ namespace ThreeSM.EnduranceConnector
                     SessionTimeSeconds = sessionTimeSeconds,
                     SessionTimeRemainingSeconds = NormalizeTimeRemaining(sessionTimeRemaining),
                     SessionLapsRemaining = NormalizeRemainingLaps(sessionLapsRemaining),
-                    Flags = flags.Count == 0 ? null : flags.ToArray(),
+                    Flags = flags == null || flags.Count == 0 ? null : flags.ToArray(),
                     SessionState = sessionPhase,
-                    PrimaryFlag = sendFlagFields && flagState.Active ? flagState.Primary : null,
-                    FlagColour = sendFlagFields && flagState.Active ? flagState.ColourHex : null,
-                    FlagSeverity = sendFlagFields && flagState.Active ? (int)flagState.Severity : 0,
                     StartLights = startLights,
                     PitLaneOpen = pitLaneOpen,
                     IsStartSequence = isStartSequence,
@@ -1410,18 +1550,15 @@ namespace ThreeSM.EnduranceConnector
                 {
                     LapDistancePct = NormalizeLapDist(lapDistancePct),
                     TrackSurface = "unknown",
-                    OnPitRoad = inPitLane,
+                    OnPitRoad = onPitRoad,
                 },
                 Fuel = new V3Fuel
                 {
+                    // Zonder meting blijft dit null: een verzonnen 0 L is erger dan "onbekend".
                     FuelLitres = fuel,
-                    FuelPct = fuelCapacity.HasValue && fuelCapacity.Value > 0 && fuel >= 0
-                        ? (double?)Math.Round(Math.Min(1, fuel / fuelCapacity.Value), 4)
-                        : null,
+                    FuelPct = CaptureValueRules.FuelPercent(fuel, fuelCapacity),
                     FuelPerLapLitres = _fuelPerLap > 0 ? (double?)Math.Round(_fuelPerLap, 3) : null,
-                    LapsRemaining = _fuelPerLap > 0 && fuel > 0
-                        ? (double?)Math.Round(fuel / _fuelPerLap, 1)
-                        : (snapshot != null ? snapshot.EstimatedFuelRemaingLaps : null),
+                    LapsRemaining = CaptureValueRules.LapsRemaining(fuel, _fuelPerLap, snapshot != null ? snapshot.EstimatedFuelRemaingLaps : null),
                     FuelCapacityLitres = fuelCapacity,
                 },
                 RaceState = new V3RaceState
@@ -1434,7 +1571,7 @@ namespace ThreeSM.EnduranceConnector
                     // 0.7.0: het ruwe bitfield stond in het contract maar werd hard op null gezet.
                     // Het is de INTENTIE van de rijder (wat hij aanvinkte), niet de uitkomst; de
                     // plugin interpreteert geen bits. Ontbreekt het kanaal, dan blijft het null.
-                    PitServiceFlagsRaw = rawChannels.ReadInt("PitSvFlags", 0, int.MaxValue),
+                    PitServiceFlagsRaw = CaptureValueRules.PitServiceFlags(rawChannels.ReadInt("PitSvFlags", int.MinValue, int.MaxValue)),
                     // 0.7.1: de resterende reparatietijd stond óók in het contract en werd
                     // genegeerd. iRacing publiceert hem per kanaal (seconden). 0 is een echte
                     // meting ("niets open"); ontbreekt het kanaal, dan blijft het null en
@@ -1448,7 +1585,7 @@ namespace ThreeSM.EnduranceConnector
                 // server moet het blok kennen; een oude receiver geeft 422 op een nieuwe key).
                 // 0.7.1: niet meer elk frame — zie PublishTyres (wijziging of 30 s-hartslag).
                 Tyres = Settings.TyreTelemetryEnabled
-                    ? PublishTyres(CaptureTyres(rawChannels, sessionTimeSeconds, completedLaps, inPitLane), Settings.TyreSnapshotIntervalMilliseconds, inPitLane)
+                    ? PublishTyres(CaptureTyres(rawChannels, sessionTimeSeconds, completedLaps, inPitLaneProperty), Settings.TyreSnapshotIntervalMilliseconds, onPitRoad == true)
                     : null,
             };
         }
@@ -1485,7 +1622,8 @@ namespace ThreeSM.EnduranceConnector
         // 0 blijft 0 — dat is "er staat niets meer open", geen ontbrekende meting.
         private static double? ReadRepairSeconds(RawChannelReader channels, string channel)
         {
-            return RoundTyreValue(channels.ReadNumber(channel, 0, 86400), 1);
+            // De regels doen de bereik- en sentinelcontrole (-1 = onbekend, 0 = "niets open").
+            return CaptureValueRules.RepairSeconds(channels.ReadNumber(channel, double.MinValue, double.MaxValue));
         }
 
         /// <summary>
@@ -1541,7 +1679,7 @@ namespace ThreeSM.EnduranceConnector
                 TyreDataMode = "last_available", PressureUnit = pressureUnit, TemperatureUnit = temperatureUnit,
                 FrontLeft = CaptureTyre(manager, "FrontLeft"), FrontRight = CaptureTyre(manager, "FrontRight"),
                 RearLeft = CaptureTyre(manager, "RearLeft"), RearRight = CaptureTyre(manager, "RearRight"),
-                // 0.8.0: alleen uit de directe SDK-lezer. Zonder lezer, zonder iRacing of
+                // 0.7.2.0: alleen uit de directe SDK-lezer. Zonder lezer, zonder iRacing of
                 // met de instelling uit blijven deze velden null en valt het blok volledig
                 // weg (EmitDefaultValue=false) — de payload blijft dan byte-identiek.
                 // De SDK levert rad en m/s²; de wire-contracten zijn graden en g.
@@ -1608,65 +1746,22 @@ namespace ThreeSM.EnduranceConnector
             return values;
         }
 
-        // 0.7.0: iRacing-wearzones, 4 hoeken × 3 zones in de volgorde [left, middle, right].
-        private static readonly string[] TyreWearChannels =
-        {
-            "LFwearL", "LFwearM", "LFwearR",
-            "RFwearL", "RFwearM", "RFwearR",
-            "LRwearL", "LRwearM", "LRwearR",
-            "RRwearL", "RRwearM", "RRwearR",
-        };
-
-        // Karkastemperaturen: dit is de garage-/pyrometerwaarde, NIET de oppervlaktetemperatuur.
-        private static readonly string[] TyreCarcassChannels =
-        {
-            "LFtempCL", "LFtempCM", "LFtempCR",
-            "RFtempCL", "RFtempCM", "RFtempCR",
-            "LRtempCL", "LRtempCM", "LRtempCR",
-            "RRtempCL", "RRtempCM", "RRtempCR",
-        };
-
-        private const double MinTyreTempC = -40.0;
-        private const double MaxTyreTempC = 300.0;
         private const double MinAmbientTempC = -40.0;
         private const double MaxAmbientTempC = 100.0;
-
-        /// <summary>
-        /// Leest de 12 wear-zones en 12 karkastemperaturen. Wear komt binnen als fractie
-        /// (0–1) en gaat ×100 de deur uit; de waarde blijft onafgerond zodat de
-        /// refresh-detectie op de ruwe waarde werkt. raw 0 = "geen meting" (dezelfde guard
-        /// als CaptureTyre), dus dat wordt null en nooit 0,00 %.
-        /// </summary>
-        private static TyreZoneReading ReadTyreZones(RawChannelReader channels)
-        {
-            var wear = new double?[4][];
-            var carcass = new double?[4][];
-            for (var corner = 0; corner < 4; corner++)
-            {
-                wear[corner] = new double?[3];
-                carcass[corner] = new double?[3];
-                for (var zone = 0; zone < 3; zone++)
-                {
-                    var fraction = channels.ReadNumber(TyreWearChannels[corner * 3 + zone], 0, 1.001);
-                    if (fraction.HasValue && fraction.Value > 0) wear[corner][zone] = fraction.Value * 100.0;
-                    carcass[corner][zone] = channels.ReadNumber(TyreCarcassChannels[corner * 3 + zone], MinTyreTempC, MaxTyreTempC);
-                }
-            }
-            return new TyreZoneReading(wear, carcass);
-        }
 
         /// <summary>
         /// Bouwt het optionele bandenblok. Geeft null terug als er niets te melden is: een
         /// leeg blok is duurder dan geen blok (EmitDefaultValue=false doet de rest).
         /// </summary>
-        private V3Tyres CaptureTyres(RawChannelReader channels, double? sessionTimeSeconds, int? lap, bool onPitRoadFallback)
+        private V3Tyres CaptureTyres(RawChannelReader channels, double? sessionTimeSeconds, int? lap, bool? inPitLaneProperty)
         {
-            var reading = ReadTyreZones(channels);
+            var reading = TyreZoneReader.Read(channels);
             var setsUsed = channels.ReadInt("TireSetsUsed", 0, 255);
-            // De pit-entry-flank hangt aan de ruwe OnPitRoad; de bestaande pitlane-property is
-            // het vangnet als dat kanaal ontbreekt.
-            var onPitRoad = channels.ReadBool("OnPitRoad");
-            _tyreTracker.Update(reading, sessionTimeSeconds, lap, setsUsed, onPitRoad.HasValue ? onPitRoad.Value : onPitRoadFallback, DateTime.UtcNow);
+            // Dezelfde waarneming als track.onPitRoad: ruwe OnPitRoad eerst, de
+            // pitlane-property als vangnet. De tracker krijgt "onbekend" als false, want
+            // zonder waarneming is er geen pit-flank; dat raakt de payload niet.
+            var onPitRoad = CaptureValueRules.OnPitRoad(channels.ReadBool("OnPitRoad"), inPitLaneProperty);
+            _tyreTracker.Update(reading, sessionTimeSeconds, lap, setsUsed, onPitRoad == true, DateTime.UtcNow);
 
             var last = _tyreTracker.Last;
             var wear = ToTyreZones(last == null ? null : last.WearPercent, 2);
@@ -1900,441 +1995,6 @@ namespace ThreeSM.EnduranceConnector
         private static double? PositiveNullable(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value > 0 ? (double?)value.Value : null; }
         private static double? NullableSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)value.Value : null; }
 
-        // ===================== Lokale research-opname (opt-in) =====================
-
-        public string ResearchStatusText { get { return _researchStatusText; } }
-        public bool IsResearchRecording { get { var recorder = _research; return recorder != null && recorder.IsRecording; } }
-        public bool IsResearchEnabled { get { lock (_settingsGate) return Settings != null && Settings.ResearchEnabled; } }
-        public bool IsResearchPaused { get { var recorder = _research; return recorder != null && recorder.Paused; } }
-
-        /// <summary>Aan/uit-schakelaar. Default uit; de keuze wordt lokaal bewaard.</summary>
-        public void SetResearchEnabled(bool enabled)
-        {
-            lock (_settingsGate)
-            {
-                if (Settings == null) return;
-                Settings.ResearchEnabled = enabled;
-                this.SaveCommonSettings("ConnectorSettings", Settings);
-            }
-            if (!enabled)
-            {
-                var recorder = _research;
-                if (recorder != null)
-                {
-                    try { recorder.Disable("user_disabled"); }
-                    catch (Exception error) { SimHub.Logging.Current.Warn("3SM research: stoppen mislukt: " + error.Message); }
-                }
-                SetResearchStatusText("Research staat uit · er wordt niets opgenomen");
-            }
-            else
-            {
-                SetResearchStatusText("Research wacht op iRacing · opname start zodra er telemetrie is");
-            }
-            OnPropertyChanged("IsResearchRecording");
-            OnPropertyChanged("IsResearchPaused");
-            OnPropertyChanged("IsResearchEnabled");
-        }
-
-        public void SetResearchPaused(bool paused)
-        {
-            var recorder = _research;
-            if (recorder == null) return;
-            try
-            {
-                if (paused) recorder.Pause();
-                else recorder.Resume();
-            }
-            catch (Exception error) { SimHub.Logging.Current.Warn("3SM research: pauzeren mislukt: " + error.Message); }
-            Interlocked.Exchange(ref _lastResearchStatusUnixMs, 0);
-            RefreshResearchStatus();
-            OnPropertyChanged("IsResearchPaused");
-        }
-
-        /// <summary>Handmatige, herhaalbare protocolmarker vanuit de UI.</summary>
-        public void MarkResearch(ResearchEventKind kind, string note)
-        {
-            var recorder = _research;
-            if (recorder == null) return;
-            bool marked;
-            try { marked = recorder.Mark(kind, note); }
-            catch (Exception error)
-            {
-                SimHub.Logging.Current.Warn("3SM research: marker mislukt: " + error.Message);
-                return;
-            }
-            if (!marked) SetResearchStatusText("Research staat uit · marker niet opgeslagen");
-            else
-            {
-                Interlocked.Exchange(ref _lastResearchStatusUnixMs, 0);
-                RefreshResearchStatus();
-            }
-        }
-
-        /// <summary>Verwijdert alle lokale researchdata, inclusief de salt.</summary>
-        public void DeleteResearchData()
-        {
-            var recorder = _research;
-            if (recorder == null) return;
-            string error;
-            var deleted = 0;
-            try { deleted = recorder.DeleteLocalData(out error); }
-            catch (Exception failure) { error = failure.Message; }
-            lock (_settingsGate)
-            {
-                if (Settings != null)
-                {
-                    Settings.ResearchEnabled = false;
-                    this.SaveCommonSettings("ConnectorSettings", Settings);
-                }
-            }
-            SetResearchStatusText(error == null
-                ? "Researchdata verwijderd · " + deleted + " bestand(en)"
-                : "Verwijderen mislukt · " + error);
-            OnPropertyChanged("IsResearchRecording");
-            OnPropertyChanged("IsResearchEnabled");
-        }
-
-        /// <summary>Export is een expliciete gebruikersactie; het bestand bevat een pseudonieme ID.</summary>
-        public string ExportResearchSession(string destinationFile)
-        {
-            var recorder = _research;
-            if (recorder == null) return "Research is niet beschikbaar.";
-            if (string.IsNullOrWhiteSpace(destinationFile)) return "Geen exportpad opgegeven.";
-            string error;
-            string exportedFrom;
-            bool exported;
-            try { exported = recorder.Export(destinationFile.Trim(), out error, out exportedFrom); }
-            catch (Exception failure) { exported = false; error = failure.Message; exportedFrom = null; }
-            if (!exported) return "Exporteren mislukt · " + error;
-            return "Geëxporteerd naar " + destinationFile.Trim() + "\nBron: " + exportedFrom
-                + "\nHet bestand bevat alleen een pseudonieme rijders-ID; de salt blijft op deze pc.";
-        }
-
-        private void InitResearchRecorder()
-        {
-            try
-            {
-                string root;
-                string speedProperty;
-                lock (_settingsGate)
-                {
-                    root = Settings == null || string.IsNullOrWhiteSpace(Settings.ResearchDirectory)
-                        ? ResearchRecorder.DefaultRootDirectory()
-                        : Settings.ResearchDirectory.Trim();
-                    speedProperty = Settings == null ? null : Settings.SpeedProperty;
-                }
-                _research = new ResearchRecorder(root,
-                    new ResearchRecorderOptions { SpeedPropertyPath = speedProperty },
-                    ResearchLog, () => DateTime.UtcNow);
-                if (Settings != null && Settings.ResearchEnabled)
-                    SetResearchStatusText("Research wacht op iRacing · opname start zodra er telemetrie is");
-            }
-            catch (Exception error)
-            {
-                _research = null;
-                SimHub.Logging.Current.Warn("3SM research: recorder kon niet worden gemaakt: " + error.Message);
-            }
-        }
-
-        private static void ResearchLog(Exception error)
-        {
-            if (error == null) return;
-            try { SimHub.Logging.Current.Warn("3SM research: " + error.Message); } catch { }
-        }
-
-        private void SetResearchStatusText(string value)
-        {
-            value = value ?? string.Empty;
-            if (string.Equals(_researchStatusText, value, StringComparison.Ordinal)) return;
-            _researchStatusText = value;
-            OnPropertyChanged("ResearchStatusText");
-        }
-
-        private void RefreshResearchStatus()
-        {
-            var nowMs = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
-            if (nowMs - Interlocked.Read(ref _lastResearchStatusUnixMs) < 900) return;
-            Interlocked.Exchange(ref _lastResearchStatusUnixMs, nowMs);
-            var recorder = _research;
-            SetResearchStatusText(recorder == null ? "Research niet beschikbaar" : recorder.Status().Describe());
-        }
-
-        // 1 Hz tick: markers + context. Leest alleen wat de capture niet heeft.
-        private void ObserveResearch(PluginManager manager, GameData data, bool isIRacing, bool running, bool isInCar)
-        {
-            var recorder = _research;
-            if (recorder == null) return;
-            if (!recorder.IsRecording)
-            {
-                if (!running || !isIRacing || data == null || data.NewData == null) return;
-                TryStartResearch(manager, data);
-                return;
-            }
-            if (!running) return;
-            var snapshot = data.NewData;
-            IResearchChannelReader channels = snapshot == null
-                ? null
-                : new ResearchChannelAdapter(new RawChannelReader(snapshot, property => GetRaw(manager, property)), manager, ReadDirectSdk);
-            bool dropped;
-            recorder.OnTick(DateTime.UtcNow, true, isInCar, channels, out dropped);
-            RefreshResearchStatus();
-        }
-
-        private void TryStartResearch(PluginManager manager, GameData data)
-        {
-            var recorder = _research;
-            if (recorder == null || data == null || data.NewData == null) return;
-            var snapshot = data.NewData;
-            var player = snapshot.Opponents == null ? null : snapshot.Opponents.FirstOrDefault(opponent => opponent != null && opponent.IsPlayer);
-            int interval;
-            lock (_settingsGate) interval = Math.Max(500, Settings.SendIntervalMilliseconds);
-            var start = new ResearchSessionStart
-            {
-                PluginVersion = InstalledVersion,
-                SimHubVersion = typeof(PluginManager).Assembly.GetName().Version.ToString(),
-                Simulator = "iRacing",
-                // iRacing zet zijn buildversie in de sessie-YAML; ontbreekt die, dan null.
-                SimulatorVersion = GetNullableString(manager, "DataCorePlugin.GameRawData.SessionData.WeekendInfo.BuildVersion"),
-                TrackName = FirstNonEmpty(snapshot.TrackName, GetNullableString(manager, Settings.TrackNameProperty)),
-                TrackConfig = FirstNonEmpty(snapshot.TrackConfig, GetNullableString(manager, Settings.TrackConfigProperty)),
-                TrackId = TrackIdentityReader.Read(snapshot),
-                CarId = FirstNonEmpty(snapshot.CarId, GetNullableString(manager, Settings.CarIdProperty)),
-                CarName = FirstNonEmpty(snapshot.CarModel, player == null ? null : player.CarName, GetNullableString(manager, Settings.CarNameProperty)),
-                TransportSessionId = _sessionId,
-                DriverId = FirstNonEmpty(player == null ? null : player.Id, GetNullableString(manager, Settings.CurrentDriverIdProperty)),
-                CaptureIntervalMs = interval,
-            };
-            string error;
-            if (!recorder.Enable(start, out error))
-            {
-                SetResearchStatusText("Research kon niet starten · " + error);
-                SimHub.Logging.Current.Warn("3SM research: start mislukt: " + error);
-                return;
-            }
-            Interlocked.Exchange(ref _lastResearchStatusUnixMs, 0);
-            RefreshResearchStatus();
-            SimHub.Logging.Current.Info("3SM research: opname gestart (" + recorder.CurrentFilePath + ")");
-        }
-
-        private void ObserveResearchCapture(TelemetryEnvelopeV3 v3, TelemetryEnvelope v2)
-        {
-            var recorder = _research;
-            if (recorder == null) return;
-            ResearchCaptureView view = null;
-            if (v3 != null) view = BuildResearchView(v3);
-            else if (v2 != null) view = BuildResearchView(v2);
-            if (view != null) recorder.ObserveCapture(view);
-        }
-
-        private static DateTime ParseResearchTimestamp(string text)
-        {
-            DateTime parsed;
-            if (!string.IsNullOrEmpty(text)
-                && DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out parsed))
-                return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
-            return DateTime.UtcNow;
-        }
-
-        /// <summary>Wat de bestaande capture al had, één-op-één naar de researchlaag.</summary>
-        private static ResearchCaptureView BuildResearchView(TelemetryEnvelopeV3 envelope)
-        {
-            var view = new ResearchCaptureView
-            {
-                Present = true,
-                CapturedAtUtc = ParseResearchTimestamp(envelope.CapturedAt),
-                Sequence = envelope.Sequence,
-                SessionPhase = envelope.Session == null ? null : envelope.Session.SessionState,
-            };
-            if (envelope.Session != null) view.SessionTimeSeconds = envelope.Session.SessionTimeSeconds;
-            if (envelope.Track != null)
-            {
-                view.OnPitRoad = envelope.Track.OnPitRoad;
-                view.LapDistancePct = envelope.Track.LapDistancePct;
-            }
-            if (envelope.Position != null)
-            {
-                view.Position = envelope.Position.Position;
-                view.ClassPosition = envelope.Position.ClassPosition;
-            }
-            if (envelope.Timing != null)
-            {
-                view.LastLapSeconds = envelope.Timing.LastLapTimeSeconds;
-                view.BestLapSeconds = envelope.Timing.BestLapTimeSeconds;
-                view.CurrentLapElapsedSeconds = envelope.Timing.CurrentLapElapsedSeconds;
-                view.CompletedLaps = envelope.Timing.CompletedLaps;
-            }
-            if (envelope.Fuel != null)
-            {
-                view.FuelLitres = envelope.Fuel.FuelLitres;
-                view.FuelPerLapLitres = envelope.Fuel.FuelPerLapLitres;
-                view.LapsRemaining = envelope.Fuel.LapsRemaining;
-            }
-            if (envelope.RaceState != null) view.Incidents = envelope.RaceState.Incidents;
-            if (envelope.Vehicle != null)
-            {
-                view.HasVehicle = true;
-                view.ThrottlePct = envelope.Vehicle.ThrottlePct;
-                view.BrakePct = envelope.Vehicle.BrakePct;
-                view.SpeedKph = envelope.Vehicle.SpeedKph;
-                view.Rpm = envelope.Vehicle.Rpm;
-                view.Gear = envelope.Vehicle.Gear;
-            }
-            if (envelope.Tyres != null)
-            {
-                view.Tyres = BuildResearchTyres(envelope.Tyres);
-                if (envelope.Tyres.PitEntry != null) view.PitEntryTyres = BuildResearchPitEntry(envelope.Tyres.PitEntry);
-            }
-            return view;
-        }
-
-        private static ResearchCaptureView BuildResearchView(TelemetryEnvelope envelope)
-        {
-            var view = new ResearchCaptureView
-            {
-                Present = true,
-                CapturedAtUtc = ParseResearchTimestamp(envelope.CapturedAt),
-                Sequence = envelope.Sequence,
-            };
-            var telemetry = envelope.Telemetry;
-            if (telemetry != null)
-            {
-                view.SessionTimeSeconds = telemetry.SessionTimeSeconds;
-                view.SpeedKph = telemetry.SpeedKph;
-                view.FuelLitres = telemetry.FuelLitres;
-                view.FuelPerLapLitres = telemetry.FuelPerLapLitres;
-                view.LapsRemaining = telemetry.EstimatedLapsRemaining;
-                view.CompletedLaps = telemetry.CompletedLaps;
-                view.LastLapSeconds = telemetry.LapTimeSeconds;
-                view.Position = telemetry.Position;
-                view.ClassPosition = telemetry.ClassPosition;
-                view.Incidents = telemetry.Incidents;
-                view.OnPitRoad = telemetry.InPitLane;
-            }
-            return view;
-        }
-
-        private static ResearchTyreObservation BuildResearchTyres(V3Tyres tyres)
-        {
-            return new ResearchTyreObservation
-            {
-                HasWear = tyres.WearPercent != null,
-                HasCarcass = tyres.CarcassTempC != null,
-                HasSets = tyres.Sets != null,
-                HasCompound = tyres.CompoundId.HasValue,
-                HasEnvironment = tyres.Environment != null,
-                WearPercent = ResearchZones(tyres.WearPercent),
-                CarcassTempC = ResearchZones(tyres.CarcassTempC),
-                SetsUsed = tyres.Sets == null ? null : tyres.Sets.Used,
-                CompoundId = tyres.CompoundId,
-                TrackTempC = tyres.Environment == null ? null : tyres.Environment.TrackTempC,
-                AirTempC = tyres.Environment == null ? null : tyres.Environment.AirTempC,
-                RubberState = tyres.Environment == null ? null : tyres.Environment.RubberState,
-                Trigger = tyres.Trigger,
-                ObservedAtUtc = string.IsNullOrEmpty(tyres.ObservedAt) ? (DateTime?)null : ParseResearchTimestamp(tyres.ObservedAt),
-                Frozen = false,
-            };
-        }
-
-        // Het pit-entry-anker is de bevroren stand van vóór de bandenwissel: altijd Frozen,
-        // zodat de researchlaag hem nooit als Measured wegschrijft.
-        private static ResearchTyreObservation BuildResearchPitEntry(V3TyrePitEntry entry)
-        {
-            return new ResearchTyreObservation
-            {
-                HasWear = entry.WearPercent != null,
-                HasCarcass = entry.CarcassTempC != null,
-                HasSets = entry.SetsUsed.HasValue,
-                WearPercent = ResearchZones(entry.WearPercent),
-                CarcassTempC = ResearchZones(entry.CarcassTempC),
-                SetsUsed = entry.SetsUsed,
-                Trigger = "pit_entry",
-                ObservedAtUtc = string.IsNullOrEmpty(entry.ObservedAt) ? (DateTime?)null : ParseResearchTimestamp(entry.ObservedAt),
-                FrozenAtUtc = string.IsNullOrEmpty(entry.ObservedAt) ? (DateTime?)null : ParseResearchTimestamp(entry.ObservedAt),
-                Frozen = true,
-            };
-        }
-
-        private static double?[][] ResearchZones(V3TyreZones zones)
-        {
-            if (zones == null) return null;
-            var result = new double?[4][];
-            result[0] = CopyZones(zones.FrontLeft);
-            result[1] = CopyZones(zones.FrontRight);
-            result[2] = CopyZones(zones.RearLeft);
-            result[3] = CopyZones(zones.RearRight);
-            return result;
-        }
-
-        private static double?[] CopyZones(double?[] source)
-        {
-            var result = new double?[3];
-            if (source == null) return result;
-            for (var zone = 0; zone < 3 && zone < source.Length; zone++)
-            {
-                var value = source[zone];
-                if (value.HasValue && (double.IsNaN(value.Value) || double.IsInfinity(value.Value))) continue;
-                result[zone] = value;
-            }
-            return result;
-        }
-
-        // De researchlaag leest via deze adapter uitsluitend de kanalen/properties die de
-        // bestaande capture niet al levert. 0.8.0: SimHub geeft een aantal iRacing-kanalen
-        // niet door (stuurhoek, lat/long-versnelling, wielsnelheid, remdruk per wiel); die
-        // vallen terug op de directe SDK-lezer. De volgorde blijft: SimHub eerst, dan SDK —
-        // nooit twee bronnen door elkaar in één waarde.
-        private sealed class ResearchChannelAdapter : IResearchChannelReader
-        {
-            private readonly RawChannelReader _channels;
-            private readonly PluginManager _manager;
-            private readonly Func<IrSdkImage> _directSdk;
-            private IrSdkImage _directFrame;
-            private bool _directFrameTaken;
-
-            public ResearchChannelAdapter(RawChannelReader channels, PluginManager manager, Func<IrSdkImage> directSdk)
-            {
-                _channels = channels;
-                _manager = manager;
-                _directSdk = directSdk;
-            }
-
-            /// <summary>Hoogstens één snapshot per tick, ook bij tien kanalen.</summary>
-            private IrSdkImage DirectFrame
-            {
-                get
-                {
-                    if (!_directFrameTaken)
-                    {
-                        _directFrameTaken = true;
-                        try { _directFrame = _directSdk == null ? null : _directSdk(); }
-                        catch { _directFrame = null; }
-                    }
-                    return _directFrame;
-                }
-            }
-
-            public double? ReadNumber(string channel, double minimum, double maximum)
-            {
-                var value = _channels == null ? null : _channels.ReadNumber(channel, minimum, maximum);
-                if (value.HasValue) return value;
-                var frame = DirectFrame;
-                if (frame == null) return null;
-                var direct = frame.ReadNumber(channel);
-                if (!direct.HasValue) return null;
-                if (direct.Value < minimum || direct.Value > maximum) return null;
-                return direct;
-            }
-
-            public double? ReadProperty(string property, double minimum, double maximum)
-            {
-                var value = GetNullableDouble(_manager, property, false);
-                if (!value.HasValue) return null;
-                if (value.Value < minimum || value.Value > maximum) return null;
-                return value;
-            }
-        }
-
         private async Task SendAsync(TelemetryEnvelope envelope, Uri endpoint, string token, CancellationToken cancellationToken)
         {
             var attemptUtc = DateTime.UtcNow;
@@ -2381,9 +2041,20 @@ namespace ThreeSM.EnduranceConnector
             DiagnosticsClient diagnosticsAtAttempt;
             lock (_diagnosticsGate) diagnosticsAtAttempt = _diagnostics;
             if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestAttempt(attemptUtc);
+            MeasurementBatchPlan measurementPlan = null;
             try
             {
-                var body = SerializeWithinBudget(envelope);
+                var coreBody = SerializeWithinBudget(envelope);
+                var coreBytes = Encoding.UTF8.GetByteCount(coreBody);
+                var body = coreBody;
+                if (_measurementSender != null)
+                {
+                    // De meetserie gaat MEE in ditzelfde frame: één POST, één rate-limit. Wat
+                    // niet in de batch past blijft in de outbox staan voor het volgende frame.
+                    var withMeasurements = _measurementSender.BuildBody(coreBody, coreBytes, attemptUtc, out measurementPlan);
+                    if (withMeasurements != null) body = withMeasurements;
+                }
+                string responseBody = null;
                 using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
                 {
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -2393,9 +2064,12 @@ namespace ThreeSM.EnduranceConnector
                         if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, (int)response.StatusCode, response.IsSuccessStatusCode);
                         ingestResultRecorded = true;
                         if (!response.IsSuccessStatusCode) throw new HttpRequestException("relay HTTP " + (int)response.StatusCode);
+                        // Alleen een echt gelezen antwoord kan een bevestiging per rij bevatten.
+                        responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     }
                 }
                 if (Volatile.Read(ref _ending) == 0) Status = "V3 " + envelope.TransportSessionId.Substring(0, Math.Min(8, envelope.TransportSessionId.Length)) + " · seq " + envelope.Sequence;
+                AcknowledgeMeasurements(measurementPlan, responseBody);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -2403,11 +2077,62 @@ namespace ThreeSM.EnduranceConnector
             catch (Exception error)
             {
                 if (!ingestResultRecorded && diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, 0, false);
+                MarkMeasurementAttempt(measurementPlan);
                 if (Volatile.Read(ref _ending) == 0) Status = "Relayfout · " + error.Message;
             }
             finally
             {
                 Volatile.Write(ref _sendBusy, 0);
+            }
+        }
+
+        /// <summary>
+        /// Verwerkt het ACK per rij. Alleen een geslaagde response MÉT gelezen body komt hier;
+        /// nooit opruimen op de statuscode alleen — een 202 is geen leveringsbewijs. Een fout
+        /// in de boekhouding mag een geslaagde POST niet als mislukt laten gelden.
+        /// </summary>
+        private void AcknowledgeMeasurements(MeasurementBatchPlan plan, string responseBody)
+        {
+            if (plan == null || !plan.HasMeasurements || string.IsNullOrEmpty(responseBody) || _measurementOutbox == null) return;
+            try
+            {
+                var now = DateTime.UtcNow;
+                var ack = MeasurementAckParser.Parse(responseBody, plan.Batch);
+                var outcome = _measurementOutbox.ApplyAck(ack, now);
+                // Zelfde regel als MeasurementSender.SendAsync: wat niet per rij bevestigd is,
+                // blijft staan en gaat met backoff opnieuw. "stored:true" terwijl er rijen uit
+                // deze batch blijven staan is geen levering.
+                var remaining = new List<OutboxEntry>(plan.Batch.Events.Count + plan.Batch.Laps.Count);
+                foreach (var entry in plan.Batch.Events)
+                    if (_measurementOutbox.Contains(entry.Uid)) remaining.Add(entry);
+                foreach (var entry in plan.Batch.Laps)
+                    if (_measurementOutbox.Contains(entry.Uid)) remaining.Add(entry);
+                var stored = outcome.Stored && remaining.Count == 0;
+                _measurementOutbox.MarkAttempt(remaining, now, !stored);
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM meetlaag: ACK niet verwerkt, rijen blijven staan: " + error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Mislukte POST: de rijen blijven staan en gaan met backoff opnieuw. Zonder deze
+        /// stap zou dezelfde batch elk interval opnieuw de deur uit gaan.
+        /// </summary>
+        private void MarkMeasurementAttempt(MeasurementBatchPlan plan)
+        {
+            if (plan == null || !plan.HasMeasurements || _measurementOutbox == null) return;
+            try
+            {
+                var sent = new List<OutboxEntry>(plan.Batch.Events.Count + plan.Batch.Laps.Count);
+                sent.AddRange(plan.Batch.Events);
+                sent.AddRange(plan.Batch.Laps);
+                _measurementOutbox.MarkAttempt(sent, DateTime.UtcNow, true);
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM meetlaag: poging niet vastgelegd: " + error.Message);
             }
         }
 
@@ -2674,6 +2399,7 @@ namespace ThreeSM.EnduranceConnector
         private static double? GetNullableSeconds(PluginManager manager, string property) { var value = GetRaw(manager, property); if (value is TimeSpan) { var seconds = ((TimeSpan)value).TotalSeconds; return seconds > 0 ? (double?)seconds : null; } return GetNullableDouble(manager, property, true); }
         private static int GetInt(PluginManager manager, string property, int fallback) { var value = GetRaw(manager, property); int parsed; return value != null && int.TryParse(value.ToString(), out parsed) ? parsed : fallback; }
         private static int? GetNullableInt(PluginManager manager, string property) { var value = GetRaw(manager, property); int parsed; return value != null && int.TryParse(value.ToString(), out parsed) ? (int?)parsed : null; }
+        private static bool? GetNullableBool(PluginManager manager, string property) { return NullableBool(GetRaw(manager, property)); }
         private static bool GetBool(PluginManager manager, string property, bool fallback) { var value = GetRaw(manager, property); if (value is bool) return (bool)value; bool parsed; if (value != null && bool.TryParse(value.ToString(), out parsed)) return parsed; int integer; return value != null && int.TryParse(value.ToString(), out integer) ? integer != 0 : fallback; }
         private static int? PositiveOrNull(int value) { return value > 0 ? (int?)value : null; }
         private static int? NonNegativeOrNull(int? value) { return value.HasValue && value.Value >= 0 ? value : null; }
@@ -2764,40 +2490,59 @@ namespace ThreeSM.EnduranceConnector
                 // De overlay mag de telemetry/DataUpdate nooit onderbreken.
             }
         }
-        // Leest de actuele vlag voor de telemetrie. De zichtbare vlaggenfunctie
-        // (paneel, LED-flagboxes, SimHub-properties) is verwijderd; session.flags
-        // blijft onderdeel van het V3-contract en wordt hier nog steeds bepaald.
-        private void PublishFlags(PluginManager manager, GameData data, bool isInCar)
+        // Leest de vlaggen van deze tick voor `session.flags`. Eén toestandloze lezer
+        // (SessionFlagReader): geen panelen, geen kleuren, geen presets en geen masker op
+        // displayvoorkeuren. De vlag gaat mee met de meting, niet met de weergave.
+        private void PublishFlags(PluginManager manager)
         {
             try
             {
-                var flagSettings = Settings != null ? Settings.Flags : null;
-                var context = BuildFlagContext(manager, Settings, data, isInCar);
-                var detected = _flagService != null ? _flagService.Detect(context, flagSettings) : RaceFlags.None;
-                _lastFlagState = FlagService.Present(detected, FlagService.MaskOf(flagSettings));
-                _lastDetectedFlags = detected;
-                if (!string.Equals(_lastFlagState.Primary, _lastLoggedFlagPrimary, StringComparison.Ordinal))
-                {
-                    _lastLoggedFlagPrimary = _lastFlagState.Primary;
-                    SimHub.Logging.Current.Info("3SM flags: " + _lastFlagState.Primary);
-                }
+                var names = SessionFlagReader.Read(BuildFlagInput(manager));
+                var previous = SessionFlagReader.Describe(_lastFlagNames);
+                var current = SessionFlagReader.Describe(names);
+                _lastFlagNames = names;
+                if (!string.Equals(previous, current, StringComparison.Ordinal))
+                    SimHub.Logging.Current.Info("3SM flags: " + current);
             }
             catch { /* vlagdetectie mag de telemetry nooit breken */ }
         }
 
-        // Watch: houdt het LED-profiel up-to-date (elke ~5 s) als het al bestaat.
-
-        private FlagContext BuildFlagContext(PluginManager manager, ConnectorSettings settings, GameData data, bool isInCar)
+        // Ruwe SDK-toestand -> lezer. Null betekent "bron ontbreekt" en blijft null; we
+        // verzinnen geen "vlag uit".
+        private static SessionFlagInput BuildFlagInput(PluginManager manager)
         {
-            return new FlagContext
+            return new SessionFlagInput
             {
-                Game = data == null ? null : data.GameName,
-                Snapshot = data == null ? null : data.NewData,
-                GetRaw = property => GetRaw(manager, property),
-                IsInCar = isInCar,
-                InPitLane = GetBool(manager, settings.PitLaneProperty, false),
-                FlagNameFallback = Convert.ToString(GetRaw(manager, settings.FlagProperty))
+                SessionFlags = ReadSessionFlagsBitmask(manager),
+                WhiteFlag = NullableBool(GetRaw(manager, "Flag_White")),
+                CheckeredFlag = NullableBool(GetRaw(manager, "Flag_Checkered")),
+                GreenFlag = NullableBool(GetRaw(manager, "Flag_Green")),
+                DetailRed = NullableBool(GetRaw(manager, "DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Isred")),
+                DetailYellow = NullableBool(GetRaw(manager, "DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Isyellow")),
+                DetailService = NullableBool(GetRaw(manager, "DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Isservicible")),
+                SlowCarAhead = NullableBool(GetRaw(manager, "IRacingExtraProperties.iRacing_SlowCarAhead")),
+                SessionTypeName = GetNullableString(manager, "SessionTypeName"),
             };
+        }
+
+        // Het iRacing-bitmasker is één unsigned getal. Buiten 0..uint.MaxValue is het geen
+        // meting; dan valt de lezer terug op de losse vlag-properties.
+        private static uint? ReadSessionFlagsBitmask(PluginManager manager)
+        {
+            var value = GetNullableDouble(manager, "DataCorePlugin.GameRawData.Telemetry.SessionFlags", false);
+            if (!value.HasValue || value.Value > uint.MaxValue) return null;
+            return (uint)value.Value;
+        }
+
+        private static bool? NullableBool(object value)
+        {
+            if (value == null) return null;
+            if (value is bool) return (bool)value;
+            bool parsed;
+            if (bool.TryParse(value.ToString(), out parsed)) return parsed;
+            double number;
+            if (double.TryParse(value.ToString(), out number) && !double.IsNaN(number) && !double.IsInfinity(number)) return number != 0.0;
+            return null;
         }
 
         private static string ResolveFlag(StatusDataBase snapshot, object fallback)

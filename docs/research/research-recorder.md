@@ -1,4 +1,14 @@
-# Research-recorder (plugin 0.7.0)
+﻿# Research-recorder (plugin 0.7.0 — **verwijderd in 0.7.2.0**)
+
+> **Status sinds 0.7.2.0: deze recorder bestaat niet meer.** De code (`Research*.cs`), het
+> SimHub-paneel, de instellingen `ResearchEnabled`/`ResearchDirectory` en het testproject
+> `3SM.EnduranceConnector.ResearchTests` zijn verwijderd. Dit document blijft staan als
+> beschrijving van wat er tot 0.7.1.2 was en hoe een bestaand JSONL-bestand eruitziet.
+> Bestaande opnames op schijf zijn gebruikersdata en worden door de plugin nooit
+> verwijderd of aangeraakt.
+>
+> Laden van een oude configuratie met de researchsleutels blijft werken: onbekende
+> sleutels worden genegeerd (zie `SettingsCompatibilityTests`).
 
 Lokale, optionele opname van telemetrie voor onderzoek. De recorder is een **dunne laag
 bovenop de bestaande capture**: hij leest niets opnieuw uit de SDK wat de capture al heeft,

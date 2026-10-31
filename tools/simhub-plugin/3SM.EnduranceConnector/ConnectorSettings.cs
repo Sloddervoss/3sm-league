@@ -32,7 +32,7 @@ namespace ThreeSM.EnduranceConnector
         // reject new fields; default off also preserves existing installations.
         public bool ExtendedPitwallTelemetryEnabled = true;
 
-        // 0.8.0: directe lezer van de iRacing-shared-memory (Local\IRSDKMemMapFileName)
+        // 0.7.2.0: directe lezer van de iRacing-shared-memory (Local\IRSDKMemMapFileName)
         // voor de kanalen die SimHub's GameRawData niet doorgeeft: wielsnelheid, remdruk
         // per wiel, stuurhoek en lat/long-versnelling. Read-only, geen ReadProcessMemory
         // en geen tweede programma.
@@ -56,12 +56,6 @@ namespace ThreeSM.EnduranceConnector
         // 0 of negatief = de standaardwaarde (30 s), zodat een oud configuratiebestand
         // zonder deze sleutel hetzelfde gedrag krijgt als een verse installatie.
         public int TyreSnapshotIntervalMilliseconds = 30000;
-
-        // Research-opname (lokaal, standaard uit). Schrijft JSONL naar deze pc en verlaat
-        // het apparaat nooit vanzelf; exporteren is een expliciete gebruikersactie.
-        // Leeg pad = %LOCALAPPDATA%\3SM\EnduranceConnector\research.
-        public bool ResearchEnabled = false;
-        public string ResearchDirectory = string.Empty;
 
         public string SpeedProperty = "DataCorePlugin.GameData.NewData.SpeedKmh";
         public string LapProperty = "DataCorePlugin.GameData.NewData.CurrentLap";
@@ -99,13 +93,6 @@ namespace ThreeSM.EnduranceConnector
         public string CurrentLapElapsedProperty = "DataCorePlugin.GameData.NewData.LapCurrentLapTime";
         public string BestLapTimeProperty = "DataCorePlugin.GameData.NewData.BestLapTime";
         public string LapDistancePctProperty = "DataCorePlugin.GameData.NewData.LapDistPct";
-
-        // Vlag-module (FlagService): genormaliseerde racevlaggen uit ruwe game-data.
-        // Publiceert naar SimHub-properties zodat LED-flagboxes/overlays ze kunnen tonen.
-        public FlagSettings Flags = new FlagSettings();
-
-        // Opgeslagen vlaggen/paneel-presets.
-        public List<FlagPreset> FlagPresets = new List<FlagPreset>();
 
         // Veilige versie-check en staged update. De plugin downloadt alleen van de vaste
         // 3SM-host; een extern updaterproces vervangt de geladen DLL na SimHub-exit.
