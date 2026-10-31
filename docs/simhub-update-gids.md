@@ -37,8 +37,9 @@ lange sessie elke 6 uur op een nieuwe versie (met auto-update uit: elke 24 uur).
 
 ## Handmatige installatie via de publieke ZIP
 
-Voor een handmatige installatie download je `3SM.EnduranceConnector-latest.zip` via de
-3SM-site. Sluit SimHub volledig af, hef zo nodig vóór het uitpakken de Windows-blokkering op
+Voor een handmatige installatie download je `3SM.EnduranceConnector-0.7.2.0.zip` via de
+3SM-site (de alias `3SM.EnduranceConnector-latest.zip` bevat dezelfde bytes). Sluit SimHub
+volledig af, hef zo nodig vóór het uitpakken de Windows-blokkering op
 de ZIP op, pak de ZIP uit en volg `INSTALLEREN.txt`. Plaats alleen de canoniek benoemde
 `3SM.EnduranceConnector.dll` in de map met `SimHubWPF.exe`; laat geen tweede versioned kopie
 in die map staan. Start SimHub daarna opnieuw en controleer de connectorversie.
@@ -47,18 +48,16 @@ De overgang `0.3.8.0 → 0.3.9.0` moet door het bekende 0.3.8.0 self-update-defe
 handmatig worden uitgevoerd. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer via
 de normale automatische updater.
 
-**Huidige versie: `0.7.1.2`.** Zowel de automatische updater als de ZIP op de site leveren
-die versie. `0.7.1.2` is inhoudelijk gelijk aan `0.7.1.1`; alleen het versienummer is opgehoogd
-om de automatische updater te testen. Nieuw sinds `0.7.0.0`: reparatietijd in de pitstraat, de
-meatball-vlag, een gevulde achterstand tot de leider, remdruk per wiel, stuurhoek en
-langs-/dwarsversnelling. Wie een oudere plugin heeft, krijgt de update vanzelf aangeboden; een
-handmatige installatie is alleen nodig als UAC of lokale beveiligingssoftware de helper blokkeert.
-
-**Volgende release: `0.7.2.0`.** Die versie staat al in `AssemblyVersion` op deze branch
-en wordt met `release.sh --patch` uitgegeven (niet met de standaardbump, die maakt er
-`0.8.0.0` van). Het updatepad is ongewijzigd: één update vanaf `0.7.1.2` is genoeg, ook
-wanneer een oude installatie in `STAGED` of `WAITING_FOR_RESTART` staat. Zie
-`docs/operations/2026-10-31-simhub-meetcontract-0.7.2.md`.
+**Huidige versie: `0.7.2.0`.** Zowel de automatische updater als de ZIP op de site leveren
+die versie, en de koppelpagina linkt het versiegebonden ZIP
+`3SM.EnduranceConnector-0.7.2.0.zip` (de alias `3SM.EnduranceConnector-latest.zip` blijft
+bestaan voor handmatige installaties en oude links). Nieuw sinds `0.7.1.2`: de meetlaag is
+aangesloten en het frame draagt zijn eigen meetserie, interne ballast is verwijderd en een
+ontbrekende meting gaat als leeg over de lijn in plaats van als nul. Het protocol blijft
+versie 3; het updatepad is ongewijzigd, dus één update vanaf `0.7.1.2` is genoeg, ook
+wanneer een oude installatie in `STAGED` of `WAITING_FOR_RESTART` staat. Wie een oudere
+plugin heeft, krijgt de update vanzelf aangeboden; een handmatige installatie is alleen
+nodig als UAC of lokale beveiligingssoftware de helper blokkeert.
 
 De eerste installatie van een versie van vóór `0.3.0.0` naar de updater-bootstrap blijft
 eenmalig handmatig: sluit SimHub, hernoem een versioned download zoals
