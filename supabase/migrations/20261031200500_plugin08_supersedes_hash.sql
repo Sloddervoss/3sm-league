@@ -22,8 +22,11 @@
 --   * De hash gaat over dezelfde velden plus de verwijzing. Twee rijen met
 --     dezelfde inhoud maar een andere supersedes verschillen nu, en dezelfde
 --     inhoud met dezelfde verwijzing blijft een duplicaat.
---   * Eén functie per tabel (simhub_event_row_hash / simhub_lap_row_hash) is de
---     enige formule, voor de backfill, de classificatie en de terugval.
+--   * De hash beschrijft de OPGESLAGEN rij. Ontbreekt de verwijzing bij een
+--     hogere revisie, dan blijft de bestaande staan (COALESCE); de hash gaat dan
+--     over die bewaarde verwijzing. Eén functie per tabel
+--     (simhub_event_row_hash / simhub_lap_row_hash) is de enige formule, voor de
+--     backfill, de classificatie en de terugval (review 3, punt 9).
 --   * Revisies blijven monotoon binnen één batch. De classificatie schuift mee
 --     met wat al is ingepland en de rij-voor-rij terugval herclassificeert tegen
 --     de actuele rijstand (simhub_apply_event_row / simhub_apply_lap_row). Een
@@ -44,8 +47,11 @@
 -- Eén formule op één plek: de backfill hieronder, de classificatie in de
 -- schrijver en de rij-voor-rij terugval gebruiken alle drie deze functie.
 --
--- De verwijzing hoort bij de inhoud: twee rijen die alleen in hun verwijzing
--- verschillen zijn geen duplicaat van elkaar.
+-- De verwijzing hoort bij de inhoud. Ontbreekt zij bij een hogere revisie, dan
+-- blijft de bestaande verwijzing staan (COALESCE in de schrijver). De hash gaat
+-- daarom over de verwijzing die de rij werkelijk draagt: anders beschrijft hij
+-- een rij die niet bestaat en verandert een herverzending van uitkomst
+-- (review 3, punt 9).
 create or replace function public.simhub_event_row_hash(p public.simhub_measurement_events)
 returns text
 language sql
@@ -98,7 +104,8 @@ $$;
 -- (review 3, punt 8).
 --
 -- Uitkomst: accepted, superseded, duplicate, revision_conflict of
--- stale_revision. De hash komt uit dezelfde functie als de classificatie.
+-- stale_revision. De hash wordt berekend over de waarden die worden
+-- weggeschreven, inclusief de verwijzing die na COALESCE blijft staan.
 create or replace function public.simhub_apply_event_row(p jsonb)
 returns text
 language plpgsql
@@ -107,10 +114,11 @@ declare
   v_new public.simhub_measurement_events;
   v_cur_rev integer;
   v_cur_hash text;
+  v_cur_sup uuid;
 begin
   v_new := jsonb_populate_record(null::public.simhub_measurement_events, p);
-  select e.record_revision, e.content_hash
-    into v_cur_rev, v_cur_hash
+  select e.record_revision, e.content_hash, e.supersedes_event_uid
+    into v_cur_rev, v_cur_hash, v_cur_sup
     from public.simhub_measurement_events e
    where e.device_id = v_new.device_id and e.event_uid = v_new.event_uid;
 
@@ -131,6 +139,7 @@ begin
     return 'accepted';
   end if;
 
+  v_new.supersedes_event_uid := coalesce(v_new.supersedes_event_uid, v_cur_sup);
   v_new.content_hash := public.simhub_event_row_hash(v_new);
 
   if v_new.record_revision > v_cur_rev then
@@ -151,7 +160,7 @@ begin
            evidence = v_new.evidence,
            confidence = v_new.confidence,
            record_revision = v_new.record_revision,
-           supersedes_event_uid = coalesce(v_new.supersedes_event_uid, e.supersedes_event_uid),
+           supersedes_event_uid = v_new.supersedes_event_uid,
            content_hash = v_new.content_hash,
            received_at = now()
      where e.device_id = v_new.device_id
@@ -181,10 +190,11 @@ declare
   v_new public.simhub_lap_summaries;
   v_cur_rev integer;
   v_cur_hash text;
+  v_cur_sup uuid;
 begin
   v_new := jsonb_populate_record(null::public.simhub_lap_summaries, p);
-  select l.record_revision, l.content_hash
-    into v_cur_rev, v_cur_hash
+  select l.record_revision, l.content_hash, l.supersedes_summary_uid
+    into v_cur_rev, v_cur_hash, v_cur_sup
     from public.simhub_lap_summaries l
    where l.device_id = v_new.device_id and l.summary_uid = v_new.summary_uid;
 
@@ -219,6 +229,7 @@ begin
     return 'accepted';
   end if;
 
+  v_new.supersedes_summary_uid := coalesce(v_new.supersedes_summary_uid, v_cur_sup);
   v_new.content_hash := public.simhub_lap_row_hash(v_new);
 
   if v_new.record_revision > v_cur_rev then
@@ -257,7 +268,7 @@ begin
            wear_observation_ids = v_new.wear_observation_ids,
            coverage = v_new.coverage,
            record_revision = v_new.record_revision,
-           supersedes_summary_uid = coalesce(v_new.supersedes_summary_uid, l.supersedes_summary_uid),
+           supersedes_summary_uid = v_new.supersedes_summary_uid,
            content_hash = v_new.content_hash,
            received_at = now()
      where l.device_id = v_new.device_id
@@ -339,6 +350,7 @@ declare
   v_at timestamptz; v_st double precision; v_tick bigint;
   v_wb jsonb; v_wa jsonb; v_sg jsonb; v_ev jsonb; v_conf double precision;
   v_rev integer; v_supersedes uuid; v_hash text; v_prev_rev integer; v_prev_hash text;
+  v_prev_sup uuid; v_stored_sup uuid;
   -- Snelpad: rijen worden gevalideerd en geclassificeerd in de lus, maar
   -- geschreven in één set-based statement. Mislukt dat, dan volgt een
   -- rij-voor-rij terugval met dezelfde al gevalideerde waarden.
@@ -398,9 +410,12 @@ begin
       else
         -- Eén query voor de bestaande stand van alle aangeboden UUID's in
         -- plaats van een SELECT per rij.
+        -- Ook de verwijzing wordt ingelezen: de hash van een hogere revisie
+        -- zonder verwijzing gaat over de verwijzing die blijft staan.
         select coalesce(jsonb_object_agg(e.event_uid::text,
                                          jsonb_build_object('rev', e.record_revision,
-                                                            'hash', e.content_hash)), '{}'::jsonb)
+                                                            'hash', e.content_hash,
+                                                            'sup', e.supersedes_event_uid)), '{}'::jsonb)
           into v_prev
           from public.simhub_measurement_events e
          where e.device_id = v_device
@@ -574,10 +589,17 @@ begin
             -- (review 3, punt 8).
             v_prev_rev := null;
             v_prev_hash := null;
+            v_prev_sup := null;
             if v_prev ? v_uid::text then
               v_prev_rev := (v_prev -> v_uid::text ->> 'rev')::integer;
               v_prev_hash := v_prev -> v_uid::text ->> 'hash';
+              v_prev_sup := nullif(v_prev -> v_uid::text ->> 'sup', '')::uuid;
             end if;
+            -- De verwijzing die de rij straks werkelijk draagt: ontbreekt zij
+            -- bij een hogere revisie, dan blijft de bestaande staan. De hash
+            -- gaat daarover, niet over null (review 3, punt 9).
+            v_stored_sup := case when v_prev_rev is null then v_supersedes
+                                 else coalesce(v_supersedes, v_prev_sup) end;
 
             -- Inhoudelijke vingerafdruk over de opgeslagen rij: dezelfde
             -- revisie met andere inhoud is een conflict, geen stille negeeractie.
@@ -588,7 +610,7 @@ begin
                 'kind', v_kind, 'observed_at', v_at, 'session_time_seconds', v_st,
                 'sdk_tick', v_tick, 'wear_before', v_wb, 'wear_after', v_wa,
                 'set_generation', v_sg, 'evidence', v_ev, 'confidence', v_conf,
-                'supersedes_event_uid', v_supersedes)));
+                'supersedes_event_uid', v_stored_sup)));
 
             if v_prev_rev is null then
               -- Nieuw: later in één statement ingevoegd.
@@ -601,13 +623,13 @@ begin
                 'session_time_seconds', v_st, 'sdk_tick', v_tick,
                 'wear_before', v_wb, 'wear_after', v_wa, 'set_generation', v_sg,
                 'evidence', v_ev, 'confidence', v_conf, 'record_revision', v_rev,
-                'content_hash', v_hash, 'supersedes_event_uid', v_supersedes,
+                'content_hash', v_hash, 'supersedes_event_uid', v_stored_sup,
                 '_label', v_label, '_index', v_rec.ord - 1);
               ev_acc := ev_acc || jsonb_build_object('id', v_uid::text, 'record_revision', v_rev);
               -- De batchstand schuift mee: een volgende, lagere revisie van
               -- dezelfde UUID is vanaf hier stale.
               v_prev := v_prev || jsonb_build_object(v_uid::text,
-                          jsonb_build_object('rev', v_rev, 'hash', v_hash));
+                          jsonb_build_object('rev', v_rev, 'hash', v_hash, 'sup', v_stored_sup));
             elsif v_rev > v_prev_rev then
               -- Hogere revisie: later in één statement bijgewerkt.
               ev_upd := ev_upd || jsonb_build_object(
@@ -618,11 +640,11 @@ begin
                 'session_time_seconds', v_st, 'sdk_tick', v_tick,
                 'wear_before', v_wb, 'wear_after', v_wa, 'set_generation', v_sg,
                 'evidence', v_ev, 'confidence', v_conf, 'record_revision', v_rev,
-                'content_hash', v_hash, 'supersedes_event_uid', v_supersedes,
+                'content_hash', v_hash, 'supersedes_event_uid', v_stored_sup,
                 '_label', v_label, '_index', v_rec.ord - 1);
               ev_sup := ev_sup || jsonb_build_object('id', v_uid::text, 'record_revision', v_rev);
               v_prev := v_prev || jsonb_build_object(v_uid::text,
-                          jsonb_build_object('rev', v_rev, 'hash', v_hash));
+                          jsonb_build_object('rev', v_rev, 'hash', v_hash, 'sup', v_stored_sup));
             elsif v_rev = v_prev_rev and v_hash is not distinct from v_prev_hash then
               -- Zelfde revisie, zelfde inhoud: herverzending uit de oude outbox.
               ev_dup := ev_dup || jsonb_build_object('id', v_uid::text, 'record_revision', v_prev_rev);
@@ -674,7 +696,9 @@ begin
                      evidence = u.evidence,
                      confidence = u.confidence,
                      record_revision = u.record_revision,
-                     supersedes_event_uid = coalesce(u.supersedes_event_uid, e.supersedes_event_uid),
+                     -- De verwijzing is al tegen de bestaande stand verrekend
+                     -- en zit zo in de hash; hier geen tweede COALESCE.
+                     supersedes_event_uid = u.supersedes_event_uid,
                      content_hash = u.content_hash,
                      received_at = now()
                 from jsonb_populate_recordset(null::public.simhub_measurement_events, ev_upd) u
@@ -755,9 +779,11 @@ begin
       elsif jsonb_array_length(p_laps) > v_max_laps then
         lp_block := 'too_many';
       else
+        -- Ook de verwijzing, om dezelfde reden als bij de gebeurtenissen.
         select coalesce(jsonb_object_agg(l.summary_uid::text,
                                          jsonb_build_object('rev', l.record_revision,
-                                                            'hash', l.content_hash)), '{}'::jsonb)
+                                                            'hash', l.content_hash,
+                                                            'sup', l.supersedes_summary_uid)), '{}'::jsonb)
           into v_prev
           from public.simhub_lap_summaries l
          where l.device_id = v_device
@@ -985,10 +1011,15 @@ begin
             -- batch schuift die mee met wat al is ingepland (review 3, punt 8).
             v_prev_rev := null;
             v_prev_hash := null;
+            v_prev_sup := null;
             if v_prev ? v_sum::text then
               v_prev_rev := (v_prev -> v_sum::text ->> 'rev')::integer;
               v_prev_hash := v_prev -> v_sum::text ->> 'hash';
+              v_prev_sup := nullif(v_prev -> v_sum::text ->> 'sup', '')::uuid;
             end if;
+            -- De verwijzing die de rij straks werkelijk draagt (review 3, punt 9).
+            v_stored_sup := case when v_prev_rev is null then v_supersedes
+                                 else coalesce(v_supersedes, v_prev_sup) end;
 
             -- Vingerafdruk over de opgeslagen rij, via dezelfde functie als de
             -- terugval en de backfill.
@@ -1012,7 +1043,7 @@ begin
                 'valid_duration_seconds', v_vd, 'sample_count', v_sc,
                 'max_gap_seconds', v_gap, 'pit_visit_ids', v_pitids,
                 'wear_observation_ids', v_wearids, 'coverage', v_cov,
-                'supersedes_summary_uid', v_supersedes)));
+                'supersedes_summary_uid', v_stored_sup)));
 
             if v_prev_rev is null then
               lp_ins := lp_ins || jsonb_build_object(
@@ -1039,11 +1070,11 @@ begin
                 'max_gap_seconds', v_gap, 'pit_visit_ids', v_pitids,
                 'wear_observation_ids', v_wearids, 'coverage', v_cov,
                 'record_revision', v_rev, 'content_hash', v_hash,
-                'supersedes_summary_uid', v_supersedes,
+                'supersedes_summary_uid', v_stored_sup,
                 '_label', v_label, '_index', v_rec.ord - 1);
               lp_acc := lp_acc || jsonb_build_object('id', v_sum::text, 'record_revision', v_rev);
               v_prev := v_prev || jsonb_build_object(v_sum::text,
-                          jsonb_build_object('rev', v_rev, 'hash', v_hash));
+                          jsonb_build_object('rev', v_rev, 'hash', v_hash, 'sup', v_stored_sup));
             elsif v_rev > v_prev_rev then
               lp_upd := lp_upd || jsonb_build_object(
                 'summary_uid', v_sum, 'summary_id', v_name, 'device_id', v_device,
@@ -1068,11 +1099,11 @@ begin
                 'max_gap_seconds', v_gap, 'pit_visit_ids', v_pitids,
                 'wear_observation_ids', v_wearids, 'coverage', v_cov,
                 'record_revision', v_rev, 'content_hash', v_hash,
-                'supersedes_summary_uid', v_supersedes,
+                'supersedes_summary_uid', v_stored_sup,
                 '_label', v_label, '_index', v_rec.ord - 1);
               lp_sup := lp_sup || jsonb_build_object('id', v_sum::text, 'record_revision', v_rev);
               v_prev := v_prev || jsonb_build_object(v_sum::text,
-                          jsonb_build_object('rev', v_rev, 'hash', v_hash));
+                          jsonb_build_object('rev', v_rev, 'hash', v_hash, 'sup', v_stored_sup));
             elsif v_rev = v_prev_rev and v_hash is not distinct from v_prev_hash then
               lp_dup := lp_dup || jsonb_build_object('id', v_sum::text, 'record_revision', v_prev_rev);
             elsif v_rev = v_prev_rev then
@@ -1150,7 +1181,8 @@ begin
                      wear_observation_ids = u.wear_observation_ids,
                      coverage = u.coverage,
                      record_revision = u.record_revision,
-                     supersedes_summary_uid = coalesce(u.supersedes_summary_uid, l.supersedes_summary_uid),
+                     -- Al verrekend met de bestaande stand en zo gehasht.
+                     supersedes_summary_uid = u.supersedes_summary_uid,
                      content_hash = u.content_hash,
                      received_at = now()
                 from jsonb_populate_recordset(null::public.simhub_lap_summaries, lp_upd) u

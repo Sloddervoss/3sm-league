@@ -1,23 +1,33 @@
 -- ============================================================================
--- Plugin 0.7.2.0 — revisies blijven monotoon binnen één batch
+-- Plugin 0.7.2.0 — revisies blijven monotoon en de hash beschrijft de rij
 -- Datum: 2026-10-31
 --
 -- Draai na de fixture en alle migraties (zie run_plugin08_proposal.sh). Alles
 -- draait in één transactie die aan het eind wordt teruggedraaid.
 --
--- Eén blokkerend punt uit review 3, met zijn eigen probe:
+-- Twee blokkerende punten uit review 3, met hun eigen probe:
 --
 --   M1  (punt 8) Een batch met dezelfde UUID en de revisies 3 én 2 bovenop een
 --       bestaande revisie 1 mag niet beide inplannen. De hoogste wint, de lagere
 --       krijgt stale_revision en wordt niet als opgeslagen bevestigd. De
 --       rij-voor-rij terugval herclassificeert tegen de actuele rijstand.
+--   M2  (punt 9) Een hogere revisie zonder supersedes_* laat de bestaande
+--       verwijzing staan (COALESCE) en de hash gaat over die bewaarde
+--       verwijzing: de hash beschrijft de opgeslagen rij. Herverzending is dan
+--       een duplicaat en een écht andere verwijzing is dat niet.
 --
 -- Bewijs:
 --   M1a  gebeurtenis: 1 bestaand, dan 3 en 2 in één batch -> eindstand 3, één
 --        bevestiging, de ander stale;
 --   M1b  hetzelfde voor rondeaggregaten;
 --   M1c  de terugvalfunctie zelf: een lagere revisie dan de rij is stale en
---        schrijft niets, een hogere landt.
+--        schrijft niets, een hogere landt;
+--   M2a  gebeurtenis met verwijzing X, hogere revisie zonder verwijzing ->
+--        bewaart X en hasht over X;
+--   M2b  herverzending van die payload is een duplicaat;
+--   M2c  een echt andere verwijzing bij gelijke revisie is geen duplicaat;
+--   M2d  hetzelfde patroon voor rondeaggregaten;
+--   M2e  de opgeslagen hash is exact de rijfunctie (één formule).
 -- ============================================================================
 
 begin;
@@ -288,6 +298,99 @@ begin
                      'M1c de terugval noemt een lagere rondevisie stale');
   select * into v_lap from public.simhub_lap_summaries where summary_uid = pg_temp.uid(1070);
   perform pg_temp.eq(v_lap.record_revision, 3, 'M1c de ronde bleef op revisie 3');
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- M2a/M2b/M2c — de hash gaat over de bewaarde verwijzing
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_ack jsonb;
+  v_row public.simhub_measurement_events%rowtype;
+  v_verwacht text;
+begin
+  -- Eerste waarneming met verwijzing X.
+  v_ack := pg_temp.batch(jsonb_build_array(
+    pg_temp.event(80, jsonb_build_object('supersedesEventUid', pg_temp.uid(81)))), null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 1,
+                     'M2a de waarneming met verwijzing X is opgeslagen');
+
+  -- Hogere revisie zonder verwijzing: COALESCE bewaart X.
+  v_ack := pg_temp.batch(jsonb_build_array(
+    pg_temp.event(80, jsonb_build_object('recordRevision', 2, 'confidence', 0.4))), null);
+  select * into v_row from public.simhub_measurement_events where event_uid = pg_temp.uid(80);
+  perform pg_temp.eq(v_row.record_revision, 2, 'M2a de hogere revisie staat opgeslagen');
+  perform pg_temp.eq(v_row.supersedes_event_uid, pg_temp.uid(81),
+                     'M2a de bestaande verwijzing X blijft staan');
+  perform pg_temp.eq(v_row.content_hash, public.simhub_event_row_hash(v_row),
+                     'M2a de opgeslagen hash beschrijft de opgeslagen rij');
+
+  -- Expliciet: de hash is de formule met X, niet met null.
+  v_verwacht := md5(jsonb_build_object(
+    'segmentId', 'seg-1', 'observedSessionId', 'sess-1', 'pitVisitId', null,
+    'kind', 'wear_refresh_confirmed',
+    'observedAt', '2026-10-31T12:00:00Z'::timestamptz,
+    'sessionTimeSeconds', 1000::double precision, 'sdkTick', 12345::bigint,
+    'wearBefore', pg_temp.wear(12.5), 'wearAfter', pg_temp.wear(0.2),
+    'setGeneration', null, 'evidence', pg_temp.evidence(),
+    'confidence', 0.4::double precision,
+    'supersedesEventUid', pg_temp.uid(81))::text);
+  perform pg_temp.eq(v_row.content_hash, v_verwacht,
+                     'M2a de hash rekent met de bewaarde verwijzing X');
+
+  -- Herverzending van precies die payload is een duplicaat.
+  v_ack := pg_temp.batch(jsonb_build_array(
+    pg_temp.event(80, jsonb_build_object('recordRevision', 2, 'confidence', 0.4))), null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,duplicates}'), 1,
+                     'M2b herverzending is een duplicaat');
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,rejected}'), 0,
+                     'M2b herverzending wordt niet als conflict gezien');
+
+  -- Een écht andere verwijzing bij gelijke revisie is geen duplicaat.
+  v_ack := pg_temp.batch(jsonb_build_array(
+    pg_temp.event(80, jsonb_build_object('recordRevision', 2, 'confidence', 0.4,
+                                         'supersedesEventUid', pg_temp.uid(82)))), null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,duplicates}'), 0,
+                     'M2c een andere verwijzing is geen duplicaat');
+  perform pg_temp.eq(v_ack #>> '{events,rejected,0,reason}', 'revision_conflict',
+                     'M2c een andere verwijzing bij gelijke revisie is een conflict');
+  select * into v_row from public.simhub_measurement_events where event_uid = pg_temp.uid(80);
+  perform pg_temp.eq(v_row.supersedes_event_uid, pg_temp.uid(81),
+                     'M2c de opgeslagen verwijzing is niet stil veranderd');
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- M2d/M2e — hetzelfde voor rondeaggregaten, plus één formule
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_ack jsonb;
+  v_row public.simhub_lap_summaries%rowtype;
+begin
+  v_ack := pg_temp.batch(null, jsonb_build_array(
+    pg_temp.lap(80, jsonb_build_object('supersedesSummaryUid', pg_temp.uid(1081)))));
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,accepted}'), 1,
+                     'M2d de ronde met verwijzing X is opgeslagen');
+
+  v_ack := pg_temp.batch(null, jsonb_build_array(
+    pg_temp.lap(80, jsonb_build_object('recordRevision', 2, 'trackTempCMean', 34.0))));
+  select * into v_row from public.simhub_lap_summaries where summary_uid = pg_temp.uid(1080);
+  perform pg_temp.eq(v_row.record_revision, 2, 'M2d de hogere revisie staat opgeslagen');
+  perform pg_temp.eq(v_row.supersedes_summary_uid, pg_temp.uid(1081),
+                     'M2d de bestaande verwijzing X blijft staan');
+  perform pg_temp.eq(v_row.content_hash, public.simhub_lap_row_hash(v_row),
+                     'M2e de opgeslagen hash is de rijfunctie, dus over X');
+
+  v_ack := pg_temp.batch(null, jsonb_build_array(
+    pg_temp.lap(80, jsonb_build_object('recordRevision', 2, 'trackTempCMean', 34.0))));
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,duplicates}'), 1,
+                     'M2d herverzending is een duplicaat');
+
+  v_ack := pg_temp.batch(null, jsonb_build_array(
+    pg_temp.lap(80, jsonb_build_object('recordRevision', 2, 'trackTempCMean', 34.0,
+                                       'supersedesSummaryUid', pg_temp.uid(1082)))));
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,duplicates}'), 0,
+                     'M2d een andere verwijzing is geen duplicaat');
 end $$;
 
 -- ---------------------------------------------------------------------------
