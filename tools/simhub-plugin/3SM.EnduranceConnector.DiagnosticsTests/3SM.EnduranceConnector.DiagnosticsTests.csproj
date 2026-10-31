@@ -26,6 +26,9 @@
     <Compile Include="..\3SM.EnduranceConnector\RawChannelReader.cs" Link="RawChannelReader.cs" />
     <!-- 0.8: versievergelijking van het updatepad, SimHub-vrij. -->
     <Compile Include="..\3SM.EnduranceConnector\UpdateVersionPolicy.cs" Link="UpdateVersionPolicy.cs" />
+    <!-- 0.7.2.0: meetlaag, duurzame ID's en wire-DTO's. -->
+    <Compile Include="..\3SM.EnduranceConnector\MeasurementIds.cs" Link="MeasurementIds.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\MeasurementEvent.cs" Link="MeasurementEvent.cs" />
     <!-- 0.7.1: bandenhek + vingerafdruk. Beide bestanden zijn SimHub-vrij. -->
     <Compile Include="..\3SM.EnduranceConnector\TyrePublishGate.cs" Link="TyrePublishGate.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetryContractsV3.cs" Link="TelemetryContractsV3.cs" />

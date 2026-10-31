@@ -60,6 +60,10 @@
     <Compile Include="TyreZoneReader.cs" />
     <!-- 0.7.2.0: de updatevergelijking op één testbare plek (zelfde regel als voorheen). -->
     <Compile Include="UpdateVersionPolicy.cs" />
+    <!-- 0.7.2.0: meetlaag. Duurzame ID's en de wire-DTO's van een meting en een
+         ronde. SimHub-vrij, zodat de tests dezelfde bestanden compileren. -->
+    <Compile Include="MeasurementIds.cs" />
+    <Compile Include="MeasurementEvent.cs" />
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->
     <Compile Include="TyrePublishGate.cs" />
