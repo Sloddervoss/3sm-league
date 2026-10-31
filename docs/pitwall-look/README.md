@@ -154,3 +154,13 @@ pitmarkering zijn niet gewijzigd; alleen de beschikbare schermruimte is anders.
 Impact: uitsluitend frontendpresentatie in de worktree. Backend/API, bot,
 database/migraties, auth/rollen en deployment: geen wijzigingen.
 Productiefrontendwijzigingen: NEE. Niet gepusht, niet gemerged, niet gedeployed.
+
+## Visuele vergelijking met origineel
+
+Zie `ontwerpvergelijking.txt` voor de vergelijking per verschil, de expliciete
+grenzen en de nieuwe verificatie. De eerdere claim dat de volledige opbouw
+van het referentiebeeld is gevolgd was te ruim: contextregel, beslissingsband
+en aanvullende blokken komen uit de bestaande pitwallbrief, niet uit het
+originele beeld. De nieuwe ronde herstelt onder meer losse KPI-containers,
+compacte timingrijen, oranje selectieaccenten en de bredere pacekaart met
+raster en meetpunten. Screenshots en `verification.json` zijn vernieuwd.

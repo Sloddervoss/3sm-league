@@ -14,40 +14,40 @@
         {
           "x": 155,
           "y": 752.5,
-          "width": 391,
+          "width": 521.328125,
           "height": 294.5,
           "bottom": 1047
         },
         {
-          "x": 558,
+          "x": 688.328125,
           "y": 752.5,
-          "width": 391,
+          "width": 347.546875,
           "height": 294.5,
           "bottom": 1047
         },
         {
-          "x": 961,
+          "x": 1047.875,
           "y": 752.5,
-          "width": 391,
+          "width": 347.5625,
           "height": 294.5,
           "bottom": 1047
         },
         {
-          "x": 1364,
+          "x": 1407.4375,
           "y": 752.5,
-          "width": 391,
+          "width": 347.546875,
           "height": 294.5,
           "bottom": 1047
         }
       ],
       "timing": {
         "x": 711.328125,
-        "y": 443.25,
+        "y": 445.25,
         "width": 1028.671875,
-        "height": 250.25,
+        "height": 248.25,
         "bottom": 693.5,
-        "clientHeight": 250,
-        "scrollHeight": 800,
+        "clientHeight": 248,
+        "scrollHeight": 484,
         "overflow": "auto"
       }
     },
@@ -88,40 +88,40 @@
         {
           "x": 155,
           "y": 750.5,
-          "width": 391,
+          "width": 521.328125,
           "height": 290,
           "bottom": 1040.5
         },
         {
-          "x": 558,
+          "x": 688.328125,
           "y": 750.5,
-          "width": 391,
+          "width": 347.546875,
           "height": 290,
           "bottom": 1040.5
         },
         {
-          "x": 961,
+          "x": 1047.875,
           "y": 750.5,
-          "width": 391,
+          "width": 347.5625,
           "height": 290,
           "bottom": 1040.5
         },
         {
-          "x": 1364,
+          "x": 1407.4375,
           "y": 750.5,
-          "width": 391,
+          "width": 347.546875,
           "height": 290,
           "bottom": 1040.5
         }
       ],
       "timing": {
         "x": 711.328125,
-        "y": 443,
+        "y": 445,
         "width": 1028.671875,
-        "height": 250.5,
+        "height": 248.5,
         "bottom": 693.5,
-        "clientHeight": 251,
-        "scrollHeight": 800,
+        "clientHeight": 249,
+        "scrollHeight": 484,
         "overflow": "auto"
       }
     },
