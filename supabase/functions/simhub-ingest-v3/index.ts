@@ -1,7 +1,18 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
 import { assertAllowedOrigin, consumeEdgeRateLimit, jsonResponse, readBoundedJson, sha256Hex } from "../_shared/simhub.ts";
 import { resolveTelemetryContext } from "./context.ts";
-import { aggregateBatch, isMissingFunctionError, persistArguments } from "../_shared/simhubAggregates.ts";
+import {
+  afterAggregatesSuccess,
+  afterMissingFunction,
+  aggregateBatch,
+  capabilityStatus,
+  initialCapability,
+  isMissingFunctionError,
+  mergeMeasurementAck,
+  persistArguments,
+  shouldAttemptAggregates,
+  snapshotDto,
+} from "../_shared/simhubAggregates.ts";
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -15,14 +26,15 @@ const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSe
 /**
  * Heeft de database de acht-argumentversie van simhub_persist_v3?
  *
- * Deze vlag leeft per isolate en begint op true. Krijgt de RPC 42883/PGRST202
- * terug (de migratie is nog niet toegepast, of is teruggedraaid), dan gaat
- * hetzelfde frame opnieuw weg met alleen de basisargumenten en blijven de
- * meetreeksen vanaf dat moment in de logboeken staan. Zo kan een 0.8-Edge nooit
- * de hele ingest stukmaken op een database die de nieuwe signatuur niet heeft —
- * en dat is precies de eis rond de update van 0.7.1.x naar 0.8.
+ * Deze toestand leeft per isolate en begint op "ja". Krijgt de RPC
+ * 42883/PGRST202 terug (de migratie is nog niet toegepast, of is teruggedraaid),
+ * dan gaat hetzelfde frame opnieuw weg met alleen de basisargumenten. Anders dan
+ * voor 0.7.2.0 is dat geen permanente vlag meer: na AggregatesRetryMs wordt het
+ * opnieuw geprobeerd, en de toestand staat in elk antwoord (`aggregates`). Eén
+ * schema-cachefout mag de aggregaten niet voor de levensduur van dit isolate
+ * uitschakelen.
  */
-let aggregatesSupported = true;
+let aggregatesCapability = initialCapability(0);
 
 const deviceToken = (request: Request): string => {
   const authorization = request.headers.get("authorization") || "";
@@ -103,43 +115,77 @@ Deno.serve(async (request) => {
 
       // Transactionality, write-time authority, source baselines and all event
       // writes live in the service-role-only database RPC; Edge makes one call.
+      //
+      // De snapshot krijgt een KERN-DTO: de meetserie gaat als aparte parameters
+      // mee en hoort niet in simhub_telemetry_latest.v3_normalized, want die
+      // snapshot is browserleesbaar. De database heeft daarnaast een trigger die
+      // de sleutels alsnog verwijdert (tweede wachter).
       const baseArguments = {
         p_token_hash: await sha256Hex(token),
         p_session_id: context.normalized!.transportSessionId,
         p_sequence: context.normalized!.sequence,
         p_captured_at: context.normalized!.capturedAt,
-        p_v3_normalized: context.normalized,
+        p_v3_normalized: snapshotDto(context.normalized!),
       };
-      // 0.8.0: de meetreeksen gaan als aparte parameters mee — alleen als er
-      // iets te sturen is. Zonder reeksen is dit exact de aanroep van vóór 0.8.
+      // 0.7.2.0: de meetreeksen gaan als aparte parameters mee — alleen als er
+      // iets te sturen is én de database de signatuur (nog) lijkt te hebben.
       const batch = aggregateBatch(context.normalized!);
+      const now = Date.now();
+      const attemptAggregates = batch !== null && shouldAttemptAggregates(aggregatesCapability, now);
       let { data, error } = await service.rpc(
         "simhub_persist_v3",
-        persistArguments(baseArguments, batch, aggregatesSupported),
+        persistArguments(baseArguments, batch, attemptAggregates),
       );
+      let aggregatesStored = attemptAggregates;
       if (error && batch && isMissingFunctionError(error)) {
-        // De database kent de acht-argumentversie niet. Terugvallen, één keer
-        // waarschuwen, en daarna niet meer proberen.
-        aggregatesSupported = false;
+        // De database kent de acht-argumentversie niet. Terugvallen en de
+        // toestand met tijdstip onthouden, zodat er na de TTL een herprobe komt.
+        aggregatesCapability = afterMissingFunction(Date.now());
+        aggregatesStored = false;
         console.warn(
-          "simhub_persist_v3 zonder meetreeksen: database heeft de 0.8-signatuur niet",
-          JSON.stringify(batch ? { events: batch.events.length, laps: batch.laps.length } : null),
+          "simhub_persist_v3 zonder meetreeksen: database heeft de 0.7.2.0-signatuur niet",
+          JSON.stringify({ events: batch.events.length, laps: batch.laps.length }),
         );
         ({ data, error } = await service.rpc("simhub_persist_v3", baseArguments));
+      } else if (!error && attemptAggregates) {
+        aggregatesCapability = afterAggregatesSuccess(Date.now());
       }
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       const result = row?.result;
-      if (result === "not_authority" || result === "not_bound" || result === "not_registered") return jsonResponse(request, { error: result }, 403);
-      if (result === "invalid_device" || result === "revoked") return jsonResponse(request, { error: "invalid_device" }, 401);
-      if (result === "replayed") return jsonResponse(request, { error: "replayed" }, 409);
+      // Het antwoord per rij. Bij een afgekeurd frame is er niets opgeslagen en
+      // dat zegt het rapport met zoveel woorden.
+      const measurements = mergeMeasurementAck(
+        context.normalized?.measurementReport ?? null,
+        row?.measurement_ack,
+        batch === null ? true : aggregatesStored && result === "accepted",
+      );
+      const aggregateStatus = capabilityStatus(aggregatesCapability, Date.now());
+
+      if (result === "not_authority" || result === "not_bound" || result === "not_registered") {
+        return jsonResponse(request, { error: result, measurements, aggregates: aggregateStatus }, 403);
+      }
+      if (result === "invalid_device" || result === "revoked") {
+        return jsonResponse(request, { error: "invalid_device", measurements, aggregates: aggregateStatus }, 401);
+      }
+      if (result === "replayed") {
+        return jsonResponse(request, { error: "replayed", measurements, aggregates: aggregateStatus }, 409);
+      }
       // Een vol sessieregister is een throttle-toestand, geen serverfout. Zonder
       // deze twee regels belandde session_limit op de generieke 500 hieronder en
       // leek de plugin kapot terwijl hij alleen zijn sessieplafond raakte.
-      if (result === "session_limit") return jsonResponse(request, { error: "device_session_limit" }, 409);
-      if (result === "rate_limited") return jsonResponse(request, { error: "rate_limited" }, 429);
-      if (result === "invalid_payload") return jsonResponse(request, { error: result }, 422);
-      if (result !== "accepted") return jsonResponse(request, { error: "internal_error" }, 500);
+      if (result === "session_limit") {
+        return jsonResponse(request, { error: "device_session_limit", measurements, aggregates: aggregateStatus }, 409);
+      }
+      if (result === "rate_limited") {
+        return jsonResponse(request, { error: "rate_limited", measurements, aggregates: aggregateStatus }, 429);
+      }
+      if (result === "invalid_payload") {
+        return jsonResponse(request, { error: result, measurements, aggregates: aggregateStatus }, 422);
+      }
+      if (result !== "accepted") {
+        return jsonResponse(request, { error: "internal_error", measurements, aggregates: aggregateStatus }, 500);
+      }
 
       // 0.4.3: server-side opponent sampled history (UI-independent). Best-effort:
       // sampling failure must NOT break core telemetry ingest (option B). Only when
@@ -166,7 +212,12 @@ Deno.serve(async (request) => {
         console.error("simhub-ingest-v3 opponent sampling non-fatal", (sampleErr as Error).message ?? "unknown");
       }
 
-      return jsonResponse(request, { accepted: true, receivedAt: row.received_at }, 202);
+      return jsonResponse(request, {
+        accepted: true,
+        receivedAt: row.received_at,
+        measurements,
+        aggregates: aggregateStatus,
+      }, 202);
     }
 
     // Unknown protocol version
