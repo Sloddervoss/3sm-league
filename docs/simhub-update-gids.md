@@ -38,7 +38,9 @@ lange sessie elke 6 uur op een nieuwe versie (met auto-update uit: elke 24 uur).
 ## Handmatige installatie via de publieke ZIP
 
 Voor een handmatige installatie download je `3SM.EnduranceConnector-0.7.2.0.zip` via de
-3SM-site (de alias `3SM.EnduranceConnector-latest.zip` bevat dezelfde bytes). Sluit SimHub
+3SM-site. De alias `3SM.EnduranceConnector-latest.zip` blijft voor oude links bestaan, maar
+kan kort na een release nog de vorige bytes serveren; gebruik daarom het versiegebonden
+bestand. Sluit SimHub
 volledig af, hef zo nodig vóór het uitpakken de Windows-blokkering op
 de ZIP op, pak de ZIP uit en volg `INSTALLEREN.txt`. Plaats alleen de canoniek benoemde
 `3SM.EnduranceConnector.dll` in de map met `SimHubWPF.exe`; laat geen tweede versioned kopie
