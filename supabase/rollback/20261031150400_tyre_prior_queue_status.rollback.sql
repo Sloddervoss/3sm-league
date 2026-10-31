@@ -2,12 +2,23 @@
 -- Zet de wachtrij terug op afgerond_op als enige afrondingssignaal: de
 -- statuskolom, de retentie, de probleemview en de statusindexen verdwijnen, de
 -- oude partiële index en de oude drain komen terug. Rijen die nu 'mislukt' zijn
--- (drie pogingen, afgerond_op gezet) worden weer open: dat is precies de
--- toestand van vóór de migratie, met hetzelfde misleidende open=0.
+-- (drie pogingen, afgerond_op gezet) worden weer open: dat is de toestand van
+-- vóór de migratie, met hetzelfde misleidende open=0.
+--
+-- BELANGRIJK — dubbele open rijen. De migratie staat toe dat dezelfde sessie
+-- een mislukte rij én een nieuwe open rij heeft. Zodra deze rollback de
+-- mislukte rij weer onafgerond maakt, staan er twee rijen met afgerond_op is
+-- null voor dezelfde (device_id, session_key) en kan de oude unieke index niet
+-- worden aangemaakt. Daarom voegt deze rollback die rijen eerst samen: de
+-- oudste opdracht blijft staan, neemt de hoogste pogingen en de laatst bekende
+-- fout over, en de rest wordt verwijderd. Pas daarna komt de index.
+--
+-- Geen eigen begin/commit: draai dit bestand met psql -1 (of in één
+-- transactie). Daardoor is de rollback ook binnen een testtransactie te
+-- gebruiken zonder de sessie te committen.
 --
 -- Draai deze rollback vóór die van 20261031150300 als de hele reeks terug moet.
 
-begin;
 
 drop view if exists public.tyre_prior_queue_problemen;
 drop function if exists public.tyre_prior_queue_retention(integer);
@@ -97,6 +108,58 @@ update public.tyre_prior_queue
    set afgerond_op = null
  where status = 'mislukt';
 
+-- ---------------------------------------------------------------------------
+-- Samenvoegen van dubbele open rijen
+-- ---------------------------------------------------------------------------
+-- Dezelfde sessie kan na de migratie twee rijen hebben: een mislukte en een
+-- nieuwe open opdracht. De stap hierboven maakt daar twee OPEN rijen van, en de
+-- oude unieke index op (device_id, session_key) waar afgerond_op null is kan dat
+-- niet aan. Bewaar de oudste opdracht (die met de eerste vraagtijd), neem de
+-- hoogste pogingen en de laatst bekende fout over, en verwijder de rest.
+do $$
+declare
+  v_weg integer := 0;
+begin
+  create temporary table if not exists _queue_dubbel on commit drop as
+  with genummerd as (
+    select q.id,
+           q.device_id,
+           q.session_key,
+           q.pogingen,
+           q.laatste_fout,
+           first_value(q.id) over (partition by q.device_id, q.session_key
+                                   order by q.gevraagd_op, q.id) as behoud,
+           row_number() over (partition by q.device_id, q.session_key
+                              order by q.gevraagd_op, q.id) as rn
+      from public.tyre_prior_queue q
+     where q.afgerond_op is null
+  )
+  select * from genummerd where rn > 1;
+
+  update public.tyre_prior_queue q
+     set pogingen = greatest(q.pogingen, d.pogingen),
+         laatste_fout = coalesce(q.laatste_fout, d.laatste_fout)
+    from (
+      select d2.behoud,
+             max(d2.pogingen) as pogingen,
+             (array_agg(d2.laatste_fout order by d2.id desc))[1] as laatste_fout
+        from _queue_dubbel d2
+       group by d2.behoud
+    ) d
+   where q.id = d.behoud;
+
+  delete from public.tyre_prior_queue q
+   using _queue_dubbel d
+   where q.id = d.id;
+
+  get diagnostics v_weg = row_count;
+  if v_weg > 0 then
+    raise notice 'rollback: % dubbele open wachtrijrij(en) samengevoegd', v_weg;
+  end if;
+
+  drop table if exists _queue_dubbel;
+end $$;
+
 drop index if exists public.tyre_prior_queue_open_idx;
 create unique index tyre_prior_queue_open_idx
   on public.tyre_prior_queue (device_id, session_key)
@@ -112,4 +175,3 @@ comment on column public.tyre_prior_queue.afgerond_op is
 comment on column public.tyre_prior_queue.pogingen is
   'Aantal mislukte verwerkingen. Bij 3 wordt de rij niet meer opgepakt; laatste_fout zegt waarom.';
 
-commit;
