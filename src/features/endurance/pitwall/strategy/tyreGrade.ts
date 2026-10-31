@@ -90,6 +90,12 @@ export interface TyreEstimate {
   limitPct: number | null;
   /** Aantal meetpunten waarop dit rust. */
   samples: number;
+  /**
+   * Het bereik is een experiment: het staat er als getal, maar het mag geen
+   * advies dragen. De band toont dan tekst in plaats van rondes. Ontbreekt het
+   * veld, dan is dit een gewoon bereik (de oude, meetbare vorm).
+   */
+  experimenteel?: boolean;
 }
 
 export interface GradeInput {

@@ -174,6 +174,30 @@ export interface TyreEigen {
   stints: number | null;
 }
 
+/**
+ * Het bereik in rondes dat de server meegaf (`basis.band`).
+ *
+ * Tot 31-10 heette dit een `modelmarge`, en dat las als een gekalibreerde
+ * marge. Dat is het niet: het is de spreiding tussen stints plus de meetruis
+ * van één apparaat. Daarom heet de band nu `experimenteel` en zegt
+ * `beslissend` met zoveel woorden of dit getal nog ergens over gaat.
+ *
+ * `beslissend` is de enige poort: alleen een expliciete `true` laat het bereik
+ * meewegen in een advies. Ontbreekt het veld — oude server, of een server die
+ * het blok niet kent — dan is het antwoord nee. Een ontbrekend veld mag geen
+ * advies worden; dat is precies de fout die dit veld moet voorkomen.
+ */
+export interface TyreBand {
+  /** `experimenteel` (sinds 31-10) of `modelmarge` (oudere server); null als de server zweeg. */
+  soort: string | null;
+  /** Stuurt dit bereik het advies? Alleen een expliciete `true` telt. */
+  beslissend: boolean;
+  /** De gebruikte sigma in procentpunten per ronde, als de server hem gaf. */
+  sigma: number | null;
+  /** Aantal stints waarop de band rust; 0 of null als er geen band is. */
+  stints: number | null;
+}
+
 export interface TyreBasis {
   carKey: string | null;
   trackKey: string | null;
@@ -223,6 +247,12 @@ export interface TyreBasis {
   priorBron: string | null;
   /** De actuele identiteit waarop de poort zich baseerde (`basis.context`). */
   context: TyreContext | null;
+  /**
+   * Het bereik in rondes en of het iets mag beslissen (`basis.band`). Ontbreekt
+   * het blok, dan is deze band `beslissend: false`: het bereik blijft zichtbaar
+   * als experiment, maar stuurt geen advies.
+   */
+  band: TyreBand;
 }
 
 export interface TyreEstimateV2 {
@@ -395,6 +425,27 @@ function contextOf(value: unknown): TyreContext | null {
   return { carKey, trackKey, onbekend };
 }
 
+/**
+ * `basis.band`: het bereik en of het iets mag beslissen.
+ *
+ * `soort` is een token van de server (`experimenteel`, en bij een oudere server
+ * `modelmarge`); onbekend blijft onbekend, want een verzonnen naam zou de band
+ * een betekenis geven die hij niet heeft. `beslissend` is streng: alleen een
+ * expliciete `true` telt. Ontbreekt het blok of het veld, dan draagt dit bereik
+ * geen advies — dat is de veilige kant, en de enige kant die klopt voor een
+ * experiment.
+ */
+function bandOf(value: unknown): TyreBand {
+  const bron = record(value);
+  const soort = typeof bron?.soort === "string" ? bron.soort.trim().toLowerCase() : null;
+  return {
+    soort,
+    beslissend: bron?.beslissend === true,
+    sigma: num(bron?.sigma),
+    stints: num(bron?.stints),
+  };
+}
+
 /** `basis.eigen`. Nul stints is een waarde, geen ontbreken: zie `eigenOf`. */
 function eigenOf(value: unknown): TyreEigen | null {
   const bron = record(value);
@@ -487,6 +538,7 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
       priorLevel: levelOf(get(basisRuw, "prior_level")),
       priorBron: text(get(basisRuw, "prior_bron")),
       context: contextOf(get(basisRuw, "context")),
+      band: bandOf(get(basisRuw, "band")),
     },
     provenance: provenanceOf(get(raw, "provenance"), grade),
     // Alleen A is gemeten; zonder veld is alles daarboven voorlopig.
@@ -526,6 +578,23 @@ export function bandmetingStale(estimate: TyreEstimateV2): boolean {
   const vers = estimate.basis.actualiteit?.vers;
   if (vers != null) return vers === false;
   return estimate.basis.redenen.includes("stale_state");
+}
+
+/**
+ * Is dit bereik een experiment? Zo ja, dan blijft het zichtbaar in het
+ * modelpaneel, maar het komt niet in een advies en niet als getal in de
+ * beslissingsband.
+ *
+ * Twee redenen om ja te zeggen: de server noemt de band zelf `experimenteel`, of
+ * hij zegt niet dat het bereik iets mag beslissen. Dat tweede telt ook als het
+ * veld ontbreekt, want dan weten we het niet — en "niet weten" is in een
+ * advies nooit hetzelfde als "het mag".
+ */
+export function bandExperimenteel(estimate: TyreEstimateV2 | null): boolean {
+  if (estimate == null) return false;
+  const { soort, beslissend } = estimate.basis.band;
+  if (soort != null && soort.trim().toLowerCase() === "experimenteel") return true;
+  return !beslissend;
 }
 
 /**
@@ -713,6 +782,9 @@ export function vanV1(estimate: TyreEstimate): TyreEstimateV2 {
       priorLevel: null,
       priorBron: null,
       context: null,
+      // v1 kent geen band en geen poort: dit bereik is per definitie een
+      // experiment en mag geen advies dragen.
+      band: { soort: null, beslissend: false, sigma: null, stints: null },
     },
     modelBron: null,
     provenance: estimate.grade === "A" ? "measured" : estimate.grade === "D" ? "none" : "estimated",
@@ -735,7 +807,16 @@ export function naarTyreEstimate(estimate: TyreEstimateV2 | null): TyreEstimate 
   // Een bereik dat de server zelf onbruikbaar noemt, gaat niet naar de band: de
   // band is het blok dat zegt wat je moet doen, en "295–1181 rondes" is daar een
   // advies dat niemand mag opvolgen. Het modelpaneel toont het getal gedempt.
-  const metRondes = (grade === "A" || grade === "B") && estimate.usable;
+  //
+  // Sinds 31-10 geldt dat ook voor een bereik dat de server experimenteel noemt
+  // (`basis.band.beslissend = false`, of het veld ontbreekt): dat getal blijft in
+  // het modelpaneel staan, maar de band krijgt er geen rondes, geen helling en
+  // geen grens van. Zonder `lapsToThreshold` kan de bandenrij de tank niet
+  // verdringen en kan het bereik dus geen stop of een groen "blijf buiten"
+  // veroorzaken; `experimenteel` zegt in de band met zoveel woorden waarom daar
+  // geen getal staat.
+  const experimenteel = bandExperimenteel(estimate);
+  const metRondes = (grade === "A" || grade === "B") && estimate.usable && !experimenteel;
   return {
     grade,
     source: "server",
@@ -753,6 +834,8 @@ export function naarTyreEstimate(estimate: TyreEstimateV2 | null): TyreEstimate 
     // De grens is de drempel uit plan-03, niet "kaal": dit getal komt uit een anker.
     limitPct: metRondes ? 40 : null,
     samples: metRondes ? (estimate.stints ?? 1) : 0,
+    // De band leest dit om tekst te tonen in plaats van een getal.
+    experimenteel,
   };
 }
 

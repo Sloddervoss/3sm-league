@@ -29,6 +29,26 @@ export function TyreAdviceLine({ estimate }: { estimate: TyreEstimate | null }) 
   const { grade } = estimate;
   const metRondes = grade === "A" || grade === "B";
 
+  // Een experimenteel bereik staat niet in het advies. Het getal blijft in het
+  // modelpaneel staan; hier staat alleen de uitkomst, zonder rondes — een getal
+  // in de band leest als een advies, en dat is dit bereik niet.
+  if (estimate.experimenteel) {
+    return (
+      <div
+        className="flex items-baseline gap-2 text-[13px] leading-5 text-gray-400"
+        data-pitwall-tyre-grade={grade}
+        data-pitwall-tyre-confidence={gradeWord(grade)}
+        data-pitwall-tyre-line="experimenteel"
+      >
+        <Disc3 className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
+        <p className="min-w-0 flex-1 font-mono italic">
+          <span className="sr-only">{`Banden: ${gradeWord(grade)}, geen advies. `}</span>
+          geen advies · experimenteel bereik
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`flex items-baseline gap-2 text-[13px] leading-5 ${toonKleur(grade)}`}

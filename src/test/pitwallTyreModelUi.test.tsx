@@ -49,7 +49,12 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
     // herkomstwoord waar het getal vandaan komt — ze zijn nooit elkaars gelijke.
     expect(screen.getByText("C · zwak")).toBeVisible();
     expect(screen.getByText("geschat")).toBeVisible();
-    expect(screen.getByText(/voorlopig bereik/)).toBeVisible();
+    // Zonder `basis.band` is dit bereik niet beslissend: de kop zegt dat het een
+    // experiment is, en de regel eronder zegt dat het advies er niet op rust.
+    expect(view.container.querySelector("[data-pitwall-tyre-subtitle]")).toHaveTextContent(
+      "Experimenteel bereik · één stint, ruime marge",
+    );
+    expect(screen.getByText("Experimenteel bereik: stuurt het advies niet.")).toBeVisible();
     expect(screen.getByText(/één stint, ruime marge/)).toBeVisible();
     expect(screen.getByText("3 stints")).toBeVisible();
     // Voorlopig betekent geen percentage: het bereik is het enige getal.
@@ -58,9 +63,11 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
     view.unmount();
   });
 
-  it("noemt het bereik een modelbereik en geen gemeten garantie", () => {
+  it("noemt een beslissend bereik een modelbereik en geen gemeten garantie", () => {
     // De review: "gemeten bereik" suggereert dekking die er niet is. Gemeten
     // zijn de invoerwaarden; het aantal resterende rondes is een modeluitkomst.
+    // Deze vorm houdt de oude naam: alleen een server die zegt dat het bereik
+    // iets beslist (`band.beslissend = true`) is geen experiment.
     const estimate = parseTyreEstimateV2({
       grade: "A",
       usable: true,
@@ -71,7 +78,11 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
       // Een volledig antwoord: zonder `voorlopig` geldt het antwoord als
       // voorlopig en heet het bereik geen modelbereik meer.
       voorlopig: false,
-      basis: { car_key: "bmw_m4_gt3", track_key: "spa" },
+      basis: {
+        car_key: "bmw_m4_gt3",
+        track_key: "spa",
+        band: { soort: "modelmarge", beslissend: true, sigma: 0.4, stints: 2 },
+      },
     });
 
     const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
@@ -81,6 +92,9 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
     expect(view.container.querySelector("[data-pitwall-tyre-modelbereik-note]")).toHaveTextContent(
       "Modelbereik, geen gemeten garantie.",
     );
+    // Geen experimenteel-label, geen experimentele regel.
+    expect(view.container.querySelector("[data-pitwall-tyre-experimenteel]")).toBeNull();
+    expect(view.container.textContent).not.toMatch(/stuurt het advies niet/);
     view.unmount();
   });
 
@@ -281,27 +295,33 @@ describe("fouten en randen van het bandenmodel", () => {
     view.unmount();
   });
 
-  it("noemt het bereik pas voorlopig als dat bereik er ook staat", () => {
+  it("noemt het bereik pas experimenteel als dat bereik er ook staat", () => {
     // Graad B zonder bereik: de kop zegt "rondes onbekend", dus een ondertitel
-    // over een voorlopig bereik waarschuwt voor een getal dat er niet is.
+    // over een (experimenteel) bereik waarschuwt voor een getal dat er niet is.
     const zonderBereik = parseTyreEstimateV2({ grade: "B", usable: true, range_laps: null });
     const eerste = render(<TyreModelPanel estimate={zonderBereik} bron="v2" coverage={[]} />);
 
     expect(screen.getByText("rondes onbekend")).toBeVisible();
     expect(screen.queryByText(/voorlopig bereik/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Modelbereik/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Experimenteel bereik/)).not.toBeInTheDocument();
     expect(eerste.container.querySelector("[data-pitwall-tyre-modelbereik-note]")).toBeNull();
+    expect(eerste.container.querySelector("[data-pitwall-tyre-experimenteel]")).toBeNull();
     expect(eerste.container.querySelector("[data-pitwall-tyre-subtitle]")).toBeNull();
     eerste.unmount();
 
     const metBereik = parseTyreEstimateV2({ grade: "B", usable: true, range_laps: { low: 10, high: 12 } });
     const tweede = render(<TyreModelPanel estimate={metBereik} bron="v2" coverage={[]} />);
-    expect(screen.getByText(/voorlopig bereik/)).toBeVisible();
+    // Zonder `band` in het antwoord is dit bereik niet beslissend, en dan zegt
+    // de kop dat het een experiment is — niet dat het "voorlopig" is.
+    expect(tweede.container.querySelector("[data-pitwall-tyre-subtitle]")).toHaveTextContent(
+      "Experimenteel bereik",
+    );
     // Het bereik heet nooit "gemeten": gemeten zijn de invoerwaarden, niet de
-    // resterende rondes. De regel eronder zegt dat zonder doekjes eromheen.
+    // resterende rondes. De regel eronder zegt het zonder doekjes eromheen.
     expect(tweede.container.textContent).not.toMatch(/gemeten bereik/);
-    expect(tweede.container.querySelector("[data-pitwall-tyre-modelbereik-note]")).toHaveTextContent(
-      "Modelbereik, geen gemeten garantie.",
+    expect(tweede.container.querySelector("[data-pitwall-tyre-experimenteel]")).toHaveTextContent(
+      "Experimenteel bereik: stuurt het advies niet.",
     );
     tweede.unmount();
   });
@@ -463,7 +483,13 @@ describe("fouten en randen van het bandenmodel", () => {
 
   it("geeft een onbruikbaar bereik niet door aan de beslissingsband", () => {
     const bruikbaar = naarTyreEstimate(
-      parseTyreEstimateV2({ grade: "B", usable: true, wear_per_lap: 1.2, range_laps: { low: 10, high: 12 } }),
+      parseTyreEstimateV2({
+        grade: "B",
+        usable: true,
+        wear_per_lap: 1.2,
+        range_laps: { low: 10, high: 12 },
+        basis: { band: { soort: "modelmarge", beslissend: true } },
+      }),
     );
     expect(bruikbaar?.lapsRange).toEqual({ low: 10, high: 12 });
 
@@ -1312,8 +1338,11 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
 
     expect(view.container.querySelector("[data-pitwall-tyre-provisional]")).toBeNull();
     expect(view.container.querySelector("[data-pitwall-tyre-stap]")).not.toBeNull();
-    // "voorlopig bereik" blijft wel staan: dat gaat over het bereik, niet over de telling.
-    expect(screen.getByText(/voorlopig bereik/)).toBeVisible();
+    // De kop blijft staan: die gaat over het bereik, niet over de telling. En
+    // zonder `basis.band` in dit antwoord heet dat bereik een experiment.
+    expect(view.container.querySelector("[data-pitwall-tyre-subtitle]")).toHaveTextContent(
+      "Experimenteel bereik",
+    );
     view.unmount();
   });
 });

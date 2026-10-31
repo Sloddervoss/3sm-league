@@ -13,6 +13,7 @@ import {
   voorlopigRegel,
 } from "./tyreCopy";
 import {
+  bandExperimenteel,
   heeftBronDetails,
   priorUitleg,
   provenanceLabel,
@@ -44,6 +45,11 @@ import {
  * - Waar het getal vandaan komt, staat als gewone zin onder het bereik. Niet als
  *   tweede badge: de herkomst zegt al dát het geschat is, deze regel zegt waaróm
  *   en hoeveel stints eronder liggen. Bij een eigen meting zwijgt hij.
+ * - Een bereik dat de server niet-beslissend noemt (`basis.band.beslissend =
+ *   false`; sinds 31-10 is dat altijd zo) blijft zichtbaar — het is het enige
+ *   getal dat het model rekent — maar heet "Experimenteel bereik" en zegt
+ *   eronder dat het het advies niet stuurt. In de beslissingsband komt dat getal
+ *   niet terug.
  */
 
 const provenanceTone: Record<string, string> = {
@@ -143,6 +149,11 @@ function BereikRegel({
 
   const herkomst = provenanceLabel(estimate.provenance);
   const bereik = estimate.rangeLaps;
+  // Sinds 31-10 is het bereik een experiment: het blijft zichtbaar (het is het
+  // enige getal dat het model rekent) maar het stuurt geen advies. Dat staat met
+  // zoveel woorden bij de kop, want een getal zonder die regel leest als een
+  // belofte. Ontbreekt `basis.band`, dan geldt hetzelfde: niet beslissend.
+  const experimenteel = bandExperimenteel(estimate);
   // Het label is de uitleg van de server ("één stint, ruime marge"), geen graad:
   // de graad staat als letter met graadwoord in de badge ernaast.
   const uitleg = estimate.gradeLabel;
@@ -163,8 +174,19 @@ function BereikRegel({
   // "voorlopig bereik" boven "rondes onbekend" waarschuwt voor een getal dat de
   // lezer nergens ziet. En "gemeten" is het bereik nooit: gemeten zijn de
   // invoerwaarden, niet de resterende rondes.
+  //
+  // De kop volgt de betekenis van het getal, niet de ouderdom: een experimenteel
+  // bereik heet zo, ook als het niet meer `voorlopig` is — dat laatste gaat over
+  // de basis, het eerste over wat je ermee mag. Alleen een server die zegt dat
+  // het bereik iets beslist (`band.beslissend = true`) houdt de oude naam.
   const ondertitel = [
-    toonBereik ? (estimate.voorlopig ? "voorlopig bereik" : "Modelbereik") : null,
+    toonBereik
+      ? experimenteel
+        ? "Experimenteel bereik"
+        : estimate.voorlopig
+          ? "voorlopig bereik"
+          : "Modelbereik"
+      : null,
     estimate.usable ? null : "niet bruikbaar voor een advies",
     uitleg,
   ]
@@ -203,10 +225,18 @@ function BereikRegel({
           )}
           {/* Het bereik is een modeluitkomst, geen dekking. Dat staat er één keer
               bij, en alleen als er echt een bereik staat: een voorbehoud bij een
-              leeg vak waarschuwt nergens voor. */}
+              leeg vak waarschuwt nergens voor. Sinds 31-10 is de regel bij een
+              experimenteel bereik harder: het getal stuurt het advies niet. */}
           {toonBereik && (
-            <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-modelbereik-note="true">
-              Modelbereik, geen gemeten garantie.
+            <p
+              className="mt-0.5 text-[11px] text-gray-500"
+              {...(experimenteel
+                ? { "data-pitwall-tyre-experimenteel": "true" }
+                : { "data-pitwall-tyre-modelbereik-note": "true" })}
+            >
+              {experimenteel
+                ? "Experimenteel bereik: stuurt het advies niet."
+                : "Modelbereik, geen gemeten garantie."}
             </p>
           )}
           {/* Eén regel in gewone taal onder het bereik: waar komt dit getal
