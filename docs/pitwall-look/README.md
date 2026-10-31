@@ -263,3 +263,16 @@ Vier screenshots vernieuwd; `verification.json` bevat nu ook computed-style-
 en afknipcontroles. Vier panelen volledig binnen 1080p in beide fixtures.
 Geen data-, RPC-, reken-, advies-, polling- of toegangsverandering.
 Niet gepusht, gemerged of gedeployed. PRODUCTIEWIJZIGING: NEE.
+
+
+## Circuitkaart — nieuwste ronde 2026-11-01
+
+Deze ronde vervangt eerdere uitspraken hierboven dat de kaart ongewijzigd is
+of dat de screenshots uitsluitend de kaartfallback tonen. Zie
+`kaart-verificatie.txt` voor scope, bronbestanden, tests, visuele iteraties en
+verificatiegrenzen. De nieuwe lokale fixture gebruikt de exacte bestaande
+Spa-layout 163. Assets, herkenning, projectiegeometrie en motionberekeningen
+zijn ongewijzigd. De sectorlegenda staat niet meer bij de kaart; oranje betekent
+alleen het gereden deel. Rondebalk en alle bestaande fallbacks blijven bestaan.
+Actueel: volledige Vitest 196 bestanden / 1643 tests PASS; browserharnas beide
+modi PASS; Vite-bundel PASS. Typecheck: dezelfde 13 diagnostics als startcommit.

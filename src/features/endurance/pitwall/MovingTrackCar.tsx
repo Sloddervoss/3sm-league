@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { V3Opponent } from './pitwallHelpers';
 import { lapMotion, pointOnTrack, wrapLap } from './trackMotion';
 
-export function MovingTrackCar({ car, points, capturedAt }: {
-  car: V3Opponent; points: { x: number; y: number }[]; capturedAt?: string;
+export function MovingTrackCar({ car, points, capturedAt, onPosition }: {
+  car: V3Opponent; points: { x: number; y: number }[]; capturedAt?: string; onPosition?: (pct: number) => void;
 }) {
   const node = useRef<SVGGElement>(null);
   const displayed = useRef(car.lapDistancePct!);
@@ -26,10 +26,11 @@ export function MovingTrackCar({ car, points, capturedAt }: {
       displayed.current = progress === 1 ? pct : wrapLap(from + motion.delta * progress);
       const point = pointOnTrack(points, displayed.current);
       node.current?.setAttribute('transform', `translate(${point.x} ${point.y})`);
+      onPosition?.(displayed.current);
       if (progress < 1) frame = requestAnimationFrame(draw);
     };
     draw(start);
     return () => cancelAnimationFrame(frame);
-  }, [pct, capturedAt, points, inPit]);
-  return <g ref={node}><title>{car.driverName ?? car.carNumber ?? car.id}{car.inPit ? ' · PIT (baanprojectie)' : ''}</title><circle r={car.isPlayer ? 32 : 25} fill={car.isPlayer ? '#fb923c' : car.inPit ? '#fbbf24' : '#38bdf8'} stroke="#101418" strokeWidth="7" /><text textAnchor="middle" dominantBaseline="central" fill="#07111a" fontSize="23" fontWeight="900">{car.carNumber ?? '·'}</text></g>;
+  }, [pct, capturedAt, points, inPit, onPosition]);
+  return <g ref={node}><title>{car.driverName ?? car.carNumber ?? car.id}{car.inPit ? ' · PIT (baanprojectie)' : ''}</title><circle r={car.isPlayer ? 17 : 12} fill={car.isPlayer ? '#fb923c' : car.inPit ? '#fbbf24' : '#38bdf8'} stroke="#101418" strokeWidth="5" /></g>;
 }

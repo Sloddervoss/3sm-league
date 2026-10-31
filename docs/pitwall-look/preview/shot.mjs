@@ -75,7 +75,13 @@ try {
 
     assert.equal(await page.getByText('▲ +0.649 s', { exact: true }).count(), 1);
     assert.equal(await page.getByText('Verstreken sessie', { exact: true }).count(), 1);
-    assert.equal(await page.getByLabel('Sectorlegenda eigen tijden; geen kaartgrenzen').count(), 1);
+    assert.equal(await page.getByLabel('Sectorlegenda eigen tijden; geen kaartgrenzen').count(), 0);
+    await page.locator('[data-pitwall-track-artwork="layered"]').waitFor();
+    const trackMap = page.locator('[data-pitwall-slot="trackmap"] svg[role="img"]');
+    assert.equal(await trackMap.locator('text').count(), 0);
+    assert.equal(await trackMap.locator('circle').count(), 13);
+    assert(await trackMap.locator('mask polyline').getAttribute('points'));
+    assert.equal(await trackMap.locator('image[filter*="finish"]').count(), 1);
     assert.equal(await page.getByRole('meter').count(), 4);
     const ownDescriptionFits = await page.locator('[data-pitwall-slot="own-car"] > p:last-of-type').evaluate(e => e.scrollWidth <= e.clientWidth);
     assert(ownDescriptionFits, `${mode}: own-car description must not be truncated`);

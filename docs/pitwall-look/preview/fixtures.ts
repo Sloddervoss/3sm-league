@@ -65,7 +65,9 @@ export const fixtureV3: V3Normalized = {
   transportSessionId: "preview-session",
   identity: {
     trackName: "Circuit de Spa-Francorchamps",
-    trackConfig: "Grand Prix",
+    // Exact bestaande manifestlayout, alleen voor deze lokale fixture.
+    trackId: 163,
+    trackConfig: "Grand Prix Pits - 2010",
     currentDriverName: "V. de Vos",
     carName: "Porsche 911 GT3 R",
   },

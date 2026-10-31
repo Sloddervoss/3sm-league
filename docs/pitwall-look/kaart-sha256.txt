@@ -1,0 +1,7 @@
+03cf71c6ebbe0a0c74461183b20387aa5fdb593e62556ddd8af5f400f6cfc51b  docs/pitwall-look/pitwall-endurance-1920x1080.png
+df02cbe0d6c94684c36a7d83de665c29af21bee0cd15346f3450957487063d85  docs/pitwall-look/pitwall-test-1920x1080.png
+3ec23e939223cce4ae194696e984511d100a313be812774c70d361950346e8de  docs/pitwall-look/pitwall-endurance-full.png
+825abcd918b9f03a82d1b132b8cfc8825f275be7161b5e03b964da89b47e1602  docs/pitwall-look/pitwall-test-full.png
+2547d47bf523d0087dfce7a5e0f3d3a7597045ecb99787b6cc8b58f8307fc361  docs/pitwall-look/kaart-vergelijking.png
+30233ff53882772ee4cb64e5b78b4169e82ea3d7587d3437b38d67a01d233259  docs/pitwall-look/kaart-detail.png
+9a28882eb2e7b47365b29f71dd3f80f145ab2b244558c2c6b18e7f4f56c86b40  docs/pitwall-look/kaart-verificatie.txt

@@ -4,13 +4,7 @@ import type { V3Normalized } from './pitwallHelpers';
 import { TrackProjection } from './TrackProjection';
 import { PitwallPanel } from './PitwallPanel';
 
-/**
- * Circuit en eigen auto.
- *
- * Alles aan de kaart is ongewijzigd: dezelfde TrackProjection, dezelfde
- * markers, dezelfde projectie. Alleen het kader, de kop en de ruimte eromheen
- * zijn van deze look.
- */
+/** Circuitkaart met bestaande projectie, meetwaarden en rondebalkfallback. */
 export function LiveTrackPanel({ v3, live, fallbackTrack }: { v3: V3Normalized | null; live: boolean; fallbackTrack: string }) {
   const track = v3?.identity?.trackName || fallbackTrack;
   const config = v3?.identity?.trackConfig ?? '';
@@ -40,10 +34,6 @@ export function LiveTrackPanel({ v3, live, fallbackTrack }: { v3: V3Normalized |
             {raining != null && <span>{raining ? 'Regen gemeld' : 'Geen regen gemeld'}</span>}
           </span>
         )}
-      </div>
-      <div className="mt-1 flex gap-3 text-[11px] text-slate-400" aria-label="Sectorlegenda eigen tijden; geen kaartgrenzen">
-        {['S1', 'S2', 'S3'].map((sector, i) => <span key={sector} className="inline-flex items-center gap-1"><i aria-hidden className={`h-0.5 w-3 ${['bg-orange-400', 'bg-emerald-400', 'bg-purple-400'][i]}`} />{sector}</span>)}
-        <span>eigen sectortijden</span>
       </div>
       <div className="mb-2 mt-2 flex justify-between text-[10px] uppercase tracking-[0.12em] text-slate-500">
         <span>Start / finish</span>
