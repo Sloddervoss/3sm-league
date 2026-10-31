@@ -3,6 +3,18 @@ import { parseVehicleTelemetry, type VehicleTelemetry } from "./vehicleTelemetry
 import { parseTyreTelemetry, type TyreTelemetry } from "./tyreTelemetry.ts";
 import { parseBrakesTelemetry, type BrakesTelemetry } from "./brakesTelemetry.ts";
 import { parseWeatherTelemetry, type WeatherTelemetry } from "./weatherTelemetry.ts";
+import {
+  acceptUnknownRootKeys,
+  parseCapabilities,
+  parseEnvironment,
+  parseLapSummaries,
+  parseMeasurementEvents,
+  parseSchemaRevision,
+  type LapSummary,
+  type MeasurementEvent,
+  type SimHubCapabilities,
+  type SimHubEnvironment,
+} from "./simhubExtensions.ts";
 
 export type SimHubFlag = "green" | "yellow" | "red" | "white" | "checkered" | "unknown";
 
@@ -62,6 +74,12 @@ const neverFatalBlock = <T>(label: string, parse: (value: unknown) => T): ((valu
   };
 
 const parseTyresNeverFatal = neverFatalBlock("tyres", parseTyreTelemetry);
+// 0.8.0: de nieuwe blokken volgen dezelfde regel. Een kapotte meetreeks kost de
+// reeks, niet het frame; de fout staat in de logboeken.
+const parseCapabilitiesNeverFatal = neverFatalBlock("capabilities", parseCapabilities);
+const parseEnvironmentNeverFatal = neverFatalBlock("environment", parseEnvironment);
+const parseMeasurementEventsNeverFatal = neverFatalBlock("measurementEvents", parseMeasurementEvents);
+const parseLapSummariesNeverFatal = neverFatalBlock("lapSummaries", parseLapSummaries);
 const parseBrakesNeverFatal = neverFatalBlock("brakes", parseBrakesTelemetry);
 const parseWeatherNeverFatal = neverFatalBlock("weather", parseWeatherTelemetry);
 
@@ -305,6 +323,32 @@ export type NormalizedTelemetryEnvelope = {
   /** S3: baanvocht, regen en luchtdruk. Zelfde afspraak: optioneel, alles nullable. */
   weather?: WeatherTelemetry | null;
   /**
+   * 0.8.0 — schemarevisie naast `protocolVersion: 3`. Additief: een frame zonder
+   * dit veld blijft geldig en `protocolVersion` verandert niet. Een hogere
+   * waarde dan deze Edge kent is geen fout; de bijbehorende onbekende blokken
+   * vallen onder de begrensde acceptatie van onbekende rootkeys.
+   */
+  schemaRevision?: number | null;
+  /**
+   * 0.8.0 — wat de connector kan, met een eigen versie per feature. Optioneel en
+   * nooit fataal. Een ontbrekende sleutel betekent "kan het niet"; of het
+   * kanaal er nu is, staat in de kwaliteitsmetadata en niet hier.
+   */
+  capabilities?: SimHubCapabilities | null;
+  /**
+   * 0.8.0 — zelfstandig omgevingsblok, los van `tyres`. Zelfde namen en eenheden
+   * als `tyres.environment`.
+   */
+  environment?: SimHubEnvironment | null;
+  /**
+   * 0.8.0 — meetgebeurtenissen met een stabiel client-ID. Nooit fataal: een
+   * ongeldige reeks kost alleen deze reeks. Wordt NIET in het frame-DTO
+   * opgeslagen; de ingest geeft hem als aparte parameter aan de database.
+   */
+  measurementEvents?: MeasurementEvent[] | null;
+  /** 0.8.0 — rondeaggregaten. Zelfde afspraak als measurementEvents. */
+  lapSummaries?: LapSummary[] | null;
+  /**
    * Optioneel herkomstblok (0.8.0). `simHubVersion` is de versie van SimHub zelf,
    * `connectorVersion` die van de connector; dat zijn twee verschillende dingen en
    * ze horen in twee verschillende kolommen. Ontbreekt het blok, dan is dit null en
@@ -394,6 +438,30 @@ const v3SignedGap = (value: unknown, path: string): number | null => {
   const v3OptionalBoolean = (value: unknown, path: string): boolean | null =>
     value === undefined || value === null ? null : v3Boolean(value, path);
 
+const V3RequiredRootKeys = ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"];
+const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries"];
+
+/**
+ * Rootkeys van een V3-frame: de verplichte moeten er zijn, de bekende optionele
+ * mogen er zijn, en al het andere wordt begrensd geaccepteerd en genegeerd.
+ * Geeft de namen van de genegeerde sleutels terug (voor de logregel hierboven).
+ *
+ * Waarom niet `exactKeysAllowExtra`: die weigert alles wat niet in de lijst
+ * staat, waardoor één nieuw blok van een 0.9-connector het hele frame kostte.
+ */
+const rootKeys = (
+  root: Record<string, unknown>,
+  required: string[],
+  optional: string[],
+  path: string,
+): string[] => {
+  for (const key of required) {
+    if (!(key in root)) throw new Error(`${path} is missing required field ${key}`);
+  }
+  const accepted = acceptUnknownRootKeys(root, [...required, ...optional]);
+  return accepted.accepted;
+};
+
 export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnvelope => {
   const root = asRecord(input, "payload");
   // `source` is optioneel en additief: de connector meldt hier zijn eigen versie
@@ -401,7 +469,16 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   // in de lijst belandde zo'n frame op "payload contains unknown fields" (422) en
   // kon de connector zijn versie dus nooit kwijt. Een frame zonder het blok
   // blijft exact hetzelfde werken.
-  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle", "tyres", "brakes", "weather", "source"], "payload");
+  //
+  // 0.8.0: onbekende rootkeys zijn geen framefout meer, maar ze zijn WEL
+  // begrensd (aantal, naam, diepte en omvang) en ze worden nooit doorgegeven:
+  // ze tellen alleen mee als signaal dat een nieuwere connector iets stuurt wat
+  // deze server nog niet kent. Zie simhubExtensions.acceptUnknownRootKeys.
+  // Onbekende velden BINNEN een bekend blok blijven gewoon een fout.
+  const unknownRootKeys = rootKeys(root, V3RequiredRootKeys, V3OptionalRootKeys, "payload");
+  if (unknownRootKeys.length) {
+    console.warn("[ingest] onbekende rootkeys in V3-frame genegeerd", { keys: unknownRootKeys.join(",") });
+  }
   if (root.protocolVersion !== 3) throw new Error("unsupported protocolVersion");
   const sequence = v3Number(root.sequence, "payload.sequence", { integer: true, min: 0 }) as number;
   const capturedAt = text(root.capturedAt, "payload.capturedAt", 40);
@@ -517,6 +594,15 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
     brakes: parseBrakesNeverFatal(root.brakes),
     weather: parseWeatherNeverFatal(root.weather),
     source: parseSourceBlock(root.source),
+    // 0.8.0 — additief. `schemaRevision` is een kale teller en wordt strikt
+    // gelezen (een verkeerd type is een framefout); de vier blokken eronder zijn
+    // nooit fataal. Ze worden niet in `simhub_telemetry_latest` opgeslagen: de
+    // ingest geeft de twee meetreeksen als aparte RPC-parameters door.
+    schemaRevision: parseSchemaRevision(root.schemaRevision),
+    capabilities: parseCapabilitiesNeverFatal(root.capabilities),
+    environment: parseEnvironmentNeverFatal(root.environment),
+    measurementEvents: parseMeasurementEventsNeverFatal(root.measurementEvents),
+    lapSummaries: parseLapSummariesNeverFatal(root.lapSummaries),
   };
 };
 

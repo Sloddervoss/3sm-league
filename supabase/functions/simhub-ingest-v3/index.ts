@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
 import { assertAllowedOrigin, consumeEdgeRateLimit, jsonResponse, readBoundedJson, sha256Hex } from "../_shared/simhub.ts";
 import { resolveTelemetryContext } from "./context.ts";
+import { aggregateBatch, isMissingFunctionError, persistArguments } from "../_shared/simhubAggregates.ts";
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -10,6 +11,18 @@ declare const Deno: {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+/**
+ * Heeft de database de acht-argumentversie van simhub_persist_v3?
+ *
+ * Deze vlag leeft per isolate en begint op true. Krijgt de RPC 42883/PGRST202
+ * terug (de migratie is nog niet toegepast, of is teruggedraaid), dan gaat
+ * hetzelfde frame opnieuw weg met alleen de basisargumenten en blijven de
+ * meetreeksen vanaf dat moment in de logboeken staan. Zo kan een 0.8-Edge nooit
+ * de hele ingest stukmaken op een database die de nieuwe signatuur niet heeft —
+ * en dat is precies de eis rond de update van 0.7.1.x naar 0.8.
+ */
+let aggregatesSupported = true;
 
 const deviceToken = (request: Request): string => {
   const authorization = request.headers.get("authorization") || "";
@@ -90,13 +103,30 @@ Deno.serve(async (request) => {
 
       // Transactionality, write-time authority, source baselines and all event
       // writes live in the service-role-only database RPC; Edge makes one call.
-      const { data, error } = await service.rpc("simhub_persist_v3", {
+      const baseArguments = {
         p_token_hash: await sha256Hex(token),
         p_session_id: context.normalized!.transportSessionId,
         p_sequence: context.normalized!.sequence,
         p_captured_at: context.normalized!.capturedAt,
         p_v3_normalized: context.normalized,
-      });
+      };
+      // 0.8.0: de meetreeksen gaan als aparte parameters mee — alleen als er
+      // iets te sturen is. Zonder reeksen is dit exact de aanroep van vóór 0.8.
+      const batch = aggregateBatch(context.normalized!);
+      let { data, error } = await service.rpc(
+        "simhub_persist_v3",
+        persistArguments(baseArguments, batch, aggregatesSupported),
+      );
+      if (error && batch && isMissingFunctionError(error)) {
+        // De database kent de acht-argumentversie niet. Terugvallen, één keer
+        // waarschuwen, en daarna niet meer proberen.
+        aggregatesSupported = false;
+        console.warn(
+          "simhub_persist_v3 zonder meetreeksen: database heeft de 0.8-signatuur niet",
+          JSON.stringify(batch ? { events: batch.events.length, laps: batch.laps.length } : null),
+        );
+        ({ data, error } = await service.rpc("simhub_persist_v3", baseArguments));
+      }
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       const result = row?.result;
