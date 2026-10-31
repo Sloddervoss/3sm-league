@@ -20,7 +20,12 @@ describe('optional Pitwall vehicle telemetry', () => {
   });
   it('keeps older plugin payloads compatible', () => { expect(parseVehicleTelemetry(undefined)).toBeNull(); expect(parseVehicleTelemetry(null)).toBeNull(); });
   it('accepts old and extended V3 envelopes through the actual ingest parser', () => { expect(parseTelemetryV3Envelope(envelope()).vehicle).toBeNull(); expect(parseTelemetryV3Envelope({...envelope(),vehicle}).vehicle).toEqual(metSdkNullen(vehicle)); });
-  it('does not let optional telemetry change server-owned identity', () => { const parsed=parseTelemetryV3Envelope({...envelope(),vehicle}); expect(parsed.deviceId).toBeNull(); expect(parsed.authority).toBeNull(); expect(() => parseTelemetryV3Envelope({...envelope(),vehicle,eventId:'injected'})).toThrow(); });
+  it('does not let optional telemetry change server-owned identity', () => { const parsed=parseTelemetryV3Envelope({...envelope(),vehicle}); expect(parsed.deviceId).toBeNull(); expect(parsed.authority).toBeNull(); const metInjectie = parseTelemetryV3Envelope({...envelope(),vehicle,eventId:'injected'});
+      // Sinds de extensie-whitelist worden onbekende rootkeys genegeerd in plaats van
+      // geweigerd. Dat is alleen veilig als ze ook echt nergens doorkomen.
+      expect(metInjectie.deviceId).toBeNull();
+      expect(metInjectie.authority).toBeNull();
+      expect((metInjectie as unknown as Record<string, unknown>).eventId).not.toBe('injected'); });
   it('preserves real zero pedal values and unknown corners', () => { expect(parseVehicleTelemetry(vehicle)).toEqual(metSdkNullen(vehicle)); });
   it.each([NaN,Infinity,-1,101,'50'])('rejects malformed throttle %s', value => { expect(() => parseVehicleTelemetry({...vehicle,throttlePct:value})).toThrow(); });
   it('rejects server identity injection and unjustified live tyre claims', () => { expect(() => parseVehicleTelemetry({...vehicle,deviceId:'x'})).toThrow(); expect(() => parseVehicleTelemetry({...vehicle,tyreDataMode:'live'})).toThrow(); });

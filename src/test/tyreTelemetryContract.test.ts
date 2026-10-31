@@ -267,8 +267,12 @@ describe("ingest-poort: 202 met en zonder tyres", () => {
 
   it("houdt de 202/422-takken in de edge-functie vast", () => {
     const bron = readFileSync("supabase/functions/simhub-ingest-v3/index.ts", "utf8");
-    expect(bron).toContain('if (context.result === "invalid_payload") return jsonResponse(request, { error: "invalid_payload" }, 422);');
-    expect(bron).toContain("return jsonResponse(request, { accepted: true, receivedAt: row.received_at }, 202);");
-    expect(bron).toContain('if (result !== "accepted") return jsonResponse(request, { error: "internal_error" }, 500);');
+    // De vorm van het antwoord is sinds de meetlaag uitgebreid met `measurements`
+    // en `aggregates`. Toets de betekenis, niet de letterlijke regel: een test die
+    // op één exacte string staat, breekt bij elke uitbreiding zonder iets te
+    // bewijzen over het gedrag.
+    expect(bron).toMatch(/context\.result === "invalid_payload"[\s\S]{0,120}422/);
+    expect(bron).toMatch(/return jsonResponse\(request, \{[\s\S]{0,200}accepted: true[\s\S]{0,200}202\)/);
+    expect(bron).toMatch(/if \(result !== "accepted"\)[\s\S]{0,160}500/);
   });
 });
