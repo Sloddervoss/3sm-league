@@ -1826,9 +1826,10 @@ namespace ThreeSM.EnduranceConnector
                     // Niet naar nul knijpen: dan verdwijnt precies de helft van het veld.
                     GapToPlayerSeconds = SignedSeconds(opponent.GaptoPlayer),
                     // 0.7.1: het gat naar de leider stond in het contract maar bleef null.
-                    // De validator staat alleen 0..86400 toe (-1 = onbekend), dus een
-                    // negatieve of ontbrekende waarde wordt null en nooit een gok.
-                    GapToLeaderSeconds = ClampNonNegative(SignedSeconds(opponent.GaptoLeader)),
+                    // Sinds 2026-10-31 is het contract signed (-86400..86400, geen sentinel):
+                    // een auto die een ronde voorligt levert een negatief getal, en de oude
+                    // ClampNonNegative maakte dat null. De server accepteert het teken nu.
+                    GapToLeaderSeconds = SignedSeconds(opponent.GaptoLeader),
                     LastLapSeconds = PositiveSeconds(opponent.LastLapTime),
                     BestLapSeconds = PositiveSeconds(opponent.BestLapTime),
                     InPit = opponent.IsCarInPitLane || opponent.IsCarInPit,
@@ -1850,7 +1851,6 @@ namespace ThreeSM.EnduranceConnector
         private static double? Clamp01(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)Math.Max(0, Math.Min(1, value.Value)) : null; }
         private static double? SignedSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? value : null; }
 
-          private static double? ClampNonNegative(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value >= 0 ? (double?)value.Value : null; }
         private static double? PositiveSeconds(TimeSpan value) { return value > TimeSpan.Zero ? (double?)value.TotalSeconds : null; }
         private static double? PositiveNullable(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) && value.Value > 0 ? (double?)value.Value : null; }
         private static double? NullableSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)value.Value : null; }

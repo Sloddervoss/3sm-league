@@ -112,19 +112,28 @@ describe("V3-telemetrie: reparatietijd, meatball, gap en bandenblok (connector 0
     expect(parsed.opponents?.map((o) => o.gapToLeaderSeconds)).toEqual([0, 1.8, null]);
   });
 
-  it("weigert een negatief gat naar de leider (daarom knijpt de plugin dat naar null)", () => {
+  it("accepteert een negatief gat naar de leider (signed contract sinds 2026-10-31)", () => {
+    // Een auto die een ronde voorligt heeft een negatief gat. Dat is een meting,
+    // geen fout: de plugin verstuurt SignedSeconds en de validator knijpt niet meer.
     const payload = basisPayload();
     payload.opponents = [tegenstander({ gapToLeaderSeconds: -0.4 })];
-    expect(() => parseTelemetryV3Envelope(payload)).toThrow(/gapToLeaderSeconds/i);
+    const parsed = parseTelemetryV3Envelope(payload);
+    expect(parsed.opponents?.[0]?.gapToLeaderSeconds).toBeCloseTo(-0.4, 5);
   });
 
-  it("weigert ook een negatief gapToPlayerSeconds; dat blokkeert het hele frame", () => {
-    // Bestaand gedrag van de validator (min 0), geen 0.7.1-wijziging: de plugin stuurt
-    // hier SignedSeconds(opponent.GaptoPlayer) en dat kan negatief zijn. Bewijs dat zo'n
-    // frame in zijn geheel wordt geweigerd, zodat dit niet stil blijft liggen.
+  it("accepteert ook een negatief gapToPlayerSeconds; het frame komt door", () => {
+    // Vóór 2026-10-31 liep dit veld door min: 0 met -1 als sentinel: elke auto
+    // vóór de speler kreeg een leeg gat en -1 gold als "onbekend". Nu blijft het
+    // teken staan, inclusief -1 als een echt gat van één seconde.
     const payload = basisPayload();
-    payload.opponents = [tegenstander({ gapToPlayerSeconds: -42.8 })];
-    expect(() => parseTelemetryV3Envelope(payload)).toThrow(/gapToPlayerSeconds/i);
+    payload.opponents = [
+      tegenstander({ id: "p1", position: 1, gapToPlayerSeconds: -42.8 }),
+      tegenstander({ id: "p2", position: 2, gapToPlayerSeconds: -1 }),
+      tegenstander({ id: "p7", position: 7, gapToPlayerSeconds: 2.1 }),
+    ];
+    const parsed = parseTelemetryV3Envelope(payload);
+    expect(parsed.opponents?.map((o) => o.gapToPlayerSeconds)).toEqual([-42.8, -1, 2.1]);
+    expect(parsed.timing.completedLaps).toBe(42);
   });
 
   it("blijft geldig als het bandenblok in een frame ontbreekt", () => {

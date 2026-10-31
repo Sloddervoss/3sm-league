@@ -57,6 +57,32 @@ const v3Number = (value: unknown, path: string, rule: { nullable?: boolean; inte
   return value;
 };
 
+/** Gaten zijn verschillen in seconden; buiten ±24 uur is het geen gat maar rommel. */
+const SignedGapLimitSeconds = 86400;
+
+/**
+ * Een gat is een *verschil* en heeft dus een teken: zit de andere auto vóór de
+ * speler, dan is `gapToPlayerSeconds` negatief, en -1 kan een echt gat van één
+ * seconde zijn. Daarom hier geen `min: 0` en geen -1-sentinel zoals in `num()`:
+ * dat maakte precies de helft van het veld leeg.
+ *
+ * Alleen ontbreken (null/undefined) of een niet-numerieke waarde levert null op.
+ * Buiten ±86400 seconden is het geen meting meer; dat veld wordt leeg en de rij
+ * blijft staan — één onbruikbaar getal kost nooit het frame of de tegenstander.
+ */
+const signedGap = (value: unknown, path: string): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    console.error("[ingest] gat is niet-numeriek, veld leeggemaakt", { pad: path, waarde: String(value) });
+    return null;
+  }
+  if (value < -SignedGapLimitSeconds || value > SignedGapLimitSeconds) {
+    console.error("[ingest] gat buiten bereik, veld leeggemaakt", { pad: path, waarde: String(value) });
+    return null;
+  }
+  return value;
+};
+
 const v3Bool = (value: unknown, path: string): boolean | null => {
   if (value === null) return null;
   if (typeof value !== "boolean") throw new Error(`${path} is invalid`);
@@ -92,6 +118,9 @@ export const parseOpponents = (value: unknown, path = "opponents"): V3Opponent[]
     const lapNum = (v: unknown, p: string): number | null => zacht(v, p, { nullable: true, integer: true, min: 1, max: 100000, sentinels: [-1, 0] });
     const posNum = (v: unknown, p: string): number | null => zacht(v, p, { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] });
     const lapDist = (v: unknown, p: string): number | null => zacht(v, p, { nullable: true, min: 0, max: 1, sentinels: [-1] });
+    // Gaten hebben een teken (zie signedGap); rondetijden, snelheid en
+    // percentages niet, dus die houden hun eigen ondergrens.
+    const gat = (v: unknown, p: string): number | null => signedGap(v, p);
     const rij: V3Opponent = {
       id,
       carNumber: nullableText(o.carNumber, `${path}[${index}].carNumber`),
@@ -103,8 +132,8 @@ export const parseOpponents = (value: unknown, path = "opponents"): V3Opponent[]
       classPosition: posNum(o.classPosition, `${path}[${index}].classPosition`),
       lap: lapNum(o.lap, `${path}[${index}].lap`),
       lapDistancePct: lapDist(o.lapDistancePct, `${path}[${index}].lapDistancePct`),
-      gapToPlayerSeconds: num(o.gapToPlayerSeconds, `${path}[${index}].gapToPlayerSeconds`),
-      gapToLeaderSeconds: num(o.gapToLeaderSeconds, `${path}[${index}].gapToLeaderSeconds`),
+      gapToPlayerSeconds: gat(o.gapToPlayerSeconds, `${path}[${index}].gapToPlayerSeconds`),
+      gapToLeaderSeconds: gat(o.gapToLeaderSeconds, `${path}[${index}].gapToLeaderSeconds`),
       lastLapSeconds: num(o.lastLapSeconds, `${path}[${index}].lastLapSeconds`),
       bestLapSeconds: num(o.bestLapSeconds, `${path}[${index}].bestLapSeconds`),
       inPit: v3Bool(o.inPit, `${path}[${index}].inPit`),
