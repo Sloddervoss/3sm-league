@@ -69,6 +69,9 @@ echo "== SQL-tests: de reparaties uit de review =="
 echo "== SQL-tests: de tweede review =="
 "${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_review2_repairs.sql"
 
+echo "== SQL-tests: revisiemonotonie en de hash over de opgeslagen rij =="
+"${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_review3_repairs.sql"
+
 echo "== SQL-tests: supersedes in de content-hash =="
 "${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_supersedes_hash.sql"
 

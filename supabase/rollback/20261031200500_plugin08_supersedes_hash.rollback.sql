@@ -1003,3 +1003,10 @@ comment on function public.simhub_persist_measurement_batch(uuid, text, jsonb, j
 
 revoke all on function public.simhub_persist_measurement_batch(uuid, text, jsonb, jsonb) from public, anon, authenticated;
 grant execute on function public.simhub_persist_measurement_batch(uuid, text, jsonb, jsonb) to service_role;
+
+-- De hulpfuncties van deze migratie horen niet bij de oude schrijver: weg ermee,
+-- zodat de rollback dezelfde objecten achterlaat als vóór de migratie.
+drop function if exists public.simhub_apply_event_row(jsonb);
+drop function if exists public.simhub_apply_lap_row(jsonb);
+drop function if exists public.simhub_event_row_hash(public.simhub_measurement_events);
+drop function if exists public.simhub_lap_row_hash(public.simhub_lap_summaries);
