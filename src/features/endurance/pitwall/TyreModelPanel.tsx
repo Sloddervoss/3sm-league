@@ -159,18 +159,19 @@ function BereikRegel({
     : geenRondes && estimate.usable
       ? "geen"
       : "onbekend";
-  // Alleen zeggen dat het bereik voorlopig (of gemeten) is als dat bereik er
-  // staat. "voorlopig bereik" boven "rondes onbekend" waarschuwt voor een getal
-  // dat de lezer nergens ziet.
+  // Alleen zeggen dat het bereik voorlopig is als dat bereik er staat.
+  // "voorlopig bereik" boven "rondes onbekend" waarschuwt voor een getal dat de
+  // lezer nergens ziet. En "gemeten" is het bereik nooit: gemeten zijn de
+  // invoerwaarden, niet de resterende rondes.
   const ondertitel = [
-    toonBereik ? (estimate.voorlopig ? "voorlopig bereik" : "gemeten bereik") : null,
+    toonBereik ? (estimate.voorlopig ? "voorlopig bereik" : "Modelbereik") : null,
     estimate.usable ? null : "niet bruikbaar voor een advies",
     uitleg,
   ]
     .filter((deel): deel is string => deel != null)
     .join(" · ");
   // De regel onder een voorlopig bereik is een teller, geen belofte: hoeveel
-  // stints er echt liggen en wanneer de band smaller wordt.
+  // stints er echt liggen en wat meer metingen wel en niet doen.
   const voorlopigTekst = voorlopigRegel(estimate);
 
   return (
@@ -198,6 +199,14 @@ function BereikRegel({
           {ondertitel !== "" && (
             <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-subtitle>
               {ondertitel}
+            </p>
+          )}
+          {/* Het bereik is een modeluitkomst, geen dekking. Dat staat er één keer
+              bij, en alleen als er echt een bereik staat: een voorbehoud bij een
+              leeg vak waarschuwt nergens voor. */}
+          {toonBereik && (
+            <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-modelbereik-note="true">
+              Modelbereik, geen gemeten garantie.
             </p>
           )}
           {/* Eén regel in gewone taal onder het bereik: waar komt dit getal
@@ -254,7 +263,7 @@ function BereikRegel({
           teller in `BronRegels` dit werk (en telt hij de stints die er echt
           zijn). Zonder die velden blijft deze regel staan, maar zonder de twee
           onwaarheden van de oude tekst: "nog geen tweede meting" bij zestien
-          stints, en "elke stop maakt de band smaller". */}
+          stints, en de belofte dat een volgende meting de band smaller maakt. */}
       {estimate.voorlopig && toonBereik && !heeftBronDetails(estimate) && voorlopigTekst != null && (
         <p className="flex items-start gap-1.5 text-[11px] leading-4 text-amber-200/90" data-pitwall-tyre-provisional="true">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" aria-hidden />

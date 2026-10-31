@@ -58,6 +58,29 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
     view.unmount();
   });
 
+  it("noemt het bereik een modelbereik en geen gemeten garantie", () => {
+    // De review: "gemeten bereik" suggereert dekking die er niet is. Gemeten
+    // zijn de invoerwaarden; het aantal resterende rondes is een modeluitkomst.
+    const estimate = parseTyreEstimateV2({
+      grade: "A",
+      usable: true,
+      stints: 4,
+      wear_per_lap: 1.2,
+      range_laps: { low: 8, high: 12 },
+      provenance: "measured",
+      basis: { car_key: "bmw_m4_gt3", track_key: "spa" },
+    });
+
+    const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
+
+    expect(screen.getByText("Modelbereik")).toBeVisible();
+    expect(view.container.textContent).not.toMatch(/gemeten bereik/);
+    expect(view.container.querySelector("[data-pitwall-tyre-modelbereik-note]")).toHaveTextContent(
+      "Modelbereik, geen gemeten garantie.",
+    );
+    view.unmount();
+  });
+
   it("valt terug op v1 als pitwall_tyre_estimate_v2 nog niet bestaat", async () => {
     const rpc = vi.fn(async (fn: string) => {
       if (fn === "pitwall_tyre_estimate_v2") {
@@ -258,13 +281,20 @@ describe("fouten en randen van het bandenmodel", () => {
 
     expect(screen.getByText("rondes onbekend")).toBeVisible();
     expect(screen.queryByText(/voorlopig bereik/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/gemeten bereik/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Modelbereik/)).not.toBeInTheDocument();
+    expect(eerste.container.querySelector("[data-pitwall-tyre-modelbereik-note]")).toBeNull();
     expect(eerste.container.querySelector("[data-pitwall-tyre-subtitle]")).toBeNull();
     eerste.unmount();
 
     const metBereik = parseTyreEstimateV2({ grade: "B", usable: true, range_laps: { low: 10, high: 12 } });
     const tweede = render(<TyreModelPanel estimate={metBereik} bron="v2" coverage={[]} />);
     expect(screen.getByText(/voorlopig bereik/)).toBeVisible();
+    // Het bereik heet nooit "gemeten": gemeten zijn de invoerwaarden, niet de
+    // resterende rondes. De regel eronder zegt dat zonder doekjes eromheen.
+    expect(tweede.container.textContent).not.toMatch(/gemeten bereik/);
+    expect(tweede.container.querySelector("[data-pitwall-tyre-modelbereik-note]")).toHaveTextContent(
+      "Modelbereik, geen gemeten garantie.",
+    );
     tweede.unmount();
   });
 
@@ -1031,11 +1061,12 @@ describe("waar het bandencijfer vandaan komt", () => {
  *
  * 1. bij `bron = eigen` verdween alle uitleg over de pool, ook als het getal
  *    geblend was — nu staan de gedeelde verwachting en de eigen meting naast
- *    elkaar, allebei met de combinatie erbij;
+ *    elkaar, met de herkomst erbij;
  * 2. "nog geen tweede meting" stond er ook bij zestien stints — nu telt een
  *    teller de eigen stints die er echt zijn;
- * 3. "elke stop maakt de band smaller" was niet gegarandeerd — nu zegt de regel
- *    dat de band breder kan worden zodra eigen en gedeeld uiteenlopen.
+ * 3. de regel beloofde een smaller wordende band — nu zegt hij dat meer
+ *    metingen de onzekerheid onderbouwen en het bereik beide kanten op kan,
+ *    met een aparte waarschuwing als eigen en gedeeld uiteenlopen.
  *
  * En de vierde eis: een oude RPC (zonder `actualiteit`, `gedeeld`, `eigen` en
  * `redenen`) valt terug op de bestaande weergave en breekt niet.
@@ -1066,16 +1097,39 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
     expect(gedeeld).toHaveTextContent("Gedeeld voor bmw_m4_gt3 op spa: 2,0% per ronde, uit 41 rondes van 3 rijders.");
 
     const eigen = view.container.querySelector("[data-pitwall-tyre-eigen]")!;
-    expect(eigen).toHaveTextContent("Eigen voor bmw_m4_gt3 op spa: 1,9% per ronde, uit 2 stints en 18 rondes.");
+    expect(eigen).toHaveTextContent(
+      "Laatste eigen stint: 1,9% per ronde. Totale eigen meetbasis op deze combinatie: 2 stints, 18 rondes.",
+    );
 
-    // De teller telt de eigen stints die er zijn en noemt de volgende graad.
+    // De teller telt de eigen stints die er zijn en noemt de volgende graad,
+    // zonder te beloven dat het bereik smaller wordt.
     expect(view.container.querySelector("[data-pitwall-tyre-stap]")).toHaveTextContent(
-      "Nog 1 stint op deze combinatie tot graad A; elke stint met hetzelfde beeld maakt de band smaller.",
+      "Nog 1 stint op deze combinatie tot graad A. " +
+        "Meer metingen kunnen de onzekerheid beter onderbouwen; het bereik kan smaller of breder worden.",
     );
     // De oude, stille priorregel is weg: die zei niets bij bron eigen.
     expect(view.container.querySelector("[data-pitwall-tyre-prior]")).toBeNull();
     // Het bereik staat er gewoon nog.
     expect(screen.getByText("9–13")).toBeVisible();
+    view.unmount();
+  });
+
+  it("zegt waar een bredere gedeelde prior is gemeten in plaats van op dit circuit", () => {
+    const view = render(
+      <TyreModelPanel
+        estimate={contract({ gedeeld: GEDEELD, eigen: EIGEN, prior_level: "auto" })}
+        bron="v2"
+        coverage={[]}
+      />,
+    );
+
+    const gedeeld = view.container.querySelector("[data-pitwall-tyre-gedeeld]")!;
+    expect(gedeeld).toHaveTextContent(
+      "Gedeelde referentie voor bmw_m4_gt3, gemeten op andere circuits: 2,0% per ronde, uit 41 rondes van 3 rijders.",
+    );
+    // De locatie van dit circuit (spa) hoort niet in deze regel: de prior is
+    // daar niet gemeten.
+    expect(gedeeld.textContent).not.toContain("spa");
     view.unmount();
   });
 
@@ -1108,8 +1162,8 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
   it.each([
     ["short_basis", "Minder dan 8 rondes eigen basis"],
     ["inferred_boundary", "sprong in de wear-stand"],
-    ["context_mismatch", "andere auto of een ander circuit"],
-    ["thin_pool", "Nog te weinig rijders op deze combinatie"],
+    ["context_mismatch", "past niet bij de huidige auto of baan"],
+    ["thin_pool", "metingen van minstens twee andere accounts nodig"],
     ["zero_slope", "Geen meetbare slijtage"],
   ])("vertaalt de reden %s naar één eigen regel", (code, fragment) => {
     const view = render(
@@ -1124,7 +1178,7 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
     view.unmount();
   });
 
-  it("zegt bij een dunne pool dat er nog te weinig rijders zijn, zonder gedeelde regel", () => {
+  it("zegt bij een dunne pool welke accounts er nodig zijn, zonder gedeelde regel", () => {
     const view = render(
       <TyreModelPanel
         estimate={contract({ eigen: { rate: 1.9, rondes: 18, stints: 2 }, gedeeld: null, redenen: ["thin_pool"] })}
@@ -1135,7 +1189,7 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
 
     expect(view.container.querySelector("[data-pitwall-tyre-gedeeld]")).toBeNull();
     expect(view.container.querySelector('[data-pitwall-tyre-reden="thin_pool"]')).toHaveTextContent(
-      "Nog te weinig rijders op deze combinatie",
+      "Voor publicatie zijn metingen van minstens twee andere accounts nodig. Je eigen apparaten tellen niet mee.",
     );
     view.unmount();
   });
@@ -1154,9 +1208,11 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
       "Je eigen slijtage (1,9% per ronde) en de gedeelde (1,1% per ronde) lopen uiteen: " +
         "een volgende stint kan de band breder maken in plaats van smaller.",
     );
-    // De teller belooft hier niets meer over een smaller wordende band.
+    // De teller belooft hier niets over een smaller wordende band; de
+    // waarschuwing hierboven doet het werk.
     expect(view.container.querySelector("[data-pitwall-tyre-stap]")).toHaveTextContent(
-      "Nog 1 stint op deze combinatie tot graad A.",
+      "Nog 1 stint op deze combinatie tot graad A. " +
+        "Meer metingen kunnen de onzekerheid beter onderbouwen; het bereik kan smaller of breder worden.",
     );
     expect(view.container.textContent).not.toContain("maakt de band smaller");
     view.unmount();

@@ -240,13 +240,50 @@ describe("gedeeld en eigen naast elkaar", () => {
   const GEDEELD = { rate: 2.14, rondes: 41, stints: 7, accounts: 3 };
   const EIGEN = { rate: 1.9, rondes: 18, stints: 2 };
 
-  it("noemt bij beide bronnen de combinatie, het tempo en de meetbasis", () => {
+  it("noemt bij beide bronnen de herkomst, het tempo en de meetbasis", () => {
     const estimate = v2({ bron: "eigen", gedeeld: GEDEELD, eigen: EIGEN });
 
     expect(gedeeldRegel(estimate)).toBe(
       "Gedeeld voor bmw_m4_gt3 op spa: 2,1% per ronde, uit 41 rondes van 3 rijders.",
     );
-    expect(eigenRegel(estimate)).toBe("Eigen voor bmw_m4_gt3 op spa: 1,9% per ronde, uit 2 stints en 18 rondes.");
+    expect(eigenRegel(estimate)).toBe(
+      "Laatste eigen stint: 1,9% per ronde. Totale eigen meetbasis op deze combinatie: 2 stints, 18 rondes.",
+    );
+  });
+
+  it("localiseert een bredere prior niet op het huidige circuit", () => {
+    // De review: prior_level=auto, maar de regel zette de prior op dit circuit.
+    const auto = v2({ gedeeld: GEDEELD, prior_level: "auto" });
+    expect(gedeeldRegel(auto)).toBe(
+      "Gedeelde referentie voor bmw_m4_gt3, gemeten op andere circuits: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+    );
+
+    const circuit = v2({ gedeeld: GEDEELD, prior_level: "circuit" });
+    expect(gedeeldRegel(circuit)).toBe(
+      "Gedeelde referentie voor spa, gemeten in andere auto's: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+    );
+
+    const algemeen = v2({ gedeeld: GEDEELD, prior_level: "algemeen" });
+    expect(gedeeldRegel(algemeen)).toBe(
+      "Gedeelde referentie uit de hele pool, gemeten in andere auto's op andere circuits: " +
+        "2,1% per ronde, uit 41 rondes van 3 rijders.",
+    );
+
+    // Alleen de exacte trap hoort bij deze auto op dit circuit.
+    const exact = v2({ gedeeld: GEDEELD, prior_level: "exact" });
+    expect(gedeeldRegel(exact)).toBe(
+      "Gedeeld voor bmw_m4_gt3 op spa: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+    );
+
+    // Zonder auto- of circuitnaam blijft de herkomst staan zonder te lokaliseren.
+    const zonderNaam = parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      basis: { prior_level: "auto", gedeeld: GEDEELD },
+    })!;
+    expect(gedeeldRegel(zonderNaam)).toBe(
+      "Gedeelde referentie voor deze auto, gemeten op andere circuits: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+    );
   });
 
   it("leest de contractvelden, en niets als ze ontbreken", () => {
@@ -275,7 +312,7 @@ describe("gedeeld en eigen naast elkaar", () => {
 
   it("zegt bij nul eigen stints dat er nog niets eigens is", () => {
     const estimate = v2({ gedeeld: GEDEELD, eigen: { rate: null, rondes: 0, stints: 0 } });
-    expect(eigenRegel(estimate)).toBe("Eigen voor bmw_m4_gt3 op spa: nog geen eigen meting op deze combinatie.");
+    expect(eigenRegel(estimate)).toBe("Nog geen eigen meting op deze combinatie.");
     expect(stapRegel(estimate)).toBeNull();
   });
 
@@ -285,7 +322,10 @@ describe("gedeeld en eigen naast elkaar", () => {
     expect(combinatie(null, null)).toBeNull();
 
     const estimate = v2({ car_key: null, track_key: null, eigen: EIGEN });
-    expect(eigenRegel(estimate)).toBe("Eigen: 1,9% per ronde, uit 2 stints en 18 rondes.");
+    expect(gedeeldRegel(estimate)).toBeNull();
+    expect(eigenRegel(estimate)).toBe(
+      "Laatste eigen stint: 1,9% per ronde. Totale eigen meetbasis op deze combinatie: 2 stints, 18 rondes.",
+    );
   });
 });
 
@@ -306,26 +346,33 @@ describe("de teller onder het bereik", () => {
       },
     })!;
 
+  const VOORUITBLIK =
+    "Meer metingen kunnen de onzekerheid beter onderbouwen; het bereik kan smaller of breder worden.";
+
   it("telt de eigen stints en noemt de eerstvolgende graad", () => {
-    expect(stapRegel(metEigen(1))).toBe(
-      "Nog 1 stint op deze combinatie tot graad B; elke stint met hetzelfde beeld maakt de band smaller.",
-    );
-    expect(stapRegel(metEigen(2))).toBe(
-      "Nog 1 stint op deze combinatie tot graad A; elke stint met hetzelfde beeld maakt de band smaller.",
-    );
+    expect(stapRegel(metEigen(1))).toBe(`Nog 1 stint op deze combinatie tot graad B. ${VOORUITBLIK}`);
+    expect(stapRegel(metEigen(2))).toBe(`Nog 1 stint op deze combinatie tot graad A. ${VOORUITBLIK}`);
+    // Graad A is een telling, geen optimaliteitsbewijs.
     expect(stapRegel(metEigen(3))).toBe(
-      "Graad A: op deze combinatie is de band zo smal als deze metingen toelaten; meer stints veranderen de graad niet.",
+      "Graad A: minstens drie eigen stints met voldoende meetbasis op deze combinatie.",
     );
   });
 
-  it("belooft geen smaller wordende band als de hellingen uiteenlopen", () => {
-    // Precies de fout van 31-10: de server verbreedt de band hier juist.
+  it("belooft nergens een smaller wordende band", () => {
+    for (const stints of [1, 2, 3]) {
+      const regel = stapRegel(metEigen(stints))!;
+      expect(regel).not.toMatch(/maakt de band smaller/i);
+      expect(regel).not.toMatch(/zo smal als/i);
+    }
+
     expect(hellingenUiteen(2.8, 1.1)).toBe(true);
     expect(hellingenUiteen(1.9, 2.0)).toBe(false);
     expect(hellingenUiteen(null, 2.0)).toBe(false);
 
     const estimate = metEigen(2, 1.1);
-    expect(stapRegel(estimate)).toBe("Nog 1 stint op deze combinatie tot graad A.");
+    // De teller verandert niet als de hellingen uiteenlopen; de waarschuwing
+    // staat ernaast en zegt zelf wat er aan de hand is.
+    expect(stapRegel(estimate)).toBe(`Nog 1 stint op deze combinatie tot graad A. ${VOORUITBLIK}`);
     expect(uiteenloopRegel(estimate)).toBe(
       "Je eigen slijtage (1,9% per ronde) en de gedeelde (1,1% per ronde) lopen uiteen: " +
         "een volgende stint kan de band breder maken in plaats van smaller.",
@@ -369,14 +416,20 @@ describe("de teller onder het bereik", () => {
     })!;
     const regel = voorlopigRegel(zestien)!;
     expect(regel).toBe(
-      "Dit bereik is voorlopig: het rust op 16 stints. Een nieuwe stint met hetzelfde beeld maakt de band smaller.",
+      "Dit bereik is voorlopig: het rust op 16 stints. " +
+        "Meer metingen kunnen de onzekerheid beter onderbouwen; het bereik kan smaller of breder worden.",
     );
     expect(regel).not.toMatch(/tweede meting/i);
+    expect(regel).not.toMatch(/maakt de band smaller/i);
     expect(regel).not.toMatch(/elke stop/i);
 
-    expect(voorlopigRegel(parseTyreEstimateV2({ grade: "B", stints: 1 })!)).toContain("Eén stint is nog geen band");
+    const een = voorlopigRegel(parseTyreEstimateV2({ grade: "B", stints: 1 })!)!;
+    expect(een).toContain("Eén stint is nog geen band");
+    expect(een).toContain(
+      "Meer metingen kunnen de onzekerheid beter onderbouwen; het bereik kan smaller of breder worden.",
+    );
     expect(voorlopigRegel(parseTyreEstimateV2({ grade: "B", stints: 0 })!)).toBe(
-      "Dit bereik is voorlopig: er is nog te weinig gemeten om de band smaller te maken.",
+      "Dit bereik is voorlopig: er is nog te weinig gemeten om de onzekerheid te onderbouwen.",
     );
   });
 });
@@ -436,9 +489,11 @@ describe("één regel per reden-code", () => {
   it("vertaalt elke code naar één zin, zonder Engels of veldnamen", () => {
     expect(redenRegel("short_basis")).toContain("Minder dan 8 rondes eigen basis");
     expect(redenRegel("inferred_boundary")).toContain("sprong in de wear-stand");
-    expect(redenRegel("context_mismatch")).toContain("andere auto of een ander circuit");
+    expect(redenRegel("context_mismatch")).toBe(
+      "De gebruikte historische basis of bandenstand past niet bij de huidige auto of baan. Daarom geen actueel bandenadvies.",
+    );
     expect(redenRegel("thin_pool")).toBe(
-      "Nog te weinig rijders op deze combinatie: er zijn minstens twee rijders nodig voor een gedeelde verwachting.",
+      "Voor publicatie zijn metingen van minstens twee andere accounts nodig. Je eigen apparaten tellen niet mee.",
     );
     expect(redenRegel("zero_slope")).toContain("Geen meetbare slijtage");
 
