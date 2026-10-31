@@ -370,6 +370,7 @@ internal static class FaseDTests
             {
                 Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
                 Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
+                Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
@@ -391,6 +392,7 @@ internal static class FaseDTests
             baselineChecks += Group("UpdaterTransitionTests", () => UpdaterTransitionTests.Run(Check));
             baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
             baselineChecks += Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
+            baselineChecks += Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
