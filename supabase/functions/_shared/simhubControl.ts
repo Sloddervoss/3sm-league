@@ -18,12 +18,29 @@
  * Geen Deno- of npm-imports: testbaar met vitest en met `deno test`.
  */
 
-export const MinSendIntervalMs = 250;
+/**
+ * De grenzen van deze module zijn de grenzen van de INGEST, niet die van de
+ * plugin. Een configuratie die hier door komt, moet de ingest ook doorstaan;
+ * anders publiceert control beleid dat bij het eerste frame 429 of 413 geeft.
+ *
+ *   sendIntervalMs  >= 400  = de rate-limit in simhub_persist_v3
+ *   payloadBudget   <= 24576 = de bodylimiet van readBoundedJson in simhub.ts
+ *
+ * De SQL-kant heeft dezelfde getallen in
+ * simhub_connector_config_send_interval_range en _payload_budget_range, en
+ * plugin08_review_repairs.sql controleert dat de 400 ms in de functiebody
+ * dezelfde is als de constraint.
+ */
+export const MinSendIntervalMs = 400;
 export const MaxSendIntervalMs = 10000;
 export const MinSampleHz = 1;
 export const MaxSampleHz = 50;
 export const MinPayloadBudgetBytes = 4096;
-export const MaxPayloadBudgetBytes = 262144;
+export const MaxPayloadBudgetBytes = 24576;
+/** De bodylimiet van de ingest; hetzelfde getal als readBoundedJson. */
+export const IngestMaxBodyBytes = 24576;
+/** De minimale tijd tussen twee frames in de ingest (rate-limit). */
+export const IngestMinFrameIntervalMs = 400;
 
 /** De schemarevisie die deze server aankan. */
 export const ServerSchemaRevision = 1;
