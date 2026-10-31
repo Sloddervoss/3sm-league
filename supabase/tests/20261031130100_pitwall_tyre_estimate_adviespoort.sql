@@ -9,8 +9,9 @@
 --      sleutels geven D, geen A.
 --   C. De band: minder dan twee stints op de combinatie geeft range_laps null;
 --      twee stints geven een bereik rond de gemeten helling.
---   D. n_eff is de Kish-maat: bij twee gelijke stints van 9 rondes is hij 18,
---      niet de som van eigen rondes plus de prior.
+--   D. n_eff is de Kish-maat over de stintgewichten: bij twee gelijke stints
+--      van 9 rondes is hij 2 (twee eenheden), niet 18. De oude formule
+--      (som a)^2/som(a^2/rondes) gaf hier 18; dat was een rondetelling.
 --   E. De nieuwe sleutels staan er en de bestaande sleutels zijn niet weg.
 --   F. De invariant op de echte apparaten: usable => vers + A/B + bereik, en
 --      niet-vers => niet usable + geen bereik + graad hooguit C.
@@ -57,6 +58,31 @@ returns void language sql as $$
   select pg_temp.blok(p_device, p_session, 3, 21, 1,  p_auto, p_baan, 0,    p_start);
 $$;
 
+
+-- Het nieuwste telemetrieframe: de actuele context (auto, baan, sessie) komt
+-- sinds 20261031150000 hier vandaan en niet uit de rondesamples.
+create function pg_temp.frame(p_device uuid, p_session text, p_auto text,
+                              p_baan text, p_at timestamptz)
+returns void language sql as $$
+  insert into public.simhub_telemetry_latest
+    (device_id, owner_user_id, session_id, sequence, captured_at, connector_id,
+     game, telemetry, car_id, car_name, track_name, track_config, v3_normalized)
+  select p_device, d.owner_user_id, p_session, 1, p_at, 'test', 'iracing',
+         '{}'::jsonb, p_auto, p_auto,
+         split_part(p_baan, ':', 1), split_part(p_baan, ':', 2), '{}'::jsonb
+    from public.simhub_devices d
+   where d.id = p_device
+  on conflict (device_id) do update set
+    owner_user_id = excluded.owner_user_id,
+    session_id = excluded.session_id,
+    captured_at = excluded.captured_at,
+    car_id = excluded.car_id,
+    car_name = excluded.car_name,
+    track_name = excluded.track_name,
+    track_config = excluded.track_config,
+    v3_normalized = excluded.v3_normalized;
+$$;
+
 do $test$
 declare
   v_dev   constant uuid := '290fe152-5789-448c-8420-8deb3cf3077f';  -- CAT-PC (leeg)
@@ -79,6 +105,7 @@ begin
   -- A + D. Twee gelijke, verse stints: bruikbaar, met een bereik
   --------------------------------------------------------------------------
   perform pg_temp.twee_stints(v_dev, 'adv-a', 'adviescar', 'advies:gp', 0.5, v_t);
+  perform pg_temp.frame(v_dev, 'adv-a', 'adviescar', 'advies:gp', v_t);
   v_e := public.pitwall_tyre_estimate_v2(v_dev);
 
   perform pg_temp.eis('verse stand: actualiteit.vers = true',
@@ -103,10 +130,11 @@ begin
   perform pg_temp.eis('twee gelijke stints geven een smalle band (<= 5 rondes breed)',
                       (v_e #>> '{range_laps,high}')::numeric
                       - (v_e #>> '{range_laps,low}')::numeric <= 5);
-  perform pg_temp.eis('n_eff is de Kish-maat over 2 x 9 rondes = 18',
-                      (v_e #>> '{basis,n_eff}')::numeric = 18);
+  perform pg_temp.eis('n_eff is de Kish-maat over 2 gelijke stints = 2',
+                      (v_e #>> '{basis,n_eff}')::numeric between 1.9 and 2.1);
   perform pg_temp.eis('rondes_effectief is dezelfde Kish-maat',
-                      (v_e #>> '{basis,rondes_effectief}')::numeric = 18);
+                      (v_e #>> '{basis,rondes_effectief}')::numeric
+                      = (v_e #>> '{basis,n_eff}')::numeric);
   perform pg_temp.eis('n_eff is niet de oude som van eigen rondes plus de prior',
                       (v_e #>> '{basis,n_eff}')::numeric
                         <> (v_e #>> '{basis,rondes_in_basis}')::numeric
@@ -140,6 +168,7 @@ begin
   perform pg_temp.blok(v_dev_c, 'adv-c', 2, 11, 10, 'combocar', 'combox:gp', 0.5, v_t);
   perform pg_temp.blok(v_dev_c, 'adv-c', 3, 21, 10, 'combocar', 'combox:gp', 0.5, v_t);
   perform pg_temp.blok(v_dev_c, 'adv-c', 4, 31, 1,  'combocar', 'combox:gp', 0,   v_t);
+  perform pg_temp.frame(v_dev_c, 'adv-c', 'combocar', 'combox:gp', v_t);
   perform set_config('request.jwt.claim.sub', v_owner_3cf::text, true);
   v_e := public.pitwall_tyre_estimate_v2(v_dev_c);
 
@@ -155,6 +184,8 @@ begin
   --------------------------------------------------------------------------
   perform pg_temp.twee_stints(v_dev_d, 'adv-d', 'oudcar', 'oud:gp', 0.5,
                               v_t - interval '60 minutes');
+  perform pg_temp.frame(v_dev_d, 'adv-d', 'oudcar', 'oud:gp',
+                        v_t - interval '60 minutes');
   perform set_config('request.jwt.claim.sub', v_owner_103::text, true);
   v_e := public.pitwall_tyre_estimate_v2(v_dev_d);
 
@@ -173,6 +204,7 @@ begin
   --------------------------------------------------------------------------
   perform pg_temp.blok(v_dev_e, 'adv-e', 1, 1,  10, 'eencar', 'een:gp', 0.5, v_t);
   perform pg_temp.blok(v_dev_e, 'adv-e', 2, 11, 1,  'eencar', 'een:gp', 0,   v_t);
+  perform pg_temp.frame(v_dev_e, 'adv-e', 'eencar', 'een:gp', v_t);
   perform set_config('request.jwt.claim.sub', v_owner_3cf::text, true);
   v_e := public.pitwall_tyre_estimate_v2(v_dev_e);
 
