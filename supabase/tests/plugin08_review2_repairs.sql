@@ -406,6 +406,64 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- P8 — set-based snelpad, met dezelfde uitkomst als de rij-lus
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_ack jsonb;
+  v_row public.simhub_lap_summaries%rowtype;
+begin
+  -- Drie nieuwe rijen, middelste ongeldig: het snelpad doet de geldige twee in
+  -- één INSERT en de afkeuring blijft zichtbaar.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1',
+    jsonb_build_array(pg_temp.event(40), pg_temp.event(41, jsonb_build_object('kind', 'FOUT')), pg_temp.event(42)),
+    jsonb_build_array(pg_temp.lap(40), pg_temp.lap(41)));
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 2,
+                     'P8 snelpad accepteert de twee geldige gebeurtenissen');
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,rejected}'), 1,
+                     'P8 de ongeldige rij blijft een afwijzing');
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,accepted}'), 2,
+                     'P8 snelpad accepteert de rondeaggregaten');
+
+  -- Herverzending: classificatie zonder schrijfacties.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1',
+    jsonb_build_array(pg_temp.event(40), pg_temp.event(42)),
+    jsonb_build_array(pg_temp.lap(40)));
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,duplicates}'), 2,
+                     'P8 een replay is een duplicaat');
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 0,
+                     'P8 een replay schrijft niets');
+
+  -- Hogere revisie: één UPDATE, en de bevestiging noemt de nieuwe revisie.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1',
+    jsonb_build_array(pg_temp.event(40, jsonb_build_object('recordRevision', 2, 'confidence', 0.4))),
+    null);
+  perform pg_temp.eq(v_ack #> '{events,superseded,0,record_revision}', '2'::jsonb,
+                     'P8 een hogere revisie is in één stap bijgewerkt');
+  perform pg_temp.eq((select e.record_revision from public.simhub_measurement_events e
+                       where e.device_id = (select device::text from t_ids)
+                         and e.event_uid = pg_temp.uid(40)), 2,
+                     'P8 de nieuwe revisie staat in de tabel');
+
+  -- Twee dezelfde UUID's in één batch: het snelpad faalt en de lus doet het.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1',
+    jsonb_build_array(pg_temp.event(43), pg_temp.event(43, jsonb_build_object('confidence', 0.1))),
+    null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 1,
+                     'P8 bij een dubbele UUID in de batch is er één acceptatie');
+  perform pg_temp.eq(v_ack #> '{events,rejected,0,reason}', '"revision_conflict"'::jsonb,
+                     'P8 de tweede rij is een conflict, geen stille verdwijning');
+  perform pg_temp.eq((select count(*)::integer from public.simhub_measurement_events e
+                       where e.device_id = (select device::text from t_ids)
+                         and e.event_uid = pg_temp.uid(43)), 1,
+                     'P8 de terugval heeft geen tweede rij opgeleverd');
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Resultaat
 -- ---------------------------------------------------------------------------
 do $$

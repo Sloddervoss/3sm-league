@@ -269,35 +269,51 @@ waar de DDL wijzigt ook een rollback; het contract staat in
 | 11 | versie | overal 0.7.2.0, `protocolVersion` blijft 3 | Deno P08-P6 |
 | 12 | retentie | 90/400 dagen + `simhub_prune_measurements` (standaard proef, service-role) | `190800`, SQL R12 |
 
-### Meting op het ingestpad (wegwerpdatabase, PostgreSQL 16.2)
+### Reparaties uit de tweede review (6.1 sol, 2026-10-31)
 
-`supabase/tests/plugin08_load_test.sql`, 20 frames per variant:
-
-| Variant | p50 | p95 | max |
+| # | Punt | Reparatie | Bewijs |
 |---|---|---|---|
-| frame zonder meetreeks (0.7.1.x-pad) | 0,6–1,2 ms | 3–6 ms | 9–18 ms |
-| Edge-max: 50 gebeurtenissen + 5 rondes | ~150 ms | ~160 ms | ~210 ms |
-| database-max: 200 + 20 | ~780–830 ms | ~970–995 ms | ~1010 ms |
-| 200 + 20, alles duplicaat | ~490 ms | ~560 ms | ~575 ms |
+| 1 | rijdersemantiek | ronde draagt `currentDriverName`; `current_driver_id` server-side geresolveerd; client-UUID en `driverChanged`+rijder geweigerd | `200000`, SQL P1, Deno P08-11 |
+| 2 | ACK en revisies | bevestigingen `{id, record_revision}`; `ok:false` wordt `stored:false` met reden; één indexruimte via `acceptedIndexes`; `received` is de aangeboden reeks | `200100`, SQL P2, Deno R2-1..R2-3 |
+| 3 | rollback | geen labeluniciteit meer, UUID-uniciteit blijft, oude schrijver dedupliceert in de query, idempotent; destructief script verwijdert tabellen vóór de validatiefuncties | `rollback/190000`, SQL rollback-seed/check |
+| 4 | complete | ≥10 samples per groep, gat ≤2 s, ≥80% van het venster; anders `complete=false` met reden | `200200`, SQL P4, Deno R2-4 |
+| 5 | wear | `version` verplicht in SQL (geen coalesce); `evidence:null` al in de Edge geweigerd | `200300`, SQL P5, Deno R2-5 |
+| 6 | control | `out_of_range` → HTTP 400 met `reason`, `invalid_payload` → 422 met reden | Edge `controlWriteOutcome`, Deno R2-6 |
+| 7 | payload | 20/3 als gemeten Edge-maximum (14.551 bytes) + batchbudget 16.384 bytes met `payload_too_large` | `plugin08_payload_measure.ts`, Deno R2-7 |
+| 8 | prestatie | set-based snelpad (één INSERT, één UPDATE) met rij-lus-terugval; gemeten p50/p95 en WAL | `200400`, SQL P8, `plugin08_load_test.sql` |
 
-(Twee runs; de spreiding tussen runs is enkele tientallen ms.)
+### Meting op het ingestpad (wegwerpdatabase, PostgreSQL 18.6)
 
-WAL: 272 kB per frame met 220 rijen (≈ 1,2 kB per rij). Geen verlies: 5200
-gebeurtenissen en 520 rondeaggregaten, precies zoals aangeboden.
+`supabase/tests/plugin08_load_test.sql`, 20 frames per variant (10 voor de
+databasedrempel), drie runs op dezelfde machine. De getallen zijn de mediaan van
+de runs; de spreiding tussen runs is enkele ms tot tientallen ms.
 
-Conclusie: bij de Edge-grenzen (50/5) kost een frame ~150 ms van het budget van
-400 ms. Op de databasedrempel (200/20) is één frame ~780 ms en dat past niet in
-het verzendinterval; de Edge-grens is dus geen cosmetische keuze. Het profiel
-laat zien waar de tijd zit: losse `INSERT`-statements in een lus kosten hier
-~2 ms per stuk tegen ~0,15 ms set-based. Een set-based snelpad (met de rij-lus
-als terugval) is de eerstvolgende optimalisatie; die is niet in deze set gedaan
-om de rij-isolatie en het bewezen gedrag niet te vermengen met een
-herarchitectuur.
+| Variant | p50 | p95 | WAL per frame |
+|---|---|---|---|
+| frame zonder meetreeks (0.7.1.x-pad) | 1–3 ms | 2–6 ms | — |
+| **wire-max 20/3 (gekozen Edge-maximum)** | **18–19 ms** | **22–26 ms** | **30–35 kB** |
+| 50/5 (oude edge-max, boven de bytegrens) | 41–47 ms | 43–73 ms | 71–75 kB |
+| database-max 200/20 | 207–227 ms | 223–294 ms | — |
+| 20/3 met twee dezelfde UUID's (rij-lus-terugval) | 33–35 ms | 34–43 ms | 56–57 kB |
+| 20/3 alles duplicaat (classificatie, geen schrijfactie) | 1 ms | 1–2 ms | — |
+
+Het set-based snelpad is dus ongeveer twee keer sneller dan de rij-lus op
+dezelfde batch (19 ms tegen 34 ms) en schrijft bijna de helft minder WAL
+(31 kB tegen 57 kB). Het gekozen maximum van 20/3 past met ~19 ms ruim in het
+verzendinterval van 400 ms; 50/5 past daar met ~42 ms ook in, maar die batch
+past niet in de HTTP-body van 24.576 bytes (gemeten 32.751 bytes) en is dus
+geen ondersteund wireprofiel meer.
+
+Caveat: dit is een wegwerpdatabase op één machine, met de SQL-laag direct
+aangeroepen. De HTTP-bodylimiet, de Edge-parser, gelijktijdige devices en
+outboxafvoer zijn hier niet inbegrepen. Productie draait PostgreSQL 15.19; de
+gebruikte functies (`jsonb_populate_recordset`, `pg_current_wal_insert_lsn`)
+bestaan daar ook, maar de getallen zijn niet één-op-één overdraagbaar.
 
 ### Restrisico's
 
 1. **Latentie op de databasedrempel** (zie boven): 200/20 haalt het
-   verzendinterval niet. Mitigatie: de Edge stuurt maximaal 50/5 en de outbox
+   verzendinterval niet. Mitigatie: de Edge stuurt maximaal 20/3 en de outbox
    spreidt de rest.
 2. **Geen native Deno-runtime in deze omgeving**: de Deno-tests draaien met de
    echte Deno-binary (45 tests), maar niet tegen een live Supabase-project. De

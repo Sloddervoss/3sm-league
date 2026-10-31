@@ -1,21 +1,24 @@
 -- ============================================================================
--- Plugin 0.7.2.0 — belastingstest op het meetpad (reviewpunt 5, "nog niet bewezen")
+-- Plugin 0.7.2.0 — belastingstest op het meetpad (review 2, punt 8)
 -- Datum: 2026-10-31
 --
 -- Wat dit meet, in een WEGWERPDATABASE:
---   * de latentie per frame bij de maximale batches (200 gebeurtenissen en
---     20 rondeaggregaten per frame, de databasedrempels);
---   * hetzelfde pad met veel duplicaten (een outbox die opnieuw aanbiedt), wat
---     de revisie-/dedupe-tak raakt in plaats van de insert-tak;
---   * het WAL-volume per frame (pg_wal_lsn_diff), plus de tabel- en indexgroei.
+--   * het pad zonder meetreeksen (referentie, 0.7.1.x);
+--   * het gekozen wire-maximum 20 events / 3 rondes per frame;
+--   * de databasedrempel 200 / 20 per frame (capaciteit, geen wireprofiel);
+--   * 50 / 5 per frame, de oude "edge-max" die nu boven de bytegrens ligt;
+--   * dezelfde batches nog eens (duplicaten: de classificatietak);
+--   * een batch met twee dezelfde UUID's, wat het set-based snelpad laat
+--     terugvallen op de rij-voor-rij lus.
+--   * het WAL-volume per frame.
 --
 -- Draai met: psql -X -v ON_ERROR_STOP=1 -d <wegwerpdb> -f plugin08_load_test.sql
--- (na fixture + migraties). Het script laat niets achter: het draait in een
--- transactie die aan het eind wordt teruggedraaid.
+-- (na fixture + migraties). Het script draait in een transactie die aan het
+-- eind wordt teruggedraaid.
 --
 -- Geen PASS/FAIL-drempel op latentie: een grens hier zou een schatting zijn.
--- Wat het script wél hard controleert: er raakt geen rij zoek en duplicaten
--- worden als duplicaat geteld. De gemeten getallen staan in de uitvoer.
+-- Wat het script wél hard controleert: geen rij raakt zoek, duplicaten worden
+-- als duplicaat geteld en de terugval geeft dezelfde uitkomst.
 -- ============================================================================
 
 begin;
@@ -23,6 +26,7 @@ begin;
 set local request.jwt.claim.role = 'service_role';
 
 create temp table t_lat (ronde integer, soort text, ms numeric);
+create temp table t_wal (soort text, bytes bigint, ms numeric);
 create temp table t_ctx as
 select '11111111-1111-4111-8111-111111111111'::uuid as device,
        '22222222-2222-4222-8222-222222222222'::uuid as event,
@@ -44,9 +48,7 @@ returns jsonb language sql immutable as $$
   select jsonb_build_object('validDurationSeconds', 120.0, 'sampleCount', p_samples, 'maxGapSeconds', 0.1)
 $$;
 
--- Eén frame met de maximale batches. p_frame bepaalt de UUID-reeks, zodat een
--- tweede ronde met dezelfde p_frame precies dezelfde rijen aanbiedt (duplicaten).
-create or replace function pg_temp.frame_payload(p_frame bigint, p_events integer, p_laps integer)
+create or replace function pg_temp.frame_payload(p_frame bigint)
 returns jsonb language sql as $$
   select jsonb_build_object(
     'protocolVersion', 3,
@@ -70,10 +72,14 @@ returns jsonb language sql as $$
                                      'optionalRepairSeconds', 0))
 $$;
 
-create or replace function pg_temp.events_payload(p_frame bigint, p_events integer)
+-- p_dubbel: als true bevat de reeks één UUID twee keer. Dat dwingt in de
+-- database het set-based snelpad tot de rij-voor-rij terugval.
+create or replace function pg_temp.events_payload(p_frame bigint, p_events integer, p_dubbel boolean default false)
 returns jsonb language sql as $$
   select jsonb_agg(jsonb_build_object(
-           'eventUid', pg_temp.uid(p_frame * 100000 + g),
+           'eventUid', case when p_dubbel and g = p_events
+                            then pg_temp.uid(p_frame * 100000 + 1)
+                            else pg_temp.uid(p_frame * 100000 + g) end,
            'eventId', 'evt-' || g,
            'kind', 'wear_refresh_confirmed',
            'segmentId', 'seg-load',
@@ -112,8 +118,7 @@ returns jsonb language sql as $$
            'fuelStartLitres', 42, 'fuelEndLitres', 39.5,
            'fuelLevelIntegralLitreSeconds', 4875,
            'absLatAccelIntegralGSeconds', 220, 'latAccelSquaredIntegralG2Seconds', 380,
-           'maxAbsLatAccelG', 1.85, 'absLongAccelIntegralG30Seconds', 60,
-           'absLongAccelIntegralGSeconds', 60,
+           'maxAbsLatAccelG', 1.85, 'absLongAccelIntegralGSeconds', 60,
            'sampleCount', 7200,
            'pitVisitIds', jsonb_build_array('pit-load'),
            'wearObservationIds', jsonb_build_array('evt-1'),
@@ -124,8 +129,26 @@ returns jsonb language sql as $$
     from generate_series(1, p_laps) g
 $$;
 
+-- Eén frame door de echte schrijver. Geeft de ACK terug.
+create or replace function pg_temp.run_frame(
+  p_session text, p_seq bigint, p_frame bigint, p_events integer, p_laps integer,
+  p_dubbel boolean default false)
+returns jsonb language plpgsql as $$
+declare
+  v_ack jsonb;
+begin
+  update public.simhub_devices set last_seen_at = now() - interval '1 minute';
+  select r.measurement_ack into v_ack
+    from public.simhub_persist_v3(
+      repeat('a', 64), p_session, p_seq, '2026-10-31T12:00:00Z'::timestamptz,
+      pg_temp.frame_payload(p_frame), '0.7.2.0',
+      pg_temp.events_payload(p_frame, p_events, p_dubbel),
+      pg_temp.laps_payload(p_frame, p_laps)) r;
+  return v_ack;
+end $$;
+
 -- ---------------------------------------------------------------------------
--- 0. Referentie: hetzelfde frame ZONDER meetreeksen (het pad van 0.7.1.x)
+-- A. Referentie: hetzelfde frame ZONDER meetreeksen (pad van 0.7.1.x)
 -- ---------------------------------------------------------------------------
 do $$
 declare
@@ -136,19 +159,16 @@ begin
   for v_frame in 1..20 loop
     update public.simhub_devices set last_seen_at = now() - interval '1 minute';
     v_t0 := clock_timestamp();
-    if (select r.result from public.simhub_persist_v3(
-          repeat('a', 64), 'sess-base', v_frame, '2026-10-31T12:00:00Z'::timestamptz,
-          pg_temp.frame_payload(v_frame, 200, 20)) r) <> 'accepted' then
-      raise exception 'referentieframe % werd niet geaccepteerd', v_frame;
-    end if;
+    perform public.simhub_persist_v3(
+      repeat('a', 64), 'sess-base', v_frame, '2026-10-31T12:00:00Z'::timestamptz,
+      pg_temp.frame_payload(v_frame));
     v_t1 := clock_timestamp();
-    insert into t_lat values (v_frame, 'zonder-meetreeks', extract(epoch from (v_t1 - v_t0)) * 1000);
+    insert into t_lat values (v_frame, 'A zonder-meetreeks', extract(epoch from (v_t1 - v_t0)) * 1000);
   end loop;
-end
-$$;
+end $$;
 
 -- ---------------------------------------------------------------------------
--- 0b. Realistisch: de Edge-grenzen (50 gebeurtenissen, 5 rondes per frame)
+-- B. Het gekozen wire-maximum: 20 events / 3 rondes
 -- ---------------------------------------------------------------------------
 do $$
 declare
@@ -158,63 +178,62 @@ declare
   v_ack jsonb;
 begin
   for v_frame in 1..20 loop
-    update public.simhub_devices set last_seen_at = now() - interval '1 minute';
     v_t0 := clock_timestamp();
-    select r.measurement_ack into v_ack
-      from public.simhub_persist_v3(
-        repeat('a', 64), 'sess-edge', v_frame, '2026-10-31T12:00:00Z'::timestamptz,
-        pg_temp.frame_payload(500 + v_frame, 50, 5), '0.7.2.0',
-        pg_temp.events_payload(500 + v_frame, 50),
-        pg_temp.laps_payload(500 + v_frame, 5)) r;
+    v_ack := pg_temp.run_frame('sess-edge', v_frame, 500 + v_frame, 20, 3);
+    v_t1 := clock_timestamp();
+    if jsonb_array_length(v_ack #> '{events,accepted}') <> 20
+       or jsonb_array_length(v_ack #> '{laps,accepted}') <> 3 then
+      raise exception 'wire-max frame % is niet verwerkt: %', v_frame, v_ack;
+    end if;
+    insert into t_lat values (v_frame, 'B wire-max 20/3', extract(epoch from (v_t1 - v_t0)) * 1000);
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- C. 50 / 5 per frame (de oude edge-max; boven de bytegrens, databasecapaciteit)
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_frame integer;
+  v_t0 timestamptz;
+  v_t1 timestamptz;
+  v_ack jsonb;
+begin
+  for v_frame in 1..20 loop
+    v_t0 := clock_timestamp();
+    v_ack := pg_temp.run_frame('sess-50', v_frame, 600 + v_frame, 50, 5);
     v_t1 := clock_timestamp();
     if jsonb_array_length(v_ack #> '{events,accepted}') <> 50
        or jsonb_array_length(v_ack #> '{laps,accepted}') <> 5 then
-      raise exception 'edge-max frame % is niet verwerkt: %', v_frame, v_ack;
+      raise exception '50/5 frame % is niet verwerkt: %', v_frame, v_ack;
     end if;
-    insert into t_lat values (v_frame, 'edge-max', extract(epoch from (v_t1 - v_t0)) * 1000);
+    insert into t_lat values (v_frame, 'C 50/5', extract(epoch from (v_t1 - v_t0)) * 1000);
   end loop;
-end
-$$;
+end $$;
 
 -- ---------------------------------------------------------------------------
--- 1. Koud: 20 frames met de maximale batches
+-- D. Databasedrempel: 200 / 20 per frame (capaciteit, geen wireprofiel)
 -- ---------------------------------------------------------------------------
 do $$
 declare
   v_frame integer;
   v_t0 timestamptz;
   v_t1 timestamptz;
-  v_result text;
   v_ack jsonb;
 begin
-  for v_frame in 1..20 loop
-    update public.simhub_devices set last_seen_at = now() - interval '1 minute';
+  for v_frame in 1..10 loop
     v_t0 := clock_timestamp();
-    select r.result, r.measurement_ack into v_result, v_ack
-      from public.simhub_persist_v3(
-        repeat('a', 64), 'sess-load', v_frame, '2026-10-31T12:00:00Z'::timestamptz,
-        pg_temp.frame_payload(v_frame, 200, 20), '0.7.2.0',
-        pg_temp.events_payload(v_frame, 200),
-        pg_temp.laps_payload(v_frame, 20)) r;
+    v_ack := pg_temp.run_frame('sess-dbmax', v_frame, 700 + v_frame, 200, 20);
     v_t1 := clock_timestamp();
-    if v_result <> 'accepted' then
-      raise exception 'frame % gaf resultaat %', v_frame, v_result;
-    end if;
     if jsonb_array_length(v_ack #> '{events,accepted}') <> 200 then
-      raise exception 'frame % schreef % gebeurtenissen in plaats van 200',
-        v_frame, jsonb_array_length(v_ack #> '{events,accepted}');
+      raise exception 'db-max frame % is niet verwerkt: %', v_frame, v_ack;
     end if;
-    if jsonb_array_length(v_ack #> '{laps,accepted}') <> 20 then
-      raise exception 'frame % schreef % rondes in plaats van 20',
-        v_frame, jsonb_array_length(v_ack #> '{laps,accepted}');
-    end if;
-    insert into t_lat values (v_frame, 'max-batch', extract(epoch from (v_t1 - v_t0)) * 1000);
+    insert into t_lat values (v_frame, 'D db-max 200/20', extract(epoch from (v_t1 - v_t0)) * 1000);
   end loop;
-end
-$$;
+end $$;
 
 -- ---------------------------------------------------------------------------
--- 2. Duplicaten: dezelfde 20 frames nog eens, plus één nieuwe
+-- E. Duplicaten: dezelfde 20/3-batches nog eens
 -- ---------------------------------------------------------------------------
 do $$
 declare
@@ -224,52 +243,86 @@ declare
   v_ack jsonb;
 begin
   for v_frame in 1..20 loop
-    update public.simhub_devices set last_seen_at = now() - interval '1 minute';
     v_t0 := clock_timestamp();
-    select r.measurement_ack into v_ack
-      from public.simhub_persist_v3(
-        repeat('a', 64), 'sess-load', 1000 + v_frame, '2026-10-31T12:00:00Z'::timestamptz,
-        pg_temp.frame_payload(v_frame, 200, 20), '0.7.2.0',
-        pg_temp.events_payload(v_frame, 200),
-        pg_temp.laps_payload(v_frame, 20)) r;
+    v_ack := pg_temp.run_frame('sess-edge', v_frame, 500 + v_frame, 20, 3);
     v_t1 := clock_timestamp();
-    if jsonb_array_length(v_ack #> '{events,duplicates}') <> 200 then
-      raise exception 'herverzending % telde % duplicaten in plaats van 200',
-        v_frame, jsonb_array_length(v_ack #> '{events,duplicates}');
+    if jsonb_array_length(v_ack #> '{events,duplicates}') <> 20
+       or jsonb_array_length(v_ack #> '{laps,duplicates}') <> 3 then
+      raise exception 'herverzending % telde % duplicaten: %',
+        v_frame, jsonb_array_length(v_ack #> '{events,duplicates}'), v_ack;
     end if;
-    insert into t_lat values (v_frame, 'duplicates', extract(epoch from (v_t1 - v_t0)) * 1000);
+    insert into t_lat values (v_frame, 'E duplicaten 20/3', extract(epoch from (v_t1 - v_t0)) * 1000);
   end loop;
-end
-$$;
+end $$;
 
 -- ---------------------------------------------------------------------------
--- 3. WAL en groei
+-- F. Terugval: één UUID twee keer in de batch (set-based faalt, lus doet het)
 -- ---------------------------------------------------------------------------
-create temp table t_wal as
-select pg_current_wal_lsn() as lsn_voor,
-       (select count(*) from public.simhub_measurement_events) as events_voor,
-       (select count(*) from public.simhub_lap_summaries) as laps_voor;
-
 do $$
 declare
+  v_frame integer;
+  v_t0 timestamptz;
+  v_t1 timestamptz;
+  v_ack jsonb;
+begin
+  for v_frame in 1..20 loop
+    v_t0 := clock_timestamp();
+    v_ack := pg_temp.run_frame('sess-fallback', v_frame, 900 + v_frame, 20, 3, true);
+    v_t1 := clock_timestamp();
+    -- De tweede rij met dezelfde UUID en dezelfde revisie maar andere inhoud
+    -- is een conflict; de eerste is gewoon geaccepteerd. De terugval mag geen
+    -- rij stil laten verdwijnen.
+    if jsonb_array_length(v_ack #> '{events,accepted}') <> 19
+       or jsonb_array_length(v_ack #> '{events,rejected}') <> 1
+       or v_ack #>> '{events,rejected,0,reason}' <> 'revision_conflict' then
+      raise exception 'terugvalframe % gaf % accepted / % afgekeurd: %',
+        v_frame, jsonb_array_length(v_ack #> '{events,accepted}'),
+        jsonb_array_length(v_ack #> '{events,rejected}'), v_ack;
+    end if;
+    insert into t_lat values (v_frame, 'F terugval 20/3', extract(epoch from (v_t1 - v_t0)) * 1000);
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- G. WAL per frame, per profiel
+-- ---------------------------------------------------------------------------
+-- pg_current_wal_insert_lsn() schuift op zodra WAL wordt ingevoegd; de flush-LSN
+-- (pg_current_wal_lsn) blijft binnen één transactie staan en is hier dus
+-- onbruikbaar. pg_wal_lsn_diff geeft het aantal bytes ertussen.
+do $$
+declare
+  v_before pg_lsn;
+  v_after pg_lsn;
   v_t0 timestamptz;
   v_t1 timestamptz;
 begin
-  -- Eén extra frame, zodat de WAL-meting precies dat frame dekt.
-  update public.simhub_devices set last_seen_at = now() - interval '1 minute';
+  v_before := pg_current_wal_insert_lsn();
   v_t0 := clock_timestamp();
-  perform public.simhub_persist_v3(
-    repeat('a', 64), 'sess-load', 2000, '2026-10-31T12:00:00Z'::timestamptz,
-    pg_temp.frame_payload(99, 200, 20), '0.7.2.0',
-    pg_temp.events_payload(99, 200),
-    pg_temp.laps_payload(99, 20));
+  perform pg_temp.run_frame('sess-wal', 1, 3001, 20, 3);
   v_t1 := clock_timestamp();
-  insert into t_lat values (99, 'wal-frame', extract(epoch from (v_t1 - v_t0)) * 1000);
-end
-$$;
+  v_after := pg_current_wal_insert_lsn();
+  insert into t_wal values ('wire-max 20/3', pg_wal_lsn_diff(v_after, v_before)::bigint,
+                            extract(epoch from (v_t1 - v_t0)) * 1000);
+
+  v_before := pg_current_wal_insert_lsn();
+  v_t0 := clock_timestamp();
+  perform pg_temp.run_frame('sess-wal', 2, 3002, 50, 5);
+  v_t1 := clock_timestamp();
+  v_after := pg_current_wal_insert_lsn();
+  insert into t_wal values ('50/5', pg_wal_lsn_diff(v_after, v_before)::bigint,
+                            extract(epoch from (v_t1 - v_t0)) * 1000);
+
+  v_before := pg_current_wal_insert_lsn();
+  v_t0 := clock_timestamp();
+  perform pg_temp.run_frame('sess-wal', 3, 3003, 20, 3, true);
+  v_t1 := clock_timestamp();
+  v_after := pg_current_wal_insert_lsn();
+  insert into t_wal values ('terugval 20/3', pg_wal_lsn_diff(v_after, v_before)::bigint,
+                            extract(epoch from (v_t1 - v_t0)) * 1000);
+end $$;
 
 -- ---------------------------------------------------------------------------
--- 4. Rapport
+-- Rapport
 -- ---------------------------------------------------------------------------
 select soort,
        count(*) as frames,
@@ -281,18 +334,21 @@ select soort,
  group by soort
  order by soort;
 
+select soort, bytes as wal_bytes, round(ms::numeric, 1) as ms
+  from t_wal order by soort;
+
 select (select count(*) from public.simhub_measurement_events) as events,
        (select count(*) from public.simhub_lap_summaries) as laps,
        pg_size_pretty(pg_total_relation_size('public.simhub_measurement_events')) as events_size,
        pg_size_pretty(pg_total_relation_size('public.simhub_lap_summaries')) as laps_size;
 
--- WAL per frame: het verschil tussen de lsn vóór de laatste meting en nu.
-select pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), lsn_voor)) as wal_voor_laatste_frame
-  from t_wal;
-
--- Harde controle: 20 × 200 (koud) + 20 × 50 (edge-max) + 200 (wal-frame)
--- = 5200 gebeurtenissen; 20 × 20 + 20 × 5 + 20 = 520 rondeaggregaten.
--- De duplicatenronde en de referentieronde voegen niets toe.
+-- Harde controle op verlies:
+--   B: 20 × 20 events, 20 × 3 laps
+--   C: 20 × 50, 20 × 5
+--   D: 10 × 200, 10 × 20
+--   E: duplicaten, geen nieuwe rijen
+--   F: 20 × 19, 20 × 3
+--   G: 20 + 50 + 19 events, 3 + 5 + 3 laps
 do $$
 declare
   v_events integer;
@@ -300,11 +356,11 @@ declare
 begin
   select count(*) into v_events from public.simhub_measurement_events;
   select count(*) into v_laps from public.simhub_lap_summaries;
-  if v_events <> 5200 then
-    raise exception 'verwachtte 5200 gebeurtenissen, gevonden %', v_events;
+  if v_events <> 400 + 1000 + 2000 + 380 + 89 then
+    raise exception 'verwachtte % gebeurtenissen, gevonden %', 400 + 1000 + 2000 + 380 + 89, v_events;
   end if;
-  if v_laps <> 520 then
-    raise exception 'verwachtte 520 rondeaggregaten, gevonden %', v_laps;
+  if v_laps <> 60 + 100 + 200 + 60 + 11 then
+    raise exception 'verwachtte % rondeaggregaten, gevonden %', 60 + 100 + 200 + 60 + 11, v_laps;
   end if;
   raise notice 'belastingstest: % gebeurtenissen en % rondeaggregaten, geen verlies', v_events, v_laps;
 end
