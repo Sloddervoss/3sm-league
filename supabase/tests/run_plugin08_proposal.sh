@@ -52,6 +52,7 @@ MIGRATIES=(
   20261031200200_plugin08_complete_coverage
   20261031200300_plugin08_wear_version_required
   20261031200400_plugin08_measurement_fast_path
+  20261031200500_plugin08_supersedes_hash
 )
 
 for migratie in "${MIGRATIES[@]}"; do
@@ -67,6 +68,9 @@ echo "== SQL-tests: de reparaties uit de review =="
 
 echo "== SQL-tests: de tweede review =="
 "${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_review2_repairs.sql"
+
+echo "== SQL-tests: supersedes in de content-hash =="
+"${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_supersedes_hash.sql"
 
 echo "== body-diff simhub_persist_v3 =="
 (cd "$ROOT" && node supabase/tests/plugin08_persist_body_diff.mjs)
