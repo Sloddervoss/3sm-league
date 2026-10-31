@@ -1,4 +1,4 @@
-import { consumeEdgeRateLimit, normalizePairCode, parseTelemetryEnvelope, parseTelemetryV3Envelope, randomDeviceToken, randomPairCode, readBoundedJson, sha256Hex } from "./simhub.ts";
+import { consumeEdgeRateLimit, normalizePairCode, parseTelemetryEnvelope, parseTelemetryV3Envelope, randomDeviceToken, randomPairCode, readBoundedJson, readSimhubVersion, sha256Hex } from "./simhub.ts";
 
 declare const Deno: {
   test(name: string, test: () => void | Promise<void>): void;
@@ -131,4 +131,61 @@ Deno.test("een ongeldige gap kost het frame niet", () => {
   const parsed = parseTelemetryV3Envelope(v3);
   if (parsed.position.gapToLeaderSeconds !== null) throw new Error("ongeldige gap is niet leeggemaakt");
   if (parsed.timing.completedLaps !== 2) throw new Error("frame is niet doorgekomen");
+});
+
+// ---------------------------------------------------------------------------
+// Connectorversie: source.simHubVersion is decoratie in het v3-pad. Hij moet
+// eruit komen als hij er is, en anders null zijn — nooit een throw, en nooit
+// een waarde die niet aan de grens van 60 tekens voldoet.
+// ---------------------------------------------------------------------------
+Deno.test("connectorversie komt uit source.simHubVersion", () => {
+  const gevallen: Array<[unknown, string | null]> = [
+    [{ source: { simHubVersion: "9.11.21.0" } }, "9.11.21.0"],
+    [{ source: { simHubVersion: "  0.6.0.1  " } }, "0.6.0.1"],
+    [{ source: { simHubVersion: "a".repeat(60) } }, "a".repeat(60)],
+    [{ source: { simHubVersion: "a".repeat(61) } }, null],
+    [{ source: { simHubVersion: "" } }, null],
+    [{ source: { simHubVersion: "   " } }, null],
+    [{ source: { simHubVersion: 91121 } }, null],
+    [{ source: { simHubVersion: null } }, null],
+    [{ source: { simHubVersion: ["9.11.21.0"] } }, null],
+    [{ source: {} }, null],
+    [{ source: "PCBART" }, null],
+    [{ source: null }, null],
+    [{}, null],
+    [null, null],
+    [undefined, null],
+    ["payload", null],
+    [[{ source: { simHubVersion: "9" } }], null],
+  ];
+  for (const [invoer, verwacht] of gevallen) {
+    const uit = readSimhubVersion(invoer);
+    if (uit !== verwacht) {
+      throw new Error(`readSimhubVersion(${JSON.stringify(invoer)}) gaf ${JSON.stringify(uit)}, verwacht ${JSON.stringify(verwacht)}`);
+    }
+  }
+});
+
+// De v3-body bevat het veld naast de genormaliseerde velden; het lezen ervan
+// mag het normaliseren niet raken.
+Deno.test("een versie in de body verandert de genormaliseerde payload niet", () => {
+  const v3 = {
+    protocolVersion: 3,
+    sequence: 7,
+    capturedAt: "2026-10-31T10:00:00Z",
+    transportSessionId: "sessie-versie",
+    source: { connectorId: "PCBART", simHubVersion: "0.6.0.1", game: "IRacing" },
+    identity: { currentDriverId: null, currentDriverName: "Vincent", carId: null, carName: null, trackName: null, trackConfig: null },
+    session: { isInCar: true, sessionTimeSeconds: 10, sessionTimeRemainingSeconds: null, sessionLapsRemaining: null, flags: ["green"], sessionState: "racing" },
+    timing: { currentLapElapsedSeconds: 5, lastLapTimeSeconds: null, bestLapTimeSeconds: null, completedLaps: 2 },
+    position: { position: 1, classPosition: 1, gapToLeaderSeconds: null },
+    track: { lapDistancePct: 0.2, trackSurface: "on_track", onPitRoad: false },
+    fuel: { fuelLitres: 40, fuelPct: null },
+    raceState: { incidents: 0 },
+    pitService: { pitServiceFlagsRaw: null, requiredRepairSeconds: null, optionalRepairSeconds: null },
+  };
+  const parsed = parseTelemetryV3Envelope(v3);
+  if (readSimhubVersion(v3) !== "0.6.0.1") throw new Error("versie niet gelezen");
+  if ("source" in (parsed as unknown as Record<string, unknown>)) throw new Error("source hoort niet in de genormaliseerde payload");
+  if (parsed.sequence !== 7 || parsed.timing.completedLaps !== 2) throw new Error("frame is niet doorgekomen");
 });

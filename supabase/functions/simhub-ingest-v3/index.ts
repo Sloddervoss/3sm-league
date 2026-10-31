@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
-import { assertAllowedOrigin, consumeEdgeRateLimit, jsonResponse, readBoundedJson, sha256Hex } from "../_shared/simhub.ts";
+import { assertAllowedOrigin, consumeEdgeRateLimit, jsonResponse, readBoundedJson, readSimhubVersion, sha256Hex } from "../_shared/simhub.ts";
 import { resolveTelemetryContext } from "./context.ts";
 
 declare const Deno: {
@@ -90,12 +90,17 @@ Deno.serve(async (request) => {
 
       // Transactionality, write-time authority, source baselines and all event
       // writes live in the service-role-only database RPC; Edge makes one call.
+      // p_simhub_version is de zesde parameter van simhub_persist_v3 en staat er
+      // alleen als hij echt in de body zit; de database valt anders terug op de
+      // apparaatnaam. Zonder dit veld belandde 'DESKTOP-E2SEMRP' in een kolom
+      // die de control room als connectorversie toont.
       const { data, error } = await service.rpc("simhub_persist_v3", {
         p_token_hash: await sha256Hex(token),
         p_session_id: context.normalized!.transportSessionId,
         p_sequence: context.normalized!.sequence,
         p_captured_at: context.normalized!.capturedAt,
         p_v3_normalized: context.normalized,
+        p_simhub_version: readSimhubVersion(root),
       });
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;

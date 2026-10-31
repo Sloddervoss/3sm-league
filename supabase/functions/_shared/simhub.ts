@@ -67,6 +67,28 @@ const parseWeatherNeverFatal = neverFatalBlock("weather", parseWeatherTelemetry)
 
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/**
+ * De connectorversie uit source.simHubVersion, of null als het veld ontbreekt,
+ * geen string is of niet aan de grens voldoet.
+ *
+ * Waarom niet de strikte `text()`: in het v3-pad is dit veld decoratie, geen
+ * voorwaarde. Een lege of lange versie mag een frame niet laten vallen — dan
+ * liever null, dan schrijft de database de apparaatnaam als terugval. De grens
+ * van 60 tekens is dezelfde die de v1/v2-parser op dit veld hanteert; te lang
+ * is geen versienummer maar rommel, en dat slaan we niet op.
+ */
+export const readSimhubVersion = (input: unknown): string | null => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const source = (input as Record<string, unknown>).source;
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  const value = (source as Record<string, unknown>).simHubVersion;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 60) return null;
+  return trimmed;
+};
+
+
 const asRecord = (value: unknown, path: string): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${path} must be an object`);
   return value as Record<string, unknown>;
@@ -361,7 +383,13 @@ const v3Boolean = (value: unknown, path: string): boolean | null => {
 
 export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnvelope => {
   const root = asRecord(input, "payload");
-  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle", "tyres", "brakes", "weather"], "payload");
+  // `source` is optioneel en additief: de connector mag zijn herkomstblok
+  // (connectorId, simHubVersion, game) meesturen, en de ingest leest daar de
+  // connectorversie uit. Zonder deze sleutel in de lijst belandde zo'n frame op
+  // "payload contains unknown fields" (422) en was er geen weg om de versie ooit
+  // vast te leggen. De inhoud wordt hier niet gevalideerd en niet bewaard in
+  // v3_normalized; een frame zonder het blok blijft exact hetzelfde werken.
+  exactKeysAllowExtra(root, ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"], ["opponents", "vehicle", "tyres", "brakes", "weather", "source"], "payload");
   if (root.protocolVersion !== 3) throw new Error("unsupported protocolVersion");
   const sequence = v3Number(root.sequence, "payload.sequence", { integer: true, min: 0 }) as number;
   const capturedAt = text(root.capturedAt, "payload.capturedAt", 40);
