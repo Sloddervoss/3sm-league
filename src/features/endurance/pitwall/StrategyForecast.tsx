@@ -91,7 +91,7 @@ export const StrategyForecast = ({ strategy, position, pace, plannedStints, next
 };
 
 const PanelShell = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+  <div className="rounded-xl border border-[#1D2431] bg-[#0B0D11] p-3.5">
     <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</div>
     {children}
   </div>

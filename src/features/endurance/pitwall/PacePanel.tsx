@@ -1,16 +1,36 @@
 import type { PitwallPaceData, PitwallStrategyRow } from "./pitwallHelpers";
 import { formatLapTime } from "./pitwallHelpers";
+import { PitwallPanel } from "./PitwallPanel";
+import { PaceGraph, type PacePoint } from "./PaceGraph";
 
 interface Props {
   strategy: PitwallStrategyRow | null;
   pace: PitwallPaceData | null;
   /** Rondetijden uit dezelfde bron als de tijdlijn, voor als het pace-blok leeg is. */
   lapTimes?: number[];
+  /**
+   * De punten voor de grafiek. Endurance: de tijdlijn met pitmarkeringen.
+   * Testmodus: `lap_samples` van het apparaat. De grafiek zelf is dezelfde.
+   */
+  points?: PacePoint[];
 }
 
-export const PacePanel = ({ strategy, pace, lapTimes = [] }: Props) => {
-  if (!strategy) {
-    return <PanelShell title="PACE"><p className="text-xs text-gray-500">Geen data</p></PanelShell>;
+/**
+ * Het pace-paneel: één oranje lijn met de bestaande pacewaarden eronder.
+ *
+ * De waarden zijn exact die van `PacePanel` van voor deze look: laatste, beste,
+ * stintgemiddelde, doel en — alleen als beide kanten bekend zijn — het verschil.
+ * Er wordt niets bijgerekend en er is geen tweede lijn.
+ */
+export const PacePanel = ({ strategy, pace, lapTimes = [], points = [] }: Props) => {
+  const grafiek = <PaceGraph points={points} />;
+
+  if (!strategy && points.length === 0) {
+    return (
+      <PitwallPanel title="Pace" slot="pace">
+        <p className="text-[12px] text-slate-500">Geen data</p>
+      </PitwallPanel>
+    );
   }
 
   // Uitlooprondes (pit, spin, herstart) mogen het gemiddelde niet bepalen.
@@ -20,46 +40,43 @@ export const PacePanel = ({ strategy, pace, lapTimes = [] }: Props) => {
   const bestLap = pace?.bestLapSeconds ?? (eigen.length ? Math.min(...eigen) : null);
   const stintAvg = pace?.stintAvgSeconds ?? (eigen.length ? eigen.reduce((a, b) => a + b, 0) / eigen.length : null);
   const target = pace?.targetSeconds;
-  const delta = (lastLap != null && target != null) ? lastLap - target : null;
+  const delta = lastLap != null && target != null ? lastLap - target : null;
 
   const showAny = lastLap != null || stintAvg != null || target != null;
 
   if (!showAny) {
     return (
-      <PanelShell title="PACE">
-        <p className="text-xs text-gray-500">Nog geen rondetijd in deze stint</p>
-      </PanelShell>
+      <PitwallPanel title="Pace" slot="pace">
+        {grafiek}
+        <p className="mt-2 text-[12px] text-slate-500">Nog geen rondetijd in deze stint</p>
+      </PitwallPanel>
     );
   }
 
   return (
-    <PanelShell title="PACE">
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
-        {lastLap != null && (
-          <span className="text-gray-500">Laatste <span className="font-bold font-mono text-white">{formatLapTime(lastLap)}</span></span>
-        )}
-        {bestLap != null && (
-          <span className="text-gray-500">Beste <span className="font-bold font-mono text-gray-300">{formatLapTime(bestLap)}</span></span>
-        )}
-        {stintAvg != null && (
-          <span className="text-gray-500">Stint <span className="font-bold font-mono text-white">{formatLapTime(stintAvg)}</span></span>
-        )}
-        {target != null && (
-          <span className="text-gray-500">Doel <span className="font-bold font-mono text-white">{formatLapTime(target)}</span></span>
-        )}
-        {delta != null && (
-          <span className={`font-bold text-[11px] ${delta < 0 ? "text-emerald-400" : "text-orange-400"}`}>
-            Δ {delta >= 0 ? "+" : ""}{delta.toFixed(1)}s
-          </span>
-        )}
-      </div>
-    </PanelShell>
+    <PitwallPanel title="Pace" slot="pace" meta="eigen auto">
+      {grafiek}
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
+        {lastLap != null && <Value label="Laatste" value={formatLapTime(lastLap)} tone="text-white" />}
+        {bestLap != null && <Value label="Beste" value={formatLapTime(bestLap)} tone="text-slate-200" />}
+        {stintAvg != null && <Value label="Stint gem." value={formatLapTime(stintAvg)} tone="text-slate-200" />}
+        {target != null && <Value label="Doel" value={formatLapTime(target)} tone="text-slate-200" />}
+      </dl>
+      {delta != null && (
+        <p className={`mt-2.5 text-[12px] font-bold ${delta < 0 ? "text-emerald-300" : "text-orange-300"}`} data-pitwall-pace-delta="true">
+          Δ laatste t.o.v. doel {delta >= 0 ? "+" : ""}
+          {delta.toFixed(1)}s
+        </p>
+      )}
+    </PitwallPanel>
   );
 };
 
-const PanelShell = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
-    <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</div>
-    {children}
-  </div>
-);
+function Value({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</dt>
+      <dd className={`mt-0.5 font-mono text-[18px] font-bold tabular-nums leading-none ${tone}`}>{value}</dd>
+    </div>
+  );
+}
