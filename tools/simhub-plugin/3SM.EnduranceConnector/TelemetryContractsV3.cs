@@ -1,4 +1,5 @@
-﻿using System.Runtime.Serialization;
+﻿using System;
+using System.Runtime.Serialization;
 
 namespace ThreeSM.EnduranceConnector
 {
@@ -35,6 +36,56 @@ namespace ThreeSM.EnduranceConnector
         // door elkaar liepen. EmitDefaultValue=false: is er niets te melden, dan staat
         // de sleutel niet in de payload en blijft een 0.7.x-frame byte-identiek.
         [DataMember(Name = "source", Order = 16, EmitDefaultValue = false)] public V3Source Source { get; set; }
+        // 0.7.2.0 additief: de meetserie meldt zichzelf in het frame in plaats van alleen in
+        // het antwoord op /simhub-control. protocolVersion blijft 3 — dit zijn leden, geen
+        // nieuwe framing. EmitDefaultValue=false: zonder meetserie staan de sleutels niet in
+        // de payload en blijft een 0.7.x-frame byte-identiek (de gouden fixture bewaakt dat).
+        [DataMember(Name = "schemaRevision", Order = 17, EmitDefaultValue = false)] public int SchemaRevision { get; set; }
+        [DataMember(Name = "capabilities", Order = 18, EmitDefaultValue = false)] public V3Capabilities Capabilities { get; set; }
+    }
+
+    /// <summary>
+    /// Het capabilities-blok van deze connector in de draadvorm van het frame:
+    /// <c>{"revision":1,"pitService":1,"measurementEvents":1,…}</c>.
+    ///
+    /// Waarom expliciete leden en geen dictionary: <c>DataContractJsonSerializer</c> schrijft
+    /// een dictionary als een ARRAY van Key/Value-paren, en op de draad moet dit één object
+    /// zijn. De namen komen één-op-één uit <see cref="ConnectorCapabilities.Implemented"/>;
+    /// de testharnas vergelijkt de leden met die lijst, zodat een feature toevoegen zonder
+    /// lid hier niet stilzwijgend uit het frame verdwijnt.
+    /// </summary>
+    [DataContract]
+    public sealed class V3Capabilities
+    {
+        [DataMember(Name = "revision", Order = 1)] public int Revision { get; set; }
+        [DataMember(Name = "pitService", Order = 2, EmitDefaultValue = false)] public int? PitService { get; set; }
+        [DataMember(Name = "wearObservation", Order = 3, EmitDefaultValue = false)] public int? WearObservation { get; set; }
+        [DataMember(Name = "lapSummary", Order = 4, EmitDefaultValue = false)] public int? LapSummary { get; set; }
+        [DataMember(Name = "directIrSdk", Order = 5, EmitDefaultValue = false)] public int? DirectIrSdk { get; set; }
+        [DataMember(Name = "measurementEvents", Order = 6, EmitDefaultValue = false)] public int? MeasurementEvents { get; set; }
+        [DataMember(Name = "lapSummaries", Order = 7, EmitDefaultValue = false)] public int? LapSummaries { get; set; }
+        [DataMember(Name = "environment", Order = 8, EmitDefaultValue = false)] public int? Environment { get; set; }
+
+        /// <summary>Van de handshake naar de draadvorm; null blijft null (geen leeg blok).</summary>
+        public static V3Capabilities From(ConnectorCapabilities capabilities)
+        {
+            if (capabilities == null) return null;
+            var result = new V3Capabilities { Revision = capabilities.Revision };
+            foreach (var pair in capabilities.Supported)
+            {
+                switch (pair.Key)
+                {
+                    case "pitService": result.PitService = pair.Value; break;
+                    case "wearObservation": result.WearObservation = pair.Value; break;
+                    case "lapSummary": result.LapSummary = pair.Value; break;
+                    case "directIrSdk": result.DirectIrSdk = pair.Value; break;
+                    case "measurementEvents": result.MeasurementEvents = pair.Value; break;
+                    case "lapSummaries": result.LapSummaries = pair.Value; break;
+                    case "environment": result.Environment = pair.Value; break;
+                }
+            }
+            return result;
+        }
     }
 
     // Herkomstblok (optioneel, additief onder protocolVersion 3).

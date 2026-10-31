@@ -84,6 +84,13 @@ namespace ThreeSM.EnduranceConnector
         // iRacing bestaat de map niet en blijft elke waarde null; de plugin werkt door.
         private IrSdkMemoryReader _irSdk;
         private long _pitLimiterSinceMs;
+        // Meetlaag (0.7.2.0). Vier velden, één keer gevuld in Init. Blijft het geheel null
+        // (bijvoorbeeld omdat de map niet beschrijfbaar is), dan loopt de gewone telemetrie
+        // gewoon door: meten is een toevoeging, geen voorwaarde.
+        private MeasurementOutbox _measurementOutbox;
+        private MeasurementPipeline _measurementPipeline;
+        private MeasurementSender _measurementSender;
+        private ConnectorControlClient _controlClient;
 
         public PluginManager PluginManager { get; set; }
         public ConnectorSettings Settings { get; internal set; }
@@ -165,6 +172,10 @@ namespace ThreeSM.EnduranceConnector
             _tyreTracker.Reset();
             _tyreGate.Reset();
             _irSdk = new IrSdkMemoryReader();
+            InitMeasurementLayer();
+            // Handshake met de server: beleid, geen voorwaarde. Lukt het niet, dan blijft het
+            // vaste V3-profiel gelden en merkt de rest van de plugin er niets van.
+            RefreshControlPolicy();
             Status = Settings.UseCentralRelay
                 ? (IsPaired ? "Gekoppeld · wacht op iRacing" : "Niet gekoppeld · maak een code op de 3SM-site")
                 : "Lokale fallback · wacht op iRacing";
@@ -655,8 +666,15 @@ namespace ThreeSM.EnduranceConnector
                 if (!running && _gameWasRunning)
                 {
                     _stintClock.Stop();
+                    // Einde van de sessie: open pitbezoek, lopende ronde en de laatste ankers
+                    // gaan er met een expliciete reden uit in plaats van te blijven hangen.
+                    EndMeasurementSession("session_end");
                 }
                 _gameWasRunning = running;
+                // Meetlaag: elke tick een monster, vóór de pairing- en intervalpoort. Of er
+                // gemeten wordt hangt niet van IsPaired of _sendBusy af; dat was precies de
+                // fout waardoor de bandentracker pas na de poorten werd bijgewerkt.
+                ObserveMeasurements(pluginManager, data, running, isInCar);
                 // Vlaggen elke tick oplossen/publiceren (los van het verzendinterval),
                 // zodat een flagbox/overlay direct reageert.
                 PublishFlags(pluginManager);
@@ -766,6 +784,9 @@ namespace ThreeSM.EnduranceConnector
                 activePairing = _activePairing;
             }
             DisposeDiagnostics();
+            // Meetlaag eerst afsluiten: de laatste ronde en een open pitbezoek worden nog
+            // bewaard in de outbox voordat de HTTP-client verdwijnt.
+            EndMeasurementSession("plugin_stop");
             // Directe SDK-lezer: alleen de eigen read-only handle vrijgeven. Nooit een
             // exception laten ontsnappen tijdens SimHub-shutdown.
             try
@@ -788,6 +809,199 @@ namespace ThreeSM.EnduranceConnector
             }
             else SimHub.Logging.Current.Warn("3SM Endurance: shutdowntaak liep na vijf seconden nog; resources worden niet voortijdig disposed.");
             Status = "Gestopt";
+        }
+
+        // ------------------------------------------------------------------- meetlaag 0.7.2.0
+        //
+        // De meetlaag is SimHub-vrij en volledig getest in 3SM.EnduranceConnector.DiagnosticsTests.
+        // Hier staat alleen de bedrading: één keer starten, per tick een monster aanbieden, bij
+        // het einde van de sessie afsluiten, en de meetserie meeschuiven in het frame.
+
+        /// <summary>
+        /// Start de meetlaag één keer. Lukt dat niet, dan blijft de gewone telemetrie werken:
+        /// één regel in het log, geen exception in SimHub's init.
+        /// </summary>
+        private void InitMeasurementLayer()
+        {
+            try
+            {
+                var dataDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "3SM Endurance Connector");
+                _measurementOutbox = new MeasurementOutbox(Path.Combine(dataDirectory, "measurement-outbox.json"));
+                _measurementOutbox.Load();                       // herstel na een herstart
+                _measurementPipeline = new MeasurementPipeline(_measurementOutbox, new MeasurementIdFactory());
+                _measurementSender = new MeasurementSender(_measurementOutbox, _http,
+                    () => ConnectorCapabilities.Implemented().ToJson(), MeasurementLimits.Default());
+                _controlClient = new ConnectorControlClient(new Uri(ProductionRelayBaseUrl), _http, string.Empty,
+                    () => DateTime.UtcNow);
+                _controlClient.LoadCache(Path.Combine(dataDirectory, "connector-control.json"));
+            }
+            catch (Exception error)
+            {
+                _measurementOutbox = null;
+                _measurementPipeline = null;
+                _measurementSender = null;
+                _controlClient = null;
+                SimHub.Logging.Current.Warn("3SM meetlaag: niet gestart, telemetrie loopt door: " + error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Biedt deze tick aan de meetlaag aan. Alleen als er echt gereden wordt: zonder
+        /// in-car data is er niets te meten en zou een rij nullen een meting suggereren.
+        /// </summary>
+        private void ObserveMeasurements(PluginManager manager, GameData data, bool running, bool isInCar)
+        {
+            if (_measurementPipeline == null || !running || !isInCar || data.NewData == null) return;
+            try
+            {
+                var sample = BuildMeasurementSample(manager, data);
+                if (sample != null) _measurementPipeline.Observe(sample);
+            }
+            catch (Exception error)
+            {
+                // Eén onleesbaar kanaal mag de tick niet kosten: dit monster valt weg, de
+                // rest van de plugin merkt er niets van.
+                SimHub.Logging.Current.Warn("3SM meetlaag: monster overgeslagen: " + error.Message);
+            }
+        }
+
+        /// <summary>Sluit de meetsessie af met een expliciete reden; nooit stilzwijgend laten hangen.</summary>
+        private void EndMeasurementSession(string reason)
+        {
+            if (_measurementPipeline == null) return;
+            try { _measurementPipeline.End(reason); }
+            catch (Exception error) { SimHub.Logging.Current.Warn("3SM meetlaag: afsluiten mislukt: " + error.Message); }
+        }
+
+        /// <summary>
+        /// Haalt het beleid van <c>GET /simhub-control</c> op de achtergrond op, één keer per
+        /// start. De client faalt nooit hard en heeft een eigen korte timeout, dus dit blokkeert
+        /// niets; de cache uit de vorige keer geldt tot dit antwoord binnen is.
+        /// </summary>
+        private void RefreshControlPolicy()
+        {
+            if (_controlClient == null) return;
+            try
+            {
+                Task.Run(async () =>
+                {
+                    var state = await _controlClient.RefreshAsync(_shutdown.Token).ConfigureAwait(false);
+                    if (Volatile.Read(ref _ending) == 0)
+                    {
+                        SimHub.Logging.Current.Info("3SM beleid: " + state.Mode + " · interval " + state.SendIntervalMs
+                            + " ms · schema " + state.SchemaRevision + (string.IsNullOrEmpty(state.Reason) ? string.Empty : " · " + state.Reason));
+                    }
+                });
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM beleid: handshake niet gestart: " + error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Eén meetmonster uit dezelfde tick, met dezelfde lezers als het frame: de directe
+        /// iRacing-SDK voor de kanalen die SimHub niet doorgeeft en de ruwe-kanalenlezer voor
+        /// de rest. Ontbreekt een kanaal, dan blijft het veld null — 0 is een meting, null is
+        /// "de sim zei niets".
+        /// </summary>
+        private TelemetrySample BuildMeasurementSample(PluginManager manager, GameData data)
+        {
+            var snapshot = data.NewData;
+            if (snapshot == null) return null;
+            var channels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
+            var sdk = ReadDirectSdk();
+            var player = snapshot.Opponents == null
+                ? null
+                : snapshot.Opponents.FirstOrDefault(opponent => opponent != null && opponent.IsPlayer);
+
+            var trackTemp = RoundTyreValue(channels.ReadNumber("TrackTempCrew", MinAmbientTempC, MaxAmbientTempC), 1);
+            if (!trackTemp.HasValue) trackTemp = RoundTyreValue(channels.ReadNumber("TrackTemp", MinAmbientTempC, MaxAmbientTempC), 1);
+
+            return new TelemetrySample
+            {
+                ObservedAtUtc = DateTime.UtcNow,
+                // De SDK-tick is de harde ontdubbeling: SimHub's DataUpdate kan met ongewijzigde
+                // ruwe data opnieuw vuren en dat is geen tweede meting.
+                SdkTick = sdk == null || !sdk.Connected ? (long?)null : sdk.TickCount,
+                SessionTimeSeconds = _sessionTime.Read(snapshot),
+                // De huidige ronde is het aantal afgeronde rondes plus één; de grens valt dus
+                // precies op de finishlijn en niet op SimHub's eigen teller.
+                LapNumber = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0)) + 1,
+                CurrentDriverName = FirstNonEmpty(snapshot.PlayerName,
+                    player == null ? null : player.Name,
+                    GetNullableString(manager, Settings.CurrentDriverNameProperty)),
+                ObservedSessionId = BuildObservedSessionId(manager, channels),
+                LatAccelG = DirectSdkNumber(sdk, IrSdkChannels.LatAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
+                LongAccelG = DirectSdkNumber(sdk, IrSdkChannels.LongAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
+                // Intentie van de rijder, geen uitkomst; -1 (geen waarde) wordt null.
+                PitServiceFlagsRaw = CaptureValueRules.PitServiceFlags(DirectSdkInt(sdk, "PitSvFlags", int.MinValue, int.MaxValue)),
+                RequestedFuelLitres = DirectSdkNumber(sdk, "PitSvFuel", 1, 0, 300, 2),
+                TyreSetsUsed = DirectSdkInt(sdk, "TireSetsUsed", 0, 255) ?? channels.ReadInt("TireSetsUsed", 0, 255),
+                // Pitstraat: het ruwe SDK-kanaal, zonder SimHub-fallback naar false.
+                OnPitRoad = channels.ReadBool("OnPitRoad"),
+                InPitStall = channels.ReadBool("PlayerCarInPitStall"),
+                TrackTempC = trackTemp,
+                AirTempC = RoundTyreValue(channels.ReadNumber("AirTemp", MinAmbientTempC, MaxAmbientTempC), 1),
+                FuelLitres = CaptureValueRules.FuelLitres(GetNullableDouble(manager, Settings.FuelProperty, false)),
+                Wear = ReadMeasurementWear(channels),
+            };
+        }
+
+        /// <summary>
+        /// De sessie waarin gemeten wordt — niet de transportsessie. iRacing's SessionUniqueID
+        /// plus het sessienummer verandert bij practice → qualify → race, en dan begint de
+        /// meetlaag een nieuw segment zonder dat de plugin herstart.
+        /// </summary>
+        private static string BuildObservedSessionId(PluginManager manager, RawChannelReader channels)
+        {
+            var uniqueId = GetNullableInt(manager, "DataCorePlugin.GameRawData.SessionData.WeekendInfo.SessionUniqueID");
+            var sessionNumber = channels.ReadInt("SessionNum", 0, 1000);
+            if (!uniqueId.HasValue && !sessionNumber.HasValue) return null;
+            var text = "sim"
+                + (uniqueId.HasValue ? "-" + uniqueId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty)
+                + (sessionNumber.HasValue ? "-s" + sessionNumber.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
+            return text;
+        }
+
+        /// <summary>
+        /// De wear-lezing als één waarde per hoek: de laagste van de drie zones, in procenten
+        /// rest. Ontbreekt voor één hoek elk kanaal, dan is er geen lezing — geen halve wear
+        /// met een verzonnen 0.
+        /// </summary>
+        private static WearReading ReadMeasurementWear(RawChannelReader channels)
+        {
+            var reading = TyreZoneReader.Read(channels);
+            var corners = new double[4];
+            for (var corner = 0; corner < 4; corner++)
+            {
+                double? worst = null;
+                for (var zone = 0; zone < 3; zone++)
+                {
+                    var value = reading.WearPercent[corner][zone];
+                    if (!value.HasValue) continue;
+                    if (!worst.HasValue || value.Value < worst.Value) worst = value;
+                }
+                if (!worst.HasValue) return null;
+                corners[corner] = worst.Value;
+            }
+            return new WearReading(corners[0], corners[1], corners[2], corners[3]);
+        }
+
+        /// <summary>
+        /// Eén integer SDK-kanaal binnen [minimum, maximum]; onleesbaar of buiten de grens is
+        /// null. Dezelfde nullable-discipline als <see cref="DirectSdkNumber"/>.
+        /// </summary>
+        private static int? DirectSdkInt(IrSdkImage image, string channel, int minimum, int maximum)
+        {
+            if (image == null || string.IsNullOrEmpty(channel)) return null;
+            var value = image.ReadNumber(channel);
+            if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value)) return null;
+            if (value.Value < int.MinValue || value.Value > int.MaxValue) return null;
+            var rounded = (int)Math.Round(value.Value, MidpointRounding.AwayFromZero);
+            if (rounded < minimum || rounded > maximum) return null;
+            return rounded;
         }
 
         public Control GetWPFSettingsControl(PluginManager pluginManager) { return new SettingsControl(this); }
@@ -1287,6 +1501,11 @@ namespace ThreeSM.EnduranceConnector
                 Sequence = nextSequence,
                 CapturedAt = DateTime.UtcNow.ToString("o"),
                 TransportSessionId = _sessionId,
+                // 0.7.2.0 additief: het frame meldt zijn schemarevisie en wat deze connector
+                // kan. protocolVersion blijft 3. De meetsleutels zelf (measurementEvents,
+                // lapSummaries) komen uit de outbox bij het verzenden.
+                SchemaRevision = MeasurementContract.SchemaRevision,
+                Capabilities = V3Capabilities.From(ConnectorCapabilities.Implemented()),
                 // Herkomst: SimHub-versie en plug-inversie zijn twee verschillende dingen.
                 // Null als er niets te melden is; EmitDefaultValue=false laat de sleutel
                 // dan weg en houdt een 0.7.x-frame byte-identiek.
@@ -1822,9 +2041,20 @@ namespace ThreeSM.EnduranceConnector
             DiagnosticsClient diagnosticsAtAttempt;
             lock (_diagnosticsGate) diagnosticsAtAttempt = _diagnostics;
             if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestAttempt(attemptUtc);
+            MeasurementBatchPlan measurementPlan = null;
             try
             {
-                var body = SerializeWithinBudget(envelope);
+                var coreBody = SerializeWithinBudget(envelope);
+                var coreBytes = Encoding.UTF8.GetByteCount(coreBody);
+                var body = coreBody;
+                if (_measurementSender != null)
+                {
+                    // De meetserie gaat MEE in ditzelfde frame: één POST, één rate-limit. Wat
+                    // niet in de batch past blijft in de outbox staan voor het volgende frame.
+                    var withMeasurements = _measurementSender.BuildBody(coreBody, coreBytes, attemptUtc, out measurementPlan);
+                    if (withMeasurements != null) body = withMeasurements;
+                }
+                string responseBody = null;
                 using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
                 {
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1834,9 +2064,12 @@ namespace ThreeSM.EnduranceConnector
                         if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, (int)response.StatusCode, response.IsSuccessStatusCode);
                         ingestResultRecorded = true;
                         if (!response.IsSuccessStatusCode) throw new HttpRequestException("relay HTTP " + (int)response.StatusCode);
+                        // Alleen een echt gelezen antwoord kan een bevestiging per rij bevatten.
+                        responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     }
                 }
                 if (Volatile.Read(ref _ending) == 0) Status = "V3 " + envelope.TransportSessionId.Substring(0, Math.Min(8, envelope.TransportSessionId.Length)) + " · seq " + envelope.Sequence;
+                AcknowledgeMeasurements(measurementPlan, responseBody);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -1844,11 +2077,62 @@ namespace ThreeSM.EnduranceConnector
             catch (Exception error)
             {
                 if (!ingestResultRecorded && diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, 0, false);
+                MarkMeasurementAttempt(measurementPlan);
                 if (Volatile.Read(ref _ending) == 0) Status = "Relayfout · " + error.Message;
             }
             finally
             {
                 Volatile.Write(ref _sendBusy, 0);
+            }
+        }
+
+        /// <summary>
+        /// Verwerkt het ACK per rij. Alleen een geslaagde response MÉT gelezen body komt hier;
+        /// nooit opruimen op de statuscode alleen — een 202 is geen leveringsbewijs. Een fout
+        /// in de boekhouding mag een geslaagde POST niet als mislukt laten gelden.
+        /// </summary>
+        private void AcknowledgeMeasurements(MeasurementBatchPlan plan, string responseBody)
+        {
+            if (plan == null || !plan.HasMeasurements || string.IsNullOrEmpty(responseBody) || _measurementOutbox == null) return;
+            try
+            {
+                var now = DateTime.UtcNow;
+                var ack = MeasurementAckParser.Parse(responseBody, plan.Batch);
+                var outcome = _measurementOutbox.ApplyAck(ack, now);
+                // Zelfde regel als MeasurementSender.SendAsync: wat niet per rij bevestigd is,
+                // blijft staan en gaat met backoff opnieuw. "stored:true" terwijl er rijen uit
+                // deze batch blijven staan is geen levering.
+                var remaining = new List<OutboxEntry>(plan.Batch.Events.Count + plan.Batch.Laps.Count);
+                foreach (var entry in plan.Batch.Events)
+                    if (_measurementOutbox.Contains(entry.Uid)) remaining.Add(entry);
+                foreach (var entry in plan.Batch.Laps)
+                    if (_measurementOutbox.Contains(entry.Uid)) remaining.Add(entry);
+                var stored = outcome.Stored && remaining.Count == 0;
+                _measurementOutbox.MarkAttempt(remaining, now, !stored);
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM meetlaag: ACK niet verwerkt, rijen blijven staan: " + error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Mislukte POST: de rijen blijven staan en gaan met backoff opnieuw. Zonder deze
+        /// stap zou dezelfde batch elk interval opnieuw de deur uit gaan.
+        /// </summary>
+        private void MarkMeasurementAttempt(MeasurementBatchPlan plan)
+        {
+            if (plan == null || !plan.HasMeasurements || _measurementOutbox == null) return;
+            try
+            {
+                var sent = new List<OutboxEntry>(plan.Batch.Events.Count + plan.Batch.Laps.Count);
+                sent.AddRange(plan.Batch.Events);
+                sent.AddRange(plan.Batch.Laps);
+                _measurementOutbox.MarkAttempt(sent, DateTime.UtcNow, true);
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM meetlaag: poging niet vastgelegd: " + error.Message);
             }
         }
 

@@ -23,8 +23,11 @@ netwerk en zonder Supabase.
 
 ## Aanroepen vanuit `EnduranceConnectorPlugin.cs`
 
-De Windows-plugin bouwt alleen op een machine met SimHub; daarom is de integratie hier
-niet toegepast maar exact vastgelegd. Drie plekken, elk een paar regels:
+De Windows-plugin bouwt alleen op een machine met SimHub, dus de integratie is hier
+niet te compileren. Ze staat er wel in; dit is wat er staat en waarom het op deze
+plek staat. Elke aanroep is apart te controleren met
+`python3 check-measurement-wiring.py` (statische controle: bestanden in de csproj,
+leden die echt bestaan, en of het monster vóór de pairing-poort wordt aangeboden).
 
 ### 1. Eenmalig, in `Init`
 
@@ -80,6 +83,25 @@ if (plan != null && plan.HasMeasurements)
 `MeasurementSender.SendAsync` doet planning, POST en ACK in één keer; gebruik die
 als de plugin het frame niet zelf hoeft te posten. Belangrijk blijft: **geen
 `ApplyAck` zonder de response-body**, en nooit opruimen op alleen de statuscode.
+
+De plugin doet de POST zelf (het frame is al gebouwd) en doet daarna hetzelfde:
+`MeasurementAckParser.Parse` + `MeasurementOutbox.ApplyAck` alleen na een geslaagde
+response mét gelezen body. Een mislukte POST laat de rijen staan én markeert de
+poging, zodat de backoff ingaat in plaats van elk interval opnieuw te zenden.
+
+## Het frame draagt de meetserie zelf
+
+`TelemetryEnvelopeV3` heeft er twee additieve leden bij: `schemaRevision` (uit
+`MeasurementContract.SchemaRevision`) en `capabilities` (uit
+`ConnectorCapabilities.Implemented()`, als object met één lid per feature).
+`protocolVersion` blijft 3, en beide leden vallen weg als ze niet gevuld zijn
+(`EmitDefaultValue=false`), zodat een frame zonder meetserie byte-identiek blijft
+aan 0.7.x — de gouden fixture bewaakt dat.
+
+Omdat de envelope de twee vaste leden nu zelf draagt, schuift
+`MeasurementSender.BuildBody` ze er niet nog eens in: staat `schemaRevision` al in
+de kern, dan gaan alleen `measurementEvents` en `lapSummaries` erbij. Twee keer
+dezelfde sleutel in één object is geen geldige JSON.
 
 ## Wat de server ziet
 

@@ -989,5 +989,58 @@ namespace ThreeSM.EnduranceConnector
             var hasMembers = head.Length > 1;
             return head + (hasMembers ? "," : string.Empty) + measurementMembers + "}";
         }
+
+        /// <summary>
+        /// Staat dit lid al op het hoogste niveau van het frame? Nodig omdat de envelope
+        /// sinds 0.7.2.0 zelf <c>schemaRevision</c> en <c>capabilities</c> draagt: hetzelfde
+        /// lid twee keer in één object is geen geldige JSON meer.
+        ///
+        /// Alleen toetsen op het hoogste niveau: een gelijknamige sleutel ergens dieper in
+        /// het frame (een meting, een tegenstander) telt niet mee, en tekst binnen een string
+        /// wordt overgeslagen.
+        /// </summary>
+        public static bool FrameDeclaresMember(string frameJson, string member)
+        {
+            if (string.IsNullOrEmpty(frameJson) || string.IsNullOrEmpty(member)) return false;
+            var depth = 0;
+            var index = 0;
+            while (index < frameJson.Length)
+            {
+                var character = frameJson[index];
+                if (character == '"')
+                {
+                    var end = EndOfString(frameJson, index);
+                    if (end < 0) return false;
+                    if (depth == 1)
+                    {
+                        var after = end + 1;
+                        while (after < frameJson.Length && char.IsWhiteSpace(frameJson[after])) after++;
+                        if (after < frameJson.Length && frameJson[after] == ':'
+                            && string.Equals(frameJson.Substring(index + 1, end - index - 1), member, StringComparison.Ordinal))
+                        {
+                            return true;
+                        }
+                    }
+                    index = end + 1;
+                    continue;
+                }
+                if (character == '{' || character == '[') depth++;
+                else if (character == '}' || character == ']') depth--;
+                index++;
+            }
+            return false;
+        }
+
+        /// <summary>Index van de sluitende quote, of -1 als de string niet eindigt.</summary>
+        private static int EndOfString(string text, int quoteIndex)
+        {
+            for (var index = quoteIndex + 1; index < text.Length; index++)
+            {
+                var character = text[index];
+                if (character == '\\') { index++; continue; }
+                if (character == '"') return index;
+            }
+            return -1;
+        }
     }
 }

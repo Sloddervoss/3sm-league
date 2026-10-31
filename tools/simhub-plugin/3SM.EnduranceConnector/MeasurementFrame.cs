@@ -36,6 +36,12 @@ namespace ThreeSM.EnduranceConnector
         public OutboxBatch Batch { get; set; }
         /// <summary>De JSON-leden die in het frame worden geschoven (zonder accolades).</summary>
         public string MembersJson { get; set; }
+        /// <summary>
+        /// Alleen de twee reeksen, zonder de vaste kop. Voor een frame dat
+        /// <c>schemaRevision</c> en <c>capabilities</c> al zelf draagt: een lid twee keer in
+        /// hetzelfde object is geen geldige JSON meer.
+        /// </summary>
+        public string SeriesJson { get; set; }
         /// <summary>Bytes van de twee reeksen samen, op dezelfde manier gemeten als de Edge.</summary>
         public int MeasurementBytes { get; set; }
         public int DeferredEvents { get; set; }
@@ -86,7 +92,8 @@ namespace ThreeSM.EnduranceConnector
                 plan.Reason = "frame_budget_exhausted";
                 plan.DeferredEvents = due.Events.Count;
                 plan.DeferredLaps = due.Laps.Count;
-                plan.MembersJson = head + ",\"measurementEvents\":[],\"lapSummaries\":[]";
+                plan.SeriesJson = Series(new string[0], new string[0]);
+                plan.MembersJson = head + "," + plan.SeriesJson;
                 return plan;
             }
 
@@ -102,8 +109,8 @@ namespace ThreeSM.EnduranceConnector
             plan.DeferredLaps = due.Laps.Count - laps.Count;
             plan.DeferredEvents = due.Events.Count - events.Count;
             plan.MeasurementBytes = MeasurementJson.Bytes(MeasurementJson.Batch(events, laps));
-            plan.MembersJson = head + ",\"measurementEvents\":[" + string.Join(",", events.ToArray())
-                + "],\"lapSummaries\":[" + string.Join(",", laps.ToArray()) + "]";
+            plan.SeriesJson = Series(events, laps);
+            plan.MembersJson = head + "," + plan.SeriesJson;
 
             // De batch in payloadvolgorde: rondes eerst, daarna events.
             for (var index = 0; index < laps.Count; index++) plan.Batch.Laps.Add(due.Laps[index]);
@@ -140,6 +147,18 @@ namespace ThreeSM.EnduranceConnector
             var capabilities = string.IsNullOrEmpty(capabilitiesJson) ? "{\"revision\":1,\"supported\":{}}" : capabilitiesJson;
             return "\"schemaRevision\":" + MeasurementContract.SchemaRevision
                 + ",\"capabilities\":" + capabilities;
+        }
+
+        /// <summary>De twee reeksen, zonder de vaste kop.</summary>
+        private static string Series(IList<string> events, IList<string> laps)
+        {
+            return "\"measurementEvents\":[" + string.Join(",", ToArray(events))
+                + "],\"lapSummaries\":[" + string.Join(",", ToArray(laps)) + "]";
+        }
+
+        private static string[] ToArray(IList<string> rows)
+        {
+            return rows == null ? new string[0] : new List<string>(rows).ToArray();
         }
     }
 
@@ -215,7 +234,13 @@ namespace ThreeSM.EnduranceConnector
         {
             plan = Plan(coreBodyBytes, nowUtc);
             if (!plan.HasMeasurements) return null;
-            return MeasurementJson.InjectIntoFrame(coreBodyJson, plan.MembersJson);
+            // Draagt de kern de vaste leden al — de envelope doet dat sinds 0.7.2.0 zelf —
+            // dan gaan alleen de twee reeksen erbij. Hetzelfde lid twee keer in één object
+            // is geen geldige JSON, ook niet als de waarde toevallig gelijk is.
+            var members = MeasurementJson.FrameDeclaresMember(coreBodyJson, "schemaRevision")
+                ? plan.SeriesJson
+                : plan.MembersJson;
+            return MeasurementJson.InjectIntoFrame(coreBodyJson, members);
         }
 
         /// <summary>

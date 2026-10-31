@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
+using System.Runtime.Serialization;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ThreeSM.EnduranceConnector;
@@ -251,6 +254,73 @@ internal static class MeasurementTransportTests
         Check("F17", !legacyReport.Events.Stored && legacyReport.Laps.Stored,
             "een reeks zonder 'stored' geldt als niet opgeslagen; een lege reeks zegt niets");
 
+        // ------------------------------------------- de envelope draagt de meetserie zelf
+        // Sinds 0.7.2.0 meldt het frame welke schemarevisie en capabilities het meebrengt.
+        // Additief: protocolVersion blijft 3, en zonder meetserie staan de sleutels er niet.
+        var declared = new TelemetryEnvelopeV3
+        {
+            ProtocolVersion = 3,
+            Sequence = 7,
+            SchemaRevision = MeasurementContract.SchemaRevision,
+            Capabilities = V3Capabilities.From(ConnectorCapabilities.Implemented()),
+        };
+        var declaredJson = V3PayloadFixtureTests.SerializeObject(declared, typeof(TelemetryEnvelopeV3));
+        using (var document = JsonDocument.Parse(declaredJson))
+        {
+            var root = document.RootElement;
+            Check("F18", root.GetProperty("protocolVersion").GetInt32() == 3
+                && root.GetProperty("schemaRevision").GetInt32() == MeasurementContract.SchemaRevision
+                && root.GetProperty("capabilities").GetProperty("revision").GetInt32() == MeasurementContract.CapabilitiesRevision
+                && root.GetProperty("capabilities").GetProperty("measurementEvents").GetInt32() == 1
+                && root.GetProperty("capabilities").GetProperty("pitService").GetInt32() == 1,
+                "het frame meldt schemaRevision en capabilities als object; protocolVersion blijft 3");
+        }
+        // Geen drift: elk feature dat de connector implementeert staat als lid in het blok,
+        // en er staat geen lid in dat de connector niet kan.
+        var declaredNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in typeof(V3Capabilities).GetProperties())
+        {
+            var member = (DataMemberAttribute)Attribute.GetCustomAttribute(property, typeof(DataMemberAttribute));
+            if (member != null && member.Name != "revision") declaredNames.Add(member.Name);
+        }
+        var implementedNames = new HashSet<string>(ConnectorCapabilities.Implemented().Supported.Keys, StringComparer.Ordinal);
+        Check("F19", declaredNames.SetEquals(implementedNames),
+            "capabilities-leden en de geïmplementeerde features zijn dezelfde verzameling ("
+            + declaredNames.Count + "/" + implementedNames.Count + ")");
+        var bareJson = V3PayloadFixtureTests.SerializeObject(
+            new TelemetryEnvelopeV3 { ProtocolVersion = 3, Sequence = 7 }, typeof(TelemetryEnvelopeV3));
+        Check("F20", bareJson.IndexOf("\"schemaRevision\"", StringComparison.Ordinal) < 0
+            && bareJson.IndexOf("\"capabilities\"", StringComparison.Ordinal) < 0,
+            "zonder meetserie staan schemaRevision en capabilities niet in de payload");
+
+        // De envelope draagt de vaste leden nu zelf; de planner mag ze er niet een tweede
+        // keer in schuiven. Twee keer dezelfde sleutel in één object is geen geldige JSON.
+        const string declaringCore = "{\"protocolVersion\":3,\"sequence\":7,\"schemaRevision\":1,"
+            + "\"capabilities\":{\"revision\":1,\"measurementEvents\":1}}";
+        var declaredOutbox = new MeasurementOutbox(Path.Combine(NewDirectory(), "outbox.json"));
+        declaredOutbox.Enqueue(Event(ids, "wear_value_changed", 80), out string _);
+        var declaredSender = new MeasurementSender(declaredOutbox, new HttpClient(new FakeRelay()), () => null, limits);
+        MeasurementBatchPlan declaredPlan;
+        var declaredBody = declaredSender.BuildBody(declaringCore, Encoding.UTF8.GetByteCount(declaringCore), T0, out declaredPlan);
+        Check("F21", declaredBody != null && declaredPlan.HasMeasurements
+            && Count(declaredBody, "\"schemaRevision\"") == 1 && Count(declaredBody, "\"capabilities\"") == 1
+            && MeasurementJson.DeserializeDictionary(declaredBody).ContainsKey("measurementEvents"),
+            "draagt de kern de vaste leden al, dan komen ze er niet een tweede keer in ("
+            + Count(declaredBody, "\"schemaRevision\"") + "/" + Count(declaredBody, "\"capabilities\"") + " keer)");
+
         return count;
+    }
+
+    private static int Count(string text, string needle)
+    {
+        var total = 0;
+        var index = 0;
+        while (true)
+        {
+            index = text.IndexOf(needle, index, StringComparison.Ordinal);
+            if (index < 0) return total;
+            total++;
+            index += needle.Length;
+        }
     }
 }
