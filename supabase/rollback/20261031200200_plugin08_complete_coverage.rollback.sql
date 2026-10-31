@@ -7,6 +7,10 @@
 -- Geen begin/commit: atomair te draaien met psql -1.
 -- ============================================================================
 
+-- Eerst de constraint die aan de drieargumentfunctie hangt, anders weigert
+-- PostgreSQL het droppen van de functie.
+alter table public.simhub_lap_summaries
+  drop constraint if exists simhub_lap_summaries_complete_needs_coverage;
 drop function if exists public.simhub_coverage_complete(jsonb, timestamptz, timestamptz);
 drop function if exists public.simhub_coverage_reasons(jsonb, timestamptz, timestamptz);
 

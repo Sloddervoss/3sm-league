@@ -46,11 +46,21 @@ drop trigger if exists simhub_telemetry_latest_strip_measurements
   on public.simhub_telemetry_latest;
 drop function if exists public.simhub_strip_measurement_snapshot();
 
--- 3. Validatie- en contracthelpers.
+-- 3. De meetgegevens zelf, VÓÓR de validatiefuncties. De CHECK-constraints van
+--    de tabellen verwijzen naar simhub_coverage_* en simhub_wear_v1_valid;
+--    zou je die functies eerst droppen, dan weigert PostgreSQL met
+--    "other objects depend on it". De tabellen dragen de constraints, dus die
+--    gaan eerst weg (inclusief de rijen — dit bestand is destructief).
+drop table if exists public.simhub_measurement_events;
+drop table if exists public.simhub_lap_summaries;
+
+-- 4. Validatie- en contracthelpers.
 drop function if exists public.simhub_coverage_group_valid(jsonb);
 drop function if exists public.simhub_coverage_valid(jsonb);
 drop function if exists public.simhub_coverage_has(jsonb, text);
 drop function if exists public.simhub_coverage_complete(jsonb);
+drop function if exists public.simhub_coverage_complete(jsonb, timestamptz, timestamptz);
+drop function if exists public.simhub_coverage_reasons(jsonb, timestamptz, timestamptz);
 drop function if exists public.simhub_coverage_sample_total(jsonb);
 drop function if exists public.simhub_coverage_valid_duration(jsonb);
 drop function if exists public.simhub_coverage_max_gap(jsonb);
@@ -69,15 +79,11 @@ drop function if exists public.simhub_jtimestamptz(jsonb);
 drop function if exists public.simhub_jbool(jsonb);
 drop function if exists public.simhub_jtextarray(jsonb, integer);
 
--- 4. Configuratie (code en de laatste stand).
+-- 5. Configuratie (code en de laatste stand).
 drop function if exists public.simhub_connector_config_apply(jsonb, integer);
 drop view if exists public.simhub_connector_config_readonly;
 drop function if exists public.simhub_connector_config_public();
 drop table if exists public.simhub_connector_config;
-
--- 5. De meetgegevens zelf. Dit is onomkeerbaar.
-drop table if exists public.simhub_measurement_events;
-drop table if exists public.simhub_lap_summaries;
 
 -- 6. De oude schrijver terug, zodat de ingest blijft werken.
 --    (Draai daarvoor eerst supabase/rollback/20261031180300_...rollback.sql als

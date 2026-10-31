@@ -3,29 +3,35 @@
 -- code en, waar nodig, een constraint. De tabellen en hun inhoud blijven staan,
 -- zodat een review of een latere herkansing de gegevens niet kwijt is.
 --
--- De oude uniciteit (device_id, event_id) komt terug en event_uid mag weer leeg
--- zijn, zodat de schrijver van 20261031180300 (die alleen het tekst-ID kent) blijft
--- werken. De UUID-kolommen en hun waarden blijven staan: dat is de duurzame
+-- De oude schrijver komt terug en event_uid mag weer leeg zijn, zodat de
+-- schrijver van 20261031180300 (die alleen het tekst-ID kent) blijft werken.
+-- BELANGRIJK: de oude uniciteit op (device_id, event_id) komt NIET terug. Het
+-- nieuwe model staat twee UUID's met hetzelfde tekstlabel toe; zo'n constraint
+-- zou de rollback op geldige meetdata laten klappen (review 2, punt 3). De oude
+-- schrijver dedupliceert daarom in de query (`where not exists`), niet via een
+-- constraint. De UUID-kolommen en hun waarden blijven staan: dat is de duurzame
 -- identiteit, en die weggooien zou de outbox van elke client onbruikbaar maken.
 -- Volgorde: altijd van nieuw naar oud terugdraaien (190800 eerst).
 -- Geen begin/commit: atomair te draaien met psql -1.
 -- ============================================================================
 
-alter table public.simhub_measurement_events
-  drop constraint if exists simhub_measurement_events_device_event_uid_key;
+-- De UUID-uniciteit BLIJFT staan: die is de duurzame identiteit en belemmert de
+-- oude schrijver niet (die laat event_uid leeg, en NULLs botsen niet). Alleen
+-- de NOT NULL gaat eraf, zodat de oude schrijver zonder UUID kan invoegen.
 alter table public.simhub_measurement_events
   alter column event_uid drop not null;
+-- De oude schrijver kent content_hash niet; zonder default zou elke insert op
+-- de NOT NULL stranden. Een lege hash betekent hier "geschreven door de oude
+-- schrijver", niet "inhoudelijk gelijk aan iets".
 alter table public.simhub_measurement_events
-  add constraint simhub_measurement_events_device_event_key unique (device_id, event_id);
+  alter column content_hash set default '';
 drop index if exists public.simhub_measurement_events_device_observed_session_idx;
 drop index if exists public.simhub_lap_summaries_device_observed_session_idx;
 
 alter table public.simhub_lap_summaries
-  drop constraint if exists simhub_lap_summaries_device_summary_uid_key;
-alter table public.simhub_lap_summaries
   alter column summary_uid drop not null;
 alter table public.simhub_lap_summaries
-  add constraint simhub_lap_summaries_device_summary_key unique (device_id, summary_id);
+  alter column content_hash set default '';
 
 drop function if exists public.simhub_persist_measurement_batch(uuid, text, jsonb, jsonb);
 
@@ -140,11 +146,18 @@ begin
         device_id, transport_session_id, segment_id, event_id, kind, observed_at,
         session_time_seconds, sdk_tick, wear_before, wear_after, set_generation,
         evidence, confidence)
-      select v_device, v_session, p.segment_id, p.event_id, p.kind, p.observed_at,
+      select distinct on (p.event_id)
+             v_device, v_session, p.segment_id, p.event_id, p.kind, p.observed_at,
              p.session_time_seconds, p.sdk_tick, p.wear_before, p.wear_after,
              p.set_generation, p.evidence, p.confidence
         from parsed p
-      on conflict (device_id, event_id) do nothing
+       -- Labeldedupe in de query in plaats van in een unique constraint: een
+       -- bestaande rij met hetzelfde label (uit het UUID-tijdperk) blokkeert de
+       -- rollback dan niet en er komt geen tweede bij.
+       where not exists (
+         select 1 from public.simhub_measurement_events x
+          where x.device_id = v_device and x.event_id = p.event_id)
+       order by p.event_id
       returning 1
     )
     select (select count(*) from parsed), (select count(*) from ins)
@@ -244,7 +257,8 @@ begin
         lat_accel_squared_integral_g2_seconds, max_abs_lat_accel_g,
         abs_long_accel_integral_g_seconds, valid_duration_seconds, sample_count,
         max_gap_seconds, pit_visit_ids, wear_observation_ids)
-      select p.summary_id, v_device, v_session, p.segment_id, p.lap_number,
+      select distinct on (p.summary_id)
+             p.summary_id, v_device, v_session, p.segment_id, p.lap_number,
              p.started_at, p.ended_at, p.current_driver_id, p.aggregation_version,
              p.complete, p.invalid_reasons, p.pit_lap, p.driver_changed,
              p.track_temp_c_mean, p.track_temp_c_min, p.track_temp_c_max,
@@ -256,7 +270,10 @@ begin
              p.sample_count, p.max_gap_seconds, p.pit_visit_ids,
              p.wear_observation_ids
         from parsed p
-      on conflict (device_id, summary_id) do nothing
+       where not exists (
+         select 1 from public.simhub_lap_summaries x
+          where x.device_id = v_device and x.summary_id = p.summary_id)
+       order by p.summary_id
       returning 1
     )
     select (select count(*) from parsed), (select count(*) from ins)

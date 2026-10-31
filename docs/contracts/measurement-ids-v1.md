@@ -260,7 +260,20 @@ Een termijn korter dan 30 dagen wordt geweigerd; de functie is service-role-only
 
 ## 10. Terugdraaien
 
-De rollbackketen is gegevensbehoudend: de oude schrijver komt terug, de tabellen
-en hun inhoud blijven staan. Destructief opruimen staat in
-`supabase/rollback/plugin08_destructive_cleanup.sql` en is een aparte,
-gedocumenteerde handeling na een export.
+De rollbackketen is gegevensbehoudend en **per migratie**: de oude schrijver
+komt terug, de tabellen en hun inhoud blijven staan. Er is bewust **geen
+"volledige rollback"-recept**: de keten draait van nieuw naar oud en de
+tussenstand is geen ondersteunde toestand om op te blijven staan.
+
+De rollback legt geen oude tekstuniciteit (`device_id, event_id` /
+`device_id, summary_id`) opnieuw op. Het nieuwe model staat twee UUID's met
+hetzelfde tekstlabel toe; zo'n constraint zou op geldige meetdata klappen. De
+oude schrijver dedupliceert daarom in de query (`where not exists`) en de
+UUID-uniciteit blijft staan. De rollback is idempotent en getest met echte
+rijen, hergebruikte labels, een leeg label, hogere revisies en
+correctieverwijzingen (`supabase/tests/plugin08_review2_rollback_check.sql`).
+
+Destructief opruimen staat in `supabase/rollback/plugin08_destructive_cleanup.sql`
+en is een aparte, gedocumenteerde handeling na een export. Dat script verwijdert
+eerst de tabellen en pas daarna de validatiefuncties: de CHECK-constraints hangen
+aan die functies, dus de omgekeerde volgorde zou de opruiming laten stranden.

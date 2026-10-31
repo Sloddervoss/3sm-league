@@ -144,11 +144,15 @@ begin
   perform pg_temp.expect(not exists (select 1 from pg_trigger
                                       where tgname = 'simhub_telemetry_latest_strip_measurements'),
                          'de snapshot-trigger is weg');
-  perform pg_temp.expect(not exists (select 1 from pg_proc p
-                                      join pg_namespace n on n.oid = p.pronamespace
-                                     where n.nspname = 'public'
-                                       and p.proname = 'simhub_persist_measurement_batch'),
-                         'de meetbatchschrijver is weg (herstel: alleen de oude schrijver)');
+  -- Na de VOLLEDIGE keten is ook de batchschrijver van 180300 weg; die hoort
+  -- bij de meetfunctie, niet bij de oude schrijver. Het tussenliggende herstel
+  -- (oude vierargumentversie) wordt apart getest in
+  -- plugin08_review2_rollback_check.sql, direct na de 190000-rollback.
+  perform pg_temp.expect(
+    not exists (select 1 from pg_proc p
+                  join pg_namespace n on n.oid = p.pronamespace
+                 where n.nspname = 'public' and p.proname = 'simhub_persist_measurement_batch'),
+    'na de volledige keten is de meetbatchschrijver weg');
 end
 $$;
 

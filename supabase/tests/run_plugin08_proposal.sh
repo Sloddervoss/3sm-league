@@ -70,16 +70,19 @@ echo "== SQL-tests: de tweede review =="
 echo "== body-diff simhub_persist_v3 =="
 (cd "$ROOT" && node supabase/tests/plugin08_persist_body_diff.mjs)
 
+echo "== echte meetrijen voor de rollbackcontrole (review 2, punt 3) =="
+"${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_review2_rollback_seed.sql"
+
 echo "== markerrijen voor de rollbackcontrole =="
 "${PSQL[@]}" -c "
   insert into public.simhub_measurement_events
     (device_id, event_uid, event_id, kind, observed_session_id, delivered_session_id, content_hash)
   values ('11111111-1111-4111-8111-111111111111',
-          'aaaaaaaa-0000-4000-8000-000000000001',
+          'cccccccc-0000-4000-8000-000000000001',
           'rollback-marker', 'rollback-marker', 'sess-1', 'sess-1', md5('marker'));
   insert into public.simhub_lap_summaries
     (summary_uid, summary_id, device_id, lap_number, content_hash)
-  values ('aaaaaaaa-0000-4000-8000-000000000002', 'rollback-marker',
+  values ('cccccccc-0000-4000-8000-000000000002', 'rollback-marker',
           '11111111-1111-4111-8111-111111111111', 1, md5('marker'));
 "
 
@@ -88,10 +91,19 @@ for (( i=${#MIGRATIES[@]}-1; i>=0; i-- )); do
   migratie="${MIGRATIES[$i]}"
   echo "== rollback $migratie =="
   "${PSQL[@]}" -1 -f "$ROOT/supabase/rollback/$migratie.rollback.sql"
+  if [ "$migratie" = "20261031190000_plugin08_measurement_identity" ]; then
+    # Idempotentie: dezelfde rollback nog een keer, met echte meetrijen in de
+    # tabellen. Daarna de controle op gegevensbehoud en de oude schrijver.
+    echo "== rollback 20261031190000 nogmaals (idempotentie) =="
+    "${PSQL[@]}" -1 -f "$ROOT/supabase/rollback/$migratie.rollback.sql"
+    echo "== rollbackcontrole met echte meetrijen (review 2) =="
+    "${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_review2_rollback_check.sql"
+  fi
 done
 
 echo "== rollbackcontrole (gegevensbehoud) =="
 "${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_rollback_phase.sql"
+
 
 echo "== Deno-tests (parser, protocol en isolatie) =="
 if command -v deno >/dev/null 2>&1; then
