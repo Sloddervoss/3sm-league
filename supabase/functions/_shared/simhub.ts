@@ -7,11 +7,12 @@ import {
   acceptUnknownRootKeys,
   parseCapabilities,
   parseEnvironment,
-  parseLapSummaries,
-  parseMeasurementEvents,
+  parseLapSummariesReport,
+  parseMeasurementEventsReport,
   parseSchemaRevision,
   type LapSummary,
   type MeasurementEvent,
+  type SeriesReport,
   type SimHubCapabilities,
   type SimHubEnvironment,
 } from "./simhubExtensions.ts";
@@ -78,8 +79,6 @@ const parseTyresNeverFatal = neverFatalBlock("tyres", parseTyreTelemetry);
 // reeks, niet het frame; de fout staat in de logboeken.
 const parseCapabilitiesNeverFatal = neverFatalBlock("capabilities", parseCapabilities);
 const parseEnvironmentNeverFatal = neverFatalBlock("environment", parseEnvironment);
-const parseMeasurementEventsNeverFatal = neverFatalBlock("measurementEvents", parseMeasurementEvents);
-const parseLapSummariesNeverFatal = neverFatalBlock("lapSummaries", parseLapSummaries);
 const parseBrakesNeverFatal = neverFatalBlock("brakes", parseBrakesTelemetry);
 const parseWeatherNeverFatal = neverFatalBlock("weather", parseWeatherTelemetry);
 
@@ -349,6 +348,16 @@ export type NormalizedTelemetryEnvelope = {
   /** 0.8.0 — rondeaggregaten. Zelfde afspraak als measurementEvents. */
   lapSummaries?: LapSummary[] | null;
   /**
+   * 0.7.2.0 — de uitslag van de parser per reeks: welke rijen zijn goedgekeurd,
+   * welke afgekeurd en waarom. Dit gaat NIET naar de database (snapshotDto
+   * haalt het eruit) maar naar het antwoord dat de connector krijgt, zodat een
+   * outbox niet op een kale 202 opruimt.
+   */
+  measurementReport?: {
+    events: SeriesReport<MeasurementEvent>;
+    laps: SeriesReport<LapSummary>;
+  } | null;
+  /**
    * Optioneel herkomstblok (0.8.0). `simHubVersion` is de versie van SimHub zelf,
    * `connectorVersion` die van de connector; dat zijn twee verschillende dingen en
    * ze horen in twee verschillende kolommen. Ontbreekt het blok, dan is dit null en
@@ -508,6 +517,21 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   // bestaande velden blijven verplicht zodat een oude connector niets merkt.
   exactKeysAllowExtra(pitService, ["pitServiceFlagsRaw", "requiredRepairSeconds", "optionalRepairSeconds"], ["repairSecondsRequested", "optionalRepairSecondsRequested", "fastRepairAvailable", "fastRepairUsed"], "pitService");
 
+  // 0.7.2.0 — de meetreeksen worden rij voor rij gelezen. Een kapotte rij kost
+  // alleen die rij; de uitslag gaat mee terug naar de connector in het
+  // ACK-antwoord. Een reeks die als geheel onbruikbaar is (geen array, te lang)
+  // levert een blockError op en verder geen rijen.
+  const measurementReport = {
+    events: parseMeasurementEventsReport(root.measurementEvents),
+    laps: parseLapSummariesReport(root.lapSummaries),
+  };
+  if (measurementReport.events.blockError) {
+    console.warn("[ingest] measurementEvents-reeks afgekeurd:", measurementReport.events.blockError);
+  }
+  if (measurementReport.laps.blockError) {
+    console.warn("[ingest] lapSummaries-reeks afgekeurd:", measurementReport.laps.blockError);
+  }
+
   return {
     protocolVersion: 3,
     sequence,
@@ -601,8 +625,9 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
     schemaRevision: parseSchemaRevision(root.schemaRevision),
     capabilities: parseCapabilitiesNeverFatal(root.capabilities),
     environment: parseEnvironmentNeverFatal(root.environment),
-    measurementEvents: parseMeasurementEventsNeverFatal(root.measurementEvents),
-    lapSummaries: parseLapSummariesNeverFatal(root.lapSummaries),
+    measurementEvents: measurementReport.events.rows.length ? measurementReport.events.rows : null,
+    lapSummaries: measurementReport.laps.rows.length ? measurementReport.laps.rows : null,
+    measurementReport,
   };
 };
 
