@@ -25,6 +25,9 @@ export interface EnduranceEvent {
   name: string;
   circuit: string;
   configuration: string;
+  /** Expliciete eventplanning, geen gemeten sessielimieten. */
+  plannedLaps?: number | null;
+  plannedDurationMinutes?: number | null;
   imageUrl?: string;
   startAt: string;
   endAt: string;

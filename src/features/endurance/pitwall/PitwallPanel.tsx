@@ -1,3 +1,4 @@
+import { Activity, Disc3, Fuel, MapPin, Timer, Users, ListOrdered } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
@@ -30,10 +31,11 @@ export function PitwallPanel({
   bodyClassName?: string;
   actions?: ReactNode;
 }) {
+  const Icon = ({ pace: Activity, tyres: Disc3, fuel: Fuel, trackmap: MapPin, driver: Users, session: Timer, standings: ListOrdered } as Record<string, typeof Activity>)[slot ?? ''];
   return (
     <section data-pitwall-slot={slot} className={`flex min-w-0 flex-col ${PITWALL_PANEL_CLASS} ${className}`}>
       <header className="flex items-baseline justify-between gap-2 border-b border-[#161C27] px-3.5 py-2.5">
-        <h3 className="font-heading text-[12px] font-black uppercase tracking-[0.16em] text-slate-300">{title}</h3>
+        <h3 className="font-heading text-[12px] font-black uppercase tracking-[0.16em] text-slate-300">{Icon && <Icon className="mr-1 inline h-3.5 w-3.5" aria-hidden />}{title}</h3>
         <div className="flex items-center gap-2">
           {meta != null && <span className="text-[11px] text-slate-500">{meta}</span>}
           {actions}

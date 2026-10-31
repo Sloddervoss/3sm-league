@@ -1,3 +1,4 @@
+import { Car } from "lucide-react";
 import { formatLapTime } from "./pitwallHelpers";
 
 /**
@@ -15,7 +16,11 @@ export function OwnCarPanel({
   lastLapSeconds,
   bestLapSeconds,
   gapToLeaderSeconds,
+  carNumber,
+  completedLaps,
 }: {
+  carNumber?: string | null;
+  completedLaps?: number | null;
   driverName: string | null;
   carName: string | null;
   teamName: string | null;
@@ -25,10 +30,10 @@ export function OwnCarPanel({
 }) {
   return (
     <section className="rounded-xl border border-[#1D2431] bg-[#0B0D11] px-3.5 py-3" data-pitwall-slot="own-car">
-      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">Eigen auto</p>
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400"><Car className="mr-1 inline h-3 w-3" aria-hidden />Eigen auto{carNumber && ` #${carNumber}`}{completedLaps != null && ` · R${completedLaps}`}</p>
       <p className="mt-1 truncate font-heading text-[18px] font-black leading-tight text-white">{driverName ?? "—"}</p>
       {(carName || teamName) && (
-        <p className="mt-0.5 truncate text-[11px] text-slate-400">{[carName, teamName].filter(Boolean).join(" · ")}</p>
+        <p className="mt-0.5 text-[11px] text-slate-400">{[carName, teamName].filter(Boolean).join(" · ")}</p>
       )}
 
       <dl className="mt-2.5 grid grid-cols-3 gap-x-3 border-t border-[#161C27] pt-2">

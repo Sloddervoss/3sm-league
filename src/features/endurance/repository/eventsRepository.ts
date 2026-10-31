@@ -18,6 +18,8 @@ export type EnduranceEventRow = {
   name: string;
   circuit: string;
   configuration: string;
+  planned_laps?: number | null;
+  planned_duration_minutes?: number | null;
   image_url: string | null;
   start_at: string;
   end_at: string;
@@ -40,7 +42,7 @@ export type EnduranceEventRow = {
   updated_at: string;
 };
 
-const selectEventColumns = "id,name,circuit,configuration,image_url,start_at,end_at,briefing_start_at,expected_end_at,registration_deadline,slots,class_ids,allowed_car_ids,selected_class_id,selected_car_id,max_drivers_per_car,visibility,status,source,invited_user_ids,manager_ids,race_id,created_at,updated_at";
+const selectEventColumns = "id,name,circuit,configuration,planned_laps,planned_duration_minutes,image_url,start_at,end_at,briefing_start_at,expected_end_at,registration_deadline,slots,class_ids,allowed_car_ids,selected_class_id,selected_car_id,max_drivers_per_car,visibility,status,source,invited_user_ids,manager_ids,race_id,created_at,updated_at";
 
 /** Plain: lijst alle endurance events. */
 export async function listEnduranceEvents(): Promise<EnduranceEventRow[]> {

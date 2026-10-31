@@ -322,7 +322,7 @@ export const PitwallTab = ({ event }: Props) => {
 
         <div className="min-w-0 space-y-3 2xl:col-start-1 2xl:row-start-1">
           <PitwallDashboard
-            kpi={<RaceTelemetryStrip v3={isDemo ? null : real.v3 ?? null} live={isLive} />}
+            kpi={<RaceTelemetryStrip plannedLaps={event.plannedLaps} plannedDurationMinutes={event.plannedDurationMinutes} v3={isDemo ? null : real.v3 ?? null} live={isLive} />}
             decision={strategy ? <DecisionBand advice={advice} /> : undefined}
             track={
               <>
@@ -332,6 +332,8 @@ export const PitwallTab = ({ event }: Props) => {
                   fallbackTrack={[event.circuit, event.configuration].filter(Boolean).join(" - ")}
                 />
                 <OwnCarPanel
+                  carNumber={isLive ? real.v3?.opponents?.find(c => c.isPlayer)?.carNumber : null}
+                  completedLaps={isLive ? real.v3?.timing?.completedLaps : null}
                   driverName={ownDriver}
                   carName={ownCar}
                   teamName={teamName}
@@ -343,6 +345,8 @@ export const PitwallTab = ({ event }: Props) => {
             }
             timing={
               <StandingsWidget
+                plannedStints={plannedStints.map(s => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))}
+                events={events}
                 live={isLive}
                 standings={standings}
                 ownCarLabel={teamName ?? "Mijn auto"}
@@ -352,15 +356,17 @@ export const PitwallTab = ({ event }: Props) => {
             panels={
               strategy
                 ? [
-                    <PacePanel key="pace" strategy={strategy} pace={pace} lapTimes={lapTimes} points={pacePoints} />,
+                    <PacePanel v3={isDemo ? null : real.v3} live={isLive} key="pace" strategy={strategy} pace={pace} lapTimes={lapTimes} points={pacePoints} />,
                     <StintDriverPanel
+                      carNumber={isLive ? real.v3?.opponents?.find(c => c.isPlayer)?.carNumber : null}
+                      nowMs={Date.parse(real.now)}
                       key="driver"
                       strategy={strategy}
                       plannedStints={nextStints.map((s) => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))}
                       currentStint={currentStint}
                       driverName={driverName}
                     />,
-                    <FuelPanel key="fuel" strategy={strategy} />,
+                    <FuelPanel key="fuel" strategy={strategy} window={isLive ? advice.window : null} plannedStints={[...(currentStint ? [currentStint] : []), ...nextStints].map(s => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))} />,
                     <VehicleTelemetryPanel
                       key={`tyres:${event.id}:${selectedTeamId}`}
                       v3={isDemo ? null : real.v3 ?? null}

@@ -1,3 +1,6 @@
+import { lapsAdvice } from './tyreCopy';
+import { formatLapsRange } from './strategy/tyreGrade';
+import { bandExperimenteel, provenanceLabel, type TyreEstimateV2 } from './strategy/tyreEstimateV2';
 import type { V3Normalized } from './pitwallHelpers';
 import type { TyreEstimate } from './strategy/tyreGrade';
 import { TyreAdviceLine } from './TyreAdviceLine';
@@ -33,10 +36,12 @@ export function VehicleTelemetryPanel({
   v3,
   live,
   tyreEstimate,
+  tyreModel,
 }: {
   v3: V3Normalized | null;
   live: boolean;
   tyreEstimate?: TyreEstimate | null;
+  tyreModel?: TyreEstimateV2 | null;
 }) {
   const inCar = v3?.session?.isInCar !== false;
   const car = live && inCar ? v3?.vehicle : null;
@@ -64,6 +69,7 @@ export function VehicleTelemetryPanel({
         <p className="mt-1 font-mono text-[24px] font-bold leading-none tabular-nums">
           {pct != null ? `${pct}%` : '—'}
         </p>
+        {pct != null && Number(pct) >= 0 && Number(pct) <= 100 && <div className="mt-1 h-1 rounded bg-white/10" role="meter" aria-label={`${label} resterend`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(pct)}><div className="h-full rounded bg-current" style={{ width: `${pct}%` }} /></div>}
         {(hasTemp || hasPress) && (
           <p className="mt-1.5 flex flex-wrap gap-x-2 font-mono text-[10px] text-slate-400">
             {hasTemp && <span>{temp} °{car?.temperatureUnit}</span>}
@@ -97,7 +103,11 @@ export function VehicleTelemetryPanel({
         <span className="text-slate-300">{amount(car?.rpm)}</span> rpm
       </p>
 
-      {tyreEstimate ? (
+      {live && inCar && tyreModel?.usable && tyreModel.rangeLaps && <p className="mt-1 text-[11px] text-slate-400" data-pitwall-model-life="true">
+        {bandExperimenteel(tyreModel) ? 'Experimenteel bereik' : 'Modelbereik'}: {formatLapsRange(tyreModel.rangeLaps)} rondes · {provenanceLabel(tyreModel.provenance)}{bandExperimenteel(tyreModel) ? ' · stuurt geen advies' : ''}
+      </p>}
+      {live && inCar && !tyreModel && tyreEstimate?.experimenteel && (tyreEstimate.grade === 'A' || tyreEstimate.grade === 'B') && lapsAdvice(tyreEstimate).rangeText != null && <p className="mt-1 text-[11px] text-slate-400">Experimenteel bereik: {lapsAdvice(tyreEstimate).rangeText} rondes {lapsAdvice(tyreEstimate).limit} · stuurt geen advies</p>}
+      {live && inCar && tyreEstimate ? (
         <div className="mt-1.5">
           <TyreAdviceLine estimate={tyreEstimate} />
         </div>

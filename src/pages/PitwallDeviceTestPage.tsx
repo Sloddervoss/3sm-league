@@ -24,6 +24,7 @@ import { naarTyreEstimate, type TyreRpcClient } from "@/features/endurance/pitwa
 import { useTyreModel } from "@/features/endurance/pitwall/useTyreModel";
 import { usePitwallStrategy } from "@/features/endurance/pitwall/usePitwallStrategy";
 import { RaceTelemetryStrip } from "@/features/endurance/pitwall/RaceTelemetryStrip";
+import { OwnCarPanel } from "@/features/endurance/pitwall/OwnCarPanel";
 import { LiveTrackPanel } from "@/features/endurance/pitwall/LiveTrackPanel";
 import { VehicleTelemetryPanel } from "@/features/endurance/pitwall/VehicleTelemetryPanel";
 import { FuelPanel } from "@/features/endurance/pitwall/FuelPanel";
@@ -318,7 +319,7 @@ export default function PitwallDeviceTestPage() {
                 <PitwallDashboard
                   kpi={<RaceTelemetryStrip v3={v3} live={live} />}
                   decision={<DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />}
-                  track={<LiveTrackPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} />}
+                  track={<><LiveTrackPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} /><OwnCarPanel driverName={ownDriverName} carName={ownCarName} teamName={null} carNumber={live ? v3?.opponents?.find(c => c.isPlayer)?.carNumber : null} completedLaps={live ? v3?.timing?.completedLaps : null} lastLapSeconds={live ? v3?.timing?.lastLapTimeSeconds ?? null : null} bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null} gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null} /></>}
                   timing={
                     <StandingsWidget
                       standings={standings}
@@ -328,7 +329,7 @@ export default function PitwallDeviceTestPage() {
                     />
                   }
                   panels={[
-                    <PacePanel key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
+                    <PacePanel v3={v3} live={live} key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
                     <MySessionPanel
                       key="session"
                       driverName={ownDriverName}
@@ -338,7 +339,7 @@ export default function PitwallDeviceTestPage() {
                       medianSeconds={sessionPace?.median ?? null}
                     />,
                     <FuelPanel key="fuel" strategy={strategy} />,
-                    <VehicleTelemetryPanel key="tyres" v3={v3} live={live} />,
+                    <VehicleTelemetryPanel key="tyres" v3={v3} live={live} tyreEstimate={tyreEstimate} tyreModel={tyreModel} />,
                   ]}
                   extra={
                     <>

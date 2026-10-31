@@ -18,6 +18,7 @@ Hebben wij = toestand vóór deze ronde. Categorie 1 = bouwen/behouden, 2 = best
 - H: `src/features/endurance/pitwall/VehicleTelemetryPanel.tsx; TyreAdviceLine.tsx; TyreModelPanel.tsx; strategy/tyreEstimateV2.ts — rangeLaps, usable, basis.band, bandExperimenteel`
 - I: `supabase/functions/_shared/weatherTelemetry.ts — WeatherTelemetry; simhubExtensions.ts — SimHubEnvironment; simhub.ts — root.weather/root.environment normalisatie`
 - J: `src/features/endurance/pitwall/pitwallHelpers.ts — PitwallTimelineEvent; usePitwallData.ts — timeline; strategy/pitStops.ts — begrensde eigen metingen`
+- L: `supabase/migrations/20261024130000_endurance_pitwall_car_specs_and_distance.sql` — endurance_events.planned_laps/planned_duration_minutes; `src/features/endurance/repository/eventsRepository.ts`, `mappers.ts`, `core/types.ts` — bestaande eventleesroute, momenteel nog zonder deze velden
 - K: `src/lib/iracingTracks.ts; src/features/endurance/core/enduranceTracks.ts; src/integrations/supabase/types.ts — geen bewezen lengte/bochten in deze bronnen`
 
 ## Inventaris vóór bouwen
@@ -36,8 +37,8 @@ Hebben wij = toestand vóór deze ronde. Categorie 1 = bouwen/behouden, 2 = best
 | Bovenbalk | RACE TIME verstreken klok | Nee | 2 | A: session.sessionTimeSeconds, sessietijd sinds start; geen wall-clock of geplande duur |
 | Bovenbalk | Noemer /28 algemeen | Nee | 4 | A,D: begrensde snapshot/resttijd bewijst geen totaal; SDK-kanaal niet geverifieerd |
 | Bovenbalk | Noemer /14 klasse | Nee | 4 | A,D: begrensde snapshot/resttijd bewijst geen totaal; SDK-kanaal niet geverifieerd |
-| Bovenbalk | Raceduur /6h | Nee | 4 | A,D: begrensde snapshot/resttijd bewijst geen totaal; SDK-kanaal niet geverifieerd |
-| Bovenbalk | Totale ronden /360 | Nee | 4 | A,D: begrensde snapshot/resttijd bewijst geen totaal; SDK-kanaal niet geverifieerd |
+| Bovenbalk | Raceduur /6h | Deels | 2 | L: endurance_events.planned_duration_minutes is bewezen planning, geen gemeten sessieduur; aansluiten als expliciet gepland label |
+| Bovenbalk | Totale ronden /360 | Deels | 2 | L: endurance_events.planned_laps is bewezen planning; aansluiten als expliciet gepland label, niet als gemeten racelimiet |
 | Circuit | Circuitnaam en configuratie | Ja | 1 | C: identity.trackName/trackConfig en fallbackTrack |
 | Circuit | Luchttemperatuur °C met weericoon | Deels | 1 | B: tyres.environment.airTempC; icoon als temperatuur, geen onbewolktheid suggereren |
 | Circuit | Dry/nat label en druppelicoon | Nee | 2 | I: weather.trackWetnessPct of environment.trackWetnessPct; alleen 0 expliciet droog, >0 vochtpercentage; isRaining is niet hetzelfde |
@@ -90,7 +91,7 @@ Hebben wij = toestand vóór deze ronde. Categorie 1 = bouwen/behouden, 2 = best
 | Rotatie | NEXT DRIVER naam | Ja | 1 | F: planned_stints driver_id via displayName |
 | Rotatie | Next stint / geplande rondes | Ja | 1 | F: expected_laps |
 | Rotatie | NEXT SWAP aftellen | Nee | 2 | F: geplande wissel op planningseinde, geen gegarandeerde wissel |
-| Rotatie | SWAP CHECKLIST titel en drie vinkvakjes | Nee | 4 | F: geen confirmationvelden; tyre_change is planning, geen bevestiging |
+| Rotatie | SWAP CHECKLIST titel en drie vinkvakjes | Nee | 4 | F: core/types.ts StintConfirmation bevestigt een planversie, niet rijder-gereed/pitstrategie/brandstof-banden; die checklistvelden ontbreken; tyre_change blijft planning |
 | Brandstof | Titel en brandstofpompicoon | Deels | 1 | G,F: presentatie |
 | Brandstof | FUEL REMAINING L | Ja | 1 | G,F: current_fuel_litres |
 | Brandstof | ~ ronden bereik | Ja | 1 | G,F: fuel_laps_remaining |
@@ -125,3 +126,28 @@ Hebben wij = toestand vóór deze ronde. Categorie 1 = bouwen/behouden, 2 = best
 ## Bouwgrenzen
 
 Alle categorie 1/2 worden behouden of aangesloten; tabs uitsluitend met inhoud en met de echte scope in de tekst. Geen wijziging aan adviesmotor, poorten, netwerk, opslag, rechten, plugin of database. Planning krijgt het woord gepland; geen werkelijke stinttimer claimen. Geen snapshotnoemers. Bandenmodel blijft experimenteel waar de bestaande bron dat zegt, en stuurt geen nieuw advies.
+
+### Aanvullende broncontrole vóór aansluiten eventplanning
+
+De gerichte tweede controle vond bestaande nullable DB-kolommen planned_laps en planned_duration_minutes (migratie L). Het bestaande eventsRepository selecteerde ze niet en de mapper liet ze weg. Daarom zijn alleen de twee planningsvarianten van racetotalen hierboven gecorrigeerd van 4 naar 2, vóór aansluiten. Dit bewijst geen live sessielimiet. Geen start/eind-kalenderdatums omrekenen tot fictieve racetotalen. Het geselecteerde event blijft de scope; testmodus heeft deze planning niet. Bestaande StintConfirmation bevestigt een planversie, niet de drie operationele checklistregels uit het beeld.
+
+## Uitkomst na bouwen
+
+Alle 48 categorie-1-regels zijn behouden of aangevuld; alle 15 categorie-2-regels aangesloten met hun bronbeperkingen. De 23 categorie-4-regels blijven aantoonbare hiaten; geen categorie 3 zonder bewezen kanaal. Dit is geen belofte dat een echte feed ieder optioneel veld levert.
+
+- Weer: temperatuur en rubber behouden; root environment/weather optioneel aangesloten. Alleen gemeten vocht 0% heet droog; geen regen betekent niet droog. Geen windwaarde of bewolkingsicoon verzonnen.
+- Circuit: eigen S1/S2/S3-legenda toegevoegd; geen geografisch noorden, lengte, bochten of sectorgrenzen gefingeerd. Bestaande kaart- en markerlogica niet gewijzigd.
+- Timing: echte klassefilter, eigen teamplanning, eigen opgeslagen pitgebeurtenissen en events. Zonder bron ontbreekt de tab; pitgeschiedenis heet geen compleet stopaantal.
+- Pace: rondetijdhistorie, actuele snelheid en laatste-minus-beste met expliciete referentie; geen snelheids- of leiderhistorie gemaakt.
+- Tijd: verstreken sessietijd, en afzonderlijk geplande stintvoortgang/einde/wissel. Geen gemeten stinttijd geclaimd. Eventtotalen uitsluitend gelabeld als plan.
+- Brandstof: hetzelfde advice.window als balk met actuele ronde, geen nieuwe adviesformule; stintplanning als volledige bereikbare lijst. De drie screenshotregels zijn volledig zichtbaar.
+- Banden: restpercentages als balken; bestaande modelrange aangesloten met dezelfde bruikbaarheid/experimenteel-poort en expliciet geen nieuw advies. Geen compoundnaam of huidig setnummer uit een teller afgeleid.
+- Eigen auto: autonummer/voltooide rondes en volledige omschrijving; nu ook de gedeelde strook in testmodus.
+
+## Verificatie en grenzen
+
+Zie elementen-verificatie.txt en verification.json. Volledige Vitest: 195 bestanden, 1638 tests groen. Vite-compilatie: 2478 modules, geslaagd. Beide definitieve 1920×1080-screenshots met vision_analyze gecontroleerd: PASS; alle vier hoofdpanelen, drie stintregels, volledige eigen-auto-omschrijving en Meer analyse zonder afknipping of tekstoverlap. Timing is bewust intern scrollbaar.
+
+Screenshots gebruiken het bestaande lokale fixtureharnas, geen ingelogde productieroutes en geen echte racedata. De optionele vocht- en modelwaarden en geplande eventtotalen zijn aanvullend met componenttests geoefend, niet als live aangeleverde data voorgesteld. Bestaande fixture-inconsistenties (identiteit, gaps, klokken) zijn niet herschreven om een mooi verhaal te maken. Oude schema's zonder de al bestaande eventplanningkolommen ondersteunen de uitgebreide eventselectie niet; toepassing van die bestaande migratie is hier niet op productie nagegaan.
+
+Typecheck: exact dezelfde 13 diagnostics als bfcc387, byte-identieke uitvoer. ESLint: geen nieuwe errors; de testpagina heeft dezelfde drie bestaande no-explicit-any-errors. Backend/RPC-implementaties, DB/migraties, plugin, advieskern en rechten blijven ongewijzigd. Alleen de bestaande eventleesselectie bevat twee extra bestaande kolommen. Geen push, merge, deploy of productiequery.

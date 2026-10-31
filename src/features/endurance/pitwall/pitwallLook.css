@@ -71,3 +71,42 @@
     grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
   }
 }
+
+/* Elementeninventaris: ruimte verdelen, geen inhoud afknippen. */
+@media (min-width: 1280px) {
+  [data-pitwall-look] [data-pitwall-kpi-group] > div { column-gap: 16px; }
+  [data-pitwall-look] [data-pitwall-slot="trackmap"] svg[role="img"],
+  [data-pitwall-look] [data-pitwall-slot="trackmap"] img { height: 108px; }
+  [data-pitwall-look] [data-pitwall-slot="trackmap"] > div { padding-block: 8px; }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.4fr); }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] > p:first-child { font-size: 11px; white-space: nowrap; letter-spacing: 0; }
+  [data-pitwall-look] [data-pitwall-decision-band] { padding: 8px 12px; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] dl > div { display: block; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] dl { gap: 2px 12px; }
+}
+
+@media (min-width: 1280px) {
+  [data-pitwall-look] [data-pitwall-slot="fuel"] dl { grid-template-columns: 1fr; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] dl > div { display: flex; }
+  [data-pitwall-look] [data-pitwall-decision-band] .pitwall-decision-content > * { margin-top: 2px; }
+  [data-pitwall-look] [data-pitwall-decision-band] .pitwall-decision-content > :first-child { margin-top: 0; }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] > p:last-of-type { grid-column: 1; grid-row: 3; }
+}
+
+@media (min-width: 1280px) {
+  [data-pitwall-look] [data-pitwall-slot="own-car"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr); }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] dl dt { white-space: nowrap; }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] > p:first-child { white-space: normal; }
+  [data-pitwall-look] [data-pitwall-slot="trackmap"] svg[role="img"],
+  [data-pitwall-look] [data-pitwall-slot="trackmap"] img { height: 96px; }
+}
+
+@media (min-width: 1280px) {
+  [data-pitwall-look].space-y-3 > :not(:last-child) { margin-bottom: 8px; }
+  [data-pitwall-look] .pitwall-timing { height: 352px; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] > div { padding-block: 8px; }
+}
+
+@media (min-width: 1280px) {
+  [data-pitwall-look] [data-pitwall-slot="own-car"] > p:last-of-type { grid-column: 1 / -1; grid-row: 3; }
+}

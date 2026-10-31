@@ -112,7 +112,7 @@ export const PaceGraph = ({ points, className = "" }: Props) => {
         <span>
           {min.toFixed(1)}–{max.toFixed(1)} s
         </span>
-        <span>mediaan {ref.toFixed(1)}</span>
+        <span>R{points[0]?.lap}–R{points[points.length - 1]?.lap} · mediaan {ref.toFixed(1)}</span>
       </p>
     </div>
   );

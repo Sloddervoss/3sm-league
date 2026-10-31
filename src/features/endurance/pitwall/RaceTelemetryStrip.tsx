@@ -1,3 +1,4 @@
+import { lapDifference } from './elementPresentation';
 import type { ReactNode } from 'react';
 import type { V3Normalized } from './pitwallHelpers';
 import { preciseLapTime as lap } from './telemetryFormat';
@@ -9,6 +10,8 @@ const clock = (seconds: number | null | undefined): string => {
   const sec = Math.floor(seconds % 60);
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
 };
+
+const finiteClock = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
 
 const second = (value: number | null | undefined): string =>
   typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : '—';
@@ -24,21 +27,23 @@ const second = (value: number | null | undefined): string =>
  * blijven losse waarden, en de ronde is de teller van voltooide rondes — niet
  * omgedoopt tot de lopende ronde.
  *
- * De waarden komen uit dezelfde velden als voor deze look-update; er wordt hier
- * niets berekend of aangevuld.
+ * De rondedelta vergelijkt uitsluitend laatste met beste; sessietijd is geen stinttijd.
  */
-export function RaceTelemetryStrip({ v3, live }: { v3: V3Normalized | null; live: boolean }) {
+export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinutes }: { v3: V3Normalized | null; live: boolean; plannedLaps?: number | null; plannedDurationMinutes?: number | null }) {
   const data = live ? v3 : null;
+  const planLaps = typeof plannedLaps === "number" && Number.isSafeInteger(plannedLaps) && plannedLaps > 0 ? plannedLaps : null;
+  const planMinutes = typeof plannedDurationMinutes === "number" && Number.isSafeInteger(plannedDurationMinutes) && plannedDurationMinutes > 0 ? plannedDurationMinutes : null;
   const pos = data?.position?.position;
   const cls = data?.position?.classPosition;
   const last = data?.timing?.lastLapTimeSeconds;
   const best = data?.timing?.bestLapTimeSeconds;
   const laps = data?.timing?.completedLaps;
+  const difference = lapDifference(last, best);
   const rest = data?.session?.sessionTimeRemainingSeconds;
 
   return (
     <div
-      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[5fr_4fr_6fr]"
+      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[5fr_6fr_8fr]"
       data-pitwall-kpi="true"
     >
       <KpiGroup label="Sectoren" group="sectoren">
@@ -50,12 +55,14 @@ export function RaceTelemetryStrip({ v3, live }: { v3: V3Normalized | null; live
       <KpiGroup label="Rondetijd" group="rondetijd">
         <Cell label="Laatste" value={lap(last)} tone="text-white" />
         <Cell label="Beste" value={lap(best)} tone="text-emerald-300" />
+        {difference != null && <Cell label="Δ laatste − beste" value={`${difference > 0 ? '▲ +' : difference < 0 ? '▼ ' : ''}${difference.toFixed(3)} s`} tone={difference > 0 ? "text-red-300" : "text-emerald-300"} />}
       </KpiGroup>
 
       <KpiGroup label="Positie" group="positie">
         <Cell label="P" value={pos != null ? `P${pos}` : '—'} />
         <Cell label="K" value={cls != null ? `K${cls}` : '—'} tone="text-sky-300" />
-        <Cell label="Ronde" value={laps != null ? String(laps) : '—'} />
+        <Cell label={planLaps != null ? `Ronde · plan ${planLaps}` : "Ronde"} value={laps != null ? String(laps) : '—'} />
+        {finiteClock(data?.session?.sessionTimeSeconds) && <Cell label={planMinutes != null ? `Sessie · plan ${clock(planMinutes * 60)}` : "Verstreken sessie"} value={clock(data?.session?.sessionTimeSeconds)} />}
         <Cell label="Resttijd" value={clock(rest)} tone="text-emerald-300" />
       </KpiGroup>
     </div>

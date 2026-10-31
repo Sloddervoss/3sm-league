@@ -1,9 +1,14 @@
+import { useState } from "react";
+import { finiteNonNegative, lapDifference } from "./elementPresentation";
+import type { V3Normalized } from "./pitwallHelpers";
 import type { PitwallPaceData, PitwallStrategyRow } from "./pitwallHelpers";
 import { formatLapTime } from "./pitwallHelpers";
 import { PitwallPanel } from "./PitwallPanel";
 import { PaceGraph, type PacePoint } from "./PaceGraph";
 
 interface Props {
+  v3?: V3Normalized | null;
+  live?: boolean;
   strategy: PitwallStrategyRow | null;
   pace: PitwallPaceData | null;
   /** Rondetijden uit dezelfde bron als de tijdlijn, voor als het pace-blok leeg is. */
@@ -15,17 +20,25 @@ interface Props {
   points?: PacePoint[];
 }
 
-/**
- * Het pace-paneel: één oranje lijn met de bestaande pacewaarden eronder.
- *
- * De waarden zijn exact die van `PacePanel` van voor deze look: laatste, beste,
- * stintgemiddelde, doel en — alleen als beide kanten bekend zijn — het verschil.
- * Er wordt niets bijgerekend en er is geen tweede lijn.
- */
-export const PacePanel = ({ strategy, pace, lapTimes = [], points = [] }: Props) => {
-  const grafiek = <PaceGraph points={points} />;
+/** Rondetijdhistorie, actuele snelheid en delta met expliciete eigen referentie.
+ * Geen historische snelheid of leiderlijn zonder bron. Advieslogica blijft gelijk. */
+export const PacePanel = ({ strategy, pace, lapTimes = [], points = [], v3, live = true }: Props) => {
+  const [mode, setMode] = useState('lap');
+  const speed = live && v3?.session?.isInCar !== false && finiteNonNegative(v3?.vehicle?.speedKph) ? v3.vehicle.speedKph : null;
+  const difference = live ? lapDifference(v3?.timing?.lastLapTimeSeconds ?? pace?.lastLapSeconds, v3?.timing?.bestLapTimeSeconds ?? pace?.bestLapSeconds) : null;
+  const modes = [{ id: 'lap', label: 'Rondetijd' }, ...(speed != null ? [{ id: 'speed', label: 'Snelheid' }] : []), ...(difference != null ? [{ id: 'delta', label: 'Delta' }] : [])];
+  const active = modes.some(m => m.id === mode) ? mode : 'lap';
+  const grafiek = <>
+    <div className="mb-1 flex gap-3" aria-label="Pace-weergave">
+      {modes.map(m => <button key={m.id} type="button" aria-pressed={active === m.id} onClick={() => setMode(m.id)} className={`text-[12px] font-bold ${active === m.id ? 'border-b border-orange-400 text-orange-300' : 'text-slate-400'}`}>{m.label}</button>)}
+    </div>
+    {active === 'lap' ? <><PaceGraph points={points} /><p className="text-[11px] text-orange-300">━ Eigen auto · rondetijd (s)</p></> : <div className="flex h-28 flex-col justify-center">
+      <p className="font-mono text-[32px] font-bold text-white">{active === 'speed' ? `${speed?.toFixed(0)} km/h` : `${difference != null && difference >= 0 ? '+' : ''}${difference?.toFixed(3)} s`}</p>
+      <p className="text-[12px] text-slate-400">{active === 'speed' ? 'Actuele snelheid · geen historische reeks' : 'Laatste ronde − beste ronde · eigen auto'}</p>
+    </div>}
+  </>;
 
-  if (!strategy && points.length === 0) {
+  if (!strategy && points.length === 0 && speed == null && difference == null) {
     return (
       <PitwallPanel title="Pace" slot="pace">
         <p className="text-[12px] text-slate-500">Geen data</p>
@@ -48,7 +61,7 @@ export const PacePanel = ({ strategy, pace, lapTimes = [], points = [] }: Props)
     return (
       <PitwallPanel title="Pace" slot="pace">
         {grafiek}
-        <p className="mt-2 text-[12px] text-slate-500">Nog geen rondetijd in deze stint</p>
+        <p className="mt-2 text-[12px] text-slate-500">Geen aanvullende stintwaarden; grafiek toont opgeslagen rondes</p>
       </PitwallPanel>
     );
   }

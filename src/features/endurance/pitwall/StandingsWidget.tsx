@@ -1,12 +1,14 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { StandingsDerivation } from "./standings";
 import { renderGap, renderPosition } from "./standings";
-import type { V3Opponent } from "./pitwallHelpers";
+import type { PitwallPlannedStint, PitwallTimelineEvent, V3Opponent } from "./pitwallHelpers";
 import { formatClosingRate } from "./closingRate";
 import { preciseLapTime } from "./telemetryFormat";
 import { PitwallPanel } from "./PitwallPanel";
 
 interface Props {
+  plannedStints?: PitwallPlannedStint[];
+  events?: PitwallTimelineEvent[];
   standings: StandingsDerivation;
   /** Own car label (team name or "Mijn auto"). */
   ownCarLabel: string | null;
@@ -49,8 +51,13 @@ const TrendMark = ({ rate }: { rate: number | null }) => {
  * leider". P en K blijven losse waarden: de snapshot is begrensd en bewijst
  * geen volledig deelnemersaantal.
  */
-export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = true }: Props) => {
-  if (standings.noData) {
+export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = true, plannedStints = [], events = [] }: Props) => {
+  const [view, setView] = useState('live');
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
+  const pitEvents = events.filter(e => e.event_type === 'pit_entry' || e.event_type === 'pit_exit');
+  const views = [{ id: 'live', label: 'Live timing' }, ...(!standings.noData ? [{ id: 'class', label: 'Klasse' }] : []), ...(plannedStints.length ? [{ id: 'stints', label: 'Stints' }] : []), ...(pitEvents.length ? [{ id: 'pits', label: 'Pitstops' }] : []), ...(events.length ? [{ id: 'events', label: 'Gebeurtenissen' }] : [])];
+  const active = views.some(v => v.id === view) ? view : 'live';
+  if (standings.noData && views.length === 1) {
     return (
       <PitwallPanel title="Live timing" slot="standings" meta={live ? "Live" : "Offline"}>
         <p className="py-6 text-center text-[13px] text-slate-400">Wacht op tegenstanderdata…</p>
@@ -60,6 +67,9 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
 
   const { overallPosition, classPosition, ahead, behind, aheadTrend, behindTrend, rows } = standings;
 
+  const classes = [...new Set(rows.map(r => r.carClass ?? 'Zonder klasse'))];
+  const activeClass = selectedClass && classes.includes(selectedClass) ? selectedClass : classes[0];
+  const visibleRows = active === 'class' ? rows.filter(r => (r.carClass ?? 'Zonder klasse') === activeClass) : rows;
   const perClass = rows.reduce<Record<string, number>>((acc, r) => {
     const key = r.carClass ?? "Zonder klasse";
     acc[key] = (acc[key] ?? 0) + 1;
@@ -79,6 +89,14 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
       className="pitwall-timing"
       bodyClassName="pitwall-timing-body px-0 py-0"
     >
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-[#161C27] px-3.5 py-1" aria-label="Timing-weergave">
+        {views.map(v => <button key={v.id} type="button" aria-pressed={active === v.id} onClick={() => setView(v.id)} className={`text-[12px] font-bold ${active === v.id ? 'border-b border-orange-400 text-orange-300' : 'text-slate-400'}`}>{v.label}</button>)}
+      </div>
+      {active === 'class' && <div className="flex flex-wrap gap-2 px-3.5 py-1">{classes.map(c => <button key={c} type="button" aria-pressed={activeClass === c} onClick={() => setSelectedClass(c)} className="text-[12px] text-sky-300">{c}</button>)}</div>}
+      {(active === 'stints' || active === 'pits' || active === 'events') ? <div className="pitwall-timing-scroll p-3 text-[13px] text-slate-300" tabIndex={0} role="region" aria-label="Eigen opgeslagen planning en gebeurtenissen">
+        <p className="mb-2 text-[12px] text-slate-400">{active === 'stints' ? 'Eigen team · planning, geen gemeten rivalenstints.' : 'Eigen auto · opgeslagen gebeurtenissen, geen volledig wedstrijdtotaal.'}</p>
+        {active === 'stints' ? <ol>{plannedStints.map((s, i) => <li key={s.id} className="border-t border-white/10 py-2">{i + 1}. {s.driver_id} · {s.expected_laps} ronden gepland · {s.status}{s.tyre_change ? ' · bandenwissel gepland' : ''}</li>)}</ol> : <ol>{(active === 'pits' ? pitEvents : events).map((e, i) => <li key={`${e.event_key}:${i}`} className="border-t border-white/10 py-1"><time>{e.captured_at}</time> · R{e.completed_laps ?? e.lap ?? '—'} · {e.event_type}</li>)}</ol>}
+      </div> : <>
       {/* AHEAD / YOU / BEHIND — wie zit er direct voor en achter je. */}
       <div className="grid gap-px border-b border-[#161C27] bg-[#161C27] sm:grid-cols-3" data-pitwall-slot="ahead-you-behind">
         <RelativeRow tone="sky" label="Voor" opponent={ahead} trend={aheadTrend} />
@@ -97,7 +115,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
         <RelativeRow tone="rose" label="Achter" opponent={behind} trend={behindTrend} />
       </div>
 
-      {rows.length > 1 && (
+      {visibleRows.length > 0 && (
         <div className="pitwall-timing-scroll overflow-x-auto" tabIndex={0} role="region" aria-label="Live timing — scrollbaar klassement">
           <table className="w-full min-w-[720px] text-left text-[12px] tabular-nums">
             <thead className="bg-[#0A0C10] text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
@@ -115,9 +133,9 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, index) => (
+              {visibleRows.map((r, index) => (
                 <Fragment key={r.id}>
-                  {(index === 0 || rows[index - 1].carClass !== r.carClass) && (
+                  {(index === 0 || visibleRows[index - 1].carClass !== r.carClass) && (
                     <tr className="border-t border-[#1D2431] bg-[#0A0C10]">
                       <td colSpan={10} className="px-2.5 py-1.5">
                         <span className="text-[11px] font-black uppercase tracking-[0.14em] text-sky-200">
@@ -143,7 +161,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
                     </td>
                     <td className="px-2 py-1.5 font-mono text-slate-400">{r.carNumber ?? "—"}</td>
                     <td className="max-w-[15rem] px-2 py-1.5">
-                      <p className={`truncate ${r.isPlayer ? "font-bold text-white" : "font-semibold text-slate-100"}`}>
+                      <p className={`truncate ${r.isPlayer ? "font-bold text-white before:mr-1 before:text-orange-400 before:content-['▸']" : "font-semibold text-slate-100"}`}>
                         {driverLabel(r)}
                       </p>
                       {teamLabel(r) && <p className="mt-0.5 truncate text-[10.5px] leading-tight text-slate-500">{teamLabel(r)}</p>}
@@ -162,6 +180,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
         </div>
       )}
 
+      </>}
       <p className="px-3.5 py-2 text-[10px] text-slate-500">
         Snapshot van tegenstanders, geen volledig klassement. Gap is het verschil tot jouw auto. Scroll voor alle rijen.
       </p>

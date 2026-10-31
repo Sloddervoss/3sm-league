@@ -30,6 +30,8 @@ export function enduranceEventRowToAppModel(row: EnduranceEventRow): EnduranceEv
     name: row.name,
     circuit: row.circuit,
     configuration: row.configuration ?? "",
+    plannedLaps: row.planned_laps ?? null,
+    plannedDurationMinutes: row.planned_duration_minutes ?? null,
     imageUrl: row.image_url,
     startAt: row.start_at,
     endAt: row.end_at,
