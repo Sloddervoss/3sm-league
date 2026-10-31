@@ -6,7 +6,7 @@ import "./pitwallLook.css";
  *
  * Volgorde: contextregel, KPI-strip, beslissingsband, dan circuit links (een
  * derde) naast live timing rechts (twee derde), daaronder vier panelen en tot
- * slot de bestaande aanvullende blokken.
+ * slot de bestaande aanvullende blokken achter ‘Meer analyse’.
  *
  * Er wordt niets verkleind om het te laten passen: onder 1280px gaan de twee
  * hoofdkolommen onder elkaar en staan de vier panelen twee aan twee; onder
@@ -57,7 +57,14 @@ export function PitwallDashboard({
         ))}
       </div>
 
-      {extra}
+      {extra && (
+        <details className="pitwall-more" data-pitwall-more="true">
+          <summary className="cursor-pointer text-[12px] font-bold leading-6 text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400">
+            Meer analyse
+          </summary>
+          <div className="space-y-3 pt-3" data-pitwall-extra="true">{extra}</div>
+        </details>
+      )}
     </div>
   );
 }

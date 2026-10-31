@@ -386,3 +386,20 @@ describe("Endurance-pitwall — hetzelfde raster, andere tweede paneel", () => {
     view.unmount();
   });
 });
+
+
+describe("Aanvullende analyse", () => {
+  it("houdt de ongewijzigde extra inhoud standaard ingeklapt na de vier panelen", () => {
+    const view = render(<PitwallDashboard track={null} timing={null} panels={[1, 2, 3, 4]} extra={<p>Extra inhoud</p>} />);
+    const disclosure = view.container.querySelector("details");
+    expect(disclosure?.open).toBe(false);
+    expect(disclosure?.querySelector("summary")?.textContent?.trim()).toBe("Meer analyse");
+    expect(disclosure?.querySelector('[data-pitwall-extra]')?.textContent).toBe("Extra inhoud");
+    expect(disclosure?.previousElementSibling?.getAttribute("data-pitwall-row")).toBe("panels");
+  });
+
+  it("toont geen lege uitklapper zonder aanvullende inhoud", () => {
+    const view = render(<PitwallDashboard track={null} timing={null} panels={[]} />);
+    expect(view.container.querySelector("details")).toBeNull();
+  });
+});
