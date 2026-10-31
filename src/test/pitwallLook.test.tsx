@@ -81,6 +81,9 @@ describe("KPI-strip — drie groepen, geen verzonnen noemers", () => {
     const positie = view.container.querySelector('[data-pitwall-kpi-group="positie"]');
 
     expect(sectoren).not.toBeNull();
+    for (const group of [sectoren, rondetijd, positie]) {
+      expect(group?.className).toContain("rounded-lg border");
+    }
     expect(rondetijd).not.toBeNull();
     expect(positie).not.toBeNull();
 
@@ -183,6 +186,8 @@ describe("Pace-paneel — één lijn, bestaande waarden", () => {
       />,
     );
     expect(view.container.querySelector("[data-pitwall-pace-graph]")).not.toBeNull();
+    expect(view.container.querySelectorAll("[data-pitwall-pace-graph] circle")).toHaveLength(3);
+    expect(view.container.querySelectorAll("[data-pitwall-pace-graph] line").length).toBeGreaterThanOrEqual(9);
     expect(screen.getByText("1:32.4")).toBeTruthy();
     expect(screen.getByText("1:31.8")).toBeTruthy();
     expect(screen.getByText("1:33.1")).toBeTruthy();
@@ -197,6 +202,8 @@ describe("Pace-paneel — één lijn, bestaande waarden", () => {
     ];
     const view = render(<PacePanel strategy={null} pace={null} points={samples} />);
     expect(view.container.querySelector("[data-pitwall-pace-graph]")).not.toBeNull();
+    expect(view.container.querySelectorAll("[data-pitwall-pace-graph] circle")).toHaveLength(3);
+    expect(view.container.querySelectorAll("[data-pitwall-pace-graph] line").length).toBeGreaterThanOrEqual(9);
   });
 });
 

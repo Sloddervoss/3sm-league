@@ -44,6 +44,9 @@ try {
     });
     const desktop = await measure();
     assert.equal(desktop.panels.length, 4);
+    assert(desktop.panels[0].width > desktop.panels[1].width * 1.4, `${mode}: pace follows the wider circuit column`);
+    assert.equal(await page.locator("[data-pitwall-pace-graph] circle").count() > 0, true);
+    assert.equal(await page.locator("[data-pitwall-kpi-group]").count(), 3);
     assert(desktop.panels.every((r) => r.y >= 0 && r.bottom <= 1080), `${mode}: all four panels must fit`);
     assert(desktop.document.width <= 1920, `${mode}: horizontal page overflow`);
     assert(desktop.timing.scrollHeight > desktop.timing.clientHeight);
