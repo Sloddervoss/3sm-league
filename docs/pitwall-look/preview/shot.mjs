@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const OUT = path.resolve(process.cwd(), "docs/pitwall-look");
-const BASE = "http://127.0.0.1:5199/docs/pitwall-look/preview";
+const BASE = process.env.PITWALL_PREVIEW_BASE || "http://127.0.0.1:5199/docs/pitwall-look/preview";
 const CHROME = process.env.PITWALL_CHROME ||
   path.join(process.env.HOME ?? "", ".cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell");
 await mkdir(OUT, { recursive: true });
@@ -46,6 +46,20 @@ try {
     });
     const desktop = await measure();
     assert.equal(desktop.panels.length, 4);
+    assert.equal(await page.getByText("Compound-ID 4", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("2 gebruikt", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("3 beschikbaar", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("Baan 31.5 °C", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("Lucht 21.3 °C", { exact: true }).count(), 1);
+    const environmentClear = () => page.evaluate(() => {
+      const readings = [...document.querySelectorAll("[data-pitwall-environment] > span")];
+      const markers = [...document.querySelectorAll("[aria-label=\"Live rondeposities\"] > span")];
+      return readings.every(reading => markers.every(marker => {
+        const a = reading.getBoundingClientRect(), b = marker.getBoundingClientRect();
+        return a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+      }));
+    });
+    assert(await environmentClear(), `${mode}: environment must not overlap car markers`);
     assert(desktop.panels[0].width > desktop.panels[1].width * 1.4, `${mode}: pace follows the wider circuit column`);
     assert.equal(await page.locator("[data-pitwall-pace-graph] circle").count() > 0, true);
     assert.equal(await page.locator("[data-pitwall-kpi-group]").count(), 3);
@@ -109,6 +123,7 @@ try {
       await page.setViewportSize({ width, height: 1080 });
       await page.evaluate(() => scrollTo(0, 0));
       const m = await measure();
+      assert(await environmentClear(), `${mode}: environment overlap at ${width}px`);
       assert(m.document.width <= width, `${mode}: overflow at ${width}px`);
       const columns = m.panels.filter((r) => r.y === m.panels[0].y).length;
       assert.equal(columns, width >= 1280 ? 4 : width >= 768 ? 2 : 1);

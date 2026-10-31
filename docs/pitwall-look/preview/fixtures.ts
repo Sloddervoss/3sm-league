@@ -9,6 +9,9 @@
  * De vorm van de data is die van `v3_normalized` en `get_pitwall_data`; de
  * waarden zijn verzonnen voorbeeldwaarden, niet uit een race gelezen.
  */
+import { parseTyreTelemetry } from "../../../supabase/functions/_shared/tyreTelemetry";
+import baseline from "../../../tools/simhub-plugin/3SM.EnduranceConnector.DiagnosticsTests/Fixtures/v3-frame-baseline.json";
+
 import type {
   PitwallPlannedStint,
   PitwallStrategyRow,
@@ -72,6 +75,8 @@ export const fixtureV3: V3Normalized = {
   track: { lapDistancePct: 0.18, trackSurface: "on_track", onPitRoad: false },
   fuel: { fuelLitres: 68.4, fuelCapacityLitres: 100 },
   opponents: fixtureOpponents,
+  // Expliciete plugin-testfixture, geen live meting. Zelfde normalisatie als ingest.
+  tyres: parseTyreTelemetry(baseline.tyres),
   vehicle: {
     speedKph: 187,
     throttlePct: 100,

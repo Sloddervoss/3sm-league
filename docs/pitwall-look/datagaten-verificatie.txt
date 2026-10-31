@@ -1,0 +1,68 @@
+PITWALL DATAGATEN — VERIFICATIE
+
+Werkboom: /home/hermes/wt/pitwall-look
+Branch: feat/pitwall-look-3sm
+Startcommit: 24fd812
+Analysecommit: 46aeb7f
+Implementatiecommit: 96e0485
+
+PASS — npm test: 194 testbestanden, 1609 tests, inclusief 18 nieuwe datagatentests.
+PASS — ESLint op de drie gewijzigde productie-TS/TSX-bestanden en nieuwe test.
+PASS — git diff --check.
+PASS — parseTelemetryV3Envelope + snapshotDto + UI met de bestaande pluginfixture:
+compound-ID, sets, temperatuur en rubberconditie blijven behouden.
+PASS — null/ontbrekend, gedeeltelijk, 0, onbeperkt (255), ongeldige getallen,
+offline en buiten-de-auto. Geen hardcoded live invulwaarden.
+PASS — browserharnas beide modi: vier hoofdpanelen en Meer analyse binnen 1080p,
+geen horizontale overflow, timing met muis/toetsenbord bereikbaar, 64 extra rijen
+veranderen documenthoogte niet; inklappen, raw-telemetrie en responsive behouden.
+PASS — assertions op toegevoegde meetwaarden en geen overlap tussen weerregel
+en automarkers, ook bij 1440/1024/390px.
+PASS — beide 1080p-screenshots met vision_analyze gecontroleerd: nieuwe metingen
+leesbaar zonder overlap, alle vier panelen plus Meer analyse volledig zichtbaar.
+
+FAIL (aantoonbaar bestaand) — npm run typecheck: 13 diagnostics. Git archive van
+24fd812 met dezelfde node_modules geeft byte-identieke uitvoer en exitcode 2.
+Fouten in TeamModal, community-support, pitWindow/strategy.test en main.tsx.
+Geen nieuwe diagnostics. Logs uitsluitend tijdelijk in de scratchdirectory.
+Geen productiebuild/deploy uitgevoerd; browserharnas en Vitest oefenen echte
+componenten, maar bewijzen geen ingelogde productieroute of echte feeddekking.
+
+Eerste browserruns vonden te hoge panelen; nieuwe metadata compacter ingedeeld
+zonder hoofdwaarden te verkleinen of inhoud te verwijderen. Eerste visuele
+controle vond overlap met automarkers; meetregel boven de voortgang gezet,
+vervolgens browserchecks en visuele controle opnieuw geslaagd.
+De bestaande server op poort 5199 bleef intact; eigen testserver gebruikte 5198.
+
+GEWIJZIGDE BESTANDEN EN SHA-256
+6dc508545e3bb3607b52619bcbf271b1d2a2576aaeb0eb7cd01bdd4d22757e59  src/features/endurance/pitwall/pitwallHelpers.ts
+f623872ec0dc831a7a1322ffcd366583c29fa6bc8baa88d8a30e1206df1ab40c  src/features/endurance/pitwall/VehicleTelemetryPanel.tsx
+a6e313c193852976cfaa06ab5b4007fc5983f7cedb8bf1e91d7fd000f5338ece  src/features/endurance/pitwall/LiveTrackPanel.tsx
+095e33739985158ccf475d2839d905e7f4a3605dd8dd3be47798919b3f9cd489  src/test/pitwallDataGaps.test.tsx
+0f247ec83f59c88e04eee664c01f10509e459019e32ae651e2b07c41ff507c57  docs/pitwall-look/datagaten.md
+fb6328b162ba5011e97f1cf2adb380897851ce6893a252e4e23d9d1fded545b5  docs/pitwall-look/README.md
+06cf3a0dffb03d70d12fb8dcc57c11466a1485ab32050c366187fb7bfa637e63  docs/pitwall-look/preview/fixtures.ts
+ea372faa37532ce0ec46dca2385259ef6cafefc2e1c4abac4cb7450576aca735  docs/pitwall-look/preview/shot.mjs
+8c1f77a3ab707782c91b8acba10e500ac81c494e0928066d7511f2066cf31474  docs/pitwall-look/verification.json
+ac6376f25e3ef6a9a1914c2149c7ae183f3255fd0ba8cdf587ee0006d02da20f  docs/pitwall-look/pitwall-endurance-1920x1080.png
+b7f1d866dfc31a2d3fc6664064f540058dc326fc8b470f5cd415a45ac7aee4df  docs/pitwall-look/pitwall-test-1920x1080.png
+78ba900ee560f20972d4a609c588eae20118a42e19a6f6d5d356c2045ca90d2a  docs/pitwall-look/pitwall-endurance-full.png
+00a77f42afc80a8448a7d6d380224cdcb9f454511f8b8facae7ce38d2db2bbf2  docs/pitwall-look/pitwall-test-full.png
+Daarnaast dit verificatieverslag zelf (geen zelfreferentiële hash).
+
+IMPACT
+Website/frontend: alleen gedeelde pitwallpresentatie en frontendtype.
+Backend/API en bestaande wirecontracten: geen impact verwacht, niet gewijzigd.
+Bot: geen impact verwacht. Database/migraties/RLS: niet gewijzigd.
+Auth/rollen: geen impact verwacht. Plugin: niet gewijzigd, geen release gebouwd.
+Advieslogica, polling, caches en toegangsrechten: niet gewijzigd.
+Deployment: niet gewijzigd. Productiefrontendwijzigingen: NEE.
+Geen push, merge, deploy of productieactie. Werk uitsluitend lokaal gecommit.
+
+RESTEREND
+Geen actueel gemeten stintanker bewezen; geen timer uit planningsdatums gemaakt.
+Niet-geverifieerde SDK-kandidaten blijven categorie 4, niet categorie 3.
+Een contractveld is geen bewijs van een daadwerkelijk uitgezonden SDK-meting.
+Voor pluginuitbreiding eerst exacte kanalen/auto-scope bewijzen en aparte go.
+
+PRODUCTIEWIJZIGING: NEE

@@ -195,3 +195,38 @@ Screenshots zijn lokale fixtures met echte componenten, geen verificatie van
 ingelogde productieroutes. Backend/API, bot, DB/migraties, auth/rollen en
 deployment: geen impact. Productiefrontendwijzigingen: NEE.
 Niet gepusht, niet gemerged, niet gedeployed. PRODUCTIEWIJZIGING: NEE.
+
+
+## Datagaten: brongecontroleerde uitbreiding
+
+Actuele analyse: `datagaten.md`. De eerdere opmerkingen hierboven over ontbrekende
+compound-/setgegevens zijn hiermee achterhaald: de bestaande plugin en ingest
+leveren deze optioneel al. Nieuw in beide modi:
+
+- `VehicleTelemetryPanel.tsx`: compound-ID (geen onbewezen compoundnaam), gebruikte
+  en beschikbare sets; sentinel 255 voor beschikbaar wordt “onbeperkt”.
+- `LiveTrackPanel.tsx`: baan-/luchttemperatuur in °C en rubberconditie, boven de
+  voortgangsmarkers zodat ze niet overlappen. Rubberconditie is géén nat/droogstatus.
+- `pitwallHelpers.ts`: optioneel `tyres` via het bestaande servertype, zonder
+  runtime-import of nieuwe contractvorm.
+- Ontbrekende/ongeldige waarden worden niet aangevuld. Eigen bandenwaarden
+  verdwijnen buiten de auto en offline; sessieomgeving verdwijnt offline.
+- Eigen sectortijden waren al zichtbaar. Geen stinttimer uit planningsdatums.
+
+De nieuwe screenshotwaarden voor deze uitbreiding komen expliciet uit de
+bestaande plugin-testfixture `v3-frame-baseline.json`, via de echte bandenparser.
+Dit zijn testwaarden, geen productieobservaties; de overige voorbeelddata blijft
+ongewijzigd. Er is niets gepubliceerd.
+
+Verificatie van deze ronde: `datagaten-verificatie.txt`. Vier screenshots vernieuwd;
+beide 1080p-beelden opnieuw visueel gecontroleerd. Bij 1920×1080 blijft de
+onderrand endurance 1027 px en is de onderrand test 1012,5 px; Meer analyse
+blijft volledig binnen beeld. Geen overlap tussen de weerregel en automarkers.
+De browser controleert dit ook bij 1440, 1024 en 390 px.
+
+Voor een bezette standaardpoort ondersteunt `preview/shot.mjs` nu
+`PITWALL_PREVIEW_BASE`; deze ronde draaide de eigen tijdelijke server op 5198.
+De al draaiende server op 5199 is niet gestopt of aangepast.
+
+Frontendpresentatie gewijzigd; backend/API, plugin, bot, database/migraties,
+auth/rollen, adviespad en deployment ongewijzigd. Productiefrontendwijzigingen: NEE.
