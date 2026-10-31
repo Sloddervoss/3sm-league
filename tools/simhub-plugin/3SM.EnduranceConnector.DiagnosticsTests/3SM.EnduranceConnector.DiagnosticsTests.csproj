@@ -20,6 +20,10 @@
     <!-- ConnectorSettings verwijst naar FlagSettings/FlagPreset; dat bestand was hier
          niet gelinkt, waardoor deze harness niet bouwde. FlagModels is SimHub-vrij. -->
     <Compile Include="..\3SM.EnduranceConnector\FlagModels.cs" Link="FlagModels.cs" />
+    <!-- FASE 1 baseline: de bestaande vlagcode zelf mee compileren, zodat de referentie
+         in LegacyFlagOracle.cs tegen de ECHTE 0.7.1.2-implementatie bewezen wordt.
+         GameReaderCommon wordt door Stubs\GameReaderCommonStub.cs ingevuld. -->
+    <Compile Include="..\3SM.EnduranceConnector\FlagService.cs" Link="FlagService.cs" />
     <!-- 0.7.1: bandenhek + vingerafdruk. Beide bestanden zijn SimHub-vrij. -->
     <Compile Include="..\3SM.EnduranceConnector\TyrePublishGate.cs" Link="TyrePublishGate.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetryContractsV3.cs" Link="TelemetryContractsV3.cs" />
@@ -27,5 +31,9 @@
          memory-image te testen (geen SimHub-DLL, geen iRacing nodig). -->
     <Compile Include="..\3SM.EnduranceConnector\IrSdkChannels.cs" Link="IrSdkChannels.cs" />
     <Compile Include="..\3SM.EnduranceConnector\IrSdkMemoryReader.cs" Link="IrSdkMemoryReader.cs" />
+  </ItemGroup>
+  <!-- Vastgelegde baseline: gouden V3-frame, 0.7.1.2-configuratie en 0.7.1.2-updaterstaten. -->
+  <ItemGroup>
+    <None Include="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -1,29 +1,12 @@
+# Fase D / baseline-harness.
+#
+# Draait het testproject (net8.0). De vroegere csc-lijst met losse bestanden is vervangen:
+# die liep uit de pas met de csproj (nieuwe bestanden werden vergeten, waardoor de harness
+# niet meer bouwde) en kon de nieuwe tests niet compileren. Vereist: .NET 8 SDK.
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
-$connector = Join-Path $root '3SM.EnduranceConnector'
-$outDir = Join-Path $PSScriptRoot 'bin'
-New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
-if (-not (Test-Path $csc)) { throw 'csc.exe voor .NET Framework ontbreekt' }
-$exe = Join-Path $outDir '3SM.EnduranceConnector.DiagnosticsTests.exe'
-& $csc /nologo /warn:4 /target:exe /out:$exe `
-  /reference:System.dll `
-  /reference:System.Core.dll `
-  /reference:System.Net.Http.dll `
-  /reference:System.Runtime.Serialization.dll `
-  (Join-Path $connector 'DiagnosticsClient.cs') `
-  (Join-Path $connector 'UpdaterStateStore.cs') `
-  (Join-Path $connector 'SessionTelemetryReader.cs') `
-  (Join-Path $connector 'ConnectorSettings.cs') `
-  (Join-Path $connector 'FlagModels.cs') `
-  (Join-Path $connector 'TelemetryContractsV3.cs') `
-  (Join-Path $connector 'TyrePublishGate.cs') `
-  (Join-Path $connector 'IrSdkChannels.cs') `
-  (Join-Path $connector 'IrSdkMemoryReader.cs') `
-  (Join-Path $PSScriptRoot 'TyreGateTests.cs') `
-  (Join-Path $PSScriptRoot 'IrSdkReaderTests.cs') `
-  (Join-Path $PSScriptRoot 'FaseDTests.cs')
-if ($LASTEXITCODE -ne 0) { throw "Fase D harness compile faalde: $LASTEXITCODE" }
-& $exe
+$project = Join-Path $PSScriptRoot '3SM.EnduranceConnector.DiagnosticsTests.csproj'
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+    throw '.NET 8 SDK (dotnet) ontbreekt; de harness bouwt niet met de oude csc uit .NET Framework.'
+}
+& dotnet run -c Release --project $project
 exit $LASTEXITCODE

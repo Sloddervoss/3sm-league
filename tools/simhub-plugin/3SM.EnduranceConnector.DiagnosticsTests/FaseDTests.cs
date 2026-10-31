@@ -338,14 +338,34 @@ internal static class FaseDTests
         if (!(cadence && bounded)) failed++;
     }
 
-    public static int Main()
+    public static int Main(string[] args)
     {
+        // Hulpmode: legt de baseline vast (zie V3PayloadFixtureTests / SettingsCompatibilityTests).
+        // Wordt alleen met de hand gebruikt; de normale run doet niets speciaals.
+        if (args != null && args.Length > 0)
+        {
+            if (string.Equals(args[0], "--dump-v3", StringComparison.Ordinal))
+            {
+                Console.Write(V3PayloadFixtureTests.Serialize(V3PayloadFixtureTests.BuildRepresentativeFrame()));
+                return 0;
+            }
+            if (string.Equals(args[0], "--dump-settings", StringComparison.Ordinal))
+            {
+                Console.Write(SettingsCompatibilityTests.DumpLegacySettings());
+                return 0;
+            }
+        }
         var irSdkChecks = 0;
+        var baselineChecks = 0;
         try
         {
             BasicMatrix().GetAwaiter().GetResult();
             TyreGateTests.Run(Check);
             irSdkChecks = IrSdkReaderTests.Run(Check);
+            baselineChecks += FlagBaselineTests.Run(Check);
+            baselineChecks += V3PayloadFixtureTests.Run(Check);
+            baselineChecks += SettingsCompatibilityTests.Run(Check);
+            baselineChecks += UpdaterTransitionTests.Run(Check);
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
@@ -356,6 +376,6 @@ internal static class FaseDTests
             Console.WriteLine("HARNESS_EXCEPTION_TYPE=" + error.GetType().FullName);
         }
         Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
-        return failed == 0 && passed == 38 + irSdkChecks ? 0 : 1;
+        return failed == 0 && passed == 38 + irSdkChecks + baselineChecks ? 0 : 1;
     }
 }
