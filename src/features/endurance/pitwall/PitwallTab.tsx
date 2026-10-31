@@ -8,14 +8,15 @@ import { useEnduranceActor } from "../core/ActorContext";
 import type { EnduranceEvent } from "../core/types";
 import { usePitwallData } from "./usePitwallData";
 import { getDemoData, DEMO_SCENARIO_LIST, type DemoScenario, type DemoData } from "./pitwallDemoData";
-import { TopRaceBar } from "./TopRaceBar";
+import { PitwallDashboard } from "./PitwallDashboard";
+import { PitwallContextBar } from "./PitwallContextBar";
+import { OwnCarPanel } from "./OwnCarPanel";
 import { DecisionBand } from "./DecisionBand";
 import { usePitwallStrategy } from "./usePitwallStrategy";
 import { PitStrategyBlock } from "./PitStrategyBlock";
 import { FuelPanel } from "./FuelPanel";
 import { StintDriverPanel } from "./StintDriverPanel";
 import { PacePanel } from "./PacePanel";
-import { RacePositionPanel } from "./RacePositionPanel";
 import { AlertZone } from "./AlertZone";
 import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
@@ -25,7 +26,6 @@ import { median } from "./strategy/fuelModel";
 import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
 import { LiveTrackPanel } from "./LiveTrackPanel";
 import { RaceTelemetryStrip } from "./RaceTelemetryStrip";
-import { PaceGraph } from "./PaceGraph";
 import { deriveStandings } from "./standings";
 import { useMemo, useCallback, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -180,23 +180,91 @@ export const PitwallTab = ({ event }: Props) => {
         : null,
   });
 
+  const teamName = teams.find((t) => t.id === selectedTeamId)?.name ?? null;
+  const ownDriver = (isDemo ? null : real.v3?.identity?.currentDriverName) ?? driverName ?? null;
+  const ownCar = isDemo ? null : real.v3?.identity?.carName ?? null;
+  const ownLastLap = (isDemo ? null : real.v3?.timing?.lastLapTimeSeconds) ?? pace?.lastLapSeconds ?? null;
+  const ownBestLap = (isDemo ? null : real.v3?.timing?.bestLapTimeSeconds) ?? pace?.bestLapSeconds ?? null;
+
+  const connectionState = !isLive ? "offline" : strategy?.strategy_status === "low_sample" ? "stale" : "live";
+
   return (
     /* data-pitwall + data-pitwall-focus for CSS targeting */
-    <div className={isFocusMode ? "space-y-2 w-full" : "space-y-3"} data-pitwall="true" data-pitwall-focus={isFocusMode ? "true" : undefined}>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-orange-500/15 bg-gradient-to-r from-orange-500/10 to-transparent p-4">
-        <div><h2 className="font-heading text-xl font-black text-white">Pitwall</h2><p className="mt-1 text-xs text-gray-400">Je race in beeld. Stints en bijsturen binnen handbereik.</p></div>
-        {!isDemo && <button type="button" aria-expanded={controlOpen} aria-controls="pitwall-race-control" onClick={() => setControlOpen(!controlOpen)} className={`flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400 ${controlOpen ? "bg-white/10 text-white" : "bg-orange-500 text-white hover:bg-orange-400"}`}><Radio className="h-4 w-4" />{controlOpen ? "Race Control sluiten" : "Stints & Race Control"}</button>}
-      </div>
+    <div
+      className={isFocusMode ? "w-full space-y-2 bg-[#07080A] text-slate-200" : "space-y-3 bg-[#07080A] text-slate-200"}
+      data-pitwall="true"
+      data-pitwall-focus={isFocusMode ? "true" : undefined}
+      data-pitwall-mode="endurance"
+    >
+      {/* === CONTEXTREGEL — race, team, rijder, verbindingsstatus === */}
+      <PitwallContextBar
+        eyebrow="3SM · Endurance"
+        title={event.name}
+        state={connectionState}
+        note={!isLive ? "Planning blijft beschikbaar" : undefined}
+        items={[
+          ...(teamName ? [{ label: "Team", value: teamName }] : []),
+          ...(ownDriver ? [{ label: "Rijder", value: ownDriver, tone: "accent" as const }] : []),
+          ...(ownCar ? [{ label: "Auto", value: ownCar }] : []),
+        ]}
+        actions={
+          <>
+            {!isDemo && (
+              <button
+                type="button"
+                aria-expanded={controlOpen}
+                aria-controls="pitwall-race-control"
+                onClick={() => setControlOpen(!controlOpen)}
+                className={`flex min-h-9 items-center gap-2 rounded-lg px-3 text-[12px] font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400 ${
+                  controlOpen ? "bg-white/10 text-white" : "bg-orange-500 text-white hover:bg-orange-400"
+                }`}
+              >
+                <Radio className="h-4 w-4" />
+                {controlOpen ? "Race Control sluiten" : "Stints & Race Control"}
+              </button>
+            )}
+            {isFocusMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={requestFullscreen}
+                  className="rounded-lg bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-bold text-slate-300 transition ring-1 ring-white/10 hover:text-white"
+                >
+                  Volledig scherm
+                </button>
+                <button
+                  type="button"
+                  onClick={exitFocus}
+                  className="rounded-lg bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-bold text-slate-300 transition ring-1 ring-white/10 hover:text-white"
+                >
+                  Focus verlaten
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={enterFocus}
+                className="rounded-lg bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-bold text-slate-300 transition ring-1 ring-white/10 hover:text-white"
+              >
+                Focus mode
+              </button>
+            )}
+          </>
+        }
+      />
+
       {/* === TEAM SELECTOR (real mode only) === */}
       {teams.length > 1 && !isDemo && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {teams.map((team) => (
             <button
               key={team.id}
               type="button"
               onClick={() => setSelectedTeamId(team.id)}
-              className={`rounded px-3 py-1.5 text-xs font-bold transition ${
-                selectedTeamId === team.id ? "bg-orange-500 text-white" : "bg-black/20 text-gray-400 hover:text-white"
+              className={`rounded-lg px-3 py-1.5 text-[12px] font-bold transition ${
+                selectedTeamId === team.id
+                  ? "bg-orange-500 text-white"
+                  : "bg-white/[0.04] text-slate-400 ring-1 ring-white/10 hover:text-white"
               }`}
             >
               {team.name}
@@ -205,59 +273,12 @@ export const PitwallTab = ({ event }: Props) => {
         </div>
       )}
 
-      <div className={controlOpen ? "grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]" : ""}>
-      {controlOpen && <aside id="pitwall-race-control" className="min-w-0 rounded-2xl border border-orange-500/20 bg-card/90 p-3 2xl:sticky 2xl:top-4 2xl:col-start-2 2xl:row-start-1 2xl:max-h-[85vh] 2xl:overflow-y-auto [&_.grid]:!grid-cols-1">
-        <div className="mb-3 flex items-center justify-between px-2"><span className="text-xs font-bold uppercase tracking-wider text-orange-300">Stints & Race Control</span><button type="button" aria-label="Race Control sluiten" onClick={() => setControlOpen(false)} className="rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button></div>
-        <RaceControlPanel key={`${event.id}:${selectedTeamId}`} event={event} selectedTeamId={selectedTeamId ?? ""} embedded />
-      </aside>}
-      <div className="min-w-0 space-y-3 2xl:col-start-1 2xl:row-start-1">
-      {/* FOCUS MODE TOP STRIP */}
-      {isFocusMode && (
-        <div className="flex items-center gap-3 rounded-lg bg-black/60 px-4 py-2 text-xs ring-1 ring-white/5">
-          <span className="font-black text-orange-400 tracking-wider text-[10px]">3SM</span>
-          <span className="h-4 w-px bg-white/10" />
-          <span className="font-bold text-white">{event.name}</span>
-          <span className="h-4 w-px bg-white/10" />
-          {selectedTeamId && (
-            <>
-              <span className="text-gray-400">Team: <span className="font-bold text-white">
-                {teams.find((t) => t.id === selectedTeamId)?.name ?? selectedTeamId}
-              </span></span>
-              <span className="h-4 w-px bg-white/10" />
-            </>
-          )}
-          <span className={`inline-flex items-center gap-1 font-bold ${
-            !isLive || strategy?.strategy_status === "low_sample"
-              ? "text-yellow-400" : "text-emerald-400"
-          }`}>
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
-            {isLive ? "LIVE" : "OFFLINE"}
-          </span>
-          <div className="ml-auto flex gap-2">
-            <button
-              type="button"
-              onClick={requestFullscreen}
-              className="rounded bg-white/10 px-2 py-1 font-bold text-gray-400 hover:text-white text-[10px] transition"
-            >
-              Volledig scherm
-            </button>
-            <button
-              type="button"
-              onClick={exitFocus}
-              className="rounded bg-white/10 px-2 py-1 font-bold text-gray-400 hover:text-white text-[10px] transition"
-            >
-              Focus verlaten
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* === DEMO SWITCHER === */}
       {isDemo && !isFocusMode && (
         <div className="rounded-lg border border-dashed border-orange-500/30 bg-orange-500/[0.04] px-3 py-2">
           <div className="mb-1.5 flex items-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full bg-orange-500" />
-            <span className="text-[9px] font-bold uppercase tracking-wider text-orange-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-orange-400">
               DEV PITWALL DEMO — Scenario: {demoScenario === "normal" ? "Normale race" : demoScenario === "pit" ? "Pit deze ronde" : demoScenario === "low-data" ? "Weinig data" : "Telemetrie verloren"}
             </span>
           </div>
@@ -278,100 +299,114 @@ export const PitwallTab = ({ event }: Props) => {
         </div>
       )}
 
-      {/* Focus toggle button — only in non-focus embedded mode */}
-      {!isFocusMode && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={enterFocus}
-            className="rounded bg-white/8 px-3 py-1 text-xs font-bold text-gray-400 hover:text-white transition ring-1 ring-white/10"
+      <div className={controlOpen ? "grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]" : ""}>
+        {controlOpen && (
+          <aside
+            id="pitwall-race-control"
+            className="min-w-0 rounded-xl border border-[#1D2431] bg-[#0B0D11] p-3 2xl:sticky 2xl:top-4 2xl:col-start-2 2xl:row-start-1 2xl:max-h-[85vh] 2xl:overflow-y-auto [&_.grid]:!grid-cols-1"
           >
-            Focus mode
-          </button>
-        </div>
-      )}
-
-      {/* === TOP BAR — sticky in focus mode === */}
-      {strategy && (
-        <TopRaceBar
-          strategy={strategy}
-          position={position}
-          raceClock={raceClock}
-          offlineMode={!isLive}
-        />
-      )}
-
-      {/* === BESLISSINGSBAND — de enige plek met een advies en met rondes === */}
-      {strategy && <DecisionBand advice={advice} />}
-
-      {loading && !strategy && (
-        <p className="text-sm text-gray-500">Pitwall laden…</p>
-      )}
-
-      {!isDemo && (teamQuery.error || real.error) && <p role="alert" className="text-sm text-red-300">Pitwall laden mislukt. Controleer je toegang en probeer opnieuw.</p>}
-      {!loading && !strategy && !isDemo && !teamQuery.error && !real.error && (
-        <p className="text-sm text-gray-500">
-          Geen pitwall-data beschikbaar. {!selectedTeamId && "Er is nog geen toegankelijk team voor deze race."}
-        </p>
-      )}
-
-      <RaceTelemetryStrip v3={isDemo ? null : real.v3 ?? null} live={isLive} />
-
-      {/* Het klassement is het grootste paneel: daar kijkt een pitwall het eerst naar. */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <div className="min-w-0">
-          <StandingsWidget
-            live={isLive}
-            standings={standings}
-            ownCarLabel={teams.find((t) => t.id === selectedTeamId)?.name ?? "Mijn auto"}
-            ownCarNumber={null}
-          />
-        </div>
-        <div className="min-w-0 space-y-3">
-          <LiveTrackPanel v3={isDemo ? null : real.v3 ?? null} live={isLive} fallbackTrack={[event.circuit, event.configuration].filter(Boolean).join(' - ')} />
-          <PaceGraph points={pacePoints} />
-        </div>
-      </div>
-
-      {strategy && (
-        <>
-          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-            <FuelPanel strategy={strategy} />
-            <PitStrategyBlock
-              strategy={strategy}
-              driverName={driverName}
-              nextDriverName={nextDriverName}
-              pitLoss={isDemo ? null : real.pitStopMeasurement}
-            />
-            <RacePositionPanel strategy={strategy} position={position} />
-            <VehicleTelemetryPanel
-              key={`${event.id}:${selectedTeamId}`}
-              v3={isDemo ? null : real.v3 ?? null}
-              live={isLive}
-              tyreEstimate={isDemo ? null : real.tyreEstimate}
-            />
-          </div>
-
-          {/* Strategie is het tweede grote paneel; pace en stint zijn naslag. */}
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-            <StrategyForecast
-              strategy={strategy}
-              position={position}
-              pace={pace}
-              plannedStints={plannedStints}
-              nextDriverName={nextDriverName}
-            />
-            <div className="space-y-3">
-              <PacePanel strategy={strategy} pace={pace} lapTimes={lapTimes} />
-              <StintDriverPanel strategy={strategy} plannedStints={nextStints.map((s) => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))} currentStint={currentStint} driverName={driverName} />
+            <div className="mb-3 flex items-center justify-between px-2">
+              <span className="text-[11px] font-black uppercase tracking-[0.16em] text-orange-300">Stints & Race Control</span>
+              <button
+                type="button"
+                aria-label="Race Control sluiten"
+                onClick={() => setControlOpen(false)}
+                className="rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          </div>
+            <RaceControlPanel key={`${event.id}:${selectedTeamId}`} event={event} selectedTeamId={selectedTeamId ?? ""} embedded />
+          </aside>
+        )}
 
-          <AlertZone alerts={alerts} />
-          <RaceTimeline events={events} plannedStints={plannedStints} />
-        </>
-      )}
-      </div>
+        <div className="min-w-0 space-y-3 2xl:col-start-1 2xl:row-start-1">
+          <PitwallDashboard
+            kpi={<RaceTelemetryStrip v3={isDemo ? null : real.v3 ?? null} live={isLive} />}
+            decision={strategy ? <DecisionBand advice={advice} /> : undefined}
+            track={
+              <>
+                <LiveTrackPanel
+                  v3={isDemo ? null : real.v3 ?? null}
+                  live={isLive}
+                  fallbackTrack={[event.circuit, event.configuration].filter(Boolean).join(" - ")}
+                />
+                <OwnCarPanel
+                  driverName={ownDriver}
+                  carName={ownCar}
+                  teamName={teamName}
+                  lastLapSeconds={ownLastLap}
+                  bestLapSeconds={ownBestLap}
+                  gapToLeaderSeconds={position?.gapToLeaderSeconds ?? null}
+                />
+              </>
+            }
+            timing={
+              <StandingsWidget
+                live={isLive}
+                standings={standings}
+                ownCarLabel={teamName ?? "Mijn auto"}
+                ownCarNumber={null}
+              />
+            }
+            panels={
+              strategy
+                ? [
+                    <PacePanel key="pace" strategy={strategy} pace={pace} lapTimes={lapTimes} points={pacePoints} />,
+                    <StintDriverPanel
+                      key="driver"
+                      strategy={strategy}
+                      plannedStints={nextStints.map((s) => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))}
+                      currentStint={currentStint}
+                      driverName={driverName}
+                    />,
+                    <FuelPanel key="fuel" strategy={strategy} />,
+                    <VehicleTelemetryPanel
+                      key={`tyres:${event.id}:${selectedTeamId}`}
+                      v3={isDemo ? null : real.v3 ?? null}
+                      live={isLive}
+                      tyreEstimate={isDemo ? null : real.tyreEstimate}
+                    />,
+                  ]
+                : []
+            }
+            extra={
+              strategy ? (
+                <>
+                  {/* Aanvullende strategie: ongewijzigde componenten, nieuwe plek. */}
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+                    <StrategyForecast
+                      strategy={strategy}
+                      position={position}
+                      pace={pace}
+                      plannedStints={plannedStints}
+                      nextDriverName={nextDriverName}
+                    />
+                    <PitStrategyBlock
+                      strategy={strategy}
+                      driverName={driverName}
+                      nextDriverName={nextDriverName}
+                      pitLoss={isDemo ? null : real.pitStopMeasurement}
+                    />
+                  </div>
+                  <AlertZone alerts={alerts} />
+                  <RaceTimeline events={events} plannedStints={plannedStints} />
+                </>
+              ) : undefined
+            }
+          />
+
+          {loading && !strategy && <p className="text-[13px] text-slate-500">Pitwall laden…</p>}
+
+          {!isDemo && (teamQuery.error || real.error) && (
+            <p role="alert" className="text-[13px] text-red-300">Pitwall laden mislukt. Controleer je toegang en probeer opnieuw.</p>
+          )}
+          {!loading && !strategy && !isDemo && !teamQuery.error && !real.error && (
+            <p className="text-[13px] text-slate-500">
+              Geen pitwall-data beschikbaar. {!selectedTeamId && "Er is nog geen toegankelijk team voor deze race."}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
