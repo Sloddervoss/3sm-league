@@ -132,3 +132,33 @@ Deno.test("een ongeldige gap kost het frame niet", () => {
   if (parsed.position.gapToLeaderSeconds !== null) throw new Error("ongeldige gap is niet leeggemaakt");
   if (parsed.timing.completedLaps !== 2) throw new Error("frame is niet doorgekomen");
 });
+
+// Sinds 2026-10-31 is een gat signed. Een auto vóór de speler heeft een negatief
+// gapToPlayerSeconds en dat is een geldige meting; een frame met zo'n gat hoort
+// geaccepteerd te worden (202-pad), niet leeggemaakt of geweigerd.
+Deno.test("een negatief gat wordt geaccepteerd en blijft staan", () => {
+  const v3 = {
+    protocolVersion: 3,
+    sequence: 2,
+    capturedAt: "2026-10-31T10:00:00Z",
+    transportSessionId: "sessie",
+    identity: { currentDriverId: null, currentDriverName: "Vincent", carId: "mclaren720sgt3", carName: null, trackName: "spa", trackConfig: null },
+    session: { isInCar: true, sessionTimeSeconds: 10, sessionTimeRemainingSeconds: null, sessionLapsRemaining: null, flags: ["green"], sessionState: "racing" },
+    timing: { currentLapElapsedSeconds: 5, lastLapTimeSeconds: null, bestLapTimeSeconds: null, completedLaps: 2 },
+    // De speler ligt zelf een seconde achter op de leider; negatief is dus geldig.
+    position: { position: 2, classPosition: 2, gapToLeaderSeconds: -1 },
+    track: { lapDistancePct: 0.2, trackSurface: "on_track", onPitRoad: false },
+    fuel: { fuelLitres: 40, fuelPct: null },
+    raceState: { incidents: 0 },
+    pitService: { pitServiceFlagsRaw: null, requiredRepairSeconds: null, optionalRepairSeconds: null },
+    opponents: [
+      { id: "p1", carNumber: "77", driverName: "R. Godefrooij", teamName: null, carClass: "GT3", carClassId: "17", position: 1, classPosition: 1, lap: 42, lapDistancePct: 0.3, gapToPlayerSeconds: -42.8, gapToLeaderSeconds: 0, lastLapSeconds: 121.8, bestLapSeconds: 120.4, inPit: false, speedKph: 212.4, connected: true, isPlayer: false },
+      { id: "p7", carNumber: "88", driverName: "E. Smit", teamName: null, carClass: "GT3", carClassId: "17", position: 7, classPosition: 3, lap: 41, lapDistancePct: 0.1, gapToPlayerSeconds: 0, gapToLeaderSeconds: 15, lastLapSeconds: 122.8, bestLapSeconds: 121.4, inPit: false, speedKph: 205.1, connected: true, isPlayer: false },
+    ],
+  };
+  const parsed = parseTelemetryV3Envelope(v3);
+  if (parsed.position.gapToLeaderSeconds !== -1) throw new Error("negatief eigen gat is leeggemaakt");
+  if (parsed.opponents?.[0]?.gapToPlayerSeconds !== -42.8) throw new Error("negatief tegenstandergat is leeggemaakt");
+  if (parsed.opponents?.[1]?.gapToPlayerSeconds !== 0) throw new Error("nul is geen meting meer");
+  if (parsed.opponents?.[1]?.gapToLeaderSeconds !== 15) throw new Error("positief gat is aangetast");
+});

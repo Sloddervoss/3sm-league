@@ -347,6 +347,27 @@ const v3Boolean = (value: unknown, path: string): boolean | null => {
   return value;
 };
 
+/**
+ * Een gat is een verschil en kan negatief zijn: de plugin stuurt
+ * `SignedSeconds(player.GaptoLeader)` en de tegenstanderlijst gebruikt hetzelfde
+ * teken. Deze parser heeft daarom geen ondergrens van 0 en geen -1-sentinel —
+ * -1 is een echt gat van één seconde. Alleen ontbreken of een niet-numerieke
+ * waarde maakt het veld leeg; buiten ±86400 is het geen gat maar rommel en
+ * wordt het veld ook leeg, zonder het frame te kosten.
+ */
+const v3SignedGap = (value: unknown, path: string): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    console.error("[ingest] gat is niet-numeriek, veld leeggemaakt", { pad: path, waarde: String(value) });
+    return null;
+  }
+  if (value < -86400 || value > 86400) {
+    console.error("[ingest] gat buiten bereik, veld leeggemaakt", { pad: path, waarde: String(value) });
+    return null;
+  }
+  return value;
+};
+
   // 0.5.6 additief: optionele velden mogen volledig ONTBREKEN; v3Number/v3Boolean
   // laten alleen null door, geen undefined.
 
@@ -440,17 +461,9 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
     position: {
       position: v3Number(position.position, "position.position", { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] }),
       classPosition: v3Number(position.classPosition, "position.classPosition", { nullable: true, integer: true, min: 1, max: 1000, sentinels: [0, -1] }),
-      // Optioneel veld: een oudere plugin kan hier een ongeldige waarde sturen
-      // (bijvoorbeeld een verkeerde eenheid). Dat mag nooit het hele frame kosten;
-      // we laten het veld dan leeg en houden de rest van de telemetrie.
-      gapToLeaderSeconds: (() => {
-        try {
-          return v3Number(position.gapToLeaderSeconds, "position.gapToLeaderSeconds", { nullable: true, min: 0, max: 86400, sentinels: [-1] });
-        } catch {
-          console.error("[ingest] gapToLeaderSeconds ongeldig, veld leeggemaakt", { waarde: String(position.gapToLeaderSeconds) });
-          return null;
-        }
-      })(),
+      // Optioneel veld met een teken: negatief is geldig (auto vóór de speler).
+      // Een niet-numerieke waarde maakt alleen dit veld leeg, nooit het frame.
+      gapToLeaderSeconds: v3SignedGap(position.gapToLeaderSeconds, "position.gapToLeaderSeconds"),
     },
     track: {
       lapDistancePct: v3Number(track.lapDistancePct, "track.lapDistancePct", { nullable: true, min: 0, max: 1, sentinels: [-1] }),
