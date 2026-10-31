@@ -89,7 +89,10 @@ export const centralRowToBridgeResponse = (row: CentralSimHubLatestRow): SimHubB
       capturedAt: row.captured_at,
       source: {
         connectorId: row.connector_id,
-        simHubVersion: row.simhub_version,
+        // De kolom is sinds 2026-10-31 nullable en bevat geen apparaatnaam meer.
+        // De bridgevorm eist een niet-lege string, dus onbekend wordt "unknown";
+        // nooit de connectorversie in de SimHub-kolom schuiven.
+        simHubVersion: row.simhub_version ?? "unknown",
         game: row.game,
       },
       race: {
