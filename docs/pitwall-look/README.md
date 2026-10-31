@@ -56,11 +56,11 @@ Verwijderd omdat hun inhoud nu elders staat en dubbel zou zijn: `TopRaceBar`
 | --- | --- |
 | `pitwall-endurance-1920x1080.png` | endurance, viewport 1920×1080 |
 | `pitwall-test-1920x1080.png` | pitwall-test, viewport 1920×1080 |
-| `pitwall-endurance-full.png` | endurance, volledige pagina (1910×1513) |
-| `pitwall-test-full.png` | pitwall-test, volledige pagina (1910×1271) |
+| `pitwall-endurance-full.png` | endurance, volledige pagina (1910×1529) |
+| `pitwall-test-full.png` | pitwall-test, volledige pagina (1910×1275) |
 
 De viewport-beelden tonen nu de vier hoofdpanelen volledig zonder paginascroll.
-De `-full`-beelden tonen ook alle aanvullende blokken. De browser toont echte
+De `-full`-beelden tonen alle aanvullende blokken na het openen van ‘Meer analyse’. De browser toont echte
 scrollbars; daardoor is de volledige-paginacapture 1910 px breed, terwijl de
 viewportcapture 1920×1080 blijft.
 
@@ -164,3 +164,34 @@ en aanvullende blokken komen uit de bestaande pitwallbrief, niet uit het
 originele beeld. De nieuwe ronde herstelt onder meer losse KPI-containers,
 compacte timingrijen, oranje selectieaccenten en de bredere pacekaart met
 raster en meetpunten. Screenshots en `verification.json` zijn vernieuwd.
+
+
+## Afwerking: aanvullende analyse standaard ingeklapt
+
+De gedeelde `PitwallDashboard` plaatst uitsluitend de bestaande `extra`-inhoud
+achter een native `details`/`summary` met één regel ‘Meer analyse’. De inhoud,
+componentprops en databronnen zijn niet gewijzigd. De inhoud blijft gemount;
+openen kan met één klik of met het toetsenbord. Zonder extra inhoud verschijnt
+geen lege uitklapper. De bestaande raw-telemetrie-uitklapper blijft binnen deze
+sectie zelfstandig werken.
+
+Om ook deze regel geheel binnen 1080p te houden, is het desktop-timingvlak
+368 px hoog en de eerdere 20 px ondermarge bij de circuitvoortgang verwijderd.
+Geen hoofdwaarden of paneelinhoud zijn verkleind of verwijderd.
+
+Actuele verificatie (vervangt de eerdere viewportmetingen hierboven):
+- PASS — volledige `npm test`: 193 testbestanden, 1591 tests.
+- PASS — ESLint voor dashboard en looktests; `git diff --check`.
+- PASS — browserharnas voor beide modi: ingeklapt document exact 1080 px hoog,
+  vier panelen volledig zichtbaar, ‘Meer analyse’ volledig binnen de viewport,
+  extra blokken niet zichtbaar; muisklik en Enter openen/sluiten de sectie.
+- PASS — paneelonderrand endurance 1027 px, test 1008,5 px.
+- PASS — bestaande timing-scroll-, groei-, raw-telemetrie- en responsivechecks.
+- PASS — beide nieuwe 1920×1080 screenshots afzonderlijk met `vision_analyze`
+  gecontroleerd: geen FORECAST-/BANDENMODEL-strook of andere aanvullende
+  blokrand zichtbaar. Alleen ‘Meer analyse’ en donkere marge onder de panelen.
+
+Screenshots zijn lokale fixtures met echte componenten, geen verificatie van
+ingelogde productieroutes. Backend/API, bot, DB/migraties, auth/rollen en
+deployment: geen impact. Productiefrontendwijzigingen: NEE.
+Niet gepusht, niet gemerged, niet gedeployed. PRODUCTIEWIJZIGING: NEE.

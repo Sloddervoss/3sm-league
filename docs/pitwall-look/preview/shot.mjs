@@ -39,6 +39,8 @@ try {
         viewport: { width: innerWidth, height: innerHeight },
         document: { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight },
         panels,
+        more: rect(document.querySelector('[data-pitwall-more] > summary')),
+        extraVisible: [...document.querySelector('[data-pitwall-extra]').children].some((e) => e.checkVisibility()),
         timing: { ...rect(table), clientHeight: table.clientHeight, scrollHeight: table.scrollHeight, overflow: getComputedStyle(table).overflowY },
       };
     });
@@ -52,7 +54,23 @@ try {
     assert(desktop.timing.scrollHeight > desktop.timing.clientHeight);
     assert.equal(desktop.timing.overflow, "auto");
     await page.screenshot({ path: path.join(OUT, `pitwall-${mode}-1920x1080.png`) });
+    assert(desktop.more.y >= Math.max(...desktop.panels.map((r) => r.bottom)));
+    assert(desktop.more.bottom <= 1080, `${mode}: Meer analyse must fit entirely`);
+    assert.equal(desktop.extraVisible, false, `${mode}: no extra block may peek out`);
+    assert.equal(desktop.document.height, 1080, `${mode}: collapsed page must fit without scrolling`);
+    const more = page.locator('[data-pitwall-more]');
+    assert.equal(await more.evaluate((e) => e.open), false);
+    await more.locator(':scope > summary').click();
+    assert.equal(await more.evaluate((e) => e.open), true);
+    assert.equal((await measure()).extraVisible, true);
     await page.screenshot({ path: path.join(OUT, `pitwall-${mode}-full.png`), fullPage: true });
+    await more.locator(':scope > summary').click();
+    await page.evaluate(() => scrollTo(0, 0));
+    await more.locator(':scope > summary').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await more.evaluate((e) => e.open), true);
+    await page.keyboard.press('Enter');
+    assert.equal(await more.evaluate((e) => e.open), false);
 
     const beforeScroll = await measure();
     // Real wheel and keyboard scrolling, while the page and panel row stay put.
@@ -77,13 +95,15 @@ try {
     });
     assert.equal((await measure()).document.height, beforeGrowth.document.height);
     await page.reload({ waitUntil: "networkidle" });
+    await page.locator('[data-pitwall-more] > summary').click();
     if (mode === "test") {
-      const raw = page.locator('details').filter({ hasText: 'telemetrie' });
+      const raw = page.locator('[data-pitwall-extra] details').filter({ hasText: 'telemetrie' });
       // The existing raw telemetry disclosure remains interactive below the fold.
       assert.equal(await raw.count(), 1);
       await raw.locator('summary').click();
       assert(await raw.evaluate((e) => e.open));
     }
+    await page.locator('[data-pitwall-more] > summary').click();
     const responsive = [];
     for (const width of [1440, 1024, 390]) {
       await page.setViewportSize({ width, height: 1080 });
@@ -100,7 +120,7 @@ try {
       responsive.push({ width, panelColumns: columns, noHorizontalPageOverflow: true });
     }
     assert.deepEqual(errors, []);
-    results.push({ mode, desktop, wheelAndKeyboardScroll: "PASS", growingSnapshot: "PASS", rawDisclosure: mode === "test" ? "PASS" : "not in endurance fixture", responsive, browserErrors: errors });
+    results.push({ mode, desktop, moreAnalysis: "PASS: closed by default, click and keyboard, contents preserved", wheelAndKeyboardScroll: "PASS", growingSnapshot: "PASS", rawDisclosure: mode === "test" ? "PASS" : "not in endurance fixture", responsive, browserErrors: errors });
     console.log(`${mode}: PASS; panel bottom ${Math.max(...desktop.panels.map((r) => r.bottom))}px; document ${desktop.document.height}px`);
     await page.close();
   }

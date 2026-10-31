@@ -7,50 +7,59 @@
         "height": 1080
       },
       "document": {
-        "width": 1910,
-        "height": 1513
+        "width": 1920,
+        "height": 1080
       },
       "panels": [
         {
-          "x": 155,
-          "y": 752.5,
+          "x": 160,
+          "y": 732.5,
           "width": 521.328125,
           "height": 294.5,
-          "bottom": 1047
+          "bottom": 1027
         },
         {
-          "x": 688.328125,
-          "y": 752.5,
+          "x": 693.328125,
+          "y": 732.5,
           "width": 347.546875,
           "height": 294.5,
-          "bottom": 1047
+          "bottom": 1027
         },
         {
-          "x": 1047.875,
-          "y": 752.5,
+          "x": 1052.875,
+          "y": 732.5,
           "width": 347.5625,
           "height": 294.5,
-          "bottom": 1047
+          "bottom": 1027
         },
         {
-          "x": 1407.4375,
-          "y": 752.5,
+          "x": 1412.4375,
+          "y": 732.5,
           "width": 347.546875,
           "height": 294.5,
-          "bottom": 1047
+          "bottom": 1027
         }
       ],
+      "more": {
+        "x": 160,
+        "y": 1039,
+        "width": 1600,
+        "height": 24,
+        "bottom": 1063
+      },
+      "extraVisible": false,
       "timing": {
-        "x": 711.328125,
+        "x": 716.328125,
         "y": 445.25,
         "width": 1028.671875,
-        "height": 248.25,
-        "bottom": 693.5,
-        "clientHeight": 248,
+        "height": 216.25,
+        "bottom": 661.5,
+        "clientHeight": 216,
         "scrollHeight": 484,
         "overflow": "auto"
       }
     },
+    "moreAnalysis": "PASS: closed by default, click and keyboard, contents preserved",
     "wheelAndKeyboardScroll": "PASS",
     "growingSnapshot": "PASS",
     "rawDisclosure": "not in endurance fixture",
@@ -81,50 +90,59 @@
         "height": 1080
       },
       "document": {
-        "width": 1910,
-        "height": 1271
+        "width": 1920,
+        "height": 1080
       },
       "panels": [
         {
-          "x": 155,
-          "y": 750.5,
+          "x": 160,
+          "y": 718.5,
           "width": 521.328125,
           "height": 290,
-          "bottom": 1040.5
+          "bottom": 1008.5
         },
         {
-          "x": 688.328125,
-          "y": 750.5,
+          "x": 693.328125,
+          "y": 718.5,
           "width": 347.546875,
           "height": 290,
-          "bottom": 1040.5
+          "bottom": 1008.5
         },
         {
-          "x": 1047.875,
-          "y": 750.5,
+          "x": 1052.875,
+          "y": 718.5,
           "width": 347.5625,
           "height": 290,
-          "bottom": 1040.5
+          "bottom": 1008.5
         },
         {
-          "x": 1407.4375,
-          "y": 750.5,
+          "x": 1412.4375,
+          "y": 718.5,
           "width": 347.546875,
           "height": 290,
-          "bottom": 1040.5
+          "bottom": 1008.5
         }
       ],
+      "more": {
+        "x": 160,
+        "y": 1020.5,
+        "width": 1600,
+        "height": 24,
+        "bottom": 1044.5
+      },
+      "extraVisible": false,
       "timing": {
-        "x": 711.328125,
+        "x": 716.328125,
         "y": 445,
         "width": 1028.671875,
-        "height": 248.5,
-        "bottom": 693.5,
-        "clientHeight": 249,
+        "height": 216.5,
+        "bottom": 661.5,
+        "clientHeight": 217,
         "scrollHeight": 484,
         "overflow": "auto"
       }
     },
+    "moreAnalysis": "PASS: closed by default, click and keyboard, contents preserved",
     "wheelAndKeyboardScroll": "PASS",
     "growingSnapshot": "PASS",
     "rawDisclosure": "PASS",
