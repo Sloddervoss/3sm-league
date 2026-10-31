@@ -73,12 +73,11 @@ namespace ThreeSM.EnduranceConnector
         private UpdaterState _updaterState;
         private readonly object _diagnosticsGate = new object();
         private DiagnosticsClient _diagnostics;
-        private readonly FlagService _flagService = new FlagService();
         private OverlayPropertyPublisher _overlayPublisher;
         private OverlayClient _overlayClient;
-        private FlagState _lastFlagState = FlagState.Empty();
-        private string _lastLoggedFlagPrimary;
-        private RaceFlags _lastDetectedFlags;
+        // Laatst opgeloste vlaggen (wire-namen) voor session.flags. Alleen gebruikt om
+        // wijzigingen te loggen; de payload wordt per tick opnieuw bepaald.
+        private string[] _lastFlagNames;
         // 0.7.1: hek voor het bandenblok (wijziging of één keer per interval).
         private readonly TyrePublishGate _tyreGate = new TyrePublishGate();
         // 0.8.0: directe lezer van de iRacing-shared-memory, read-only. Lazy: zonder
@@ -117,54 +116,15 @@ namespace ThreeSM.EnduranceConnector
                 Settings.SchemaVersion = 4;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
-            if (Settings.SchemaVersion < 5)
-            {
-                // 0.5.0: vlag-module + SimHub-property publicatie voor flagboxes/overlays.
-                if (Settings.Flags == null) Settings.Flags = new FlagSettings();
-                if (Settings.Flags.Boxes == null || Settings.Flags.Boxes.Length < 4)
-                    Settings.Flags.Boxes = new FlagBoxSlot[] { new FlagBoxSlot(), new FlagBoxSlot(), new FlagBoxSlot(), new FlagBoxSlot() };
-                Settings.SchemaVersion = 5;
-                this.SaveCommonSettings("ConnectorSettings", Settings);
-            }
-            if (Settings.SchemaVersion < 6)
-            {
-                // 1.0.5: racige standaard-rev (groen/geel/rood) + 8 box-slots.
-                var fs = Settings.Flags ?? (Settings.Flags = new FlagSettings());
-                for (var i = 0; i < 8; i++)
-                {
-                    var b = fs.Box(i);
-                    if (b.GearColour == 10 && b.CustomGearColour1 == "#FFFFFF" && b.CustomGearColour2 == "#FFFFFF")
-                    {
-                        b.GearColour = 2; // Racing
-                        b.CustomGearColour1 = "#00E676";
-                        b.CustomGearColour2 = "#FFD400";
-                        b.CustomGearColour3 = "#FF1744";
-                    }
-                }
-                Settings.SchemaVersion = 6;
-                this.SaveCommonSettings("ConnectorSettings", Settings);
-            }
-            if (Settings.SchemaVersion < 7)
-            {
-                // 0.7.x: hier stond de opt-in voor de lokale research-opname. Die is in 0.8
-                // vervallen en de velden zijn weg; het schemanummer blijft staan zodat de
-                // migratieladder voor bestaande installaties niet verspringt.
-                Settings.SchemaVersion = 7;
-                this.SaveCommonSettings("ConnectorSettings", Settings);
-            }
             if (Settings.SchemaVersion < 8)
             {
-                // 0.7.1: meatball is nieuw en staat standaard aan. Een bestaand
-                // configuratiebestand heeft de sleutel niet, en een deserializer die
-                // ontbrekende leden overslaat laat het veld op false staan. Daarom hier
-                // expliciet aanzetten (ontbrekend = aan), net als de bandenmeting.
-                var flagSettings = Settings.Flags ?? (Settings.Flags = new FlagSettings());
-                flagSettings.ShowMeatball = true;
-                for (var i = 0; i < 8; i++) flagSettings.Box(i).ShowMeatball = true;
+                // 0.8: de vlaggenmodule (panelen, presets, LED-boxen) en de research-opname
+                // zijn vervallen. De oude trappen 5, 6 en 7 pasten alleen instellingen aan
+                // die niet meer bestaan; het schemanummer gaat daarom in één keer naar 8.
+                // Een bestaande configuratie houdt alles wat er nog toe doet.
                 Settings.SchemaVersion = 8;
                 this.SaveCommonSettings("ConnectorSettings", Settings);
             }
-            // Vlag-properties aanmelden zodat SimHub LED-profielen erop kunnen binden.
             InitUpdaterStateStore();
             _deviceToken = UnprotectToken(Settings.DeviceTokenProtected);
 
@@ -696,7 +656,7 @@ namespace ThreeSM.EnduranceConnector
                 _gameWasRunning = running;
                 // Vlaggen elke tick oplossen/publiceren (los van het verzendinterval),
                 // zodat een flagbox/overlay direct reageert.
-                PublishFlags(pluginManager, data, isInCar);
+                PublishFlags(pluginManager);
                 PublishOverlay(running, isInCar);
                 // Auto-update op een veilig moment: nooit tijdens een game en bij idle
                 // pas na 30 minuten zonder game (verder max. één herstart per 24 uur).
@@ -1266,9 +1226,8 @@ namespace ThreeSM.EnduranceConnector
             var trackConfig = FirstNonEmpty(snapshot.TrackConfig, GetNullableString(manager, Settings.TrackConfigProperty));
             var position = PositiveOrNull(snapshot.Position) ?? PositiveOrNull(GetInt(manager, Settings.PositionProperty, 0));
             var classPosition = PositiveOrNull(player == null ? 0 : player.PositionInClass) ?? PositiveOrNull(GetInt(manager, Settings.ClassPositionProperty, 0));
-            // Vlag komt uit de per-tick resolutie in DataUpdate (PublishFlags -> _lastFlagState).
-            var flagState = _lastFlagState ?? FlagState.Empty();
-            var sendFlagFields = Settings.Flags != null && Settings.Flags.SendFlagFields;
+            // Vlaggen komen uit de per-tick resolutie in DataUpdate (PublishFlags).
+            var flagNames = _lastFlagNames;
             var completedLaps = Math.Max(0, GetInt(manager, Settings.CompletedLapsProperty, 0));
             var lapTimeSeconds = GetNullableSeconds(manager, Settings.LastLapTimeProperty);
             // Eerst de ingestelde property; die blijkt leeg (F2Time is een rondetijd, geen achterstand).
@@ -1302,9 +1261,7 @@ namespace ThreeSM.EnduranceConnector
                 Sequence = nextSequence
             };
 
-            var flags = new List<string>();
-            var legacyFlagNames = FlagService.ToLegacyNames(flagState);
-            if (legacyFlagNames != null) foreach (var legacyFlagName in legacyFlagNames) flags.Add(legacyFlagName);
+            var flags = flagNames == null ? null : new List<string>(flagNames);
 
             int? startLights; bool isStartSequence;
             StartLightsFor(manager, out startLights, out isStartSequence);
@@ -1344,11 +1301,8 @@ namespace ThreeSM.EnduranceConnector
                     SessionTimeSeconds = sessionTimeSeconds,
                     SessionTimeRemainingSeconds = NormalizeTimeRemaining(sessionTimeRemaining),
                     SessionLapsRemaining = NormalizeRemainingLaps(sessionLapsRemaining),
-                    Flags = flags.Count == 0 ? null : flags.ToArray(),
+                    Flags = flags == null || flags.Count == 0 ? null : flags.ToArray(),
                     SessionState = sessionPhase,
-                    PrimaryFlag = sendFlagFields && flagState.Active ? flagState.Primary : null,
-                    FlagColour = sendFlagFields && flagState.Active ? flagState.ColourHex : null,
-                    FlagSeverity = sendFlagFields && flagState.Active ? (int)flagState.Severity : 0,
                     StartLights = startLights,
                     PitLaneOpen = pitLaneOpen,
                     IsStartSequence = isStartSequence,
@@ -2289,40 +2243,59 @@ namespace ThreeSM.EnduranceConnector
                 // De overlay mag de telemetry/DataUpdate nooit onderbreken.
             }
         }
-        // Leest de actuele vlag voor de telemetrie. De zichtbare vlaggenfunctie
-        // (paneel, LED-flagboxes, SimHub-properties) is verwijderd; session.flags
-        // blijft onderdeel van het V3-contract en wordt hier nog steeds bepaald.
-        private void PublishFlags(PluginManager manager, GameData data, bool isInCar)
+        // Leest de vlaggen van deze tick voor `session.flags`. Eén toestandloze lezer
+        // (SessionFlagReader): geen panelen, geen kleuren, geen presets en geen masker op
+        // displayvoorkeuren. De vlag gaat mee met de meting, niet met de weergave.
+        private void PublishFlags(PluginManager manager)
         {
             try
             {
-                var flagSettings = Settings != null ? Settings.Flags : null;
-                var context = BuildFlagContext(manager, Settings, data, isInCar);
-                var detected = _flagService != null ? _flagService.Detect(context, flagSettings) : RaceFlags.None;
-                _lastFlagState = FlagService.Present(detected, FlagService.MaskOf(flagSettings));
-                _lastDetectedFlags = detected;
-                if (!string.Equals(_lastFlagState.Primary, _lastLoggedFlagPrimary, StringComparison.Ordinal))
-                {
-                    _lastLoggedFlagPrimary = _lastFlagState.Primary;
-                    SimHub.Logging.Current.Info("3SM flags: " + _lastFlagState.Primary);
-                }
+                var names = SessionFlagReader.Read(BuildFlagInput(manager));
+                var previous = SessionFlagReader.Describe(_lastFlagNames);
+                var current = SessionFlagReader.Describe(names);
+                _lastFlagNames = names;
+                if (!string.Equals(previous, current, StringComparison.Ordinal))
+                    SimHub.Logging.Current.Info("3SM flags: " + current);
             }
             catch { /* vlagdetectie mag de telemetry nooit breken */ }
         }
 
-        // Watch: houdt het LED-profiel up-to-date (elke ~5 s) als het al bestaat.
-
-        private FlagContext BuildFlagContext(PluginManager manager, ConnectorSettings settings, GameData data, bool isInCar)
+        // Ruwe SDK-toestand -> lezer. Null betekent "bron ontbreekt" en blijft null; we
+        // verzinnen geen "vlag uit".
+        private static SessionFlagInput BuildFlagInput(PluginManager manager)
         {
-            return new FlagContext
+            return new SessionFlagInput
             {
-                Game = data == null ? null : data.GameName,
-                Snapshot = data == null ? null : data.NewData,
-                GetRaw = property => GetRaw(manager, property),
-                IsInCar = isInCar,
-                InPitLane = GetBool(manager, settings.PitLaneProperty, false),
-                FlagNameFallback = Convert.ToString(GetRaw(manager, settings.FlagProperty))
+                SessionFlags = ReadSessionFlagsBitmask(manager),
+                WhiteFlag = NullableBool(GetRaw(manager, "Flag_White")),
+                CheckeredFlag = NullableBool(GetRaw(manager, "Flag_Checkered")),
+                GreenFlag = NullableBool(GetRaw(manager, "Flag_Green")),
+                DetailRed = NullableBool(GetRaw(manager, "DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Isred")),
+                DetailYellow = NullableBool(GetRaw(manager, "DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Isyellow")),
+                DetailService = NullableBool(GetRaw(manager, "DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Isservicible")),
+                SlowCarAhead = NullableBool(GetRaw(manager, "IRacingExtraProperties.iRacing_SlowCarAhead")),
+                SessionTypeName = GetNullableString(manager, "SessionTypeName"),
             };
+        }
+
+        // Het iRacing-bitmasker is één unsigned getal. Buiten 0..uint.MaxValue is het geen
+        // meting; dan valt de lezer terug op de losse vlag-properties.
+        private static uint? ReadSessionFlagsBitmask(PluginManager manager)
+        {
+            var value = GetNullableDouble(manager, "DataCorePlugin.GameRawData.Telemetry.SessionFlags", false);
+            if (!value.HasValue || value.Value > uint.MaxValue) return null;
+            return (uint)value.Value;
+        }
+
+        private static bool? NullableBool(object value)
+        {
+            if (value == null) return null;
+            if (value is bool) return (bool)value;
+            bool parsed;
+            if (bool.TryParse(value.ToString(), out parsed)) return parsed;
+            double number;
+            if (double.TryParse(value.ToString(), out number) && !double.IsNaN(number) && !double.IsInfinity(number)) return number != 0.0;
+            return null;
         }
 
         private static string ResolveFlag(StatusDataBase snapshot, object fallback)

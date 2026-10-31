@@ -94,13 +94,6 @@ namespace ThreeSM.EnduranceConnector
         public string BestLapTimeProperty = "DataCorePlugin.GameData.NewData.BestLapTime";
         public string LapDistancePctProperty = "DataCorePlugin.GameData.NewData.LapDistPct";
 
-        // Vlag-module (FlagService): genormaliseerde racevlaggen uit ruwe game-data.
-        // Publiceert naar SimHub-properties zodat LED-flagboxes/overlays ze kunnen tonen.
-        public FlagSettings Flags = new FlagSettings();
-
-        // Opgeslagen vlaggen/paneel-presets.
-        public List<FlagPreset> FlagPresets = new List<FlagPreset>();
-
         // Veilige versie-check en staged update. De plugin downloadt alleen van de vaste
         // 3SM-host; een extern updaterproces vervangt de geladen DLL na SimHub-exit.
         public string LastKnownRemoteVersion = string.Empty;

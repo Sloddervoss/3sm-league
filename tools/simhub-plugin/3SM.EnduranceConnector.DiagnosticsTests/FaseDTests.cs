@@ -340,18 +340,14 @@ internal static class FaseDTests
 
     public static int Main(string[] args)
     {
-        // Hulpmode: legt de baseline vast (zie V3PayloadFixtureTests / SettingsCompatibilityTests).
+        // Hulpmode: legt de V3-baseline vast (zie V3PayloadFixtureTests). De
+        // configuratiefixture is eenmalig met de 0.7.1.2-code geschreven en staat vast.
         // Wordt alleen met de hand gebruikt; de normale run doet niets speciaals.
         if (args != null && args.Length > 0)
         {
             if (string.Equals(args[0], "--dump-v3", StringComparison.Ordinal))
             {
                 Console.Write(V3PayloadFixtureTests.Serialize(V3PayloadFixtureTests.BuildRepresentativeFrame()));
-                return 0;
-            }
-            if (string.Equals(args[0], "--dump-settings", StringComparison.Ordinal))
-            {
-                Console.Write(SettingsCompatibilityTests.DumpLegacySettings());
                 return 0;
             }
         }
@@ -362,7 +358,7 @@ internal static class FaseDTests
             BasicMatrix().GetAwaiter().GetResult();
             TyreGateTests.Run(Check);
             irSdkChecks = IrSdkReaderTests.Run(Check);
-            baselineChecks += FlagBaselineTests.Run(Check);
+            baselineChecks += FlagMappingTests.Run(Check);
             baselineChecks += V3PayloadFixtureTests.Run(Check);
             baselineChecks += SettingsCompatibilityTests.Run(Check);
             baselineChecks += UpdaterTransitionTests.Run(Check);

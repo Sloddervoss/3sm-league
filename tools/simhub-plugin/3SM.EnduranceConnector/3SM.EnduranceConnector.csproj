@@ -52,8 +52,8 @@
     <Compile Include="OverlayClient.cs" />
     <Compile Include="OverlayPropertyPublisher.cs" />
     <Compile Include="OverlayTemplateInstaller.cs" />
-    <Compile Include="FlagModels.cs" />
-    <Compile Include="FlagService.cs" />
+    <!-- 0.8: vlaggen zijn een toestandloze meting geworden (session.flags). -->
+    <Compile Include="SessionFlagReader.cs" />
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->
     <Compile Include="TyrePublishGate.cs" />

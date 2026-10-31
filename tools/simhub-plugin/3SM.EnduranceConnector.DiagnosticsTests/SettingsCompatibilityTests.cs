@@ -149,45 +149,4 @@ internal static class SettingsCompatibilityTests
             return (ConnectorSettings)serializer.ReadObject(stream);
         }
     }
-
-    /// <summary>
-    /// Schrijft de 0.7.1.2-vormige configuratie (zoals SimHub hem op schijf had) naar
-    /// stdout. Alleen gebruikt om de fixture eenmalig vast te leggen met de oude code.
-    /// </summary>
-    internal static string DumpLegacySettings()
-    {
-        var settings = new ConnectorSettings
-        {
-            SchemaVersion = 8,
-            UseCentralRelay = true,
-            DiagnosticsEnabled = true,
-            DeviceTokenProtected = string.Empty,
-            DeviceId = "11111111-1111-1111-1111-111111111111",
-            BoundRaceId = "race-road-america-6h",
-            BoundTeamId = "team-orange-31",
-            BoundOwnerUserId = "user-vincent",
-            ConnectorId = "PCBART",
-            SendIntervalMilliseconds = 1000,
-            IrSdkDirectReadEnabled = true,
-            LastKnownRemoteVersion = "0.8.0.0",
-            LastKnownRemoteDllUrl = "https://3stripemotorsport.cc/downloads/3SM.EnduranceConnector-0.8.0.0.dll",
-            LastKnownRemoteSha256 = "9f2c1d3e4b5a69789f2c1d3e4b5a69789f2c1d3e4b5a69789f2c1d3e4b5a6978",
-            LastKnownRemoteFileName = "3SM.EnduranceConnector.dll",
-            LastKnownRemoteByteLength = 262144,
-            LastKnownRemoteSignature = "c2lnbmF0dXJl",
-            LastVersionCheckUtc = new DateTime(2026, 10, 30, 21, 14, 5, DateTimeKind.Utc),
-            AutoUpdateEnabled = true,
-        };
-        // Een realistische maar compacte vlaggenconfiguratie: alleen de velden die een
-        // bestaande installatie echt op schijf heeft staan.
-        settings.Flags.ShowGreen = true;
-        settings.Flags.ShowMeatball = true;
-        settings.Flags.SendFlagFields = true;
-        settings.Flags.PropertyPrefix = "THREESM.Flags";
-        settings.Flags.ActivePresetName = "iRacing standaard";
-        // De researchsleutels bestaan niet meer in 0.8. Ze staan hier als ruwe tekst in,
-        // zodat de fixture exact het 0.7.1.2-bestand blijft dat op gebruikers-pc's staat.
-        var json = SerializeStrict(settings);
-        return json.TrimEnd().TrimEnd('}') + ",\"ResearchDirectory\":\"D:\\\\3SM\\\\research\",\"ResearchEnabled\":true}";
-    }
 }

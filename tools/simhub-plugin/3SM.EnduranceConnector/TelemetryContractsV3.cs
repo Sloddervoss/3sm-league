@@ -232,6 +232,11 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "sessionState", Order = 6)] public string SessionState { get; set; }
         // 0.5.0 additive: rijke vlag-presentatie. EmitDefaultValue=false zodat oude
         // receivers (en het bestaande schema) onveranderd blijven als de module uit staat.
+        //
+        // 0.8: deze drie velden worden NIET meer gevuld. Ze hoorden bij de verwijderde
+        // presentatielaag (kleur/layout/ernst van een flagbox) en die is er niet meer.
+        // De leden blijven in het contract staan zodat een server of oudere client die
+        // ze kent niets hoeft te wijzigen; ze vallen door EmitDefaultValue simpelweg weg.
         [DataMember(Name = "primaryFlag", Order = 7, EmitDefaultValue = false)] public string PrimaryFlag { get; set; }
         [DataMember(Name = "flagColour", Order = 8, EmitDefaultValue = false)] public string FlagColour { get; set; }
         [DataMember(Name = "flagSeverity", Order = 9, EmitDefaultValue = false)] public int FlagSeverity { get; set; }
