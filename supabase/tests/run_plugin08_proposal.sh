@@ -47,6 +47,7 @@ MIGRATIES=(
   20261031190600_plugin08_snapshot_strip
   20261031190700_plugin08_control_limits
   20261031190800_plugin08_retention
+  20261031200000_plugin08_lap_driver_semantics
 )
 
 for migratie in "${MIGRATIES[@]}"; do
@@ -59,6 +60,9 @@ echo "== SQL-tests: structuur en terugwaartse compatibiliteit =="
 
 echo "== SQL-tests: de reparaties uit de review =="
 "${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_review_repairs.sql"
+
+echo "== SQL-tests: de tweede review =="
+"${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_review2_repairs.sql"
 
 echo "== body-diff simhub_persist_v3 =="
 (cd "$ROOT" && node supabase/tests/plugin08_persist_body_diff.mjs)

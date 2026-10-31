@@ -102,7 +102,7 @@ returns jsonb language sql as $$
            'lapNumber', g,
            'startedAt', '2026-10-31T11:58:00Z',
            'endedAt', '2026-10-31T12:00:00Z',
-           'currentDriverId', '44444444-4444-4444-8444-444444444444',
+           'currentDriverName', 'Load Driver',
            'aggregationVersion', 1,
            'complete', true,
            'invalidReasons', jsonb_build_array(),

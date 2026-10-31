@@ -188,6 +188,25 @@ Regels:
 
 ---
 
+## 7b. Rijder van een ronde
+
+Een rondeaggregaat draagt de **SimHub-naam** van de rijder:
+
+```json
+{"currentDriverName": "Vincent de Vos", "driverChanged": false}
+```
+
+1. `currentDriverName` is tekst (1..64 tekens) en optioneel; `null` betekent
+   "niet bekend". De connector kent geen user-UUID en stuurt er dus geen.
+2. `currentDriverId` in een ronde is een fout
+   (`client_driver_id_forbidden`). De **server** resolveert de naam naar
+   `current_driver_id` met `simhub_resolve_driver_user`, binnen het team en
+   event van het apparaat. Geen match of twijfel: leeg.
+3. `driverChanged: true` samen met een ingevulde `currentDriverName` is
+   tegenstrijdig en wordt geweigerd (`driver_changed_with_driver`) — in de Edge
+   én in de database. Een wissel betekent: geen enkele rijder is de rijder van
+   de hele ronde.
+
 ## 8. Grenzen
 
 | Wat | Waarde | Waar |

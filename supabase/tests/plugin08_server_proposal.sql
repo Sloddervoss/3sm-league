@@ -116,7 +116,7 @@ returns jsonb language sql immutable as $$
     'lapNumber', p_n,
     'startedAt', '2026-10-31T11:58:00Z',
     'endedAt', '2026-10-31T12:00:00Z',
-    'currentDriverId', '44444444-4444-4444-8444-444444444444',
+    'currentDriverName', 'Driver One',
     'aggregationVersion', 1,
     'complete', true,
     'invalidReasons', jsonb_build_array(),
@@ -357,8 +357,10 @@ begin
   perform pg_temp.eq(v_row.device_id, (select device_id::text from t_ctx),
                      'T4 device_id komt van de server');
   perform pg_temp.eq(v_row.lap_number, 17, 'T4 lapNumber is opgeslagen');
-  perform pg_temp.eq(v_row.current_driver_id, '44444444-4444-4444-8444-444444444444'::uuid,
-                     'T4 currentDriverId is als uuid opgeslagen');
+  perform pg_temp.eq(v_row.current_driver_name, 'Driver One',
+                     'T4 currentDriverName is bewaard');
+  perform pg_temp.eq(v_row.current_driver_id, null::uuid,
+                     'T4 zonder naam-match blijft current_driver_id leeg');
   perform pg_temp.eq(v_row.track_temp_c_mean, 32.5::double precision, 'T4 trackTempCMean is opgeslagen');
   perform pg_temp.eq(v_row.fuel_level_integral_litre_seconds, 4875::double precision,
                      'T4 brandstofniveau-integraal is opgeslagen');

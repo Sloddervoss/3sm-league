@@ -102,7 +102,7 @@ const lap = (n: number, extra: Record<string, unknown> = {}) => ({
   lapNumber: n,
   startedAt: "2026-10-31T11:58:00Z",
   endedAt: "2026-10-31T12:00:00Z",
-  currentDriverId: "44444444-4444-4444-8444-444444444444",
+  currentDriverName: "Driver One",
   aggregationVersion: 1,
   complete: true,
   invalidReasons: [],
@@ -309,6 +309,31 @@ Deno.test("P08-9 dekking: complete en integralen eisen hun eigen groep", () => {
   );
   if (!coverageComplete(coverage())) throw new Error("een volledige dekking moet compleet zijn");
   if (coverageComplete(null)) throw new Error("zonder dekking is niets compleet");
+});
+
+Deno.test("P08-11 rijdersemantiek: naam van de client, uuid van de server", () => {
+  // De probe uit review 2: driverChanged=true met een ingevulde rijder.
+  expectThrow(
+    () => parseLapSummary(lap(1, { driverChanged: true }), 0),
+    "driverChanged met een rijdernaam",
+  );
+  // Een client-UUID is geen clientgegeven.
+  expectThrow(
+    () => parseLapSummary(lap(1, { currentDriverName: undefined, currentDriverId: "44444444-4444-4444-8444-444444444444" }), 0),
+    "currentDriverId als uuid",
+  );
+  // Zonder naam en zonder wissel is een ronde geldig; de uuid komt nooit uit de parser.
+  const zonder = parseLapSummary(lap(1, { currentDriverName: null }), 0);
+  if (zonder.currentDriverName !== null) throw new Error("naam moet leeg blijven");
+  if ("currentDriverId" in zonder) throw new Error("de parser mag geen driver-uuid produceren");
+  // Een wissel zonder naam is geldig: dat is precies de betekenis.
+  const wissel = parseLapSummary(lap(1, { currentDriverName: null, driverChanged: true }), 0);
+  if (wissel.driverChanged !== true || wissel.currentDriverName !== null) {
+    throw new Error("een wissel zonder naam is niet bewaard");
+  }
+  // En de gewone vorm bewaart de naam letterlijk.
+  const naam = parseLapSummary(lap(1), 0);
+  if (naam.currentDriverName !== "Driver One") throw new Error("currentDriverName niet bewaard");
 });
 
 Deno.test("P08-10 een oude V1/V2-payload blijft ongewijzigd", () => {

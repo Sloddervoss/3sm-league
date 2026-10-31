@@ -526,7 +526,11 @@ export type LapSummary = {
   lapNumber: number;
   startedAt: string | null;
   endedAt: string | null;
-  currentDriverId: string | null;
+  /**
+   * SimHub-naam van de rijder. Dit is wat de connector werkelijk kent; de
+   * user_id wordt server-side geresolveerd en is geen wire-veld.
+   */
+  currentDriverName: string | null;
   aggregationVersion: number;
   recordRevision: number;
   supersedesSummaryUid: string | null;
@@ -556,7 +560,7 @@ export type LapSummary = {
 
 const lapKeys = [
   "summaryUid", "summaryId", "segmentId", "observedSessionId", "lapNumber", "startedAt", "endedAt",
-  "currentDriverId", "aggregationVersion", "recordRevision", "supersedesSummaryUid",
+  "currentDriverName", "currentDriverId", "aggregationVersion", "recordRevision", "supersedesSummaryUid",
   "complete", "invalidReasons", "pitLap", "driverChanged",
   "trackTempCMean", "trackTempCMin", "trackTempCMax", "airTempCMean",
   "fuelStartLitres", "fuelEndLitres", "fuelLevelIntegralLitreSeconds", "fuelAddedLitresObserved",
@@ -605,15 +609,29 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
     throw new Error(`${path}.observedSessionId is invalid`);
   }
 
-  const currentDriverId = optText(record.currentDriverId, `${path}.currentDriverId`, 64);
-  if (currentDriverId !== null && !uidPattern.test(currentDriverId)) {
-    throw new Error(`${path}.currentDriverId must be a uuid or null`);
+  // Een UUID is geen clientgegeven. Het kernframe behandelt currentDriverId als
+  // een SimHub-naam en resolveert die server-side; een ronde doet hetzelfde. Een
+  // client die hier tóch een UUID zet, krijgt een afwijzing met reden in plaats
+  // van een stil genegeerd veld.
+  if (record.currentDriverId !== undefined && record.currentDriverId !== null) {
+    throw new Error(`${path}.currentDriverId is not allowed; send currentDriverName`);
+  }
+  const currentDriverName = optText(record.currentDriverName, `${path}.currentDriverName`, 64);
+  if (currentDriverName !== null && !/^[A-Za-z0-9 .,'_-]{1,64}$/.test(currentDriverName)) {
+    throw new Error(`${path}.currentDriverName is invalid`);
   }
 
   const startedAt = optTimestamp(record.startedAt, `${path}.startedAt`);
   const endedAt = optTimestamp(record.endedAt, `${path}.endedAt`);
   if (startedAt !== null && endedAt !== null && Date.parse(endedAt) < Date.parse(startedAt)) {
     throw new Error(`${path}.endedAt is before startedAt`);
+  }
+
+  // Een rijderwissel binnen de ronde en tóch één naam is tegenstrijdig. Welke
+  // van de twee zou het zijn? Niet normaliseren, maar weigeren.
+  const driverChanged = optBoolean(record.driverChanged, `${path}.driverChanged`);
+  if (driverChanged === true && currentDriverName !== null) {
+    throw new Error(`${path}.driverChanged cannot be combined with currentDriverName`);
   }
 
   const trackTempCMin = optNumber(record.trackTempCMin, `${path}.trackTempCMin`, -60, 120);
@@ -664,7 +682,7 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
     lapNumber,
     startedAt,
     endedAt,
-    currentDriverId: currentDriverId === null ? null : currentDriverId.toLowerCase(),
+    currentDriverName,
     // Versie van het aggregatie-algoritme; zonder dit getal zijn oude en nieuwe
     // berekeningen later niet uit elkaar te houden.
     aggregationVersion: optInteger(record.aggregationVersion, `${path}.aggregationVersion`, 1, 1000) ?? 1,
@@ -673,7 +691,7 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
     complete,
     invalidReasons: optReasonArray(record.invalidReasons, `${path}.invalidReasons`, 16),
     pitLap: optBoolean(record.pitLap, `${path}.pitLap`),
-    driverChanged: optBoolean(record.driverChanged, `${path}.driverChanged`),
+    driverChanged,
     ...values,
     fuelStartLitres: optNumber(record.fuelStartLitres, `${path}.fuelStartLitres`, 0, 300),
     fuelEndLitres: optNumber(record.fuelEndLitres, `${path}.fuelEndLitres`, 0, 300),
