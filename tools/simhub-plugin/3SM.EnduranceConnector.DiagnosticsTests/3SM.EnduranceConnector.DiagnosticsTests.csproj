@@ -35,6 +35,8 @@
     <Compile Include="..\3SM.EnduranceConnector\TyreAnchorTracker.cs" Link="TyreAnchorTracker.cs" />
     <Compile Include="..\3SM.EnduranceConnector\MeasurementOutbox.cs" Link="MeasurementOutbox.cs" />
     <Compile Include="..\3SM.EnduranceConnector\MeasurementFrame.cs" Link="MeasurementFrame.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ConnectorControlContracts.cs" Link="ConnectorControlContracts.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ConnectorControlClient.cs" Link="ConnectorControlClient.cs" />
     <!-- 0.7.1: bandenhek + vingerafdruk. Beide bestanden zijn SimHub-vrij. -->
     <Compile Include="..\3SM.EnduranceConnector\TyrePublishGate.cs" Link="TyrePublishGate.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetryContractsV3.cs" Link="TelemetryContractsV3.cs" />

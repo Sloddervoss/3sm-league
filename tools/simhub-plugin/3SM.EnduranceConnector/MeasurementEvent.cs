@@ -776,6 +776,8 @@ namespace ThreeSM.EnduranceConnector
             var reader = new JsonReader(json, 0);
             var value = reader.ReadValue(0) as Dictionary<string, object>;
             if (value == null) throw new FormatException("json is geen object");
+            // Geen trailing data accepteren: een half gelezen antwoord is geen antwoord.
+            if (!reader.AtEnd()) throw new FormatException("trailing data");
             return value;
         }
 
@@ -789,6 +791,12 @@ namespace ThreeSM.EnduranceConnector
             {
                 _text = text;
                 _index = index;
+            }
+
+            public bool AtEnd()
+            {
+                SkipWhitespace();
+                return _index >= _text.Length;
             }
 
             public object ReadValue(int depth)
