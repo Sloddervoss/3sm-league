@@ -67,6 +67,8 @@
     <Compile Include="MeasurementEvent.cs" />
     <Compile Include="TelemetrySampler.cs" />
     <Compile Include="LapAccumulator.cs" />
+    <!-- 0.7.2.0: pitbezoeken, intentie en resultaat gescheiden. -->
+    <Compile Include="PitServiceTracker.cs" />
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->
     <Compile Include="TyrePublishGate.cs" />

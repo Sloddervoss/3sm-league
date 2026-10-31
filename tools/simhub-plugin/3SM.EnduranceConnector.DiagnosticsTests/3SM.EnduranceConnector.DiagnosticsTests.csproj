@@ -31,6 +31,7 @@
     <Compile Include="..\3SM.EnduranceConnector\MeasurementEvent.cs" Link="MeasurementEvent.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetrySampler.cs" Link="TelemetrySampler.cs" />
     <Compile Include="..\3SM.EnduranceConnector\LapAccumulator.cs" Link="LapAccumulator.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\PitServiceTracker.cs" Link="PitServiceTracker.cs" />
     <!-- 0.7.1: bandenhek + vingerafdruk. Beide bestanden zijn SimHub-vrij. -->
     <Compile Include="..\3SM.EnduranceConnector\TyrePublishGate.cs" Link="TyrePublishGate.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetryContractsV3.cs" Link="TelemetryContractsV3.cs" />

@@ -369,6 +369,7 @@ internal static class FaseDTests
             if (string.Equals(args[0], "--only-measurement", StringComparison.Ordinal))
             {
                 Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
+                Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
@@ -388,6 +389,8 @@ internal static class FaseDTests
             baselineChecks += Group("V3PayloadFixtureTests", () => V3PayloadFixtureTests.Run(Check));
             baselineChecks += Group("SettingsCompatibilityTests", () => SettingsCompatibilityTests.Run(Check));
             baselineChecks += Group("UpdaterTransitionTests", () => UpdaterTransitionTests.Run(Check));
+            baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
+            baselineChecks += Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
