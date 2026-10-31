@@ -192,6 +192,10 @@ namespace ThreeSM.EnduranceConnector
         public int DroppedLaps { get; private set; }
         public int RejectedEvents { get; private set; }
         public int RejectedLaps { get; private set; }
+        /// <summary>Rijen die al bij het aanbieden zijn geweigerd (contractfout), met reden.</summary>
+        public int RefusedEvents { get; private set; }
+        public int RefusedLaps { get; private set; }
+        public string LastRefusalReason { get; private set; }
         public string LastDropReason { get; private set; }
         public string LastBlockError { get; private set; }
         public string LastPersistenceError { get; private set; }
@@ -208,7 +212,13 @@ namespace ThreeSM.EnduranceConnector
         {
             if (record == null) { reason = "record_null"; return false; }
             var problems = record.Validate();
-            if (problems.Count > 0) { reason = problems[0]; return false; }
+            if (problems.Count > 0)
+            {
+                // Expliciet verlies met reden: deze rij zou de Edge zeker weigeren.
+                reason = problems[0];
+                lock (_gate) { RefusedEvents++; LastRefusalReason = reason; }
+                return false;
+            }
             var entry = new OutboxEntry
             {
                 Uid = record.EventUid,
@@ -232,7 +242,12 @@ namespace ThreeSM.EnduranceConnector
         {
             if (record == null) { reason = "record_null"; return false; }
             var problems = record.Validate();
-            if (problems.Count > 0) { reason = problems[0]; return false; }
+            if (problems.Count > 0)
+            {
+                reason = problems[0];
+                lock (_gate) { RefusedLaps++; LastRefusalReason = reason; }
+                return false;
+            }
             var entry = new OutboxEntry
             {
                 Uid = record.SummaryUid,

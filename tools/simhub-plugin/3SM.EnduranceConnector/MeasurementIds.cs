@@ -168,6 +168,12 @@ namespace ThreeSM.EnduranceConnector
             return "evt-" + _eventLabels.ToString(CultureInfo.InvariantCulture);
         }
 
+        /// <summary>Nieuwe lokale segmentidentiteit (context, geen identiteit).</summary>
+        public string NewSegmentId()
+        {
+            return MeasurementIds.NewSegmentId(_create());
+        }
+
         /// <summary>Leesbaar label voor een ronde: het rondenummer plus een teller.</summary>
         public string NextSummaryLabel(int lapNumber)
         {

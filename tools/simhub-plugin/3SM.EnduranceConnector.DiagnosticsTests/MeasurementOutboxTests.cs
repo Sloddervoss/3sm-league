@@ -278,6 +278,21 @@ internal static class MeasurementOutboxTests
             && attemptOutbox.Due(T0.AddSeconds(2), 20, 3).Events[0].Attempts == 0,
             "een geslaagde poging zet de teller terug en laat de rij staan tot het ACK");
 
+        // Een rij die de Edge zeker weigert, telt als expliciet geweigerd verlies.
+        var refusedLap = Lap(ids, 5);
+        refusedLap.Complete = true;
+        refusedLap.TrackTempCMean = null;
+        refusedLap.Coverage = null;
+        refusedLap.ValidDurationSeconds = null;
+        refusedLap.SampleCount = null;
+        refusedLap.MaxGapSeconds = null;
+        var refusedOutbox = new MeasurementOutbox(Path.Combine(NewDirectory(), "outbox.json"));
+        var refused = refusedOutbox.EnqueueLap(refusedLap, out reason);
+        Check("O21", !refused && refusedOutbox.RefusedLaps == 1
+            && !string.IsNullOrEmpty(refusedOutbox.LastRefusalReason),
+            "een ronde die niet aan het contract voldoet wordt met reden geweigerd en geteld ("
+            + refusedOutbox.LastRefusalReason + ")");
+
         return count;
     }
 }

@@ -422,6 +422,38 @@ namespace ThreeSM.EnduranceConnector
         public string[] PitVisitIds { get; set; }
         public string[] WearObservationIds { get; set; }
 
+        /// <summary>
+        /// Koppelt een pitbezoek aan deze ronde. Het bezoek-ID is context; de
+        /// waargenomen brandstoftoevoer telt maar op één ronde (de ronde waarin de
+        /// delta is waargenomen), ook als het bezoek zelf over de finishlijn liep.
+        /// </summary>
+        public void NotePitVisit(string pitVisitId, double? fuelAddedLitresObserved)
+        {
+            if (MeasurementIds.IsLocalId(pitVisitId))
+            {
+                PitLap = true;
+                var current = PitVisitIds ?? new string[0];
+                var list = new List<string>(current);
+                if (!list.Contains(pitVisitId)) list.Add(pitVisitId);
+                PitVisitIds = list.ToArray();
+            }
+            if (fuelAddedLitresObserved.HasValue && fuelAddedLitresObserved.Value > 0)
+            {
+                PitLap = true;
+                FuelAddedLitresObserved = (FuelAddedLitresObserved ?? 0) + fuelAddedLitresObserved.Value;
+            }
+        }
+
+        /// <summary>Voegt de wear-waarneming van een anker toe aan deze ronde.</summary>
+        public void NoteWearObservation(string eventUid)
+        {
+            if (!MeasurementIds.IsUid(eventUid)) return;
+            var current = WearObservationIds ?? new string[0];
+            var list = new List<string>(current);
+            if (!list.Contains(eventUid)) list.Add(eventUid);
+            WearObservationIds = list.ToArray();
+        }
+
         public MeasurementLapSummaryRecord ToSummary(string summaryUid, string summaryId, string observedSessionId)
         {
             return new MeasurementLapSummaryRecord

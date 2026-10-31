@@ -77,6 +77,9 @@
     <!-- 0.7.2.0: kleine handshake met de server: capabilities, beleid, veilige defaults. -->
     <Compile Include="ConnectorControlContracts.cs" />
     <Compile Include="ConnectorControlClient.cs" />
+    <!-- 0.7.2.0: de bedrading: sampler -> pit -> anker -> outbox, met de toewijzing van
+         een pitbezoek aan de ronde waarin de delta is waargenomen. -->
+    <Compile Include="MeasurementPipeline.cs" />
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->
     <Compile Include="TyrePublishGate.cs" />

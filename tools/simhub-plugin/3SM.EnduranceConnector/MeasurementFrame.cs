@@ -305,9 +305,7 @@ namespace ThreeSM.EnduranceConnector
 
             var ack = MeasurementAckParser.Parse(responseBody, plan.Batch);
             var outcome = _outbox.ApplyAck(ack, nowUtc);
-            result.ConfirmationsSeen = outcome.Removed > 0 || ack.Events.Stored || ack.Laps.Stored;
-            result.Stored = outcome.Stored;
-            result.BlockError = outcome.BlockError;
+            result.ConfirmationsSeen = outcome.Removed > 0;
 
             // Wat de server niet duurzaam heeft opgeslagen, blijft staan en gaat met
             // backoff opnieuw. Wat bevestigd is, is al uit de wachtrij verdwenen.
@@ -316,8 +314,19 @@ namespace ThreeSM.EnduranceConnector
             {
                 if (_outbox.Contains(entry.Uid)) remaining.Add(entry);
             }
-            _outbox.MarkAttempt(remaining, nowUtc, !outcome.Stored);
-            if (!outcome.Stored)
+
+            // "stored:true" terwijl er rijen uit deze batch blijven staan is geen
+            // levering. Zonder deze regel zou dezelfde batch elk frame opnieuw gaan,
+            // zonder wachttijd. Behandel het als niet opgeslagen, zodat de backoff geldt.
+            var stored = outcome.Stored && remaining.Count == 0;
+            if (outcome.Stored && remaining.Count > 0)
+            {
+                outcome.BlockError = "ack_without_row_confirmation";
+            }
+            result.Stored = stored;
+            result.BlockError = outcome.BlockError;
+            _outbox.MarkAttempt(remaining, nowUtc, !stored);
+            if (!stored && string.IsNullOrEmpty(result.Error))
             {
                 result.Error = "not_stored:" + (outcome.BlockError ?? "unknown");
             }
