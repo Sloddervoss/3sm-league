@@ -147,11 +147,12 @@ export interface TyreGedeeld {
   accounts: number | null;
   /**
    * De spreiding tussen de priorstints waarop de band rust (`basis.gedeeld.
-   * spreiding`), in procentpunten per ronde. Null als de server hem niet kon
-   * bepalen; `spreidingBekend` zegt of dat "niet gemeten" of "geen antwoord" is.
+   * spreiding`), in procentpunten per ronde. Ontbreekt het veld, dan zegt de
+   * server er niets over; `spreidingBekend` zegt of dat "niet te bepalen" of
+   * "geen antwoord" is.
    */
-  spreiding: number | null;
-  spreidingBekend: boolean | null;
+  spreiding?: number | null;
+  spreidingBekend?: boolean | null;
 }
 
 /**
@@ -368,9 +369,12 @@ function gedeeldOf(value: unknown): TyreGedeeld | null {
     rondes: num(bron.rondes),
     stints: num(bron.stints),
     accounts: num(bron.accounts),
-    spreiding: num(bron.spreiding),
-    spreidingBekend: typeof bron.spreiding_bekend === "boolean" ? bron.spreiding_bekend : null,
   };
+  // Alleen wat de server werkelijk stuurt: een ontbrekend veld wordt geen
+  // sleutel met null, want dan lijkt het of de server "onbekend" zei.
+  const spreiding = num(bron.spreiding);
+  if (spreiding != null) gedeeld.spreiding = spreiding;
+  if (typeof bron.spreiding_bekend === "boolean") gedeeld.spreidingBekend = bron.spreiding_bekend;
   const leeg =
     gedeeld.rate == null && gedeeld.rondes == null && gedeeld.stints == null && gedeeld.accounts == null;
   return leeg ? null : gedeeld;
