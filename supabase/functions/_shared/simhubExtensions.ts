@@ -696,7 +696,10 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
     throw new Error(`${path}.currentDriverId is not allowed; send currentDriverName`);
   }
   const currentDriverName = optText(record.currentDriverName, `${path}.currentDriverName`, 64);
-  if (currentDriverName !== null && !/^[A-Za-z0-9 .,'_-]{1,64}$/.test(currentDriverName)) {
+  // Geen eigen tekenlijst: iRacing-namen bevatten accenten en punten. Alleen
+  // stuurtekens zijn ongeldig; de lengte is de grens. Zo is de Edge niet
+  // strenger dan de database (simhub_jvalid 'string', 1..64).
+  if (currentDriverName !== null && /[\u0000-\u001f\u007f]/.test(currentDriverName)) {
     throw new Error(`${path}.currentDriverName is invalid`);
   }
 

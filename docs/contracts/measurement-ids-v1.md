@@ -273,6 +273,11 @@ UUID-uniciteit blijft staan. De rollback is idempotent en getest met echte
 rijen, hergebruikte labels, een leeg label, hogere revisies en
 correctieverwijzingen (`supabase/tests/plugin08_review2_rollback_check.sql`).
 
+Bekende grens: rijden die de oude schrijver *na* een rollback wegschrijft hebben
+geen `event_uid`. De forward-migratie zet die kolom weer NOT NULL en zou daarop
+stuiten; hertoepassen na een rollback vraagt dus eerst een backfill- of
+opschoonbesluit. Dat is bewust niet stilzwijgend opgelost.
+
 Destructief opruimen staat in `supabase/rollback/plugin08_destructive_cleanup.sql`
 en is een aparte, gedocumenteerde handeling na een export. Dat script verwijdert
 eerst de tabellen en pas daarna de validatiefuncties: de CHECK-constraints hangen

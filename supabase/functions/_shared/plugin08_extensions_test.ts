@@ -340,6 +340,9 @@ Deno.test("P08-11 rijdersemantiek: naam van de client, uuid van de server", () =
   // En de gewone vorm bewaart de naam letterlijk.
   const naam = parseLapSummary(lap(1), 0);
   if (naam.currentDriverName !== "Driver One") throw new Error("currentDriverName niet bewaard");
+  // Accenten en punten zijn geldige iRacing-namen; geen ASCII-only lijst.
+  const accent = parseLapSummary(lap(1, { currentDriverName: "José M. van Dijk" }), 0);
+  if (accent.currentDriverName !== "José M. van Dijk") throw new Error("accentnaam geweigerd");
 });
 
 Deno.test("P08-10 een oude V1/V2-payload blijft ongewijzigd", () => {
