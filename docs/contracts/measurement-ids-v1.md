@@ -229,9 +229,19 @@ Een rondeaggregaat draagt de **SimHub-naam** van de rijder:
 |---|---|---|
 | minimale tijd tussen frames | 400 ms | `simhub_persist_v3` (rate-limit) én `simhub_connector_config.send_interval_ms` |
 | maximale HTTP-body | 24576 bytes | `readBoundedJson` én `payload_budget_bytes` |
-| meetgebeurtenissen per frame | 200 (DB) / 50 (Edge) | batchgrens |
-| rondeaggregaten per frame | 20 (DB) / 5 (Edge) | batchgrens |
+| meetgebeurtenissen per frame | 200 (DB) / 20 (Edge) | batchgrens |
+| rondeaggregaten per frame | 20 (DB) / 3 (Edge) | batchgrens |
+| meetreeksen per frame (bytes) | 16384 (Edge) | `MaxMeasurementBatchBytes`, compacte JSON |
 | bewijs per object | 4096 jsonb-bytes | databasedrempel |
+
+De Edge-aantallen zijn **gemeten**, niet geschat. De oude 50/5-fixtures kostten
+32.751 bytes compacte JSON (de reviewprobe mat 34.221 bytes met een iets grotere
+rondefixture); dat past niet in de HTTP-body van 24.576 bytes en werd dus pas
+op de bodylimiet geweigerd. Met 20 events en 3 rondes is een maximale batch
+14.551 bytes (`supabase/tests/plugin08_payload_measure.ts`), inclusief de
+kern van 821 bytes. Het batchbudget van 16.384 bytes wordt daarnaast apart
+afgedwongen: een batch erboven wordt `payload_too_large` (stored:false met die
+`block_error`); de core-telemetrie wordt dan wel opgeslagen.
 
 Control publiceert alleen waarden die de ingest aanvaardt; een waarde buiten de
 band wordt bij het schrijven geweigerd met `out_of_range` en een

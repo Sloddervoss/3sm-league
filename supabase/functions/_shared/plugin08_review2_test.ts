@@ -14,6 +14,11 @@ import type { NormalizedTelemetryEnvelope } from "./simhub.ts";
 import { controlWriteOutcome } from "./simhubControl.ts";
 import { mergeMeasurementAck, ackHasRejections } from "./simhubAggregates.ts";
 import {
+  MaxFrameBodyBytes,
+  MaxLapSummariesPerFrame,
+  MaxMeasurementBatchBytes,
+  MaxMeasurementEventsPerFrame,
+  measurementBatchBytes,
   parseLapSummariesReport,
   parseLapSummary,
   parseMeasurementEventsReport,
@@ -135,6 +140,45 @@ Deno.test("R2-4 complete vereist echte rondedekking", () => {
     coverage: { temperature: group(10, 32, 2), fuel: group(10, 32, 2), load: group(10, 32, 2) },
   }, 0);
   if (grens.complete !== true) throw new Error("exact 80% werd niet compleet");
+});
+
+Deno.test("R2-7 het bytebudget is een echte grens, niet alleen het aantal", () => {
+  const langeLap = (n: number) => ({
+    summaryUid: uid(1000 + n),
+    summaryId: `lap-${n}`,
+    segmentId: "seg-1",
+    observedSessionId: "sess-1",
+    lapNumber: n,
+    startedAt: "2026-10-31T11:58:00Z",
+    endedAt: "2026-10-31T12:00:00Z",
+    currentDriverName: "Driver One",
+    aggregationVersion: 1,
+    complete: true,
+    pitLap: false,
+    driverChanged: false,
+    trackTempCMean: 32.5,
+    fuelLevelIntegralLitreSeconds: 4875,
+    absLatAccelIntegralGSeconds: 220,
+    maxAbsLatAccelG: 1.85,
+    coverage: {
+      temperature: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+      fuel: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+      load: { sampleCount: 2400, validDurationSeconds: 120, maxGapSeconds: 0.1 },
+    },
+  });
+  // De oude 50/5-fixtures: ruim boven de HTTP-bodylimiet.
+  const oudeEvents = Array.from({ length: 50 }, (_, i) => event(i + 1));
+  const oudeLaps = Array.from({ length: 5 }, (_, i) => langeLap(i + 1));
+  const oud = measurementBatchBytes(oudeEvents, oudeLaps);
+  if (oud <= MaxFrameBodyBytes) throw new Error(`50/5 = ${oud} bytes, had boven ${MaxFrameBodyBytes} moeten zijn`);
+
+  // Het gekozen maximum moet met dezelfde fixtures onder de bodylimiet blijven.
+  const maxEvents = Array.from({ length: MaxMeasurementEventsPerFrame }, (_, i) => event(i + 1));
+  const maxLaps = Array.from({ length: MaxLapSummariesPerFrame }, (_, i) => langeLap(i + 1));
+  const max = measurementBatchBytes(maxEvents, maxLaps);
+  if (max > MaxMeasurementBatchBytes) throw new Error(`maximale batch ${max} > batchbudget ${MaxMeasurementBatchBytes}`);
+  if (max > MaxFrameBodyBytes) throw new Error(`maximale batch ${max} > bodylimiet ${MaxFrameBodyBytes}`);
+  console.log(`50/5 = ${oud} bytes; gekozen maximum ${MaxMeasurementEventsPerFrame}/${MaxLapSummariesPerFrame} = ${max} bytes`);
 });
 
 Deno.test("R2-6 out_of_range is een invoerfout met reden, geen 503", () => {

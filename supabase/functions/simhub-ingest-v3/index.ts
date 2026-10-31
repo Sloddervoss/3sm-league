@@ -2,6 +2,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
 import { assertAllowedOrigin, consumeEdgeRateLimit, jsonResponse, readBoundedJson, sha256Hex } from "../_shared/simhub.ts";
 import { resolveTelemetryContext } from "./context.ts";
 import {
+  MaxMeasurementBatchBytes,
+  measurementBatchBytes,
+} from "../_shared/simhubExtensions.ts";
+import {
   afterAggregatesSuccess,
   afterMissingFunction,
   aggregateBatch,
@@ -130,21 +134,31 @@ Deno.serve(async (request) => {
       // 0.7.2.0: de meetreeksen gaan als aparte parameters mee — alleen als er
       // iets te sturen is én de database de signatuur (nog) lijkt te hebben.
       const batch = aggregateBatch(context.normalized!);
+      // Bytebudget op BATCH-niveau (review 2, punt 7). Het aantal is geen
+      // grens: twintig rijen met maximaal bewijs kunnen samen meer zijn dan de
+      // HTTP-body toestaat. Te groot betekent: de meetserie gaat niet mee, de
+      // core-telemetrie wel, en de client ziet `payload_too_large` per reeks.
+      const batchBytes = measurementBatchBytes(
+        context.normalized!.measurementEvents ?? null,
+        context.normalized!.lapSummaries ?? null,
+      );
+      const batchOverBudget = batch !== null && batchBytes > MaxMeasurementBatchBytes;
+      const batchToSend = batchOverBudget ? null : batch;
       const now = Date.now();
-      const attemptAggregates = batch !== null && shouldAttemptAggregates(aggregatesCapability, now);
+      const attemptAggregates = batchToSend !== null && shouldAttemptAggregates(aggregatesCapability, now);
       let { data, error } = await service.rpc(
         "simhub_persist_v3",
-        persistArguments(baseArguments, batch, attemptAggregates),
+        persistArguments(baseArguments, batchToSend, attemptAggregates),
       );
       let aggregatesStored = attemptAggregates;
-      if (error && batch && isMissingFunctionError(error)) {
+      if (error && batchToSend && isMissingFunctionError(error)) {
         // De database kent de acht-argumentversie niet. Terugvallen en de
         // toestand met tijdstip onthouden, zodat er na de TTL een herprobe komt.
         aggregatesCapability = afterMissingFunction(Date.now());
         aggregatesStored = false;
         console.warn(
           "simhub_persist_v3 zonder meetreeksen: database heeft de 0.7.2.0-signatuur niet",
-          JSON.stringify({ events: batch.events.length, laps: batch.laps.length }),
+          JSON.stringify({ events: batchToSend.events.length, laps: batchToSend.laps.length }),
         );
         ({ data, error } = await service.rpc("simhub_persist_v3", baseArguments));
       } else if (!error && attemptAggregates) {
@@ -158,8 +172,21 @@ Deno.serve(async (request) => {
       const measurements = mergeMeasurementAck(
         context.normalized?.measurementReport ?? null,
         row?.measurement_ack,
-        batch === null ? true : aggregatesStored && result === "accepted",
+        batchToSend === null ? !batchOverBudget : aggregatesStored && result === "accepted",
       );
+      if (batchOverBudget) {
+        // Zichtbaar per reeks, met de maat erbij in de log. Nooit stil.
+        for (const key of ["events", "laps"] as const) {
+          const parser = context.normalized?.measurementReport?.[key];
+          if ((parser?.rows.length ?? 0) > 0) {
+            measurements[key].stored = false;
+            measurements[key].block_error = "payload_too_large";
+          }
+        }
+        console.warn("simhub-ingest-v3 meetbatch boven bytebudget", JSON.stringify({
+          batchBytes, limitBytes: MaxMeasurementBatchBytes,
+        }));
+      }
       const aggregateStatus = capabilityStatus(aggregatesCapability, Date.now());
 
       if (result === "not_authority" || result === "not_bound" || result === "not_registered") {

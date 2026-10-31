@@ -28,10 +28,27 @@ export const MaxUnknownPayloadChars = 16384;
 export const MaxUnknownValueChars = 4096;
 /** Maximale nestingdiepte van een onbekende waarde. */
 export const MaxUnknownDepth = 3;
-/** Meetgebeurtenissen per frame; de rest hoort in de volgende batch (outbox). */
-export const MaxMeasurementEventsPerFrame = 50;
-/** Rondeaggregaten per frame. */
-export const MaxLapSummariesPerFrame = 5;
+/**
+ * Meetgebeurtenissen per frame; de rest hoort in de volgende batch (outbox).
+ *
+ * Review 2, punt 7: aantallen zijn geen bytes. De oude 50/5-fixtures kostten
+ * 32.751 bytes (compacte JSON) en pasten dus nooit in de HTTP-body van 24.576
+ * bytes — de Edge weigerde ze pas op de bodylimiet. Deze aantallen zijn gemeten
+ * met supabase/tests/plugin08_payload_measure.ts: 20 events + 3 rondes kosten
+ * 14.551 bytes, ruim onder het budget en met ruimte voor de optionele
+ * telemetrieblokken.
+ */
+export const MaxMeasurementEventsPerFrame = 20;
+/** Rondeaggregaten per frame (gemeten: 3 × 939 bytes). */
+export const MaxLapSummariesPerFrame = 3;
+/**
+ * Bytebudget voor de twee meetreeksen samen (compacte JSON). Een frame dat
+ * hierboven komt wordt expliciet `payload_too_large`; het aantal alleen is geen
+ * grens.
+ */
+export const MaxMeasurementBatchBytes = 16384;
+/** De HTTP-bodylimiet van readBoundedJson; hier moet een maximale batch onder blijven. */
+export const MaxFrameBodyBytes = 24576;
 
 /** De drie metriekgroepen waarvoor dekking verplicht is bij `complete`. */
 export const CoverageGroups = ["temperature", "fuel", "load"] as const;
@@ -856,6 +873,13 @@ export const parseMeasurementEvents = (value: unknown): MeasurementEvent[] | nul
   const report = parseMeasurementEventsReport(value);
   return value === undefined || value === null ? null : report.rows;
 };
+
+/** Omvang van de meetreeksen samen in bytes (compacte JSON, zoals op de wire). */
+export const measurementBatchBytes = (events: unknown[] | null, laps: unknown[] | null): number =>
+  new TextEncoder().encode(JSON.stringify({
+    measurementEvents: events ?? [],
+    lapSummaries: laps ?? [],
+  })).byteLength;
 
 export const parseLapSummaries = (value: unknown): LapSummary[] | null => {
   const report = parseLapSummariesReport(value);
