@@ -101,7 +101,7 @@ Deno.test("P08-P2 het ACK noemt per rij wat er gebeurde", () => {
     ok: true,
     events: {
       received: 1,
-      accepted: [uid(1)],
+      accepted: [{ id: uid(1), record_revision: 4 }],
       duplicates: [],
       superseded: [],
       rejected: [{ id: uid(1), index: 0, reason: "revision_conflict" }],
@@ -110,7 +110,8 @@ Deno.test("P08-P2 het ACK noemt per rij wat er gebeurde", () => {
     laps: { received: 0, accepted: [], duplicates: [], superseded: [], rejected: [], block_error: null },
   };
   const ack = mergeMeasurementAck(parsed.measurementReport ?? null, dbAck, true);
-  if (ack.events.accepted[0] !== uid(1)) throw new Error("geaccepteerde rij niet gemeld");
+  if (ack.events.accepted[0]?.id !== uid(1)) throw new Error("geaccepteerde rij niet gemeld");
+  if (ack.events.accepted[0]?.recordRevision !== 4) throw new Error("bevestigde revisie niet gemeld");
   const reasons = ack.events.rejected.map((r) => `${r.stage}:${r.reason}`);
   if (!reasons.includes("database:revision_conflict")) throw new Error("database-afwijzing niet gemeld");
   if (!reasons.some((r) => r.startsWith("parser:"))) throw new Error("parserafkeuring niet gemeld");
