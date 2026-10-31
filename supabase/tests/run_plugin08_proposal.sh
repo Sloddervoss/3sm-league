@@ -75,6 +75,9 @@ echo "== SQL-tests: revisiemonotonie en de hash over de opgeslagen rij =="
 echo "== SQL-tests: supersedes in de content-hash =="
 "${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_supersedes_hash.sql"
 
+echo "== SQL-tests: duplicaatbevestigingen overleven de terugval =="
+"${PSQL[@]}" -f "$ROOT/supabase/tests/plugin08_review4_repairs.sql"
+
 echo "== body-diff simhub_persist_v3 =="
 (cd "$ROOT" && node supabase/tests/plugin08_persist_body_diff.mjs)
 

@@ -32,6 +32,11 @@
 --     de actuele rijstand (simhub_apply_event_row / simhub_apply_lap_row). Een
 --     lagere revisie wordt stale_revision en wordt nooit bevestigd als
 --     opgeslagen (review 3, punt 8).
+--   * De terugval herclassificeert ook de duplicaatkandidaten. Een duplicaat dat
+--     vóór de terugval al herkend was, hoort niet in het schrijfplan maar moet
+--     wél een uitslag houden: anders verdwijnt die rij bij een terugval uit alle
+--     lijsten, krijgt zij geen afwijzing en kan de outbox haar niet opruimen
+--     (review 4).
 --   * Bestaande rijen krijgen de nieuwe hash (anders zou een herverzending van
 --     een oude rij als conflict gelden). Alleen de hash wordt herschreven; geen
 --     enkele meetwaarde, revisie of verwijzing verandert.
@@ -356,8 +361,12 @@ declare
   -- rij-voor-rij terugval met dezelfde al gevalideerde waarden.
   ev_ins jsonb := '[]'::jsonb;
   ev_upd jsonb := '[]'::jsonb;
+  -- Duplicaatkandidaten: zij worden niet geschreven, maar de terugval moet ze
+  -- wél opnieuw kunnen classificeren. Daarom bewaren we hun volledige rij.
+  ev_dup_rows jsonb := '[]'::jsonb;
   lp_ins jsonb := '[]'::jsonb;
   lp_upd jsonb := '[]'::jsonb;
+  lp_dup_rows jsonb := '[]'::jsonb;
   v_prev jsonb;
   -- Hoogste revisie per identiteit binnen deze batch: één winnaar per UUID.
   v_batch_max jsonb;
@@ -648,6 +657,20 @@ begin
             elsif v_rev = v_prev_rev and v_hash is not distinct from v_prev_hash then
               -- Zelfde revisie, zelfde inhoud: herverzending uit de oude outbox.
               ev_dup := ev_dup || jsonb_build_object('id', v_uid::text, 'record_revision', v_prev_rev);
+              -- Dezelfde velden als een insert of update, zodat de terugval deze
+              -- rij opnieuw tegen de actuele stand kan classificeren. De
+              -- bevestiging alleen is niet genoeg: viel het snelpad terug, dan
+              -- zou deze rij uit alle uitslaglijsten verdwijnen (review 4).
+              ev_dup_rows := ev_dup_rows || jsonb_build_object(
+                'device_id', v_device, 'event_uid', v_uid, 'event_id', v_name,
+                'observed_session_id', v_obs, 'delivered_session_id', v_delivered,
+                'transport_session_id', v_delivered, 'segment_id', v_seg,
+                'pit_visit_id', v_pit, 'kind', v_kind, 'observed_at', v_at,
+                'session_time_seconds', v_st, 'sdk_tick', v_tick,
+                'wear_before', v_wb, 'wear_after', v_wa, 'set_generation', v_sg,
+                'evidence', v_ev, 'confidence', v_conf, 'record_revision', v_rev,
+                'content_hash', v_hash, 'supersedes_event_uid', v_stored_sup,
+                '_label', v_label, '_index', v_rec.ord - 1);
             elsif v_rev = v_prev_rev then
               ev_rej := public.simhub_ack_reject(ev_rej, v_label, v_rec.ord - 1, 'revision_conflict', v_max_rejects);
             else
@@ -719,11 +742,19 @@ begin
             -- stand die bij aanvang van de batch is ingelezen. Zo kan een lagere
             -- revisie een hogere nooit overschrijven en wordt er niets bevestigd
             -- dat niet is opgeslagen (review 3, punt 8).
+            --
+            -- Ook de duplicaatkandidaten gaan mee: zij zijn niet ingepland,
+            -- maar zonder herclassificatie zouden ze uit alle uitslaglijsten
+            -- verdwijnen (review 4). De oorspronkelijke batchvolgorde blijft
+            -- staan, zodat een duplicaat van een rij die in dezelfde batch
+            -- wordt ingevoegd opnieuw als duplicaat eindigt.
             ev_acc := '[]'::jsonb;
             ev_dup := '[]'::jsonb;
             ev_sup := '[]'::jsonb;
             for v_apply in
-              select value as row from jsonb_array_elements(ev_ins || ev_upd)
+              select value as row
+                from jsonb_array_elements(ev_ins || ev_upd || ev_dup_rows)
+               order by (value->>'_index')::integer
             loop
               begin
                 case public.simhub_apply_event_row(v_apply.row - '_label' - '_index')
@@ -1106,6 +1137,33 @@ begin
                           jsonb_build_object('rev', v_rev, 'hash', v_hash, 'sup', v_stored_sup));
             elsif v_rev = v_prev_rev and v_hash is not distinct from v_prev_hash then
               lp_dup := lp_dup || jsonb_build_object('id', v_sum::text, 'record_revision', v_prev_rev);
+              -- Dezelfde velden als een insert of update: de terugval
+              -- herclassificeert ook dit duplicaat (review 4).
+              lp_dup_rows := lp_dup_rows || jsonb_build_object(
+                'summary_uid', v_sum, 'summary_id', v_name, 'device_id', v_device,
+                'observed_session_id', v_obs, 'delivered_session_id', v_delivered,
+                'transport_session_id', v_delivered, 'segment_id', v_seg,
+                'lap_number', v_lap,
+                'started_at', public.simhub_jtimestamptz(v_rec.row->'startedAt'),
+                'ended_at', public.simhub_jtimestamptz(v_rec.row->'endedAt'),
+                'current_driver_id', v_drv_id, 'current_driver_name', v_drv_name,
+                'aggregation_version', v_agg, 'complete', v_complete,
+                'invalid_reasons', v_reasons, 'pit_lap', v_pitlap,
+                'driver_changed', v_drvchg, 'track_temp_c_mean', v_tmean,
+                'track_temp_c_min', v_tmin, 'track_temp_c_max', v_tmax,
+                'air_temp_c_mean', v_amean, 'fuel_start_litres', v_fs,
+                'fuel_end_litres', v_fe, 'fuel_level_integral_litre_seconds', v_fi,
+                'fuel_added_litres_observed', v_fa,
+                'abs_lat_accel_integral_g_seconds', v_ai,
+                'lat_accel_squared_integral_g2_seconds', v_ai2,
+                'max_abs_lat_accel_g', v_amax,
+                'abs_long_accel_integral_g_seconds', v_ali,
+                'valid_duration_seconds', v_vd, 'sample_count', v_sc::bigint,
+                'max_gap_seconds', v_gap, 'pit_visit_ids', v_pitids,
+                'wear_observation_ids', v_wearids, 'coverage', v_cov,
+                'record_revision', v_rev, 'content_hash', v_hash,
+                'supersedes_summary_uid', v_stored_sup,
+                '_label', v_label, '_index', v_rec.ord - 1);
             elsif v_rev = v_prev_rev then
               lp_rej := public.simhub_ack_reject(lp_rej, v_label, v_rec.ord - 1, 'revision_conflict', v_max_rejects);
             else
@@ -1195,12 +1253,16 @@ begin
             end if;
           exception when others then
             -- Alles terug en opnieuw, rij voor rij, met herclassificatie tegen
-            -- de rijstand van dít moment (review 3, punt 8).
+            -- de rijstand van dít moment (review 3, punt 8). De duplicaat-
+            -- kandidaten doen mee, anders verdwijnen zij uit alle uitslag-
+            -- lijsten (review 4), in de oorspronkelijke batchvolgorde.
             lp_acc := '[]'::jsonb;
             lp_dup := '[]'::jsonb;
             lp_sup := '[]'::jsonb;
             for v_apply in
-              select value as row from jsonb_array_elements(lp_ins || lp_upd)
+              select value as row
+                from jsonb_array_elements(lp_ins || lp_upd || lp_dup_rows)
+               order by (value->>'_index')::integer
             loop
               begin
                 case public.simhub_apply_lap_row(v_apply.row - '_label' - '_index')
@@ -1265,7 +1327,7 @@ $function$;
 
 
 comment on function public.simhub_persist_measurement_batch(uuid, text, jsonb, jsonb) is
-  'Interne schrijver voor meetgebeurtenissen en rondeaggregaten. Set-based snelpad voor nieuwe rijen en hogere revisies, met een rij-voor-rij terugval die tegen de actuele rijstand herclassificeert. Revisies blijven monotoon; de content-hash gaat over de opgeslagen rij inclusief de bewaarde supersedes. Elke bevestiging is {id, record_revision}.';
+  'Interne schrijver voor meetgebeurtenissen en rondeaggregaten. Set-based snelpad voor nieuwe rijen en hogere revisies, met een rij-voor-rij terugval die tegen de actuele rijstand herclassificeert, inclusief de duplicaatkandidaten. Revisies blijven monotoon; de content-hash gaat over de opgeslagen rij inclusief de bewaarde supersedes. Elke aangeboden rij krijgt precies één uitslag en elke bevestiging is {id, record_revision}.';
 
 revoke all on function public.simhub_persist_measurement_batch(uuid, text, jsonb, jsonb) from public, anon, authenticated;
 grant execute on function public.simhub_persist_measurement_batch(uuid, text, jsonb, jsonb) to service_role;
