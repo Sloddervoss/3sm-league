@@ -173,12 +173,13 @@ export interface TyreBasis {
    */
   priorRate: number | null;
   /**
-   * `basis.prior_n` is `n_eff`: de meetbasis in rondes die het cijfer draagt
-   * (`n/(n+8)` gewogen). Dat is een gewogen getal en dus geen aantal rondes dat
-   * iemand kan natellen: 1,9 betekent niet "twee rondes". Sinds migratie
-   * 20261029120000 stuurt de server daarom `prior_rondes` (de echte rondes) en
-   * `prior_stints` (het aantal stints) mee. `priorN` blijft de terugval voor een
-   * server die die velden nog niet kent.
+   * `basis.prior_n` is `n_eff`: sinds 20261031150200 de Kish-maat over de
+   * stintgewichten, (som a)^2/som a^2. Dat is een effectieve meetbasis in
+   * eenheden van die gewichten — bij gelijke stints ongeveer het aantal
+   * stints — en dus geen aantal rondes dat iemand kan natellen. De echte
+   * aantallen staan ernaast: `prior_rondes` (rondes) en `prior_stints`
+   * (stints). `priorN` blijft de terugval voor een server die die velden nog
+   * niet kent.
    */
   priorN: number | null;
   /** De echte rondes onder de prior (`basis.prior_rondes`), of null als de server zweeg. */
