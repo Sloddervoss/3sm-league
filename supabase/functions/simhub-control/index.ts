@@ -43,6 +43,7 @@ import {
   ServerProtocolVersion,
   ServerSchemaRevision,
   isExpired,
+  controlWriteOutcome,
   parseConfigRow,
 } from "../_shared/simhubControl.ts";
 
@@ -253,27 +254,12 @@ Deno.serve(async (request) => {
     });
     if (error) return controlResponse(request, { error: "write_failed" }, 503);
 
-    const row = Array.isArray(data) ? data[0] : data;
-    const result = (row as { result?: string } | null)?.result ?? "unknown";
-    if (result === "applied") {
-      return controlResponse(request, {
-        ok: true,
-        result,
-        configRevision: (row as { config_revision?: number }).config_revision ?? null,
-        ignoredFeatureKeys: (row as { ignored_feature_keys?: string[] }).ignored_feature_keys ?? [],
-      });
-    }
-    if (result === "revision_conflict") {
-      return controlResponse(request, {
-        error: result,
-        configRevision: (row as { config_revision?: number }).config_revision ?? null,
-      }, 409);
-    }
-    if (result === "unauthorized") return controlResponse(request, { error: "forbidden" }, 403);
-    if (result === "unknown_fields" || result === "invalid_payload") {
-      return controlResponse(request, { error: result }, 422);
-    }
-    return controlResponse(request, { error: "write_failed", result }, 503);
+    // De vertaling van databaseresultaat naar HTTP-status staat in
+    // _shared/simhubControl.ts, zodat dezelfde regel getest kan worden zonder
+    // netwerk. out_of_range is een invoerfout (400) met de reden erbij, geen
+    // 503 write_failed.
+    const outcome = controlWriteOutcome(Array.isArray(data) ? data[0] : data);
+    return controlResponse(request, outcome.body, outcome.status);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
     if (message === "origin_not_allowed") return controlResponse(request, { error: message }, 403);

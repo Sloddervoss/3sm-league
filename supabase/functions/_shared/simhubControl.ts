@@ -310,3 +310,56 @@ export const acceptedExtensions = (negotiation: Negotiation): string[] =>
   negotiation.mode === "negotiated"
     ? KnownFeatures.filter((feature) => negotiation.features[feature] === true)
     : [];
+
+/**
+ * Vertaalt de uitkomst van `simhub_connector_config_apply` naar een HTTP-status
+ * en -body voor de beheerclient (review 2, punt 6).
+ *
+ * `out_of_range` en `invalid_payload` zijn invoerfouten van de beheerder, geen
+ * tijdelijke onbeschikbaarheid. Ze krijgen daarom 400/422 met de
+ * `rejection_detail` van de database; 503 `write_failed` is voorbehouden aan
+ * een echte schrijf- of verbindingsfout. Zonder deze vertaling verdween de
+ * reden ("sendIntervalMs:400..10000") in een generieke fout.
+ */
+export type ControlWriteOutcome = { status: number; body: Record<string, unknown> };
+
+export const controlWriteOutcome = (row: unknown): ControlWriteOutcome => {
+  const record = (row && typeof row === "object" ? row : {}) as Record<string, unknown>;
+  const result = typeof record.result === "string" ? record.result : "unknown";
+  const configRevision = typeof record.config_revision === "number" ? record.config_revision : null;
+  const detail = typeof record.rejection_detail === "string" && record.rejection_detail
+    ? record.rejection_detail
+    : null;
+  const ignored = Array.isArray(record.ignored_feature_keys)
+    ? record.ignored_feature_keys.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  switch (result) {
+    case "applied":
+      return {
+        status: 200,
+        body: { ok: true, result, configRevision, ignoredFeatureKeys: ignored },
+      };
+    case "revision_conflict":
+      return {
+        status: 409,
+        body: { error: result, configRevision, ...(detail ? { reason: detail } : {}) },
+      };
+    case "unauthorized":
+      return { status: 403, body: { error: "forbidden" } };
+    case "out_of_range":
+      return {
+        status: 400,
+        body: { error: "out_of_range", reason: detail ?? "out_of_range", configRevision },
+      };
+    case "unknown_fields":
+    case "invalid_payload":
+      return {
+        status: 422,
+        body: { error: result, reason: detail ?? result, configRevision },
+      };
+    case "not_initialized":
+      return { status: 409, body: { error: "not_initialized", configRevision } };
+    default:
+      return { status: 503, body: { error: "write_failed", result } };
+  }
+};

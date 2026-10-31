@@ -234,7 +234,10 @@ Een rondeaggregaat draagt de **SimHub-naam** van de rijder:
 | bewijs per object | 4096 jsonb-bytes | databasedrempel |
 
 Control publiceert alleen waarden die de ingest aanvaardt; een waarde buiten de
-band wordt bij het schrijven geweigerd met `out_of_range` en een `rejection_detail`.
+band wordt bij het schrijven geweigerd met `out_of_range` en een
+`rejection_detail`. De beheerclient krijgt dat als **HTTP 400** met `reason`
+(bijv. `sendIntervalMs:400..10000`), niet als 503 `write_failed`: het is een
+invoerfout, geen storing.
 
 ## 9. Bewaartermijn
 

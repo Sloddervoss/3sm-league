@@ -11,6 +11,7 @@
  *    ook als de parser de middelste rij al had afgekeurd (punt 2).
  */
 import type { NormalizedTelemetryEnvelope } from "./simhub.ts";
+import { controlWriteOutcome } from "./simhubControl.ts";
 import { mergeMeasurementAck, ackHasRejections } from "./simhubAggregates.ts";
 import {
   parseLapSummariesReport,
@@ -134,6 +135,30 @@ Deno.test("R2-4 complete vereist echte rondedekking", () => {
     coverage: { temperature: group(10, 32, 2), fuel: group(10, 32, 2), load: group(10, 32, 2) },
   }, 0);
   if (grens.complete !== true) throw new Error("exact 80% werd niet compleet");
+});
+
+Deno.test("R2-6 out_of_range is een invoerfout met reden, geen 503", () => {
+  const uit = controlWriteOutcome({
+    result: "out_of_range",
+    config_revision: 4,
+    ignored_feature_keys: [],
+    rejection_detail: "sendIntervalMs:400..10000",
+  });
+  if (uit.status !== 400) throw new Error(`status = ${uit.status}, verwacht 400`);
+  if (uit.body.error !== "out_of_range") throw new Error("foutcode niet doorgegeven");
+  if (uit.body.reason !== "sendIntervalMs:400..10000") throw new Error("de reden is niet doorgegeven");
+  if (uit.body.configRevision !== 4) throw new Error("de configuratierevisie ontbreekt");
+
+  const ongeldig = controlWriteOutcome({
+    result: "invalid_payload", rejection_detail: "features_not_an_object", config_revision: 4,
+  });
+  if (ongeldig.status !== 422 || ongeldig.body.reason !== "features_not_an_object") {
+    throw new Error("invalid_payload verliest de reden");
+  }
+  // Een echte schrijffout blijft 503; een geslaagde schrijfactie blijft 200.
+  if (controlWriteOutcome({ result: "write_failed" }).status !== 503) throw new Error("503 verdwenen");
+  const ok = controlWriteOutcome({ result: "applied", config_revision: 5, ignored_feature_keys: ["x"] });
+  if (ok.status !== 200 || ok.body.configRevision !== 5) throw new Error("applied niet doorgegeven");
 });
 
 Deno.test("R2-5 evidence: null is geen bewijs en wear.version is verplicht", () => {
