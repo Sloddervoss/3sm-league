@@ -38,7 +38,7 @@ export function RaceTelemetryStrip({ v3, live }: { v3: V3Normalized | null; live
 
   return (
     <div
-      className="grid overflow-hidden rounded-xl border border-[#1D2431] bg-[#0B0D11] sm:grid-cols-2 xl:grid-cols-[5fr_4fr_6fr]"
+      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[5fr_4fr_6fr]"
       data-pitwall-kpi="true"
     >
       <KpiGroup label="Sectoren" group="sectoren">
@@ -47,12 +47,12 @@ export function RaceTelemetryStrip({ v3, live }: { v3: V3Normalized | null; live
         <Cell label="S3" value={second(data?.vehicle?.sector3Seconds)} />
       </KpiGroup>
 
-      <KpiGroup label="Rondetijd" group="rondetijd" className="border-t border-[#1D2431] sm:border-l sm:border-t-0">
-        <Cell label="Laatste" value={lap(last)} tone="text-amber-300" />
-        <Cell label="Beste" value={lap(best)} tone="text-fuchsia-300" />
+      <KpiGroup label="Rondetijd" group="rondetijd">
+        <Cell label="Laatste" value={lap(last)} tone="text-white" />
+        <Cell label="Beste" value={lap(best)} tone="text-emerald-300" />
       </KpiGroup>
 
-      <KpiGroup label="Positie" group="positie" className="border-t border-[#1D2431] sm:border-l sm:border-t-0">
+      <KpiGroup label="Positie" group="positie">
         <Cell label="P" value={pos != null ? `P${pos}` : '—'} />
         <Cell label="K" value={cls != null ? `K${cls}` : '—'} tone="text-sky-300" />
         <Cell label="Ronde" value={laps != null ? String(laps) : '—'} />
@@ -74,7 +74,7 @@ function KpiGroup({
   children: ReactNode;
 }) {
   return (
-    <div className={`px-4 py-2.5 ${className}`} data-pitwall-kpi-group={group}>
+    <div className={`rounded-lg border border-[#1D2431] bg-[#0B0D11] px-4 py-2.5 ${className}`} data-pitwall-kpi-group={group}>
       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">{label}</p>
       <div className="mt-1.5 flex flex-wrap items-start gap-x-6 gap-y-2">{children}</div>
     </div>

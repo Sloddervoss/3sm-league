@@ -33,10 +33,10 @@ const median = (values: number[]): number => {
  * hebben geen historie van een ander.
  */
 export const PaceGraph = ({ points, className = "" }: Props) => {
-  const { path, markers, min, max, ref } = useMemo(() => {
+  const { path, markers, dots, min, max, ref } = useMemo(() => {
     const clean = points.filter((p) => Number.isFinite(p.seconds) && p.seconds > 0 && p.seconds < 600);
     if (clean.length < 2) {
-      return { path: "", markers: [] as Array<{ x: number; y: number; kind: string }>, min: 0, max: 0, ref: 0 };
+      return { path: "", dots: [] as Array<{ x: number; y: number }>, markers: [] as Array<{ x: number; y: number; kind: string }>, min: 0, max: 0, ref: 0 };
     }
 
     const mid = median(clean.map((p) => p.seconds));
@@ -60,7 +60,7 @@ export const PaceGraph = ({ points, className = "" }: Props) => {
       .filter(({ point }) => point.marker)
       .map(({ point, index }) => ({ x: x(index), y: y(Math.min(Math.max(point.seconds, lo), hi)), kind: point.marker as string }));
 
-    return { path: d, markers: marks, min: lo, max: hi, ref: mid };
+    return { path: d, markers: marks, dots: clean.map((p, index) => ({ x: x(index), y: y(Math.min(Math.max(p.seconds, lo), hi)) })), min: lo, max: hi, ref: mid };
   }, [points]);
 
   if (!path) {
@@ -77,6 +77,12 @@ export const PaceGraph = ({ points, className = "" }: Props) => {
         preserveAspectRatio="none"
         data-pitwall-pace-graph="true"
       >
+        {[0, 1, 2, 3].map((tick) => (
+          <line key={`h${tick}`} x1={PAD} x2={W - PAD} y1={PAD + tick * (H - PAD * 2) / 3} y2={PAD + tick * (H - PAD * 2) / 3} stroke="#1F2634" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        ))}
+        {[0, 1, 2, 3, 4].map((tick) => (
+          <line key={`v${tick}`} y1={PAD} y2={H - PAD} x1={PAD + tick * (W - PAD * 2) / 4} x2={PAD + tick * (W - PAD * 2) / 4} stroke="#161C27" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        ))}
         <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#1F2634" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         <path
           d={path}
@@ -87,6 +93,7 @@ export const PaceGraph = ({ points, className = "" }: Props) => {
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />
+        {dots.map((dot, index) => <circle key={index} cx={dot.x} cy={dot.y} r="2" fill="#F97316" />)}
         {markers.map((m, i) => (
           <line
             key={i}

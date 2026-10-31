@@ -18,7 +18,7 @@
 /* Use a bounded table even when rendered outside the wide dashboard. */
 .pitwall-timing { min-height: 0; }
 .pitwall-timing-body { display: flex; flex-direction: column; min-height: 0; }
-.pitwall-timing-scroll { max-height: 360px; overflow: auto; scrollbar-color: #65748b #0b0d11; }
+.pitwall-timing-scroll { max-height: 360px; overflow: auto; overscroll-behavior: contain; scrollbar-color: #65748b #0b0d11; }
 .pitwall-timing-scroll:focus-visible { outline: 2px solid #fb923c; outline-offset: -2px; }
 .pitwall-timing-scroll thead { position: sticky; top: 0; z-index: 1; }
 .pitwall-timing-scroll table { font-size: 13px; }
@@ -42,4 +42,32 @@
   [data-pitwall-look] .pitwall-decision-content { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); column-gap: 24px; align-content: start; }
   [data-pitwall-look] .pitwall-decision-content > * { grid-column: 1; }
   [data-pitwall-look] .pitwall-decision-content > .pitwall-decision-compare { grid-column: 2; grid-row: 1 / 5; margin-top: 0; }
+}
+
+/* Reference-image hierarchy: orange marks selection, not every numeric value. */
+[data-pitwall-look] [data-pitwall-slot] { border-radius: 8px; }
+[data-pitwall-look] [data-pitwall-slot="own-car"] {
+  border-color: #a85519;
+  box-shadow: inset 3px 0 0 #f97316;
+}
+[data-pitwall-look] .pitwall-timing > header h3 {
+  background: #f97316;
+  color: #090b0f;
+  padding: 5px 10px;
+  border-radius: 5px;
+}
+[data-pitwall-look] .pitwall-timing > header { padding-block: 4px; }
+[data-pitwall-look] .pitwall-timing-scroll tbody td { padding-block: 4px; }
+[data-pitwall-look] .pitwall-timing-scroll tbody td > p { display: inline; }
+[data-pitwall-look] .pitwall-timing-scroll tbody td > p + p { margin-left: 8px; }
+[data-pitwall-look] [data-pitwall-own-row] td:nth-child(3) {
+  color: #fb923c;
+  font-weight: 900;
+}
+[data-pitwall-look] .pitwall-timing-scroll td:nth-child(6) { color: #e2e8f0; }
+[data-pitwall-look] .pitwall-timing-scroll td:nth-child(7) { color: #6ee7b7; }
+@media (min-width: 1280px) {
+  [data-pitwall-look] [data-pitwall-row="panels"] {
+    grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+  }
 }
