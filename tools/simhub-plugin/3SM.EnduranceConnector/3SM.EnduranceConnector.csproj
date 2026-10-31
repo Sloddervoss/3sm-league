@@ -70,6 +70,8 @@
     <!-- 0.7.2.0: pitbezoeken (intentie vs resultaat) en wear-ankers met bewijs. -->
     <Compile Include="PitServiceTracker.cs" />
     <Compile Include="TyreAnchorTracker.cs" />
+    <!-- 0.7.2.0: begrensde persistente outbox met ACK per rij. -->
+    <Compile Include="MeasurementOutbox.cs" />
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->
     <Compile Include="TyrePublishGate.cs" />

@@ -760,6 +760,177 @@ namespace ThreeSM.EnduranceConnector
             }
         }
 
+        /// <summary>
+        /// Leest JSON als woordenboek met eigen code in plaats van met
+        /// <c>DataContractJsonSerializer</c>. Reden: die serializer levert voor een
+        /// genest object soms een kale <c>object</c> zonder leden, waardoor een ACK met
+        /// een geneste <c>measurements</c>-structuur stil als "geen bevestiging" zou
+        /// worden gelezen. Een parser van honderd regels is hier voorspelbaar, werkt op
+        /// net48 en net8 en kan niet stil data laten vallen.
+        ///
+        /// Vorm: Dictionary&lt;string, object&gt;, List&lt;object&gt;, string, double, bool, null.
+        /// </summary>
+        public static Dictionary<string, object> DeserializeDictionary(string json)
+        {
+            if (json == null) throw new ArgumentNullException("json");
+            var reader = new JsonReader(json, 0);
+            var value = reader.ReadValue(0) as Dictionary<string, object>;
+            if (value == null) throw new FormatException("json is geen object");
+            return value;
+        }
+
+        private sealed class JsonReader
+        {
+            private readonly string _text;
+            private int _index;
+            private const int MaxDepth = 32;
+
+            public JsonReader(string text, int index)
+            {
+                _text = text;
+                _index = index;
+            }
+
+            public object ReadValue(int depth)
+            {
+                if (depth > MaxDepth) throw new FormatException("json te diep genest");
+                SkipWhitespace();
+                if (_index >= _text.Length) throw new FormatException("onverwacht einde");
+                var character = _text[_index];
+                switch (character)
+                {
+                    case '{': return ReadObject(depth);
+                    case '[': return ReadArray(depth);
+                    case '"': return ReadString();
+                    case 't': Expect("true"); return true;
+                    case 'f': Expect("false"); return false;
+                    case 'n': Expect("null"); return null;
+                    default: return ReadNumber();
+                }
+            }
+
+            private Dictionary<string, object> ReadObject(int depth)
+            {
+                var result = new Dictionary<string, object>(StringComparer.Ordinal);
+                _index++; // {
+                SkipWhitespace();
+                if (_index < _text.Length && _text[_index] == '}') { _index++; return result; }
+                while (true)
+                {
+                    SkipWhitespace();
+                    if (_index >= _text.Length || _text[_index] != '"') throw new FormatException("sleutel verwacht");
+                    var key = ReadString();
+                    SkipWhitespace();
+                    if (_index >= _text.Length || _text[_index] != ':') throw new FormatException(": verwacht");
+                    _index++;
+                    result[key] = ReadValue(depth + 1);
+                    SkipWhitespace();
+                    if (_index >= _text.Length) throw new FormatException("} verwacht");
+                    var separator = _text[_index];
+                    if (separator == ',') { _index++; continue; }
+                    if (separator == '}') { _index++; return result; }
+                    throw new FormatException(", of } verwacht");
+                }
+            }
+
+            private List<object> ReadArray(int depth)
+            {
+                var result = new List<object>();
+                _index++; // [
+                SkipWhitespace();
+                if (_index < _text.Length && _text[_index] == ']') { _index++; return result; }
+                while (true)
+                {
+                    result.Add(ReadValue(depth + 1));
+                    SkipWhitespace();
+                    if (_index >= _text.Length) throw new FormatException("] verwacht");
+                    var separator = _text[_index];
+                    if (separator == ',') { _index++; continue; }
+                    if (separator == ']') { _index++; return result; }
+                    throw new FormatException(", of ] verwacht");
+                }
+            }
+
+            private string ReadString()
+            {
+                _index++; // "
+                var builder = new StringBuilder();
+                while (_index < _text.Length)
+                {
+                    var character = _text[_index++];
+                    if (character == '"') return builder.ToString();
+                    if (character != '\\') { builder.Append(character); continue; }
+                    if (_index >= _text.Length) throw new FormatException("escape onvolledig");
+                    var escape = _text[_index++];
+                    switch (escape)
+                    {
+                        case '"': builder.Append('"'); break;
+                        case '\\': builder.Append('\\'); break;
+                        case '/': builder.Append('/'); break;
+                        case 'b': builder.Append('\b'); break;
+                        case 'f': builder.Append('\f'); break;
+                        case 'n': builder.Append('\n'); break;
+                        case 'r': builder.Append('\r'); break;
+                        case 't': builder.Append('\t'); break;
+                        case 'u':
+                            if (_index + 4 > _text.Length) throw new FormatException("unicode onvolledig");
+                            var hex = _text.Substring(_index, 4);
+                            int code;
+                            if (!int.TryParse(hex, System.Globalization.NumberStyles.HexNumber,
+                                System.Globalization.CultureInfo.InvariantCulture, out code))
+                                throw new FormatException("unicode ongeldig");
+                            builder.Append((char)code);
+                            _index += 4;
+                            break;
+                        default: throw new FormatException("escape onbekend");
+                    }
+                }
+                throw new FormatException("string niet afgesloten");
+            }
+
+            private object ReadNumber()
+            {
+                var start = _index;
+                while (_index < _text.Length)
+                {
+                    var character = _text[_index];
+                    var numeric = (character >= '0' && character <= '9') || character == '-' || character == '+'
+                        || character == '.' || character == 'e' || character == 'E';
+                    if (!numeric) break;
+                    _index++;
+                }
+                if (start == _index) throw new FormatException("getal verwacht");
+                var text = _text.Substring(start, _index - start);
+                double parsed;
+                if (!double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out parsed))
+                {
+                    throw new FormatException("getal ongeldig");
+                }
+                return parsed;
+            }
+
+            private void Expect(string literal)
+            {
+                if (_index + literal.Length > _text.Length
+                    || string.CompareOrdinal(_text, _index, literal, 0, literal.Length) != 0)
+                {
+                    throw new FormatException(literal + " verwacht");
+                }
+                _index += literal.Length;
+            }
+
+            private void SkipWhitespace()
+            {
+                while (_index < _text.Length)
+                {
+                    var character = _text[_index];
+                    if (character != ' ' && character != '\t' && character != '\r' && character != '\n') return;
+                    _index++;
+                }
+            }
+        }
+
         public static int Bytes(string json)
         {
             return string.IsNullOrEmpty(json) ? 0 : Encoding.UTF8.GetByteCount(json);
