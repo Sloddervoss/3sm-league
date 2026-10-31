@@ -348,18 +348,78 @@ function helling(rate: number | null): string | null {
 }
 
 /**
+ * De trappen van de prior, in de woorden van deze regel.
+ *
+ * De server bouwt de prior van grof naar fijn en stuurt per gebruikte trap een
+ * aantal stints mee (`basis.prior_bron`). De volgorde hier is de leesvolgorde —
+ * van de eigen combinatie naar de hele pool — en niet die van de server, zodat
+ * dezelfde opbouw altijd in dezelfde vorm staat.
+ */
+const TRAPPEN: ReadonlyArray<{ patroon: RegExp; woord: string }> = [
+  { patroon: /deze auto op dit circuit/i, woord: "eigen combinatie" },
+  { patroon: /deze auto op andere circuits/i, woord: "deze auto" },
+  { patroon: /andere auto[’']?s op dit circuit/i, woord: "dit circuit" },
+  { patroon: /alle auto[’']?s en circuits/i, woord: "hele pool" },
+];
+
+/**
+ * De feitelijke trapopbouw zoals de server hem teruggaf, in één zin.
+ *
+ * "eigen combinatie 2 stints, deze auto 12 stints, dit circuit 8 stints, hele
+ * pool 40 stints". Alleen de trappen die de server noemde komen erin: een trap
+ * zonder data stuurt hij niet mee. Kent deze regel een label niet, dan blijft
+ * het letterlijke antwoord van de server staan — verzinwoorden zijn erger dan
+ * een lange zin, en een trap weglaten zou de opbouw onvolledig maken.
+ *
+ * Een trap met nul stints heeft niets bijgedragen en valt af. Ontbreekt het
+ * veld, dan is er geen opbouw en dus geen tweede zin.
+ */
+function trapOpbouw(priorBron: string | null): string | null {
+  const ruw = priorBron?.trim();
+  if (ruw == null || ruw === "") return null;
+
+  const segmenten = ruw
+    .split("·")
+    .map((deel) => deel.trim())
+    .filter((deel) => deel !== "");
+  if (segmenten.length === 0) return null;
+
+  const gevonden: Array<{ rang: number; tekst: string }> = [];
+  for (const segment of segmenten) {
+    const rang = TRAPPEN.findIndex((trap) => trap.patroon.test(segment));
+    if (rang < 0) return ruw;
+    const aantal = /(\d+)\s*stint/i.exec(segment);
+    if (aantal == null) return ruw;
+    const n = Number(aantal[1]);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    gevonden.push({ rang, tekst: `${TRAPPEN[rang].woord} ${stints(n)}` });
+  }
+
+  if (gevonden.length === 0) return null;
+  return gevonden
+    .sort((a, b) => a.rang - b.rang)
+    .map((deel) => deel.tekst)
+    .join(", ");
+}
+
+/**
  * De gedeelde verwachting achter deze combinatie (`basis.gedeeld`).
  *
- * De kop volgt `basis.prior_level` en niet de vraag van de lezer. Een prior uit
- * de trap `auto` is gemeten met deze auto op ándere circuits; `circuit` is
- * gemeten op dít circuit met andere auto's; `algemeen` over alle auto's en
- * circuits. Alleen bij `exact` (of zonder niveau) is de referentie echt deze
- * auto op dit circuit. De oude regel zette elke prior op het huidige circuit en
- * lokaliseerde bredere kennis dus waar hij niet gemeten was.
+ * Deze regel lokaliseert niets. `basis.prior_level` is het fijnste niveau van
+ * een blend, niet de volledige herkomst: bij `auto` kan de prior ook circuit- en
+ * algemene kennis bevatten, en bij `circuit` dragen andere auto's op ditzelfde
+ * circuit bij. Elke kop die één trap als de bron noemde ("gemeten op andere
+ * circuits", "gemeten in andere auto's") was dus te stellig, ook al stond er
+ * geen circuitnaam in. Daarom zegt de regel alleen wat zeker is — gedeelde
+ * modelreferentie uit meerdere bronnen — en zet hij de trapopbouw van de server
+ * er als tweede zin achter: dat is het enige dat per trap feitelijk klopt.
  *
- * "Gedeeld voor bmw_m4_gt3 op spa: 2,1% per ronde, uit 41 rondes van 3 rijders."
- * "Gedeelde referentie voor deze auto, gemeten op andere circuits: 0,3% per
- * ronde, uit 187 rondes van 2 rijders."
+ * "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 0,3% per ronde, uit
+ * 187 rondes van 2 rijders. Opbouw: eigen combinatie 2 stints, deze auto 12
+ * stints, dit circuit 8 stints, hele pool 40 stints."
+ *
+ * Zonder `prior_bron` blijft het bij de eerste zin: liever geen opbouw dan een
+ * opbouw die wij zelf invullen.
  *
  * Alleen rondes en rijders zonder helling mag: een pool met een meetbasis maar
  * zonder bruikbare helling is nog steeds iets dat de lezer hoort te weten (het
@@ -367,7 +427,7 @@ function helling(rate: number | null): string | null {
  * niets gedeeld en dus ook geen regel.
  */
 export function gedeeldRegel(estimate: TyreEstimateV2): string | null {
-  const { gedeeld, carKey, trackKey, priorLevel, bron } = estimate.basis;
+  const { gedeeld, priorBron } = estimate.basis;
   if (gedeeld == null) return null;
 
   const delen: string[] = [];
@@ -389,23 +449,9 @@ export function gedeeldRegel(estimate: TyreEstimateV2): string | null {
   }
 
   if (delen.length === 0) return null;
-  return `${gedeeldKop(carKey, trackKey, priorLevel ?? bron)}: ${delen.join(", ")}.`;
-}
-
-/** De kop van de gedeelde regel, op basis van de trap waar de prior uit komt. */
-function gedeeldKop(carKey: string | null, trackKey: string | null, trap: string | null): string {
-  switch (trap) {
-    case "auto":
-      return `Gedeelde referentie voor ${carKey ?? "deze auto"}, gemeten op andere circuits`;
-    case "circuit":
-      return `Gedeelde referentie voor ${trackKey ?? "dit circuit"}, gemeten in andere auto's`;
-    case "algemeen":
-      return "Gedeelde referentie uit de hele pool, gemeten in andere auto's op andere circuits";
-    default: {
-      const voor = combinatie(carKey, trackKey);
-      return `Gedeeld${voor == null ? "" : ` voor ${voor}`}`;
-    }
-  }
+  const eerste = `Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: ${delen.join(", ")}.`;
+  const opbouw = trapOpbouw(priorBron);
+  return opbouw == null ? eerste : `${eerste} Opbouw: ${opbouw}.`;
 }
 
 /**

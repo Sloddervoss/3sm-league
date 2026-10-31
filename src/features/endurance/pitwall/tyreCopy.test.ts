@@ -244,45 +244,112 @@ describe("gedeeld en eigen naast elkaar", () => {
     const estimate = v2({ bron: "eigen", gedeeld: GEDEELD, eigen: EIGEN });
 
     expect(gedeeldRegel(estimate)).toBe(
-      "Gedeeld voor bmw_m4_gt3 op spa: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+      "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,1% per ronde, uit 41 rondes van 3 rijders.",
     );
     expect(eigenRegel(estimate)).toBe(
       "Laatste eigen stint: 1,9% per ronde. Totale eigen meetbasis op deze combinatie: 2 stints, 18 rondes.",
     );
   });
 
-  it("localiseert een bredere prior niet op het huidige circuit", () => {
-    // De review: prior_level=auto, maar de regel zette de prior op dit circuit.
-    const auto = v2({ gedeeld: GEDEELD, prior_level: "auto" });
-    expect(gedeeldRegel(auto)).toBe(
-      "Gedeelde referentie voor bmw_m4_gt3, gemeten op andere circuits: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+  it("lokaliseert geen enkele trap en zet de opbouw van de server erachter", () => {
+    // De review van ronde 3: prior_level is het fijnste niveau van een blend,
+    // niet de volledige herkomst. Geen enkele kop mag daarom nog één trap als
+    // de bron noemen; de trapopbouw komt uit `prior_bron` en telt per trap.
+    const eerste = "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,1% per ronde, uit 41 rondes van 3 rijders.";
+
+    // Trap exact: alleen de eigen combinatie deed mee.
+    const exact = v2({
+      gedeeld: GEDEELD,
+      prior_level: "exact",
+      prior_bron: "deze auto op dit circuit: 2 stints, 18 rondes (stints van andere apparaten)",
+    });
+    expect(gedeeldRegel(exact)).toBe(`${eerste} Opbouw: eigen combinatie 2 stints.`);
+
+    // Trap auto: deze auto op andere circuits én de hele pool eronder.
+    const auto = v2({
+      gedeeld: GEDEELD,
+      prior_level: "auto",
+      prior_bron:
+        "alle auto's en circuits: 40 stints, 900 rondes (stints van andere apparaten) · " +
+        "deze auto op andere circuits: 12 stints, 180 rondes (stints van andere apparaten)",
+    });
+    expect(gedeeldRegel(auto)).toBe(`${eerste} Opbouw: deze auto 12 stints, hele pool 40 stints.`);
+
+    // Trap circuit: andere auto's op ditzelfde circuit, plus de pool.
+    const circuit = v2({
+      gedeeld: GEDEELD,
+      prior_level: "circuit",
+      prior_bron:
+        "alle auto's en circuits: 40 stints, 900 rondes (stints van andere apparaten) · " +
+        "andere auto's op dit circuit: 8 stints, 90 rondes (stints van andere apparaten)",
+    });
+    expect(gedeeldRegel(circuit)).toBe(`${eerste} Opbouw: dit circuit 8 stints, hele pool 40 stints.`);
+
+    // Alle vier de trappen, in leesvolgorde van fijn naar grof.
+    const alles = v2({
+      gedeeld: GEDEELD,
+      prior_level: "exact",
+      prior_bron:
+        "alle auto's en circuits: 40 stints, 900 rondes (stints van andere apparaten) · " +
+        "andere auto's op dit circuit: 8 stints, 90 rondes (stints van andere apparaten) · " +
+        "deze auto op andere circuits: 12 stints, 180 rondes (stints van andere apparaten) · " +
+        "deze auto op dit circuit: 2 stints, 18 rondes (stints van andere apparaten)",
+    });
+    expect(gedeeldRegel(alles)).toBe(
+      `${eerste} Opbouw: eigen combinatie 2 stints, deze auto 12 stints, dit circuit 8 stints, hele pool 40 stints.`,
     );
 
-    const circuit = v2({ gedeeld: GEDEELD, prior_level: "circuit" });
-    expect(gedeeldRegel(circuit)).toBe(
-      "Gedeelde referentie voor spa, gemeten in andere auto's: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+    // En de oude, lokalisierende koppen zijn weg.
+    for (const estimate of [exact, auto, circuit, alles]) {
+      const regel = gedeeldRegel(estimate) ?? "";
+      expect(regel).not.toContain("gemeten op andere circuits");
+      expect(regel).not.toContain("in andere auto's");
+      expect(regel).not.toContain("op spa");
+    }
+  });
+
+  it("valt zonder opbouwveld terug op de eerste zin en noemt geen trap", () => {
+    const zonderOpbouw = v2({ gedeeld: GEDEELD, prior_level: "auto" });
+    expect(gedeeldRegel(zonderOpbouw)).toBe(
+      "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,1% per ronde, uit 41 rondes van 3 rijders.",
     );
 
-    const algemeen = v2({ gedeeld: GEDEELD, prior_level: "algemeen" });
-    expect(gedeeldRegel(algemeen)).toBe(
-      "Gedeelde referentie uit de hele pool, gemeten in andere auto's op andere circuits: " +
-        "2,1% per ronde, uit 41 rondes van 3 rijders.",
-    );
-
-    // Alleen de exacte trap hoort bij deze auto op dit circuit.
-    const exact = v2({ gedeeld: GEDEELD, prior_level: "exact" });
-    expect(gedeeldRegel(exact)).toBe(
-      "Gedeeld voor bmw_m4_gt3 op spa: 2,1% per ronde, uit 41 rondes van 3 rijders.",
-    );
-
-    // Zonder auto- of circuitnaam blijft de herkomst staan zonder te lokaliseren.
+    // Ook een lege of ontbrekende auto/baannaam verandert daar niets aan.
     const zonderNaam = parseTyreEstimateV2({
       grade: "B",
       usable: true,
       basis: { prior_level: "auto", gedeeld: GEDEELD },
     })!;
     expect(gedeeldRegel(zonderNaam)).toBe(
-      "Gedeelde referentie voor deze auto, gemeten op andere circuits: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+      "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+    );
+  });
+
+  it("laat een onbekende opbouwvorm letterlijk staan en telt alleen gebruikte trappen", () => {
+    // Een trap met nul stints droeg niets bij en valt af.
+    const nul = v2({
+      gedeeld: GEDEELD,
+      prior_bron:
+        "deze auto op andere circuits: 12 stints, 180 rondes · deze auto op dit circuit: 0 stints, 0 rondes",
+    });
+    expect(gedeeldRegel(nul)).toBe(
+      "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,1% per ronde, uit 41 rondes van 3 rijders. " +
+        "Opbouw: deze auto 12 stints.",
+    );
+
+    // Enkelvoud blijft enkelvoud, net als elders in dit bestand.
+    const een = v2({ gedeeld: GEDEELD, prior_bron: "andere auto's op dit circuit: 1 stint, 9 rondes" });
+    expect(gedeeldRegel(een)).toBe(
+      "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,1% per ronde, uit 41 rondes van 3 rijders. " +
+        "Opbouw: dit circuit 1 stint.",
+    );
+
+    // Een label dat deze regel niet kent: het antwoord van de server blijft
+    // staan in plaats van dat wij een trap verzinnen of weglaten.
+    const vreemd = "iets nieuws: 3 stints, 40 rondes";
+    const onbekend = v2({ gedeeld: GEDEELD, prior_bron: vreemd });
+    expect(gedeeldRegel(onbekend)).toBe(
+      `Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,1% per ronde, uit 41 rondes van 3 rijders. Opbouw: ${vreemd}.`,
     );
   });
 

@@ -1094,7 +1094,9 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
     );
 
     const gedeeld = view.container.querySelector("[data-pitwall-tyre-gedeeld]")!;
-    expect(gedeeld).toHaveTextContent("Gedeeld voor bmw_m4_gt3 op spa: 2,0% per ronde, uit 41 rondes van 3 rijders.");
+    expect(gedeeld).toHaveTextContent(
+      "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,0% per ronde, uit 41 rondes van 3 rijders.",
+    );
 
     const eigen = view.container.querySelector("[data-pitwall-tyre-eigen]")!;
     expect(eigen).toHaveTextContent(
@@ -1114,10 +1116,17 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
     view.unmount();
   });
 
-  it("zegt waar een bredere gedeelde prior is gemeten in plaats van op dit circuit", () => {
+  it("noemt geen enkele trap als de bron en toont de opbouw van de server apart", () => {
     const view = render(
       <TyreModelPanel
-        estimate={contract({ gedeeld: GEDEELD, eigen: EIGEN, prior_level: "auto" })}
+        estimate={contract({
+          gedeeld: GEDEELD,
+          eigen: EIGEN,
+          prior_level: "auto",
+          prior_bron:
+            "alle auto's en circuits: 40 stints, 900 rondes (stints van andere apparaten) · " +
+            "deze auto op andere circuits: 12 stints, 180 rondes (stints van andere apparaten)",
+        })}
         bron="v2"
         coverage={[]}
       />,
@@ -1125,11 +1134,15 @@ describe("gedeeld plus eigen, en geen loze belofte", () => {
 
     const gedeeld = view.container.querySelector("[data-pitwall-tyre-gedeeld]")!;
     expect(gedeeld).toHaveTextContent(
-      "Gedeelde referentie voor bmw_m4_gt3, gemeten op andere circuits: 2,0% per ronde, uit 41 rondes van 3 rijders.",
+      "Gedeelde modelreferentie, opgebouwd uit meerdere bronnen: 2,0% per ronde, uit 41 rondes van 3 rijders. " +
+        "Opbouw: deze auto 12 stints, hele pool 40 stints.",
     );
-    // De locatie van dit circuit (spa) hoort niet in deze regel: de prior is
-    // daar niet gemeten.
+    // De locatie van dit circuit hoort niet in deze regel: de blend is daar niet
+    // als geheel gemeten. En ook de oude koppen die één trap als bron noemden
+    // zijn weg.
     expect(gedeeld.textContent).not.toContain("spa");
+    expect(gedeeld.textContent).not.toContain("gemeten op andere circuits");
+    expect(gedeeld.textContent).not.toContain("in andere auto's");
     view.unmount();
   });
 
