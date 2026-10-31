@@ -1,4 +1,5 @@
 /* Pitwall V1 — types & helpers */
+import type { TyreTelemetry } from "../../../../supabase/functions/_shared/tyreTelemetry";
 import type { VehicleTelemetry } from "../../../../supabase/functions/_shared/vehicleTelemetry";
 import { estimateFuelToFinish } from "./strategy/fuelToFinish";
 export interface PitwallPositionData {
@@ -45,6 +46,8 @@ export interface V3Normalized {
   capturedAt?: string;
   transportSessionId?: string;
   vehicle?: VehicleTelemetry | null;
+  /** Bestaand, genormaliseerd optioneel rootblok; geen nieuw wirecontract. */
+  tyres?: TyreTelemetry | null;
   identity?: {
     trackId?: number | null;
     currentDriverId?: string;

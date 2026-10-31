@@ -40,7 +40,13 @@ export function VehicleTelemetryPanel({
 }) {
   const inCar = v3?.session?.isInCar !== false;
   const car = live && inCar ? v3?.vehicle : null;
-  const status = !live ? 'Telemetrie offline' : !inCar ? 'Niet in de auto' : car ? 'Laatst beschikbare bandenmeting' : 'Niet aangeleverd';
+  const tyres = live && inCar ? v3?.tyres : null;
+  const counter = (n: number | null | undefined) => typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 255 ? n : null;
+  const compound = counter(tyres?.compoundId);
+  const used = counter(tyres?.sets?.used);
+  const available = counter(tyres?.sets?.available);
+  const hasMetadata = compound != null || used != null || available != null;
+  const status = !live ? 'Telemetrie offline' : !inCar ? 'Niet in de auto' : car || tyres ? 'Laatst beschikbare bandenmeting' : 'Niet aangeleverd';
 
   const tyre = (key: 'frontLeft' | 'frontRight' | 'rearLeft' | 'rearRight', label: string) => {
     const t = car?.[key];
@@ -70,6 +76,12 @@ export function VehicleTelemetryPanel({
 
   return (
     <PitwallPanel title="Banden" slot="tyres" meta={status}>
+      {hasMetadata && (
+        <p className="flex flex-wrap gap-x-2 text-[11px] text-slate-300" data-pitwall-tyre-sets="true">
+          {compound != null && <span>Compound-ID {compound}</span>}
+          {(used != null || available != null) && <span>Sets: {used != null && <span>{used} gebruikt</span>}{used != null && available != null && " / "}{available != null && <span>{available === 255 ? "onbeperkt" : available} beschikbaar</span>}</span>}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-1.5">
         {tyre('frontLeft', 'LV')}
         {tyre('frontRight', 'RV')}
@@ -77,7 +89,7 @@ export function VehicleTelemetryPanel({
         {tyre('rearRight', 'RA')}
       </div>
 
-      <p className="mt-2.5 flex flex-wrap items-baseline gap-x-2 border-t border-[#161C27] pt-2 font-mono text-[11px] text-slate-400">
+      <p className={`flex flex-wrap items-baseline gap-x-2 border-t border-[#161C27] font-mono text-[11px] text-slate-400 ${hasMetadata ? "mt-0.5 pt-1" : "mt-2.5 pt-2"}`}>
         <span className="text-slate-200">{amount(car?.speedKph)}</span> km/h
         <span className="text-slate-600">·</span>
         <span className="text-orange-300">{car?.gear ?? '—'}</span>
@@ -90,7 +102,7 @@ export function VehicleTelemetryPanel({
           <TyreAdviceLine estimate={tyreEstimate} />
         </div>
       ) : (
-        <p className="mt-1 text-[10px] text-slate-500">Stand van SimHub; verspringt alleen bij een stop.</p>
+        <p className="mt-1 text-[10px] text-slate-500">SimHub-stand; vernieuwt bij een stop.</p>
       )}
     </PitwallPanel>
   );
