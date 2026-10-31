@@ -283,6 +283,88 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- P4 — complete vereist echte rondedekking
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_ack jsonb;
+  v_row public.simhub_lap_summaries%rowtype;
+  v_blocked boolean;
+begin
+  -- De letterlijke probe uit de review: 1 sample, 0,001 s, gat 0, bij een
+  -- rondevenster van twee minuten.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1', null,
+    jsonb_build_array(pg_temp.lap(20, jsonb_build_object(
+      'coverage', jsonb_build_object(
+        'temperature', pg_temp.group_(1, 0.001, 0),
+        'fuel', pg_temp.group_(1, 0.001, 0),
+        'load', pg_temp.group_(1, 0.001, 0))))));
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,accepted}'), 1,
+                     'P4 de rij zelf blijft geldig');
+  select * into v_row from public.simhub_lap_summaries
+   where device_id = (select device::text from t_ids) and summary_uid = pg_temp.uid(1020);
+  perform pg_temp.eq(v_row.complete, false,
+                     'P4 1 sample en 0,001 s is niet compleet');
+  perform pg_temp.expect((select exists (select 1 from unnest(v_row.invalid_reasons) r
+                                          where r = 'coverage_samples:temperature')),
+                         'P4 de reden noemt het ontbrekende sampleaantal');
+  perform pg_temp.expect((select exists (select 1 from unnest(v_row.invalid_reasons) r
+                                          where r = 'coverage_duration:window')),
+                         'P4 de reden noemt het niet-gemeten deel van het venster');
+
+  -- Een volledige ronde: 120 s venster, 2400 samples per groep, gat 0,1 s.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1', null,
+    jsonb_build_array(pg_temp.lap(21)));
+  select * into v_row from public.simhub_lap_summaries
+   where device_id = (select device::text from t_ids) and summary_uid = pg_temp.uid(1021);
+  perform pg_temp.eq(v_row.complete, true,
+                     'P4 een volledig gemeten ronde is compleet');
+  perform pg_temp.eq(v_row.invalid_reasons, '{}'::text[],
+                     'P4 een complete ronde heeft geen redenen');
+
+  -- De tweede wachter: een rechtstreekse insert kan de claim niet vervalsen.
+  v_blocked := false;
+  begin
+    insert into public.simhub_lap_summaries
+      (summary_uid, summary_id, device_id, lap_number, started_at, ended_at,
+       complete, coverage, content_hash)
+    values (pg_temp.uid(998), 'lap-fake', (select device::text from t_ids), 9,
+            '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z', true,
+            jsonb_build_object(
+              'temperature', pg_temp.group_(1, 0.001, 0),
+              'fuel', pg_temp.group_(1, 0.001, 0),
+              'load', pg_temp.group_(1, 0.001, 0)),
+            md5('fake'));
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  perform pg_temp.expect(v_blocked,
+                         'P4 de CHECK weigert complete=true zonder rondedekking');
+
+  -- En de grens is echt: 80% van het venster is genoeg, 79% niet.
+  perform pg_temp.expect(
+    public.simhub_coverage_complete(
+      jsonb_build_object('temperature', pg_temp.group_(10, 32, 2),
+                         'fuel', pg_temp.group_(10, 32, 2),
+                         'load', pg_temp.group_(10, 32, 2)),
+      '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z'),
+    'P4 96 van 120 s (80%) is compleet');
+  perform pg_temp.expect(
+    not public.simhub_coverage_complete(
+      jsonb_build_object('temperature', pg_temp.group_(10, 32, 2),
+                         'fuel', pg_temp.group_(10, 31, 2),
+                         'load', pg_temp.group_(10, 31, 2)),
+      '2026-10-31T11:58:00Z', '2026-10-31T12:00:00Z'),
+    'P4 94 van 120 s is niet compleet');
+  perform pg_temp.expect(
+    not public.simhub_coverage_complete(
+      pg_temp.coverage_full(), null, null),
+    'P4 zonder venster is een ronde niet compleet');
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Resultaat
 -- ---------------------------------------------------------------------------
 do $$

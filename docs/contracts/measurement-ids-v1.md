@@ -184,8 +184,14 @@ Regels:
 2. Elke groep heeft alle drie de velden; `sampleCount` is een geheel getal ≥ 0,
    `validDurationSeconds` en `maxGapSeconds` zijn ≥ 0 en ≤ 86400.
 3. Een groep is **gedekt** als `sampleCount > 0` én `validDurationSeconds > 0`.
-4. `complete: true` mag alleen als alle drie de groepen gedekt zijn én het gat
-   per groep ≤ 5 s is. Anders: `complete_without_coverage`.
+4. `complete: true` vereist **echte rondedekking**: alle drie de groepen, per
+   groep ≥ 10 samples en een gat ≤ 2 s, en de som van de meetduren ≥ 80% van
+   (`endedAt` − `startedAt`). Zonder venster is er geen bewijs en dus geen
+   `complete`. Voldoet een ronde niet, dan blijft de rij geldig maar wordt
+   `complete` op **false** gezet en noemt `invalidReasons` de reden
+   (`coverage_missing:<groep>`, `coverage_samples:<groep>`,
+   `coverage_gap:<groep>`, `coverage_duration:window`,
+   `coverage_window_missing`). De Edge en de database gebruiken dezelfde regel.
 5. Een waarde zonder dekking van haar eigen groep wordt geweigerd
    (`coverage_missing:<groep>`), niet als "meting" opgeslagen. Een integraal
    zonder dekking bestaat dus niet in de tabel.

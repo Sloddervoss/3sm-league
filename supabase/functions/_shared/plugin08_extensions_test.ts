@@ -300,15 +300,21 @@ Deno.test("P08-9 dekking: complete en integralen eisen hun eigen groep", () => {
     () => parseLapSummary(lap(1, { coverage: { ...coverage(), brakes: group() } }), 0),
     "onbekende dekkingsgroep",
   );
-  // Groepen gedekt maar het gat is te groot: niet compleet.
-  expectThrow(
-    () => parseLapSummary(lap(1, {
-      coverage: { temperature: group(2400, 120, 12), fuel: group(), load: group() },
-    }), 0),
-    "complete met een te groot gat",
-  );
-  if (!coverageComplete(coverage())) throw new Error("een volledige dekking moet compleet zijn");
-  if (coverageComplete(null)) throw new Error("zonder dekking is niets compleet");
+  // Groepen gedekt maar het gat is te groot: geen fout, wel complete=false.
+  const grootGat = parseLapSummary(lap(1, {
+    coverage: { temperature: group(2400, 120, 12), fuel: group(), load: group() },
+  }), 0);
+  if (grootGat.complete !== false) throw new Error("complete met een te groot gat bleef true");
+  if (!(grootGat.invalidReasons ?? []).some((r) => r === "coverage_gap:temperature")) {
+    throw new Error("de reden voor het grote gat ontbreekt");
+  }
+  if (!coverageComplete(coverage(), "2026-10-31T11:58:00Z", "2026-10-31T12:00:00Z")) {
+    throw new Error("een volledige dekking moet compleet zijn");
+  }
+  if (coverageComplete(coverage())) throw new Error("zonder venster is niets compleet");
+  if (coverageComplete(null, "2026-10-31T11:58:00Z", "2026-10-31T12:00:00Z")) {
+    throw new Error("zonder dekking is niets compleet");
+  }
 });
 
 Deno.test("P08-11 rijdersemantiek: naam van de client, uuid van de server", () => {

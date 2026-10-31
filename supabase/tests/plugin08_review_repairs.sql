@@ -507,8 +507,16 @@ begin
       'temperature', pg_temp.group_(2400, 120.0, 12.0),
       'fuel', pg_temp.group_(2400, 120.0, 0.1),
       'load', pg_temp.group_(2400, 120.0, 0.1))))));
-  perform pg_temp.eq(v_ack #>> '{laps,rejected,0,reason}', 'complete_without_coverage',
-                     'R5 complete=true met een te groot gat is geen complete meting');
+  -- Sinds review 2 wordt zo'n rij niet meer geweigerd maar gedegradeerd: de
+  -- ronde blijft bruikbaar, de claim "compleet" gaat naar false met reden.
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{laps,accepted}'), 1,
+                     'R5 complete met een te groot gat blijft een geldige ronde');
+  perform pg_temp.expect(
+    (select l.complete is false
+            and exists (select 1 from unnest(l.invalid_reasons) r where r like 'coverage_gap:%')
+       from public.simhub_lap_summaries l
+      where l.summary_uid = pg_temp.uid(1066)),
+    'R5 complete met een te groot gat wordt gedegradeerd met reden');
 
   -- Onbekende groep.
   v_ack := pg_temp.batch(null, jsonb_build_array(

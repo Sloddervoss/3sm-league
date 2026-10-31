@@ -514,9 +514,69 @@ export const coverageHas = (coverage: LapCoverage | null, group: (typeof Coverag
   return Boolean(entry && entry.sampleCount > 0 && entry.validDurationSeconds > 0);
 };
 
-/** `complete` mag alleen als alle drie de groepen gedekt zijn en het gat klein is. */
-export const coverageComplete = (coverage: LapCoverage | null): boolean =>
-  CoverageGroups.every((group) => coverageHas(coverage, group) && (coverage?.[group]?.maxGapSeconds ?? 99) <= 5);
+/**
+ * Eisen waarmee `complete` iets betekent (review 2, punt 4). Zonder deze
+ * drempels was één sample van 0,001 s genoeg om een ronde van twee minuten
+ * "compleet" te noemen.
+ */
+export const MinSamplesPerGroup = 10;
+/** Grootste toegestane gat binnen een groep. */
+export const MaxCoverageGapSeconds = 2;
+/** Minimaal gemeten deel van het rondevenster. */
+export const MinCoveredFraction = 0.8;
+
+export type CoverageVerdict = {
+  complete: boolean;
+  /** Stabiele redencodes; leeg als de ronde aantoonbaar volledig is. */
+  reasons: string[];
+};
+
+/**
+ * Beoordeelt of de dekking een volledige ronde aantoont.
+ *
+ * Nodig: alle drie de groepen, per groep minimaal 10 samples en een gat van
+ * hoogstens 2 s, en samen minstens 80% van het opgegeven rondevenster. Zonder
+ * `startedAt`/`endedAt` is er geen venster en dus geen bewijs: dan is de ronde
+ * niet compleet. Dat is strenger dan "de groepen zijn aanwezig" en dat is
+ * precies de bedoeling.
+ */
+export const coverageVerdict = (
+  coverage: LapCoverage | null,
+  startedAt: string | null,
+  endedAt: string | null,
+): CoverageVerdict => {
+  const reasons: string[] = [];
+  const windowStart = startedAt === null ? NaN : Date.parse(startedAt);
+  const windowEnd = endedAt === null ? NaN : Date.parse(endedAt);
+  const windowSeconds = (windowEnd - windowStart) / 1000;
+  if (!Number.isFinite(windowSeconds) || windowSeconds <= 0) {
+    reasons.push("coverage_window_missing");
+  }
+  let covered = 0;
+  for (const group of CoverageGroups) {
+    const entry = coverage?.[group];
+    if (!entry) {
+      reasons.push(`coverage_missing:${group}`);
+      continue;
+    }
+    if (entry.sampleCount < MinSamplesPerGroup) reasons.push(`coverage_samples:${group}`);
+    if (entry.maxGapSeconds > MaxCoverageGapSeconds) reasons.push(`coverage_gap:${group}`);
+    if (entry.validDurationSeconds <= 0) reasons.push(`coverage_duration:${group}`);
+    covered += entry.validDurationSeconds;
+  }
+  if (Number.isFinite(windowSeconds) && windowSeconds > 0
+      && covered < windowSeconds * MinCoveredFraction - 1e-6) {
+    reasons.push("coverage_duration:window");
+  }
+  return { complete: reasons.length === 0, reasons: [...new Set(reasons)] };
+};
+
+/** `complete` mag alleen als de dekking de hele ronde aantoont. */
+export const coverageComplete = (
+  coverage: LapCoverage | null,
+  startedAt: string | null = null,
+  endedAt: string | null = null,
+): boolean => coverageVerdict(coverage, startedAt, endedAt).complete;
 
 export type LapSummary = {
   summaryUid: string;
@@ -642,7 +702,6 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
 
   // Dekking: een waarde zonder de dekking van haar eigen groep is geen meting.
   const coverage = parseLapCoverage(record.coverage, `${path}.coverage`);
-  const complete = optBoolean(record.complete, `${path}.complete`);
   const values = {
     trackTempCMean: optNumber(record.trackTempCMean, `${path}.trackTempCMean`, -60, 120),
     trackTempCMin,
@@ -670,8 +729,16 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
       && !coverageHas(coverage, "load")) {
     throw new Error(`${path}.coverage.load is required for load values`);
   }
-  if (complete === true && !coverageComplete(coverage)) {
-    throw new Error(`${path}.complete requires all three coverage groups`);
+  // "Compleet" is een kwaliteitsclaim over de hele ronde. Onvoldoende dekking
+  // is geen framefout: de ronde blijft geldig, maar de claim gaat naar false en
+  // de reden staat in invalidReasons. Zo is achteraf te zien waarom.
+  const verdict = coverageVerdict(coverage, startedAt, endedAt);
+  const requestedComplete = optBoolean(record.complete, `${path}.complete`);
+  // Alleen een claim van de client wordt getoetst; `null` blijft "geen uitspraak".
+  const complete = requestedComplete === true ? verdict.complete : requestedComplete;
+  let invalidReasons = optReasonArray(record.invalidReasons, `${path}.invalidReasons`, 16);
+  if (requestedComplete === true && !verdict.complete) {
+    invalidReasons = [...new Set([...(invalidReasons ?? []), ...verdict.reasons])].slice(0, 16);
   }
 
   return {
@@ -689,7 +756,7 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
     recordRevision: optInteger(record.recordRevision, `${path}.recordRevision`, 1, 100000) ?? 1,
     supersedesSummaryUid: optUid(record.supersedesSummaryUid, `${path}.supersedesSummaryUid`),
     complete,
-    invalidReasons: optReasonArray(record.invalidReasons, `${path}.invalidReasons`, 16),
+    invalidReasons,
     pitLap: optBoolean(record.pitLap, `${path}.pitLap`),
     driverChanged,
     ...values,

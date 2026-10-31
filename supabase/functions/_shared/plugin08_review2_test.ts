@@ -14,6 +14,7 @@ import type { NormalizedTelemetryEnvelope } from "./simhub.ts";
 import { mergeMeasurementAck, ackHasRejections } from "./simhubAggregates.ts";
 import {
   parseLapSummariesReport,
+  parseLapSummary,
   parseMeasurementEventsReport,
 } from "./simhubExtensions.ts";
 
@@ -84,6 +85,55 @@ Deno.test("R2-2 bevestigingen dragen de bevestigde record_revision", () => {
     laps: { received: 0, accepted: [], duplicates: [], superseded: [], rejected: [], block_error: null },
   }, true);
   if (oud.events.accepted[0].recordRevision !== null) throw new Error("revisie verzonnen");
+});
+
+Deno.test("R2-4 complete vereist echte rondedekking", () => {
+  const group = (sampleCount: number, validDurationSeconds: number, maxGapSeconds: number) =>
+    ({ sampleCount, validDurationSeconds, maxGapSeconds });
+  const base = {
+    summaryUid: uid(1000),
+    summaryId: "lap-1",
+    segmentId: "seg-1",
+    observedSessionId: "sess-1",
+    lapNumber: 1,
+    startedAt: "2026-10-31T11:58:00Z",
+    endedAt: "2026-10-31T12:00:00Z",
+    currentDriverName: "Driver One",
+    aggregationVersion: 1,
+    complete: true,
+    invalidReasons: [] as string[],
+    pitLap: false,
+    driverChanged: false,
+    trackTempCMean: 32.5,
+    fuelLevelIntegralLitreSeconds: 4875,
+    absLatAccelIntegralGSeconds: 220,
+    sampleCount: 7200,
+  };
+  // De probe: 1 sample en 0,001 s per groep bij een venster van twee minuten.
+  const dun = parseLapSummary({
+    ...base,
+    coverage: { temperature: group(1, 0.001, 0), fuel: group(1, 0.001, 0), load: group(1, 0.001, 0) },
+  }, 0);
+  if (dun.complete !== false) throw new Error("1 sample werd als compleet gezien");
+  if (!(dun.invalidReasons ?? []).includes("coverage_samples:temperature")) {
+    throw new Error("de reden voor het sampleaantal ontbreekt");
+  }
+  if (!(dun.invalidReasons ?? []).includes("coverage_duration:window")) {
+    throw new Error("de reden voor het venster ontbreekt");
+  }
+  // Een volledig gemeten ronde blijft compleet.
+  const vol = parseLapSummary({
+    ...base,
+    coverage: { temperature: group(2400, 120, 0.1), fuel: group(2400, 120, 0.1), load: group(2400, 120, 0.1) },
+  }, 0);
+  if (vol.complete !== true) throw new Error("een volledige ronde werd niet compleet");
+  if ((vol.invalidReasons ?? []).length !== 0) throw new Error("een complete ronde kreeg redenen");
+  // 80% van het venster is de grens.
+  const grens = parseLapSummary({
+    ...base,
+    coverage: { temperature: group(10, 32, 2), fuel: group(10, 32, 2), load: group(10, 32, 2) },
+  }, 0);
+  if (grens.complete !== true) throw new Error("exact 80% werd niet compleet");
 });
 
 Deno.test("R2-3 parser- en database-indexen beschrijven dezelfde reeks", () => {
