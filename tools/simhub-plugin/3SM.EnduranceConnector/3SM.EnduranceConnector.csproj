@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -48,16 +48,6 @@
     <Compile Include="Theme.cs" />
     <Compile Include="TelemetryContracts.cs" />
     <Compile Include="TelemetryContractsV3.cs" />
-    <!-- Research-opname (opt-in, lokale JSONL). Pure logica: geen SimHub-referentie; de
-         tests in 3SM.EnduranceConnector.ResearchTests compileren dezelfde bestanden. -->
-    <Compile Include="ResearchProvenance.cs" />
-    <Compile Include="ResearchObservations.cs" />
-    <Compile Include="ResearchJsonl.cs" />
-    <Compile Include="ResearchQueue.cs" />
-    <Compile Include="ResearchEvents.cs" />
-    <Compile Include="ResearchIdentity.cs" />
-    <Compile Include="ResearchContextSampler.cs" />
-    <Compile Include="ResearchRecorder.cs" />
     <Compile Include="OverlayContracts.cs" />
     <Compile Include="OverlayClient.cs" />
     <Compile Include="OverlayPropertyPublisher.cs" />
@@ -67,8 +57,6 @@
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->
     <Compile Include="TyrePublishGate.cs" />
-    <Compile Include="SimHubDeviceLister.cs" />
-    <Compile Include="SimHubLedProfileHost.cs" />
     <Compile Include="EnduranceConnectorPlugin.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -57,12 +57,6 @@ namespace ThreeSM.EnduranceConnector
         // zonder deze sleutel hetzelfde gedrag krijgt als een verse installatie.
         public int TyreSnapshotIntervalMilliseconds = 30000;
 
-        // Research-opname (lokaal, standaard uit). Schrijft JSONL naar deze pc en verlaat
-        // het apparaat nooit vanzelf; exporteren is een expliciete gebruikersactie.
-        // Leeg pad = %LOCALAPPDATA%\3SM\EnduranceConnector\research.
-        public bool ResearchEnabled = false;
-        public string ResearchDirectory = string.Empty;
-
         public string SpeedProperty = "DataCorePlugin.GameData.NewData.SpeedKmh";
         public string LapProperty = "DataCorePlugin.GameData.NewData.CurrentLap";
         public string CompletedLapsProperty = "DataCorePlugin.GameData.NewData.CompletedLaps";

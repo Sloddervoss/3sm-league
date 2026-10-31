@@ -169,8 +169,6 @@ internal static class SettingsCompatibilityTests
             ConnectorId = "PCBART",
             SendIntervalMilliseconds = 1000,
             IrSdkDirectReadEnabled = true,
-            ResearchEnabled = true,
-            ResearchDirectory = "D:\\3SM\\research",
             LastKnownRemoteVersion = "0.8.0.0",
             LastKnownRemoteDllUrl = "https://3stripemotorsport.cc/downloads/3SM.EnduranceConnector-0.8.0.0.dll",
             LastKnownRemoteSha256 = "9f2c1d3e4b5a69789f2c1d3e4b5a69789f2c1d3e4b5a69789f2c1d3e4b5a6978",
@@ -187,6 +185,9 @@ internal static class SettingsCompatibilityTests
         settings.Flags.SendFlagFields = true;
         settings.Flags.PropertyPrefix = "THREESM.Flags";
         settings.Flags.ActivePresetName = "iRacing standaard";
-        return SerializeStrict(settings);
+        // De researchsleutels bestaan niet meer in 0.8. Ze staan hier als ruwe tekst in,
+        // zodat de fixture exact het 0.7.1.2-bestand blijft dat op gebruikers-pc's staat.
+        var json = SerializeStrict(settings);
+        return json.TrimEnd().TrimEnd('}') + ",\"ResearchDirectory\":\"D:\\\\3SM\\\\research\",\"ResearchEnabled\":true}";
     }
 }
