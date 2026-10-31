@@ -1025,3 +1025,215 @@ describe("waar het bandencijfer vandaan komt", () => {
     view.unmount();
   });
 });
+
+/**
+ * De drie fouten uit de review van 31-10, vastgelegd in de UI:
+ *
+ * 1. bij `bron = eigen` verdween alle uitleg over de pool, ook als het getal
+ *    geblend was — nu staan de gedeelde verwachting en de eigen meting naast
+ *    elkaar, allebei met de combinatie erbij;
+ * 2. "nog geen tweede meting" stond er ook bij zestien stints — nu telt een
+ *    teller de eigen stints die er echt zijn;
+ * 3. "elke stop maakt de band smaller" was niet gegarandeerd — nu zegt de regel
+ *    dat de band breder kan worden zodra eigen en gedeeld uiteenlopen.
+ *
+ * En de vierde eis: een oude RPC (zonder `actualiteit`, `gedeeld`, `eigen` en
+ * `redenen`) valt terug op de bestaande weergave en breekt niet.
+ */
+describe("gedeeld plus eigen, en geen loze belofte", () => {
+  const contract = (basis: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      stints: 2,
+      wear_per_lap: 1.9,
+      range_laps: { low: 9, high: 13 },
+      provenance: "estimated",
+      voorlopig: true,
+      ...extra,
+      basis: { car_key: "bmw_m4_gt3", track_key: "spa", rondes_in_basis: 18, ...basis },
+    })!;
+
+  const GEDEELD = { rate: 2.0, rondes: 41, stints: 7, accounts: 3 };
+  const EIGEN = { rate: 1.9, rondes: 18, stints: 2 };
+
+  it("toont de pool én de eigen meting naast elkaar, ook bij bron eigen", () => {
+    const view = render(
+      <TyreModelPanel estimate={contract({ bron: "eigen", gedeeld: GEDEELD, eigen: EIGEN })} bron="v2" coverage={[]} />,
+    );
+
+    const gedeeld = view.container.querySelector("[data-pitwall-tyre-gedeeld]")!;
+    expect(gedeeld).toHaveTextContent("Gedeeld voor bmw_m4_gt3 op spa: 2,0% per ronde, uit 41 rondes van 3 rijders.");
+
+    const eigen = view.container.querySelector("[data-pitwall-tyre-eigen]")!;
+    expect(eigen).toHaveTextContent("Eigen voor bmw_m4_gt3 op spa: 1,9% per ronde, uit 2 stints en 18 rondes.");
+
+    // De teller telt de eigen stints die er zijn en noemt de volgende graad.
+    expect(view.container.querySelector("[data-pitwall-tyre-stap]")).toHaveTextContent(
+      "Nog 1 stint op deze combinatie tot graad A; elke stint met hetzelfde beeld maakt de band smaller.",
+    );
+    // De oude, stille priorregel is weg: die zei niets bij bron eigen.
+    expect(view.container.querySelector("[data-pitwall-tyre-prior]")).toBeNull();
+    // Het bereik staat er gewoon nog.
+    expect(screen.getByText("9–13")).toBeVisible();
+    view.unmount();
+  });
+
+  it("zegt bij een niet-verse stand 'geen actuele bandmeting' met de leeftijd en zonder rondes-getal", () => {
+    const estimate = contract({
+      eigen: { rate: 1.9, rondes: 140, stints: 16 },
+      gedeeld: GEDEELD,
+      actualiteit: { wear_ouderheid_min: 47, sessie_match: true, set_match: true, vers: false },
+      redenen: ["stale_state"],
+    }, { grade: "C", usable: false, stints: 16, range_laps: null });
+
+    const view = render(<TyreModelPanel estimate={estimate} bron="v2" coverage={[]} />);
+
+    const stale = view.container.querySelector("[data-pitwall-tyre-stale]")!;
+    expect(stale).toHaveAttribute("data-pitwall-tyre-stale", "47");
+    expect(stale).toHaveTextContent(
+      "Geen actuele bandmeting: de laatste meting is 47 minuten oud. Daarom geen rondes tot de grens.",
+    );
+    // Geen rondes-getal in deze regel, en geen teller die een vooruitblik belooft.
+    expect(stale.textContent).not.toMatch(/\d+ rondes?/);
+    expect(view.container.querySelector("[data-pitwall-tyre-stap]")).toBeNull();
+    expect(view.container.querySelector("[data-pitwall-tyre-uiteenloop]")).toBeNull();
+    expect(view.container.querySelector("[data-pitwall-tyre-range]")).toHaveAttribute(
+      "data-pitwall-tyre-range",
+      "onbekend",
+    );
+    view.unmount();
+  });
+
+  it.each([
+    ["short_basis", "Minder dan 8 rondes eigen basis"],
+    ["inferred_boundary", "sprong in de wear-stand"],
+    ["context_mismatch", "andere auto of een ander circuit"],
+    ["thin_pool", "Nog te weinig rijders op deze combinatie"],
+    ["zero_slope", "Geen meetbare slijtage"],
+  ])("vertaalt de reden %s naar één eigen regel", (code, fragment) => {
+    const view = render(
+      <TyreModelPanel estimate={contract({ gedeeld: GEDEELD, eigen: EIGEN, redenen: [code] })} bron="v2" coverage={[]} />,
+    );
+
+    const regel = view.container.querySelector(`[data-pitwall-tyre-reden="${code}"]`);
+    expect(regel).not.toBeNull();
+    expect(regel).toHaveTextContent(fragment);
+    // Eén regel per code, geen veldnamen of Engels op het scherm.
+    expect(regel!.textContent).not.toMatch(/prior|basis\.|redenen|thin_pool|zero_slope|stale_state/);
+    view.unmount();
+  });
+
+  it("zegt bij een dunne pool dat er nog te weinig rijders zijn, zonder gedeelde regel", () => {
+    const view = render(
+      <TyreModelPanel
+        estimate={contract({ eigen: { rate: 1.9, rondes: 18, stints: 2 }, gedeeld: null, redenen: ["thin_pool"] })}
+        bron="v2"
+        coverage={[]}
+      />,
+    );
+
+    expect(view.container.querySelector("[data-pitwall-tyre-gedeeld]")).toBeNull();
+    expect(view.container.querySelector('[data-pitwall-tyre-reden="thin_pool"]')).toHaveTextContent(
+      "Nog te weinig rijders op deze combinatie",
+    );
+    view.unmount();
+  });
+
+  it("waarschuwt dat de band breder kan worden als eigen en gedeeld uiteenlopen", () => {
+    const view = render(
+      <TyreModelPanel
+        estimate={contract({ bron: "eigen", gedeeld: { ...GEDEELD, rate: 1.1 }, eigen: EIGEN })}
+        bron="v2"
+        coverage={[]}
+      />,
+    );
+
+    const uiteen = view.container.querySelector("[data-pitwall-tyre-uiteenloop]")!;
+    expect(uiteen).toHaveTextContent(
+      "Je eigen slijtage (1,9% per ronde) en de gedeelde (1,1% per ronde) lopen uiteen: " +
+        "een volgende stint kan de band breder maken in plaats van smaller.",
+    );
+    // De teller belooft hier niets meer over een smaller wordende band.
+    expect(view.container.querySelector("[data-pitwall-tyre-stap]")).toHaveTextContent(
+      "Nog 1 stint op deze combinatie tot graad A.",
+    );
+    expect(view.container.textContent).not.toContain("maakt de band smaller");
+    view.unmount();
+  });
+
+  it("valt terug op de bestaande weergave bij een oude RPC", () => {
+    // Letterlijk het antwoord van vóór 31-10: geen actualiteit, gedeeld, eigen
+    // of redenen. De pagina mag daar niet op breken en niet op verzinnen.
+    const oud = parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      stints: 2,
+      wear_per_lap: 1.1,
+      range_laps: { low: 9, high: 13 },
+      provenance: "estimated",
+      voorlopig: true,
+      basis: {
+        car_key: "bmw_m4_gt3",
+        track_key: "spa",
+        rondes_in_basis: 18,
+        bron: "auto",
+        prior_n: 41,
+        prior_rondes: 41,
+        prior_stints: 7,
+      },
+    })!;
+
+    expect(oud.basis.gedeeld).toBeNull();
+    expect(oud.basis.eigen).toBeNull();
+    expect(oud.basis.redenen).toEqual([]);
+
+    const view = render(<TyreModelPanel estimate={oud} bron="v2" coverage={[]} />);
+
+    expect(view.container.querySelector("[data-pitwall-tyre-bron]")).toBeNull();
+    expect(view.container.querySelector("[data-pitwall-tyre-gedeeld]")).toBeNull();
+    expect(view.container.querySelector("[data-pitwall-tyre-eigen]")).toBeNull();
+    // De oude priorregel staat er nog precies zoals hij was.
+    expect(view.container.querySelector("[data-pitwall-tyre-prior]")).toHaveTextContent(
+      "Nog geen eigen meting op dit circuit — gebaseerd op 41 rondes van andere rijders met deze auto",
+    );
+    // En de voorlopig-regel telt nu de stints in plaats van "nog geen tweede meting".
+    const voorlopig = view.container.querySelector("[data-pitwall-tyre-provisional]")!;
+    expect(voorlopig).toHaveTextContent("het rust op 2 stints");
+    expect(view.container.textContent).not.toMatch(/tweede meting/i);
+    expect(screen.getByText("9–13")).toBeVisible();
+    view.unmount();
+  });
+
+  it("telt bij zestien stints geen 'tweede meting' meer, ook niet zonder de nieuwe velden", () => {
+    const zestien = parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      stints: 16,
+      wear_per_lap: 1.1,
+      range_laps: { low: 9, high: 13 },
+      provenance: "estimated",
+      voorlopig: true,
+      basis: { car_key: "bmw_m4_gt3", track_key: "spa", bron: "auto", prior_n: 41, prior_rondes: 41 },
+    })!;
+
+    const view = render(<TyreModelPanel estimate={zestien} bron="v2" coverage={[]} />);
+
+    const voorlopig = view.container.querySelector("[data-pitwall-tyre-provisional]")!;
+    expect(voorlopig).toHaveTextContent("het rust op 16 stints");
+    expect(voorlopig.textContent).not.toMatch(/tweede meting|elke stop/i);
+    view.unmount();
+  });
+
+  it("vervangt de voorlopig-regel door de teller zodra de nieuwe velden er zijn", () => {
+    const view = render(
+      <TyreModelPanel estimate={contract({ gedeeld: GEDEELD, eigen: EIGEN })} bron="v2" coverage={[]} />,
+    );
+
+    expect(view.container.querySelector("[data-pitwall-tyre-provisional]")).toBeNull();
+    expect(view.container.querySelector("[data-pitwall-tyre-stap]")).not.toBeNull();
+    // "voorlopig bereik" blijft wel staan: dat gaat over het bereik, niet over de telling.
+    expect(screen.getByText(/voorlopig bereik/)).toBeVisible();
+    view.unmount();
+  });
+});
