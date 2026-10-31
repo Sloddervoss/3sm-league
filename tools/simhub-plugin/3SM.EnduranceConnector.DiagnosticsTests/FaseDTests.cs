@@ -104,6 +104,21 @@ internal static class FaseDTests
         using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(body)))
             return (Dictionary<string, object>)serializer.ReadObject(stream);
     }
+    private static int Group(string name, Func<int> body)
+    {
+        var before = passed;
+        try
+        {
+            body();
+        }
+        catch (Exception error)
+        {
+            failed++;
+            Console.WriteLine("FAIL " + name + " HARNESS_EXCEPTION " + error.GetType().Name + ": " + error.Message);
+        }
+        return passed - before;
+    }
+
     private static void Check(string id, bool condition, string evidence)
     {
         if (condition) { passed++; Console.WriteLine("PASS " + id + " " + evidence); }
@@ -358,12 +373,14 @@ internal static class FaseDTests
             BasicMatrix().GetAwaiter().GetResult();
             TyreGateTests.Run(Check);
             irSdkChecks = IrSdkReaderTests.Run(Check);
-            baselineChecks += FlagMappingTests.Run(Check);
-            baselineChecks += CaptureNullSemanticsTests.Run(Check);
-            baselineChecks += UpdatePathTests.Run(Check);
-            baselineChecks += V3PayloadFixtureTests.Run(Check);
-            baselineChecks += SettingsCompatibilityTests.Run(Check);
-            baselineChecks += UpdaterTransitionTests.Run(Check);
+            // Elke groep in zijn eigen try: een fout in de ene groep mag de andere groepen
+            // niet verbergen (een fixture die niet meer klopt gooide eerder de hele run om).
+            baselineChecks += Group("FlagMappingTests", () => FlagMappingTests.Run(Check));
+            baselineChecks += Group("CaptureNullSemanticsTests", () => CaptureNullSemanticsTests.Run(Check));
+            baselineChecks += Group("UpdatePathTests", () => UpdatePathTests.Run(Check));
+            baselineChecks += Group("V3PayloadFixtureTests", () => V3PayloadFixtureTests.Run(Check));
+            baselineChecks += Group("SettingsCompatibilityTests", () => SettingsCompatibilityTests.Run(Check));
+            baselineChecks += Group("UpdaterTransitionTests", () => UpdaterTransitionTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
