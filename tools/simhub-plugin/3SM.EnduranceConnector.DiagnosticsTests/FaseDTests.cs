@@ -359,6 +359,7 @@ internal static class FaseDTests
             TyreGateTests.Run(Check);
             irSdkChecks = IrSdkReaderTests.Run(Check);
             baselineChecks += FlagMappingTests.Run(Check);
+            baselineChecks += CaptureNullSemanticsTests.Run(Check);
             baselineChecks += V3PayloadFixtureTests.Run(Check);
             baselineChecks += SettingsCompatibilityTests.Run(Check);
             baselineChecks += UpdaterTransitionTests.Run(Check);

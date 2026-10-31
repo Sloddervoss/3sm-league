@@ -54,6 +54,10 @@
     <Compile Include="OverlayTemplateInstaller.cs" />
     <!-- 0.8: vlaggen zijn een toestandloze meting geworden (session.flags). -->
     <Compile Include="SessionFlagReader.cs" />
+    <!-- 0.8: eerlijke nullen. Pure logica (geen SimHub-referentie), zodat de tests
+         dezelfde bestanden compileren. -->
+    <Compile Include="CaptureValueRules.cs" />
+    <Compile Include="TyreZoneReader.cs" />
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->
     <Compile Include="TyrePublishGate.cs" />

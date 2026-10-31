@@ -1242,11 +1242,14 @@ namespace ThreeSM.EnduranceConnector
             var bestLapTime = GetNullableSeconds(manager, Settings.BestLapTimeProperty);
             var lapDistancePct = GetNullableDouble(manager, Settings.LapDistancePctProperty, false)
                 ?? (player == null ? null : Clamp01(NullableSeconds(player.TrackPositionPercent)));
-            var fuel = Math.Max(0, GetDouble(manager, Settings.FuelProperty, 0));
+            // Ontbrekende brandstof is null, geen 0. 0 is een echte meting (lege tank in
+            // de garage) en blijft 0. Zie CaptureValueRules en CaptureNullSemanticsTests.
+            var fuel = CaptureValueRules.FuelLitres(GetNullableDouble(manager, Settings.FuelProperty, false));
             var fuelCapacity = ResolveFuelCapacity(manager);
-            UpdateFuelStint(fuel, completedLaps);
+            if (fuel.HasValue) UpdateFuelStint(fuel.Value, completedLaps);
             var incidents = NonNegativeOrNull(GetNullableInt(manager, Settings.IncidentsProperty));
-            var inPitLane = GetBool(manager, Settings.PitLaneProperty, false);
+            // Pitstraat: één nullable waarneming, ruwe SDK eerst. Zonder bron null, niet false.
+            var inPitLaneProperty = GetNullableBool(manager, Settings.PitLaneProperty);
             var nextSequence = Interlocked.Increment(ref _sequence);
 
             bool rawTelemetryAvailable;
@@ -1273,6 +1276,7 @@ namespace ThreeSM.EnduranceConnector
             // 0.7.0: één lezer voor alle ruwe iRacing-kanalen (property-pad, dan reflectie).
             // Wordt pas gebruikt als het bijbehorende blok aan staat; de lezer doet zelf niets.
             var rawChannels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
+            var onPitRoad = CaptureValueRules.OnPitRoad(rawChannels.ReadBool("OnPitRoad"), inPitLaneProperty);
 
             return new TelemetryEnvelopeV3
             {
@@ -1324,18 +1328,15 @@ namespace ThreeSM.EnduranceConnector
                 {
                     LapDistancePct = NormalizeLapDist(lapDistancePct),
                     TrackSurface = "unknown",
-                    OnPitRoad = inPitLane,
+                    OnPitRoad = onPitRoad,
                 },
                 Fuel = new V3Fuel
                 {
+                    // Zonder meting blijft dit null: een verzonnen 0 L is erger dan "onbekend".
                     FuelLitres = fuel,
-                    FuelPct = fuelCapacity.HasValue && fuelCapacity.Value > 0 && fuel >= 0
-                        ? (double?)Math.Round(Math.Min(1, fuel / fuelCapacity.Value), 4)
-                        : null,
+                    FuelPct = CaptureValueRules.FuelPercent(fuel, fuelCapacity),
                     FuelPerLapLitres = _fuelPerLap > 0 ? (double?)Math.Round(_fuelPerLap, 3) : null,
-                    LapsRemaining = _fuelPerLap > 0 && fuel > 0
-                        ? (double?)Math.Round(fuel / _fuelPerLap, 1)
-                        : (snapshot != null ? snapshot.EstimatedFuelRemaingLaps : null),
+                    LapsRemaining = CaptureValueRules.LapsRemaining(fuel, _fuelPerLap, snapshot != null ? snapshot.EstimatedFuelRemaingLaps : null),
                     FuelCapacityLitres = fuelCapacity,
                 },
                 RaceState = new V3RaceState
@@ -1348,7 +1349,7 @@ namespace ThreeSM.EnduranceConnector
                     // 0.7.0: het ruwe bitfield stond in het contract maar werd hard op null gezet.
                     // Het is de INTENTIE van de rijder (wat hij aanvinkte), niet de uitkomst; de
                     // plugin interpreteert geen bits. Ontbreekt het kanaal, dan blijft het null.
-                    PitServiceFlagsRaw = rawChannels.ReadInt("PitSvFlags", 0, int.MaxValue),
+                    PitServiceFlagsRaw = CaptureValueRules.PitServiceFlags(rawChannels.ReadInt("PitSvFlags", int.MinValue, int.MaxValue)),
                     // 0.7.1: de resterende reparatietijd stond óók in het contract en werd
                     // genegeerd. iRacing publiceert hem per kanaal (seconden). 0 is een echte
                     // meting ("niets open"); ontbreekt het kanaal, dan blijft het null en
@@ -1362,7 +1363,7 @@ namespace ThreeSM.EnduranceConnector
                 // server moet het blok kennen; een oude receiver geeft 422 op een nieuwe key).
                 // 0.7.1: niet meer elk frame — zie PublishTyres (wijziging of 30 s-hartslag).
                 Tyres = Settings.TyreTelemetryEnabled
-                    ? PublishTyres(CaptureTyres(rawChannels, sessionTimeSeconds, completedLaps, inPitLane), Settings.TyreSnapshotIntervalMilliseconds, inPitLane)
+                    ? PublishTyres(CaptureTyres(rawChannels, sessionTimeSeconds, completedLaps, inPitLaneProperty), Settings.TyreSnapshotIntervalMilliseconds, onPitRoad == true)
                     : null,
             };
         }
@@ -1399,7 +1400,8 @@ namespace ThreeSM.EnduranceConnector
         // 0 blijft 0 — dat is "er staat niets meer open", geen ontbrekende meting.
         private static double? ReadRepairSeconds(RawChannelReader channels, string channel)
         {
-            return RoundTyreValue(channels.ReadNumber(channel, 0, 86400), 1);
+            // De regels doen de bereik- en sentinelcontrole (-1 = onbekend, 0 = "niets open").
+            return CaptureValueRules.RepairSeconds(channels.ReadNumber(channel, double.MinValue, double.MaxValue));
         }
 
         /// <summary>
@@ -1522,65 +1524,22 @@ namespace ThreeSM.EnduranceConnector
             return values;
         }
 
-        // 0.7.0: iRacing-wearzones, 4 hoeken × 3 zones in de volgorde [left, middle, right].
-        private static readonly string[] TyreWearChannels =
-        {
-            "LFwearL", "LFwearM", "LFwearR",
-            "RFwearL", "RFwearM", "RFwearR",
-            "LRwearL", "LRwearM", "LRwearR",
-            "RRwearL", "RRwearM", "RRwearR",
-        };
-
-        // Karkastemperaturen: dit is de garage-/pyrometerwaarde, NIET de oppervlaktetemperatuur.
-        private static readonly string[] TyreCarcassChannels =
-        {
-            "LFtempCL", "LFtempCM", "LFtempCR",
-            "RFtempCL", "RFtempCM", "RFtempCR",
-            "LRtempCL", "LRtempCM", "LRtempCR",
-            "RRtempCL", "RRtempCM", "RRtempCR",
-        };
-
-        private const double MinTyreTempC = -40.0;
-        private const double MaxTyreTempC = 300.0;
         private const double MinAmbientTempC = -40.0;
         private const double MaxAmbientTempC = 100.0;
-
-        /// <summary>
-        /// Leest de 12 wear-zones en 12 karkastemperaturen. Wear komt binnen als fractie
-        /// (0–1) en gaat ×100 de deur uit; de waarde blijft onafgerond zodat de
-        /// refresh-detectie op de ruwe waarde werkt. raw 0 = "geen meting" (dezelfde guard
-        /// als CaptureTyre), dus dat wordt null en nooit 0,00 %.
-        /// </summary>
-        private static TyreZoneReading ReadTyreZones(RawChannelReader channels)
-        {
-            var wear = new double?[4][];
-            var carcass = new double?[4][];
-            for (var corner = 0; corner < 4; corner++)
-            {
-                wear[corner] = new double?[3];
-                carcass[corner] = new double?[3];
-                for (var zone = 0; zone < 3; zone++)
-                {
-                    var fraction = channels.ReadNumber(TyreWearChannels[corner * 3 + zone], 0, 1.001);
-                    if (fraction.HasValue && fraction.Value > 0) wear[corner][zone] = fraction.Value * 100.0;
-                    carcass[corner][zone] = channels.ReadNumber(TyreCarcassChannels[corner * 3 + zone], MinTyreTempC, MaxTyreTempC);
-                }
-            }
-            return new TyreZoneReading(wear, carcass);
-        }
 
         /// <summary>
         /// Bouwt het optionele bandenblok. Geeft null terug als er niets te melden is: een
         /// leeg blok is duurder dan geen blok (EmitDefaultValue=false doet de rest).
         /// </summary>
-        private V3Tyres CaptureTyres(RawChannelReader channels, double? sessionTimeSeconds, int? lap, bool onPitRoadFallback)
+        private V3Tyres CaptureTyres(RawChannelReader channels, double? sessionTimeSeconds, int? lap, bool? inPitLaneProperty)
         {
-            var reading = ReadTyreZones(channels);
+            var reading = TyreZoneReader.Read(channels);
             var setsUsed = channels.ReadInt("TireSetsUsed", 0, 255);
-            // De pit-entry-flank hangt aan de ruwe OnPitRoad; de bestaande pitlane-property is
-            // het vangnet als dat kanaal ontbreekt.
-            var onPitRoad = channels.ReadBool("OnPitRoad");
-            _tyreTracker.Update(reading, sessionTimeSeconds, lap, setsUsed, onPitRoad.HasValue ? onPitRoad.Value : onPitRoadFallback, DateTime.UtcNow);
+            // Dezelfde waarneming als track.onPitRoad: ruwe OnPitRoad eerst, de
+            // pitlane-property als vangnet. De tracker krijgt "onbekend" als false, want
+            // zonder waarneming is er geen pit-flank; dat raakt de payload niet.
+            var onPitRoad = CaptureValueRules.OnPitRoad(channels.ReadBool("OnPitRoad"), inPitLaneProperty);
+            _tyreTracker.Update(reading, sessionTimeSeconds, lap, setsUsed, onPitRoad == true, DateTime.UtcNow);
 
             var last = _tyreTracker.Last;
             var wear = ToTyreZones(last == null ? null : last.WearPercent, 2);
@@ -2153,6 +2112,7 @@ namespace ThreeSM.EnduranceConnector
         private static double? GetNullableSeconds(PluginManager manager, string property) { var value = GetRaw(manager, property); if (value is TimeSpan) { var seconds = ((TimeSpan)value).TotalSeconds; return seconds > 0 ? (double?)seconds : null; } return GetNullableDouble(manager, property, true); }
         private static int GetInt(PluginManager manager, string property, int fallback) { var value = GetRaw(manager, property); int parsed; return value != null && int.TryParse(value.ToString(), out parsed) ? parsed : fallback; }
         private static int? GetNullableInt(PluginManager manager, string property) { var value = GetRaw(manager, property); int parsed; return value != null && int.TryParse(value.ToString(), out parsed) ? (int?)parsed : null; }
+        private static bool? GetNullableBool(PluginManager manager, string property) { return NullableBool(GetRaw(manager, property)); }
         private static bool GetBool(PluginManager manager, string property, bool fallback) { var value = GetRaw(manager, property); if (value is bool) return (bool)value; bool parsed; if (value != null && bool.TryParse(value.ToString(), out parsed)) return parsed; int integer; return value != null && int.TryParse(value.ToString(), out integer) ? integer != 0 : fallback; }
         private static int? PositiveOrNull(int value) { return value > 0 ? (int?)value : null; }
         private static int? NonNegativeOrNull(int? value) { return value.HasValue && value.Value >= 0 ? value : null; }

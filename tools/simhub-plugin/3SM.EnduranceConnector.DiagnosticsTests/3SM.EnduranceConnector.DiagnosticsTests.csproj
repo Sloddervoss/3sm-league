@@ -19,6 +19,11 @@
     <Compile Include="..\3SM.EnduranceConnector\ConnectorSettings.cs" Link="ConnectorSettings.cs" />
     <!-- 0.8: de vlaggenlezer is SimHub-vrij en dus hier te testen. -->
     <Compile Include="..\3SM.EnduranceConnector\SessionFlagReader.cs" Link="SessionFlagReader.cs" />
+    <!-- 0.8: eerlijke nullen. Alle drie SimHub-vrij: regels, bandenzones en de tracker. -->
+    <Compile Include="..\3SM.EnduranceConnector\CaptureValueRules.cs" Link="CaptureValueRules.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\TyreZoneReader.cs" Link="TyreZoneReader.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\TyreSnapshotTracker.cs" Link="TyreSnapshotTracker.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\RawChannelReader.cs" Link="RawChannelReader.cs" />
     <!-- 0.7.1: bandenhek + vingerafdruk. Beide bestanden zijn SimHub-vrij. -->
     <Compile Include="..\3SM.EnduranceConnector\TyrePublishGate.cs" Link="TyrePublishGate.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetryContractsV3.cs" Link="TelemetryContractsV3.cs" />
