@@ -63,7 +63,12 @@ describe("SimHub plugin one-click updater contract", () => {
     expect(plugin).toContain("readyEvent.WaitOne");
     expect(plugin).toContain("--ready-event");
     expect(plugin).toContain('Verb = "runas"');
-    expect(plugin).toContain("Application.Current.MainWindow.Close()");
+    // Sluiten gaat via de dispatcher: MainWindow is eigendom van de UI-thread en mag vanaf de
+    // achtergrondthread niet eens gelezen worden (dat was de 0.7.2.0-hotfix).
+    expect(plugin).toContain("var dispatcher = application.Dispatcher;");
+    expect(plugin).toContain("window.Close();");
+    expect(plugin).not.toContain("Application.Current.MainWindow");
+    expect(plugin.indexOf("dispatcher.BeginInvoke")).toBeLessThan(plugin.indexOf("application.MainWindow"));
     expect(plugin).not.toMatch(/File\.(Copy|Move|Replace)\(/);
   });
 
