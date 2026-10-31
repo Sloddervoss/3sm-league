@@ -48,6 +48,7 @@ MIGRATIES=(
   20261031190700_plugin08_control_limits
   20261031190800_plugin08_retention
   20261031200000_plugin08_lap_driver_semantics
+  20261031200100_plugin08_ack_revisions
 )
 
 for migratie in "${MIGRATIES[@]}"; do

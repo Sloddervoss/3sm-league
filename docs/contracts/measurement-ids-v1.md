@@ -93,9 +93,9 @@ parserafkeuringen aan toe en antwoordt met:
   "measurements": {
     "events": {
       "received": 3,
-      "accepted": ["<uuid>"],
-      "duplicates": ["<uuid>"],
-      "superseded": [],
+      "accepted": [{"id": "<uuid>", "record_revision": 1}],
+      "duplicates": [{"id": "<uuid>", "record_revision": 1}],
+      "superseded": [{"id": "<uuid>", "record_revision": 2}],
       "rejected": [
         {"id": "<uuid>", "index": 1, "reason": "wear_after_contract", "stage": "parser"},
         {"id": "<uuid>", "index": 2, "reason": "revision_conflict", "stage": "database"}
@@ -103,7 +103,7 @@ parserafkeuringen aan toe en antwoordt met:
       "block_error": null,
       "stored": true
     },
-    "laps": {"received": 1, "accepted": ["<uuid>"], "duplicates": [], "superseded": [], "rejected": [], "block_error": null, "stored": true}
+    "laps": {"received": 1, "accepted": [{"id": "<uuid>", "record_revision": 1}], "duplicates": [], "superseded": [], "rejected": [], "block_error": null, "stored": true}
   },
   "aggregates": {"supported": true, "degraded": false, "reason": null, "retryInMs": null}
 }
@@ -115,11 +115,18 @@ Regels:
    als de reeks als geheel werd afgekeurd (`block_error`: `not_an_array`,
    `too_many`).
 2. `stage` zegt waar de afkeuring vandaan kwam: `parser` (Edge) of `database`.
-3. `stored: false` betekent: deze reeks is **niet** duurzaam opgeslagen. Een
+   Beide `index`-waarden verwijzen naar de **oorspronkelijke** payload: de Edge
+   vertaalt de databasepositie met de goedgekeurde rijen terug.
+3. `accepted`, `duplicates` en `superseded` zijn objecten met de **bevestigde**
+   `record_revision`. Bij meerdere revisies van dezelfde UUID weet de outbox
+   daardoor welke versie de server heeft aangenomen.
+4. `stored: false` betekent: deze reeks is **niet** duurzaam opgeslagen. Een
    outbox mag hem dan niet opruimen.
-4. Bij een afgekeurd frame (`replayed`, `rate_limited`, ...) is `stored` false en
+5. Bij een afgekeurd frame (`replayed`, `rate_limited`, ...) is `stored` false en
    noemt het antwoord de frame-uitkomst in `measurements`/`error`.
-5. Redencodes zijn stabiel en Engels; ze zijn geen vrije tekst.
+6. Een databaseantwoord met `ok:false` wordt nooit een leeg succes: de reeks
+   krijgt `stored:false` en `block_error` noemt de reden
+   (`measurement_batch_failed` of de specifieke fout). Redencodes zijn stabiel en Engels; ze zijn geen vrije tekst.
 
 ---
 

@@ -719,9 +719,18 @@ export type SeriesReport<T> = {
   rejected: SeriesRejection[];
   /** Gezet als de reeks als geheel onbruikbaar was (geen array, te lang). */
   blockError: string | null;
+  /** Aantal aangeboden rijen in de oorspronkelijke payload (ook afgekeurde). */
+  received: number;
+  /**
+   * Voor elke goedgekeurde rij de positie in de oorspronkelijke reeks. Hiermee
+   * kan een databaseafwijzing (die alleen de ingekorte reeks ziet) naar de
+   * juiste payloadindex worden vertaald.
+   */
+  acceptedIndexes: number[];
 };
 
-const emptyReport = <T>(blockError: string | null = null): SeriesReport<T> => ({ rows: [], rejected: [], blockError });
+const emptyReport = <T>(blockError: string | null = null, received = 0): SeriesReport<T> =>
+  ({ rows: [], rejected: [], blockError, received, acceptedIndexes: [] });
 
 /**
  * Leest een reeks rij voor rij. Eén kapotte rij kost alleen die rij: de goede
@@ -738,11 +747,12 @@ const parseSeries = <T>(
 ): SeriesReport<T> => {
   if (value === undefined || value === null) return emptyReport<T>();
   if (!Array.isArray(value)) return emptyReport<T>("not_an_array");
-  if (value.length > max) return emptyReport<T>("too_many");
-  const report: SeriesReport<T> = { rows: [], rejected: [], blockError: null };
+  if (value.length > max) return emptyReport<T>("too_many", value.length);
+  const report: SeriesReport<T> = { rows: [], rejected: [], blockError: null, received: value.length, acceptedIndexes: [] };
   value.forEach((entry, index) => {
     try {
       report.rows.push(parseOne(entry, index));
+      report.acceptedIndexes.push(index);
     } catch (error) {
       const reason = (error as Error).message ?? "invalid_row";
       report.rejected.push({ id: identify(entry), index, reason });

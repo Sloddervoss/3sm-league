@@ -1,0 +1,114 @@
+/**
+ * Plugin 0.7.2.0 — tests voor de tweede DDL-review (6.1 sol).
+ *
+ * Draai met:
+ *   deno test --allow-env --allow-read supabase/functions/_shared/plugin08_review2_test.ts
+ *
+ * Wat hier bewezen wordt:
+ *  - een databasefout wordt `stored:false` met reden, geen leeg succes (punt 2);
+ *  - bevestigingen dragen de bevestigde record_revision (punt 2);
+ *  - parser- en database-indexen beschrijven dezelfde, oorspronkelijke reeks,
+ *    ook als de parser de middelste rij al had afgekeurd (punt 2).
+ */
+import type { NormalizedTelemetryEnvelope } from "./simhub.ts";
+import { mergeMeasurementAck, ackHasRejections } from "./simhubAggregates.ts";
+import {
+  parseLapSummariesReport,
+  parseMeasurementEventsReport,
+} from "./simhubExtensions.ts";
+
+declare const Deno: {
+  test(name: string, fn: () => void | Promise<void>): void;
+};
+
+const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+
+const wear = (fl = 12.5) => ({ version: 1, scale: "remaining_percent", fl, fr: fl, rl: fl, rr: fl });
+const evidence = () => ({ version: 1, source: "tire_sets_used", channels: ["tire_sets_used"] });
+
+const event = (n: number, extra: Record<string, unknown> = {}) => ({
+  eventUid: uid(n),
+  eventId: `evt-${n}`,
+  kind: "wear_refresh_confirmed",
+  segmentId: "seg-1",
+  observedSessionId: "sess-1",
+  observedAt: "2026-10-31T12:00:00Z",
+  sessionTimeSeconds: 1000,
+  sdkTick: 12345,
+  wearBefore: wear(),
+  wearAfter: wear(0.2),
+  evidence: evidence(),
+  confidence: 0.9,
+  ...extra,
+});
+
+const report = (rows: unknown[], laps: unknown[] = []): NormalizedTelemetryEnvelope["measurementReport"] => ({
+  events: parseMeasurementEventsReport(rows),
+  laps: parseLapSummariesReport(laps),
+}) as NonNullable<NormalizedTelemetryEnvelope["measurementReport"]>;
+
+Deno.test("R2-1 een databasefout is stored:false met reden, geen leeg succes", () => {
+  const parser = report([event(1), event(2)]);
+  const ack = mergeMeasurementAck(parser, { ok: false, error: "measurement_batch_failed" }, true);
+  if (ack.events.stored !== false) throw new Error("events.stored moet false zijn");
+  if (ack.events.block_error !== "measurement_batch_failed") throw new Error(`block_error = ${ack.events.block_error}`);
+  if (ack.events.received !== 2) throw new Error("received moet de aangeboden reeks zijn");
+  if (!ackHasRejections(ack)) throw new Error("een mislukte batch moet zichtbaar zijn");
+  // Dezelfde fout, maar zonder db.error: nog steeds een reden, nooit null.
+  const zonderReden = mergeMeasurementAck(parser, { ok: false }, true);
+  if (zonderReden.events.block_error !== "measurement_batch_failed") throw new Error("fallbackreden ontbreekt");
+});
+
+Deno.test("R2-2 bevestigingen dragen de bevestigde record_revision", () => {
+  const parser = report([event(1)]);
+  const ack = mergeMeasurementAck(parser, {
+    ok: true,
+    events: {
+      received: 1,
+      accepted: [{ id: uid(1), record_revision: 7 }],
+      duplicates: [],
+      superseded: [],
+      rejected: [],
+      block_error: null,
+    },
+    laps: { received: 0, accepted: [], duplicates: [], superseded: [], rejected: [], block_error: null },
+  }, true);
+  if (ack.events.accepted.length !== 1) throw new Error("geen bevestiging");
+  if (ack.events.accepted[0].id !== uid(1)) throw new Error("verkeerde id");
+  if (ack.events.accepted[0].recordRevision !== 7) throw new Error("revisie niet bevestigd");
+  // Een oude database geeft nog kale strings: dan is de revisie onbekend (null),
+  // niet "1" en niet weggelaten.
+  const oud = mergeMeasurementAck(parser, {
+    ok: true,
+    events: { received: 1, accepted: [uid(1)], duplicates: [], superseded: [], rejected: [], block_error: null },
+    laps: { received: 0, accepted: [], duplicates: [], superseded: [], rejected: [], block_error: null },
+  }, true);
+  if (oud.events.accepted[0].recordRevision !== null) throw new Error("revisie verzonnen");
+});
+
+Deno.test("R2-3 parser- en database-indexen beschrijven dezelfde reeks", () => {
+  // Drie rijen, de middelste is ongeldig in de parser. De database ziet dus
+  // alleen rij 0 en rij 2, en nummert die als 0 en 1.
+  const parser = report([event(1), { eventUid: uid(2), kind: "wear_value_changed", wearAfter: { fl: "banana" } }, event(3)]);
+  if (parser!.events.received !== 3) throw new Error("received moet 3 zijn");
+  if (parser!.events.acceptedIndexes.join(",") !== "0,2") throw new Error("acceptedIndexes niet 0,2");
+
+  const ack = mergeMeasurementAck(parser, {
+    ok: true,
+    events: {
+      received: 2,
+      accepted: [{ id: uid(1), record_revision: 1 }],
+      duplicates: [],
+      superseded: [],
+      // Database-index 1 = de tweede goedgekeurde rij = payloadindex 2.
+      rejected: [{ id: uid(3), index: 1, reason: "revision_conflict" }],
+      block_error: null,
+    },
+    laps: { received: 0, accepted: [], duplicates: [], superseded: [], rejected: [], block_error: null },
+  }, true);
+
+  if (ack.events.received !== 3) throw new Error(`received = ${ack.events.received}, verwacht 3`);
+  const indexes = ack.events.rejected.map((entry) => `${entry.stage}:${entry.index}`).join(",");
+  if (indexes !== "parser:1,database:2") throw new Error(`indexruimte = ${indexes}`);
+  if (ack.events.accepted[0].recordRevision !== 1) throw new Error("revisie ontbreekt");
+});

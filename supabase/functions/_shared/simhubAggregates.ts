@@ -166,14 +166,22 @@ export type AckRejection = {
   stage: "parser" | "database";
 };
 
+export type AckId = {
+  id: string;
+  /** De revisie die de database heeft bevestigd. Zonder dit getal is een ACK
+   *  bij meerdere revisies van dezelfde UUID niet eenduidig. */
+  recordRevision: number | null;
+};
+
 export type AckSeries = {
+  /** Aangeboden rijen in de oorspronkelijke payload, inclusief parserafwijzingen. */
   received: number;
-  accepted: string[];
-  duplicates: string[];
-  superseded: string[];
+  accepted: AckId[];
+  duplicates: AckId[];
+  superseded: AckId[];
   rejected: AckRejection[];
   block_error: string | null;
-  /** Alleen gevuld als de meetserie niet bij de database aankwam. */
+  /** false = deze reeks is niet duurzaam opgeslagen; een outbox mag hem niet opruimen. */
   stored: boolean;
 };
 
@@ -192,8 +200,30 @@ const emptySeries = (stored: boolean): AckSeries => ({
   stored,
 });
 
-const strings = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+/**
+ * Leest de bevestigingen. De database geeft sinds review 2 objecten
+ * `{id, record_revision}`. Een kale string wordt nog gelezen (oudere database,
+ * zelfde Edge), maar dan is de revisie onbekend en dat staat er als `null` —
+ * nooit als "1".
+ */
+const ackIds = (value: unknown): AckId[] => {
+  if (!Array.isArray(value)) return [];
+  const out: AckId[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string") {
+      out.push({ id: entry, recordRevision: null });
+      continue;
+    }
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.id !== "string") continue;
+    const revision = typeof record.record_revision === "number" && Number.isInteger(record.record_revision)
+      ? record.record_revision
+      : null;
+    out.push({ id: record.id, recordRevision: revision });
+  }
+  return out;
+};
 
 const rejections = (value: unknown, stage: "parser" | "database"): AckRejection[] =>
   Array.isArray(value)
@@ -210,10 +240,15 @@ const rejections = (value: unknown, stage: "parser" | "database"): AckRejection[
 /**
  * Voegt het parserrapport en het databaserapport samen tot één antwoord.
  *
- * De database is leidend voor wat er is opgeslagen. Wat de parser al had
- * afgekeurd, is nooit bij de database aangekomen en staat er dus niet in; die
- * rijen worden hier toegevoegd met stage 'parser'. Zonder database-ACK (de
- * terugvalmodus) meldt het antwoord eerlijk dat er niets is opgeslagen.
+ * Twee harde regels sinds review 2:
+ *
+ *   1. Een databaseantwoord met `ok:false` is een fout, ook als het kernframe
+ *      geaccepteerd is. Het wordt `stored:false` met de reden als
+ *      `block_error`; het mag nooit als `stored:true` met lege uitslagen
+ *      doorkomen.
+ *   2. Beide kanten beschrijven dezelfde indexruimte: de oorspronkelijke
+ *      payload. De database zag alleen de goedgekeurde rijen en nummert die
+ *      opnieuw; de Edge vertaalt die index met `acceptedIndexes` terug.
  */
 export const mergeMeasurementAck = (
   parserReport: NormalizedTelemetryEnvelope["measurementReport"],
@@ -221,6 +256,12 @@ export const mergeMeasurementAck = (
   stored: boolean,
 ): MeasurementAck => {
   const db = (dbAck && typeof dbAck === "object" ? dbAck : {}) as Record<string, unknown>;
+  // Een databasefout is geen leeg succes. De reden gaat mee naar de client.
+  const dbFailed = db.ok === false;
+  const dbError = dbFailed
+    ? (typeof db.error === "string" && db.error ? db.error : "measurement_batch_failed")
+    : null;
+  const storeSucceeded = stored && !dbFailed;
   const dbEvents = (db.events && typeof db.events === "object" ? db.events : {}) as Record<string, unknown>;
   const dbLaps = (db.laps && typeof db.laps === "object" ? db.laps : {}) as Record<string, unknown>;
 
@@ -228,32 +269,40 @@ export const mergeMeasurementAck = (
     dbSide: Record<string, unknown>,
     parser: SeriesReport<unknown> | undefined,
   ): AckSeries => {
-    if (!stored) {
+    const parserRejected: AckRejection[] = (parser?.rejected ?? []).map((entry: SeriesRejection) => ({
+      id: entry.id ?? null,
+      index: entry.index,
+      reason: entry.reason,
+      stage: "parser" as const,
+    }));
+    // De posities van de goedgekeurde rijen in de oorspronkelijke reeks. Zonder
+    // deze vertaling zou een databaseafwijzing op index 1 bij een ingekorte
+    // reeks naar de verkeerde rij wijzen.
+    const acceptedIndexes = parser?.acceptedIndexes ?? [];
+    const mapIndex = (index: number | null): number | null => {
+      if (index === null) return null;
+      if (!parser) return index;
+      return index >= 0 && index < acceptedIndexes.length ? acceptedIndexes[index] : null;
+    };
+
+    if (!storeSucceeded) {
       const out = emptySeries(false);
-      out.received = parser?.rows.length ?? 0;
-      out.block_error = parser?.blockError ?? "aggregates_unsupported";
-      out.rejected = (parser?.rejected ?? []).map((entry: SeriesRejection) => ({
-        id: entry.id ?? null,
-        index: entry.index,
-        reason: entry.reason,
-        stage: "parser" as const,
-      }));
+      out.received = parser?.received ?? 0;
+      out.block_error = dbError ?? parser?.blockError ?? "aggregates_unsupported";
+      out.rejected = parserRejected;
       return out;
     }
+    const databaseRejected = rejections(dbSide.rejected, "database")
+      .map((entry) => ({ ...entry, index: mapIndex(entry.index) }))
+      .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER));
     return {
-      received: typeof dbSide.received === "number" ? dbSide.received : (parser?.rows.length ?? 0),
-      accepted: strings(dbSide.accepted),
-      duplicates: strings(dbSide.duplicates),
-      superseded: strings(dbSide.superseded),
-      rejected: [
-        ...(parser?.rejected ?? []).map((entry: SeriesRejection) => ({
-          id: entry.id ?? null,
-          index: entry.index,
-          reason: entry.reason,
-          stage: "parser" as const,
-        })),
-        ...rejections(dbSide.rejected, "database"),
-      ],
+      // Het totaal is de aangeboden reeks, niet wat de database na inkorting zag.
+      received: parser?.received ?? (typeof dbSide.received === "number" ? dbSide.received : 0),
+      accepted: ackIds(dbSide.accepted),
+      duplicates: ackIds(dbSide.duplicates),
+      superseded: ackIds(dbSide.superseded),
+      rejected: [...parserRejected, ...databaseRejected]
+        .sort((a, b) => (a.index ?? Number.MAX_SAFE_INTEGER) - (b.index ?? Number.MAX_SAFE_INTEGER)),
       block_error: typeof dbSide.block_error === "string" ? dbSide.block_error : (parser?.blockError ?? null),
       stored: true,
     };
@@ -267,5 +316,6 @@ export const mergeMeasurementAck = (
 
 /** Is er iets misgegaan dat de connector moet zien? */
 export const ackHasRejections = (ack: MeasurementAck): boolean =>
-  ack.events.rejected.length > 0 || ack.laps.rejected.length > 0
+  !ack.events.stored || !ack.laps.stored
+  || ack.events.rejected.length > 0 || ack.laps.rejected.length > 0
   || ack.events.block_error !== null || ack.laps.block_error !== null;

@@ -218,6 +218,71 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- P2 — ACK en revisies: elke bevestiging noemt de bevestigde revisie
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_ack jsonb;
+  v_acc jsonb;
+  v_ids text;
+begin
+  -- Drie rijen, de middelste is stuk. De database ziet twee rijen en nummert
+  -- die opnieuw; de Edge vertaalt dat terug (Deno R2-3). Hier telt de
+  -- databezijde: received is de aangeboden reeks.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1',
+    jsonb_build_array(
+      pg_temp.event(10),
+      pg_temp.event(11, jsonb_build_object('kind', 'NIET GELDIG')),
+      pg_temp.event(12)),
+    null);
+  perform pg_temp.eq(v_ack #> '{events,received}', '3'::jsonb,
+                     'P2 received telt de aangeboden reeks, niet de ingekorte');
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 2,
+                     'P2 twee van de drie rijen zijn geaccepteerd');
+  perform pg_temp.eq(v_ack #> '{events,rejected,0,index}', '1'::jsonb,
+                     'P2 de afkeuring noemt de middelste rij');
+  perform pg_temp.eq(v_ack #> '{events,rejected,0,reason}', '"kind_invalid"'::jsonb,
+                     'P2 de afkeuring noemt de reden');
+  v_acc := pg_temp.ack_event(v_ack, pg_temp.uid(10)::text);
+  perform pg_temp.eq(v_acc->>'record_revision', '1',
+                     'P2 een bevestiging noemt de bevestigde revisie');
+  v_acc := pg_temp.ack_event(v_ack, pg_temp.uid(12)::text);
+  perform pg_temp.eq(v_acc->>'record_revision', '1',
+                     'P2 ook de tweede bevestiging noemt haar revisie');
+
+  -- Revisie 2 van dezelfde UUID: de bevestiging moet 2 noemen, niet 1.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1',
+    jsonb_build_array(pg_temp.event(10, jsonb_build_object('recordRevision', 2, 'confidence', 0.5))),
+    null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,superseded}'), 1,
+                     'P2 een hogere revisie vervangt de oude stand');
+  perform pg_temp.eq(v_ack #> '{events,superseded,0,id}', to_jsonb(pg_temp.uid(10)::text),
+                     'P2 de vervanging noemt de juiste UUID');
+  perform pg_temp.eq(v_ack #> '{events,superseded,0,record_revision}', '2'::jsonb,
+                     'P2 de bevestiging noemt de nieuwe revisie');
+
+  -- Dezelfde revisie en dezelfde inhoud nog eens: duplicaat, met revisie.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1',
+    jsonb_build_array(pg_temp.event(10, jsonb_build_object('recordRevision', 2, 'confidence', 0.5))),
+    null);
+  perform pg_temp.eq(v_ack #> '{events,duplicates,0,id}', to_jsonb(pg_temp.uid(10)::text),
+                     'P2 de replay is als duplicaat gemeld');
+  perform pg_temp.eq(v_ack #> '{events,duplicates,0,record_revision}', '2'::jsonb,
+                     'P2 het duplicaat noemt de bevestigde revisie');
+
+  -- Een antwoord met ok=false is een fout, ook zonder exception. De Edge maakt
+  -- daar stored:false met deze reden van (Deno R2-1).
+  v_ack := public.simhub_persist_measurement_batch(null, 'sess-1', '[]'::jsonb, null);
+  perform pg_temp.eq(v_ack #> '{ok}', 'false'::jsonb,
+                     'P2 een mislukte batch meldt ok=false');
+  perform pg_temp.eq(v_ack #> '{error}', '"invalid_arguments"'::jsonb,
+                     'P2 een mislukte batch noemt de reden');
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Resultaat
 -- ---------------------------------------------------------------------------
 do $$
