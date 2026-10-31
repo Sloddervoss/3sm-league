@@ -97,7 +97,9 @@ namespace ThreeSM.EnduranceConnector
             }
         }
         public string LeftMenuTitle { get { return "3SM"; } }
-        public string InstalledVersion { get { return this.GetType().Assembly.GetName().Version.ToString(); } }
+        public string InstalledVersion { get { return LocalVersion.ToString(); } }
+        // De geladen assemblyversie: het ijkpunt voor de updatevergelijking.
+        private Version LocalVersion { get { return GetType().Assembly.GetName().Version; } }
         public string Status { get { return _status; } private set { SetStatus(value); } }
         public string LastTelemetrySummary { get { return _lastTelemetrySummary; } }
         public string UpdateStatus { get { return _updateStatus; } }
@@ -223,8 +225,9 @@ namespace ThreeSM.EnduranceConnector
                     expectedSignature = Settings.LastKnownRemoteSignature;
                 }
 
+                // Zelfde regel als altijd (UpdateVersionPolicy): leesbaar én strikt nieuwer.
                 Version remoteVersion;
-                if (!Version.TryParse(versionText, out remoteVersion) || remoteVersion <= this.GetType().Assembly.GetName().Version)
+                if (!UpdateVersionPolicy.TryParseNewer(versionText, LocalVersion, out remoteVersion))
                     throw new InvalidOperationException("Er staat geen nieuwere update klaar.");
 
                 // RSA-verificatie van de opgeslagen releasemetadata vóór enige download/staging.
@@ -438,7 +441,7 @@ namespace ThreeSM.EnduranceConnector
             string text;
             lock (_settingsGate) text = Settings == null ? null : Settings.LastKnownRemoteVersion;
             Version parsed;
-            if (!Version.TryParse(text, out parsed) || parsed <= this.GetType().Assembly.GetName().Version) return false;
+            if (!UpdateVersionPolicy.TryParseNewer(text, LocalVersion, out parsed)) return false;
             remote = parsed;
             return true;
         }
@@ -551,7 +554,7 @@ namespace ThreeSM.EnduranceConnector
                 if (force) SetUpdateStatus("Controleren op updates…");
                 SetUpdaterState(new UpdaterState { state = "CHECKING" });
 
-                var localVersion = this.GetType().Assembly.GetName().Version;
+                var localVersion = LocalVersion;
                 // TEST/canary builds append their release channel so the version check selects
                 // the correct manifest; STABLE builds stay a plain GET (unchanged behavior).
                 var endpoint = new Uri(BuildRelayEndpoint("simhub-version").AbsoluteUri + ReleaseChannelQuery);
@@ -564,7 +567,7 @@ namespace ThreeSM.EnduranceConnector
                     if (info == null || string.IsNullOrWhiteSpace(info.Version)) throw new HttpRequestException("versie-endpoint gaf geen versie terug");
                     var remote = Version.TryParse(info.Version.Trim(), out var parsed) ? parsed : null;
                     if (remote == null) throw new HttpRequestException("serverversie is ongeldig: " + info.Version.Trim());
-                    if (remote > localVersion)
+                    if (UpdateVersionPolicy.IsNewer(remote, localVersion))
                     {
                         var metadataValid = ValidateReleaseManifest(info, remote);
                         lock (_settingsGate)
