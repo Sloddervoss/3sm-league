@@ -72,7 +72,7 @@ returns void language sql as $$
   insert into public.simhub_telemetry_latest
     (device_id, owner_user_id, session_id, sequence, captured_at, connector_id,
      game, telemetry, car_id, car_name, track_name, track_config, v3_normalized)
-  select p_device, d.owner_user_id, p_session, 1, p_at, 'test', 'iracing',
+  select p_device, d.owner_user_id, p_session, 1, p_at, 'test', 'IRacing',
          '{}'::jsonb, p_auto, p_auto,
          split_part(p_baan, ':', 1), split_part(p_baan, ':', 2), '{}'::jsonb
     from public.simhub_devices d
