@@ -52,13 +52,13 @@
     <Compile Include="OverlayClient.cs" />
     <Compile Include="OverlayPropertyPublisher.cs" />
     <Compile Include="OverlayTemplateInstaller.cs" />
-    <!-- 0.8: vlaggen zijn een toestandloze meting geworden (session.flags). -->
+    <!-- 0.7.2.0: vlaggen zijn een toestandloze meting geworden (session.flags). -->
     <Compile Include="SessionFlagReader.cs" />
-    <!-- 0.8: eerlijke nullen. Pure logica (geen SimHub-referentie), zodat de tests
+    <!-- 0.7.2.0: eerlijke nullen. Pure logica (geen SimHub-referentie), zodat de tests
          dezelfde bestanden compileren. -->
     <Compile Include="CaptureValueRules.cs" />
     <Compile Include="TyreZoneReader.cs" />
-    <!-- 0.8: de updatevergelijking op één testbare plek (zelfde regel als voorheen). -->
+    <!-- 0.7.2.0: de updatevergelijking op één testbare plek (zelfde regel als voorheen). -->
     <Compile Include="UpdateVersionPolicy.cs" />
     <!-- 0.7.1: bandenblok niet elk frame. Pure logica (geen SimHub-referentie), zodat de
          tests hetzelfde bestand kunnen compileren. -->

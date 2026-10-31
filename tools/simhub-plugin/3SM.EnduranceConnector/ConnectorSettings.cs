@@ -32,7 +32,7 @@ namespace ThreeSM.EnduranceConnector
         // reject new fields; default off also preserves existing installations.
         public bool ExtendedPitwallTelemetryEnabled = true;
 
-        // 0.8.0: directe lezer van de iRacing-shared-memory (Local\IRSDKMemMapFileName)
+        // 0.7.2.0: directe lezer van de iRacing-shared-memory (Local\IRSDKMemMapFileName)
         // voor de kanalen die SimHub's GameRawData niet doorgeeft: wielsnelheid, remdruk
         // per wiel, stuurhoek en lat/long-versnelling. Read-only, geen ReadProcessMemory
         // en geen tweede programma.

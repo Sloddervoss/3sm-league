@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace ThreeSM.EnduranceConnector
 {
@@ -6,15 +6,15 @@ namespace ThreeSM.EnduranceConnector
     /// De enige plek waar "is er een nieuwere versie?" wordt beslist. Puur en zonder
     /// SimHub, zodat de regel te testen is zonder plugin, updater of SimHub.
     ///
-    /// De regel is bewust exact dezelfde als die vóór 0.8 in de plugin stond:
+    /// De regel is bewust exact dezelfde als die vóór 0.7.2.0 in de plugin stond:
     /// <c>Version.TryParse</c> en daarna <b>strikt groter</b> dan de geladen assemblyversie.
     /// Niet groter of gelijk, niet "anders": een gelijke versie levert nooit een update op,
     /// en een onleesbare versie is geen update.
     ///
-    /// Versies worden als vier delen verwacht (0.8.0.0). Dat is geen eis van deze klasse
+    /// Versies worden als vier delen verwacht (0.7.2.0.0). Dat is geen eis van deze klasse
     /// maar van het updatepad zelf: de externe updater vergelijkt de bestands- en
     /// assemblyversie van de gedownloade DLL met het aangekondigde versienummer, en
-    /// <c>0.8</c> is niet gelijk aan <c>0.8.0.0</c>. release.sh leest de versie uit
+    /// <c>0.7.2.0</c> is niet gelijk aan <c>0.7.2.0.0</c>. release.sh leest de versie uit
     /// AssemblyVersion("x.y.z.w"), dus de aangekondigde versie heeft altijd vier delen.
     /// </summary>
     public static class UpdateVersionPolicy

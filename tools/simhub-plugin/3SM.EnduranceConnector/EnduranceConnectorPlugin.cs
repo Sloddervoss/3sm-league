@@ -80,7 +80,7 @@ namespace ThreeSM.EnduranceConnector
         private string[] _lastFlagNames;
         // 0.7.1: hek voor het bandenblok (wijziging of één keer per interval).
         private readonly TyrePublishGate _tyreGate = new TyrePublishGate();
-        // 0.8.0: directe lezer van de iRacing-shared-memory, read-only. Lazy: zonder
+        // 0.7.2.0: directe lezer van de iRacing-shared-memory, read-only. Lazy: zonder
         // iRacing bestaat de map niet en blijft elke waarde null; de plugin werkt door.
         private IrSdkMemoryReader _irSdk;
         private long _pitLimiterSinceMs;
@@ -120,7 +120,7 @@ namespace ThreeSM.EnduranceConnector
             }
             if (Settings.SchemaVersion < 8)
             {
-                // 0.8: de vlaggenmodule (panelen, presets, LED-boxen) en de research-opname
+                // 0.7.2.0: de vlaggenmodule (panelen, presets, LED-boxen) en de research-opname
                 // zijn vervallen. De oude trappen 5, 6 en 7 pasten alleen instellingen aan
                 // die niet meer bestaan; het schemanummer gaat daarom in één keer naar 8.
                 // Een bestaande configuratie houdt alles wat er nog toe doet.
@@ -1460,7 +1460,7 @@ namespace ThreeSM.EnduranceConnector
                 TyreDataMode = "last_available", PressureUnit = pressureUnit, TemperatureUnit = temperatureUnit,
                 FrontLeft = CaptureTyre(manager, "FrontLeft"), FrontRight = CaptureTyre(manager, "FrontRight"),
                 RearLeft = CaptureTyre(manager, "RearLeft"), RearRight = CaptureTyre(manager, "RearRight"),
-                // 0.8.0: alleen uit de directe SDK-lezer. Zonder lezer, zonder iRacing of
+                // 0.7.2.0: alleen uit de directe SDK-lezer. Zonder lezer, zonder iRacing of
                 // met de instelling uit blijven deze velden null en valt het blok volledig
                 // weg (EmitDefaultValue=false) — de payload blijft dan byte-identiek.
                 // De SDK levert rad en m/s²; de wire-contracten zijn graden en g.

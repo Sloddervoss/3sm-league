@@ -13,8 +13,46 @@ using ThreeSM.EnduranceConnector;
 //     configuratie, oude updaterstaat, één installatie, daarna geen tweede aanbod.
 internal static class UpdatePathTests
 {
-    // De versie waarmee de vloot nu rondrijdt (AssemblyInfo.cs tot de 0.8-bump).
+    // De versie waarmee de vloot nu rondrijdt.
+    // Kopieert een 0.7.1.2-fixture naar een eigen map en zet desgewenst de aangekondigde
+    // versie op de staging, zoals de plugin dat doet na een download.
+    private static string Simulate(string fixture, string root, string name, string pendingVersion)
+    {
+        var directory = Path.Combine(root, name);
+        Directory.CreateDirectory(directory);
+        File.Copy(fixture, Path.Combine(directory, UpdaterState.StoreFileName), true);
+        if (pendingVersion == null) return directory;
+        var store = new UpdaterStateStore(directory);
+        store.TryUpdate(current => current.pendingUpdateVersion = pendingVersion);
+        return directory;
+    }
+
+    // Dezelfde voorwaarde die TryAutoApplyUpdate gebruikt: een herstelbare staat waarvan de
+    // aangekondigde versie bij de staging hoort.
+    private static bool IsResumable(UpdaterState state, string announcedVersion)
+    {
+        return state.LogicallyNeedsRecovery
+            && (string.IsNullOrWhiteSpace(state.pendingUpdateVersion)
+                || string.Equals(state.pendingUpdateVersion, announcedVersion, StringComparison.Ordinal));
+    }
+
+    private static string ReadUpward(string relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var candidate = Path.Combine(directory.FullName, "tools", "simhub-plugin", relativePath);
+            if (File.Exists(candidate)) return File.ReadAllText(candidate, Encoding.UTF8);
+            candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate)) return File.ReadAllText(candidate, Encoding.UTF8);
+            directory = directory.Parent;
+        }
+        return null;
+    }
+
     private static readonly Version Installed = new Version("0.7.1.2");
+    // De versie die deze release krijgt (DDL-review 6.1: overal 0.7.2.0).
+    private static readonly Version Release = new Version("0.7.2.0");
 
     public static int Run(Action<string, bool, string> check)
     {
@@ -73,6 +111,21 @@ internal static class UpdatePathTests
         Check("V14", new Version("0.8.0.0") == new Version("0.8.0.0") && !new Version("0.8").Equals(new Version("0.8.0.0")),
             "vier delen zijn vereist: 0.8 is niet gelijk aan 0.8.0.0 (daarom leest release.sh AssemblyVersion)");
 
+        // ---- 3b. de releaseversie zelf ----
+        Check("V21", UpdateVersionPolicy.IsNewer(Release, Installed), "0.7.2.0 is nieuwer dan 0.7.1.2 (de nieuwe release)");
+        Check("V22", !UpdateVersionPolicy.IsNewer(Release, Release), "0.7.2.0 tegenover 0.7.2.0 is geen update (geen lus na de update)");
+        Check("V23", UpdateVersionPolicy.Format(Release) == "0.7.2.0" && new Version(UpdateVersionPolicy.Format(Release)).Equals(Release),
+            "de release geeft --version 0.7.2.0 en de updater leest dat gelijk terug");
+
+        // ---- 3c. de versie staat echt overal op 0.7.2.0 ----
+        foreach (var assembly in new[] { "3SM.EnduranceConnector", "3SM.EnduranceConnector.Updater" })
+        {
+            var info = ReadUpward(Path.Combine(assembly, "AssemblyInfo.cs"));
+            Check("V24-" + assembly,
+                info != null && info.Contains("AssemblyVersion(\"0.7.2.0\")") && info.Contains("AssemblyFileVersion(\"0.7.2.0\")"),
+                assembly + " meldt 0.7.2.0" + (info == null ? " (bestand niet gevonden)" : string.Empty));
+        }
+
         // ---- 4. één update van 0.7.1.2 naar 0.8, met de echte bestanden ----
         var settingsJson = File.ReadAllText(SettingsCompatibilityTests.LegacyFileName, Encoding.UTF8);
         var settings = SettingsCompatibilityTests.Deserialize(settingsJson);
@@ -85,43 +138,55 @@ internal static class UpdatePathTests
         var root = Path.Combine(Path.GetTempPath(), "3sm-update-path-" + Guid.NewGuid().ToString("N"));
         try
         {
-            // De oude staat WAITING_FOR_RESTART mag de update niet blokkeren.
+            // De oude staten STAGED en WAITING_FOR_RESTART mogen de update niet blokkeren.
+            // Twee gevallen per staat:
+            //  a) de fixture hoort bij de aangekondigde 0.8.0.0 -> hervatbaar;
+            //  b) dezelfde oude staat maar de release is 0.7.2.0 -> de staging hoort niet bij
+            //     die versie, dus de plugin mag hem NIET installeren (veilige weigering);
+            //  c) een staat die wel bij 0.7.2.0 hoort -> hervatbaar en installeerbaar.
             foreach (var fixture in new[] { UpdaterTransitionTests.StagedFileName, UpdaterTransitionTests.WaitingFileName })
             {
-                var directory = Path.Combine(root, Path.GetFileNameWithoutExtension(fixture));
-                Directory.CreateDirectory(directory);
-                File.Copy(fixture, Path.Combine(directory, UpdaterState.StoreFileName), true);
-                var store = new UpdaterStateStore(directory);
-                var state = store.Load();
-                var resumable = state.LogicallyNeedsRecovery
-                    && (string.IsNullOrWhiteSpace(state.pendingUpdateVersion)
-                        || string.Equals(state.pendingUpdateVersion, UpdateVersionPolicy.Format(announced), StringComparison.Ordinal));
-                Check("V18-" + state.state, resumable,
-                    state.state + " uit 0.7.1.2 hoort bij 0.8.0.0 en is hervatbaar");
+                var label = Path.GetFileNameWithoutExtension(fixture);
+                var mismatched = new UpdaterStateStore(Simulate(fixture, root, label + "-mismatch", null)).Load();
+                Check("V18-" + label + "-0.8.0.0", IsResumable(mismatched, "0.8.0.0"),
+                    mismatched.state + " uit 0.7.1.2 hoort bij 0.8.0.0 en is hervatbaar");
+                Check("V18-" + label + "-verschil", !IsResumable(mismatched, "0.7.2.0"),
+                    "dezelfde " + mismatched.state + " wordt niet als 0.7.2.0 geïnstalleerd (versie moet kloppen)");
 
-                // De updaterreeks: INSTALLING -> SUCCESS, precies zoals Program.cs die schrijft.
-                store.TryUpdate(current =>
+                var matching = new UpdaterStateStore(Simulate(fixture, root, label + "-match", "0.7.2.0")).Load();
+                Check("V18b-" + label, IsResumable(matching, "0.7.2.0"),
+                    matching.state + " met een 0.7.2.0-staging is hervatbaar");
+
+                foreach (var announcedVersion in new[] { "0.8.0.0", "0.7.2.0" })
                 {
-                    current.state = "INSTALLING";
-                    current.pendingUpdateVersion = UpdateVersionPolicy.Format(announced);
-                    current.pendingStagedDll = state.pendingStagedDll;
-                    current.pendingSimHubPid = state.pendingSimHubPid;
-                });
-                store.TryUpdate(current =>
-                {
-                    current.state = "SUCCESS";
-                    current.pendingUpdateVersion = null;
-                    current.pendingStagedDll = null;
-                    current.pendingSimHubPid = null;
-                    current.lastUpdateResult = "success";
-                    current.lastUpdateErrorCode = null;
-                    current.lastUpdateUtc = DateTime.UtcNow.ToString("O");
-                });
-                var finished = new UpdaterStateStore(directory).Load();
-                Check("V19-" + state.state, finished.state == "SUCCESS" && finished.pendingUpdateVersion == null,
-                    "één installatie vanaf " + state.state + " eindigt in SUCCESS zonder openstaande update");
-                Check("V20-" + state.state, !UpdateVersionPolicy.IsNewer(announced, announced),
-                    "na de update is dezelfde 0.8.0.0 geen nieuwe update meer (geen lus)");
+                    var directory = Simulate(fixture, root, label + "-run-" + announcedVersion, announcedVersion);
+                    var store = new UpdaterStateStore(directory);
+                    // De updaterreeks: INSTALLING -> SUCCESS, precies zoals Program.cs die schrijft.
+                    store.TryUpdate(current =>
+                    {
+                        // Zelfde velden als SetInstallingState in Program.cs; de staging
+                        // blijft staan zoals hij was.
+                        current.state = "INSTALLING";
+                        current.pendingUpdateVersion = announcedVersion;
+                    });
+                    store.TryUpdate(current =>
+                    {
+                        current.state = "SUCCESS";
+                        current.pendingUpdateVersion = null;
+                        current.pendingStagedDll = null;
+                        current.pendingSimHubPid = null;
+                        current.lastUpdateResult = "success";
+                        current.lastUpdateErrorCode = null;
+                        current.lastUpdateUtc = DateTime.UtcNow.ToString("O");
+                    });
+                    var finished = new UpdaterStateStore(directory).Load();
+                    Check("V19-" + label + "-" + announcedVersion,
+                        finished.state == "SUCCESS" && finished.pendingUpdateVersion == null,
+                        "één installatie vanaf " + matching.state + " naar " + announcedVersion + " eindigt in SUCCESS");
+                    var finishedVersion = new Version(announcedVersion);
+                    Check("V20-" + label + "-" + announcedVersion, !UpdateVersionPolicy.IsNewer(finishedVersion, finishedVersion),
+                        "na de update is " + announcedVersion + " geen nieuwe update meer (geen lus)");
+                }
             }
         }
         finally

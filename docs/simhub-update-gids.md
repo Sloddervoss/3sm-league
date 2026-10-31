@@ -54,6 +54,12 @@ meatball-vlag, een gevulde achterstand tot de leider, remdruk per wiel, stuurhoe
 langs-/dwarsversnelling. Wie een oudere plugin heeft, krijgt de update vanzelf aangeboden; een
 handmatige installatie is alleen nodig als UAC of lokale beveiligingssoftware de helper blokkeert.
 
+**Volgende release: `0.7.2.0`.** Die versie staat al in `AssemblyVersion` op deze branch
+en wordt met `release.sh --patch` uitgegeven (niet met de standaardbump, die maakt er
+`0.8.0.0` van). Het updatepad is ongewijzigd: één update vanaf `0.7.1.2` is genoeg, ook
+wanneer een oude installatie in `STAGED` of `WAITING_FOR_RESTART` staat. Zie
+`docs/operations/2026-10-31-simhub-meetcontract-0.7.2.md`.
+
 De eerste installatie van een versie van vóór `0.3.0.0` naar de updater-bootstrap blijft
 eenmalig handmatig: sluit SimHub, hernoem een versioned download zoals
 `3SM.EnduranceConnector-0.3.0.0.dll` eerst naar exact `3SM.EnduranceConnector.dll`, en plaats

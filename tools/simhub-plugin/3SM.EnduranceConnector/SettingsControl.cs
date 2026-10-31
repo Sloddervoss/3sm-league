@@ -142,7 +142,7 @@ namespace ThreeSM.EnduranceConnector
             optionsStack.Children.Add(extended);
             var tyres = UiKit.Toggle("Bandenmeting meesturen", _plugin.Settings != null && _plugin.Settings.TyreTelemetryEnabled, v => _plugin.UpdateSettings(s => s.TyreTelemetryEnabled = v));
             optionsStack.Children.Add(tyres);
-            // 0.8.0: standaard aan (ontbrekende sleutel = aan). Alleen uitzetten als een
+            // 0.7.2.0: standaard aan (ontbrekende sleutel = aan). Alleen uitzetten als een
             // machine bewust geen eigen iRacing-lezer naast SimHub wil.
             var irSdk = UiKit.Toggle("iRacing-kanalen rechtstreeks lezen (wielsnelheid, remdruk, stuurhoek)", _plugin.Settings != null && _plugin.Settings.IrSdkDirectRead, v => _plugin.UpdateSettings(s => s.IrSdkDirectReadEnabled = v));
             optionsStack.Children.Add(irSdk);

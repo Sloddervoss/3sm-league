@@ -1,4 +1,4 @@
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 
 namespace ThreeSM.EnduranceConnector
 {
@@ -31,7 +31,7 @@ namespace ThreeSM.EnduranceConnector
         // EmitDefaultValue=false: no tyres block at all when there is nothing to report, so a
         // 0.6.1.1 payload stays byte-identical. protocolVersion stays 3 (framing unchanged).
         [DataMember(Name = "tyres", Order = 15, EmitDefaultValue = false)] public V3Tyres Tyres { get; set; }
-        // 0.8.0 additive: optioneel herkomstblok met de twee versies die tot dusverre
+        // 0.7.2.0 additive: optioneel herkomstblok met de twee versies die tot dusverre
         // door elkaar liepen. EmitDefaultValue=false: is er niets te melden, dan staat
         // de sleutel niet in de payload en blijft een 0.7.x-frame byte-identiek.
         [DataMember(Name = "source", Order = 16, EmitDefaultValue = false)] public V3Source Source { get; set; }
@@ -155,7 +155,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "rearLeft")] public V3Tyre RearLeft { get; set; }
         [DataMember(Name = "rearRight")] public V3Tyre RearRight { get; set; }
 
-        // 0.8.0 additief: kanalen die SimHub's GameRawData niet doorgeeft en die de plugin
+        // 0.7.2.0 additief: kanalen die SimHub's GameRawData niet doorgeeft en die de plugin
         // rechtstreeks uit de iRacing-shared-memory leest (IrSdkMemoryReader). Alles nullable
         // en EmitDefaultValue=false: zonder lezer (of zonder rijdende sim) verandert de
         // payload byte-voor-byte niet. Eenheid staat in de naam (Bar/Deg/G), zodat de
@@ -233,7 +233,7 @@ namespace ThreeSM.EnduranceConnector
         // 0.5.0 additive: rijke vlag-presentatie. EmitDefaultValue=false zodat oude
         // receivers (en het bestaande schema) onveranderd blijven als de module uit staat.
         //
-        // 0.8: deze drie velden worden NIET meer gevuld. Ze hoorden bij de verwijderde
+        // 0.7.2.0: deze drie velden worden NIET meer gevuld. Ze hoorden bij de verwijderde
         // presentatielaag (kleur/layout/ernst van een flagbox) en die is er niet meer.
         // De leden blijven in het contract staan zodat een server of oudere client die
         // ze kent niets hoeft te wijzigen; ze vallen door EmitDefaultValue simpelweg weg.

@@ -1,6 +1,6 @@
-# Research-recorder (plugin 0.7.0 — **verwijderd in 0.8**)
+﻿# Research-recorder (plugin 0.7.0 — **verwijderd in 0.7.2.0**)
 
-> **Status sinds 0.8: deze recorder bestaat niet meer.** De code (`Research*.cs`), het
+> **Status sinds 0.7.2.0: deze recorder bestaat niet meer.** De code (`Research*.cs`), het
 > SimHub-paneel, de instellingen `ResearchEnabled`/`ResearchDirectory` en het testproject
 > `3SM.EnduranceConnector.ResearchTests` zijn verwijderd. Dit document blijft staan als
 > beschrijving van wat er tot 0.7.1.2 was en hoe een bestaand JSONL-bestand eruitziet.

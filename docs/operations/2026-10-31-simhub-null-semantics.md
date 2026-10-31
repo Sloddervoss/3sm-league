@@ -1,4 +1,4 @@
-# Nul-, onbekend- en sentinel-semantiek in de V3-payload (plugin 0.8)
+﻿# Nul-, onbekend- en sentinel-semantiek in de V3-payload (plugin 0.7.2.0)
 
 Dit document beschrijft **welke velden null kunnen zijn** in de telemetry die de 3SM
 SimHub-connector verstuurt, en **wat de server daarmee moet doen**. Het is de
