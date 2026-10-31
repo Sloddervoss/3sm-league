@@ -3,16 +3,27 @@ import {
   adviceLine,
   bindingSentence,
   causeLine,
+  combinatie,
+  eigenRegel,
+  gedeeldRegel,
   gradeLabel,
   gradeWord,
+  hellingenUiteen,
   lapsAdvice,
   lapsLabel,
   limitLabel,
   marginAria,
   rangeSuffix,
+  redenIsWaarschuwing,
+  redenRegel,
+  staleRegel,
+  stapRegel,
   stayOutLine,
+  uiteenloopRegel,
+  voorlopigRegel,
   whatToDo,
 } from "./tyreCopy";
+import { parseTyreEstimateV2, type TyreEstimateV2 } from "./strategy/tyreEstimateV2";
 import type { TyreEstimate } from "./strategy/tyreGrade";
 
 /**
@@ -194,5 +205,256 @@ describe("de ene grens in woorden", () => {
     expect(lapsLabel(null)).toBe("onbekend");
     expect(rangeSuffix({ low: 11, high: 14 })).toBe("(11–14)");
     expect(marginAria(4)).toBe("plus of min 4 procent");
+  });
+});
+
+/**
+ * De eerlijke bronregels van 31-10: wat de pool vindt naast wat je zelf meet,
+ * een teller die de stints telt die er echt zijn, en geen belofte die de server
+ * niet waarmaakt.
+ *
+ * De oude copy zei bij een eigen meting niets over de pool (ook als het getal
+ * geblend was), noemde zestien stints "nog geen tweede meting", en beloofde dat
+ * elke stop de band smaller maakt. Deze tests leggen de drie correcties vast.
+ */
+describe("gedeeld en eigen naast elkaar", () => {
+  /** Een graad B met de contractvelden van 31-10; `basis` mag per test afwijken. */
+  const v2 = (basis: Record<string, unknown>, extra: Record<string, unknown> = {}): TyreEstimateV2 =>
+    parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      stints: 2,
+      wear_per_lap: 1.9,
+      range_laps: { low: 9, high: 13 },
+      provenance: "estimated",
+      voorlopig: true,
+      ...extra,
+      basis: {
+        car_key: "bmw_m4_gt3",
+        track_key: "spa",
+        rondes_in_basis: 18,
+        ...basis,
+      },
+    })!;
+
+  const GEDEELD = { rate: 2.14, rondes: 41, stints: 7, accounts: 3 };
+  const EIGEN = { rate: 1.9, rondes: 18, stints: 2 };
+
+  it("noemt bij beide bronnen de combinatie, het tempo en de meetbasis", () => {
+    const estimate = v2({ bron: "eigen", gedeeld: GEDEELD, eigen: EIGEN });
+
+    expect(gedeeldRegel(estimate)).toBe(
+      "Gedeeld voor bmw_m4_gt3 op spa: 2,1% per ronde, uit 41 rondes van 3 rijders.",
+    );
+    expect(eigenRegel(estimate)).toBe("Eigen voor bmw_m4_gt3 op spa: 1,9% per ronde, uit 2 stints en 18 rondes.");
+  });
+
+  it("leest de contractvelden, en niets als ze ontbreken", () => {
+    const met = v2({ bron: "eigen", gedeeld: GEDEELD, eigen: EIGEN, redenen: ["thin_pool", "short_basis"] });
+    expect(met.basis.gedeeld).toEqual({ rate: 2.14, rondes: 41, stints: 7, accounts: 3 });
+    expect(met.basis.eigen).toEqual({ rate: 1.9, rondes: 18, stints: 2 });
+    // Gesorteerd en gededupliceerd, ook als de server dat niet deed.
+    expect(met.basis.redenen).toEqual(["thin_pool", "short_basis"]);
+
+    const zonder = v2({ bron: "eigen" });
+    expect(zonder.basis.gedeeld).toBeNull();
+    expect(zonder.basis.eigen).toBeNull();
+    expect(zonder.basis.redenen).toEqual([]);
+    expect(zonder.basis.actualiteit).toBeNull();
+    // En dus valt de UI terug op de oude weergave: geen regel, geen breuk.
+    expect(gedeeldRegel(zonder)).toBeNull();
+    expect(eigenRegel(zonder)).toBeNull();
+  });
+
+  it("negeert onbekende codes en een lege huls", () => {
+    const estimate = v2({ redenen: ["iets_nieuws", "zero_slope", "zero_slope"], gedeeld: {} });
+    expect(estimate.basis.redenen).toEqual(["zero_slope"]);
+    expect(estimate.basis.gedeeld).toBeNull();
+    expect(gedeeldRegel(estimate)).toBeNull();
+  });
+
+  it("zegt bij nul eigen stints dat er nog niets eigens is", () => {
+    const estimate = v2({ gedeeld: GEDEELD, eigen: { rate: null, rondes: 0, stints: 0 } });
+    expect(eigenRegel(estimate)).toBe("Eigen voor bmw_m4_gt3 op spa: nog geen eigen meting op deze combinatie.");
+    expect(stapRegel(estimate)).toBeNull();
+  });
+
+  it("laat de combinatie weg als de server hem niet stuurde", () => {
+    expect(combinatie("bmw_m4_gt3", "spa")).toBe("bmw_m4_gt3 op spa");
+    expect(combinatie("bmw_m4_gt3", null)).toBe("bmw_m4_gt3");
+    expect(combinatie(null, null)).toBeNull();
+
+    const estimate = v2({ car_key: null, track_key: null, eigen: EIGEN });
+    expect(eigenRegel(estimate)).toBe("Eigen: 1,9% per ronde, uit 2 stints en 18 rondes.");
+  });
+});
+
+describe("de teller onder het bereik", () => {
+  const metEigen = (stints: number, gedeeld: number | null = 2.0): TyreEstimateV2 =>
+    parseTyreEstimateV2({
+      grade: "C",
+      usable: true,
+      stints,
+      wear_per_lap: 1.9,
+      range_laps: { low: 9, high: 13 },
+      voorlopig: true,
+      basis: {
+        car_key: "bmw_m4_gt3",
+        track_key: "spa",
+        eigen: { rate: 1.9, rondes: stints * 9, stints },
+        gedeeld: gedeeld == null ? null : { rate: gedeeld, rondes: 41, stints: 7, accounts: 3 },
+      },
+    })!;
+
+  it("telt de eigen stints en noemt de eerstvolgende graad", () => {
+    expect(stapRegel(metEigen(1))).toBe(
+      "Nog 1 stint op deze combinatie tot graad B; elke stint met hetzelfde beeld maakt de band smaller.",
+    );
+    expect(stapRegel(metEigen(2))).toBe(
+      "Nog 1 stint op deze combinatie tot graad A; elke stint met hetzelfde beeld maakt de band smaller.",
+    );
+    expect(stapRegel(metEigen(3))).toBe(
+      "Graad A: op deze combinatie is de band zo smal als deze metingen toelaten; meer stints veranderen de graad niet.",
+    );
+  });
+
+  it("belooft geen smaller wordende band als de hellingen uiteenlopen", () => {
+    // Precies de fout van 31-10: de server verbreedt de band hier juist.
+    expect(hellingenUiteen(2.8, 1.1)).toBe(true);
+    expect(hellingenUiteen(1.9, 2.0)).toBe(false);
+    expect(hellingenUiteen(null, 2.0)).toBe(false);
+
+    const estimate = metEigen(2, 1.1);
+    expect(stapRegel(estimate)).toBe("Nog 1 stint op deze combinatie tot graad A.");
+    expect(uiteenloopRegel(estimate)).toBe(
+      "Je eigen slijtage (1,9% per ronde) en de gedeelde (1,1% per ronde) lopen uiteen: " +
+        "een volgende stint kan de band breder maken in plaats van smaller.",
+    );
+
+    // Zonder uiteenlopende hellingen is er geen waarschuwing.
+    expect(uiteenloopRegel(metEigen(2, 2.0))).toBeNull();
+  });
+
+  it("zwijgt bij een niet-verse stand en bij een onmeetbare helling", () => {
+    const stale = parseTyreEstimateV2({
+      grade: "C",
+      usable: false,
+      stints: 16,
+      range_laps: null,
+      basis: {
+        eigen: { rate: 1.9, rondes: 140, stints: 16 },
+        actualiteit: { wear_ouderheid_min: 47, sessie_match: true, set_match: true, vers: false },
+        redenen: ["stale_state"],
+      },
+    })!;
+    expect(stapRegel(stale)).toBeNull();
+
+    const vlak = parseTyreEstimateV2({
+      grade: "C",
+      usable: true,
+      stints: 2,
+      basis: { eigen: { rate: 0.01, rondes: 18, stints: 2 }, redenen: ["zero_slope"] },
+    })!;
+    expect(stapRegel(vlak)).toBeNull();
+  });
+
+  it("vervangt 'nog geen tweede meting' door het echte aantal stints", () => {
+    // Het geval uit de review: zestien stints en toch "nog geen tweede meting".
+    const zestien = parseTyreEstimateV2({
+      grade: "B",
+      usable: true,
+      stints: 16,
+      range_laps: { low: 9, high: 13 },
+      voorlopig: true,
+    })!;
+    const regel = voorlopigRegel(zestien)!;
+    expect(regel).toBe(
+      "Dit bereik is voorlopig: het rust op 16 stints. Een nieuwe stint met hetzelfde beeld maakt de band smaller.",
+    );
+    expect(regel).not.toMatch(/tweede meting/i);
+    expect(regel).not.toMatch(/elke stop/i);
+
+    expect(voorlopigRegel(parseTyreEstimateV2({ grade: "B", stints: 1 })!)).toContain("Eén stint is nog geen band");
+    expect(voorlopigRegel(parseTyreEstimateV2({ grade: "B", stints: 0 })!)).toBe(
+      "Dit bereik is voorlopig: er is nog te weinig gemeten om de band smaller te maken.",
+    );
+  });
+});
+
+describe("de niet-verse bandmeting", () => {
+  const stale = (actualiteit: Record<string, unknown> | null, redenen: string[] = ["stale_state"]): TyreEstimateV2 =>
+    parseTyreEstimateV2({
+      grade: "C",
+      usable: false,
+      stints: 16,
+      range_laps: null,
+      basis: { actualiteit, redenen },
+    })!;
+
+  it("zegt 'geen actuele bandmeting' met de leeftijd in minuten", () => {
+    expect(staleRegel(stale({ wear_ouderheid_min: 47, sessie_match: true, set_match: true, vers: false }))).toBe(
+      "Geen actuele bandmeting: de laatste meting is 47 minuten oud. Daarom geen rondes tot de grens.",
+    );
+    expect(staleRegel(stale({ wear_ouderheid_min: 1, sessie_match: true, set_match: true, vers: false }))).toContain(
+      "de laatste meting is 1 minuut oud",
+    );
+    expect(staleRegel(stale({ wear_ouderheid_min: 0, sessie_match: true, set_match: true, vers: false }))).toContain(
+      "de laatste meting is minder dan een minuut oud",
+    );
+  });
+
+  it("zegt waarom een jonge meting toch niet vers is", () => {
+    expect(staleRegel(stale({ wear_ouderheid_min: 3, sessie_match: true, set_match: false, vers: false }))).toBe(
+      "Geen actuele bandmeting: de laatste meting hoort bij een andere set. Daarom geen rondes tot de grens.",
+    );
+    expect(staleRegel(stale({ wear_ouderheid_min: 3, sessie_match: false, set_match: true, vers: false }))).toContain(
+      "komt uit een andere sessie",
+    );
+  });
+
+  it("weegt een ontbrekend vers-veld zelf met de grens uit het contract", () => {
+    const vers = stale({ wear_ouderheid_min: 4, sessie_match: true, set_match: true }, []);
+    expect(vers.basis.actualiteit?.vers).toBe(true);
+    expect(staleRegel(vers)).toBeNull();
+
+    const oud = stale({ wear_ouderheid_min: 47, sessie_match: true, set_match: true });
+    expect(oud.basis.actualiteit?.vers).toBe(false);
+    expect(staleRegel(oud)).not.toBeNull();
+
+    // Een verse stand met een vergeten `vers`-veld telt als vers, ook als de
+    // samenvatting nog "stale_state" zegt: `vers` is de scherpste uitspraak.
+    const tegenstrijdig = stale({ wear_ouderheid_min: 4, sessie_match: true, set_match: true });
+    expect(staleRegel(tegenstrijdig)).toBeNull();
+  });
+
+  it("zegt niets over actualiteit zonder bewijs", () => {
+    expect(staleRegel(stale(null, []))).toBeNull();
+  });
+});
+
+describe("één regel per reden-code", () => {
+  it("vertaalt elke code naar één zin, zonder Engels of veldnamen", () => {
+    expect(redenRegel("short_basis")).toContain("Minder dan 8 rondes eigen basis");
+    expect(redenRegel("inferred_boundary")).toContain("sprong in de wear-stand");
+    expect(redenRegel("context_mismatch")).toContain("andere auto of een ander circuit");
+    expect(redenRegel("thin_pool")).toBe(
+      "Nog te weinig rijders op deze combinatie: er zijn minstens twee rijders nodig voor een gedeelde verwachting.",
+    );
+    expect(redenRegel("zero_slope")).toContain("Geen meetbare slijtage");
+
+    for (const code of ["short_basis", "inferred_boundary", "context_mismatch", "thin_pool", "zero_slope"] as const) {
+      const regel = redenRegel(code)!;
+      expect(regel).not.toMatch(/basis\.|redenen|prior|thin_pool|zero_slope|shared/i);
+    }
+    // De niet-verse stand heeft zijn eigen regel met de leeftijd.
+    expect(redenRegel("stale_state")).toBeNull();
+  });
+
+  it("weet welke codes een waarschuwing zijn en welke een voorbehoud", () => {
+    expect(redenIsWaarschuwing("thin_pool")).toBe(true);
+    expect(redenIsWaarschuwing("context_mismatch")).toBe(true);
+    expect(redenIsWaarschuwing("zero_slope")).toBe(true);
+    expect(redenIsWaarschuwing("short_basis")).toBe(false);
+    expect(redenIsWaarschuwing("inferred_boundary")).toBe(false);
   });
 });

@@ -1,7 +1,19 @@
 import { Disc3, Layers, TriangleAlert } from "lucide-react";
 import { formatLapsRange, formatRate } from "./strategy/tyreGrade";
-import { gradeWord, rangeAria } from "./tyreCopy";
 import {
+  eigenRegel,
+  gedeeldRegel,
+  gradeWord,
+  rangeAria,
+  redenIsWaarschuwing,
+  redenRegel,
+  staleRegel,
+  stapRegel,
+  uiteenloopRegel,
+  voorlopigRegel,
+} from "./tyreCopy";
+import {
+  heeftBronDetails,
   priorUitleg,
   provenanceLabel,
   type TyreCoverageRow,
@@ -157,6 +169,9 @@ function BereikRegel({
   ]
     .filter((deel): deel is string => deel != null)
     .join(" · ");
+  // De regel onder een voorlopig bereik is een teller, geen belofte: hoeveel
+  // stints er echt liggen en wanneer de band smaller wordt.
+  const voorlopigTekst = voorlopigRegel(estimate);
 
   return (
     <div className="space-y-2">
@@ -186,9 +201,13 @@ function BereikRegel({
             </p>
           )}
           {/* Eén regel in gewone taal onder het bereik: waar komt dit getal
-              vandaan? Alleen als er ook echt een bereik staat — dezelfde gate
-              als de voorlopig-regel: een uitleg over een bereik dat er niet is
-              (of dat niet bruikbaar is als advies) legt niets uit. */}
+              vandaan? De nieuwe bronregels (gedeeld én eigen) staan er altijd
+              als de server ze stuurde — ook zonder bruikbaar bereik, want een
+              niet-verse meting moet je kunnen uitleggen. De oudere priorregel
+              valt stil zodra `basis.gedeeld` het verhaal overneemt, en houdt
+              dezelfde gate als voorheen: geen uitleg over een bereik dat er
+              niet staat. */}
+          <BronRegels estimate={estimate} />
           {toonBereik && <PriorRegel estimate={estimate} />}
           {bereik != null && !estimate.usable && (
             <p className="mt-0.5 text-[11px] text-gray-500" data-pitwall-tyre-range-raw={formatLapsRange(bereik) ?? undefined}>
@@ -231,12 +250,15 @@ function BereikRegel({
 
       <BasisRegel estimate={estimate} />
 
-      {estimate.voorlopig && toonBereik && (
+      {/* Het voorlopig-verhaal: bij een antwoord met de nieuwe velden doet de
+          teller in `BronRegels` dit werk (en telt hij de stints die er echt
+          zijn). Zonder die velden blijft deze regel staan, maar zonder de twee
+          onwaarheden van de oude tekst: "nog geen tweede meting" bij zestien
+          stints, en "elke stop maakt de band smaller". */}
+      {estimate.voorlopig && toonBereik && !heeftBronDetails(estimate) && voorlopigTekst != null && (
         <p className="flex items-start gap-1.5 text-[11px] leading-4 text-amber-200/90" data-pitwall-tyre-provisional="true">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" aria-hidden />
-          <span>
-            Nog geen tweede meting: dit bereik is voorlopig. Elke stop die erbij komt, maakt de band smaller.
-          </span>
+          <span>{voorlopigTekst}</span>
         </p>
       )}
     </div>
@@ -279,6 +301,104 @@ function PriorRegel({ estimate }: { estimate: TyreEstimateV2 }) {
           <span>{waarschuwing}</span>
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Het eerlijke bronverhaal onder het bereik: twee regels, één teller.
+ *
+ * Waarom dit naast `PriorRegel` bestaat en niet erin: de oude regel keek naar
+ * `basis.bron` en zweeg bij "eigen". Dat was één fout met twee gezichten — de
+ * lezer zag een getal dat met de pool geblend was zonder dat te weten, en bij
+ * zestien stints stond er "nog geen tweede meting". De nieuwe velden maken het
+ * mogelijk beide te zeggen: wat de pool vindt (`gedeeld`) en wat je zelf meet
+ * (`eigen`), allebei met de combinatie erbij, plus een teller die de stints telt
+ * die er echt zijn.
+ *
+ * Wat hier met opzet niet staat: een badge per regel. Dit is uitleg, geen status
+ * — de graad en de herkomst hebben al hun eigen badge, en een derde woord naast
+ * hetzelfde getal is er één te veel. Wel een driehoekje bij de regels die een
+ * waarschuwing zijn (niet-vers, dunne pool, andere context, geen helling), want
+ * dat is dezelfde vorm als de rest van het paneel al gebruikt.
+ *
+ * Alles wat de server niet stuurde blijft weg. Ontbreken de velden helemaal, dan
+ * komt deze component niet in beeld en doet `PriorRegel` het oude werk — een oude
+ * RPC mag geen lege regels of verzonnen aantallen opleveren.
+ */
+function BronRegels({ estimate }: { estimate: TyreEstimateV2 }) {
+  const gedeeld = gedeeldRegel(estimate);
+  const eigen = eigenRegel(estimate);
+  // De niet-verse stand heeft zijn eigen regel met de leeftijd; daar hangt geen
+  // teller en geen vooruitblik aan, want de huidige band is onbekend.
+  const stale = staleRegel(estimate);
+  const stap = stale == null ? stapRegel(estimate) : null;
+  const uiteen = stale == null ? uiteenloopRegel(estimate) : null;
+  // `stale_state` valt af: `staleRegel` zegt het al, met meer informatie.
+  const redenen = estimate.basis.redenen
+    .filter((code) => code !== "stale_state")
+    .flatMap((code) => {
+      const tekst = redenRegel(code);
+      return tekst == null ? [] : [{ code, tekst }];
+    });
+
+  if (gedeeld == null && eigen == null && stale == null && stap == null && uiteen == null && redenen.length === 0) {
+    return null;
+  }
+
+  const minuten = estimate.basis.actualiteit?.wearOuderheidMin;
+
+  return (
+    <div className="mt-0.5 space-y-0.5" data-pitwall-tyre-bron="contract">
+      {gedeeld != null && (
+        <p className="text-[11px] leading-4 text-gray-400" data-pitwall-tyre-gedeeld="true">
+          {gedeeld}
+        </p>
+      )}
+      {eigen != null && (
+        <p className="text-[11px] leading-4 text-gray-400" data-pitwall-tyre-eigen="true">
+          {eigen}
+        </p>
+      )}
+      {stap != null && (
+        <p className="text-[11px] leading-4 text-gray-300" data-pitwall-tyre-stap="true">
+          {stap}
+        </p>
+      )}
+      {stale != null && (
+        <p
+          className="flex items-start gap-1.5 text-[11px] leading-4 text-amber-200/90"
+          data-pitwall-tyre-stale={minuten != null ? String(Math.round(minuten)) : "onbekend"}
+        >
+          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" aria-hidden />
+          <span>{stale}</span>
+        </p>
+      )}
+      {uiteen != null && (
+        <p
+          className="flex items-start gap-1.5 text-[11px] leading-4 text-amber-200/90"
+          data-pitwall-tyre-uiteenloop="true"
+        >
+          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" aria-hidden />
+          <span>{uiteen}</span>
+        </p>
+      )}
+      {redenen.map(({ code, tekst }) => (
+        <p
+          key={code}
+          className={
+            redenIsWaarschuwing(code)
+              ? "flex items-start gap-1.5 text-[11px] leading-4 text-amber-200/90"
+              : "text-[11px] leading-4 text-gray-400"
+          }
+          data-pitwall-tyre-reden={code}
+        >
+          {redenIsWaarschuwing(code) && (
+            <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0 text-amber-300" aria-hidden />
+          )}
+          <span>{tekst}</span>
+        </p>
+      ))}
     </div>
   );
 }

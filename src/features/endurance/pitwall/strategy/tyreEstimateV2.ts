@@ -71,6 +71,83 @@ export function provenanceLabel(provenance: TyreProvenance | null): string {
  */
 export type TyrePriorBron = "eigen" | "exact" | "auto" | "circuit" | "algemeen";
 
+/**
+ * De codes waarmee de server zegt waaróm een getal zwak is (`basis.redenen`).
+ * Ze staan hier als gesloten set, net als de oorzaken bij v1: de UI vertaalt ze
+ * naar precies één regel en verzint er zelf geen bij.
+ *
+ *   short_basis        minder dan 8 rondes eigen basis
+ *   inferred_boundary  setgrens uit een wear-sprong in plaats van de teller
+ *   context_mismatch   de basis komt uit een andere auto of baan
+ *   stale_state        de wear-stand is niet vers
+ *   thin_pool          minder dan twee accounts in de pool
+ *   zero_slope         helling nul of te klein om te meten
+ */
+export type TyreReden =
+  | "short_basis"
+  | "inferred_boundary"
+  | "context_mismatch"
+  | "stale_state"
+  | "thin_pool"
+  | "zero_slope";
+
+/**
+ * De volgorde waarin de redenen op het scherm komen. Het contract eist dat de
+ * server ze gesorteerd stuurt; wij sorteren ze nog eens, zodat een oude of
+ * eigenwijze server geen wisselende volgorde op het scherm zet. De zwaarste
+ * staan bovenaan: een niet-verse meting gaat vóór een dunne basis.
+ */
+export const TYRE_REDEN_VOLGORDE: TyreReden[] = [
+  "stale_state",
+  "thin_pool",
+  "context_mismatch",
+  "zero_slope",
+  "short_basis",
+  "inferred_boundary",
+];
+
+/**
+ * Hoe oud een wear-meting mag zijn voordat hij niet meer vers heet. De server
+ * rekent met dezelfde tien minuten (contract 31-10); hier staat de grens alleen
+ * zodat de UI een ontbrekend `vers`-veld zelf kan wegen in plaats van te doen
+ * alsof een oude meting actueel is.
+ */
+export const VERSE_METING_MAX_MIN = 10;
+
+/** De actuele stand van de wear-meting waarop dit getal rust (`basis.actualiteit`). */
+export interface TyreActualiteit {
+  /** Minuten sinds de nieuwste wear-meting van deze set; null als de server zweeg. */
+  wearOuderheidMin: number | null;
+  /** Komt die meting uit dezelfde sessie als het laatste frame? */
+  sessieMatch: boolean | null;
+  /** Hoort die meting bij de set die nu onder de auto zit? */
+  setMatch: boolean | null;
+  /**
+   * `wearOuderheidMin <= 10` én dezelfde sessie én dezelfde set. Ontbreekt het
+   * veld maar zijn de drie ingredienten er wel, dan wegen we hem zelf met
+   * dezelfde regel — een ontbrekend veld mag geen oude meting actueel maken.
+   */
+  vers: boolean | null;
+}
+
+/** De gedeelde verwachting uit de pool, zonder het eigen apparaat (`basis.gedeeld`). */
+export interface TyreGedeeld {
+  /** Helling in procentpunten per ronde; null als de pool leeg is. */
+  rate: number | null;
+  /** Totale meetbasis in de pool, in rondes. */
+  rondes: number | null;
+  stints: number | null;
+  /** Aantal verschillende eigenaren; nooit namen of id's. */
+  accounts: number | null;
+}
+
+/** De eigen meting op precies deze auto en baan (`basis.eigen`). */
+export interface TyreEigen {
+  rate: number | null;
+  rondes: number | null;
+  stints: number | null;
+}
+
 export interface TyreBasis {
   carKey: string | null;
   trackKey: string | null;
@@ -78,6 +155,16 @@ export interface TyreBasis {
   rondesInBasis: number | null;
   /** Waar de voorkennis vandaan komt (`basis.bron`), of null als de server zweeg. */
   bron: TyrePriorBron | null;
+  /**
+   * De nieuwe contractvelden van 31-10. Ze zijn `null` respectievelijk leeg
+   * zolang de RPC ze niet stuurt; de UI valt dan terug op de oude weergave en
+   * breekt niet op een server die nog niet is bijgewerkt.
+   */
+  actualiteit: TyreActualiteit | null;
+  gedeeld: TyreGedeeld | null;
+  eigen: TyreEigen | null;
+  /** De codes uit `basis.redenen`, gesorteerd en zonder onbekende tokens. */
+  redenen: TyreReden[];
   /**
    * De helling uit de voorkennis in procentpunten per ronde, positief = slijt.
    * Wordt bewaard zodat niemand hem opnieuw hoeft te lezen, maar staat niet als
@@ -229,6 +316,82 @@ function levelOf(value: unknown): string | null {
   return alsGetal == null ? null : String(alsGetal);
 }
 
+/** Een object uit de json, of null als het er niet is. Lijsten zijn geen object. */
+function record(value: unknown): Record<string, unknown> | null {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function bool(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+/**
+ * `basis.gedeeld`. null als de server het veld niet stuurt én als hij een lege
+ * huls stuurt (alle vier de velden null): dan is er niets gedeeld om te tonen en
+ * hoort er ook geen regel te staan.
+ */
+function gedeeldOf(value: unknown): TyreGedeeld | null {
+  const bron = record(value);
+  if (bron == null) return null;
+  const gedeeld: TyreGedeeld = {
+    rate: num(bron.rate),
+    rondes: num(bron.rondes),
+    stints: num(bron.stints),
+    accounts: num(bron.accounts),
+  };
+  const leeg =
+    gedeeld.rate == null && gedeeld.rondes == null && gedeeld.stints == null && gedeeld.accounts == null;
+  return leeg ? null : gedeeld;
+}
+
+/** `basis.eigen`. Nul stints is een waarde, geen ontbreken: zie `eigenOf`. */
+function eigenOf(value: unknown): TyreEigen | null {
+  const bron = record(value);
+  if (bron == null) return null;
+  const eigen: TyreEigen = { rate: num(bron.rate), rondes: num(bron.rondes), stints: num(bron.stints) };
+  const leeg = eigen.rate == null && eigen.rondes == null && eigen.stints == null;
+  return leeg ? null : eigen;
+}
+
+/**
+ * `basis.actualiteit`. `vers` komt van de server; ontbreekt het maar zijn de
+ * drie ingredienten er wel, dan passen we de regel uit het contract zelf toe
+ * (`<= 10 min` én dezelfde sessie én dezelfde set). Anders blijft `vers` null en
+ * zegt de UI niets over actualiteit in plaats van iets te beweren.
+ */
+function actualiteitOf(value: unknown): TyreActualiteit | null {
+  const bron = record(value);
+  if (bron == null) return null;
+  const wearOuderheidMin = num(bron.wear_ouderheid_min);
+  const sessieMatch = bool(bron.sessie_match);
+  const setMatch = bool(bron.set_match);
+  const versRuw = bool(bron.vers);
+  const vers =
+    versRuw ??
+    (wearOuderheidMin != null && sessieMatch != null && setMatch != null
+      ? wearOuderheidMin <= VERSE_METING_MAX_MIN && sessieMatch && setMatch
+      : null);
+  const actualiteit: TyreActualiteit = { wearOuderheidMin, sessieMatch, setMatch, vers };
+  const leeg = vers == null && wearOuderheidMin == null && sessieMatch == null && setMatch == null;
+  return leeg ? null : actualiteit;
+}
+
+/**
+ * `basis.redenen`: onbekende tokens vallen weg, dubbele ook, en de uitkomst
+ * staat altijd in `TYRE_REDEN_VOLGORDE`. Een reden die we niet kennen vertalen
+ * we niet — een verzonnen uitleg is erger dan een ontbrekende.
+ */
+function redenenOf(value: unknown): TyreReden[] {
+  if (!Array.isArray(value)) return [];
+  const gezet = new Set<string>();
+  for (const item of value) {
+    if (typeof item === "string") gezet.add(item.trim().toLowerCase());
+  }
+  return TYRE_REDEN_VOLGORDE.filter((code) => gezet.has(code));
+}
+
 /** `{low, high}` of `[low, high]`; altijd naar buiten afgerond, nooit negatief. */
 function rangeOf(value: unknown): LapRange | null {
   const bron = Array.isArray(value) ? { low: value[0], high: value[1] } : value;
@@ -264,6 +427,10 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
       trackTempC: num(get(basisRuw, "track_temp_c")),
       rondesInBasis: num(get(basisRuw, "rondes_in_basis")),
       bron: priorBronOf(get(basisRuw, "bron")),
+      actualiteit: actualiteitOf(get(basisRuw, "actualiteit")),
+      gedeeld: gedeeldOf(get(basisRuw, "gedeeld")),
+      eigen: eigenOf(get(basisRuw, "eigen")),
+      redenen: redenenOf(get(basisRuw, "redenen")),
       priorRate: num(get(basisRuw, "prior_rate")),
       priorN: num(get(basisRuw, "prior_n")),
       priorRondes: num(get(basisRuw, "prior_rondes")),
@@ -281,6 +448,35 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
 }
 
 /* ──────────────── waar het getal vandaan komt, in gewone taal ──────────────── */
+
+/**
+ * Draagt dit antwoord de contractvelden van 31-10 (`actualiteit`, `gedeeld`,
+ * `eigen`, `redenen`)?
+ *
+ * Zo ja, dan vertelt de UI het nieuwe verhaal: twee regels (gedeeld én eigen) in
+ * plaats van één priorregel, en een teller in plaats van "nog geen tweede
+ * meting". Zo nee, dan blijft alles zoals het was — een oude RPC mag de pagina
+ * niet laten breken en al helemaal niet laten liegen.
+ */
+export function heeftBronDetails(estimate: TyreEstimateV2): boolean {
+  const { actualiteit, gedeeld, eigen, redenen } = estimate.basis;
+  return actualiteit != null || gedeeld != null || eigen != null || redenen.length > 0;
+}
+
+/**
+ * Is de wear-stand waarop dit getal rust niet vers?
+ *
+ * `actualiteit.vers` is de scherpste uitspraak die de server doet (hij komt uit
+ * de drie ingredienten zelf) en wint daarom van de samenvatting in `redenen`.
+ * Ontbreekt `vers`, dan telt `stale_state`. Zo kan een vergeten code een oude
+ * meting niet actueel maken, en kan een vergeten `vers` de klacht niet wissen.
+ * Zonder enig bewijs zeggen we niets: geen `vers` en geen code is niet "stale".
+ */
+export function bandmetingStale(estimate: TyreEstimateV2): boolean {
+  const vers = estimate.basis.actualiteit?.vers;
+  if (vers != null) return vers === false;
+  return estimate.basis.redenen.includes("stale_state");
+}
 
 /**
  * Onder hoeveel rondes een voorkennis een grove schatting is. Drie is de grens
@@ -389,8 +585,14 @@ function aantallenDetail(estimate: TyreEstimateV2): string | null {
  * anders dan "gebaseerd op twee rondes".
  */
 export function priorUitleg(estimate: TyreEstimateV2): TyrePriorUitleg {
-  const { bron, priorN, priorRondes } = estimate.basis;
-  if (bron == null || bron === "eigen") return { regel: null, waarschuwing: null, detail: null };
+  const { bron, priorN, priorRondes, gedeeld } = estimate.basis;
+  // Zegt de nieuwe contractvorm al wat er gedeeld is (`basis.gedeeld`), dan is
+  // deze oudere zin dubbelop: `BronRegels` noemt de pool dan met dezelfde
+  // aantallen en zonder "nog geen eigen meting" te beweren naast een eigen
+  // meting. Deze regel valt dus stil zodra het nieuwe verhaal het overneemt.
+  if (bron == null || bron === "eigen" || gedeeld != null) {
+    return { regel: null, waarschuwing: null, detail: null };
+  }
 
   // De echte rondes als de server ze stuurt; `prior_n` is de terugval. De
   // migratie stuurt 0 als er geen pool is (coalesce), en nul rondes is geen
@@ -444,6 +646,10 @@ export function vanV1(estimate: TyreEstimate): TyreEstimateV2 {
       trackTempC: null,
       rondesInBasis: null,
       bron: null,
+      actualiteit: null,
+      gedeeld: null,
+      eigen: null,
+      redenen: [],
       priorRate: null,
       priorN: null,
       priorRondes: null,

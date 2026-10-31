@@ -23,6 +23,12 @@ import {
   type TyreEstimate,
   type TyreGrade,
 } from "./strategy/tyreGrade";
+import {
+  bandmetingStale,
+  VERSE_METING_MAX_MIN,
+  type TyreEstimateV2,
+  type TyreReden,
+} from "./strategy/tyreEstimateV2";
 
 /**
  * `A · sterk`: de letter alleen is nooit genoeg, het woord doet het werk.
@@ -284,4 +290,288 @@ export function rangeAria(range: { low: number; high: number } | null): string |
 /** `1,8` met komma; gebruikt in zinnen die geen eenheid zijn. */
 export function decimal(value: number | null): string | null {
   return formatDecimal(value);
+}
+
+/* ═══════════════ gedeeld én eigen: het eerlijke bandenverhaal ═══════════════ */
+
+/**
+ * De teksten van het nieuwe contract (31-10) staan hier en niet in het paneel.
+ *
+ * De aanleiding is één fout die de review van 31-10 vond: zodra `basis.bron`
+ * "eigen" was, zweeg het paneel over de pool — ook als de voorspelling met die
+ * pool was geblend. Een rijder zag dan een getal zonder te weten dat het deels
+ * van anderen kwam. Daarom staan hier nu twee regels naast elkaar, allebei met
+ * de combinatie erbij: wat andere rijders op deze auto en dit circuit meten, en
+ * wat je zelf meet. Ze zeggen hetzelfde soort ding in dezelfde vorm, zodat de
+ * lezer ze kan vergelijken in plaats van te raden welke de waarheid is.
+ *
+ * De tweede fout was een belofte die de server niet waarmaakt: "elke stop maakt
+ * de band smaller". Dat geldt alleen zolang eigen meting en prior elkaar niet
+ * tegenspreken; lopen ze uiteen, dan verbreedt de server de band juist. Daarom
+ * zegt `uiteenloopRegel` het omgekeerde als het nodig is, met de twee hellingen
+ * erbij — de lezer kan dan zelf zien waaróm.
+ */
+
+/**
+ * Vanaf welk relatief verschil twee hellingen "uiteenlopen".
+ *
+ * Dit is een weergavedrempel, geen modelgrens: de server rekent de breedte zelf
+ * uit de spreiding tussen stints. Een kwart verschil is hier de grens omdat de
+ * meetruis op één stint al snel die orde van grootte heeft — bij minder verschil
+ * durven we te zeggen dat een volgende stint de band smaller maakt, daarboven
+ * niet. Liever één keer te voorzichtig dan een belofte die de server niet houdt.
+ */
+export const BAND_VERBREDING_MARGE = 0.25;
+
+/** `2 stints` / `1 stint`; dezelfde enkelvoudregel als elders in dit bestand. */
+function stints(n: number): string {
+  const aantal = String(Math.round(n));
+  return aantal === "1" ? "1 stint" : `${aantal} stints`;
+}
+
+/** De combinatie in gewone taal: `bmw_m4_gt3 op spa`. Onbekend? Dan niets. */
+export function combinatie(carKey: string | null, trackKey: string | null): string | null {
+  if (carKey != null && trackKey != null) return `${carKey} op ${trackKey}`;
+  return carKey ?? trackKey ?? null;
+}
+
+/** `1 rijder` / `3 rijders`; nooit een naam, alleen een aantal. */
+function rijders(n: number): string {
+  const aantal = String(Math.round(n));
+  return aantal === "1" ? "1 rijder" : `${aantal} rijders`;
+}
+
+/** `1,9% per ronde`; zonder helling niets, want nul is geen meting. */
+function helling(rate: number | null): string | null {
+  const waarde = decimal(rate);
+  return waarde == null ? null : `${waarde}% per ronde`;
+}
+
+/**
+ * De gedeelde verwachting voor deze combinatie (`basis.gedeeld`).
+ *
+ * "Gedeeld voor bmw_m4_gt3 op spa: 2,1% per ronde, uit 41 rondes van 3 rijders."
+ *
+ * Alleen rondes en rijders zonder helling mag: een pool met een meetbasis maar
+ * zonder bruikbare helling is nog steeds iets dat de lezer hoort te weten (het
+ * zegt namelijk dat er wél gereden is). Een lege pool levert null op — dan is er
+ * niets gedeeld en dus ook geen regel.
+ */
+export function gedeeldRegel(estimate: TyreEstimateV2): string | null {
+  const { gedeeld, carKey, trackKey } = estimate.basis;
+  if (gedeeld == null) return null;
+
+  const delen: string[] = [];
+  const rate = helling(gedeeld.rate);
+  if (rate != null) delen.push(rate);
+
+  const basis =
+    gedeeld.rondes != null && gedeeld.rondes > 0
+      ? `uit ${rondes(Math.round(gedeeld.rondes))}`
+      : gedeeld.stints != null && gedeeld.stints > 0
+        ? `uit ${stints(gedeeld.stints)}`
+        : null;
+  if (basis != null) {
+    const wie =
+      gedeeld.accounts != null && gedeeld.accounts > 0
+        ? ` van ${rijders(gedeeld.accounts)}`
+        : " van andere rijders";
+    delen.push(`${basis}${wie}`);
+  }
+
+  if (delen.length === 0) return null;
+  const voor = combinatie(carKey, trackKey);
+  return `Gedeeld${voor == null ? "" : ` voor ${voor}`}: ${delen.join(", ")}.`;
+}
+
+/**
+ * De eigen meting op deze set (`basis.eigen`).
+ *
+ * "Eigen voor bmw_m4_gt3 op spa: 1,9% per ronde, uit 2 stints en 18 rondes."
+ *
+ * Nul eigen stints is een geldig antwoord en geen lege regel: dan zegt de regel
+ * dat er nog niets eigens is. Dat is precies de eerlijkheid die ontbrak — het
+ * getal rustte wél op de pool, maar zei dat niet.
+ */
+export function eigenRegel(estimate: TyreEstimateV2): string | null {
+  const { eigen, carKey, trackKey } = estimate.basis;
+  if (eigen == null) return null;
+
+  const voor = combinatie(carKey, trackKey);
+  const kop = `Eigen${voor == null ? "" : ` voor ${voor}`}`;
+
+  if (eigen.stints != null && eigen.stints <= 0) {
+    return `${kop}: nog geen eigen meting op deze combinatie.`;
+  }
+
+  const delen: string[] = [];
+  const rate = helling(eigen.rate);
+  if (rate != null) delen.push(rate);
+
+  const stuks: string[] = [];
+  if (eigen.stints != null && eigen.stints > 0) stuks.push(stints(eigen.stints));
+  if (eigen.rondes != null && eigen.rondes > 0) stuks.push(rondes(Math.round(eigen.rondes)));
+  if (stuks.length > 0) delen.push(`uit ${stuks.join(" en ")}`);
+
+  if (delen.length === 0) return null;
+  return `${kop}: ${delen.join(", ")}.`;
+}
+
+/** Lopen de eigen helling en de gedeelde ver genoeg uiteen om te waarschuwen? */
+export function hellingenUiteen(eigen: number | null, gedeeld: number | null): boolean {
+  if (eigen == null || gedeeld == null) return false;
+  const noemer = Math.max(Math.abs(eigen), Math.abs(gedeeld));
+  if (noemer <= 0) return false;
+  return Math.abs(eigen - gedeeld) / noemer > BAND_VERBREDING_MARGE;
+}
+
+/**
+ * De waarschuwing dat de band breder kan worden in plaats van smaller.
+ *
+ * Dit is de correctie op "elke stop maakt de band smaller". De server verbreedt
+ * de band zodra de eigen meting en de prior niet meer bij elkaar passen; dat
+ * gebeurt hier, en de regel zegt het met de twee hellingen erbij zodat de lezer
+ * ziet waaróm. Geen getallen verzinnen: alleen wat de server zelf stuurde.
+ */
+export function uiteenloopRegel(estimate: TyreEstimateV2): string | null {
+  const eigen = estimate.basis.eigen?.rate ?? null;
+  const gedeeld = estimate.basis.gedeeld?.rate ?? null;
+  if (!hellingenUiteen(eigen, gedeeld)) return null;
+  const eigenTekst = decimal(eigen);
+  const gedeeldTekst = decimal(gedeeld);
+  if (eigenTekst == null || gedeeldTekst == null) return null;
+  return (
+    `Je eigen slijtage (${eigenTekst}% per ronde) en de gedeelde (${gedeeldTekst}% per ronde) ` +
+    "lopen uiteen: een volgende stint kan de band breder maken in plaats van smaller."
+  );
+}
+
+/**
+ * De teller die "nog geen tweede meting" vervangt.
+ *
+ * `Nog 2 stints op deze combinatie tot graad B; elke stint met hetzelfde beeld
+ * maakt de band smaller.`
+ *
+ * De oude regel was onwaar zodra een apparaat zestien stints had: er wás allang
+ * een tweede meting, en de band werd niet smaller van elke stop. Deze teller
+ * telt de eigen stints die er écht zijn, noemt de eerstvolgende graad, en
+ * belooft alleen iets als de eigen meting en de gedeelde elkaar niet tegenspreken.
+ *
+ * Geen teller bij een niet-verse stand (dan weten we de huidige staat niet), bij
+ * een helling die te klein is om te meten (meer stints meet dan niets bij), of
+ * als de eigen stints ontbreken.
+ */
+export function stapRegel(estimate: TyreEstimateV2): string | null {
+  const { eigen, redenen } = estimate.basis;
+  const aantal = eigen?.stints ?? null;
+  if (aantal == null || aantal <= 0) return null;
+  if (bandmetingStale(estimate)) return null;
+  if (redenen.includes("zero_slope")) return null;
+
+  const uiteen = uiteenloopRegel(estimate) != null;
+  const smaller = uiteen ? "" : "; elke stint met hetzelfde beeld maakt de band smaller";
+
+  if (aantal >= 3) {
+    return `Graad A: op deze combinatie is de band zo smal als deze metingen toelaten${uiteen ? "" : "; meer stints veranderen de graad niet"}.`;
+  }
+
+  const totA = 3 - aantal;
+  const totB = 2 - aantal;
+  if (totB <= 0) {
+    return `Nog ${stints(totA)} op deze combinatie tot graad A${smaller}.`;
+  }
+  return `Nog ${stints(totB)} op deze combinatie tot graad B${smaller}.`;
+}
+
+/** `47 minuten`, `1 minuut`, `minder dan een minuut`. */
+function ouderdom(minuten: number): string {
+  const m = Math.round(minuten);
+  if (m < 1) return "minder dan een minuut";
+  return m === 1 ? "1 minuut" : `${m} minuten`;
+}
+
+/**
+ * "Geen actuele bandmeting", met de leeftijd erbij en zonder rondes-getal.
+ *
+ * De server zet bij een niet-verse stand `usable = false` en `range_laps = null`;
+ * deze regel legt uit waaróm er geen rondes staan in plaats van de lezer met
+ * "rondes onbekend" achter te laten. De leeftijd is het eerlijkste getal dat we
+ * hebben, en het is met opzet het enige getal in deze regel: een aantal rondes
+ * zou hier suggereren dat we de huidige band kennen.
+ *
+ * Is de meting wel jong maar hoort hij bij een andere set of sessie, dan is de
+ * leeftijd niet de reden en zegt de regel dat in plaats daarvan.
+ */
+export function staleRegel(estimate: TyreEstimateV2): string | null {
+  if (!bandmetingStale(estimate)) return null;
+
+  const { wearOuderheidMin, sessieMatch, setMatch } = estimate.basis.actualiteit ?? {
+    wearOuderheidMin: null,
+    sessieMatch: null,
+    setMatch: null,
+  };
+
+  const versGenoeg = wearOuderheidMin != null && wearOuderheidMin > VERSE_METING_MAX_MIN;
+  let reden: string;
+  if (versGenoeg) {
+    reden = `de laatste meting is ${ouderdom(wearOuderheidMin)} oud`;
+  } else if (setMatch === false) {
+    reden = "de laatste meting hoort bij een andere set";
+  } else if (sessieMatch === false) {
+    reden = "de laatste meting komt uit een andere sessie";
+  } else if (wearOuderheidMin != null) {
+    reden = `de laatste meting is ${ouderdom(wearOuderheidMin)} oud`;
+  } else {
+    reden = "de meting is niet vers";
+  }
+
+  return `Geen actuele bandmeting: ${reden}. Daarom geen rondes tot de grens.`;
+}
+
+/**
+ * De vaste regel per reden-code. Eén code, één zin — de UI verzint er zelf geen.
+ *
+ * `stale_state` staat er niet in: die heeft zijn eigen regel met de leeftijd
+ * (`staleRegel`), en twee zinnen over hetzelfde feit is er één te veel.
+ */
+export function redenRegel(code: TyreReden): string | null {
+  switch (code) {
+    case "short_basis":
+      return "Minder dan 8 rondes eigen basis op deze combinatie: één rondje meer of minder kan het beeld laten kantelen.";
+    case "inferred_boundary":
+      return "De setgrens komt uit een sprong in de wear-stand, niet uit de bandenteller: het aantal rondes op deze set is een schatting.";
+    case "context_mismatch":
+      return "De gedeelde verwachting komt uit een andere auto of een ander circuit: voor deze combinatie zegt hij minder.";
+    case "thin_pool":
+      return "Nog te weinig rijders op deze combinatie: er zijn minstens twee rijders nodig voor een gedeelde verwachting.";
+    case "zero_slope":
+      return "Geen meetbare slijtage op deze combinatie: de bandenstand verandert te weinig om een tempo te meten.";
+    default:
+      return null;
+  }
+}
+
+/** De codes waar een waarschuwing bij hoort; de rest is een voorbehoud. */
+export function redenIsWaarschuwing(code: TyreReden): boolean {
+  return code === "context_mismatch" || code === "thin_pool" || code === "zero_slope";
+}
+
+/**
+ * De regel onder een voorlopig bereik, voor een antwoord zonder de nieuwe velden.
+ *
+ * De oude tekst ("Nog geen tweede meting: dit bereik is voorlopig. Elke stop die
+ * erbij komt, maakt de band smaller.") was op twee punten onwaar: bij zestien
+ * stints was er allang een tweede meting, en de band wordt niet van elke stop
+ * smaller. Deze regel telt wat er wél staat en belooft alleen een smaller wordende
+ * band bij een stint die hetzelfde beeld laat zien.
+ */
+export function voorlopigRegel(estimate: TyreEstimateV2): string | null {
+  const aantal = estimate.stints;
+  if (aantal == null || aantal <= 0) {
+    return "Dit bereik is voorlopig: er is nog te weinig gemeten om de band smaller te maken.";
+  }
+  if (aantal < 2) {
+    return "Eén stint is nog geen band: dit bereik is voorlopig. Een tweede stint met hetzelfde beeld maakt de band smaller.";
+  }
+  return `Dit bereik is voorlopig: het rust op ${stints(aantal)}. Een nieuwe stint met hetzelfde beeld maakt de band smaller.`;
 }
