@@ -68,6 +68,9 @@ describe("bandenmodel v2 op de pitwall-testpagina", () => {
       wear_per_lap: 1.2,
       range_laps: { low: 8, high: 12 },
       provenance: "measured",
+      // Een volledig antwoord: zonder `voorlopig` geldt het antwoord als
+      // voorlopig en heet het bereik geen modelbereik meer.
+      voorlopig: false,
       basis: { car_key: "bmw_m4_gt3", track_key: "spa" },
     });
 

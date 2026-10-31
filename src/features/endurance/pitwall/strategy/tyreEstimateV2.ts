@@ -466,7 +466,7 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
     grade,
     gradeLabel: text(get(raw, "grade_label")),
     // Ontbreekt `usable`, dan geldt: een D is niet bruikbaar, de rest wel.
-    usable: typeof usableRuw === "boolean" ? usableRuw : grade !== "D",
+    usable: typeof usableRuw === "boolean" ? usableRuw : false,
     stints: num(get(raw, "stints")),
     wearPerLapPp: num(get(raw, "wear_per_lap")),
     rangeLaps: rangeOf(get(raw, "range_laps")),
@@ -490,7 +490,7 @@ export function parseTyreEstimateV2(raw: unknown): TyreEstimateV2 | null {
     },
     provenance: provenanceOf(get(raw, "provenance"), grade),
     // Alleen A is gemeten; zonder veld is alles daarboven voorlopig.
-    voorlopig: typeof voorlopigRuw === "boolean" ? voorlopigRuw : grade !== "A",
+    voorlopig: typeof voorlopigRuw === "boolean" ? voorlopigRuw : true,
     // De omschrijving mag naast `basis` staan (zoals de migratie hem stuurt) of
     // erin; beide vormen lezen we, want een gemiste vorm is een lege regel.
     modelBron: text(get(raw, "model_bron")) ?? text(get(basisRuw, "model_bron")),
