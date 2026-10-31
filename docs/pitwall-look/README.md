@@ -250,3 +250,16 @@ De al draaiende server op 5199 is niet gestopt of aangepast.
 
 Frontendpresentatie gewijzigd; backend/API, plugin, bot, database/migraties,
 auth/rollen, adviespad en deployment ongewijzigd. Productiefrontendwijzigingen: NEE.
+
+
+## Visuele gelijkenis — opdracht 2026-11-01
+
+Actueel verslag: `visuele-gelijkenis-2026-11-01.txt` (vervangt eerdere
+maatvoeringen en visuele conclusies hierboven). Twee iteraties met doelbeeld
+en eigen screenshot naast elkaar in vision_analyze, plus eindcontrole van beide
+modi. Grootste afwijkingen in compositie en daarna typografie weggewerkt.
+Volledige Vitest opnieuw groen: 195 bestanden / 1638 tests.
+Vier screenshots vernieuwd; `verification.json` bevat nu ook computed-style-
+en afknipcontroles. Vier panelen volledig binnen 1080p in beide fixtures.
+Geen data-, RPC-, reken-, advies-, polling- of toegangsverandering.
+Niet gepusht, gemerged of gedeployed. PRODUCTIEWIJZIGING: NEE.

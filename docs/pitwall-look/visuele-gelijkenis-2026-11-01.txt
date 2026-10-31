@@ -1,0 +1,115 @@
+PITWALL — VISUELE GELIJKENIS, OPDRACHT 2026-11-01
+
+Werkboom: /home/hermes/wt/pitwall-look
+Branch: feat/pitwall-look-3sm
+Basis: 762e4c4 (schone werkboom bij start)
+Presentatiecommit: 6ce825d
+Geen push, merge of deploy.
+
+SCOPE
+Uitsluitend pitwallLook.css en lokaal visueel verificatieharnas/bewijs.
+Geen wijziging van databronnen, RPCs, berekeningen, advieslogica, polling,
+toegang, kaartgeometrie of fixtures. De bestaande fixtures bevatten expliciete
+voorbeeldwaarden; die zijn niet aangepast of als echte racewaarden gepresenteerd.
+Screenshots gebruiken echte componenten in het lokale fixtureharnas, niet een
+inlog op productieroutes. De screenshots bewijzen geen live-routepassing.
+
+WAT HET ORIGINEEL DOET / WAT IS AANGEPAST
+1. Vorm: origineel heeft bescheiden rondingen en dunne koele randen, geen
+   zachte websitekaarten. Nu panelen 5px radius, 1px #172a36-rand,
+   #060e14-vlakken en #03090d dashboardachtergrond; interne bandenrastercellen
+   rechthoekig en neutraal. Advies 4px radius, interne adviesvakjes 2px.
+2. Grid: origineel is vrijwel schermbreed met kaart links en timing rechts,
+   daaronder een brede pacekaart en drie smallere instrumenten. De directe
+   1600px-dashboardhost mag nu tot 1864px groeien; paneelgaps 10px en verticale
+   dashboardtussenruimte 8px. Hoofdrij 1:2, onderrij 1.5:1:1:1 behouden.
+3. Kaart/timing: origineel geeft beide het grootste visuele gewicht. Desktop-
+   timinghoogte van 352 naar 450px; kaart van 96 naar 188px. Voor/jij/achter
+   compacter en geen dubbel oranje timinglabel: alleen de echte actieve tab
+   is oranje. De kaartasset en markers zijn ongewijzigd.
+4. KPI: origineel gebruikt verticale rasterlijnen met kleine kapitalen boven
+   grote tabulaire cijfers. Nu dunne celscheidingen, 10px labels, 24px waarden,
+   minder binnenruimte. Geen nieuwe waarden of totalen toegevoegd.
+5. Koppen: origineel gebruikt icoon + smalle kapitalen + dunne scheidingslijn.
+   Nu bestaande lokaal gehoste Rajdhani op paneelkoppen, 12px/600, .04em
+   tracking; overige kapitale labels circa .035em. Geen externe fonts.
+6. Waardehiërarchie: origineel zet ondersteunende waarden rustiger dan de
+   topmetingen. Nu brandstof 26px, banden 20px, numerieke tracking 0;
+   eigen-autotijden wit/groen in plaats van geel/paars.
+7. Dichtheid: origineel heeft korte timingrijen en lage onderpanelen. Nu
+   compacte tabelpadding, 13px desktoprijtekst, teamnaam secundair op dezelfde
+   regel. Brandstofdetails in 2 kolommen; pacewaarden in 3 kolommen.
+8. Advies: origineel heeft geen brede advieskaart. Onze bestaande informatie
+   blijft volledig beschikbaar, maar staat desktop naast elkaar in drie
+   kolommen, met kleinere kop en compacte tank-/bandenvergelijking.
+
+VISION-ITERATIES (DOEL EN EIGEN BEELD IN ÉÉN COLLAGE)
+Vooraf: doelbeeld en uitgangsscreenshot naast elkaar beoordeeld. Grootste
+verschil: context/advies en websitekaarten domineren, kaart en timing te klein.
+
+Ronde 1: vergelijking-ronde-1.png. Na herbouw bleven advies en onderpanelen
+te hoog. De echte browsertest faalde eerst op documenthoogte 1128px.
+Weggewerkt door compactere advieskolommen, brandstofdetails in twee kolommen
+en kleinere planningkoppen; geen clipping, inhoud verwijderen of zoom.
+Een tussentest op 1107px faalde ook terecht; daarna advies over drie kolommen.
+
+Ronde 2: vergelijking-ronde-2.png. Schermpassing geslaagd. Vision wees daarna
+op typografische textuur: brede koppen/tracking en te dominante cijfers.
+Weggewerkt met Rajdhani-koppen, kleinere tracking, brandstof26/banden20.
+
+Eindcontrole: vergelijking-eindcontrole.png, linksboven doel, rechtsboven
+endurance, rechtsonder test. Vision beoordeelt de technische instrumentstijl
+als overtuigend overeenkomend en bevestigt alle vier onderpanelen in beide
+modi. Het is een eigen vertaling, geen vrijwel identieke reproductie.
+
+VERIFICATIE — PASS/FAIL
+PASS — npm test na definitieve CSS: 195 bestanden / 1638 tests groen.
+PASS — npx eslint docs/pitwall-look/preview/shot.mjs.
+PASS — git diff --check.
+PASS — screenshot-harnas op 127.0.0.1:5197; beide modi 1920x1080.
+  endurance: onderrand vier panelen 1024.5 px; timingrij 25 px; document 1080 px; afknipcontrole True.
+  test: onderrand vier panelen 962.5 px; timingrij 25 px; document 1080 px; afknipcontrole True.
+PASS — computed styles: radius5px, border1px/#172a36, panel#060e14,
+       Rajdhani-kop; werkelijke timingrijhoogte <=27px.
+PASS — geen afgeknipte paragrafen, lijsten of meetbalken in de vier panelen.
+PASS — alle drie stintregels volledig, eigen-autobeschrijving past.
+PASS — tabs voor klasse, eigen stints/pitstops/events, snelheid/delta.
+PASS — timing scrollt met wiel/toetsenbord, laatste rij bereikbaar,
+       64 extra DOM-rijen veroorzaken geen paginagroei.
+PASS — Meer analyse met klik en Enter; raw-telemetrie-uitklapper werkt.
+PASS — 1440/1024/390px: 4/2/1 kolommen, geen horizontale paginaoverflow,
+       geen overlap van omgevingsmetingen met rondevoortgangsmarkers.
+PASS — geen browserfouten of externe requests in het fixtureharnas.
+Niet geclaimd — productie/inlogroute, typecheck of volledige productiebuild.
+Vitest meldt alleen de bestaande Vite-configwaarschuwing over __dirname.
+
+SCREENSHOTS
+pitwall-endurance-1920x1080.png — vaste viewport, Meer analyse dicht.
+pitwall-test-1920x1080.png — vaste viewport, Meer analyse dicht.
+pitwall-endurance-full.png — volledige pagina, Meer analyse open.
+pitwall-test-full.png — volledige pagina, Meer analyse open.
+verification.json bevat browsermetingen en acceptatie-uitkomsten.
+visuele-gelijkenis-sha256.txt borgt screenshots en vergelijkingen.
+
+EIGEN OORDEEL EN RESTVERSCHILLEN
+De oppervlakken, dichtheid, kleinere radii, het raster, kapitalen en de
+numerieke hiërarchie volgen nu het instrumentidee in plaats van een zachte
+website. De grootste resterende afwijking is de circuitpresentatie: onze
+bestaande gedetailleerde kaartasset met aparte rondevoortgang tegenover een
+heldere oranje baanomtrek met markers op het doelbeeld. De assetgeometrie en
+positiebetrouwbaarheid zijn bewust niet vervangen door een visuele nepkaart.
+Dat blijft een duidelijke beperking van de gelijkenis, geen pixelpariteit.
+
+Context en advies blijven extra horizontale stroken; die zijn nu compact maar
+veranderen de compositie nog steeds. Onderpanelen zijn tekstueler dan het
+origineel, zonder verzonnen checkliststatussen, tweede grafiekreeks of data.
+Dat is acceptabel als eigen-waardenvertaling van het instrumentbeeld, niet
+als claim dat het doelbeeld exact is nagebouwd. De circuitstijl zou een aparte,
+betrouwbaar gevoede kaartpresentatie vereisen om die laatste afstand te dichten.
+
+IMPACT
+Frontend: lokale pitwallpresentatie gewijzigd.
+Productiefrontendwijzigingen: NEE.
+Backend/API, bot, database/migraties, auth/rollen, deployment: geen impact.
+Geen waarden toegevoegd, niets gepubliceerd.
+PRODUCTIEWIJZIGING: NEE

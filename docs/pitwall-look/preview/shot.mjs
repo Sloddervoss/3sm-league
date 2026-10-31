@@ -45,6 +45,34 @@ try {
       };
     });
     const desktop = await measure();
+    // The instrument skin is verified in the browser, not inferred from class names.
+    const skin = await page.evaluate(() => {
+      const style = selector => getComputedStyle(document.querySelector(selector));
+      const panel = style('[data-pitwall-slot="pace"]');
+      const title = style('[data-pitwall-slot="pace"] h3');
+      const row = document.querySelector('.pitwall-timing-scroll tbody tr[data-pitwall-own-row]');
+      const contentFits = [...document.querySelectorAll('[data-pitwall-row="panels"] section')].every(panel => {
+        const bounds = panel.getBoundingClientRect();
+        return [...panel.querySelectorAll('p, dl, ol, [role="meter"]')].every(child => {
+          const r = child.getBoundingClientRect();
+          return r.bottom <= bounds.bottom + 1 && r.right <= bounds.right + 1;
+        });
+      });
+      return {
+        radius: panel.borderRadius, border: panel.borderTopWidth,
+        background: panel.backgroundColor, borderColor: panel.borderTopColor,
+        titleFont: title.fontFamily, titleTracking: title.letterSpacing,
+        timingRowHeight: row.getBoundingClientRect().height, contentFits,
+      };
+    });
+    assert.equal(skin.radius, '5px');
+    assert.equal(skin.border, '1px');
+    assert.equal(skin.background, 'rgb(6, 14, 20)');
+    assert.equal(skin.borderColor, 'rgb(23, 42, 54)');
+    assert(skin.titleFont.includes('Rajdhani'));
+    assert(skin.timingRowHeight <= 27, `${mode}: compact timing rows`);
+    assert(skin.contentFits, `${mode}: panel contents must not be clipped`);
+
     assert.equal(await page.getByText('▲ +0.649 s', { exact: true }).count(), 1);
     assert.equal(await page.getByText('Verstreken sessie', { exact: true }).count(), 1);
     assert.equal(await page.getByLabel('Sectorlegenda eigen tijden; geen kaartgrenzen').count(), 1);
@@ -171,7 +199,7 @@ try {
       responsive.push({ width, panelColumns: columns, noHorizontalPageOverflow: true });
     }
     assert.deepEqual(errors, []);
-    results.push({ mode, desktop, interactionChecks, stintRowsFullyVisible: mode === "endurance" ? "PASS: three full rows" : "not applicable", ownDescriptionFits, moreAnalysis: "PASS: closed by default, click and keyboard, contents preserved", wheelAndKeyboardScroll: "PASS", growingSnapshot: "PASS", rawDisclosure: mode === "test" ? "PASS" : "not in endurance fixture", responsive, browserErrors: errors });
+    results.push({ mode, desktop, skin, interactionChecks, stintRowsFullyVisible: mode === "endurance" ? "PASS: three full rows" : "not applicable", ownDescriptionFits, moreAnalysis: "PASS: closed by default, click and keyboard, contents preserved", wheelAndKeyboardScroll: "PASS", growingSnapshot: "PASS", rawDisclosure: mode === "test" ? "PASS" : "not in endurance fixture", responsive, browserErrors: errors });
     console.log(`${mode}: PASS; panel bottom ${Math.max(...desktop.panels.map((r) => r.bottom))}px; document ${desktop.document.height}px`);
     await page.close();
   }
