@@ -365,6 +365,13 @@ internal static class FaseDTests
                 Console.Write(V3PayloadFixtureTests.Serialize(V3PayloadFixtureTests.BuildRepresentativeFrame()));
                 return 0;
             }
+            // Snelle iteratie op de meetlaag zonder de 60 s-soaktest van de rest.
+            if (string.Equals(args[0], "--only-measurement", StringComparison.Ordinal))
+            {
+                Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
         }
         var irSdkChecks = 0;
         var baselineChecks = 0;
