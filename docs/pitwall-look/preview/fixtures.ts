@@ -69,7 +69,7 @@ export const fixtureV3: V3Normalized = {
     currentDriverName: "V. de Vos",
     carName: "Porsche 911 GT3 R",
   },
-  session: { isInCar: true, sessionTimeRemainingSeconds: 12257, sessionLapsRemaining: 57, sessionState: "racing" },
+  session: { sessionTimeSeconds: baseline.session.sessionTimeSeconds, isInCar: true, sessionTimeRemainingSeconds: 12257, sessionLapsRemaining: 57, sessionState: "racing" },
   timing: { lastLapTimeSeconds: 103.162, bestLapTimeSeconds: 102.513, completedLaps: 142, currentLapElapsedSeconds: 38.2 },
   position: { position: 6, classPosition: 5, gapToLeaderSeconds: 12.3 },
   track: { lapDistancePct: 0.18, trackSurface: "on_track", onPitRoad: false },

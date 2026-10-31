@@ -4,6 +4,7 @@ import { PitwallContextBar } from "../../../src/features/endurance/pitwall/Pitwa
 import { PitwallDashboard } from "../../../src/features/endurance/pitwall/PitwallDashboard";
 import { RaceTelemetryStrip } from "../../../src/features/endurance/pitwall/RaceTelemetryStrip";
 import { DecisionBand } from "../../../src/features/endurance/pitwall/DecisionBand";
+import { OwnCarPanel } from "../../../src/features/endurance/pitwall/OwnCarPanel";
 import { LiveTrackPanel } from "../../../src/features/endurance/pitwall/LiveTrackPanel";
 import { StandingsWidget } from "../../../src/features/endurance/pitwall/StandingsWidget";
 import { PacePanel } from "../../../src/features/endurance/pitwall/PacePanel";
@@ -67,10 +68,10 @@ function Preview() {
         <PitwallDashboard
           kpi={<RaceTelemetryStrip v3={fixtureV3} live />}
           decision={<DecisionBand advice={advice} />}
-          track={<LiveTrackPanel v3={fixtureV3} live fallbackTrack="Circuit de Spa-Francorchamps - Grand Prix" />}
+          track={<><LiveTrackPanel v3={fixtureV3} live fallbackTrack="Circuit de Spa-Francorchamps - Grand Prix" /><OwnCarPanel driverName={fixtureV3.identity?.currentDriverName ?? null} carName={fixtureV3.identity?.carName ?? null} teamName={null} carNumber={fixtureV3.opponents?.find(c => c.isPlayer)?.carNumber} completedLaps={fixtureV3.timing?.completedLaps} lastLapSeconds={fixtureV3.timing?.lastLapTimeSeconds ?? null} bestLapSeconds={fixtureV3.timing?.bestLapTimeSeconds ?? null} gapToLeaderSeconds={fixtureV3.position?.gapToLeaderSeconds ?? null} /></>}
           timing={<StandingsWidget standings={standings} ownCarLabel="Porsche 911 GT3 R" ownCarNumber={null} live />}
           panels={[
-            <PacePanel key="pace" strategy={deviceStrategy} pace={null} lapTimes={[]} points={points} />,
+            <PacePanel v3={fixtureV3} live key="pace" strategy={deviceStrategy} pace={null} lapTimes={[]} points={points} />,
             <MySessionPanel
               key="session"
               driverName="Vincent"

@@ -1,0 +1,96 @@
+ELEMENTENINVENTARIS — KORTE OPLEVERLIJST
+
+CATEGORIE 1 — BEHOUDEN OF GEBOUWD
+Bovenbalk — S1/S2/S3, seconden: A: vehicle.sector1Seconds/sector2Seconds/sector3Seconds; behouden
+Bovenbalk — Laatste ronde, m:ss.mmm: A: timing.lastLapTimeSeconds; behouden
+Bovenbalk — Beste ronde, groene waarde: A: timing.bestLapTimeSeconds; behouden
+Bovenbalk — POS/P en CLASS POS/K: A: position.position/classPosition; behouden
+Bovenbalk — LAP, teller voltooide ronden: A: timing.completedLaps; behouden
+Bovenbalk — Resterende tijd, klok: A: session.sessionTimeRemainingSeconds; behouden
+Bovenbalk — DELTA, teken, rood/groen en richtingicoon: A: laatste minus beste, expliciet referentielabel; geen live rondedelta
+Bovenbalk — Klein verschil onder LAST LAP: A: zelfde laatste-minus-beste, één keer tonen om duplicatie te vermijden
+Circuit — Circuitnaam en configuratie: C: identity.trackName/trackConfig en fallbackTrack
+Circuit — Luchttemperatuur °C met weericoon: B: tyres.environment.airTempC; icoon als temperatuur, geen onbewolktheid suggereren
+Circuit — Baanlijn, achtergrond en richtingpijlen: C: bestaande kaart/projectie behouden; decoratieve achtergrond is geen telemetrie
+Circuit — Automarkers, nummers, eigen oranje selectie: C,D: opponents[].lapDistancePct/carNumber/isPlayer/inPit
+Circuit — SECTORS: gekleurde streepjes S1/S2/S3: A,C: legenda van eigen tijdvelden; sectorgrenzen op de kaart niet bekend, dus geen segmentkleuring claimen
+Geselecteerde auto — SELECTED DRIVER, coureur en team: A: OwnCarPanel driverName/teamName
+Geselecteerde auto — Oranje rand/selectiestrook: A: OwnCarPanel presentatie
+Geselecteerde auto — Autotype/-icoon: A: OwnCarPanel carName
+Geselecteerde auto — LAST LAP/BEST LAP: A: OwnCarPanel lastLapSeconds/bestLapSeconds
+Timing — LIVE TIMING actieve tab + icoon: D,F,J: bestaande timing als echte startweergave
+Timing — CLASS tab: D,F,J: filter per aanwezige carClass; aantallen uitsluitend in beeld
+Timing — P/#, klassepositie en carnummer: D: position/classPosition/carNumber
+Timing — CLASS badge en groepsbalken: D: carClass + aantal in beeld
+Timing — DRIVER en team/subregel: D: driverName/teamName
+Timing — LAST LAP/BEST LAP: D: lastLapSeconds/bestLapSeconds
+Timing — Eigen oranje rij, nummeraccent/selectiepijl: D: isPlayer
+Timing — GAP met eerlijke referentie: D: gapToPlayerSeconds; niet origineel leiderlabel
+Timing — PIT status: D: inPit, niet stopaantal
+Pace — Titel en telemetrie/auto-icoon: E,A: presentatie zonder nieuwe data
+Pace — LAP TIME tab: E,A: points[].lap/seconds, eigen gemeten rondes
+Pace — DELTA tab: E,A: timing laatste/beste bewezen referentie, geen leiderdelta
+Pace — Oranje eigen lijn en legenda: E,A: PaceGraph points[].seconds
+Pace — X-as rondegetallen en Y-as seconden: E,A: PaceGraph points[].lap/seconds; huidige schaal behouden
+Pace — Raster en meetpuntcirkels: E,A: bestaande PaceGraph SVG
+Pace — Verticale pit/wissel-stippellijn: E,A: points[].marker pit/swap; niet fictieve r140-referentie
+Rotatie — Titel/rotatie-icoon: F: bestaande driverpanelpresentatie
+Rotatie — CURRENT DRIVER naam/badge: F: driverName, eigen carNumber niet identificeren als drivernummer
+Rotatie — NEXT DRIVER naam: F: planned_stints driver_id via displayName
+Rotatie — Next stint / geplande rondes: F: expected_laps
+Brandstof — Titel en brandstofpompicoon: G,F: presentatie
+Brandstof — FUEL REMAINING L: G,F: current_fuel_litres
+Brandstof — ~ ronden bereik: G,F: fuel_laps_remaining
+Brandstof — AVG CONSUMPTION L/lap: G,F: fuel_per_lap_litres/race_fuel_per_lap_litres
+Brandstof — Groen verbruikverschil -0.2: G,F: stintverbruik minus racegemiddelde, expliciete basis L/ronde
+Banden — Titel/bandicoon: H,B: presentatie
+Banden — Vier hoeken FRONT LEFT/RIGHT REAR LEFT/RIGHT: H,B: vehicle.frontLeft/frontRight/rearLeft/rearRight, LV/RV/LA/RA
+Banden — Temperatuur en °C/°F, Temp label: H,B: temperature/temperatureUnit
+Banden — Wear percentage: H,B: wearPercent is resterend, geen versleten percentage
+Banden — Groene restbalk per hoek: H,B: zelfde wearPercent, 0–100; geen extra model
+Banden — Compound-ID en settellers: H,B: tyres.compoundId/sets.used/sets.available
+
+CATEGORIE 2 — AANGESLOTEN
+Bovenbalk — RACE TIME verstreken klok: A: session.sessionTimeSeconds, sessietijd sinds start; geen wall-clock of geplande duur
+Bovenbalk — Raceduur /6h: L: endurance_events.planned_duration_minutes is bewezen planning, geen gemeten sessieduur; aansluiten als expliciet gepland label
+Bovenbalk — Totale ronden /360: L: endurance_events.planned_laps is bewezen planning; aansluiten als expliciet gepland label, niet als gemeten racelimiet
+Circuit — Dry/nat label en druppelicoon: I: weather.trackWetnessPct of environment.trackWetnessPct; alleen 0 expliciet droog, >0 vochtpercentage; isRaining is niet hetzelfde
+Geselecteerde auto — CAR nummerbadge en LAP: D,A: eigen opponent isPlayer.carNumber; timing.completedLaps; ook testmodus geselecteerde autostrook tonen
+Timing — STINTS tab: D,F,J: planned_stints; expliciet planning, geen rivalenstints
+Timing — PIT STOPS tab: D,F,J: timeline pit_entry/pit_exit: opgeslagen eigen gebeurtenissen, geen compleet wedstrijdtotaal
+Timing — EVENTS tab: D,F,J: timeline event_type/captured_at/completed_laps; alleen als inhoud bestaat
+Pace — SPEED tab en km/h: E,A: vehicle.speedKph: actuele snelheid, geen historische lijn
+Rotatie — Oranje voortgangsbalk en %: F: uitsluitend geplande tijdvoortgang op start/eind, expliciet planning
+Rotatie — NEXT SWAP aftellen: F: geplande wissel op planningseinde, geen gegarandeerde wissel
+Brandstof — PIT WINDOW rondebereik: G,F: bestaand advice.window; alleen doorgeven, geen herberekening
+Brandstof — Pitwindowbalk en percentage: G,F: balk met huidige ronde en earliest/latest, geen fictief 68%
+Brandstof — STINT PLAN huidige en volgende regels: G,F: planned_stints expected_laps/status; volledige lijst intern scrollbaar
+Banden — Estimated life rondes: H,B: bestaand modelbereik + bestaande experimenteel/no-advice markering; geen nieuwe schatting
+
+CATEGORIE 3 — GEEN BEWEZEN NIEUWE PLUGINKANALEN
+
+CATEGORIE 4 — OVERGEBLEVEN
+Bovenbalk — Kleine verschillen onder S1/S2/S3: A: geen historische sectorreferentie; exact kanaal niet geverifieerd
+Bovenbalk — Noemer /28 algemeen: A,D: begrensde snapshot/resttijd bewijst geen totaal; SDK-kanaal niet geverifieerd
+Bovenbalk — Noemer /14 klasse: A,D: begrensde snapshot/resttijd bewijst geen totaal; SDK-kanaal niet geverifieerd
+Circuit — Windicoon, 2.1 m/s: I: geen windveld/capture; exact SDK-kanaal niet geverifieerd
+Circuit — Weer wolk/zon toestand: I: geen bewezen bewolkingsstatus; icoon mag geen toestand verzinnen
+Circuit — Noordkompas N/pijl: C: kaartoriëntatie is geen bewezen geografisch noorden; niet faken
+Circuit — LENGTH, km: K: geen bewezen configuratiegebonden lengte; niet uit pixelgeometrie afleiden
+Circuit — TURNS, bochtenteller: K: geen bewezen metadata; niet uit bestandsnaam of bochtige polyline raden
+Circuit — Gekleurde sectorsegmenten op baan: C: geen bewezen sectorgrenzen; originele segmentkleuren zelf inconsistent
+Geselecteerde auto — Mini donkerblauw teken: C: functie niet leesbaar in origineel; niet geverifieerd
+Timing — S1/S2/S3 alle auto’s: D: V3Opponent bevat geen sectoren; exact SDK-kanaal niet geverifieerd
+Timing — PIT stopaantal alle auto’s: D: inPit is status, geen teller; geen volledige historie
+Timing — DELTA alle auto’s: D: referentie in origineel niet benoemd; geen vergelijkingsbasis verzinnen
+Timing — Sorteerdriehoekjes bij GAP: D: geen bestaande sorteerfunctie; onleesbare status niet als bediening kopiëren
+Timing — Subtiele boog eerste rij: D: functie niet leesbaar, niet geverifieerd
+Pace — Groene leiderlijn en legenda: E,A: geen historische leiderreeks
+Rotatie — GT3 en gereden stintlaps: F: current_stint_valid_sample_count zijn samples, geen ronden
+Rotatie — STINT TIME werkelijke duur: F: geen bewezen werkelijk stintanker; actual_start_at ook planning
+Rotatie — SWAP CHECKLIST titel en drie vinkvakjes: F: core/types.ts StintConfirmation bevestigt een planversie, niet rijder-gereed/pitstrategie/brandstof-banden; die checklistvelden ontbreken; tyre_change blijft planning
+Brandstof — Huidige stint 68% gereden afstand: G,F: geen bewezen start-rondeteller; gepland tijdpercentage staat bij rotatie
+Banden — M compoundbadge/naam: H,B: compoundId aanwezig maar geen bewezen M/S/H mapping
+Banden — Tyre set 3/8 als gemonteerde set: H,B: used/available geen identificatie huidige set
+Banden — Donkere mini-iconen naast balken: H,B: niet leesbaar/niet geverifieerd
+

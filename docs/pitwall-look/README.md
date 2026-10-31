@@ -1,5 +1,25 @@
 # Pitwall-look — Vincents ontwerp in de bestaande pitwall
 
+## Actuele elementronde (vervangt oudere uitspraken hieronder)
+
+Volledige inventaris en actuele bronbesluiten: `elementen.md` (86 regels).
+Oplevering en checks: `elementen-verificatie.txt`; machineleesbare browserchecks:
+`verification.json`. Categorie 1/2 gebouwd of behouden; ontbrekende bronnen
+blijven expliciet hiaten. Historische opmerkingen hieronder zoals “geen delta”,
+“geen tabs”, “geen planningstimer” zijn door deze ronde deels achterhaald.
+Planning wordt nooit als gemeten stint- of sessielimiet verkocht.
+
+Nieuw: echte timingweergaven met broninhoud, pacekeuze, verstreken sessietijd,
+expliciete rondedelta, optionele vochtdata, sectorlegenda, planningklok/-lijst,
+pitwindowbalk, restbalken en bestaand modelbereik. Twee bestaande nullable
+eventplanningkolommen worden via de bestaande eventleesroute meegenomen;
+geen schema-/RPC-/plugin-/advieswijziging.
+
+Actueel bewijs: volledige Vitest 195 bestanden / 1638 tests PASS; Vite-bundel PASS;
+beide 1080p-beelden visueel PASS. Typecheck en drie ESLint-errors in de bestaande
+testpagina zijn aantoonbaar onveranderd vanaf bfcc387.
+
+
 Dit is de look-update van de pitwall: de opbouw van het referentiebeeld
 (contextregel, KPI-strip, beslissingsband, circuit links / timing rechts, vier
 panelen, aanvullende blokken) voor **beide** modi — de endurance-pitwall en de

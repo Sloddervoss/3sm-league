@@ -13,52 +13,62 @@
       "panels": [
         {
           "x": 160,
-          "y": 732.5,
+          "y": 674.5,
           "width": 521.328125,
-          "height": 294.5,
-          "bottom": 1027
+          "height": 355,
+          "bottom": 1029.5
         },
         {
           "x": 693.328125,
-          "y": 732.5,
+          "y": 674.5,
           "width": 347.546875,
-          "height": 294.5,
-          "bottom": 1027
+          "height": 355,
+          "bottom": 1029.5
         },
         {
           "x": 1052.875,
-          "y": 732.5,
+          "y": 674.5,
           "width": 347.5625,
-          "height": 294.5,
-          "bottom": 1027
+          "height": 355,
+          "bottom": 1029.5
         },
         {
           "x": 1412.4375,
-          "y": 732.5,
+          "y": 674.5,
           "width": 347.546875,
-          "height": 294.5,
-          "bottom": 1027
+          "height": 355,
+          "bottom": 1029.5
         }
       ],
       "more": {
         "x": 160,
-        "y": 1039,
+        "y": 1037.5,
         "width": 1600,
         "height": 24,
-        "bottom": 1063
+        "bottom": 1061.5
       },
       "extraVisible": false,
       "timing": {
         "x": 716.328125,
-        "y": 445.25,
+        "y": 449.25,
         "width": 1028.671875,
-        "height": 216.25,
-        "bottom": 661.5,
-        "clientHeight": 216,
+        "height": 172.25,
+        "bottom": 621.5,
+        "clientHeight": 172,
         "scrollHeight": 484,
         "overflow": "auto"
       }
     },
+    "interactionChecks": [
+      "Stints: nonempty own-team content, bounded layout",
+      "Pitstops: nonempty own-team content, bounded layout",
+      "Gebeurtenissen: nonempty own-team content, bounded layout",
+      "Klasse: LMP2 filter, restored full snapshot",
+      "Snelheid: explicit source/reference, bounded layout",
+      "Delta: explicit source/reference, bounded layout"
+    ],
+    "stintRowsFullyVisible": "PASS: three full rows",
+    "ownDescriptionFits": true,
     "moreAnalysis": "PASS: closed by default, click and keyboard, contents preserved",
     "wheelAndKeyboardScroll": "PASS",
     "growingSnapshot": "PASS",
@@ -96,52 +106,59 @@
       "panels": [
         {
           "x": 160,
-          "y": 718.5,
+          "y": 674.5,
           "width": 521.328125,
-          "height": 294,
-          "bottom": 1012.5
+          "height": 310,
+          "bottom": 984.5
         },
         {
           "x": 693.328125,
-          "y": 718.5,
+          "y": 674.5,
           "width": 347.546875,
-          "height": 294,
-          "bottom": 1012.5
+          "height": 310,
+          "bottom": 984.5
         },
         {
           "x": 1052.875,
-          "y": 718.5,
+          "y": 674.5,
           "width": 347.5625,
-          "height": 294,
-          "bottom": 1012.5
+          "height": 310,
+          "bottom": 984.5
         },
         {
           "x": 1412.4375,
-          "y": 718.5,
+          "y": 674.5,
           "width": 347.546875,
-          "height": 294,
-          "bottom": 1012.5
+          "height": 310,
+          "bottom": 984.5
         }
       ],
       "more": {
         "x": 160,
-        "y": 1024.5,
+        "y": 992.5,
         "width": 1600,
         "height": 24,
-        "bottom": 1048.5
+        "bottom": 1016.5
       },
       "extraVisible": false,
       "timing": {
         "x": 716.328125,
-        "y": 445,
+        "y": 449,
         "width": 1028.671875,
-        "height": 216.5,
-        "bottom": 661.5,
-        "clientHeight": 217,
+        "height": 172.5,
+        "bottom": 621.5,
+        "clientHeight": 173,
         "scrollHeight": 484,
         "overflow": "auto"
       }
     },
+    "interactionChecks": [
+      "Klasse: LMP2 filter, restored full snapshot",
+      "Snelheid: explicit source/reference, bounded layout",
+      "Delta: explicit source/reference, bounded layout"
+    ],
+    "stintRowsFullyVisible": "not applicable",
+    "ownDescriptionFits": true,
     "moreAnalysis": "PASS: closed by default, click and keyboard, contents preserved",
     "wheelAndKeyboardScroll": "PASS",
     "growingSnapshot": "PASS",

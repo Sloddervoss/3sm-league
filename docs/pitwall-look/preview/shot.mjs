@@ -45,6 +45,42 @@ try {
       };
     });
     const desktop = await measure();
+    assert.equal(await page.getByText('▲ +0.649 s', { exact: true }).count(), 1);
+    assert.equal(await page.getByText('Verstreken sessie', { exact: true }).count(), 1);
+    assert.equal(await page.getByLabel('Sectorlegenda eigen tijden; geen kaartgrenzen').count(), 1);
+    assert.equal(await page.getByRole('meter').count(), 4);
+    const ownDescriptionFits = await page.locator('[data-pitwall-slot="own-car"] > p:last-of-type').evaluate(e => e.scrollWidth <= e.clientWidth);
+    assert(ownDescriptionFits, `${mode}: own-car description must not be truncated`);
+    const interactionChecks = [];
+    if (mode === 'endurance') {
+      const plan = page.getByRole('list', { name: 'Volledige stintplanning' });
+      assert.equal(await plan.getByRole('listitem').count(), 3);
+      assert(await plan.evaluate(e => [...e.children].every(c => c.getBoundingClientRect().bottom <= e.getBoundingClientRect().bottom + 1)), 'all fixture stint rows must fit, no half row');
+      for (const name of ['Stints', 'Pitstops', 'Gebeurtenissen']) {
+        await page.getByRole('button', { name, exact: true }).click();
+        const region = page.getByRole('region', { name: 'Eigen opgeslagen planning en gebeurtenissen' });
+        assert(await region.getByRole('listitem').count() > 0, `${name}: real fixture content required`);
+        assert.equal((await measure()).document.height, 1080, `${name}: no page growth`);
+        interactionChecks.push(`${name}: nonempty own-team content, bounded layout`);
+      }
+      await page.getByRole('button', { name: 'Live timing', exact: true }).click();
+    } else {
+      assert.equal(await page.getByRole('button', { name: 'Stints', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('button', { name: 'Pitstops', exact: true }).count(), 0);
+    }
+    await page.getByRole('button', { name: 'Klasse', exact: true }).click();
+    await page.getByRole('button', { name: 'LMP2', exact: true }).click();
+    assert.equal(await page.locator('.pitwall-timing-scroll tbody tr[data-pitwall-own-row]').count(), 0);
+    await page.getByRole('button', { name: 'Live timing', exact: true }).click();
+    interactionChecks.push('Klasse: LMP2 filter, restored full snapshot');
+    for (const name of ['Snelheid', 'Delta']) {
+      await page.getByRole('button', { name, exact: true }).click();
+      assert.equal(await page.getByText(name === 'Snelheid' ? '187 km/h' : '+0.649 s', { exact: true }).count(), 1);
+      assert.equal((await measure()).document.height, 1080);
+      interactionChecks.push(`${name}: explicit source/reference, bounded layout`);
+    }
+    await page.getByRole('button', { name: 'Rondetijd', exact: true }).click();
+
     assert.equal(desktop.panels.length, 4);
     assert.equal(await page.getByText("Compound-ID 4", { exact: true }).count(), 1);
     assert.equal(await page.getByText("2 gebruikt", { exact: true }).count(), 1);
@@ -135,7 +171,7 @@ try {
       responsive.push({ width, panelColumns: columns, noHorizontalPageOverflow: true });
     }
     assert.deepEqual(errors, []);
-    results.push({ mode, desktop, moreAnalysis: "PASS: closed by default, click and keyboard, contents preserved", wheelAndKeyboardScroll: "PASS", growingSnapshot: "PASS", rawDisclosure: mode === "test" ? "PASS" : "not in endurance fixture", responsive, browserErrors: errors });
+    results.push({ mode, desktop, interactionChecks, stintRowsFullyVisible: mode === "endurance" ? "PASS: three full rows" : "not applicable", ownDescriptionFits, moreAnalysis: "PASS: closed by default, click and keyboard, contents preserved", wheelAndKeyboardScroll: "PASS", growingSnapshot: "PASS", rawDisclosure: mode === "test" ? "PASS" : "not in endurance fixture", responsive, browserErrors: errors });
     console.log(`${mode}: PASS; panel bottom ${Math.max(...desktop.panels.map((r) => r.bottom))}px; document ${desktop.document.height}px`);
     await page.close();
   }

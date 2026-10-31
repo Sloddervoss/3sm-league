@@ -71,6 +71,8 @@ function Preview() {
             <>
               <LiveTrackPanel v3={fixtureV3} live fallbackTrack="Circuit de Spa-Francorchamps - Grand Prix" />
               <OwnCarPanel
+                carNumber={fixtureV3.opponents?.find(c => c.isPlayer)?.carNumber}
+                completedLaps={fixtureV3.timing?.completedLaps}
                 driverName={driverName}
                 carName="Porsche 911 GT3 R"
                 teamName={teamName}
@@ -80,11 +82,11 @@ function Preview() {
               />
             </>
           }
-          timing={<StandingsWidget standings={standings} ownCarLabel={teamName} ownCarNumber={null} live />}
+          timing={<StandingsWidget plannedStints={fixtureStints} events={fixtureEvents} standings={standings} ownCarLabel={teamName} ownCarNumber={null} live />}
           panels={[
-            <PacePanel key="pace" strategy={fixtureStrategy} pace={{ lastLapSeconds: 103.162, bestLapSeconds: 102.513, stintAvgSeconds: 102.9, targetSeconds: null }} points={pacePoints} />,
-            <StintDriverPanel key="driver" strategy={fixtureStrategy} plannedStints={nextStints} currentStint={currentStint} driverName={driverName} />,
-            <FuelPanel key="fuel" strategy={fixtureStrategy} />,
+            <PacePanel v3={fixtureV3} live key="pace" strategy={fixtureStrategy} pace={{ lastLapSeconds: 103.162, bestLapSeconds: 102.513, stintAvgSeconds: 102.9, targetSeconds: null }} points={pacePoints} />,
+            <StintDriverPanel carNumber={fixtureV3.opponents?.find(c => c.isPlayer)?.carNumber} nowMs={Date.parse(fixtureV3.capturedAt!)} key="driver" strategy={fixtureStrategy} plannedStints={nextStints} currentStint={currentStint} driverName={driverName} />,
+            <FuelPanel key="fuel" strategy={fixtureStrategy} window={advice.window} plannedStints={fixtureStints} />,
             <VehicleTelemetryPanel key="tyres" v3={fixtureV3} live />,
           ]}
           extra={
