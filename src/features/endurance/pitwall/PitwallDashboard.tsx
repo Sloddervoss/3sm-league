@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./pitwallLook.css";
 
 /**
  * Het raster van Vincents ontwerp, als losse presentatiecomponent.

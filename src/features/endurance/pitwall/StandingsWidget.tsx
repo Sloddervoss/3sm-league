@@ -76,7 +76,8 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
           {live ? "Live" : "Offline"}
         </span>
       }
-      bodyClassName="px-0 py-0"
+      className="pitwall-timing"
+      bodyClassName="pitwall-timing-body px-0 py-0"
     >
       {/* AHEAD / YOU / BEHIND — wie zit er direct voor en achter je. */}
       <div className="grid gap-px border-b border-[#161C27] bg-[#161C27] sm:grid-cols-3" data-pitwall-slot="ahead-you-behind">
@@ -97,7 +98,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
       </div>
 
       {rows.length > 1 && (
-        <div className="overflow-x-auto">
+        <div className="pitwall-timing-scroll overflow-x-auto" tabIndex={0} role="region" aria-label="Live timing — scrollbaar klassement">
           <table className="w-full min-w-[720px] text-left text-[12px] tabular-nums">
             <thead className="bg-[#0A0C10] text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
               <tr>
@@ -162,7 +163,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
       )}
 
       <p className="px-3.5 py-2 text-[10px] text-slate-500">
-        Snapshot van tegenstanders, geen volledig klassement. Gap is het verschil tot jouw auto.
+        Snapshot van tegenstanders, geen volledig klassement. Gap is het verschil tot jouw auto. Scroll voor alle rijen.
       </p>
     </PitwallPanel>
   );

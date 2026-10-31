@@ -152,6 +152,17 @@ describe("Live timing — kolommen, klassesortering en de eigen rij", () => {
     expect(screen.getAllByText(/in beeld$/).length).toBeGreaterThan(0);
   });
 
+  it("houdt alle timingrijen in een benoemd, toetsenbordbereikbaar scrollvlak", () => {
+    render(<StandingsWidget standings={standings} ownCarLabel="3SM Endurance" ownCarNumber={null} live />);
+    const region = screen.getByRole("region", { name: "Live timing — scrollbaar klassement" });
+    expect(region.tabIndex).toBe(0);
+    expect(region.className).toContain("pitwall-timing-scroll");
+    expect(region.querySelectorAll("tbody tr[data-pitwall-own-row]")).toHaveLength(1);
+    expect(within(region).getByText("Vincent")).toBeTruthy();
+    expect(within(region).getByText("M. Fischer")).toBeTruthy();
+    expect(screen.getByText(/Scroll voor alle rijen/)).toBeTruthy();
+  });
+
   it("wacht netjes op tegenstanderdata", () => {
     render(<StandingsWidget standings={deriveStandings(null)} ownCarLabel="Mijn auto" ownCarNumber={null} live />);
     expect(screen.getByText("Wacht op tegenstanderdata…")).toBeTruthy();
