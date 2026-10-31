@@ -362,9 +362,26 @@ namespace ThreeSM.EnduranceConnector
                     { message = "De externe updater bevestigde zijn proceshandle niet op tijd."; return false; }
                 }
 
-                if (Application.Current != null && Application.Current.MainWindow != null)
+                // MainWindow is eigendom van de UI-thread. Vanaf de achtergrondthread mag je hem
+                // niet eens lézen: dat gooit "The calling thread cannot access this object" en
+                // dan blijft de update steken terwijl de updater al klaarstaat. Alleen de
+                // dispatcher leest en sluit het venster.
+                var application = Application.Current;
+                if (application != null)
                 {
-                    _ = Application.Current.Dispatcher.BeginInvoke(new Action(() => Application.Current.MainWindow.Close()));
+                    var dispatcher = application.Dispatcher;
+                    if (dispatcher != null)
+                    {
+                        try
+                        {
+                            _ = dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                var window = application.MainWindow;
+                                if (window != null) window.Close();
+                            }));
+                        }
+                        catch (InvalidOperationException) { }
+                    }
                 }
                 return true;
             }
