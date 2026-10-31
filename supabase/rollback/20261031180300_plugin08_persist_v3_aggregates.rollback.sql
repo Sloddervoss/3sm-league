@@ -1,9 +1,14 @@
 -- Rollback van 20261031180300_plugin08_persist_v3_aggregates.sql
 --
 -- Zet simhub_persist_v3 terug op de definitie van 20261031140000: zes
--- parameters, zonder p_events en p_laps. De tabellen en de interne schrijver
--- blijven staan (die horen bij 20261031180000 en 20261031180100); ze worden
--- hier alleen niet meer gevuld.
+-- parameters, zonder p_events en p_laps. De tabellen en hun GEGEVENS blijven
+-- staan; ze worden hier alleen niet meer gevuld. Dat is opzettelijk: een DROP
+-- zou alle wear-ankers, pitgebeurtenissen en rondeaggregaten weggooien en de
+-- aanname dat de outbox ze opnieuw aanbiedt is niet gegarandeerd.
+--
+-- Destructief opruimen (na export) staat in
+-- supabase/rollback/plugin08_destructive_cleanup.sql en is een aparte,
+-- gedocumenteerde handeling — geen onderdeel van deze rollback.
 --
 -- VOLGORDE — dit is belangrijk en gaat mis als je hem negeert:
 --   1. Zet eerst in de connectorconfiguratie de features
