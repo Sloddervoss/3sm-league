@@ -56,11 +56,13 @@ Verwijderd omdat hun inhoud nu elders staat en dubbel zou zijn: `TopRaceBar`
 | --- | --- |
 | `pitwall-endurance-1920x1080.png` | endurance, viewport 1920×1080 |
 | `pitwall-test-1920x1080.png` | pitwall-test, viewport 1920×1080 |
-| `pitwall-endurance-full.png` | endurance, volledige pagina (1920×2078) |
-| `pitwall-test-full.png` | pitwall-test, volledige pagina (1920×1785) |
+| `pitwall-endurance-full.png` | endurance, volledige pagina (1910×1513) |
+| `pitwall-test-full.png` | pitwall-test, volledige pagina (1910×1271) |
 
-De viewport-beelden laten zien wat er zonder scrollen in beeld staat; de
-`-full`-beelden tonen de vier panelen en de aanvullende blokken.
+De viewport-beelden tonen nu de vier hoofdpanelen volledig zonder paginascroll.
+De `-full`-beelden tonen ook alle aanvullende blokken. De browser toont echte
+scrollbars; daardoor is de volledige-paginacapture 1910 px breed, terwijl de
+viewportcapture 1920×1080 blijft.
 
 ### Hoe ze gemaakt zijn
 
@@ -73,13 +75,14 @@ wordt door geen route geïmporteerd en zit niet in de build.
 
 ```bash
 npx vite --config vite.pitwall-look.config.ts   # serveert /docs/pitwall-look/preview/*.html
-node docs/pitwall-look/preview/shot.mjs         # schrijft de PNG's (Playwright)
+bash scripts/ensure-playwright-runtime.sh node docs/pitwall-look/preview/shot.mjs
 ```
 
 `shot.mjs` gebruikt `--executablePath` naar de browser in
 `~/.cache/ms-playwright`, omdat de Playwright-versie in deze werkboom een
-nieuwere browser wil dan hier geïnstalleerd is. Op een machine met
-`npx playwright install` is de standaardlaunch genoeg.
+nieuwere browser wil dan hier geïnstalleerd is. `ensure-playwright-runtime.sh` levert de bestaande user-local NSS/NSPR-libraries.
+De screenshot-run faalt bij browserfouten, externe requests of een mislukte
+layout-/scrollassertie en schrijft ook `verification.json`.
 
 ## Tests
 
@@ -90,3 +93,64 @@ nieuwere browser wil dan hier geïnstalleerd is. Op een machine met
 - `src/test/pitwallLookTestMode.test.tsx` — de pitwall-test-pagina met
   gemockte RPC's: "Mijn sessie" in plaats van "Coureur & wissel", hetzelfde
   raster, tankinhoud zonder strategie.
+
+## Compacte 1080p-afwerking
+
+Startpunt: `4fc057e`, bestaande branch `feat/pitwall-look-3sm`.
+
+- `src/features/endurance/pitwall/pitwallLook.css`: lokaal gescopeerde
+  paneelheaders, 12 px secundaire labels met hoger contrast, compacte
+  circuitruimte/eigen-autostrook en een horizontaal ingedeelde beslissingsband.
+  Hoofdwaarden worden niet verkleind. Onder 1280 px vervalt de compacte
+  desktopindeling; de bestaande twee-/éénkolomsvolgorde blijft behouden.
+- `src/features/endurance/pitwall/PitwallDashboard.tsx`: importeert die styling.
+- `src/features/endurance/pitwall/DecisionBand.tsx`: alleen CSS-ankers;
+  alle voorwaarden, adviesinhoud en live-region-eigenschappen zijn gelijk.
+- `src/features/endurance/pitwall/StandingsWidget.tsx`: 400 px desktopvlak,
+  intern scrollbare tabel met sticky kolomkoppen, benoemde focusbare regio
+  en zichtbare scrollhint. Alle tegenstanders blijven in de tabel aanwezig.
+  Buiten de brede indeling is de tabel maximaal 360 px hoog.
+- `src/test/pitwallLook.test.tsx`: extra regressietest voor toegankelijk
+  scrollvlak, eigen rij en behoud van tegenstanders.
+- `docs/pitwall-look/preview/shot.mjs`: viewport- én volledige captures,
+  browserasserties en een machineleesbaar verificatierapport.
+
+### PASS/FAIL
+
+- PASS — volledige `npm test`: 193 bestanden / 1589 tests.
+- PASS — ESLint op de vier gewijzigde TSX-/testbestanden; `git diff --check`.
+- PASS — beide modi op 1920×1080: onderrand vier panelen op respectievelijk
+  1047 px (endurance) en 1040,5 px (test). Meetresultaten: `verification.json`.
+- PASS — muiswiel én toetsenbord bereiken het einde van live timing;
+  paginascroll en paneelpositie blijven gelijk.
+- PASS — 64 extra DOM-rijen vergroten de documenthoogte niet. Dit is uitsluitend
+  een browser-layoutstresstest, geen nieuwe fixture of gewijzigde databron.
+- PASS — 1440, 1024 en 390 px zonder horizontale paginaoverflow;
+  twee panelen per rij bij 1024 px en één per rij bij 390 px.
+- PASS — raw-telemetrie-uitklapper opent in het testharnas;
+  geen browserfouten en geen externe netwerkrequests.
+- FAIL, bestaand — `npm run typecheck`: 13 diagnostics in TeamModal,
+  community-support, pitWindow/strategy.test en main.tsx. Een losse `git archive`
+  van startcommit `4fc057e` produceert exact dezelfde diagnostics na het
+  normaliseren van het tijdelijke pad. Niet opgelost binnen deze look-opdracht.
+
+### Bewust behouden en verificatiegrens
+
+De aanvullende strategie, meldingen, tijdlijn en diagnostiek blijven onder het
+hoofdscherm staan: een volledige pagina is dus bewust hoger dan 1080 px. Geen
+inhoud verborgen of verwijderd om de vier panelen te laten passen.
+
+De screenshots tonen fixturecomponenten, geen ingelogde productieroutes. De
+omliggende sitenavigatie, apparatenlijst en geopende Race Control zijn niet in
+dit harnas opgenomen; er wordt geen volledige live-routeverificatie geclaimd.
+Een extra lang advies, een open bedieningspaneel of grotere browsertekst mag
+meer paginaruimte innemen; daarvoor wordt niet geclipt.
+
+De fixture toont bestaande niet-consistente cijfers en een bestaande melding
+voor ontbrekende officiële projectiegeometrie met kaartfallback. Beide zijn
+bewust niet gerepareerd. Trackassets, herkenning, projectie, markers en
+pitmarkering zijn niet gewijzigd; alleen de beschikbare schermruimte is anders.
+
+Impact: uitsluitend frontendpresentatie in de worktree. Backend/API, bot,
+database/migraties, auth/rollen en deployment: geen wijzigingen.
+Productiefrontendwijzigingen: NEE. Niet gepusht, niet gemerged, niet gedeployed.

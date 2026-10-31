@@ -1,0 +1,150 @@
+[
+  {
+    "mode": "endurance",
+    "desktop": {
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "document": {
+        "width": 1910,
+        "height": 1513
+      },
+      "panels": [
+        {
+          "x": 155,
+          "y": 752.5,
+          "width": 391,
+          "height": 294.5,
+          "bottom": 1047
+        },
+        {
+          "x": 558,
+          "y": 752.5,
+          "width": 391,
+          "height": 294.5,
+          "bottom": 1047
+        },
+        {
+          "x": 961,
+          "y": 752.5,
+          "width": 391,
+          "height": 294.5,
+          "bottom": 1047
+        },
+        {
+          "x": 1364,
+          "y": 752.5,
+          "width": 391,
+          "height": 294.5,
+          "bottom": 1047
+        }
+      ],
+      "timing": {
+        "x": 711.328125,
+        "y": 443.25,
+        "width": 1028.671875,
+        "height": 250.25,
+        "bottom": 693.5,
+        "clientHeight": 250,
+        "scrollHeight": 800,
+        "overflow": "auto"
+      }
+    },
+    "wheelAndKeyboardScroll": "PASS",
+    "growingSnapshot": "PASS",
+    "rawDisclosure": "not in endurance fixture",
+    "responsive": [
+      {
+        "width": 1440,
+        "panelColumns": 4,
+        "noHorizontalPageOverflow": true
+      },
+      {
+        "width": 1024,
+        "panelColumns": 2,
+        "noHorizontalPageOverflow": true
+      },
+      {
+        "width": 390,
+        "panelColumns": 1,
+        "noHorizontalPageOverflow": true
+      }
+    ],
+    "browserErrors": []
+  },
+  {
+    "mode": "test",
+    "desktop": {
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "document": {
+        "width": 1910,
+        "height": 1271
+      },
+      "panels": [
+        {
+          "x": 155,
+          "y": 750.5,
+          "width": 391,
+          "height": 290,
+          "bottom": 1040.5
+        },
+        {
+          "x": 558,
+          "y": 750.5,
+          "width": 391,
+          "height": 290,
+          "bottom": 1040.5
+        },
+        {
+          "x": 961,
+          "y": 750.5,
+          "width": 391,
+          "height": 290,
+          "bottom": 1040.5
+        },
+        {
+          "x": 1364,
+          "y": 750.5,
+          "width": 391,
+          "height": 290,
+          "bottom": 1040.5
+        }
+      ],
+      "timing": {
+        "x": 711.328125,
+        "y": 443,
+        "width": 1028.671875,
+        "height": 250.5,
+        "bottom": 693.5,
+        "clientHeight": 251,
+        "scrollHeight": 800,
+        "overflow": "auto"
+      }
+    },
+    "wheelAndKeyboardScroll": "PASS",
+    "growingSnapshot": "PASS",
+    "rawDisclosure": "PASS",
+    "responsive": [
+      {
+        "width": 1440,
+        "panelColumns": 4,
+        "noHorizontalPageOverflow": true
+      },
+      {
+        "width": 1024,
+        "panelColumns": 2,
+        "noHorizontalPageOverflow": true
+      },
+      {
+        "width": 390,
+        "panelColumns": 1,
+        "noHorizontalPageOverflow": true
+      }
+    ],
+    "browserErrors": []
+  }
+]
