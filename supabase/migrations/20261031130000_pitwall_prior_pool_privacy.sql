@@ -46,6 +46,19 @@
 -- wat deze functie over een individu kan prijsgeven: bij één account komt er
 -- geen getal naar buiten, ook niet als je de wrapper met andermans auto en baan
 -- aanroept.
+--
+-- De drempel telt NA de uitsluiting, en dat is een bewuste lezing van het
+-- contract. Een cel met twee accounts waarvan de aanroeper er één is, houdt na
+-- uitsluiting één account over; publiceren zou dan precies de data van die ene
+-- ander teruggeven (de aanroeper kent zijn eigen bijdrage). "Minimaal twee
+-- accounts" moet dus over de gepubliceerde populatie gaan, niet over de
+-- populatie inclusief de vrager.
+--
+-- Gevolg voor de huidige league (3 apparaten, 2 accounts): deelnemers krijgen
+-- geen publiceerbare cel meer en vallen terug op de trap erboven; alleen een
+-- derde partij ziet de cel. Zodra er een derde account bij komt, publiceert de
+-- cel weer voor iedereen. Dat is de prijs van de regel, niet een fout: met twee
+-- mensen is "gedeelde kennis" niet te onderscheiden van "de rit van de ander".
 -- ============================================================================
 
 begin;
