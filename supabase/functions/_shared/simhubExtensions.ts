@@ -435,11 +435,13 @@ export const parseMeasurementEvent = (value: unknown, index: number): Measuremen
   const wearAfter = parseWearV1(record.wearAfter, `${path}.wearAfter`);
 
   // Een wear-waarneming zonder bewijsgrond of zonder confidence is geen
-  // waarneming. De database weigert hem ook; hier gebeurt het met een reden.
-  if ((wearBefore !== null || wearAfter !== null) && record.evidence === undefined) {
+  // waarneming. `evidence: null` is geen bewijs: dat werd eerder pas door de
+  // database geweigerd en is nu al hier een afwijzing, met dezelfde regel.
+  const hasWear = wearBefore !== null || wearAfter !== null;
+  if (hasWear && (record.evidence === undefined || record.evidence === null)) {
     throw new Error(`${path}.evidence is required when wear is present`);
   }
-  if ((wearBefore !== null || wearAfter !== null) && confidence === null) {
+  if (hasWear && confidence === null) {
     throw new Error(`${path}.confidence is required when wear is present`);
   }
 

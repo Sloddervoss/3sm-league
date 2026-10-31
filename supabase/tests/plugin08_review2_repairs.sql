@@ -365,6 +365,47 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- P5 — wear.version is verplicht, evidence null is geen bewijs
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_ack jsonb;
+  v_blocked boolean;
+begin
+  -- De probe uit de review: een volledig wear-object zonder version.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1',
+    jsonb_build_array(pg_temp.event(30, jsonb_build_object(
+      'wearAfter', jsonb_build_object(
+        'scale', 'remaining_percent', 'fl', 12, 'fr', 12, 'rl', 12, 'rr', 12)))),
+    null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 0,
+                     'P5 wear zonder version wordt niet geaccepteerd');
+  perform pg_temp.eq(v_ack #> '{events,rejected,0,reason}', '"wear_after_contract"'::jsonb,
+                     'P5 de afwijzing noemt het wear-contract');
+
+  -- De tweede wachter: ook een rechtstreekse insert moet eraan voldoen.
+  v_blocked := false;
+  begin
+    insert into public.simhub_measurement_events
+      (device_id, event_uid, kind, wear_after, evidence, confidence, content_hash)
+    values ((select device::text from t_ids), pg_temp.uid(997), 'wear_refresh_confirmed',
+            jsonb_build_object('scale', 'remaining_percent', 'fl', 12, 'fr', 12, 'rl', 12, 'rr', 12),
+            pg_temp.evidence(), 0.9, md5('x'));
+  exception when check_violation then
+    v_blocked := true;
+  end;
+  perform pg_temp.expect(v_blocked,
+                         'P5 de CHECK weigert wear zonder version');
+
+  -- De geldige vorm komt er wel door.
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-1', jsonb_build_array(pg_temp.event(31)), null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 1,
+                     'P5 wear met version 1 wordt geaccepteerd');
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Resultaat
 -- ---------------------------------------------------------------------------
 do $$

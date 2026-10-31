@@ -142,6 +142,9 @@ Regels:
 * Onbekende sleutels zijn een fout. `"fl": "banana"` is een fout.
 * Een waarneming met `wearBefore`/`wearAfter` **eist** `evidence` en
   `confidence` (0..1); anders is het geen waarneming en wordt de rij geweigerd.
+  `evidence: null` of een ontbrekende `version` is geen bewijs respectievelijk
+  geen geldig wear-object: beide worden al in de Edge afgewezen, met dezelfde
+  regel als de database-CHECK.
 
 ## 5. evidence_v1
 

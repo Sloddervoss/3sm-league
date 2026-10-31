@@ -50,6 +50,7 @@ MIGRATIES=(
   20261031200000_plugin08_lap_driver_semantics
   20261031200100_plugin08_ack_revisions
   20261031200200_plugin08_complete_coverage
+  20261031200300_plugin08_wear_version_required
 )
 
 for migratie in "${MIGRATIES[@]}"; do

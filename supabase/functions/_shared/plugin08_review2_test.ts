@@ -136,6 +136,21 @@ Deno.test("R2-4 complete vereist echte rondedekking", () => {
   if (grens.complete !== true) throw new Error("exact 80% werd niet compleet");
 });
 
+Deno.test("R2-5 evidence: null is geen bewijs en wear.version is verplicht", () => {
+  const zonderBewijs = parseMeasurementEventsReport([event(1, { evidence: null })]);
+  if (zonderBewijs.rows.length !== 0) throw new Error("evidence null werd geaccepteerd");
+  if (!/evidence/.test(zonderBewijs.rejected[0].reason)) throw new Error("de reden noemt bewijs niet");
+
+  const zonderVersie = parseMeasurementEventsReport([
+    event(1, { wearAfter: { scale: "remaining_percent", fl: 12, fr: 12, rl: 12, rr: 12 } }),
+  ]);
+  if (zonderVersie.rows.length !== 0) throw new Error("wear zonder version werd geaccepteerd");
+  if (!/version/.test(zonderVersie.rejected[0].reason)) throw new Error("de reden noemt version niet");
+
+  const metVersie = parseMeasurementEventsReport([event(1)]);
+  if (metVersie.rows.length !== 1) throw new Error("geldige wear werd geweigerd");
+});
+
 Deno.test("R2-3 parser- en database-indexen beschrijven dezelfde reeks", () => {
   // Drie rijen, de middelste is ongeldig in de parser. De database ziet dus
   // alleen rij 0 en rij 2, en nummert die als 0 en 1.
