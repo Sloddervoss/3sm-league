@@ -15,10 +15,14 @@ Malforme PACE wordt null zonder kerntelemetrie of measurement_ack te verliezen.
 Metric: `id`, `observedSessionTimeSeconds`, nullable `lastLapSeconds`, `bestLapSeconds`,
 `lastLapSectorSeconds`, `bestLapSectorSeconds`, `bestSectorSeconds`,
 `bestLapDeltaToFieldBestSeconds`, `bestLapDeltaToPlayerSeconds`, `lapValid`,
-`lapHighPrecision`, `trackPositionPercentRaw`, plus `sectorMismatchCount`.
+`lapHighPrecision`, `trackPositionPercentRaw`, plus `sectorMismatchCount`. Additief/nullable: `sectorCount` (1–16),
+`sectorLap` (afgeronde ronde), `sectorSource`, `sectorErrorSeconds`,
+`bestSectorSource`, `bestSectorErrorSeconds`, `sectorDiagnostic`.
+Bron is `measured`, `simhub` of null; afwijking is som minus gemelde rondetijd in seconden.
 
-Last/best-triplets zijn alleen geldig als alle drie waarden positief/eindig zijn en hun som
-maximaal 0,1 s van de bijbehorende rondetijd afwijkt. Anders het HELE triplet null.
+Last/best-sectorreeksen zijn alleen geldig als alle waarden positief/eindig zijn, het aantal
+bij `sectorCount` past en hun som
+maximaal 0,1 s van de bijbehorende rondetijd afwijkt. Anders de HELE reeks null.
 Controle vindt onafhankelijk plaats in plugin, Edge en UI. De bronafwijkingsteller neemt toe
 bij een nieuwe ongeldige broncombinatie/episode, niet bij iedere identieke tick.
 BestSector-minima zijn aparte theoretische minima, geen opgetelde echte ronde.
@@ -27,8 +31,12 @@ Beste-rondedelta's zijn secondenverschillen van BESTE rondes en NOOIT de live DE
 
 Een rondetijdrecord bevat `id`, `lap`, `seconds`, `observedSessionTimeSeconds`,
 `quality=sampled`, `observationId`. Eerste waarneming is baseline. Bevestiging vereist
-een waargenomen korte finishovergang, een eerder finishanker en overeenkomst met LastLapTime
-binnen 0,25 s. Identieke rondetijden van twee verschillende ronden blijven aparte records.
+een waargenomen opeenvolgende rondewissel en een positieve gemelde laatste rondetijd.
+De capture wacht 0,25 s op bronverversing, maximaal 2 s; waar de SDK `CarIdxLapCompleted`
+levert moet die exact bij de afgeronde ronde horen. Rondetijdenhistorie vereist geen
+volledige afstandscurve: een gemist intern afstandspunt mag de leiderlijn niet blokkeren.
+Identieke rondetijden van twee verschillende ronden blijven aparte records. Geen backfill
+voor ronden van vóór binnenkomst; geen afgeleide rondetijd uit huidige snelheid.
 
 Chunk: `id`, `traceId`, `lap`, `chunkIndex`, `finalChunk`, `anchorSessionTimeMs`,
 `anchorUncertaintyMs`, `lapSeconds`, `provenance=simhub-opponent-sampled`,
@@ -42,7 +50,7 @@ server alle punten heeft ontvangen. Alleen de server schrijft `complete` en `con
 
 Maximaal 40 identiteiten, 3 sporen × 128 afstandsbins en 20 rondetijden per auto.
 Actuele, laatste en snelste volledig opgenomen ronde; geen groeiende ticklijsten.
-Capture loopt vóór pairing/send-poorten, maximaal 10 Hz op sessietijd, gelijke SDK-tick genegeerd.
+Capture loopt vóór pairing/send-poorten, maximaal 20 Hz op de hoogste beschikbare bron-sessietijd, gelijke SDK-tick genegeerd.
 Twee omliggende waarnemingen: maximaal 0,25 s én twee binintervallen; anders geen verbinding.
 Pit, ontbrekende klok, tijd-terug, replay/offline, teleport en sessiewissel breken de capture.
 Iedere nieuwe trace krijgt een eigen ID, ook bij een onderbreking binnen hetzelfde rondenummer.
@@ -96,8 +104,11 @@ Gaten krijgen nieuwe SVG-subpaden. Eén punt is geen curve; lege referentie is g
 Geen huidige snelheid of laatste-minus-beste als vervanging van een ontbrekende grafiek.
 
 Live-timingsectoren en de eigen KPI-strip gebruiken uitsluitend actuele, gecontroleerde
-PACE-triplets; de oude ongecontroleerde vehicle.sector*-waarden blijven onzichtbaar.
-Metric-freshness is maximaal 5 s sessietijd en de LastLapTime moet bij de rij passen.
+PACE-sectorreeksen; de oude ongecontroleerde vehicle.sector*-waarden blijven onzichtbaar.
+Metric-freshness is maximaal 5 s sessietijd. Met `sectorLap` moet de afgeronde ronde exact
+bij de actuele rij horen; de getoonde laatste rondetijd komt dan uit diezelfde gecontroleerde
+metric (CarIdxLastLapTime en SimHub kunnen iets verschillen). Oudere metrics zonder
+ronde-identiteit vereisen exacte LastLapTime-gelijkheid met de rij.
 Offline, verkeerde transportidentiteit en verlopen historie worden onderdrukt. Bij lege data
 staat er een korte reden. Alle tabs blijven bereikbaar. Kaart en vier-panelenraster ongewijzigd.
 
@@ -107,3 +118,47 @@ Feature standaard uit: nieuwe producer stuurt alleen na negotiated `paceCapture=
 Eerst aparte GO, schema/rollback-pins opnieuw vergelijken, scheduler/loadgates bewijzen,
 DB → Edge/control → plugin-canary → frontend. Deze lokale DLL is GEEN distributierelease:
 geen nieuwe versie, ZIP, signing, manifest of updater-uitrol gemaakt.
+
+## Definitieve sectoracquisitie (2026-11-01, lokaal)
+
+`RawChannelReader` leest `SplitTimeInfo.Sectors[].SectorStartPct` via
+`RawData.SessionData.SessionInfo`, met nullable fallback als SplitTimeInfo direct onder
+SessionData hangt. Start moet 0 zijn, grenzen strikt oplopend en <1; maximaal 16.
+Geen fallback naar een verondersteld drievoud. TrackID/TrackName/TrackConfigName en
+observedSession bepalen de cache-identiteit; metadata wordt maximaal eenmaal per seconde
+herlezen, wisseling wist de capture. SDK-carindex komt uit DriverInfo op exact autonummer,
+nooit op coureurnaam of lijstvolgorde.
+
+De voorkeursbron is één SDK-image met SessionTime, CarIdxLapDistPct, CarIdxLap,
+CarIdxLapCompleted, CarIdxLastLapTime en CarIdxBestLapTime; anders bestaande nullable
+Opponent-/sessiebronnen. SDK-klok wordt vóór de 20Hz-poort gelezen: een tragere SimHub-klok
+mag geen snellere SDK-sampler tegenhouden. Een nieuwe SDK-tick kan dus tot 20 Hz meetellen.
+
+`SectorMeasurement` interpoleert elke werkelijk gepasseerde grens tussen de omliggende
+ticks, ook de finish. Een eerste deelronde mist het startanker en publiceert niets.
+Gaten >0,25 s, sprongen >2/127 baanlengte, achteruit/teleport, pit, offline, ongeldig lapflag,
+lap-/tick-/klokreset en sessiewissels mogen geen doorgaande sectorronde opleveren.
+Een voltooide reeks moet binnen 0,1 s van de gemelde laatste rondetijd liggen.
+Vertraagde rondetijd mag maximaal 2 s alsnog diezelfde ronde valideren; een ander
+CarIdxLapCompleted mag dat niet. Beste gemeten sectoren worden alleen bij de bijbehorende
+beste-rondetijd bewaard, nooit samengesteld uit losse minima.
+
+SimHub LastLapSectorTimes/BestLapSectorTimes.GetSectorSplit(n) kan een willekeurig aantal
+sectoren leveren; de oude LastLapSector1..3/BestLapSector1..3-getters zijn alleen bruikbaar
+bij een werkelijke drievoudige layout. Dezelfde som-/aantalcontrole geldt. Voorrang:
+goedgekeurd gemeten → goedgekeurd SimHub → null. Ook de Edge-parser en UI toetsen opnieuw.
+
+Diagnostiek: eerste finish, eerste volledig opgenomen ronde en daarna elke twintigste
+ronde. Eén kleine opname per geselecteerde ronde; pas na de 2s-bronverversingsmarge, zonder
+extra request, outbox of ACK. Velden: source/count/sumSeconds/reportedSeconds/errorSeconds/
+reason (`valid`, `incomplete`, `sum_mismatch`, `missing_lap`). Deze diagnostiek beschrijft de
+eigen meetproef; de normale sectorSource/sectorErrorSeconds vermelden de werkelijk gekozen
+bron, inclusief SimHub-fallback. Geen apparaatnaam of apparaat-id in diagnostiek. Bij krap
+budget wordt eerst diagnostiek uit de serialisatie gehaald, daarna zo nodig heel PACE.
+Core en bestaande meetbatch gaan altijd voor. Maximaal één bewaarde diagnostiek per auto.
+
+Frontend kiest 0/onbekend of het werkelijke aantal kolommen uit actuele metadata. Zes
+sectoren blijven zes. Compacte cijfers vanaf vier; horizontaal scrollen blijft beschikbaar
+voor bredere layouts, zonder het kaart-/vier-panelenraster te veranderen. Een expliciet
+gekozen verdwenen auto wordt nooit stilzwijgend door de nieuwe leider vervangen. Bestaande
+opgenomen rondes mogen zichtbaar blijven, maar ontbrekende ronden/bins worden niet opgevuld.
