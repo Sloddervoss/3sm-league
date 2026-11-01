@@ -116,6 +116,51 @@ namespace ThreeSM.EnduranceConnector
             return text.Length == 0 ? null : text;
         }
 
+        // Session YAML is refreshed much less frequently than telemetry. The caller caches
+        // the result per session/track configuration; malformed layouts are never guessed.
+        public double[] ReadSectorStarts()
+        {
+            var root = SessionRoot();
+            var split = GetMember(root, "SplitTimeInfo");
+            if (split == null) split = GetMember(GetMember(GetMember(_newData, "RawData"), "SessionData"), "SplitTimeInfo");
+            var sectors = GetMember(split, "Sectors") as IEnumerable;
+            if (sectors == null) return null;
+            var starts = new List<double>();
+            foreach (var sector in sectors)
+            {
+                var value = ToDouble(GetMember(sector, "SectorStartPct"));
+                if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value)
+                    || value < 0 || value >= 1 || starts.Count >= 16
+                    || (starts.Count > 0 && value <= starts[starts.Count - 1])) return null;
+                starts.Add(value.Value);
+            }
+            return starts.Count > 0 && starts[0] == 0 ? starts.ToArray() : null;
+        }
+        public string ReadTrackConfiguration()
+        {
+            var weekend = GetMember(SessionRoot(), "WeekendInfo")
+                ?? GetMember(GetMember(GetMember(_newData, "RawData"), "SessionData"), "WeekendInfo");
+            return Convert.ToString(GetMember(weekend, "TrackID"), CultureInfo.InvariantCulture) + ":"
+                + Convert.ToString(GetMember(weekend, "TrackName"), CultureInfo.InvariantCulture) + ":"
+                + Convert.ToString(GetMember(weekend, "TrackConfigName"), CultureInfo.InvariantCulture);
+        }
+        public Dictionary<string, int> ReadCarIndices()
+        {
+            var result = new Dictionary<string, int>(StringComparer.Ordinal);
+            var drivers = GetMember(GetMember(SessionRoot(), "DriverInfo"), "Drivers") as IEnumerable;
+            if (drivers == null) return result;
+            foreach (var driver in drivers)
+            {
+                var number = Convert.ToString(GetMember(driver, "CarNumber"), CultureInfo.InvariantCulture);
+                var index = ToDouble(GetMember(driver, "CarIdx"));
+                if (!string.IsNullOrEmpty(number) && index.HasValue && index >= 0 && index < 64 && index == Math.Floor(index.Value))
+                    result[number] = (int)index.Value;
+            }
+            return result;
+        }
+        private object SessionRoot()
+        { return GetMember(GetMember(GetMember(_newData, "RawData"), "SessionData"), "SessionInfo"); }
+
         private object ReadValue(string channel)
         {
             if (string.IsNullOrEmpty(channel)) return null;
@@ -139,6 +184,8 @@ namespace ThreeSM.EnduranceConnector
         private static object GetMember(object target, string member)
         {
             if (target == null || string.IsNullOrEmpty(member)) return null;
+            var dictionary = target as IDictionary;
+            if (dictionary != null) return dictionary.Contains(member) ? dictionary[member] : null;
             var type = target.GetType();
             var key = type.FullName + "|" + member;
             PropertyInfo property;

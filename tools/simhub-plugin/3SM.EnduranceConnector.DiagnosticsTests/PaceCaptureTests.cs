@@ -80,6 +80,7 @@ internal static class PaceCaptureTests
         // Artifact is synthetic and explicitly not a 40-car live capture.
         var output=Environment.GetEnvironmentVariable("PACE_FRAME_OUTPUT");
         if(!string.IsNullOrEmpty(output)) File.WriteAllText(output,packed);
+        n+=SectorMeasurementTests.Run(check);
         return n;
     }
 }

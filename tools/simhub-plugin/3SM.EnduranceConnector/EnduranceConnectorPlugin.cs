@@ -47,6 +47,10 @@ namespace ThreeSM.EnduranceConnector
         private readonly Stopwatch _sendClock = Stopwatch.StartNew();
         private readonly Stopwatch _stintClock = new Stopwatch();
         private readonly PaceCaptureBuffer _paceCapture = new PaceCaptureBuffer();
+        private double[] _paceSectorStarts;
+        private Dictionary<string,int> _paceCarIndices = new Dictionary<string,int>(StringComparer.Ordinal);
+        private string _paceMetadataKey;
+        private double _paceMetadataAt = -1, _paceSampleAt = -1;
         private readonly SessionTelemetryReader _sessionTime = new SessionTelemetryReader();
         // 0.7.0: onthoudt de laatst gezien wear/karkas en bevriest die op de pit-entry-flank.
         private readonly TyreSnapshotTracker _tyreTracker = new TyreSnapshotTracker();
@@ -2016,20 +2020,50 @@ namespace ThreeSM.EnduranceConnector
         }
         private static bool? PaceBool(object source,string name)
         { try { var value=source.GetType().GetProperty(name)?.GetValue(source,null); return value is bool?(bool?)value:null; } catch { return null; } }
-        private static double?[] PaceSectors(object source,string prefix)
+        private static double?[] PaceSectors(object source,string prefix,int count)
         {
-            var values=Enumerable.Range(1,3).Select(i=>PaceNumber(source,prefix+i,0.001,86400)).ToArray();
+            if(count<1 || count>16) return null;
+            var values=new double?[count];
+            for(int i=1;i<=count;i++)
+            {
+                // Newer SimHub versions expose arbitrary sectors through SectorTimes.
+                // Old getters only cover three; never project those onto a six-sector layout.
+                try
+                {
+                    string member=prefix=="LastLapSector" ? "LastLapSectorTimes" : prefix=="BestLapSector" ? "BestLapSectorTimes" : "BestSectorSplits";
+                    var times=source.GetType().GetProperty(member)?.GetValue(source,null);
+                    var value=times?.GetType().GetMethod("GetSectorSplit",new[]{typeof(int)})?.Invoke(times,new object[]{i});
+                    if(value is TimeSpan) values[i-1]=PaceCaptureBuffer.Number(((TimeSpan)value).TotalSeconds,0.001,86400);
+                }
+                catch { /* Field-local nullable fallback. */ }
+                if(!values[i-1].HasValue && count==3) values[i-1]=PaceNumber(source,prefix+i,0.001,86400);
+            }
             return values.All(v=>v==null)?null:values;
         }
         private void ObservePace(PluginManager manager,GameData data,bool active)
         {
-            if(!active || data.NewData==null) { _paceCapture.Reset(); return; }
+            if(!active || data.NewData==null) { _paceCapture.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; return; }
             try
             {
                 var snapshot=data.NewData;
                 var channels=new RawChannelReader(snapshot,property=>GetRaw(manager,property));
-                var clock=_sessionTime.Read(snapshot);
                 var sdk=ReadDirectSdk();
+                var sdkClock=sdk?.ReadNumber("SessionTime");
+                var clock=sdkClock??_sessionTime.Read(snapshot);
+                if(clock.HasValue && _paceSampleAt>=0 && clock>=_paceSampleAt && clock-_paceSampleAt<0.049999) return;
+                _paceSampleAt=clock??-1;
+                var observedSession=BuildObservedSessionId(manager,channels);
+                var metadataKey=observedSession+":"+channels.ReadTrackConfiguration();
+                if(metadataKey!=_paceMetadataKey || !clock.HasValue || clock<_paceMetadataAt || clock-_paceMetadataAt>=1)
+                {
+                    if(metadataKey!=_paceMetadataKey) _paceCapture.Reset();
+                    _paceSectorStarts=channels.ReadSectorStarts();
+                    _paceCarIndices=channels.ReadCarIndices();
+                    _paceMetadataKey=metadataKey; _paceMetadataAt=clock??-1;
+                }
+                var sectorCount=_paceSectorStarts?.Length??0;
+                // One source image for positions, lap counters, reported times and clock.
+
                 var own= snapshot.Opponents?.FirstOrDefault(o=>o!=null && o.IsPlayer);
                 var ownSpeed=VehicleNumber(manager, "SpeedKmh",600);
                 var playerSpeed=own==null?null:PaceNumber(own,"Speed",0,600);
@@ -2041,16 +2075,25 @@ namespace ThreeSM.EnduranceConnector
                 if(snapshot.Opponents!=null) foreach(var o in snapshot.Opponents.Where(o=>o!=null)
                     .OrderBy(o=>o.IsPlayer?0:o.Position==1?1:2).ThenBy(o=>o.Id,StringComparer.Ordinal).Take(40))
                 {
-                    rows.Add(new PaceObservation {Id=o.Id,Lap=o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
-                        Distance=PaceNumber(o,"TrackPositionPercent",0,1),
+                    int carIndex;
+                    var hasIndex=sdkClock.HasValue && !string.IsNullOrEmpty(o.CarNumber) && _paceCarIndices.TryGetValue(o.CarNumber,out carIndex);
+                    // No name-based or array-position identity guesses.
+                    carIndex=hasIndex ? _paceCarIndices[o.CarNumber] : -1;
+                    var directDistance=hasIndex ? sdk.ReadNumber("CarIdxLapDistPct",carIndex) : null;
+                    var directLap=hasIndex ? sdk.ReadNumber("CarIdxLap",carIndex) : null;
+                    var directLast=hasIndex ? sdk.ReadNumber("CarIdxLastLapTime",carIndex) : null;
+                    var reportedLap=hasIndex ? sdk.ReadNumber("CarIdxLapCompleted",carIndex) : null;
+                    var directBest=hasIndex ? sdk.ReadNumber("CarIdxBestLapTime",carIndex) : null;
+                    rows.Add(new PaceObservation {Id=o.Id,ReportedLap=reportedLap.HasValue?(int?)reportedLap.Value:null,Lap=directLap.HasValue?(int?)directLap.Value:o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
+                        Distance=directDistance??PaceNumber(o,"TrackPositionPercent",0,1),
                         SpeedKph=o.IsPlayer?ownSpeed:speedUnitOk?PaceNumber(o,"Speed",0,600):null,
-                        LastLapSeconds=PositiveSeconds(o.LastLapTime),BestLapSeconds=PositiveSeconds(o.BestLapTime),
+                        LastLapSeconds=hasIndex ? PaceCaptureBuffer.Number(directLast,0.001,86400) : PositiveSeconds(o.LastLapTime),BestLapSeconds=hasIndex ? PaceCaptureBuffer.Number(directBest,0.001,86400) : PositiveSeconds(o.BestLapTime),
                         IsPlayer=o.IsPlayer,Position=o.Position,Connected=o.IsConnected || o.IsPlayer,InPit=o.IsCarInPitLane || o.IsCarInPit,
-                        Metric=new PaceMetric {LastLapSectorSeconds=PaceSectors(o,"LastLapSector"),BestLapSectorSeconds=PaceSectors(o,"BestLapSector"),BestSectorSeconds=PaceSectors(o,"BestSector"),
+                        Metric=new PaceMetric {LastLapSectorSeconds=PaceSectors(o,"LastLapSector",sectorCount),BestLapSectorSeconds=PaceSectors(o,"BestLapSector",sectorCount),BestSectorSeconds=PaceSectors(o,"BestSector",sectorCount),
                             BestLapDeltaToFieldBestSeconds=PaceNumber(o,"DeltaToBest",0,86400),BestLapDeltaToPlayerSeconds=PaceNumber(o,"DeltaToPlayer",-86400,86400),
                             LapValid=PaceBool(o,"LapValid"),LapHighPrecision=PaceNumber(o,"CurrentLapHighPrecision",0,100001),TrackPositionPercentRaw=PaceNumber(o,"TrackPositionPercentRaw",-100001,100001)}});
                 }
-                _paceCapture.Observe(BuildObservedSessionId(manager,channels),clock,sdk==null || !sdk.Connected?(long?)null:sdk.TickCount,rows);
+                _paceCapture.Observe(observedSession,clock,sdkClock.HasValue?(long?)sdk.TickCount:null,rows,_paceSectorStarts);
             }
             catch(Exception error) { _paceCapture.Reset(); SimHub.Logging.Current.Warn("3SM pace: capture onderbroken: "+error.GetType().Name); }
         }
