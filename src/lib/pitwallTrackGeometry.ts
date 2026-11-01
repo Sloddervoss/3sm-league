@@ -110,7 +110,9 @@ export async function loadTrackProjection(trackName: string, trackConfig: string
       const points = await loadRoadProjection(trackId, mapSource, signal);
       return { mapPath, points, hasOfficialDirection: true, unavailableReason: null };
     } catch {
-      return { mapPath, points: [], hasOfficialDirection: false, unavailableReason: 'De gecontroleerde road-baanlijn is niet beschikbaar of past niet bij deze kaart.' };
+      // De gecontroleerde baanlijn is niet te verifiëren (bijvoorbeeld omdat
+      // crypto.subtle ontbreekt buiten https/localhost). We vallen dan terug op de
+      // omtrekmethode in plaats van de kaart zonder auto's te laten staan.
     }
   }
   const outer = parseSvg(mapSource);
