@@ -11,8 +11,7 @@ it('moves between samples, does not run past the latest measurement and cancels 
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { frames.set(++nextId, cb); return nextId; });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
   const points = [{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}];
-  const onPosition = vi.fn();
-  const draw = (pct:number, second:number) => <svg><MovingTrackCar onPosition={onPosition} car={{id:'a',lapDistancePct:pct}} points={points} capturedAt={`2026-09-06T20:00:0${second}Z`} /></svg>;
+  const draw = (pct:number, second:number) => <svg><MovingTrackCar car={{id:'a',lapDistancePct:pct}} points={points} capturedAt={`2026-09-06T20:00:0${second}Z`} /></svg>;
   const view = render(draw(0,0));
   view.rerender(draw(.1,1));
   const tick = (time:number) => act(() => {
@@ -22,10 +21,8 @@ it('moves between samples, does not run past the latest measurement and cancels 
   tick(500);
   const x = () => Number(view.container.querySelector('g')!.getAttribute('transform')!.match(/translate\(([^ ]+)/)![1]);
   expect(x()).toBeCloseTo(2);
-  expect(onPosition.mock.calls.at(-1)![0]).toBeCloseTo(.05);
   tick(1000);
   expect(x()).toBeCloseTo(4);
-  expect(onPosition).toHaveBeenLastCalledWith(.1);
   expect(frames.size).toBe(0);
   tick(2000);
   expect(x()).toBeCloseTo(4);

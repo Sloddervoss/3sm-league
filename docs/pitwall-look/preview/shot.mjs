@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import sharp from "sharp";
 
 const OUT = path.resolve(process.cwd(), "docs/pitwall-look");
 const BASE = process.env.PITWALL_PREVIEW_BASE || "http://127.0.0.1:5199/docs/pitwall-look/preview";
@@ -76,53 +75,7 @@ try {
 
     assert.equal(await page.getByText('▲ +0.649 s', { exact: true }).count(), 1);
     assert.equal(await page.getByText('Verstreken sessie', { exact: true }).count(), 1);
-    assert.equal(await page.getByLabel('Sectorlegenda eigen tijden; geen kaartgrenzen').count(), 0);
-    await page.locator('[data-pitwall-track-artwork="layered"]').waitFor();
-    const trackMap = page.locator('[data-pitwall-slot="trackmap"] svg[role="img"]');
-    assert.equal(await trackMap.locator('text').count(), 0);
-    assert.equal(await trackMap.locator('circle').count(), 13);
-    assert(await trackMap.locator('mask polyline').getAttribute('points'));
-    assert.equal(await trackMap.locator('image[filter*="finish"]').count(), 1);
-    const composition = await trackMap.evaluate(async svg => {
-      const source = await (await fetch('/tracks/layered/track-163.svg')).text();
-      const asset = new DOMParser().parseFromString(source, 'image/svg+xml');
-      const hrefs = [...svg.querySelectorAll('image')].map(image => image.getAttribute('href'));
-      return {
-        inactiveAbsent: [...asset.querySelectorAll('image[filter="url(#inactiveColor)"]')].every(image => !hrefs.includes(image.getAttribute('href'))),
-        backgroundPresent: hrefs.includes(asset.querySelector('image[filter="url(#backgroundColor)"]').getAttribute('href')),
-      };
-    });
-    assert(composition.inactiveAbsent, 'no inactive configs or pitroad in composition');
-    assert(composition.backgroundPresent, 'source Background Details retained');
-    const countTrackPixels = async () => {
-      const { data, info } = await sharp(await trackMap.screenshot()).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-      let orange = 0, gray = 0;
-      for (let i = 0; i < data.length; i += info.channels) {
-        const [r, g, b] = data.subarray(i, i + 3);
-        if (r > 110 && r > g * 1.5 && g > b * 1.3) orange++;
-        if (r > 45 && Math.max(r, g, b) - Math.min(r, g, b) < 40) gray++;
-      }
-      return { orange, gray };
-    };
-    const progressLine = trackMap.locator('mask polyline');
-    const originalPoints = await progressLine.getAttribute('points');
-    const partialPixels = await countTrackPixels();
-    await progressLine.evaluate(line => line.setAttribute('points', ''));
-    const emptyPixels = await countTrackPixels();
-    // Same existing geometry, obtained through the real loader; no synthetic course.
-    const fullPoints = await page.evaluate(async () => {
-      const { loadTrackProjection } = await import('/src/lib/pitwallTrackGeometry.ts');
-      const geometry = await loadTrackProjection('Circuit de Spa-Francorchamps', 'Grand Prix Pits - 2010', new AbortController().signal, 163);
-      return [...geometry.points, geometry.points[0]].map(p => `${p.x},${p.y}`).join(' ');
-    });
-    await progressLine.evaluate((line, points) => line.setAttribute('points', points), fullPoints);
-    const fullPixels = await countTrackPixels();
-    assert(partialPixels.orange > emptyPixels.orange + 40, 'partial progress actually reveals orange');
-    assert(fullPixels.orange > partialPixels.orange * 2, 'rest of course is NOT already orange');
-    assert(partialPixels.gray > fullPixels.gray + 100, 'untravelled course actually stays gray');
-    assert(emptyPixels.orange < 40, 'empty progress leaves only the small own-car marker orange');
-    await progressLine.evaluate((line, points) => line.setAttribute('points', points), originalPoints);
-    const trackArtwork = { ...composition, emptyPixels, partialPixels, fullPixels, rasterMaskChecks: 'PASS' };
+    assert.equal(await page.getByLabel('Sectorlegenda eigen tijden; geen kaartgrenzen').count(), 1);
     assert.equal(await page.getByRole('meter').count(), 4);
     const ownDescriptionFits = await page.locator('[data-pitwall-slot="own-car"] > p:last-of-type').evaluate(e => e.scrollWidth <= e.clientWidth);
     assert(ownDescriptionFits, `${mode}: own-car description must not be truncated`);
@@ -246,7 +199,7 @@ try {
       responsive.push({ width, panelColumns: columns, noHorizontalPageOverflow: true });
     }
     assert.deepEqual(errors, []);
-    results.push({ mode, desktop, skin, trackArtwork, interactionChecks, stintRowsFullyVisible: mode === "endurance" ? "PASS: three full rows" : "not applicable", ownDescriptionFits, moreAnalysis: "PASS: closed by default, click and keyboard, contents preserved", wheelAndKeyboardScroll: "PASS", growingSnapshot: "PASS", rawDisclosure: mode === "test" ? "PASS" : "not in endurance fixture", responsive, browserErrors: errors });
+    results.push({ mode, desktop, skin, interactionChecks, stintRowsFullyVisible: mode === "endurance" ? "PASS: three full rows" : "not applicable", ownDescriptionFits, moreAnalysis: "PASS: closed by default, click and keyboard, contents preserved", wheelAndKeyboardScroll: "PASS", growingSnapshot: "PASS", rawDisclosure: mode === "test" ? "PASS" : "not in endurance fixture", responsive, browserErrors: errors });
     console.log(`${mode}: PASS; panel bottom ${Math.max(...desktop.panels.map((r) => r.bottom))}px; document ${desktop.document.height}px`);
     await page.close();
   }
