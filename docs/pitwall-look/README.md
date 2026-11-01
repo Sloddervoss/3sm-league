@@ -1,5 +1,13 @@
 # Pitwall-look — Vincents ontwerp in de bestaande pitwall
 
+## PACE-bouwronde (lokaal, niet uitgerold)
+
+Actueel PACE-contract: `../contracts/pace-capture-v1.md`. Bewijs: `pace-bewijs.md`.
+Verificatie en grenzen: `pace-oplevering.md`. PACE heeft nu twee echte reeksen en
+sectorcontrole. Oudere uitspraken hieronder over één lijn/actuele-snelheidtegels
+zijn voor PACE achterhaald. Nieuw browserharnas: `preview/pace-shot.mjs`, met
+expliciet synthetische fixtures en nul productie-requests.
+
 ## Actuele elementronde (vervangt oudere uitspraken hieronder)
 
 Volledige inventaris en actuele bronbesluiten: `elementen.md` (86 regels).

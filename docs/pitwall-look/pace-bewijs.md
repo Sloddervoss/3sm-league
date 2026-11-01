@@ -2,6 +2,8 @@
 
 Bron: PCBART / Bart Tonkes, door opdrachtgever gemelde plugin 0.7.2.1. De live snapshot geeft source=null en connectorVersion is niet vastgesteld uit dit JSON; de versie is dus geen onafhankelijk bewezen runtimewaarde.
 
+Serverobservatie eerste meting: 2026-11-01T10:14:03.95111+00:00; laatste: 2026-11-01T10:19:33.059417+00:00. Eerste receivedAt: 2026-11-01T10:14:03.395704+00:00; laatste: 2026-11-01T10:19:32.083499+00:00. capturedAt is de plugin-klok; dit is geen bewijs van kloksynchronisatie.
+
 75 afzonderlijke SELECTs via SSH/docker exec/psql, ieder in BEGIN READ ONLY; COMMIT. Geen race-pc benaderd. Tijden hieronder UTC. Basis-HEAD 23552bdf2832211a1ae56ad8f06feb78de0b9e36; lokale main b1d458a965315921567690c451fb1cf4f6c0fa21. Bestaand untracked pace-ontwerp.md behouden.
 
 ## 1. Sectoren zijn geen coherente laatste ronde
@@ -85,7 +87,21 @@ Opponent.LastLapSector1..3, BestLapSector1..3, BestSector1..3 en DeltaToBest/Del
 
 ## Reproduceerbaarheid en grenzen
 
-Query: SELECT jsonb_build_object(observedAt=clock_timestamp(), capturedAt=t.captured_at, sequence=t.sequence, data=t.v3_normalized) FROM public.simhub_telemetry_latest t JOIN public.simhub_devices d ON d.id=t.device_id WHERE upper(d.device_name)=PCBART (daadwerkelijke SQL gebruikt gequote veldnamen/waarden). Elke query in read-only transactie; 4 s wachttijd plus SSH/queryduur. Alleen nieuwste snapshots gelezen, geen historietabel of writes.
+Daadwerkelijke read-only query (via `ssh 3sm-docker` en `docker exec -i supabase-db psql -X -q -v ON_ERROR_STOP=1 -U supabase_admin -d postgres -At`):
+
+```sql
+BEGIN READ ONLY;
+SELECT jsonb_build_object(
+  'observedAt', clock_timestamp(), 'device', d.device_name,
+  'capturedAt', t.captured_at, 'receivedAt', t.received_at,
+  'sequence', t.sequence, 'sessionId', t.session_id, 'data', t.v3_normalized)
+FROM public.simhub_telemetry_latest t
+JOIN public.simhub_devices d ON d.id=t.device_id
+WHERE upper(d.device_name)='PCBART';
+COMMIT;
+```
+
+Elke query in read-only transactie; 4 s wachttijd plus SSH/queryduur. Alleen nieuwste snapshots gelezen, geen historietabel of writes. Tijdstippen en getallen hieronder zijn bewaarde meetuitkomsten, geen gereconstrueerde rit.
 
 Live pg_get_functiondef read-only uitgelezen voor simhub_persist_v3, get_pitwall_data en get_simhub_device_details. Persist heeft exact acht argumenten, laatste drie DEFAULT NULL; retour TABLE(result text, received_at timestamptz, measurement_ack jsonb). Device-rowlock en replaycontrole zijn aanwezig.
 
