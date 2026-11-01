@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.Serialization;
 
 namespace ThreeSM.EnduranceConnector
@@ -11,6 +11,7 @@ namespace ThreeSM.EnduranceConnector
     [DataContract]
     public sealed class TelemetryEnvelopeV3
     {
+        [DataMember(Name = "paceCapture", Order = 19, EmitDefaultValue = false)] public PaceCaptureFrame PaceCapture { get; set; }
         [DataMember(Name = "protocolVersion", Order = 1)] public int ProtocolVersion { get; set; }
         [DataMember(Name = "sequence", Order = 2)] public long Sequence { get; set; }
         [DataMember(Name = "capturedAt", Order = 3)] public string CapturedAt { get; set; }
@@ -57,6 +58,7 @@ namespace ThreeSM.EnduranceConnector
     [DataContract]
     public sealed class V3Capabilities
     {
+        [DataMember(Name = "paceCapture", Order = 9, EmitDefaultValue = false)] public int? PaceCapture { get; set; }
         [DataMember(Name = "revision", Order = 1)] public int Revision { get; set; }
         [DataMember(Name = "pitService", Order = 2, EmitDefaultValue = false)] public int? PitService { get; set; }
         [DataMember(Name = "wearObservation", Order = 3, EmitDefaultValue = false)] public int? WearObservation { get; set; }
@@ -82,6 +84,7 @@ namespace ThreeSM.EnduranceConnector
                     case "measurementEvents": result.MeasurementEvents = pair.Value; break;
                     case "lapSummaries": result.LapSummaries = pair.Value; break;
                     case "environment": result.Environment = pair.Value; break;
+                    case "paceCapture": result.PaceCapture = pair.Value; break;
                 }
             }
             return result;

@@ -40,7 +40,7 @@ internal static class MeasurementTransportTests
         return path;
     }
 
-    private static MeasurementEventRecord Event(MeasurementIdFactory ids, string kind, double wearAfter, string note = null)
+    internal static MeasurementEventRecord Event(MeasurementIdFactory ids, string kind, double wearAfter, string note = null)
     {
         return new MeasurementEventRecord
         {
@@ -64,7 +64,7 @@ internal static class MeasurementTransportTests
         };
     }
 
-    private static MeasurementLapSummaryRecord Lap(MeasurementIdFactory ids, int lapNumber, int pitVisitIds = 0)
+    internal static MeasurementLapSummaryRecord Lap(MeasurementIdFactory ids, int lapNumber, int pitVisitIds = 0)
     {
         var aggregate = new LapAggregate
         {

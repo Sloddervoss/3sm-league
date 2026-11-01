@@ -1,4 +1,4 @@
-﻿using GameReaderCommon;
+using GameReaderCommon;
 using SimHub.Plugins;
 using System;
 using System.Collections.Generic;
@@ -46,6 +46,7 @@ namespace ThreeSM.EnduranceConnector
         private readonly object _settingsGate = new object();
         private readonly Stopwatch _sendClock = Stopwatch.StartNew();
         private readonly Stopwatch _stintClock = new Stopwatch();
+        private readonly PaceCaptureBuffer _paceCapture = new PaceCaptureBuffer();
         private readonly SessionTelemetryReader _sessionTime = new SessionTelemetryReader();
         // 0.7.0: onthoudt de laatst gezien wear/karkas en bevriest die op de pit-entry-flank.
         private readonly TyreSnapshotTracker _tyreTracker = new TyreSnapshotTracker();
@@ -692,6 +693,7 @@ namespace ThreeSM.EnduranceConnector
                 // gemeten wordt hangt niet van IsPaired of _sendBusy af; dat was precies de
                 // fout waardoor de bandentracker pas na de poorten werd bijgewerkt.
                 ObserveMeasurements(pluginManager, data, running, isInCar);
+                ObservePace(pluginManager, data, running && isInCar);
                 // Vlaggen elke tick oplossen/publiceren (los van het verzendinterval),
                 // zodat een flagbox/overlay direct reageert.
                 PublishFlags(pluginManager);
@@ -767,6 +769,7 @@ namespace ThreeSM.EnduranceConnector
                     envelope = null;
                     if (central) envelope = CaptureV3(pluginManager, data, isInCar, out observation);
                     else localEnvelope = Capture(pluginManager, data, false, isInCar, out observation);
+                    if(envelope!=null && _controlClient!=null && _controlClient.Current.FeatureEnabled("paceCapture")) envelope.PaceCapture=_paceCapture.NextFrame();
                     ObserveDiagnostics(observation);
                 }
                 lock (_sendGate)
@@ -848,7 +851,7 @@ namespace ThreeSM.EnduranceConnector
                 _measurementOutbox.Load();                       // herstel na een herstart
                 _measurementPipeline = new MeasurementPipeline(_measurementOutbox, new MeasurementIdFactory());
                 _measurementSender = new MeasurementSender(_measurementOutbox, _http,
-                    () => ConnectorCapabilities.Implemented().ToJson(), MeasurementLimits.Default());
+                    () => ConnectorCapabilities.Implemented().ToJson(), new MeasurementLimits { MaxFrameBodyBytes = MaxPayloadBytes });
                 _controlClient = new ConnectorControlClient(new Uri(ProductionRelayBaseUrl), _http, string.Empty,
                     () => DateTime.UtcNow);
                 _controlClient.LoadCache(Path.Combine(dataDirectory, "connector-control.json"));
@@ -2005,6 +2008,53 @@ namespace ThreeSM.EnduranceConnector
                 .ToArray();
         }
 
+        // Reflection keeps missing/obsolete getters field-local; no requirement on a newer SDK DLL.
+        private static double? PaceNumber(object source, string name, double min, double max)
+        {
+            try { var value=source.GetType().GetProperty(name)?.GetValue(source,null); return value==null?null:PaceCaptureBuffer.Number(Convert.ToDouble(value,System.Globalization.CultureInfo.InvariantCulture),min,max); }
+            catch { return null; }
+        }
+        private static bool? PaceBool(object source,string name)
+        { try { var value=source.GetType().GetProperty(name)?.GetValue(source,null); return value is bool?(bool?)value:null; } catch { return null; } }
+        private static double?[] PaceSectors(object source,string prefix)
+        {
+            var values=Enumerable.Range(1,3).Select(i=>PaceNumber(source,prefix+i,0.001,86400)).ToArray();
+            return values.All(v=>v==null)?null:values;
+        }
+        private void ObservePace(PluginManager manager,GameData data,bool active)
+        {
+            if(!active || data.NewData==null) { _paceCapture.Reset(); return; }
+            try
+            {
+                var snapshot=data.NewData;
+                var channels=new RawChannelReader(snapshot,property=>GetRaw(manager,property));
+                var clock=_sessionTime.Read(snapshot);
+                var sdk=ReadDirectSdk();
+                var own= snapshot.Opponents?.FirstOrDefault(o=>o!=null && o.IsPlayer);
+                var ownSpeed=VehicleNumber(manager, "SpeedKmh",600);
+                var playerSpeed=own==null?null:PaceNumber(own,"Speed",0,600);
+                // This ride proved the same magnitude, not a universal unit conversion.
+                // Per-update corroboration rejects incompatible/stale speed sources; zero remains real.
+                var speedUnitOk=ownSpeed.HasValue && playerSpeed.HasValue && ownSpeed>30
+                    && Math.Abs(ownSpeed.Value-playerSpeed.Value)<=Math.Max(5,ownSpeed.Value*0.05);
+                var rows=new List<PaceObservation>();
+                if(snapshot.Opponents!=null) foreach(var o in snapshot.Opponents.Where(o=>o!=null)
+                    .OrderBy(o=>o.IsPlayer?0:o.Position==1?1:2).ThenBy(o=>o.Id,StringComparer.Ordinal).Take(40))
+                {
+                    rows.Add(new PaceObservation {Id=o.Id,Lap=o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
+                        Distance=PaceNumber(o,"TrackPositionPercent",0,1),
+                        SpeedKph=o.IsPlayer?ownSpeed:speedUnitOk?PaceNumber(o,"Speed",0,600):null,
+                        LastLapSeconds=PositiveSeconds(o.LastLapTime),BestLapSeconds=PositiveSeconds(o.BestLapTime),
+                        IsPlayer=o.IsPlayer,Position=o.Position,Connected=o.IsConnected || o.IsPlayer,InPit=o.IsCarInPitLane || o.IsCarInPit,
+                        Metric=new PaceMetric {LastLapSectorSeconds=PaceSectors(o,"LastLapSector"),BestLapSectorSeconds=PaceSectors(o,"BestLapSector"),BestSectorSeconds=PaceSectors(o,"BestSector"),
+                            BestLapDeltaToFieldBestSeconds=PaceNumber(o,"DeltaToBest",0,86400),BestLapDeltaToPlayerSeconds=PaceNumber(o,"DeltaToPlayer",-86400,86400),
+                            LapValid=PaceBool(o,"LapValid"),LapHighPrecision=PaceNumber(o,"CurrentLapHighPrecision",0,100001),TrackPositionPercentRaw=PaceNumber(o,"TrackPositionPercentRaw",-100001,100001)}});
+                }
+                _paceCapture.Observe(BuildObservedSessionId(manager,channels),clock,sdk==null || !sdk.Connected?(long?)null:sdk.TickCount,rows);
+            }
+            catch(Exception error) { _paceCapture.Reset(); SimHub.Logging.Current.Warn("3SM pace: capture onderbroken: "+error.GetType().Name); }
+        }
+
         private static double? Clamp01(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)Math.Max(0, Math.Min(1, value.Value)) : null; }
         private static double? SignedSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? value : null; }
 
@@ -2061,6 +2111,8 @@ namespace ThreeSM.EnduranceConnector
             MeasurementBatchPlan measurementPlan = null;
             try
             {
+                var paceCapture=envelope.PaceCapture;
+                envelope.PaceCapture=null; // core + measurement ACK/outbox always have priority
                 var coreBody = SerializeWithinBudget(envelope);
                 var coreBytes = Encoding.UTF8.GetByteCount(coreBody);
                 var body = coreBody;
@@ -2071,6 +2123,8 @@ namespace ThreeSM.EnduranceConnector
                     var withMeasurements = _measurementSender.BuildBody(coreBody, coreBytes, attemptUtc, out measurementPlan);
                     if (withMeasurements != null) body = withMeasurements;
                 }
+                body=PaceCaptureBuffer.AppendWithinBudget(body,paceCapture);
+                if(Encoding.UTF8.GetByteCount(body)>MaxPayloadBytes) throw new InvalidOperationException("payload_too_large");
                 string responseBody = null;
                 using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
                 {

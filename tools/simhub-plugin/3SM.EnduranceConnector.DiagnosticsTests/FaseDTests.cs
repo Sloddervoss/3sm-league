@@ -368,6 +368,7 @@ internal static class FaseDTests
             // Snelle iteratie op de meetlaag zonder de 60 s-soaktest van de rest.
             if (string.Equals(args[0], "--only-measurement", StringComparison.Ordinal))
             {
+                Group("PaceCaptureTests", () => PaceCaptureTests.Run(Check));
                 Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
                 Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
                 Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));
@@ -394,6 +395,7 @@ internal static class FaseDTests
             baselineChecks += Group("V3PayloadFixtureTests", () => V3PayloadFixtureTests.Run(Check));
             baselineChecks += Group("SettingsCompatibilityTests", () => SettingsCompatibilityTests.Run(Check));
             baselineChecks += Group("UpdaterTransitionTests", () => UpdaterTransitionTests.Run(Check));
+            baselineChecks += Group("PaceCaptureTests", () => PaceCaptureTests.Run(Check));
             baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
             baselineChecks += Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
             baselineChecks += Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));

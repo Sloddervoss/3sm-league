@@ -43,7 +43,8 @@ namespace ThreeSM.EnduranceConnector
                     { "directIrSdk", 1 },
                     { "measurementEvents", 1 },
                     { "lapSummaries", 1 },
-                    { "environment", 1 }
+                    { "environment", 1 },
+                    { "paceCapture", 1 }
                 });
         }
 
@@ -101,7 +102,7 @@ namespace ThreeSM.EnduranceConnector
         public static readonly string[] KnownFeatures =
         {
             "pitService", "wearObservation", "lapSummary", "directIrSdk",
-            "measurementEvents", "lapSummaries", "environment", "opponents"
+            "measurementEvents", "lapSummaries", "environment", "opponents", "paceCapture"
         };
 
         public ConnectorControlState()
