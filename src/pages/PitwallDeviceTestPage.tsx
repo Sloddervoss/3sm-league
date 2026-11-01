@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cable, ChevronRight, Cpu, Lock, RefreshCw } from "lucide-react";
@@ -58,32 +58,7 @@ export default function PitwallDeviceTestPage() {
   const { user, isSuperAdmin, loading, rolesLoading } = useAuth();
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const realtimeAt = useRef(0);
-  useEffect(() => {
-    realtimeAt.current = 0;
-    if (!user || !isSuperAdmin || !deviceId) return;
-    let active = true;
-    const channel = supabase.channel(`pitwall-test-live-${deviceId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'simhub_telemetry_latest', filter: `device_id=eq.${deviceId}` }, change => {
-        if (!active) return;
-        if (change.eventType === 'DELETE') {
-          realtimeAt.current = 0;
-          void queryClient.invalidateQueries({ queryKey: ['pitwall-test', 'device', deviceId] });
-          return;
-        }
-        const row = change.new as SimHubDeviceDetail['telemetry'];
-        if (!row || row.device_id !== deviceId) return;
-        realtimeAt.current = Date.now();
-        queryClient.setQueryData<SimHubDeviceDetail>(['pitwall-test', 'device', deviceId], current => newestDeviceTelemetry(current, row, deviceId));
-      }).subscribe(status => {
-        if (!active) return;
-        if (status !== 'SUBSCRIBED') {
-          realtimeAt.current = 0;
-          void queryClient.invalidateQueries({ queryKey: ['pitwall-test', 'device', deviceId] }, { cancelRefetch: false });
-        }
-      });
-    return () => { active = false; void supabase.removeChannel(channel); };
-  }, [user, isSuperAdmin, deviceId, queryClient]);
+  // Poll only the authorized, bounded RPC projection. No 512-KiB row subscription.
 
   /* Fleet: connected SimHub profiles, online-first (same read RPC as the
    * Control Room). Refreshes so new/offline devices appear without reload. */
@@ -110,7 +85,7 @@ export default function PitwallDeviceTestPage() {
       const cached = queryClient.getQueryData<SimHubDeviceDetail>(['pitwall-test', 'device', deviceId]);
       return newestDeviceTelemetry(result, cached?.telemetry ?? null, deviceId!) ?? result;
     },
-    refetchInterval: () => Date.now() - realtimeAt.current < 3_000 ? 5_000 : 1_000,
+    refetchInterval: 1_000,
   });
 
   /* Rondes en coureurs van dit apparaat, ook zonder event. */
@@ -311,7 +286,7 @@ export default function PitwallDeviceTestPage() {
                   note={live || online ? undefined : "Wissel naar een gebonden team-pitwall voor pit-in / fuel-to-add."}
                   actions={
                     <span className="text-[11px] text-slate-500">
-                      {relTime(tele?.received_at)} · {Date.now() - realtimeAt.current < 3_000 ? "Realtime" : "1s polling"}
+                      {relTime(tele?.received_at)} · 1s polling
                     </span>
                   }
                 />
@@ -321,7 +296,7 @@ export default function PitwallDeviceTestPage() {
                   decision={<DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />}
                   track={<><LiveTrackPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} /><OwnCarPanel driverName={ownDriverName} carName={ownCarName} teamName={null} carNumber={live ? v3?.opponents?.find(c => c.isPlayer)?.carNumber : null} completedLaps={live ? v3?.timing?.completedLaps : null} lastLapSeconds={live ? v3?.timing?.lastLapTimeSeconds ?? null : null} bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null} gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null} /></>}
                   timing={
-                    <StandingsWidget
+                    <StandingsWidget v3={v3}
                       standings={standings}
                       ownCarLabel={ownCarName ?? detail.device.device_name}
                       ownCarNumber={null}
@@ -329,7 +304,7 @@ export default function PitwallDeviceTestPage() {
                     />
                   }
                   panels={[
-                    <PacePanel v3={v3} live={live} key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
+                    <PacePanel paceSource={{deviceId}} v3={v3} live={live} key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
                     <MySessionPanel
                       key="session"
                       driverName={ownDriverName}

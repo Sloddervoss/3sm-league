@@ -1,3 +1,4 @@
+import type { PaceHistory } from "../../../../supabase/functions/_shared/paceCapture";
 /* Pitwall V1 — types & helpers */
 import type { WeatherTelemetry } from "../../../../supabase/functions/_shared/weatherTelemetry";
 import type { SimHubEnvironment } from "../../../../supabase/functions/_shared/simhubExtensions";
@@ -45,6 +46,7 @@ export interface PitwallStrategyRow {
 }
 
 export interface V3Normalized {
+  paceHistory?: PaceHistory | null;
   capturedAt?: string;
   transportSessionId?: string;
   vehicle?: VehicleTelemetry | null;

@@ -1,3 +1,4 @@
+import { rowSectors } from "./paceSeries";
 import { lapDifference } from './elementPresentation';
 import type { ReactNode } from 'react';
 import type { V3Normalized } from './pitwallHelpers';
@@ -39,6 +40,8 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   const best = data?.timing?.bestLapTimeSeconds;
   const laps = data?.timing?.completedLaps;
   const difference = lapDifference(last, best);
+  const player = data?.opponents?.find(o=>o.isPlayer);
+  const sectors = player ? rowSectors(data,player.id,player.lastLapSeconds) : null;
   const rest = data?.session?.sessionTimeRemainingSeconds;
 
   return (
@@ -46,10 +49,10 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
       className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[5fr_6fr_8fr]"
       data-pitwall-kpi="true"
     >
-      <KpiGroup label="Sectoren" group="sectoren">
-        <Cell label="S1" value={second(data?.vehicle?.sector1Seconds)} />
-        <Cell label="S2" value={second(data?.vehicle?.sector2Seconds)} />
-        <Cell label="S3" value={second(data?.vehicle?.sector3Seconds)} />
+      <KpiGroup label={sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd"} group="sectoren">
+        <Cell label="S1" value={second(sectors?.[0])} />
+        <Cell label="S2" value={second(sectors?.[1])} />
+        <Cell label="S3" value={second(sectors?.[2])} />
       </KpiGroup>
 
       <KpiGroup label="Rondetijd" group="rondetijd">

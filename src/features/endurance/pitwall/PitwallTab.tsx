@@ -344,7 +344,7 @@ export const PitwallTab = ({ event }: Props) => {
               </>
             }
             timing={
-              <StandingsWidget
+              <StandingsWidget v3={isDemo ? null : real.v3}
                 plannedStints={plannedStints.map(s => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))}
                 events={events}
                 live={isLive}
@@ -356,7 +356,7 @@ export const PitwallTab = ({ event }: Props) => {
             panels={
               strategy
                 ? [
-                    <PacePanel v3={isDemo ? null : real.v3} live={isLive} key="pace" strategy={strategy} pace={pace} lapTimes={lapTimes} points={pacePoints} />,
+                    <PacePanel paceSource={isDemo ? undefined : {eventId:event.id,teamId:selectedTeamId}} v3={isDemo ? null : real.v3} live={isLive} key="pace" strategy={strategy} pace={pace} lapTimes={lapTimes} points={pacePoints} />,
                     <StintDriverPanel
                       carNumber={isLive ? real.v3?.opponents?.find(c => c.isPlayer)?.carNumber : null}
                       nowMs={Date.parse(real.now)}

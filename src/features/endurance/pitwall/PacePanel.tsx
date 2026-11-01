@@ -1,12 +1,17 @@
-import { useState } from "react";
-import { finiteNonNegative, lapDifference } from "./elementPresentation";
+import type { PaceHistory } from "../../../../supabase/functions/_shared/paceCapture";
+import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { readPitwallPace, type PaceSource } from "@/lib/simhubPace";
+import { PaceSeriesGraph } from "./PaceSeriesGraph";
+import { freshPaceHistory, newestTrace, completeReference, lapSeries, speedSeries, deltaSeries, type StoredTrace } from "./paceSeries";
 import type { V3Normalized } from "./pitwallHelpers";
 import type { PitwallPaceData, PitwallStrategyRow } from "./pitwallHelpers";
 import { formatLapTime } from "./pitwallHelpers";
 import { PitwallPanel } from "./PitwallPanel";
-import { PaceGraph, type PacePoint } from "./PaceGraph";
+import { type PacePoint } from "./PaceGraph";
 
 interface Props {
+  paceSource?: PaceSource;
   v3?: V3Normalized | null;
   live?: boolean;
   strategy: PitwallStrategyRow | null;
@@ -20,31 +25,42 @@ interface Props {
   points?: PacePoint[];
 }
 
-/** Rondetijdhistorie, actuele snelheid en delta met expliciete eigen referentie.
- * Geen historische snelheid of leiderlijn zonder bron. Advieslogica blijft gelijk. */
-export const PacePanel = ({ strategy, pace, lapTimes = [], points = [], v3, live = true }: Props) => {
+/** Twee echte reeksen, ontbrekende/ongecontroleerde data blijft leeg. Advies ongewijzigd. */
+const PacePresentation = ({ strategy, pace, lapTimes = [], points = [], v3, live = true, remoteHistory, remoteError, chosenId, onChoose }: Props & {remoteHistory?: PaceHistory | null; remoteError?: boolean; chosenId?: string | null; onChoose?: (id:string | null)=>void}) => {
   const [mode, setMode] = useState('lap');
-  const speed = live && v3?.session?.isInCar !== false && finiteNonNegative(v3?.vehicle?.speedKph) ? v3.vehicle.speedKph : null;
-  const difference = live ? lapDifference(v3?.timing?.lastLapTimeSeconds ?? pace?.lastLapSeconds, v3?.timing?.bestLapTimeSeconds ?? pace?.bestLapSeconds) : null;
-  const modes = [{ id: 'lap', label: 'Rondetijd' }, ...(speed != null ? [{ id: 'speed', label: 'Snelheid' }] : []), ...(difference != null ? [{ id: 'delta', label: 'Delta' }] : [])];
-  const active = modes.some(m => m.id === mode) ? mode : 'lap';
+  const [referenceId, setReferenceId] = useState<string | null>(null);
+  const choices = v3?.opponents?.filter(o => !o.isPlayer && o.connected !== false) ?? [];
+  const selected = choices.find(o => o.id === (chosenId ?? referenceId)) ?? choices.find(o => o.position === 1) ?? null;
+  const history = live ? freshPaceHistory(v3, remoteHistory ?? v3?.paceHistory) : null;
+  const ownId = v3?.opponents?.find(o=>o.isPlayer)?.id;
+  const own = history?.cars.find(c=>c.id===ownId);
+  const other = selected ? history?.cars.find(c=>c.id===selected.id) : undefined;
+  const trace = newestTrace(own);
+  const pin = useRef<{key:string; trace:StoredTrace | null}>({key:"",trace:null});
+  const pinKey = `${history?.segmentId}:${trace?.traceId}:${selected?.id}`;
+  if (pin.current.key !== pinKey) pin.current = {key:pinKey, trace:null};
+  if (!pin.current.trace) pin.current.trace = completeReference(other);
+  const [deltaOwn, deltaRef] = deltaSeries(trace, pin.current.trace);
+  const ownLaps = own ? lapSeries(own) : live ? points.slice(-20).filter(p=>Number.isFinite(p.lap) && Number.isFinite(p.seconds) && p.seconds>0 && p.seconds<=86400).map(p=>({x:p.lap,y:p.seconds,marker:p.marker})) : [];
+  const ownSeries = mode === "lap" ? ownLaps : mode === "speed" ? speedSeries(trace) : deltaOwn;
+  const refSeries = mode === "lap" ? lapSeries(other) : mode === "speed" ? speedSeries(newestTrace(other)) : deltaRef;
+  const modes = [{id:"lap",label:"Rondetijd"},{id:"speed",label:"Snelheid"},{id:"delta",label:"Delta"}];
   const grafiek = <>
     <div className="mb-1 flex gap-3" aria-label="Pace-weergave">
-      {modes.map(m => <button key={m.id} type="button" aria-pressed={active === m.id} onClick={() => setMode(m.id)} className={`text-[12px] font-bold ${active === m.id ? 'border-b border-orange-400 text-orange-300' : 'text-slate-400'}`}>{m.label}</button>)}
+      {modes.map(m=><button key={m.id} type="button" aria-pressed={mode===m.id} onClick={()=>setMode(m.id)} className={`text-[12px] font-bold ${mode===m.id ? "border-b border-orange-400 text-orange-300" : "text-slate-400"}`}>{m.label}</button>)}
     </div>
-    {active === 'lap' ? <><PaceGraph points={points} /><p className="text-[11px] text-orange-300">━ Eigen auto · rondetijd (s)</p></> : <div className="flex h-28 flex-col justify-center">
-      <p className="font-mono text-[32px] font-bold text-white">{active === 'speed' ? `${speed?.toFixed(0)} km/h` : `${difference != null && difference >= 0 ? '+' : ''}${difference?.toFixed(3)} s`}</p>
-      <p className="text-[12px] text-slate-400">{active === 'speed' ? 'Actuele snelheid · geen historische reeks' : 'Laatste ronde − beste ronde · eigen auto'}</p>
-    </div>}
+    <label className="flex gap-2 text-[11px] text-slate-400">Vergelijk
+      <select aria-label="Vergelijkingsauto" value={selected?.id ?? ""} onChange={e=>{setReferenceId(e.target.value || null); onChoose?.(e.target.value || null);}} className="min-w-0 max-w-40 bg-slate-950 text-slate-200">
+        <option value="">Geen referentie</option>
+        {choices.map(o=><option key={o.id} value={o.id}>{o.driverName ?? o.carNumber ?? o.id}</option>)}
+      </select>
+    </label>
+    <PaceSeriesGraph own={ownSeries} reference={refSeries} label={modes.find(m=>m.id===mode)!.label} unit={mode==="speed"?"km/h":"s"} distance={mode!=="lap"} />
+    <p className="text-[11px] text-orange-300">━ Eigen auto{selected && <span className="text-emerald-300"> · ━ {selected.driverName ?? selected.id}</span>}</p>
+    {selected && refSeries.length<2 && <p className="text-[11px] text-slate-400">Vergelijkingsreeks ontbreekt of is niet gecontroleerd.</p>}
+    {mode==="delta" && <p className="text-[11px] text-slate-400">Eigen tijd − vaste opgenomen referentie op dezelfde baanpositie; positief is langzamer.</p>}
+    {remoteError && <p className="text-[11px] text-slate-400">Pace-opslag niet beschikbaar.</p>}
   </>;
-
-  if (!strategy && points.length === 0 && speed == null && difference == null) {
-    return (
-      <PitwallPanel title="Pace" slot="pace">
-        <p className="text-[12px] text-slate-500">Geen data</p>
-      </PitwallPanel>
-    );
-  }
 
   // Uitlooprondes (pit, spin, herstart) mogen het gemiddelde niet bepalen.
   const eigen = lapTimes.filter((n) => Number.isFinite(n) && n > 0 && n < 600);
@@ -92,4 +108,18 @@ function Value({ label, value, tone }: { label: string; value: string; tone: str
       <dd className={`mt-0.5 font-mono text-[18px] font-bold tabular-nums leading-none ${tone}`}>{value}</dd>
     </div>
   );
+}
+
+export const PacePanel = (props: Props) => props.paceSource ? <ConnectedPacePanel {...props} /> : <PacePresentation {...props} />;
+function ConnectedPacePanel(props: Props) {
+  const [chosenId,setChosenId] = useState<string | null>(null);
+  const choices = props.v3?.opponents?.filter(o=>!o.isPlayer && o.connected!==false) ?? [];
+  const selected = choices.find(o=>o.id===chosenId) ?? choices.find(o=>o.position===1) ?? null;
+  const source = props.paceSource!;
+  const query = useQuery({
+    queryKey: ["pitwall-pace",source.deviceId,source.eventId,source.teamId,selected?.id],
+    enabled: props.live!==false && !!(source.deviceId || source.eventId && source.teamId),
+    queryFn: ()=>readPitwallPace(source,selected?.id ?? null), refetchInterval:1000,retry:false,
+  });
+  return <PacePresentation {...props} remoteHistory={query.data} remoteError={query.isError} chosenId={chosenId} onChoose={setChosenId} />;
 }

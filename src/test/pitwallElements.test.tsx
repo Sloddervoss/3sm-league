@@ -91,20 +91,20 @@ describe("Timing: uitsluitend tabs met inhoud en juiste scope", () => {
   });
 });
 
-describe("Pace: snelheid is actueel, delta heeft een referentie", () => {
-  it("werkt ook zonder strategierij en zonder historische snelheidsreeks", () => {
+describe("Pace: uitsluitend echte reeksen", () => {
+  it("maakt actuele snelheid of laatste-minus-beste nooit tot een grafiek", () => {
     render(<PacePanel strategy={null} pace={null} v3={fixtureV3} live />);
-    fireEvent.click(screen.getByRole("button", { name: "Snelheid" }));
-    expect(screen.getByText("187 km/h")).toBeInTheDocument();
-    expect(screen.getByText(/geen historische reeks/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Delta" }));
-    expect(screen.getByText("+0.649 s")).toBeInTheDocument();
-    expect(screen.getByText(/Laatste ronde − beste ronde/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", {name:"Snelheid"}));
+    expect(screen.getByText("Geen gecontroleerde reeks beschikbaar.")).toBeInTheDocument();
+    expect(screen.queryByText("187 km/h")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", {name:"Delta"}));
+    expect(screen.queryByText("+0.649 s")).not.toBeInTheDocument();
+    expect(screen.getByText(/vaste opgenomen referentie/)).toBeInTheDocument();
   });
-  it("toont zonder referentie geen deltaknop, buiten auto geen snelheid", () => {
-    render(<PacePanel strategy={fixtureStrategy} pace={null} v3={{ vehicle: fixtureV3.vehicle, session: { isInCar: false } }} />);
-    expect(screen.queryByRole("button", { name: "Snelheid" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delta" })).not.toBeInTheDocument();
+  it("houdt tabs bereikbaar en vertelt eerlijk dat de reeks ontbreekt", () => {
+    render(<PacePanel strategy={fixtureStrategy} pace={null} live={false} v3={fixtureV3} />);
+    fireEvent.click(screen.getByRole("button", {name:"Snelheid"}));
+    expect(screen.getByText("Geen gecontroleerde reeks beschikbaar.")).toBeInTheDocument();
   });
 });
 

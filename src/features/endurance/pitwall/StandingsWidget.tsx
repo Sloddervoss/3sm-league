@@ -1,3 +1,5 @@
+import { freshMetrics, rowSectors } from "./paceSeries";
+import type { V3Normalized } from "./pitwallHelpers";
 import { Fragment, useState } from "react";
 import type { StandingsDerivation } from "./standings";
 import { renderGap, renderPosition } from "./standings";
@@ -7,6 +9,7 @@ import { preciseLapTime } from "./telemetryFormat";
 import { PitwallPanel } from "./PitwallPanel";
 
 interface Props {
+  v3?: V3Normalized | null;
   plannedStints?: PitwallPlannedStint[];
   events?: PitwallTimelineEvent[];
   standings: StandingsDerivation;
@@ -51,7 +54,7 @@ const TrendMark = ({ rate }: { rate: number | null }) => {
  * leider". P en K blijven losse waarden: de snapshot is begrensd en bewijst
  * geen volledig deelnemersaantal.
  */
-export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = true, plannedStints = [], events = [] }: Props) => {
+export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live = true, plannedStints = [], events = [] }: Props) => {
   const [view, setView] = useState('live');
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const pitEvents = events.filter(e => e.event_type === 'pit_entry' || e.event_type === 'pit_exit');
@@ -127,6 +130,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
                 <th className="px-2 py-1.5">Klasse</th>
                 <th className="px-2 py-1.5 text-right">Laatste</th>
                 <th className="px-2 py-1.5 text-right">Beste</th>
+                {[1,2,3].map(n=><th key={n} className="px-2 py-1.5 text-right">S{n}</th>)}
                 <th className="px-2 py-1.5 text-right">Ronde</th>
                 <th className="px-2 py-1.5 text-right">Gap tot jou</th>
                 <th className="px-2 py-1.5 text-center">Pit</th>
@@ -137,7 +141,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
                 <Fragment key={r.id}>
                   {(index === 0 || visibleRows[index - 1].carClass !== r.carClass) && (
                     <tr className="border-t border-[#1D2431] bg-[#0A0C10]">
-                      <td colSpan={10} className="px-2.5 py-1.5">
+                      <td colSpan={13} className="px-2.5 py-1.5">
                         <span className="text-[11px] font-black uppercase tracking-[0.14em] text-sky-200">
                           {r.carClass ?? "Zonder klasse"}
                         </span>
@@ -169,6 +173,7 @@ export const StandingsWidget = ({ standings, ownCarLabel, ownCarNumber, live = t
                     <td className="px-2 py-1.5 text-[11px] uppercase tracking-[0.08em] text-sky-300">{r.carClass ?? "—"}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-amber-200">{preciseLapTime(r.lastLapSeconds)}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
+                    {[0,1,2].map(n=><td key={n} className="px-2 py-1.5 text-right font-mono text-slate-300" title={live && rowSectors(v3,r.id,r.lastLapSeconds) ? "Gecontroleerde laatste ronde" : `Geen gecontroleerd sectortriplet · bronafwijkingen ${freshMetrics(v3,r.id)?.sectorMismatchCount ?? "onbekend"}`}>{live ? rowSectors(v3,r.id,r.lastLapSeconds)?.[n]?.toFixed(3) ?? "—" : "—"}</td>)}
                     <td className="px-2 py-1.5 text-right font-mono text-slate-300">{r.lap ?? "—"}</td>
                     <td className="px-2 py-1.5 text-right font-mono font-semibold text-orange-300">{renderGap(r, false)}</td>
                     <td className="px-2 py-1.5 text-center text-[11px] font-bold text-yellow-400">{r.inPit ? "PIT" : "—"}</td>
