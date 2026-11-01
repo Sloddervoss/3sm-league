@@ -11,14 +11,25 @@ const points = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y:
 afterEach(() => vi.unstubAllGlobals());
 
 describe('pitwall circuit artwork', () => {
-  it('reuses the exact source layers, without background or label overlays', () => {
+  it('reuses the exact source layers, excluding inactive configurations and unmasked glow', () => {
     const layers = readTrackArtwork(source)!;
     const svg = new DOMParser().parseFromString(source, 'image/svg+xml');
-    expect(layers.inactive).toHaveLength(2);
+    expect(layers.background).toBe(svg.querySelector('image[filter="url(#backgroundColor)"]')!.getAttribute('href'));
     expect(layers.active).toBe(svg.querySelector('image[filter="url(#activeColor)"]')!.getAttribute('href'));
     expect(layers.finish).toBe(svg.querySelector('image[filter="url(#finishColor)"]')!.getAttribute('href'));
-    expect(Object.keys(layers).sort()).toEqual(['active', 'finish', 'inactive']);
+    expect(Object.keys(layers).sort()).toEqual(['active', 'background', 'finish']);
     expect(readTrackArtwork('<svg/>')).toBeNull();
+  });
+
+  it('reads named source layers without copying other configurations', () => {
+    const layers = readTrackArtwork(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"><style>.road{fill:white}</style><g data-name="Background Details"><path id="background"/></g><g data-name="Inactive Configs"><path id="other"/></g><g data-name="Spa - config"><path class="road" id="selected"/></g><g data-name="Spa - Start Finish Line"><path id="finish"/></g></svg>`)!;
+    expect(layers).not.toBeNull();
+    const decode = (uri: string) => atob(uri.split(',')[1]);
+    expect(decode(layers.active)).toContain('id="selected"');
+    expect(decode(layers.active)).toContain('.road{fill:white}');
+    expect(decode(layers.active)).not.toContain('id="other"');
+    expect(decode(layers.background!)).toContain('id="background"');
+    expect(decode(layers.finish)).toContain('id="finish"');
   });
 
   it('reveals the ordered path up to exactly the same interpolated point as the car', () => {
@@ -28,7 +39,7 @@ describe('pitwall circuit artwork', () => {
     expect(trackProgressPoints([], .5)).toBe('');
   });
 
-  it('renders dim base, masked orange and glow, source finish, no labels or grid', async () => {
+  it('renders dim base, masked orange and glow, source background and finish, no inactive layouts', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: async () => source }));
     const ref = createRef<SVGPolylineElement>();
     const { container, rerender } = render(<svg><TrackArtwork mapPath="/track.svg" progressMask={ref} progressPoints="0,0 100,0" /></svg>);
@@ -37,7 +48,14 @@ describe('pitwall circuit artwork', () => {
     expect(container.querySelectorAll('[data-pitwall-track-progress] image')).toHaveLength(2);
     expect(container.querySelectorAll('image[filter$="-finish)"]')).toHaveLength(1);
     expect(container.querySelectorAll('text, pattern, line')).toHaveLength(0);
-    expect(container.querySelectorAll('image')).toHaveLength(6);
+    expect(container.querySelectorAll('image')).toHaveLength(5);
+    const layers = readTrackArtwork(source)!;
+    const hrefs = [...container.querySelectorAll('image')].map(image => image.getAttribute('href'));
+    const asset = new DOMParser().parseFromString(source, 'image/svg+xml');
+    for (const inactive of asset.querySelectorAll('image[filter="url(#inactiveColor)"]')) expect(hrefs).not.toContain(inactive.getAttribute('href'));
+    expect(container.querySelector('[data-pitwall-track-background] image')).toHaveAttribute('href', layers.background);
+    expect(container.querySelector('[data-pitwall-track-progress]')).toHaveAttribute('mask');
+    expect(container.querySelector('mask')).toHaveAttribute('maskContentUnits', 'userSpaceOnUse');
     rerender(<svg><TrackArtwork mapPath="/track.svg" progressMask={ref} progressPoints="" /></svg>);
     expect(ref.current).toHaveAttribute('points', '');
   });

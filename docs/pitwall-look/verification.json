@@ -69,6 +69,23 @@
       "timingRowHeight": 25,
       "contentFits": true
     },
+    "trackArtwork": {
+      "inactiveAbsent": true,
+      "backgroundPresent": true,
+      "emptyPixels": {
+        "orange": 21,
+        "gray": 2286
+      },
+      "partialPixels": {
+        "orange": 688,
+        "gray": 2000
+      },
+      "fullPixels": {
+        "orange": 3826,
+        "gray": 530
+      },
+      "rasterMaskChecks": "PASS"
+    },
     "interactionChecks": [
       "Stints: nonempty own-team content, bounded layout",
       "Pitstops: nonempty own-team content, bounded layout",
@@ -171,6 +188,23 @@
       "titleTracking": "0.48px",
       "timingRowHeight": 25,
       "contentFits": true
+    },
+    "trackArtwork": {
+      "inactiveAbsent": true,
+      "backgroundPresent": true,
+      "emptyPixels": {
+        "orange": 21,
+        "gray": 2286
+      },
+      "partialPixels": {
+        "orange": 688,
+        "gray": 2000
+      },
+      "fullPixels": {
+        "orange": 3826,
+        "gray": 530
+      },
+      "rasterMaskChecks": "PASS"
     },
     "interactionChecks": [
       "Klasse: LMP2 filter, restored full snapshot",

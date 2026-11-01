@@ -276,3 +276,14 @@ zijn ongewijzigd. De sectorlegenda staat niet meer bij de kaart; oranje betekent
 alleen het gereden deel. Rondebalk en alle bestaande fallbacks blijven bestaan.
 Actueel: volledige Vitest 196 bestanden / 1643 tests PASS; browserharnas beide
 modi PASS; Vite-bundel PASS. Typecheck: dezelfde 13 diagnostics als startcommit.
+
+
+## Herstel lagencompositie (na c1fc559)
+
+Actueel bewijs: `kaart-lagen-verificatie.txt`. Vervangt de eerdere compositie
+met inactive-lagen: alleen de dimme Background Details, actieve grijze layout,
+gemaskeerde oranje voortgang en finish worden getoond, met auto's erbovenop.
+Andere configs en pitroad zijn uitgesloten. Assets, berekeningen en fallbacks
+blijven ongewijzigd. Browser-rasterchecks bewijzen nu ook dat het ongereden
+deel grijs blijft; beide 1080p-screenshots zijn vernieuwd en visueel vergeleken.
+Volledige Vitest: 196 bestanden / 1644 tests PASS.

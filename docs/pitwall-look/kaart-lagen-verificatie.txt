@@ -1,0 +1,67 @@
+PITWALL — HERSTEL LAGENCOMPOSITIE
+Werkboom: /home/hermes/wt/pitwall-look
+Branch: feat/pitwall-look-3sm
+Startcommit: c1fc559
+Bij start al aanwezig: untracked docs/pitwall-look/preview/serve-spa.py.
+Dat bestand niet gewijzigd of meegenomen in de commit.
+
+Uitvoering
+- Bestaande TrackArtwork-component doorontwikkeld, geen parallelle renderer.
+- Alleen Background Details (zeer dim), actieve layout (grijze basis),
+  gemaskeerde oranje actieve layout en finish worden samengesteld.
+- Inactive Configs, pitroad en de ongemaskeerde activeGlow uit de bron worden
+  niet opgenomen. Er wordt dus geen tweede configuratie als grijze basis getekend.
+- Naast de ingebedde lagen uit de bestaande shipped assets ondersteunt de
+  extractor originele data-name-lagen: Background Details, '<circuit> - config'
+  en start/finish. Stijlen/defs blijven in een geïsoleerde SVG-image.
+- Maskercoördinaten expliciet userSpaceOnUse; bestaande projectiepunten en
+  voortgangsinterpolatie ongewijzigd. Auto's blijven bovenop de finish staan.
+- De bestaande renderer had al een voortgangsmasker. Alleen testen dat dit
+  element bestaat was onvoldoende bewijs; nu wordt de echte rasteruitkomst getest.
+- Volledige statische assetfallback bij mislukte extractie behouden. Die fallback
+  heeft bewust nog de oorspronkelijke assetweergave; geen wijziging van assets.
+- Testmodus, data, fixtures, berekeningen, baanherkenning en motion ongewijzigd.
+
+PASS/FAIL
+PASS volledige npm test -- --reporter=dot: 196 bestanden / 1644 tests.
+PASS ESLint gewijzigde TS/TSX + screenshot-script; git diff --check.
+PASS Vite bundel naar scratch, geen SEO-/zip-/deployscripts gedraaid.
+PASS browserharnas beide modi 1920x1080; documenthoogte 1080; alle vier
+     panelen binnen beeld, bestaande interactie-/scroll-/responsivechecks groen.
+PASS rastermasker in beide modi: leeg 21 oranje pixels (eigen auto), gedeeltelijk
+     688, volledig 3826. Grijze pixels: leeg 2286, gedeeltelijk 2000, volledig 530.
+     Het ongereden deel is aantoonbaar niet oranje. Bron-URIs van alle inactive-
+     images ontbreken; Background Details is wel aanwezig.
+PASS SHA-256 alle gevolgde public/tracks-assets + beschermde projectie-/motion-
+     bronnen/fixture identiek aan startcommit; kaart-lagen-beschermd-sha256.txt.
+FAIL bestaand: npm run typecheck, 13 diagnostics. Een git archive van c1fc559
+     met dezelfde dependencies produceert exact dezelfde 13 diagnostics.
+
+Vision
+- Beide vernieuwde 1920x1080 screenshots afzonderlijk bekeken met vision_analyze.
+- Doelbeeld en endurance-resultaat naast elkaar opnieuw bekeken in
+  kaart-lagen-vergelijking.png: doel links, nieuw resultaat rechts.
+- Bevestigd: kort oranje segment, resterende hoofdcontour grijs; geen duidelijk
+  afzonderlijke alternatieve layout. Donkere achtergrondstructuur is zichtbaar.
+- De afwezigheid van inactive-config-lagen is aanvullend via bron-URI/DOM getest,
+  niet alleen op basis van een visuele indruk.
+- Bewuste verschillen: ander circuit, kleinere kaart, kleine markers, witte
+  bronpijl, schematische projectie. Geen pixelpariteit geclaimd.
+- Bestaande inconsistenties in fixturecijfers niet gewijzigd.
+
+Screenshots
+pitwall-endurance-1920x1080.png
+pitwall-test-1920x1080.png
+pitwall-endurance-full.png
+pitwall-test-full.png
+kaart-lagen-vergelijking.png
+verification.json bevat nieuwe browser- en rastermetingen.
+Alle captures zijn lokale fixtures met echte componenten, geen ingelogde
+productieroutes of live-raceverificatie.
+
+Impact
+Frontend: uitsluitend lokale kaartpresentatie en testbewijs.
+Backend/API, bot, DB/migraties, auth/rollen, deployment: geen impact.
+Productiefrontendwijzigingen: NEE.
+Geen push, merge of deploy.
+PRODUCTIEWIJZIGING: NEE
