@@ -32,7 +32,23 @@ export function TrackProjection({ trackName, trackConfig, v3, live }: { trackNam
   if (!geometry || loadedKey !== key) return <div>{trackId == null && <TrackMap track={displayName || trackName} className="h-60 w-full object-contain" />}<p className="text-[10px] text-gray-500">{failed ? `Officiële baangeometrie niet beschikbaar${trackId != null ? ` voor TrackID ${trackId}` : ''}; rondevoortgang blijft zichtbaar.` : 'Officiële baangeometrie laden…'}</p></div>;
 
   const ownCar = cars.find(car => car.isPlayer);
-  return <div><svg viewBox="0 0 1920 1080" className="h-60 w-full" role="img" aria-label={`${displayName || trackName} met schematische live autoposities`}>
+  // Toon de baan groot in het paneel: knip de 1920×1080-correctie bij op de
+  // werkelijke baandomvang. De afbeelding blijft op 1920×1080 staan, dus de
+  // uitlijning van lagen en auto's verandert niet.
+  const viewBox = (() => {
+    const pts = geometry.points;
+    if (pts.length < 2) return '0 0 1920 1080';
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+    const w = maxX - minX, h = maxY - minY;
+    if (!(w > 0) || !(h > 0)) return '0 0 1920 1080';
+    const pad = Math.max(w, h) * 0.06;
+    return `${(minX - pad).toFixed(1)} ${(minY - pad).toFixed(1)} ${(w + pad * 2).toFixed(1)} ${(h + pad * 2).toFixed(1)}`;
+  })();
+  return <div><svg viewBox={viewBox} className="h-60 w-full" role="img" aria-label={`${displayName || trackName} met schematische live autoposities`}>
     <TrackArtwork mapPath={geometry.mapPath} progressMask={progressMask} progressPoints={trackProgressPoints(geometry.points, ownCar?.lapDistancePct)} />
     {geometry.points.length > 0 && cars.slice(0, 64).map(car => {
       const pct = car.lapDistancePct;
