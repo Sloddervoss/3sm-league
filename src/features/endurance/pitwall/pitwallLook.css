@@ -144,3 +144,8 @@
 /* Final comparison: narrow existing self-hosted type, quieter secondary digits. */
 [data-pitwall-look] [data-pitwall-fuel-value] { font-size: 26px; }
 [data-pitwall-look] [data-pitwall-row="panels"] [class*="font-mono"] { letter-spacing: 0; }
+
+/* Variable real sector layouts: compact digits, never alter map geometry or panel grid. */
+[data-pitwall-look] [data-pitwall-kpi-group].pitwall-many-sectors .font-mono { font-size: 17px; }
+[data-pitwall-look] [data-pitwall-kpi-group].pitwall-many-sectors > div > div { padding-inline: 5px; }
+[data-pitwall-look] .pitwall-timing-scroll table[data-sector-count]:not([data-sector-count="0"]):not([data-sector-count="1"]):not([data-sector-count="2"]):not([data-sector-count="3"]) { font-size: 11px; }

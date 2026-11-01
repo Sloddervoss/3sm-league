@@ -91,3 +91,80 @@ describe("PACE reeksen en tweede lijn",()=>{
    metric.lastLapSectorSeconds=[30,30,40]; metric.observedSessionTimeSeconds=290; expect(rowSectors(state,"rival",100)).toBeNull();
  });
 });
+
+
+describe("PACE definitief: werkelijke sectorindeling en herkomst",()=>{
+ it.each([3,6,8,16])("valideert %i sectoren, niet alleen drie",count=>{
+   const values=Array.from({length:count},()=>100/count);
+   expect(validatedSectors(values,100,count)).toHaveLength(count);
+   expect(validatedSectors(values,100,count-1)).toBeNull();
+ });
+ it("behoudt nullable metadata en compacte diagnostiek in het additieve contract",()=>{
+   const state=v3();
+   const metric={id:"own",observedSessionTimeSeconds:300,lastLapSeconds:100,bestLapSeconds:100,lastLapSectorSeconds:[10,20,10,20,10,30],bestLapSectorSeconds:null,bestSectorSeconds:null,bestLapDeltaToFieldBestSeconds:null,bestLapDeltaToPlayerSeconds:null,lapValid:true,lapHighPrecision:null,trackPositionPercentRaw:null,sectorMismatchCount:0,sectorCount:6,sectorSource:"measured" as const,sectorErrorSeconds:0,sectorDiagnostic:{source:"measured" as const,count:6,sumSeconds:100,reportedSeconds:100,errorSeconds:0,reason:"valid" as const}};
+   const wire={...capture(),opponentMetrics:[metric]};
+   expect(parsePaceCapture(wire)?.opponentMetrics[0]).toMatchObject(metric);
+   state.paceHistory!.cars[0].metrics=metric;
+   const {container,rerender}=render(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
+   expect(screen.getByRole("columnheader",{name:"S6"})).toBeInTheDocument();
+   expect(screen.queryByRole("columnheader",{name:"S7"})).not.toBeInTheDocument();
+   expect(container.querySelector("td[colspan='16']")).not.toBeNull();
+   expect(screen.getAllByTitle(/Gecontroleerde laatste ronde · measured · afwijking 0.000 s/)).toHaveLength(6);
+   metric.lastLapSectorSeconds=[1,2,3,4,5,6];
+   rerender(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
+   expect(screen.queryByText("30.000")).not.toBeInTheDocument();
+   expect(screen.getByRole("columnheader",{name:"S6"})).toBeInTheDocument();
+ });
+ it("weigert verkeerde sectoraantallen en publiceert ook bij lapValid=false niets",()=>{
+   const metric={id:"x",observedSessionTimeSeconds:1,lastLapSeconds:100,bestLapSeconds:100,lastLapSectorSeconds:[30,30,40],bestLapSectorSeconds:null,bestSectorSeconds:null,bestLapDeltaToFieldBestSeconds:null,bestLapDeltaToPlayerSeconds:null,lapValid:true,lapHighPrecision:null,trackPositionPercentRaw:null,sectorMismatchCount:0,sectorCount:6};
+   expect(parsePaceCapture({...capture(),opponentMetrics:[metric]})?.opponentMetrics[0].lastLapSectorSeconds).toBeNull();
+   metric.sectorCount=3;metric.lapValid=false;
+   expect(parsePaceCapture({...capture(),opponentMetrics:[metric]})?.opponentMetrics[0].lastLapSectorSeconds).toBeNull();
+   metric.lapValid=true;metric.sectorCount=17;
+   expect(parsePaceCapture({...capture(),opponentMetrics:[metric]})).toBeNull();
+ });
+ it("onbekende sectorindeling wordt niet stilzwijgend S1/S2/S3",()=>{
+   const state=v3();
+   render(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
+   expect(screen.queryByRole("columnheader",{name:"S1"})).not.toBeInTheDocument();
+ });
+ it("late join tekent geen voorgeschiedenis en een weggevalde keuze wordt geen andere auto",()=>{
+   const state=v3();
+   state.paceHistory!.cars[1].laps=state.paceHistory!.cars[1].laps.slice(-1);
+   const {container,rerender}=render(<PacePanel v3={state} strategy={null} pace={null} />);
+   expect(container.querySelector('[data-pace-line="reference"]')).toBeNull();
+   state.paceHistory!.cars[1].laps.push({...state.paceHistory!.cars[1].laps[0],lap:3,seconds:102});
+   rerender(<PacePanel v3={state} strategy={null} pace={null} />);
+   expect(container.querySelector('[data-pace-line="reference"]')).not.toBeNull();
+   fireEvent.change(screen.getByRole("combobox",{name:"Vergelijkingsauto"}),{target:{value:"rival"}});
+   state.opponents=[state.opponents![0],{id:"new-leader",position:1}];
+   rerender(<PacePanel v3={state} strategy={null} pace={null} />);
+   expect(screen.getByRole("combobox",{name:"Vergelijkingsauto"})).toHaveValue("rival");
+   expect(screen.getByText(/Gekozen auto verdwenen/)).toBeInTheDocument();
+   fireEvent.change(screen.getByRole("combobox",{name:"Vergelijkingsauto"}),{target:{value:""}});
+   expect(container.querySelector('[data-pace-line="reference"]')).toBeNull();
+ });
+ it("lege snelheids- en deltareeksen geven hun werkelijke ontbreekreden",()=>{
+   render(<PacePanel v3={{...v3(),paceHistory:null}} strategy={null} pace={null} />);
+   fireEvent.click(screen.getByRole("button",{name:"Snelheid"}));
+   expect(screen.getByText(/geen spoor met bevestigde km\/h-eenheid/)).toBeInTheDocument();
+   fireEvent.click(screen.getByRole("button",{name:"Delta"}));
+   expect(screen.getByText(/geen volledige vaste referentie met betrouwbaar finishanker/)).toBeInTheDocument();
+ });
+});
+
+
+it("leest de door het echte C#-harnas gemeten zes-sectorenfixture en koppelt SDK-rondetijd via ronde-identiteit",()=>{
+  const wire=JSON.parse(readFileSync("supabase/tests/fixtures/pace-six-sectors-frame.json","utf8"));
+  const parsed=parsePaceCapture(wire.paceCapture)!;
+  expect(parsed).not.toBeNull();
+  const metric=parsed.opponentMetrics[0];
+  expect(metric.sectorSource).toBe("measured");expect(metric.lastLapSectorSeconds).toHaveLength(6);
+  expect(metric.lastLapSectorSeconds!.reduce((a,b)=>a+b,0)).toBeCloseTo(metric.lastLapSeconds!,8);
+  const state=v3();state.paceHistory!.cars[0].metrics={...metric,id:"own",observedSessionTimeSeconds:300};
+  state.opponents![0].lap=metric.sectorLap!+1;
+  state.opponents![0].lastLapSeconds=metric.lastLapSeconds!+0.08;
+  expect(rowSectors(state,"own",state.opponents![0].lastLapSeconds)).toHaveLength(6);
+  state.opponents![0].lap=metric.sectorLap!+2;
+  expect(rowSectors(state,"own",state.opponents![0].lastLapSeconds)).toBeNull();
+});

@@ -87,7 +87,8 @@ describe("KPI-strip — drie groepen, geen verzonnen noemers", () => {
     expect(rondetijd).not.toBeNull();
     expect(positie).not.toBeNull();
 
-    expect(within(sectoren as HTMLElement).getAllByText("—")).toHaveLength(3);
+    expect(within(sectoren as HTMLElement).getAllByText("—")).toHaveLength(1);
+    expect(within(sectoren as HTMLElement).getByText("Sectorindeling onbekend")).toBeInTheDocument();
     expect(within(sectoren as HTMLElement).getByText("Sectoren · niet gecontroleerd")).toBeTruthy();
 
     expect(within(positie as HTMLElement).getByText("P6")).toBeTruthy();

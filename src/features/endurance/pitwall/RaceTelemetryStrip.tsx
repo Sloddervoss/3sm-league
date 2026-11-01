@@ -1,4 +1,4 @@
-import { rowSectors } from "./paceSeries";
+import { rowSectors, trackSectorCount } from "./paceSeries";
 import { lapDifference } from './elementPresentation';
 import type { ReactNode } from 'react';
 import type { V3Normalized } from './pitwallHelpers';
@@ -49,10 +49,9 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
       className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[5fr_6fr_8fr]"
       data-pitwall-kpi="true"
     >
-      <KpiGroup label={sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd"} group="sectoren">
-        <Cell label="S1" value={second(sectors?.[0])} />
-        <Cell label="S2" value={second(sectors?.[1])} />
-        <Cell label="S3" value={second(sectors?.[2])} />
+      <KpiGroup label={sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd"} group="sectoren" className={trackSectorCount(data)>3 ? "pitwall-many-sectors" : ""}>
+        {trackSectorCount(data) === 0 && <Cell label="Sectorindeling onbekend" value="—" compact />}
+        {Array.from({length:trackSectorCount(data)},(_,i)=><Cell key={i} compact={trackSectorCount(data)>3} label={`S${i+1}`} value={second(sectors?.[i])} />)}
       </KpiGroup>
 
       <KpiGroup label="Rondetijd" group="rondetijd">
@@ -91,11 +90,11 @@ function KpiGroup({
   );
 }
 
-function Cell({ label, value, tone = 'text-white' }: { label: string; value: string; tone?: string }) {
+function Cell({ label, value, tone = 'text-white', compact = false }: { label: string; value: string; tone?: string; compact?: boolean }) {
   return (
     <div className="min-w-0">
       <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
-      <p className={`mt-0.5 font-mono text-[26px] font-bold leading-none tabular-nums ${tone}`}>{value}</p>
+      <p className={`mt-0.5 font-mono ${compact ? "text-[17px]" : "text-[26px]"} font-bold leading-none tabular-nums ${tone}`}>{value}</p>
     </div>
   );
 }

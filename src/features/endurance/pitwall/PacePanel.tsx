@@ -28,16 +28,20 @@ interface Props {
 /** Twee echte reeksen, ontbrekende/ongecontroleerde data blijft leeg. Advies ongewijzigd. */
 const PacePresentation = ({ strategy, pace, lapTimes = [], points = [], v3, live = true, remoteHistory, remoteError, chosenId, onChoose }: Props & {remoteHistory?: PaceHistory | null; remoteError?: boolean; chosenId?: string | null; onChoose?: (id:string | null)=>void}) => {
   const [mode, setMode] = useState('lap');
-  const [referenceId, setReferenceId] = useState<string | null>(null);
-  const choices = v3?.opponents?.filter(o => !o.isPlayer && o.connected !== false) ?? [];
-  const selected = choices.find(o => o.id === (chosenId ?? referenceId)) ?? choices.find(o => o.position === 1) ?? null;
+  const [referenceId, setReferenceId] = useState<string | null | undefined>(undefined);
+  const choices = v3?.opponents?.filter(o => !o.isPlayer) ?? [];
+  const choice = onChoose ? chosenId : referenceId;
+  // Auto-select leader only until an explicit selection. A disappearing rival must
+  // not silently become a different car; retain their stored history if available.
+  const selected = choice === undefined ? choices.find(o=>o.position===1 && o.connected!==false) ?? null : choices.find(o=>o.id===choice) ?? null;
   const history = live ? freshPaceHistory(v3, remoteHistory ?? v3?.paceHistory) : null;
   const ownId = v3?.opponents?.find(o=>o.isPlayer)?.id;
   const own = history?.cars.find(c=>c.id===ownId);
-  const other = selected ? history?.cars.find(c=>c.id===selected.id) : undefined;
+  const selectedId = choice === undefined ? selected?.id : choice;
+  const other = selectedId ? history?.cars.find(c=>c.id===selectedId) : undefined;
   const trace = newestTrace(own);
   const pin = useRef<{key:string; trace:StoredTrace | null}>({key:"",trace:null});
-  const pinKey = `${history?.segmentId}:${trace?.traceId}:${selected?.id}`;
+  const pinKey = `${history?.segmentId}:${trace?.traceId}:${selectedId}`;
   if (pin.current.key !== pinKey) pin.current = {key:pinKey, trace:null};
   if (!pin.current.trace) pin.current.trace = completeReference(other);
   const [deltaOwn, deltaRef] = deltaSeries(trace, pin.current.trace);
@@ -50,14 +54,17 @@ const PacePresentation = ({ strategy, pace, lapTimes = [], points = [], v3, live
       {modes.map(m=><button key={m.id} type="button" aria-pressed={mode===m.id} onClick={()=>setMode(m.id)} className={`text-[12px] font-bold ${mode===m.id ? "border-b border-orange-400 text-orange-300" : "text-slate-400"}`}>{m.label}</button>)}
     </div>
     <label className="flex gap-2 text-[11px] text-slate-400">Vergelijk
-      <select aria-label="Vergelijkingsauto" value={selected?.id ?? ""} onChange={e=>{setReferenceId(e.target.value || null); onChoose?.(e.target.value || null);}} className="min-w-0 max-w-40 bg-slate-950 text-slate-200">
+      <select aria-label="Vergelijkingsauto" value={selectedId ?? ""} onChange={e=>{setReferenceId(e.target.value || null); onChoose?.(e.target.value || null);}} className="min-w-0 max-w-40 bg-slate-950 text-slate-200">
         <option value="">Geen referentie</option>
-        {choices.map(o=><option key={o.id} value={o.id}>{o.driverName ?? o.carNumber ?? o.id}</option>)}
+        {selectedId && !choices.some(o=>o.id===selectedId) && <option value={selectedId}>Gekozen auto · niet meer in snapshot</option>}
+        {choices.map(o=><option key={o.id} value={o.id}>{o.driverName ?? o.carNumber ?? o.id}{o.connected===false ? " · offline" : ""}</option>)}
       </select>
     </label>
     <PaceSeriesGraph own={ownSeries} reference={refSeries} label={modes.find(m=>m.id===mode)!.label} unit={mode==="speed"?"km/h":"s"} distance={mode!=="lap"} />
     <p className="text-[11px] text-orange-300">━ Eigen auto{selected && <span className="text-emerald-300"> · ━ {selected.driverName ?? selected.id}</span>}</p>
-    {selected && refSeries.length<2 && <p className="text-[11px] text-slate-400">Vergelijkingsreeks ontbreekt of is niet gecontroleerd.</p>}
+    {selectedId && refSeries.length<2 && <p className="text-[11px] text-slate-400">Vergelijkingsreeks ontbreekt of is niet gecontroleerd.</p>}
+    {ownSeries.length<2 && <p className="text-[11px] text-slate-400">{mode==="speed" ? "Snelheid ontbreekt: geen spoor met bevestigde km/h-eenheid." : mode==="delta" ? "Delta ontbreekt: geen volledige vaste referentie met betrouwbaar finishanker." : "Nog geen twee opgenomen eigen rondetijden."}</p>}
+    {selectedId && !selected && <p className="text-[11px] text-slate-400">Gekozen auto verdwenen; alleen eerder opgenomen rondes, geen opgevulde waarden.</p>}
     {mode==="delta" && <p className="text-[11px] text-slate-400">Eigen tijd − vaste opgenomen referentie op dezelfde baanpositie; positief is langzamer.</p>}
     {remoteError && <p className="text-[11px] text-slate-400">Pace-opslag niet beschikbaar.</p>}
   </>;
@@ -112,14 +119,14 @@ function Value({ label, value, tone }: { label: string; value: string; tone: str
 
 export const PacePanel = (props: Props) => props.paceSource ? <ConnectedPacePanel {...props} /> : <PacePresentation {...props} />;
 function ConnectedPacePanel(props: Props) {
-  const [chosenId,setChosenId] = useState<string | null>(null);
-  const choices = props.v3?.opponents?.filter(o=>!o.isPlayer && o.connected!==false) ?? [];
-  const selected = choices.find(o=>o.id===chosenId) ?? choices.find(o=>o.position===1) ?? null;
+  const [chosenId,setChosenId] = useState<string | null | undefined>(undefined);
+  const choices = props.v3?.opponents?.filter(o=>!o.isPlayer) ?? [];
+  const selected = chosenId === undefined ? choices.find(o=>o.position===1 && o.connected!==false) ?? null : choices.find(o=>o.id===chosenId) ?? null;
   const source = props.paceSource!;
   const query = useQuery({
-    queryKey: ["pitwall-pace",source.deviceId,source.eventId,source.teamId,selected?.id],
+    queryKey: ["pitwall-pace",source.deviceId,source.eventId,source.teamId,chosenId ?? selected?.id],
     enabled: props.live!==false && !!(source.deviceId || source.eventId && source.teamId),
-    queryFn: ()=>readPitwallPace(source,selected?.id ?? null), refetchInterval:1000,retry:false,
+    queryFn: ()=>readPitwallPace(source,chosenId === undefined ? selected?.id ?? null : chosenId), refetchInterval:1000,retry:false,
   });
   return <PacePresentation {...props} remoteHistory={query.data} remoteError={query.isError} chosenId={chosenId} onChoose={setChosenId} />;
 }

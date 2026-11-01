@@ -15,7 +15,16 @@ export const freshMetrics = (v3: V3Normalized | null | undefined, id: string) =>
 };
 export const rowSectors = (v3: V3Normalized | null | undefined, id: string, last: unknown) => {
   const m = freshMetrics(v3, id);
-  return m && m.lastLapSeconds === last ? validatedSectors(m.lastLapSectorSeconds, last) : null;
+  const row = v3?.opponents?.find(o=>o.id===id);
+  // Source-specific last-lap times can differ (SimHub vs CarIdxLastLapTime).
+  // New frames carry the completed lap identity; only old frames need exact time equality.
+  const sameLap = m?.sectorLap != null ? row?.lap === m.sectorLap + 1 : m?.lastLapSeconds === last;
+  return m && sameLap && m.lapValid !== false ? validatedSectors(m.lastLapSectorSeconds, m.lastLapSeconds, m.sectorCount) : null;
+};
+/** No guessed three-sector layout. Legacy validated arrays can identify their own count. */
+export const trackSectorCount = (v3?: V3Normalized | null): number => {
+  const counts = new Set((freshPaceHistory(v3)?.cars ?? []).map(c => freshMetrics(v3,c.id)).filter(m=>m!=null).map(m => m.sectorCount ?? validatedSectors(m.lastLapSectorSeconds,m.lastLapSeconds)?.length).filter((n): n is number => Number.isInteger(n) && n! >= 1 && n! <= 16));
+  return counts.size === 1 ? [...counts][0] : 0;
 };
 export const newestTrace = (car?: PaceCar): StoredTrace | null => {
   const traces = (car?.traces ?? []).filter((t: StoredTrace) => !t.conflict && t.points.length <= 128);
