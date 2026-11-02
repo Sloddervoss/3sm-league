@@ -25,12 +25,16 @@ internal static class PaceSourceSelectionTests
         choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
         Check("03",choice.LastLapSeconds==null && choice.LastLapSource==null,"eerste waarneming blijft leeg");
 
-        // 04: dezelfde teller en dezelfde tijd mag niet nog eens aan een ronde worden geplakt.
+        // 04: de tijd blijft staan zolang de auto op de volgende ronde rijdt (de buffer
+        //     keurt pas 0,25 s na de overgang), maar hij wordt niet aan een nieuwe ronde
+        //     geplakt als de teller weer opschuift zonder nieuwe tijd.
         selector=new PaceSourceSelector();
         selector.Choose("car-1",null,null,null,1,0,null,1);
-        choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
-        var again=selector.Choose("car-1",null,null,null,2,122.684,null,2);
-        Check("04",again.LastLapSeconds==null,"onveranderde tijd wordt niet hergebruikt");
+        selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var hold=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var nextLap=selector.Choose("car-1",null,null,null,3,122.684,null,3);
+        Check("04",hold.LastLapSeconds==122.684 && hold.ReportedLap==1 && nextLap.LastLapSeconds==null,
+            "vasthouden op dezelfde ronde, niet op de volgende: "+hold.LastLapSeconds+"/"+hold.ReportedLap+" -> "+nextLap.LastLapSeconds);
 
         // 05: een sprong van meer dan een ronde (reset, pit, herstart) is geen bewijs.
         selector=new PaceSourceSelector();
@@ -80,13 +84,35 @@ internal static class PaceSourceSelectionTests
 
         // 12: tegenproef - de oude regel (index gevonden => alleen direct) geeft op
         //     precies dit frame null, terwijl de nieuwe regel 122,684 teruggeeft.
-        //     Zo is vastgelegd dat de reparatie het gemeten geval verandert.
         selector=new PaceSourceSelector();
         selector.Choose("car-1",null,null,null,1,0,null,1);
         choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
         var oldRule = (bool hasIndex, double? directLast) => hasIndex ? directLast : (double?)122.684;
         Check("12",oldRule(true,null)==null && choice.LastLapSeconds==122.684,
             "oude regel gaf null, nieuwe regel geeft "+choice.LastLapSeconds);
+
+        // 13: spreken de twee tellers elkaar tegen, dan is er geen bewijs (bronwissel).
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,5,0,null,6);
+        choice=selector.Choose("car-1",null,null,null,5,122.684,null,7);
+        Check("13",choice.LastLapSeconds==null,"tegensprekende tellers geven geen tijd");
+
+        // 14: verdwijnt de directe teller, dan is dat een bronwissel en geen bewijs.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        choice=selector.Choose("car-1",null,null,null,null,122.684,null,2);
+        Check("14",choice.LastLapSeconds==null,"bronwissel van de teller is geen bewijs");
+
+        // 15: na een bewezen overgang blijft de tijd staan binnen de bufferwacht van
+        //     0,25 s, en verdwijnt zodra de auto een ronde verder is.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var t1=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var t2=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var t3=selector.Choose("car-1",null,null,null,3,122.684,null,3);
+        Check("15",t1.LastLapSeconds==122.684 && t2.LastLapSeconds==122.684 && t3.LastLapSeconds==null,
+            "bufferwacht houdt de tijd vast: "+t1.LastLapSeconds+"/"+t2.LastLapSeconds+"/"+t3.LastLapSeconds);
 
         return n;
     }
