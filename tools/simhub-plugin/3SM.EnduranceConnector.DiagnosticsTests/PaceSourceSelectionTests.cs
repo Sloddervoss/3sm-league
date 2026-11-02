@@ -114,6 +114,26 @@ internal static class PaceSourceSelectionTests
         Check("15",t1.LastLapSeconds==122.684 && t2.LastLapSeconds==122.684 && t3.LastLapSeconds==null,
             "bufferwacht houdt de tijd vast: "+t1.LastLapSeconds+"/"+t2.LastLapSeconds+"/"+t3.LastLapSeconds);
 
+        // 16: end-to-end bewijs voor punt 2 van de reviewer: de terugvaltijd moet de
+        //     rondehistorie van de buffer echt bereiken (die keurt pas 0,25 s na de
+        //     overgang). Zonder vasthouden bleef StoredLapCount op 0.
+        var buffer=new PaceCaptureBuffer();
+        var liveSelector=new PaceSourceSelector();
+        double? simHubTime=null;
+        var lapNow=1;
+        for(int tick=0;tick<=140;tick++)
+        {
+            var clock=tick*0.1;
+            if(tick>0 && tick%100==0) { lapNow++; simHubTime=10.0; }
+            var chosen=liveSelector.Choose("car-1",null,null,null,lapNow,simHubTime,null,lapNow);
+            buffer.Observe("sess",clock,tick,new[]{
+                new PaceObservation {Id="car-1",Lap=lapNow,Distance=(clock%10)/10.0,SpeedKph=180,Connected=true,IsPlayer=true,Position=1,
+                    LastLapSeconds=chosen.LastLapSeconds,BestLapSeconds=chosen.BestLapSeconds,ReportedLap=chosen.ReportedLap,
+                    Metric=new PaceMetric {LapValid=true}}
+            }, new double[]{0.25,0.5,0.75});
+        }
+        Check("16",buffer.StoredLapCount>=1,"terugvaltijd bereikt de rondehistorie: "+buffer.StoredLapCount+" ronde(n)");
+
         return n;
     }
 }
