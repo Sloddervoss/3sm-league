@@ -122,7 +122,7 @@ internal static class UpdatePathTests
         {
             var info = ReadUpward(Path.Combine(assembly, "AssemblyInfo.cs"));
             Check("V24-" + assembly,
-                info != null && info.Contains("AssemblyVersion(\"" + (assembly == "3SM.EnduranceConnector" ? "0.7.3.0" : "0.7.2.0") + "\")") && info.Contains("AssemblyFileVersion(\"" + (assembly == "3SM.EnduranceConnector" ? "0.7.3.0" : "0.7.2.0") + "\")"),
+                info != null && info.Contains("AssemblyVersion(\"" + (assembly == "3SM.EnduranceConnector" ? "0.7.3.1" : "0.7.2.0") + "\")") && info.Contains("AssemblyFileVersion(\"" + (assembly == "3SM.EnduranceConnector" ? "0.7.3.1" : "0.7.2.0") + "\")"),
                 assembly + " behoudt de eigen hotfixversie" + (info == null ? " (bestand niet gevonden)" : string.Empty));
         }
 
