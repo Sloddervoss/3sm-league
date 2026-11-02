@@ -47,6 +47,7 @@ namespace ThreeSM.EnduranceConnector
         private readonly Stopwatch _sendClock = Stopwatch.StartNew();
         private readonly Stopwatch _stintClock = new Stopwatch();
         private readonly PaceCaptureBuffer _paceCapture = new PaceCaptureBuffer();
+        private readonly PaceSourceSelector _paceSources = new PaceSourceSelector();
         private double[] _paceSectorStarts;
         private Dictionary<string,int> _paceCarIndices = new Dictionary<string,int>(StringComparer.Ordinal);
         private string _paceMetadataKey;
@@ -2042,21 +2043,26 @@ namespace ThreeSM.EnduranceConnector
         }
         private void ObservePace(PluginManager manager,GameData data,bool active)
         {
-            if(!active || data.NewData==null) { _paceCapture.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; return; }
+            if(!active || data.NewData==null) { _paceCapture.Reset(); _paceSources.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; return; }
             try
             {
                 var snapshot=data.NewData;
                 var channels=new RawChannelReader(snapshot,property=>GetRaw(manager,property));
                 var sdk=ReadDirectSdk();
                 var sdkClock=sdk?.ReadNumber("SessionTime");
-                var clock=sdkClock??_sessionTime.Read(snapshot);
+                var simHubClock=_sessionTime.Read(snapshot);
+                // De SDK-klok en de SimHub-klok horen dezelfde sessie te beschrijven.
+                // Wijkt de SDK-klok af (stilgevallen of oude image), dan is hij geen
+                // bruikbare tijdbasis; de SimHub-klok is dat wel.
+                var sdkClockUsable=sdkClock.HasValue && (!simHubClock.HasValue || Math.Abs(sdkClock.Value-simHubClock.Value)<=2.0);
+                var clock=sdkClockUsable?sdkClock:simHubClock;
                 if(clock.HasValue && _paceSampleAt>=0 && clock>=_paceSampleAt && clock-_paceSampleAt<0.049999) return;
                 _paceSampleAt=clock??-1;
                 var observedSession=BuildObservedSessionId(manager,channels);
                 var metadataKey=observedSession+":"+channels.ReadTrackConfiguration();
                 if(metadataKey!=_paceMetadataKey || !clock.HasValue || clock<_paceMetadataAt || clock-_paceMetadataAt>=1)
                 {
-                    if(metadataKey!=_paceMetadataKey) _paceCapture.Reset();
+                    if(metadataKey!=_paceMetadataKey) { _paceCapture.Reset(); _paceSources.Reset(); }
                     _paceSectorStarts=channels.ReadSectorStarts();
                     _paceCarIndices=channels.ReadCarIndices();
                     _paceMetadataKey=metadataKey; _paceMetadataAt=clock??-1;
@@ -2076,7 +2082,7 @@ namespace ThreeSM.EnduranceConnector
                     .OrderBy(o=>o.IsPlayer?0:o.Position==1?1:2).ThenBy(o=>o.Id,StringComparer.Ordinal).Take(40))
                 {
                     int carIndex;
-                    var hasIndex=sdkClock.HasValue && !string.IsNullOrEmpty(o.CarNumber) && _paceCarIndices.TryGetValue(o.CarNumber,out carIndex);
+                    var hasIndex=sdkClockUsable && !string.IsNullOrEmpty(o.CarNumber) && _paceCarIndices.TryGetValue(o.CarNumber,out carIndex);
                     // No name-based or array-position identity guesses.
                     carIndex=hasIndex ? _paceCarIndices[o.CarNumber] : -1;
                     var directDistance=hasIndex ? sdk.ReadNumber("CarIdxLapDistPct",carIndex) : null;
@@ -2084,16 +2090,21 @@ namespace ThreeSM.EnduranceConnector
                     var directLast=hasIndex ? sdk.ReadNumber("CarIdxLastLapTime",carIndex) : null;
                     var reportedLap=hasIndex ? sdk.ReadNumber("CarIdxLapCompleted",carIndex) : null;
                     var directBest=hasIndex ? sdk.ReadNumber("CarIdxBestLapTime",carIndex) : null;
-                    rows.Add(new PaceObservation {Id=o.Id,ReportedLap=reportedLap.HasValue?(int?)reportedLap.Value:null,Lap=directLap.HasValue?(int?)directLap.Value:o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
+                    // Eén bronkeuze per auto. Een gevonden index bewijst niet dat de
+                    // directe rondetijd bruikbaar is; PaceSourceSelector eist bij een
+                    // terugval op SimHub een aangetoonde ronde-overgang, anders blijft
+                    // de tijd leeg in plaats van bij de verkeerde ronde te horen.
+                    var chosen=_paceSources.Choose(o.Id,directLast,directBest,reportedLap,directLap,PositiveSeconds(o.LastLapTime),PositiveSeconds(o.BestLapTime),o.CurrentLap);
+                    rows.Add(new PaceObservation {Id=o.Id,ReportedLap=chosen.ReportedLap,Lap=chosen.Lap.HasValue?(int?)chosen.Lap.Value:o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
                         Distance=directDistance??PaceNumber(o,"TrackPositionPercent",0,1),
                         SpeedKph=o.IsPlayer?ownSpeed:speedUnitOk?PaceNumber(o,"Speed",0,600):null,
-                        LastLapSeconds=hasIndex ? PaceCaptureBuffer.Number(directLast,0.001,86400) : PositiveSeconds(o.LastLapTime),BestLapSeconds=hasIndex ? PaceCaptureBuffer.Number(directBest,0.001,86400) : PositiveSeconds(o.BestLapTime),
+                        LastLapSeconds=chosen.LastLapSeconds,BestLapSeconds=chosen.BestLapSeconds,
                         IsPlayer=o.IsPlayer,Position=o.Position,Connected=o.IsConnected || o.IsPlayer,InPit=o.IsCarInPitLane || o.IsCarInPit,
                         Metric=new PaceMetric {LastLapSectorSeconds=PaceSectors(o,"LastLapSector",sectorCount),BestLapSectorSeconds=PaceSectors(o,"BestLapSector",sectorCount),BestSectorSeconds=PaceSectors(o,"BestSector",sectorCount),
                             BestLapDeltaToFieldBestSeconds=PaceNumber(o,"DeltaToBest",0,86400),BestLapDeltaToPlayerSeconds=PaceNumber(o,"DeltaToPlayer",-86400,86400),
                             LapValid=PaceBool(o,"LapValid"),LapHighPrecision=PaceNumber(o,"CurrentLapHighPrecision",0,100001),TrackPositionPercentRaw=PaceNumber(o,"TrackPositionPercentRaw",-100001,100001)}});
                 }
-                _paceCapture.Observe(observedSession,clock,sdkClock.HasValue?(long?)sdk.TickCount:null,rows,_paceSectorStarts);
+                _paceCapture.Observe(observedSession,clock,sdkClockUsable?(long?)sdk.TickCount:null,rows,_paceSectorStarts);
             }
             catch(Exception error) { _paceCapture.Reset(); SimHub.Logging.Current.Warn("3SM pace: capture onderbroken: "+error.GetType().Name); }
         }
