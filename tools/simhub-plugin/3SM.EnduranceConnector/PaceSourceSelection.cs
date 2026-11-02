@@ -68,7 +68,7 @@ namespace ThreeSM.EnduranceConnector
             if (!value.HasValue) return null;
             var seconds = value.Value;
             if (double.IsNaN(seconds) || double.IsInfinity(seconds)) return null;
-            return seconds >= MinLapSeconds && seconds <= MaxLapSeconds ? seconds : null;
+            return seconds >= MinLapSeconds && seconds <= MaxLapSeconds ? (double?)seconds : null;
         }
 
         /// <summary>
