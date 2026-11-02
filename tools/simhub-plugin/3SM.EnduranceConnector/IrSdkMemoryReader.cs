@@ -154,15 +154,16 @@ namespace ThreeSM.EnduranceConnector
         /// bestaat niet, type is geen getal, waarde valt buiten de buffer, of NaN/oneindig.
         /// Nooit 0 als "de sim zei niets" — 0 is een echte meting.
         /// </summary>
-        public double? ReadNumber(string name)
+        public double? ReadNumber(string name, int index = 0)
         {
             if (!Connected || string.IsNullOrEmpty(name) || _variables == null) return null;
             IrSdkVariable variable;
             if (!_variables.TryGetValue(name, out variable)) return null;
 
+            if (index < 0 || index >= variable.Count) return null;
             var size = SizeOf(variable.Type);
             if (size <= 0) return null;
-            var position = _dataOffset + variable.Offset;
+            var position = _dataOffset + variable.Offset + (long)index * size;
             if (variable.Offset < 0 || position < _dataOffset) return null;
             if ((long)position + size > (long)_dataOffset + _dataLength) return null;
             if ((long)position + size > _length) return null;
@@ -171,16 +172,16 @@ namespace ThreeSM.EnduranceConnector
             switch (variable.Type)
             {
                 case TypeFloat:
-                    value = BitConverter.ToSingle(_image, position);
+                    value = BitConverter.ToSingle(_image, (int)position);
                     break;
                 case TypeDouble:
-                    value = BitConverter.ToDouble(_image, position);
+                    value = BitConverter.ToDouble(_image, (int)position);
                     break;
                 case TypeInt:
-                    value = BitConverter.ToInt32(_image, position);
+                    value = BitConverter.ToInt32(_image, (int)position);
                     break;
                 case TypeBitField:
-                    value = BitConverter.ToUInt32(_image, position);
+                    value = BitConverter.ToUInt32(_image, (int)position);
                     break;
                 case TypeBool:
                     value = _image[position] != 0 ? 1d : 0d;

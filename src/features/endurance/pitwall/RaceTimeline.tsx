@@ -16,7 +16,7 @@ const EVENT_ICONS: Record<string, { icon: string; color: string }> = {
 export const RaceTimeline = ({ events, plannedStints }: Props) => {
   if (events.length === 0 && plannedStints.length === 0) {
     return (
-      <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+      <div className="rounded-xl border border-[#1D2431] bg-[#0B0D11] p-3.5">
         <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">TIMELINE</div>
         <p className="text-xs text-gray-500">Geen events</p>
       </div>
@@ -31,7 +31,7 @@ export const RaceTimeline = ({ events, plannedStints }: Props) => {
   const history = filtered.slice(0, -3).reverse();
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+    <div className="rounded-xl border border-[#1D2431] bg-[#0B0D11] p-3.5">
       <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">TIMELINE</div>
 
       {filtered.length > 0 && (

@@ -1,0 +1,239 @@
+[
+  {
+    "mode": "endurance",
+    "desktop": {
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "document": {
+        "width": 1920,
+        "height": 1080
+      },
+      "panels": [
+        {
+          "x": 28,
+          "y": 701.5,
+          "width": 611.328125,
+          "height": 323,
+          "bottom": 1024.5
+        },
+        {
+          "x": 649.328125,
+          "y": 701.5,
+          "width": 407.546875,
+          "height": 323,
+          "bottom": 1024.5
+        },
+        {
+          "x": 1066.875,
+          "y": 701.5,
+          "width": 407.5625,
+          "height": 323,
+          "bottom": 1024.5
+        },
+        {
+          "x": 1484.4375,
+          "y": 701.5,
+          "width": 407.546875,
+          "height": 323,
+          "bottom": 1024.5
+        }
+      ],
+      "more": {
+        "x": 28,
+        "y": 1032.5,
+        "width": 1864,
+        "height": 24,
+        "bottom": 1056.5
+      },
+      "extraVisible": false,
+      "timing": {
+        "x": 657,
+        "y": 344.25,
+        "width": 1234,
+        "height": 326.25,
+        "bottom": 670.5,
+        "clientHeight": 326,
+        "scrollHeight": 422,
+        "overflow": "auto"
+      }
+    },
+    "skin": {
+      "radius": "5px",
+      "border": "1px",
+      "background": "rgb(6, 14, 20)",
+      "borderColor": "rgb(23, 42, 54)",
+      "titleFont": "Rajdhani, sans-serif",
+      "titleTracking": "0.48px",
+      "timingRowHeight": 25,
+      "contentFits": true
+    },
+    "trackArtwork": {
+      "inactiveAbsent": true,
+      "backgroundPresent": true,
+      "emptyPixels": {
+        "orange": 21,
+        "gray": 2286
+      },
+      "partialPixels": {
+        "orange": 688,
+        "gray": 2000
+      },
+      "fullPixels": {
+        "orange": 3826,
+        "gray": 530
+      },
+      "rasterMaskChecks": "PASS"
+    },
+    "interactionChecks": [
+      "Stints: nonempty own-team content, bounded layout",
+      "Pitstops: nonempty own-team content, bounded layout",
+      "Gebeurtenissen: nonempty own-team content, bounded layout",
+      "Klasse: LMP2 filter, restored full snapshot",
+      "Snelheid: explicit source/reference, bounded layout",
+      "Delta: explicit source/reference, bounded layout"
+    ],
+    "stintRowsFullyVisible": "PASS: three full rows",
+    "ownDescriptionFits": true,
+    "moreAnalysis": "PASS: closed by default, click and keyboard, contents preserved",
+    "wheelAndKeyboardScroll": "PASS",
+    "growingSnapshot": "PASS",
+    "rawDisclosure": "not in endurance fixture",
+    "responsive": [
+      {
+        "width": 1440,
+        "panelColumns": 4,
+        "noHorizontalPageOverflow": true
+      },
+      {
+        "width": 1024,
+        "panelColumns": 2,
+        "noHorizontalPageOverflow": true
+      },
+      {
+        "width": 390,
+        "panelColumns": 1,
+        "noHorizontalPageOverflow": true
+      }
+    ],
+    "browserErrors": []
+  },
+  {
+    "mode": "test",
+    "desktop": {
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "document": {
+        "width": 1920,
+        "height": 1080
+      },
+      "panels": [
+        {
+          "x": 28,
+          "y": 691.5,
+          "width": 611.328125,
+          "height": 271,
+          "bottom": 962.5
+        },
+        {
+          "x": 649.328125,
+          "y": 691.5,
+          "width": 407.546875,
+          "height": 271,
+          "bottom": 962.5
+        },
+        {
+          "x": 1066.875,
+          "y": 691.5,
+          "width": 407.5625,
+          "height": 271,
+          "bottom": 962.5
+        },
+        {
+          "x": 1484.4375,
+          "y": 691.5,
+          "width": 407.546875,
+          "height": 271,
+          "bottom": 962.5
+        }
+      ],
+      "more": {
+        "x": 28,
+        "y": 970.5,
+        "width": 1864,
+        "height": 24,
+        "bottom": 994.5
+      },
+      "extraVisible": false,
+      "timing": {
+        "x": 657,
+        "y": 333,
+        "width": 1234,
+        "height": 327.5,
+        "bottom": 660.5,
+        "clientHeight": 328,
+        "scrollHeight": 422,
+        "overflow": "auto"
+      }
+    },
+    "skin": {
+      "radius": "5px",
+      "border": "1px",
+      "background": "rgb(6, 14, 20)",
+      "borderColor": "rgb(23, 42, 54)",
+      "titleFont": "Rajdhani, sans-serif",
+      "titleTracking": "0.48px",
+      "timingRowHeight": 25,
+      "contentFits": true
+    },
+    "trackArtwork": {
+      "inactiveAbsent": true,
+      "backgroundPresent": true,
+      "emptyPixels": {
+        "orange": 21,
+        "gray": 2286
+      },
+      "partialPixels": {
+        "orange": 688,
+        "gray": 2000
+      },
+      "fullPixels": {
+        "orange": 3826,
+        "gray": 530
+      },
+      "rasterMaskChecks": "PASS"
+    },
+    "interactionChecks": [
+      "Klasse: LMP2 filter, restored full snapshot",
+      "Snelheid: explicit source/reference, bounded layout",
+      "Delta: explicit source/reference, bounded layout"
+    ],
+    "stintRowsFullyVisible": "not applicable",
+    "ownDescriptionFits": true,
+    "moreAnalysis": "PASS: closed by default, click and keyboard, contents preserved",
+    "wheelAndKeyboardScroll": "PASS",
+    "growingSnapshot": "PASS",
+    "rawDisclosure": "PASS",
+    "responsive": [
+      {
+        "width": 1440,
+        "panelColumns": 4,
+        "noHorizontalPageOverflow": true
+      },
+      {
+        "width": 1024,
+        "panelColumns": 2,
+        "noHorizontalPageOverflow": true
+      },
+      {
+        "width": 390,
+        "panelColumns": 1,
+        "noHorizontalPageOverflow": true
+      }
+    ],
+    "browserErrors": []
+  }
+]

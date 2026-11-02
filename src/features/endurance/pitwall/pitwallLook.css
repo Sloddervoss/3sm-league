@@ -1,0 +1,151 @@
+/* Scoped instrument skin. No data, geometry, advice or access changes. */
+[data-pitwall-look], [data-pitwall-context] {
+  --pitwall-panel: #060e14;
+  --pitwall-border: #172a36;
+  --color-slate-500: #7998af;
+  --color-slate-400: #99afbf;
+  color: #dcebf5;
+}
+[data-pitwall-look] { background: #03090d; }
+[data-pitwall-look] :is(.text-gray-400, .text-gray-500, .text-slate-600) { color: #7998af; }
+[data-pitwall-look] [data-pitwall-slot],
+[data-pitwall-look] [data-pitwall-kpi-group],
+[data-pitwall-context] {
+  border-radius: 5px;
+  border: 1px solid var(--pitwall-border);
+  background: var(--pitwall-panel);
+  box-shadow: none;
+}
+[data-pitwall-look] [data-pitwall-slot] > header {
+  padding: 6px 12px;
+  border-color: #172a36;
+  align-items: center;
+  min-height: 32px;
+}
+[data-pitwall-look] [data-pitwall-slot] > header h3 {
+  font-family: Rajdhani, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: .04em;
+  margin: 0;
+  white-space: nowrap;
+}
+[data-pitwall-look] [data-pitwall-slot] > header h3 svg { color: #ff750c; }
+[data-pitwall-look] [data-pitwall-slot] > header > div { min-width: 0; }
+[data-pitwall-look] [data-pitwall-slot] > header > div > span { font-size: 10px; line-height: 13px; }
+[data-pitwall-look] [data-pitwall-slot] > div { padding: 10px 12px; }
+[data-pitwall-look] :is([class*="text-[10px]"], [class*="text-[10.5px]"], [class*="text-[11px]"]) { line-height: 14px; }
+[data-pitwall-look] :is(dt, [class*="uppercase"]) { letter-spacing: .035em; }
+[data-pitwall-look] [data-pitwall-row="panels"] > div > section { height: 100%; }
+[data-pitwall-look] [data-pitwall-row="panels"] { gap: 10px; }
+[data-pitwall-look] [data-pitwall-kpi] { gap: 10px; }
+[data-pitwall-look] [data-pitwall-kpi-group] { padding: 8px 14px; }
+/* Each group is a ruled instrument strip, not a card with a second heading. */
+[data-pitwall-look] [data-pitwall-kpi-group] > p { font-size: 10px; line-height: 12px; }
+[data-pitwall-look] [data-pitwall-kpi-group] > div { margin-top: 4px; gap: 6px 0; }
+[data-pitwall-look] [data-pitwall-kpi-group] > div > div { flex: 1; padding-inline: 10px; border-left: 1px solid #172a36; }
+[data-pitwall-look] [data-pitwall-kpi-group] > div > div:first-child { border-left: 0; padding-left: 0; }
+[data-pitwall-look] [data-pitwall-kpi-group] > div > div > p:first-child { font-size: 10px; line-height: 14px; }
+[data-pitwall-look] [data-pitwall-kpi-group] .font-mono { font-size: 24px; }
+[data-pitwall-look] [data-pitwall-slot="own-car"] { border-color: #9a4b18; box-shadow: inset 4px 0 0 #ff750c; }
+[data-pitwall-look] [data-pitwall-slot="own-car"] dd { font-size: 15px; }
+[data-pitwall-look] [data-pitwall-slot="own-car"] dd.text-amber-300 { color: #dcebf5; }
+[data-pitwall-look] [data-pitwall-slot="own-car"] dd.text-fuchsia-300 { color: #6ee7b7; }
+[data-pitwall-look] [data-pitwall-decision-band] { border-radius: 4px; padding: 8px 12px; background: #071410; }
+[data-pitwall-look] [data-pitwall-decision-band] [role="status"] { font-size: 19px; line-height: 24px; }
+[data-pitwall-look] [data-pitwall-decision-band] [class*="rounded"] { border-radius: 2px; }
+[data-pitwall-look] .pitwall-decision-content > p:nth-child(2) { font-size: 12px; line-height: 16px; }
+[data-pitwall-look] [data-pitwall-tyre-corner] { border-radius: 0; border-color: #172a36; background: transparent; padding: 7px 8px; }
+[data-pitwall-look] [data-pitwall-tyre-corner] > p:first-child { color: #7998af; opacity: 1; font-size: 10px; }
+[data-pitwall-look] [data-pitwall-tyre-corner] > p:nth-child(2) { font-size: 20px; }
+[data-pitwall-look] [data-pitwall-tyre-corner] [role="meter"],
+[data-pitwall-look] [data-pitwall-tyre-corner] [role="meter"] > div { border-radius: 0; }
+[data-pitwall-look] [data-pitwall-slot="tyres"] > div > .grid { gap: 0; }
+[data-pitwall-look] [aria-label="Pace-weergave"] button,
+[data-pitwall-look] [aria-label="Timing-weergave"] button { text-transform: uppercase; font-size: 10px; letter-spacing: .035em; line-height: 20px; }
+/* Bounded table also works outside the shared desktop grid. */
+.pitwall-timing { min-height: 0; }
+.pitwall-timing-body { display: flex; flex-direction: column; min-height: 0; }
+.pitwall-timing-scroll { max-height: 360px; overflow: auto; overscroll-behavior: contain; scrollbar-color: #385368 #060e14; scrollbar-width: thin; }
+.pitwall-timing-scroll:focus-visible { outline: 2px solid #fb923c; outline-offset: -2px; }
+.pitwall-timing-scroll thead { position: sticky; top: 0; z-index: 1; }
+[data-pitwall-look] .pitwall-timing > .pitwall-timing-body { padding: 0; }
+[data-pitwall-look] .pitwall-timing-scroll table { font-size: 12px; line-height: 16px; }
+[data-pitwall-look] .pitwall-timing-scroll :is(td, th) { padding-block: 4px; }
+[data-pitwall-look] .pitwall-timing-scroll th { font-size: 10px; }
+[data-pitwall-look] .pitwall-timing-scroll tbody td > p { display: inline; }
+[data-pitwall-look] .pitwall-timing-scroll tbody td > p + p { margin-left: 8px; font-size: 10px; }
+[data-pitwall-look] .pitwall-timing-scroll td:nth-child(6) { color: #dcebf5; }
+[data-pitwall-look] .pitwall-timing-scroll td:nth-child(7) { color: #6ee7b7; }
+[data-pitwall-look] [data-pitwall-own-row] td:nth-child(3) { color: #ff8b36; font-weight: 900; }
+[data-pitwall-look] .pitwall-timing > header { padding-block: 4px; min-height: 30px; }
+[data-pitwall-look] .pitwall-timing > header h3 { color: #99afbf; }
+[data-pitwall-look] [aria-label="Timing-weergave"] { padding-block: 3px; gap: 6px 18px; }
+[data-pitwall-look] [aria-label="Timing-weergave"] [aria-pressed="true"] { background: #ff750c; color: #060e14; border: 0; padding-inline: 8px; border-radius: 3px; }
+[data-pitwall-look] .pitwall-timing-body > p:last-child { font-size: 10px; line-height: 14px; padding-block: 4px; }
+[data-pitwall-look] [data-pitwall-slot="ahead-you-behind"] > div { padding: 4px 10px; background-color: #060e14; }
+[data-pitwall-look] [data-pitwall-slot="ahead-you-behind"] > div > div { margin-top: 0; }
+[data-pitwall-look] [data-pitwall-slot="ahead-you-behind"] p { font-size: 9px; line-height: 12px; }
+[data-pitwall-context] { padding: 6px 12px; }
+[data-pitwall-context] button { border-radius: 3px; }
+[data-pitwall-look] .pitwall-more > summary { text-transform: uppercase; letter-spacing: .04em; font-size: 10px; }
+@media (min-width: 1280px) {
+  /* Widen only the host of this instrument, never the global website shell. */
+  .max-w-\[1600px\]:has(> [data-pitwall-look]) { max-width: 1864px; }
+  [data-pitwall-look].space-y-3 > :not(:last-child) { margin-bottom: 8px; }
+  [data-pitwall-look] [data-pitwall-row="track-timing"] { align-items: stretch; gap: 10px; }
+  [data-pitwall-look] [data-pitwall-col="timing"] { display: flex; min-height: 0; }
+  [data-pitwall-look] .pitwall-timing { width: 100%; height: 450px; }
+  [data-pitwall-look] .pitwall-timing-scroll { flex: 1; max-height: none; min-height: 0; }
+  [data-pitwall-look] [data-pitwall-col="track"] { display: flex; flex-direction: column; gap: 8px; }
+  [data-pitwall-look] [data-pitwall-col="track"] > * { margin-block: 0; }
+  [data-pitwall-look] [data-pitwall-slot="trackmap"] { flex: 1; }
+  [data-pitwall-look] [data-pitwall-slot="trackmap"] svg[role="img"],
+  [data-pitwall-look] [data-pitwall-slot="trackmap"] img { height: 188px; }
+  [data-pitwall-look] [aria-label="Live rondeposities"] { margin-bottom: 8px; }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] { padding-block: 8px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr); column-gap: 12px; }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] > p { grid-column: 1; margin-top: 0; }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] > p:last-of-type { grid-column: 1 / -1; grid-row: 3; font-size: 10px; }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] dl { grid-column: 2; grid-row: 1 / 3; margin: 0; padding: 0; border: 0; gap: 8px; }
+  [data-pitwall-look] [data-pitwall-slot="own-car"] dt { white-space: nowrap; font-size: 10px; }
+  [data-pitwall-look] .pitwall-decision-content { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 16px; align-content: start; }
+  [data-pitwall-look] .pitwall-decision-content > * { grid-column: 1; margin-top: 2px; }
+  [data-pitwall-look] .pitwall-decision-content > :first-child { margin-top: 0; }
+  [data-pitwall-look] .pitwall-decision-content > .pitwall-decision-compare { grid-column: 3; grid-row: 1 / 3; margin-top: 0; }
+  [data-pitwall-look] [data-pitwall-row="panels"] { grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); }
+  [data-pitwall-look] [data-pitwall-slot="pace"] dl { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 8px; }
+}
+
+/* Round 2: recover height from explanation, not from the timing viewport. */
+@media (min-width: 1280px) {
+  [data-pitwall-look] [data-pitwall-tyre-fuel] ul { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  [data-pitwall-look] [data-pitwall-tyre-fuel] ul > li { margin: 0; }
+  [data-pitwall-look] [data-pitwall-tyre-fuel] ul > li > .w-12 { width: auto; }
+  [data-pitwall-look] [data-pitwall-tyre-action] > p { font-size: 12px; line-height: 16px; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] dl { grid-template-columns: 1fr 1fr; gap: 4px 14px; padding-top: 5px; margin-top: 6px; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] dl > div { display: block; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] dt { font-size: 10px; text-transform: uppercase; line-height: 12px; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] dd { line-height: 16px; }
+  [data-pitwall-look] [data-pitwall-slot="fuel"] > div > .flex:first-child { align-items: start; }
+  [data-pitwall-look] [data-pitwall-stint-plan] > p { font-size: 10px; text-transform: uppercase; letter-spacing: .035em; line-height: 14px; }
+  [data-pitwall-look] [data-pitwall-window] { margin-top: 4px; }
+  [data-pitwall-look] [data-pitwall-window] > div { height: 4px; }
+  [data-pitwall-look] .pitwall-timing-scroll table { font-size: 13px; }
+}
+
+@media (min-width: 1280px) {
+  [data-pitwall-look] .pitwall-decision-content > [data-pitwall-tyre-action] { grid-column: 2; grid-row: 1 / 3; margin: 0; }
+  [data-pitwall-look] [data-pitwall-decision-band] [role="status"] { font-size: 17px; line-height: 22px; }
+  [data-pitwall-look] [data-pitwall-tyre-action] > p { display: block; }
+  [data-pitwall-look] [data-pitwall-tyre-action] > p > span { margin-right: 4px; }
+}
+
+/* Final comparison: narrow existing self-hosted type, quieter secondary digits. */
+[data-pitwall-look] [data-pitwall-fuel-value] { font-size: 26px; }
+[data-pitwall-look] [data-pitwall-row="panels"] [class*="font-mono"] { letter-spacing: 0; }
+
+/* Variable real sector layouts: compact digits, never alter map geometry or panel grid. */
+[data-pitwall-look] [data-pitwall-kpi-group].pitwall-many-sectors .font-mono { font-size: 17px; }
+[data-pitwall-look] [data-pitwall-kpi-group].pitwall-many-sectors > div > div { padding-inline: 5px; }
+[data-pitwall-look] .pitwall-timing-scroll table[data-sector-count]:not([data-sector-count="0"]):not([data-sector-count="1"]):not([data-sector-count="2"]):not([data-sector-count="3"]) { font-size: 11px; }

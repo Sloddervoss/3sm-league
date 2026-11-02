@@ -46,3 +46,5 @@ bot/.cache/
 # Python-bytecode van release-tooling (release-gate.py importeert clrpe)
 __pycache__/
 *.pyc
+docs/pitwall-look/preview/lab-key.pem
+docs/pitwall-look/preview/lab-cert.pem

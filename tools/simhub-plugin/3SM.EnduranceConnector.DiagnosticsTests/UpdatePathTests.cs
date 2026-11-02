@@ -122,8 +122,8 @@ internal static class UpdatePathTests
         {
             var info = ReadUpward(Path.Combine(assembly, "AssemblyInfo.cs"));
             Check("V24-" + assembly,
-                info != null && info.Contains("AssemblyVersion(\"0.7.2.0\")") && info.Contains("AssemblyFileVersion(\"0.7.2.0\")"),
-                assembly + " meldt 0.7.2.0" + (info == null ? " (bestand niet gevonden)" : string.Empty));
+                info != null && info.Contains("AssemblyVersion(\"" + (assembly == "3SM.EnduranceConnector" ? "0.7.3.1" : "0.7.2.0") + "\")") && info.Contains("AssemblyFileVersion(\"" + (assembly == "3SM.EnduranceConnector" ? "0.7.3.1" : "0.7.2.0") + "\")"),
+                assembly + " behoudt de eigen hotfixversie" + (info == null ? " (bestand niet gevonden)" : string.Empty));
         }
 
         // ---- 4. één update van 0.7.1.2 naar 0.8, met de echte bestanden ----

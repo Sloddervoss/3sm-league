@@ -1,0 +1,191 @@
+PITWALL — VERGELIJKING MET HET ORIGINELE ONTWERP
+
+Werkboom: /home/hermes/wt/pitwall-look
+Branch: feat/pitwall-look-3sm
+Startcommit: 1a604cb
+Origineel: /home/hermes/.hermes/cache/documents/native-inputs/6d0780991ab3ed1b8bd157bc983bf5be05c89ecf24c80110d095ea9624d66c2f/img_26a32595ab73.png
+
+Het origineel is eerst met vision_analyze geopend, daarna de twee bestaande
+screenshots. De verschillen hieronder vergelijken die beelden; de nieuwe
+screenshots zijn na de aanpassingen opnieuw visueel gecontroleerd.
+
+PER VERSCHIL: ORIGINEEL / EERDERE VERSIE / BESLUIT
+
+1. KPI-containers
+Origineel: drie losse donkere containers met ruimte ertussen.
+Versie: één doorlopende afgeronde strook met verticale scheidingen.
+Overnemen: gerepareerd naar drie afzonderlijk omlijnde groepen.
+
+2. Rondetijdkleuren
+Origineel: laatste ronde wit, beste groen.
+Versie: laatste geel, beste paars in KPI en timingtabel.
+Overnemen: KPI en timingtabel nu wit/groen. Bestaande eigen-autostrook
+behoudt voor deze wijziging haar gele/paarse tijdaccenten.
+
+3. Vorm van panelen
+Origineel: bescheiden afgeronde hoeken, dunne koelblauwe randen.
+Versie: duidelijk rondere panelen.
+Overnemen: dashboardpanelen nu 8px afgerond, bestaande donkere vlakken blijven.
+
+4. Selectie van eigen auto
+Origineel: oranje rand en linkeraccent rond geselecteerde coureur.
+Versie: eigen-autokaart met neutrale rand; alleen label oranje.
+Overnemen: oranje rand en linkeraccent toegevoegd. Eigen tabelrij blijft
+oranje gemarkeerd; startnummer krijgt nadrukkelijk oranje tekst.
+Geen nieuwe selectie van andere autos geïntroduceerd.
+
+5. Timingkop
+Origineel: oranje actieve Live Timing-tab, overige tabs daarnaast.
+Versie: neutrale paneelkop.
+Overnemen: oranje Live timing-label. Geen nepknop of tabs zonder inhoud.
+Class/Stints/Pit Stops/Events blijven weg: nieuwe navigatiefuncties vallen
+buiten deze presentatiebrief; dat is niet alleen een dataprobleem.
+
+6. Timingdichtheid
+Origineel: compacte enkelregelige rijen, veel deelnemers tegelijk zichtbaar.
+Versie: coureur en team onder elkaar, hogere rijen; slechts circa vier
+volledige rijen tegelijk zichtbaar in de eerdere screenshots.
+Overnemen: coureur en team nu op dezelfde regel, minder verticale celpadding.
+Nieuwe screenshots tonen P1 t/m P7; niet alle deelnemers tegelijk.
+Alle rijen blijven bereikbaar via hetzelfde begrensde scrollvlak.
+Scroll chaining geblokkeerd zodat het muiswiel niet de pagina meeneemt
+wanneer het compactere klassement zijn onderrand bereikt.
+
+7. Timingkolommen en definities
+Origineel: S1/S2/S3, pitstopaantallen, GAP en DELTA.
+Versie: P, K, nummer, coureur/team, klasse, laatste/beste, ronde,
+gap tot jou en PIT-status.
+Niet overnemen: de huidige tegenstanders hebben geen drie sectortijden of
+pitstopaantallen. GAP heet terecht gap tot jou, niet gap tot leider.
+Een nieuwe delta-afleiding valt buiten de ongewijzigde-berekeningenbrief.
+
+8. Klassen en aantallen
+Origineel: GT3/LMP2/GTE met volledige klasseaantallen.
+Versie: uitsluitend klassen die in de snapshot zitten, met aantal in beeld.
+Niet overnemen: geen extra deelnemers of klassen fabriceren; een begrensde
+snapshot bewijst geen volledige startlijst.
+
+9. Onderste raster
+Origineel: pace even breed als circuitkolom, drie smallere kaarten ernaast.
+Versie: vier gelijke kaarten, pace daardoor smaller dan circuit.
+Overnemen: desktopverhouding nu 1.5:1:1:1; pace volgt de circuitbreedte.
+Onder 1280px blijven twee kolommen en op mobiel één kolom behouden.
+
+10. Pacegrafiek
+Origineel: raster, meetpunten, gelabelde assen, eigen auto plus leider.
+Versie: een enkele kale oranje lijn, bereik en mediaan onderaan.
+Gedeeltelijk overnemen: raster en punten toegevoegd, met ongewijzigde
+filtering, schaal, pitmarkeringen en rondetijden. Bestaande schaaltekst
+blijft staan; geen nieuwe asindeling toegevoegd. Geen tweede lijn omdat
+we geen historische leiderreeks hebben. Geen Speed/Delta-tabs zonder data.
+
+11. Circuit
+Origineel: grote oranje baanomtrek met automarkers op de baan.
+Versie: bestaande kleinere Spa-kaart en aparte rondevoortgang; melding
+dat officiële projectiegeometrie ontbreekt.
+Bewust niet aanpassen: trackassets, herkenning, geometrie, projectie en
+markers vallen buiten deze lookbrief. Ook een oranje vervangingssilhouet
+zou niet de ontbrekende betrouwbare projectiegeometrie leveren.
+De afwijkende kaartgrootte is een presentatiecompromis, geen dataveld.
+
+12. Weer en circuitdetails
+Origineel: temperatuur, droogte, wind, lengte, bochten en sectorlegenda.
+Versie: circuitnaam, livestatus, kaart en rondevoortgang.
+Niet toevoegen: geen hiervoor aangesloten betrouwbare bron in dit paneel.
+Geen waarden uit het ontwerp als live meetwaarden overtypen.
+
+13. Bovenste delta en totalen
+Origineel: delta plus sectorverbeteringen, P12/28, P5/14, ronde/360, tijd/6h.
+Versie: losse actuele waarden zonder noemers, tijd is resterende racetijd.
+Niet overnemen: geen nieuwe delta-/sectorvergelijking berekenen; geen
+volledige deelnemers- of racetotalen afleiden uit een beperkte snapshot.
+Resttijd blijft resttijd: de originele kloksemantiek niet stilzwijgend kopiëren.
+
+14. Coureurrotatie
+Origineel: stinttijd, voortgang, wissel over minuten en bevestigde checklist.
+Versie: huidige coureur, geldige samples, volgende geplande coureurs,
+verwachte ronden en alleen een geplande bandenwissel als dat zo is vastgelegd.
+Niet overnemen: planning is geen bevestiging; geen timers, percentages of
+checkmarks verzinnen. Testmodus behoudt Mijn sessie in plaats van rotatie.
+
+15. Brandstofstrategie
+Origineel: tank, verbruik, pitwindow, voortgang en meerdere stints.
+Versie: bestaande tank/range/verbruik/finish/meetbasis, advies afzonderlijk.
+Niet uitbreiden: geen nieuwe pitwindow- of voortgangsberekening. In de
+testmodus alleen tankinhoud en de expliciete databeperking behouden.
+
+16. Banden
+Origineel: compound M, temperatuur, Wear, balken, setnummer en levensduur.
+Versie: resterend percentage, temperatuur en druk per hoek, plus meetstatus.
+Bewust behouden: restpercentage is niet versleten percentage; bestaande
+gezondheidskleuren blijven functioneel. Geen compounds, setnummers of
+levensduur toevoegen zonder bron. Druk en meetstatus blijven zichtbaar.
+De gekleurde vakken wijken dus bewust af van het neutralere origineel.
+
+17. Context en beslissingsband
+Origineel: begint direct met KPIs, zonder contextregel of breed adviesvak.
+Versie: race/apparaatcontext, livestatus, bediening en beslissingsband erboven.
+Bewust behouden: beide onderdelen horen bij de bestaande brief en bevatten
+bestaande bediening/adviespoorten. Ze kosten verticale ruimte. Daarom is
+dit geen pixelkopie van het origineel. Geen advies verborgen om te passen.
+
+18. Buitenmarges, lettertype en aanvullende inhoud
+Origineel: vrijwel schermvullend, technisch smal letterbeeld, onderste rij
+sluit het ontwerp af.
+Versie: gecentreerde 1600px-preview, bestaande websitefonts en extra
+strategie/diagnostiek onder de vier primaire kaarten.
+Bewust behouden: bestaande pagina-inbedding en typografie niet sitebreed
+wijzigen. Extra blokken mogen onder de vouw blijven. Alle vier primaire
+kaarten passen wel volledig in 1920x1080. Niet claimen dat de hele pagina
+zonder scroll past; ook de screenshots tonen onderaan volgende blokken.
+
+VERIFICATIE
+PASS: npm test — 193 bestanden, 1589 tests.
+PASS: aanvullende assertions in bestaande looktests — 2 bestanden, 25 tests.
+PASS: ESLint op gewijzigde TSX en testbestand; git diff --check.
+PASS: screenshot-harnas, beide modi, geen browserfouten/externe requests.
+PASS: bredere pacekaart, drie KPI-groepen en zichtbare meetpunten gecontroleerd.
+PASS: primaire panelen eindigen op 1047px (endurance) en 1040.5px (test).
+PASS: muiswiel/toetsenbord bereiken laatste timingrij zonder paginascroll;
+64 extra DOM-rijen veranderen documenthoogte niet.
+PASS: 1440/1024/390px geen horizontale paginaoverflow; 4/2/1 panelkolommen.
+PASS: raw-telemetrie-uitklapper blijft werken.
+
+De eerste screenshot-run ontdekte scroll chaining na het compacter maken
+van de tabel. Dat is met overscroll-behavior: contain opgelost en de volledige
+browsercontrole is opnieuw geslaagd.
+
+GRENS VAN HET BEWIJS
+Screenshots zijn van het bestaande lokale fixtureharnas met echte componenten,
+niet van ingelogde productieroutes. Bestaande inconsistente fixturewaarden
+(onder andere ronde, klassepositie en leider-gap tussen panelen) zijn niet
+gewijzigd. Geen claims over echte feedconsistentie of productie gemaakt.
+Geen nieuwe typecheckclaim; de eerder gedocumenteerde typecheckblokkade is
+in deze ronde niet opnieuw onderzocht.
+
+AANGEPASTE BRONBESTANDEN
+src/features/endurance/pitwall/RaceTelemetryStrip.tsx
+src/features/endurance/pitwall/PaceGraph.tsx
+src/features/endurance/pitwall/pitwallLook.css
+src/test/pitwallLook.test.tsx
+docs/pitwall-look/preview/shot.mjs
+Daarnaast vier vernieuwde PNGs, verification.json, README en dit verslag.
+
+IMPACT
+Frontend: alleen lokale pitwallpresentatie en visuele tests.
+Backend/API, bot, database/migraties, auth/rollen: geen wijzigingen.
+Deployment: geen wijzigingen. Productiefrontendwijzigingen: NEE.
+Geen commit, push, merge of deploy uitgevoerd.
+PRODUCTIEWIJZIGING: NEE
+
+
+NAWERKING — AANVULLENDE ANALYSE INGEKLAPT
+De bovenstaande beschrijving van zichtbare extra blokken onder de vouw en
+‘Geen commit’ beschrijft de voorgaande ronde. Dat openstaande werk is inmiddels
+in drie kleine Conventional Commits vastgelegd. Daarna is de aanvullende
+inhoud ongewijzigd achter ‘Meer analyse’ geplaatst in de gedeelde dashboard-
+component. De actuele screenshots en verificatie staan in README.md en
+verification.json. Beide 1080p-beelden zijn met vision_analyze goedgekeurd:
+geen strook van FORECAST of BANDENMODEL zichtbaar. Volledige Vitest:
+193 bestanden, 1591 tests geslaagd. Niet gepusht of gedeployed.
+PRODUCTIEWIJZIGING: NEE.

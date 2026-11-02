@@ -9,7 +9,6 @@ export type PacePoint = {
 
 interface Props {
   points: PacePoint[];
-  /** Mediaan van de reeks, om de schaal te bepalen. */
   className?: string;
 }
 
@@ -25,11 +24,19 @@ const median = (values: number[]): number => {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 };
 
+/**
+ * De rondetijdenlijn, zonder eigen kaart.
+ *
+ * De schaal, de bandfiltering, de pitmarkeringen en de oranje lijn zijn
+ * ongewijzigd; alleen het kader is weg — dat komt nu van het paneel waar de
+ * grafiek in staat. Eén lijn: de eigen auto. Geen tweede (leider)lijn, want we
+ * hebben geen historie van een ander.
+ */
 export const PaceGraph = ({ points, className = "" }: Props) => {
-  const { path, markers, min, max, ref } = useMemo(() => {
+  const { path, markers, dots, min, max, ref } = useMemo(() => {
     const clean = points.filter((p) => Number.isFinite(p.seconds) && p.seconds > 0 && p.seconds < 600);
     if (clean.length < 2) {
-      return { path: "", markers: [] as Array<{ x: number; y: number; kind: string }>, min: 0, max: 0, ref: 0 };
+      return { path: "", dots: [] as Array<{ x: number; y: number }>, markers: [] as Array<{ x: number; y: number; kind: string }>, min: 0, max: 0, ref: 0 };
     }
 
     const mid = median(clean.map((p) => p.seconds));
@@ -53,29 +60,40 @@ export const PaceGraph = ({ points, className = "" }: Props) => {
       .filter(({ point }) => point.marker)
       .map(({ point, index }) => ({ x: x(index), y: y(Math.min(Math.max(point.seconds, lo), hi)), kind: point.marker as string }));
 
-    return { path: d, markers: marks, min: lo, max: hi, ref: mid };
+    return { path: d, markers: marks, dots: clean.map((p, index) => ({ x: x(index), y: y(Math.min(Math.max(p.seconds, lo), hi)) })), min: lo, max: hi, ref: mid };
   }, [points]);
 
   if (!path) {
-    return (
-      <div className={`rounded-xl border border-white/10 bg-black/40 px-3 py-2 ${className}`}>
-        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Pace</h3>
-        <p className="mt-2 text-[11px] text-gray-500">Nog geen geldige rondetijden.</p>
-      </div>
-    );
+    return <p className={`py-8 text-center text-[12px] text-slate-500 ${className}`}>Nog geen geldige rondetijden.</p>;
   }
 
   return (
-    <div className={`rounded-xl border border-white/10 bg-black/40 px-3 py-2 ${className}`}>
-      <div className="flex items-baseline justify-between">
-        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Pace</h3>
-        <span className="font-mono text-[10px] text-gray-500">
-          {min.toFixed(1)}–{max.toFixed(1)} s · mediaan {ref.toFixed(1)}
-        </span>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 h-24 w-full" role="img" aria-label="Rondetijden">
-        <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#2B3038" strokeWidth="1" />
-        <path d={path} fill="none" stroke="#FF7417" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+    <div className={className}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-28 w-full"
+        role="img"
+        aria-label="Rondetijden"
+        preserveAspectRatio="none"
+        data-pitwall-pace-graph="true"
+      >
+        {[0, 1, 2, 3].map((tick) => (
+          <line key={`h${tick}`} x1={PAD} x2={W - PAD} y1={PAD + tick * (H - PAD * 2) / 3} y2={PAD + tick * (H - PAD * 2) / 3} stroke="#1F2634" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        ))}
+        {[0, 1, 2, 3, 4].map((tick) => (
+          <line key={`v${tick}`} y1={PAD} y2={H - PAD} x1={PAD + tick * (W - PAD * 2) / 4} x2={PAD + tick * (W - PAD * 2) / 4} stroke="#161C27" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        ))}
+        <line x1={PAD} x2={W - PAD} y1={H - PAD} y2={H - PAD} stroke="#1F2634" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        <path
+          d={path}
+          fill="none"
+          stroke="#F97316"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        {dots.map((dot, index) => <circle key={index} cx={dot.x} cy={dot.y} r="2" fill="#F97316" />)}
         {markers.map((m, i) => (
           <line
             key={i}
@@ -86,10 +104,16 @@ export const PaceGraph = ({ points, className = "" }: Props) => {
             stroke={m.kind === "pit" ? "#F4C15D" : "#42C98B"}
             strokeWidth="1"
             strokeDasharray="2 2"
+            vectorEffect="non-scaling-stroke"
           />
         ))}
       </svg>
-      <p className="text-[9px] text-gray-600">Geldige rondes; uitloop boven 600 s telt niet mee in de schaal.</p>
+      <p className="mt-1 flex items-baseline justify-between font-mono text-[10px] text-slate-500">
+        <span>
+          {min.toFixed(1)}–{max.toFixed(1)} s
+        </span>
+        <span>R{points[0]?.lap}–R{points[points.length - 1]?.lap} · mediaan {ref.toFixed(1)}</span>
+      </p>
     </div>
   );
 };

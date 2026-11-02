@@ -1,0 +1,88 @@
+Circuitkaart — oplevering 2026-11-01
+Branch: feat/pitwall-look-3sm
+Startcommit: f2b0155
+
+Scope en uitvoering
+- Alleen kaartpresentatie: dimme inactive-lagen plus dimme active-laag als volledige
+  baanbasis; oranje active-laag en warme glow gemaskeerd langs bestaande projectie.
+- Maskereinde volgt dezelfde geïnterpoleerde positie als de eigen autostip.
+  lapMotion, pointOnTrack, baanherkenning en baankalibratie zijn niet gewijzigd.
+- Finish en rijrichtingspijl zijn exact de finishColor-image uit hetzelfde asset.
+- Kleine autostippen; nummers alleen nog in de bestaande rondebalkfallback.
+  Achtergrondlaag, bochtnamen, kaartlabels en raster worden niet gerenderd.
+- Sectorlegenda uit het circuitpaneel verwijderd: oranje is rondevoortgang,
+  geen onbewezen sectorgrens. Sectortijden elders zijn niet gewijzigd.
+- Netwerklezen van uitsluitend dezelfde geselecteerde lokale SVG zit in
+  src/lib/pitwallTrackArtwork.ts, buiten de netwerkvrije endurancepresentatie.
+  Geen nieuwe databron, RPC, polling of telemetrieveld.
+
+Gewijzigde bronbestanden
+src/lib/pitwallTrackArtwork.ts
+src/features/endurance/pitwall/TrackArtwork.tsx
+src/features/endurance/pitwall/trackArtworkPresentation.ts
+src/features/endurance/pitwall/TrackProjection.tsx
+src/features/endurance/pitwall/MovingTrackCar.tsx
+src/features/endurance/pitwall/LiveTrackPanel.tsx
+src/test/pitwallTrackArtwork.test.tsx
+src/test/pitwallMovingCar.test.tsx
+
+Fallbacks en screenshotfixture
+- Zonder betrouwbare projectie: dezelfde bestaande statische kaartfallback en
+  rondebalk, zonder verzonnen coördinaten. Offline geen autostippen/voortgang.
+- Bij falende laagextractie blijft de volledige geselecteerde SVG beschikbaar.
+  Een layoutwissel toont nooit de eerder geladen artworklaag.
+- Alleen docs/pitwall-look/preview/fixtures.ts heeft nu de exacte bestaande Spa
+  TrackID 163 + Grand Prix Pits - 2010. De oude onvolledige Grand Prix-fixture
+  testte uitsluitend de fallback. Geen wijziging van runtime-identiteitslogica.
+- docs/pitwall-look/preview/shot.mjs controleert nu ook de echte layered renderer,
+  13 stippen, afwezigheid van text, gevuld voortgangsmasker en één finish-image.
+- Screenshots zijn lokale fixtures met echte componenten; geen ingelogde live-
+  routeverificatie. Andere bestaande inconsistenties in voorbeeldwaarden blijven.
+
+Visuele iteraties met vision_analyze
+1. Doelbeeld en bestaande screenshots bekeken: oude kaart had bochtnamen en
+   nummers, omdat de fixture terugviel op de oude kaart.
+2. Nieuwe kaart gecontroleerd: dimme basis, oranje gereden deel en stippen goed;
+   sectorlegenda verwarrend en dimme baan weinig contrast. Legenda verwijderd,
+   basiscontrast verhoogd. Vergelijkingsmontage met doelbeeld beoordeeld.
+3. Eindvergelijking: glow nog te subtiel. Glow versterkt met uitsluitend een
+   visueel SVG-filter, screenshots opnieuw gemaakt. Definitieve 2x kaartuitsnede:
+   vision_analyze meldt duidelijke warme glow, leesbare basis, stippen op baan,
+   geen kaartlabels/raster en geen concrete zichtbare kaartproblemen.
+
+Oordeel en bewuste verschillen
+De gevraagde sobere kaartstijl is bereikt, geen pixelkopie van het doelbeeld.
+Spa heeft een andere contour dan Gilles-Villeneuve en oogt bij dezelfde hoogte
+compacter. Niet uitgerekt of gedraaid: bestaande bronverhouding blijft intact.
+Het voorbeeld heeft slechts 18% gereden: terecht niet de hele baan oranje.
+Witte bronpijl en rondebalk blijven bewust behouden; geen vervangende finish,
+geen sectorkleuren of verzonnen grenzen. Andere panelen blijven ongemoeid.
+
+Verificatie
+PASS — volledige npm test -- --reporter=dot: 196 bestanden, 1643 tests.
+PASS — ESLint alle gewijzigde TS/TSX-bron- en testbestanden, geen waarschuwingen.
+PASS — Vite productie-bundel via node node_modules/vite/bin/vite.js build
+       --outDir /home/hermes/.hermes/cache/scratch/pitwall-track-build.
+       Geen SEO-generator, zipstap of deployment uitgevoerd.
+PASS — browserharnas beide modi, viewport 1920x1080, documenthoogte 1080;
+       alle vier panelen zichtbaar; endurance onderrand 1024.5px, test 962.5px.
+       Bestaande scroll-, uitklap-, responsive- en externe-requestchecks groen.
+PASS — git diff --check.
+PASS — SHA-256 beschermde assets en projectie/motion-bronnen identiek aan HEAD.
+FAIL, bestaand — npm run typecheck: 13 diagnostics. Losse git-archive van
+       startcommit geeft exact dezelfde 13 diagnostics; geen nieuwe diagnostics.
+
+Screenshots (opnieuw gemaakt)
+pitwall-endurance-1920x1080.png
+pitwall-test-1920x1080.png
+pitwall-endurance-full.png
+pitwall-test-full.png
+kaart-vergelijking.png (doelbeeld links, resultaat rechts)
+kaart-detail.png (2x kaartuitsnede definitief resultaat)
+
+Impact
+Frontend: alleen lokale circuitkaartpresentatie + fixture/testbewijs.
+Backend/API, bot, DB/migraties, auth/rollen, deployment: geen wijzigingen.
+Productiefrontendwijzigingen: NEE.
+Niet pushen, niet mergen, niet deployen.
+PRODUCTIEWIJZIGING: NEE

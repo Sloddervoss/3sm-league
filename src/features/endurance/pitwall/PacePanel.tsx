@@ -1,17 +1,73 @@
+import type { PaceHistory } from "../../../../supabase/functions/_shared/paceCapture";
+import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { readPitwallPace, type PaceSource } from "@/lib/simhubPace";
+import { PaceSeriesGraph } from "./PaceSeriesGraph";
+import { freshPaceHistory, newestTrace, completeReference, lapSeries, speedSeries, deltaSeries, type StoredTrace } from "./paceSeries";
+import type { V3Normalized } from "./pitwallHelpers";
 import type { PitwallPaceData, PitwallStrategyRow } from "./pitwallHelpers";
 import { formatLapTime } from "./pitwallHelpers";
+import { PitwallPanel } from "./PitwallPanel";
+import { type PacePoint } from "./PaceGraph";
 
 interface Props {
+  paceSource?: PaceSource;
+  v3?: V3Normalized | null;
+  live?: boolean;
   strategy: PitwallStrategyRow | null;
   pace: PitwallPaceData | null;
   /** Rondetijden uit dezelfde bron als de tijdlijn, voor als het pace-blok leeg is. */
   lapTimes?: number[];
+  /**
+   * De punten voor de grafiek. Endurance: de tijdlijn met pitmarkeringen.
+   * Testmodus: `lap_samples` van het apparaat. De grafiek zelf is dezelfde.
+   */
+  points?: PacePoint[];
 }
 
-export const PacePanel = ({ strategy, pace, lapTimes = [] }: Props) => {
-  if (!strategy) {
-    return <PanelShell title="PACE"><p className="text-xs text-gray-500">Geen data</p></PanelShell>;
-  }
+/** Twee echte reeksen, ontbrekende/ongecontroleerde data blijft leeg. Advies ongewijzigd. */
+const PacePresentation = ({ strategy, pace, lapTimes = [], points = [], v3, live = true, remoteHistory, remoteError, chosenId, onChoose }: Props & {remoteHistory?: PaceHistory | null; remoteError?: boolean; chosenId?: string | null; onChoose?: (id:string | null)=>void}) => {
+  const [mode, setMode] = useState('lap');
+  const [referenceId, setReferenceId] = useState<string | null | undefined>(undefined);
+  const choices = v3?.opponents?.filter(o => !o.isPlayer) ?? [];
+  const choice = onChoose ? chosenId : referenceId;
+  // Auto-select leader only until an explicit selection. A disappearing rival must
+  // not silently become a different car; retain their stored history if available.
+  const selected = choice === undefined ? choices.find(o=>o.position===1 && o.connected!==false) ?? null : choices.find(o=>o.id===choice) ?? null;
+  const history = live ? freshPaceHistory(v3, remoteHistory ?? v3?.paceHistory) : null;
+  const ownId = v3?.opponents?.find(o=>o.isPlayer)?.id;
+  const own = history?.cars.find(c=>c.id===ownId);
+  const selectedId = choice === undefined ? selected?.id : choice;
+  const other = selectedId ? history?.cars.find(c=>c.id===selectedId) : undefined;
+  const trace = newestTrace(own);
+  const pin = useRef<{key:string; trace:StoredTrace | null}>({key:"",trace:null});
+  const pinKey = `${history?.segmentId}:${trace?.traceId}:${selectedId}`;
+  if (pin.current.key !== pinKey) pin.current = {key:pinKey, trace:null};
+  if (!pin.current.trace) pin.current.trace = completeReference(other);
+  const [deltaOwn, deltaRef] = deltaSeries(trace, pin.current.trace);
+  const ownLaps = own ? lapSeries(own) : live ? points.slice(-20).filter(p=>Number.isFinite(p.lap) && Number.isFinite(p.seconds) && p.seconds>0 && p.seconds<=86400).map(p=>({x:p.lap,y:p.seconds,marker:p.marker})) : [];
+  const ownSeries = mode === "lap" ? ownLaps : mode === "speed" ? speedSeries(trace) : deltaOwn;
+  const refSeries = mode === "lap" ? lapSeries(other) : mode === "speed" ? speedSeries(newestTrace(other)) : deltaRef;
+  const modes = [{id:"lap",label:"Rondetijd"},{id:"speed",label:"Snelheid"},{id:"delta",label:"Delta"}];
+  const grafiek = <>
+    <div className="mb-1 flex gap-3" aria-label="Pace-weergave">
+      {modes.map(m=><button key={m.id} type="button" aria-pressed={mode===m.id} onClick={()=>setMode(m.id)} className={`text-[12px] font-bold ${mode===m.id ? "border-b border-orange-400 text-orange-300" : "text-slate-400"}`}>{m.label}</button>)}
+    </div>
+    <label className="flex gap-2 text-[11px] text-slate-400">Vergelijk
+      <select aria-label="Vergelijkingsauto" value={selectedId ?? ""} onChange={e=>{setReferenceId(e.target.value || null); onChoose?.(e.target.value || null);}} className="min-w-0 max-w-40 bg-slate-950 text-slate-200">
+        <option value="">Geen referentie</option>
+        {selectedId && !choices.some(o=>o.id===selectedId) && <option value={selectedId}>Gekozen auto · niet meer in snapshot</option>}
+        {choices.map(o=><option key={o.id} value={o.id}>{o.driverName ?? o.carNumber ?? o.id}{o.connected===false ? " · offline" : ""}</option>)}
+      </select>
+    </label>
+    <PaceSeriesGraph own={ownSeries} reference={refSeries} label={modes.find(m=>m.id===mode)!.label} unit={mode==="speed"?"km/h":"s"} distance={mode!=="lap"} />
+    <p className="text-[11px] text-orange-300">━ Eigen auto{selected && <span className="text-emerald-300"> · ━ {selected.driverName ?? selected.id}</span>}</p>
+    {selectedId && refSeries.length<2 && <p className="text-[11px] text-slate-400">Vergelijkingsreeks ontbreekt of is niet gecontroleerd.</p>}
+    {ownSeries.length<2 && <p className="text-[11px] text-slate-400">{mode==="speed" ? "Snelheid ontbreekt: geen spoor met bevestigde km/h-eenheid." : mode==="delta" ? "Delta ontbreekt: geen volledige vaste referentie met betrouwbaar finishanker." : "Nog geen twee opgenomen eigen rondetijden."}</p>}
+    {selectedId && !selected && <p className="text-[11px] text-slate-400">Gekozen auto verdwenen; alleen eerder opgenomen rondes, geen opgevulde waarden.</p>}
+    {mode==="delta" && <p className="text-[11px] text-slate-400">Eigen tijd − vaste opgenomen referentie op dezelfde baanpositie; positief is langzamer.</p>}
+    {remoteError && <p className="text-[11px] text-slate-400">Pace-opslag niet beschikbaar.</p>}
+  </>;
 
   // Uitlooprondes (pit, spin, herstart) mogen het gemiddelde niet bepalen.
   const eigen = lapTimes.filter((n) => Number.isFinite(n) && n > 0 && n < 600);
@@ -20,46 +76,57 @@ export const PacePanel = ({ strategy, pace, lapTimes = [] }: Props) => {
   const bestLap = pace?.bestLapSeconds ?? (eigen.length ? Math.min(...eigen) : null);
   const stintAvg = pace?.stintAvgSeconds ?? (eigen.length ? eigen.reduce((a, b) => a + b, 0) / eigen.length : null);
   const target = pace?.targetSeconds;
-  const delta = (lastLap != null && target != null) ? lastLap - target : null;
+  const delta = lastLap != null && target != null ? lastLap - target : null;
 
   const showAny = lastLap != null || stintAvg != null || target != null;
 
   if (!showAny) {
     return (
-      <PanelShell title="PACE">
-        <p className="text-xs text-gray-500">Nog geen rondetijd in deze stint</p>
-      </PanelShell>
+      <PitwallPanel title="Pace" slot="pace">
+        {grafiek}
+        <p className="mt-2 text-[12px] text-slate-500">Geen aanvullende stintwaarden; grafiek toont opgeslagen rondes</p>
+      </PitwallPanel>
     );
   }
 
   return (
-    <PanelShell title="PACE">
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
-        {lastLap != null && (
-          <span className="text-gray-500">Laatste <span className="font-bold font-mono text-white">{formatLapTime(lastLap)}</span></span>
-        )}
-        {bestLap != null && (
-          <span className="text-gray-500">Beste <span className="font-bold font-mono text-gray-300">{formatLapTime(bestLap)}</span></span>
-        )}
-        {stintAvg != null && (
-          <span className="text-gray-500">Stint <span className="font-bold font-mono text-white">{formatLapTime(stintAvg)}</span></span>
-        )}
-        {target != null && (
-          <span className="text-gray-500">Doel <span className="font-bold font-mono text-white">{formatLapTime(target)}</span></span>
-        )}
-        {delta != null && (
-          <span className={`font-bold text-[11px] ${delta < 0 ? "text-emerald-400" : "text-orange-400"}`}>
-            Δ {delta >= 0 ? "+" : ""}{delta.toFixed(1)}s
-          </span>
-        )}
-      </div>
-    </PanelShell>
+    <PitwallPanel title="Pace" slot="pace" meta="eigen auto">
+      {grafiek}
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
+        {lastLap != null && <Value label="Laatste" value={formatLapTime(lastLap)} tone="text-white" />}
+        {bestLap != null && <Value label="Beste" value={formatLapTime(bestLap)} tone="text-slate-200" />}
+        {stintAvg != null && <Value label="Stint gem." value={formatLapTime(stintAvg)} tone="text-slate-200" />}
+        {target != null && <Value label="Doel" value={formatLapTime(target)} tone="text-slate-200" />}
+      </dl>
+      {delta != null && (
+        <p className={`mt-2.5 text-[12px] font-bold ${delta < 0 ? "text-emerald-300" : "text-orange-300"}`} data-pitwall-pace-delta="true">
+          Δ laatste t.o.v. doel {delta >= 0 ? "+" : ""}
+          {delta.toFixed(1)}s
+        </p>
+      )}
+    </PitwallPanel>
   );
 };
 
-const PanelShell = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
-    <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</div>
-    {children}
-  </div>
-);
+function Value({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</dt>
+      <dd className={`mt-0.5 font-mono text-[18px] font-bold tabular-nums leading-none ${tone}`}>{value}</dd>
+    </div>
+  );
+}
+
+export const PacePanel = (props: Props) => props.paceSource ? <ConnectedPacePanel {...props} /> : <PacePresentation {...props} />;
+function ConnectedPacePanel(props: Props) {
+  const [chosenId,setChosenId] = useState<string | null | undefined>(undefined);
+  const choices = props.v3?.opponents?.filter(o=>!o.isPlayer) ?? [];
+  const selected = chosenId === undefined ? choices.find(o=>o.position===1 && o.connected!==false) ?? null : choices.find(o=>o.id===chosenId) ?? null;
+  const source = props.paceSource!;
+  const query = useQuery({
+    queryKey: ["pitwall-pace",source.deviceId,source.eventId,source.teamId,chosenId ?? selected?.id],
+    enabled: props.live!==false && !!(source.deviceId || source.eventId && source.teamId),
+    queryFn: ()=>readPitwallPace(source,chosenId === undefined ? selected?.id ?? null : chosenId), refetchInterval:1000,retry:false,
+  });
+  return <PacePresentation {...props} remoteHistory={query.data} remoteError={query.isError} chosenId={chosenId} onChoose={setChosenId} />;
+}

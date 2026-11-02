@@ -1,0 +1,221 @@
+{
+  "source": "synthetic, isolated browser fixtures; no production requests",
+  "results": [
+    {
+      "mode": "endurance",
+      "tabs": [
+        {
+          "tab": "Rondetijd",
+          "layout": {
+            "contentFits": true,
+            "height": 1080,
+            "width": 1920,
+            "panels": [
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 28,
+                "right": 639.328125
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 649.328125,
+                "right": 1056.875
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 1066.875,
+                "right": 1474.4375
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 1484.4375,
+                "right": 1891.984375
+              }
+            ]
+          }
+        },
+        {
+          "tab": "Snelheid",
+          "layout": {
+            "contentFits": true,
+            "height": 1080,
+            "width": 1920,
+            "panels": [
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 28,
+                "right": 639.328125
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 649.328125,
+                "right": 1056.875
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 1066.875,
+                "right": 1474.4375
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 1484.4375,
+                "right": 1891.984375
+              }
+            ]
+          }
+        },
+        {
+          "tab": "Delta",
+          "layout": {
+            "contentFits": true,
+            "height": 1080,
+            "width": 1920,
+            "panels": [
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 28,
+                "right": 639.328125
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 649.328125,
+                "right": 1056.875
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 1066.875,
+                "right": 1474.4375
+              },
+              {
+                "top": 701.5,
+                "bottom": 1024.5,
+                "left": 1484.4375,
+                "right": 1891.984375
+              }
+            ]
+          }
+        }
+      ],
+      "errors": []
+    },
+    {
+      "mode": "test",
+      "tabs": [
+        {
+          "tab": "Rondetijd",
+          "layout": {
+            "contentFits": true,
+            "height": 1080,
+            "width": 1920,
+            "panels": [
+              {
+                "top": 691.5,
+                "bottom": 962.5,
+                "left": 28,
+                "right": 639.328125
+              },
+              {
+                "top": 691.5,
+                "bottom": 962.5,
+                "left": 649.328125,
+                "right": 1056.875
+              },
+              {
+                "top": 691.5,
+                "bottom": 962.5,
+                "left": 1066.875,
+                "right": 1474.4375
+              },
+              {
+                "top": 691.5,
+                "bottom": 962.5,
+                "left": 1484.4375,
+                "right": 1891.984375
+              }
+            ]
+          }
+        },
+        {
+          "tab": "Snelheid",
+          "layout": {
+            "contentFits": true,
+            "height": 1080,
+            "width": 1920,
+            "panels": [
+              {
+                "top": 691.5,
+                "bottom": 962.5,
+                "left": 28,
+                "right": 639.328125
+              },
+              {
+                "top": 691.5,
+                "bottom": 962.5,
+                "left": 649.328125,
+                "right": 1056.875
+              },
+              {
+                "top": 691.5,
+                "bottom": 962.5,
+                "left": 1066.875,
+                "right": 1474.4375
+              },
+              {
+                "top": 691.5,
+                "bottom": 962.5,
+                "left": 1484.4375,
+                "right": 1891.984375
+              }
+            ]
+          }
+        },
+        {
+          "tab": "Delta",
+          "layout": {
+            "contentFits": true,
+            "height": 1080,
+            "width": 1920,
+            "panels": [
+              {
+                "top": 691.5,
+                "bottom": 965.5,
+                "left": 28,
+                "right": 639.328125
+              },
+              {
+                "top": 691.5,
+                "bottom": 965.5,
+                "left": 649.328125,
+                "right": 1056.875
+              },
+              {
+                "top": 691.5,
+                "bottom": 965.5,
+                "left": 1066.875,
+                "right": 1474.4375
+              },
+              {
+                "top": 691.5,
+                "bottom": 965.5,
+                "left": 1484.4375,
+                "right": 1891.984375
+              }
+            ]
+          }
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

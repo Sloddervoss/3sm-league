@@ -1,0 +1,99 @@
+{
+  "checkedAt": "2026-11-01T16:18:51.441615+00:00",
+  "branch": "feat/pitwall-look-3sm",
+  "base": "952768459c296d41d4abbee9041bc9fd10ba20f5",
+  "productionChanged": false,
+  "productionFrontendChanges": "NONE",
+  "pushed": false,
+  "deployed": false,
+  "migrationApplied": false,
+  "gates": {
+    "vitest": {
+      "status": "PASS",
+      "files": 196,
+      "tests": 1670
+    },
+    "build": {
+      "status": "PASS"
+    },
+    "csharpHarness": {
+      "status": "PASS",
+      "passed": 519,
+      "failed": 0
+    },
+    "pluginNet48Build": {
+      "status": "PASS",
+      "errors": 0,
+      "existingWarnings": [
+        "CS0169 _pitLimiterSinceMs"
+      ]
+    },
+    "targetedEslint": {
+      "status": "PASS"
+    },
+    "browser": {
+      "status": "PASS",
+      "modes": [
+        "endurance",
+        "test"
+      ],
+      "sectors": [
+        3,
+        6
+      ],
+      "tabs": [
+        "Rondetijd",
+        "Snelheid",
+        "Delta"
+      ],
+      "width": 1920,
+      "height": 1080,
+      "externalRequests": 0
+    },
+    "typecheck": {
+      "status": "FAIL_PREEXISTING",
+      "baselineErrors": 13,
+      "currentErrors": 13,
+      "exactSameErrorLines": true
+    },
+    "sqlAndAdviceDiff": {
+      "status": "PASS",
+      "unchangedPaths": [
+        "supabase/migrations",
+        "supabase/rollbacks",
+        "supabase/functions/_shared/simhubAggregates.ts",
+        "src/features/endurance/pitwall/strategy"
+      ]
+    }
+  },
+  "ownChangedSourcesAndDocs": [
+    "docs/contracts/pace-capture-v1.md",
+    "docs/pitwall-look/pace-oplevering.md",
+    "docs/pitwall-look/preview/paceFixture.ts",
+    "docs/pitwall-look/preview/pace-shot.mjs",
+    "src/features/endurance/pitwall/PacePanel.tsx",
+    "src/features/endurance/pitwall/RaceTelemetryStrip.tsx",
+    "src/features/endurance/pitwall/StandingsWidget.tsx",
+    "src/features/endurance/pitwall/paceSeries.ts",
+    "src/features/endurance/pitwall/pitwallLook.css",
+    "src/test/paceCapture.test.tsx",
+    "src/test/pitwallLook.test.tsx",
+    "supabase/functions/_shared/paceCapture.ts",
+    "supabase/tests/fixtures/pace-six-sectors-frame.json",
+    "tools/simhub-plugin/3SM.EnduranceConnector.DiagnosticsTests/PaceCaptureTests.cs",
+    "tools/simhub-plugin/3SM.EnduranceConnector.DiagnosticsTests/SectorMeasurementTests.cs",
+    "tools/simhub-plugin/3SM.EnduranceConnector/EnduranceConnectorPlugin.cs",
+    "tools/simhub-plugin/3SM.EnduranceConnector/IrSdkMemoryReader.cs",
+    "tools/simhub-plugin/3SM.EnduranceConnector/PaceCapture.cs",
+    "tools/simhub-plugin/3SM.EnduranceConnector/RawChannelReader.cs"
+  ],
+  "notVerified": [
+    "live iRacing ride / SimHub Windows runtime",
+    "production ingest/RPC/storage/scheduler",
+    "40-car live CPU/latency/completeness"
+  ],
+  "notes": [
+    "Synthetic C# acquisition and isolated browser fixtures, not live racing data.",
+    "Concurrent map/previewserver/geometry files excluded from pace changes."
+  ]
+}

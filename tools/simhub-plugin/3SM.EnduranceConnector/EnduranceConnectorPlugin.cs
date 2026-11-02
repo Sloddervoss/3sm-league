@@ -1,4 +1,4 @@
-﻿using GameReaderCommon;
+using GameReaderCommon;
 using SimHub.Plugins;
 using System;
 using System.Collections.Generic;
@@ -46,6 +46,16 @@ namespace ThreeSM.EnduranceConnector
         private readonly object _settingsGate = new object();
         private readonly Stopwatch _sendClock = Stopwatch.StartNew();
         private readonly Stopwatch _stintClock = new Stopwatch();
+        private readonly PaceCaptureBuffer _paceCapture = new PaceCaptureBuffer();
+        private readonly PaceSourceSelector _paceSources = new PaceSourceSelector();
+        private double[] _paceSectorStarts;
+        private Dictionary<string,int> _paceCarIndices = new Dictionary<string,int>(StringComparer.Ordinal);
+        private string _paceMetadataKey;
+        private string _paceClockSource;
+        private double _paceLastClock = -1;
+        private long? _paceLastTick;
+        private int? _paceLastPlayerLap;
+        private double _paceMetadataAt = -1, _paceSampleAt = -1;
         private readonly SessionTelemetryReader _sessionTime = new SessionTelemetryReader();
         // 0.7.0: onthoudt de laatst gezien wear/karkas en bevriest die op de pit-entry-flank.
         private readonly TyreSnapshotTracker _tyreTracker = new TyreSnapshotTracker();
@@ -692,6 +702,7 @@ namespace ThreeSM.EnduranceConnector
                 // gemeten wordt hangt niet van IsPaired of _sendBusy af; dat was precies de
                 // fout waardoor de bandentracker pas na de poorten werd bijgewerkt.
                 ObserveMeasurements(pluginManager, data, running, isInCar);
+                ObservePace(pluginManager, data, running && isInCar);
                 // Vlaggen elke tick oplossen/publiceren (los van het verzendinterval),
                 // zodat een flagbox/overlay direct reageert.
                 PublishFlags(pluginManager);
@@ -767,6 +778,7 @@ namespace ThreeSM.EnduranceConnector
                     envelope = null;
                     if (central) envelope = CaptureV3(pluginManager, data, isInCar, out observation);
                     else localEnvelope = Capture(pluginManager, data, false, isInCar, out observation);
+                    if(envelope!=null && _controlClient!=null && _controlClient.Current.FeatureEnabled("paceCapture")) envelope.PaceCapture=_paceCapture.NextFrame();
                     ObserveDiagnostics(observation);
                 }
                 lock (_sendGate)
@@ -848,7 +860,7 @@ namespace ThreeSM.EnduranceConnector
                 _measurementOutbox.Load();                       // herstel na een herstart
                 _measurementPipeline = new MeasurementPipeline(_measurementOutbox, new MeasurementIdFactory());
                 _measurementSender = new MeasurementSender(_measurementOutbox, _http,
-                    () => ConnectorCapabilities.Implemented().ToJson(), MeasurementLimits.Default());
+                    () => ConnectorCapabilities.Implemented().ToJson(), new MeasurementLimits { MaxFrameBodyBytes = MaxPayloadBytes });
                 _controlClient = new ConnectorControlClient(new Uri(ProductionRelayBaseUrl), _http, string.Empty,
                     () => DateTime.UtcNow);
                 _controlClient.LoadCache(Path.Combine(dataDirectory, "connector-control.json"));
@@ -2005,6 +2017,122 @@ namespace ThreeSM.EnduranceConnector
                 .ToArray();
         }
 
+        // Reflection keeps missing/obsolete getters field-local; no requirement on a newer SDK DLL.
+        private static double? PaceNumber(object source, string name, double min, double max)
+        {
+            try { var value=source.GetType().GetProperty(name)?.GetValue(source,null); return value==null?null:PaceCaptureBuffer.Number(Convert.ToDouble(value,System.Globalization.CultureInfo.InvariantCulture),min,max); }
+            catch { return null; }
+        }
+        private static bool? PaceBool(object source,string name)
+        { try { var value=source.GetType().GetProperty(name)?.GetValue(source,null); return value is bool?(bool?)value:null; } catch { return null; } }
+        private static double?[] PaceSectors(object source,string prefix,int count)
+        {
+            if(count<1 || count>16) return null;
+            var values=new double?[count];
+            for(int i=1;i<=count;i++)
+            {
+                // Newer SimHub versions expose arbitrary sectors through SectorTimes.
+                // Old getters only cover three; never project those onto a six-sector layout.
+                try
+                {
+                    string member=prefix=="LastLapSector" ? "LastLapSectorTimes" : prefix=="BestLapSector" ? "BestLapSectorTimes" : "BestSectorSplits";
+                    var times=source.GetType().GetProperty(member)?.GetValue(source,null);
+                    var value=times?.GetType().GetMethod("GetSectorSplit",new[]{typeof(int)})?.Invoke(times,new object[]{i});
+                    if(value is TimeSpan) values[i-1]=PaceCaptureBuffer.Number(((TimeSpan)value).TotalSeconds,0.001,86400);
+                }
+                catch { /* Field-local nullable fallback. */ }
+                if(!values[i-1].HasValue && count==3) values[i-1]=PaceNumber(source,prefix+i,0.001,86400);
+            }
+            return values.All(v=>v==null)?null:values;
+        }
+        private void ObservePace(PluginManager manager,GameData data,bool active)
+        {
+            if(!active || data.NewData==null) { _paceCapture.Reset(); _paceSources.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; return; }
+            try
+            {
+                var snapshot=data.NewData;
+                var channels=new RawChannelReader(snapshot,property=>GetRaw(manager,property));
+                var sdk=ReadDirectSdk();
+                var sdkClock=sdk?.ReadNumber("SessionTime");
+                var simHubClock=_sessionTime.Read(snapshot);
+                // De SDK-klok en de SimHub-klok horen dezelfde sessie te beschrijven.
+                // Wijkt de SDK-klok af (stilgevallen of oude image), dan is hij geen
+                // bruikbare tijdbasis; de SimHub-klok is dat wel.
+                var sdkClockUsable=sdkClock.HasValue && (!simHubClock.HasValue || Math.Abs(sdkClock.Value-simHubClock.Value)<=2.0);
+                var clock=sdkClockUsable?sdkClock:simHubClock;
+                var tick=sdkClockUsable?(long?)sdk.TickCount:null;
+                // Tick-terugloop is een nieuwe epoch. Dit moet vóór het opbouwen van de
+                // waarnemingen: een reset achteraf haalt eerder afgeleid bewijs niet terug.
+                if(tick.HasValue && _paceLastTick.HasValue && tick<_paceLastTick) { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; }
+                _paceLastTick=tick;
+                // Een andere tijdbasis of een teruglopende klok is een nieuwe epoch.
+                // De buffer herkent dat zelf, maar de bronkeuze moet mee: anders kan
+                // een oude waarneming als rondebewijs voor de nieuwe epoch dienen.
+                var clockSource=sdkClockUsable?"sdk":"simhub";
+                if(_paceClockSource!=null && _paceClockSource!=clockSource) { _paceCapture.Reset(); _paceSources.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; _paceMetadataKey=null; }
+                if(clock.HasValue && _paceLastClock>=0 && clock<_paceLastClock) { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataAt=-1; _paceMetadataKey=null; }
+                _paceClockSource=clockSource;
+                if(clock.HasValue) _paceLastClock=clock.Value;
+                if(clock.HasValue && _paceSampleAt>=0 && clock>=_paceSampleAt && clock-_paceSampleAt<0.049999) return;
+                _paceSampleAt=clock??-1;
+                var observedSession=BuildObservedSessionId(manager,channels);
+                var metadataKey=observedSession+":"+channels.ReadTrackConfiguration();
+                if(metadataKey!=_paceMetadataKey || !clock.HasValue || clock<_paceMetadataAt || clock-_paceMetadataAt>=1)
+                {
+                    if(metadataKey!=_paceMetadataKey) { _paceCapture.Reset(); _paceSources.Reset(); }
+                    _paceSectorStarts=channels.ReadSectorStarts();
+                    _paceCarIndices=channels.ReadCarIndices();
+                    _paceMetadataKey=metadataKey; _paceMetadataAt=clock??-1;
+                }
+                var sectorCount=_paceSectorStarts?.Length??0;
+                // One source image for positions, lap counters, reported times and clock.
+
+                var own= snapshot.Opponents?.FirstOrDefault(o=>o!=null && o.IsPlayer);
+                var ownSpeed=VehicleNumber(manager, "SpeedKmh",600);
+                var playerSpeed=own==null?null:PaceNumber(own,"Speed",0,600);
+                // This ride proved the same magnitude, not a universal unit conversion.
+                // Per-update corroboration rejects incompatible/stale speed sources; zero remains real.
+                var speedUnitOk=ownSpeed.HasValue && playerSpeed.HasValue && ownSpeed>30
+                    && Math.Abs(ownSpeed.Value-playerSpeed.Value)<=Math.Max(5,ownSpeed.Value*0.05);
+                var rows=new List<PaceObservation>();
+                if(snapshot.Opponents!=null) foreach(var o in snapshot.Opponents.Where(o=>o!=null)
+                    .OrderBy(o=>o.IsPlayer?0:o.Position==1?1:2).ThenBy(o=>o.Id,StringComparer.Ordinal).Take(40))
+                {
+                    int carIndex;
+                    var hasIndex=sdkClockUsable && !string.IsNullOrEmpty(o.CarNumber) && _paceCarIndices.TryGetValue(o.CarNumber,out carIndex);
+                    // No name-based or array-position identity guesses.
+                    carIndex=hasIndex ? _paceCarIndices[o.CarNumber] : -1;
+                    var directDistance=hasIndex ? sdk.ReadNumber("CarIdxLapDistPct",carIndex) : null;
+                    var directLap=hasIndex ? sdk.ReadNumber("CarIdxLap",carIndex) : null;
+                    var directLast=hasIndex ? sdk.ReadNumber("CarIdxLastLapTime",carIndex) : null;
+                    var reportedLap=hasIndex ? sdk.ReadNumber("CarIdxLapCompleted",carIndex) : null;
+                    var directBest=hasIndex ? sdk.ReadNumber("CarIdxBestLapTime",carIndex) : null;
+                    // Eén bronkeuze per auto. Een gevonden index bewijst niet dat de
+                    // directe rondetijd bruikbaar is; PaceSourceSelector eist bij een
+                    // terugval op SimHub een aangetoonde ronde-overgang, anders blijft
+                    // de tijd leeg in plaats van bij de verkeerde ronde te horen.
+                    var chosen=_paceSources.Choose(o.Id,directLast,directBest,reportedLap,directLap,PositiveSeconds(o.LastLapTime),PositiveSeconds(o.BestLapTime),o.CurrentLap);
+                    rows.Add(new PaceObservation {Id=o.Id,ReportedLap=chosen.ReportedLap,Lap=chosen.Lap.HasValue?(int?)chosen.Lap.Value:o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
+                        Distance=directDistance??PaceNumber(o,"TrackPositionPercent",0,1),
+                        SpeedKph=o.IsPlayer?ownSpeed:speedUnitOk?PaceNumber(o,"Speed",0,600):null,
+                        LastLapSeconds=chosen.LastLapSeconds,BestLapSeconds=chosen.BestLapSeconds,
+                        IsPlayer=o.IsPlayer,Position=o.Position,Connected=o.IsConnected || o.IsPlayer,InPit=o.IsCarInPitLane || o.IsCarInPit,
+                        Metric=new PaceMetric {LastLapSectorSeconds=PaceSectors(o,"LastLapSector",sectorCount),BestLapSectorSeconds=PaceSectors(o,"BestLapSector",sectorCount),BestSectorSeconds=PaceSectors(o,"BestSector",sectorCount),
+                            BestLapDeltaToFieldBestSeconds=PaceNumber(o,"DeltaToBest",0,86400),BestLapDeltaToPlayerSeconds=PaceNumber(o,"DeltaToPlayer",-86400,86400),
+                            LapValid=PaceBool(o,"LapValid"),LapHighPrecision=PaceNumber(o,"CurrentLapHighPrecision",0,100001),TrackPositionPercentRaw=PaceNumber(o,"TrackPositionPercentRaw",-100001,100001)}});
+                }
+                // De gekozen teller kan de directe SDK-teller zijn; een terugloop daarvan
+                // moet de bronkeuze net zo goed wissen als een SimHub-terugloop. De reset
+                // gebeurt vóór Observe, zodat er geen waarneming met oud bewijs doorgaat.
+                var playerRow=rows.FirstOrDefault(r=>r.IsPlayer);
+                if(playerRow!=null && playerRow.Lap.HasValue && _paceLastPlayerLap.HasValue && playerRow.Lap.Value<_paceLastPlayerLap.Value)
+                { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; _paceLastPlayerLap=playerRow.Lap; return; }
+                if(playerRow!=null && playerRow.Lap.HasValue) _paceLastPlayerLap=playerRow.Lap;
+                _paceCapture.Observe(observedSession,clock,tick,rows,_paceSectorStarts);
+            }
+            catch(Exception error) { _paceCapture.Reset(); _paceSources.Reset(); SimHub.Logging.Current.Warn("3SM pace: capture onderbroken: "+error.GetType().Name); }
+        }
+
         private static double? Clamp01(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)Math.Max(0, Math.Min(1, value.Value)) : null; }
         private static double? SignedSeconds(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? value : null; }
 
@@ -2061,6 +2189,8 @@ namespace ThreeSM.EnduranceConnector
             MeasurementBatchPlan measurementPlan = null;
             try
             {
+                var paceCapture=envelope.PaceCapture;
+                envelope.PaceCapture=null; // core + measurement ACK/outbox always have priority
                 var coreBody = SerializeWithinBudget(envelope);
                 var coreBytes = Encoding.UTF8.GetByteCount(coreBody);
                 var body = coreBody;
@@ -2071,6 +2201,8 @@ namespace ThreeSM.EnduranceConnector
                     var withMeasurements = _measurementSender.BuildBody(coreBody, coreBytes, attemptUtc, out measurementPlan);
                     if (withMeasurements != null) body = withMeasurements;
                 }
+                body=PaceCaptureBuffer.AppendWithinBudget(body,paceCapture);
+                if(Encoding.UTF8.GetByteCount(body)>MaxPayloadBytes) throw new InvalidOperationException("payload_too_large");
                 string responseBody = null;
                 using (var request = new HttpRequestMessage(HttpMethod.Post, endpoint))
                 {

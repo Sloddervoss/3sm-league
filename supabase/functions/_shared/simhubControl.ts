@@ -63,6 +63,7 @@ export const KnownFeatures = [
   "lapSummaries",
   "environment",
   "opponents",
+  "paceCapture",
 ] as const;
 
 export type ConnectorConfig = {

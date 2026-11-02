@@ -1,0 +1,146 @@
+﻿using System;
+using ThreeSM.EnduranceConnector;
+internal static class PaceSourceSelectionTests
+{
+    public static int Run(Action<string,bool,string> check)
+    {
+        int n=0; void Check(string id,bool ok,string detail) {check("PACESRC-"+id,ok,detail); n++;}
+
+        // 01: een geldige rechtstreekse tijd wint altijd, ook als SimHub iets anders zegt.
+        var selector=new PaceSourceSelector();
+        var choice=selector.Choose("car-1",122.684,121.9,1,2,999,999,2);
+        Check("01",choice.LastLapSeconds==122.684 && choice.LastLapSource==PaceSourceSelector.SourceDirect && choice.ReportedLap==1,
+            "directe tijd wint: "+choice.LastLapSeconds+" / "+choice.LastLapSource+" / ronde "+choice.ReportedLap);
+
+        // 02: de fout van 0.7.3.0 - index gevonden, directe tijd ontbreekt, SimHub heeft hem wel.
+        //     Na een aangetoonde ronde-overgang (1 -> 2) wordt de SimHub-tijd overgenomen.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);              // eerste waarneming: nog geen bewijs
+        choice=selector.Choose("car-1",null,null,null,2,122.684,null,2); // teller schuift op, tijd is nieuw
+        Check("02",choice.LastLapSeconds==122.684 && choice.LastLapSource==PaceSourceSelector.SourceSimHub && choice.ReportedLap==1,
+            "terugval met rondebewijs: "+choice.LastLapSeconds+" / "+choice.LastLapSource+" / ronde "+choice.ReportedLap);
+
+        // 03: eerste waarneming zonder geschiedenis geeft geen waarde - nooit gokken.
+        selector=new PaceSourceSelector();
+        choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        Check("03",choice.LastLapSeconds==null && choice.LastLapSource==null,"eerste waarneming blijft leeg");
+
+        // 04: de tijd blijft staan zolang de auto op de volgende ronde rijdt (de buffer
+        //     keurt pas 0,25 s na de overgang), maar hij wordt niet aan een nieuwe ronde
+        //     geplakt als de teller weer opschuift zonder nieuwe tijd.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var hold=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var nextLap=selector.Choose("car-1",null,null,null,3,122.684,null,3);
+        Check("04",hold.LastLapSeconds==122.684 && hold.ReportedLap==1 && nextLap.LastLapSeconds==null,
+            "vasthouden op dezelfde ronde, niet op de volgende: "+hold.LastLapSeconds+"/"+hold.ReportedLap+" -> "+nextLap.LastLapSeconds);
+
+        // 05: een sprong van meer dan een ronde (reset, pit, herstart) is geen bewijs.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        choice=selector.Choose("car-1",null,null,null,5,122.684,null,5);
+        Check("05",choice.LastLapSeconds==null,"ronde-sprong geeft geen tijd");
+
+        // 06: een andere auto erft het bewijs van een andere niet.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        choice=selector.Choose("car-2",null,null,null,2,122.684,null,2);
+        Check("06",choice.LastLapSeconds==null,"geschiedenis is per auto");
+
+        // 07: nul, -1 en NaN zijn geen rondetijd - ook niet via de terugval.
+        foreach(var bad in new double?[]{0,-1,double.NaN,double.PositiveInfinity})
+        {
+            selector=new PaceSourceSelector();
+            selector.Choose("car-1",null,null,null,1,bad,null,1);
+            choice=selector.Choose("car-1",null,null,null,2,bad,null,2);
+            Check("07-"+bad,choice.LastLapSeconds==null && choice.BestLapSeconds==null,"ongeldige SimHub-waarde blijft leeg: "+bad);
+        }
+
+        // 08: de beste ronde mag uit de andere bron komen, mits de auto bekend is.
+        selector=new PaceSourceSelector();
+        choice=selector.Choose("car-1",null,0,1,2,130.0,120.9,2);
+        Check("08",choice.BestLapSeconds==120.9 && choice.BestLapSource==PaceSourceSelector.SourceSimHub,
+            "beste ronde valt terug op SimHub: "+choice.BestLapSeconds+" / "+choice.BestLapSource);
+
+        // 09: zonder ronde teller is er geen auto-identiteit en dus geen terugval.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,null,0,null,null);
+        choice=selector.Choose("car-1",null,null,null,null,122.684,null,null);
+        Check("09",choice.LastLapSeconds==null,"geen teller, geen terugval");
+
+        // 10: directe ongeldige waarde met geldige SimHub-waarde en rondebewijs werkt ook.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",0,-1,0,1,0,null,1);
+        choice=selector.Choose("car-1",-1,0,0,2,122.684,121.0,2);
+        Check("10",choice.LastLapSeconds==122.684 && choice.ReportedLap==1,"directe sentinel valt terug op SimHub");
+
+        // 11: Reset() gooit de geschiedenis weg; daarna is er weer geen bewijs.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        selector.Reset();
+        choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        Check("11",choice.LastLapSeconds==null && selector.CarCount==1,"reset wist het bewijs");
+
+        // 12: tegenproef - de oude regel (index gevonden => alleen direct) geeft op
+        //     precies dit frame null, terwijl de nieuwe regel 122,684 teruggeeft.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var oldRule = (bool hasIndex, double? directLast) => hasIndex ? directLast : (double?)122.684;
+        Check("12",oldRule(true,null)==null && choice.LastLapSeconds==122.684,
+            "oude regel gaf null, nieuwe regel geeft "+choice.LastLapSeconds);
+
+        // 13: spreken de twee tellers elkaar tegen, dan is er geen bewijs (bronwissel).
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,5,0,null,6);
+        choice=selector.Choose("car-1",null,null,null,5,122.684,null,7);
+        Check("13",choice.LastLapSeconds==null,"tegensprekende tellers geven geen tijd");
+
+        // 14: verdwijnt de directe teller, dan is dat een bronwissel en geen bewijs.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        choice=selector.Choose("car-1",null,null,null,null,122.684,null,2);
+        Check("14",choice.LastLapSeconds==null,"bronwissel van de teller is geen bewijs");
+
+        // 15: na een bewezen overgang blijft de tijd staan binnen de bufferwacht van
+        //     0,25 s, en verdwijnt zodra de auto een ronde verder is.
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,1,0,null,1);
+        selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var t1=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var t2=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        var t3=selector.Choose("car-1",null,null,null,3,122.684,null,3);
+        Check("15",t1.LastLapSeconds==122.684 && t2.LastLapSeconds==122.684 && t3.LastLapSeconds==null,
+            "bufferwacht houdt de tijd vast: "+t1.LastLapSeconds+"/"+t2.LastLapSeconds+"/"+t3.LastLapSeconds);
+
+        // 16: end-to-end bewijs voor punt 2 van de reviewer: de terugvaltijd moet de
+        //     rondehistorie van de buffer echt bereiken (die keurt pas 0,25 s na de
+        //     overgang). Zonder vasthouden bleef StoredLapCount op 0.
+        var buffer=new PaceCaptureBuffer();
+        var liveSelector=new PaceSourceSelector();
+        double? simHubTime=null;
+        var lapNow=1;
+        for(int tick=0;tick<=140;tick++)
+        {
+            var clock=tick*0.1;
+            if(tick>0 && tick%100==0) { lapNow++; simHubTime=10.0; }
+            var chosen=liveSelector.Choose("car-1",null,null,null,lapNow,simHubTime,null,lapNow);
+            buffer.Observe("sess",clock,tick,new[]{
+                new PaceObservation {Id="car-1",Lap=lapNow,Distance=(clock%10)/10.0,SpeedKph=180,Connected=true,IsPlayer=true,Position=1,
+                    LastLapSeconds=chosen.LastLapSeconds,BestLapSeconds=chosen.BestLapSeconds,ReportedLap=chosen.ReportedLap,
+                    Metric=new PaceMetric {LapValid=true}}
+            }, new double[]{0.25,0.5,0.75});
+        }
+        Check("16",buffer.StoredLapCount>=1,"terugvaltijd bereikt de rondehistorie: "+buffer.StoredLapCount+" ronde(n)");
+
+        // 17: verschijnt een teller die er de vorige keer niet was, dan is dat geen bewijs
+        //     en mag de vorige lege meting niet worden opgevraagd (reviewer-punt 1).
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,null,0,null,1);
+        choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        Check("17",choice.LastLapSeconds==null,"nieuwe teller is geen bewijs en gooit niet");
+
+        return n;
+    }
+}

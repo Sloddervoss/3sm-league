@@ -112,7 +112,7 @@ export function DecisionBand({ advice }: { advice: Advice }) {
       className={`flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-start sm:justify-between ${rand}`}
       data-pitwall-decision-band="true"
     >
-      <div className="min-w-0 flex-1">
+      <div className="pitwall-decision-content min-w-0 flex-1">
         {/* Alleen de korte beslissing zit in de live region: één keer per ronde
             voorlezen, niet elke seconde. De onderbouwing staat eronder. */}
         <p
@@ -187,7 +187,7 @@ export function DecisionBand({ advice }: { advice: Advice }) {
           </p>
         )}
 
-        <div className="mt-3">
+        <div className="pitwall-decision-compare mt-3">
           <TyreFuelCompare
             comparison={advice.tyreFuel ?? null}
             binding={advice.binding ?? null}

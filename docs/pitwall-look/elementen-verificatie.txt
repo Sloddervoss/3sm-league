@@ -1,0 +1,109 @@
+OPLEVERING PITWALL-ELEMENTEN — LOKAAL
+
+Branch: feat/pitwall-look-3sm
+Startcommit: bfcc387a4e65e563778b360f4f8d99384f96b28b (schone werkboom).
+Lokale main: b1d458a965315921567690c451fb1cf4f6c0fa21.
+Geen fetch, push, merge, deploy of productiequery.
+
+INVENTARIS EN UITKOMST
+86 elementregels: 48 categorie 1, 15 categorie 2, 0 categorie 3, 23 categorie 4.
+Volledige bronverantwoording en kanaalnamen: elementen.md.
+Categorie 1 behouden/aangevuld; categorie 2 aangesloten met expliciete scope.
+De twee geplande racetotalen zijn na aanvullende broncontrole gecorrigeerd van
+categorie 4 naar 2; bron is de bestaande migratie met nullable eventkolommen.
+Geen datumverschil of tekst uit het originele ontwerp als racefeit gebruikt.
+
+PASS/FAIL
+PASS — npm test -- --maxWorkers=2: 195 bestanden, 1638 tests, 182.17 s.
+       Volledige suite, geen testfilter; twee workers beperken geheugengebruik.
+PASS — node node_modules/vite/bin/vite.js build --outDir
+       /home/hermes/.hermes/cache/scratch/pitwall-elements-build-final
+       2478 modules, bundel gebouwd in 3.16 s. Geen SEO-/deployscripts gedraaid.
+PASS — ESLint voor gewijzigde pitwallcomponenten, types, mapper, repository
+       en nieuwe tests: geen errors. Preview heeft twee bestaande Fast Refresh-
+       warnings (entrycomponenten exporteren niet).
+FAIL, BESTAAND — npm run typecheck: 13 diagnostics, byte-identiek aan git archive
+       van bfcc387 met dezelfde node_modules. Geen nieuwe diagnostics.
+FAIL, BESTAAND — ESLint PitwallDeviceTestPage: dezelfde drie no-explicit-any-
+       errors als bfcc387; regels/berichten programmatisch vergeleken.
+PASS — git diff --check.
+PASS — preview/shot.mjs met PITWALL_PREVIEW_BASE op eigen lokale poort 5198.
+       Beide documentafmetingen 1920×1080, geen horizontale/paginaoverflow.
+       Onderpanelen: endurance onderrand 1029.5 px; test 984.5 px.
+       Meer analyse: endurance onderrand 1061.5 px; test 1016.5 px.
+PASS — vision_analyze op beide definitieve 1920×1080-beelden: geen afknipping
+       of tekstoverlap; drie volledige stintregels en volledige eigen-auto-tekst.
+PASS — timingklassefilter, Stints/Pitstops/Events alleen met echte broninhoud,
+       geen paginagroei bij weergavewissel; Snelheid en Delta met bewezen basis.
+PASS — muis- en toetsenbordscroll in timing, einde bereikbaar; 64 extra rijen
+       veranderen de documenthoogte niet. Meer analyse met klik/Enter; raw
+       telemetrie bereikbaar. Geen browserfouten of externe netwerkrequests.
+PASS — 1440/1024/390 px: geen horizontale paginaoverflow, juiste paneelkolommen,
+       omgevingstekst overlapt geen voortgangsmarkers.
+
+VISUELE CORRECTIES IN DEZE RONDE
+Eerste browserruns pasten niet door toegevoegde inhoud. Raster herverdeeld,
+herhaalde driverchips verwijderd (inhoud blijft elders behouden), brandstof
+compacter geordend. Eerste visionronde vond een halve stintregel en een
+afgekorte eigen-auto-omschrijving. Beide gecorrigeerd, daarna browserasserties
+toegevoegd en definitieve beelden opnieuw met vision gecontroleerd.
+Geen hoofdwaarde verkleind of adviescomponentinhoud verwijderd. De kaart staat
+compacter; kleine labels in de bestaande kaartasset blijven beperkt leesbaar.
+
+VERIFICATIEGRENS EN RESTEREND
+Fixtureharnas met echte componenten; geen ingelogde productieroutes, geen echte
+feeddekking. De bestaande voorbeelddata bevat bekende inconsistente gaps,
+autonummers en klokken. Geen nieuwe live data verzonnen om die te maskeren.
+Optionele vocht-/modeldata en geplande eventtotalen zijn met componenttests
+geverifieerd; de basisscreenshots claimen geen echte aanlevering daarvan.
+Geen bewezen windkanaal, circuitlengte/bochten, sectorgrenzen/rivalensectoren,
+volledige deelnemersnoemers, gemeten stintanker, complete rivalenpitgeschiedenis,
+leiderhistorie of operationele swapbevestigingen. Compound-ID/setaantallen zijn
+geen geverifieerde M-naam of huidig gemonteerd setnummer. Zie alle 23 regels
+in categorie 4 voor de exacte bronbeperking.
+De eventselectie verwacht de twee kolommen uit de bestaande migratie
+20261024130000; geen live schemaverificatie uitgevoerd en geen migratie gedraaid.
+
+IMPACT
+Website/frontend: gedeelde pitwallpresentatie, beide modi en lokale previews.
+Backend/API: twee bestaande velden toegevoegd aan bestaande eventleesselectie;
+geen extra endpoint, geen RPC-implementatie of nieuwe polling.
+Database/migraties/RLS: niet gewijzigd. Bot: geen impact verwacht.
+Plugin: niet gewijzigd; geen release. Advieskern/poorten: ongewijzigd.
+Auth/rollen: ongewijzigd. Deployment: ongewijzigd.
+Productiefrontendwijzigingen: NEE. PRODUCTIEWIJZIGING: NEE.
+
+AANGEPASTE BESTANDEN
+- docs/pitwall-look/README.md
+- docs/pitwall-look/elementen.md
+- docs/pitwall-look/pitwall-endurance-1920x1080.png
+- docs/pitwall-look/pitwall-endurance-full.png
+- docs/pitwall-look/pitwall-test-1920x1080.png
+- docs/pitwall-look/pitwall-test-full.png
+- docs/pitwall-look/preview/endurance.tsx
+- docs/pitwall-look/preview/fixtures.ts
+- docs/pitwall-look/preview/shot.mjs
+- docs/pitwall-look/preview/test.tsx
+- docs/pitwall-look/verification.json
+- src/features/endurance/core/types.ts
+- src/features/endurance/pitwall/FuelPanel.tsx
+- src/features/endurance/pitwall/LiveTrackPanel.tsx
+- src/features/endurance/pitwall/OwnCarPanel.tsx
+- src/features/endurance/pitwall/PaceGraph.tsx
+- src/features/endurance/pitwall/PacePanel.tsx
+- src/features/endurance/pitwall/PitwallPanel.tsx
+- src/features/endurance/pitwall/PitwallTab.tsx
+- src/features/endurance/pitwall/RaceTelemetryStrip.tsx
+- src/features/endurance/pitwall/StandingsWidget.tsx
+- src/features/endurance/pitwall/StintDriverPanel.tsx
+- src/features/endurance/pitwall/VehicleTelemetryPanel.tsx
+- src/features/endurance/pitwall/elementPresentation.ts
+- src/features/endurance/pitwall/pitwallHelpers.ts
+- src/features/endurance/pitwall/pitwallLook.css
+- src/features/endurance/repository/eventsRepository.ts
+- src/features/endurance/repository/mappers.test.ts
+- src/features/endurance/repository/mappers.ts
+- src/pages/PitwallDeviceTestPage.tsx
+- src/test/pitwallElements.test.tsx
+
+Daarnaast dit opleververslag en het SHA-256-manifest zelf.

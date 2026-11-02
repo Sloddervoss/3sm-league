@@ -1,4 +1,8 @@
+import type { PaceHistory } from "../../../../supabase/functions/_shared/paceCapture";
 /* Pitwall V1 — types & helpers */
+import type { WeatherTelemetry } from "../../../../supabase/functions/_shared/weatherTelemetry";
+import type { SimHubEnvironment } from "../../../../supabase/functions/_shared/simhubExtensions";
+import type { TyreTelemetry } from "../../../../supabase/functions/_shared/tyreTelemetry";
 import type { VehicleTelemetry } from "../../../../supabase/functions/_shared/vehicleTelemetry";
 import { estimateFuelToFinish } from "./strategy/fuelToFinish";
 export interface PitwallPositionData {
@@ -42,9 +46,14 @@ export interface PitwallStrategyRow {
 }
 
 export interface V3Normalized {
+  paceHistory?: PaceHistory | null;
   capturedAt?: string;
   transportSessionId?: string;
   vehicle?: VehicleTelemetry | null;
+  /** Bestaand, genormaliseerd optioneel rootblok; geen nieuw wirecontract. */
+  tyres?: TyreTelemetry | null;
+  weather?: WeatherTelemetry | null;
+  environment?: SimHubEnvironment | null;
   identity?: {
     trackId?: number | null;
     currentDriverId?: string;

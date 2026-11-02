@@ -31,6 +31,14 @@ const makeRow = (overrides?: Partial<EnduranceEventRow>): EnduranceEventRow => (
 });
 
 describe("enduranceEventRowToAppModel", () => {
+  it("behoudt uitsluitend expliciete raceplanning, zonder datumafleiding", () => {
+    const model = enduranceEventRowToAppModel(makeRow({ planned_laps: 360, planned_duration_minutes: 360 }));
+    expect(model.plannedLaps).toBe(360);
+    expect(model.plannedDurationMinutes).toBe(360);
+    const missing = enduranceEventRowToAppModel(makeRow());
+    expect(missing.plannedLaps).toBeNull();
+    expect(missing.plannedDurationMinutes).toBeNull();
+  });
   it("converts a normal array of slots", () => {
     const row = makeRow({
       slots: [

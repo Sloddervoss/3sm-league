@@ -1,3 +1,4 @@
+import { parsePaceCapture, type PaceCapture } from "./paceCapture.ts";
 import { exactKeysAllowExtra, parseOpponents, type V3Opponent } from "./opponents.ts";
 import { parseVehicleTelemetry, type VehicleTelemetry } from "./vehicleTelemetry.ts";
 import { parseTyreTelemetry, type TyreTelemetry } from "./tyreTelemetry.ts";
@@ -299,6 +300,7 @@ export type NormalizedTelemetryEnvelope = {
   };
   /** 0.4.1 additive, bounded, null-tolerant opponent snapshot. */
   opponents: V3Opponent[] | null;
+  paceCapture?: PaceCapture | null;
   /**
    * Optioneel voertuigblok. Sinds de directe-SDK-lezer bevat het naast de
    * SimHub-kanalen ook `brakeLinePressureBar` per hoek, plus
@@ -448,7 +450,7 @@ const v3SignedGap = (value: unknown, path: string): number | null => {
     value === undefined || value === null ? null : v3Boolean(value, path);
 
 const V3RequiredRootKeys = ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"];
-const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries"];
+const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries", "paceCapture"];
 
 /**
  * Rootkeys van een V3-frame: de verplichte moeten er zijn, de bekende optionele
@@ -611,6 +613,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
       fastRepairUsed: v3OptionalNumber(pitService.fastRepairUsed, "pitService.fastRepairUsed", { integer: true, min: 0, max: 255, sentinels: [-1] }),
     },
     opponents: parseOpponents(root.opponents, "payload.opponents"),
+    paceCapture: parsePaceCapture(root.paceCapture),
     vehicle: parseVehicleTelemetry(root.vehicle),
     // De drie optionele meetblokken zijn nooit fataal: een fout in één blok kost
     // alleen dat blok, niet het frame met ronde, brandstof en positie.

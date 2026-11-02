@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cable, ChevronRight, Cpu, Lock, RefreshCw } from "lucide-react";
@@ -23,14 +23,16 @@ import type { TyreEstimate } from "@/features/endurance/pitwall/strategy/tyreGra
 import { naarTyreEstimate, type TyreRpcClient } from "@/features/endurance/pitwall/strategy/tyreEstimateV2";
 import { useTyreModel } from "@/features/endurance/pitwall/useTyreModel";
 import { usePitwallStrategy } from "@/features/endurance/pitwall/usePitwallStrategy";
-import { TopRaceBar } from "@/features/endurance/pitwall/TopRaceBar";
 import { RaceTelemetryStrip } from "@/features/endurance/pitwall/RaceTelemetryStrip";
+import { OwnCarPanel } from "@/features/endurance/pitwall/OwnCarPanel";
 import { LiveTrackPanel } from "@/features/endurance/pitwall/LiveTrackPanel";
 import { VehicleTelemetryPanel } from "@/features/endurance/pitwall/VehicleTelemetryPanel";
 import { FuelPanel } from "@/features/endurance/pitwall/FuelPanel";
-import { RacePositionPanel } from "@/features/endurance/pitwall/RacePositionPanel";
 import { PacePanel } from "@/features/endurance/pitwall/PacePanel";
 import { StandingsWidget } from "@/features/endurance/pitwall/StandingsWidget";
+import { PitwallDashboard } from "@/features/endurance/pitwall/PitwallDashboard";
+import { PitwallContextBar } from "@/features/endurance/pitwall/PitwallContextBar";
+import { MySessionPanel } from "@/features/endurance/pitwall/MySessionPanel";
 import { deriveStandings } from "@/features/endurance/pitwall/standings";
 import { newestDeviceTelemetry } from "@/features/endurance/pitwall/deviceTelemetryCache";
 import { devicePresence, devicePresenceLabel } from "@/features/endurance/pitwall/devicePresence";
@@ -56,32 +58,7 @@ export default function PitwallDeviceTestPage() {
   const { user, isSuperAdmin, loading, rolesLoading } = useAuth();
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const realtimeAt = useRef(0);
-  useEffect(() => {
-    realtimeAt.current = 0;
-    if (!user || !isSuperAdmin || !deviceId) return;
-    let active = true;
-    const channel = supabase.channel(`pitwall-test-live-${deviceId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'simhub_telemetry_latest', filter: `device_id=eq.${deviceId}` }, change => {
-        if (!active) return;
-        if (change.eventType === 'DELETE') {
-          realtimeAt.current = 0;
-          void queryClient.invalidateQueries({ queryKey: ['pitwall-test', 'device', deviceId] });
-          return;
-        }
-        const row = change.new as SimHubDeviceDetail['telemetry'];
-        if (!row || row.device_id !== deviceId) return;
-        realtimeAt.current = Date.now();
-        queryClient.setQueryData<SimHubDeviceDetail>(['pitwall-test', 'device', deviceId], current => newestDeviceTelemetry(current, row, deviceId));
-      }).subscribe(status => {
-        if (!active) return;
-        if (status !== 'SUBSCRIBED') {
-          realtimeAt.current = 0;
-          void queryClient.invalidateQueries({ queryKey: ['pitwall-test', 'device', deviceId] }, { cancelRefetch: false });
-        }
-      });
-    return () => { active = false; void supabase.removeChannel(channel); };
-  }, [user, isSuperAdmin, deviceId, queryClient]);
+  // Poll only the authorized, bounded RPC projection. No 512-KiB row subscription.
 
   /* Fleet: connected SimHub profiles, online-first (same read RPC as the
    * Control Room). Refreshes so new/offline devices appear without reload. */
@@ -108,7 +85,7 @@ export default function PitwallDeviceTestPage() {
       const cached = queryClient.getQueryData<SimHubDeviceDetail>(['pitwall-test', 'device', deviceId]);
       return newestDeviceTelemetry(result, cached?.telemetry ?? null, deviceId!) ?? result;
     },
-    refetchInterval: () => Date.now() - realtimeAt.current < 3_000 ? 5_000 : 1_000,
+    refetchInterval: 1_000,
   });
 
   /* Rondes en coureurs van dit apparaat, ook zonder event. */
@@ -200,12 +177,25 @@ export default function PitwallDeviceTestPage() {
     );
   }
 
+  const samplePoints = (sandboxQuery.data?.lap_samples ?? [])
+    .filter((r) => typeof r.seconds === "number" && Number.isFinite(r.seconds) && r.seconds > 0)
+    .slice()
+    .sort((a, b) => a.lap - b.lap)
+    .slice(-60)
+    .map((r) => ({ lap: r.lap, seconds: r.seconds as number }));
+
+  const sessionPace = sandboxQuery.data?.pace ?? null;
+  const ownDriverName = v3?.identity?.currentDriverName ?? tele?.current_driver_name ?? tele?.driver_id ?? null;
+  const ownCarName = tele?.car_name ?? v3?.identity?.carName ?? null;
+  const trackLabel = deviceTrackLabel(v3, tele?.track_name) || "";
+  const linkedTeamName = (detail?.endurance_team as Record<string, unknown> | null)?.["name"] as string | null | undefined;
+
   return (
     <div className="min-h-screen bg-background" data-no-translate>
       <Navbar />
       <main className="container mx-auto max-w-[1600px] px-4 py-6">
         {/* Header */}
-        <section className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-5 py-4 md:flex-row md:items-center md:justify-between">
+        <section className="mb-4 flex flex-col gap-3 rounded-xl border border-[#1D2431] bg-[#0A0C10] px-5 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Cpu className="h-5 w-5 text-orange-300" />
             <div>
@@ -219,40 +209,13 @@ export default function PitwallDeviceTestPage() {
           </div>
         </section>
 
-        {/* Coureurs op dit apparaat — ook zonder event, uit het rondearchief. */}
-        <section className="mb-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-5 py-4">
-          <div className="mb-3 flex items-baseline justify-between gap-3">
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Coureurs op dit apparaat</h2>
-            <span className="text-[11px] text-gray-500">
-              {sandboxQuery.data?.pace?.count ?? 0} rondes vastgelegd
-              {sandboxQuery.data?.pace?.fastest != null ? ` · snelste ${sandboxQuery.data.pace.fastest.toFixed(2)} s` : ""}
-            </span>
-          </div>
-          {coureurs.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              Nog niemand gereden in deze sessie. Zodra er een ronde wordt afgerond, verschijnt de coureur hier.
-            </p>
-          ) : (
-            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {coureurs.map((c) => (
-                <li key={c.naam} className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                  <span className="text-sm text-white">{c.naam}</span>
-                  <span className="text-xs text-gray-400">
-                    {c.ronden} rondes{c.snelste != null ? ` · ${c.snelste.toFixed(2)} s` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
         <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
           {/* ───── Device list (connected SimHub profiles) ───── */}
           <aside className="space-y-2">
             <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Gekoppelde SimHub profielen</h2>
             {fleetQuery.error && <p role="alert" className="text-sm text-red-300">Fleet laden mislukt.</p>}
             {!fleetQuery.error && fleetQuery.data?.length === 0 && (
-              <div className="flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-8 text-sm text-gray-500">
+              <div className="flex flex-col items-center gap-2 rounded-xl border border-[#1D2431] bg-[#0B0D11] px-4 py-8 text-sm text-gray-500">
                 <Cable className="h-7 w-7 text-gray-600" />
                 <p>Geen gekoppelde apparaten</p>
               </div>
@@ -268,7 +231,7 @@ export default function PitwallDeviceTestPage() {
                   className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
                     selected
                       ? "border-orange-500/60 bg-orange-500/[0.07] ring-1 ring-orange-500/30"
-                      : "border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04]"
+                      : "border-[#1D2431] bg-[#0B0D11] hover:bg-white/[0.04]"
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -292,10 +255,10 @@ export default function PitwallDeviceTestPage() {
             })}
           </aside>
 
-          {/* ───── Live view ───── */}
+          {/* ───── Live view — hetzelfde raster als de endurance-pitwall ───── */}
           <section className="min-w-0">
             {!deviceId && (
-              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-16 text-sm text-gray-500">
+              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-[#1D2431] bg-[#0B0D11] px-6 py-16 text-sm text-gray-500">
                 <Cpu className="h-8 w-8 text-gray-600" />
                 <p>Selecteer een geconnecte SimHub-profiel links om de live pitwall te openen.</p>
               </div>
@@ -308,76 +271,103 @@ export default function PitwallDeviceTestPage() {
             )}
 
             {deviceId && detail && (
-              <div className="space-y-3">
-                {/* Device header strip */}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-black/50 px-4 py-2 text-xs ring-1 ring-white/8">
-                  <span className={`inline-flex items-center gap-1.5 font-bold ${live ? "text-emerald-400" : "text-gray-400"}`}>
-                    <span className={`inline-block h-1.5 w-1.5 rounded-full bg-current`} />
-                    {live ? "LIVE" : online ? "ONLINE — geen telemetrie" : "OFFLINE"}
-                  </span>
-                  <span className="h-4 w-px bg-white/10" />
-                  <span className="font-bold text-white">{detail.device.device_name}</span>
-                  <span className="font-mono text-gray-400">{detail.health?.connector_version ?? "—"}</span>
-                  <span className="h-4 w-px bg-white/10" />
-                  <span className="text-gray-400">Laatst gezien: <span className="text-gray-200">{relTime(detail.health?.received_at)}</span></span>
-                  <span className="text-gray-400">Telemetrie: {relTime(tele?.received_at)} · {Date.now() - realtimeAt.current < 3_000 ? 'Realtime' : '1s polling'}</span>
-                  {detail.endurance_team ? (
-                    <span className="rounded bg-orange-500/15 px-2 py-0.5 font-bold text-orange-300 ring-1 ring-orange-500/20">
-                      Gekoppeld · {((detail.endurance_event ?? {}).name as string | null) ?? "team"}
+              <div className="space-y-3 bg-[#07080A]" data-pitwall-mode="test">
+                <PitwallContextBar
+                  eyebrow="3SM · Pitwall test"
+                  title={detail.device.device_name}
+                  state={live ? "live" : online ? "stale" : "offline"}
+                  stateLabel={live ? "LIVE" : online ? "ONLINE — geen telemetrie" : "OFFLINE"}
+                  items={[
+                    { label: "Circuit", value: trackLabel || "geen sessie" },
+                    { label: "Connector", value: detail.health?.connector_version ?? "—" },
+                    { label: "Laatst gezien", value: relTime(detail.health?.received_at) },
+                    ...(linkedTeamName ? [{ label: "Team", value: linkedTeamName, tone: "accent" as const }] : []),
+                  ]}
+                  note={live || online ? undefined : "Wissel naar een gebonden team-pitwall voor pit-in / fuel-to-add."}
+                  actions={
+                    <span className="text-[11px] text-slate-500">
+                      {relTime(tele?.received_at)} · 1s polling
                     </span>
-                  ) : (
-                    <span className="rounded bg-white/8 px-2 py-0.5 font-bold text-gray-400 ring-1 ring-white/10">Niet gekoppeld</span>
-                  )}
-                  {(detail.endurance_team as Record<string, unknown> | null)?.["name"]
-                    ? null
-                    : (
-                      <span className="ml-auto text-gray-500 text-[10px]">
-                        Wissel naar een gebonden team-pitwall voor pit-in / fuel-to-add.
-                      </span>
-                    )}
-                </div>
-
-                {/* Track auto-detect + telemetry strip */}
-                <TopRaceBar strategy={strategy} position={position} raceClock={raceClock} offlineMode={!live} />
-                <DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />
-                <TyreModelPanel
-                  estimate={tyreModel}
-                  bron={tyre.bron}
-                  coverage={tyre.coverage}
-                  coverageLoading={tyre.coverageLoading}
-                  coverageError={tyre.coverageError}
-                  modelLoading={tyre.modelLoading}
-                  v2Error={tyre.v2Error}
+                  }
                 />
-                <RaceTelemetryStrip v3={v3} live={live} />
 
-                <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
-                  <div className="min-w-0 space-y-3">
-                    <LiveTrackPanel v3={v3} live={live} fallbackTrack={deviceTrackLabel(v3, tele?.track_name) || detail.device.device_name} />
-                    <VehicleTelemetryPanel v3={v3} live={live} />
-                  </div>
-                  <div className="min-w-0 space-y-3">
-                    <StandingsWidget standings={standings} ownCarLabel={tele?.car_name ?? detail.device.device_name} ownCarNumber={null} />
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <FuelPanel strategy={strategy} />
-                      <RacePositionPanel strategy={strategy} position={position} />
-                      <PacePanel strategy={strategy} pace={pace} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Raw telemetry toggle for debugging */}
-                <RawTelemetryDetails value={v3} />
-
-                {detailQuery.isFetching && (
-                  <p className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                    <RefreshCw className="h-3 w-3 animate-spin" /> Live telemetrie verfrist automatisch.
-                  </p>
-                )}
+                <PitwallDashboard
+                  kpi={<RaceTelemetryStrip v3={v3} live={live} />}
+                  decision={<DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />}
+                  track={<><LiveTrackPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} /><OwnCarPanel driverName={ownDriverName} carName={ownCarName} teamName={null} carNumber={live ? v3?.opponents?.find(c => c.isPlayer)?.carNumber : null} completedLaps={live ? v3?.timing?.completedLaps : null} lastLapSeconds={live ? v3?.timing?.lastLapTimeSeconds ?? null : null} bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null} gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null} /></>}
+                  timing={
+                    <StandingsWidget v3={v3}
+                      standings={standings}
+                      ownCarLabel={ownCarName ?? detail.device.device_name}
+                      ownCarNumber={null}
+                      live={live}
+                    />
+                  }
+                  panels={[
+                    <PacePanel paceSource={{deviceId}} v3={v3} live={live} key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
+                    <MySessionPanel
+                      key="session"
+                      driverName={ownDriverName}
+                      carName={ownCarName}
+                      recordedLaps={sessionPace?.count ?? null}
+                      fastestSeconds={sessionPace?.fastest ?? null}
+                      medianSeconds={sessionPace?.median ?? null}
+                    />,
+                    <FuelPanel key="fuel" strategy={strategy} />,
+                    <VehicleTelemetryPanel key="tyres" v3={v3} live={live} tyreEstimate={tyreEstimate} tyreModel={tyreModel} />,
+                  ]}
+                  extra={
+                    <>
+                      {/* Modelinformatie blijft: experimenteel bereik, niet beslissend. */}
+                      <TyreModelPanel
+                        estimate={tyreModel}
+                        bron={tyre.bron}
+                        coverage={tyre.coverage}
+                        coverageLoading={tyre.coverageLoading}
+                        coverageError={tyre.coverageError}
+                        modelLoading={tyre.modelLoading}
+                        v2Error={tyre.v2Error}
+                      />
+                      <RawTelemetryDetails value={v3} />
+                      {detailQuery.isFetching && (
+                        <p className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                          <RefreshCw className="h-3 w-3 animate-spin" /> Live telemetrie verfrist automatisch.
+                        </p>
+                      )}
+                    </>
+                  }
+                />
               </div>
             )}
           </section>
         </div>
+
+        {/* Coureurs op dit apparaat — ook zonder event, uit het rondearchief. */}
+        <section className="mt-4 rounded-xl border border-[#1D2431] bg-[#0B0D11] px-5 py-4">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Coureurs op dit apparaat</h2>
+            <span className="text-[11px] text-gray-500">
+              {sandboxQuery.data?.pace?.count ?? 0} rondes vastgelegd
+              {sandboxQuery.data?.pace?.fastest != null ? ` · snelste ${sandboxQuery.data.pace.fastest.toFixed(2)} s` : ""}
+            </span>
+          </div>
+          {coureurs.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Nog niemand gereden in deze sessie. Zodra er een ronde wordt afgerond, verschijnt de coureur hier.
+            </p>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {coureurs.map((c) => (
+                <li key={c.naam} className="flex items-center justify-between rounded-xl border border-[#1D2431] bg-black/30 px-3 py-2">
+                  <span className="text-sm text-white">{c.naam}</span>
+                  <span className="text-xs text-gray-400">
+                    {c.ronden} rondes{c.snelste != null ? ` · ${c.snelste.toFixed(2)} s` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </main>
       <Footer />
     </div>

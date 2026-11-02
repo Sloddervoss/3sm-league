@@ -20,7 +20,7 @@ export function RawTelemetryDetails({ value }: { value: unknown }) {
 
   return (
     <details
-      className="rounded-lg border border-white/10 bg-white/[0.02]"
+      className="rounded-xl border border-[#1D2431] bg-[#0B0D11]"
       open={showRaw}
       onToggle={(event) => setShowRaw(event.currentTarget.open)}
       data-pitwall-raw={showRaw ? "open" : "dicht"}
