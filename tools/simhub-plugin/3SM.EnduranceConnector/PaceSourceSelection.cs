@@ -129,10 +129,13 @@ namespace ThreeSM.EnduranceConnector
                 var simHubLast = Valid(simHubLastLapSeconds);
                 var sameCounters = seen.SimHubLap.HasValue == simHubLap.HasValue
                     && seen.DirectLap.HasValue == directLap.HasValue;
+                // Elke teller moet op zichzelf precies één zijn opgeschoven. Een teller
+                // die er net wel of net niet is, levert geen bewijs (en mag nooit de
+                // waarde van een lege vorige meting opvragen).
                 var countersAdvanced = (!simHubLap.HasValue
-                        || Math.Abs(simHubLap.Value - (seen.SimHubLap.Value + 1)) < 0.000001)
+                        || (seen.SimHubLap.HasValue && Math.Abs(simHubLap.Value - (seen.SimHubLap.Value + 1)) < 0.000001))
                     && (!directLap.HasValue
-                        || Math.Abs(directLap.Value - (seen.DirectLap.Value + 1)) < 0.000001);
+                        || (seen.DirectLap.HasValue && Math.Abs(directLap.Value - (seen.DirectLap.Value + 1)) < 0.000001));
                 var timeIsNew = simHubLast.HasValue
                     && (!seen.RawSimHubLast.HasValue
                         || Math.Abs(simHubLast.Value - seen.RawSimHubLast.Value) > 0.000001);

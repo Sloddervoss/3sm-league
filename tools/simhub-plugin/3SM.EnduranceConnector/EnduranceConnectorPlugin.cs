@@ -2060,6 +2060,11 @@ namespace ThreeSM.EnduranceConnector
                 // bruikbare tijdbasis; de SimHub-klok is dat wel.
                 var sdkClockUsable=sdkClock.HasValue && (!simHubClock.HasValue || Math.Abs(sdkClock.Value-simHubClock.Value)<=2.0);
                 var clock=sdkClockUsable?sdkClock:simHubClock;
+                var tick=sdkClockUsable?(long?)sdk.TickCount:null;
+                // Tick-terugloop is een nieuwe epoch. Dit moet vóór het opbouwen van de
+                // waarnemingen: een reset achteraf haalt eerder afgeleid bewijs niet terug.
+                if(tick.HasValue && _paceLastTick.HasValue && tick<_paceLastTick) { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; }
+                _paceLastTick=tick;
                 // Een andere tijdbasis of een teruglopende klok is een nieuwe epoch.
                 // De buffer herkent dat zelf, maar de bronkeuze moet mee: anders kan
                 // een oude waarneming als rondebewijs voor de nieuwe epoch dienen.
@@ -2083,11 +2088,6 @@ namespace ThreeSM.EnduranceConnector
                 // One source image for positions, lap counters, reported times and clock.
 
                 var own= snapshot.Opponents?.FirstOrDefault(o=>o!=null && o.IsPlayer);
-                // Een teruglopende rondeteller van de speler is een herstart of een
-                // nieuwe sessie: het oude rondebewijs mag daar niet doorheen lopen.
-                if(own!=null && own.CurrentLap.HasValue && _paceLastPlayerLap.HasValue && own.CurrentLap.Value<_paceLastPlayerLap.Value)
-                { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; }
-                if(own!=null && own.CurrentLap.HasValue) _paceLastPlayerLap=own.CurrentLap;
                 var ownSpeed=VehicleNumber(manager, "SpeedKmh",600);
                 var playerSpeed=own==null?null:PaceNumber(own,"Speed",0,600);
                 // This ride proved the same magnitude, not a universal unit conversion.
@@ -2121,9 +2121,13 @@ namespace ThreeSM.EnduranceConnector
                             BestLapDeltaToFieldBestSeconds=PaceNumber(o,"DeltaToBest",0,86400),BestLapDeltaToPlayerSeconds=PaceNumber(o,"DeltaToPlayer",-86400,86400),
                             LapValid=PaceBool(o,"LapValid"),LapHighPrecision=PaceNumber(o,"CurrentLapHighPrecision",0,100001),TrackPositionPercentRaw=PaceNumber(o,"TrackPositionPercentRaw",-100001,100001)}});
                 }
-                var tick=sdkClockUsable?(long?)sdk.TickCount:null;
-                if(tick.HasValue && _paceLastTick.HasValue && tick<_paceLastTick) { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; }
-                _paceLastTick=tick;
+                // De gekozen teller kan de directe SDK-teller zijn; een terugloop daarvan
+                // moet de bronkeuze net zo goed wissen als een SimHub-terugloop. De reset
+                // gebeurt vóór Observe, zodat er geen waarneming met oud bewijs doorgaat.
+                var playerRow=rows.FirstOrDefault(r=>r.IsPlayer);
+                if(playerRow!=null && playerRow.Lap.HasValue && _paceLastPlayerLap.HasValue && playerRow.Lap.Value<_paceLastPlayerLap.Value)
+                { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; _paceLastPlayerLap=playerRow.Lap; return; }
+                if(playerRow!=null && playerRow.Lap.HasValue) _paceLastPlayerLap=playerRow.Lap;
                 _paceCapture.Observe(observedSession,clock,tick,rows,_paceSectorStarts);
             }
             catch(Exception error) { _paceCapture.Reset(); _paceSources.Reset(); SimHub.Logging.Current.Warn("3SM pace: capture onderbroken: "+error.GetType().Name); }

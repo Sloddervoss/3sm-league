@@ -134,6 +134,13 @@ internal static class PaceSourceSelectionTests
         }
         Check("16",buffer.StoredLapCount>=1,"terugvaltijd bereikt de rondehistorie: "+buffer.StoredLapCount+" ronde(n)");
 
+        // 17: verschijnt een teller die er de vorige keer niet was, dan is dat geen bewijs
+        //     en mag de vorige lege meting niet worden opgevraagd (reviewer-punt 1).
+        selector=new PaceSourceSelector();
+        selector.Choose("car-1",null,null,null,null,0,null,1);
+        choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
+        Check("17",choice.LastLapSeconds==null,"nieuwe teller is geen bewijs en gooit niet");
+
         return n;
     }
 }
