@@ -1,4 +1,5 @@
 import { parsePaceCapture, type PaceCapture } from "./paceCapture.ts";
+import { parseLapTimesNeverFatal, type LapTimeEntry } from "./lapTimes.ts";
 import { exactKeysAllowExtra, parseOpponents, type V3Opponent } from "./opponents.ts";
 import { parseVehicleTelemetry, type VehicleTelemetry } from "./vehicleTelemetry.ts";
 import { parseTyreTelemetry, type TyreTelemetry } from "./tyreTelemetry.ts";
@@ -302,6 +303,12 @@ export type NormalizedTelemetryEnvelope = {
   opponents: V3Opponent[] | null;
   paceCapture?: PaceCapture | null;
   /**
+   * 0.7.4.0 — bewezen (ronde, tijd)-paren van de connector. Nooit fataal; een
+   * ongeldige reeks kost alleen deze reeks. Wordt niet in het frame-DTO
+   * opgeslagen maar als aparte parameter aan de ingest doorgegeven.
+   */
+  lapTimes?: LapTimeEntry[] | null;
+  /**
    * Optioneel voertuigblok. Sinds de directe-SDK-lezer bevat het naast de
    * SimHub-kanalen ook `brakeLinePressureBar` per hoek, plus
    * `steeringWheelAngleDeg`, `latAccelG` en `longAccelG`. Die vier zijn
@@ -450,7 +457,7 @@ const v3SignedGap = (value: unknown, path: string): number | null => {
     value === undefined || value === null ? null : v3Boolean(value, path);
 
 const V3RequiredRootKeys = ["protocolVersion", "sequence", "capturedAt", "transportSessionId", "identity", "session", "timing", "position", "track", "fuel", "raceState", "pitService"];
-const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries", "paceCapture"];
+const V3OptionalRootKeys = ["opponents", "vehicle", "tyres", "brakes", "weather", "source", "schemaRevision", "capabilities", "environment", "measurementEvents", "lapSummaries", "paceCapture", "lapTimes"];
 
 /**
  * Rootkeys van een V3-frame: de verplichte moeten er zijn, de bekende optionele
@@ -614,6 +621,7 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
     },
     opponents: parseOpponents(root.opponents, "payload.opponents"),
     paceCapture: parsePaceCapture(root.paceCapture),
+    lapTimes: parseLapTimesNeverFatal(root.lapTimes),
     vehicle: parseVehicleTelemetry(root.vehicle),
     // De drie optionele meetblokken zijn nooit fataal: een fout in één blok kost
     // alleen dat blok, niet het frame met ronde, brandstof en positie.
