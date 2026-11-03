@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.Serialization;
 
 namespace ThreeSM.EnduranceConnector
@@ -12,6 +13,11 @@ namespace ThreeSM.EnduranceConnector
     public sealed class TelemetryEnvelopeV3
     {
         [DataMember(Name = "paceCapture", Order = 19, EmitDefaultValue = false)] public PaceCaptureFrame PaceCapture { get; set; }
+        /// <summary>
+        /// 0.7.4.0 — bewezen (ronde, tijd)-paren. De connector stuurt alleen wat hij zag
+        /// afsluiten en waarvoor de tijd binnenkwam; de server voegt niets samen.
+        /// </summary>
+        [DataMember(Name = "lapTimes", Order = 20, EmitDefaultValue = false)] public List<LapTimeDto> LapTimes { get; set; }
         [DataMember(Name = "protocolVersion", Order = 1)] public int ProtocolVersion { get; set; }
         [DataMember(Name = "sequence", Order = 2)] public long Sequence { get; set; }
         [DataMember(Name = "capturedAt", Order = 3)] public string CapturedAt { get; set; }
@@ -351,5 +357,16 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "pitServiceFlagsRaw", Order = 1)] public int? PitServiceFlagsRaw { get; set; }
         [DataMember(Name = "requiredRepairSeconds", Order = 2)] public double? RequiredRepairSeconds { get; set; }
         [DataMember(Name = "optionalRepairSeconds", Order = 3)] public double? OptionalRepairSeconds { get; set; }
+    }
+
+    /// <summary>Eén bewezen rondetijd zoals de connector hem heeft waargenomen.</summary>
+    [DataContract]
+    public sealed class LapTimeDto
+    {
+        [DataMember(Name = "carId", Order = 1)] public string CarId { get; set; }
+        [DataMember(Name = "sessionKey", Order = 2)] public string SessionKey { get; set; }
+        [DataMember(Name = "lap", Order = 3)] public int Lap { get; set; }
+        [DataMember(Name = "seconds", Order = 4)] public double Seconds { get; set; }
+        [DataMember(Name = "source", Order = 5)] public string Source { get; set; }
     }
 }

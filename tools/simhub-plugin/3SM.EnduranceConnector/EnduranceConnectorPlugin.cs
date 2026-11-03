@@ -47,6 +47,8 @@ namespace ThreeSM.EnduranceConnector
         private readonly Stopwatch _sendClock = Stopwatch.StartNew();
         private readonly Stopwatch _stintClock = new Stopwatch();
         private readonly PaceCaptureBuffer _paceCapture = new PaceCaptureBuffer();
+        private readonly LapAttributionEngine _lapAttribution = new LapAttributionEngine();
+        private readonly List<LapTimeDto> _pendingLapTimes = new List<LapTimeDto>();
         private readonly PaceSourceSelector _paceSources = new PaceSourceSelector();
         private double[] _paceSectorStarts;
         private Dictionary<string,int> _paceCarIndices = new Dictionary<string,int>(StringComparer.Ordinal);
@@ -778,7 +780,13 @@ namespace ThreeSM.EnduranceConnector
                     envelope = null;
                     if (central) envelope = CaptureV3(pluginManager, data, isInCar, out observation);
                     else localEnvelope = Capture(pluginManager, data, false, isInCar, out observation);
-                    if(envelope!=null && _controlClient!=null && _controlClient.Current.FeatureEnabled("paceCapture")) envelope.PaceCapture=_paceCapture.NextFrame();
+                    if(envelope!=null && _controlClient!=null && _controlClient.Current.FeatureEnabled("paceCapture"))
+                      {
+                          envelope.PaceCapture=_paceCapture.NextFrame();
+                          // Wat de engine bewees gaat mee in het eerstvolgende frame en verdwijnt
+                          // daarna: geen herhaling, geen dubbele rij aan de serverkant.
+                          if(_pendingLapTimes.Count>0) { envelope.LapTimes=new List<LapTimeDto>(_pendingLapTimes); _pendingLapTimes.Clear(); }
+                      }
                     ObserveDiagnostics(observation);
                 }
                 lock (_sendGate)
@@ -2047,7 +2055,7 @@ namespace ThreeSM.EnduranceConnector
         }
         private void ObservePace(PluginManager manager,GameData data,bool active)
         {
-            if(!active || data.NewData==null) { _paceCapture.Reset(); _paceSources.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; return; }
+            if(!active || data.NewData==null) { _paceCapture.Reset(); _lapAttribution.Reset(); _pendingLapTimes.Clear(); _paceSources.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; return; }
             try
             {
                 var snapshot=data.NewData;
@@ -2063,14 +2071,14 @@ namespace ThreeSM.EnduranceConnector
                 var tick=sdkClockUsable?(long?)sdk.TickCount:null;
                 // Tick-terugloop is een nieuwe epoch. Dit moet vóór het opbouwen van de
                 // waarnemingen: een reset achteraf haalt eerder afgeleid bewijs niet terug.
-                if(tick.HasValue && _paceLastTick.HasValue && tick<_paceLastTick) { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; }
+                if(tick.HasValue && _paceLastTick.HasValue && tick<_paceLastTick) { _paceCapture.Reset(); _lapAttribution.Reset(); _pendingLapTimes.Clear(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; }
                 _paceLastTick=tick;
                 // Een andere tijdbasis of een teruglopende klok is een nieuwe epoch.
                 // De buffer herkent dat zelf, maar de bronkeuze moet mee: anders kan
                 // een oude waarneming als rondebewijs voor de nieuwe epoch dienen.
                 var clockSource=sdkClockUsable?"sdk":"simhub";
-                if(_paceClockSource!=null && _paceClockSource!=clockSource) { _paceCapture.Reset(); _paceSources.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; _paceMetadataKey=null; }
-                if(clock.HasValue && _paceLastClock>=0 && clock<_paceLastClock) { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataAt=-1; _paceMetadataKey=null; }
+                if(_paceClockSource!=null && _paceClockSource!=clockSource) { _paceCapture.Reset(); _lapAttribution.Reset(); _pendingLapTimes.Clear(); _paceSources.Reset(); _paceSampleAt=-1; _paceMetadataAt=-1; _paceMetadataKey=null; }
+                if(clock.HasValue && _paceLastClock>=0 && clock<_paceLastClock) { _paceCapture.Reset(); _lapAttribution.Reset(); _pendingLapTimes.Clear(); _paceSources.Reset(); _paceMetadataAt=-1; _paceMetadataKey=null; }
                 _paceClockSource=clockSource;
                 if(clock.HasValue) _paceLastClock=clock.Value;
                 if(clock.HasValue && _paceSampleAt>=0 && clock>=_paceSampleAt && clock-_paceSampleAt<0.049999) return;
@@ -2079,7 +2087,7 @@ namespace ThreeSM.EnduranceConnector
                 var metadataKey=observedSession+":"+channels.ReadTrackConfiguration();
                 if(metadataKey!=_paceMetadataKey || !clock.HasValue || clock<_paceMetadataAt || clock-_paceMetadataAt>=1)
                 {
-                    if(metadataKey!=_paceMetadataKey) { _paceCapture.Reset(); _paceSources.Reset(); }
+                    if(metadataKey!=_paceMetadataKey) { _paceCapture.Reset(); _lapAttribution.Reset(); _pendingLapTimes.Clear(); _paceSources.Reset(); }
                     _paceSectorStarts=channels.ReadSectorStarts();
                     _paceCarIndices=channels.ReadCarIndices();
                     _paceMetadataKey=metadataKey; _paceMetadataAt=clock??-1;
@@ -2126,11 +2134,22 @@ namespace ThreeSM.EnduranceConnector
                 // gebeurt vóór Observe, zodat er geen waarneming met oud bewijs doorgaat.
                 var playerRow=rows.FirstOrDefault(r=>r.IsPlayer);
                 if(playerRow!=null && playerRow.Lap.HasValue && _paceLastPlayerLap.HasValue && playerRow.Lap.Value<_paceLastPlayerLap.Value)
-                { _paceCapture.Reset(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; _paceLastPlayerLap=playerRow.Lap; return; }
+                { _paceCapture.Reset(); _lapAttribution.Reset(); _pendingLapTimes.Clear(); _paceSources.Reset(); _paceMetadataKey=null; _paceMetadataAt=-1; _paceLastPlayerLap=playerRow.Lap; return; }
                 if(playerRow!=null && playerRow.Lap.HasValue) _paceLastPlayerLap=playerRow.Lap;
                 _paceCapture.Observe(observedSession,clock,tick,rows,_paceSectorStarts);
+                // Bewezen paren: de engine koppelt een tijd aan de ronde die op dat moment
+                // wacht. De sleutel is de transportsessie plus de gemeten sessie, zodat een
+                // sessiewissel nooit een oude wachtrij laat doorlopen.
+                var lapSessionKey = _sessionId + ":" + observedSession;
+                foreach (var row in rows)
+                {
+                    if (string.IsNullOrEmpty(row.Id) || !row.Lap.HasValue || !clock.HasValue) continue;
+                    foreach (var verified in _lapAttribution.Observe(lapSessionKey, row.Id, row.Lap.Value, row.LastLapSeconds, clock.Value))
+                        _pendingLapTimes.Add(new LapTimeDto { CarId = verified.CarId, SessionKey = verified.SessionKey, Lap = verified.Lap, Seconds = verified.Seconds, Source = verified.Source });
+                }
+                if (_pendingLapTimes.Count > 64) _pendingLapTimes.RemoveRange(0, _pendingLapTimes.Count - 64);
             }
-            catch(Exception error) { _paceCapture.Reset(); _paceSources.Reset(); SimHub.Logging.Current.Warn("3SM pace: capture onderbroken: "+error.GetType().Name); }
+            catch(Exception error) { _paceCapture.Reset(); _lapAttribution.Reset(); _pendingLapTimes.Clear(); _paceSources.Reset(); SimHub.Logging.Current.Warn("3SM pace: capture onderbroken: "+error.GetType().Name); }
         }
 
         private static double? Clamp01(double? value) { return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value) ? (double?)Math.Max(0, Math.Min(1, value.Value)) : null; }

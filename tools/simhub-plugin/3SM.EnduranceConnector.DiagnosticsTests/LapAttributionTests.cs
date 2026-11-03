@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.Serialization.Json;
+using System.Text;
 using ThreeSM.EnduranceConnector;
 
 internal static class LapAttributionTests
@@ -30,6 +33,16 @@ internal static class LapAttributionTests
         }
         public void At(int newLap, double? newTime) { lap = newLap; time = newTime; Pump(); }
         public void Session(string key) { session = key; Pump(); }
+    }
+
+    private static string Serialize(TelemetryEnvelopeV3 envelope)
+    {
+        var serializer = new DataContractJsonSerializer(typeof(TelemetryEnvelopeV3));
+        using (var stream = new MemoryStream())
+        {
+            serializer.WriteObject(stream, envelope);
+            return Encoding.UTF8.GetString(stream.ToArray());
+        }
     }
 
     public static int Run(Action<string, bool, string> check)
@@ -153,6 +166,26 @@ internal static class LapAttributionTests
         r.Advance(0.1); r.At(7, 120.0);         // herstel: ijkpunt
         r.Advance(0.4); r.At(7, 122.0);         // echte tijd van ronde 7, maar geen wachtrij
         Check("16", r.Count == 0, "na een onderbreking wordt niets toegeschreven");
+
+        // 17: het frame draagt de paren onder de afgesproken naam, en laat het blok weg als er
+        //     niets bewezen is. Zo verandert een frame zonder rondetijden niet van vorm.
+        var withTimes = new TelemetryEnvelopeV3
+        {
+            ProtocolVersion = 3, Sequence = 1, CapturedAt = "2026-11-03T20:00:00.000Z", TransportSessionId = "t-1",
+            Identity = new V3Identity(), Session = new V3Session(), Timing = new V3Timing(), Position = new V3Position(),
+            Track = new V3Track(), Fuel = new V3Fuel(), RaceState = new V3RaceState(), PitService = new V3PitService(),
+            LapTimes = new List<LapTimeDto> { new LapTimeDto { CarId = "Jaimy Peters", SessionKey = "t-1:sim-7-s0", Lap = 7, Seconds = 121.456, Source = "sdk" } },
+        };
+        var json = Serialize(withTimes);
+        Check("17a", json.Contains("\"lapTimes\"") && json.Contains("\"carId\":\"Jaimy Peters\"") && json.Contains("\"lap\":7") && json.Contains("\"source\":\"sdk\""),
+            "frame draagt lapTimes met carId, lap en bron");
+        var withoutTimes = new TelemetryEnvelopeV3
+        {
+            ProtocolVersion = 3, Sequence = 2, CapturedAt = "2026-11-03T20:00:01.000Z", TransportSessionId = "t-1",
+            Identity = new V3Identity(), Session = new V3Session(), Timing = new V3Timing(), Position = new V3Position(),
+            Track = new V3Track(), Fuel = new V3Fuel(), RaceState = new V3RaceState(), PitService = new V3PitService(),
+        };
+        Check("17b", !Serialize(withoutTimes).Contains("lapTimes"), "zonder bewijs geen lapTimes in het frame");
 
         // 13: een lege of onbruikbare sessiesleutel zet de motor terug; niets blijft hangen.
         r = new Rig(5, 120.0);
