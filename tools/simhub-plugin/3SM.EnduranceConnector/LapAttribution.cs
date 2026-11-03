@@ -104,6 +104,9 @@ namespace ThreeSM.EnduranceConnector
                 state.LastTime = timeUsable ? lastLapSeconds : null;
                 state.SawGap = !timeUsable;
                 state.LastSeenAt = sessionTime;
+                // De eerste waarneming legt ook de bron vast; anders ziet de eerste
+                // bronwissel eruit als een gewone tijdswijziging.
+                state.LastSource = sourceId;
                 cars[carId] = state;
                 return produced;
             }

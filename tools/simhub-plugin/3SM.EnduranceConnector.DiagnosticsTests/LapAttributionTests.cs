@@ -180,6 +180,15 @@ internal static class LapAttributionTests
         got18.AddRange(eng.Observe("S", "car", 7, 122.0, 340.5, "simhub"));
         Check("18b", got18.Count == 1 && got18[0].Lap == 7, "daarna telt de volgende ronde weer");
 
+        // 19: de bronwissel direct na de basislijn. Zonder vastgelegde beginsbron zou de
+        //     tweede waarneming als gewone tijdswijziging gelden (Astra's tegenvoorbeeld).
+        var eng19 = new LapAttributionEngine();
+        var got19 = new List<LapTimeRecord>();
+        got19.AddRange(eng19.Observe("S", "car", 1, 90.0, 0.0, "A"));
+        got19.AddRange(eng19.Observe("S", "car", 2, 91.0, 0.1, "B"));
+        got19.AddRange(eng19.Observe("S", "car", 2, 92.0, 0.2, "B"));
+        Check("19", got19.Count == 0, "bronwissel direct na de basislijn schrijft niets");
+
         // 17: het frame draagt de paren onder de afgesproken naam, en laat het blok weg als er
         //     niets bewezen is. Zo verandert een frame zonder rondetijden niet van vorm.
         var withTimes = new TelemetryEnvelopeV3
