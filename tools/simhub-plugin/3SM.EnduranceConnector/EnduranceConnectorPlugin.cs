@@ -49,6 +49,7 @@ namespace ThreeSM.EnduranceConnector
         private readonly PaceCaptureBuffer _paceCapture = new PaceCaptureBuffer();
         private readonly LapAttributionEngine _lapAttribution = new LapAttributionEngine();
         private readonly List<LapTimeDto> _pendingLapTimes = new List<LapTimeDto>();
+        private string _lapSessionKey;
         private readonly PaceSourceSelector _paceSources = new PaceSourceSelector();
         private double[] _paceSectorStarts;
         private Dictionary<string,int> _paceCarIndices = new Dictionary<string,int>(StringComparer.Ordinal);
@@ -2141,10 +2142,21 @@ namespace ThreeSM.EnduranceConnector
                 // wacht. De sleutel is de transportsessie plus de gemeten sessie, zodat een
                 // sessiewissel nooit een oude wachtrij laat doorlopen.
                 var lapSessionKey = _sessionId + ":" + observedSession;
+                // Een nieuwe transportsessie of een nieuwe gemeten sessie: de wachtrij van de
+                // vorige sessie mag niet in dit frame terechtkomen.
+                if (!string.Equals(_lapSessionKey, lapSessionKey, StringComparison.Ordinal))
+                {
+                    _lapSessionKey = lapSessionKey;
+                    _lapAttribution.Reset();
+                    _pendingLapTimes.Clear();
+                }
                 foreach (var row in rows)
                 {
                     if (string.IsNullOrEmpty(row.Id) || !row.Lap.HasValue || !clock.HasValue) continue;
-                    foreach (var verified in _lapAttribution.Observe(lapSessionKey, row.Id, row.Lap.Value, row.LastLapSeconds, clock.Value))
+                    // row.Lap is de ronde die nu loopt; de engine werkt met afgeronde rondes.
+                    var completed = row.Lap.Value - 1;
+                    if (completed < 0) continue;
+                    foreach (var verified in _lapAttribution.Observe(lapSessionKey, row.Id, completed, row.LastLapSeconds, clock.Value))
                         _pendingLapTimes.Add(new LapTimeDto { CarId = verified.CarId, SessionKey = verified.SessionKey, Lap = verified.Lap, Seconds = verified.Seconds, Source = verified.Source });
                 }
                 if (_pendingLapTimes.Count > 64) _pendingLapTimes.RemoveRange(0, _pendingLapTimes.Count - 64);
