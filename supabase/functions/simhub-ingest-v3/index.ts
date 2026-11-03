@@ -209,6 +209,21 @@ Deno.serve(async (request) => {
         return jsonResponse(request, { error: "internal_error", measurements, aggregates: aggregateStatus }, 500);
       }
 
+      // 0.7.4.0: bewezen rondetijden van de connector. Best-effort, net als de
+      // tegenstandersteekproef hieronder: een fout kost de tijd, niet het frame.
+      try {
+        const lapTimes = context.normalized?.lapTimes ?? null;
+        if (Array.isArray(lapTimes) && lapTimes.length > 0) {
+          const { error: lapError } = await service.rpc("simhub_record_lap_times", {
+            p_token_hash: await sha256Hex(token),
+            p_rows: lapTimes,
+          });
+          if (lapError) console.warn("simhub-ingest-v3 lapTimes niet opgeslagen", lapError.message);
+        }
+      } catch (lapErr) {
+        console.warn("simhub-ingest-v3 lapTimes non-fatal", (lapErr as Error).message ?? "unknown");
+      }
+
       // 0.4.3: server-side opponent sampled history (UI-independent). Best-effort:
       // sampling failure must NOT break core telemetry ingest (option B). Only when
       // opponents exist and a race run is active.
