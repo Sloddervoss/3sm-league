@@ -98,18 +98,15 @@ internal static class LapAttributionTests
         Check("11", got.Count == 3 && got[0] == 2 && got[1] == 3 && got[2] == 4,
             "drie rondes met gemeten vertraging: " + string.Join(",", got));
 
-        // 12: twee tellerstappen voordat de tijd kwam. De tijd die dan binnenkomt kan bij de
-        //     overgeslagen ronde horen: hij wordt niet geschreven maar dient als ijkpunt,
-        //     waarna de volgende ronde weer gewoon telt.
+        // 12: één ronde zonder tijd. De wachtrij laat die ronde vallen en koppelt de volgende tijd
+        //     weer aan de volgende ronde — geen verschuiving.
         e = new LapAttributionEngine();
         e.Observe("S", "car", 5, 120.0, 100.0);
-        e.Observe("S", "car", 6, 120.0, 101.0);
-        e.Observe("S", "car", 7, 120.0, 200.0);
-        r = e.Observe("S", "car", 7, 122.0, 200.5);
-        e.Observe("S", "car", 8, 122.0, 320.0);
-        var r12b = e.Observe("S", "car", 8, 121.0, 320.5);
-        Check("12", r.Count == 0 && r12b.Count == 1 && r12b[0].Lap == 8,
-            "overgeslagen ronde wordt ijkpunt; de volgende ronde telt weer");
+        e.Observe("S", "car", 6, 120.0, 220.0);              // ronde 6 opent, tijd komt niet
+        e.Observe("S", "car", 7, 120.0, 340.0);              // ronde 6 vervalt, ronde 7 opent
+        var r12a = e.Observe("S", "car", 7, 122.0, 340.5);
+        Check("12", r12a.Count == 1 && r12a[0].Lap == 7,
+            "na een gemiste ronde landt de tijd weer op de juiste ronde");
 
         // 14: een ontbrekende tijd is geen wijziging. Komt dezelfde oude waarde terug,
         //     dan mag hij niet als nieuw gelden (Astra's null-tussensample).
@@ -120,18 +117,33 @@ internal static class LapAttributionTests
         r = e.Observe("S", "car", 6, 120.0, 101.2);
         Check("14", r.Count == 0, "null wist de vorige tijd niet");
 
-        // 15: achtergebleven tijd van een overgeslagen ronde mag niet onder de volgende ronde
-        //     belanden (Astra's tweede tegenvoorbeeld).
+        // 15: een tijd die buiten de gemeten grens valt, wordt niet alsnog aan een oude ronde
+        //     geplakt; die ronde vervalt en de volgende tellerstap begint opnieuw.
         e = new LapAttributionEngine();
         e.Observe("S", "car", 5, 120.0, 100.0);
         e.Observe("S", "car", 6, 120.0, 101.0);
-        e.Observe("S", "car", 7, 120.0, 200.0);
-        var r15a = e.Observe("S", "car", 7, 122.0, 200.5);   // ijkpunt, niet schrijven
-        var r15b = e.Observe("S", "car", 8, 122.0, 320.0);   // nieuwe overgang
-        var r15c = e.Observe("S", "car", 8, 120.5, 320.5);   // hoort bij 8
-        Check("15", r15a.Count == 0 && r15b.Count == 0 && r15c.Count == 1 && r15c[0].Lap == 8,
-            "ronde 6 opnieuw wordt niet onder 7 of 8 geschoven");
+        var r15a = e.Observe("S", "car", 6, 122.0, 200.0);   // veel te laat
+        e.Observe("S", "car", 7, 122.0, 320.0);
+        var r15b = e.Observe("S", "car", 7, 121.0, 320.5);
+        Check("15", r15a.Count == 0 && r15b.Count == 1 && r15b[0].Lap == 7,
+            "late tijd vervalt; de volgende ronde telt weer");
 
+
+
+        // 16: na een onderbreking in de tijdwaarneming wordt de eerste terugkomende waarde niet
+        //     toegeschreven. Anders kan een tijd die tijdens de onderbreking gepubliceerd is,
+        //     alsnog onder de volgende ronde belanden (Astra's derde tegenvoorbeeld).
+        e = new LapAttributionEngine();
+        e.Observe("S", "car", 5, 119.0, 100.0);
+        e.Observe("S", "car", 6, null, 220.0);
+        e.Observe("S", "car", 6, null, 223.0);
+        e.Observe("S", "car", 7, null, 342.0);
+        var r16a = e.Observe("S", "car", 7, 120.0, 342.1);   // herstel: ijkpunt, niet schrijven
+        var r16b = e.Observe("S", "car", 7, 122.0, 342.5);   // echte tijd van ronde 7, maar geen wachtrij
+        e.Observe("S", "car", 8, 122.0, 460.0);
+        var r16c = e.Observe("S", "car", 8, 121.0, 460.5);
+        Check("16", r16a.Count == 0 && r16b.Count == 0 && r16c.Count == 1 && r16c[0].Lap == 8,
+            "na een onderbreking geen toeschrijving; daarna weer in de pas");
 
         // 13: een lege of onbruikbare sessiesleutel zet de motor terug; niets blijft hangen.
         e = new LapAttributionEngine();
