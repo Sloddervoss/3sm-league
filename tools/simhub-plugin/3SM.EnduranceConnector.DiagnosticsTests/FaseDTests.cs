@@ -370,6 +370,7 @@ internal static class FaseDTests
             {
                 Group("PaceCaptureTests", () => PaceCaptureTests.Run(Check));
                   Group("PaceSourceSelectionTests", () => PaceSourceSelectionTests.Run(Check));
+                  Group("LapAttributionTests", () => LapAttributionTests.Run(Check));
                 Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
                 Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
                 Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));
@@ -398,6 +399,7 @@ internal static class FaseDTests
             baselineChecks += Group("UpdaterTransitionTests", () => UpdaterTransitionTests.Run(Check));
             baselineChecks += Group("PaceCaptureTests", () => PaceCaptureTests.Run(Check));
               baselineChecks += Group("PaceSourceSelectionTests", () => PaceSourceSelectionTests.Run(Check));
+              baselineChecks += Group("LapAttributionTests", () => LapAttributionTests.Run(Check));
             baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
             baselineChecks += Group("MeasurementPitTests", () => MeasurementPitTests.Run(Check));
             baselineChecks += Group("MeasurementAnchorTests", () => MeasurementAnchorTests.Run(Check));

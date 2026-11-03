@@ -36,6 +36,7 @@
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="PaceCapture.cs" />
     <Compile Include="PaceSourceSelection.cs" />
+    <Compile Include="LapAttribution.cs" />
     <Compile Include="UpdaterStateStore.cs" />
     <Compile Include="SessionTelemetryReader.cs" />
     <Compile Include="RawChannelReader.cs" />
