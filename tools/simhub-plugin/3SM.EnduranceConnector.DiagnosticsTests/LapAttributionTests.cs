@@ -167,6 +167,19 @@ internal static class LapAttributionTests
         r.Advance(0.4); r.At(7, 122.0);         // echte tijd van ronde 7, maar geen wachtrij
         Check("16", r.Count == 0, "na een onderbreking wordt niets toegeschreven");
 
+        // 18: een bronwissel is geen tijdswijziging. De tijd die na de wissel binnenkomt is
+        //     een ijkpunt; pas de ronde daarna telt weer.
+        var eng = new LapAttributionEngine();
+        var got18 = new List<LapTimeRecord>();
+        for (var st = 100.0; st <= 220.0; st += 1.0) got18.AddRange(eng.Observe("S", "car", 5, 120.0, st, "sdk"));
+        got18.AddRange(eng.Observe("S", "car", 6, 120.0, 220.0, "sdk"));
+        got18.AddRange(eng.Observe("S", "car", 6, 121.0, 220.5, "simhub"));
+        Check("18a", got18.Count == 0, "tijd van een andere bron wordt niet toegeschreven");
+        for (var st = 221.0; st <= 340.0; st += 1.0) got18.AddRange(eng.Observe("S", "car", 6, 121.0, st, "simhub"));
+        got18.AddRange(eng.Observe("S", "car", 7, 121.0, 340.0, "simhub"));
+        got18.AddRange(eng.Observe("S", "car", 7, 122.0, 340.5, "simhub"));
+        Check("18b", got18.Count == 1 && got18[0].Lap == 7, "daarna telt de volgende ronde weer");
+
         // 17: het frame draagt de paren onder de afgesproken naam, en laat het blok weg als er
         //     niets bewezen is. Zo verandert een frame zonder rondetijden niet van vorm.
         var withTimes = new TelemetryEnvelopeV3

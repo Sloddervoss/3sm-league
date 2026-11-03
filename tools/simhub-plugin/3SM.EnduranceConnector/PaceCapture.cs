@@ -174,6 +174,7 @@ namespace ThreeSM.EnduranceConnector
     {
         public string Id;
         public int? Lap, ReportedLap;
+        public string LapSource;
         public double? Distance, SpeedKph, LastLapSeconds, BestLapSeconds;
         public bool InPit, Connected, IsPlayer;
         public int? Position;

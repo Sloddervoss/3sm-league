@@ -43,6 +43,7 @@ namespace ThreeSM.EnduranceConnector
             public double? LastTime;
             public bool SawGap;
             public double LastSeenAt = -1;
+            public string LastSource;
             public readonly Queue<Waiting> Pending = new Queue<Waiting>();
         }
 
@@ -74,7 +75,7 @@ namespace ThreeSM.EnduranceConnector
         /// Eén waarneming. Levert de rondetijden op die op grond van deze waarneming bewezen zijn;
         /// meestal geen. Nooit een tijd zonder wachtende ronde, nooit een tijd na een gat.
         /// </summary>
-        public IList<LapTimeRecord> Observe(string sessionKey, string carId, int completedLaps, double? lastLapSeconds, double sessionTime)
+        public IList<LapTimeRecord> Observe(string sessionKey, string carId, int completedLaps, double? lastLapSeconds, double sessionTime, string sourceId = null)
         {
             var produced = new List<LapTimeRecord>();
 
@@ -115,6 +116,12 @@ namespace ThreeSM.EnduranceConnector
                 if (timeUsable) { state.LastTime = lastLapSeconds; state.SawGap = false; } else state.SawGap = true;
                 return produced;
             }
+
+            // Een andere bron levert een andere tijd voor dezelfde ronde. Dat is geen
+            // tijdswijziging van de auto maar van de meting: eerst een ijkpunt.
+            if (sourceId != null && state.LastSource != null && !string.Equals(sourceId, state.LastSource, StringComparison.Ordinal))
+                state.SawGap = true;
+            if (sourceId != null) state.LastSource = sourceId;
 
             if (state.LastSeenAt >= 0 && sessionTime - state.LastSeenAt > GapSeconds) state.SawGap = true;
             state.LastSeenAt = sessionTime;

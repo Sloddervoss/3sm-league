@@ -786,7 +786,18 @@ namespace ThreeSM.EnduranceConnector
                           envelope.PaceCapture=_paceCapture.NextFrame();
                           // Wat de engine bewees gaat mee in het eerstvolgende frame en verdwijnt
                           // daarna: geen herhaling, geen dubbele rij aan de serverkant.
-                          if(_pendingLapTimes.Count>0) { envelope.LapTimes=new List<LapTimeDto>(_pendingLapTimes); _pendingLapTimes.Clear(); }
+                          if(_pendingLapTimes.Count>0)
+                          {
+                              // Alleen rijen van deze transportsessie. Een rij van een vorige
+                              // sessie hoort niet in dit frame, ook niet als de teller toevallig
+                              // doorloopt.
+                              var prefix = envelope.TransportSessionId + ":";
+                              var rowsToSend = new List<LapTimeDto>();
+                              foreach (var pending in _pendingLapTimes)
+                                  if (pending.SessionKey != null && pending.SessionKey.StartsWith(prefix, StringComparison.Ordinal)) rowsToSend.Add(pending);
+                              _pendingLapTimes.Clear();
+                              if(rowsToSend.Count>0) envelope.LapTimes=rowsToSend;
+                          }
                       }
                     ObserveDiagnostics(observation);
                 }
@@ -2121,7 +2132,7 @@ namespace ThreeSM.EnduranceConnector
                     // terugval op SimHub een aangetoonde ronde-overgang, anders blijft
                     // de tijd leeg in plaats van bij de verkeerde ronde te horen.
                     var chosen=_paceSources.Choose(o.Id,directLast,directBest,reportedLap,directLap,PositiveSeconds(o.LastLapTime),PositiveSeconds(o.BestLapTime),o.CurrentLap);
-                    rows.Add(new PaceObservation {Id=o.Id,ReportedLap=chosen.ReportedLap,Lap=chosen.Lap.HasValue?(int?)chosen.Lap.Value:o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
+                    rows.Add(new PaceObservation {Id=o.Id,ReportedLap=chosen.ReportedLap,LapSource=chosen.LastLapSource,Lap=chosen.Lap.HasValue?(int?)chosen.Lap.Value:o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
                         Distance=directDistance??PaceNumber(o,"TrackPositionPercent",0,1),
                         SpeedKph=o.IsPlayer?ownSpeed:speedUnitOk?PaceNumber(o,"Speed",0,600):null,
                         LastLapSeconds=chosen.LastLapSeconds,BestLapSeconds=chosen.BestLapSeconds,
@@ -2156,7 +2167,7 @@ namespace ThreeSM.EnduranceConnector
                     // row.Lap is de ronde die nu loopt; de engine werkt met afgeronde rondes.
                     var completed = row.Lap.Value - 1;
                     if (completed < 0) continue;
-                    foreach (var verified in _lapAttribution.Observe(lapSessionKey, row.Id, completed, row.LastLapSeconds, clock.Value))
+                    foreach (var verified in _lapAttribution.Observe(lapSessionKey, row.Id, completed, row.LastLapSeconds, clock.Value, row.LapSource))
                         _pendingLapTimes.Add(new LapTimeDto { CarId = verified.CarId, SessionKey = verified.SessionKey, Lap = verified.Lap, Seconds = verified.Seconds, Source = verified.Source });
                 }
                 if (_pendingLapTimes.Count > 64) _pendingLapTimes.RemoveRange(0, _pendingLapTimes.Count - 64);
