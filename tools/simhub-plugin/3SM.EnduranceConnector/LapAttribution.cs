@@ -22,6 +22,12 @@ namespace ThreeSM.EnduranceConnector
         /// <summary>Gemeten maximum was 1,07 s; 2,0 s geeft ruimte zonder een oude tijd te accepteren.</summary>
         public const double DefaultTimeoutSeconds = 2.0;
 
+        /// <summary>
+        /// Stilte tussen twee waarnemingen die als onderbreking telt. Het plugin leest meerdere
+        /// malen per seconde; 2,5 s betekent dat er echt frames ontbraken.
+        /// </summary>
+        public const double GapSeconds = 2.5;
+
 
         private const double TimeEpsilon = 0.000001;
 
@@ -36,6 +42,7 @@ namespace ThreeSM.EnduranceConnector
             public int Lap;
             public double? LastTime;
             public bool SawGap;
+            public double LastSeenAt = -1;
             public readonly Queue<Waiting> Pending = new Queue<Waiting>();
         }
 
@@ -95,6 +102,7 @@ namespace ThreeSM.EnduranceConnector
                 state = new CarState { Lap = completedLaps };
                 state.LastTime = timeUsable ? lastLapSeconds : null;
                 state.SawGap = !timeUsable;
+                state.LastSeenAt = sessionTime;
                 cars[carId] = state;
                 return produced;
             }
@@ -107,6 +115,9 @@ namespace ThreeSM.EnduranceConnector
                 if (timeUsable) { state.LastTime = lastLapSeconds; state.SawGap = false; } else state.SawGap = true;
                 return produced;
             }
+
+            if (state.LastSeenAt >= 0 && sessionTime - state.LastSeenAt > GapSeconds) state.SawGap = true;
+            state.LastSeenAt = sessionTime;
 
             if (!timeUsable)
             {

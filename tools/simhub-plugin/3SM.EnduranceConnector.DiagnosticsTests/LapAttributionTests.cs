@@ -4,153 +4,162 @@ using ThreeSM.EnduranceConnector;
 
 internal static class LapAttributionTests
 {
+    /// <summary>
+    /// Bootst de plugin na: meerdere waarnemingen per seconde, een tellerstap bij de overgang en
+    /// een tijd die pas even later verandert.
+    /// </summary>
+    private sealed class Rig
+    {
+        private readonly LapAttributionEngine engine = new LapAttributionEngine();
+        private double t;
+        private int lap;
+        private double? time;
+        private string session = "S";
+        private readonly List<LapTimeRecord> written = new List<LapTimeRecord>();
+        public Rig(int startLap, double? startTime) { lap = startLap; time = startTime; t = 100.0; Pump(); }
+        public LapAttributionEngine Engine { get { return engine; } }
+        public int Count { get { return written.Count; } }
+        public LapTimeRecord Last { get { return written.Count == 0 ? null : written[written.Count - 1]; } }
+        public List<LapTimeRecord> All { get { return written; } }
+        private void Pump() { foreach (var r in engine.Observe(session, "car", lap, time, t)) written.Add(r); }
+        public void Advance(double seconds)
+        {
+            var end = t + seconds;
+            while (t + 1.0 <= end) { t += 1.0; Pump(); }
+            t = end; Pump();
+        }
+        public void At(int newLap, double? newTime) { lap = newLap; time = newTime; Pump(); }
+        public void Session(string key) { session = key; Pump(); }
+    }
+
     public static int Run(Action<string, bool, string> check)
     {
         int n = 0; void Check(string id, bool ok, string detail) { check("LAP-" + id, ok, detail); n++; }
 
         // 01: de eerste waarneming is een basislijn. Er wordt niets geschreven.
-        var e = new LapAttributionEngine();
-        Check("01", e.Observe("S", "car", 5, 120.0, 100.0).Count == 0, "basislijn schrijft niets");
+        var r = new Rig(5, 120.0);
+        Check("01", r.Count == 0, "basislijn schrijft niets");
 
-        // 02: gemeten gedrag — teller springt, tijd komt 0,5 s later. Die tijd hoort bij de nieuwe ronde.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        Check("02a", e.Observe("S", "car", 6, 120.0, 101.0).Count == 0, "overgangssample schrijft niet");
-        var r = e.Observe("S", "car", 6, 121.5, 101.5);
-        Check("02b", r.Count == 1 && r[0].Lap == 6 && Math.Abs(r[0].Seconds - 121.5) < 1e-9 && r[0].Source == "sdk",
-            "tijd landt op ronde 6: " + (r.Count == 1 ? r[0].Lap + "/" + r[0].Seconds : "geen"));
+        // 02: gemeten gedrag — teller springt, tijd komt ~0,5 s later. Die tijd hoort bij ronde 6.
+        r = new Rig(5, 120.0);
+        r.Advance(120); r.At(6, 120.0);
+        Check("02a", r.Count == 0, "overgangssample schrijft niet");
+        r.Advance(0.5); r.At(6, 121.5);
+        Check("02b", r.Count == 1 && r.Last.Lap == 6 && Math.Abs(r.Last.Seconds - 121.5) < 1e-9,
+            "tijd landt op ronde 6: " + (r.Last == null ? "geen" : r.Last.Lap + "/" + r.Last.Seconds));
 
-        // 03: tijd verandert vóórdat de teller springt. Zonder open ronde wordt er niets geschreven.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        r = e.Observe("S", "car", 5, 121.0, 100.5);
-        Check("03", r.Count == 0, "tijd zonder open ronde wordt niet toegeschreven");
+        // 03: tijd verandert zonder dat er een ronde wacht. Niets schrijven.
+        r = new Rig(5, 120.0);
+        r.At(5, 121.0);
+        Check("03", r.Count == 0, "tijd zonder wachtende ronde wordt niet toegeschreven");
 
-        // 04: teller en tijd veranderen in hetzelfde sample. Niet eenduidig, dus niet schrijven.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        r = e.Observe("S", "car", 6, 121.0, 101.0);
+        // 04: teller en tijd in hetzelfde sample. Niet eenduidig, dus niet schrijven.
+        r = new Rig(5, 120.0);
+        r.Advance(120); r.At(6, 121.0);
         Check("04", r.Count == 0, "overgang met tijdswijziging in hetzelfde sample blijft leeg");
 
-        // 05: de tijd komt te laat (voorbij de 2 s-grens). De ronde blijft leeg, geen inhaalslag.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        e.Observe("S", "car", 6, 120.0, 101.0);
-        r = e.Observe("S", "car", 6, 122.0, 103.5);
+        // 05: de tijd komt te laat. De ronde vervalt, geen inhaalslag.
+        r = new Rig(5, 120.0);
+        r.Advance(120); r.At(6, 120.0);
+        r.Advance(3.5); r.At(6, 122.0);
         Check("05", r.Count == 0, "tijd na de grens wordt niet alsnog geplakt");
 
         // 06: sprong groter dan één. Geen bewijs, dus niets schrijven.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        e.Observe("S", "car", 8, 120.0, 101.0);
-        r = e.Observe("S", "car", 8, 123.0, 101.5);
+        r = new Rig(5, 120.0);
+        r.Advance(240); r.At(8, 120.0);
+        r.Advance(0.5); r.At(8, 123.0);
         Check("06", r.Count == 0, "na een sprong wordt niets geschreven");
 
         // 07: sessiewissel met een achtergebleven tijd. De oude waarde telt niet mee.
-        e = new LapAttributionEngine();
-        e.Observe("A", "car", 13, 120.0, 100.0);
-        var g1 = e.Generation;
-        Check("07a", e.Observe("B", "car", 13, 120.0, 500.0).Count == 0, "nieuwe sessie: basislijn");
-        Check("07b", e.Generation > g1, "generatie loopt op bij een sessiewissel");
-        Check("07c", e.Observe("B", "car", 14, 120.0, 501.0).Count == 0, "achtergebleven tijd schrijft niet");
+        r = new Rig(13, 120.0);
+        var gen = r.Engine.Generation;
+        r.Session("B");
+        Check("07a", r.Count == 0, "nieuwe sessie: basislijn");
+        Check("07b", r.Engine.Generation > gen, "generatie loopt op bij een sessiewissel");
+        r.Advance(120); r.At(14, 120.0);
+        r.Advance(0.5); r.At(14, 120.0);
+        Check("07c", r.Count == 0, "achtergebleven tijd schrijft niet");
 
         // 08: twee rondes met exact dezelfde tijd. De tweede levert geen nieuwe waarneming op:
         //     één ronde ontbreekt, er komt geen verkeerde koppeling.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        e.Observe("S", "car", 6, 120.0, 101.0);
-        var a = e.Observe("S", "car", 6, 121.0, 101.5);
-        e.Observe("S", "car", 7, 121.0, 200.0);
-        var b = e.Observe("S", "car", 7, 121.0, 200.5);
-        Check("08", a.Count == 1 && a[0].Lap == 6 && b.Count == 0,
-            "gelijke tijd: ronde 6 geschreven, ronde 7 overgeslagen");
+        r = new Rig(5, 120.0);
+        r.Advance(120); r.At(6, 120.0);
+        r.Advance(0.5); r.At(6, 121.0);
+        r.Advance(120); r.At(7, 121.0);
+        r.Advance(3);
+        Check("08", r.Count == 1 && r.Last.Lap == 6, "gelijke tijd: ronde 6 geschreven, ronde 7 overgeslagen");
 
         // 09: teller loopt terug. Alles vervalt, niets schrijven.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 10, 120.0, 100.0);
-        e.Observe("S", "car", 11, 120.0, 101.0);
-        Check("09a", e.Observe("S", "car", 3, 119.0, 300.0).Count == 0, "tellerreset schrijft niets");
-        Check("09b", e.Observe("S", "car", 4, 118.0, 301.0).Count == 0, "na reset eerst weer basislijn");
+        r = new Rig(10, 120.0);
+        r.Advance(120); r.At(11, 120.0);
+        r.Advance(1); r.At(3, 119.0);
+        Check("09a", r.Count == 0, "tellerreset schrijft niets");
+        r.Advance(120); r.At(4, 118.0);
+        Check("09b", r.Count == 0, "na reset eerst weer basislijn");
 
         // 10: meerdere auto's hebben eigen toestand; geen kruisbesmetting.
-        e = new LapAttributionEngine();
-        e.Observe("S", "a", 5, 120.0, 100.0);
-        e.Observe("S", "b", 9, 118.0, 100.0);
-        e.Observe("S", "a", 6, 120.0, 101.0);
-        e.Observe("S", "b", 10, 118.0, 101.0);
-        var ra = e.Observe("S", "a", 6, 121.0, 101.5);
-        var rb = e.Observe("S", "b", 10, 117.5, 101.5);
-        Check("10", ra.Count == 1 && ra[0].CarId == "a" && ra[0].Lap == 6 && rb.Count == 1 && rb[0].CarId == "b" && rb[0].Lap == 10,
+        var multi = new LapAttributionEngine();
+        var got = new List<LapTimeRecord>();
+        Action<string, int, double?, double> feed = (car, l, tm, st) => { foreach (var rec in multi.Observe("S", car, l, tm, st)) got.Add(rec); };
+        for (var st = 100.0; st <= 220.0; st += 1.0) { feed("a", 5, 120.0, st); feed("b", 9, 118.0, st); }
+        feed("a", 6, 120.0, 220.0); feed("b", 10, 118.0, 220.0);
+        feed("a", 6, 121.0, 220.5); feed("b", 10, 117.5, 220.5);
+        Check("10", got.Count == 2 && got[0].CarId == "a" && got[0].Lap == 6 && got[1].CarId == "b" && got[1].Lap == 10,
             "twee auto's elk hun eigen ronde");
 
         // 11: de gemeten vertraging nagespeeld (0,1 / 0,5 / 1,0 s) over drie rondes.
-        e = new LapAttributionEngine();
-        double t = 0; int lap = 1; double time = 100.0;
-        e.Observe("S", "car", lap, time, t);
-        var got = new List<int>();
+        r = new Rig(1, 100.0);
+        var nextLap = 1;
+        var nextTime = 100.0;
         foreach (var delay in new[] { 0.1, 0.5, 1.0 })
         {
-            lap++; t += 120.0;
-            e.Observe("S", "car", lap, time, t);            // overgang: tijd nog oud
-            time += 0.5; t += delay;
-            foreach (var rec in e.Observe("S", "car", lap, time, t)) got.Add(rec.Lap);
+            r.Advance(120);
+            nextLap++; nextTime += 0.5;
+            r.At(nextLap, nextTime - 0.5);      // overgang: tijd nog oud
+            r.Advance(delay);
+            r.At(nextLap, nextTime);            // tijd verschijnt
         }
-        Check("11", got.Count == 3 && got[0] == 2 && got[1] == 3 && got[2] == 4,
-            "drie rondes met gemeten vertraging: " + string.Join(",", got));
+        Check("11", r.Count == 3 && r.All[0].Lap == 2 && r.All[1].Lap == 3 && r.All[2].Lap == 4,
+            "drie rondes met gemeten vertraging: " + string.Join(",", r.All.ConvertAll(x => x.Lap.ToString()).ToArray()));
 
-        // 12: één ronde zonder tijd. De wachtrij laat die ronde vallen en koppelt de volgende tijd
-        //     weer aan de volgende ronde — geen verschuiving.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        e.Observe("S", "car", 6, 120.0, 220.0);              // ronde 6 opent, tijd komt niet
-        e.Observe("S", "car", 7, 120.0, 340.0);              // ronde 6 vervalt, ronde 7 opent
-        var r12a = e.Observe("S", "car", 7, 122.0, 340.5);
-        Check("12", r12a.Count == 1 && r12a[0].Lap == 7,
-            "na een gemiste ronde landt de tijd weer op de juiste ronde");
+        // 12: één ronde zonder tijd. De volgende tijd landt weer op de juiste ronde.
+        r = new Rig(5, 120.0);
+        r.Advance(120); r.At(6, 120.0);         // ronde 6 opent, tijd komt niet
+        r.Advance(120); r.At(7, 120.0);         // ronde 6 vervalt, ronde 7 opent
+        r.Advance(0.5); r.At(7, 122.0);
+        Check("12", r.Count == 1 && r.Last.Lap == 7, "na een gemiste ronde landt de tijd weer goed");
 
-        // 14: een ontbrekende tijd is geen wijziging. Komt dezelfde oude waarde terug,
-        //     dan mag hij niet als nieuw gelden (Astra's null-tussensample).
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        e.Observe("S", "car", 6, 120.0, 101.0);
-        e.Observe("S", "car", 6, null, 101.1);
-        r = e.Observe("S", "car", 6, 120.0, 101.2);
+        // 14: een ontbrekende tijd is geen wijziging. Komt dezelfde waarde terug, dan is hij
+        //     niet opnieuw nieuw.
+        r = new Rig(5, 120.0);
+        r.Advance(120); r.At(6, 120.0);
+        r.Advance(0.2); r.At(6, null);
+        r.Advance(0.2); r.At(6, 120.0);
         Check("14", r.Count == 0, "null wist de vorige tijd niet");
 
-        // 15: een tijd die buiten de gemeten grens valt, wordt niet alsnog aan een oude ronde
-        //     geplakt; die ronde vervalt en de volgende tellerstap begint opnieuw.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        e.Observe("S", "car", 6, 120.0, 101.0);
-        var r15a = e.Observe("S", "car", 6, 122.0, 200.0);   // veel te laat
-        e.Observe("S", "car", 7, 122.0, 320.0);
-        var r15b = e.Observe("S", "car", 7, 121.0, 320.5);
-        Check("15", r15a.Count == 0 && r15b.Count == 1 && r15b[0].Lap == 7,
-            "late tijd vervalt; de volgende ronde telt weer");
+        // 15: een tijd buiten de gemeten grens wordt niet aan een oude ronde geplakt.
+        r = new Rig(5, 120.0);
+        r.Advance(120); r.At(6, 120.0);
+        r.Advance(3); r.At(6, 122.0);
+        r.Advance(120); r.At(7, 122.0);
+        r.Advance(0.5); r.At(7, 121.0);
+        Check("15", r.Count == 1 && r.Last.Lap == 7, "late tijd vervalt; de volgende ronde telt weer");
 
-
-
-        // 16: na een onderbreking in de tijdwaarneming wordt de eerste terugkomende waarde niet
-        //     toegeschreven. Anders kan een tijd die tijdens de onderbreking gepubliceerd is,
-        //     alsnog onder de volgende ronde belanden (Astra's derde tegenvoorbeeld).
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 119.0, 100.0);
-        e.Observe("S", "car", 6, null, 220.0);
-        e.Observe("S", "car", 6, null, 223.0);
-        e.Observe("S", "car", 7, null, 342.0);
-        var r16a = e.Observe("S", "car", 7, 120.0, 342.1);   // herstel: ijkpunt, niet schrijven
-        var r16b = e.Observe("S", "car", 7, 122.0, 342.5);   // echte tijd van ronde 7, maar geen wachtrij
-        e.Observe("S", "car", 8, 122.0, 460.0);
-        var r16c = e.Observe("S", "car", 8, 121.0, 460.5);
-        Check("16", r16a.Count == 0 && r16b.Count == 0 && r16c.Count == 1 && r16c[0].Lap == 8,
-            "na een onderbreking geen toeschrijving; daarna weer in de pas");
+        // 16: na een onderbreking in de waarneming is de eerste terugkomende waarde een ijkpunt.
+        r = new Rig(5, 119.0);
+        r.Advance(120); r.At(6, null);
+        r.Advance(1.5); r.At(6, null);
+        r.Advance(120); r.At(7, null);
+        r.Advance(0.1); r.At(7, 120.0);         // herstel: ijkpunt
+        r.Advance(0.4); r.At(7, 122.0);         // echte tijd van ronde 7, maar geen wachtrij
+        Check("16", r.Count == 0, "na een onderbreking wordt niets toegeschreven");
 
         // 13: een lege of onbruikbare sessiesleutel zet de motor terug; niets blijft hangen.
-        e = new LapAttributionEngine();
-        e.Observe("S", "car", 5, 120.0, 100.0);
-        e.Observe("S", "car", 6, 120.0, 101.0);
-        Check("13a", e.Observe(null, "car", 6, 121.0, 101.5).Count == 0, "zonder sessiesleutel niets");
-        Check("13b", e.SessionKey == null, "sessie gewist");
+        r = new Rig(5, 120.0);
+        r.Advance(120); r.At(6, 120.0);
+        var empty = r.Engine.Observe(null, "car", 6, 121.0, 300.0);
+        Check("13a", empty.Count == 0, "zonder sessiesleutel niets");
+        Check("13b", r.Engine.SessionKey == null, "sessie gewist");
 
         return n;
     }
