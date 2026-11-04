@@ -224,6 +224,55 @@ Deno.serve(async (request) => {
         console.warn("simhub-ingest-v3 lapTimes non-fatal", (lapErr as Error).message ?? "unknown");
       }
 
+      // 0.7.5 (poort 1): leg het bandenblok vast zoals het binnenkomt. Geen oordeel
+      // en geen setgrens hier — alleen waarnemingen, zodat we later kunnen
+      // beoordelen zonder opnieuw te meten. Best-effort, net als lapTimes.
+      try {
+        const tyres = context.normalized?.tyres ?? null;
+        const transport = context.normalized?.transportSessionId ?? null;
+        const sequence = context.normalized?.sequence ?? null;
+        if (tyres && transport && Number.isInteger(sequence)) {
+          const zoneMin = (z: { l: number | null; m: number | null; r: number | null } | null): number | null => {
+            if (!z) return null;
+            const values = [z.l, z.m, z.r].filter((v): v is number => typeof v === "number");
+            return values.length > 0 ? Math.min(...values) : null;
+          };
+          const row = {
+            sessionKey: transport,
+            frameSequence: sequence,
+            observedAt: tyres.observedAt,
+            sessionTimeSeconds: tyres.sessionTimeSeconds,
+            lap: tyres.lap,
+            trigger: tyres.trigger,
+            driverName: context.normalized?.identity?.currentDriverName ?? null,
+            connectorId: context.connectorId ?? null,
+            setsUsed: tyres.sets.used,
+            setsAvailable: tyres.sets.available,
+            setFl: tyres.sets.frontLeft,
+            setFr: tyres.sets.frontRight,
+            setRl: tyres.sets.rearLeft,
+            setRr: tyres.sets.rearRight,
+            // Per hoek de slechtste van de drie zones (links/midden/rechts); de
+            // ruwe drie waarden staan in `raw`.
+            wearFl: zoneMin(tyres.wearPercent.fl),
+            wearFr: zoneMin(tyres.wearPercent.fr),
+            wearRl: zoneMin(tyres.wearPercent.rl),
+            wearRr: zoneMin(tyres.wearPercent.rr),
+            onPitRoad: context.normalized?.track?.onPitRoad ?? null,
+            fuelLitres: context.normalized?.fuel?.fuelLitres ?? null,
+            fuelCapacityLitres: context.normalized?.fuel?.fuelCapacityLitres ?? null,
+            raw: tyres,
+          };
+          const { error: tyreError } = await service.rpc("simhub_record_tyre_observations", {
+            p_token_hash: await sha256Hex(token),
+            p_rows: [row],
+          });
+          if (tyreError) console.warn("simhub-ingest-v3 tyreObservations niet opgeslagen", tyreError.message);
+        }
+      } catch (tyreErr) {
+        console.warn("simhub-ingest-v3 tyreObservations non-fatal", (tyreErr as Error).message ?? "unknown");
+      }
+
       // 0.4.3: server-side opponent sampled history (UI-independent). Best-effort:
       // sampling failure must NOT break core telemetry ingest (option B). Only when
       // opponents exist and a race run is active.

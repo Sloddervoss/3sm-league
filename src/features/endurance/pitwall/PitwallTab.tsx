@@ -15,6 +15,7 @@ import { DecisionBand } from "./DecisionBand";
 import { usePitwallStrategy } from "./usePitwallStrategy";
 import { PitStrategyBlock } from "./PitStrategyBlock";
 import { FuelPanel } from "./FuelPanel";
+import { PitStopAnchor } from "./PitStopAnchor";
 import { StintDriverPanel } from "./StintDriverPanel";
 import { PacePanel } from "./PacePanel";
 import { AlertZone } from "./AlertZone";
@@ -366,6 +367,7 @@ export const PitwallTab = ({ event }: Props) => {
                       currentStint={currentStint}
                       driverName={driverName}
                     />,
+                    <PitStopAnchor key="tyrestop" source={isDemo ? null : { eventId: event.id, teamId: selectedTeamId }} enabled={!isDemo && isLive} />,
                     <FuelPanel key="fuel" strategy={strategy} window={isLive ? advice.window : null} plannedStints={[...(currentStint ? [currentStint] : []), ...nextStints].map(s => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))} />,
                     <VehicleTelemetryPanel
                       key={`tyres:${event.id}:${selectedTeamId}`}

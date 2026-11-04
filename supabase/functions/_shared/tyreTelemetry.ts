@@ -58,6 +58,12 @@ export type TyrePitEntry = {
 };
 
 export type TyreTelemetry = {
+  /** Additief (0.7.5): de momentopname zoals de connector hem stuurde. Optioneel,
+   * zodat een ouder object of een test dat dit blok niet zet blijft werken. */
+  observedAt?: string | null;
+  sessionTimeSeconds?: number | null;
+  lap?: number | null;
+  trigger?: string | null;
   wearPercent: TyreZones;
   carcassTempC: TyreZones;
   sets: TyreSets;
