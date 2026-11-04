@@ -131,6 +131,6 @@ export function fuelToAddForFinish(
   if (lapsToFinish == null || perLap == null || fuelLitres == null) return null;
   const nodig = (lapsToFinish + reserveLaps) * perLap - fuelLitres;
   if (nodig <= 0) return 0;
-  if (tankCapacityLitres == null) return nodig;
+  if (tankCapacityLitres == null) return null;
   return Math.min(nodig, Math.max(0, tankCapacityLitres - fuelLitres));
 }

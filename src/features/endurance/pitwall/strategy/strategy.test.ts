@@ -74,7 +74,9 @@ describe("fuelModel", () => {
     // 35 rondes x 3 liter = 105, er zit nog 90 in: 15 nodig, maar er kan nog 10 bij.
     expect(fuelToAddForFinish(35, 3, 90, 100, 0)).toBe(10);
     expect(fuelToAddForFinish(20, 3, 90, null, 0)).toBe(0);
-    expect(fuelToAddForFinish(35, 3, 90, null, 0)).toBe(15);
+    // Zonder bekende tankinhoud geen "te tanken": het getal zou beweren dat het
+    // erin past. De liters die nodig zijn staan apart in fuelToFinish.
+    expect(fuelToAddForFinish(35, 3, 90, null, 0)).toBeNull();
     expect(fuelToAddForFinish(5, 3, 90, 100, 0)).toBe(0);
   });
 });
