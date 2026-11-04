@@ -225,6 +225,16 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
       ? stop.fuelAfterLitres - stop.fuelBeforeLitres
       : null;
 
+  // Handmatig openen mag niet meteen weer dichtgaan door de timer van de
+  // automatische vraag; die hoort alleen bij het moment dat de stop binnenkomt.
+  const openMetTik = () => {
+    if (sluitTimer.current) {
+      window.clearTimeout(sluitTimer.current);
+      sluitTimer.current = null;
+    }
+    setOpen(true);
+  };
+
   const submit = async (target: TyreStop, answer: TyreStopAnswer) => {
     if (!sessionKey || busy) return;
     const mine = generation.current;
@@ -255,7 +265,7 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
   ) : (
     <button
       type="button"
-      onClick={() => setOpen(true)}
+      onClick={openMetTik}
       className="flex items-center gap-0.5 text-[11px] text-slate-400 hover:text-slate-200"
       aria-expanded={open}
     >
