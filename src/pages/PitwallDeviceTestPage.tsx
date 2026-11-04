@@ -304,8 +304,8 @@ export default function PitwallDeviceTestPage() {
                       live={live}
                     />
                   }
+                  notice={<PitStopAnchor source={{ deviceId }} enabled showExample />}
                   panels={[
-                    <PitStopAnchor key="tyrestop" source={{ deviceId }} enabled showExample />,
                     <PacePanel paceSource={{deviceId}} v3={v3} live={live} key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
                     <MySessionPanel
                       key="session"

@@ -169,6 +169,11 @@
 [data-pitwall-look] [data-pitwall-slot] {
   width: 100%;
 }
+/* Een korte kaart naast een hoge kaart mag geen streepje worden; hij houdt
+   dezelfde onderkant-aanblik zonder mee te rekken met de hoogste van de rij. */
+[data-pitwall-look] [data-pitwall-row="panels"] [data-pitwall-slot] {
+  min-height: 176px;
+}
 [data-pitwall-look] [data-pitwall-slot] > header {
   min-height: 38px;
 }

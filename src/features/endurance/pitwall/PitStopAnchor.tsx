@@ -260,7 +260,11 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
               ? s.fuelAfterLitres - s.fuelBeforeLitres
               : null;
           return (
-            <div key={s.visitKey} className="rounded border border-white/5 px-2 py-1.5">
+            <div
+              key={s.visitKey}
+              className="flex flex-col gap-2 rounded border border-white/5 px-3 py-2 md:flex-row md:items-center md:justify-between"
+            >
+              <div className="min-w-0">
               <p className="text-[12px] text-slate-300">
                 {s.lap != null ? `Ronde ${s.lap}` : "Pitbezoek"}
                 {s.sessionTimeSeconds != null ? ` · ${formatClock(s.sessionTimeSeconds)}` : ""}
@@ -271,7 +275,8 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
                   Tankverschil: {verschil.toFixed(1).replace(".", ",")} L (twee metingen)
                 </p>
               )}
-              <div className="mt-1 flex flex-wrap gap-1">
+              </div>
+              <div className="flex flex-wrap gap-1">
                 {KEUZES.map(([value, label]) => (
                   <button
                     key={value}

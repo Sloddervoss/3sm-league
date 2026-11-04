@@ -23,6 +23,7 @@ export function PitwallDashboard({
   track,
   timing,
   panels,
+  notice,
   extra,
 }: {
   context?: ReactNode;
@@ -31,6 +32,8 @@ export function PitwallDashboard({
   track: ReactNode;
   timing: ReactNode;
   panels: ReactNode[];
+  /** Smalle strook boven de panelenrij; geen kaart tussen de vier panelen. */
+  notice?: ReactNode;
   extra?: ReactNode;
 }) {
   return (
@@ -48,6 +51,12 @@ export function PitwallDashboard({
           {timing}
         </div>
       </div>
+
+      {notice && (
+        <div data-pitwall-row="notice" className="min-w-0">
+          {notice}
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-pitwall-row="panels">
         {panels.map((panel, index) => (
