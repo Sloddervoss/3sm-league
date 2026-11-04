@@ -111,10 +111,10 @@ describe("PitStopAnchor", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Beide" })).toBeNull());
   });
 
-  it("laat een nieuw binnengekomen stop staan tijdens het bevestigen", async () => {
+  it("toont één stop tegelijk en schuift na bevestiging door", async () => {
     let calls = 0;
     let resolveAnswer: (v: boolean) => void = () => {};
-    const tweede = { ...stop({ visitKey: "seq:9000", anchorSeq: 9000, lap: 24, sessionTimeSeconds: 980 }) };
+    const tweede = stop({ visitKey: "seq:9000", anchorSeq: 9000, lap: 24, sessionTimeSeconds: 980 });
     readTyreStops.mockImplementation(() => {
       calls += 1;
       if (calls === 1) return Promise.resolve({ sessionKey: "simhub-abc", stops: [stop()] });
@@ -124,12 +124,12 @@ describe("PitStopAnchor", () => {
     render(<PitStopAnchor source={source} enabled pollMs={40} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Beide" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Beide" }));
-    // De poll zet stop B erbij terwijl het antwoord nog loopt.
-    await waitFor(() => expect(screen.getByText(/Ronde 24/)).toBeInTheDocument());
+    // De poll zet een tweede stop erbij: die komt pas na de eerste aan de beurt.
+    await waitFor(() => expect(screen.getByText(/Nog 1 stop te bevestigen/)).toBeInTheDocument());
+    expect(screen.queryByText(/Ronde 24/)).toBeNull();
     resolveAnswer(true);
-    await waitFor(() => expect(screen.queryByText(/Ronde 23/)).toBeNull());
-    // B is er nog: de bevestiging van A mag hem niet wegvegen.
-    expect(screen.getByText(/Ronde 24/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Ronde 24/)).toBeInTheDocument());
+    expect(screen.queryByText(/Ronde 23/)).toBeNull();
   });
 
   it("toont een voorbeeldkaart als er nog geen pitstop is", async () => {

@@ -302,27 +302,30 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
   return (
     <PitwallPanel title="Pitstop" slot="tyrestop" meta={meta}>
       <div className="space-y-2">
-        {stops.map((s) => {
+        {(() => {
+          const s = stops[0];
           const verschil =
             s.fuelBeforeLitres != null && s.fuelAfterLitres != null
               ? s.fuelAfterLitres - s.fuelBeforeLitres
               : null;
           return (
-            <div
-              key={s.visitKey}
-              className="flex flex-col gap-2 rounded border border-white/5 px-3 py-2 md:flex-row md:items-center md:justify-between"
-            >
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0">
-              <p className="text-[12px] text-slate-300">
-                {s.lap != null ? `Ronde ${s.lap}` : "Pitbezoek"}
-                {s.sessionTimeSeconds != null ? ` · ${formatClock(s.sessionTimeSeconds)}` : ""}
-              </p>
-              {verschil != null && (
-                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
-                  <Fuel className="h-3 w-3" aria-hidden />
-                  Tankverschil: {verschil.toFixed(1).replace(".", ",")} L (twee metingen)
+                <p className="text-[12px] text-slate-300">
+                  {s.lap != null ? `Ronde ${s.lap}` : "Pitbezoek"}
+                  {s.sessionTimeSeconds != null ? ` · ${formatClock(s.sessionTimeSeconds)}` : ""}
                 </p>
-              )}
+                {verschil != null && (
+                  <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
+                    <Fuel className="h-3 w-3" aria-hidden />
+                    Tankverschil: {verschil.toFixed(1).replace(".", ",")} L (twee metingen)
+                  </p>
+                )}
+                {stops.length > 1 && (
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    Nog {stops.length - 1} {stops.length === 2 ? "stop" : "stops"} te bevestigen — die komt hierna.
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap gap-1">
                 {KEUZES.map(([value, label]) => (
@@ -339,7 +342,7 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
               </div>
             </div>
           );
-        })}
+        })()}
         {error && <p className="text-[11px] text-amber-300">{error}</p>}
         <p className="flex items-center gap-1 text-[11px] text-slate-500">
           <LifeBuoy className="h-3 w-3" aria-hidden />

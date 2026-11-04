@@ -241,8 +241,11 @@ Deno.serve(async (request) => {
             sessionKey: transport,
             frameSequence: sequence,
             observedAt: tyres.observedAt,
-            sessionTimeSeconds: tyres.sessionTimeSeconds,
-            lap: tyres.lap,
+            // Het bandenblok van 0.7.3 bevat geen ronde of sessietijd; die staan
+            // wel in het frame zelf. Zonder deze terugval is elke stop anoniem.
+            sessionTimeSeconds:
+              tyres.sessionTimeSeconds ?? context.normalized?.session?.sessionTimeSeconds ?? null,
+            lap: tyres.lap ?? context.normalized?.timing?.completedLaps ?? null,
             trigger: tyres.trigger,
             driverName: context.normalized?.identity?.currentDriverName ?? null,
             connectorId: context.connectorId ?? null,
