@@ -157,13 +157,17 @@
 [data-pitwall-look] {
   font-variant-numeric: tabular-nums;
 }
+/* Panelen houden hun eigen hoogte: niet oprekken tot de hoogste kaart van de
+   rij, want dan staat er een leeg vlak onder twee regels tekst. Ze blijven wel
+   bovenaan uitgelijnd, zodat de rij niet scheef zakt. */
+[data-pitwall-look] [data-pitwall-row="panels"] {
+  align-items: start;
+}
 [data-pitwall-look] [data-pitwall-row="panels"] > div {
-  display: flex;
   min-width: 0;
 }
 [data-pitwall-look] [data-pitwall-slot] {
   width: 100%;
-  height: 100%;
 }
 [data-pitwall-look] [data-pitwall-slot] > header {
   min-height: 38px;
