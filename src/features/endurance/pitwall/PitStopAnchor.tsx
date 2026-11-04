@@ -79,6 +79,7 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exampleDone, setExampleDone] = useState<string | null>(null);
+  const [geladen, setGeladen] = useState(false);
   const [bevestigd, setBevestigd] = useState(false);
   const generation = useRef(0);
   const gevraagd = useRef<Set<string>>(new Set());
@@ -115,6 +116,7 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
         return openStops;
       });
       setError(null);
+      setGeladen(true);
 
       // De nieuwste onbeantwoorde stop opent de vraag — één keer. Alle stops die
       // nu in het vak staan gelden als gevraagd, zodat er na het beantwoorden
@@ -132,6 +134,7 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
     } catch {
       if (mine !== generation.current) return;
       setStops([]);
+      setGeladen(true);
       setError("Kon de pitbezoeken niet ophalen.");
     }
   }, [enabled, source]);
@@ -146,6 +149,7 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
     setExampleDone(null);
     setBevestigd(false);
     setBusy(null);
+    setGeladen(false);
     void load();
     if (!enabled) return;
     const timer = window.setInterval(() => void load(), pollMs);
@@ -170,6 +174,13 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
       return (
         <PitwallPanel title="Pitstop" slot="tyrestop">
           <p className="text-[11px] text-amber-300">{error}</p>
+        </PitwallPanel>
+      );
+    }
+    if (!geladen) {
+      return (
+        <PitwallPanel title="Pitstop" slot="tyrestop">
+          <p className="text-[11px] text-slate-500">Pitstops laden…</p>
         </PitwallPanel>
       );
     }
