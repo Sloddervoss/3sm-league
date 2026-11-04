@@ -173,7 +173,14 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                       {teamLabel(r) && <p className="mt-0.5 truncate text-[10.5px] leading-tight text-slate-500">{teamLabel(r)}</p>}
                     </td>
                     <td className="px-2 py-1.5 text-[11px] uppercase tracking-[0.08em] text-sky-300">{r.carClass ?? "—"}</td>
-                    <td className="px-2 py-1.5 text-right font-mono text-amber-200">{preciseLapTime(live && rowSectors(v3,r.id,r.lastLapSeconds) ? freshMetrics(v3,r.id)?.lastLapSeconds : r.lastLapSeconds)}</td>
+                    <td
+                        className="px-2 py-1.5 text-right font-mono text-amber-200"
+                        title={(r as { lastLapInvalid?: boolean }).lastLapInvalid ? "Laatste ronde ongeldig (reset of baanverlating) — telt niet als rondetijd" : undefined}
+                      >
+                        {(r as { lastLapInvalid?: boolean }).lastLapInvalid
+                          ? "—"
+                          : preciseLapTime(live && rowSectors(v3,r.id,r.lastLapSeconds) ? freshMetrics(v3,r.id)?.lastLapSeconds : r.lastLapSeconds)}
+                      </td>
                     <td className="px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
                     {sectorColumns.map(n=><td key={n} className="px-2 py-1.5 text-right font-mono text-slate-300" title={live && rowSectors(v3,r.id,r.lastLapSeconds) ? `Gecontroleerde laatste ronde · ${freshMetrics(v3,r.id)?.sectorSource ?? "bron onbekend"} · afwijking ${freshMetrics(v3,r.id)?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s` : `Geen gecontroleerde sectorreeks · bronafwijkingen ${freshMetrics(v3,r.id)?.sectorMismatchCount ?? "onbekend"}`}>{live ? rowSectors(v3,r.id,r.lastLapSeconds)?.[n]?.toFixed(3) ?? "—" : "—"}</td>)}
                     <td className="px-2 py-1.5 text-right font-mono text-slate-300">{r.lap ?? "—"}</td>

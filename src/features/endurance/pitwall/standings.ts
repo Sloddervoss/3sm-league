@@ -53,6 +53,21 @@ const fallbackOwnPosition = (rows: V3Opponent[]): number | null => {
 
 /** Derive standings from the current V3 snapshot. Bound ≤ opponent cap + player.
  *  Optional `trends`: opponent-id → closingRatePerLap (from bounded OpponentHistory). */
+/**
+ * Een ronde die sneller is dan de beste ronde van dezelfde auto kan niet geldig
+ * zijn: een geldige snellere ronde zou zelf de beste zijn geworden. Dit is wat
+ * er gebeurt als de auto naar de pit reset of wordt getowd — de sim levert dan
+ * een korte "ronde" die geen rondetijd is.
+ */
+export function geldigeLaatsteRonde(
+  last: number | null | undefined,
+  best: number | null | undefined,
+): number | null {
+  if (last == null) return null;
+  if (best == null) return last;
+  return last < best - 0.05 ? null : last;
+}
+
 export function deriveStandings(
   v3?: V3Normalized | null,
   maxRows = 40,
@@ -71,7 +86,22 @@ export function deriveStandings(
       return playerRank(a) - playerRank(b);
     })
     .slice(0, maxRows + 1)
-    .map((o) => ({ ...o, isPlayer: !!o.isPlayer }));
+    .map((o) => {
+      // Een ronde die sneller is dan de beste ronde van dezelfde auto kan niet
+      // geldig zijn: een geldige snellere ronde zou de beste zijn geworden. Dat
+      // gebeurt bij een reset naar de pit of een tow. De tijd blijft in het frame
+      // staan, maar wordt hier niet als rondetijd gepresenteerd.
+      const ongeldig =
+        o.lastLapSeconds != null &&
+        o.bestLapSeconds != null &&
+        o.lastLapSeconds < o.bestLapSeconds - 0.05;
+      return {
+        ...o,
+        isPlayer: !!o.isPlayer,
+        lastLapInvalid: ongeldig,
+        lastLapSeconds: ongeldig ? null : o.lastLapSeconds,
+      };
+    });
 
   // Own overall/class position: prefer own v3.position; fallback to player row in snapshot.
   const ownOverall = v3?.position?.position ?? fallbackOwnPosition(rows);

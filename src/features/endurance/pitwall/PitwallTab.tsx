@@ -27,7 +27,7 @@ import { median } from "./strategy/fuelModel";
 import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
 import { LiveTrackPanel } from "./LiveTrackPanel";
 import { RaceTelemetryStrip } from "./RaceTelemetryStrip";
-import { deriveStandings } from "./standings";
+import { deriveStandings, geldigeLaatsteRonde } from "./standings";
 import { useMemo, useCallback, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { PitwallPositionData, PitwallPaceData, PitwallRaceClock } from "./pitwallHelpers";
@@ -184,7 +184,10 @@ export const PitwallTab = ({ event }: Props) => {
   const teamName = teams.find((t) => t.id === selectedTeamId)?.name ?? null;
   const ownDriver = (isDemo ? null : real.v3?.identity?.currentDriverName) ?? driverName ?? null;
   const ownCar = isDemo ? null : real.v3?.identity?.carName ?? null;
-  const ownLastLap = (isDemo ? null : real.v3?.timing?.lastLapTimeSeconds) ?? pace?.lastLapSeconds ?? null;
+  const ownLastLap = geldigeLaatsteRonde(
+    (isDemo ? null : real.v3?.timing?.lastLapTimeSeconds) ?? pace?.lastLapSeconds,
+    (isDemo ? null : real.v3?.timing?.bestLapTimeSeconds) ?? pace?.bestLapSeconds,
+  ) ?? null;
   const ownBestLap = (isDemo ? null : real.v3?.timing?.bestLapTimeSeconds) ?? pace?.bestLapSeconds ?? null;
 
   const connectionState = !isLive ? "offline" : strategy?.strategy_status === "low_sample" ? "stale" : "live";

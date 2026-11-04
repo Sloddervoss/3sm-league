@@ -126,3 +126,28 @@ describe("0.4.2 standings derivation", () => {
     expect(d.rows.map((r) => r.id)).toEqual(["gt3", "geen-klasse"]);
   });
 });
+
+describe("een ronde na een reset is geen rondetijd", () => {
+  it("laat een laatste ronde die sneller is dan de beste weg", () => {
+    const d = deriveStandings(mkV3([
+      opp({ id: "jaimy", position: 2, lastLapSeconds: 115.583, bestLapSeconds: 120.279 }),
+    ]));
+    expect(d.rows[0].lastLapSeconds).toBeNull();
+    expect((d.rows[0] as { lastLapInvalid?: boolean }).lastLapInvalid).toBe(true);
+  });
+
+  it("houdt een normale laatste ronde gewoon staan", () => {
+    const d = deriveStandings(mkV3([
+      opp({ id: "jaimy", position: 2, lastLapSeconds: 121.402, bestLapSeconds: 120.279 }),
+    ]));
+    expect(d.rows[0].lastLapSeconds).toBe(121.402);
+    expect((d.rows[0] as { lastLapInvalid?: boolean }).lastLapInvalid).toBe(false);
+  });
+
+  it("toont de tijd als er nog geen beste ronde is", () => {
+    const d = deriveStandings(mkV3([
+      opp({ id: "jaimy", position: 2, lastLapSeconds: 121.402, bestLapSeconds: null }),
+    ]));
+    expect(d.rows[0].lastLapSeconds).toBe(121.402);
+  });
+});
