@@ -94,7 +94,7 @@ function Cell({ label, value, tone = 'text-white', compact = false }: { label: s
   return (
     <div className="min-w-0">
       <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
-      <p className={`mt-0.5 font-mono ${compact ? "text-[17px]" : "text-[26px]"} font-bold leading-none tabular-nums ${tone}`}>{value}</p>
+      <p className={`mt-0.5 font-mono ${compact ? "text-[18px]" : "text-[26px]"} font-bold leading-none tabular-nums ${tone}`}>{value}</p>
     </div>
   );
 }

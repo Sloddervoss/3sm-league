@@ -404,13 +404,13 @@ export const PitwallTab = ({ event }: Props) => {
             }
           />
 
-          {loading && !strategy && <p className="text-[13px] text-slate-500">Pitwall laden…</p>}
+          {loading && !strategy && <p className="text-[12px] text-slate-500">Pitwall laden…</p>}
 
           {!isDemo && (teamQuery.error || real.error) && (
-            <p role="alert" className="text-[13px] text-red-300">Pitwall laden mislukt. Controleer je toegang en probeer opnieuw.</p>
+            <p role="alert" className="text-[12px] text-red-300">Pitwall laden mislukt. Controleer je toegang en probeer opnieuw.</p>
           )}
           {!loading && !strategy && !isDemo && !teamQuery.error && !real.error && (
-            <p className="text-[13px] text-slate-500">
+            <p className="text-[12px] text-slate-500">
               Geen pitwall-data beschikbaar. {!selectedTeamId && "Er is nog geen toegankelijk team voor deze race."}
             </p>
           )}

@@ -35,7 +35,7 @@ export function TyreAdviceLine({ estimate }: { estimate: TyreEstimate | null }) 
   if (estimate.experimenteel) {
     return (
       <div
-        className="flex items-baseline gap-2 text-[13px] leading-5 text-gray-400"
+        className="flex items-baseline gap-2 text-[12px] leading-5 text-gray-400"
         data-pitwall-tyre-grade={grade}
         data-pitwall-tyre-confidence={gradeWord(grade)}
         data-pitwall-tyre-line="experimenteel"
@@ -51,7 +51,7 @@ export function TyreAdviceLine({ estimate }: { estimate: TyreEstimate | null }) 
 
   return (
     <div
-      className={`flex items-baseline gap-2 text-[13px] leading-5 ${toonKleur(grade)}`}
+      className={`flex items-baseline gap-2 text-[12px] leading-5 ${toonKleur(grade)}`}
       data-pitwall-tyre-grade={grade}
       data-pitwall-tyre-confidence={gradeWord(grade)}
       data-pitwall-tyre-line={adviceLine(estimate)}

@@ -24,7 +24,7 @@ export const StrategyForecast = ({ strategy, position, pace, plannedStints, next
     <PanelShell title="FORECAST">
       {/* HUIDIG — compact inline */}
       <div className="mb-2">
-        <div className="text-[9px] font-bold uppercase tracking-wider text-gray-600 mb-1">HUIDIG</div>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">HUIDIG</div>
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
           <span className="text-gray-500">Pos <span className="font-bold text-white">
             {position?.overallPosition != null ? `P${position.overallPosition}${position.classPosition != null ? `/K${position.classPosition}` : ""}` : "—"}
@@ -41,7 +41,7 @@ export const StrategyForecast = ({ strategy, position, pace, plannedStints, next
       {/* NEXT STOP */}
       {!isLowData && !isInsufficient && (
         <div className="mb-2">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-gray-600 mb-1">VOLGENDE STOP</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">VOLGENDE STOP</div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
             <span className="text-gray-500">Ronde <span className="font-bold text-orange-400">{pitLap != null ? pitLap : "—"}</span></span>
             <span className="text-gray-500">Coureur <span className="font-bold text-orange-400">{nextDriverName ?? "—"}</span></span>
@@ -56,7 +56,7 @@ export const StrategyForecast = ({ strategy, position, pace, plannedStints, next
       {/* DAARNA */}
       {nextStint && !isLowData && !isInsufficient && (
         <div className="mb-2">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-gray-600 mb-1">DAARNA</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">DAARNA</div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
             <span className="text-gray-500">Coureur <span className="font-bold text-gray-300">{nextStint.driver_id}</span></span>
             <span className="text-gray-500">Stint <span className="font-bold text-white">{nextStint.expected_laps}r</span></span>

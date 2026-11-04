@@ -65,7 +65,7 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
   if (standings.noData && views.length === 1) {
     return (
       <PitwallPanel title="Live timing" slot="standings" meta={live ? "Live" : "Offline"}>
-        <p className="py-6 text-center text-[13px] text-slate-400">Wacht op tegenstanderdata…</p>
+        <p className="py-6 text-center text-[12px] text-slate-400">Wacht op tegenstanderdata…</p>
       </PitwallPanel>
     );
   }
@@ -98,7 +98,7 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
         {views.map(v => <button key={v.id} type="button" aria-pressed={active === v.id} onClick={() => setView(v.id)} className={`text-[12px] font-bold ${active === v.id ? 'border-b border-orange-400 text-orange-300' : 'text-slate-400'}`}>{v.label}</button>)}
       </div>
       {active === 'class' && <div className="flex flex-wrap gap-2 px-3.5 py-1">{classes.map(c => <button key={c} type="button" aria-pressed={activeClass === c} onClick={() => setSelectedClass(c)} className="text-[12px] text-sky-300">{c}</button>)}</div>}
-      {(active === 'stints' || active === 'pits' || active === 'events') ? <div className="pitwall-timing-scroll p-3 text-[13px] text-slate-300" tabIndex={0} role="region" aria-label="Eigen opgeslagen planning en gebeurtenissen">
+      {(active === 'stints' || active === 'pits' || active === 'events') ? <div className="pitwall-timing-scroll p-3 text-[12px] text-slate-300" tabIndex={0} role="region" aria-label="Eigen opgeslagen planning en gebeurtenissen">
         <p className="mb-2 text-[12px] text-slate-400">{active === 'stints' ? 'Eigen team · planning, geen gemeten rivalenstints.' : 'Eigen auto · opgeslagen gebeurtenissen, geen volledig wedstrijdtotaal.'}</p>
         {active === 'stints' ? <ol>{plannedStints.map((s, i) => <li key={s.id} className="border-t border-white/10 py-2">{i + 1}. {s.driver_id} · {s.expected_laps} ronden gepland · {s.status}{s.tyre_change ? ' · bandenwissel gepland' : ''}</li>)}</ol> : <ol>{(active === 'pits' ? pitEvents : events).map((e, i) => <li key={`${e.event_key}:${i}`} className="border-t border-white/10 py-1"><time>{e.captured_at}</time> · R{e.completed_laps ?? e.lap ?? '—'} · {e.event_type}</li>)}</ol>}
       </div> : <>
@@ -107,13 +107,13 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
         <RelativeRow tone="sky" label="Voor" opponent={ahead} trend={aheadTrend} />
         <div className="bg-orange-500/[0.09] px-3.5 py-2">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">Jij</p>
-          <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[13px] font-bold text-white">
+          <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[12px] font-bold text-white">
             <span>{overallPosition != null ? `P${renderPosition(overallPosition)}` : "P—"}</span>
             {typeof classPosition === "number" && <span className="text-[11px] font-semibold text-slate-300">K{classPosition}</span>}
             {ownCarNumber && <span className="text-slate-400">#{ownCarNumber}</span>}
             <span className="truncate">{ownCarLabel ?? "Mijn auto"}</span>
             {ahead && (
-              <span className="ml-auto text-[13px] font-black text-orange-300">{ahead.inPit ? "PIT" : renderGap(ahead)}</span>
+              <span className="ml-auto text-[12px] font-black text-orange-300">{ahead.inPit ? "PIT" : renderGap(ahead)}</span>
             )}
           </div>
         </div>
@@ -211,18 +211,18 @@ function RelativeRow({
     <div className="bg-[#0B0D11] px-3.5 py-2">
       <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${labelClass}`}>{label}</p>
       {opponent ? (
-        <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[13px] text-slate-300">
+        <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[12px] text-slate-300">
           <span className="font-bold text-white">P{renderPosition(opponent.position)}</span>
           {typeof opponent.classPosition === "number" && <span className="text-[11px] text-slate-500">K{opponent.classPosition}</span>}
           {opponent.carNumber && <span className="text-slate-400">#{opponent.carNumber}</span>}
           <span className="truncate">{driverLabel(opponent)}</span>
           <span className="ml-auto flex items-center gap-1.5">
             <TrendMark rate={trend} />
-            <span className="text-[13px] font-black text-orange-300">{opponent.inPit ? "PIT" : renderGap(opponent)}</span>
+            <span className="text-[12px] font-black text-orange-300">{opponent.inPit ? "PIT" : renderGap(opponent)}</span>
           </span>
         </div>
       ) : (
-        <p className="mt-1 font-mono text-[13px] text-slate-600">—</p>
+        <p className="mt-1 font-mono text-[12px] text-slate-600">—</p>
       )}
     </div>
   );

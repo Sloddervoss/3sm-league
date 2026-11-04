@@ -57,7 +57,7 @@ export const RaceTimeline = ({ events, plannedStints }: Props) => {
       {/* GEPLAND */}
       {plannedStints.length > 0 && (
         <div className="pt-1.5 border-t border-white/5">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-gray-600 mb-1">PLAN</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1">PLAN</div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
             {plannedStints.slice(0, 4).map((stint) => (
               <span key={stint.id} className={`${stint.status === "in_car" ? "text-orange-400" : "text-gray-400"}`}>

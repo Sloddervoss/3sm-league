@@ -95,7 +95,7 @@ export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss
 
       {/* Punt 9: gemeten tijd in de pitstraat. Geen meting = geen getal. */}
       <div className="mb-2 flex items-baseline justify-between gap-2 text-[11px]">
-        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-500">Pitstraat</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Pitstraat</span>
         {pitLoss?.pitLaneSeconds != null ? (
           <span
             className="font-bold text-white"
@@ -127,7 +127,7 @@ export const PitStrategyBlock = ({ strategy, driverName, nextDriverName, pitLoss
 
 const ActionItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div className="flex-1 rounded-lg bg-black/30 px-2.5 py-1.5 text-center min-w-0">
-    <div className="text-[9px] font-bold uppercase tracking-widest text-gray-500">{label}</div>
+    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{label}</div>
     <div className="mt-0.5 font-bold text-white text-xs">{value}</div>
   </div>
 );

@@ -66,7 +66,7 @@ export function VehicleTelemetryPanel({
         data-pitwall-tyre-corner={key}
       >
         <p className="text-[11px] font-black uppercase tracking-[0.14em] opacity-80">{label}</p>
-        <p className="mt-1 font-mono text-[24px] font-bold leading-none tabular-nums">
+        <p className="mt-1 font-mono text-[22px] font-bold leading-none tabular-nums">
           {pct != null ? `${pct}%` : '—'}
         </p>
         {pct != null && Number(pct) >= 0 && Number(pct) <= 100 && <div className="mt-1 h-1 rounded bg-white/10" role="meter" aria-label={`${label} resterend`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(pct)}><div className="h-full rounded bg-current" style={{ width: `${pct}%` }} /></div>}

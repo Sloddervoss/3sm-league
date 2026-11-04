@@ -21,7 +21,7 @@ export function LiveTrackPanel({ v3, live, fallbackTrack }: { v3: V3Normalized |
 
   return (
     <PitwallPanel title="Circuit" slot="trackmap" meta={live ? <span className="text-emerald-300">Live data</span> : 'Offline'}>
-      <p className="mb-1 truncate font-heading text-[15px] font-bold text-white">{track || 'Wacht op circuit'}</p>
+      <p className="mb-1 truncate font-heading text-[14px] font-bold text-white">{track || 'Wacht op circuit'}</p>
       <TrackProjection trackName={track} trackConfig={config} v3={v3} live={live} />
       <div className="flex flex-wrap gap-x-3 text-[11px] text-slate-300">
         <span className="text-slate-500">{cars.length ? `${cars.length} auto's met positie.` : "Wacht op autoposities."}</span>
@@ -45,7 +45,7 @@ export function LiveTrackPanel({ v3, live, fallbackTrack }: { v3: V3Normalized |
           <span
             key={car.id}
             title={`${car.driverName ?? car.id}: ${(car.lapDistancePct! * 100).toFixed(1)}%${car.inPit ? ' · PIT' : ''}`}
-            className={`absolute -top-2 flex h-5 min-w-5 -translate-x-1/2 items-center justify-center rounded px-1 text-[9px] font-black ${
+            className={`absolute -top-2 flex h-5 min-w-5 -translate-x-1/2 items-center justify-center rounded px-1 text-[10px] font-black ${
               car.isPlayer ? 'bg-orange-400 text-black' : car.inPit ? 'bg-amber-300 text-black' : 'bg-sky-900 text-sky-100'
             }`}
             style={{ left: `${car.lapDistancePct! * 100}%` }}

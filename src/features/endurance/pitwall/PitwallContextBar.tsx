@@ -49,7 +49,7 @@ export function PitwallContextBar({
     >
       <div className="min-w-0">
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">{eyebrow}</p>
-        <p className="truncate font-heading text-[15px] font-black text-white">{title}</p>
+        <p className="truncate font-heading text-[14px] font-black text-white">{title}</p>
       </div>
 
       {items.length > 0 && <span aria-hidden className="hidden h-8 w-px shrink-0 bg-[#1D2431] self-center sm:block" />}
@@ -58,7 +58,7 @@ export function PitwallContextBar({
         <div key={item.label} className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{item.label}</p>
           <p
-            className={`truncate text-[13px] font-bold ${
+            className={`truncate text-[12px] font-bold ${
               item.tone === "accent" ? "text-orange-300" : item.tone === "muted" ? "text-slate-400" : "text-slate-200"
             }`}
           >

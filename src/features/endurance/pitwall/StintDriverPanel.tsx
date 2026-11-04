@@ -62,7 +62,7 @@ export const StintDriverPanel = ({ strategy, plannedStints, driverName, currentS
       {firstNext && (
         <div className="mt-3 border-t border-[#161C27] pt-2.5" data-pitwall-driver-next="true">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Volgende</p>
-          <p className="mt-1 truncate font-heading text-[16px] font-bold leading-tight text-orange-300">{firstNext.driver_id}</p>
+          <p className="mt-1 truncate font-heading text-[18px] font-bold leading-tight text-orange-300">{firstNext.driver_id}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">{firstNext.expected_laps} ronden gepland{nextSeconds != null && ` · wissel gepland over ${formatSeconds(nextSeconds)}`}</p>
           {firstNext.tyre_change && (
             <p

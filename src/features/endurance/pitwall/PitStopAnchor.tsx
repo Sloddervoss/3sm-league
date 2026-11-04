@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Fuel, LifeBuoy } from "lucide-react";
+import { ChevronDown, Fuel, LifeBuoy } from "lucide-react";
 import { PitwallPanel } from "./PitwallPanel";
 import {
   answerTyreStop,
@@ -13,39 +13,82 @@ interface Props {
   source: TyreStopSource | null;
   /** Alleen ophalen als de pitwall live is; in de demo bestaat er geen bron. */
   enabled: boolean;
-  /**
-   * Toon een voorbeeldkaart als er nog geen pitstop is waargenomen. Alleen voor
-   * de testpagina en de demo: daar moet het onderdeel zichtbaar en aanklikbaar
-   * zijn zonder dat er iets wordt opgeslagen.
-   */
+  /** Voorbeeldkaart als er nog geen pitstop is waargenomen (testpagina en demo). */
   showExample?: boolean;
+  /** Hoe vaak er wordt gekeken; alleen voor tests anders dan 15 s. */
+  pollMs?: number;
 }
+
+/**
+ * Hoe lang de vraag open blijft staan. Daarna klapt hij dicht tot een teller:
+ * de pitwall mag nooit blijven vragen terwijl niemand meekijkt.
+ */
+const VRAAG_OPEN_MS = 30_000;
+
+/** Onthouden welke stops al gevraagd zijn, ook over een herlaad heen. */
+const GEVRAAAGD_KEY = "pitwall.pitstop.gevraagd";
 
 const formatClock = (seconds: number | null): string => {
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
   const total = Math.floor(seconds);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 };
 
+/** Dezelfde stop in een andere sessie of bij een ander device is een andere stop. */
+const vraagSleutel = (sourceKey: string, sessionKey: string | null, visitKey: string): string =>
+  `${sourceKey}|${sessionKey ?? "-"}|${visitKey}`;
+
+const bronSleutel = (source: TyreStopSource): string =>
+  source.deviceId ?? `${source.eventId ?? "-"}:${source.teamId ?? "-"}`;
+
+const leesGevraagd = (): Set<string> => {
+  try {
+    return new Set(JSON.parse(window.sessionStorage.getItem(GEVRAAAGD_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+};
+
+const bewaarGevraagd = (keys: Set<string>) => {
+  try {
+    window.sessionStorage.setItem(GEVRAAAGD_KEY, JSON.stringify([...keys].slice(-40)));
+  } catch {
+    /* opslag geweigerd: dan geldt alleen dit geheugen */
+  }
+};
+
+const KEUZES: ReadonlyArray<readonly [TyreStopAnswer, string]> = [
+  ["tyres", "Banden gewisseld"],
+  ["fuel", "Alleen getankt"],
+  ["both", "Beide"],
+  ["none", "Geen van beide"],
+];
+
 /**
- * Ankervak voor één pitbezoek.
+ * Bevestiging van een pitbezoek.
  *
- * De plugin kan niet bewijzen dat er gewisseld is; de crew wel. Dit vak vraagt het
- * één keer per stop en legt het antwoord apart vast. Het verandert niets aan het
- * bandenadvies: zonder bewijs blijft de setgrens onbekend.
+ * De meting kan niet bewijzen wat er in de pitstraat is gebeurd; de crew wel.
+ * Daarom vraagt dit vak het — maar nooit blijvend: de vraag staat dertig
+ * seconden open, klapt daarna dicht tot een teller, en is later alsnog in te
+ * vullen. Niets invullen betekent onbekend, niet "geen service".
  */
-export const PitStopAnchor = ({ source, enabled, showExample = false }: Props) => {
-  const [stop, setStop] = useState<TyreStop | null>(null);
+export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 15000 }: Props) => {
+  const [stops, setStops] = useState<TyreStop[]>([]);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exampleDone, setExampleDone] = useState<string | null>(null);
-  // Elke bronwissel (ander team of event) krijgt een eigen reeks; een antwoord
-  // van de vorige reeks mag deze nooit overschrijven.
+  const [bevestigd, setBevestigd] = useState(false);
   const generation = useRef(0);
+  const gevraagd = useRef<Set<string>>(new Set());
+  // Lokaal bevestigde stops: een poll die vóór het opslaan begon mag ze niet
+  // terugzetten, anders kan de crew hetzelfde antwoord nog eens overschrijven.
+  const beantwoord = useRef<Set<string>>(new Set());
+  // De sessie waaronder de zichtbare stops zijn opgehaald. Een bevestiging die
+  // na een sessiewissel terugkomt mag die lijst niet meer aanraken.
+  const sessieRef = useRef<string | null>(null);
+  const sluitTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     if (!enabled || !source) return;
@@ -53,41 +96,66 @@ export const PitStopAnchor = ({ source, enabled, showExample = false }: Props) =
     try {
       const feed = await readTyreStops(source);
       if (mine !== generation.current) return;
-      setSessionKey(feed?.sessionKey ?? null);
-      const open = feed?.stops.find((s) => s.answer == null) ?? null;
-      setStop(open);
+      const key = feed?.sessionKey ?? null;
+      sessieRef.current = key;
+      setSessionKey(key);
+      const bron = bronSleutel(source);
+      const openStops = (feed?.stops ?? []).filter(
+        (s) => s.answer == null && !beantwoord.current.has(vraagSleutel(bron, key, s.visitKey)),
+      );
+      setStops(openStops);
       setError(null);
+
+      // De nieuwste onbeantwoorde stop opent de vraag — één keer. Alle stops die
+      // nu in het vak staan gelden als gevraagd, zodat er na het beantwoorden
+      // geen oudere vraag vanzelf opnieuw openklapt.
+      const nieuwste = openStops[0];
+      const nieuw = nieuwste ? vraagSleutel(bron, key, nieuwste.visitKey) : null;
+      if (nieuw && !gevraagd.current.has(nieuw)) {
+        for (const s of openStops) gevraagd.current.add(vraagSleutel(bron, key, s.visitKey));
+        bewaarGevraagd(gevraagd.current);
+        setOpen(true);
+        setBevestigd(false);
+        if (sluitTimer.current) window.clearTimeout(sluitTimer.current);
+        sluitTimer.current = window.setTimeout(() => setOpen(false), VRAAG_OPEN_MS);
+      }
     } catch {
       if (mine !== generation.current) return;
-      setStop(null);
+      setStops([]);
       setError("Kon de pitbezoeken niet ophalen.");
     }
   }, [enabled, source]);
 
   useEffect(() => {
     generation.current += 1;
-    setStop(null);
+    gevraagd.current = leesGevraagd();
+    setStops([]);
+    setOpen(false);
     setSessionKey(null);
-    setDone(false);
     setError(null);
+    setExampleDone(null);
+    setBevestigd(false);
+    setBusy(null);
     void load();
     if (!enabled) return;
-    const timer = window.setInterval(() => void load(), 15000);
-    return () => window.clearInterval(timer);
-  }, [enabled, load]);
+    const timer = window.setInterval(() => void load(), pollMs);
+    return () => {
+      window.clearInterval(timer);
+      if (sluitTimer.current) window.clearTimeout(sluitTimer.current);
+    };
+  }, [enabled, load, pollMs]);
+
+  // De vraag sluit pas als de lijst leeg is én er iets bevestigd is; niet op
+  // het moment van bevestigen zelf, want de lijst kan intussen zijn aangevuld.
+  useEffect(() => {
+    if (bevestigd && stops.length === 0) setOpen(false);
+  }, [bevestigd, stops.length]);
 
   if (!enabled || !source) return null;
+
+  const stop = stops[0] ?? null;
+
   if (!stop) {
-    if (done) {
-      return (
-        <PitwallPanel title="Pitstop" slot="tyrestop">
-          <p className="flex items-center gap-1 text-[11px] text-emerald-300">
-            <LifeBuoy className="h-3 w-3" aria-hidden />
-            Bedankt — vastgelegd.
-          </p>
-        </PitwallPanel>
-      );
-    }
     if (showExample) {
       return (
         <PitwallPanel title="Pitstop" slot="tyrestop" meta={<span className="text-slate-500">voorbeeld</span>}>
@@ -96,12 +164,7 @@ export const PitStopAnchor = ({ source, enabled, showExample = false }: Props) =
             Nog geen pitstop waargenomen. Zo ziet de vraag eruit zodra de auto binnenkomt.
           </p>
           <div className="mt-2 flex flex-wrap gap-1">
-            {([
-              ["tyres", "Banden gewisseld"],
-              ["fuel", "Alleen getankt"],
-              ["both", "Beide"],
-              ["none", "Geen van beide"],
-            ] as const).map(([value, label]) => (
+            {KEUZES.map(([value, label]) => (
               <button
                 key={value}
                 type="button"
@@ -120,19 +183,10 @@ export const PitStopAnchor = ({ source, enabled, showExample = false }: Props) =
         </PitwallPanel>
       );
     }
-    if (error) {
-      return (
-        <PitwallPanel title="Pitstop" slot="tyrestop">
-          <p className="text-[11px] text-amber-300">{error}</p>
-        </PitwallPanel>
-      );
-    }
-    // Zonder voorbeeld blijft het vak zichtbaar: anders denkt de crew dat de
-    // vraag niet bestaat tot de eerste stop er is.
     return (
       <PitwallPanel title="Pitstop" slot="tyrestop">
         <p className="text-[11px] text-slate-500">
-          Nog geen pitstop waargenomen in deze sessie.
+          {error ?? (bevestigd ? "Bevestigd — bedankt." : "Geen openstaande stops.")}
         </p>
       </PitwallPanel>
     );
@@ -143,60 +197,102 @@ export const PitStopAnchor = ({ source, enabled, showExample = false }: Props) =
       ? stop.fuelAfterLitres - stop.fuelBeforeLitres
       : null;
 
-  const submit = async (answer: TyreStopAnswer) => {
+  const submit = async (target: TyreStop, answer: TyreStopAnswer) => {
     if (!sessionKey || busy) return;
     const mine = generation.current;
-    setBusy(true);
+    const onderSessie = sessionKey;
+    setBusy(target.visitKey);
     try {
-      const ok = await answerTyreStop(source, stop, answer, sessionKey);
-      if (mine !== generation.current) return;
+      const ok = await answerTyreStop(source, target, answer, sessionKey);
+      if (mine !== generation.current || sessieRef.current !== onderSessie) return;
       if (ok) {
-        setDone(true);
-        setStop(null);
+        beantwoord.current.add(vraagSleutel(bronSleutel(source), onderSessie, target.visitKey));
+        // Op de actuele lijst werken: een poll kan er tijdens het bevestigen
+        // een nieuwe stop bij hebben gezet, en die mag niet verdwijnen.
+        setStops((prev) => prev.filter((s) => s.visitKey !== target.visitKey));
+        setBevestigd(true);
+        setError(null);
       } else {
         setError("Niet vastgelegd.");
       }
     } catch {
-      if (mine === generation.current) setError("Niet vastgelegd.");
+      if (mine === generation.current && sessieRef.current === onderSessie) setError("Niet vastgelegd.");
     } finally {
-      if (mine === generation.current) setBusy(false);
+      if (mine === generation.current) setBusy(null);
     }
   };
 
+  const meta = open ? (
+    <span className="text-amber-300">bevestiging nodig</span>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="flex items-center gap-0.5 text-[11px] text-slate-400 hover:text-slate-200"
+      aria-expanded={open}
+    >
+      {stops.length === 1 ? "1 stop nog te bevestigen" : `${stops.length} stops nog te bevestigen`}
+      <ChevronDown className="h-3 w-3" aria-hidden />
+    </button>
+  );
+
+  if (!open) {
+    return (
+      <PitwallPanel title="Pitstop" slot="tyrestop" meta={meta}>
+        <p className="text-[11px] text-slate-500">
+          {stop.lap != null ? `Ronde ${stop.lap}` : "Pitbezoek"}
+          {stop.sessionTimeSeconds != null ? ` · ${formatClock(stop.sessionTimeSeconds)}` : ""}
+          {" — nog niet bevestigd."}
+          {fuelAdded != null
+            ? ` Tankverschil ${fuelAdded.toFixed(1).replace(".", ",")} L.`
+            : ""}
+        </p>
+      </PitwallPanel>
+    );
+  }
+
   return (
-    <PitwallPanel title="Pitstop" slot="tyrestop" meta={<span className="text-amber-300">bevestiging nodig</span>}>
-      <p className="text-[12px] text-slate-300">
-        Pitstop{stop.lap != null ? ` · ronde ${stop.lap}` : ""}
-        {stop.sessionTimeSeconds != null ? ` · ${formatClock(stop.sessionTimeSeconds)}` : ""}
-      </p>
-      {fuelAdded != null && (
-        <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
-          <Fuel className="h-3 w-3" aria-hidden />
-          Tankverschil: {fuelAdded.toFixed(1).replace(".", ",")} L (twee metingen)
-        </p>
-      )}
-      <p className="mt-2 text-[11px] text-slate-500">Wat is er gebeurd?</p>
-      <div className="mt-1 flex flex-wrap gap-1">
-        <button type="button" disabled={busy} onClick={() => void submit("tyres")} className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10 disabled:opacity-50">
-          Banden gewisseld
-        </button>
-        <button type="button" disabled={busy} onClick={() => void submit("fuel")} className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10 disabled:opacity-50">
-          Alleen getankt
-        </button>
-        <button type="button" disabled={busy} onClick={() => void submit("both")} className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10 disabled:opacity-50">
-          Beide
-        </button>
-        <button type="button" disabled={busy} onClick={() => void submit("none")} className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-400 hover:bg-white/10 disabled:opacity-50">
-          Geen van beide
-        </button>
-      </div>
-      {done && (
-        <p className="mt-2 flex items-center gap-1 text-[11px] text-emerald-300">
+    <PitwallPanel title="Pitstop" slot="tyrestop" meta={meta}>
+      <div className="space-y-2">
+        {stops.map((s) => {
+          const verschil =
+            s.fuelBeforeLitres != null && s.fuelAfterLitres != null
+              ? s.fuelAfterLitres - s.fuelBeforeLitres
+              : null;
+          return (
+            <div key={s.visitKey} className="rounded border border-white/5 px-2 py-1.5">
+              <p className="text-[12px] text-slate-300">
+                {s.lap != null ? `Ronde ${s.lap}` : "Pitbezoek"}
+                {s.sessionTimeSeconds != null ? ` · ${formatClock(s.sessionTimeSeconds)}` : ""}
+              </p>
+              {verschil != null && (
+                <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
+                  <Fuel className="h-3 w-3" aria-hidden />
+                  Tankverschil: {verschil.toFixed(1).replace(".", ",")} L (twee metingen)
+                </p>
+              )}
+              <div className="mt-1 flex flex-wrap gap-1">
+                {KEUZES.map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={busy != null}
+                    onClick={() => void submit(s, value)}
+                    className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10 disabled:opacity-50"
+                  >
+                    {busy === s.visitKey ? "…" : label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {error && <p className="text-[11px] text-amber-300">{error}</p>}
+        <p className="flex items-center gap-1 text-[11px] text-slate-500">
           <LifeBuoy className="h-3 w-3" aria-hidden />
-          Bedankt — vastgelegd.
+          Niets invullen betekent onbekend — niet “geen service”.
         </p>
-      )}
-      {error && <p className="mt-2 text-[11px] text-amber-300">{error}</p>}
+      </div>
     </PitwallPanel>
   );
 };

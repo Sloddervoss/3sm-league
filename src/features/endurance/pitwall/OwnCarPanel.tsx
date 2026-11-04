@@ -39,15 +39,15 @@ export function OwnCarPanel({
       <dl className="mt-2.5 grid grid-cols-3 gap-x-3 border-t border-[#161C27] pt-2">
         <div>
           <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Laatste</dt>
-          <dd className="mt-0.5 font-mono text-[15px] font-bold tabular-nums text-amber-300">{formatLapTime(lastLapSeconds)}</dd>
+          <dd className="mt-0.5 font-mono text-[14px] font-bold tabular-nums text-amber-300">{formatLapTime(lastLapSeconds)}</dd>
         </div>
         <div>
           <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Beste</dt>
-          <dd className="mt-0.5 font-mono text-[15px] font-bold tabular-nums text-fuchsia-300">{formatLapTime(bestLapSeconds)}</dd>
+          <dd className="mt-0.5 font-mono text-[14px] font-bold tabular-nums text-fuchsia-300">{formatLapTime(bestLapSeconds)}</dd>
         </div>
         <div>
           <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Gap leider</dt>
-          <dd className="mt-0.5 font-mono text-[15px] font-bold tabular-nums text-slate-200">
+          <dd className="mt-0.5 font-mono text-[14px] font-bold tabular-nums text-slate-200">
             {gapToLeaderSeconds != null ? `+${gapToLeaderSeconds.toFixed(1)}s` : "—"}
           </dd>
         </div>

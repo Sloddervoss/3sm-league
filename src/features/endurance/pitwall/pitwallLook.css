@@ -49,11 +49,11 @@
 [data-pitwall-look] [data-pitwall-kpi-group] > div > div > p:first-child { font-size: 10px; line-height: 14px; }
 [data-pitwall-look] [data-pitwall-kpi-group] .font-mono { font-size: 24px; }
 [data-pitwall-look] [data-pitwall-slot="own-car"] { border-color: #9a4b18; box-shadow: inset 4px 0 0 #ff750c; }
-[data-pitwall-look] [data-pitwall-slot="own-car"] dd { font-size: 15px; }
+[data-pitwall-look] [data-pitwall-slot="own-car"] dd { font-size: 14px; }
 [data-pitwall-look] [data-pitwall-slot="own-car"] dd.text-amber-300 { color: #dcebf5; }
 [data-pitwall-look] [data-pitwall-slot="own-car"] dd.text-fuchsia-300 { color: #6ee7b7; }
 [data-pitwall-look] [data-pitwall-decision-band] { border-radius: 4px; padding: 8px 12px; background: #071410; }
-[data-pitwall-look] [data-pitwall-decision-band] [role="status"] { font-size: 19px; line-height: 24px; }
+[data-pitwall-look] [data-pitwall-decision-band] [role="status"] { font-size: 18px; line-height: 24px; }
 [data-pitwall-look] [data-pitwall-decision-band] [class*="rounded"] { border-radius: 2px; }
 [data-pitwall-look] .pitwall-decision-content > p:nth-child(2) { font-size: 12px; line-height: 16px; }
 [data-pitwall-look] [data-pitwall-tyre-corner] { border-radius: 0; border-color: #172a36; background: transparent; padding: 7px 8px; }
@@ -149,3 +149,31 @@
 [data-pitwall-look] [data-pitwall-kpi-group].pitwall-many-sectors .font-mono { font-size: 17px; }
 [data-pitwall-look] [data-pitwall-kpi-group].pitwall-many-sectors > div > div { padding-inline: 5px; }
 [data-pitwall-look] .pitwall-timing-scroll table[data-sector-count]:not([data-sector-count="0"]):not([data-sector-count="1"]):not([data-sector-count="2"]):not([data-sector-count="3"]) { font-size: 11px; }
+
+/* --- Rust in het raster ---------------------------------------------------
+   De panelen waren zo hoog als hun eigen inhoud, waardoor de rij eronder
+   versprong zodra één tekst langer werd. Ze vullen nu altijd de rij, en cijfers
+   krijgen vaste breedte zodat een meting het vak niet oprekt of laat krimpen. */
+[data-pitwall-look] {
+  font-variant-numeric: tabular-nums;
+}
+[data-pitwall-look] [data-pitwall-row="panels"] > div {
+  display: flex;
+  min-width: 0;
+}
+[data-pitwall-look] [data-pitwall-slot] {
+  width: 100%;
+  height: 100%;
+}
+[data-pitwall-look] [data-pitwall-slot] > header {
+  min-height: 38px;
+}
+[data-pitwall-look] button {
+  white-space: nowrap;
+}
+
+/* De vaste maat van een KPI-waarde: "—" en "1:23.456" houden dezelfde breedte. */
+[data-pitwall-look] [data-pitwall-kpi-group] .font-mono {
+  display: inline-block;
+  min-width: 3.2em;
+}

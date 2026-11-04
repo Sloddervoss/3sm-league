@@ -45,7 +45,7 @@ export function TyreFuelCompare({
 
   return (
     <div className="min-w-0" data-pitwall-tyre-fuel="true" data-pitwall-binding={binding}>
-      <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500">{bindingHeading()}</p>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{bindingHeading()}</p>
       <ul className="mt-1 space-y-0.5 font-mono text-[12px] leading-4 tabular-nums">
         {rijen.map(({ key, label, row, grens }) => {
           const actief = binding === key || binding === "both";

@@ -77,7 +77,7 @@ export function PitwallMetric({
   size?: "sm" | "md" | "lg";
   dataAttr?: Record<string, string>;
 }) {
-  const sizeClass = size === "lg" ? "text-[26px] leading-none" : size === "md" ? "text-[19px] leading-none" : "text-[15px] leading-none";
+  const sizeClass = size === "lg" ? "text-[26px] leading-none" : size === "md" ? "text-[18px] leading-none" : "text-[14px] leading-none";
   return (
     <div className="min-w-0" {...dataAttr}>
       <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
