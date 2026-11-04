@@ -13,6 +13,12 @@ interface Props {
   source: TyreStopSource | null;
   /** Alleen ophalen als de pitwall live is; in de demo bestaat er geen bron. */
   enabled: boolean;
+  /**
+   * Toon een voorbeeldkaart als er nog geen pitstop is waargenomen. Alleen voor
+   * de testpagina en de demo: daar moet het onderdeel zichtbaar en aanklikbaar
+   * zijn zonder dat er iets wordt opgeslagen.
+   */
+  showExample?: boolean;
 }
 
 const formatClock = (seconds: number | null): string => {
@@ -30,12 +36,13 @@ const formatClock = (seconds: number | null): string => {
  * één keer per stop en legt het antwoord apart vast. Het verandert niets aan het
  * bandenadvies: zonder bewijs blijft de setgrens onbekend.
  */
-export const PitStopAnchor = ({ source, enabled }: Props) => {
+export const PitStopAnchor = ({ source, enabled, showExample = false }: Props) => {
   const [stop, setStop] = useState<TyreStop | null>(null);
   const [sessionKey, setSessionKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exampleDone, setExampleDone] = useState<string | null>(null);
   // Elke bronwissel (ander team of event) krijgt een eigen reeks; een antwoord
   // van de vorige reeks mag deze nooit overschrijven.
   const generation = useRef(0);
@@ -81,10 +88,52 @@ export const PitStopAnchor = ({ source, enabled }: Props) => {
         </PitwallPanel>
       );
     }
-    if (!error) return null;
+    if (showExample) {
+      return (
+        <PitwallPanel title="Pitstop" slot="tyrestop" meta={<span className="text-slate-500">voorbeeld</span>}>
+          <p className="text-[12px] text-slate-300">Pitstop · ronde —</p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Nog geen pitstop waargenomen. Zo ziet de vraag eruit zodra de auto binnenkomt.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {([
+              ["tyres", "Banden gewisseld"],
+              ["fuel", "Alleen getankt"],
+              ["both", "Beide"],
+              ["none", "Geen van beide"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setExampleDone(label)}
+                className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {exampleDone && (
+            <p className="mt-2 text-[11px] text-slate-500">
+              Voorbeeld — “{exampleDone}” is niet opgeslagen; er is nog geen pitstop.
+            </p>
+          )}
+        </PitwallPanel>
+      );
+    }
+    if (error) {
+      return (
+        <PitwallPanel title="Pitstop" slot="tyrestop">
+          <p className="text-[11px] text-amber-300">{error}</p>
+        </PitwallPanel>
+      );
+    }
+    // Zonder voorbeeld blijft het vak zichtbaar: anders denkt de crew dat de
+    // vraag niet bestaat tot de eerste stop er is.
     return (
       <PitwallPanel title="Pitstop" slot="tyrestop">
-        <p className="text-[11px] text-slate-500">{error}</p>
+        <p className="text-[11px] text-slate-500">
+          Nog geen pitstop waargenomen in deze sessie.
+        </p>
       </PitwallPanel>
     );
   }

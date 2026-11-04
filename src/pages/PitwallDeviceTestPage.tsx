@@ -28,6 +28,7 @@ import { OwnCarPanel } from "@/features/endurance/pitwall/OwnCarPanel";
 import { LiveTrackPanel } from "@/features/endurance/pitwall/LiveTrackPanel";
 import { VehicleTelemetryPanel } from "@/features/endurance/pitwall/VehicleTelemetryPanel";
 import { FuelPanel } from "@/features/endurance/pitwall/FuelPanel";
+import { PitStopAnchor } from "@/features/endurance/pitwall/PitStopAnchor";
 import { PacePanel } from "@/features/endurance/pitwall/PacePanel";
 import { StandingsWidget } from "@/features/endurance/pitwall/StandingsWidget";
 import { PitwallDashboard } from "@/features/endurance/pitwall/PitwallDashboard";
@@ -304,6 +305,7 @@ export default function PitwallDeviceTestPage() {
                     />
                   }
                   panels={[
+                    <PitStopAnchor key="tyrestop" source={{ deviceId }} enabled showExample />,
                     <PacePanel paceSource={{deviceId}} v3={v3} live={live} key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
                     <MySessionPanel
                       key="session"

@@ -367,7 +367,7 @@ export const PitwallTab = ({ event }: Props) => {
                       currentStint={currentStint}
                       driverName={driverName}
                     />,
-                    <PitStopAnchor key="tyrestop" source={isDemo ? null : { eventId: event.id, teamId: selectedTeamId }} enabled={!isDemo && isLive} />,
+                    <PitStopAnchor key="tyrestop" source={isDemo ? null : { eventId: event.id, teamId: selectedTeamId }} enabled={!isDemo && isLive} showExample={isDemo} />,
                     <FuelPanel key="fuel" strategy={strategy} window={isLive ? advice.window : null} plannedStints={[...(currentStint ? [currentStint] : []), ...nextStints].map(s => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))} />,
                     <VehicleTelemetryPanel
                       key={`tyres:${event.id}:${selectedTeamId}`}

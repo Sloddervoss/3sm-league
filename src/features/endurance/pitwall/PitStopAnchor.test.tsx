@@ -61,6 +61,15 @@ describe("PitStopAnchor", () => {
     await waitFor(() => expect(screen.getByText("Bedankt — vastgelegd.")).toBeInTheDocument());
   });
 
+  it("toont een voorbeeldkaart als er nog geen pitstop is", async () => {
+    readTyreStops.mockResolvedValue({ sessionKey: null, stops: [] });
+    render(<PitStopAnchor source={source} enabled showExample />);
+    await waitFor(() => expect(screen.getByText(/Nog geen pitstop waargenomen/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Beide" }));
+    expect(screen.getByText(/niet opgeslagen/)).toBeInTheDocument();
+    expect(answerTyreStop).not.toHaveBeenCalled();
+  });
+
   it("toont geen liters als het niveau ontbreekt", async () => {
     readTyreStops.mockResolvedValue({
       sessionKey: "simhub-abc",
