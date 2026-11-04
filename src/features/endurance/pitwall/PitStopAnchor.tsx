@@ -81,6 +81,15 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
   const [exampleDone, setExampleDone] = useState<string | null>(null);
   const [geladen, setGeladen] = useState(false);
   const [bevestigd, setBevestigd] = useState(false);
+  // De bron komt als vers object binnen bij elke render van de pitwall. Wie hem
+  // als afhankelijkheid gebruikt, herlaadt en sluit de vraag elke seconde.
+  const deviceId = source?.deviceId ?? null;
+  const eventId = source?.eventId ?? null;
+  const teamId = source?.teamId ?? null;
+  const bron = { deviceId, eventId, teamId };
+  const bronRef = useRef(bron);
+  bronRef.current = bron;
+
   const generation = useRef(0);
   const gevraagd = useRef<Set<string>>(new Set());
   // Lokaal bevestigde stops: een poll die vóór het opslaan begon mag ze niet
@@ -95,18 +104,19 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
   const sluitTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
-    if (!enabled || !source) return;
+    if (!enabled || (!deviceId && !eventId && !teamId)) return;
     const mine = generation.current;
+    const src = bronRef.current;
     try {
-      const feed = await readTyreStops(source);
+      const feed = await readTyreStops(src);
       if (mine !== generation.current) return;
       const key = feed?.sessionKey ?? null;
       const vorigeSessie = sessieRef.current;
       sessieRef.current = key;
       setSessionKey(key);
-      const bron = bronSleutel(source);
+      const bronId = bronSleutel(src);
       const openStops = (feed?.stops ?? []).filter(
-        (s) => s.answer == null && !beantwoord.current.has(vraagSleutel(bron, key, s.visitKey)),
+        (s) => s.answer == null && !beantwoord.current.has(vraagSleutel(bronId, key, s.visitKey)),
       );
       if (openStops.length > 0) hadStop.current = true;
       setStops((prev) => {
@@ -122,9 +132,9 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
       // nu in het vak staan gelden als gevraagd, zodat er na het beantwoorden
       // geen oudere vraag vanzelf opnieuw openklapt.
       const nieuwste = openStops[0];
-      const nieuw = nieuwste ? vraagSleutel(bron, key, nieuwste.visitKey) : null;
+      const nieuw = nieuwste ? vraagSleutel(bronId, key, nieuwste.visitKey) : null;
       if (nieuw && !gevraagd.current.has(nieuw)) {
-        for (const s of openStops) gevraagd.current.add(vraagSleutel(bron, key, s.visitKey));
+        for (const s of openStops) gevraagd.current.add(vraagSleutel(bronId, key, s.visitKey));
         bewaarGevraagd(gevraagd.current);
         setOpen(true);
         setBevestigd(false);
@@ -137,7 +147,7 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
       setGeladen(true);
       setError("Kon de pitbezoeken niet ophalen.");
     }
-  }, [enabled, source]);
+  }, [enabled, deviceId, eventId, teamId]);
 
   useEffect(() => {
     generation.current += 1;
@@ -241,10 +251,10 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
     const onderSessie = sessionKey;
     setBusy(target.visitKey);
     try {
-      const ok = await answerTyreStop(source, target, answer, sessionKey);
+      const ok = await answerTyreStop(bronRef.current, target, answer, sessionKey);
       if (mine !== generation.current || sessieRef.current !== onderSessie) return;
       if (ok) {
-        beantwoord.current.add(vraagSleutel(bronSleutel(source), onderSessie, target.visitKey));
+        beantwoord.current.add(vraagSleutel(bronSleutel(bronRef.current), onderSessie, target.visitKey));
         // Op de actuele lijst werken: een poll kan er tijdens het bevestigen
         // een nieuwe stop bij hebben gezet, en die mag niet verdwijnen.
         setStops((prev) => prev.filter((s) => s.visitKey !== target.visitKey));
