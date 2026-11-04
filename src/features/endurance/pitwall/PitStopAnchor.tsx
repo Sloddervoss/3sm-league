@@ -88,6 +88,9 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
   // De sessie waaronder de zichtbare stops zijn opgehaald. Een bevestiging die
   // na een sessiewissel terugkomt mag die lijst niet meer aanraken.
   const sessieRef = useRef<string | null>(null);
+  // Zodra er één stop is gezien, valt het vak nooit meer terug op de voorbeeld-
+  // kaart. Anders wisselt het elke poll van inhoud als een sessie net leeg is.
+  const hadStop = useRef(false);
   const sluitTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -97,13 +100,20 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
       const feed = await readTyreStops(source);
       if (mine !== generation.current) return;
       const key = feed?.sessionKey ?? null;
+      const vorigeSessie = sessieRef.current;
       sessieRef.current = key;
       setSessionKey(key);
       const bron = bronSleutel(source);
       const openStops = (feed?.stops ?? []).filter(
         (s) => s.answer == null && !beantwoord.current.has(vraagSleutel(bron, key, s.visitKey)),
       );
-      setStops(openStops);
+      if (openStops.length > 0) hadStop.current = true;
+      setStops((prev) => {
+        // Een lege poll in dezelfde sessie mag een openstaande vraag niet
+        // weghalen; pas bij een andere sessie of een bevestigd antwoord vervalt ze.
+        if (openStops.length === 0 && prev.length > 0 && vorigeSessie === key) return prev;
+        return openStops;
+      });
       setError(null);
 
       // De nieuwste onbeantwoorde stop opent de vraag — één keer. Alle stops die
@@ -156,7 +166,14 @@ export const PitStopAnchor = ({ source, enabled, showExample = false, pollMs = 1
   const stop = stops[0] ?? null;
 
   if (!stop) {
-    if (showExample) {
+    if (error) {
+      return (
+        <PitwallPanel title="Pitstop" slot="tyrestop">
+          <p className="text-[11px] text-amber-300">{error}</p>
+        </PitwallPanel>
+      );
+    }
+    if (showExample && !hadStop.current) {
       return (
         <PitwallPanel title="Pitstop" slot="tyrestop" meta={<span className="text-slate-500">voorbeeld</span>}>
           <p className="text-[12px] text-slate-300">Pitstop · ronde —</p>
