@@ -1406,6 +1406,7 @@ const fetchDynamicRoutes = async () => {
         season: league.season,
         carClass: cleanText(league.car_class) || null,
         description: cleanText(league.description) || null,
+        createdAt: league.created_at || null,
         updatedAt: league.updated_at || null,
         total: counts.total,
         completed: counts.completed,
@@ -2593,7 +2594,11 @@ if (homeDataRoute) {
   // in het label zit ("GT Master Challenge Cup 2026 s2").
   const nextRace = calendarHubSummaries.find((race) => race.status === 'upcoming') || null;
   const lastRace = completedRacePool[0] || null;
-  const standLeague = leagueSummaries[0] || null;
+  // Niet leagueSummaries[0]: die lijst is op relevantie gesorteerd (aantal
+  // standen, aantal races), niet op aanmaakdatum. De UI gebruikt de laatst
+  // aangemaakte competitie, dus die zoeken we expliciet.
+  const standLeague = [...leagueSummaries]
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] || null;
   const standRows = standLeague ? (standingsByLeague.get(standLeague.id) || []) : [];
 
   const homeFacts = [];
