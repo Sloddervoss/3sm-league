@@ -1413,6 +1413,7 @@ const fetchDynamicRoutes = async () => {
       name: driverLabel(profile),
       teamName: teamNameFor(profile.user_id),
       irating: profile.irating ?? null,
+      safetyRating: profile.safety_rating ?? null,
       ...(overallByUser.get(profile.user_id) || { points: 0, wins: 0, podiums: 0, fastestLaps: 0, races: 0 }),
     }))
     .filter((driver) => driver.name)
@@ -2542,8 +2543,13 @@ if (homeDataRoute) {
   const nextRace = calendarHubSummaries[0] || null;
   const lastRace = completedRacePool[0] || null;
   const lastLeagueId = lastRace?.league_id || null;
-  const lastLeagueRows = lastLeagueId ? (standingsByLeague.get(lastLeagueId) || []) : [];
-  const lastLeague = lastLeagueId ? leagueSummaries.find((league) => league.id === lastLeagueId) : null;
+  // De stand hoort bij de competitie waar de homepage op focust: die van de
+  // eerstvolgende race, en anders die van de laatst verreden race.
+  const nextLeague = nextRace?.leagueName
+    ? leagueSummaries.find((league) => league.label === nextRace.leagueName)
+    : null;
+  const standLeague = nextLeague || (lastLeagueId ? leagueSummaries.find((league) => league.id === lastLeagueId) : null);
+  const standRows = standLeague ? (standingsByLeague.get(standLeague.id) || []) : [];
 
   const homeFacts = [];
   if (nextRace) {
@@ -2565,9 +2571,9 @@ if (homeDataRoute) {
       );
     }
   }
-  if (lastLeagueRows.length) {
+  if (standRows.length) {
     homeFacts.push(
-      `Stand in ${lastLeague?.label || 'het klassement'}: ${lastLeagueRows.slice(0, 5).map((row) => `${row.position}. ${row.name} ${row.points}`).join(', ')} punten.`,
+      `Stand in ${standLeague.label}: ${standRows.slice(0, 5).map((row) => `${row.position}. ${row.name} ${row.points} punten`).join(', ')}.`,
     );
   }
   if (newsHubSummaries.length) {
