@@ -46,6 +46,10 @@ import {
   readStreamerProfiles,
   notificationDecision,
   markNotificationSent,
+  upsertNotice,
+  removeNotices,
+  noticesToClear,
+  staleNotices,
   upsertStreamerProfile,
   writeStreamerProfiles,
 } from './streamers.js';
@@ -55,6 +59,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SENT_FILE   = path.join(__dirname, 'sent_notifications.json');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 const STREAMERS_FILE = path.join(__dirname, 'streamers.json');
+// Welke live-kaarten staan er in het kanaal? Runtime-bestand, net als streamers.json.
+const STREAM_NOTICES_FILE = path.join(__dirname, 'streamer-notices.json');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config();
@@ -122,6 +128,9 @@ async function botLogDiscordOnly(message) {
 const throttledLogs = new Map();
 const missingSchemaWarnings = new Set();
 const active_notifications = new Set();
+// Hoe vaak een poll achter elkaar "offline" zag, zodat één mislukte API-aanroep
+// de kaart van een lopende stream niet opruimt.
+const streamOfflineMisses = new Map();
 const ERROR_LOG_THROTTLE_MS = 5 * 60 * 1000;
 const NETWORK_ERROR_LOG_THROTTLE_MS = 15 * 60 * 1000;
 const JOB_STUCK_WARNING_MS = 4 * 60 * 1000;
@@ -459,26 +468,94 @@ async function checkStreams() {
     try {
       const statuses = await fetchPlatformStatuses(profile);
       const session = buildStreamerSession(profile, statuses);
-      const action = notificationDecision(active_notifications, session);
-      if (action !== 'notify') continue;
+
+      // Offline is pas offline na twee polls: één mislukte API-aanroep mag de
+      // kaart van een lopende stream niet wissen.
+      const misses = (streamOfflineMisses.get(session.key) || 0) + (session.shouldNotify ? 0 : 1);
+      streamOfflineMisses.set(session.key, session.shouldNotify ? 0 : misses);
+      const parked = !session.shouldNotify && misses < 2;
+
+      const notices = readStreamNotices();
+      const stale = noticesToClear(notices, session);
+
+      if (stale.length && !parked) {
+        const failed = await clearStreamNotices(stale);
+        const failedIds = new Set(failed.map(notice => notice.messageId));
+        // Gelukte verwijderingen gaan uit het bestand; mislukte blijven staan
+        // zodat de volgende poll het opnieuw probeert.
+        writeStreamNotices(notices.filter(notice => notice.key !== session.key || failedIds.has(notice.messageId)));
+        active_notifications.delete(session.key);
+      }
+
+      if (!session.shouldNotify) continue;
+      if (notices.some(notice => notice.key === session.key && notice.streamKey === session.streamKey)) continue;
 
       const channel = await getLiveChannel(profile);
       if (!channel) continue;
       const card = buildDiscordLiveEmbed(session);
-      await channel.send({
+      const message = await channel.send({
         embeds: [card.embed],
         components: card.components,
         allowedMentions: card.allowedMentions,
       });
-      // Pas ná een geslaagde send als gemeld markeren. Anders blokkeert één
-      // mislukte poging (kanaal weg, rechten, rate limit) alle volgende polls
-      // voor deze stream en blijft de melding voorgoed uit.
+      // Pas ná een geslaagde send onthouden. Anders blokkeert één mislukte
+      // poging (kanaal weg, rechten, rate limit) alle volgende polls voor deze
+      // stream en blijft de melding voorgoed uit.
       markNotificationSent(active_notifications, session);
+      const fresh = readStreamNotices();
+      writeStreamNotices(upsertNotice(fresh, {
+        key: session.key,
+        profiel_naam: profile.profiel_naam,
+        streamKey: session.streamKey,
+        channelId: channel.id,
+        messageId: message.id,
+        sentAt: new Date().toISOString(),
+      }));
       await botLog(`[streams] Live melding gestuurd voor ${profile.profiel_naam}: ${session.platforms.map(p => p.platform).join(', ')}`);
     } catch (e) {
       await throttledBotLog(`streams:${profile.profiel_naam}:${describeError(e)}`, `[streams] ${profile.profiel_naam}: ${describeError(e)}`);
     }
   }
+}
+
+function readStreamNotices() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(STREAM_NOTICES_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStreamNotices(notices) {
+  try {
+    const tmp = `${STREAM_NOTICES_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(notices, null, 2));
+    fs.renameSync(tmp, STREAM_NOTICES_FILE);
+  } catch (e) {
+    botLog(`[streams] kon ${STREAM_NOTICES_FILE} niet schrijven: ${describeError(e)}`);
+  }
+}
+
+// Ruimt de kaarten op die niet meer bij een lopende uitzending horen. Lukt
+// verwijderen niet (rechten, bericht al weg), dan valt de kaart terug op een
+// korte "afgelopen"-regel in plaats van te blijven staan als live.
+async function clearStreamNotices(notices) {
+  const failed = [];
+  for (const notice of notices) {
+    try {
+      const channel = await client.channels.fetch(notice.channelId).catch(() => null);
+      if (!channel) { failed.push(notice); continue; }
+      const message = await channel.messages.fetch(notice.messageId).catch(() => null);
+      if (!message) continue; // al weg: niets op te ruimen
+      await message.delete();
+    } catch (e) {
+      failed.push(notice);
+      await throttledBotLog(`streams:clear:${notice.messageId}:${describeError(e)}`, `[streams] kon melding ${notice.messageId} niet verwijderen: ${describeError(e)}`);
+    }
+  }
+  // Alleen de mislukte blijven in het bestand; de volgende poll probeert opnieuw.
+  return failed;
 }
 
 async function getUitslagenChannel() {
@@ -3013,6 +3090,17 @@ client.once('clientReady', async () => {
   for (const [, guild] of client.guilds.cache) {
     await registerCommands(guild.id);
     await ensureLiveChannelPermissions(guild);
+  }
+
+  // Na een herstart weet de bot niet meer wat hij al meldde. De kaarten in het
+  // kanaal zijn de bron: zij bepalen of een stream al gemeld is, en kaarten die
+  // na een week nergens meer bij horen gaan weg.
+  for (const notice of readStreamNotices()) active_notifications.add(notice.key);
+  const week = staleNotices(readStreamNotices());
+  if (week.length) {
+    const failed = await clearStreamNotices(week).catch(() => week);
+    const keep = readStreamNotices().filter(notice => !week.some(old => old.messageId === notice.messageId) || failed.some(f => f.messageId === notice.messageId));
+    writeStreamNotices(keep);
   }
 
   // Elke minuut, gespreid over de minuut: race checks + aanmeldingen + koppelingen

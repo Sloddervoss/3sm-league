@@ -113,7 +113,47 @@ export function buildStreamerSession(profile, platformStatuses) {
     profile,
     shouldNotify: platforms.length > 0,
     platforms,
+    // Uniek per uitzending, niet per profiel: dezelfde streamer die na een
+    // kwartier opnieuw begint is een nieuwe melding, een herstart van de bot niet.
+    streamKey: platforms
+      .map(platform => `${platform.platform}:${platform.streamId || platform.startedAt || platform.url}`)
+      .sort()
+      .join('|'),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Wat er in het kanaal staat
+// ---------------------------------------------------------------------------
+// De bot onthoudt per melding welk bericht hij plaatste, zodat hij het bij een
+// livegang kan opruimen. Zonder dat geheugen blijft elke oude kaart staan (en
+// verdubbelt een herstart van de bot de melding, want de sessie is dan "nieuw").
+export function upsertNotice(notices, record) {
+  const list = (Array.isArray(notices) ? notices : [])
+    .filter(notice => notice && notice.key && notice.key !== record.key);
+  list.push({ ...record });
+  return list;
+}
+
+export function removeNotices(notices, key) {
+  return (Array.isArray(notices) ? notices : [])
+    .filter(notice => notice && notice.key && notice.key !== key);
+}
+
+// Een oude melding mag weg als hij niet bij de nu lopende uitzending hoort.
+export function noticesToClear(notices, session) {
+  return (Array.isArray(notices) ? notices : []).filter((notice) => {
+    if (!notice || !notice.key || notice.key !== session?.key) return false;
+    if (!session.shouldNotify) return true;               // streamer is offline
+    return notice.streamKey !== session.streamKey;        // andere uitzending
+  });
+}
+
+// Na een week is een melding sowieso oud genoeg, ook als de streamer zijn
+// kanaal nooit meer live zet.
+export function staleNotices(notices, now = Date.now(), maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
+  return (Array.isArray(notices) ? notices : []).filter(notice =>
+    notice && notice.sentAt && now - Date.parse(notice.sentAt) > maxAgeMs);
 }
 
 // Bepaal wat er moet gebeuren zonder de sessie al als "gemeld" te markeren.

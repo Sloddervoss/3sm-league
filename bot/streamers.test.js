@@ -1,17 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  normalizeStreamerProfile,
-  upsertStreamerProfile,
-  deleteStreamerProfile,
-  profileAutocompleteChoices,
-  titleContains3Stripe,
-  buildStreamerSession,
-  updateActiveNotifications,
-  notificationDecision,
-  markNotificationSent,
-  buildLiveEmbedPayload,
-} from './streamers.js';
+import { normalizeStreamerProfile, upsertStreamerProfile, deleteStreamerProfile, profileAutocompleteChoices, titleContains3Stripe, buildStreamerSession, updateActiveNotifications, notificationDecision, markNotificationSent, buildLiveEmbedPayload, upsertNotice, removeNotices, noticesToClear, staleNotices } from './streamers.js';
 
 test('normalizeStreamerProfile requires at least one platform name or id', () => {
   assert.throws(
@@ -230,4 +219,46 @@ test('een mislukte verzending houdt de volgende poll open', () => {
 
   markNotificationSent(active, session);
   assert.equal(notificationDecision(active, session), 'skip');
+});
+
+
+test('dezelfde uitzending houdt dezelfde streamKey, een nieuwe uitzending niet', () => {
+  const profile = normalizeStreamerProfile({ profiel_naam: 'Jaimy', twitch_naam: 'jaimsjourney' });
+  const first = buildStreamerSession(profile, [{ platform: 'Twitch', live: true, title: '3stripe race', url: 'https://twitch.tv/jaimsjourney', streamId: '111' }]);
+  const second = buildStreamerSession(profile, [{ platform: 'Twitch', live: true, title: '3stripe race 2', url: 'https://twitch.tv/jaimsjourney', streamId: '111' }]);
+  const next = buildStreamerSession(profile, [{ platform: 'Twitch', live: true, title: '3stripe race 3', url: 'https://twitch.tv/jaimsjourney', streamId: '222' }]);
+
+  assert.equal(first.streamKey, second.streamKey);
+  assert.notEqual(first.streamKey, next.streamKey);
+});
+
+test('noticesToClear ruimt op bij offline en bij een nieuwe uitzending', () => {
+  const profile = normalizeStreamerProfile({ profiel_naam: 'Jaimy', twitch_naam: 'jaimsjourney' });
+  const live = buildStreamerSession(profile, [{ platform: 'Twitch', live: true, title: '3stripe race', url: 'https://twitch.tv/jaimsjourney', streamId: '111' }]);
+  const offline = buildStreamerSession(profile, [{ platform: 'Twitch', live: false, title: '', url: 'https://twitch.tv/jaimsjourney' }]);
+  const next = buildStreamerSession(profile, [{ platform: 'Twitch', live: true, title: '3stripe race 4', url: 'https://twitch.tv/jaimsjourney', streamId: '222' }]);
+  const notices = [{ key: live.key, streamKey: live.streamKey, messageId: '1' }];
+
+  assert.deepEqual(noticesToClear(notices, live), []);
+  assert.deepEqual(noticesToClear(notices, offline).map(n => n.messageId), ['1']);
+  assert.deepEqual(noticesToClear(notices, next).map(n => n.messageId), ['1']);
+  assert.deepEqual(noticesToClear(notices, { key: 'iemand-anders', shouldNotify: false }), []);
+});
+
+test('upsertNotice vervangt de kaart van hetzelfde profiel en laat de rest staan', () => {
+  const start = [{ key: 'a', messageId: '1' }, { key: 'b', messageId: '2' }];
+  const result = upsertNotice(start, { key: 'a', messageId: '3' });
+
+  assert.deepEqual(result.map(n => n.messageId), ['2', '3']);
+  assert.deepEqual(removeNotices(result, 'a').map(n => n.messageId), ['2']);
+});
+
+test('staleNotices laat een kaart van een week oud los', () => {
+  const now = Date.parse('2026-11-05T20:00:00Z');
+  const notices = [
+    { key: 'a', sentAt: '2026-11-05T19:00:00Z' },
+    { key: 'b', sentAt: '2026-10-20T19:00:00Z' },
+  ];
+
+  assert.deepEqual(staleNotices(notices, now).map(n => n.key), ['b']);
 });
