@@ -2494,7 +2494,7 @@ if (driversRoute && driverSummaries.length) {
     `3SM telt ${driverSummaries.length} coureurs met een publiek profiel${teamCount ? `, verdeeld over ${teamCount} team${teamCount === 1 ? '' : 's'}` : ''}. ${withRaces.length} van hen hebben al races gereden in de league.`,
     'Prestaties per coureur komen terug in de standings en in de race-uitslagen, zodat je een coureur door de seizoenen heen kunt volgen.',
   ];
-  driversRoute.facts = driverSummaries.slice(0, 10).map((driver) =>
+  driversRoute.facts = driverSummaries.map((driver) =>
     `${driver.name}${driver.teamName ? ` (${driver.teamName})` : ''} — ${driver.races} races, ${driver.wins} overwinningen, ${driver.podiums} podiums, ${driver.points} punten.`);
   driversRoute.crawlerHtml = buildDriversHubCrawlerHtml();
   const driversItemList = buildDriversItemListJsonLd();
