@@ -1286,7 +1286,7 @@ const fetchDynamicRoutes = async () => {
   // stand, de coureurs en de teams kwamen uitsluitend na hydratatie uit de API.
   const { data: allRaceRows, error: allRaceError } = await supabase
     .from('races')
-    .select('id,league_id,status,updated_at,race_date');
+    .select('id,league_id,name,track,status,updated_at,race_date');
   if (allRaceError) console.warn(`Kon alle races niet ophalen voor hubdata: ${allRaceError.message}`);
 
   const { data: leagueRows, error: leagueError } = await supabase
@@ -1297,7 +1297,7 @@ const fetchDynamicRoutes = async () => {
 
   const { data: profileRows, error: profileError } = await supabase
     .from('public_profiles')
-    .select('user_id,display_name,iracing_name,irating,team_id');
+    .select('user_id,display_name,iracing_name,irating,safety_rating,team_id');
   if (profileError) console.warn(`Kon coureursprofielen niet ophalen voor hubdata: ${profileError.message}`);
 
   const { data: teamRowData, error: teamRowError } = await supabase
@@ -1432,7 +1432,15 @@ const fetchDynamicRoutes = async () => {
       color: cleanText(team.color) || null,
       updatedAt: team.updated_at || null,
       memberUserIds: [...memberIds],
-      members: members.map((member) => ({ name: member.name, points: member.points, wins: member.wins })),
+      members: members.map((member) => ({
+        name: member.name,
+        points: member.points,
+        wins: member.wins,
+        podiums: member.podiums,
+        races: member.races,
+        irating: member.irating ?? null,
+        safetyRating: member.safetyRating ?? null,
+      })),
       points: members.reduce((sum, member) => sum + member.points, 0),
       wins: members.reduce((sum, member) => sum + member.wins, 0),
       podiums: members.reduce((sum, member) => sum + member.podiums, 0),
@@ -1658,6 +1666,20 @@ const fetchDynamicRoutes = async () => {
     const teamMemberRaces = teamMemberIds.size
       ? completedRacePool.filter((race) => (race.race_results || []).some((result) => teamMemberIds.has(result.user_id)))
       : [];
+    // Dezelfde acht recente resultaten als het teampaneel in de UI: positie,
+    // race, coureur en punten. Zonder dit blok stond er alleen een puntenlijst.
+    const teamRecentResults = teamMemberRaces
+      .flatMap((race) => (race.race_results || [])
+        .filter((result) => teamMemberIds.has(result.user_id) && result.position != null)
+        .map((result) => ({
+          date: race.race_date,
+          raceName: cleanText(race.name),
+          position: result.position,
+          points: result.points ?? 0,
+          driver: cleanText(result.profiles?.display_name || result.profiles?.iracing_name) || '—',
+        })))
+      .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+      .slice(0, 8);
 
     dynamicRoutes.push({
       path: entityPath,
@@ -1674,8 +1696,15 @@ const fetchDynamicRoutes = async () => {
       intro: `${team.name} is een team binnen de 3 Stripe Motorsport iRacing league. Hieronder staan de coureurs, hun punten en de races waarin het team uitkwam.`,
       facts: [
         team.description || null,
-        `${team.members.length} coureur${team.members.length === 1 ? '' : 's'}: ${team.members.map((member) => `${member.name} (${member.points} punten)`).join(', ') || 'nog geen'}.`,
+        `${team.members.length} coureur${team.members.length === 1 ? '' : 's'}: ${team.members.map((member) => {
+          const extra = [
+            member.irating ? `iRating ${member.irating}` : null,
+            member.safetyRating ? `licentie ${member.safetyRating}` : null,
+          ].filter(Boolean).join(', ');
+          return `${member.name} (${member.points} punten${extra ? `, ${extra}` : ''})`;
+        }).join(', ') || 'nog geen'}.`,
         `Samen ${team.points} punten, ${team.wins} overwinningen en ${team.podiums} podiums.`,
+        ...teamRecentResults.map((result) => `P${result.position} · ${result.raceName} — ${result.driver}, ${result.points} punten (${formatDateNl(result.date, { style: 'long' }) || dateOnly(result.date)}).`),
       ].filter(Boolean),
       crawlerLinksLabel: `Coureurs van ${team.name}`,
       crawlerLinks: memberLinks,
@@ -1708,6 +1737,15 @@ const fetchDynamicRoutes = async () => {
     // Ook de nog niet verreden en geannuleerde races van deze competitie: die
     // bepalen het "x van y verreden" op de seizoenspagina.
     const leagueAllRaces = (allRaceRows || []).filter((race) => race.league_id === league.id);
+    // De races zelf horen ook in de HTML: de pagina belooft "alle N verreden
+    // races met hun uitslagen". Verreden races komen uit de pool met uitslagen
+    // (daar zit de winnaar in), geplande uit de volledige racedlijst.
+    const completedLeagueRaces = completedRacePool
+      .filter((race) => race.league_id === league.id)
+      .sort((a, b) => new Date(b.race_date || 0) - new Date(a.race_date || 0));
+    const plannedLeagueRaces = leagueAllRaces
+      .filter((race) => race.status !== 'completed')
+      .sort((a, b) => new Date(a.race_date || 0) - new Date(b.race_date || 0));
 
     dynamicRoutes.push({
       path: entityPath,
@@ -1718,7 +1756,21 @@ const fetchDynamicRoutes = async () => {
       changefreq: 'weekly',
       lastmod: seasonRouteLastmod({ updatedAt: league.updatedAt, races: leagueAllRaces }),
       intro: `Dit is het seizoensoverzicht van ${league.label}${league.carClass ? ` (${league.carClass})` : ''}: de volledige stand en alle ${leagueRaces.length} verreden races met hun uitslagen.`,
-      facts: rows.slice(0, 10).map((row) => `${row.position}. ${row.name}${row.teamName ? ` (${row.teamName})` : ''} — ${row.points} punten, ${row.wins} overwinningen, ${row.podiums} podiums.`),
+      facts: [
+        ...rows.map((row) => `${row.position}. ${row.name}${row.teamName ? ` (${row.teamName})` : ''} — ${row.points} punten, ${row.wins} overwinningen, ${row.podiums} podiums.`),
+        ...completedLeagueRaces.slice(0, 20).map((race) => {
+          const winner = (race.race_results || [])
+            .filter((result) => result.position === 1)
+            .map((result) => cleanText(result.profiles?.display_name || result.profiles?.iracing_name))
+            .filter(Boolean)[0] || null;
+          const when = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
+          return `Race ${race.round ?? '—'} · ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} — ${when}${winner ? `, winnaar ${winner}` : ''} (verreden).`;
+        }),
+        ...plannedLeagueRaces.slice(0, 20).map((race) => {
+          const when = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
+          return `Race ${race.round ?? '—'} · ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} — ${when} (gepland).`;
+        }),
+      ],
       details: [
         `${league.completed} van ${league.total} races verreden in ${league.label}.`,
         league.leaderName ? `Aanvoerder: ${league.leaderName} met ${league.leaderPoints} punten.` : null,
@@ -2422,7 +2474,7 @@ if (standingsRoute) {
         : `De stand van ${primary.label} bevat ${rows.length} coureurs met punten.`,
       'De stand wordt bijgewerkt na elke gereden race en sluit direct aan op de race-uitslagen en de kalender.',
     ];
-    standingsRoute.facts = rows.slice(0, 10).map((row) =>
+    standingsRoute.facts = rows.map((row) =>
       `${row.position}. ${row.name}${row.teamName ? ` (${row.teamName})` : ''} — ${row.points} punten, ${row.wins} overwinningen, ${row.podiums} podiums.`);
   }
   standingsRoute.crawlerHtml = buildStandingsHubCrawlerHtml();
@@ -2479,6 +2531,53 @@ if (seasonsRoute && leagueSummaries.length) {
   const seasonsItemList = buildSeasonsItemListJsonLd();
   if (seasonsItemList) {
     seasonsRoute.extraJsonLd = [{ id: 'seasons-itemlist-jsonld', data: seasonsItemList }];
+  }
+}
+
+// Homepage: dezelfde blokken die de UI toont (volgende race, laatste podium,
+// stand en nieuws) horen ook in de eerste HTML te staan. Zonder dit was de
+// homepage voor een crawler zonder JavaScript een intro en verder niets.
+const homeDataRoute = routes.find((route) => route.path === '/');
+if (homeDataRoute) {
+  const nextRace = calendarHubSummaries[0] || null;
+  const lastRace = completedRacePool[0] || null;
+  const lastLeagueId = lastRace?.league_id || null;
+  const lastLeagueRows = lastLeagueId ? (standingsByLeague.get(lastLeagueId) || []) : [];
+  const lastLeague = lastLeagueId ? leagueSummaries.find((league) => league.id === lastLeagueId) : null;
+
+  const homeFacts = [];
+  if (nextRace) {
+    homeFacts.push(
+      `Volgende race: ${nextRace.name}${nextRace.track ? ` op ${nextRace.track}` : ''} — ${nextRace.formattedDate}${nextRace.leagueName || nextRace.carClass ? ` · ${nextRace.leagueName || nextRace.carClass}` : ''}.`,
+    );
+  }
+  if (lastRace) {
+    const podium = (lastRace.race_results || [])
+      .filter((result) => result.position != null && result.position <= 3)
+      .sort((a, b) => a.position - b.position)
+      .map((result) => {
+        const name = cleanText(result.profiles?.display_name || result.profiles?.iracing_name) || '—';
+        return `${result.position}. ${name} ${result.points ?? 0} punten`;
+      });
+    if (podium.length) {
+      homeFacts.push(
+        `Laatste race: ${cleanText(lastRace.name)}${lastRace.track ? ` op ${cleanText(lastRace.track)}` : ''} — podium ${podium.join(', ')}.`,
+      );
+    }
+  }
+  if (lastLeagueRows.length) {
+    homeFacts.push(
+      `Stand in ${lastLeague?.label || 'het klassement'}: ${lastLeagueRows.slice(0, 5).map((row) => `${row.position}. ${row.name} ${row.points}`).join(', ')} punten.`,
+    );
+  }
+  if (newsHubSummaries.length) {
+    homeFacts.push(
+      `Laatste nieuws: ${newsHubSummaries.slice(0, 3).map((post) => `${post.title} (${post.formattedDate})`).join('; ')}.`,
+    );
+  }
+
+  if (homeFacts.length) {
+    homeDataRoute.facts = [...(homeDataRoute.facts || []), ...homeFacts];
   }
 }
 
