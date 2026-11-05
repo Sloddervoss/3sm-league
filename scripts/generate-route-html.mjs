@@ -473,6 +473,15 @@ const categoryToSlug = (category) => categorySlugMap.get(category) || normalizeS
 
 const slugify = (value) => normalizeSlugInput(cleanText(value));
 
+// Een race heeft niet altijd een rondenummer, en de naam bevat vaak zelf al
+// "Race 5". Dan is "Race — · Race 5 · ..." dubbel of leeg; deze helper levert
+// het prefix alleen als het iets toevoegt.
+const raceLabel = (race) => {
+  const name = cleanText(race?.name) || '';
+  if (race?.round == null || /\brace\s*\d+/i.test(name)) return '';
+  return `Race ${race.round}`;
+};
+
 const driverLabel = (profile) => cleanText(profile?.iracing_name || profile?.display_name) || 'Onbekende coureur';
 
 // ---------- Entiteitspagina's ----------
@@ -814,6 +823,8 @@ const summarizeRaceForHub = (race) => {
     raceDate: race.race_date,
     formattedDate: dateLabel,
     round: race.round,
+    status: race.status || null,
+    leagueId: race.league_id || null,
     leagueName: cleanText(race.leagues?.name) || null,
     carClass: className || null,
     winner,
@@ -1286,7 +1297,7 @@ const fetchDynamicRoutes = async () => {
   // stand, de coureurs en de teams kwamen uitsluitend na hydratatie uit de API.
   const { data: allRaceRows, error: allRaceError } = await supabase
     .from('races')
-    .select('id,league_id,name,track,status,updated_at,race_date');
+    .select('id,league_id,name,track,round,status,updated_at,race_date');
   if (allRaceError) console.warn(`Kon alle races niet ophalen voor hubdata: ${allRaceError.message}`);
 
   const { data: leagueRows, error: leagueError } = await supabase
@@ -1410,7 +1421,11 @@ const fetchDynamicRoutes = async () => {
   driverSummaries = (profileRows || [])
     .map((profile) => ({
       userId: profile.user_id,
+      // `name` is de canonieke schrijfwijze voor URL's en JSON-LD (iracing_name
+      // eerst). `label` is wat de UI toont (display_name eerst), zodat dezelfde
+      // pagina niet twee spellingen van dezelfde coureur laat zien.
       name: driverLabel(profile),
+      label: cleanText(profile.display_name || profile.iracing_name) || driverLabel(profile),
       teamName: teamNameFor(profile.user_id),
       irating: profile.irating ?? null,
       safetyRating: profile.safety_rating ?? null,
@@ -1421,10 +1436,15 @@ const fetchDynamicRoutes = async () => {
       b.points - a.points || b.wins - a.wins || b.races - a.races || a.name.localeCompare(b.name));
 
   teamSummaries = (teamRowData || []).map((team) => {
-    const memberIds = new Set([
-      ...(membershipData || []).filter((membership) => membership.team_id === team.id).map((membership) => membership.user_id),
-      ...(profileRows || []).filter((profile) => profile.team_id === team.id).map((profile) => profile.user_id),
-    ].filter(Boolean));
+    // Alleen team_memberships, precies zoals TeamModal in de UI. De oude
+    // samenvoeging met profiles.team_id kon leden opleveren die het paneel niet
+    // toont (in productie nu nul, maar het verschil zou stil ontstaan).
+    const memberIds = new Set(
+      (membershipData || [])
+        .filter((membership) => membership.team_id === team.id)
+        .map((membership) => membership.user_id)
+        .filter(Boolean),
+    );
     const members = driverSummaries.filter((driver) => memberIds.has(driver.userId));
     return {
       id: team.id,
@@ -1435,6 +1455,7 @@ const fetchDynamicRoutes = async () => {
       memberUserIds: [...memberIds],
       members: members.map((member) => ({
         name: member.name,
+        label: member.label || member.name,
         points: member.points,
         wins: member.wins,
         podiums: member.podiums,
@@ -1679,7 +1700,11 @@ const fetchDynamicRoutes = async () => {
           points: result.points ?? 0,
           driver: cleanText(result.profiles?.display_name || result.profiles?.iracing_name) || '—',
         })))
-      .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+      // Zonder tweede en derde sleutel kan de selectie bij de grens van acht
+      // per build verschillen wanneer twee races dezelfde datum hebben.
+      .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)
+        || (a.position ?? 99) - (b.position ?? 99)
+        || a.driver.localeCompare(b.driver))
       .slice(0, 8);
 
     dynamicRoutes.push({
@@ -1702,7 +1727,7 @@ const fetchDynamicRoutes = async () => {
             member.irating ? `iRating ${member.irating}` : null,
             member.safetyRating ? `licentie ${member.safetyRating}` : null,
           ].filter(Boolean).join(', ');
-          return `${member.name} (${member.points} punten${extra ? `, ${extra}` : ''})`;
+          return `${member.label || member.name} (${member.points} punten${extra ? `, ${extra}` : ''})`;
         }).join(', ') || 'nog geen'}.`,
         `Samen ${team.points} punten, ${team.wins} overwinningen en ${team.podiums} podiums.`,
         ...teamRecentResults.map((result) => `P${result.position} · ${result.raceName} — ${result.driver}, ${result.points} punten (${formatDateNl(result.date, { style: 'long' }) || dateOnly(result.date)}).`),
@@ -1739,13 +1764,31 @@ const fetchDynamicRoutes = async () => {
     // bepalen het "x van y verreden" op de seizoenspagina.
     const leagueAllRaces = (allRaceRows || []).filter((race) => race.league_id === league.id);
     // De races zelf horen ook in de HTML: de pagina belooft "alle N verreden
-    // races met hun uitslagen". Verreden races komen uit de pool met uitslagen
-    // (daar zit de winnaar in), geplande uit de volledige racedlijst.
-    const completedLeagueRaces = completedRacePool
-      .filter((race) => race.league_id === league.id)
-      .sort((a, b) => new Date(b.race_date || 0) - new Date(a.race_date || 0));
+    // races met hun uitslagen". De racedlijst komt uit allRaceRows (alle races
+    // van deze league, niet de globale pool van 250); alleen de winnaar halen we
+    // uit de pool met uitslagen. Status expliciet: 'upcoming' is gepland,
+    // 'cancelled' en 'live' krijgen hun eigen regel in plaats van "(gepland)".
+    const winnerByRaceId = new Map();
+    for (const poolRace of completedRacePool) {
+      if (poolRace.league_id !== league.id) continue;
+      const winner = (poolRace.race_results || [])
+        .filter((result) => result.position === 1)
+        .map((result) => cleanText(result.profiles?.display_name || result.profiles?.iracing_name))
+        .filter(Boolean)[0];
+      if (winner) winnerByRaceId.set(poolRace.id, winner);
+    }
+    const completedLeagueRaces = leagueAllRaces
+      .filter((race) => race.status === 'completed')
+      .sort((a, b) => new Date(b.race_date || 0) - new Date(a.race_date || 0))
+      .map((race) => ({ ...race, winner: winnerByRaceId.get(race.id) || null }));
     const plannedLeagueRaces = leagueAllRaces
-      .filter((race) => race.status !== 'completed')
+      .filter((race) => race.status === 'upcoming')
+      .sort((a, b) => new Date(a.race_date || 0) - new Date(b.race_date || 0));
+    const cancelledLeagueRaces = leagueAllRaces
+      .filter((race) => race.status === 'cancelled')
+      .sort((a, b) => new Date(a.race_date || 0) - new Date(b.race_date || 0));
+    const liveLeagueRaces = leagueAllRaces
+      .filter((race) => race.status === 'live')
       .sort((a, b) => new Date(a.race_date || 0) - new Date(b.race_date || 0));
 
     dynamicRoutes.push({
@@ -1756,20 +1799,24 @@ const fetchDynamicRoutes = async () => {
       priority: '0.6',
       changefreq: 'weekly',
       lastmod: seasonRouteLastmod({ updatedAt: league.updatedAt, races: leagueAllRaces }),
-      intro: `Dit is het seizoensoverzicht van ${league.label}${league.carClass ? ` (${league.carClass})` : ''}: de volledige stand en alle ${leagueRaces.length} verreden races met hun uitslagen.`,
+      intro: `Dit is het seizoensoverzicht van ${league.label}${league.carClass ? ` (${league.carClass})` : ''}: de volledige stand en alle ${completedLeagueRaces.length} verreden races met hun uitslagen.`,
       facts: [
         ...rows.map((row) => `${row.position}. ${row.name}${row.teamName ? ` (${row.teamName})` : ''} — ${row.points} punten, ${row.wins} overwinningen, ${row.podiums} podiums.`),
-        ...completedLeagueRaces.slice(0, 20).map((race) => {
-          const winner = (race.race_results || [])
-            .filter((result) => result.position === 1)
-            .map((result) => cleanText(result.profiles?.display_name || result.profiles?.iracing_name))
-            .filter(Boolean)[0] || null;
+        ...completedLeagueRaces.map((race) => {
           const when = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
-          return `Race ${race.round ?? '—'} · ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} — ${when}${winner ? `, winnaar ${winner}` : ''} (verreden).`;
+          return `${raceLabel(race)} · ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} — ${when}${race.winner ? `, winnaar ${race.winner}` : ''} (verreden).`;
         }),
-        ...plannedLeagueRaces.slice(0, 20).map((race) => {
+        ...liveLeagueRaces.map((race) => {
           const when = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
-          return `Race ${race.round ?? '—'} · ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} — ${when} (gepland).`;
+          return `${raceLabel(race)} · ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} — ${when} (bezig).`;
+        }),
+        ...plannedLeagueRaces.map((race) => {
+          const when = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
+          return `${raceLabel(race)} · ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} — ${when} (gepland).`;
+        }),
+        ...cancelledLeagueRaces.map((race) => {
+          const when = formatDateNl(race.race_date, { style: 'long' }) || dateOnly(race.race_date);
+          return `${raceLabel(race)} · ${cleanText(race.name)}${race.track ? ` op ${cleanText(race.track)}` : ''} — ${when} (geannuleerd).`;
         }),
       ],
       details: [
@@ -2540,15 +2587,13 @@ if (seasonsRoute && leagueSummaries.length) {
 // homepage voor een crawler zonder JavaScript een intro en verder niets.
 const homeDataRoute = routes.find((route) => route.path === '/');
 if (homeDataRoute) {
-  const nextRace = calendarHubSummaries[0] || null;
+  // De homepage-UI toont de stand van de laatst aangemaakte competitie
+  // (HomepagePrototype: leagues[0] op created_at desc). De prerender volgt die
+  // regel letterlijk; koppelen op een presentatienaam liep mis zodra het seizoen
+  // in het label zit ("GT Master Challenge Cup 2026 s2").
+  const nextRace = calendarHubSummaries.find((race) => race.status === 'upcoming') || null;
   const lastRace = completedRacePool[0] || null;
-  const lastLeagueId = lastRace?.league_id || null;
-  // De stand hoort bij de competitie waar de homepage op focust: die van de
-  // eerstvolgende race, en anders die van de laatst verreden race.
-  const nextLeague = nextRace?.leagueName
-    ? leagueSummaries.find((league) => league.label === nextRace.leagueName)
-    : null;
-  const standLeague = nextLeague || (lastLeagueId ? leagueSummaries.find((league) => league.id === lastLeagueId) : null);
+  const standLeague = leagueSummaries[0] || null;
   const standRows = standLeague ? (standingsByLeague.get(standLeague.id) || []) : [];
 
   const homeFacts = [];
