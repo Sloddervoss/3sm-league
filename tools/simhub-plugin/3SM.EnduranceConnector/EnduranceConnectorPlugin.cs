@@ -2132,6 +2132,29 @@ namespace ThreeSM.EnduranceConnector
                     // terugval op SimHub een aangetoonde ronde-overgang, anders blijft
                     // de tijd leeg in plaats van bij de verkeerde ronde te horen.
                     var chosen=_paceSources.Choose(o.Id,directLast,directBest,reportedLap,directLap,PositiveSeconds(o.LastLapTime),PositiveSeconds(o.BestLapTime),o.CurrentLap);
+                    if(o.IsPlayer)
+                    {
+                        // De speler heeft een doorlopende eigen bron: CompletedLaps en
+                        // LastLapTime lopen ook als het opponent-object leeg is (gemeten
+                        // 2026-11-05: opponent.lap null terwijl timing.completedLaps 23 en
+                        // timing.lastLap 120,494 waren). De selectie hierboven eist dat tijd
+                        // en tellerstap in dezelfde waarneming verschijnen; de
+                        // toeschrijvingsengine verwacht de tijd juist één waarneming later
+                        // (gemeten mediaan 0,52 s). Voor de speler laten we het paren dus
+                        // aan de engine en kiezen we hier alleen de bron.
+                        var playerCompleted=directLap.HasValue?reportedLap:(double?)GetNullableInt(manager,Settings.CompletedLapsProperty);
+                        var playerLast=directLast??PositiveNullable(GetNullableSeconds(manager,Settings.LastLapTimeProperty))??PositiveSeconds(o.LastLapTime);
+                        var playerBest=directBest??PositiveNullable(GetNullableSeconds(manager,Settings.BestLapTimeProperty))??PositiveSeconds(o.BestLapTime);
+                        var playerLap=directLap??(playerCompleted.HasValue?(double?)(playerCompleted.Value+1):null);
+                        chosen=new PaceSourceChoice {
+                            LastLapSeconds=playerLast,
+                            BestLapSeconds=playerBest,
+                            Lap=playerLap,
+                            ReportedLap=playerCompleted.HasValue?(int?)playerCompleted.Value:null,
+                            LastLapSource=directLast.HasValue?PaceSourceSelector.SourceDirect:PaceSourceSelector.SourceSimHub,
+                            BestLapSource=directBest.HasValue?PaceSourceSelector.SourceDirect:PaceSourceSelector.SourceSimHub,
+                        };
+                    }
                     rows.Add(new PaceObservation {Id=o.Id,ReportedLap=chosen.ReportedLap,LapSource=chosen.LastLapSource,Lap=chosen.Lap.HasValue?(int?)chosen.Lap.Value:o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
                         Distance=directDistance??PaceNumber(o,"TrackPositionPercent",0,1),
                         SpeedKph=o.IsPlayer?ownSpeed:speedUnitOk?PaceNumber(o,"Speed",0,600):null,
