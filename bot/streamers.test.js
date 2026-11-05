@@ -124,19 +124,77 @@ test('buildStreamerSession combines multiple live platforms into one session onl
   assert.equal(session.key, 'vincent');
 });
 
-test('buildLiveEmbedPayload adds a dynamic support message before platform links', () => {
+test('buildLiveEmbedPayload bouwt de broadcast-kaart met merk, velden, beeld en knop', () => {
   const session = buildStreamerSession(
-    normalizeStreamerProfile({ profiel_naam: 'SmoothieBroers', twitch_naam: 'SmoothieBroers' }),
-    [{ platform: 'Twitch', live: true, title: 'GT3 race | 3stripe practice', url: 'https://twitch.tv/SmoothieBroers' }],
+    normalizeStreamerProfile({ profiel_naam: 'Jaimy', twitch_naam: 'jaimsjourney' }),
+    [{
+      platform: 'Twitch',
+      live: true,
+      title: 'NK Iracing SRVN - KNAF Split 3 3 Stripe Motorsport.',
+      url: 'https://twitch.tv/jaimsjourney',
+      game: 'iRacing',
+      thumbnailUrl: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_jaimsjourney-1280x720.jpg',
+      streamId: '123456789',
+      avatarUrl: 'https://static-cdn.jtvnw.net/jtv_user_pictures/avatar-300x300.png',
+    }],
   );
 
   const payload = buildLiveEmbedPayload(session);
 
-  assert.equal(payload.title, '🔴 SmoothieBroers is live met 3Stripe!');
-  assert.equal(payload.footer, '3 Stripe Motorsport');
-  assert.match(payload.description, /SmoothieBroers rijdt live voor 3 Stripe Motorsport — kom even supporten in de chat 👊/);
-  assert.match(payload.description, /\*\*Twitch\*\* — \[Kijk live\]\(https:\/\/twitch\.tv\/SmoothieBroers\)/);
-  assert.match(payload.description, /GT3 race \| 3stripe practice/);
+  assert.equal(payload.color, 0xf97316);
+  assert.equal(payload.author.name, '3 Stripe Motorsport');
+  assert.equal(payload.title, '🔴 Jaimy is live met 3Stripe!');
+  assert.equal(payload.description, 'Jaimy rijdt live voor 3 Stripe Motorsport — kom even supporten in de chat 👊');
+  assert.equal(payload.url, 'https://twitch.tv/jaimsjourney');
+  assert.deepEqual(payload.thumbnail, { url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/avatar-300x300.png' });
+  assert.match(payload.image.url, /3sm_session=123456789$/);
+  assert.deepEqual(payload.fields.map(f => f.name), ['Twitch', 'Spel']);
+  assert.match(payload.fields[0].value, /KNAF Split 3 3 Stripe Motorsport/);
+  assert.match(payload.fields[0].value, /\[Kijk live\]\(https:\/\/twitch\.tv\/jaimsjourney\)/);
+  assert.deepEqual(payload.buttons, [{ label: 'Kijk op Twitch', url: 'https://twitch.tv/jaimsjourney' }]);
+});
+
+test('buildLiveEmbedPayload laat de titel ongelinkt bij een multistream en kiest één beeld', () => {
+  const session = buildStreamerSession(
+    normalizeStreamerProfile({ profiel_naam: 'Vincent', twitch_naam: 'sloddervoss', kick_naam: 'slodderkick' }),
+    [
+      { platform: 'Twitch', live: true, title: '3stripe endurance', url: 'https://twitch.tv/sloddervoss', game: 'iRacing', thumbnailUrl: 'https://static-cdn.jtvnw.net/p-1280x720.jpg' },
+      { platform: 'Kick', live: true, title: '3stripe endurance', url: 'https://kick.com/slodderkick', game: 'iRacing' },
+    ],
+  );
+
+  const payload = buildLiveEmbedPayload(session);
+
+  assert.equal(payload.url, undefined);
+  assert.deepEqual(payload.fields.map(f => f.name), ['Twitch', 'Kick', 'Spel']);
+  assert.deepEqual(payload.buttons.map(b => b.label), ['Kijk op Twitch', 'Kijk op Kick']);
+  assert.equal(payload.image.url, 'https://static-cdn.jtvnw.net/p-1280x720.jpg?3sm_session=Twitch-Vincent');
+});
+
+test('buildLiveEmbedPayload valt terug op het merklogo en laat Spel weg bij verschillende games', () => {
+  const session = buildStreamerSession(
+    normalizeStreamerProfile({ profiel_naam: 'Sanne', twitch_naam: 'sanne', kick_naam: 'sannekick' }),
+    [
+      { platform: 'Twitch', live: true, title: '3 Stripe race', url: 'https://twitch.tv/sanne', game: 'iRacing' },
+      { platform: 'Kick', live: true, title: '3 Stripe race', url: 'https://kick.com/sannekick', game: 'Assetto Corsa' },
+    ],
+  );
+
+  const payload = buildLiveEmbedPayload(session);
+
+  assert.deepEqual(payload.thumbnail, { url: 'https://3stripemotorsport.cc/favicon-512x512.png' });
+  assert.equal(payload.image, undefined);
+  assert.deepEqual(payload.fields.map(f => f.name), ['Twitch', 'Kick']);
+});
+
+test('buildLiveEmbedPayload ontsnapt markdown in de streamtitel', () => {
+  const session = buildStreamerSession(
+    normalizeStreamerProfile({ profiel_naam: 'Jaimy', twitch_naam: 'jaimsjourney' }),
+    [{ platform: 'Twitch', live: true, title: '**gratis** _wins_ 3stripe', url: 'https://twitch.tv/jaimsjourney' }],
+  );
+
+  const payload = buildLiveEmbedPayload(session);
+  assert.match(payload.fields[0].value, /\\\*\\\*gratis\\\*\\\*/);
 });
 
 test('updateActiveNotifications sends once while live and resets after fully offline', () => {

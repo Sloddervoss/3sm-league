@@ -423,12 +423,32 @@ async function ensureLiveChannelPermissions(guild = null, channelId = null) {
 
 function buildDiscordLiveEmbed(session) {
   const payload = buildLiveEmbedPayload(session);
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(payload.color)
     .setTitle(payload.title)
     .setDescription(payload.description)
     .setFooter({ text: payload.footer })
     .setTimestamp();
+
+  if (payload.author?.name) embed.setAuthor(payload.author);
+  if (payload.url) embed.setURL(payload.url);
+  if (payload.fields?.length) embed.addFields(payload.fields);
+  if (payload.thumbnail?.url) embed.setThumbnail(payload.thumbnail.url);
+  if (payload.image?.url) embed.setImage(payload.image.url);
+
+  const buttons = (payload.buttons || [])
+    .filter(button => /^https:\/\//i.test(button.url || ''))
+    .slice(0, 5)
+    .map(button => new ButtonBuilder()
+      .setStyle(ButtonStyle.Link)
+      .setLabel(button.label.slice(0, 80))
+      .setURL(button.url));
+
+  const components = buttons.length
+    ? [new ActionRowBuilder().addComponents(buttons)]
+    : [];
+
+  return { embed, components, allowedMentions: payload.allowedMentions || { parse: [] } };
 }
 
 async function checkStreams() {
@@ -444,7 +464,12 @@ async function checkStreams() {
 
       const channel = await getLiveChannel(profile);
       if (!channel) continue;
-      await channel.send({ embeds: [buildDiscordLiveEmbed(session)] });
+      const card = buildDiscordLiveEmbed(session);
+      await channel.send({
+        embeds: [card.embed],
+        components: card.components,
+        allowedMentions: card.allowedMentions,
+      });
       // Pas ná een geslaagde send als gemeld markeren. Anders blokkeert één
       // mislukte poging (kanaal weg, rechten, rate limit) alle volgende polls
       // voor deze stream en blijft de melding voorgoed uit.

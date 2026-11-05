@@ -99,6 +99,13 @@ export function buildStreamerSession(profile, platformStatuses) {
       platform: status.platform,
       title: status.title || status.name || '3Stripe live',
       url: status.url,
+      // Verrijking voor de kaart. Ontbreekt een veld, dan valt dat onderdeel weg.
+      game: status.game || null,
+      startedAt: status.startedAt || null,
+      viewers: status.viewers ?? null,
+      thumbnailUrl: status.thumbnailUrl || null,
+      streamId: status.streamId || null,
+      avatarUrl: status.avatarUrl || null,
     }));
 
   return {
@@ -156,13 +163,50 @@ export async function fetchTwitchStatus(profile, options = {}) {
   if (!streamResponse.ok) throw new Error(`Twitch streams fout: HTTP ${streamResponse.status}`);
   const streamData = await streamResponse.json();
   const stream = streamData?.data?.[0];
+  if (!stream) {
+    return { platform: 'Twitch', live: false, title: '', url: `https://twitch.tv/${profile.twitch_naam}` };
+  }
+
+  // De avatar is een extra aanroep; één keer per login per proces is genoeg.
+  // Faalt hij, dan is de melding nog steeds compleet (het merklogo valt in).
+  const avatarUrl = await fetchTwitchAvatar(profile.twitch_naam, clientId, token, fetchImpl);
+
   return {
     platform: 'Twitch',
-    live: !!stream,
-    title: stream?.title || '',
+    live: true,
+    title: stream.title || '',
     url: `https://twitch.tv/${profile.twitch_naam}`,
+    game: clean(stream.game_name) || null,
+    startedAt: stream.started_at || null,
+    viewers: Number.isFinite(stream.viewer_count) ? stream.viewer_count : null,
+    // {width}x{height} is een sjabloon in de URL; Discord haalt het beeld zelf op.
+    thumbnailUrl: clean(stream.thumbnail_url).replace('{width}', '1280').replace('{height}', '720') || null,
+    streamId: stream.id || null,
+    avatarUrl,
   };
-}
+  }
+
+  const twitchAvatarCache = new Map();
+
+  async function fetchTwitchAvatar(login, clientId, token, fetchImpl, now = Date.now()) {
+  const key = String(login || '').toLowerCase();
+  if (!key) return null;
+  const hit = twitchAvatarCache.get(key);
+  if (hit && now - hit.at < 6 * 60 * 60 * 1000) return hit.url;
+
+  try {
+    const response = await fetchImpl(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`, {
+      headers: { 'Client-ID': clientId, Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const url = clean(data?.data?.[0]?.profile_image_url) || null;
+    if (url) twitchAvatarCache.set(key, { url, at: now });
+    return url;
+  } catch {
+    return null;
+  }
+  }
 
 export async function fetchYouTubeStatus(profile, options = {}) {
   if (!profile.youtube_id) return null;
@@ -225,17 +269,73 @@ export async function fetchPlatformStatuses(profile, options = {}) {
     .filter(Boolean);
 }
 
-export function buildLiveEmbedPayload(session) {
-  const platformDescription = session.platforms
-    .map(platform => `**${platform.platform}** — [Kijk live](${platform.url})\n${platform.title}`)
-    .join('\n\n');
-  const profileName = session.profile.profiel_naam;
-  const description = `${profileName} rijdt live voor 3 Stripe Motorsport — kom even supporten in de chat 👊\n\n${platformDescription}`;
+// ---------------------------------------------------------------------------
+// De live-kaart
+// ---------------------------------------------------------------------------
+// Ontwerp (na review): merk bovenaan, de streamer als hoofdpersoon, per live
+// platform één blok met de echte titel en een kijklink, één groot racebeeld uit
+// de uitzending en één kijkknop. Geen kijkertellers: die verouderen sneller dan
+// de melding en zeggen niets als er niemand kijkt.
+const BRAND_COLOR = 0xf97316; // 3SM-oranje; rood is alleen nog de 🔴 in de titel
+const BRAND_SITE = 'https://3stripemotorsport.cc';
+const BRAND_ICON = 'https://3stripemotorsport.cc/favicon-512x512.png';
+const PREVIEW_FOOTER = '3 Stripe Motorsport • Preview is een momentopname';
 
-  return {
-    color: 0xef4444,
+const truncateText = (value, max) => {
+  const text = String(value ?? '');
+  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+};
+
+// Een streamtitel is vrije tekst: **bold** of _cursief_ van de streamer zou de
+// opmaak van de kaart overnemen. Backslashes en markers ontsnappen.
+const escapeMarkdown = (value) => String(value ?? '').replace(/([*_`~\\])/g, '\\$1');
+
+export function buildLiveEmbedPayload(session) {
+  const platforms = session.platforms || [];
+  const profileName = truncateText(session.profile?.profiel_naam || 'Een 3SM-coureur', 80);
+  const single = platforms.length === 1 ? platforms[0] : null;
+
+  // Eén beeld per melding, in een vaste orde: Twitch heeft het breedste beeld,
+  // daarna YouTube, dan Kick. Alleen van een platform dat écht meetelt.
+  const imagePlatform = ['Twitch', 'YouTube', 'Kick']
+    .map(name => platforms.find(platform => platform.platform === name && platform.thumbnailUrl))
+    .find(Boolean) || null;
+
+  const games = platforms.map(platform => platform.game).filter(Boolean);
+  const game = games.length && new Set(games).size === 1 ? games[0] : null;
+
+  const fields = platforms.map((platform) => ({
+    name: platform.platform,
+    // Ruim onder de 1024 van Discord, zodat de kijklink altijd past.
+    value: `${escapeMarkdown(truncateText(platform.title, 400))}\n[Kijk live](${platform.url})`,
+    inline: false,
+  }));
+  if (game) fields.push({ name: 'Spel', value: escapeMarkdown(game), inline: false });
+
+  const payload = {
+    color: BRAND_COLOR,
+    author: { name: '3 Stripe Motorsport', url: BRAND_SITE, icon_url: BRAND_ICON },
     title: `🔴 ${profileName} is live met 3Stripe!`,
-    description,
-    footer: '3 Stripe Motorsport',
+    description: `${profileName} rijdt live voor 3 Stripe Motorsport — kom even supporten in de chat 👊`,
+    fields,
+    thumbnail: { url: single?.avatarUrl || BRAND_ICON },
+    footer: PREVIEW_FOOTER,
+    buttons: platforms.map(platform => ({ label: `Kijk op ${platform.platform}`, url: platform.url })),
+    allowedMentions: { parse: [] },
   };
+
+  // Eén platform: de titel is zelf de link. Bij een multistream mag de titel geen
+  // voorkeursplatform kiezen; de knoppen doen dat.
+  if (single) payload.url = single.url;
+
+  if (imagePlatform?.thumbnailUrl) {
+    // Stabiele sessiesleutel: geen nieuwe URL per poll (dat is een nieuwe
+    // Discord-cache-entry zonder dat het beeld actueler wordt), maar wel uniek
+    // per uitzending, zodat een volgende stream geen oude preview erft.
+    const key = imagePlatform.streamId || imagePlatform.startedAt || `${imagePlatform.platform}-${profileName}`;
+    const separator = imagePlatform.thumbnailUrl.includes('?') ? '&' : '?';
+    payload.image = { url: `${imagePlatform.thumbnailUrl}${separator}3sm_session=${encodeURIComponent(String(key))}` };
+  }
+
+  return payload;
 }
