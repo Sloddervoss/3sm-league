@@ -117,14 +117,36 @@ internal static class UpdatePathTests
         Check("V23", UpdateVersionPolicy.Format(Release) == "0.7.2.0" && new Version(UpdateVersionPolicy.Format(Release)).Equals(Release),
             "de release geeft --version 0.7.2.0 en de updater leest dat gelijk terug");
 
-        // ---- 3c. de versie staat echt overal op 0.7.2.0 ----
-        foreach (var assembly in new[] { "3SM.EnduranceConnector", "3SM.EnduranceConnector.Updater" })
+        // ---- 3c. elke assembly houdt zijn eigen versielijn ----
+        // De connector gaat met elke release mee; de updater heeft zijn eigen lijn.
+        // Daarom niet het versienummer van één release vastpinnen (dat werd stil
+        // verouderd toen de connector naar 0.7.4.0 ging), maar de eigenschap toetsen:
+        // vier delen, gelijk in beide regels, en de connector vooruit ten opzichte van
+        // de versie waar de updater op staat.
+        var connectorInfo = ReadUpward(Path.Combine("3SM.EnduranceConnector", "AssemblyInfo.cs"));
+        var updaterInfo = ReadUpward(Path.Combine("3SM.EnduranceConnector.Updater", "AssemblyInfo.cs"));
+        string Declared(string info, string attribute)
         {
-            var info = ReadUpward(Path.Combine(assembly, "AssemblyInfo.cs"));
-            Check("V24-" + assembly,
-                info != null && info.Contains("AssemblyVersion(\"" + (assembly == "3SM.EnduranceConnector" ? "0.7.3.1" : "0.7.2.0") + "\")") && info.Contains("AssemblyFileVersion(\"" + (assembly == "3SM.EnduranceConnector" ? "0.7.3.1" : "0.7.2.0") + "\")"),
-                assembly + " behoudt de eigen hotfixversie" + (info == null ? " (bestand niet gevonden)" : string.Empty));
+            if (info == null) return null;
+            var marker = attribute + "(\"";
+            var at = info.IndexOf(marker, StringComparison.Ordinal);
+            if (at < 0) return null;
+            var start = at + marker.Length;
+            var end = info.IndexOf('"', start);
+            return end > start ? info.Substring(start, end - start) : null;
         }
+        var connectorVersion = Declared(connectorInfo, "AssemblyVersion");
+        var connectorFileVersion = Declared(connectorInfo, "AssemblyFileVersion");
+        var updaterVersion = Declared(updaterInfo, "AssemblyVersion");
+        var updaterFileVersion = Declared(updaterInfo, "AssemblyFileVersion");
+        Version parsedConnector = null;
+        var connectorParses = connectorVersion != null && Version.TryParse(connectorVersion, out parsedConnector);
+        Check("V24-3SM.EnduranceConnector",
+            connectorParses && connectorVersion == connectorFileVersion && parsedConnector > new Version("0.7.3.1"),
+            "de connector heeft vier delen en een eigen, hogere versie (" + (connectorVersion ?? "geen") + ")");
+        Check("V24b-3SM.EnduranceConnector.Updater",
+            updaterVersion == "0.7.2.0" && updaterVersion == updaterFileVersion,
+            "de updater houdt zijn eigen versielijn (" + (updaterVersion ?? "geen") + ")");
 
         // ---- 4. één update van 0.7.1.2 naar 0.8, met de echte bestanden ----
         var settingsJson = File.ReadAllText(SettingsCompatibilityTests.LegacyFileName, Encoding.UTF8);
