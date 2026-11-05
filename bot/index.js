@@ -44,7 +44,8 @@ import {
   fetchPlatformStatuses,
   profileAutocompleteChoices,
   readStreamerProfiles,
-  updateActiveNotifications,
+  notificationDecision,
+  markNotificationSent,
   upsertStreamerProfile,
   writeStreamerProfiles,
 } from './streamers.js';
@@ -438,12 +439,16 @@ async function checkStreams() {
     try {
       const statuses = await fetchPlatformStatuses(profile);
       const session = buildStreamerSession(profile, statuses);
-      const action = updateActiveNotifications(active_notifications, session);
+      const action = notificationDecision(active_notifications, session);
       if (action !== 'notify') continue;
 
       const channel = await getLiveChannel(profile);
       if (!channel) continue;
       await channel.send({ embeds: [buildDiscordLiveEmbed(session)] });
+      // Pas ná een geslaagde send als gemeld markeren. Anders blokkeert één
+      // mislukte poging (kanaal weg, rechten, rate limit) alle volgende polls
+      // voor deze stream en blijft de melding voorgoed uit.
+      markNotificationSent(active_notifications, session);
       await botLog(`[streams] Live melding gestuurd voor ${profile.profiel_naam}: ${session.platforms.map(p => p.platform).join(', ')}`);
     } catch (e) {
       await throttledBotLog(`streams:${profile.profiel_naam}:${describeError(e)}`, `[streams] ${profile.profiel_naam}: ${describeError(e)}`);

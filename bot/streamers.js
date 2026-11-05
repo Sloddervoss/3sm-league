@@ -1,6 +1,10 @@
 import fs from 'fs';
 
-const REQUIRED_TITLE_TEXT = '3stripe';
+// Streamers zetten hun titel zelden exact op "3stripe". In de praktijk staat er
+// "3 Stripe Motorsport", "3-stripe" of "3stripe.nl", en dan viel de melding
+// volledig weg. Deze vorm accepteert elke scheiding tussen 3 en Stripe, maar
+// eist dat de 3 niet aan een cijfer of letter vastzit ("123 stripe" telt niet).
+const THREE_STRIPE_PATTERN = /(?<![0-9a-z])3[\s._-]*stripe/i;
 
 function clean(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -19,7 +23,7 @@ function requireSafeIdentifier(value, label) {
 }
 
 export function titleContains3Stripe(title) {
-  return clean(title).toLowerCase().includes(REQUIRED_TITLE_TEXT);
+  return THREE_STRIPE_PATTERN.test(clean(title));
 }
 
 export function normalizeStreamerProfile(input = {}, existing = null) {
@@ -105,15 +109,27 @@ export function buildStreamerSession(profile, platformStatuses) {
   };
 }
 
-export function updateActiveNotifications(activeNotifications, session) {
+// Bepaal wat er moet gebeuren zonder de sessie al als "gemeld" te markeren.
+// Dat markeren gebeurde eerder vóór kanaalopzoeking en channel.send(), waardoor
+// één mislukte verzending (kanaal weg, rechten, rate limit) het profiel voor de
+// rest van de sessie stil hield: elke volgende poll gaf 'skip'.
+export function notificationDecision(activeNotifications, session) {
   if (!session?.shouldNotify) {
     activeNotifications.delete(session?.key);
     return 'reset';
   }
+  return activeNotifications.has(session.key) ? 'skip' : 'notify';
+}
 
-  if (activeNotifications.has(session.key)) return 'skip';
-  activeNotifications.add(session.key);
-  return 'notify';
+export function markNotificationSent(activeNotifications, session) {
+  if (session?.shouldNotify && session?.key) activeNotifications.add(session.key);
+  return activeNotifications;
+}
+
+export function updateActiveNotifications(activeNotifications, session) {
+  const action = notificationDecision(activeNotifications, session);
+  if (action === 'notify') markNotificationSent(activeNotifications, session);
+  return action;
 }
 
 export async function fetchTwitchStatus(profile, options = {}) {

@@ -8,6 +8,8 @@ import {
   titleContains3Stripe,
   buildStreamerSession,
   updateActiveNotifications,
+  notificationDecision,
+  markNotificationSent,
   buildLiveEmbedPayload,
 } from './streamers.js';
 
@@ -93,6 +95,14 @@ test('titleContains3Stripe is case-insensitive and exact to 3stripe text', () =>
   assert.equal(titleContains3Stripe('GT3 3Stripe practice'), true);
   assert.equal(titleContains3Stripe('3STRIPE endurance'), true);
   assert.equal(titleContains3Stripe('random league stream'), false);
+  // De vorm die in het echt op Twitch staat: met een spatie, in een lange titel.
+  assert.equal(titleContains3Stripe('NK Iracing SRVN - KNAF Split 3 3 Stripe Motorsport.'), true);
+  assert.equal(titleContains3Stripe('3-stripe league race'), true);
+  assert.equal(titleContains3Stripe('3_stripe league race'), true);
+  assert.equal(titleContains3Stripe('3stripemotorsport.nl live'), true);
+  // Geen valse positieven: de 3 mag niet aan iets vastzitten.
+  assert.equal(titleContains3Stripe('Race 123 stripe challenge'), false);
+  assert.equal(titleContains3Stripe('3 strijd om de titel'), false);
 });
 
 test('buildStreamerSession combines multiple live platforms into one session only when 3stripe is present', () => {
@@ -144,4 +154,22 @@ test('updateActiveNotifications sends once while live and resets after fully off
   assert.equal(updateActiveNotifications(active, online), 'skip');
   assert.equal(updateActiveNotifications(active, offline), 'reset');
   assert.equal(updateActiveNotifications(active, online), 'notify');
+});
+
+test('een mislukte verzending houdt de volgende poll open', () => {
+  // De oude volgorde markeerde "gemeld" vóór channel.send(). Faalt die send, dan
+  // gaf elke volgende poll 'skip' en kwam de melding nooit meer. Deze test legt
+  // vast dat de beslissing pas na een geslaagde send definitief wordt.
+  const active = new Set();
+  const session = buildStreamerSession(
+    normalizeStreamerProfile({ profiel_naam: 'Jaimy', twitch_naam: 'jaimsjourney' }),
+    [{ platform: 'Twitch', live: true, title: 'NK Iracing SRVN - KNAF Split 3 3 Stripe Motorsport.', url: 'https://twitch.tv/jaimsjourney' }],
+  );
+
+  assert.equal(notificationDecision(active, session), 'notify');
+  // send mislukt: er wordt niets gemarkeerd, dus de volgende poll mag het opnieuw.
+  assert.equal(notificationDecision(active, session), 'notify');
+
+  markNotificationSent(active, session);
+  assert.equal(notificationDecision(active, session), 'skip');
 });
