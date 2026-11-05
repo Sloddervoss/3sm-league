@@ -2123,10 +2123,12 @@ namespace ThreeSM.EnduranceConnector
                     // No name-based or array-position identity guesses.
                     carIndex=hasIndex ? _paceCarIndices[o.CarNumber] : -1;
                     var directDistance=hasIndex ? sdk.ReadNumber("CarIdxLapDistPct",carIndex) : null;
-                    var directLap=hasIndex ? sdk.ReadNumber("CarIdxLap",carIndex) : null;
-                    var directLast=hasIndex ? sdk.ReadNumber("CarIdxLastLapTime",carIndex) : null;
-                    var reportedLap=hasIndex ? sdk.ReadNumber("CarIdxLapCompleted",carIndex) : null;
-                    var directBest=hasIndex ? sdk.ReadNumber("CarIdxBestLapTime",carIndex) : null;
+                    // iRacing levert -1 als "nog geen tijd". Zo'n waarde mag een geldige
+                    // terugval nooit verdringen, dus valideren vóór de bronkeuze.
+                    var directLap=hasIndex ? NonNegative(sdk.ReadNumber("CarIdxLap",carIndex)) : null;
+                    var directLast=hasIndex ? PaceSourceSelector.ValidLapSeconds(sdk.ReadNumber("CarIdxLastLapTime",carIndex)) : null;
+                    var reportedLap=hasIndex ? NonNegative(sdk.ReadNumber("CarIdxLapCompleted",carIndex)) : null;
+                    var directBest=hasIndex ? PaceSourceSelector.ValidLapSeconds(sdk.ReadNumber("CarIdxBestLapTime",carIndex)) : null;
                     // Eén bronkeuze per auto. Een gevonden index bewijst niet dat de
                     // directe rondetijd bruikbaar is; PaceSourceSelector eist bij een
                     // terugval op SimHub een aangetoonde ronde-overgang, anders blijft
@@ -2141,19 +2143,13 @@ namespace ThreeSM.EnduranceConnector
                         // en tellerstap in dezelfde waarneming verschijnen; de
                         // toeschrijvingsengine verwacht de tijd juist één waarneming later
                         // (gemeten mediaan 0,52 s). Voor de speler laten we het paren dus
-                        // aan de engine en kiezen we hier alleen de bron.
-                        var playerCompleted=directLap.HasValue?reportedLap:(double?)GetNullableInt(manager,Settings.CompletedLapsProperty);
-                        var playerLast=directLast??PositiveNullable(GetNullableSeconds(manager,Settings.LastLapTimeProperty))??PositiveSeconds(o.LastLapTime);
-                        var playerBest=directBest??PositiveNullable(GetNullableSeconds(manager,Settings.BestLapTimeProperty))??PositiveSeconds(o.BestLapTime);
-                        var playerLap=directLap??(playerCompleted.HasValue?(double?)(playerCompleted.Value+1):null);
-                        chosen=new PaceSourceChoice {
-                            LastLapSeconds=playerLast,
-                            BestLapSeconds=playerBest,
-                            Lap=playerLap,
-                            ReportedLap=playerCompleted.HasValue?(int?)playerCompleted.Value:null,
-                            LastLapSource=directLast.HasValue?PaceSourceSelector.SourceDirect:PaceSourceSelector.SourceSimHub,
-                            BestLapSource=directBest.HasValue?PaceSourceSelector.SourceDirect:PaceSourceSelector.SourceSimHub,
-                        };
+                        // aan de engine; hier alleen valideren en de bron benoemen.
+                        chosen=PaceSourceSelector.ChooseForPlayer(
+                            directLast,directBest,reportedLap,
+                            GetNullableSeconds(manager,Settings.LastLapTimeProperty),
+                            GetNullableSeconds(manager,Settings.BestLapTimeProperty),
+                            PositiveSeconds(o.LastLapTime),PositiveSeconds(o.BestLapTime),
+                            GetNullableInt(manager,Settings.CompletedLapsProperty));
                     }
                     rows.Add(new PaceObservation {Id=o.Id,ReportedLap=chosen.ReportedLap,LapSource=chosen.LastLapSource,Lap=chosen.Lap.HasValue?(int?)chosen.Lap.Value:o.CurrentLap.HasValue?(int?)o.CurrentLap.Value:null,
                         Distance=directDistance??PaceNumber(o,"TrackPositionPercent",0,1),
@@ -2242,6 +2238,15 @@ namespace ThreeSM.EnduranceConnector
             {
                 Volatile.Write(ref _sendBusy, 0);
             }
+        }
+
+        /// <summary>Een teller is alleen bruikbaar als hij bestaat en niet negatief is.</summary>
+        private static double? NonNegative(double? value)
+        {
+            if(!value.HasValue) return null;
+            var number=value.Value;
+            if(double.IsNaN(number)||double.IsInfinity(number)||number<0) return null;
+            return number;
         }
 
         private async Task SendV3Async(TelemetryEnvelopeV3 envelope, Uri endpoint, string token, CancellationToken cancellationToken)

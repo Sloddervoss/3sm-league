@@ -141,6 +141,51 @@ internal static class PaceSourceSelectionTests
         choice=selector.Choose("car-1",null,null,null,2,122.684,null,2);
         Check("17",choice.LastLapSeconds==null,"nieuwe teller is geen bewijs en gooit niet");
 
+        // 18: iRacing levert -1 als "nog geen tijd". Die mag een geldige eigenschap
+        //     niet verdringen (reviewer-punt A uit de tweede Astra-ronde).
+        var player=PaceSourceSelector.ChooseForPlayer(-1,-1,null,120.494,121.9,null,null,23);
+        Check("18",player.LastLapSeconds==120.494 && player.LastLapSource==PaceSourceSelector.SourcePlayerProperty,
+            "sentinel -1 verdringt de eigenschap niet: "+player.LastLapSeconds+" / "+player.LastLapSource);
+
+        // 19: ook 0 en NaN zijn geen tijd.
+        var zero=PaceSourceSelector.ChooseForPlayer(0,double.NaN,null,120.494,121.9,null,null,23);
+        Check("19",zero.LastLapSeconds==120.494 && zero.BestLapSeconds==121.9,
+            "0 en NaN vallen weg: "+zero.LastLapSeconds+" / "+zero.BestLapSeconds);
+
+        // 20: zonder directe bron wint de eigenschap en is de lopende ronde afgerond+1.
+        var propertyOnly=PaceSourceSelector.ChooseForPlayer(null,null,null,120.494,121.9,null,null,23);
+        Check("20",propertyOnly.LastLapSeconds==120.494 && propertyOnly.Lap==24 && propertyOnly.ReportedLap==23
+              && propertyOnly.LastLapSource==PaceSourceSelector.SourcePlayerProperty,
+            "eigenschap levert ronde 24 (afgerond 23): "+propertyOnly.Lap+" / "+propertyOnly.ReportedLap);
+
+        // 21: zonder teller geen gok, maar de tijd blijft bruikbaar.
+        var noCounter=PaceSourceSelector.ChooseForPlayer(null,null,null,120.494,null,120.0,null,null);
+        Check("21",noCounter.LastLapSeconds==120.494 && noCounter.Lap==null && noCounter.ReportedLap==null,
+            "tijd zonder teller: "+noCounter.LastLapSeconds+" ronde "+noCounter.Lap);
+
+        // 22: de keten bronkeuze -> toeschrijving: een tijd die één waarneming later komt
+        //     hoort bij de ronde die net is afgesloten.
+        var engine=new LapAttributionEngine();
+        var first=PaceSourceSelector.ChooseForPlayer(null,null,null,120.5,null,null,null,3);
+        engine.Observe("sess","speler",(int)first.ReportedLap.Value,first.LastLapSeconds,10.0,first.LastLapSource);
+        var step=PaceSourceSelector.ChooseForPlayer(null,null,null,120.5,null,null,null,4);
+        engine.Observe("sess","speler",(int)step.ReportedLap.Value,step.LastLapSeconds,11.0,step.LastLapSource);
+        var later=PaceSourceSelector.ChooseForPlayer(null,null,null,119.8,null,null,null,4);
+        var produced=engine.Observe("sess","speler",(int)later.ReportedLap.Value,later.LastLapSeconds,11.5,later.LastLapSource);
+        Check("22",produced.Count==1 && Math.Abs(produced[0].Seconds-119.8)<0.001,
+            "vertraagde tijd wordt gepaard: "+produced.Count+" rij(en)");
+
+        // 23: een bronwissel is geen tijdswijziging: eerst een ijkpunt, geen toeschrijving.
+        var switchEngine=new LapAttributionEngine();
+        var a=PaceSourceSelector.ChooseForPlayer(null,null,null,120.5,null,null,null,3);
+        switchEngine.Observe("sess","speler",(int)a.ReportedLap.Value,a.LastLapSeconds,10.0,a.LastLapSource);
+        var b=PaceSourceSelector.ChooseForPlayer(null,null,null,120.5,null,null,null,4);
+        switchEngine.Observe("sess","speler",(int)b.ReportedLap.Value,b.LastLapSeconds,11.0,b.LastLapSource);
+        var c=PaceSourceSelector.ChooseForPlayer(null,null,null,null,null,121.4,null,4);
+        var afterSwitch=switchEngine.Observe("sess","speler",(int)c.ReportedLap.Value,c.LastLapSeconds,11.5,c.LastLapSource);
+        Check("23",afterSwitch.Count==0 && c.LastLapSource==PaceSourceSelector.SourceSimHub,
+            "bronwissel geeft een ijkpunt: "+afterSwitch.Count+" rij(en) / "+c.LastLapSource);
+
         return n;
     }
 }

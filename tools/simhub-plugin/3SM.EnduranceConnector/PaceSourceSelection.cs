@@ -46,6 +46,42 @@ namespace ThreeSM.EnduranceConnector
     {
         public const string SourceDirect = "direct";
         public const string SourceSimHub = "simhub";
+        /// <summary>De spelerseigenschap (CompletedLaps/LastLapTime). Los van SourceSimHub,
+        /// zodat de toeschrijving een wissel tussen die twee als bronwissel ziet.</summary>
+        public const string SourcePlayerProperty = "player_property";
+
+        /// <summary>Een rondetijd is alleen bruikbaar boven nul en binnen een dag.</summary>
+        public static double? ValidLapSeconds(double? value) => Valid(value);
+
+        /// <summary>
+        /// Bronkeuze voor de speler. De speler heeft een doorlopende eigen bron, dus hier
+        /// wordt niet op een gelijktijdige tellerstap gewacht: de toeschrijving paart de
+        /// tijd aan de ronde. Wat overblijft is valideren en de bron benoemen, zodat een
+        /// wissel tussen eigenschap en opponent-object als bronwissel herkend wordt.
+        /// </summary>
+        public static PaceSourceChoice ChooseForPlayer(double? directLastLapSeconds,double? directBestLapSeconds,
+            double? reportedCompletedLaps,double? propertyLastLapSeconds,double? propertyBestLapSeconds,
+            double? opponentLastLapSeconds,double? opponentBestLapSeconds,double? completedLapsFromSimHub)
+        {
+            var directLast=Valid(directLastLapSeconds);
+            var directBest=Valid(directBestLapSeconds);
+            var propertyLast=Valid(propertyLastLapSeconds);
+            var propertyBest=Valid(propertyBestLapSeconds);
+            double? completed=null;
+            if(reportedCompletedLaps.HasValue&&reportedCompletedLaps.Value>=0) completed=Math.Floor(reportedCompletedLaps.Value);
+            else if(completedLapsFromSimHub.HasValue&&completedLapsFromSimHub.Value>=0) completed=Math.Floor(completedLapsFromSimHub.Value);
+
+            var last=directLast??propertyLast??Valid(opponentLastLapSeconds);
+            var best=directBest??propertyBest??Valid(opponentBestLapSeconds);
+            return new PaceSourceChoice {
+                LastLapSeconds=last,
+                BestLapSeconds=best,
+                Lap=completed.HasValue?(double?)(completed.Value+1):null,
+                ReportedLap=completed.HasValue?(int?)completed.Value:null,
+                LastLapSource=directLast.HasValue?SourceDirect:propertyLast.HasValue?SourcePlayerProperty:SourceSimHub,
+                BestLapSource=directBest.HasValue?SourceDirect:propertyBest.HasValue?SourcePlayerProperty:SourceSimHub,
+            };
+        }
 
         private const double MinLapSeconds = 0.001;
         private const double MaxLapSeconds = 86400;
