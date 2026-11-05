@@ -246,7 +246,18 @@ export const parseTyreTelemetry = (value: unknown): TyreTelemetry | null => {
   const r = record(value, path);
   nonEmpty(r, path);
   allowKeys(r, ["observedAt", "sessionTimeSeconds", "lap", "trigger", "wearPercent", "carcassTempC", "sets", "compoundId", "environment", "pitEntry", "pressuresBar"], path);
+  // Deze vier velden werden toegelaten maar niet teruggegeven; daardoor schreef de
+  // ingest observed_at altijd NULL en was elke bandenwaarneming onbestemd in de tijd.
+  const trigger = (value: unknown): string | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string" || value.length > 40) throw Error(`${path}.trigger is invalid`);
+    return value;
+  };
   return {
+    observedAt: capturedAt(r.observedAt, `${path}.observedAt`),
+    sessionTimeSeconds: num(r.sessionTimeSeconds, `${path}.sessionTimeSeconds`, { min: 0, max: 604800 }),
+    lap: num(r.lap, `${path}.lap`, { integer: true, min: 0, max: 100000 }),
+    trigger: trigger(r.trigger),
     wearPercent: zones(r.wearPercent, `${path}.wearPercent`),
     carcassTempC: carcassZones(r.carcassTempC, `${path}.carcassTempC`),
     sets: sets(r.sets, `${path}.sets`),
