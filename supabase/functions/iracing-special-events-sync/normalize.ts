@@ -561,5 +561,19 @@ export async function discoverCombinedSeriesEvent(
   }
   const ordered = slotsByWeek.sort((a, b) => a.sessionStartAt.localeCompare(b.sessionStartAt));
   if (ordered.length === 0) return null;
-  return { ...event, sourceKey: seriesSeed.sourceKey, name: seriesSeed.seriesName, dateStart, dateEnd, slots: ordered };
+  // Hierboven is de basisgebeurtenis genormaliseerd zónder slots; daardoor stond
+  // availabilityStatus op `tbd` terwijl de week-slots er juist wel zijn. Dat maakte
+  // de hele serie onzichtbaar in de kalender (die `tbd` wegfiltert). Opnieuw bepalen
+  // ná het samenvoegen, en de hash over dezelfde inhoud herrekenen.
+  const withSlots = {
+    ...event,
+    sourceKey: seriesSeed.sourceKey,
+    name: seriesSeed.seriesName,
+    dateStart,
+    dateEnd,
+    slots: ordered,
+    availabilityStatus: "exact_slots" as AvailabilityStatus,
+  };
+  const { sourceHash: _previousHash, ...hashable } = withSlots;
+  return { ...withSlots, sourceHash: await sha256(hashable) };
 }

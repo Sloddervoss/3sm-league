@@ -11,7 +11,7 @@
  * Elke keuzetest verwacht een ander nummer dan het vaste: een implementatie die
  * niets doet (`return mappedSeasonId`) zakt daardoor op elke keuzetest.
  */
-import { resolveCurrentSeriesSeasonId } from "./discovery.ts";
+import { hasSeriesScheduleRows, resolveCurrentSeriesSeasonId } from "./discovery.ts";
 
 const check = (name: string, actual: unknown, expected: unknown) => {
   if (actual !== expected) {
@@ -125,4 +125,17 @@ Deno.test("een niet-officieel seizoen verliest van een ouder officieel seizoen",
 Deno.test("valt terug als het enige seizoen van de serie niet-officieel is", () => {
   const seasons = [{ ...season(5000, 331, 2026, 4, true), official: false }];
   check("niet-officieel enkel", resolveCurrentSeriesSeasonId(6307, 331, seasons), 6307);
+});
+
+// Een leeg of onbruikbaar schema mag een gepubliceerde serie niet downgraden.
+Deno.test("een leeg schema is geen schema", () => {
+  check("leeg null", hasSeriesScheduleRows(null), false);
+  check("leeg object", hasSeriesScheduleRows({}), false);
+  check("lege lijst", hasSeriesScheduleRows([]), false);
+  check("lege envelope", hasSeriesScheduleRows({ schedules: [] }), false);
+  check("rij zonder baan", hasSeriesScheduleRows({ schedules: [{ start_date: "2026-11-07" }] }), false);
+  check("rij zonder tijden of datum", hasSeriesScheduleRows({ schedules: [{ track: { track_name: "Nürburgring Combined" } }] }), false);
+  check("rij met tijden", hasSeriesScheduleRows({ schedules: [{ track: { track_name: "Nürburgring Combined" }, race_time_descriptors: [{ session_times: ["2026-11-07T07:00:00Z"] }] }] }), true);
+  check("rij met alleen datum", hasSeriesScheduleRows({ schedules: [{ track: { track_name: "Monza" }, start_date: "2026-11-21" }] }), true);
+  check("losse rij", hasSeriesScheduleRows({ track: { track_name: "Monza" }, start_date: "2026-11-21" }), true);
 });

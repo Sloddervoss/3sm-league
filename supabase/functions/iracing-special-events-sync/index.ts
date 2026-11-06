@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createIRacingClient } from "../_shared/iracingClient.ts";
-import { findPublishedSpecialSeason, resolveCurrentSeriesSeasonId, type PublishedSeason } from "./discovery.ts";
+import { findPublishedSpecialSeason, hasSeriesScheduleRows, resolveCurrentSeriesSeasonId, type PublishedSeason } from "./discovery.ts";
 import {
   countAdmittedUpcomingEvents,
   findApprovedSpecialEvent,
@@ -201,6 +201,20 @@ Deno.serve(async (request) => {
         .select("id,source_hash,source_payload,iracing_season_id").eq("source_key", normalized.sourceKey).maybeSingle();
       if (existingError) throw existingError;
 
+      // Een armere payload mag nooit een rijkere rij overschrijven. Levert iRacing
+      // deze ronde geen tijden (seizoen net afgelopen of nog niet gepubliceerd), dan
+      // zou de rij naar `tbd` gaan en verdwijnen de al bekende tijdsloten uit de
+      // kalender — precies wat er met de Nürburgring van 7-8 november gebeurde.
+      if (existing && normalized.slots.length === 0) {
+        const { data: stillActive, error: activeError } = await service.from("endurance_iracing_event_slots")
+          .select("id").eq("catalog_event_id", existing.id).eq("active", true).limit(1);
+        if (activeError) throw activeError;
+        if ((stillActive ?? []).length > 0) {
+          errors.push(`${normalized.sourceKey}: iRacing leverde deze ronde geen tijdsloten; bestaande slots en status behouden`);
+          return;
+        }
+      }
+
       // De eventsleutel bevat het weeknummer en het circuit, niet het seizoen. Komt
       // dezelfde week+baan in een volgend seizoen terug, dan wijst de sleutel naar
       // dezelfde rij. Hangt daar een echte 3SM-race aan, dan mag de sync die rij
@@ -400,6 +414,14 @@ Deno.serve(async (request) => {
           cars: rosterForSeries?.cars ?? seriesEntry.seed.cars ?? [],
         };
         const schedule = await (await dataClient()).fetchData(`/data/series/season_schedule?season_id=${effectiveSeasonId}`);
+        // Een leeg schema betekent: seizoen afgelopen of nog niet gepubliceerd. Dat
+        // mag een bestaande, gepubliceerde serie nooit downgraden naar `tbd` — dan
+        // verdwijnt een race die dit weekend verreden wordt uit de kalender terwijl
+        // de tijdsloten er nog staan. Overslaan en de run als `partial` melden.
+        if (!hasSeriesScheduleRows(schedule)) {
+          errors.push(`${seriesEntry.seed.sourceKey}: iRacing leverde geen bruikbaar seizoensschema; bestaande slots en status behouden`);
+          continue;
+        }
         // Het effectieve seizoen gaat mee de upsert in, zodat iracing_season_id en
         // de bronpayload het seizoen noemen waaruit de rij echt is opgebouwd.
         const catalogEntry: SeasonMapEntry = { ...seriesEntry, seasonId: effectiveSeasonId };

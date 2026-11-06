@@ -61,3 +61,31 @@ export function findPublishedSpecialSeason(seed: SpecialEventSeed, seasons: Publ
   if (matches.length > 1) throw new Error(`${seed.sourceKey}: meerdere officiële seasons; expliciete mapping vereist`);
   return matches[0] ?? null;
 }
+
+/**
+ * Zegt een iRacing-schema iets over races?
+ *
+ * Een seizoen dat net is afgelopen, of dat nog moet beginnen, komt als lege lijst
+ * terug. Zo'n antwoord mag een al gepubliceerde serie niet downgraden naar `tbd`:
+ * de laatste bekende tijdsloten blijven dan staan en de run meldt het als fout.
+ * Een rij met alleen een baan en een startdatum is wel bruikbaar (date_only).
+ */
+export function hasSeriesScheduleRows(input: unknown): boolean {
+  const envelope = input as { schedules?: unknown } | null;
+  const rows: unknown[] = Array.isArray(envelope?.schedules)
+    ? envelope!.schedules as unknown[]
+    : Array.isArray(input) ? input as unknown[]
+      : input && typeof input === "object" ? [input] : [];
+  return rows.some((row) => {
+    if (!row || typeof row !== "object") return false;
+    const entry = row as {
+      track?: { track_name?: unknown };
+      race_time_descriptors?: unknown;
+      start_date?: unknown;
+    };
+    if (typeof entry.track?.track_name !== "string" || !entry.track.track_name.trim()) return false;
+    const descriptors = Array.isArray(entry.race_time_descriptors) ? entry.race_time_descriptors : [];
+    return descriptors.length > 0
+      || (typeof entry.start_date === "string" && entry.start_date.trim() !== "");
+  });
+}
