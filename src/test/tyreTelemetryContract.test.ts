@@ -99,10 +99,8 @@ describe("V3-rootblok tyres: additief contract", () => {
     expect({ ...met, tyres: undefined }).toEqual(zonder);
   });
 
-  it("behoudt tyre-waarden en normaliseert ontbrekende observatiemetadata naar null", () => {
-    expect(parseTelemetryV3Envelope(metTyres(volTyreBlok())).tyres).toEqual({
-      ...volTyreBlok(), observedAt: null, lap: null, sessionTimeSeconds: null, trigger: null,
-    });
+  it("accepteert een volledig tyres-blok en geeft de waarden één-op-één terug", () => {
+    expect(parseTelemetryV3Envelope(metTyres(volTyreBlok())).tyres).toEqual(volTyreBlok());
   });
 
   it("accepteert tyres: null en een leeggelaten onderdeel", () => {
