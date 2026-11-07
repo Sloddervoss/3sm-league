@@ -5,7 +5,7 @@ Basis: main @ 5d414ce
 Commits: 80d5148 (kern), cb6ecac (buiten-scope tyre-test teruggedraaid),
 06a1189 (verslag), f46f424 (teller via aggregaat-RPC, migratie uitgebreid),
 4849449 (reviewcorrecties).
-Status: uitgerold (site 96c6445); migratie TOEGEPAST op 7 nov 2026 als supabase_admin.
+Status: uitgerold (site 96c6445); beide migraties TOEGEPAST op 7 nov 2026 als supabase_admin.
 
 1. WAT ER IS GEWIJZIGD
 
@@ -82,12 +82,32 @@ BEGIN / CREATE FUNCTION x3 / COMMIT. Daarna gecontroleerd:
 
 5. OPENSTAAND / BEPERKINGEN
 
-- De foutmelding bij een verstreken slot is de bestaande algemene tekst ("Onbekend,
-  inactief of niet bij dit event horend catalogusslot"); functioneel correct, maar
-  niet uitlegbaar aan een manager. Een duidelijkere tekst vraagt een nieuwe migratie.
+- De foutmelding bij een verstreken slot is nu expliciet, zie sectie 6.
 - Na het verstrijken van het gekozen slot kan een manager binnen hetzelfde
   catalogusevent geen ander slot activeren (bestaande één-keuze-per-eventregel).
 - De frontend vertrouwt op de browserklok voor de weergave; de server is pas leidend
   na de migratie.
 - Niet met een echte browser of productie-account getest; de preview op poort 8090 is
   gebouwd maar niet ingelogd doorzien.
+
+
+6. VERVOLG: DUIDELIJKE MELDING BIJ EEN VERSTREKEN SLOT
+
+Migratie: supabase/migrations/20261107120000_endurance_slot_started_message.sql
+Rollback: supabase/rollback/20261107120000_endurance_slot_started_message.rollback.sql
+Toegepast op 7 nov 2026 als supabase_admin (BEGIN / CREATE FUNCTION x2 / COMMIT).
+
+  endurance_activate_iracing_slot
+    verstreken slot  -> "Dit tijdslot is al begonnen; kies een tijdslot dat nog moet starten"
+    onbekend slot    -> ongewijzigd "Onbekend, inactief of niet bij dit event horend catalogusslot"
+  endurance_set_iracing_slot_interest
+    verstreken slot  -> "Dit tijdslot is al begonnen; interesse is niet meer mogelijk"
+    onbekend slot    -> ongewijzigd "Onbekend of inactief iRacing-timeslot"
+
+Beide meldingen komen in het scherm terecht via het bestaande foutvak
+(role="alert") in IRacingEventCatalog.tsx; de repository zet er de bestaande
+prefix "iRacing-tijdslot activeren mislukt:" voor.
+
+Gecontroleerd na toepassing, met JWT-claims van een manager in een transactie die
+steeds is teruggedraaid: alle vier de gevallen hierboven geven exact de bedoelde
+tekst. Endurance-tests: 8 bestanden, 71 tests, alle groen.
