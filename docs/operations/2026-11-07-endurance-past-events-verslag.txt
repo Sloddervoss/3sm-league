@@ -166,3 +166,19 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
 
 PRODUCTIEWIJZIGING: NEE
+
+
+3. CORRECTIES NA DE REVIEWDOOR GPT-6-ASTRA (zelfde branch, na f46f424)
+
+  - Rollback: ontbrekende puntkomma na het laatste $function$ toegevoegd; de
+    volledige rollback is daarna als supabase_admin in een transactie uitgevoerd
+    en teruggedraaid (CREATE FUNCTION x3, ROLLBACK, exit 0).
+  - Teller: manager_interest_overview ververst nu elke 60 seconden en wordt
+    geïnvalideerd na een eigen interesse-wijziging.
+  - Filter: een event met gepubliceerde slots waarvan er geen enkele meer moet
+    starten verdwijnt, ook als de einddatum vandaag is of ontbreekt.
+  - Tests toegevoegd voor die drie gevallen; broncontract bijgewerkt naar
+    isRaceableCatalogEvent(event, today, now).
+  - Openstaand, bewust niet opgelost: na het verstrijken van het gekozen slot kan
+    een manager binnen hetzelfde catalogusevent geen ander slot activeren
+    (bestaande één-keuze-per-eventregel). Dat gedrag is niet veranderd.

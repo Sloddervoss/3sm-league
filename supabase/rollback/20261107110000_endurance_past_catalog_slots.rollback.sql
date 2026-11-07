@@ -332,6 +332,6 @@ BEGIN
     ON event.id = combined.catalog_event_id AND event.active
   GROUP BY combined.catalog_event_id;
 END;
-$function$
+$function$;
 
 COMMIT;

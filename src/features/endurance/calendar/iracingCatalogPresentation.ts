@@ -189,11 +189,18 @@ export const sortCatalogByNextStart = (
 export const isRaceableCatalogEvent = (
   event: Pick<IRacingCatalogEvent, "active" | "availability_status" | "event_end_date"> & {
     selectedEventId: string | null;
+    slots?: IRacingCatalogEvent["slots"];
   },
   today: string = catalogTodayAmsterdam(),
+  now: Date = new Date(),
 ): boolean => {
   if (!event.active) return false;
   if (event.availability_status === "tbd") return false;
+  // Zijn er al tijdsloten gepubliceerd en is er geen enkel meer te rijden, dan is
+  // het event voorbij — ook als de einddatum vandaag is of helemaal ontbreekt.
+  if (event.slots && event.slots.length > 0 && upcomingCatalogSlots(event.slots, now).length === 0) {
+    return false;
+  }
   if (!event.event_end_date) return true;
   return event.event_end_date >= today;
 };

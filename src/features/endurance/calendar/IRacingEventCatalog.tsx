@@ -416,7 +416,7 @@ export const IRacingEventCatalog = () => {
   const [openEventId, setOpenEventId] = useState<string | null>(null);
   const visible = useMemo(() => {
     const today = catalogTodayAmsterdam(now);
-    return sortCatalogByNextStart(events.filter((event) => isRaceableCatalogEvent(event, today)));
+    return sortCatalogByNextStart(events.filter((event) => isRaceableCatalogEvent(event, today, now)));
   }, [events, now]);
 
   if (isLoading) return <Panel><p role="status" className="text-sm text-gray-400">{c.loading}</p></Panel>;

@@ -212,7 +212,7 @@ describe("iRacing Endurance event-card flow", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
     expect(component).toContain('"Tijden volgen"');
     expect(component).toContain("catalogTodayAmsterdam(now)");
-    expect(component).toContain("isRaceableCatalogEvent(event, today)");
+    expect(component).toContain("isRaceableCatalogEvent(event, today, now)");
     expect(component).toContain("Exacte starttijden nog niet gepubliceerd door iRacing");
     const presentation = read("src/features/endurance/calendar/iracingCatalogPresentation.ts");
     expect(presentation).toContain('event.availability_status === "tbd"');

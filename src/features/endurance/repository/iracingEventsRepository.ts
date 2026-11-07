@@ -159,6 +159,9 @@ export function useSetIRacingSlotInterest() {
     onSuccess: () => Promise.all([
       queryClient.invalidateQueries({ queryKey: iracingSlotInterestSummaryQueryKey }),
       queryClient.invalidateQueries({ queryKey: ["endurance", "iracing-slot-interest-members"] }),
+      // De kaartbadge komt uit een andere query; zonder deze regel blijft hij
+      // achter na je eigen klik.
+      queryClient.invalidateQueries({ queryKey: iracingManagerInterestOverviewQueryKey }),
     ]),
   });
 }
@@ -223,6 +226,9 @@ export function useIRacingManagerInterestOverview(enabled: boolean) {
     queryKey: iracingManagerInterestOverviewQueryKey,
     queryFn: listIRacingManagerInterestOverview,
     enabled,
+    // Een slot dat verstreken raakt verandert de telling zonder dat er iets
+    // klikt; ververs daarom ook vanzelf.
+    refetchInterval: 60_000,
   });
 }
 
