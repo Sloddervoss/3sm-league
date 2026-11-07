@@ -1,0 +1,168 @@
+VERSLAG — endurance past events
+
+Worktree: /home/hermes/projects/3sm-league-astra
+Branch: fix/endurance-past-events
+Basis: 5d414ce
+Commits: 871cc33 (bestaande tyre-testverwachting), 80d5148 (catalogus en RPC-voorstel).
+Geen push, merge, deploy of databaseverbinding/-wijziging uitgevoerd.
+
+1. WIJZIGINGEN PER BESTAND (regels na wijziging)
+
+src/features/endurance/calendar/iracingCatalogPresentation.ts
+  136–152: één strikt toekomstcriterium (actief en session_start_at > nu),
+  zonder uitzondering voor de selectie; geselecteerde badge gebruikt hetzelfde
+  criterium. Unieke coureurs tellen alleen mee op toekomstige actieve slots.
+  189–207: event_end_date vóór vandaag verbergt ook gekoppelde events.
+  Amsterdamse dagbepaling blijft behouden. Geen einddatum/date_only behouden.
+  De oude dagstring-overload en ongebruikte selectieparameter zijn verwijderd;
+  alle gevonden callers zijn aangepast naar Date.
+
+src/features/endurance/calendar/IRacingEventCatalog.tsx
+  225–228: activatieformulier controleert de tijd opnieuw bij verzenden.
+  256–278: badge alleen voor toekomstige selectie; personenbadge alleen met
+  toekomstige slots; slotaantal gebruikt uitsluitend toekomstige slots.
+  Teller gebruikt de bestaande manager-only slot_interest_members-RPC, met
+  deduplicatie op user_id. Dit werkt zonder eerst een SQL-migratie toe te passen.
+  De oude eventbrede manager_interest_overview wordt hier niet meer aangeroepen.
+  319–323, 384–388: slotlijst en klikhandlers weren verstreken slots; een reeds
+  geopend activatiepaneel verdwijnt zodra het gekozen slot verstreken is.
+  389–397: geen onjuist 'tijden nog onbekend'-paneel of voorlopige interesseknop
+  wanneer er wél bekende maar uitsluitend verstreken slots zijn.
+  411–421: iedere seconde herberekenen, ook bij Amsterdamse dagwisseling.
+
+src/test/enduranceIracingCatalogFilter.test.ts
+  17–23: Amsterdamse middernacht getest met een nog afwijkende UTC-datum.
+  38–42: oude uitzondering voor een gekoppelde voorbije race omgedraaid.
+  Tests voor date_only, geen einddatum, tbd en inactief blijven aanwezig.
+
+src/test/enduranceIracingEventCard.test.tsx
+  64–81: SQL-contracttest: tijdguards, plaats vóór idempotente return en exacte
+  rollback naar de vorige functies uit de repository.
+  93–105 en 129–145: verstreken slots blijven niet meer staan wegens selectie.
+  148–161: selectie vóór/op/na start; uitsluitend toekomstige actieve interesse.
+  220–229: broncontract voor eventfilter aangepast.
+
+src/test/enduranceIracingCatalogBrowser.test.tsx (extra buiten brief-lijst)
+  84–116: DOM-tests voor verborgen gekoppeld event, verlopen selectie met nog
+  toekomstige slots, timerverversing, verdwenen open-raceknop en activatiepaneel.
+  178–185: voorlopige eventinteresse blijft mogelijk zonder personenbadge.
+  Nodig om echte React-interactie te testen naast helper- en broncontracttests.
+
+src/test/tyreTelemetryContract.test.ts (extra buiten brief-lijst)
+  102–106: alleen bestaande testverwachting gecorrigeerd: observedAt, lap,
+  sessionTimeSeconds en trigger worden bij ontbreken al naar null genormaliseerd.
+  De ongewijzigde basis faalde hier ook. Parser/productiecode niet aangepast.
+  Apart gecommit om deze losstaande correctie expliciet te houden.
+
+supabase/migrations/20261107110000_endurance_past_catalog_slots.sql
+  1–3: expliciet NIET TOEGEPAST voorstel, met verwijzing naar rollback.
+  177–180: activatie weigert session_start_at <= clock_timestamp(), ná de
+  advisory lock en vóór iedere bestaande-race-return of insert.
+  289: slotinteresse vindt uitsluitend slots met start > clock_timestamp().
+  Bestaande autorisatie, search_path, signatures en foutteksten blijven intact.
+  CREATE OR REPLACE behoudt de bestaande grants. Geen datamigratie/opruiming.
+
+supabase/rollback/20261107110000_endurance_past_catalog_slots.rollback.sql
+  Vanaf regel 5: exacte voorgaande definities van beide RPC's terugplaatsen.
+  Alleen passend direct na dit voorstel, zonder latere wijzigingen aan die RPC's.
+  Nieuw bestand gerechtvaardigd door acceptatiecriterium 5.
+
+Dit verslag: docs/operations/2026-11-07-endurance-past-events-verslag.txt
+  Extra document om bewijs, beperkingen en migratievoorstel vast te leggen.
+
+2. TESTUITSLAGEN EN ACCEPTATIE
+
+Volledig npm test: PASS — 197 bestanden geslaagd, 1688 tests geslaagd,
+0 gefaald. Geen tests overgeslagen in de gerapporteerde uitslag.
+Duur: 128.44 seconden. Volledige console-uitvoer staat hieronder.
+De eerste poging kon niet starten omdat dependencies in deze worktree ontbraken;
+npm ci installeerde ze lokaal. package.json en lockfile zijn niet gewijzigd.
+
+git diff --check: PASS.
+Aanvullend npm run typecheck: FAIL, exact dezelfde uitvoer op de ongewijzigde
+basiscommit. Bestaande fouten in TeamModal, community-support/PayPal,
+pitWindow/strategy en main.tsx. Geen daarvan aangepast; geen geslaagde buildclaim.
+Baselinecontrole: de gewijzigde tracked bestanden tijdelijk exact uit HEAD
+5d414ce hersteld, checks uitgevoerd en eigen wijzigingen daarna teruggezet.
+Baseline tyre-test: exit 1. Baseline typecheck: exit 2.
+
+Acceptatie 1–3: PASS in helper- en React/DOM-tests.
+Acceptatie 4: race-, archief-, beheer- en registratiecode ongewijzigd; volledige
+suite groen. Geen live archiefrace geopend of ingelogde productie-E2E uitgevoerd.
+Acceptatie 5: PASS als geleverd migratievoorstel; NIET toegepast en NIET getest
+in PostgreSQL. RPC-bevindingen zijn repositorybewijs, geen live-schema-inspectie.
+Acceptatie 6: geen copy-/labeltemplates gewijzigd of toegevoegd. Bestaande
+foutteksten hergebruikt. De bestaande slotaantallabel kan nu '0 tijdsloten' tonen
+(voorheen het totale aantal, bijvoorbeeld '5 tijdsloten') bij een event waarvan
+vandaag het laatste slot verstreken is maar de einddatum nog niet voorbij is.
+Dat is een andere berekende waarde, geen nieuw label; niets is gepubliceerd.
+
+3. SERVERCONTROLE — HUIDIGE REPOSITORYDEFINITIES
+
+endurance_activate_iracing_slot:
+  supabase/migrations/20261023130000_endurance_valkyrie_car_mapping.sql:174–181
+  controleert slot-ID, event-ID en active, maar niet de starttijd.
+  Regels 183–199 nemen de lock en kunnen een bestaande race-ID teruggeven.
+  Regels 202–209 leiden tijden af; ook daar ontbreekt een verledencontrole.
+
+endurance_set_iracing_slot_interest:
+  supabase/migrations/20260813163000_endurance_iracing_slot_interest.sql:108–118
+  controleert actief slot en actief event, zonder tijdsgrens.
+  Regels 120–132 schrijven/verwijderen interesse vervolgens gewoon.
+  Het voorstel weigert zowel toevoegen als intrekken voor verstreken slots.
+
+endurance_iracing_manager_interest_overview:
+  supabase/migrations/20260813173000_endurance_iracing_preliminary_event_interest.sql:85–99
+  telt DISTINCT user_id uit voorlopige eventinteresse UNION ALL actieve
+  slotinteresse; regel 95 controleert active maar niet session_start_at.
+  Deze RPC blijft ongewijzigd en wordt niet meer gebruikt door de catalogus.
+  De vervangende bestaande manager-only members-RPC controleert de rol in
+  20260813163000_endurance_iracing_slot_interest.sql:154–157.
+
+4. BEWUST NIET AANGERAAKT / IMPACT
+
+Mijn races, endurance-archief, racebeheer, racepagina's en registratie ongewijzigd.
+Geen events, koppelingen, interessehistorie, teams of inschrijvingen verwijderd.
+iracingEventsRepository.ts ongewijzigd; bestaande hooks/RPC-contracten hergebruikt.
+Geen wijziging in auth/rollen, RLS, grants, tabellen, generated types of imports.
+Website: uitsluitend catalogusweergave en catalogusacties lokaal gewijzigd.
+Backend: twee RPC-definities als niet-toegepast voorstel.
+Bot, SEO, assets, deployment/config: geen impact verwacht, niets gewijzigd.
+Production frontend changes: NONE.
+
+5. WAT IK MOGELIJK OVER HET HOOFD ZIE
+
+Live RPC-definities kunnen afwijken van de migratiehistorie; dat is hier niet
+geverifieerd omdat de opdracht uitsluitend deze worktree toestaat. Het SQL-
+voorstel is statisch getest, niet in PostgreSQL uitgevoerd. De nieuwe teller
+vraagt voor managers per zichtbaar event met toekomstige slots de bestaande
+namenprojectie op: dat geeft meer requests/data dan één aggregaat-RPC en verdient
+bij een grote catalogus een performancemeting; gewone leden krijgen deze query
+niet ingeschakeld. De frontend vertrouwt op de browserklok en ververst per seconde
+(achtergrondtabs kunnen later verversen), maar klikhandlers controleren opnieuw.
+Serverbescherming tegen directe RPC-aanroepen is pas effectief na een apart
+gekeurde toepassing van het voorstel. Een event dat vandaag zijn laatste slot
+heeft gehad kan conform de gevraagde einddatumregel nog tot middernacht blijven
+staan, zonder slots of interessebadge. Visuele layout, live archiefbereikbaarheid
+en netwerkconcurrentie zijn niet met een echte browser/production-account getest.
+
+VOLLEDIGE UITEINDELIJKE NPM TEST-CONSOLE
+
+
+> 3-stripe-motorsport@0.0.0 test
+> vitest run
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vitest.config.ts:14:32). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /home/hermes/projects/3sm-league-astra
+
+
+ Test Files  197 passed (197)
+      Tests  1688 passed (1688)
+   Start at  10:46:13
+   Duration  128.44s (transform 6.98s, setup 24.21s, import 25.96s, tests 37.14s, environment 243.80s)
+
+
+PRODUCTIEWIJZIGING: NEE
