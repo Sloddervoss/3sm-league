@@ -5,7 +5,7 @@ Basis: main @ 5d414ce
 Commits: 80d5148 (kern), cb6ecac (buiten-scope tyre-test teruggedraaid),
 06a1189 (verslag), f46f424 (teller via aggregaat-RPC, migratie uitgebreid),
 4849449 (reviewcorrecties).
-Status: NIET uitgerold; migratie NIET toegepast.
+Status: uitgerold (site 96c6445); migratie TOEGEPAST op 7 nov 2026 als supabase_admin.
 
 1. WAT ER IS GEWIJZIGD
 
@@ -68,15 +68,23 @@ De huidige productie-RPC's zijn gelezen met pg_get_functiondef: geen van de drie
 controleerde de starttijd. De migratie is als tekst gevalideerd door haar in een
 transactie als supabase_admin uit te voeren en weer terug te draaien
 (CREATE FUNCTION x3, ROLLBACK, exit 0). Hetzelfde is met de rollback gedaan.
-De rol postgres heeft op deze database geen DDL-rechten; toepassen moet als
-supabase_admin. Er is niets op de database uitgevoerd.
+De rol postgres heeft op deze database geen DDL-rechten; toepassen gebeurt als
+supabase_admin.
+
+Toegepast: 7 nov 2026, `psql -U supabase_admin -v ON_ERROR_STOP=1`, uitkomst
+BEGIN / CREATE FUNCTION x3 / COMMIT. Daarna gecontroleerd:
+- eigenaar en grants van alle drie functies ongewijzigd (supabase_admin, zelfde ACL
+  als een niet-aangeraakte RPC);
+- activatie van een verstreken slot geeft een fout, ook binnen een transactie;
+- interesse op een verstreken slot geeft een fout;
+- de anomteller telde in een testtransactie alleen de interesse op het toekomstige
+  slot (1) terwijl de oude ongefilterde telling 2 zou geven; daarna teruggedraaid.
 
 5. OPENSTAAND / BEPERKINGEN
 
-- Zonder de migratie kan een verstreken slot nog via een directe RPC-aanroep worden
-  geactiveerd; de frontend blokkeert het wel.
-- Tot de migratie is toegepast telt de badge op een lopende serie ook historische
-  slotinteresse mee.
+- De foutmelding bij een verstreken slot is de bestaande algemene tekst ("Onbekend,
+  inactief of niet bij dit event horend catalogusslot"); functioneel correct, maar
+  niet uitlegbaar aan een manager. Een duidelijkere tekst vraagt een nieuwe migratie.
 - Na het verstrijken van het gekozen slot kan een manager binnen hetzelfde
   catalogusevent geen ander slot activeren (bestaande één-keuze-per-eventregel).
 - De frontend vertrouwt op de browserklok voor de weergave; de server is pas leidend
