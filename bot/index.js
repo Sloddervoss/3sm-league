@@ -1465,7 +1465,7 @@ async function checkStewardPenalties() {
 }
 
 // ── Cron: steward penalty correcties (na intrekken) ───────────────────────────
-async function checkStewardCorrections() {
+async function checkStewardCorrections(ctx = {}) {
   const { data, error } = await supabase
     .from('penalties')
     .select('id, race_id, user_id, discord_message_id, races(name)')
@@ -1485,6 +1485,10 @@ async function checkStewardCorrections() {
   const profilesByUserId = await fetchProfilesByUserIds(data.map(penalty => penalty.user_id), 'user_id, display_name, iracing_name');
   for (const penalty of data) {
     const raceName = penalty.races?.name || 'Onbekende race';
+
+    // Een run die de taakgrens heeft overschreden mag niet naast een nieuwe
+    // run doorpubliceren. De bewaker annuleert niet, dus dit is het stopmoment.
+    if (typeof ctx.isStale === 'function' && ctx.isStale()) return;
 
     const profile = profilesByUserId.get(penalty.user_id);
     const driverName = profileName(profile);
@@ -1588,7 +1592,7 @@ async function checkAbandonPenalties() {
 }
 
 // ── Cron: abandon correcties (na misclick undo) ───────────────────────────────
-async function checkAbandonCorrections() {
+async function checkAbandonCorrections(ctx = {}) {
   const { data, error } = await supabaseStep(
     '[checkAbandonCorrections]',
     (signal) => supabase
@@ -1612,6 +1616,10 @@ async function checkAbandonCorrections() {
   const profilesByUserId = await fetchProfilesByUserIds(data.map(penalty => penalty.user_id), 'user_id, display_name, iracing_name');
   for (const penalty of data) {
     const raceName = penalty.races?.name || 'Onbekende race';
+
+    // Een run die de taakgrens heeft overschreden mag niet naast een nieuwe
+    // run doorpubliceren. De bewaker annuleert niet, dus dit is het stopmoment.
+    if (typeof ctx.isStale === 'function' && ctx.isStale()) return;
 
     const profile = profilesByUserId.get(penalty.user_id);
     const driverName = profileName(profile);
