@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isRaceableCatalogEvent } from "@/features/endurance/calendar/iracingCatalogPresentation";
 
 /**
@@ -14,6 +14,13 @@ const base = {
 };
 
 describe("isRaceableCatalogEvent", () => {
+  afterEach(() => vi.useRealTimers());
+  it("wisselt de einddatum op Amsterdamse middernacht, niet UTC", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-07T23:00:00Z"));
+    expect(isRaceableCatalogEvent({ ...base, event_end_date: "2026-11-07", selectedEventId: "linked" })).toBe(false);
+    expect(isRaceableCatalogEvent({ ...base, event_end_date: "2026-11-08" })).toBe(true);
+  });
   it("toont een toekomstige race met tijdsloten", () => {
     expect(isRaceableCatalogEvent({ ...base, event_end_date: "2026-11-08" }, "2026-10-18")).toBe(true);
   });
@@ -28,10 +35,10 @@ describe("isRaceableCatalogEvent", () => {
     expect(isRaceableCatalogEvent({ ...base, event_end_date: "2026-09-12" }, "2026-10-18")).toBe(false);
   });
 
-  it("houdt een voorbije race zichtbaar als er al een slot aan gekoppeld is", () => {
+  it("verbergt een voorbije race ook als er al een slot aan gekoppeld is", () => {
     expect(
       isRaceableCatalogEvent({ ...base, event_end_date: "2026-09-12", selectedEventId: "slot-123" }, "2026-10-18"),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("verbergt een inactieve rij", () => {

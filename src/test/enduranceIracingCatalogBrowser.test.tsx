@@ -8,6 +8,8 @@ const mutateAsync = vi.fn(async () => "local-event-portimao");
 const setSlotInterest = vi.fn();
 const setEventInterest = vi.fn();
 const localClassIds = { current: ["GTP", "LMP2", "GT3"] };
+const selection = { eventId: null as string | null, slotId: null as string | null };
+const slotYear = { current: "2099" };
 const authRoles = { isSuperAdmin: false, isEnduranceManager: true };
 const officialPosterUrl = "https://www.iracing.com/wp-content/uploads/2025/12/iRSE-2026-Portimao-1000.png";
 
@@ -22,10 +24,10 @@ vi.mock("@/features/endurance/repository/iracingEventsRepository", () => ({
       local_car_ids: ["hpd-arx-01c", "chevrolet-corvette-c6r", "aston-martin-dbr9-gt1", "ford-gt-gt2-gt3"],
       cars: [{ sourceKey: "hrc-arx01c-feature", name: "HPD ARX-01c", imageUrl: null, officialClassId: "HPD" }], team_event: true,
       official_url: "https://www.iracing.com/special-events/", poster_url: officialPosterUrl, availability_status: "exact_slots",
-      source_updated_at: null, last_seen_at: "2026-08-13T08:00:00Z", active: true, selectedEventId: null, selectedSlotId: null,
+      source_updated_at: null, last_seen_at: "2026-08-13T08:00:00Z", active: true, selectedEventId: selection.eventId, selectedSlotId: selection.slotId,
       slots: ["00:00", "09:00", "14:00", "18:00", "22:00"].map((label, index) => ({
         id: `slot-${index}`, catalog_event_id: "event-portimao", source_slot_key: `slot-${index}`,
-        session_start_at: `2099-08-15T${label}:00Z`, practice_start_at: null, practice_duration_minutes: 30,
+        session_start_at: `${slotYear.current}-08-15T${label}:00Z`, practice_start_at: null, practice_duration_minutes: 30,
         qualifying_start_at: null, qualifying_duration_minutes: 8, transition_duration_minutes: null,
         estimated_race_start_at: null, race_duration_minutes: null, race_lap_limit: 215,
         session_duration_minutes: null, session_timing_status: "partial", label, active: true,
@@ -63,10 +65,12 @@ const renderCatalog = (language: "nl" | "en" = "nl") => {
 
 describe("iRacing Endurance catalogus browserflow", () => {
   beforeEach(() => {
+    selection.eventId = null; selection.slotId = null; slotYear.current = "2099";
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-13T12:00:00Z"));
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    Element.prototype.scrollIntoView = vi.fn();
     mutateAsync.mockClear(); setSlotInterest.mockClear(); setEventInterest.mockClear();
     localClassIds.current = ["GTP", "LMP2", "GT3"]; localStorage.clear();
     authRoles.isSuperAdmin = false; authRoles.isEnduranceManager = true;
@@ -75,6 +79,40 @@ describe("iRacing Endurance catalogus browserflow", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("verbergt een afgelopen gekoppeld event volledig", () => {
+    selection.eventId = "completed-race"; selection.slotId = "slot-0";
+    vi.setSystemTime(new Date("2026-11-07T12:00:00Z"));
+    renderCatalog();
+    expect(screen.queryByRole("button", { name: "Details voor Portimão 1000 bekijken" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Geselecteerd door 3SM")).not.toBeInTheDocument();
+  });
+
+  it("laat selectie, teller en open-raceknop verdwijnen zodra het geselecteerde slot begint", () => {
+    slotYear.current = "2026"; selection.eventId = "local-race"; selection.slotId = "slot-0";
+    vi.setSystemTime(new Date("2026-08-14T23:59:59Z"));
+    renderCatalog();
+    expect(screen.getByLabelText("2 geïnteresseerde coureurs")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" }));
+    expect(screen.getByRole("button", { name: "Open race / inschrijven" })).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.queryByRole("button", { name: "Open race / inschrijven" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Geselecteerd door 3SM")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("0 geïnteresseerde coureurs")).toBeInTheDocument();
+    expect(screen.getAllByText("Officieel tijdslot")).toHaveLength(4);
+  });
+
+  it("verwijdert een open activatiepaneel wanneer het slot begint", () => {
+    slotYear.current = "2026";
+    vi.setSystemTime(new Date("2026-08-14T23:59:59Z"));
+    renderCatalog();
+    fireEvent.click(screen.getByRole("button", { name: "Details voor Portimão 1000 bekijken" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Deze gaan we rijden" })[0]);
+    expect(screen.getByRole("button", { name: "Bevestigen en inschrijving openen" })).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.queryByRole("button", { name: "Bevestigen en inschrijving openen" })).not.toBeInTheDocument();
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it("scrollt automatisch naar het bevestigingspaneel bij tijdslotkeuze (vele slots)", async () => {
@@ -140,7 +178,7 @@ describe("iRacing Endurance catalogus browserflow", () => {
   it("toont managers unieke animo en biedt zonder tijdsloten hartinteresse", () => {
     renderCatalog();
     expect(screen.getByLabelText("2 geïnteresseerde coureurs")).toHaveTextContent("2");
-    expect(screen.getByLabelText("3 geïnteresseerde coureurs")).toHaveTextContent("3");
+    expect(screen.queryByLabelText("3 geïnteresseerde coureurs")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Details voor Southern 500 bekijken" }));
     fireEvent.click(screen.getByRole("button", { name: "Ik heb interesse in dit event" }));
     expect(setEventInterest).toHaveBeenCalledWith({ catalogEventId: "event-southern", interested: true });

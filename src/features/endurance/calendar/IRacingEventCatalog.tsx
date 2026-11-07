@@ -13,6 +13,8 @@ import {
   expectedCatalogRaceStart,
   formatCatalogInstant,
   isRaceableCatalogEvent,
+  isUpcomingCatalogSlot,
+  upcomingCatalogInterestCount,
   phaseRange,
   selectedCatalogSlot,
   sortCatalogByNextStart,
@@ -24,7 +26,6 @@ import {
   useActivateIRacingEnduranceSlot,
   useIRacingEnduranceCatalog,
   useIRacingEventInterestSummary,
-  useIRacingManagerInterestOverview,
   useIRacingSlotInterestMembers,
   useIRacingSlotInterestSummary,
   useSetIRacingSlotInterest,
@@ -223,6 +224,7 @@ const ActivationPanel = ({ event, slot, onClose }: { event: IRacingCatalogEvent;
   </Panel>;
   const submit = async (formEvent: React.FormEvent) => {
     formEvent.preventDefault();
+    if (!isUpcomingCatalogSlot(slot)) { onClose(); return; }
     setError("");
     try {
       await activate.mutateAsync({
@@ -251,10 +253,13 @@ const ActivationPanel = ({ event, slot, onClose }: { event: IRacingCatalogEvent;
   </Panel>;
 };
 
-const CompactEventCard = ({ event, onOpen, canManage, interestedCount }: { event: IRacingCatalogEvent; onOpen: () => void; canManage: boolean; interestedCount: number }) => {
+const CompactEventCard = ({ event, onOpen, canManage }: { event: IRacingCatalogEvent; onOpen: () => void; canManage: boolean }) => {
   const { language } = useLanguage();
   const c = copy[language];
   const selected = selectedCatalogSlot(event);
+  const futureSlots = upcomingCatalogSlots(event.slots);
+  const { data: members = [] } = useIRacingSlotInterestMembers(event.id, canManage && futureSlots.length > 0);
+  const interestedCount = upcomingCatalogInterestCount(futureSlots, members);
   return <button
     type="button"
     aria-haspopup="dialog"
@@ -265,12 +270,12 @@ const CompactEventCard = ({ event, onOpen, canManage, interestedCount }: { event
     <div className="relative aspect-video overflow-hidden border-b border-white/[0.07] bg-[radial-gradient(circle_at_center,_#24104d_0%,_#0a0711_62%,_#050506_100%)] p-4 sm:p-6">
       <EventVisual event={event} className="h-full w-full object-contain opacity-100 transition duration-300 group-hover:scale-[1.02]" />
       {selected && <span className="absolute left-3 top-3"><StatusPill tone="orange">{c.selectedBy3sm}</StatusPill></span>}
-      {canManage && <span aria-label={c.managerInterest(interestedCount)} title={c.managerInterest(interestedCount)} className="absolute right-3 top-3 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-black/75 px-3 text-sm font-black text-white shadow-lg ring-1 ring-white/15 backdrop-blur"><Users className="h-4 w-4 text-orange-400" /><span>{interestedCount}</span></span>}
+      {canManage && futureSlots.length > 0 && <span aria-label={c.managerInterest(interestedCount)} title={c.managerInterest(interestedCount)} className="absolute right-3 top-3 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-black/75 px-3 text-sm font-black text-white shadow-lg ring-1 ring-white/15 backdrop-blur"><Users className="h-4 w-4 text-orange-400" /><span>{interestedCount}</span></span>}
     </div>
     <div className="space-y-3 p-5">
       <div className="flex flex-wrap gap-2">
         <StatusPill>{c.officialSource}</StatusPill>
-        <StatusPill tone={selected ? "orange" : "neutral"}>{selected ? c.selected : event.slots.length ? c.slotsKnown(event.slots.length) : c.timesFollow}</StatusPill>
+        <StatusPill tone={selected ? "orange" : "neutral"}>{selected ? c.selected : event.slots.length ? c.slotsKnown(futureSlots.length) : c.timesFollow}</StatusPill>
       </div>
       <h3 className="font-heading text-xl font-black leading-tight text-white">{event.name}</h3>
       <div className="space-y-1.5 text-xs text-gray-400">
@@ -311,11 +316,11 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
   if (!event) return null;
   const selected = selectedCatalogSlot(event);
   const officialEventLogo = officialEventLogos[event.source_key];
-  // Toon alleen upcoming slots; het geselecteerde/geactiveerde slot blijft altijd
-  // zichtbaar (daarop hebben teams geregistreerd) waardoor een verlopen kaart nooit leeg raakt.
-  const visibleSlots = upcomingCatalogSlots(event.slots, event.selectedSlotId);
+  const visibleSlots = upcomingCatalogSlots(event.slots);
   const eventInterest = eventInterestRows.find((row) => row.catalog_event_id === event.id);
-  const toggleInterest = (slot: IRacingCatalogSlot, interested: boolean) => setInterest.mutate({ catalogSlotId: slot.id, interested });
+  const toggleInterest = (slot: IRacingCatalogSlot, interested: boolean) => {
+    if (isUpcomingCatalogSlot(slot)) setInterest.mutate({ catalogSlotId: slot.id, interested });
+  };
   const toggleEventInterest = () => setEventInterest.mutate({ catalogEventId: event.id, interested: !eventInterest?.is_current_user_interested });
 
   return <PreviewModal open={open} onClose={onClose} ariaLabel={`${event.name} details`} maxWidth="880px">
@@ -376,12 +381,12 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
               interestedNames={interestedNames}
               interestPending={setInterest.isPending && setInterest.variables?.catalogSlotId === slot.id}
               onToggleInterest={toggleInterest}
-              onActivate={setActivating}
-              onOpen={(eventId) => navigate(`/endurance/races/${eventId}`)}
+              onActivate={(slot) => { if (isUpcomingCatalogSlot(slot)) setActivating(slot); }}
+              onOpen={(eventId) => { if (isUpcomingCatalogSlot(slot)) navigate(`/endurance/races/${eventId}`); }}
             />;
           })}
-          <div ref={activationRef} className="scroll-mt-6">{activating && <ActivationPanel event={event} slot={activating} onClose={() => setActivating(null)} />}</div>
-        </div> : <div className="rounded-2xl bg-black/25 p-5 ring-1 ring-white/[0.07]">
+          <div ref={activationRef} className="scroll-mt-6">{activating && visibleSlots.some((slot) => slot.id === activating.id) && <ActivationPanel event={event} slot={activating} onClose={() => setActivating(null)} />}</div>
+        </div> : event.slots.length === 0 ? <div className="rounded-2xl bg-black/25 p-5 ring-1 ring-white/[0.07]">
           <p className="flex items-center gap-2 text-sm font-bold text-white"><Flag className="h-4 w-4 text-orange-400" />{c.exactTimesPending}</p>
           <p className="mt-2 text-xs text-gray-500">{c.noSlotSelection}</p>
           <p className="mt-4 text-sm text-gray-300">{c.preliminaryHelp}</p>
@@ -389,7 +394,7 @@ const EventDetailModal = ({ event, open, onClose, canManage }: {
             <Heart className={`h-4 w-4 ${eventInterest?.is_current_user_interested ? "fill-current" : ""}`} />
             {setEventInterest.isPending ? c.updating : eventInterest?.is_current_user_interested ? c.removePreliminary : c.preliminary}
           </SecondaryButton>}
-        </div>}
+        </div> : null}
       </section>
 
       <p className="flex items-center gap-2 text-xs text-gray-500"><Clock3 className="h-3.5 w-3.5" />{c.lastChecked} {formatCatalogInstant(event.last_seen_at, "amsterdam", language)}</p>
@@ -403,12 +408,17 @@ export const IRacingEventCatalog = () => {
   const { isSuperAdmin, isEnduranceManager } = useAuth();
   const canManage = Boolean(isSuperAdmin || isEnduranceManager);
   const { data: events = [], isLoading, isError, error } = useIRacingEnduranceCatalog();
-  const { data: managerInterest = [] } = useIRacingManagerInterestOverview(canManage);
+  // Herbereken ook zonder een netwerkrefetch wanneer een slot begint of de dag wisselt.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [openEventId, setOpenEventId] = useState<string | null>(null);
   const visible = useMemo(() => {
-    const today = catalogTodayAmsterdam();
+    const today = catalogTodayAmsterdam(now);
     return sortCatalogByNextStart(events.filter((event) => isRaceableCatalogEvent(event, today)));
-  }, [events]);
+  }, [events, now]);
 
   if (isLoading) return <Panel><p role="status" className="text-sm text-gray-400">{c.loading}</p></Panel>;
   if (isError) return <Panel><p role="alert" className="text-sm text-red-300">Officiële kalender kon niet worden geladen: {(error as Error).message}</p></Panel>;
@@ -424,7 +434,6 @@ export const IRacingEventCatalog = () => {
         event={event}
         onOpen={() => setOpenEventId(event.id)}
         canManage={canManage}
-        interestedCount={managerInterest.find((row) => row.catalog_event_id === event.id)?.interested_count ?? 0}
       />)}
     </div>
     <EventDetailModal event={openEvent} open={Boolean(openEvent)} onClose={() => setOpenEventId(null)} canManage={canManage} />

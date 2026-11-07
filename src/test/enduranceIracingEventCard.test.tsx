@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   catalogDateWindow,
+  upcomingCatalogInterestCount,
   expectedCatalogRaceStart,
   formatCatalogInstant,
   phaseRange,
@@ -60,28 +61,47 @@ const event: IRacingCatalogEvent = {
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("iRacing Endurance event-card flow", () => {
+  it("levert RPC-tijdguards met exacte rollback, zonder bestaande autorisatie te wijzigen", () => {
+    const migration = read("supabase/migrations/20261107110000_endurance_past_catalog_slots.sql");
+    const rollback = read("supabase/rollback/20261107110000_endurance_past_catalog_slots.rollback.sql");
+    const extract = (sql: string, name: string) => sql.match(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\$\\$;`))?.[0];
+    for (const [name, file] of [
+      ["endurance_activate_iracing_slot", "20261023130000_endurance_valkyrie_car_mapping.sql"],
+      ["endurance_set_iracing_slot_interest", "20260813163000_endurance_iracing_slot_interest.sql"],
+    ]) {
+      const old = extract(read(`supabase/migrations/${file}`), name);
+      expect(old).toBeDefined();
+      expect(extract(rollback, name)).toBe(old);
+      expect(extract(migration, name)).toContain("SECURITY DEFINER");
+      expect(extract(migration, name)).toContain("clock_timestamp()");
+    }
+    expect(migration.indexOf("v_slot.session_start_at <= clock_timestamp()")).toBeGreaterThan(migration.indexOf("PERFORM pg_advisory_xact_lock"));
+    expect(migration.indexOf("v_slot.session_start_at <= clock_timestamp()")).toBeLessThan(migration.indexOf("RETURN v_existing.id"));
+    expect(migration).toContain("AND slot.session_start_at > clock_timestamp()");
+  });
+
   it("houdt vijf officiële slots onder exact één event", () => {
     expect(event.id).toBe("event-portimao");
     expect(event.slots).toHaveLength(5);
     expect(new Set(event.slots.map((slot) => slot.catalog_event_id))).toEqual(new Set([event.id]));
     expect(selectedCatalogSlot(event)).toBeNull();
-    expect(selectedCatalogSlot({ ...event, selectedSlotId: "slot-2" })?.id).toBe("slot-2");
+    expect(selectedCatalogSlot({ ...event, selectedSlotId: "slot-2" }, new Date("2026-08-01T00:00:00Z"))?.id).toBe("slot-2");
     expect(event.local_car_ids).toHaveLength(2);
     expect(event.cars.map((car) => car.name)).toContain("HRC ARX01c");
   });
 
-  it("toont alleen upcoming slots en houdt het geselecteerde slot altijd zichtbaar", () => {
+  it("toont alleen toekomstige slots, zonder uitzondering voor een selectie", () => {
     // Alle slot-datums liggen in aug 2026; met vandaag = begin september zijn ze allemaal verlopen.
-    const pastOnly = upcomingCatalogSlots(event.slots, null, "2026-09-01");
+    const pastOnly = upcomingCatalogSlots(event.slots, new Date("2026-09-01T00:00:00Z"));
     expect(pastOnly).toHaveLength(0);
     // Met vandaag = vóór het event blijven alle upcoming slots zichtbaar.
-    const allUpcoming = upcomingCatalogSlots(event.slots, null, "2026-08-01");
+    const allUpcoming = upcomingCatalogSlots(event.slots, new Date("2026-08-01T00:00:00Z"));
     expect(allUpcoming).toHaveLength(5);
-    // Een geselecteerd slot blijft tonen, ook als de datum verlopen is.
-    const selectedKept = upcomingCatalogSlots(event.slots, "slot-2", "2026-09-01");
-    expect(selectedKept.map((slot) => slot.id)).toEqual(["slot-2"]);
-    // Enkel de upcoming slots (>= vandaag) naast het geselecteerde slot.
-    const mixed = upcomingCatalogSlots(event.slots, "slot-2", "2026-08-15");
+    // Ook bij een selectie blijven verlopen slots verborgen.
+    const selectedKept = upcomingCatalogSlots(event.slots, new Date("2026-09-01T00:00:00Z"));
+    expect(selectedKept.map((slot) => slot.id)).toEqual([]);
+    // Alleen toekomstige slots.
+    const mixed = upcomingCatalogSlots(event.slots, new Date("2026-08-15T00:00:00Z"));
     expect(mixed.some((slot) => slot.id === "slot-2")).toBe(true);
   });
 
@@ -112,7 +132,7 @@ describe("iRacing Endurance event-card flow", () => {
     // Rond 12:30Z op 15 aug zijn slot-4, slot-1 en slot-2 al begonnen/verstreken;
     // slot-3 (16:00Z) is later op dezelfde dag en moet nog zichtbaar zijn.
     const now = new Date("2026-08-15T12:30:00Z");
-    const visible = upcomingCatalogSlots(event.slots, null, now);
+    const visible = upcomingCatalogSlots(event.slots, now);
     const ids = visible.map((slot) => slot.id);
     expect(ids).toContain("slot-3");
     // slot-0 heeft sessiestart 2026-08-14T22:00Z < 12:30Z => niet zichtbaar.
@@ -120,9 +140,24 @@ describe("iRacing Endurance event-card flow", () => {
     expect(ids).not.toContain("slot-4");
     expect(ids).not.toContain("slot-1");
     expect(ids).not.toContain("slot-2");
-    // Geselecteerd slot blijft zelfs als het verstreken is, naast de nog upcoming slot.
-    const selectedKept = upcomingCatalogSlots(event.slots, "slot-1", new Date("2026-08-15T12:30:00Z"));
-    expect(selectedKept.map((slot) => slot.id)).toEqual(["slot-1", "slot-3"]);
+    // Een verlopen selectie komt niet terug in de lijst.
+    const selectedKept = upcomingCatalogSlots(event.slots, new Date("2026-08-15T12:30:00Z"));
+    expect(selectedKept.map((slot) => slot.id)).toEqual(["slot-3"]);
+  });
+
+  it("verbergt de selectie op en na sessiestart, maar behoudt een toekomstige selectie", () => {
+    const selected = { ...event, selectedSlotId: "slot-2" };
+    expect(selectedCatalogSlot(selected, new Date("2026-08-15T11:59:59Z"))?.id).toBe("slot-2");
+    expect(selectedCatalogSlot(selected, new Date("2026-08-15T12:00:00Z"))).toBeNull();
+    expect(selectedCatalogSlot(selected, new Date("2026-09-01T00:00:00Z"))).toBeNull();
+  });
+
+  it("telt unieke coureurs uitsluitend op toekomstige actieve slots", () => {
+    const members = [["slot-1", "old"], ["slot-2", "both"], ["slot-3", "both"], ["slot-3", "future"]]
+      .map(([catalog_slot_id, user_id]) => ({ catalog_slot_id, user_id, iracing_name: null, display_name: null }));
+    expect(upcomingCatalogInterestCount(event.slots, members, new Date("2026-08-15T12:00:00Z"))).toBe(2);
+    expect(upcomingCatalogInterestCount(event.slots, members, new Date("2026-08-15T16:00:00Z"))).toBe(0);
+    expect(upcomingCatalogInterestCount(event.slots.map((slot) => ({ ...slot, active: false })), members, new Date("2026-08-01T00:00:00Z"))).toBe(0);
   });
 
   it("formatteert UTC en Amsterdam expliciet en toont het datumvenster", () => {
@@ -182,15 +217,15 @@ describe("iRacing Endurance event-card flow", () => {
     expect(repo).toContain("local_car_ids");
   });
 
-  it("toont datum-only events als tijden-volgen, houdt afgelopen ongekozen events en serie-regels zonder tijdsloten uit de lijst", () => {
+  it("toont datum-only events als tijden-volgen, houdt alle afgelopen events en serie-regels zonder tijdsloten uit de lijst", () => {
     const component = read("src/features/endurance/calendar/IRacingEventCatalog.tsx");
     expect(component).toContain('"Tijden volgen"');
-    expect(component).toContain("catalogTodayAmsterdam()");
+    expect(component).toContain("catalogTodayAmsterdam(now)");
     expect(component).toContain("isRaceableCatalogEvent(event, today)");
     expect(component).toContain("Exacte starttijden nog niet gepubliceerd door iRacing");
     const presentation = read("src/features/endurance/calendar/iracingCatalogPresentation.ts");
     expect(presentation).toContain('event.availability_status === "tbd"');
-    expect(presentation).toContain("event.event_end_date >= today || Boolean(event.selectedEventId)");
+    expect(presentation).toContain("return event.event_end_date >= today;");
   });
 
   it("rendert activatie alleen voor managers en registratie alleen bij het gekozen slot", () => {

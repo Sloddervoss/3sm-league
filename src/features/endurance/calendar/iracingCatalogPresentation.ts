@@ -133,33 +133,23 @@ export const catalogDateWindow = (event: Pick<IRacingCatalogEvent, "event_start_
   return `${start} – ${formatter.format(new Date(`${event.event_end_date}T12:00:00Z`))}`;
 };
 
-/**
- * Filtert slots op de officiële catalogus: alleen upcoming slots worden getoond.
- * - Wordt een Amsterdam-datum-string meegegeven, dan wordt op dagniveau gefilterd
- *   (sessiestart op of na die dag) — backward-compat voor daggebaseerde callers.
- * - Wordt een echt moment (Date) meegegeven (of weggelaten), dan is de filter
- *   tijdsgevoelig: slots die al begonnen zijn (sessiestart in het verleden)
- *   verdwijnen zodra hun tijd verstreken is, ook op de dag van vandaag.
- * Het geselecteerde/geactiveerde slot blijft altijd zichtbaar zodat een verlopen
- * kaart waarop teams geregistreerd hebben nooit leeg raakt.
- */
-export const upcomingCatalogSlots = (
-  slots: IRacingCatalogSlot[],
-  selectedSlotId: string | null | undefined,
-  now: string | Date = new Date(),
-): IRacingCatalogSlot[] =>
-  slots.filter((slot) => {
-    if (selectedSlotId && slot.id === selectedSlotId) return true;
-    const start = slot.session_start_at;
-    if (!start) return false;
-    // Datum-string => dagffilter (sessiestart op of na die dag).
-    if (typeof now === "string") return start.slice(0, 10) >= now;
-    // Echt moment => tijdsgevoelig: nog niet begonnen.
-    return new Date(start).getTime() >= now.getTime();
-  });
+/** Alleen actieve slots die strikt na het huidige moment starten. */
+export const isUpcomingCatalogSlot = (slot: IRacingCatalogSlot, now = new Date()) =>
+  slot.active && new Date(slot.session_start_at).getTime() > now.getTime();
 
-export const selectedCatalogSlot = (event: IRacingCatalogEvent) =>
-  event.slots.find((slot) => slot.id === event.selectedSlotId) ?? null;
+export const upcomingCatalogSlots = (slots: IRacingCatalogSlot[], now = new Date()): IRacingCatalogSlot[] =>
+  slots.filter((slot) => isUpcomingCatalogSlot(slot, now));
+
+export const selectedCatalogSlot = (event: IRacingCatalogEvent, now = new Date()) =>
+  upcomingCatalogSlots(event.slots, now).find((slot) => slot.id === event.selectedSlotId) ?? null;
+
+/** Behoud unieke coureurs; voorlopige eventinteresse telt hier niet mee. */
+export const upcomingCatalogInterestCount = (
+  slots: IRacingCatalogSlot[], members: IRacingSlotInterestMember[], now = new Date(),
+) => {
+  const ids = new Set(upcomingCatalogSlots(slots, now).map((slot) => slot.id));
+  return new Set(members.filter((member) => ids.has(member.catalog_slot_id)).map((member) => member.user_id)).size;
+};
 
 /**
  * Berekent het eerstvolgende startmoment van een event voor catalogussortering:
@@ -202,8 +192,7 @@ export const sortCatalogByNextStart = (
  * Serie-regels (`availability_status` = `tbd`) beschrijven een heel seizoen: ze
  * hebben een begin- en einddatum maanden uit elkaar en geen tijdsloten. Zo'n rij
  * komt anders als "aankomende race" in de lijst te staan terwijl er niets aan te
- * melden valt. Een al gekozen slot blijft altijd zichtbaar, ook als het event
- * inmiddels voorbij is, zodat een bestaande koppeling nooit uit het zicht raakt.
+ * melden valt. Voorbije events verdwijnen ongeacht een bestaande 3SM-koppeling.
  */
 export const isRaceableCatalogEvent = (
   event: Pick<IRacingCatalogEvent, "active" | "availability_status" | "event_end_date"> & {
@@ -214,5 +203,5 @@ export const isRaceableCatalogEvent = (
   if (!event.active) return false;
   if (event.availability_status === "tbd") return false;
   if (!event.event_end_date) return true;
-  return event.event_end_date >= today || Boolean(event.selectedEventId);
+  return event.event_end_date >= today;
 };
