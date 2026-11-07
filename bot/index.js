@@ -35,6 +35,7 @@ import { describeError, formatLogArg, redactSensitiveText } from './logging.js';
 import {
   createNetworkHealthTracker,
   createTimeoutFetch,
+  classificeerFouttekst,
   isTransientNetworkErrorText,
   parseNetworkTimeoutMs,
 } from './network.js';
@@ -165,22 +166,25 @@ function discordCall(promise, label) {
 }
 
 async function throttledBotLog(key, ...args) {
-  const now = Date.now();
   const text = args.join(' ') || key;
-  const normalizedKey = isTransientNetworkErrorText(`${key} ${text}`)
-    ? 'network:transient-fetch-failed'
-    : key;
-  const throttleMs = normalizedKey === 'network:transient-fetch-failed'
-    ? NETWORK_ERROR_LOG_THROTTLE_MS
-    : ERROR_LOG_THROTTLE_MS;
-  const last = throttledLogs.get(normalizedKey) || 0;
-  if (now - last < throttleMs) return;
-  throttledLogs.set(normalizedKey, now);
+  const classificatie = classificeerFouttekst(`${key} ${text}`);
 
-  if (normalizedKey === 'network:transient-fetch-failed') {
+  // Een storing in Supabase of de API gaat altijd naar de gezondheidswaker,
+  // ook als de melding hieronder wordt gedempt. Anders blijft de tracker
+  // "gezond" terwijl er niets meer werkt. Alleen de uitvoer is gedempt.
+  if (classificatie?.subsystem === 'supabase') {
     await networkHealth.recordFailure('cron/network', text);
     return;
   }
+
+  // Discord heeft zijn eigen teller: een Discord-timeout mag nooit als
+  // "Supabase onbereikbaar" in het journaal belanden, maar is wel zichtbaar.
+  const normalizedKey = classificatie ? `network:${classificatie.subsystem}:${classificatie.kind}` : key;
+  const throttleMs = classificatie ? NETWORK_ERROR_LOG_THROTTLE_MS : ERROR_LOG_THROTTLE_MS;
+  const now = Date.now();
+  const last = throttledLogs.get(normalizedKey) || 0;
+  if (now - last < throttleMs) return;
+  throttledLogs.set(normalizedKey, now);
 
   await botLog(...args);
 }
@@ -252,13 +256,31 @@ async function markeerCorrectieVerzonden(penaltyId, label) {
   return 'mislukt';
 }
 
-async function supabaseStep(label, queryPromise) {
+// Eén deadline per Supabase-aanroep, inclusief wachttijd op de responsebody.
+// Deze grens is bewust hoger dan de oude 10 s: de transportlaag staat 25 s toe
+// (network.js) en een tunnelhik van ~16 s is meetbaar normaal. Elke buitenste
+// wrapper moet daarom boven deze waarde liggen, anders breekt hij een aanroep af
+// die zijn eigen grens nog niet heeft bereikt.
+const SUPABASE_STEP_TIMEOUT_MS = SUPABASE_FETCH_TIMEOUT_MS;
+
+async function supabaseStep(label, query, { ms = SUPABASE_STEP_TIMEOUT_MS } = {}) {
+  // `query` is een fabriek die de AbortSignal krijgt, zodat een afgebroken
+  // aanroep de onderliggende fetch echt stopt in plaats van door te lopen.
+  const controller = new AbortController();
+  const queryPromise = typeof query === 'function' ? query(controller.signal) : query;
   let timer;
   try {
     // Zonder eigen grens kan een stilstaande socket de hele sync laten wachten:
     // de Supabase-client heeft geen timeout op een doodgeslagen verbinding.
     const grens = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`timeout na 10000 ms: ${label}`)), 10000);
+      timer = setTimeout(() => {
+        const fout = new Error(`timeout na ${ms} ms: ${label}`);
+        fout.name = 'SupabaseTimeoutError';
+        fout.subsystem = 'supabase';
+        fout.kind = 'timeout';
+        controller.abort(fout);
+        reject(fout);
+      }, ms);
     });
     const result = await Promise.race([queryPromise, grens]);
     if (result?.error) {
@@ -1525,12 +1547,13 @@ async function checkStewardCorrections() {
 async function checkAbandonPenalties() {
   const { data, error } = await supabaseStep(
     '[checkAbandonPenalties]',
-    supabase
+    (signal) => supabase
       .from('penalties')
       .select('id, race_id, user_id, points_deduction, races(name)')
       .eq('source', 'abandon')
       .eq('notified', false)
       .eq('revoked', false) // nooit sturen als al ingetrokken vóór versturen
+      .abortSignal(signal)
   );
   if (error) return;
   if (!data?.length) return;
@@ -1598,13 +1621,14 @@ async function checkAbandonPenalties() {
 async function checkAbandonCorrections() {
   const { data, error } = await supabaseStep(
     '[checkAbandonCorrections]',
-    supabase
+    (signal) => supabase
       .from('penalties')
       .select('id, race_id, user_id, discord_message_id, races(name)')
       .eq('source', 'abandon')
       .eq('revoked', true)
       .eq('notified', true)
       .eq('correction_sent', false)
+      .abortSignal(signal)
   );
   if (error) return;
   if (!data?.length) return;
@@ -1979,10 +2003,15 @@ async function syncTeamRoles(ctx = {}) {
         const teamsUitslag = await metNetwerkHerhaling(
           () => supabaseStep(
             '[syncTeamRoles] teams',
-            supabase.from('teams').select('id, name, color, discord_role_id, discord_category_id')
+            (signal) => supabase.from('teams')
+              .select('id, name, color, discord_role_id, discord_category_id')
+              .abortSignal(signal)
           ),
           {
             label: 'teams ophalen',
+            // Boven de eigen Supabase-deadline, zodat die als eerste afgaat en
+            // er één duidelijke melding per poging overblijft.
+            ms: SUPABASE_STEP_TIMEOUT_MS + 2000,
             isActief: assertActive,
             // PostgREST gooit niet maar resolve't met { error }; dat is ook een
             // mislukte poging en moet dus herhaald worden.
@@ -2261,16 +2290,13 @@ async function syncTeamRoles(ctx = {}) {
 
       // Sync Discord-rollen voor alle gekoppelde leden
       setStep('profiles ophalen uit Supabase');
-      const { data: profiles, error: profilesError } = await metTimeout(
-        supabaseStep(
-          '[syncTeamRoles] profiles',
-          supabase
-            .from('profiles').select('user_id, discord_id, iracing_name, display_name')
-            .not('discord_id', 'is', null)
-        ),
-        TEAM_SYNC_TIMEOUT_MS,
-        'profiles ophalen'
-      ).catch(fout => ({ data: null, error: fout }));
+      const { data: profiles, error: profilesError } = await supabaseStep(
+        '[syncTeamRoles] profiles',
+        (signal) => supabase
+          .from('profiles').select('user_id, discord_id, iracing_name, display_name')
+          .not('discord_id', 'is', null)
+          .abortSignal(signal)
+      );
       if (profilesError) {
         return markeer(`profiles ophalen: ${describeError(profilesError)}`);
       }
@@ -2279,29 +2305,22 @@ async function syncTeamRoles(ctx = {}) {
       stats.profiles = profiles.length;
 
       setStep('team memberships ophalen uit Supabase');
-      const { data: memberships, error: membershipsError } = await metTimeout(
-        supabaseStep(
-          '[syncTeamRoles] memberships',
-          supabase.from('team_memberships').select('user_id, team_id')
-        ),
-        TEAM_SYNC_TIMEOUT_MS,
-        'memberships ophalen'
-      ).catch(fout => ({ data: null, error: fout }));
+      const { data: memberships, error: membershipsError } = await supabaseStep(
+        '[syncTeamRoles] memberships',
+        (signal) => supabase.from('team_memberships').select('user_id, team_id').abortSignal(signal)
+      );
       if (membershipsError) {
         return markeer(`memberships ophalen: ${describeError(membershipsError)}`);
       }
 
       setStep('admin/steward rollen ophalen uit Supabase');
-      const { data: adminRoles, error: adminRolesError } = await metTimeout(
-        supabaseStep(
-          '[syncTeamRoles] user_roles',
-          supabase
-            .from('user_roles').select('user_id, role')
-            .in('role', ['admin', 'super_admin', 'moderator'])
-        ),
-        TEAM_SYNC_TIMEOUT_MS,
-        'user_roles ophalen'
-      ).catch(fout => ({ data: null, error: fout }));
+      const { data: adminRoles, error: adminRolesError } = await supabaseStep(
+        '[syncTeamRoles] user_roles',
+        (signal) => supabase
+          .from('user_roles').select('user_id, role')
+          .in('role', ['admin', 'super_admin', 'moderator'])
+          .abortSignal(signal)
+      );
       if (adminRolesError) {
         return markeer(`user_roles ophalen: ${describeError(adminRolesError)}`);
       }

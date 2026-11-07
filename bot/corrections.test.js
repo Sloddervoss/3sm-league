@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import { beslisRollback, publiceerCorrectie } from './corrections.js';
 
 // Registreert de volgorde van alle bijwerkingen, zodat de test de ordening kan
@@ -74,4 +75,23 @@ test('een gecommitte maar onbevestigde schrijfactie houdt het bericht', () => {
   assert.equal(beslisRollback({ vlagGezet: true }), 'behouden');
   assert.equal(beslisRollback({ vlagGezet: false, opgeslagenMessageId: 'm1', onsMessageId: 'm1' }), 'verwijderen');
   assert.equal(beslisRollback({ vlagGezet: true, opgeslagenMessageId: 'ander', onsMessageId: 'm1' }), 'verwijderen');
+});
+
+test('de correctiepaden in index.js gebruiken de veilige volgorde', async () => {
+  const bron = await fs.readFile(new URL('./index.js', import.meta.url), 'utf8');
+
+  // Beide correctietaken publiceren via dezelfde volgorde-functie.
+  assert.equal((bron.match(/publiceerCorrectie\(/g) || []).length, 2);
+
+  // De oude volgorde -- eerst het origineel wissen -- mag niet terugkomen.
+  assert.doesNotMatch(bron, /channel\.messages\.delete\(penalty\.discord_message_id\)/);
+});
+
+test('elke Supabase-stap krijgt een abortsignaal en een eigen deadline', async () => {
+  const bron = await fs.readFile(new URL('./index.js', import.meta.url), 'utf8');
+
+  assert.ok((bron.match(/\.abortSignal\(signal\)/g) || []).length >= 6,
+    'elke supabaseStep-aanroep hoort een abortsignaal te krijgen');
+  assert.doesNotMatch(bron, /metTimeout\(\s*supabaseStep\(/,
+    'de buitenste 8s-grens mag niet om een Supabase-stap heen zitten');
 });
