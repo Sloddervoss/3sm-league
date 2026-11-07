@@ -7,7 +7,7 @@
 
 import { formatDuration } from './cronGuard.js';
 import { describeError, redactSensitiveText } from './logging.js';
-import { isTransientNetworkErrorText } from './network.js';
+import { classificeerFouttekst, isTransientNetworkErrorText } from './network.js';
 
 // Eén Discord- of database-aanroep binnen de sync mag nooit langer duren.
 export const TEAM_SYNC_TIMEOUT_MS = 8_000;
@@ -111,13 +111,14 @@ function verzamelFouttekst(fout) {
 export function netwerkFoutSoort(fout) {
   const tekst = verzamelFouttekst(fout);
   if (!tekst) return null;
-  if (/\btimeout na \d+ ms\b/i.test(tekst)) return 'timeout';
+  // Eén classificatie met de rest van de bot (network.js): dezelfde regel mag
+  // hier niet anders beoordeeld worden dan in de botlog of de gezondheidswaker.
+  // Een expliciete netwerkcode blijft als reden staan; die is specifieker dan
+  // het verzamelwoord en wordt door de bestaande tests en logregels verwacht.
   const code = tekst.match(NETWERK_CODE_PATROON);
-  if (code) return code[1];
-  // Zelfde lijst als de netwerkbewaker: fetch failed, time-outs en 5xx.
-  if (isTransientNetworkErrorText(tekst)) {
-    return /\btimeout\b/i.test(tekst) ? 'timeout' : 'netwerkfout';
-  }
+  if (code && !/\[discord\]/i.test(tekst)) return code[1];
+  const classificatie = classificeerFouttekst(tekst);
+  if (classificatie) return classificatie.kind === 'timeout' ? 'timeout' : 'netwerkfout';
   return null;
 }
 

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {
+    classificeerFouttekst,
   createNetworkHealthTracker,
   createTimeoutFetch,
   isTransientNetworkErrorText,
@@ -64,4 +65,36 @@ test('bot network health logs stay out of Discord botLog channel', async () => {
   assert.match(indexSource, /function networkStatusLog\(/);
   assert.match(indexSource, /log:\s*networkStatusLog/);
   assert.doesNotMatch(indexSource, /createNetworkHealthTracker\(\{\s*log:\s*botLog/s);
+});
+
+test('classificeerFouttekst scheidt Supabase en Discord en kent de eigen timeouttekst', () => {
+  assert.deepEqual(classificeerFouttekst('timeout na 25000 ms: [checkAbandonCorrections]'),
+    { subsystem: 'supabase', kind: 'timeout' });
+  assert.deepEqual(classificeerFouttekst('TimeoutError | fetch timeout na 25s'),
+    { subsystem: 'supabase', kind: 'timeout' });
+  assert.deepEqual(classificeerFouttekst('[checkProtests] fout: fetch failed'),
+    { subsystem: 'supabase', kind: 'network' });
+  assert.deepEqual(classificeerFouttekst('[discord] rol bijwerken timeout na 20s'),
+    { subsystem: 'discord', kind: 'timeout' });
+  assert.deepEqual(classificeerFouttekst('TimeoutError | [discord] lid ophalen'),
+    { subsystem: 'discord', kind: 'timeout' });
+  assert.equal(classificeerFouttekst('Missing Permissions'), null);
+  assert.equal(classificeerFouttekst(''), null);
+});
+
+test('een nieuwe storing na herstel wordt opnieuw gemeld', async () => {
+  const logs = [];
+  let nu = 1000;
+  const tracker = createNetworkHealthTracker({
+    log: async (...args) => logs.push(args),
+    throttleMs: 15 * 60 * 1000,
+    now: () => nu,
+  });
+
+  await tracker.recordFailure('cron', 'storing 1');
+  assert.equal(logs.length, 1);
+  await tracker.recordSuccess('cron');
+  nu += 60 * 1000;
+  await tracker.recordFailure('cron', 'storing 2');
+  assert.equal(logs.length, 3);
 });

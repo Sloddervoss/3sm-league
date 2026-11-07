@@ -27,6 +27,33 @@ export function isTransientNetworkErrorText(text) {
     || /\b(Supabase\/PostgREST empty error response|Bad Gateway|Error code 5\d\d|Cloudflare)\b/i.test(text);
 }
 
+/**
+ * Bepaalt subsysteem en soort van een foutmelding.
+ *
+ * Eén classificatie voor de hele bot: de netwerkbewaker, de team-sync-retries en
+ * de botlog mogen het niet oneens zijn over dezelfde regel. Tekstmatching blijft
+ * nodig — fouten komen als string binnen — maar de uitkomst is expliciet, en
+ * Discord staat vóór Supabase omdat een Discord-timeout ook "TimeoutError" heet.
+ */
+export function classificeerFouttekst(text) {
+  const waarde = String(text ?? '');
+  if (!waarde) return null;
+
+  if (/\[discord\]/i.test(waarde)) {
+    return {
+      subsystem: 'discord',
+      kind: /\btimeout\b|TimeoutError/i.test(waarde) ? 'timeout' : 'error',
+    };
+  }
+  if (/\btimeout na \d+ ms\b/i.test(waarde) || /\bTimeoutError\b/.test(waarde)) {
+    return { subsystem: 'supabase', kind: 'timeout' };
+  }
+  if (isTransientNetworkErrorText(waarde)) {
+    return { subsystem: 'supabase', kind: 'network' };
+  }
+  return null;
+}
+
 export function createTimeoutFetch({ fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   if (typeof fetchImpl !== 'function') {
     throw new TypeError('fetchImpl must be a function');
