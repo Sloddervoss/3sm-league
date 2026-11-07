@@ -143,14 +143,6 @@ export const upcomingCatalogSlots = (slots: IRacingCatalogSlot[], now = new Date
 export const selectedCatalogSlot = (event: IRacingCatalogEvent, now = new Date()) =>
   upcomingCatalogSlots(event.slots, now).find((slot) => slot.id === event.selectedSlotId) ?? null;
 
-/** Behoud unieke coureurs; voorlopige eventinteresse telt hier niet mee. */
-export const upcomingCatalogInterestCount = (
-  slots: IRacingCatalogSlot[], members: IRacingSlotInterestMember[], now = new Date(),
-) => {
-  const ids = new Set(upcomingCatalogSlots(slots, now).map((slot) => slot.id));
-  return new Set(members.filter((member) => ids.has(member.catalog_slot_id)).map((member) => member.user_id)).size;
-};
-
 /**
  * Berekent het eerstvolgende startmoment van een event voor catalogussortering:
  * de vroegste nog upcoming slot-sessiestart. Heeft een event (nog) geen

@@ -303,4 +303,35 @@ BEGIN
 END;
 $$;
 
+-- Vorige definitie van de anomteller terugplaatsen.
+CREATE OR REPLACE FUNCTION public.endurance_iracing_manager_interest_overview()
+ RETURNS TABLE(catalog_event_id uuid, interested_count bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'auth', 'pg_temp'
+AS $function$
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.is_endurance_manager(auth.uid()) THEN
+    RAISE EXCEPTION 'Permission denied: alleen endurance_manager of super_admin kan eventanimo bekijken'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY
+  SELECT combined.catalog_event_id, count(DISTINCT combined.user_id)::BIGINT
+  FROM (
+    SELECT event_interest.catalog_event_id, event_interest.user_id
+    FROM public.endurance_iracing_event_interest AS event_interest
+    UNION ALL
+    SELECT slot_interest.catalog_event_id, slot_interest.user_id
+    FROM public.endurance_iracing_slot_interest AS slot_interest
+    JOIN public.endurance_iracing_event_slots AS slot
+      ON slot.id = slot_interest.catalog_slot_id
+     AND slot.catalog_event_id = slot_interest.catalog_event_id
+     AND slot.active
+  ) AS combined
+  JOIN public.endurance_iracing_events AS event
+    ON event.id = combined.catalog_event_id AND event.active
+  GROUP BY combined.catalog_event_id;
+END;
+$function$
+
 COMMIT;

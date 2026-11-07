@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   catalogDateWindow,
-  upcomingCatalogInterestCount,
   expectedCatalogRaceStart,
   formatCatalogInstant,
   phaseRange,
@@ -150,14 +149,6 @@ describe("iRacing Endurance event-card flow", () => {
     expect(selectedCatalogSlot(selected, new Date("2026-08-15T11:59:59Z"))?.id).toBe("slot-2");
     expect(selectedCatalogSlot(selected, new Date("2026-08-15T12:00:00Z"))).toBeNull();
     expect(selectedCatalogSlot(selected, new Date("2026-09-01T00:00:00Z"))).toBeNull();
-  });
-
-  it("telt unieke coureurs uitsluitend op toekomstige actieve slots", () => {
-    const members = [["slot-1", "old"], ["slot-2", "both"], ["slot-3", "both"], ["slot-3", "future"]]
-      .map(([catalog_slot_id, user_id]) => ({ catalog_slot_id, user_id, iracing_name: null, display_name: null }));
-    expect(upcomingCatalogInterestCount(event.slots, members, new Date("2026-08-15T12:00:00Z"))).toBe(2);
-    expect(upcomingCatalogInterestCount(event.slots, members, new Date("2026-08-15T16:00:00Z"))).toBe(0);
-    expect(upcomingCatalogInterestCount(event.slots.map((slot) => ({ ...slot, active: false })), members, new Date("2026-08-01T00:00:00Z"))).toBe(0);
   });
 
   it("formatteert UTC en Amsterdam expliciet en toont het datumvenster", () => {

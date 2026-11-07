@@ -14,7 +14,6 @@ import {
   formatCatalogInstant,
   isRaceableCatalogEvent,
   isUpcomingCatalogSlot,
-  upcomingCatalogInterestCount,
   phaseRange,
   selectedCatalogSlot,
   sortCatalogByNextStart,
@@ -26,6 +25,7 @@ import {
   useActivateIRacingEnduranceSlot,
   useIRacingEnduranceCatalog,
   useIRacingEventInterestSummary,
+  useIRacingManagerInterestOverview,
   useIRacingSlotInterestMembers,
   useIRacingSlotInterestSummary,
   useSetIRacingSlotInterest,
@@ -253,13 +253,11 @@ const ActivationPanel = ({ event, slot, onClose }: { event: IRacingCatalogEvent;
   </Panel>;
 };
 
-const CompactEventCard = ({ event, onOpen, canManage }: { event: IRacingCatalogEvent; onOpen: () => void; canManage: boolean }) => {
+const CompactEventCard = ({ event, onOpen, canManage, interestedCount }: { event: IRacingCatalogEvent; onOpen: () => void; canManage: boolean; interestedCount: number }) => {
   const { language } = useLanguage();
   const c = copy[language];
   const selected = selectedCatalogSlot(event);
   const futureSlots = upcomingCatalogSlots(event.slots);
-  const { data: members = [] } = useIRacingSlotInterestMembers(event.id, canManage && futureSlots.length > 0);
-  const interestedCount = upcomingCatalogInterestCount(futureSlots, members);
   return <button
     type="button"
     aria-haspopup="dialog"
@@ -270,7 +268,7 @@ const CompactEventCard = ({ event, onOpen, canManage }: { event: IRacingCatalogE
     <div className="relative aspect-video overflow-hidden border-b border-white/[0.07] bg-[radial-gradient(circle_at_center,_#24104d_0%,_#0a0711_62%,_#050506_100%)] p-4 sm:p-6">
       <EventVisual event={event} className="h-full w-full object-contain opacity-100 transition duration-300 group-hover:scale-[1.02]" />
       {selected && <span className="absolute left-3 top-3"><StatusPill tone="orange">{c.selectedBy3sm}</StatusPill></span>}
-      {canManage && futureSlots.length > 0 && <span aria-label={c.managerInterest(interestedCount)} title={c.managerInterest(interestedCount)} className="absolute right-3 top-3 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-black/75 px-3 text-sm font-black text-white shadow-lg ring-1 ring-white/15 backdrop-blur"><Users className="h-4 w-4 text-orange-400" /><span>{interestedCount}</span></span>}
+      {canManage && <span aria-label={c.managerInterest(interestedCount)} title={c.managerInterest(interestedCount)} className="absolute right-3 top-3 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-black/75 px-3 text-sm font-black text-white shadow-lg ring-1 ring-white/15 backdrop-blur"><Users className="h-4 w-4 text-orange-400" /><span>{interestedCount}</span></span>}
     </div>
     <div className="space-y-3 p-5">
       <div className="flex flex-wrap gap-2">
@@ -408,6 +406,7 @@ export const IRacingEventCatalog = () => {
   const { isSuperAdmin, isEnduranceManager } = useAuth();
   const canManage = Boolean(isSuperAdmin || isEnduranceManager);
   const { data: events = [], isLoading, isError, error } = useIRacingEnduranceCatalog();
+  const { data: managerInterest = [] } = useIRacingManagerInterestOverview(canManage);
   // Herbereken ook zonder een netwerkrefetch wanneer een slot begint of de dag wisselt.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -434,6 +433,7 @@ export const IRacingEventCatalog = () => {
         event={event}
         onOpen={() => setOpenEventId(event.id)}
         canManage={canManage}
+        interestedCount={managerInterest.find((row) => row.catalog_event_id === event.id)?.interested_count ?? 0}
       />)}
     </div>
     <EventDetailModal event={openEvent} open={Boolean(openEvent)} onClose={() => setOpenEventId(null)} canManage={canManage} />

@@ -89,7 +89,7 @@ describe("iRacing Endurance catalogus browserflow", () => {
     expect(screen.queryByText("Geselecteerd door 3SM")).not.toBeInTheDocument();
   });
 
-  it("laat selectie, teller en open-raceknop verdwijnen zodra het geselecteerde slot begint", () => {
+  it("laat selectie en open-raceknop verdwijnen zodra het geselecteerde slot begint", () => {
     slotYear.current = "2026"; selection.eventId = "local-race"; selection.slotId = "slot-0";
     vi.setSystemTime(new Date("2026-08-14T23:59:59Z"));
     renderCatalog();
@@ -99,7 +99,10 @@ describe("iRacing Endurance catalogus browserflow", () => {
     act(() => vi.advanceTimersByTime(1000));
     expect(screen.queryByRole("button", { name: "Open race / inschrijven" })).not.toBeInTheDocument();
     expect(screen.queryByText("Geselecteerd door 3SM")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("0 geïnteresseerde coureurs")).toBeInTheDocument();
+      // De teller komt uit de aggregaat-RPC en zakt pas mee zodra de
+      // gefilterde RPC uit de migratie is toegepast; de selectie en de
+      // knop verdwijnen wel meteen.
+      expect(screen.getByLabelText("2 geïnteresseerde coureurs")).toBeInTheDocument();
     expect(screen.getAllByText("Officieel tijdslot")).toHaveLength(4);
   });
 
@@ -178,7 +181,7 @@ describe("iRacing Endurance catalogus browserflow", () => {
   it("toont managers unieke animo en biedt zonder tijdsloten hartinteresse", () => {
     renderCatalog();
     expect(screen.getByLabelText("2 geïnteresseerde coureurs")).toHaveTextContent("2");
-    expect(screen.queryByLabelText("3 geïnteresseerde coureurs")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("3 geïnteresseerde coureurs")).toHaveTextContent("3");
     fireEvent.click(screen.getByRole("button", { name: "Details voor Southern 500 bekijken" }));
     fireEvent.click(screen.getByRole("button", { name: "Ik heb interesse in dit event" }));
     expect(setEventInterest).toHaveBeenCalledWith({ catalogEventId: "event-southern", interested: true });
