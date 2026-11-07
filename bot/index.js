@@ -10,6 +10,7 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import cron from 'node-cron';
 import { createGuardedRunner, formatDuration, withTimeout } from './cronGuard.js';
+import { beslisRollback, publiceerCorrectie } from './corrections.js';
 import {
   Afgebroken,
   alleenAlsActief,
@@ -212,6 +213,43 @@ async function retrySupabase(label, operation, attempts = 3) {
 
   await throttledBotLog(`${label}:${describeError(lastError)}`, `${label}: ${describeError(lastError)}`);
   return false;
+}
+
+// Bevestigde correctievlag. Een update die nul rijen raakt is geen succes: dan
+// heeft een andere run het bericht al geplaatst, of de rij bestaat niet meer.
+// Alleen één omgezette rij telt als opgeslagen.
+async function markeerCorrectieVerzonden(penaltyId, label) {
+  let laatsteFout = null;
+  for (let poging = 1; poging <= 3; poging += 1) {
+    const { data, error } = await supabase
+      .from('penalties')
+      .update({ correction_sent: true })
+      .eq('id', penaltyId)
+      .eq('correction_sent', false)
+      .select('id');
+
+    if (!error && (data?.length ?? 0) === 1) {
+      await networkHealth.recordSuccess(label);
+      return 'opgeslagen';
+    }
+    if (!error) return 'dubbel';
+
+    laatsteFout = error;
+    await networkHealth.recordFailure(label, describeError(error));
+    if (poging < 3) await delay(500 * poging);
+  }
+
+  // De schrijfactie kan gecommit zijn terwijl alleen het antwoord verloren ging.
+  // Lees de rij daarom na voordat we dit als mislukking behandelen.
+  const { data: rij, error: leesFout } = await supabase
+    .from('penalties').select('correction_sent').eq('id', penaltyId).maybeSingle();
+  if (!leesFout && rij?.correction_sent === true) return 'dubbel';
+
+  await throttledBotLog(
+    `${label}:opslaan:${describeError(laatsteFout)}`,
+    `${label} vlag opslaan mislukt:`, describeError(laatsteFout)
+  );
+  return 'mislukt';
 }
 
 async function supabaseStep(label, queryPromise) {
@@ -1310,7 +1348,13 @@ async function checkProtests() {
         supabase.from('protests').update({ notified: true }).eq('id', protest.id).eq('notified', false)
       );
       if (!saved) {
-        await deleteSentMessage(msg, '[checkProtests]');
+        // Een timeout na de update bewijst niet dat de update niet gebeurd is.
+        const { data: rij } = await supabase.from('protests').select('notified').eq('id', protest.id).maybeSingle();
+        if (beslisRollback({ vlagGezet: rij?.notified === true }) === 'behouden') {
+          botLog(`⚖️ Protest melding behouden: de rij staat al op notified (${protest.id})`);
+        } else {
+          await deleteSentMessage(msg, '[checkProtests]');
+        }
         continue;
       }
       botLog(`⚖️ Steward beslissing verstuurd: **${protest.races?.name}** → ${accusedName} — ${penaltyText}`);
@@ -1402,7 +1446,18 @@ async function checkStewardPenalties() {
         .eq('notified', false)
     );
     if (!saved) {
-      await deleteSentMessage(msg, '[checkStewardPenalties]');
+      const { data: rij } = await supabase.from('penalties')
+        .select('notified, discord_message_id').eq('id', penalty.id).maybeSingle();
+      const besluit = beslisRollback({
+        vlagGezet: rij?.notified === true,
+        opgeslagenMessageId: rij?.discord_message_id ?? null,
+        onsMessageId: msg.id,
+      });
+      if (besluit === 'behouden') {
+        botLog(`⚠️ Steward melding behouden: de rij bevestigt dit bericht (${penalty.id})`);
+      } else {
+        await deleteSentMessage(msg, '[checkStewardPenalties]');
+      }
       continue;
     }
 
@@ -1442,29 +1497,24 @@ async function checkStewardCorrections() {
     const profile = profilesByUserId.get(penalty.user_id);
     const driverName = profileName(profile);
 
-    if (penalty.discord_message_id) {
-      await channel.messages.delete(penalty.discord_message_id).catch(() => {});
-    }
-
     const embed = new EmbedBuilder()
       .setColor(0x6b7280)
       .setTitle(`✏️ Correctie — ${raceName}`)
       .setDescription(`De eerder gemelde steward actie voor **${driverName}** is ingetrokken.`)
       .setFooter({ text: '3 Stripe Motorsport · Stewards' })
       .setTimestamp();
-    const msg = await channel.send({ embeds: [embed] }).catch(e => {
-      botLog(`❌ Steward correctie fout: ${describeError(e)}`);
-      return null;
-    });
-    if (!msg) continue;
 
-    const saved = await retrySupabase('[checkStewardCorrections] correction update fout', () =>
-      supabase.from('penalties').update({ correction_sent: true }).eq('id', penalty.id).eq('correction_sent', false)
-    );
-    if (!saved) {
-      await deleteSentMessage(msg, '[checkStewardCorrections]');
-      continue;
-    }
+    const uitkomst = await publiceerCorrectie({
+      origineelMessageId: penalty.discord_message_id ?? null,
+      stuur: () => channel.send({ embeds: [embed] }).catch(e => {
+        botLog(`❌ Steward correctie fout: ${describeError(e)}`);
+        return null;
+      }),
+      verwijder: (doel) => channel.messages.delete(typeof doel === 'string' ? doel : doel.id),
+      markeer: () => markeerCorrectieVerzonden(penalty.id, '[checkStewardCorrections]'),
+    });
+
+    if (uitkomst !== 'verstuurd') continue;
 
     botLog(`✏️ Steward correctie verstuurd: **${driverName}** — ${raceName}`);
     await refreshResultMessage(penalty.race_id, 'steward_correction');
@@ -1518,7 +1568,18 @@ async function checkAbandonPenalties() {
         .eq('notified', false)
     );
     if (!saved) {
-      await deleteSentMessage(msg, '[checkAbandonPenalties]');
+      const { data: rij } = await supabase.from('penalties')
+        .select('notified, discord_message_id').eq('id', penalty.id).maybeSingle();
+      const besluit = beslisRollback({
+        vlagGezet: rij?.notified === true,
+        opgeslagenMessageId: rij?.discord_message_id ?? null,
+        onsMessageId: msg.id,
+      });
+      if (besluit === 'behouden') {
+        botLog(`⚠️ Abandon melding behouden: de rij bevestigt dit bericht (${penalty.id})`);
+      } else {
+        await deleteSentMessage(msg, '[checkAbandonPenalties]');
+      }
       continue;
     }
 
@@ -1561,30 +1622,24 @@ async function checkAbandonCorrections() {
     const profile = profilesByUserId.get(penalty.user_id);
     const driverName = profileName(profile);
 
-    // Verwijder origineel bericht als we het ID hebben
-    if (penalty.discord_message_id) {
-      await channel.messages.delete(penalty.discord_message_id).catch(() => {});
-    }
-
     const embed = new EmbedBuilder()
       .setColor(0x6b7280)
       .setTitle(`✏️ Correctie — ${raceName}`)
       .setDescription(`De eerder gemelde disciplinaire maatregel voor **${driverName}** is ingetrokken wegens een vergissing. Onze excuses.`)
       .setFooter({ text: '3 Stripe Motorsport · Stewards' })
       .setTimestamp();
-    const msg = await channel.send({ embeds: [embed] }).catch(e => {
-      botLog(`❌ Correctie melding fout: ${describeError(e)}`);
-      return null;
-    });
-    if (!msg) continue;
 
-    const saved = await retrySupabase('[checkAbandonCorrections] correction update fout', () =>
-      supabase.from('penalties').update({ correction_sent: true }).eq('id', penalty.id).eq('correction_sent', false)
-    );
-    if (!saved) {
-      await deleteSentMessage(msg, '[checkAbandonCorrections]');
-      continue;
-    }
+    const uitkomst = await publiceerCorrectie({
+      origineelMessageId: penalty.discord_message_id ?? null,
+      stuur: () => channel.send({ embeds: [embed] }).catch(e => {
+        botLog(`❌ Correctie melding fout: ${describeError(e)}`);
+        return null;
+      }),
+      verwijder: (doel) => channel.messages.delete(typeof doel === 'string' ? doel : doel.id),
+      markeer: () => markeerCorrectieVerzonden(penalty.id, '[checkAbandonCorrections]'),
+    });
+
+    if (uitkomst !== 'verstuurd') continue;
 
     botLog(`✏️ Correctie verstuurd: **${driverName}** — ${raceName}`);
     await refreshResultMessage(penalty.race_id, 'abandon_correction');
