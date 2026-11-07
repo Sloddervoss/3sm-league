@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import cron from 'node-cron';
 import { createGuardedRunner, formatDuration, withTimeout } from './cronGuard.js';
 import { beslisRollback, publiceerCorrectie } from './corrections.js';
+import { createSupabaseStep } from './supabaseStep.js';
 import {
   Afgebroken,
   alleenAlsActief,
@@ -256,46 +257,15 @@ async function markeerCorrectieVerzonden(penaltyId, label) {
   return 'mislukt';
 }
 
-// Eén deadline per Supabase-aanroep, inclusief wachttijd op de responsebody.
-// Deze grens is bewust hoger dan de oude 10 s: de transportlaag staat 25 s toe
-// (network.js) en een tunnelhik van ~16 s is meetbaar normaal. Elke buitenste
-// wrapper moet daarom boven deze waarde liggen, anders breekt hij een aanroep af
-// die zijn eigen grens nog niet heeft bereikt.
+// Eén deadline per Supabase-aanroep (zie supabaseStep.js). De grens ligt op de
+// transporttermijn, niet eronder: een tunnelhik van ~16 s is meetbaar normaal en
+// mag geen fout opleveren. Alle buitenste wrappers liggen hier boven.
 const SUPABASE_STEP_TIMEOUT_MS = SUPABASE_FETCH_TIMEOUT_MS;
-
-async function supabaseStep(label, query, { ms = SUPABASE_STEP_TIMEOUT_MS } = {}) {
-  // `query` is een fabriek die de AbortSignal krijgt, zodat een afgebroken
-  // aanroep de onderliggende fetch echt stopt in plaats van door te lopen.
-  const controller = new AbortController();
-  const queryPromise = typeof query === 'function' ? query(controller.signal) : query;
-  let timer;
-  try {
-    // Zonder eigen grens kan een stilstaande socket de hele sync laten wachten:
-    // de Supabase-client heeft geen timeout op een doodgeslagen verbinding.
-    const grens = new Promise((_, reject) => {
-      timer = setTimeout(() => {
-        const fout = new Error(`timeout na ${ms} ms: ${label}`);
-        fout.name = 'SupabaseTimeoutError';
-        fout.subsystem = 'supabase';
-        fout.kind = 'timeout';
-        controller.abort(fout);
-        reject(fout);
-      }, ms);
-    });
-    const result = await Promise.race([queryPromise, grens]);
-    if (result?.error) {
-      await throttledBotLog(`${label}:${describeError(result.error)}`, `${label} fout:`, describeError(result.error));
-    } else {
-      await networkHealth.recordSuccess(label);
-    }
-    return result;
-  } catch (e) {
-    await throttledBotLog(`${label}:${describeError(e)}`, `${label} fout:`, describeError(e));
-    return { data: null, error: e };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+const supabaseStep = createSupabaseStep({
+  ms: SUPABASE_STEP_TIMEOUT_MS,
+  log: throttledBotLog,
+  onSuccess: (label) => networkHealth.recordSuccess(label),
+});
 
 async function deleteSentMessage(message, label) {
   if (!message?.delete) return;
