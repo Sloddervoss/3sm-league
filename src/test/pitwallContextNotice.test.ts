@@ -23,6 +23,12 @@ describe("pitwallContextNotice", () => {
     expect(pitwallContextNotice({ ...basis, status: "no_telemetry" })).toBeNull();
   });
 
+  it("zwijgt in de archiefweergave van een afgesloten race", () => {
+    expect(
+      pitwallContextNotice({ ...basis, status: "event_completed", view: "history" }),
+    ).toBeNull();
+  });
+
   it("zegt dat het event is afgesloten", () => {
     const notice = pitwallContextNotice({ ...basis, status: "event_completed" });
     expect(notice?.tone).toBe("warning");

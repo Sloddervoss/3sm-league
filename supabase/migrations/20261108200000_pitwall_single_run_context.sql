@@ -8,10 +8,14 @@
 --
 -- Wat dit doet: de run van het getoonde live-frame is leidend. Alleen bij een actieve,
 -- verse run van dit team/event komen racegebonden blokken terug, en dan uitsluitend uit
--- die ene run. Anders blijven ze leeg en zegt `context.status` waarom
--- (no_telemetry, unlinked_telemetry, event_completed, inactive_run, stale_telemetry).
--- De telemetrie zelf blijft altijd zichtbaar; er wordt niets verzonnen en niets ouds
--- getoond alsof het actueel is.
+-- die ene run. Is het event afgesloten en is er geen verse telemetrie meer, dan komen de
+-- blokken uit de laatste run van dat event: dat is het archief (`context.view` =
+-- 'history'), geen live race.
+--
+-- Anders blijven de blokken leeg en zegt `context.status` waarom (no_telemetry,
+-- unlinked_telemetry, event_completed, inactive_run, stale_telemetry). De telemetrie
+-- zelf blijft altijd zichtbaar; er wordt niets verzonnen en niets ouds getoond alsof
+-- het actueel is.
 --
 -- Alleen-lezen: geen tabel, geen rij en geen andere functie verandert.
 
@@ -42,6 +46,7 @@ DECLARE
     v_live_received  timestamptz;
     v_event_status   text;
     v_status         text;
+    v_view           text;
     v_trends         jsonb;
     v_pit_loss       jsonb;
     v_tyre           jsonb;
@@ -104,9 +109,27 @@ BEGIN
         v_status := 'live';
     END IF;
 
-    -- Alleen bij een bewezen actieve run geven we racegebonden blokken terug.
-    -- Anders is elk blok null/leeg: liever niets dan een oude race.
-    v_race_run_id := CASE WHEN v_status = 'live' THEN v_live_run_id ELSE NULL END;
+    -- Welke run levert de racegebonden blokken?
+    --   live     -> de run van het getoonde frame.
+    --   archief  -> een afgesloten event zonder verse telemetrie: de laatste run
+    --               van dat event. Zo blijft een oude race bekijkbaar.
+    --   anders   -> niets. Dat is het geval van vanavond: verse telemetrie op een
+    --               afgesloten event, waar een oude strategie naast stond.
+    IF v_status = 'live' THEN
+        v_race_run_id := v_live_run_id;
+        v_view := 'live';
+    ELSIF v_status = 'event_completed'
+          AND (v_live_received IS NULL OR v_live_received < now() - interval '1 hour') THEN
+        SELECT r.id INTO v_race_run_id
+        FROM public.endurance_race_runs r
+        WHERE r.event_id = p_event_id AND r.team_id = p_team_id AND r.run_kind = 'race'
+        ORDER BY r.started_at DESC
+        LIMIT 1;
+        v_view := CASE WHEN v_race_run_id IS NULL THEN 'none' ELSE 'history' END;
+    ELSE
+        v_race_run_id := NULL;
+        v_view := 'none';
+    END IF;
 
     -- 0.4.3: server-side closing-rate map for this race run (bounded). Empty when none.
     v_trends := CASE WHEN v_race_run_id IS NULL THEN '{}'::jsonb
@@ -284,6 +307,7 @@ BEGIN
         -- in plaats van een oude race; zonder dit veld is "leeg" niet te duiden.
         'context', jsonb_build_object(
             'status', v_status,
+            'view', v_view,
             'race_run_id', v_race_run_id,
             'event_status', v_event_status,
             'telemetry_run_id', v_live_run_id,

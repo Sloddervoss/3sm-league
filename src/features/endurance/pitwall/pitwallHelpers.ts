@@ -218,6 +218,8 @@ export type PitwallContextStatus =
 
 export interface PitwallContext {
   status: PitwallContextStatus | string;
+  /** 'live' | 'history' (afgesloten race bekijken) | 'none' */
+  view?: "live" | "history" | "none" | string;
   race_run_id: string | null;
   event_status: string | null;
   telemetry_run_id: string | null;
@@ -238,6 +240,9 @@ export const pitwallContextNotice = (
   context: PitwallContext | null | undefined,
 ): PitwallContextNotice | null => {
   if (!context) return null;
+  // Archiefweergave: een afgesloten race bekijken is geen fout en vraagt geen
+  // waarschuwing. De blokken komen dan uit de laatste run van dat event.
+  if (context.view === "history") return null;
   switch (context.status) {
     case "event_completed":
       return { tone: "warning", message: "Dit event is afgesloten. Er is geen live race meer om te tonen." };
