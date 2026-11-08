@@ -236,6 +236,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
     v3,
     isLive,
     tyreEstimate,
+    fuelSamples: rpcData?.fuel_samples ?? [],
     pitStopMeasurement,
     pitLaneSeconds: pitStopMeasurement.pitLaneSeconds,
   };

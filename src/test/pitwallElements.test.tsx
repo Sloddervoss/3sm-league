@@ -128,6 +128,38 @@ describe("Planning en bestaand strategievenster", () => {
     expect(within(screen.getByRole("list", { name: "Volledige stintplanning" })).getAllByRole("listitem")).toHaveLength(3);
     expect(screen.getByText(/Δ vs racegem. \+0.040 L\/r/)).toBeInTheDocument();
   });
+  it("toont de tank, vier schattingen en de laatste rondes", () => {
+    const metSamples = {
+      ...fixtureStrategy,
+      current_fuel_litres: 32.6,
+      fuel_per_lap_litres: 2.42,
+      race_fuel_per_lap_litres: null,
+      fuel_to_finish_litres: 62.92,
+      fuel_sufficient_to_finish: false,
+      fuel_laps_remaining: 13,
+      valid_fuel_sample_count: 6,
+    };
+    render(
+      <FuelPanel
+        strategy={metSamples}
+        tankCapacityLitres={60}
+        fuelSamples={[
+          { lap: 34, used: 2.4 },
+          { lap: 33, used: 2.32 },
+          { lap: 32, used: 2.3 },
+          { lap: 31, used: 2.9 },
+          { lap: 30, used: 2.28 },
+          { lap: 29, used: 2.5 },
+        ]}
+      />,
+    );
+    expect(screen.getByText("van 60.0L")).toBeInTheDocument();
+    expect(screen.getByText("Laatste 5")).toBeInTheDocument();
+    expect(screen.getByText("Max")).toBeInTheDocument();
+    expect(screen.getByText("Min")).toBeInTheDocument();
+    expect(screen.getByText(/R34 2.40 L · R33 2.32 L · R32 2.30 L/)).toBeInTheDocument();
+  });
+
   it("spreekt zichzelf niet tegen als de tank zonder reserve genoeg is en met reserve niet", () => {
     const krap = {
       ...fixtureStrategy,

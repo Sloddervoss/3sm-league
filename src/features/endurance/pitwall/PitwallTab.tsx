@@ -377,7 +377,7 @@ export const PitwallTab = ({ event }: Props) => {
                       currentStint={currentStint}
                       driverName={driverName}
                     />,
-                    <FuelPanel key="fuel" strategy={strategy} window={isLive ? advice.window : null} plannedStints={[...(currentStint ? [currentStint] : []), ...nextStints].map(s => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))} />,
+                    <FuelPanel key="fuel" strategy={strategy} window={isLive ? advice.window : null} fuelSamples={isDemo ? [] : real.fuelSamples} tankCapacityLitres={isDemo ? null : real.v3?.fuel?.fuelCapacityLitres ?? null} plannedStints={[...(currentStint ? [currentStint] : []), ...nextStints].map(s => ({ ...s, driver_id: isDemo ? s.driver_id : displayName(s.driver_id) }))} />,
                     <VehicleTelemetryPanel
                       key={`tyres:${event.id}:${selectedTeamId}`}
                       v3={isDemo ? null : real.v3 ?? null}

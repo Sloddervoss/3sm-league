@@ -5,12 +5,17 @@ import type { PitwallPlannedStint } from "./pitwallHelpers";
 import type { PitwallStrategyRow } from "./pitwallHelpers";
 import { formatFuel, strategyStatusInfo } from "./pitwallHelpers";
 import { fuelScenarios } from "./strategy/fuelScenarios";
+import { fuelVariants, usableFuelSamples, type FuelSample } from "./strategy/fuelVariants";
 import { PitwallPanel } from "./PitwallPanel";
 
 interface Props {
   window?: PitWindow | null;
   plannedStints?: PitwallPlannedStint[];
   strategy: PitwallStrategyRow | null;
+  /** Laatste geldige verbruiksmetingen (nieuwste eerst), uit de pitwall-RPC. */
+  fuelSamples?: ReadonlyArray<FuelSample> | null;
+  /** Tankinhoud uit de sessiegegevens; null als SimHub die niet levert. */
+  tankCapacityLitres?: number | null;
 }
 
 /**
@@ -24,7 +29,7 @@ interface Props {
  * meting en verder niets: geen range, geen verbruik, geen strategie die er niet
  * is.
  */
-export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
+export const FuelPanel = ({ strategy, window, plannedStints = [], fuelSamples = [], tankCapacityLitres = null }: Props) => {
   if (!strategy) {
     return (
       <PitwallPanel title="Brandstof & stint" slot="fuel">
@@ -50,7 +55,11 @@ export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
   // De finishbehoefte is in liters bekend; het aantal rondes volgt daaruit, zodat
   // de scenario's met dezelfde invoer rekenen als de rest van het paneel.
   const lapsToFinish = toFinish != null && perLap != null && perLap > 0 ? toFinish / perLap : null;
-  const scenarios = fuelScenarios({ fuelLitres: fuel, perLap, lapsRemaining: lapsToFinish });
+  const scenarios = fuelScenarios({ fuelLitres: fuel, perLap, lapsRemaining: lapsToFinish, tankCapacityLitres });
+  // Vier schattingen naast elkaar. EST komt uit de rekenkern, de rest uit de
+  // gemeten reeks; zonder monsters blijven die leeg in plaats van verzonnen.
+  const variants = fuelVariants({ samples: fuelSamples, estPerLap: perLap, fuelLitres: fuel, lapsToFinish, tankCapacityLitres });
+  const history = usableFuelSamples(fuelSamples).slice(0, 3);
 
   if (isInsufficient && fuel == null) {
     return (
@@ -71,6 +80,9 @@ export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
           <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500"><Fuel className="mr-1 inline h-3 w-3" aria-hidden />In de tank</p>
           <p className="mt-1 font-mono text-[32px] font-bold leading-none tabular-nums text-white" data-pitwall-fuel-value="true">
             {fuel != null ? formatFuel(fuel) : "—"}
+            {fuel != null && tankCapacityLitres != null && tankCapacityLitres > 0 && (
+              <span className="ml-1 text-[13px] font-normal text-slate-500">van {formatFuel(tankCapacityLitres)}</span>
+            )}
           </p>
         </div>
         {laps != null && (
@@ -104,6 +116,43 @@ export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
           />
         )}
       </dl>
+
+      {variants.some((variant) => variant.perLap != null) && (
+        <div className="mt-2 border-t border-[#161C27] pt-2 text-[11px] leading-4" data-pitwall-fuel-variants="true">
+          <div className="grid grid-cols-[3.6rem_repeat(4,minmax(0,1fr))] gap-x-2">
+            <span />
+            {variants.map((variant) => (
+              <span key={variant.key} className={`text-right font-semibold ${variant.key === "est" ? "text-orange-300" : "text-slate-400"}`}>
+                {variant.label}
+              </span>
+            ))}
+            <span className="text-slate-500">L/ronde</span>
+            {variants.map((variant) => (
+              <span key={variant.key} className="text-right font-mono tabular-nums text-slate-200">
+                {variant.perLap != null ? variant.perLap.toFixed(3) : "—"}
+              </span>
+            ))}
+            <span className="text-slate-500">Rondes</span>
+            {variants.map((variant) => (
+              <span key={variant.key} className="text-right font-mono tabular-nums text-slate-200">
+                {variant.lapsLeft != null ? variant.lapsLeft : "—"}
+              </span>
+            ))}
+            <span className="text-slate-500">Tanken</span>
+            {variants.map((variant) => (
+              <span key={variant.key} className="text-right font-mono tabular-nums text-slate-200">
+                {variant.toAddLitres == null ? "—" : variant.toAddLitres > 0 ? formatFuel(variant.toAddLitres) : "0"}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <p className="mt-1 text-[11px] text-slate-500" data-pitwall-fuel-history="true">
+          Laatste rondes: {history.map((sample) => `R${sample.lap} ${sample.used.toFixed(2)} L`).join(" · ")}
+        </p>
+      )}
 
       {scenarios.verdict !== "onbekend" && (
         <p
