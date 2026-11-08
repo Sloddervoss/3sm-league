@@ -110,6 +110,9 @@ export interface V3Normalized {
 /** A single opponent from the 0.4.1 connector snapshot. */
 export interface V3Opponent {
   id: string;
+  irating?: number | null;
+  safetyRating?: number | null;
+  licenseClass?: string | null;
   carNumber?: string | null;
   driverName?: string | null;
   teamName?: string | null;

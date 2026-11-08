@@ -31,6 +31,32 @@ const teamLabel = (r: V3Opponent): string | null => {
   return r.teamName === r.driverName ? null : r.teamName;
 };
 
+const licenseStyles: Record<string, string> = {
+  R: "border-red-400/50 bg-red-500/15 text-red-200",
+  D: "border-orange-400/50 bg-orange-500/15 text-orange-200",
+  C: "border-yellow-400/50 bg-yellow-500/15 text-yellow-200",
+  B: "border-green-400/50 bg-green-500/15 text-green-200",
+  A: "border-sky-400/50 bg-sky-500/15 text-sky-100",
+  Pro: "border-slate-400/50 bg-slate-700/40 text-slate-100",
+  WC: "border-slate-300/60 bg-slate-900 text-slate-100",
+};
+
+const SafetyRatingBadge = ({ opponent }: { opponent: V3Opponent }) => {
+  const rating = opponent.safetyRating;
+  const license = opponent.licenseClass;
+  if (rating == null || !Number.isFinite(rating) || rating < 0 || rating > 4.99 || !license || !Object.prototype.hasOwnProperty.call(licenseStyles, license)) {
+    return <span className="text-slate-500">—</span>;
+  }
+  return (
+    <span
+      className={`inline-block whitespace-nowrap rounded border px-1 py-px text-[11px] leading-none ${licenseStyles[license]}`}
+      title={`Safety Rating ${license} ${rating.toFixed(2)} · huidige coureur, sessiegegevens`}
+    >
+      {license} {rating.toFixed(2)}
+    </span>
+  );
+};
+
 /** Compact trend annotation: "+0.2s/lap" (closing) or "los" (pulling away) — muted, no over-color. */
 const TrendMark = ({ rate }: { rate: number | null }) => {
   if (rate == null || !Number.isFinite(rate)) return null;
@@ -46,13 +72,9 @@ const TrendMark = ({ rate }: { rate: number | null }) => {
 /**
  * Live timing.
  *
- * Kolommen en klassesortering zijn ongewijzigd; alleen de leesbaarheid is
- * anders: meer rijhoogte, duidelijke klassekoppen, en de eigen rij met een
- * gedempt oranje vlak en een smalle markering links.
- *
- * De gap is `gapToPlayerSeconds` en heet daarom "Gap tot jou" — niet "achter
- * leider". P en K blijven losse waarden: de snapshot is begrensd en bewijst
- * geen volledig deelnemersaantal.
+ * iRating en Safety Rating horen bij de huidige coureur in de sessie.
+ * Klassepositie blijft beschikbaar voor klassesortering, maar de losse K-kolom
+ * vervalt. Ontbrekende ratings blijven onbekend, ook met een oudere connector.
  */
 export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live = true, plannedStints = [], events = [] }: Props) => {
   const sectorCount = live ? trackSectorCount(v3) : 0;
@@ -70,7 +92,7 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
     );
   }
 
-  const { overallPosition, classPosition, ahead, behind, aheadTrend, behindTrend, rows } = standings;
+  const { overallPosition, ahead, behind, aheadTrend, behindTrend, rows } = standings;
 
   const classes = [...new Set(rows.map(r => r.carClass ?? 'Zonder klasse'))];
   const activeClass = selectedClass && classes.includes(selectedClass) ? selectedClass : classes[0];
@@ -109,7 +131,6 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">Jij</p>
           <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[12px] font-bold text-white">
             <span>{overallPosition != null ? `P${renderPosition(overallPosition)}` : "P—"}</span>
-            {typeof classPosition === "number" && <span className="text-[11px] font-semibold text-slate-300">K{classPosition}</span>}
             {ownCarNumber && <span className="text-slate-400">#{ownCarNumber}</span>}
             <span className="truncate">{ownCarLabel ?? "Mijn auto"}</span>
             {ahead && (
@@ -122,13 +143,14 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
 
       {visibleRows.length > 0 && (
         <div className="pitwall-timing-scroll overflow-x-auto" tabIndex={0} role="region" aria-label="Live timing — scrollbaar klassement">
-          <table data-sector-count={sectorCount} className={`w-full min-w-[720px] text-left tabular-nums ${sectorCount > 3 ? "text-[10px] [&_th]:px-1 [&_td]:px-1" : "text-[12px]"}`}>
+          <table data-sector-count={sectorCount} className={`w-full min-w-[840px] text-left tabular-nums ${sectorCount > 3 ? "text-[10px] [&_th]:px-1 [&_td]:px-1" : "text-[12px]"}`}>
             <thead className="bg-[#0A0C10] text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
               <tr>
                 <th className="px-2.5 py-1.5">P</th>
-                <th className="px-2 py-1.5">K</th>
                 <th className="px-2 py-1.5">#</th>
                 <th className="px-2 py-1.5">Coureur</th>
+                <th scope="col" className="px-2 py-1.5 text-right"><abbr title="iRating" className="no-underline">iR</abbr></th>
+                <th scope="col" className="px-2 py-1.5"><abbr title="Safety Rating en licentieklasse" className="no-underline">SR</abbr></th>
                 <th className="px-2 py-1.5">Klasse</th>
                 <th className="px-2 py-1.5 text-right">Laatste</th>
                 <th className="px-2 py-1.5 text-right">Beste</th>
@@ -143,7 +165,7 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                 <Fragment key={r.id}>
                   {(index === 0 || visibleRows[index - 1].carClass !== r.carClass) && (
                     <tr className="border-t border-[#1D2431] bg-[#0A0C10]">
-                      <td colSpan={10+sectorCount} className="px-2.5 py-1.5">
+                      <td colSpan={11+sectorCount} className="px-2.5 py-1.5">
                         <span className="text-[11px] font-black uppercase tracking-[0.14em] text-sky-200">
                           {r.carClass ?? "Zonder klasse"}
                         </span>
@@ -162,18 +184,20 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                     }`}
                   >
                     <td className="px-2.5 py-1.5 font-mono font-bold">{r.position != null ? `P${renderPosition(r.position)}` : "—"}</td>
-                    <td className="px-2 py-1.5 font-mono text-slate-500">
-                      {r.classPosition != null ? `K${renderPosition(r.classPosition)}` : "—"}
-                    </td>
-                    <td className="px-2 py-1.5 font-mono text-slate-400">{r.carNumber ?? "—"}</td>
+                    <td data-timing="car-number" className="px-2 py-1.5 font-mono text-slate-400">{r.carNumber ?? "—"}</td>
                     <td className="max-w-[15rem] px-2 py-1.5">
                       <p className={`truncate ${r.isPlayer ? "font-bold text-white before:mr-1 before:text-orange-400 before:content-['▸']" : "font-semibold text-slate-100"}`}>
                         {driverLabel(r)}
                       </p>
                       {teamLabel(r) && <p className="mt-0.5 truncate text-[10.5px] leading-tight text-slate-500">{teamLabel(r)}</p>}
                     </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-slate-200" title="iRating · huidige coureur, sessiegegevens">
+                      {Number.isInteger(r.irating) && r.irating > 0 && r.irating <= 100000 ? r.irating : "—"}
+                    </td>
+                    <td className="px-2 py-1.5 font-mono"><SafetyRatingBadge opponent={r} /></td>
                     <td className="px-2 py-1.5 text-[11px] uppercase tracking-[0.08em] text-sky-300">{r.carClass ?? "—"}</td>
                     <td
+                        data-timing="last-lap"
                         className="px-2 py-1.5 text-right font-mono text-amber-200"
                         title={(r as { lastLapInvalid?: boolean }).lastLapInvalid ? "Laatste ronde ongeldig (reset of baanverlating) — telt niet als rondetijd" : undefined}
                       >
@@ -181,7 +205,7 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                           ? "—"
                           : preciseLapTime(live && rowSectors(v3,r.id,r.lastLapSeconds) ? freshMetrics(v3,r.id)?.lastLapSeconds : r.lastLapSeconds)}
                       </td>
-                    <td className="px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
+                    <td data-timing="best-lap" className="px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
                     {sectorColumns.map(n=><td key={n} className="px-2 py-1.5 text-right font-mono text-slate-300" title={live && rowSectors(v3,r.id,r.lastLapSeconds) ? `Gecontroleerde laatste ronde · ${freshMetrics(v3,r.id)?.sectorSource ?? "bron onbekend"} · afwijking ${freshMetrics(v3,r.id)?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s` : `Geen gecontroleerde sectorreeks · bronafwijkingen ${freshMetrics(v3,r.id)?.sectorMismatchCount ?? "onbekend"}`}>{live ? rowSectors(v3,r.id,r.lastLapSeconds)?.[n]?.toFixed(3) ?? "—" : "—"}</td>)}
                     <td className="px-2 py-1.5 text-right font-mono text-slate-300">{r.lap ?? "—"}</td>
                     <td className="px-2 py-1.5 text-right font-mono font-semibold text-orange-300">{renderGap(r, false)}</td>
@@ -196,7 +220,7 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
 
       </>}
       <p className="px-3.5 py-2 text-[10px] text-slate-500">
-        Snapshot van tegenstanders, geen volledig klassement. Gap is het verschil tot jouw auto. Scroll voor alle rijen.
+        Snapshot van tegenstanders, geen volledig klassement. Gap is het verschil tot jouw auto. iR = iRating · SR = Safety Rating van de huidige coureur. Scroll voor alle rijen.
       </p>
     </PitwallPanel>
   );
@@ -220,7 +244,6 @@ function RelativeRow({
       {opponent ? (
         <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[12px] text-slate-300">
           <span className="font-bold text-white">P{renderPosition(opponent.position)}</span>
-          {typeof opponent.classPosition === "number" && <span className="text-[11px] text-slate-500">K{opponent.classPosition}</span>}
           {opponent.carNumber && <span className="text-slate-400">#{opponent.carNumber}</span>}
           <span className="truncate">{driverLabel(opponent)}</span>
           <span className="ml-auto flex items-center gap-1.5">

@@ -130,14 +130,14 @@ describe("Live timing — kolommen, klassesortering en de eigen rij", () => {
     expect(screen.getAllByText("Apex Racing").length).toBeGreaterThan(0);
   });
 
-  it("markeert de eigen rij en laat P en K los", () => {
+  it("markeert de eigen rij en toont de algemene positie zonder K", () => {
     const view = render(<StandingsWidget standings={standings} ownCarLabel="3SM Endurance" ownCarNumber={null} live />);
     const own = view.container.querySelector('[data-pitwall-own-row="true"]');
     expect(own).not.toBeNull();
     expect(own?.textContent).toContain("Vincent");
     expect(own?.textContent).toContain("3SM Endurance");
     expect(own?.textContent).toContain("P2");
-    expect(own?.textContent).toContain("K1");
+    expect(own?.textContent).not.toContain("K1");
   });
 
   it("noemt de gap naar de bron: tot jou, niet achter de leider", () => {

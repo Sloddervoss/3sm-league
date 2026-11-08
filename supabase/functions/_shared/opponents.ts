@@ -4,6 +4,9 @@ export type V3Opponent = {
   id: string;
   carNumber: string | null;
   driverName: string | null;
+  irating?: number | null;
+  safetyRating?: number | null;
+  licenseClass?: string | null;
   teamName: string | null;
   carClass: string | null;
   carClassId: string | null;
@@ -125,6 +128,10 @@ export const parseOpponents = (value: unknown, path = "opponents"): V3Opponent[]
       id,
       carNumber: nullableText(o.carNumber, `${path}[${index}].carNumber`),
       driverName: nullableText(o.driverName, `${path}[${index}].driverName`),
+      // Additive fields: older connectors omit these. Bad rating data never costs a row.
+      irating: o.irating == null ? null : zacht(o.irating, `${path}[${index}].irating`, { integer: true, min: 1, max: 100000, sentinels: [0, -1] }),
+      safetyRating: o.safetyRating == null ? null : zacht(o.safetyRating, `${path}[${index}].safetyRating`, { min: 0, max: 4.99 }),
+      licenseClass: typeof o.licenseClass === "string" && ["R", "D", "C", "B", "A", "Pro", "WC"].includes(o.licenseClass) ? o.licenseClass : null,
       teamName: nullableText(o.teamName, `${path}[${index}].teamName`),
       carClass: nullableText(o.carClass, `${path}[${index}].carClass`),
       carClassId: nullableText(o.carClassId, `${path}[${index}].carClassId`),

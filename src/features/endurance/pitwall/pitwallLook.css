@@ -76,9 +76,9 @@
 [data-pitwall-look] .pitwall-timing-scroll th { font-size: 10px; }
 [data-pitwall-look] .pitwall-timing-scroll tbody td > p { display: inline; }
 [data-pitwall-look] .pitwall-timing-scroll tbody td > p + p { margin-left: 8px; font-size: 10px; }
-[data-pitwall-look] .pitwall-timing-scroll td:nth-child(6) { color: #dcebf5; }
-[data-pitwall-look] .pitwall-timing-scroll td:nth-child(7) { color: #6ee7b7; }
-[data-pitwall-look] [data-pitwall-own-row] td:nth-child(3) { color: #ff8b36; font-weight: 900; }
+[data-pitwall-look] .pitwall-timing-scroll [data-timing="last-lap"] { color: #dcebf5; }
+[data-pitwall-look] .pitwall-timing-scroll [data-timing="best-lap"] { color: #6ee7b7; }
+[data-pitwall-look] [data-pitwall-own-row] [data-timing="car-number"] { color: #ff8b36; font-weight: 900; }
 [data-pitwall-look] .pitwall-timing > header { padding-block: 4px; min-height: 30px; }
 [data-pitwall-look] .pitwall-timing > header h3 { color: #99afbf; }
 [data-pitwall-look] [aria-label="Timing-weergave"] { padding-block: 3px; gap: 6px 18px; }
