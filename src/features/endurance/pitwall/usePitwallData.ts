@@ -7,6 +7,7 @@ import type {
   V3Normalized, PitwallPlannedStint, V3Opponent,
 } from "./pitwallHelpers";
 import { extractRaceClock } from "./pitwallHelpers";
+import type { PitwallContext } from "./pitwallHelpers";
 import { OpponentHistory } from "./opponentHistory";
 import { resolvePitStopMeasurement } from "./strategy/pitStops";
 import { parseTyreEstimate } from "./strategy/tyreGrade";
@@ -33,6 +34,8 @@ interface PitwallRpcResponse {
   v3_normalized: V3Normalized | null;
   opponent_trends?: Record<string, { closing_rate_s_per_min: number | null; sample_count: number; window_seconds: number }> | null;
   strategy: PitwallStrategyRow | null;
+  /** Fase 1: waarom racegebonden blokken leeg zijn (zie pitwallContextNotice). */
+  context?: PitwallContext | null;
   /** Laatste geldige verbruiksmetingen per ronde; nieuwste eerst. */
   fuel_samples?: Array<{
     lap: number;

@@ -201,6 +201,72 @@ export interface PitwallData {
   access: "staff" | "team_member";
 }
 
+/** Fase 1: waarom de racegebonden blokken leeg zijn.
+ *
+ * Sinds 2026-11-08 levert get_pitwall_data alleen strategie, tijdlijn en samples
+ * uit dezelfde race run als de getoonde telemetrie. Is er geen actieve, verse run
+ * voor dit team, dan blijft alleen de telemetrie staan en zegt dit blok waarom.
+ * Zonder deze uitleg is "leeg" niet te onderscheiden van "stuk".
+ */
+export type PitwallContextStatus =
+  | "live"
+  | "no_telemetry"
+  | "unlinked_telemetry"
+  | "event_completed"
+  | "inactive_run"
+  | "stale_telemetry";
+
+export interface PitwallContext {
+  status: PitwallContextStatus | string;
+  /** 'live' | 'history' (afgesloten race bekijken) | 'none' */
+  view?: "live" | "history" | "none" | string;
+  race_run_id: string | null;
+  event_status: string | null;
+  telemetry_run_id: string | null;
+  telemetry_received_at: string | null;
+}
+
+export interface PitwallContextNotice {
+  tone: "info" | "warning";
+  message: string;
+}
+
+/**
+ * De tekst die de gebruiker ziet als er geen geldige racekoppeling is.
+ * `null` betekent: niets tonen (live, of nog geen frame — dat heeft de
+ * bestaande lege toestand al).
+ */
+export const pitwallContextNotice = (
+  context: PitwallContext | null | undefined,
+): PitwallContextNotice | null => {
+  if (!context) return null;
+  // Archiefweergave: een afgesloten race bekijken is geen fout en vraagt geen
+  // waarschuwing. De blokken komen dan uit de laatste run van dat event.
+  if (context.view === "history") return null;
+  switch (context.status) {
+    case "event_completed":
+      return { tone: "warning", message: "Dit event is afgesloten. Er is geen live race meer om te tonen." };
+    case "stale_telemetry": {
+      const tijd = context.telemetry_received_at ? new Date(context.telemetry_received_at) : null;
+      const klok = tijd && !Number.isNaN(tijd.getTime())
+        ? tijd.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })
+        : null;
+      return {
+        tone: "warning",
+        message: klok
+          ? `De telemetrie is verouderd — laatst ontvangen om ${klok}.`
+          : "De telemetrie is verouderd.",
+      };
+    }
+    case "unlinked_telemetry":
+      return { tone: "info", message: "Dit apparaat is nog niet aan een race gekoppeld." };
+    case "inactive_run":
+      return { tone: "info", message: "Geen actieve race gevonden voor dit team. Je ziet alleen de live telemetrie." };
+    default:
+      return null;
+  }
+};
+
 export interface StrategyStatusInfo {
   status: PitwallStrategyRow["strategy_status"];
   reason: string | null;

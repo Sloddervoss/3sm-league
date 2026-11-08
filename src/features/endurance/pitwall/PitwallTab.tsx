@@ -22,7 +22,7 @@ import { AlertZone } from "./AlertZone";
 import { RaceTimeline } from "./RaceTimeline";
 import { StrategyForecast } from "./StrategyForecast";
 import { StandingsWidget } from "./StandingsWidget";
-import { mergeFuelToFinish } from "./pitwallHelpers";
+import { mergeFuelToFinish, pitwallContextNotice } from "./pitwallHelpers";
 import { median } from "./strategy/fuelModel";
 import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
 import { LiveTrackPanel } from "./LiveTrackPanel";
@@ -90,6 +90,10 @@ export const PitwallTab = ({ event }: Props) => {
   }, [demoScenario]);
 
   const isDemo = import.meta.env.DEV && demo !== null;
+  /* Fase 1: geen geldige racekoppeling? Dan zegt de pitwall waarom, in plaats van
+     een oude race naast verse telemetrie te tonen. De tekst komt uit één plek
+     (pitwallContextNotice) zodat server en UI hetzelfde verhaal vertellen. */
+  const contextNotice = isDemo ? null : pitwallContextNotice(real.context);
 
   const strategyBase = isDemo ? demo.strategy : real.strategy;
   const events = isDemo ? demo.events : real.events;
@@ -300,6 +304,20 @@ export const PitwallTab = ({ event }: Props) => {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {contextNotice && (
+        <div
+          role="status"
+          className={
+            contextNotice.tone === "warning"
+              ? "rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-[12px] font-medium text-amber-200"
+              : "rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-slate-300"
+          }
+          data-pitwall-context-notice={contextNotice.tone}
+        >
+          {contextNotice.message}
         </div>
       )}
 
