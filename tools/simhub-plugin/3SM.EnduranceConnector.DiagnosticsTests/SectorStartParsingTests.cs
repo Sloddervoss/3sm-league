@@ -55,6 +55,23 @@ SplitTimeInfo:
         check("yaml: onleesbaar getal is null", RawChannelReader.ParseSectorStartsFromYaml("SplitTimeInfo:\n Sectors:\n - SectorStartPct: 0.0\n - SectorStartPct: abc\n") == null, "verwacht null");
         n += 5;
 
+        check("yaml: ontbrekende grens in een item is null",
+            RawChannelReader.ParseSectorStartsFromYaml("SplitTimeInfo:\n Sectors:\n - SectorNum: 0\n   SectorStartPct: 0.0\n - SectorNum: 1\n - SectorNum: 2\n   SectorStartPct: 0.666667\n") == null,
+            "verwacht null: twee grenzen bij drie items");
+        check("yaml: verkeerde sleutel levert geen grens",
+            RawChannelReader.ParseSectorStartsFromYaml("SplitTimeInfo:\n Sectors:\n - SectorStartPct: 0.0\n - NotSectorStartPct: 0.4\n") == null,
+            "verwacht null");
+        check("yaml: commentaar achter een getal is onleesbaar en dus null",
+            RawChannelReader.ParseSectorStartsFromYaml("SplitTimeInfo:\n Sectors:\n - SectorStartPct: 0.0\n - SectorStartPct: 0.4 # twee\n") == null,
+            "verwacht null");
+        n += 3;
+
+        var zestien = "SplitTimeInfo:\n Sectors:\n" + string.Join("", System.Linq.Enumerable.Range(0, 16).Select(i => string.Format(" - SectorStartPct: {0}\n", i / 16.0)));
+        check("yaml: zestien sectoren mag", RawChannelReader.ParseSectorStartsFromYaml(zestien)?.Length == 16, "verwacht 16");
+        var zeventien = "SplitTimeInfo:\n Sectors:\n" + string.Join("", System.Linq.Enumerable.Range(0, 17).Select(i => string.Format(" - SectorStartPct: {0}\n", i / 17.0)));
+        check("yaml: zeventien sectoren is null", RawChannelReader.ParseSectorStartsFromYaml(zeventien) == null, "verwacht null");
+        n += 2;
+
         var metAndereSleutels = RawChannelReader.ParseSectorStartsFromYaml(
             "SplitTimeInfo:\n Sectors:\n - SectorNum: 0\n   SectorStartPct: 0.0\n   Extra: 7\n - SectorNum: 1\n   SectorStartPct: 0.25\nOtherSection:\n - SectorStartPct: 0.9\n");
         check("yaml: andere sleutels negeren", metAndereSleutels != null && metAndereSleutels.Length == 2 && metAndereSleutels[1] == 0.25, metAndereSleutels == null ? "null" : string.Join(",", metAndereSleutels));

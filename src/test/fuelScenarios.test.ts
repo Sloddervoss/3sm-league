@@ -67,9 +67,20 @@ describe("fuelScenarios", () => {
     expect(fuelScenarios({ ...basis, perLap: 0 }).reason).toContain("verbruik per ronde");
   });
 
-  it("rondt af op twee decimalen", () => {
+  it("rondt een bovengrens naar beneden af, nooit omhoog", () => {
     const s = fuelScenarios({ fuelLitres: 10, perLap: 2.123456, lapsRemaining: 4 });
-    expect(s.targetPerLap).toBe(2.22);
-    expect(s.fuelPerExtraLap).toBe(2.12);
+    expect(s.targetPerLap).toBe(2.222);
+    expect(s.fuelPerExtraLap).toBe(2.123);
+    // 31,56 L bij 10 rondes plus halve reserve: 3,0057... mag geen 3,010 worden.
+    const krap = fuelScenarios({ fuelLitres: 31.56, perLap: 3, lapsRemaining: 10 });
+    expect(krap.targetPerLap).toBe(3.005);
+    expect(krap.targetPerLap! * 10.5).toBeLessThanOrEqual(31.56);
+  });
+
+  it("een onbruikbare reserve valt terug op de standaard", () => {
+    const s = fuelScenarios({ ...basis, reserveLaps: Number.POSITIVE_INFINITY });
+    expect(s.reserveLaps).toBe(0.5);
+    expect(s.verdict).not.toBe("onbekend");
+    expect(s.reason).not.toContain("Infinity");
   });
 });

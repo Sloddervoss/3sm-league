@@ -128,6 +128,22 @@ describe("Planning en bestaand strategievenster", () => {
     expect(within(screen.getByRole("list", { name: "Volledige stintplanning" })).getAllByRole("listitem")).toHaveLength(3);
     expect(screen.getByText(/Δ vs racegem. \+0.040 L\/r/)).toBeInTheDocument();
   });
+  it("spreekt zichzelf niet tegen als de tank zonder reserve genoeg is en met reserve niet", () => {
+    const krap = {
+      ...fixtureStrategy,
+      current_fuel_litres: 30,
+      fuel_per_lap_litres: 3,
+      race_fuel_per_lap_litres: null,
+      fuel_to_finish_litres: 30,
+      fuel_sufficient_to_finish: true,
+      fuel_laps_remaining: 10,
+      valid_fuel_sample_count: 12,
+    };
+    render(<FuelPanel strategy={krap} />);
+    // De bestaande regel rekent zonder reserve; de scenarioregel zegt dat erbij.
+    expect(screen.getByText("Voldoende (zonder reserve)")).toBeInTheDocument();
+    expect(screen.getByText(/Met 0.5 ronde reserve: 1.5 L tekort/)).toBeInTheDocument();
+  });
   it("verzint zonder bron geen venster of stintlijst", () => {
     render(<FuelPanel strategy={fixtureStrategy} />);
     expect(screen.queryByText(/Pitwindow/)).not.toBeInTheDocument();

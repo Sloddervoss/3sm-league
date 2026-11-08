@@ -100,7 +100,7 @@ function Cell({ label, value, tone = 'text-white', compact = false, hint }: { la
     <div className="min-w-0">
       <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
       <p className={`mt-0.5 font-mono ${compact ? "text-[18px]" : "text-[26px]"} font-bold leading-none tabular-nums ${tone}`}>{value}</p>
-      {hint != null && <p className="mt-0.5 font-mono text-[10px] leading-none tabular-nums" title="Verschil met de snelste tijd in het veld">{hint}</p>}
+      {hint != null && <p className="mt-0.5 font-mono text-[10px] leading-none tabular-nums" title="Verschil met de snelste beschikbare laatste ronde in het veld, alle klassen">{hint}</p>}
     </div>
   );
 }

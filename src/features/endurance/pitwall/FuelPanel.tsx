@@ -88,7 +88,7 @@ export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
         {toFinish != null && <Row label="Tot finish" value={formatFuel(toFinish)} />}
         {sufficient != null && (
           <Row
-            label="Voldoende"
+            label="Voldoende (zonder reserve)"
             value={sufficient ? "Ja" : "Nee"}
             tone={sufficient ? "text-emerald-300" : "text-red-300"}
           />
@@ -98,7 +98,7 @@ export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
         )}
         {scenarios.extraLaps != null && (
           <Row
-            label="Extra"
+            label="Extra afstand"
             value={scenarios.extraLaps > 0 ? `${scenarios.extraLaps} ronde${scenarios.extraLaps === 1 ? "" : "s"}` : "geen"}
             tone={scenarios.extraLaps > 0 ? "text-emerald-300" : "text-slate-300"}
           />
@@ -112,7 +112,7 @@ export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
           }`}
           data-pitwall-fuel-scenarios="true"
         >
-          {scenarios.reason}
+          Met {scenarios.reserveLaps} ronde reserve: {scenarios.reason}
         </p>
       )}
 

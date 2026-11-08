@@ -41,6 +41,8 @@ export interface FuelScenarios {
   fuelPerExtraLap: number | null;
   /** Past het tekort in één tankstop? Null als het tekort of de tank onbekend is. */
   fitsInOneStop: boolean | null;
+  /** De gebruikte reserve, zodat de UI hem kan benoemen. */
+  reserveLaps: number;
   verdict: FuelVerdict;
   reason: string;
 }
@@ -50,31 +52,38 @@ const pos = (value: number | null | undefined): value is number =>
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
-const leeg = (reason: string): FuelScenarios => ({
+const leeg = (reason: string, reserveLaps = DEFAULT_RESERVE_LAPS): FuelScenarios => ({
   targetPerLap: null,
   surplusLitres: null,
   extraLaps: null,
   fuelPerExtraLap: null,
   fitsInOneStop: null,
+  reserveLaps,
   verdict: "onbekend",
   reason,
 });
 
+/**
+ * Een bovengrens mag nooit door afronding omhoog schuiven: 3,010 L/ronde bij 31,56 L
+ * zou meer vragen dan er is. Daarom naar beneden op milliseconden.
+ */
+const floor3 = (value: number) => Math.floor(value * 1000) / 1000;
+
 export function fuelScenarios(input: FuelScenarioInput): FuelScenarios {
   const { fuelLitres, perLap, lapsRemaining } = input;
-  const reserve = typeof input.reserveLaps === "number" && input.reserveLaps >= 0
+  const reserve = typeof input.reserveLaps === "number" && Number.isFinite(input.reserveLaps) && input.reserveLaps >= 0
     ? input.reserveLaps
     : DEFAULT_RESERVE_LAPS;
 
   if (typeof lapsRemaining !== "number" || !Number.isFinite(lapsRemaining) || lapsRemaining <= 0) {
-    return leeg("Geen resterende afstand; scenario's zijn niet te berekenen.");
+    return leeg("Geen resterende afstand; scenario's zijn niet te berekenen.", reserve);
   }
   if (!pos(perLap)) {
-    return leeg("Geen verbruik per ronde; scenario's zijn niet te berekenen.");
+    return leeg("Geen verbruik per ronde; scenario's zijn niet te berekenen.", reserve);
   }
   // Nul liter is een geldige meting (lege tank), geen ontbrekende invoer.
   if (typeof fuelLitres !== "number" || !Number.isFinite(fuelLitres) || fuelLitres < 0) {
-    return leeg("Geen brandstofmeting; scenario's zijn niet te berekenen.");
+    return leeg("Geen brandstofmeting; scenario's zijn niet te berekenen.", reserve);
   }
 
   const metReserve = lapsRemaining + reserve;
@@ -90,11 +99,12 @@ export function fuelScenarios(input: FuelScenarioInput): FuelScenarios {
   if (surplus < 0) {
     const tekort = round2(Math.abs(surplus));
     return {
-      targetPerLap: round2(Math.max(0, target)),
+      targetPerLap: floor3(Math.max(0, target)),
       surplusLitres: -tekort,
       extraLaps: 0,
-      fuelPerExtraLap: round2(perLap),
+      fuelPerExtraLap: Math.floor(perLap * 1000) / 1000,
       fitsInOneStop: fits,
+      reserveLaps: reserve,
       verdict: "tekort",
       reason: `${tekort.toFixed(1)} L tekort voor de finish bij ${perLap.toFixed(3)} L/ronde.`,
     };
@@ -102,22 +112,24 @@ export function fuelScenarios(input: FuelScenarioInput): FuelScenarios {
 
   if (extra >= 1) {
     return {
-      targetPerLap: round2(Math.max(0, target)),
+      targetPerLap: floor3(Math.max(0, target)),
       surplusLitres: round2(surplus),
       extraLaps: extra,
-      fuelPerExtraLap: round2(perLap),
+      fuelPerExtraLap: Math.floor(perLap * 1000) / 1000,
       fitsInOneStop: fits,
+      reserveLaps: reserve,
       verdict: "extra_ronde",
-      reason: `${extra} ${extra === 1 ? "ronde" : "rondes"} extra mogelijk; ${round2(surplus).toFixed(1)} L over op de finish.`,
+      reason: `Brandstof voor ${extra} ${extra === 1 ? "ronde" : "rondes"} voorbij de finish; ${round2(surplus).toFixed(1)} L over.`,
     };
   }
 
   return {
-    targetPerLap: round2(Math.max(0, target)),
+    targetPerLap: floor3(Math.max(0, target)),
     surplusLitres: round2(surplus),
     extraLaps: 0,
-    fuelPerExtraLap: round2(perLap),
+    fuelPerExtraLap: Math.floor(perLap * 1000) / 1000,
     fitsInOneStop: fits,
+    reserveLaps: reserve,
     verdict: "op_schema",
     reason: `Net voldoende: ${round2(surplus).toFixed(1)} L over, geen hele ronde extra.`,
   };

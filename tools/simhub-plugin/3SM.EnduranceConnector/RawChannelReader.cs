@@ -189,11 +189,14 @@ namespace ThreeSM.EnduranceConnector
         {
             if (string.IsNullOrEmpty(yaml)) return null;
             var lines = yaml.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            const string Key = "SectorStartPct:";
             var inSplit = false;
             var inSectors = false;
             var splitIndent = -1;
             var sectorIndent = -1;
             var starts = new List<double>();
+            var items = 0;
+            var itemHasStart = true;
             foreach (var raw in lines)
             {
                 var line = raw.TrimEnd();
@@ -214,16 +217,30 @@ namespace ThreeSM.EnduranceConnector
                 var dash = trimmed.StartsWith("-", StringComparison.Ordinal);
                 var entry = dash ? trimmed.Substring(1).Trim() : trimmed;
                 if (!dash && lineIndent <= sectorIndent) break;
-                var key = "SectorStartPct:";
-                var at = entry.IndexOf(key, StringComparison.Ordinal);
-                if (at < 0) continue;
-                var rawValue = entry.Substring(at + key.Length).Trim().Trim('\'', '"');
+
+                if (dash)
+                {
+                    // Een nieuw sectoritem begint: het vorige moet zijn startwaarde hebben gehad,
+                    // anders is de lijst onvolledig en dus onbruikbaar.
+                    if (items > 0 && !itemHasStart) return null;
+                    items++;
+                    itemHasStart = false;
+                }
+
+                // Exacte sleutel: "NotSectorStartPct:" mag geen grenswaarde opleveren.
+                if (!entry.StartsWith(Key, StringComparison.Ordinal)) continue;
+                var rawValue = entry.Substring(Key.Length).Trim().Trim('\'', '"');
                 double parsed;
                 if (!double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)) return null;
                 var value = (double?)parsed;
                 if (!ValidSectorStart(value, starts)) return null;
                 starts.Add(parsed);
+                itemHasStart = true;
             }
+            if (items == 0) return null;
+            if (!itemHasStart) return null;
+            // Elke sector in de lijst moet precies één grenswaarde hebben opgeleverd.
+            if (items != starts.Count) return null;
             return starts.Count > 0 && starts[0] == 0 ? starts.ToArray() : null;
         }
 
