@@ -4,6 +4,7 @@ import { finiteNonNegative } from "./elementPresentation";
 import type { PitwallPlannedStint } from "./pitwallHelpers";
 import type { PitwallStrategyRow } from "./pitwallHelpers";
 import { formatFuel, strategyStatusInfo } from "./pitwallHelpers";
+import { fuelScenarios } from "./strategy/fuelScenarios";
 import { PitwallPanel } from "./PitwallPanel";
 
 interface Props {
@@ -46,6 +47,10 @@ export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
   const windowPosition = validWindow && finiteNonNegative(currentLap) ? Math.max(0, Math.min(100, (currentLap - validWindow.earliestLap) / Math.max(1, validWindow.latestLap - validWindow.earliestLap) * 100)) : null;
   const consumptionDelta = finiteNonNegative(perLap) && perLap > 0 && finiteNonNegative(raceAvg) && raceAvg > 0 ? perLap - raceAvg : null;
   const status = strategyStatusInfo(strategy.strategy_status);
+  // De finishbehoefte is in liters bekend; het aantal rondes volgt daaruit, zodat
+  // de scenario's met dezelfde invoer rekenen als de rest van het paneel.
+  const lapsToFinish = toFinish != null && perLap != null && perLap > 0 ? toFinish / perLap : null;
+  const scenarios = fuelScenarios({ fuelLitres: fuel, perLap, lapsRemaining: lapsToFinish });
 
   if (isInsufficient && fuel == null) {
     return (
@@ -88,7 +93,28 @@ export const FuelPanel = ({ strategy, window, plannedStints = [] }: Props) => {
             tone={sufficient ? "text-emerald-300" : "text-red-300"}
           />
         )}
+        {scenarios.targetPerLap != null && (
+          <Row label="Doel" value={`${scenarios.targetPerLap.toFixed(3)} L/ronde`} />
+        )}
+        {scenarios.extraLaps != null && (
+          <Row
+            label="Extra"
+            value={scenarios.extraLaps > 0 ? `${scenarios.extraLaps} ronde${scenarios.extraLaps === 1 ? "" : "s"}` : "geen"}
+            tone={scenarios.extraLaps > 0 ? "text-emerald-300" : "text-slate-300"}
+          />
+        )}
       </dl>
+
+      {scenarios.verdict !== "onbekend" && (
+        <p
+          className={`mt-1 text-[11px] ${
+            scenarios.verdict === "tekort" ? "text-red-300" : scenarios.verdict === "extra_ronde" ? "text-emerald-300" : "text-slate-400"
+          }`}
+          data-pitwall-fuel-scenarios="true"
+        >
+          {scenarios.reason}
+        </p>
+      )}
 
       {consumptionDelta != null && <p className={`mt-1 text-[11px] ${consumptionDelta < 0 ? "text-emerald-300" : "text-orange-300"}`}>Δ vs racegem. {consumptionDelta >= 0 ? '+' : ''}{consumptionDelta.toFixed(3)} L/r</p>}
       {validWindow && <div className="mt-2 text-[12px]" data-pitwall-window="true">

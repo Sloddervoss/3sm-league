@@ -1,4 +1,5 @@
 import { rowSectors, trackSectorCount } from "./paceSeries";
+import { fieldSectorBests, sectorDeltas } from "./sectorField";
 import { lapDifference } from './elementPresentation';
 import type { ReactNode } from 'react';
 import type { V3Normalized } from './pitwallHelpers';
@@ -43,6 +44,10 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   const player = data?.opponents?.find(o=>o.isPlayer);
   const sectors = player ? rowSectors(data,player.id,player.lastLapSeconds) : null;
   const rest = data?.session?.sessionTimeRemainingSeconds;
+  // Waar verliezen we tijd? Per sector het verschil met de snelste tijd in het veld.
+  // Alleen binnen dezelfde sectordeling; anders blijft het verschil leeg.
+  const sectorBest = fieldSectorBests((data?.opponents ?? []).map(o => ({ id: o.id, sectors: rowSectors(data,o.id,o.lastLapSeconds) })));
+  const deltas = sectors ? sectorDeltas(sectors, sectorBest) : null;
 
   return (
     <div
@@ -51,7 +56,7 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
     >
       <KpiGroup label={sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd"} group="sectoren" className={trackSectorCount(data)>3 ? "pitwall-many-sectors" : ""}>
         {trackSectorCount(data) === 0 && <Cell label="Sectorindeling onbekend" value="—" compact />}
-        {Array.from({length:trackSectorCount(data)},(_,i)=><Cell key={i} compact={trackSectorCount(data)>3} label={`S${i+1}`} value={second(sectors?.[i])} />)}
+        {Array.from({length:trackSectorCount(data)},(_,i)=><Cell key={i} compact={trackSectorCount(data)>3} label={`S${i+1}`} value={second(sectors?.[i])} hint={deltas?.[i] != null ? <span className={deltas[i]! > 0 ? "text-red-300" : "text-emerald-300"}>{deltas[i]! > 0 ? "+" : ""}{deltas[i]!.toFixed(3)}</span> : undefined} />)}
       </KpiGroup>
 
       <KpiGroup label="Rondetijd" group="rondetijd">
@@ -90,11 +95,12 @@ function KpiGroup({
   );
 }
 
-function Cell({ label, value, tone = 'text-white', compact = false }: { label: string; value: string; tone?: string; compact?: boolean }) {
+function Cell({ label, value, tone = 'text-white', compact = false, hint }: { label: string; value: string; tone?: string; compact?: boolean; hint?: ReactNode }) {
   return (
     <div className="min-w-0">
       <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
       <p className={`mt-0.5 font-mono ${compact ? "text-[18px]" : "text-[26px]"} font-bold leading-none tabular-nums ${tone}`}>{value}</p>
+      {hint != null && <p className="mt-0.5 font-mono text-[10px] leading-none tabular-nums" title="Verschil met de snelste tijd in het veld">{hint}</p>}
     </div>
   );
 }
