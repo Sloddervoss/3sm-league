@@ -9,7 +9,7 @@ const exactTranslations: Record<string, string> = {
   "Probeer opnieuw": "Try again",
   "Terug naar home": "Back to home",
   "Download 3SM Endurance Connector": "Download 3SM Endurance Connector",
-  "Versie 0.7.6.0 · Handmatige installatie": "Version 0.7.6.0 · Manual installation",
+  "Versie 0.7.6.1 · Handmatige installatie": "Version 0.7.6.1 · Manual installation",
   "Sluit SimHub, pak de ZIP uit en volg INSTALLEREN.txt. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer automatisch.": "Close SimHub, extract the ZIP and follow INSTALLEREN.txt. From version 0.3.9.0 onward, future supported updates work automatically again.",
   "ZIP downloaden": "Download ZIP",
 

@@ -5,23 +5,23 @@ import { describe, expect, it } from "vitest";
 const page = readFileSync("src/pages/SimHubPairingPage.tsx", "utf8");
 const guide = readFileSync("docs/simhub-update-gids.md", "utf8");
 const runbook = readFileSync("docs/runbooks/simhub-plugin-release.md", "utf8");
-const versionedPath = "public/downloads/3SM.EnduranceConnector-0.7.6.0.zip";
+const versionedPath = "public/downloads/3SM.EnduranceConnector-0.7.6.1.zip";
 const latestPath = "public/downloads/3SM.EnduranceConnector-latest.zip";
-const expectedZipSha = "0873cf00426f917df1d879db4d57e1df52f521fa49e8cf646648525308226859";
+const expectedZipSha = "dc7bf195b150f97622d67cacb01e0e063d109d49dcad5a9fcff6f21c87633e56";
 const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
 describe("public SimHub connector human download", () => {
   it("routes the public-facing button to the stable ZIP, never the updater DLL", () => {
-    expect(page).toContain('href="/downloads/3SM.EnduranceConnector-0.7.6.0.zip"');
-    expect(page).toContain("Versie 0.7.6.0 · Handmatige installatie");
+    expect(page).toContain('href="/downloads/3SM.EnduranceConnector-0.7.6.1.zip"');
+    expect(page).toContain("Versie 0.7.6.1 · Handmatige installatie");
     expect(page).not.toContain('href="/downloads/3SM.EnduranceConnector-0.3.9.0.dll"');
   });
 
   it("ships immutable versioned and stable ZIP artifacts with identical bytes", () => {
     expect(existsSync(versionedPath)).toBe(true);
     expect(existsSync(latestPath)).toBe(true);
-    expect(statSync(versionedPath).size).toBe(385589);
-    expect(statSync(latestPath).size).toBe(385589);
+    expect(statSync(versionedPath).size).toBe(387100);
+    expect(statSync(latestPath).size).toBe(387100);
     expect(sha256(versionedPath)).toBe(expectedZipSha);
     expect(sha256(latestPath)).toBe(expectedZipSha);
   });
@@ -32,6 +32,6 @@ describe("public SimHub connector human download", () => {
     expect(runbook).toContain("The public-facing website button points to the HUMAN ZIP.");
     expect(guide).toContain("3SM.EnduranceConnector-latest.zip");
     expect(guide).toContain("0.3.8.0 → 0.3.9.0");
-    expect(guide).toContain("Huidige versie: `0.7.6.0`");
+    expect(guide).toContain("Huidige versie: `0.7.6.1`");
   });
 });
