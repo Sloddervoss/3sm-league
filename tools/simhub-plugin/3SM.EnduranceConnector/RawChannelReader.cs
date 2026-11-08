@@ -255,7 +255,7 @@ public string ReadTrackConfiguration()
         public Dictionary<string, int> ReadCarIndices()
         {
             var result = new Dictionary<string, int>(StringComparer.Ordinal);
-            var drivers = GetMember(GetMember(SessionRoot(), "DriverInfo"), "Drivers") as IEnumerable;
+            var drivers = GetMember(DriverRoot(), "Drivers") as IEnumerable;
             if (drivers == null) return result;
             foreach (var driver in drivers)
             {
@@ -266,6 +266,67 @@ public string ReadTrackConfiguration()
             }
             return result;
         }
+        /// <summary>
+        /// Current session drivers, read afresh for each outgoing opponent snapshot.
+        /// No cross-frame cache: a driver swap must clear the outgoing driver's ratings.
+        /// Car number AND full driver name must match before these values may be used.
+        /// </summary>
+        public Dictionary<string, DriverRating> ReadDriverRatings()
+        {
+            var result = new Dictionary<string, DriverRating>(StringComparer.Ordinal);
+            var ambiguous = new HashSet<string>(StringComparer.Ordinal);
+            var drivers = GetMember(DriverRoot(), "Drivers") as IEnumerable;
+            if (drivers == null) return result;
+            foreach (var driver in drivers)
+            {
+                var number = Convert.ToString(GetMember(driver, "CarNumber"), CultureInfo.InvariantCulture);
+                var name = Convert.ToString(GetMember(driver, "UserName"), CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(number) || string.IsNullOrWhiteSpace(name) || ambiguous.Contains(number)) continue;
+                // Never choose an arbitrary driver if a source supplies multiple entries for one car.
+                if (result.ContainsKey(number)) { result.Remove(number); ambiguous.Add(number); continue; }
+                var level = RatingInteger(GetMember(driver, "LicLevel"), 1, 28);
+                var subLevel = RatingInteger(GetMember(driver, "LicSubLevel"), 0, 499);
+                var classes = new[] { "R", "D", "C", "B", "A", "Pro", "WC" };
+                result[number] = new DriverRating
+                {
+                    DriverName = name.Trim(),
+                    IRating = RatingInteger(GetMember(driver, "IRating"), 1, 100000),
+                    LicenseClass = level.HasValue ? classes[(level.Value - 1) / 4] : null,
+                    SafetyRating = level.HasValue && subLevel.HasValue ? (double?)(subLevel.Value / 100.0) : null,
+                };
+            }
+            return result;
+        }
+
+        private static int? RatingInteger(object value, int min, int max)
+        {
+            if (value is bool) return null;
+            var number = ToDouble(value);
+            return number.HasValue && !double.IsNaN(number.Value) && !double.IsInfinity(number.Value)
+                && number >= min && number <= max && number == Math.Floor(number.Value) ? (int?)number.Value : null;
+        }
+
+        public sealed class DriverRating
+        {
+            public string DriverName { get; set; }
+            public int? IRating { get; set; }
+            public double? SafetyRating { get; set; }
+            public string LicenseClass { get; set; }
+            public bool Matches(string driverName)
+            {
+                return !string.IsNullOrWhiteSpace(driverName)
+                    && string.Equals(DriverName, driverName.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        // The SDK puts DriverInfo beside SessionInfo, not inside it. Keep the old
+        // nested shape as a compatibility fallback, never as the preferred source.
+        private object DriverRoot()
+        {
+            return GetMember(GetMember(GetMember(_newData, "RawData"), "SessionData"), "DriverInfo")
+                ?? GetMember(SessionRoot(), "DriverInfo");
+        }
+
         private object SessionRoot()
         { return GetMember(GetMember(GetMember(_newData, "RawData"), "SessionData"), "SessionInfo"); }
 

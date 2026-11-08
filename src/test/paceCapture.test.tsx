@@ -108,7 +108,8 @@ describe("PACE definitief: werkelijke sectorindeling en herkomst",()=>{
    const {container,rerender}=render(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
    expect(screen.getByRole("columnheader",{name:"S6"})).toBeInTheDocument();
    expect(screen.queryByRole("columnheader",{name:"S7"})).not.toBeInTheDocument();
-   expect(container.querySelector("td[colspan='16']")).not.toBeNull();
+   const koppen = screen.getAllByRole("columnheader").length;
+   expect(container.querySelector("td[colspan]")?.getAttribute("colspan")).toBe(String(koppen));
    expect(screen.getAllByTitle(/Gecontroleerde laatste ronde · measured · afwijking 0.000 s/)).toHaveLength(6);
    metric.lastLapSectorSeconds=[1,2,3,4,5,6];
    rerender(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);

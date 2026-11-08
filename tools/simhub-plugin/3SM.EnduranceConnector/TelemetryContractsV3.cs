@@ -266,6 +266,9 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "speedKph", Order = 16)] public double? SpeedKph { get; set; }
         [DataMember(Name = "connected", Order = 17)] public bool Connected { get; set; }
         [DataMember(Name = "isPlayer", Order = 18)] public bool IsPlayer { get; set; }
+        [DataMember(Name = "irating", Order = 19, EmitDefaultValue = false)] public int? IRating { get; set; }
+        [DataMember(Name = "safetyRating", Order = 20, EmitDefaultValue = false)] public double? SafetyRating { get; set; }
+        [DataMember(Name = "licenseClass", Order = 21, EmitDefaultValue = false)] public string LicenseClass { get; set; }
     }
 
     [DataContract]

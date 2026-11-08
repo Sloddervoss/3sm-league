@@ -360,6 +360,12 @@ internal static class FaseDTests
         // Wordt alleen met de hand gebruikt; de normale run doet niets speciaals.
         if (args != null && args.Length > 0)
         {
+            if (string.Equals(args[0], "--only-driver-ratings", StringComparison.Ordinal))
+            {
+                Group("DriverRatingTests", () => DriverRatingTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
             if (string.Equals(args[0], "--dump-v3", StringComparison.Ordinal))
             {
                 Console.Write(V3PayloadFixtureTests.Serialize(V3PayloadFixtureTests.BuildRepresentativeFrame()));
@@ -392,6 +398,7 @@ internal static class FaseDTests
             // Elke groep in zijn eigen try: een fout in de ene groep mag de andere groepen
             // niet verbergen (een fixture die niet meer klopt gooide eerder de hele run om).
             baselineChecks += Group("FlagMappingTests", () => FlagMappingTests.Run(Check));
+            baselineChecks += Group("DriverRatingTests", () => DriverRatingTests.Run(Check));
             baselineChecks += Group("CaptureNullSemanticsTests", () => CaptureNullSemanticsTests.Run(Check));
             baselineChecks += Group("UpdatePathTests", () => UpdatePathTests.Run(Check));
             baselineChecks += Group("V3PayloadFixtureTests", () => V3PayloadFixtureTests.Run(Check));
