@@ -91,6 +91,8 @@ namespace ThreeSM.EnduranceConnector
         // Laatst opgeloste vlaggen (wire-namen) voor session.flags. Alleen gebruikt om
         // wijzigingen te loggen; de payload wordt per tick opnieuw bepaald.
         private string[] _lastFlagNames;
+        private string _lastRatingLogSummary;
+        private DateTime _lastRatingLogUtc = DateTime.MinValue;
         // 0.7.1: hek voor het bandenblok (wijziging of één keer per interval).
         private readonly TyrePublishGate _tyreGate = new TyrePublishGate();
         // 0.7.2.0: directe lezer van de iRacing-shared-memory, read-only. Lazy: zonder
@@ -195,6 +197,7 @@ namespace ThreeSM.EnduranceConnector
             var cachedRemoteVersion = string.IsNullOrWhiteSpace(Settings.LastKnownRemoteVersion) ? "nog niet bekend" : Settings.LastKnownRemoteVersion;
             SetUpdateStatus("Geïnstalleerd " + InstalledVersion + " · serverversie " + cachedRemoteVersion);
             SimHub.Logging.Current.Info("3SM Endurance Connector gestart");
+            SimHub.Logging.Current.Info("3SM ratings: V3-opponentkoppeling aangesloten; bron=SessionData.DriverInfo.Drivers; versie=" + InstalledVersion + "; wacht op sessiesnapshot");
             // Veilige, laagfrequente versie-check (max 1x per 24u); faalt stil.
             if (Settings.UseCentralRelay && !Volatile.Read(ref _ending).Equals(1))
             {
@@ -1544,6 +1547,9 @@ namespace ThreeSM.EnduranceConnector
             var rawChannels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
             var onPitRoad = CaptureValueRules.OnPitRoad(rawChannels.ReadBool("OnPitRoad"), inPitLaneProperty);
 
+            var opponents = BuildOpponentSnapshot(snapshot);
+            LogDriverRatingSnapshot(opponents);
+
             return new TelemetryEnvelopeV3
             {
                 ProtocolVersion = 3,
@@ -1628,7 +1634,7 @@ namespace ThreeSM.EnduranceConnector
                     RequiredRepairSeconds = ReadRepairSeconds(rawChannels, "PitRepairLeft"),
                     OptionalRepairSeconds = ReadRepairSeconds(rawChannels, "PitOptRepairLeft"),
                 },
-                Opponents = BuildOpponentSnapshot(snapshot),
+                Opponents = opponents,
                 Vehicle = CaptureVehicle(manager, ReadDirectSdk()),  // altijd: de vier SDK-velden zijn de reden dat we direct lezen
                 // 0.7.0: optioneel root-blok, alleen gevuld als de instelling aan staat (de
                 // server moet het blok kennen; een oude receiver geeft 422 op een nieuwe key).
@@ -1989,21 +1995,47 @@ namespace ThreeSM.EnduranceConnector
             return text.Length == 0 || text.Length > maxLength ? null : text;
         }
 
+        // Log only counts, never names, IDs, tokens or rating values. A startup line
+        // proves wiring; this separate line proves the actual V3 capture was executed.
+        private void LogDriverRatingSnapshot(V3Opponent[] opponents)
+        {
+            if (opponents == null) return;
+            var summary = "opponents=" + opponents.Length
+                + "; irating=" + opponents.Count(o => o.IRating.HasValue)
+                + "; safetyRating=" + opponents.Count(o => o.SafetyRating.HasValue && o.LicenseClass != null);
+            var now = DateTime.UtcNow;
+            if (summary == _lastRatingLogSummary || (now - _lastRatingLogUtc).TotalSeconds < 30) return;
+            try
+            {
+                SimHub.Logging.Current.Info("3SM ratings: V3-snapshot uitgevoerd; " + summary);
+                _lastRatingLogSummary = summary;
+                _lastRatingLogUtc = now;
+            }
+            catch { /* logging must never interrupt telemetry */ }
+        }
+
         /// <summary>Build a bounded, null-tolerant opponent snapshot from SimHub Opponents.</summary>
         internal static V3Opponent[] BuildOpponentSnapshot(GameReaderCommon.StatusDataBase snapshot)
         {
             if (snapshot?.Opponents == null) return null;
+            var ratings = new RawChannelReader(snapshot, null).ReadDriverRatings();
             var result = new List<V3Opponent>(MaxOpponentsPerSnapshot);
             foreach (var opponent in snapshot.Opponents)
             {
                 if (opponent == null) continue;
                 if (string.IsNullOrWhiteSpace(opponent.Id)) continue; // stable identity key required
                 if (!opponent.IsConnected && !opponent.IsPlayer) continue; // skip stale/disconnected non-players
+                RawChannelReader.DriverRating rating;
+                ratings.TryGetValue(opponent.CarNumber ?? "", out rating);
+                if (rating != null && !rating.Matches(opponent.Name)) rating = null;
                 var item = new V3Opponent
                 {
                     Id = opponent.Id,
                     CarNumber = opponent.CarNumber,
                     DriverName = opponent.Name,
+                    IRating = rating == null ? null : rating.IRating,
+                    SafetyRating = rating == null ? null : rating.SafetyRating,
+                    LicenseClass = rating == null ? null : rating.LicenseClass,
                     TeamName = opponent.TeamName,
                     CarClass = opponent.CarClass,
                     CarClassId = opponent.CarClassID,
