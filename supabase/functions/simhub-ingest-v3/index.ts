@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
 import { assertAllowedOrigin, consumeEdgeRateLimit, jsonResponse, readBoundedJson, sha256Hex } from "../_shared/simhub.ts";
 import { resolveTelemetryContext } from "./context.ts";
+import { tyreObservationTiming } from "../_shared/tyreObservation.ts";
 import {
   MaxMeasurementBatchBytes,
   measurementBatchBytes,
@@ -237,15 +238,16 @@ Deno.serve(async (request) => {
             const values = [z.l, z.m, z.r].filter((v): v is number => typeof v === "number");
             return values.length > 0 ? Math.min(...values) : null;
           };
+          // `tyres.observedAt` is de meettijd van de wear, niet het verzendmoment:
+          // het blok herhaalt die waarde tot de wear verandert. De ronde en de
+          // sessietijd komen daarom uit het frame; zie _shared/tyreObservation.ts.
+          const timing = tyreObservationTiming(tyres, context.normalized);
           const row = {
             sessionKey: transport,
             frameSequence: sequence,
             observedAt: tyres.observedAt,
-            // Het bandenblok van 0.7.3 bevat geen ronde of sessietijd; die staan
-            // wel in het frame zelf. Zonder deze terugval is elke stop anoniem.
-            sessionTimeSeconds:
-              tyres.sessionTimeSeconds ?? context.normalized?.session?.sessionTimeSeconds ?? null,
-            lap: tyres.lap ?? context.normalized?.timing?.completedLaps ?? null,
+            sessionTimeSeconds: timing.sessionTimeSeconds,
+            lap: timing.lap,
             trigger: tyres.trigger,
             driverName: context.normalized?.identity?.currentDriverName ?? null,
             connectorId: context.connectorId ?? null,
