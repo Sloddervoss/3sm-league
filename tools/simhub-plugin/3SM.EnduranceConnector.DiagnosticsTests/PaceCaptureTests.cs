@@ -81,6 +81,7 @@ internal static class PaceCaptureTests
         var output=Environment.GetEnvironmentVariable("PACE_FRAME_OUTPUT");
         if(!string.IsNullOrEmpty(output)) File.WriteAllText(output,packed);
         n+=SectorMeasurementTests.Run(check);
+        n+=SectorStartParsingTests.Run(check);
         return n;
     }
 }

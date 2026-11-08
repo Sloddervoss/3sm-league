@@ -118,7 +118,22 @@ namespace ThreeSM.EnduranceConnector
 
         // Session YAML is refreshed much less frequently than telemetry. The caller caches
         // the result per session/track configuration; malformed layouts are never guessed.
+        /// <summary>
+        /// Sectorgrenzen uit de sessiedata. Twee routes, want SimHub levert SessionData
+        /// afhankelijk van de versie als objectboom of als YAML-tekst:
+        ///   1. objectboom  SessionInfo.SplitTimeInfo.Sectors[].SectorStartPct
+        ///   2. YAML-tekst  dezelfde sleutels, maar als tekst geparseerd
+        /// Beide falen => null. Nooit een geraden of gelijkmatige verdeling.
+        /// </summary>
         public double[] ReadSectorStarts()
+        {
+            var fromObject = ReadSectorStartsFromObject();
+            if (fromObject != null) return fromObject;
+            var yaml = ReadSessionYamlText();
+            return yaml == null ? null : ParseSectorStartsFromYaml(yaml);
+        }
+
+        private double[] ReadSectorStartsFromObject()
         {
             var root = SessionRoot();
             var split = GetMember(root, "SplitTimeInfo");
@@ -129,14 +144,90 @@ namespace ThreeSM.EnduranceConnector
             foreach (var sector in sectors)
             {
                 var value = ToDouble(GetMember(sector, "SectorStartPct"));
-                if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value)
-                    || value < 0 || value >= 1 || starts.Count >= 16
-                    || (starts.Count > 0 && value <= starts[starts.Count - 1])) return null;
+                if (!ValidSectorStart(value, starts)) return null;
                 starts.Add(value.Value);
             }
             return starts.Count > 0 && starts[0] == 0 ? starts.ToArray() : null;
         }
-        public string ReadTrackConfiguration()
+
+        private static bool ValidSectorStart(double? value, List<double> starts)
+        {
+            return value.HasValue && !double.IsNaN(value.Value) && !double.IsInfinity(value.Value)
+                && value.Value >= 0 && value.Value < 1 && starts.Count < 16
+                && (starts.Count == 0 || value.Value > starts[starts.Count - 1]);
+        }
+
+        /// <summary>Eerste sessie-YAML die als tekst beschikbaar is, of null.</summary>
+        private string ReadSessionYamlText()
+        {
+            var direct = ReadText("SessionData");
+            if (direct != null && direct.IndexOf("SplitTimeInfo", StringComparison.Ordinal) >= 0) return direct;
+
+            object node = _newData;
+            foreach (var member in new[] { "RawData", "SessionData" }) node = GetMember(node, member);
+            var text = node as string;
+            if (text != null && text.IndexOf("SplitTimeInfo", StringComparison.Ordinal) >= 0) return text;
+
+            if (_getProperty != null)
+            {
+                try
+                {
+                    var value = _getProperty("DataCorePlugin.GameRawData.SessionData") as string;
+                    if (value != null && value.IndexOf("SplitTimeInfo", StringComparison.Ordinal) >= 0) return value;
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Leest uitsluitend het SplitTimeInfo-blok uit de sessie-YAML. Bewust geen
+        /// algemene YAML-parser: alleen de lijst met SectorStartPct-waarden is nodig en
+        /// een halve parser zou meer kunnen breken dan hij oplost.
+        /// </summary>
+        public static double[] ParseSectorStartsFromYaml(string yaml)
+        {
+            if (string.IsNullOrEmpty(yaml)) return null;
+            var lines = yaml.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            var inSplit = false;
+            var inSectors = false;
+            var splitIndent = -1;
+            var sectorIndent = -1;
+            var starts = new List<double>();
+            foreach (var raw in lines)
+            {
+                var line = raw.TrimEnd();
+                if (line.Length == 0) continue;
+                var lineIndent = line.Length - line.TrimStart(' ').Length;
+                var trimmed = line.TrimStart(' ');
+                if (!inSplit)
+                {
+                    if (trimmed.StartsWith("SplitTimeInfo:", StringComparison.Ordinal)) { inSplit = true; splitIndent = lineIndent; }
+                    continue;
+                }
+                if (lineIndent <= splitIndent) break;
+                if (!inSectors)
+                {
+                    if (trimmed.StartsWith("Sectors:", StringComparison.Ordinal)) { inSectors = true; sectorIndent = lineIndent; }
+                    continue;
+                }
+                var dash = trimmed.StartsWith("-", StringComparison.Ordinal);
+                var entry = dash ? trimmed.Substring(1).Trim() : trimmed;
+                if (!dash && lineIndent <= sectorIndent) break;
+                var key = "SectorStartPct:";
+                var at = entry.IndexOf(key, StringComparison.Ordinal);
+                if (at < 0) continue;
+                var rawValue = entry.Substring(at + key.Length).Trim().Trim('\'', '"');
+                double parsed;
+                if (!double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)) return null;
+                var value = (double?)parsed;
+                if (!ValidSectorStart(value, starts)) return null;
+                starts.Add(parsed);
+            }
+            return starts.Count > 0 && starts[0] == 0 ? starts.ToArray() : null;
+        }
+
+public string ReadTrackConfiguration()
         {
             var weekend = GetMember(SessionRoot(), "WeekendInfo")
                 ?? GetMember(GetMember(GetMember(_newData, "RawData"), "SessionData"), "WeekendInfo");
