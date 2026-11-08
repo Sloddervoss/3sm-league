@@ -10,6 +10,7 @@ import { usePitwallData } from "./usePitwallData";
 import { getDemoData, DEMO_SCENARIO_LIST, type DemoScenario, type DemoData } from "./pitwallDemoData";
 import { PitwallDashboard } from "./PitwallDashboard";
 import { PitwallContextBar } from "./PitwallContextBar";
+import { PitwallContextNotice } from "./PitwallContextNotice";
 import { OwnCarPanel } from "./OwnCarPanel";
 import { DecisionBand } from "./DecisionBand";
 import { usePitwallStrategy } from "./usePitwallStrategy";
@@ -307,19 +308,7 @@ export const PitwallTab = ({ event }: Props) => {
         </div>
       )}
 
-      {contextNotice && (
-        <div
-          role="status"
-          className={
-            contextNotice.tone === "warning"
-              ? "rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-[12px] font-medium text-amber-200"
-              : "rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-slate-300"
-          }
-          data-pitwall-context-notice={contextNotice.tone}
-        >
-          {contextNotice.message}
-        </div>
-      )}
+      <PitwallContextNotice notice={contextNotice} />
 
       <div className={controlOpen ? "grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]" : ""}>
         {controlOpen && (
