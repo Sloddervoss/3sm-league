@@ -83,7 +83,7 @@ namespace ThreeSM.EnduranceConnector
         public void Observe(double now, PaceObservation o, double[] layout)
         {
             layout=Layout(layout);
-            if (layout == null) { previous=null; crossings=null; pending=null; verified=null; best=null; starts=null; Diagnostic=null; firstCompleteDiagnostic=false; sampleDiagnostic=false; Error=null; BestError=null; return; }
+            if (layout == null) { previous=null; crossings=null; pending=null; verified=null; best=null; starts=null; Diagnostic=new SectorDiagnostic { Source="measured", Count=0, Reason="no_layout" }; firstCompleteDiagnostic=false; sampleDiagnostic=false; Error=null; BestError=null; return; }
             if(starts==null || !starts.SequenceEqual(layout))
             { starts=(double[])layout.Clone(); previous=null; crossings=null; pending=null; verified=null; best=null; Diagnostic=null; firstCompleteDiagnostic=false; sampleDiagnostic=false; Error=null; BestError=null; }
             bool usable=o.Connected && !o.InPit && o.Lap>=1 && o.Lap<=100000 && PaceCaptureBuffer.Number(o.Distance,0,1).HasValue && o.Metric?.LapValid!=false;
