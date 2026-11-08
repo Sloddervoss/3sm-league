@@ -37,7 +37,7 @@ lange sessie elke 6 uur op een nieuwe versie (met auto-update uit: elke 24 uur).
 
 ## Handmatige installatie via de publieke ZIP
 
-Voor een handmatige installatie download je `3SM.EnduranceConnector-0.7.4.0.zip` via de
+Voor een handmatige installatie download je `3SM.EnduranceConnector-0.7.6.0.zip` via de
 3SM-site. De alias `3SM.EnduranceConnector-latest.zip` blijft voor oude links bestaan, maar
 kan kort na een release nog de vorige bytes serveren; gebruik daarom het versiegebonden
 bestand. Sluit SimHub
@@ -50,10 +50,10 @@ De overgang `0.3.8.0 → 0.3.9.0` moet door het bekende 0.3.8.0 self-update-defe
 handmatig worden uitgevoerd. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer via
 de normale automatische updater.
 
-**Huidige versie: `0.7.4.0`.** Zowel de automatische updater als de ZIP op de site leveren
+**Huidige versie: `0.7.6.0`.** Zowel de automatische updater als de ZIP op de site leveren
 die versie, en de koppelpagina linkt het versiegebonden ZIP
-`3SM.EnduranceConnector-0.7.4.0.zip` (de alias `3SM.EnduranceConnector-latest.zip` blijft
-bestaan voor handmatige installaties en oude links). `0.7.4.0` stuurt de rondetijden mee die de connector zelf heeft zien afsluiten:
+`3SM.EnduranceConnector-0.7.6.0.zip` (de alias `3SM.EnduranceConnector-latest.zip` blijft
+bestaan voor handmatige installaties en oude links). `0.7.6.0` stuurt de rondetijden mee die de connector zelf heeft zien afsluiten:
 de pace-opname liet een rondetijd leeg wanneer de rechtstreekse iRacing-waarde ontbrak,
 terwijl SimHub voor dezelfde auto wel een tijd had; de plugin kiest nu per auto de bron die
 aantoonbaar bij die ronde hoort en laat de tijd anders leeg. Het protocol en het updatepad
