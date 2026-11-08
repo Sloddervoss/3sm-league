@@ -237,6 +237,10 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
     opponents,
     trends,
     v3,
+    /* Fase 1: het contextblok van de server. Zonder deze regel komt het nooit
+     * bij PitwallTab aan en zwijgt de melding altijd — de helper- en
+     * componenttests zouden dan groen blijven terwijl de keten stuk is. */
+    context: rpcData?.context ?? null,
     isLive,
     tyreEstimate,
     fuelSamples: rpcData?.fuel_samples ?? [],
