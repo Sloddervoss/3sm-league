@@ -269,7 +269,14 @@ export default function PitwallDeviceTestPage() {
   const ownCarName = tele?.car_name ?? v3?.identity?.carName ?? null;
   const trackLabel = deviceTrackLabel(v3, tele?.track_name) || "";
   const linkedTeamName = (detail?.endurance_team as Record<string, unknown> | null)?.["name"] as string | null | undefined;
-  const contextKey = [deviceId ?? "", tele?.session_id ?? "", trackLabel, ownDriverName ?? ""].join("|");
+  const contextKey = [
+    deviceId ?? "",
+    detail?.device?.last_session_id ?? "",
+    tele?.session_id ?? "",
+    tele?.race_run_id ?? "",
+    trackLabel,
+    ownDriverName ?? "",
+  ].join("|");
   const dataGap = Boolean(detailQuery.error) || !tele;
   const lastSeen = relTime(detail?.health?.received_at);
 
