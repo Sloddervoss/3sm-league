@@ -8,7 +8,7 @@ import type { TyreEstimate } from "../strategy/tyreGrade";
 import type { useTyreModel } from "../useTyreModel";
 import { RaceTelemetryStrip } from "../RaceTelemetryStrip";
 import { DecisionBand } from "../DecisionBand";
-import { LiveTrackPanel } from "../LiveTrackPanel";
+import { PremiumCircuitPanel } from "./PremiumCircuitPanel";
 import { OwnCarPanel } from "../OwnCarPanel";
 import { PacePanel } from "../PacePanel";
 import { MySessionPanel } from "../MySessionPanel";
@@ -115,7 +115,7 @@ export function PitwallPremiumView({
 
       <div className="ptp-main" data-pitwall-row="track-timing">
         <div className="ptp-track-col" data-pitwall-col="track">
-          <LiveTrackPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} />
+          <PremiumCircuitPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} />
           <OwnCarPanel
             driverName={ownDriverName}
             carName={ownCarName}
@@ -132,7 +132,7 @@ export function PitwallPremiumView({
           <PremiumTimingPanel
             v3={v3}
             standings={standings}
-            ownCarLabel={ownCarName ?? detail.device.device_name}
+            ownCarLabel={ownCarName}
             ownCarNumber={live ? v3?.opponents?.find((c) => c.isPlayer)?.carNumber ?? null : null}
             live={live}
             contextKey={contextKey}

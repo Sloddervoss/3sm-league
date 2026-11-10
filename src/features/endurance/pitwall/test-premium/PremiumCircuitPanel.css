@@ -3,8 +3,8 @@
    premium-root. De klassieke en endurance-pitwall krijgen deze attributen
    nooit, dus hun weergave blijft ongewijzigd. De projectie zelf (viewBox,
    bron-SVG, markers) blijft intact: de SVG schaalt alleen uniform via zijn
-   intrinsieke viewBox-verhouding. De extra root-selector houdt deze regels
-   boven de bestaande 160px-regel in testPremium.css, ongeacht CSS-volgorde. */
+   intrinsieke viewBox-verhouding. De eigen wrapper voorkomt stijl-lekkage
+   naar de klassieke test- of endurance-pitwall. */
 
 [data-pitwall-test-premium] [data-ptp-circuit] {
   display: flex;

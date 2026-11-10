@@ -153,10 +153,10 @@ describe("premium timing — echte tabel, echte rerender", () => {
     const view = renderPanel(rows, { ownCarLabel: "Porsche 718 Cayman GT4" });
     expect(screen.getByRole("columnheader", { name: "Auto", exact: true })).toBeTruthy();
     expect(screen.queryByRole("columnheader", { name: "Klasse", exact: true })).toBeNull();
-    const rival = view.container.querySelector('[data-timing-row-id="a"]')!;
+    const rival = view.container.querySelector<HTMLElement>('[data-timing-row-id="a"]')!;
     expect(rival.querySelector(".ptp-col-car")?.textContent).toBe("BMW M4 GT4");
     expect(rival.querySelector(".ptp-col-class")).toBeNull();
-    const own = view.container.querySelector('[data-premium-pinned-own-row]')!;
+    const own = view.container.querySelector<HTMLElement>('[data-premium-pinned-own-row]')!;
     expect(own.querySelector(".ptp-col-car")?.textContent).toBe("Porsche 718 Cayman GT4");
   });
 

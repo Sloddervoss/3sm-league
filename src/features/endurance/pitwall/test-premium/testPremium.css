@@ -712,9 +712,6 @@
 [data-pitwall-test-premium] [data-pitwall-slot="trackmap"] > div {
   padding: 6px 10px 7px;
 }
-[data-pitwall-test-premium] [data-pitwall-slot="trackmap"] svg[role="img"] {
-  height: 160px;
-}
 [data-pitwall-test-premium] [data-pitwall-slot="trackmap"] .mb-2 {
   margin-bottom: 4px;
 }
