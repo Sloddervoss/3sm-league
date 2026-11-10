@@ -515,12 +515,6 @@
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi] {
   gap: 10px;
 }
-[data-pitwall-test-premium] .ptp-kpi[data-ptp-sectors="unknown"] [data-pitwall-kpi-group="sectoren"] {
-  display: none;
-}
-[data-pitwall-test-premium] .ptp-kpi[data-ptp-sectors="unknown"] [data-pitwall-kpi] {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-}
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] {
   padding: 6px 12px 7px;
   border: 1px solid var(--ptp-line);
@@ -739,9 +733,9 @@
 [data-pitwall-test-premium] .ptp-timing {
   display: flex;
   flex-direction: column;
-  height: 430px;
+  height: clamp(700px, calc(100dvh - 280px), 1200px);
   min-height: 0;
-  max-height: 520px;
+  max-height: none;
   border: 1px solid var(--ptp-line);
   border-radius: 9px;
   background: linear-gradient(180deg, #0f151c 0%, #0b1015 100%);
@@ -955,6 +949,18 @@
   scrollbar-width: thin;
   scrollbar-color: #33404d #0a0f14;
 }
+/* Volledige eigen rij blijft zichtbaar, ook bij P16/P40 en handmatig scrollen.
+   De normale ranglijst behoudt haar eigen volgorde en haar unieke FLIP-id's. */
+[data-pitwall-test-premium] .ptp-timing-table .ptp-own-pinned > tr > td {
+  position: sticky;
+  top: 28px;
+  z-index: 2;
+  background: #24170e;
+  border-bottom: 2px solid var(--ptp-orange);
+}
+[data-pitwall-test-premium] .ptp-own-pinned .ptp-you {
+  white-space: nowrap;
+}
 [data-pitwall-test-premium] .ptp-timing-scroll:focus-visible {
   outline: 2px solid var(--ptp-orange);
   outline-offset: -2px;
@@ -970,6 +976,7 @@
 [data-pitwall-test-premium] .ptp-timing-table thead th {
   position: sticky;
   top: 0;
+  height: 28px;
   z-index: 3;
   padding: 5px 7px 5px;
   border-bottom: 1px solid var(--ptp-line);
@@ -1428,9 +1435,9 @@
     grid-template-columns: 1fr;
   }
   [data-pitwall-test-premium] .ptp-timing {
-    height: 460px;
+    height: 600px;
     min-height: 0;
-    max-height: 520px;
+    max-height: none;
   }
   [data-pitwall-test-premium] .ptp-panels {
     grid-template-columns: repeat(2, minmax(0, 1fr));

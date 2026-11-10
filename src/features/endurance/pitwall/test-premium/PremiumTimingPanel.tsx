@@ -204,12 +204,109 @@ export function PremiumTimingPanel({
       ? [...root.querySelectorAll<HTMLElement>("[data-timing-row-id]")].find((el) => el.dataset.timingRowId === ownRow.id) ?? null
       : null;
     if (!row) return;
-    const top = row.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - 34;
+    const headerHeight = root.querySelector("thead")?.getBoundingClientRect().height ?? 28;
+    const ownHeight = root.querySelector(".ptp-own-pinned")?.getBoundingClientRect().height ?? 0;
+    const top = row.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - headerHeight - ownHeight;
     if (typeof root.scrollTo === "function") {
       root.scrollTo({ top: Math.max(0, top), behavior: motionEnabled ? "smooth" : "auto" });
     } else {
       root.scrollTop = Math.max(0, top);
     }
+  };
+
+  // Dezelfde gevalideerde waarden in de ranglijst en de vastgezette eigen rij.
+  // De samenvatting heeft geen FLIP-id en verandert de echte sorteervolgorde niet.
+  const renderTimingRow = (r: StandingsDerivation["rows"][number], pinned = false) => {
+    const move = pinned ? 0 : moves[r.id] ?? 0;
+    const sectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
+    const metrics = freshMetrics(v3, r.id);
+    // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
+    // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
+    // verschijnen. De tooltip is identiek.
+    const invalidLast = (r as { lastLapInvalid?: boolean }).lastLapInvalid === true;
+    const last = invalidLast
+      ? null
+      : live && sectors
+        ? metrics?.lastLapSeconds ?? r.lastLapSeconds
+        : r.lastLapSeconds;
+    const sectorTitle = live && sectors
+      ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
+      : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
+    const flashLap = !pinned && lapFlash[r.id] === r.lap ? r.lap : null;
+    return (
+      <tr
+        data-timing-row-id={pinned ? undefined : r.id}
+        data-premium-pinned-own-row={pinned ? "true" : undefined}
+        data-pitwall-own-row={!pinned && r.isPlayer ? "true" : undefined}
+        data-premium-own-row={!pinned && r.isPlayer ? "true" : undefined}
+        className={r.isPlayer ? "is-own" : undefined}
+      >
+        <td className="ptp-col-pos" aria-label={r.position != null ? `Positie ${r.position}` : "Positie onbekend"}>
+          <span className="ptp-pos">{r.position != null ? renderPosition(r.position) : "—"}</span>
+          {move !== 0 && (
+            <span
+              className="ptp-move"
+              data-direction={move > 0 ? "up" : "down"}
+              aria-label={`${Math.abs(move)} ${Math.abs(move) === 1 ? "plaats" : "plaatsen"} ${move > 0 ? "gewonnen" : "verloren"}`}
+              title={`${Math.abs(move)} ${Math.abs(move) === 1 ? "plaats" : "plaatsen"} ${move > 0 ? "gewonnen" : "verloren"} sinds de vorige meting`}
+            >
+              {move > 0 ? `+${move}` : `${move}`}
+            </span>
+          )}
+        </td>
+        <td data-timing="car-number" className="ptp-col-num">{r.carNumber ?? "—"}</td>
+        <td className="ptp-col-driver">
+          <div className="ptp-driver">
+            <span className="ptp-driver-line">
+              <span className="ptp-driver-name">{driverLabel(r)}</span>
+              {r.isPlayer && <span className="ptp-you">{pinned ? "JIJ · VAST" : "JIJ"}</span>}
+            </span>
+            <span className="ptp-driver-meta">
+              {teamLabel(r) && <span className="ptp-team">{teamLabel(r)}</span>}
+              {Number.isInteger(r.irating) && Number(r.irating) > 0 && Number(r.irating) <= 100000 && (
+                <span title="iRating · huidige coureur, sessiegegevens">iR {r.irating}</span>
+              )}
+              <SafetyRating opponent={r} />
+            </span>
+          </div>
+        </td>
+        <td className="ptp-col-class">
+          <span className="ptp-class-chip">{r.carClass ?? "—"}</span>
+        </td>
+        <td
+          data-timing="last-lap"
+          className="ptp-col-time ptp-last"
+          title={invalidLast ? "Laatste ronde ongeldig (reset of baanverlating) — telt niet als rondetijd" : undefined}
+        >
+          {preciseLapTime(last)}
+        </td>
+        <td data-timing="best-lap" className="ptp-col-time ptp-best">{preciseLapTime(r.bestLapSeconds)}</td>
+        {sectorCount === 0 && <td className="ptp-col-sector" title="Sectorindeling onbekend; geen tijden beschikbaar">—</td>}
+        {sectorColumns.map((n) => (
+          <td key={n} className="ptp-col-sector" title={sectorTitle}>
+            {sectors?.[n] != null ? sectors[n]!.toFixed(3) : "—"}
+          </td>
+        ))}
+        <td className="ptp-col-lap ptp-lap" data-lap-flash={flashLap ?? undefined}>
+          {r.lap ?? "—"}
+          {flashLap != null && (
+            <span className="ptp-lap-flash" aria-hidden key={flashLap}>
+              <Flag size={10} />
+            </span>
+          )}
+        </td>
+        <td className="ptp-col-gap">{renderGap(r, false)}</td>
+        <td className="ptp-col-pit">
+          {r.inPit ? (
+            <span className="ptp-pit" title="Auto in de pitstraat volgens de telemetrie">
+              PIT
+            </span>
+          ) : (
+            <span className="ptp-empty">—</span>
+          )}
+        </td>
+      </tr>
+    );
   };
 
   if (standings.noData) {
@@ -311,6 +408,7 @@ export function PremiumTimingPanel({
               <th scope="col" className="ptp-col-class">Klasse</th>
               <th scope="col" className="ptp-col-time">Laatste</th>
               <th scope="col" className="ptp-col-time">Beste</th>
+              {sectorCount === 0 && <th scope="col" className="ptp-col-sector">Sectoren</th>}
               {sectorColumns.map((n) => (
                 <th key={n} scope="col" className="ptp-col-sector">S{n + 1}</th>
               ))}
@@ -319,108 +417,25 @@ export function PremiumTimingPanel({
               <th scope="col" className="ptp-col-pit">Pit</th>
             </tr>
           </thead>
+          {ownRow && (
+            <tbody className="ptp-own-pinned" aria-label="Eigen auto — vastgezet">
+              {renderTimingRow(ownRow, true)}
+            </tbody>
+          )}
           <tbody>
-            {visibleRows.map((r, index) => {
-              const move = moves[r.id] ?? 0;
-              const showClass = index === 0 || classOf(visibleRows[index - 1]) !== classOf(r);
-              const sectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
-              const metrics = freshMetrics(v3, r.id);
-              // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
-              // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
-              // verschijnen. De tooltip is identiek.
-              const invalidLast = (r as { lastLapInvalid?: boolean }).lastLapInvalid === true;
-              const last = invalidLast
-                ? null
-                : live && sectors
-                  ? metrics?.lastLapSeconds ?? r.lastLapSeconds
-                  : r.lastLapSeconds;
-              const sectorTitle = live && sectors
-                ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
-                : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
-              const flashLap = lapFlash[r.id] === r.lap ? r.lap : null;
-              return (
-                <Fragment key={r.id}>
-                  {showClass && (
-                    <tr className="ptp-class-row" data-premium-class-row={classOf(r)}>
-                      <th scope="colgroup" colSpan={9 + sectorColumns.length}>
-                        <span>{classOf(r)}</span>
-                        <span className="ptp-class-count">{perClass[classOf(r)] ?? 0} in beeld</span>
-                      </th>
-                    </tr>
-                  )}
-                  <tr
-                    data-timing-row-id={r.id}
-                    data-pitwall-own-row={r.isPlayer ? "true" : undefined}
-                    data-premium-own-row={r.isPlayer ? "true" : undefined}
-                    className={r.isPlayer ? "is-own" : undefined}
-                  >
-                    <td className="ptp-col-pos" aria-label={r.position != null ? `Positie ${r.position}` : "Positie onbekend"}>
-                      <span className="ptp-pos">{r.position != null ? renderPosition(r.position) : "—"}</span>
-                      {move !== 0 && (
-                        <span
-                          className="ptp-move"
-                          data-direction={move > 0 ? "up" : "down"}
-                          aria-label={`${Math.abs(move)} ${Math.abs(move) === 1 ? "plaats" : "plaatsen"} ${move > 0 ? "gewonnen" : "verloren"}`}
-                          title={`${Math.abs(move)} ${Math.abs(move) === 1 ? "plaats" : "plaatsen"} ${move > 0 ? "gewonnen" : "verloren"} sinds de vorige meting`}
-                        >
-                          {move > 0 ? `+${move}` : `${move}`}
-                        </span>
-                      )}
-                    </td>
-                    <td data-timing="car-number" className="ptp-col-num">{r.carNumber ?? "—"}</td>
-                    <td className="ptp-col-driver">
-                      <div className="ptp-driver">
-                        <span className="ptp-driver-line">
-                          <span className="ptp-driver-name">{driverLabel(r)}</span>
-                          {r.isPlayer && <span className="ptp-you">JIJ</span>}
-                        </span>
-                        <span className="ptp-driver-meta">
-                          {teamLabel(r) && <span className="ptp-team">{teamLabel(r)}</span>}
-                          {Number.isInteger(r.irating) && Number(r.irating) > 0 && Number(r.irating) <= 100000 && (
-                            <span title="iRating · huidige coureur, sessiegegevens">iR {r.irating}</span>
-                          )}
-                          <SafetyRating opponent={r} />
-                        </span>
-                      </div>
-                    </td>
-                    <td className="ptp-col-class">
-                      <span className="ptp-class-chip">{r.carClass ?? "—"}</span>
-                    </td>
-                    <td
-                      data-timing="last-lap"
-                      className="ptp-col-time ptp-last"
-                      title={invalidLast ? "Laatste ronde ongeldig (reset of baanverlating) — telt niet als rondetijd" : undefined}
-                    >
-                      {preciseLapTime(last)}
-                    </td>
-                    <td data-timing="best-lap" className="ptp-col-time ptp-best">{preciseLapTime(r.bestLapSeconds)}</td>
-                    {sectorColumns.map((n) => (
-                      <td key={n} className="ptp-col-sector" title={sectorTitle}>
-                        {sectors?.[n] != null ? sectors[n]!.toFixed(3) : "—"}
-                      </td>
-                    ))}
-                    <td className="ptp-col-lap ptp-lap" data-lap-flash={flashLap ?? undefined}>
-                      {r.lap ?? "—"}
-                      {flashLap != null && (
-                        <span className="ptp-lap-flash" aria-hidden key={flashLap}>
-                          <Flag size={10} />
-                        </span>
-                      )}
-                    </td>
-                    <td className="ptp-col-gap">{renderGap(r, false)}</td>
-                    <td className="ptp-col-pit">
-                      {r.inPit ? (
-                        <span className="ptp-pit" title="Auto in de pitstraat volgens de telemetrie">
-                          PIT
-                        </span>
-                      ) : (
-                        <span className="ptp-empty">—</span>
-                      )}
-                    </td>
+            {visibleRows.map((r, index) => (
+              <Fragment key={r.id}>
+                {(index === 0 || classOf(visibleRows[index - 1]) !== classOf(r)) && (
+                  <tr className="ptp-class-row" data-premium-class-row={classOf(r)}>
+                    <th scope="colgroup" colSpan={9 + Math.max(1, sectorColumns.length)}>
+                      <span>{classOf(r)}</span>
+                      <span className="ptp-class-count">{perClass[classOf(r)] ?? 0} auto's</span>
+                    </th>
                   </tr>
-                </Fragment>
-              );
-            })}
+                )}
+                {renderTimingRow(r)}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>
