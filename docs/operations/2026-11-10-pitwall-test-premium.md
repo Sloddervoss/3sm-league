@@ -88,10 +88,10 @@ kaartgeometrie/autoposities) is niet aangeraakt.
    ook na reload blijft de klassieke weergave staan.
 2. **URL-noodrem:** open `/admin/pitwall-test?pitwallView=classic`. Dit wint
    van de lokale keuze. Een klik op `Nieuw` heft de override op.
-3. **Git:** revert de drie commits op deze branch (of verwijder de featuremap):
+3. **Git:** revert de vier commits op deze branch (of verwijder de featuremap):
 
    ```bash
-   git revert --no-commit a0f0b9a1 0c93dabe c183385f
+   git revert --no-commit a0f0b9a1 0c93dabe c183385f f284fbb0
    git commit -m "revert(pitwall): premium testweergave terugdraaien"
    ```
 
