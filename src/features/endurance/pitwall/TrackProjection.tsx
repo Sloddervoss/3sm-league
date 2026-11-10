@@ -4,7 +4,15 @@ import { loadTrackProjection, type TrackProjectionGeometry } from '@/lib/pitwall
 import type { V3Normalized } from './pitwallHelpers';
 import { MovingTrackCar } from './MovingTrackCar';
 
-export function TrackProjection({ trackName, trackConfig, v3, live }: { trackName: string; trackConfig: string; v3: V3Normalized | null; live: boolean }) {
+export type TrackProjectionPresentation = 'default' | 'premium';
+
+/**
+ * `premium` is een expliciete opt-in voor de pitwall-testkaart. De standaard
+ * (endurance en klassiek) houdt exact dezelfde markup, klasse en viewBox.
+ * Beide standen gebruiken dezelfde officiële geometrie en puntprojectie.
+ */
+export function TrackProjection({ trackName, trackConfig, v3, live, presentation = 'default' }: { trackName: string; trackConfig: string; v3: V3Normalized | null; live: boolean; presentation?: TrackProjectionPresentation }) {
+  const premium = presentation === 'premium';
   const [geometry, setGeometry] = useState<TrackProjectionGeometry | null>(null);
   const [loadedKey, setLoadedKey] = useState('');
   const [failed, setFailed] = useState(false);
@@ -42,7 +50,14 @@ export function TrackProjection({ trackName, trackConfig, v3, live }: { trackNam
     const pad = Math.max(w, h) * 0.08;
     return `${(minX - pad).toFixed(1)} ${(minY - pad).toFixed(1)} ${(w + pad * 2).toFixed(1)} ${(h + pad * 2).toFixed(1)}`;
   })();
-  return <div><svg viewBox={viewBox} className="h-60 w-full" role="img" aria-label={`${displayName || trackName} met schematische live autoposities`}>
+  return <div><svg
+    viewBox={viewBox}
+    className={premium ? 'ptp-circuit-map' : 'h-60 w-full'}
+    preserveAspectRatio={premium ? 'xMidYMid meet' : undefined}
+    data-track-presentation={premium ? 'premium' : undefined}
+    role="img"
+    aria-label={`${displayName || trackName} met schematische live autoposities`}
+  >
     <image href={geometry.mapPath} width="1920" height="1080" />
     {geometry.points.length > 0 && cars.slice(0, 64).map(car => {
       const pct = car.lapDistancePct;
