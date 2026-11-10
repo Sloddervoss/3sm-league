@@ -104,8 +104,9 @@ kaartgeometrie/autoposities) is niet aangeraakt.
 - **Geen** nieuwe env-variabele. Productiebuild gebruikt de bestaande
   Supabase-env; in een verse worktree zonder `.env` is de compile getest met
   `ALLOW_MISSING_SUPABASE_ENV=1`.
-- De daadwerkelijke deploy en publicatie worden door de projecteigenaar gedaan.
-  Deze branch is niet gepusht en niet gemerged.
+- Publicatie gebeurt door Hermes via een aparte release-worktree na de gates,
+  op de expliciete opdracht van Vincent om uitsluitend de pitwall-test uit te
+  rollen. De live endurance-look heeft daarmee geen publicatiegoedkeuring.
 
 ## Rollback
 
@@ -113,23 +114,24 @@ kaartgeometrie/autoposities) is niet aangeraakt.
    ook na reload blijft de klassieke weergave staan.
 2. **URL-noodrem:** open `/admin/pitwall-test?pitwallView=classic`. Dit wint
    van de lokale keuze. Een klik op `Nieuw` heft de override op.
-3. **Git:** revert alle commits op deze branch boven de basis (of verwijder de featuremap):
+3. **Git:** maak vanaf de actuele `main` een aparte rollbackbranch en revert
+   uitsluitend de featurecommits, nieuwste eerst. De featurebranch mag na de
+   release geen ander werk bevatten:
 
    ```bash
-   git revert --no-commit $(git rev-list --reverse 52662644..HEAD)
+   git switch -c fix/pitwall-test-premium-rollback origin/main
+   git revert --no-commit $(git rev-list 52662644..feat/pitwall-test-premium)
    git commit -m "revert(pitwall): premium testweergave terugdraaien"
    ```
 
-   Of, als deze branch verder geen werk bevat:
-
-   ```bash
-   git reset --hard 52662644
-   ```
-
-   `git reset --hard` is destructief voor niet-gecommitte wijzigingen; gebruik
-   hem alleen op een schone worktree.
-4. **Deploy:** de vorige release/webroot terugzetten volgens de bestaande
-   deployprocedure. Geen database- of pluginrollback nodig.
+   Of revert de geïdentificeerde release-merge met `git revert -m 1 <merge-sha>`
+   op die rollbackbranch. Inspecteer de diff vóór een nieuwe publicatie. Geen
+   `reset --hard`, force-push of herschrijving van gedeelde geschiedenis.
+4. **Deploy:** publiceer de vorige release `/opt/3sm-release-52662644` met diens
+   `scripts/publiceer-release.sh`; deze zet ook de SEO-timer terug. De exacte
+   voorafgaande webroot en dist zijn bovendien bewaard onder
+   `/var/backups/3sm/pre-pitwall-test-premium-20261110/` op `3sm-web` met een
+   SHA256-manifest. Geen database- of pluginrollback nodig.
 
 ## Bestanden
 
@@ -186,20 +188,53 @@ Uitgevoerd in de worktree op de eindstand:
   (translate ±34 px), en geen animatie op de eerste snapshot of naburige rijen.
   Op 390 px wraps de dock/controls en is er geen horizontale documentoverflow.
 
-## Restrisico's / nog te verifiëren door projecteigenaar
+## Definitieve parent-verificatie en vrijgavepoort
 
-- De echte geauthenticeerde pagina met live `DESKTOP-GR4NN00` is niet door deze
-  subagent in de browser geopend; de parent doet de productie-/testroute-
-  verificatie. Controleer daar: echte 25-auto-tabel, scrollen, klassenfilter,
-  `Eigen rij`, pitstopvoorbeeld, `Klassiek`/`Nieuw` en de `Beweging`-lock bij
-  OS-reduced-motion.
-- De KPI-sector groep wordt in de premiumweergave verborgen als de bron geen
-  sectorindeling heeft; de contextkop zegt dan expliciet `Sectoren: niet
-  beschikbaar`. Dit voorkomt een lege kaart, maar verbergt ook de oude
-  "sectorindeling onbekend"-tekst.
-- De tabel scrollt niet automatisch naar de eigen rij; de focusstrook
-  (Voor/Jij/Achter) en de knop `Eigen rij` houden de eigen auto bereikbaar.
-- De pitbevestiging toont bij ontbrekende stops het bestaande, expliciet als
-  voorbeeld gelabelde blok. Er worden geen voorbeeldantwoorden opgeslagen.
-- De baseline had één losse suite-failure (`tyreTelemetryContract`) en 16
-  typecheckfouten; die zijn niet gerepareerd en niet geraakt.
+- Exacte codepoort: `34dd8089`. Astra vond op `617a41bd` één reconnect-FLIP-
+  blokkade: bij behouden gecachete rijen kon de eerste herstelde snapshot nog
+  bewegen. `useRowFlip` wist nu bij iedere uitgeschakelde toestand de basis vóór
+  de resetKey-/meetlogica. Offline- en datagat-tests wisselen juist bij herstel
+  de rijvolgorde; beide falen op de vorige commit en slagen na de fix.
+- Astra-herkeuring: **GO voor test-only deployment**, geen nieuwe blokkade in de
+  twee laatste fixes. Eigen in-memory probes: offline, gecachet gat, beweging
+  uit/aan en resetKey tijdens uit leveren nul herstelanimaties; de volgende
+  echte wissel animeert telkens wel. Geen algemene garantie over andere scopes.
+- Echte ingelogde browserpass: **15 checks PASS**, fleet/detail/sandbox via echte
+  HTTP-verzoeken, Klassiek/Nieuw beide richtingen, herlaadpersistentie,
+  URL-noodoverride, geblokkeerde voorkeur-opslag, reduced-motion, meer analyse,
+  geen documentoverflow op 1366/768/390 px, geen JS-fouten of pitstopmutaties.
+  De vaste 64px-navbar bedekte aanvankelijk de nieuwe dock en klassieke
+  terugschakelaar: uitsluitend de testshell en toegevoegde bediening hebben
+  daarvoor bovenruimte gekregen (`072e2abc`). Normale pointerklikken slagen nu.
+- Losse lokale, expliciet synthetische browserfixture: **10 checks PASS**, 41
+  auto's / twee klassen, begrensde timing-scroll met sticky kolomkoppen,
+  klassenfilter en Eigen rij, echte FLIP van alleen de twee gewisselde rijen,
+  verdwijnende positie-indicators bij identieke frames, noData-/sessiereset,
+  beweging uit en het bestaande pitstopvoorbeeld. Deze interceptie bestaat
+  alleen in de lokale testbrowser; nooit in productiecode of datastroom.
+- Parent-suite op definitieve code: **1801 geslaagd / 1 bestaande failure** in
+  210 bestanden (209 geslaagd); de failure is exact dezelfde
+  `tyreTelemetryContract` als op de basiscommit. Gericht: **83/83**. ESLint:
+  exit 0. Typecheck: exact dezelfde **16** basisdiagnostics, geen nieuwe.
+  Productiebuild met de bestaande publieke Supabase-config: exit 0.
+- Bronallowlist: alleen de testpagina, nieuwe `test-premium/`-map, bijbehorende
+  tests en dit document. Geen gedeelde endurance-, circuit-, backend-, DB- of
+  pluginwijzigingen. Gebouwde premium-markers staan uitsluitend in de
+  `PitwallDeviceTestPage-*` JS/CSS-chunks, niet in de endurance-/entry-chunks.
+
+## Restrisico's en bewust behouden gedrag
+
+- Tijdens de definitieve echte browserpass waren alle zeven apparaten offline;
+  de gekozen echte snapshot bevatte twee tegenstanders. Een nieuwe echte
+  inhaalactie is dus niet live geobserveerd. Beweging is gecontroleerd met de
+  afzonderlijke lokale 41-auto-fixture, niet als echte racedata gepresenteerd.
+- De KPI-sector groep wordt verborgen bij onbekende sectorindeling; de kop
+  vermeldt dan `Sectoren: niet beschikbaar`.
+- Geen automatisch scrollen naar de eigen rij; de Voor/Jij/Achter-strook en
+  Eigen rij houden de eigen auto bereikbaar.
+- De pitbevestiging is volledig behouden. Voorbeeldantwoorden worden niet
+  opgeslagen; echte antwoorden volgen onveranderd de bestaande schrijfroutine.
+- Bestaande bandencontracttest- en typecheckfouten zijn niet gerepareerd of
+  stilzwijgend buiten de verificatie gehouden.
+- Visuele goedkeuring van Vincent blijft vereist voordat endurance dezelfde
+  look mag krijgen. Deze release autoriseert dat niet.
