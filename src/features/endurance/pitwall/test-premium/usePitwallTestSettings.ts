@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
+  parseViewParam,
   readStoredMotion,
   resolveMotion,
   resolveView,
@@ -23,8 +24,17 @@ export function usePitwallTestSettings() {
   const [overridden, setOverridden] = useState<boolean>(() => resolveView(search).overridden);
   const [storedMotion, setStoredMotionState] = useState<boolean | null>(() => readStoredMotion());
   const [reducedMotion, setReducedMotion] = useState<boolean>(() => prefersReducedMotion());
+  // Het opruimen van onze eigen URL-parameter mag de zojuist gekozen weergave
+  // niet overschrijven met de (mogelijk geweigerde) opslag. Externe navigatie —
+  // browser back/forward of een nieuwe URL — moet wel gewoon winnen.
+  const selfRemoval = useRef(false);
 
   useEffect(() => {
+    const hasParam = parseViewParam(search) !== null;
+    if (!hasParam && selfRemoval.current) {
+      selfRemoval.current = false;
+      return;
+    }
     const resolved = resolveView(search);
     setViewState(resolved.view);
     setOverridden(resolved.overridden);
@@ -45,6 +55,7 @@ export function usePitwallTestSettings() {
       writeStoredView(next);
       setOverridden(false);
       if (searchParams.has("pitwallView")) {
+        selfRemoval.current = true;
         const cleaned = new URLSearchParams(searchParams);
         cleaned.delete("pitwallView");
         setSearchParams(cleaned, { replace: true });

@@ -1161,6 +1161,10 @@
   border-color: rgba(120, 170, 210, 0.26);
   color: #a9c9df;
 }
+[data-pitwall-test-premium] .ptp-sr.is-empty {
+  border-color: transparent;
+  color: #59656f;
+}
 [data-pitwall-test-premium] .ptp-col-class {
   width: 52px;
 }
@@ -1486,6 +1490,19 @@
     border-right: 0;
     border-bottom: 1px solid var(--ptp-line-soft);
   }
+}
+
+[data-pitwall-test-premium][data-motion="off"],
+[data-pitwall-test-premium][data-motion="off"] *,
+[data-pitwall-test-premium][data-motion="off"] *::before,
+[data-pitwall-test-premium][data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+[data-pitwall-test-premium][data-motion="off"] .ptp-lap-flash {
+  display: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
