@@ -220,7 +220,7 @@ export function PremiumTimingPanel({
             <span aria-hidden className="ptp-dot" />
             {live ? "Live" : "Offline"}
           </span>
-          {ownRow && (
+          {ownRow && visibleRows.some((row) => row.id === ownRow.id) && (
             <button type="button" className="ptp-ghost-button" onClick={scrollToOwn}>
               Eigen rij <ChevronRight aria-hidden size={13} />
             </button>
