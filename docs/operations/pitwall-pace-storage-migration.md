@@ -1,7 +1,11 @@
-# PACE-opslag: productie-migratie en rollback (voorbereid, niet toegepast)
+# PACE-opslag: productie-migratie en rollback
 
-Status: **VOORBEREID — NIET OP PRODUCTIE TOEGEPAST.** Productie-DDL/DML, scheduler
-en configuratie zijn in deze stap niet aangeraakt.
+Status: **TOEGEPAST OP 11 NOVEMBER 2026** na expliciete GO en parent-rehearsal.
+De bevroren forward is éénmaal transactioneel uitgevoerd op productie. Alle acht
+functiedefinities, eigenaars, security en ACL’s zijn exact tegen de goedgekeurde
+PG15-kloon teruggelezen; tabellen, views, policies en configuratie bleven gelijk.
+De scheduler is niet veranderd. Zie `2026-11-11-pitwall-test-and-simhub-0762.md`
+voor het volledige uitrolbewijs en de backup.
 
 ## Wat de migratie doet
 
@@ -94,7 +98,7 @@ Verwacht: `anon` en `authenticated` hebben geen EXECUTE op merge/project/cleanup
 
 Uitgevoerd op een geïsoleerde, disposable kloon van productie
 (`supabase/postgres:15.19.0.004`, `--network none --memory 512m --cpus 1`) met
-het volledige `public`-schema (91 tabellen, 230 functies, 165 policies) en
+het volledige `public`-schema (85 basistabellen, 6 views, 230 functies, 165 policies) en
 dezelfde tabel-ACL's. Geen productieconnectie voor DDL/DML.
 
 - `supabase/tests/pace-production-rehearsal.sql`: al zijn `PASS`-regels groen,
@@ -115,8 +119,9 @@ dezelfde tabel-ACL's. Geen productieconnectie voor DDL/DML.
   volledige historie voor alle 40 auto's is dus nooit gegarandeerd.
 - `freshness` blijft 5 seconden in de UI; de opslag-TTL is 24 uur.
 - De cleanup is begrensd (100 rijen per aanroep, `SKIP LOCKED`). Inroosteren
-  gebeurt later als aparte stap; zonder scheduler groeit `paceHistory` tot de
-  volgende handmatige/geplande run.
+  gebeurt later als aparte stap. Zonder scheduler blijven verlopen sleutels op
+  inactieve devices fysiek staan; de harde opslaggrens en lees-/merge-TTL blijven
+  gelden.
 - Een leesroute die `get_pitwall_data` gebruikt, krijgt nu een geprojecteerde
   `v3_normalized` (geen `paceCapture`, volledige reeksen alleen voor eigen +
   referentie). Dat is de PACE-capability, geen wijziging van de overige velden.
