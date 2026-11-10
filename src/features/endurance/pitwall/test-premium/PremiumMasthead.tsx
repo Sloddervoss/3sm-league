@@ -60,7 +60,7 @@ export function PremiumMasthead({
             <span aria-hidden className="ptp-status-dot" />
             {copy.label}
           </span>
-          <span className="ptp-readonly">READ-ONLY · 1s polling</span>
+          <span className="ptp-readonly">LIVE TELEMETRIE · 1s polling</span>
         </div>
       </div>
 

@@ -191,7 +191,7 @@ export function PitwallPremiumView({
             v2Error={tyre.v2Error}
           />
           <RawTelemetryDetails value={v3} />
-          <p className="ptp-footnote">Live telemetrie verfrist automatisch. Testweergave leest alleen; er wordt niets opgeslagen.</p>
+          <p className="ptp-footnote">Live telemetrie verfrist automatisch.</p>
         </div>
       </details>
     </div>

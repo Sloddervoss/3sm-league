@@ -184,9 +184,20 @@ const rpc = vi.fn(async (fn: string, args: Record<string, unknown> = {}) => {
 
 const channel = { on: () => channel, subscribe: () => channel };
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { rpc: (...args: unknown[]) => rpc(...(args as [string, Record<string, unknown>])), channel: () => channel, removeChannel: () => undefined },
-}));
+vi.mock("@/integrations/supabase/client", () => {
+  const client = {
+    // Echte Supabase-clientmethoden leven op het prototype en verliezen `this`
+    // zodra je ze losknipt. Deze mock doet hetzelfde, zodat de route-tests een
+    // gedetacheerde `rpc` hard laten falen in plaats van hem te verbergen.
+    rpc(this: unknown, ...args: unknown[]) {
+      if (this !== client) throw new TypeError("supabase.rpc must be called with the client as receiver");
+      return rpc(...(args as [string, Record<string, unknown>]));
+    },
+    channel: () => channel,
+    removeChannel: () => undefined,
+  };
+  return { supabase: client };
+});
 
 const renderPage = async (entry = "/admin/pitwall-test") => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -241,6 +252,20 @@ describe("pitwall-test premium — alleen op de testroute, klassiek blijft klass
     expect(view.container.querySelector("[data-pitwall-tyre-range]")).not.toBeNull();
     expect(view.container.textContent).toContain("Zo ziet de vraag eruit");
     expect(screen.getByText("Mijn sessie")).toBeTruthy();
+    // De pitbevestiging schrijft echte antwoorden; "read-only" zou liegen.
+    expect(view.container.textContent).toContain("LIVE TELEMETRIE · 1s polling");
+    expect(view.container.textContent).not.toContain("READ-ONLY");
+    expect(view.container.textContent).not.toContain("niets opgeslagen");
+  });
+
+  it("haalt fleet, device-detail en sandbox met de gebonden client op", async () => {
+    await renderPage();
+
+    await waitFor(() => {
+      expect(calls.mock.calls.some(([fn]) => fn === "get_simhub_fleet")).toBe(true);
+      expect(calls).toHaveBeenCalledWith("get_simhub_device_details", { p_device_id: "device-1" });
+      expect(calls).toHaveBeenCalledWith("pitwall_sandbox_v1", { p_device_id: "device-1" });
+    });
   });
 
   it("blijft showExample in de pitbevestiging echt bedienbaar", async () => {
@@ -348,5 +373,6 @@ describe("pitwall-test — geen klassieke regressie in dezelfde run", () => {
     expect(view.container.querySelector('[data-pitwall-slot="my-session"]')).not.toBeNull();
     expect(calls.mock.calls.some(([fn]) => fn === "get_simhub_fleet")).toBe(true);
     expect(calls).toHaveBeenCalledWith("get_simhub_device_details", { p_device_id: "device-1" });
+    expect(calls).toHaveBeenCalledWith("pitwall_sandbox_v1", { p_device_id: "device-1" });
   });
 });

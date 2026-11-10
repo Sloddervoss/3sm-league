@@ -45,7 +45,12 @@ const ONLINE_WINDOW_MS = 5 * 60_000;
 
 /** Bounded read RPC's; de generated types dekken de SimHub-functies niet. */
 type ReadRpc = (name: string, params?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
-const readRpc = supabase.rpc as unknown as ReadRpc;
+/**
+ * `rpc` is een prototype-methode van de Supabase-client. Losknippen verliest
+ * `this` en laat de client al vóór de netwerkcall stuklopen; bind daarom expliciet
+ * aan dezelfde client. De cast gaat alleen over de niet-gegenereerde SimHub-types.
+ */
+const readRpc = supabase.rpc.bind(supabase) as unknown as ReadRpc;
 
 const isOnline = (d?: SimHubDeviceDetail | null) =>
   Boolean(d?.health?.received_at && Date.now() - Date.parse(d.health.received_at) <= ONLINE_WINDOW_MS);
