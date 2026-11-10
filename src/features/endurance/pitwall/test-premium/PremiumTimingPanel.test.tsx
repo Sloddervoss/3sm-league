@@ -243,8 +243,8 @@ describe("premium timing — echte tabel, echte rerender", () => {
     await waitFor(() => expect(view.container.querySelector(".ptp-move")).toBeNull());
     expect(animate).not.toHaveBeenCalled();
 
-    // Weer live: eerst ijken, nog steeds geen oude sprong.
-    view.rerender(<PremiumTimingPanel {...props} standings={standings([row("a", 1), row("b", 2)])} live />);
+    // Weer live met juist een andere volgorde: eerst ijken, geen oude sprong.
+    view.rerender(<PremiumTimingPanel {...props} standings={standings([row("b", 1), row("a", 2)])} live />);
     await waitFor(() => expect(view.container.querySelector(".ptp-move")).toBeNull());
     expect(animate).not.toHaveBeenCalled();
 
@@ -260,6 +260,21 @@ describe("premium timing — echte tabel, echte rerender", () => {
       else Object.defineProperty(document, "hidden", { configurable: true, value: false });
       document.dispatchEvent(new Event("visibilitychange"));
     }
+  });
+
+  it("ijkt een gecachete tabel opnieuw na een RPC-datagat met gewijzigde volgorde", () => {
+    const before = [row("a", 1), row("b", 2)];
+    const after = [row("b", 1), row("a", 2)];
+    const props = { v3, ownCarLabel: "Mijn auto", ownCarNumber: "17", live: true, contextKey: "device-1|session-a", motionEnabled: true };
+    const view = renderPanel(before);
+    view.rerender(<PremiumTimingPanel {...props} standings={standings(before)} gap />);
+    expect(view.container.querySelectorAll("[data-timing-row-id]")).toHaveLength(2);
+    view.rerender(<PremiumTimingPanel {...props} standings={standings(after)} gap={false} />);
+    expect(animate).not.toHaveBeenCalled();
+    expect(view.container.querySelector(".ptp-move")).toBeNull();
+    // De volgende echte positiewijziging animeert wel: geen permanent uitgezette hook.
+    view.rerender(<PremiumTimingPanel {...props} standings={standings(before)} gap={false} />);
+    expect(animate).toHaveBeenCalled();
   });
 
   it("animeert niet bij de eerste snapshot, een contextwissel of als beweging uit staat", async () => {

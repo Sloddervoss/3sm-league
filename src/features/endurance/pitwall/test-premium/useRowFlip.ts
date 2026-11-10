@@ -82,18 +82,20 @@ export function useRowFlip(
       return;
     }
 
+    // Offline/datagat én Beweging uit hebben geen geldige vergelijkingsbasis.
+    // De eerste teruggekeerde snapshot is een ijkpunt, ook als de tabel bleef staan.
+    if (!enabled) {
+      previous.current = null;
+      cancelAll();
+      return;
+    }
+
     const next = measure(root);
     const before = previous.current;
 
     if (!before || before.resetKey !== resetKey) {
       previous.current = { resetKey, positions: next };
       cancelAll();
-      return;
-    }
-
-    if (!enabled) {
-      cancelAll();
-      previous.current = { resetKey, positions: next };
       return;
     }
 
