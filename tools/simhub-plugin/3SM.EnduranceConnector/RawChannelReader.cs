@@ -129,7 +129,7 @@ namespace ThreeSM.EnduranceConnector
         {
             var fromObject = ReadSectorStartsFromObject();
             if (fromObject != null) return fromObject;
-            var yaml = ReadSessionYamlText();
+            var yaml = ReadSessionYamlText("SplitTimeInfo");
             return yaml == null ? null : ParseSectorStartsFromYaml(yaml);
         }
 
@@ -157,27 +157,35 @@ namespace ThreeSM.EnduranceConnector
                 && (starts.Count == 0 || value.Value > starts[starts.Count - 1]);
         }
 
-        /// <summary>Eerste sessie-YAML die als tekst beschikbaar is, of null.</summary>
-        private string ReadSessionYamlText()
+        /// <summary>Eerste sessie-YAML die als tekst beschikbaar is en de gevraagde
+        /// sectie bevat, of null. SessionData komt afhankelijk van de SimHub-versie
+        /// als objectboom of als YAML-tekst; beide routes blijven ondersteund.</summary>
+        private string ReadSessionYamlText(string marker)
         {
             var direct = ReadText("SessionData");
-            if (direct != null && direct.IndexOf("SplitTimeInfo", StringComparison.Ordinal) >= 0) return direct;
+            if (ContainsMarker(direct, marker)) return direct;
 
             object node = _newData;
             foreach (var member in new[] { "RawData", "SessionData" }) node = GetMember(node, member);
             var text = node as string;
-            if (text != null && text.IndexOf("SplitTimeInfo", StringComparison.Ordinal) >= 0) return text;
+            if (ContainsMarker(text, marker)) return text;
 
             if (_getProperty != null)
             {
                 try
                 {
                     var value = _getProperty("DataCorePlugin.GameRawData.SessionData") as string;
-                    if (value != null && value.IndexOf("SplitTimeInfo", StringComparison.Ordinal) >= 0) return value;
+                    if (ContainsMarker(value, marker)) return value;
                 }
                 catch { }
             }
             return null;
+        }
+
+        private static bool ContainsMarker(string text, string marker)
+        {
+            return text != null && !string.IsNullOrEmpty(marker)
+                && text.IndexOf(marker, StringComparison.Ordinal) >= 0;
         }
 
         /// <summary>
@@ -268,15 +276,41 @@ public string ReadTrackConfiguration()
         }
         /// <summary>
         /// Current session drivers, read afresh for each outgoing opponent snapshot.
-        /// No cross-frame cache: a driver swap must clear the outgoing driver's ratings.
-        /// Car number AND full driver name must match before these values may be used.
+        /// The object tree has no cross-frame cache: a driver swap must clear the
+        /// outgoing driver's ratings. When SessionData is YAML instead of an object
+        /// tree, the same block is parsed through the existing YAML route; identical
+        /// YAML text is cached because iRacing only rewrites it on a session/driver
+        /// change (and changed text always reparses). Car number AND full driver name
+        /// must match before these values may be used.
         /// </summary>
         public Dictionary<string, DriverRating> ReadDriverRatings()
         {
             var result = new Dictionary<string, DriverRating>(StringComparer.Ordinal);
             var ambiguous = new HashSet<string>(StringComparer.Ordinal);
             var drivers = GetMember(DriverRoot(), "Drivers") as IEnumerable;
-            if (drivers == null) return result;
+
+            // Geen objectboom met Drivers: probeer de YAML-route voordat we stil
+            // "geen ratings" teruggeven. Een lege maar aanwezige Drivers-lijst valt
+            // hier bewust niet terug (oude, geneste data mag niet terugkomen).
+            if (drivers == null)
+            {
+                var yaml = ReadSessionYamlText("DriverInfo");
+                if (yaml == null) return result;
+                foreach (var identity in OpponentCarName.ParseDriverInfoYamlCached(yaml))
+                {
+                    var number = identity.CarNumber;
+                    var name = identity.UserName;
+                    if (string.IsNullOrWhiteSpace(number) || string.IsNullOrWhiteSpace(name) || ambiguous.Contains(number)) continue;
+                    if (result.ContainsKey(number)) { result.Remove(number); ambiguous.Add(number); continue; }
+                    result[number] = new DriverRating
+                    {
+                        DriverName = name.Trim(),
+                        CarName = identity.CarName,
+                    };
+                }
+                return result;
+            }
+
             foreach (var driver in drivers)
             {
                 var number = Convert.ToString(GetMember(driver, "CarNumber"), CultureInfo.InvariantCulture);
@@ -290,6 +324,11 @@ public string ReadTrackConfiguration()
                 result[number] = new DriverRating
                 {
                     DriverName = name.Trim(),
+                    // Alleen de schermnaam van iRacing; CarPath/CarID en CarClass zijn
+                    // geen modelnaam en de auto van de speler is nooit een terugval.
+                    CarName = OpponentCarName.Select(
+                        Convert.ToString(GetMember(driver, "CarScreenName"), CultureInfo.InvariantCulture),
+                        Convert.ToString(GetMember(driver, "CarScreenNameShort"), CultureInfo.InvariantCulture)),
                     IRating = RatingInteger(GetMember(driver, "IRating"), 1, 100000),
                     LicenseClass = level.HasValue ? classes[(level.Value - 1) / 4] : null,
                     SafetyRating = level.HasValue && subLevel.HasValue ? (double?)(subLevel.Value / 100.0) : null,
@@ -309,6 +348,7 @@ public string ReadTrackConfiguration()
         public sealed class DriverRating
         {
             public string DriverName { get; set; }
+            public string CarName { get; set; }
             public int? IRating { get; set; }
             public double? SafetyRating { get; set; }
             public string LicenseClass { get; set; }

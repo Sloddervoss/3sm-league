@@ -1547,7 +1547,7 @@ namespace ThreeSM.EnduranceConnector
             var rawChannels = new RawChannelReader(snapshot, property => GetRaw(manager, property));
             var onPitRoad = CaptureValueRules.OnPitRoad(rawChannels.ReadBool("OnPitRoad"), inPitLaneProperty);
 
-            var opponents = BuildOpponentSnapshot(snapshot);
+            var opponents = BuildOpponentSnapshot(snapshot, rawChannels);
             LogDriverRatingSnapshot(opponents);
 
             return new TelemetryEnvelopeV3
@@ -2015,10 +2015,13 @@ namespace ThreeSM.EnduranceConnector
         }
 
         /// <summary>Build a bounded, null-tolerant opponent snapshot from SimHub Opponents.</summary>
-        internal static V3Opponent[] BuildOpponentSnapshot(GameReaderCommon.StatusDataBase snapshot)
+        internal static V3Opponent[] BuildOpponentSnapshot(GameReaderCommon.StatusDataBase snapshot, RawChannelReader channels = null)
         {
             if (snapshot?.Opponents == null) return null;
-            var ratings = new RawChannelReader(snapshot, null).ReadDriverRatings();
+            // Dezelfde lezer als de rest van de capture: daarmee blijven het objectpad
+            // én het SessionData-propertypad (YAML) beschikbaar. Een eigen lezer zonder
+            // property-callback zou YAML stil als "geen DriverInfo" zien.
+            var ratings = (channels ?? new RawChannelReader(snapshot, null)).ReadDriverRatings();
             var result = new List<V3Opponent>(MaxOpponentsPerSnapshot);
             foreach (var opponent in snapshot.Opponents)
             {
@@ -2033,6 +2036,9 @@ namespace ThreeSM.EnduranceConnector
                     Id = opponent.Id,
                     CarNumber = opponent.CarNumber,
                     DriverName = opponent.Name,
+                    // Alleen via de veilige CarNumber+UserName-match; nooit de auto van
+                    // de speler, de klasse of de CarPath als modelnaam gebruiken.
+                    CarName = OpponentCarName.Resolve(ratings, opponent.CarNumber, opponent.Name),
                     IRating = rating == null ? null : rating.IRating,
                     SafetyRating = rating == null ? null : rating.SafetyRating,
                     LicenseClass = rating == null ? null : rating.LicenseClass,
@@ -2387,37 +2393,21 @@ namespace ThreeSM.EnduranceConnector
             }
         }
 
-        // Budgetcheck (0.7.0). Het bandenblok duwt een vol veld richting de 24.576-grens van
-        // de relay, dus we meten het echte frame en snoeien in vaste volgorde: eerst karkas
-        // (ook in pitEntry), dan het pitEntry-anker. Wat weg is blijft weg in dit frame; de
+        // Budgetcheck (0.7.0). Het bandenblok plus een vol veld duwt richting de
+        // 24.576-grens van de relay, dus we meten het echte frame en snoeien in vaste
+        // volgorde (V3PayloadBudget): eerst de optionele automodellen, dan karkas (ook
+        // in pitEntry), dan het pitEntry-anker. De opponentstabel, de player-rij en de
+        // core/telemeterie blijven staan. Wat weg is blijft weg in dit frame; de
         // volgende tick begint weer met een verse capture, dus dit is geen blijvende schade.
         private static string SerializeWithinBudget(TelemetryEnvelopeV3 envelope)
         {
-            var body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
-            var bytes = Encoding.UTF8.GetByteCount(body);
-            if (bytes <= MaxPayloadBytes) return body;
-
-            var trimmed = false;
-            if (envelope.Tyres != null && (envelope.Tyres.CarcassTempC != null
-                || (envelope.Tyres.PitEntry != null && envelope.Tyres.PitEntry.CarcassTempC != null)))
-            {
-                envelope.Tyres.CarcassTempC = null;
-                if (envelope.Tyres.PitEntry != null) envelope.Tyres.PitEntry.CarcassTempC = null;
-                body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
-                trimmed = true;
-                if (Encoding.UTF8.GetByteCount(body) <= MaxPayloadBytes)
-                {
-                    LogBudgetTrim(bytes, Encoding.UTF8.GetByteCount(body), "karkas");
-                    return body;
-                }
-            }
-            if (envelope.Tyres != null && envelope.Tyres.PitEntry != null)
-            {
-                envelope.Tyres.PitEntry = null;
-                body = Serialize(envelope, typeof(TelemetryEnvelopeV3));
-                LogBudgetTrim(bytes, Encoding.UTF8.GetByteCount(body), trimmed ? "karkas+pitEntry" : "pitEntry");
-            }
-            return body;
+            var result = V3PayloadBudget.Trim(
+                envelope,
+                frame => Serialize(frame, typeof(TelemetryEnvelopeV3)),
+                MaxPayloadBytes);
+            if (result.Stages.Count > 0)
+                LogBudgetTrim(result.OriginalBytes, result.FinalBytes, string.Join("+", result.Stages));
+            return result.Body;
         }
 
         private static void LogBudgetTrim(int before, int after, string stage)
