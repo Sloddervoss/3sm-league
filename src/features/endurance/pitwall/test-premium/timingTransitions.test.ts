@@ -174,4 +174,34 @@ describe("timing-transities — alleen echte positiewijzigingen per auto-id", ()
     expect(reset.positions).toEqual({});
     expect(reset.moves).toEqual({});
   });
+
+  it("laat een verlopen signaal alleen de decoratie van die auto-id verdwijnen", () => {
+    const first = snapshot(initialTimingState(), [row("a", 2, 10), row("b", 1, 10)]);
+    const moved = snapshot(first, [row("a", 1, 11), row("b", 2, 10)]);
+    expect(moved.moves).toEqual({ a: 1, b: -1 });
+    expect(moved.lapFlash).toEqual({ a: 11 });
+
+    const expired = reduceTimingTransitions(moved, { type: "expire", ids: ["a"] });
+    expect(expired.moves).toEqual({ b: -1 });
+    expect(expired.lapFlash).toEqual({});
+    // Het ijkpunt blijft staan; een volgend frame vergelijkt nog steeds met déze meting.
+    expect(expired.positions).toEqual({ a: 1, b: 2 });
+    expect(expired.laps).toEqual({ a: 11, b: 10 });
+    expect(expired.armed).toBe(true);
+  });
+
+  it("een identiek frame na afloop van het signaal flitst niet opnieuw", () => {
+    const first = snapshot(initialTimingState(), [row("a", 1, 10)]);
+    const nextLap = snapshot(first, [row("a", 1, 11)]);
+    const expired = reduceTimingTransitions(nextLap, { type: "expire", ids: ["a"] });
+    const identical = snapshot(expired, [row("a", 1, 11)]);
+
+    expect(identical.lapFlash).toEqual({});
+    expect(identical.moves).toEqual({});
+  });
+
+  it("een verlopen signaal raakt een niet-armed staat niet aan", () => {
+    const state = initialTimingState();
+    expect(reduceTimingTransitions(state, { type: "expire", ids: ["a"] })).toBe(state);
+  });
 });

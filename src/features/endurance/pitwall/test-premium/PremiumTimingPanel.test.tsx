@@ -1,9 +1,9 @@
 import type { ComponentProps } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { StandingsDerivation, StandingsRow } from "../standings";
+import { deriveStandings, type StandingsDerivation, type StandingsRow } from "../standings";
 import type { V3Normalized } from "../pitwallHelpers";
-import { PremiumTimingPanel } from "./PremiumTimingPanel";
+import { PremiumTimingPanel, TIMING_SIGNAL_TTL_MS } from "./PremiumTimingPanel";
 
 const row = (
   id: string,
@@ -354,5 +354,196 @@ describe("premium timing — echte tabel, echte rerender", () => {
     const ownButton = screen.getByRole("button", { name: /Eigen rij/ });
     expect(() => fireEvent.click(ownButton)).not.toThrow();
     expect(view.container.querySelector("tr[data-timing-row-id='me']")).not.toBeNull();
+  });
+
+  it("toont in de eigen focuscel dezelfde gap tot de auto voor je als de klassieke strook", () => {
+    const ahead = row("a", 1, 10, { gapToPlayerSeconds: -2.4 });
+    const me = row("me", 2, 10, { isPlayer: true, driverName: "Vincent" });
+    const view = renderPanel([ahead, me], { standings: standings([ahead, me], { ahead }) });
+
+    const own = view.container.querySelector(".ptp-focus-cell[data-tone='own']") as HTMLElement;
+    expect(own.textContent).toContain("P2");
+    expect(own.textContent).toContain("-2.4s");
+  });
+
+  it("toont een expliciet streepje voor een ontbrekende of ongeldige Safety Rating", () => {
+    const view = renderPanel([
+      row("a", 1, 10, { safetyRating: 5.5, licenseClass: "A" }),
+      row("b", 2, 10, { safetyRating: 2.4, licenseClass: "Z" }),
+      row("c", 3, 10, { safetyRating: 2.4, licenseClass: "A" }),
+    ]);
+
+    expect(view.container.querySelector("tr[data-timing-row-id='a'] .ptp-sr")?.textContent).toBe("—");
+    expect(view.container.querySelector("tr[data-timing-row-id='b'] .ptp-sr")?.textContent).toBe("—");
+    expect(view.container.querySelector("tr[data-timing-row-id='c'] .ptp-sr")?.textContent).toBe("A 2.40");
+  });
+
+  it("onderdrukt een ongeldige reset/tow-ronde ook als de verse PACE-meting een tijd heeft", () => {
+    const paceV3: V3Normalized = {
+      ...v3,
+      transportSessionId: "transport-1",
+      session: { sessionTimeSeconds: 1000 },
+      timing: {},
+      opponents: [
+        {
+          id: "a",
+          position: 1,
+          lap: 11,
+          carClass: "GT3",
+          carNumber: "17",
+          driverName: "Coureur a",
+          lastLapSeconds: 40,
+          bestLapSeconds: 92,
+          connected: true,
+        },
+      ],
+      paceHistory: {
+        schemaRevision: 1,
+        observedSessionId: "session-1",
+        segmentId: "segment-1",
+        transportSessionId: "transport-1",
+        updatedAt: new Date().toISOString(),
+        cars: [
+          {
+            id: "a",
+            laps: [],
+            traces: [],
+            metrics: {
+              id: "a",
+              observedSessionTimeSeconds: 998,
+              lastLapSeconds: 40,
+              bestLapSeconds: 92,
+              lastLapSectorSeconds: [10, 10, 20],
+              bestLapSectorSeconds: null,
+              bestSectorSeconds: null,
+              bestLapDeltaToFieldBestSeconds: null,
+              bestLapDeltaToPlayerSeconds: null,
+              lapValid: true,
+              lapHighPrecision: null,
+              trackPositionPercentRaw: null,
+              sectorMismatchCount: 0,
+              sectorCount: 3,
+              sectorLap: 10,
+              sectorSource: "simhub",
+              sectorErrorSeconds: 0,
+            },
+          },
+        ],
+      },
+    };
+    const derived = deriveStandings(paceV3, 40);
+    const view = renderPanel(derived.rows, { v3: paceV3, standings: derived });
+    const timingRow = view.container.querySelector("tr[data-timing-row-id='a']") as HTMLElement;
+
+    const last = timingRow.querySelector("[data-timing='last-lap']") as HTMLElement;
+    expect(last.textContent).toBe("—");
+    expect(last.getAttribute("title")).toBe(
+      "Laatste ronde ongeldig (reset of baanverlating) — telt niet als rondetijd",
+    );
+
+    expect((timingRow.querySelector("[data-timing='best-lap']") as HTMLElement).textContent).toBe("1:32.000");
+    expect((timingRow.querySelector("[data-timing='car-number']") as HTMLElement).textContent).toBe("17");
+
+    const sector = timingRow.querySelector(".ptp-col-sector") as HTMLElement;
+    expect(sector.textContent).toBe("10.000");
+    expect(sector.getAttribute("title")).toBe("Gecontroleerde laatste ronde · simhub · afwijking 0.000 s");
+    expect(timingRow.querySelector("td[data-timing='last-lap']")).toBe(last);
+  });
+
+  it("laat +1 en de rondeflits na de TTL verdwijnen en herflitst niet op een identiek frame", () => {
+    vi.useFakeTimers();
+    try {
+      const first = [row("a", 2, 10), row("b", 1, 10)];
+      const view = renderPanel(first);
+      const props = {
+        v3,
+        ownCarLabel: "Mijn auto",
+        ownCarNumber: "17",
+        live: true,
+        contextKey: "device-1|session-a",
+        motionEnabled: true,
+      };
+
+      view.rerender(<PremiumTimingPanel {...props} standings={standings([row("a", 1, 11), row("b", 2, 10)])} />);
+      const rowA = () => view.container.querySelector("tr[data-timing-row-id='a']") as HTMLElement;
+      expect(within(rowA()).getByText("+1")).toBeTruthy();
+      expect(rowA().querySelector(".ptp-lap-flash")).not.toBeNull();
+
+      // Identieke frames mogen de timer niet verlengen of opnieuw flitsen.
+      view.rerender(<PremiumTimingPanel {...props} standings={standings([row("a", 1, 11), row("b", 2, 10)])} />);
+      expect(rowA().querySelector(".ptp-lap-flash")).not.toBeNull();
+
+      act(() => vi.advanceTimersByTime(TIMING_SIGNAL_TTL_MS - 1));
+      expect(within(rowA()).queryByText("+1")).toBeTruthy();
+      expect(rowA().querySelector(".ptp-lap-flash")).not.toBeNull();
+
+      act(() => vi.advanceTimersByTime(1));
+      expect(rowA().querySelector(".ptp-move")).toBeNull();
+      expect(rowA().querySelector(".ptp-lap-flash")).toBeNull();
+      expect(rowA().getAttribute("data-lap-flash")).toBeNull();
+
+      // Hetzelfde frame na expiratie is gewone data, geen tweede flits.
+      view.rerender(<PremiumTimingPanel {...props} standings={standings([row("a", 1, 11), row("b", 2, 10)])} />);
+      expect(rowA().querySelector(".ptp-move")).toBeNull();
+      expect(rowA().querySelector(".ptp-lap-flash")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ruimt een lopende signaaltimer op bij een contextwissel", () => {
+    vi.useFakeTimers();
+    try {
+      const view = renderPanel([row("a", 1, 10), row("b", 2, 10)]);
+      const props = {
+        v3,
+        ownCarLabel: "Mijn auto",
+        ownCarNumber: "17",
+        live: true,
+        motionEnabled: true,
+      };
+
+      view.rerender(
+        <PremiumTimingPanel {...props} contextKey="device-1|session-a" standings={standings([row("a", 1, 11), row("b", 2, 10)])} />,
+      );
+      expect(view.container.querySelector(".ptp-lap-flash")).not.toBeNull();
+      expect(vi.getTimerCount()).toBe(1);
+
+      view.rerender(
+        <PremiumTimingPanel {...props} contextKey="device-2|session-b" standings={standings([row("a", 1, 11), row("b", 2, 10)])} />,
+      );
+      expect(view.container.querySelector(".ptp-lap-flash")).toBeNull();
+      expect(view.container.querySelector(".ptp-move")).toBeNull();
+      expect(vi.getTimerCount()).toBe(0);
+
+      act(() => vi.advanceTimersByTime(TIMING_SIGNAL_TTL_MS * 4));
+      expect(view.container.querySelector(".ptp-lap-flash")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bewaart geen FLIP-basis als een datagat de tabel weghaalt", async () => {
+    const view = renderPanel([row("b", 1), row("a", 2)]);
+    const props = {
+      v3,
+      ownCarLabel: "Mijn auto",
+      ownCarNumber: "17",
+      live: true,
+      contextKey: "device-1|session-a",
+      motionEnabled: true,
+    };
+
+    view.rerender(
+      <PremiumTimingPanel
+        {...props}
+        standings={standings([], { noData: true, overallPosition: null })}
+      />,
+    );
+    expect(view.container.querySelector("table")).toBeNull();
+
+    view.rerender(<PremiumTimingPanel {...props} standings={standings([row("a", 1), row("b", 2)])} />);
+    await waitFor(() => expect(view.container.querySelector("tr[data-timing-row-id='a']")).not.toBeNull());
+    expect(animate).not.toHaveBeenCalled();
   });
 });

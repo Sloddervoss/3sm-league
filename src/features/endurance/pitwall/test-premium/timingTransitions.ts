@@ -43,7 +43,9 @@ export type TimingTransitionAction =
       gap?: boolean;
     }
   | { type: "reset"; reason: TimingResetReason }
-  | { type: "visibility"; hidden: boolean };
+  | { type: "visibility"; hidden: boolean }
+  /** Alleen de korte decoratie van deze auto-id's opruimen; ijkpunt blijft. */
+  | { type: "expire"; ids: readonly string[] };
 
 export const initialTimingState = (): TimingTransitionState => ({
   contextKey: null,
@@ -92,6 +94,24 @@ export function reduceTimingTransitions(
   if (action.type === "visibility") {
     if (!action.hidden) return state;
     return blank(state.contextKey, "hidden");
+  }
+
+  if (action.type === "expire") {
+    if (!state.armed) return state;
+    let changed = false;
+    const moves = { ...state.moves };
+    const lapFlash = { ...state.lapFlash };
+    for (const id of action.ids) {
+      if (id in moves) {
+        delete moves[id];
+        changed = true;
+      }
+      if (id in lapFlash) {
+        delete lapFlash[id];
+        changed = true;
+      }
+    }
+    return changed ? { ...state, moves, lapFlash } : state;
   }
 
   if (!action.live || action.gap) {

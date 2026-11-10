@@ -69,7 +69,13 @@ export function useRowFlip(
 
   useLayoutEffect(() => {
     const root = rootRef.current;
-    if (!root) return;
+    if (!root) {
+      // De tabel is weg (noData/gat). Bewaar geen oude basis: bij terugkomst
+      // zou die een sprong animeren die nooit in beeld is gebeurd.
+      previous.current = null;
+      cancelAll();
+      return;
+    }
     if (document.hidden) {
       previous.current = null;
       cancelAll();

@@ -22,6 +22,9 @@ interface Props {
 
 type TimingView = "live" | "class";
 
+/** Korte levensduur van +/− en rondeflits; daarna is het weer gewone data. */
+export const TIMING_SIGNAL_TTL_MS = 2600;
+
 const driverLabel = (r: V3Opponent): string =>
   r.driverName ?? r.teamName ?? (r.carNumber ? `#${r.carNumber}` : `#${r.id}`);
 
@@ -36,7 +39,7 @@ function SafetyRating({ opponent }: { opponent: V3Opponent }) {
   const rating = opponent.safetyRating;
   const license = opponent.licenseClass;
   if (rating == null || !Number.isFinite(rating) || rating < 0 || rating > 4.99 || !license || !LICENSES.has(license)) {
-    return null;
+    return <span className="ptp-sr is-empty" aria-label="Safety Rating onbekend">—</span>;
   }
   return (
     <span
@@ -58,15 +61,22 @@ function FocusCell({
   tone: "ahead" | "own" | "behind";
   label: string;
   opponent?: V3Opponent | null;
-  own?: { position: number | null; number: string | null; name: string | null };
+  own?: {
+    position: number | null;
+    number: string | null;
+    name: string | null;
+    /** Zelfde gap als de klassieke "Jij"-strook: de afstand tot de auto voor je. */
+    gap?: string | null;
+    pit?: boolean;
+  };
 }) {
   const value = own
     ? {
         position: own.position,
         number: own.number,
         name: own.name ?? "Mijn auto",
-        gap: null as string | null,
-        pit: false,
+        gap: own.gap ?? null,
+        pit: Boolean(own.pit),
       }
     : opponent
       ? {
@@ -164,8 +174,23 @@ export function PremiumTimingPanel({
   // Een contextwissel mag nooit één frame oude seinen tonen, ook niet voordat
   // de effect hierboven de nieuwe basis heeft gezet.
   const compared = transition.contextKey === contextKey && live && !gap ? transition : null;
-  const moves = compared?.moves ?? {};
-  const lapFlash = compared?.lapFlash ?? {};
+  const moves = useMemo(() => compared?.moves ?? {}, [compared]);
+  const lapFlash = useMemo(() => compared?.lapFlash ?? {}, [compared]);
+
+  // Positie- en rondeseinen zijn een korte gebeurtenis, geen blijvende status.
+  // De DOM houdt de nieuwste snapshot; na deze termijn verdwijnt alleen de
+  // decoratie per auto-id. Identieke frames starten geen nieuwe timer en dus
+  // ook geen tweede flits. Een reset/contextwissel ruimt de timers op.
+  useEffect(() => {
+    const ids = new Set([...Object.keys(moves), ...Object.keys(lapFlash)]);
+    if (ids.size === 0) return;
+    const timers = [...ids].map((id) =>
+      window.setTimeout(() => dispatch({ type: "expire", ids: [id] }), TIMING_SIGNAL_TTL_MS),
+    );
+    return () => {
+      for (const timer of timers) window.clearTimeout(timer);
+    };
+  }, [moves, lapFlash]);
 
   useRowFlip(scroller, {
     enabled: motionEnabled && live && !gap,
@@ -260,6 +285,8 @@ export function PremiumTimingPanel({
             position: standings.overallPosition,
             number: ownCarNumber,
             name: ownCarLabel,
+            gap: standings.ahead ? (standings.ahead.inPit ? "PIT" : renderGap(standings.ahead)) : null,
+            pit: Boolean(standings.ahead?.inPit),
           }}
         />
         <FocusCell tone="behind" label="Achter" opponent={standings.behind} />
@@ -297,10 +324,19 @@ export function PremiumTimingPanel({
               const move = moves[r.id] ?? 0;
               const showClass = index === 0 || classOf(visibleRows[index - 1]) !== classOf(r);
               const sectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
-              const last =
-                live && rowSectors(v3, r.id, r.lastLapSeconds)
-                  ? freshMetrics(v3, r.id)?.lastLapSeconds ?? r.lastLapSeconds
+              const metrics = freshMetrics(v3, r.id);
+              // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
+              // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
+              // verschijnen. De tooltip is identiek.
+              const invalidLast = (r as { lastLapInvalid?: boolean }).lastLapInvalid === true;
+              const last = invalidLast
+                ? null
+                : live && sectors
+                  ? metrics?.lastLapSeconds ?? r.lastLapSeconds
                   : r.lastLapSeconds;
+              const sectorTitle = live && sectors
+                ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
+                : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
               const flashLap = lapFlash[r.id] === r.lap ? r.lap : null;
               return (
                 <Fragment key={r.id}>
@@ -331,7 +367,7 @@ export function PremiumTimingPanel({
                         </span>
                       )}
                     </td>
-                    <td className="ptp-col-num">{r.carNumber ?? "—"}</td>
+                    <td data-timing="car-number" className="ptp-col-num">{r.carNumber ?? "—"}</td>
                     <td className="ptp-col-driver">
                       <div className="ptp-driver">
                         <span className="ptp-driver-line">
@@ -350,10 +386,16 @@ export function PremiumTimingPanel({
                     <td className="ptp-col-class">
                       <span className="ptp-class-chip">{r.carClass ?? "—"}</span>
                     </td>
-                    <td className="ptp-col-time ptp-last">{preciseLapTime(last)}</td>
-                    <td className="ptp-col-time ptp-best">{preciseLapTime(r.bestLapSeconds)}</td>
+                    <td
+                      data-timing="last-lap"
+                      className="ptp-col-time ptp-last"
+                      title={invalidLast ? "Laatste ronde ongeldig (reset of baanverlating) — telt niet als rondetijd" : undefined}
+                    >
+                      {preciseLapTime(last)}
+                    </td>
+                    <td data-timing="best-lap" className="ptp-col-time ptp-best">{preciseLapTime(r.bestLapSeconds)}</td>
                     {sectorColumns.map((n) => (
-                      <td key={n} className="ptp-col-sector">
+                      <td key={n} className="ptp-col-sector" title={sectorTitle}>
                         {sectors?.[n] != null ? sectors[n]!.toFixed(3) : "—"}
                       </td>
                     ))}
