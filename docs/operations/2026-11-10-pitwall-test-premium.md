@@ -228,8 +228,10 @@ Uitgevoerd in de worktree op de eindstand:
   de gekozen echte snapshot bevatte twee tegenstanders. Een nieuwe echte
   inhaalactie is dus niet live geobserveerd. Beweging is gecontroleerd met de
   afzonderlijke lokale 41-auto-fixture, niet als echte racedata gepresenteerd.
-- De KPI-sector groep wordt verborgen bij onbekende sectorindeling; de kop
-  vermeldt dan `Sectoren: niet beschikbaar`.
+- Vervolgfix: de onbekende sector-KPI blijft inmiddels zichtbaar, met een
+  expliciete placeholder in de timingtabel. Zie
+  `2026-11-10-pitwall-test-timing-visibility.md` voor de grotere timing en vaste
+  eigen rij; de hieronder genoemde eerste-releasekeuzes zijn daar ingehaald.
 - Geen automatisch scrollen naar de eigen rij; de Voor/Jij/Achter-strook en
   Eigen rij houden de eigen auto bereikbaar.
 - De pitbevestiging is volledig behouden. Voorbeeldantwoorden worden niet
