@@ -1,0 +1,33 @@
+{
+  "version": "0.7.6.2",
+  "artifactSourceCommit": "874e39ebe50c78f9c542fc7a20cb2e576b88c8ca",
+  "sourceArchiveSha256": "d689edf9e61f862f73c124052a8c2fa01d32bd2de4464c9a642bff0b8942173a",
+  "configuration": "Release, net48, C# 7.3, all 41 Compile items verified in compiler invocation",
+  "dll": {
+    "fileName": "3SM.EnduranceConnector-0.7.6.2.dll",
+    "byteLength": 681472,
+    "sha256": "6461823490247bc447ec75d745abf2e69499de5eab369f9e480390d158e9a4af"
+  },
+  "zip": {
+    "fileName": "3SM.EnduranceConnector-0.7.6.2.zip",
+    "byteLength": 388607,
+    "sha256": "8566067a02291211c83044823b666b28758305738b064bc8cf224508099fa9a0",
+    "canonicalInnerDll": "3SM.EnduranceConnector.dll",
+    "innerDllMatchesMachineArtifact": true
+  },
+  "updater": {
+    "sourceUnchanged": true,
+    "embeddedVersion": "0.7.2.0",
+    "embeddedByteLength": 29696,
+    "embeddedSha256": "1ce970931b7169fbab66a9243565563a9358ef39f74bac5c1e1c60b406d702ba",
+    "compiledMethodCount": 61,
+    "compiledMethodsAndNonGuidMetadataIdenticalToPrevious": true,
+    "sameProductionSigningKey": true,
+    "oldDllsAcceptSignedCandidateAndOfferNewer": ["0.7.4.0", "0.7.6.0", "0.7.6.1"],
+    "candidateAcceptsOwnManifestWithoutSelfUpdate": true,
+    "tamperedHashLengthNameUrlSignatureRejected": true,
+    "probeDidNotInstallOrStartSimHub": true
+  },
+  "freezeGate": "OPEN: release-gate.py 23 PASS, 0 FAIL, 2 existing tooling/repo-artifact warnings",
+  "publicationStatus": "NOT YET PUBLISHED AT FREEZE"
+}

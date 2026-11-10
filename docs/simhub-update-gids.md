@@ -37,7 +37,7 @@ lange sessie elke 6 uur op een nieuwe versie (met auto-update uit: elke 24 uur).
 
 ## Handmatige installatie via de publieke ZIP
 
-Voor een handmatige installatie download je `3SM.EnduranceConnector-0.7.6.1.zip` via de
+Voor een handmatige installatie download je `3SM.EnduranceConnector-0.7.6.2.zip` via de
 3SM-site. De alias `3SM.EnduranceConnector-latest.zip` blijft voor oude links bestaan, maar
 kan kort na een release nog de vorige bytes serveren; gebruik daarom het versiegebonden
 bestand. Sluit SimHub
@@ -50,10 +50,14 @@ De overgang `0.3.8.0 → 0.3.9.0` moet door het bekende 0.3.8.0 self-update-defe
 handmatig worden uitgevoerd. Vanaf 0.3.9.0 werken toekomstige ondersteunde updates weer via
 de normale automatische updater.
 
-**Huidige versie: `0.7.6.1`.** Zowel de automatische updater als de ZIP op de site leveren
+**Huidige versie: `0.7.6.2`.** Zowel de automatische updater als de ZIP op de site leveren
 die versie, en de koppelpagina linkt het versiegebonden ZIP
-`3SM.EnduranceConnector-0.7.6.1.zip` (de alias `3SM.EnduranceConnector-latest.zip` blijft
-bestaan voor handmatige installaties en oude links). `0.7.6.1` leest per coureur iRating,
+`3SM.EnduranceConnector-0.7.6.2.zip` (de alias `3SM.EnduranceConnector-latest.zip` blijft
+bestaan voor handmatige installaties en oude links). `0.7.6.2` voegt de optionele automodelnaam
+per tegenstander toe, uit dezelfde sessiegegevens. Onbekend blijft leeg; een vol
+frame laat eerst de modelnamen weg, nooit de tegenstanders of meetrijen. De
+ondertekende automatische updater is behouden en gecontroleerd met de oudere DLLs.
+`0.7.6.1` leest per coureur iRating,
 safety rating en licentieklasse uit `SessionData.DriverInfo` en stuurt ze als optionele velden
 mee; ontbreken ze, dan blijven ze leeg en toont de pitwall een streepje. Het protocol blijft
 versie 3 en het updatepad is ongewijzigd. `0.7.6.0` stuurt de rondetijden mee die de connector zelf heeft zien afsluiten:
