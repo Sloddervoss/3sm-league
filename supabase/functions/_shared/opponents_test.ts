@@ -101,3 +101,56 @@ Deno.test("een frame met een negatief gat wordt geaccepteerd in plaats van gelee
   const gaten = parsed.map((o) => o.gapToPlayerSeconds);
   if (JSON.stringify(gaten) !== JSON.stringify([-42.8, 0, 2.1])) throw new Error(`gaten zijn aangetast: ${JSON.stringify(gaten)}`);
 });
+
+// ---------------------------------------------------------------------------
+// carName — additief model. De producer mag het veld weglaten; dan is het null.
+// Een onbruikbare waarde kost alleen het veld, nooit de rij of het frame, en er
+// wordt niets uit klasse, carClassId of coureursnaam afgeleid.
+// ---------------------------------------------------------------------------
+Deno.test("legacy tegenstander zonder carName houdt alle bestaande velden", () => {
+  const parsed = eerste();
+  const legacy = tegenstander();
+  for (const [key, value] of Object.entries(legacy)) {
+    const actual = (parsed as unknown as Record<string, unknown>)[key];
+    if (JSON.stringify(actual) !== JSON.stringify(value)) {
+      throw new Error(`bestaand veld ${key} is veranderd: ${JSON.stringify(actual)}`);
+    }
+  }
+  if (parsed.carName !== null) throw new Error("ontbrekende carName is geen null");
+});
+
+Deno.test("carName wordt gelezen, getrimd en mag exact 120 tekens zijn", () => {
+  const model = "Porsche 911 GT3 R";
+  if (eerste({ carName: model }).carName !== model) throw new Error("carName niet gelezen");
+  if (eerste({ carName: "  Porsche 911 GT3 R  " }).carName !== model) throw new Error("carName niet getrimd");
+  const max = "P".repeat(120);
+  if (eerste({ carName: max }).carName !== max) throw new Error("120 tekens werd geweigerd");
+  if (eerste({ carName: "" }).carName !== null) throw new Error("lege carName is geen null");
+  if (eerste({ carName: "   " }).carName !== null) throw new Error("spatie-carName is geen null");
+});
+
+Deno.test("een ontbrekende carName wordt niet uit klasse of coureur afgeleid", () => {
+  const parsed = eerste({ carName: undefined, carClass: "GT3", carClassId: "17", driverName: "P. Porsche" });
+  if (parsed.carName !== null) throw new Error(`model verzonnen uit andere velden: ${String(parsed.carName)}`);
+  if (parsed.carClass !== "GT3" || parsed.carClassId !== "17") throw new Error("bestaande velden beschadigd");
+});
+
+Deno.test("een onbruikbare carName kost het veld, niet de rij of het frame", () => {
+  for (const bad of [123, true, { model: "GT3" }, ["GT3"], "x".repeat(121)]) {
+    const parsed = eerste({ carName: bad });
+    if (parsed.carName !== null) throw new Error(`onbruikbare carName werd geaccepteerd: ${JSON.stringify(bad)}`);
+    if (parsed.id !== "9001" || parsed.position !== 2 || parsed.gapToPlayerSeconds !== 12.3) {
+      throw new Error("de rij is beschadigd door een onbruikbare carName");
+    }
+  }
+
+  const parsed = parseOpponents([
+    tegenstander({ id: "a", carName: "Ferrari 296 GT3" }),
+    tegenstander({ id: "b", carName: 42 }),
+    tegenstander({ id: "c" }),
+  ]);
+  if (!parsed || parsed.length !== 3) throw new Error("een kapotte carName kostte een tegenstander");
+  if (parsed.map((o) => o.carName).join("|") !== "Ferrari 296 GT3||") {
+    throw new Error(`carName-uitkomst onverwacht: ${JSON.stringify(parsed.map((o) => o.carName))}`);
+  }
+});

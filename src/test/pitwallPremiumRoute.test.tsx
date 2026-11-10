@@ -258,6 +258,21 @@ describe("pitwall-test premium — alleen op de testroute, klassiek blijft klass
     expect(view.container.textContent).not.toContain("niets opgeslagen");
   });
 
+  it("gebruikt een apparaatnaam nooit als automodel wanneer beide modelbronnen ontbreken", async () => {
+    const original = details["device-1"];
+    const missing = structuredClone(original);
+    Object.assign(missing.telemetry, { car_name: null });
+    Object.assign(missing.telemetry.v3_normalized.identity, { carName: null });
+    details["device-1"] = missing;
+    try {
+      const { view } = await renderPage();
+      await waitFor(() => expect(view.container.querySelector('[data-premium-pinned-own-row] .ptp-col-car')).not.toBeNull());
+      expect(view.container.querySelector('[data-premium-pinned-own-row] .ptp-col-car')?.textContent).toBe("—");
+    } finally {
+      details["device-1"] = original;
+    }
+  });
+
   it("haalt fleet, device-detail en sandbox met de gebonden client op", async () => {
     await renderPage();
 

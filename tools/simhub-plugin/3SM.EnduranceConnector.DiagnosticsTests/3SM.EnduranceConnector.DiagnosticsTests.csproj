@@ -25,6 +25,9 @@
     <Compile Include="..\3SM.EnduranceConnector\TyreZoneReader.cs" Link="TyreZoneReader.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TyreSnapshotTracker.cs" Link="TyreSnapshotTracker.cs" />
     <Compile Include="..\3SM.EnduranceConnector\RawChannelReader.cs" Link="RawChannelReader.cs" />
+    <!-- Automodel per tegenstander uit DriverInfo (objectboom of YAML). Puur. -->
+    <Compile Include="..\3SM.EnduranceConnector\OpponentCarName.cs" Link="OpponentCarName.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\V3PayloadBudget.cs" Link="V3PayloadBudget.cs" />
     <!-- 0.7.3.1: bronkeuze voor de pace-opname. Puur, dus hier te bewijzen. -->
     <Compile Include="..\3SM.EnduranceConnector\PaceSourceSelection.cs" Link="PaceSourceSelection.cs" />
     <Compile Include="..\3SM.EnduranceConnector\LapAttribution.cs" Link="LapAttribution.cs" />
@@ -53,5 +56,6 @@
   <!-- Vastgelegde baseline: gouden V3-frame, 0.7.1.2-configuratie en 0.7.1.2-updaterstaten. -->
   <ItemGroup>
     <None Include="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\*.yml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

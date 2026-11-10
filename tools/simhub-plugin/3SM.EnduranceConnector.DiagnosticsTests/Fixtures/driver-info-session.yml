@@ -1,0 +1,53 @@
+WeekendInfo:
+ TrackName: Circuit de Spa-Francorchamps
+ TrackID: 389
+ TrackConfigName: Grand Prix
+
+SessionInfo:
+ Sessions:
+ - SessionNum: 0
+   SessionName: RACE
+   SessionType: Race
+   ResultsPositions:
+   - Position: 1
+     CarIdx: 0
+
+DriverInfo:
+ DriverCarIdx: 0
+ Drivers:
+ - CarIdx: 0
+   UserName: Vincent deVos
+   UserID: 1001
+   TeamName: 3SM Endurance
+   CarNumber: "07"
+   CarNumberRaw: 7
+   CarPath: mercedesamggt3
+   CarScreenName: Mercedes-AMG GT3 2020
+   CarScreenNameShort: Mercedes AMG GT3
+   CarClassID: 4011
+   CarClassShortName: GT3
+ - CarIdx: 1
+   UserName: Jaimy Smit
+   UserID: 1002
+   TeamName: 3SM Endurance
+   CarNumber: "31"
+   CarNumberRaw: 31
+   CarPath: ferrari488gt3evo
+   CarScreenName:
+   CarScreenNameShort: Ferrari 488 GT3 Evo
+   CarClassID: 4011
+   CarClassShortName: GT3
+ - CarIdx: 2
+   UserName: Test Driver
+   UserID: 1003
+   CarNumber: "42"
+   CarNumberRaw: 42
+   CarPath: porsche911gt3r
+   CarScreenName:
+   CarScreenNameShort:
+   CarClassID: 4011
+   CarClassShortName: GT3
+
+CameraInfo:
+ Groups:
+ - GroupNum: 1

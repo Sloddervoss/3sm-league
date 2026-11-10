@@ -148,6 +148,22 @@ const renderPanel = (rows: StandingsRow[], overrides: Partial<ComponentProps<typ
   );
 
 describe("premium timing — echte tabel, echte rerender", () => {
+  it("toont het echte automodel naast de coureur in plaats van een herhaalde klassekolom", () => {
+    const rows = [row("a", 1, 10, { carName: "BMW M4 GT4" }), row("me", 2, 10, { isPlayer: true })];
+    const view = renderPanel(rows, { ownCarLabel: "Porsche 718 Cayman GT4" });
+    expect(screen.getByRole("columnheader", { name: "Auto" })).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "Klasse" })).toBeNull();
+    const rival = view.container.querySelector<HTMLElement>('[data-timing-row-id="a"]')!;
+    expect(rival.querySelector(".ptp-col-car")?.textContent).toBe("BMW M4 GT4");
+    expect(rival.querySelector(".ptp-col-class")).toBeNull();
+    const own = view.container.querySelector<HTMLElement>('[data-premium-pinned-own-row]')!;
+    expect(own.querySelector(".ptp-col-car")?.textContent).toBe("Porsche 718 Cayman GT4");
+  });
+
+  it("leidt een onbekend model nooit af uit de klasse of de auto van de speler", () => {
+    const view = renderPanel([row("a", 1, 10, { carClass: "GT4", carName: "  " })], { ownCarLabel: "Porsche 718 Cayman GT4" });
+    expect(view.container.querySelector('[data-timing-row-id="a"] .ptp-col-car')?.textContent).toBe("—");
+  });
   it("houdt de volledige eigen auto op P16 vast zonder de ranglijst of FLIP-identiteit te vervalsen", () => {
     const rows = Array.from({ length: 29 }, (_, n) => row(`car-${n + 1}`, n + 1, 10, { isPlayer: n === 15 }));
     const view = renderPanel(rows);

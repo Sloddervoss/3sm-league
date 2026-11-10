@@ -40,6 +40,10 @@
     <Compile Include="UpdaterStateStore.cs" />
     <Compile Include="SessionTelemetryReader.cs" />
     <Compile Include="RawChannelReader.cs" />
+    <!-- Automodel per tegenstander: pure regels + YAML-lezer, net8-testbaar. -->
+    <Compile Include="OpponentCarName.cs" />
+    <!-- Zelfde budgetvolgorde in plugin en tests: modellen eerst, metingen nooit. -->
+    <Compile Include="V3PayloadBudget.cs" />
     <Compile Include="IrSdkChannels.cs" />
     <Compile Include="IrSdkMemoryReader.cs" />
     <Compile Include="TyreSnapshotTracker.cs" />

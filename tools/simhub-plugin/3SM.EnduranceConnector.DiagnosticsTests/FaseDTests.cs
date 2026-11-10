@@ -399,6 +399,7 @@ internal static class FaseDTests
             // niet verbergen (een fixture die niet meer klopt gooide eerder de hele run om).
             baselineChecks += Group("FlagMappingTests", () => FlagMappingTests.Run(Check));
             baselineChecks += Group("DriverRatingTests", () => DriverRatingTests.Run(Check));
+            baselineChecks += Group("OpponentCarNameTests", () => OpponentCarNameTests.Run(Check));
             baselineChecks += Group("CaptureNullSemanticsTests", () => CaptureNullSemanticsTests.Run(Check));
             baselineChecks += Group("UpdatePathTests", () => UpdatePathTests.Run(Check));
             baselineChecks += Group("V3PayloadFixtureTests", () => V3PayloadFixtureTests.Run(Check));

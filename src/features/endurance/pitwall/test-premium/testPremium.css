@@ -23,7 +23,7 @@
 
 [data-pitwall-test-premium].ptp-shell {
   width: 100%;
-  max-width: 1800px;
+  max-width: 2200px;
   margin-inline: auto;
   /* Navbar is fixed (64px); keep the real device dock clickable below it. */
   padding: 74px 20px 24px;
@@ -626,7 +626,7 @@
 
 [data-pitwall-test-premium] .ptp-main {
   display: grid;
-  grid-template-columns: minmax(320px, 0.76fr) minmax(0, 1.58fr);
+  grid-template-columns: minmax(380px, 0.9fr) minmax(0, 2fr);
   gap: 8px;
   align-items: stretch;
   margin-bottom: 8px;
@@ -711,9 +711,6 @@
 }
 [data-pitwall-test-premium] [data-pitwall-slot="trackmap"] > div {
   padding: 6px 10px 7px;
-}
-[data-pitwall-test-premium] [data-pitwall-slot="trackmap"] svg[role="img"] {
-  height: 160px;
 }
 [data-pitwall-test-premium] [data-pitwall-slot="trackmap"] .mb-2 {
   margin-bottom: 4px;
@@ -967,11 +964,11 @@
 }
 [data-pitwall-test-premium] .ptp-timing-table {
   width: 100%;
-  min-width: 730px;
+  min-width: 1080px;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 11.5px;
-  line-height: 15px;
+  font-size: 12.5px;
+  line-height: 17px;
 }
 [data-pitwall-test-premium] .ptp-timing-table thead th {
   position: sticky;
@@ -981,14 +978,14 @@
   padding: 5px 7px 5px;
   border-bottom: 1px solid var(--ptp-line);
   background: #0a0e13;
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 800;
-  line-height: 11px;
-  letter-spacing: 0.1em;
+  line-height: 13px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: left;
   white-space: nowrap;
-  color: #7f8d9b;
+  color: #b2bfcc;
 }
 [data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-pos,
 [data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-num,
@@ -1007,8 +1004,8 @@
   text-align: center;
 }
 [data-pitwall-test-premium] .ptp-timing-table tbody td {
-  height: 34px;
-  padding: 3px 7px;
+  height: 42px;
+  padding: 4px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.035);
   white-space: nowrap;
   color: #aebbc8;
@@ -1091,8 +1088,8 @@
   font-weight: 800;
 }
 [data-pitwall-test-premium] .ptp-col-driver {
-  min-width: 150px;
-  max-width: 250px;
+  min-width: 185px;
+  max-width: 280px;
 }
 [data-pitwall-test-premium] .ptp-driver {
   min-width: 0;
@@ -1107,9 +1104,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 14.5px;
+  line-height: 18px;
   font-weight: 700;
-  color: #d8e1e9;
+  color: #eef3f8;
 }
 [data-pitwall-test-premium] .is-own .ptp-driver-name {
   color: #fff;
@@ -1133,9 +1131,9 @@
   min-width: 0;
   margin-top: 0;
   overflow: hidden;
-  font-size: 8.5px;
-  line-height: 10px;
-  color: #71808e;
+  font-size: 10px;
+  line-height: 13px;
+  color: #9caebe;
 }
 [data-pitwall-test-premium] .ptp-team {
   overflow: hidden;
@@ -1149,9 +1147,9 @@
   border: 1px solid var(--ptp-line);
   border-radius: 2px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 7.5px;
-  line-height: 9px;
-  color: #9fadba;
+  font-size: 9px;
+  line-height: 12px;
+  color: #b6c4d2;
 }
 [data-pitwall-test-premium] .ptp-sr[data-license="R"],
 [data-pitwall-test-premium] .ptp-sr[data-license="D"] {
@@ -1173,29 +1171,25 @@
   border-color: transparent;
   color: #59656f;
 }
-[data-pitwall-test-premium] .ptp-col-class {
-  width: 52px;
+[data-pitwall-test-premium] .ptp-col-car {
+  min-width: 170px;
+  max-width: 220px;
 }
-[data-pitwall-test-premium] .ptp-class-chip {
-  display: inline-block;
-  max-width: 54px;
+[data-pitwall-test-premium] .ptp-car-name {
+  display: block;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 1px 4px;
-  border: 1px solid #24313d;
-  border-radius: 2px;
-  background: #0b1117;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: #9fb5c5;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #c8d5e1;
 }
 [data-pitwall-test-premium] .ptp-col-time {
-  width: 70px;
+  width: 86px;
   text-align: right;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
+  font-size: 12.5px;
 }
 [data-pitwall-test-premium] .ptp-last {
   color: #efd2a9;
@@ -1204,11 +1198,11 @@
   color: #8fe0b4;
 }
 [data-pitwall-test-premium] .ptp-col-sector {
-  width: 46px;
+  width: 78px;
   text-align: right;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 8.5px;
-  color: #8e9dab;
+  font-size: 12px;
+  color: #b9c9d8;
 }
 [data-pitwall-test-premium] .ptp-col-lap {
   width: 52px;

@@ -137,6 +137,19 @@ manifest, no RSA/hash/version error, telemetry unaffected). Only then report `RE
 ## Updater compatibility
 Check every release whether the current live version can self-update to the new one.
 
+Use `tools/simhub-plugin/verify-manifest-compatibility.ps1` on the Windows build
+host to run the **actual old DLL's** manifest validator against the frozen signed
+candidate JSON before the public manifest is switched. Pass `-Dll`,
+`-ManifestPath`, `-ExpectedDllVersion`, `-ExpectedManifestVersion` and
+`-RequireNewer` for each older fleet version. Run the same probe against the new
+DLL without `-RequireNewer` to check validation without offering itself again.
+The probe rejects altered hash, byte length, filename, URL and signature and
+checks that the updater resource is embedded. It never starts SimHub or installs
+anything. This proves manifest compatibility, **not a completed installation**;
+the release test matrix, artifact download checks and final live readback remain
+mandatory. Load the four SDK assemblies explicitly; a PowerShell AssemblyResolve
+handler can recurse into a StackOverflow before it reaches the validator.
+
 **Historical exception:** 0.3.8.0 has a proven self-update defect (6 args vs required 10).
 `0.3.8.0 -> 0.3.9.0` must be done once manually via the official install method (stop
 SimHub → replace DLL → restart). From 0.3.9.0 the hardened updater is the basis.

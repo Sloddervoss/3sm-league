@@ -1,0 +1,58 @@
+{
+  "title": "RECOVERED PRODUCTION BASELINE \u2014 PACE functions",
+  "capturedAt": "2026-11-10",
+  "source": {
+    "database": "postgres",
+    "serverVersion": "15.19",
+    "access": "ssh 3sm-docker + docker exec supabase-db psql, BEGIN READ ONLY; ROLLBACK",
+    "method": "pg_get_functiondef(oid)"
+  },
+  "fixture": "pace-live-baseline-functions.sql",
+  "functions": [
+    {
+      "name": "simhub_persist_v3",
+      "identity": "p_token_hash text, p_session_id text, p_sequence bigint, p_captured_at timestamp with time zone, p_v3_normalized jsonb, p_simhub_version text, p_events jsonb, p_laps jsonb",
+      "fixtureSha256": "1b48a3527fef956fa60ff9414397a5cba3aef8c1e9ed71375ae12c5c8a030916",
+      "definitionMd5": "d058c47fe08eab791f1445e505251ba2",
+      "owner": "supabase_admin",
+      "security_definer": true,
+      "acl": "{supabase_admin=X/supabase_admin,postgres=X/supabase_admin,service_role=X/supabase_admin}"
+    },
+    {
+      "name": "get_pitwall_data",
+      "identity": "p_event_id uuid, p_team_id uuid",
+      "fixtureSha256": "dce3855375466f6755ba97ac0466641a25e46f16dffc44505bd79be0eb151a8d",
+      "definitionMd5": "a144117744c27c60d0e0c6848e77d757",
+      "owner": "supabase_admin",
+      "security_definer": true,
+      "acl": "{supabase_admin=X/supabase_admin,postgres=X/supabase_admin,authenticated=X/supabase_admin,service_role=X/supabase_admin}"
+    },
+    {
+      "name": "get_simhub_device_details",
+      "identity": "p_device_id uuid",
+      "fixtureSha256": "9a56fc2246f18a0bb0876590e7d4abe621f761b3235407d4a672588bfc9243fd",
+      "definitionMd5": "55acf9017bed39f9da7dcfeb7d89a17d",
+      "owner": "supabase_admin",
+      "security_definer": true,
+      "acl": "{supabase_admin=X/supabase_admin,postgres=X/supabase_admin,authenticated=X/supabase_admin,service_role=X/supabase_admin}"
+    },
+    {
+      "name": "get_pitwall_pace",
+      "identity": "p_device_id uuid, p_reference_id text, p_event_id uuid, p_team_id uuid",
+      "fixtureSha256": "6cbeed8e8fe1c19b742f4a1fe48accf2c6907a10467974d6e189be098a2199f3",
+      "definitionMd5": "019e3c665234987f9b4b2707bca90940",
+      "owner": "supabase_admin",
+      "security_definer": true,
+      "acl": "{supabase_admin=X/supabase_admin,postgres=X/supabase_admin,authenticated=X/supabase_admin,service_role=X/supabase_admin}"
+    },
+    {
+      "name": "simhub_connector_config_apply",
+      "identity": "p_config jsonb, p_expected_revision integer",
+      "fixtureSha256": "e657cb8d649a01244cd728375d73addb0e673afe307a52a9c462387fe62be098",
+      "definitionMd5": "86398c6fae28fa3272b0fecf46c794db",
+      "owner": "supabase_admin",
+      "security_definer": true,
+      "acl": "{supabase_admin=X/supabase_admin,postgres=X/supabase_admin,service_role=X/supabase_admin}"
+    }
+  ]
+}

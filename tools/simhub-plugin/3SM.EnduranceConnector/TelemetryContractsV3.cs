@@ -269,6 +269,11 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "irating", Order = 19, EmitDefaultValue = false)] public int? IRating { get; set; }
         [DataMember(Name = "safetyRating", Order = 20, EmitDefaultValue = false)] public double? SafetyRating { get; set; }
         [DataMember(Name = "licenseClass", Order = 21, EmitDefaultValue = false)] public string LicenseClass { get; set; }
+        // Additief onder protocolVersion 3: de door iRacing gepubliceerde schermnaam
+        // (CarScreenName, anders CarScreenNameShort). Null/afwezig als DriverInfo geen
+        // veilige match op CarNumber+UserName had. De connector begrenst op 120 tekens;
+        // CarPath/CarID en CarClass zijn geen modelnaam en worden hier nooit ingevuld.
+        [DataMember(Name = "carName", Order = 22, EmitDefaultValue = false)] public string CarName { get; set; }
     }
 
     [DataContract]

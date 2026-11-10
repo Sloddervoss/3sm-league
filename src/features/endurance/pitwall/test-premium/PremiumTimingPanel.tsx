@@ -218,6 +218,8 @@ export function PremiumTimingPanel({
   // De samenvatting heeft geen FLIP-id en verandert de echte sorteervolgorde niet.
   const renderTimingRow = (r: StandingsDerivation["rows"][number], pinned = false) => {
     const move = pinned ? 0 : moves[r.id] ?? 0;
+    const modelName = typeof r.carName === "string" ? r.carName.trim() : "";
+    const carName = modelName || (r.isPlayer ? ownCarLabel?.trim() : null) || null;
     const sectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
     const metrics = freshMetrics(v3, r.id);
     // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
@@ -258,7 +260,7 @@ export function PremiumTimingPanel({
         <td className="ptp-col-driver">
           <div className="ptp-driver">
             <span className="ptp-driver-line">
-              <span className="ptp-driver-name">{driverLabel(r)}</span>
+              <span className="ptp-driver-name" title={driverLabel(r)}>{driverLabel(r)}</span>
               {r.isPlayer && <span className="ptp-you">{pinned ? "JIJ · VAST" : "JIJ"}</span>}
             </span>
             <span className="ptp-driver-meta">
@@ -270,8 +272,10 @@ export function PremiumTimingPanel({
             </span>
           </div>
         </td>
-        <td className="ptp-col-class">
-          <span className="ptp-class-chip">{r.carClass ?? "—"}</span>
+        <td className="ptp-col-car">
+          <span className="ptp-car-name" title={carName ?? undefined}>
+            {carName ?? "—"}
+          </span>
         </td>
         <td
           data-timing="last-lap"
@@ -405,7 +409,7 @@ export function PremiumTimingPanel({
               <th scope="col" className="ptp-col-pos">P</th>
               <th scope="col" className="ptp-col-num">#</th>
               <th scope="col" className="ptp-col-driver">Coureur</th>
-              <th scope="col" className="ptp-col-class">Klasse</th>
+              <th scope="col" className="ptp-col-car">Auto</th>
               <th scope="col" className="ptp-col-time">Laatste</th>
               <th scope="col" className="ptp-col-time">Beste</th>
               {sectorCount === 0 && <th scope="col" className="ptp-col-sector">Sectoren</th>}
