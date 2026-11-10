@@ -37,8 +37,15 @@ import { MySessionPanel } from "@/features/endurance/pitwall/MySessionPanel";
 import { deriveStandings } from "@/features/endurance/pitwall/standings";
 import { newestDeviceTelemetry } from "@/features/endurance/pitwall/deviceTelemetryCache";
 import { devicePresence, devicePresenceLabel } from "@/features/endurance/pitwall/devicePresence";
+import { PremiumDeviceDock } from "@/features/endurance/pitwall/test-premium/PremiumDeviceDock";
+import { PitwallPremiumView } from "@/features/endurance/pitwall/test-premium/PitwallPremiumView";
+import { usePitwallTestSettings } from "@/features/endurance/pitwall/test-premium/usePitwallTestSettings";
 
 const ONLINE_WINDOW_MS = 5 * 60_000;
+
+/** Bounded read RPC's; de generated types dekken de SimHub-functies niet. */
+type ReadRpc = (name: string, params?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+const readRpc = supabase.rpc as unknown as ReadRpc;
 
 const isOnline = (d?: SimHubDeviceDetail | null) =>
   Boolean(d?.health?.received_at && Date.now() - Date.parse(d.health.received_at) <= ONLINE_WINDOW_MS);
@@ -55,10 +62,82 @@ const relTime = (iso?: string | null): string => {
   return `${Math.round(m / 60)}u geleden`;
 };
 
+function TestViewControls({
+  view,
+  onView,
+  motionEnabled,
+  motionLocked,
+  onMotion,
+  overridden,
+}: {
+  view: "classic" | "premium";
+  onView: (view: "classic" | "premium") => void;
+  motionEnabled: boolean;
+  motionLocked: boolean;
+  onMotion: () => void;
+  overridden: boolean;
+}) {
+  return (
+    <div className="ptp-controls mb-2 flex flex-wrap items-center gap-x-4 gap-y-2" data-pitwall-test-controls>
+      <span className="ptp-controls-label text-[9px] font-black uppercase tracking-[0.18em] text-gray-500">Testweergave</span>
+      <div
+        role="group"
+        aria-label="Pitwall-weergave"
+        className="ptp-switch inline-flex gap-0.5 rounded-md border border-white/10 bg-black/30 p-0.5"
+      >
+        <button
+          type="button"
+          aria-pressed={view === "classic"}
+          onClick={() => onView("classic")}
+          className={`rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+            view === "classic" ? "bg-orange-500 text-black" : "text-gray-400 hover:text-white"
+          }`}
+        >
+          Klassiek
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === "premium"}
+          onClick={() => onView("premium")}
+          className={`rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] transition ${
+            view === "premium" ? "bg-orange-500 text-black" : "text-gray-400 hover:text-white"
+          }`}
+        >
+          Nieuw
+        </button>
+      </div>
+      <button
+        type="button"
+        aria-pressed={motionEnabled}
+        onClick={onMotion}
+        disabled={motionLocked}
+        title={motionLocked ? "Systeeminstelling voor minder beweging staat aan" : "Rij-animaties aan of uit"}
+        className={`ptp-motion inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${
+          motionLocked
+            ? "cursor-not-allowed border-white/5 text-gray-600"
+            : motionEnabled
+              ? "border-orange-500/40 text-gray-200"
+              : "border-white/10 text-gray-500"
+        }`}
+      >
+        <span className={`ptp-motion-dot h-1.5 w-1.5 rounded-full ${motionEnabled ? "bg-emerald-400" : "bg-gray-600"}`} aria-hidden />
+        Beweging
+      </button>
+      {overridden && (
+        <span className="ptp-override text-[10px] font-semibold text-amber-300" data-pitwall-view-override>
+          URL-override actief — kies een weergave om die op te heffen
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function PitwallDeviceTestPage() {
   const { user, isSuperAdmin, loading, rolesLoading } = useAuth();
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { view, chooseView, overridden, motionEnabled, motionLocked, toggleMotion } = usePitwallTestSettings();
+  const premium = view === "premium";
   // Poll only the authorized, bounded RPC projection. No 512-KiB row subscription.
 
   /* Fleet: connected SimHub profiles, online-first (same read RPC as the
@@ -67,7 +146,7 @@ export default function PitwallDeviceTestPage() {
     queryKey: ["pitwall-test", "fleet"],
     enabled: Boolean(user) && Boolean(isSuperAdmin),
     queryFn: async (): Promise<SimHubFleetRow[]> => {
-      const { data, error } = await (supabase.rpc as any)("get_simhub_fleet");
+      const { data, error } = await readRpc("get_simhub_fleet");
       if (error) throw error;
       return (data ?? []) as SimHubFleetRow[];
     },
@@ -79,7 +158,7 @@ export default function PitwallDeviceTestPage() {
     queryKey: ["pitwall-test", "device", deviceId],
     enabled: Boolean(user) && Boolean(isSuperAdmin) && Boolean(deviceId),
     queryFn: async (): Promise<SimHubDeviceDetail> => {
-      const { data, error } = await (supabase.rpc as any)("get_simhub_device_details", { p_device_id: deviceId });
+      const { data, error } = await readRpc("get_simhub_device_details", { p_device_id: deviceId });
       if (error) throw error;
       const result = data as SimHubDeviceDetail;
       // A slower RPC response must not replace a newer Realtime snapshot.
@@ -94,7 +173,7 @@ export default function PitwallDeviceTestPage() {
     queryKey: ["pitwall-test", "sandbox", deviceId],
     enabled: Boolean(user) && Boolean(isSuperAdmin) && Boolean(deviceId),
     queryFn: async () => {
-      const { data, error } = await (supabase.rpc as any)("pitwall_sandbox_v1", { p_device_id: deviceId });
+      const { data, error } = await readRpc("pitwall_sandbox_v1", { p_device_id: deviceId });
       if (error) throw error;
       return data as {
         drivers?: { name: string }[];
@@ -190,162 +269,246 @@ export default function PitwallDeviceTestPage() {
   const ownCarName = tele?.car_name ?? v3?.identity?.carName ?? null;
   const trackLabel = deviceTrackLabel(v3, tele?.track_name) || "";
   const linkedTeamName = (detail?.endurance_team as Record<string, unknown> | null)?.["name"] as string | null | undefined;
+  const contextKey = [deviceId ?? "", tele?.session_id ?? "", trackLabel, ownDriverName ?? ""].join("|");
+  const dataGap = Boolean(detailQuery.error) || !tele;
+  const lastSeen = relTime(detail?.health?.received_at);
 
   return (
-    <div className="min-h-screen bg-background" data-no-translate>
+    <div className={premium ? "min-h-screen bg-[#07090c]" : "min-h-screen bg-background"} data-no-translate>
       <Navbar />
-      <main className="container mx-auto max-w-[1600px] px-4 py-6">
-        {/* Header */}
-        <section className="mb-4 flex flex-col gap-3 rounded-xl border border-[#1D2431] bg-[#0A0C10] px-5 py-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <Cpu className="h-5 w-5 text-orange-300" />
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">3SM · DEV tool</p>
-              <h1 className="font-heading text-xl font-black text-white">Pitwall Test — live device data</h1>
-              <p className="text-xs text-gray-400">Kies een geconnecte SimHub-profiel. De track wordt automatisch herkend; strategie-velden (pit-in, fuel-to-add) tonen “—” omdat die een gebonden raceRun vereisen.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {fleetQuery.isFetching && <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-500" />}
-          </div>
-        </section>
+      <main
+        className={premium ? "ptp-shell" : "container mx-auto max-w-[1600px] px-4 py-6"}
+        data-pitwall-test-premium={premium ? "true" : undefined}
+      >
+        {!premium && (
+          <TestViewControls
+            view={view}
+            onView={chooseView}
+            motionEnabled={motionEnabled}
+            motionLocked={motionLocked}
+            onMotion={toggleMotion}
+            overridden={overridden}
+          />
+        )}
 
-        <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-          {/* ───── Device list (connected SimHub profiles) ───── */}
-          <aside className="space-y-2">
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Gekoppelde SimHub profielen</h2>
-            {fleetQuery.error && <p role="alert" className="text-sm text-red-300">Fleet laden mislukt.</p>}
-            {!fleetQuery.error && fleetQuery.data?.length === 0 && (
-              <div className="flex flex-col items-center gap-2 rounded-xl border border-[#1D2431] bg-[#0B0D11] px-4 py-8 text-sm text-gray-500">
-                <Cable className="h-7 w-7 text-gray-600" />
-                <p>Geen gekoppelde apparaten</p>
+        {!premium && (
+          <>
+            {/* Header */}
+            <section className="mb-4 flex flex-col gap-3 rounded-xl border border-[#1D2431] bg-[#0A0C10] px-5 py-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <Cpu className="h-5 w-5 text-orange-300" />
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">3SM · DEV tool</p>
+                  <h1 className="font-heading text-xl font-black text-white">Pitwall Test — live device data</h1>
+                  <p className="text-xs text-gray-400">Kies een geconnecte SimHub-profiel. De track wordt automatisch herkend; strategie-velden (pit-in, fuel-to-add) tonen “—” omdat die een gebonden raceRun vereisen.</p>
+                </div>
               </div>
-            )}
-            {fleetQuery.data?.map((row) => {
-              const rowOnline = row.health_received_at ? Date.now() - Date.parse(row.health_received_at) <= ONLINE_WINDOW_MS : false;
-              const selected = row.device_id === deviceId;
-              return (
-                <button
-                  key={row.device_id}
-                  type="button"
-                  onClick={() => setDeviceId(row.device_id)}
-                  className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
-                    selected
-                      ? "border-orange-500/60 bg-orange-500/[0.07] ring-1 ring-orange-500/30"
-                      : "border-[#1D2431] bg-[#0B0D11] hover:bg-white/[0.04]"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${rowOnline ? "bg-emerald-400" : "bg-gray-600"}`} />
-                    <span className="min-w-0 truncate font-bold text-white">{row.device_name}</span>
-                    <ChevronRight className={`ml-auto h-3.5 w-3.5 shrink-0 ${selected ? "text-orange-400" : "text-gray-600"}`} />
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-gray-400">
-                    <span className="truncate">🏁 {rowOnline ? row.telemetry_track_name ?? "geen sessie" : "geen sessie"}</span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-gray-500">
-                    <span className="font-mono">{row.connector_version ?? "—"}</span>
-                    <span className="h-2.5 w-px bg-white/10" />
-                    <span className={rowOnline && row.game_connected ? "text-emerald-400" : ""}>
-                      {devicePresenceLabel[devicePresence(rowOnline, row.game_connected)]}
-                    </span>
-                    {rowOnline && row.telemetry_driver_name && <span>· {row.telemetry_driver_name}</span>}
-                  </div>
-                </button>
-              );
-            })}
-          </aside>
+              <div className="flex items-center gap-2">
+                {fleetQuery.isFetching && <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-500" />}
+              </div>
+            </section>
 
-          {/* ───── Live view — hetzelfde raster als de endurance-pitwall ───── */}
-          <section className="min-w-0">
+            <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
+              {/* ───── Device list (connected SimHub profiles) ───── */}
+              <aside className="space-y-2">
+                <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Gekoppelde SimHub profielen</h2>
+                {fleetQuery.error && <p role="alert" className="text-sm text-red-300">Fleet laden mislukt.</p>}
+                {!fleetQuery.error && fleetQuery.data?.length === 0 && (
+                  <div className="flex flex-col items-center gap-2 rounded-xl border border-[#1D2431] bg-[#0B0D11] px-4 py-8 text-sm text-gray-500">
+                    <Cable className="h-7 w-7 text-gray-600" />
+                    <p>Geen gekoppelde apparaten</p>
+                  </div>
+                )}
+                {fleetQuery.data?.map((row) => {
+                  const rowOnline = row.health_received_at ? Date.now() - Date.parse(row.health_received_at) <= ONLINE_WINDOW_MS : false;
+                  const selected = row.device_id === deviceId;
+                  return (
+                    <button
+                      key={row.device_id}
+                      type="button"
+                      onClick={() => setDeviceId(row.device_id)}
+                      className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                        selected
+                          ? "border-orange-500/60 bg-orange-500/[0.07] ring-1 ring-orange-500/30"
+                          : "border-[#1D2431] bg-[#0B0D11] hover:bg-white/[0.04]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${rowOnline ? "bg-emerald-400" : "bg-gray-600"}`} />
+                        <span className="min-w-0 truncate font-bold text-white">{row.device_name}</span>
+                        <ChevronRight className={`ml-auto h-3.5 w-3.5 shrink-0 ${selected ? "text-orange-400" : "text-gray-600"}`} />
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-gray-400">
+                        <span className="truncate">🏁 {rowOnline ? row.telemetry_track_name ?? "geen sessie" : "geen sessie"}</span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-gray-500">
+                        <span className="font-mono">{row.connector_version ?? "—"}</span>
+                        <span className="h-2.5 w-px bg-white/10" />
+                        <span className={rowOnline && row.game_connected ? "text-emerald-400" : ""}>
+                          {devicePresenceLabel[devicePresence(rowOnline, row.game_connected)]}
+                        </span>
+                        {rowOnline && row.telemetry_driver_name && <span>· {row.telemetry_driver_name}</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </aside>
+
+              {/* ───── Live view — hetzelfde raster als de endurance-pitwall ───── */}
+              <section className="min-w-0">
+                {!deviceId && (
+                  <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-[#1D2431] bg-[#0B0D11] px-6 py-16 text-sm text-gray-500">
+                    <Cpu className="h-8 w-8 text-gray-600" />
+                    <p>Selecteer een geconnecte SimHub-profiel links om de live pitwall te openen.</p>
+                  </div>
+                )}
+
+                {deviceId && detailQuery.isFetching && !detail && (
+                  <div className="flex items-center justify-center gap-2 py-20 text-sm text-gray-500">
+                    <RefreshCw className="h-4 w-4 animate-spin" /> Device laden…
+                  </div>
+                )}
+
+                {deviceId && detail && (
+                  <div className="space-y-3 bg-[#07080A]" data-pitwall-mode="test">
+                    <PitwallContextBar
+                      eyebrow="3SM · Pitwall test"
+                      title={detail.device.device_name}
+                      state={live ? "live" : online ? "stale" : "offline"}
+                      stateLabel={live ? "LIVE" : online ? "ONLINE — geen telemetrie" : "OFFLINE"}
+                      items={[
+                        { label: "Circuit", value: trackLabel || "geen sessie" },
+                        { label: "Connector", value: detail.health?.connector_version ?? "—" },
+                        { label: "Laatst gezien", value: relTime(detail.health?.received_at) },
+                        ...(linkedTeamName ? [{ label: "Team", value: linkedTeamName, tone: "accent" as const }] : []),
+                      ]}
+                      note={live || online ? undefined : "Wissel naar een gebonden team-pitwall voor pit-in / fuel-to-add."}
+                      actions={
+                        <span className="text-[11px] text-slate-500">
+                          {relTime(tele?.received_at)} · 1s polling
+                        </span>
+                      }
+                    />
+
+                    <PitwallDashboard
+                      kpi={<RaceTelemetryStrip v3={v3} live={live} />}
+                      decision={<DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />}
+                      track={<><LiveTrackPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} /><OwnCarPanel driverName={ownDriverName} carName={ownCarName} teamName={null} carNumber={live ? v3?.opponents?.find(c => c.isPlayer)?.carNumber : null} completedLaps={live ? v3?.timing?.completedLaps : null} lastLapSeconds={live ? v3?.timing?.lastLapTimeSeconds ?? null : null} bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null} gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null} /></>}
+                      timing={
+                        <StandingsWidget v3={v3}
+                          standings={standings}
+                          ownCarLabel={ownCarName ?? detail.device.device_name}
+                          ownCarNumber={null}
+                          live={live}
+                        />
+                      }
+                      notice={<PitStopAnchor source={{ deviceId }} enabled showExample />}
+                      panels={[
+                        <PacePanel paceSource={{deviceId}} v3={v3} live={live} key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
+                        <MySessionPanel
+                          key="session"
+                          driverName={ownDriverName}
+                          carName={ownCarName}
+                          recordedLaps={sessionPace?.count ?? null}
+                          fastestSeconds={sessionPace?.fastest ?? null}
+                          medianSeconds={sessionPace?.median ?? null}
+                        />,
+                        <FuelPanel key="fuel" strategy={strategy} />,
+                        <VehicleTelemetryPanel key="tyres" v3={v3} live={live} tyreEstimate={tyreEstimate} tyreModel={tyreModel} />,
+                      ]}
+                      extra={
+                        <>
+                          {/* Modelinformatie blijft: experimenteel bereik, niet beslissend. */}
+                          <TyreModelPanel
+                            estimate={tyreModel}
+                            bron={tyre.bron}
+                            coverage={tyre.coverage}
+                            coverageLoading={tyre.coverageLoading}
+                            coverageError={tyre.coverageError}
+                            modelLoading={tyre.modelLoading}
+                            v2Error={tyre.v2Error}
+                          />
+                          <RawTelemetryDetails value={v3} />
+                          {detailQuery.isFetching && (
+                            <p className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                              <RefreshCw className="h-3 w-3 animate-spin" /> Live telemetrie verfrist automatisch.
+                            </p>
+                          )}
+                        </>
+                      }
+                    />
+                  </div>
+                )}
+              </section>
+            </div>
+          </>
+        )}
+
+        {premium && (
+          <>
+            <PremiumDeviceDock
+              rows={fleetQuery.data}
+              selectedId={deviceId}
+              onSelect={setDeviceId}
+              loading={fleetQuery.isFetching}
+              error={Boolean(fleetQuery.error)}
+              controls={
+                <TestViewControls
+                  view={view}
+                  onView={chooseView}
+                  motionEnabled={motionEnabled}
+                  motionLocked={motionLocked}
+                  onMotion={toggleMotion}
+                  overridden={overridden}
+                />
+              }
+            />
+
             {!deviceId && (
-              <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-[#1D2431] bg-[#0B0D11] px-6 py-16 text-sm text-gray-500">
-                <Cpu className="h-8 w-8 text-gray-600" />
-                <p>Selecteer een geconnecte SimHub-profiel links om de live pitwall te openen.</p>
+              <div className="ptp-empty-state">
+                <Cpu aria-hidden size={24} />
+                <p>Kies hierboven een geconnecte SimHub-profiel om de premium pitwall te openen.</p>
               </div>
             )}
 
             {deviceId && detailQuery.isFetching && !detail && (
-              <div className="flex items-center justify-center gap-2 py-20 text-sm text-gray-500">
-                <RefreshCw className="h-4 w-4 animate-spin" /> Device laden…
+              <div className="ptp-empty-state">
+                <RefreshCw className="animate-spin" aria-hidden size={20} />
+                <p>Device laden…</p>
               </div>
             )}
 
             {deviceId && detail && (
-              <div className="space-y-3 bg-[#07080A]" data-pitwall-mode="test">
-                <PitwallContextBar
-                  eyebrow="3SM · Pitwall test"
-                  title={detail.device.device_name}
-                  state={live ? "live" : online ? "stale" : "offline"}
-                  stateLabel={live ? "LIVE" : online ? "ONLINE — geen telemetrie" : "OFFLINE"}
-                  items={[
-                    { label: "Circuit", value: trackLabel || "geen sessie" },
-                    { label: "Connector", value: detail.health?.connector_version ?? "—" },
-                    { label: "Laatst gezien", value: relTime(detail.health?.received_at) },
-                    ...(linkedTeamName ? [{ label: "Team", value: linkedTeamName, tone: "accent" as const }] : []),
-                  ]}
-                  note={live || online ? undefined : "Wissel naar een gebonden team-pitwall voor pit-in / fuel-to-add."}
-                  actions={
-                    <span className="text-[11px] text-slate-500">
-                      {relTime(tele?.received_at)} · 1s polling
-                    </span>
-                  }
-                />
-
-                <PitwallDashboard
-                  kpi={<RaceTelemetryStrip v3={v3} live={live} />}
-                  decision={<DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />}
-                  track={<><LiveTrackPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} /><OwnCarPanel driverName={ownDriverName} carName={ownCarName} teamName={null} carNumber={live ? v3?.opponents?.find(c => c.isPlayer)?.carNumber : null} completedLaps={live ? v3?.timing?.completedLaps : null} lastLapSeconds={live ? v3?.timing?.lastLapTimeSeconds ?? null : null} bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null} gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null} /></>}
-                  timing={
-                    <StandingsWidget v3={v3}
-                      standings={standings}
-                      ownCarLabel={ownCarName ?? detail.device.device_name}
-                      ownCarNumber={null}
-                      live={live}
-                    />
-                  }
-                  notice={<PitStopAnchor source={{ deviceId }} enabled showExample />}
-                  panels={[
-                    <PacePanel paceSource={{deviceId}} v3={v3} live={live} key="pace" strategy={strategy} pace={pace} lapTimes={[]} points={samplePoints} />,
-                    <MySessionPanel
-                      key="session"
-                      driverName={ownDriverName}
-                      carName={ownCarName}
-                      recordedLaps={sessionPace?.count ?? null}
-                      fastestSeconds={sessionPace?.fastest ?? null}
-                      medianSeconds={sessionPace?.median ?? null}
-                    />,
-                    <FuelPanel key="fuel" strategy={strategy} />,
-                    <VehicleTelemetryPanel key="tyres" v3={v3} live={live} tyreEstimate={tyreEstimate} tyreModel={tyreModel} />,
-                  ]}
-                  extra={
-                    <>
-                      {/* Modelinformatie blijft: experimenteel bereik, niet beslissend. */}
-                      <TyreModelPanel
-                        estimate={tyreModel}
-                        bron={tyre.bron}
-                        coverage={tyre.coverage}
-                        coverageLoading={tyre.coverageLoading}
-                        coverageError={tyre.coverageError}
-                        modelLoading={tyre.modelLoading}
-                        v2Error={tyre.v2Error}
-                      />
-                      <RawTelemetryDetails value={v3} />
-                      {detailQuery.isFetching && (
-                        <p className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                          <RefreshCw className="h-3 w-3 animate-spin" /> Live telemetrie verfrist automatisch.
-                        </p>
-                      )}
-                    </>
-                  }
-                />
-              </div>
+              <PitwallPremiumView
+                detail={detail}
+                deviceId={deviceId}
+                live={live}
+                online={online}
+                v3={v3}
+                trackLabel={trackLabel}
+                ownDriverName={ownDriverName}
+                ownCarName={ownCarName}
+                linkedTeamName={linkedTeamName ?? null}
+                standings={standings}
+                strategy={strategy}
+                strategyAdvice={strategyAdvice}
+                pace={pace}
+                points={samplePoints}
+                sessionPace={sessionPace}
+                tyre={tyre}
+                tyreEstimate={tyreEstimate}
+                motionEnabled={motionEnabled}
+                refreshing={detailQuery.isFetching}
+                contextKey={contextKey}
+                gap={dataGap}
+                lastSeen={lastSeen}
+              />
             )}
-          </section>
-        </div>
+          </>
+        )}
 
         {/* Coureurs op dit apparaat — ook zonder event, uit het rondearchief. */}
-        <section className="mt-4 rounded-xl border border-[#1D2431] bg-[#0B0D11] px-5 py-4">
+        <section className="mt-4 rounded-xl border border-[#1D2431] bg-[#0B0D11] px-5 py-4" data-ptp-archive>
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Coureurs op dit apparaat</h2>
             <span className="text-[11px] text-gray-500">
