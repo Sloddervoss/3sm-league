@@ -134,6 +134,16 @@ describe("Edge-parse van opponent.carName", () => {
     expect(result.normalized?.opponents?.map((row) => row.position)).toEqual([2, 2, 2, 2]);
   });
 
+  it("laat een JSON-object met kapotte conversiemethoden nooit de opponentlijst kosten", async () => {
+    const result = await resolve(frame([
+      tegenstander({ id: "p1", carName: { toString: null, valueOf: null } }),
+      tegenstander({ id: "p2", carName: "Porsche 718 Cayman GT4" }),
+    ]));
+    expect(result.result).toBe("accepted_device_context");
+    expect(result.normalized?.opponents?.map(row => row.id)).toEqual(["p1", "p2"]);
+    expect(result.normalized?.opponents?.map(row => row.carName)).toEqual([null, "Porsche 718 Cayman GT4"]);
+  });
+
   it("verzint geen model uit klasse, carClassId of coureursnaam", async () => {
     const result = await resolve(frame([tegenstander({ carClass: "GT3", carClassId: "17", driverName: "P. Porsche" })]));
     expect(result.result).toBe("accepted_device_context");

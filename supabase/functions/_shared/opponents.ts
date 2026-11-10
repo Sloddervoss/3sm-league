@@ -66,7 +66,7 @@ export const MaxOpponentCarNameChars = 120;
 const opponentCarName = (value: unknown, path: string): string | null => {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") {
-    console.error("[ingest] tegenstander-carName is geen tekst, veld leeggemaakt", { pad: path, waarde: String(value) });
+    console.error("[ingest] tegenstander-carName is geen tekst, veld leeggemaakt", { pad: path, type: Array.isArray(value) ? "array" : typeof value });
     return null;
   }
   const trimmed = value.trim();
