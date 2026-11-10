@@ -145,21 +145,32 @@ const rpc = vi.fn(async (fn: string) => {
 
 const channel = { on: () => channel, subscribe: () => channel };
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { rpc: (...args: unknown[]) => rpc(...(args as [string])), channel: () => channel, removeChannel: () => undefined },
-}));
+vi.mock("@/integrations/supabase/client", () => {
+  const client = {
+    rpc(this: unknown, ...args: unknown[]) {
+      if (this !== client) throw new TypeError("supabase.rpc must be called with the client as receiver");
+      return rpc(...(args as [string]));
+    },
+    channel: () => channel,
+    removeChannel: () => undefined,
+  };
+  return { supabase: client };
+});
 
 const renderPage = async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/admin/pitwall-test"]}>
+      {/* Deze suite bewaakt de klassieke look; premium heeft eigen routetests. */}
+      <MemoryRouter initialEntries={["/admin/pitwall-test?pitwallView=classic"]}>
         <PitwallDeviceTestPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
   const device = await screen.findByRole("button", { name: /SIM-PC Vincent/ });
   fireEvent.click(device);
+  await waitFor(() => expect(view.container.querySelector('[data-pitwall-look="true"]')).not.toBeNull());
+  expect(view.container.querySelector(".ptp-root")).toBeNull();
   return view;
 };
 
