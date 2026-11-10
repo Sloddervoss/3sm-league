@@ -109,6 +109,8 @@ export interface V3Normalized {
 
 /** A single opponent from the 0.4.1 connector snapshot. */
 export interface V3Opponent {
+  /** Werkelijk model uit het opponentcontract; nooit uit klasse of speler afleiden. */
+  carName?: string | null;
   id: string;
   irating?: number | null;
   safetyRating?: number | null;

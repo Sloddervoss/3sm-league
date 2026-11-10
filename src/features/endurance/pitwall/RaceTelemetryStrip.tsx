@@ -31,7 +31,7 @@ const second = (value: number | null | undefined): string =>
  *
  * De rondedelta vergelijkt uitsluitend laatste met beste; sessietijd is geen stinttijd.
  */
-export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinutes }: { v3: V3Normalized | null; live: boolean; plannedLaps?: number | null; plannedDurationMinutes?: number | null }) {
+export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinutes, showClassPosition = true }: { v3: V3Normalized | null; live: boolean; plannedLaps?: number | null; plannedDurationMinutes?: number | null; showClassPosition?: boolean }) {
   const data = live ? v3 : null;
   const planLaps = typeof plannedLaps === "number" && Number.isSafeInteger(plannedLaps) && plannedLaps > 0 ? plannedLaps : null;
   const planMinutes = typeof plannedDurationMinutes === "number" && Number.isSafeInteger(plannedDurationMinutes) && plannedDurationMinutes > 0 ? plannedDurationMinutes : null;
@@ -67,7 +67,7 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
 
       <KpiGroup label="Positie" group="positie">
         <Cell label="P" value={pos != null ? `P${pos}` : '—'} />
-        <Cell label="K" value={cls != null ? `K${cls}` : '—'} tone="text-sky-300" />
+        {showClassPosition && <Cell label="K" value={cls != null ? `K${cls}` : '—'} tone="text-sky-300" />}
         <Cell label={planLaps != null ? `Ronde · plan ${planLaps}` : "Ronde"} value={laps != null ? String(laps) : '—'} />
         {finiteClock(data?.session?.sessionTimeSeconds) && <Cell label={planMinutes != null ? `Sessie · plan ${clock(planMinutes * 60)}` : "Verstreken sessie"} value={clock(data?.session?.sessionTimeSeconds)} />}
         <Cell label="Resttijd" value={clock(rest)} tone="text-emerald-300" />
