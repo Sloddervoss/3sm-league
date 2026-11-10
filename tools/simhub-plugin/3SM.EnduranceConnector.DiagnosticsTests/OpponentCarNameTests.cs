@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Text.Json;
@@ -271,7 +272,8 @@ internal static class OpponentCarNameTests
         // optionele namen de vaste 4096 B pace-ruimte niet opeten. Dit frame is
         // 23,5 kB met namen; zonder namen blijft er ruimte voor de pace-root.
         var paceFrame = BudgetFrame(0);
-        var paceBefore = Encoding.UTF8.GetByteCount(Serialize(paceFrame));
+        var unTrimmedCore = Serialize(paceFrame);
+        var paceBefore = Encoding.UTF8.GetByteCount(unTrimmedCore);
         var paceLimited = V3PayloadBudget.Trim(paceFrame, frame => Serialize(frame), 24000);
         var paceAfter = Encoding.UTF8.GetByteCount(paceLimited.Body);
         using (var document = JsonDocument.Parse(paceLimited.Body))
@@ -286,6 +288,30 @@ internal static class OpponentCarNameTests
                 && rows.GetArrayLength() == 41,
                 "23,5 kB met namen -> " + paceAfter + " B; 4096 B pace-ruimte blijft gereserveerd");
         }
+
+        // Dezelfde frame-keuze met een echte meetrij: zonder de model-snoei past de
+        // ACK/meetrij niet meer naast de 23,5 kB kern; met de snoei past hij wel.
+        var temp = Path.Combine(Path.GetTempPath(), "carname-budget-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        try
+        {
+            var outbox = new MeasurementOutbox(Path.Combine(temp, "outbox.json"));
+            var ids = new MeasurementIdFactory();
+            outbox.Enqueue(MeasurementTransportTests.Event(ids, "wear_value_changed", 90, new string('n', 2000)), out string _);
+            var sender = new MeasurementSender(outbox, new HttpClient(),
+                () => ConnectorCapabilities.Implemented().ToJson(),
+                new MeasurementLimits { MaxFrameBodyBytes = 24000 });
+            var now = new DateTime(2026, 11, 10, 22, 0, 0, DateTimeKind.Utc);
+            MeasurementBatchPlan beforePlan;
+            sender.BuildBody(unTrimmedCore, Encoding.UTF8.GetByteCount(unTrimmedCore), now, out beforePlan);
+            MeasurementBatchPlan afterPlan;
+            sender.BuildBody(paceLimited.Body, paceAfter, now, out afterPlan);
+            Check("measurement-survives", beforePlan.Batch.Events.Count == 0
+                && afterPlan.Batch.Events.Count == 1 && afterPlan.DeferredEvents == 0,
+                "meetrij past alleen na model-snoei: voor=" + beforePlan.Batch.Events.Count
+                + " na=" + afterPlan.Batch.Events.Count);
+        }
+        finally { Directory.Delete(temp, true); }
 
         // Bedrading: zonder deze regels zouden de tests groen zijn maar de plugin
         // de nieuwe kolom nooit vullen. Bronnen worden hieronder expliciet gelezen.
