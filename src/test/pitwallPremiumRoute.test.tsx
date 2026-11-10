@@ -283,6 +283,8 @@ describe("pitwall-test premium — alleen op de testroute, klassiek blijft klass
     expect(view.container.querySelector('[data-pitwall-look="true"]')).not.toBeNull();
     expect(view.container.querySelector("[data-premium-timing]")).toBeNull();
     expect(screen.getByText("Pitwall Test — live device data")).toBeTruthy();
+    // De terugschakelaar moet onder de vaste 64px-navbar bereikbaar blijven.
+    expect(view.container.querySelector("[data-pitwall-test-controls]")).toHaveStyle({ marginTop: "64px" });
     expect(screen.getByText("Gekoppelde SimHub profielen")).toBeTruthy();
     expect(view.container.querySelector("[data-pitwall-slot='standings']")).not.toBeNull();
   });

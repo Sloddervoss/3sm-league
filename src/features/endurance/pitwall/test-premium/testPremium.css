@@ -25,7 +25,8 @@
   width: 100%;
   max-width: 1800px;
   margin-inline: auto;
-  padding: 10px 20px 24px;
+  /* Navbar is fixed (64px); keep the real device dock clickable below it. */
+  padding: 74px 20px 24px;
 }
 
 [data-pitwall-test-premium] .ptp-empty-state {

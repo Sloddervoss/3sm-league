@@ -83,7 +83,7 @@ function TestViewControls({
   overridden: boolean;
 }) {
   return (
-    <div className="ptp-controls mb-2 flex flex-wrap items-center gap-x-4 gap-y-2" data-pitwall-test-controls>
+    <div className="ptp-controls mb-2 flex flex-wrap items-center gap-x-4 gap-y-2" data-pitwall-test-controls style={view === "classic" ? { marginTop: 64 } : undefined}>
       <span className="ptp-controls-label text-[9px] font-black uppercase tracking-[0.18em] text-gray-500">Testweergave</span>
       <div
         role="group"
