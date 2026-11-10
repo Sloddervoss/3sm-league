@@ -4,6 +4,8 @@ export type V3Opponent = {
   id: string;
   carNumber: string | null;
   driverName: string | null;
+  /** Additief model (max 120 tekens). Ontbreken of null betekent onbekend. */
+  carName: string | null;
   irating?: number | null;
   safetyRating?: number | null;
   licenseClass?: string | null;
@@ -48,6 +50,32 @@ const text = (value: unknown, path: string, max = 120): string => {
   return value.trim();
 };
 const nullableText = (value: unknown, path: string): string | null => (value === null ? null : text(value, path));
+
+/** Additief model: de producer mag het veld weglaten (dan null) en mag het bij
+ * een vol budget per rij weglaten. De grens is in tekens, zoals de rest van dit
+ * bestand; het bytebudget van het frame wordt apart bewaakt. */
+export const MaxOpponentCarNameChars = 120;
+
+/**
+ * Modelnaam van een tegenstander. Ontbreken of null is de normale standaard voor
+ * een oudere connector. Een onbruikbare waarde (geen tekst, leeg of te lang)
+ * maakt alleen dit veld leeg en logt de reden: één kapot model kost nooit de rij
+ * of het frame. Er wordt niets afgeleid uit carClass, carClassId of driverName —
+ * klasse is geen model en een coureursnaam is geen auto.
+ */
+const opponentCarName = (value: unknown, path: string): string | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    console.error("[ingest] tegenstander-carName is geen tekst, veld leeggemaakt", { pad: path, waarde: String(value) });
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MaxOpponentCarNameChars) {
+    console.error("[ingest] tegenstander-carName onbruikbaar, veld leeggemaakt", { pad: path, lengte: trimmed.length });
+    return null;
+  }
+  return trimmed;
+};
 
 const v3Number = (value: unknown, path: string, rule: { nullable?: boolean; integer?: boolean; min?: number; max?: number; sentinels?: number[] } = {}): number | null => {
   if (rule.nullable && value === null) return null;
@@ -128,6 +156,7 @@ export const parseOpponents = (value: unknown, path = "opponents"): V3Opponent[]
       id,
       carNumber: nullableText(o.carNumber, `${path}[${index}].carNumber`),
       driverName: nullableText(o.driverName, `${path}[${index}].driverName`),
+      carName: opponentCarName(o.carName, `${path}[${index}].carName`),
       // Additive fields: older connectors omit these. Bad rating data never costs a row.
       irating: o.irating == null ? null : zacht(o.irating, `${path}[${index}].irating`, { integer: true, min: 1, max: 100000, sentinels: [0, -1] }),
       safetyRating: o.safetyRating == null ? null : zacht(o.safetyRating, `${path}[${index}].safetyRating`, { min: 0, max: 4.99 }),
