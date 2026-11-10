@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deriveStandings, type StandingsDerivation, type StandingsRow } from "../standings";
 import type { V3Normalized } from "../pitwallHelpers";
 import { PremiumTimingPanel, TIMING_SIGNAL_TTL_MS } from "./PremiumTimingPanel";
+import * as paceSeries from "../paceSeries";
 
 const row = (
   id: string,
@@ -147,6 +148,45 @@ const renderPanel = (rows: StandingsRow[], overrides: Partial<ComponentProps<typ
   );
 
 describe("premium timing — echte tabel, echte rerender", () => {
+  it("houdt de volledige eigen auto op P16 vast zonder de ranglijst of FLIP-identiteit te vervalsen", () => {
+    const rows = Array.from({ length: 29 }, (_, n) => row(`car-${n + 1}`, n + 1, 10, { isPlayer: n === 15 }));
+    const view = renderPanel(rows);
+    const pinned = view.container.querySelector("[data-premium-pinned-own-row]") as HTMLElement;
+    expect(pinned).not.toBeNull();
+    expect(within(pinned).getByLabelText("Positie 16")).toBeTruthy();
+    expect(within(pinned).getByText("Coureur car-16")).toBeTruthy();
+    expect(pinned.querySelector("[data-timing='last-lap']")?.textContent).toBe("1:32.400");
+    expect(pinned.hasAttribute("data-timing-row-id")).toBe(false);
+    expect(view.container.querySelectorAll("[data-timing-row-id]")).toHaveLength(29);
+    expect([...view.container.querySelectorAll("[data-timing-row-id]")].map((el) => el.getAttribute("data-timing-row-id"))).toEqual(rows.map((r) => r.id));
+    expect(animate).not.toHaveBeenCalled();
+  });
+
+  it("verzint geen vaste eigen rij wanneer de bron geen eigen auto aanwijst", () => {
+    const view = renderPanel([row("a", 1), row("b", 2)]);
+    expect(view.container.querySelector("[data-premium-pinned-own-row]")).toBeNull();
+  });
+
+  it("houdt een expliciete sectorplek zichtbaar zonder een driesectorbaan te verzinnen", () => {
+    const view = renderPanel([row("me", 16, 10, { isPlayer: true })], { live: false });
+    expect(screen.getByRole("columnheader", { name: "Sectoren" })).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "S1" })).toBeNull();
+    expect(view.container.querySelector(".ptp-class-row th")?.getAttribute("colspan")).toBe(String(view.container.querySelectorAll("thead th").length));
+    const rows = view.container.querySelectorAll("[data-timing-row-id], [data-premium-pinned-own-row]");
+    for (const r of rows) expect(r.querySelector(".ptp-col-sector")?.textContent).toBe("—");
+  });
+
+  it("houdt alle zes door de bestaande layouthelper opgegeven sectorkolommen in beide rijen", () => {
+    vi.spyOn(paceSeries, "trackSectorCount").mockReturnValue(6);
+    const view = renderPanel([row("me", 16, 10, { isPlayer: true })]);
+    for (let n = 1; n <= 6; n++) expect(screen.getByRole("columnheader", { name: `S${n}` })).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: "Sectoren" })).toBeNull();
+    for (const r of view.container.querySelectorAll("[data-timing-row-id], [data-premium-pinned-own-row]")) {
+      expect(r.querySelectorAll(".ptp-col-sector")).toHaveLength(6);
+      expect(r.querySelectorAll("td")).toHaveLength(view.container.querySelectorAll("thead th").length);
+    }
+  });
+
   it("rendert een semantische tabel met kolomkoppen, klassekoppen en een benoemd scrollvlak", () => {
     const view = renderPanel([
       row("a", 1),
