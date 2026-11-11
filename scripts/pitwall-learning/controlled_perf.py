@@ -30,6 +30,7 @@ import os
 import platform
 import random
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -613,8 +614,12 @@ def _valid_container_id(container_id: str) -> bool:
 
 def _ssh(argv: list[str], *, input_text: str | None = None,
          timeout: int = 300) -> subprocess.CompletedProcess:
+    # OpenSSH joins its arguments with spaces and hands the result to the
+    # remote shell. Quote every remote token so a `sh -c` script or an
+    # inspect format containing `|` cannot be split or piped by that shell.
+    remote = " ".join(shlex.quote(part) for part in argv)
     return subprocess.run(
-        SSH + argv, input=input_text, text=True,
+        SSH + [remote], input=input_text, text=True,
         capture_output=True, timeout=timeout,
     )
 
@@ -687,8 +692,17 @@ def prepare_proof_root(path: Path) -> Path:
     if path.exists():
         if not path.is_dir():
             raise FileExistsError(f"proof root is not a directory: {path}")
-        if any(path.iterdir()):
-            raise FileExistsError(f"proof root already contains files: {path}")
+        # The pre-run setup and TDD logs are deliberately kept beside the
+        # measurement.  They were created before the run and are never
+        # overwritten; any other pre-existing content means this is not a new
+        # proof root and is refused.
+        allowed = {"setup", "tdd"}
+        entries = list(path.iterdir())
+        unexpected = [entry for entry in entries
+                      if entry.name not in allowed or not entry.is_dir()]
+        if unexpected:
+            raise FileExistsError(
+                f"proof root already contains files: {unexpected[0]}")
     else:
         path.mkdir(parents=True, mode=0o700)
     os.chmod(path, 0o700)
