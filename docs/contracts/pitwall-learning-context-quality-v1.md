@@ -253,7 +253,9 @@ gehele ronde en blijft voor fuel een expliciete voorwaarde.
 
 Pitverlies en economic pace worden dus niet uit entry→exit of uit
 `started_at`/`ended_at` gefabriceerd. Echte brandstof-0 en wear-0 blijven
-aanwezig; een target kan daarnaast om een eigen reden ongeschikt zijn.
+aanwezig; fuel-0 blijft als waarde `0` staan maar krijgt de aparte blokkade
+`fuel_zero_rate` (geen bruikbare rate), terwijl wear-0 een geldige waarde kan
+blijven.
 
 ## Bronrealiteit en eerlijke gaten
 
