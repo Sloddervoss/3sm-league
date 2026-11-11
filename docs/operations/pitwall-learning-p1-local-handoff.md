@@ -2,8 +2,11 @@
 
 ## Besluit
 
-**Functionele bouw: PASS. Codekwaliteit: APPROVED. Performancepoort: OPEN / INCONCLUSIVE.**
-P1 heeft dus geen volledige faseacceptatie en geen productie-GO. P2 is niet gestart.
+**Functionele bouw: PASS. Codekwaliteit: APPROVED. Performancepoort: de nieuwe
+gecontroleerde 200-ronde run is volgens de vooraf vastgelegde regel PASS; de
+onafhankelijke parentreview en vrijgave staan nog open.**
+P1 heeft dus nog geen productie-GO en nog geen volledige faseacceptatie tot die
+review is afgerond. P2 is niet gestart.
 Geen push, main-merge, uitrol, training of nieuw zichtbaar advies.
 Productiefrontendwijzigingen: NONE. PRODUCTIEWIJZIGING: NEE.
 
@@ -51,7 +54,17 @@ horen bij latere, afzonderlijk toegestane fasen.
 
 ## Open prestatiepoort
 
-Eén vooraf vastgelegde ronde: 40 rondes, vijf gebalanceerde fasen, iedere fase eigen
+De onderstaande 40-ronde-uitkomst blijft **historisch INCONCLUSIVE** en wordt
+niet herschreven. De apart vooraf vastgelegde 200-ronde gecontroleerde run staat
+in `docs/operations/pitwall-learning-p1-controlled-perf.md`: p95 absent
+145,319 ms → on 159,842 ms, **+14,523 ms / +9,994%**, A/A binnen budget
+(+4,184 ms/+2,879% en +1,791 ms/+1,313%), 0 contractfouten op 1000 samples.
+Dat is volgens de ongewijzigde gate **PASS**, met een brede bootstrapdiagnostiek
+(−28,076 … +39,999 ms) die alleen ter informatie dient. De parent moet de
+robuustheid en de kleine marge onafhankelijk beoordelen; er is niets opnieuw
+gemeten en er is geen drempel of quantiel vervangen. Geen productie-GO, geen P2.
+
+De oude 40-ronde-meting: 40 rondes, vijf gebalanceerde fasen, iedere fase eigen
 backend, drie volledige ongetimede warmups na DDL/flagsetup en distinct identifiers.
 Geen doorgaan met herhalen totdat toevallig groen wordt gemeten.
 
