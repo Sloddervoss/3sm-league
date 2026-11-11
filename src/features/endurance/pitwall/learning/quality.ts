@@ -523,7 +523,9 @@ function buildTargets(
       fuelBlocking.push("refuel_in_lap_observed");
     }
     if (fuel.usedLitres.status === "observed" && fuel.usedLitres.value === 0) {
-      fuelWarning.push("fuel_zero_consumption_observed");
+      // De waarde blijft een echte 0, maar een nulverbruik is geen bruikbare
+      // fuelrate. De target wordt apart ongeschikt; het getal wordt niet gewist.
+      fuelBlocking.push("fuel_zero_rate");
     }
 
     if (fuel.usedLitres.status === "observed" && fuel.usedLitres.reason === null) {

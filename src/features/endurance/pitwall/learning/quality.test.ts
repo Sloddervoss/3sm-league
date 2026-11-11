@@ -192,7 +192,8 @@ describe("recordkwaliteit (T10)", () => {
     expect(zero.fuel.startLitres).toEqual({ status: "observed", value: 0, reason: null });
     expect(zero.fuel.usedLitres).toEqual({ status: "observed", value: 0, reason: null });
     expect(zero.targets.fuel.label).toMatchObject({ status: "available", value: 0, unit: "L/lap" });
-    expect(zero.targets.fuel.warningReasons).toContain("fuel_zero_consumption_observed");
+    expect(zero.targets.fuel.eligible).toBe(false);
+    expect(zero.targets.fuel.blockingReasons).toContain("fuel_zero_rate");
 
     const absent = assess(qualityInput({ payload: payload({ fuel_start_litres: null }) }));
     expect(absent.fuel.startLitres).toEqual({ status: "absent", value: null, reason: null });
