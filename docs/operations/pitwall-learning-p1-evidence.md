@@ -39,11 +39,23 @@ AND current_setting('data_directory') = '/work/data'
 De harness gebruikt uitsluitend:
 
 ```bash
-ssh -o BatchMode=yes 3sm-docker \
+ssh -oBatchMode=yes 3sm-docker \
   'docker exec -i pitwall-learning-p1-20261111 \
      psql -X -qAt -v ON_ERROR_STOP=1 -h /work -U postgres \
           -d pitwall_learning_p1_rehearsal'
 ```
+
+De echte worker-LOGIN-sessie kan `current_setting('data_directory')` niet
+lezen. Voor die ene probe maakt de harness daarom na de echte postgres-GUARD
+een tijdelijke, fixture-only `SECURITY DEFINER`
+`pitwall_learning.assert_rehearsal_environment()` aan: owner `postgres`,
+gepinde `search_path`, geen parameters, alleen `current_database()` en
+`data_directory`. De functie wordt vóór `COMMIT` expliciet van `PUBLIC`,
+`anon`, `authenticated`, `service_role` en de worker gerevoked en daarna
+alleen aan de worker gegeven. De worker roept hem vóór iedere DML in zijn
+`BEGIN`-transactie aan. In een `finally` wordt de helper gedropt en de harness
+verifieert dat hij absoluut afwezig is vóór de forward/parity-probe. Dit is
+testfixture-only; er is geen productiemigratie of auth-API voor gewijzigd.
 
 ## 2. Dunne capture vóór COMMIT
 
@@ -63,9 +75,12 @@ Budgetten zijn expliciet:
 
 ```text
 max 200 items per batch
-max 16.384 bytes per item
-max 262.144 bytes voor het hele batchpayload
+max 16.384 bytes per item (pg_column_size van het opgeslagen JSONB)
+max 262.144 bytes voor het hele batchpayload (pg_column_size)
 ```
+
+Deze grenzen zijn opslagmaten, geen UTF-8/ruwe-JSON-matentelling. Voor het
+wire-bewijs worden beide eenheden apart gerapporteerd (zie §7.4).
 
 Een batch die buiten het budget valt, wordt niet in stukken geknipt: de hele
 capturepoging faalt en de trigger vertaalt dat naar de vaste `WARNING` met
@@ -165,9 +180,11 @@ de batch wordt geschreven.
 De claim joint voor source-jobs de revisie en voor batchjobs de batch, en
 eist steeds een bestaande owner, actieve policy en gelijke policyversie.
 `finish_job` gebruikt `FOR UPDATE NOWAIT`, weigert NULL en iedere andere
-uitkomst dan `done`/`retry`, en controleert workerflag/owner/policy opnieuw.
-`worker_get_revision` blijft fail-closed voor flag, owner, policy en
-policyversie.
+uitkomst dan `done`/`retry`, en controleert workerflag/owner/policy/versie
+opnieuw voor **beide** uitkomsten. Een retry na owner-delete, policy-revoke of
+policyversiewijziging wordt dus geweigerd; de lease/token/state-checks blijven
+eerst lopen en de job blijft leased. `worker_get_revision` blijft fail-closed
+voor flag, owner, policy en policyversie.
 
 ## 5. Rechten en RLS
 
@@ -208,23 +225,23 @@ Commando:
 python3 scripts/pitwall-learning/rehearse-p1.py --samples 40
 ```
 
-Logs: `/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/thin-outbox-review/`
+Logs: `/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/calibrated-perf-review/`
 (`green-*.log`, `concurrency.log`, `deadletter-lock.log`, `worker-login.log`,
 `finish-busy.log`, `lock-ack.log`, `materialize-failure.log`, `perf-wire.log`,
-`perf-warmup.log`, `perf-cpu-attribution.log`, `perf-db-only-stress.log`,
-`rollback.log`, `forward-clean-probe.log`, `forward-conflict.log`,
-`retained-upgrade.log`, `summary.json`, `baseline-*.json`). De oudere
-`bounded-review`-logs zijn niet overschreven.
+`perf-cpu-attribution.log`, `perf-db-only-stress.log`, `rollback.log`,
+`forward-clean-probe.log`, `forward-conflict.log`, `summary.json`,
+`baseline-*.json`). De oudere `bounded-review`-, `spec-thin-outbox-review`- en
+`thin-outbox-review`-mappen zijn niet de uitvoermap van deze ronde.
 
 De kloon was al forward met de bounded-v2-schema-versie. De harness heeft die
 niet blind opnieuw geforward: de oude schema's/rol zijn naar
 `pitwall_learning_v2_archive` / `pitwall_learning_worker_v2_archive`
 herschreven, het echte forward-bestand is op een afwezige namespace toegepast
-en alle 40 bewijsrijen, 40 jobs en de policy zijn met expliciete kolommen
+en alle bewijsrijen, jobs en de policy zijn met expliciete kolommen
 gekopieerd. Een legacy-row-checksum (`md5(jsonb_build_object(...))` over de
 oorspronkelijke kolomset) bewees dat de kopie byte-identiek is; bij verschil
 gaat de hele transactie terug. De oude schema's blijven als archief staan (er
-is niets gedropt). De tweede harness-run zag de nieuwe versie en sloeg de
+is niets gedropt). Een tweede harness-run zag de nieuwe versie en sloeg de
 migratie over (`already thin-outbox v5`).
 
 Resultaten:
@@ -234,42 +251,46 @@ Resultaten:
 | Schema/rol/constraints/RLS/grants/default-probe | **124/124 PASS** |
 | Dunne outbox/budget/materialisatie/idempotentie/privacy | **77/77 PASS** |
 | Capture/dedupe/revisie/late/context/immutability/owner-delete/200-set | **58/58 PASS** |
-| Jobs/lease/backoff/dead-letter/NULL/policy/owner | **45/45 PASS** |
+| Jobs/lease/backoff/dead-letter/NULL/policy/owner/retry-gate | **55/55 PASS** |
 | Echte rolprobes anon/auth/service/worker/TRUNCATE | **36/36 PASS** |
+| **Totaal SQL-asserties** | **350/350 PASS** |
 | Twee connecties: A claimt, B krijgt `[]` | PASS |
 | Gelockte dead-letter-rij: B claimt de gezonde job; rij blijft `pending` | PASS |
 | Echte worker-LOGIN: batchjob claimen, fake done weigeren, materialiseren, exporteren, finishen | PASS |
 | `finish_job` op een door een andere sessie gelockte rij: `job_busy`, lease/token intact | PASS |
 | Lock op `capture_batches`: ACK accepted, vaste `PWL01`, `lock_timeout` terug op 0, 0 batches, replay duplicate | PASS |
 | Lock op `source_revisions`: ingest accepted en batch geschreven; materialisatie faalt zonder halve projectie en dezelfde lease retryt daarna succesvol | PASS |
-| Rollback-dry-run: 40 revisies + batches + jobs + materiaalbewijs behouden, public exact (99/8/165), worker/LOGIN uit, 4 triggers weg | PASS |
+| Rollback-dry-run: 104 revisies + 160 jobs + 56 batches (46 gematerialiseerd) behouden, public exact (99/8/165), worker/LOGIN uit, 4 triggers weg | PASS |
 | Forward from absent namespace: 10 tabellen, 4 triggers, rolflags, 0 rijen, definities byte-identiek aan live | PASS |
 | Forward op bestaand schema: geweigerd | PASS |
+
+De harness-uitgang is **1** en de enige failure is
+`perf_gate_INCONCLUSIVE`; alle vijf SQL-suites en alle functionele probes zijn
+groen. Dat is geen verborgen functionele fout.
 
 TDD-RED staat in `red-05-thin-outbox.log` (de nieuwe test faalt op de
 afwezige `capture_batches`) en `red-06-synchronous-detail.log` (de oude
 implementatie voegde 20 detailrevisies en 20 source-jobs toe in de
 ingest-transactie; `capture_batches` en de materialisatie-RPC bestonden niet).
+De F2-retryregressie is eerst Rood bewezen in
+`calibrated-perf-review/red-finish-retry.log` (47/55, acht retry/done-
+asserties falen op de oude done-only gate) en daarna groen in
+`green-jobs-retry.log` (55/55).
 
-## 7. Performance — INCONCLUSIVE door A/A-ruis
+## 7. Performance — gekalibreerde 40-ronde meting: INCONCLUSIVE, geen PASS
 
 Productiegrens blijft **p95 ≤ 10% én ≤ 20 ms** (strengste van de twee); er is
 niets versoepeld. De primaire gate is het verschil tussen de fase-p95's
 (`on` minus `absent`) en het percentage van de baseline-p95. De per-ronde
-paired delta wordt alleen als diagnostiek gerapporteerd.
+paired delta wordt alleen als diagnostiek gerapporteerd. Een meting met een
+onvolledige ingest (0 ACK, capture uit, lege batch, verkeerde source-kind) is
+geen PASS, maar een ongeldige meting.
 
-Meetopzet op de vastgepinde **1 CPU**-kloon (PG15.19, 512 MiB, network none):
+### 7.1 Historische koude meting (diagnostisch, niet geldig)
 
-- **primair frame (wire-representatief)**: 20 events met wear + evidence en
-  3 volledige rondeaggregaten. Gemeten part: events 12.691 B + laps 3.231 B =
-  **15.922 B** (limiet 16.384) en body **16.022 B** (limiet 24.576); alle 20
-  events + 3 laps geaccepteerd. Geen `perf_probe`-kind.
-- vijf fasen per paired ronde: triggers afwezig, afwezig A/A-herhaling,
-  installed capture uit, installed capture uit A/A-herhaling, installed
-  capture aan;
-- 40 paired rondes na één weggegooide warm-up, fasevolgorde wisselt per ronde;
-- nearest-rank p95 (`ceil(p*n)-1`), geen interpolatie of extrapolatie;
-- 200-event meting staat **apart** als DB-only stress en is geen wire-frame.
+De eerdere 40-ronde meting in
+`/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/thin-outbox-review/`
+is bewaard als **historische koudstartdiagnostiek**, niet als bewijs:
 
 | Fase | p50 | p95 |
 |---|---:|---:|
@@ -279,47 +300,130 @@ Meetopzet op de vastgepinde **1 CPU**-kloon (PG15.19, 512 MiB, network none):
 | installed uit A/A | 137,9 ms | 237,1 ms |
 | installed, capture aan | 162,6 ms | 288,6 ms |
 
-Primaire fase-p95:
+Die run deed alle vijf fasen in **één** psql-backend per ronde, met één
+weggegooide warm-up in een **andere** backend. De eerste fase in een backend
+was daardoor koud voor PL/pgSQL-plannen/relcache; de absent-fasen deden
+bovendien `DROP TRIGGER`-DDL vlak vóór de getimede call. De primaire
+`+23,163 ms / +8,7%` en de A/A `-81,084 ms / -30,5%` en
+`+25,534 ms / +12,1%` zijn daarom positie- en koudstartvertekend. Dat oude
+resultaat is geen bewijs dat de ruis door de host komt en blijft **geen PASS**.
+
+### 7.2 Vooraf vastgelegd protocol
+
+Vóór de run is dit protocol vastgelegd; de harness weigert iedere andere
+steekproefomvang dan 40:
+
+- **40 paired rondes**, vijf fasen: triggers afwezig, afwezig A/A-herhaling,
+  installed capture uit, uit A/A-herhaling, installed capture aan.
+- **Balanced phase orders**: vijf Latijnse rotaties plus vijf rotaties van de
+  omgekeerde volgorde. Elke fase staat in 40 rondes **8 keer op elk van de
+  vijf posities**; de A/A-baselines hebben dus dezelfde positieverdeling als
+  elkaar en als `on`.
+- **Per fase een eigen backend**, met `BEGIN … ROLLBACK`. Vóór de getimede
+  call staan alle relevante DDL (`DROP TRIGGER` in de absent-fasen) en de
+  captureflag aan; daarna volgen **3 ongetimede volledige 20+3-warmups**.
+- Iedere warmup is een echte volledige ingest met **distinct**
+  `eventUid`/`eventId`/`summaryUid`/`summaryId`; de lap-`wearObservationIds`
+  verwijzen naar de warmup-`eventId`'s. De gemeten frame is nieuwe 20+3-data.
+  Warmupbatches blijven tot `ROLLBACK` staan, maar de gemeten delta's nemen
+  alleen de nieuwe batch/jobs/revisies van de getimede call.
+- De warmups doorlopen dezelfde RPC-, trigger/helper- en flagbranch als de
+  meting, zodat ook de capture-helper, flagcompilatie en eventuele
+  drain/planopbouw warm zijn vóór de getimede call.
+- **nearest-rank p95** (`ceil(p*n)-1`), geen interpolatie of extrapolatie.
+- Primaire gate: `p95(on) - p95(absent) <= 20 ms` **EN** `<= 10%` van
+  `p95(absent)`.
+- A/A: **absolute** delta per identieke baseline `<= 20 ms` **EN** `<= 10%`;
+  een negatieve delta is eveneens ruis en mag geen positieve primaire delta
+  compenseren.
+- De paired-delta-p95 blijft aparte diagnostiek; er is geen metricwissel en
+  geen extra budget bovenop de 20 ms.
+- Alle 200 gemeten samples moeten 20 events + 3 laps accepteren met exact de
+  gemeten ACK-identiteiten. `on` moet 2 batches/23 items (20 event + 3 lap),
+  0 nieuwe revisies en +2 jobs tonen; `off`/`absent` moeten 0 private capture
+  tonen. Een contractschending maakt de uitslag FAIL, nooit PASS.
+
+### 7.3 Uitkomst van de gekalibreerde run
+
+Uit `calibrated-perf-review/perf-wire.log` (40 samples per fase):
+
+| Fase | p50 | p95 | >120 ms | >150 ms |
+|---|---:|---:|---:|---:|
+| triggers afwezig | 80,087 ms | 168,808 ms | 6 | 5 |
+| afwezig A/A | 81,167 ms | 176,772 ms | 7 | 4 |
+| installed, capture uit | 79,591 ms | 145,226 ms | 6 | 2 |
+| installed uit A/A | 84,189 ms | 170,242 ms | 8 | 5 |
+| installed, capture aan | 86,694 ms | 189,939 ms | 10 | 6 |
 
 ```text
-on - absent   = +23,163 ms  (+8,7% van 265,440 ms)
-on - off      = +77,079 ms  (+36,4% van 211,524 ms)
+primair:  on - absent = +21,131 ms  (+12,518% van 168,808 ms)   FAIL-timing
+secundair: on - off    = +44,713 ms  (+30,789% van 145,226 ms)
+A/A absent: +7,964 ms  (+4,718%)   binnen budget
+A/A off:   +25,016 ms  (+17,226%)  buiten budget
 ```
 
-Diagnostische paired p95:
+De A/A-controle voor `off` valt met **+25,016 ms / +17,226%** buiten de
+absolute en procentuele grens. Daarom is de uitkomst **INCONCLUSIVE**, niet
+PASS en niet FAIL. De primaire meting zit met **+21,131 ms / +12,518%**
+bovendien boven beide grenzen; als de A/A-controle geldig was geweest, zou dit
+een FAIL zijn. Er is dus geen enkele lezing waarin dit een PASS is.
+
+De p50's liggen met 79,6–86,7 ms dicht bij elkaar (p50 `on - absent`
++6,607 ms); de p95-verschillen worden gedomineerd door een klein aantal
+>120 ms-uitschieters op de gedeelde 1 CPU-host. De calibrated opzet heeft de
+systematische koude-backend/positievertekening van §7.1 aantoonbaar verwijderd
+(geen vaste fase meer op positie 1/5, geen DDL meer vóór een koude meting),
+maar de resterende host-tail is nog steeds groter dan het 10%-budget. Dat is
+een **omgevings/methodologische blocker**, geen bewijs dat de capture-code
+binnen budget zit.
+
+CPU-attributie (secundair, geen latencybewijs): p50 **+2,5 ms**, p95
+**+37,5 ms** per frame (20 rondes × 4 frames, ABBA). DB-only stress (200
+events, 10 rondes, expliciet geen wire-frame): p95 877,352 → 702,980 ms; die
+uitkomst is door dezelfde hostruis niet bruikbaar als overheadclaim.
+
+### 7.4 Contract- en groottebewijs
+
+Alle 200 gemeten samples (40 rondes × 5 fasen) hadden **0
+contractschendingen**: 20 events + 3 laps geaccepteerd, exact de gemeten
+ACK-identiteiten; `on` gaf 2 batches/23 items (20 event + 3 lap), 0 nieuwe
+revisies en +2 jobs; `off`/`absent` gaven 0 private capture. De hard-coded
+`kind_valid`-claim is verwijderd; de source-kinds worden uit de gemeten
+`capture_batches`-delta geteld.
+
+De wire-vorm blijft binnen de budgetten: events **12.691 B** + laps **3.231 B**
+= **15.922 B** (limiet 16.384), body **16.022 B** (limiet 24.576). Het
+batchpayload is **2.811 B opgeslagen/gecomprimeerd JSONB**
+(`sum(pg_column_size(payload))`) en **20.881 B ruwe JSON-tekst/UTF-8**
+(`sum(octet_length(payload::text))`); dat zijn twee verschillende eenheden en
+de 262.144 B-grens wordt op de opgeslagen waarde afgedwongen.
+
+### 7.5 Full-wire parse-referentie (geen HTTP/productieclaim)
+
+Het originele bewijs van de parent staat buiten deze worktree:
 
 ```text
-on - absent   = +199,225 ms  (+75,1%)
-on - off      = +170,124 ms  (+80,4%)
+/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/parent-full-wire-probe.mjs
+  sha256 6f9a97deb67294735661fa229f97fe34f95fb3927f9545d0ad5f9a3dd34a6dd6
+/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/parent-full-wire-probe.txt
+  sha256 e98e4b07b32bded3252f611ccf0c2d2ac6852913c6df1b2aedeb1bd5fce82241
 ```
 
-De A/A-controle is **niet binnen budget**:
+De ongewijzigde `parseTelemetryV3Envelope` parseerde daar 20 events + 3 laps,
+0 rejects, part **14.492 B** en body **15.430 B**. Dat is een parse-bewijs,
+geen HTTP E2E- of productieframebevestiging. Een optionele CI-check kan de
+twee sha256's en de laatste `{"verdict":"PASS",...}`-regel verifiëren; de
+harness genereert dit bestand niet en er is geen synthetische fixture voor in
+de plaats gezet.
 
-```text
-afwezig A/A - afwezig = -81,084 ms  (-30,5%)
-uit A/A - uit         = +25,534 ms  (+12,1%)
-```
+### 7.6 Stopregel
 
-Daarom is de uitkomst **INCONCLUSIVE**, niet PASS en niet FAIL. De primaire
-fase-p95 tegen `absent` zit met +23,2 ms boven de absolute 20 ms-grens (het
-percentage blijft met 8,7% onder de 10%-grens); de secundaire vergelijking
-tegen `installed-off` valt ruim buiten de grens. Omdat dezelfde baselinefasen
-in een echte A/A-herhaling meer dan het budget afwijken, is er geen geldige
-PASS/FAIL-uitspraak over de primaire meting. Dat is precies de tijdruis die de
-negatieve controle moest blootleggen.
-
-De oude 0,5 CPU-meting blijft ongewijzigd staan als **FAIL**:
-712,714 → 988,294 ms = **+275,580 ms / +38,666%**, met paired p95 +633,432 ms.
-Die oude FAIL is niet weggepoetst en de drempel is niet verruimd.
-
-CPU-attributie (secundair, geen ingest-latencyclaim): p50 **-7,5 ms**,
-p95 **+33,75 ms** per frame (20 rondes × 4 frames, ABBA). DB-only stress
-(200 events, 10 rondes, expliciet geen wire-frame): p95 833,9 → 918,9 ms.
-
-Het batchbewijs voor de wire-vorm: **2 batchrecords**, **23 items**,
-**2.811 bytes** batchpayload, **0 nieuwe revisies** en **+2 jobs** in de
-ingest-transactie. Dat is de bedoelde dunne brug; de rest gebeurt in de
-begrensde materialisatiestap.
+Omdat de gekalibreerde run nog steeds **INCONCLUSIVE** is, zijn er na deze
+enige vooraf vastgelegde run geen extra rondes of herhaalruns uitgevoerd om
+een PASS te zoeken. De drempel is niet verruimd en de metric is niet gewisseld.
+De open blocker is de p95-tailruis op de gedeelde 1 CPU-kloon; een rustiger
+host of een vooraf goedgekeurde, onafhankelijke herhalingsmeting is nodig voor
+een geldige PASS/FAIL-uitspraak.
 
 ## 8. Rollback
 
@@ -334,11 +438,12 @@ begrensde materialisatiestap.
   `DROP ... CASCADE`.
 
 De rollback is in de harness in één transactie uitgevoerd en daarna
-teruggedraaid. Binnen die transactie: 0 triggers, 40 revisies + 40 jobs +
-batches + materiaalbewijs behouden, worker-USAGE/LOGIN uit, switches uit,
-public-baseline exact gelijk (99 relations inclusief 8 sequences, 165 policies,
-dezelfde policy-fingerprint en ingest-hash). Na de rollback-transactie was de
-kloon weer volledig forward.
+teruggedraaid. Binnen die transactie: 0 triggers, 104 revisies + 160 jobs +
+56 batches (waarvan 46 gematerialiseerd) + het volledige materiaalbewijs
+behouden, worker-USAGE/LOGIN uit, switches uit, public-baseline exact gelijk
+(99 relations inclusief 8 sequences, 165 policies, dezelfde
+policy-fingerprint en ingest-hash). Na de rollback-transactie was de kloon
+weer volledig forward.
 
 Omdat de forward-migratie een bestaand schema/rol weigert te adopteren, is
 opnieuw forwarden na een echte rollback een aparte beheersactie (archiveren of
@@ -358,8 +463,23 @@ stilzwijgend.
   begrensde reconciliatie.
 - `server_receipt_at` is de batchontvangsttijd vóór COMMIT en geen
   first-visible/knownAt-bewijs.
-- De performancepoort is **INCONCLUSIVE** door A/A-ruis op de gedeelde
-  1 CPU-host; de oude 0,5 CPU-FAIL blijft staan. Dit is een open
-  productieblocker, geen PASS.
+- **F6 (privileged-only TRUNCATE)**: de smalle jobtrigger vervangt de oude FK
+  voor insert/update, maar rijtriggers vuren niet op `TRUNCATE`. Een
+  superuser/table-owner kan dus met direct SQL `source_revisions` leegmaken en
+  jobs laten wees-worden. Alle applicatierollen (anon/authenticated/
+  service_role/worker) hebben geen TRUNCATE; operationeel geldt: **geen
+  private TRUNCATE** buiten een expliciet goedgekeurde, afgeschermde
+  herstelactie. Dit is een residual privileged-only verschil, geen
+  productieblokker en vraagt geen extra rollen/structuur.
+- **F7 (per-item >16 KiB)**: een directe helper-call met één item boven
+  16.384 B wordt door de `admitted`-filter stil overgeslagen; alleen een
+  batch boven 262.144 B geeft de vaste `PWL01`. De echte source-constraints
+  begrenzen normale events/laps ruim onder 16 KiB. Dit is een minor
+  direct-SQL-observatie; er is geen architectuurwijziging en **geen
+  modelcoverageclaim** voor geprivilegieerde oversized direct SQL.
+- De performancepoort is **INCONCLUSIVE** door p95-tailruis op de gedeelde
+  1 CPU-host; de primaire +21,131 ms/+12,518% en de A/A-off
+  +25,016 ms/+17,226% zijn beide buiten budget. Dit is een open
+  productieblocker, geen PASS. De oude 0,5 CPU-FAIL blijft staan.
 - `ALTER DEFAULT PRIVILEGES` is geen garantie voor toekomstige objecten;
   per-object-revoke vóór COMMIT blijft verplicht.
