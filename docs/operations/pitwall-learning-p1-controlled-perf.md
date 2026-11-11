@@ -190,6 +190,9 @@ Bestanden:
 - `rounds.jsonl` — order, fase-tijden, cgroup-delta's per ronde;
 - `resources.jsonl` — cgroup CPU-throttling, memory, pids, I/O, OOM-events,
   `/proc`-diagnostiek en Postgres-statistieken, buiten de klok;
+  `cpu.stat` is de CPU van de hele private PostgreSQL-container (PG15 heeft
+  geen per-backend CPU-teller en `pg_stat_statements` is niet geïnstalleerd);
+  `io.stat` wordt vastgelegd, maar tmpfs heeft geen blkdev-regels;
 - `maintenance.jsonl` — commando's, duur, voor/na-statistieken;
 - `raw-notices.log`, `result.json`, `result-summary.md`, `FINAL-SHA256SUMS`;
 - `verification.json` en `independent-verification.txt` — herberekening uit de
