@@ -600,6 +600,34 @@ describe("parseLearningContribution — tijdmetadata", () => {
     expect(parseLearningContribution(active({ trainedThrough: "2026-11-10" }), KNOWN)).not.toBeNull();
   });
 
+  it("weigert een date-only sourceObservedAt in een echte active+decisive bijdrage", () => {
+    expect(
+      parseLearningContribution(active({ sourceObservedAt: "2026-11-11" }), KNOWN),
+    ).toBeNull();
+  });
+
+  it.each(["collecting", "shadow", "active", "blocked"])(
+    "weigert een date-only sourceObservedAt in state %s",
+    (state) => {
+      expect(
+        parseLearningContribution(base({ state, sourceObservedAt: "2026-11-11" }), KNOWN),
+        state,
+      ).toBeNull();
+    },
+  );
+
+  it("accepteert een volledig gezoneerd observatie-UTC-middernacht", () => {
+    expect(
+      parseLearningContribution(active({ sourceObservedAt: "2026-11-11T00:00:00Z" }), KNOWN),
+    ).not.toBeNull();
+  });
+
+  it("accepteert een observatie met expliciete offset", () => {
+    expect(
+      parseLearningContribution(active({ sourceObservedAt: "2026-11-11T00:00:00+02:00" }), KNOWN),
+    ).not.toBeNull();
+  });
+
   it.each([
     "not-a-date",
     "2026-11-11T10:00:00",

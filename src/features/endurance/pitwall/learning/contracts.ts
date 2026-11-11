@@ -189,17 +189,24 @@ function readNullableCount(record: Record<string, unknown>, key: string): number
 }
 
 /**
- * ISO-8601 met verplichte zone zodra er een tijd is. Een datum zonder tijd is
- * toegestaan (trainedThrough is vaak daggebrek); een tijd zonder zone niet,
- * want dan zou de parser een tijdzone moeten verzinnen.
+ * ISO-8601 met verplichte zone zodra er een tijd is. `trainedThrough` mag een
+ * datum zonder tijd zijn (vaak daggebrek); `sourceObservedAt` is een werkelijk
+ * observatie-instant en eist daarom altijd tijd én expliciete zone. Zonder tijd
+ * of zone zou de parser middernacht of een tijdzone moeten verzinnen, en dat is
+ * geen observatie.
  */
 const ISO_TIMESTAMP =
   /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2}))?$/;
 
-function isValidTimestamp(value: string): boolean {
+type TimestampShape = "date-or-instant" | "instant";
+
+function isValidTimestamp(value: string, shape: TimestampShape): boolean {
   if (value.length > MAX_TIMESTAMP_LENGTH) return false;
   const match = ISO_TIMESTAMP.exec(value);
   if (!match) return false;
+
+  const hasTime = match[4] !== undefined;
+  if (shape === "instant" && !hasTime) return false;
 
   const year = Number(match[1]);
   const month = Number(match[2]);
@@ -210,7 +217,7 @@ function isValidTimestamp(value: string): boolean {
   const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
   if (day < 1 || day > daysInMonth) return false;
 
-  if (match[4] !== undefined) {
+  if (hasTime) {
     const hour = Number(match[4]);
     const minute = Number(match[5]);
     const second = Number(match[6]);
@@ -228,10 +235,19 @@ function isValidTimestamp(value: string): boolean {
   return Number.isFinite(Date.parse(value));
 }
 
-function readNullableTimestamp(record: Record<string, unknown>, key: string): string | null {
-  const value = readNullableString(record, key, MAX_TIMESTAMP_LENGTH);
+/** trainedThrough: datum zonder tijd blijft toegestaan. */
+function readNullableTrainedThrough(record: Record<string, unknown>): string | null {
+  const value = readNullableString(record, "trainedThrough", MAX_TIMESTAMP_LENGTH);
   if (value === null) return null;
-  if (!isValidTimestamp(value)) fail();
+  if (!isValidTimestamp(value, "date-or-instant")) fail();
+  return value;
+}
+
+/** sourceObservedAt: alleen een volledig gezoneerd observatie-instant. */
+function readNullableSourceObservedAt(record: Record<string, unknown>): string | null {
+  const value = readNullableString(record, "sourceObservedAt", MAX_TIMESTAMP_LENGTH);
+  if (value === null) return null;
+  if (!isValidTimestamp(value, "instant")) fail();
   return value;
 }
 
@@ -401,13 +417,13 @@ function parseInternal(input: unknown, options?: LearningContributionParseOption
   const modelVersion = readNullableString(record, "modelVersion", MAX_VERSION_LENGTH);
   const featureVersion = readRequiredString(record, "featureVersion", MAX_VERSION_LENGTH);
   const policyVersion = readRequiredString(record, "policyVersion", MAX_VERSION_LENGTH);
-  const trainedThrough = readNullableTimestamp(record, "trainedThrough");
+  const trainedThrough = readNullableTrainedThrough(record);
   const sourceFrameSequence = readNullableString(
     record,
     "sourceFrameSequence",
     MAX_FRAME_SEQUENCE_LENGTH,
   );
-  const sourceObservedAt = readNullableTimestamp(record, "sourceObservedAt");
+  const sourceObservedAt = readNullableSourceObservedAt(record);
 
   const contextMatch = readRequiredBoolean(record, "contextMatch");
   const decisive = readRequiredBoolean(record, "decisive");
