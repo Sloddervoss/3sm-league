@@ -6,7 +6,8 @@
 --
 -- Bewust NIET:
 --   * geen DROP SCHEMA (en zeker geen CASCADE);
---   * geen DROP/TRUNCATE/DELETE van source_revisions, jobs of P2-tabellen;
+--   * geen DROP/TRUNCATE/DELETE van capture_batches, source_revisions, jobs of
+--     P2-tabellen;
 --   * geen wijziging aan public-tabellen, public-policies of public-grants.
 --
 -- Gevolg: het private schema en alle reeds vastgelegde bewijsdata blijven
