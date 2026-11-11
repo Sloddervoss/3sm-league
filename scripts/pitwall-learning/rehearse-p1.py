@@ -44,7 +44,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DB = "pitwall_learning_p1_rehearsal"
 CONTAINER = "pitwall-learning-p1-20261111"
-ART = Path("/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/thin-outbox-review")
+ART = Path("/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/calibrated-perf-review")
 MIGRATION = ROOT / "supabase/migrations/20261111163052_pitwall_learning_evidence.sql"
 ROLLBACK = ROOT / "supabase/rollbacks/20261111163052_pitwall_learning_evidence.sql"
 FIXTURE = ROOT / "supabase/tests/fixtures/pitwall-learning-p1-fixtures.sql"
@@ -718,6 +718,63 @@ COMMIT;
     return result
 
 
+WORKER_GUARD_FN = "pitwall_learning.assert_rehearsal_environment()"
+
+
+def _install_worker_guard() -> dict:
+    """Fixture-only SECURITY DEFINER guard for the real worker LOGIN session.
+
+    The worker role may not read ``data_directory`` itself. The postgres-owned
+    helper checks the same database/data_directory identity as the outer guard
+    and is granted only to the worker for the duration of this one probe.
+    """
+    sql = f"""BEGIN;
+{GUARD}
+CREATE OR REPLACE FUNCTION pitwall_learning.assert_rehearsal_environment()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $guardfn$
+BEGIN
+  IF current_database() <> '{DB}'
+     OR current_setting('data_directory') <> '/work/data' THEN
+    RAISE EXCEPTION 'REHEARSAL GUARD: wrong database or data_directory';
+  END IF;
+END
+$guardfn$;
+REVOKE ALL ON FUNCTION pitwall_learning.assert_rehearsal_environment()
+  FROM PUBLIC, anon, authenticated, service_role, pitwall_learning_worker;
+GRANT EXECUTE ON FUNCTION pitwall_learning.assert_rehearsal_environment()
+  TO pitwall_learning_worker;
+COMMIT;
+"""
+    _run(sql, timeout=60)
+    state = json.loads(_run(f"""SELECT jsonb_build_object(
+  'owner', (SELECT pg_get_userbyid(proowner) FROM pg_proc
+             WHERE oid = '{WORKER_GUARD_FN}'::regprocedure),
+  'security_definer', (SELECT prosecdef FROM pg_proc
+             WHERE oid = '{WORKER_GUARD_FN}'::regprocedure),
+  'pinned_path', (SELECT proconfig FROM pg_proc
+             WHERE oid = '{WORKER_GUARD_FN}'::regprocedure),
+  'worker_exec', has_function_privilege('pitwall_learning_worker',
+             '{WORKER_GUARD_FN}', 'EXECUTE'),
+  'anon_exec', has_function_privilege('anon',
+             '{WORKER_GUARD_FN}', 'EXECUTE')
+)::text;""").stdout.strip().splitlines()[-1])
+    return state
+
+
+def _drop_worker_guard() -> bool:
+    """Drop the fixture helper and prove it is absent again."""
+    _run(f"BEGIN;\n{GUARD}\nDROP FUNCTION IF EXISTS {WORKER_GUARD_FN};\nCOMMIT;\n",
+         timeout=60)
+    absent = _run(
+        f"SELECT to_regprocedure('{WORKER_GUARD_FN}') IS NULL;"
+    ).stdout.strip() == "t"
+    return absent
+
+
 def worker_login() -> dict:
     """
     Real worker session over the private Unix socket (trust auth, no password):
@@ -746,7 +803,8 @@ COMMIT;
         "-X", "-qAt", "-v", "ON_ERROR_STOP=1",
         "-h", "/work", "-U", "pitwall_learning_worker", "-d", DB,
     ]
-    sql = f"""
+    guard_meta = _install_worker_guard()
+    sql = f"""BEGIN;
 SELECT session_user || '|' || current_user || '|' || current_setting('search_path');
 DO $w$
 DECLARE
@@ -762,6 +820,10 @@ DECLARE
   denied_capture boolean := false;
   denied_table boolean := false;
 BEGIN
+  -- The worker role cannot read data_directory itself; this postgres-owned,
+  -- fixture-only SECURITY DEFINER helper checks the same clone identity before
+  -- any DML in this real LOGIN session.
+  PERFORM pitwall_learning.assert_rehearsal_environment();
   c := pitwall_learning.claim_jobs(1, 60);
   RAISE NOTICE 'WCLAIM %', c;
   job := (c->0->>'job_id')::uuid;
@@ -792,9 +854,14 @@ BEGIN
   RAISE NOTICE 'WFIN %', f;
 END
 $w$;
+COMMIT;
 """
-    proc = subprocess.run(SSH + worker_psql, input=sql, text=True,
-                          capture_output=True, timeout=60)
+    guard_absent = False
+    try:
+        proc = subprocess.run(SSH + worker_psql, input=sql, text=True,
+                              capture_output=True, timeout=60)
+    finally:
+        guard_absent = _drop_worker_guard()
     out = proc.stdout.strip().splitlines()
     identity = out[0] if out else ""
     claim = claim2 = batch_done = mat = None
@@ -831,10 +898,18 @@ $w$;
         and payload is True
         and owner_leak is False
         and denied is True
+        and guard_meta.get("owner") == "postgres"
+        and guard_meta.get("security_definer") is True
+        and guard_meta.get("pinned_path") == ["search_path=pg_catalog, pg_temp"]
+        and guard_meta.get("worker_exec") is True
+        and guard_meta.get("anon_exec") is False
+        and guard_absent is True
         and isinstance(finish, dict) and finish.get("status") == "done"
     )
     result = {
         "identity": identity,
+        "guard_meta": guard_meta,
+        "guard_helper_absent_after": guard_absent,
         "claim": claim,
         "fake_done": batch_done,
         "materialize": mat,
@@ -1226,15 +1301,102 @@ STRESS_EVENTS_JSON = """
   v_lp := NULL;
 """
 
+# Untimed warm-up frames. They deliberately use different UUIDs, eventId,
+# summaryId and lap wearObservationIds from the measured frame. The RPC dedupes
+# on eventId/summaryId as well as the UUID, so reusing the measured identities
+# would turn a warm-up into a cheap duplicate and would make the following
+# measurement fake-fast.
+WARM_EVENTS_JSON = """
+  SELECT jsonb_agg(jsonb_build_object(
+    'eventUid', ('11000000-0000-4000-8000-' || lpad((v_warm * 100 + k)::text, 12, '0'))::uuid,
+    'eventId', 'warm-evt-' || v_warm || '-' || k,
+    'kind', 'wear_refresh_confirmed',
+    'segmentId', 'seg-wire',
+    'pitVisitId', 'pit-wire',
+    'observedSessionId', 'sess-warm-' || v_warm,
+    'observedAt', '2026-11-11T16:00:00Z'::timestamptz,
+    'sessionTimeSeconds', 1000 + k,
+    'sdkTick', 50000 + k,
+    'confidence', 0.9,
+    'wearBefore', jsonb_build_object('version', 1, 'scale', 'remaining_percent',
+                                     'fl', 90.0, 'fr', 89.8, 'rl', 90.2, 'rr', 90.1),
+    'wearAfter', jsonb_build_object('version', 1, 'scale', 'remaining_percent',
+                                    'fl', 89.9, 'fr', 89.7, 'rl', 90.1, 'rr', 90.0),
+    'evidence', jsonb_build_object('version', 1, 'source', 'tire_sets_used',
+                                   'channels', jsonb_build_array('tire_sets_used'),
+                                   'note', 'set 3 stint 2')
+  ) ORDER BY k) INTO v_ev FROM generate_series(1, 20) k;
+"""
+WARM_LAPS_JSON = """
+  SELECT jsonb_agg(jsonb_build_object(
+    'summaryUid', ('21000000-0000-4000-8000-' || lpad((v_warm * 100 + k)::text, 12, '0'))::uuid,
+    'summaryId', 'warm-lap-' || v_warm || '-' || k,
+    'segmentId', 'seg-wire',
+    'observedSessionId', 'sess-warm-' || v_warm,
+    'lapNumber', 20 + k,
+    'startedAt', '2026-11-11T15:58:00Z',
+    'endedAt', '2026-11-11T16:00:00Z',
+    'currentDriverName', 'Wire Driver',
+    'aggregationVersion', 1,
+    'complete', true,
+    'invalidReasons', jsonb_build_array(),
+    'pitLap', false,
+    'driverChanged', false,
+    'trackTempCMean', 32.5, 'trackTempCMin', 31, 'trackTempCMax', 34,
+    'airTempCMean', 21,
+    'fuelStartLitres', 42, 'fuelEndLitres', 39.5,
+    'fuelLevelIntegralLitreSeconds', 4875,
+    'fuelAddedLitresObserved', NULL,
+    'absLatAccelIntegralGSeconds', 220,
+    'latAccelSquaredIntegralG2Seconds', 380,
+    'maxAbsLatAccelG', 1.85,
+    'absLongAccelIntegralGSeconds', 60,
+    'sampleCount', 7200,
+    'pitVisitIds', jsonb_build_array('pit-wire'),
+    'wearObservationIds', jsonb_build_array('warm-evt-' || v_warm || '-15'),
+    'coverage', jsonb_build_object(
+      'temperature', jsonb_build_object('validDurationSeconds', 120.0, 'sampleCount', 2400, 'maxGapSeconds', 0.1),
+      'fuel', jsonb_build_object('validDurationSeconds', 120.0, 'sampleCount', 2400, 'maxGapSeconds', 0.1),
+      'load', jsonb_build_object('validDurationSeconds', 120.0, 'sampleCount', 2400, 'maxGapSeconds', 0.1))
+  ) ORDER BY k) INTO v_lp FROM generate_series(1, 3) k;
+"""
 
-def _measure_block(phase: str, frame: str, sess: str, run: int) -> str:
+
+def _measure_block(phase: str, frame: str, sess: str, run: int,
+                   warmups: int = 3) -> str:
+    """One phase in its own backend.
+
+    All DDL (DROP TRIGGER for the absent phases) and the capture flag are set
+    before the untimed warm-up ingests. Each of the three warm-ups is a full
+    20-event/3-lap ingest with distinct UUID/eventId/summaryId identities, so
+    the helper path, plan cache and flag branch are warm before the one timed
+    call. The measured frame is new 20+3 data and the warm-up batches are not
+    counted in the measured deltas.
+    """
     fixtures = WIRE_EVENTS_JSON + WIRE_LAPS_JSON if frame == "wire" else STRESS_EVENTS_JSON
+    warm = ""
+    if frame == "wire" and warmups:
+        warm = f"""
+  FOR v_warm IN 1..{warmups} LOOP
+    {WARM_EVENTS_JSON}
+    {WARM_LAPS_JSON}
+    v_wack := public.simhub_persist_measurement_batch(
+      'd0000000-0000-4000-8000-000000000001',
+      'sess-warm-' || v_warm, v_ev, v_lp);
+    IF jsonb_array_length(coalesce(v_wack #> '{{events,accepted}}', '[]'::jsonb)) <> 20
+       OR jsonb_array_length(coalesce(v_wack #> '{{laps,accepted}}', '[]'::jsonb)) <> 3 THEN
+      RAISE EXCEPTION 'warm-up % did not accept 20+3: %', v_warm, v_wack;
+    END IF;
+  END LOOP;
+"""
     return f"""
 SET LOCAL request.jwt.claim.role='service_role';
 UPDATE pitwall_learning.runtime_settings
    SET capture_enabled = {str(phase == 'on').lower()} WHERE id = 1;
 DO $perf$
 DECLARE
+  v_warm integer;
+  v_wack jsonb;
   v_ev jsonb;
   v_lp jsonb;
   v_ack jsonb;
@@ -1248,27 +1410,88 @@ DECLARE
   v_b1 bigint;
   v_bb0 bigint;
   v_bb1 bigint;
+  v_bbt0 bigint;
+  v_bbt1 bigint;
   v_bi0 bigint;
   v_bi1 bigint;
+  v_bev0 bigint;
+  v_bev1 bigint;
+  v_biev0 bigint;
+  v_biev1 bigint;
+  v_blp0 bigint;
+  v_blp1 bigint;
+  v_bilp0 bigint;
+  v_bilp1 bigint;
   v_ev_bytes integer;
   v_lp_bytes integer;
+  v_ev_uids_ok boolean;
+  v_lp_uids_ok boolean;
 BEGIN
+  {warm}
   {fixtures}
   v_ev_bytes := octet_length(v_ev::text);
   v_lp_bytes := coalesce(octet_length(v_lp::text), 0);
   SELECT count(*) INTO v_rev0 FROM pitwall_learning.source_revisions;
   SELECT count(*) INTO v_j0 FROM pitwall_learning.jobs;
-  SELECT count(*), coalesce(sum(pg_column_size(payload)),0), coalesce(sum(item_count),0)
-    INTO v_b0, v_bb0, v_bi0 FROM pitwall_learning.capture_batches;
+  SELECT count(*), coalesce(sum(pg_column_size(payload)),0),
+         coalesce(sum(octet_length(payload::text)),0),
+         coalesce(sum(item_count),0)
+    INTO v_b0, v_bb0, v_bbt0, v_bi0 FROM pitwall_learning.capture_batches;
+  SELECT count(*) FILTER (WHERE source_kind='measurement_event'),
+         coalesce(sum(item_count) FILTER (WHERE source_kind='measurement_event'),0),
+         count(*) FILTER (WHERE source_kind='lap_summary'),
+         coalesce(sum(item_count) FILTER (WHERE source_kind='lap_summary'),0)
+    INTO v_bev0, v_biev0, v_blp0, v_bilp0
+    FROM pitwall_learning.capture_batches;
+
   v_t0 := clock_timestamp();
   v_ack := public.simhub_persist_measurement_batch(
     'd0000000-0000-4000-8000-000000000001', '{sess}', v_ev, v_lp);
   v_t1 := clock_timestamp();
+
   SELECT count(*) INTO v_rev1 FROM pitwall_learning.source_revisions;
   SELECT count(*) INTO v_j1 FROM pitwall_learning.jobs;
-  SELECT count(*), coalesce(sum(pg_column_size(payload)),0), coalesce(sum(item_count),0)
-    INTO v_b1, v_bb1, v_bi1 FROM pitwall_learning.capture_batches;
-  RAISE NOTICE 'P1PERF phase={phase} frame={frame} run={run} ms=% ev_acc=% lp_acc=% ev_bytes=% lp_bytes=% body_bytes=% rev_delta=% job_delta=% batch_rows=% batch_bytes=% batch_items=%',
+  SELECT count(*), coalesce(sum(pg_column_size(payload)),0),
+         coalesce(sum(octet_length(payload::text)),0),
+         coalesce(sum(item_count),0)
+    INTO v_b1, v_bb1, v_bbt1, v_bi1 FROM pitwall_learning.capture_batches;
+  SELECT count(*) FILTER (WHERE source_kind='measurement_event'),
+         coalesce(sum(item_count) FILTER (WHERE source_kind='measurement_event'),0),
+         count(*) FILTER (WHERE source_kind='lap_summary'),
+         coalesce(sum(item_count) FILTER (WHERE source_kind='lap_summary'),0)
+    INTO v_bev1, v_biev1, v_blp1, v_bilp1
+    FROM pitwall_learning.capture_batches;
+
+  -- The ACK must name exactly the measured source UUIDs (the ACK id is the
+  -- eventUid/summaryUid), not warm-up or stale rows.
+  SELECT NOT EXISTS (
+           SELECT t.obj->>'id' FROM jsonb_array_elements(
+                    coalesce(v_ack #> '{{events,accepted}}', '[]'::jsonb)) AS t(obj)
+           EXCEPT
+           SELECT ('10000000-0000-4000-8000-' || lpad(k::text, 12, '0'))
+             FROM generate_series(1, 20) k)
+     AND NOT EXISTS (
+           SELECT ('10000000-0000-4000-8000-' || lpad(k::text, 12, '0'))
+             FROM generate_series(1, 20) k
+           EXCEPT
+           SELECT t.obj->>'id' FROM jsonb_array_elements(
+                    coalesce(v_ack #> '{{events,accepted}}', '[]'::jsonb)) AS t(obj))
+    INTO v_ev_uids_ok;
+  SELECT NOT EXISTS (
+           SELECT t.obj->>'id' FROM jsonb_array_elements(
+                    coalesce(v_ack #> '{{laps,accepted}}', '[]'::jsonb)) AS t(obj)
+           EXCEPT
+           SELECT ('20000000-0000-4000-8000-' || lpad(k::text, 12, '0'))
+             FROM generate_series(1, 3) k)
+     AND NOT EXISTS (
+           SELECT ('20000000-0000-4000-8000-' || lpad(k::text, 12, '0'))
+             FROM generate_series(1, 3) k
+           EXCEPT
+           SELECT t.obj->>'id' FROM jsonb_array_elements(
+                    coalesce(v_ack #> '{{laps,accepted}}', '[]'::jsonb)) AS t(obj))
+    INTO v_lp_uids_ok;
+
+  RAISE NOTICE 'P1PERF phase={phase} frame={frame} run={run} ms=% ev_acc=% lp_acc=% ev_bytes=% lp_bytes=% body_bytes=% rev_delta=% job_delta=% batch_rows=% batch_items=% batch_stored_bytes=% batch_text_bytes=% ev_batch_rows=% ev_batch_items=% lp_batch_rows=% lp_batch_items=% ev_uids_ok=% lp_uids_ok=%',
     round(extract(epoch FROM (v_t1 - v_t0)) * 1000, 3),
     jsonb_array_length(coalesce(v_ack #> '{{events,accepted}}', '[]'::jsonb)),
     jsonb_array_length(coalesce(v_ack #> '{{laps,accepted}}', '[]'::jsonb)),
@@ -1279,8 +1502,15 @@ BEGIN
     v_rev1 - v_rev0,
     v_j1 - v_j0,
     v_b1 - v_b0,
+    v_bi1 - v_bi0,
     v_bb1 - v_bb0,
-    v_bi1 - v_bi0;
+    v_bbt1 - v_bbt0,
+    v_bev1 - v_bev0,
+    v_biev1 - v_biev0,
+    v_blp1 - v_blp0,
+    v_bilp1 - v_bilp0,
+    v_ev_uids_ok,
+    v_lp_uids_ok;
 END
 $perf$;
 """
@@ -1301,49 +1531,146 @@ def _parse_perf(stderr: str) -> list[dict]:
     return out
 
 
-def perf(samples: int = 30) -> dict:
-    phase_names = ["absent", "absent_aa", "off", "off_aa", "on"]
+def measurement_contract_errors(phase: str, rec: dict) -> list[str]:
+    """Return every reason a measured sample is not the promised 20+3 ingest.
 
-    def measure_round(run: int) -> dict:
-        blocks = {
-            "absent": _measure_block('absent', 'wire', f'perf-absent-{run}', run),
-            "absent_aa": _measure_block('absent_aa', 'wire', f'perf-absent-aa-{run}', run),
-            "off": _measure_block('off', 'wire', f'perf-off-{run}', run),
-            "off_aa": _measure_block('off_aa', 'wire', f'perf-off-aa-{run}', run),
-            "on": _measure_block('on', 'wire', f'perf-on-{run}', run),
+    This is intentionally independent of the timing result. A fast call with a
+    partial ACK, a disabled capture branch or an empty batch is an invalid
+    measurement, not a PASS.
+    """
+    errors: list[str] = []
+
+    def number(key: str) -> int:
+        try:
+            return int(rec.get(key, ""))
+        except (TypeError, ValueError):
+            errors.append(f"{phase}: missing/non-numeric {key}")
+            return -10**9
+
+    if number("ev_acc") != 20:
+        errors.append(f"{phase}: accepted events {rec.get('ev_acc')} != 20")
+    if number("lp_acc") != 3:
+        errors.append(f"{phase}: accepted laps {rec.get('lp_acc')} != 3")
+    if str(rec.get("ev_uids_ok")).lower() not in ("true", "t"):
+        errors.append(f"{phase}: event ACK identities are not the measured 20")
+    if str(rec.get("lp_uids_ok")).lower() not in ("true", "t"):
+        errors.append(f"{phase}: lap ACK identities are not the measured 3")
+
+    if phase == "on":
+        expected = {
+            "batch_rows": 2,
+            "batch_items": 23,
+            "ev_batch_rows": 1,
+            "ev_batch_items": 20,
+            "lp_batch_rows": 1,
+            "lp_batch_items": 3,
+            "rev_delta": 0,
+            "job_delta": 2,
         }
-        # Alternate the whole five-phase order each round so a fixed position
-        # (cache/page-warm drift) cannot masquerade as overhead. The two
-        # baseline phases are measured twice as a real A/A control.
-        order = phase_names if run % 2 == 0 else list(reversed(phase_names))
-        sql = "".join(
-            f"BEGIN;\n{GUARD}\n{DROP_TRIGGERS if phase in ('absent', 'absent_aa') else ''}\n"
-            f"{blocks[phase]}ROLLBACK;\n"
-            for phase in order
-        )
-        proc = _run(sql, timeout=300)
-        records = _parse_perf(proc.stderr)
-        return {rec["phase"]: rec for rec in records}
+        for key, value in expected.items():
+            if number(key) != value:
+                errors.append(f"{phase}: {key} {rec.get(key)} != {value}")
+    else:
+        for key in ("batch_rows", "batch_items", "ev_batch_rows",
+                    "ev_batch_items", "lp_batch_rows", "lp_batch_items",
+                    "rev_delta", "job_delta"):
+            if number(key) != 0:
+                errors.append(f"{phase}: private capture changed {key}={rec.get(key)}")
+    return errors
 
-    # Warm-up round is excluded from the statistics (all phases run it).
-    warm = measure_round(0)
-    _log("perf-warmup.log", json.dumps(warm, indent=2))
+
+def classify_gate(delta_abs_p95: float | None, delta_abs_pct: float | None,
+                  aa_within_budget: bool, contract_errors: list[str]) -> str:
+    """No measurement-contract error can ever become PASS."""
+    if contract_errors:
+        return "FAIL"
+    if not aa_within_budget:
+        return "INCONCLUSIVE"
+    if (delta_abs_p95 is not None and delta_abs_p95 <= 20.0
+            and delta_abs_pct is not None and delta_abs_pct <= 10.0):
+        return "PASS"
+    return "FAIL"
+
+
+def calibrated_phase_orders(phase_names: list[str] | None = None) -> list[list[str]]:
+    """Ten fixed orders: five Latin rotations plus five reversed rotations."""
+    if phase_names is None:
+        phase_names = ["absent", "absent_aa", "off", "off_aa", "on"]
+    orders = []
+    for cycle in (list(phase_names), list(reversed(phase_names))):
+        for shift in range(len(cycle)):
+            orders.append(cycle[shift:] + cycle[:shift])
+    return orders
+
+
+def perf(samples: int = 40) -> dict:
+    phase_names = ["absent", "absent_aa", "off", "off_aa", "on"]
+    if samples != 40:
+        raise ValueError("the pre-registered calibrated protocol requires exactly 40 rounds")
+
+    # Five Latin rotations plus the five rotations of the reversed order.
+    # Over every 10-round cycle each phase occurs once in every position; over
+    # 40 rounds each phase occurs exactly eight times at each position. The
+    # A/A baselines therefore share the same position distribution as each
+    # other and as the primary phases.
+    orders = calibrated_phase_orders(phase_names)
+
+    def measure_round(run: int) -> tuple[dict, list[str]]:
+        order = orders[(run - 1) % len(orders)]
+        records: dict[str, dict] = {}
+        for position, phase in enumerate(order, start=1):
+            # Each phase is a fresh backend. The absent phases drop their
+            # triggers and every phase sets its flag before the warm-ups.
+            sql = (
+                f"BEGIN;\n{GUARD}\n"
+                f"{DROP_TRIGGERS if phase in ('absent', 'absent_aa') else ''}\n"
+                f"{_measure_block(phase, 'wire', f'perf-{phase}-{run}', run)}"
+                "ROLLBACK;\n"
+            )
+            proc = _run(sql, timeout=300)
+            parsed = _parse_perf(proc.stderr)
+            if len(parsed) != 1:
+                raise RuntimeError(
+                    f"phase {phase} run {run} produced {len(parsed)} samples")
+            rec = parsed[0]
+            rec["position"] = position
+            rec["order_index"] = (run - 1) % len(orders)
+            records[phase] = rec
+        if len(records) != len(phase_names):
+            raise RuntimeError(f"run {run} did not measure all five phases")
+        return records, order
 
     phases = {name: [] for name in phase_names}
     deltas_abs = []
     deltas_off = []
     aa_absent = []
     aa_off = []
-    sizes = []
+    on_records = []
+    contract_errors: list[str] = []
+    raw_runs = []
+    positions = {name: {str(i): 0 for i in range(1, 6)} for name in phase_names}
+
     for run in range(1, samples + 1):
-        rec = measure_round(run)
-        for phase in phases:
-            phases[phase].append(float(rec[phase]["ms"]))
+        rec, order = measure_round(run)
+        for phase in phase_names:
+            phase_rec = rec[phase]
+            phases[phase].append(float(phase_rec["ms"]))
+            positions[phase][str(phase_rec["position"])] += 1
+            contract_errors.extend(
+                f"run {run} " + err
+                for err in measurement_contract_errors(phase, phase_rec))
         deltas_abs.append(float(rec["on"]["ms"]) - float(rec["absent"]["ms"]))
         deltas_off.append(float(rec["on"]["ms"]) - float(rec["off"]["ms"]))
         aa_absent.append(float(rec["absent_aa"]["ms"]) - float(rec["absent"]["ms"]))
         aa_off.append(float(rec["off_aa"]["ms"]) - float(rec["off"]["ms"]))
-        sizes.append(rec["on"])
+        on_records.append(rec["on"])
+        raw_runs.append({
+            "run": run,
+            "order_index": (run - 1) % len(orders),
+            "order": order,
+            "ms": {phase: round(float(rec[phase]["ms"]), 3) for phase in phase_names},
+            "position": {phase: rec[phase]["position"] for phase in phase_names},
+        })
 
     def p95(xs):
         return nearest_rank(xs, 0.95)
@@ -1378,46 +1705,55 @@ def perf(samples: int = 30) -> dict:
     aa_off_delta = round(stats["off_aa"]["p95_ms"] - base_off, 3)
     aa_absent_pct = round(aa_absent_delta / base_abs * 100.0, 3) if base_abs else None
     aa_off_pct = round(aa_off_delta / base_off * 100.0, 3) if base_off else None
+    # Absolute delta on purpose: a negative A/A delta is noise too, not a
+    # bonus that may offset a positive primary delta.
     aa_within_budget = (
         abs(aa_absent_delta) <= 20.0 and abs(aa_absent_pct or 0.0) <= 10.0
         and abs(aa_off_delta) <= 20.0 and abs(aa_off_pct or 0.0) <= 10.0
     )
 
+    first = on_records[0]
     wire_sizes = {
-        "events_bytes": int(sizes[0]["ev_bytes"]),
-        "laps_bytes": int(sizes[0]["lp_bytes"]),
-        "body_bytes": int(sizes[0]["body_bytes"]),
-        "events_plus_laps_bytes": int(sizes[0]["ev_bytes"]) + int(sizes[0]["lp_bytes"]),
-        "accepted_events": int(sizes[0]["ev_acc"]),
-        "accepted_laps": int(sizes[0]["lp_acc"]),
-        "rev_delta": int(sizes[0]["rev_delta"]),
-        "job_delta": int(sizes[0]["job_delta"]),
-        "batch_rows": int(sizes[0]["batch_rows"]),
-        "batch_bytes": int(sizes[0]["batch_bytes"]),
-        "batch_items": int(sizes[0]["batch_items"]),
+        "events_bytes": int(first["ev_bytes"]),
+        "laps_bytes": int(first["lp_bytes"]),
+        "body_bytes": int(first["body_bytes"]),
+        "events_plus_laps_bytes": int(first["ev_bytes"]) + int(first["lp_bytes"]),
+        "accepted_events": int(first["ev_acc"]),
+        "accepted_laps": int(first["lp_acc"]),
+        "rev_delta": int(first["rev_delta"]),
+        "job_delta": int(first["job_delta"]),
+        "batch_rows": int(first["batch_rows"]),
+        "batch_stored_bytes": int(first["batch_stored_bytes"]),
+        "batch_text_bytes": int(first["batch_text_bytes"]),
+        "batch_items": int(first["batch_items"]),
+        "ev_batch_rows": int(first["ev_batch_rows"]),
+        "lp_batch_rows": int(first["lp_batch_rows"]),
+        "ev_batch_items": int(first["ev_batch_items"]),
+        "lp_batch_items": int(first["lp_batch_items"]),
         "limits": {"events_plus_laps_max": 16384, "body_max": 24576,
                    "batch_max": 262144, "batch_items_max": 200},
-        "within_part_budget": int(sizes[0]["ev_bytes"]) + int(sizes[0]["lp_bytes"]) <= 16384,
-        "within_body_budget": int(sizes[0]["body_bytes"]) <= 24576,
-        "within_batch_budget": int(sizes[0]["batch_bytes"]) <= 262144,
-        "kind_valid": True,
-        "note": "wire frame = 20 wear_refresh_confirmed events with wear+evidence plus 3 full lap aggregates; no perf_probe kind. The DB-shaped part is validated by the existing simhub_persist_measurement_batch RPC.",
+        "within_part_budget": int(first["ev_bytes"]) + int(first["lp_bytes"]) <= 16384,
+        "within_body_budget": int(first["body_bytes"]) <= 24576,
+        "within_batch_budget": int(first["batch_stored_bytes"]) <= 262144,
+        "kind_valid": all(
+            int(r["ev_batch_rows"]) == 1 and int(r["lp_batch_rows"]) == 1
+            and int(r["ev_batch_items"]) == 20 and int(r["lp_batch_items"]) == 3
+            for r in on_records),
+        "batch_bytes_unit": (
+            "batch_stored_bytes = sum(pg_column_size(payload)) (stored, "
+            "TOAST/compression-aware JSONB); batch_text_bytes = "
+            "sum(octet_length(payload::text)) (raw JSON text UTF-8)"),
+        "note": "wire frame = 20 wear_refresh_confirmed events with wear+evidence plus 3 full lap aggregates; no perf_probe kind. Source kinds are counted from the measured capture_batches deltas, not hard-coded.",
     }
 
-    phase_pass = (delta_abs_p95 <= 20.0 and delta_abs_pct is not None
-                  and delta_abs_pct <= 10.0
-                  and wire_sizes["within_part_budget"]
-                  and wire_sizes["within_body_budget"]
-                  and wire_sizes["within_batch_budget"]
-                  and wire_sizes["rev_delta"] == 0
-                  and wire_sizes["batch_rows"] == 2
-                  and wire_sizes["job_delta"] == 2)
-    if not aa_within_budget:
-        gate_status = "INCONCLUSIVE"
-    elif phase_pass:
-        gate_status = "PASS"
-    else:
-        gate_status = "FAIL"
+    timing_pass = (
+        delta_abs_p95 <= 20.0 and delta_abs_pct is not None
+        and delta_abs_pct <= 10.0
+        and wire_sizes["within_part_budget"]
+        and wire_sizes["within_body_budget"]
+        and wire_sizes["within_batch_budget"])
+    gate_status = classify_gate(delta_abs_p95, delta_abs_pct,
+                                aa_within_budget, contract_errors)
 
     result = {
         "wire_representative": True,
@@ -1429,14 +1765,25 @@ def perf(samples: int = 30) -> dict:
                        "installed capture off A/A repeat",
                        "installed capture on"],
             "paired_rounds": samples,
-            "warmup_rounds": 1,
+            "warmup_ingests_per_phase": 3,
+            "warmup_semantics": (
+                "each phase runs in its own backend; DDL and capture flag are "
+                "set first, then three untimed full 20+3 ingests with distinct "
+                "UUID/eventId/summaryId identities; the timed frame is new 20+3 "
+                "and warm-up batches are excluded from the deltas"),
+            "order_design": (
+                "5 Latin rotations plus 5 rotations of the reversed order; "
+                "each phase occurs exactly 8 times in each of the 5 positions"),
             "quantile": "nearest-rank (ceil(p*n)-1), no interpolation",
             "primary_gate": "phase p95(on) - phase p95(absent) <= 20 ms AND <= 10% of absent p95",
             "paired_diagnostic": "p95 of per-round paired delta (on - absent / on - off), reported separately",
-            "aa_control": "same two baseline phases measured twice; A/A p95 delta must stay within the gate budget or the result is INCONCLUSIVE",
+            "aa_control": "same two baseline phases measured twice; absolute A/A p95 delta must stay within <=20 ms AND <=10% or the result is INCONCLUSIVE",
             "host": "1 CPU clone, network none, PG15.19; old 0.5 CPU results retained separately",
         },
         "stats": stats,
+        "phase_position_counts": positions,
+        "raw_runs": raw_runs,
+        "measurement_contract_errors": contract_errors,
         "paired_deltas_ms": [round(v, 3) for v in deltas_abs],
         "paired_overhead_vs_absent": {
             "p95_ms": paired_abs_p95,
@@ -1464,11 +1811,12 @@ def perf(samples: int = 30) -> dict:
             "off_delta_ms": aa_off_delta,
             "off_delta_pct": aa_off_pct,
             "within_budget": aa_within_budget,
-            "budget": "<= 20 ms AND <= 10% per baseline",
+            "budget": "absolute delta <= 20 ms AND <= 10% per baseline; negative delta counts as noise",
             "pair_deltas_absent_ms": [round(v, 3) for v in aa_absent],
             "pair_deltas_off_ms": [round(v, 3) for v in aa_off],
         },
         "sizes": wire_sizes,
+        "timing_pass": timing_pass,
         "gate_status": gate_status,
         "gate_pass": gate_status == "PASS",
     }
@@ -1776,6 +2124,7 @@ SELECT jsonb_build_object(
                FROM pitwall_learning.runtime_settings WHERE id=1),
   'anon_usage', has_schema_privilege('anon','pitwall_learning','USAGE'),
   'worker_usage', has_schema_privilege('pitwall_learning_worker','pitwall_learning','USAGE'),
+  'worker_guard_absent', to_regprocedure('pitwall_learning.assert_rehearsal_environment()') IS NULL,
   'fresh_defs_fp', {_defs_fp_sql('pitwall_learning')},
   'fresh_trig_fp', {_trig_fp_sql()},
   'public_relations', (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -1806,6 +2155,7 @@ ROLLBACK;
                                       "shadow": False, "advice": False}
             and state["anon_usage"] is False
             and state["worker_usage"] is True
+            and state["worker_guard_absent"] is True
             and state["public_relations"] == 99
             and state["public_sequences"] == 8
             and state["public_policies"] == 165
@@ -1837,11 +2187,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-red", action="store_true",
                     help="skip the schema-absence RED log (not recommended)")
-    ap.add_argument("--samples", type=int, default=30,
-                    help="paired samples per phase for the wire frame (>=30)")
+    ap.add_argument("--samples", type=int, default=40,
+                    help="paired samples per phase; the calibrated protocol is fixed at 40")
     args = ap.parse_args()
-    if args.samples < 30:
-        print("refusing fewer than 30 paired samples", file=sys.stderr)
+    if args.samples != 40:
+        print("refusing anything other than the pre-registered 40-round protocol",
+              file=sys.stderr)
         return 2
 
     ART.mkdir(parents=True, exist_ok=True)
