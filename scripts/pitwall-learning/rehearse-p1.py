@@ -950,8 +950,10 @@ COMMIT;
     _run(setup)
     batch = _batch_id_for_uid(uid)
     _run(f"BEGIN;\n{GUARD}\n{_materialize_batch_sql(batch)}COMMIT;\n")
-    claim = json.loads(_run("SELECT pitwall_learning.claim_jobs(1, 60)::text;"
-                            ).stdout.strip().splitlines()[-1])[0]
+    claim = json.loads(_run(
+        f"BEGIN;\n{GUARD}\n"
+        "SELECT pitwall_learning.claim_jobs(1, 60)::text;\nCOMMIT;\n"
+    ).stdout.strip().splitlines()[-1])[0]
     job = claim["job_id"]
     token = claim["lease_token"]
 
@@ -1555,6 +1557,19 @@ def measurement_contract_errors(phase: str, rec: dict) -> list[str]:
         errors.append(f"{phase}: event ACK identities are not the measured 20")
     if str(rec.get("lp_uids_ok")).lower() not in ("true", "t"):
         errors.append(f"{phase}: lap ACK identities are not the measured 3")
+
+    # Validate every sample, not just the first on-record. Storage compression
+    # must not disguise an oversized raw payload as an admissible wire sample.
+    ev_bytes = number("ev_bytes")
+    lp_bytes = number("lp_bytes")
+    body_bytes = number("body_bytes")
+    batch_text_bytes = number("batch_text_bytes")
+    if ev_bytes < 0 or lp_bytes < 0 or ev_bytes + lp_bytes > 16384:
+        errors.append(f"{phase}: invalid/oversized event+lap UTF-8 byte budget")
+    if not 0 <= body_bytes <= 24576:
+        errors.append(f"{phase}: invalid/oversized body UTF-8 byte budget")
+    if not 0 <= batch_text_bytes <= 262144:
+        errors.append(f"{phase}: invalid/oversized raw batch UTF-8 byte budget")
 
     if phase == "on":
         expected = {

@@ -8,7 +8,9 @@ look like a PASS.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import inspect
 import unittest
 from collections import Counter
 from pathlib import Path
@@ -22,6 +24,8 @@ SPEC.loader.exec_module(rehearse)
 
 def on_record(**overrides):
     rec = {
+        "ev_bytes": "12691", "lp_bytes": "3231", "body_bytes": "16022",
+        "batch_stored_bytes": "2811", "batch_text_bytes": "20881",
         "ev_acc": "20",
         "lp_acc": "3",
         "ev_uids_ok": "true",
@@ -41,6 +45,8 @@ def on_record(**overrides):
 
 def off_record(**overrides):
     rec = {
+        "ev_bytes": "12691", "lp_bytes": "3231", "body_bytes": "16022",
+        "batch_stored_bytes": "0", "batch_text_bytes": "0",
         "ev_acc": "20",
         "lp_acc": "3",
         "ev_uids_ok": "true",
@@ -97,6 +103,53 @@ class MeasurementContractTests(unittest.TestCase):
     def test_missing_or_non_numeric_field_is_invalid(self):
         errors = rehearse.measurement_contract_errors("on", on_record(job_delta="n/a"))
         self.assertTrue(any("non-numeric job_delta" in err for err in errors))
+
+
+class ByteBudgetTests(unittest.TestCase):
+    def test_oversize_sample_cannot_pass_even_with_fast_timing(self):
+        for key, value in (("ev_bytes", "16384"), ("lp_bytes", "16384"),
+                           ("body_bytes", "24577"), ("batch_text_bytes", "262145")):
+            with self.subTest(key=key):
+                errors = rehearse.measurement_contract_errors("on", on_record(**{key: value}))
+                self.assertEqual(rehearse.classify_gate(1.0, 1.0, True, errors), "FAIL")
+
+    def test_negative_or_missing_byte_counts_fail_closed(self):
+        for key in ("ev_bytes", "lp_bytes", "body_bytes", "batch_text_bytes"):
+            for value in ("-1", "n/a", None):
+                with self.subTest(key=key, value=value):
+                    self.assertTrue(rehearse.measurement_contract_errors(
+                        "on", on_record(**{key: value})))
+
+    def test_exact_byte_limits_remain_accepted(self):
+        self.assertEqual(rehearse.measurement_contract_errors(
+            "on", on_record(ev_bytes="13153", lp_bytes="3231", body_bytes="24576",
+                            batch_text_bytes="262144")), [])
+
+    def test_off_samples_also_obey_wire_byte_limits(self):
+        self.assertTrue(rehearse.measurement_contract_errors(
+            "off", off_record(body_bytes="24577")))
+
+
+class HarnessGuardTests(unittest.TestCase):
+    def test_finish_busy_claim_stream_contains_transaction_and_guard(self):
+        tree = ast.parse(inspect.getsource(rehearse.finish_busy))
+        claims = []
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == "_run" and node.args
+                    and isinstance(node.args[0], ast.JoinedStr)):
+                value = node.args[0]
+                literals = "".join(v.value for v in value.values
+                                   if isinstance(v, ast.Constant) and isinstance(v.value, str))
+                if "claim_jobs" in literals:
+                    claims.append((value, literals))
+        self.assertEqual(len(claims), 1)
+        value, literals = claims[0]
+        self.assertTrue(literals.startswith("BEGIN;"))
+        self.assertIn("COMMIT;", literals)
+        self.assertTrue(any(isinstance(v, ast.FormattedValue)
+                            and isinstance(v.value, ast.Name) and v.value.id == "GUARD"
+                            for v in value.values))
 
 
 class GateClassificationTests(unittest.TestCase):
