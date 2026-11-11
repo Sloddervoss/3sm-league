@@ -1272,8 +1272,9 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'lease_expired');
   END IF;
 
-  -- Workerflag en (voor een done) de actuele owner/policy worden opnieuw
-  -- gecontroleerd. Retry mag opruimen, done nooit na opt-out/verwijdering.
+  -- Workerflag en de actuele owner/policy worden voor ieder finishresultaat
+  -- opnieuw gecontroleerd. Retry mag opruimen, maar geen ingetrokken policy
+  -- of onbekende owner als geldige afloop accepteren.
   SELECT rs.worker_enabled INTO v_enabled
     FROM pitwall_learning.runtime_settings rs
    WHERE rs.id = 1;
@@ -1287,11 +1288,19 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'materialization_required');
   END IF;
 
-  IF p_outcome = 'done' AND v_job.kind IN ('source_validate', 'example_build') THEN
-    SELECT r.owner_user_id, r.account_policy_version
+  -- Actuele owner/policy/versie voor ieder finishresultaat, niet alleen voor
+  -- 'done'. Een retry mag de wachtrij opruimen, maar mag een ingetrokken
+  -- policy, een gewijzigde policyversie of een verwijderde owner niet als
+  -- geldige afloop accepteren. Voor batchjobs komt de owner uit de bevroren
+  -- batch; voor sourcejobs uit de revisie. Onbekend blijft fail-closed.
+  IF v_job.kind IN ('source_validate', 'example_build', 'materialize_capture_batch') THEN
+    SELECT coalesce(r.owner_user_id, b.owner_user_id),
+           coalesce(r.account_policy_version, b.account_policy_version)
       INTO v_owner, v_rev_version
-      FROM pitwall_learning.source_revisions r
-     WHERE r.id = v_job.source_revision_id;
+      FROM pitwall_learning.jobs j
+      LEFT JOIN pitwall_learning.source_revisions r ON r.id = j.source_revision_id
+      LEFT JOIN pitwall_learning.capture_batches b ON b.id = j.capture_batch_id
+     WHERE j.id = p_job_id;
     IF v_owner IS NULL OR NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = v_owner) THEN
       RETURN jsonb_build_object('ok', false, 'error', 'owner_missing');
     END IF;

@@ -446,6 +446,112 @@ begin
     'T08 verwijderde owner laat het bewijs geanonimiseerd bestaan');
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- F2: ieder finishresultaat (done én retry) moet de actuele owner, policy en
+-- policyversie opnieuw controleren. Deze blokken zijn eerst Rood op de oude
+-- done-only gate en daarna groen op dezelfde gate voor retry.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_dev text := 'd0000000-0000-4000-8000-000000000009';
+  v_owner uuid := 'a0000000-0000-4000-8000-000000000009';
+  v_rev uuid;
+  v_job uuid;
+  v_token uuid;
+  v_claim jsonb;
+  v_res jsonb;
+begin
+  perform pg_temp.quiesce_jobs();
+
+  insert into auth.users (id, email, aud, role, is_sso_user)
+  values (v_owner, 'p1-retry-gate@example.invalid', 'authenticated', 'authenticated', false)
+  on conflict (id) do nothing;
+
+  insert into public.simhub_devices (
+    id, owner_user_id, token_hash, device_name, connector_id, device_status)
+  values (v_dev::uuid, v_owner, repeat('c', 64), 'P1-RETRY-GATE',
+          'P1-RETRY-GATE', 'active_unbound')
+  on conflict (id) do update set owner_user_id = excluded.owner_user_id;
+
+  insert into pitwall_learning.account_policy (
+    owner_user_id, capture_enabled, personal_fit_enabled,
+    retention_jobs_days, retention_source_days, retention_forecast_days)
+  values (v_owner, true, true, 7, 180, 90)
+  on conflict (owner_user_id) do update
+    set capture_enabled = true, policy_version = 1;
+
+  update pitwall_learning.runtime_settings
+     set worker_enabled = true, capture_enabled = true where id = 1;
+
+  -- 1. Retry en done na een ingetrokken capturepolicy.
+  v_rev := pg_temp.capture_one(
+    v_dev, pg_temp.uid(901), 1, md5('retry-901'), '{"kind":"job"}'::jsonb);
+  v_claim := pitwall_learning.claim_jobs(1, 30);
+  v_job := (v_claim->0->>'job_id')::uuid;
+  v_token := (v_claim->0->>'lease_token')::uuid;
+  update pitwall_learning.account_policy set capture_enabled = false
+   where owner_user_id = v_owner;
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'retry', 'probe_retry');
+  perform pg_temp.eq(v_res->>'error', 'policy_revoked',
+    'T08 retry na policy-revoke is policy_revoked');
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'done');
+  perform pg_temp.eq(v_res->>'error', 'policy_revoked',
+    'T08 done na policy-revoke blijft policy_revoked');
+  update pitwall_learning.account_policy set capture_enabled = true
+   where owner_user_id = v_owner;
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'done');
+  perform pg_temp.eq(v_res->>'status', 'done',
+    'T08 herstelde policy laat dezelfde lease alsnog done gaan');
+
+  -- 2. Retry na een gewijzigde policyversie.
+  v_rev := pg_temp.capture_one(
+    v_dev, pg_temp.uid(902), 1, md5('retry-902'), '{"kind":"job"}'::jsonb);
+  v_claim := pitwall_learning.claim_jobs(1, 30);
+  v_job := (v_claim->0->>'job_id')::uuid;
+  v_token := (v_claim->0->>'lease_token')::uuid;
+  update pitwall_learning.account_policy
+     set policy_version = policy_version + 1 where owner_user_id = v_owner;
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'retry', 'probe_retry');
+  perform pg_temp.eq(v_res->>'error', 'policy_version_mismatch',
+    'T08 retry na policyversiewijziging is policy_version_mismatch');
+  update pitwall_learning.account_policy set policy_version = 1
+   where owner_user_id = v_owner;
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'done');
+  perform pg_temp.eq(v_res->>'status', 'done',
+    'T08 gelijke policyversie laat dezelfde lease weer done gaan');
+
+  -- 3. Retry na de worker-kill-switch.
+  v_rev := pg_temp.capture_one(
+    v_dev, pg_temp.uid(903), 1, md5('retry-903'), '{"kind":"job"}'::jsonb);
+  v_claim := pitwall_learning.claim_jobs(1, 30);
+  v_job := (v_claim->0->>'job_id')::uuid;
+  v_token := (v_claim->0->>'lease_token')::uuid;
+  update pitwall_learning.runtime_settings set worker_enabled = false where id = 1;
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'retry', 'probe_retry');
+  perform pg_temp.eq(v_res->>'error', 'worker_disabled',
+    'T08 retry na workerflag-uit is worker_disabled');
+  update pitwall_learning.runtime_settings set worker_enabled = true where id = 1;
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'done');
+  perform pg_temp.eq(v_res->>'status', 'done',
+    'T08 workerflag aan laat dezelfde lease weer done gaan');
+
+  -- 4. Retry en done na verwijdering van de owner (policy cascade).
+  v_rev := pg_temp.capture_one(
+    v_dev, pg_temp.uid(904), 1, md5('retry-904'), '{"kind":"job"}'::jsonb);
+  v_claim := pitwall_learning.claim_jobs(1, 30);
+  v_job := (v_claim->0->>'job_id')::uuid;
+  v_token := (v_claim->0->>'lease_token')::uuid;
+  delete from auth.users where id = v_owner;
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'retry', 'probe_retry');
+  perform pg_temp.eq(v_res->>'error', 'owner_missing',
+    'T08 retry na owner-delete is owner_missing');
+  v_res := pitwall_learning.finish_job(v_job, v_token, 'done');
+  perform pg_temp.eq(v_res->>'error', 'owner_missing',
+    'T08 done na owner-delete blijft owner_missing');
+  perform pg_temp.eq((select status from pitwall_learning.jobs where id = v_job),
+                     'leased', 'T08 geweigerde retry laat lease/state intact');
+end $$;
+
 do $$
 declare
   v_fail integer;
