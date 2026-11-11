@@ -11,7 +11,7 @@
 --     PUBLIC/anon/authenticated/service_role;
 --   * de workerrol heeft alleen schema-USAGE en drie EXECUTE-grants;
 --   * bestaande public-relations, -policies, -ACLs en de ingest-functie zijn
---     ongewijzigd; alleen twee capturetriggers zijn toegevoegd.
+--     ongewijzigd; alleen vier statement-level capturetriggers zijn toegevoegd.
 -- ============================================================================
 
 begin;
@@ -84,6 +84,13 @@ begin
   perform pg_temp.expect(
     v_text like '%UNIQUE (source_revision_id, kind)%',
     'T06 jobs is uniek per revision en kind');
+
+  -- Claim en dead-letter-sweep hebben elk een eigen, begrensbaar indexpad.
+  perform pg_temp.eq(
+    (select count(*) from pg_indexes
+      where schemaname = 'pitwall_learning'
+        and indexname in ('jobs_claim_idx', 'jobs_expiry_idx', 'jobs_deadletter_idx')),
+    3, 'T06 jobclaim en dead-letter hebben begrensde indexen');
 
   select pg_get_constraintdef(oid) into v_text
     from pg_constraint
@@ -250,8 +257,25 @@ begin
    where n.nspname = 'pitwall_learning'
      and p.prosecdef
      and p.proconfig @> array['search_path=pg_catalog, pitwall_learning, pg_temp'];
-  perform pg_temp.eq(v_count, 8,
-    'T06 alle acht private functies zijn SECDEF met gepinde search_path');
+  perform pg_temp.eq(v_count, 11,
+    'T06 alle elf private functies zijn SECDEF met gepinde search_path');
+
+  -- Capture werkt met een vaste, functie-lokale lock_timeout. Geen
+  -- handmatige set_config/restore meer die door een fout kan blijven hangen.
+  perform pg_temp.eq(
+    (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'pitwall_learning'
+        and p.proname in ('capture_source_revisions','capture_source_revision',
+                          'capture_measurement_events_insert','capture_measurement_events_update',
+                          'capture_lap_summaries_insert','capture_lap_summaries_update')
+        and p.proconfig @> array['lock_timeout=50ms']),
+    6, 'T06 alle capturefuncties hebben functie-lokale lock_timeout=50ms');
+  perform pg_temp.eq(
+    (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'pitwall_learning'
+        and p.proname like 'capture%'
+        and pg_get_functiondef(p.oid) like '%set_config(%'),
+    0, 'T06 capture herstelt lock_timeout niet meer handmatig');
 
   select count(*) into v_count
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -262,18 +286,39 @@ begin
   select string_agg(pg_get_functiondef(p.oid), E'\n') into v_text
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'pitwall_learning'
-     and p.proname in ('capture_source_revision','capture_measurement_event','capture_lap_summary');
+     and p.proname in ('capture_source_revisions','capture_source_revision',
+                       'capture_measurement_events_insert','capture_measurement_events_update',
+                       'capture_lap_summaries_insert','capture_lap_summaries_update');
   perform pg_temp.expect(v_text not like '%simhub_telemetry_latest%',
     'T06 capture leest geen current-snapshot');
-  perform pg_temp.expect(v_text not like '%NEW.car_id%'
-                     and v_text not like '%NEW.track_name%'
-                     and v_text not like '%NEW.track_config%'
-                     and v_text not like '%NEW.compound%'
+  perform pg_temp.expect(v_text not like '%n.car_id%'
+                     and v_text not like '%n.track_name%'
+                     and v_text not like '%n.track_config%'
+                     and v_text not like '%n.compound%'
                      and v_text not like '%simhub_telemetry_latest%',
     'T06 capture kopieert geen car/track/compound');
-  perform pg_temp.expect(v_text not like '%NEW.current_driver_name%'
-                     and v_text not like '%NEW.current_driver_id%',
+  perform pg_temp.expect(v_text not like '%n.current_driver_name%'
+                     and v_text not like '%n.current_driver_id%',
     'T06 capture bewaart geen driver_name/driver_id');
+
+  -- -----------------------------------------------------------------------
+  -- Default privileges zijn geen sluitende garantie
+  -- -----------------------------------------------------------------------
+  -- ALTER DEFAULT PRIVILEGES ... REVOKE kan de ingebouwde globale default
+  -- (PUBLIC EXECUTE op functies) niet intrekken. Deze probe maakt dat
+  -- expliciet en bewijst dat per-object-revoke nodig blijft. Alles wordt in
+  -- de testtransactie teruggedraaid.
+  execute 'set local role supabase_admin';
+  execute 'create function pitwall_learning.p1_default_probe() returns integer language sql as ''select 1''';
+  execute 'reset role';
+  perform pg_temp.expect(
+    has_function_privilege('anon', 'pitwall_learning.p1_default_probe()', 'EXECUTE'),
+    'T06 nieuwe functie krijgt nog steeds globale PUBLIC EXECUTE (defaults zijn geen garantie)');
+  execute 'revoke all on function pitwall_learning.p1_default_probe() from public, anon, authenticated, service_role';
+  perform pg_temp.expect(
+    not has_function_privilege('anon', 'pitwall_learning.p1_default_probe()', 'EXECUTE'),
+    'T06 per-object REVOKE sluit een nieuwe functie expliciet');
+  execute 'drop function pitwall_learning.p1_default_probe()';
 
   -- -----------------------------------------------------------------------
   -- Bestaande public-baseline ongewijzigd
@@ -333,14 +378,25 @@ begin
       where not tgisinternal
         and tgrelid in ('public.simhub_measurement_events'::regclass,
                         'public.simhub_lap_summaries'::regclass)),
-    2, 'T06 precies twee capturetriggers op de twee brontabellen');
+    4, 'T06 precies vier statement-capturetriggers op de twee brontabellen');
   perform pg_temp.eq(
     (select count(*) from pg_trigger
       where not tgisinternal
         and tgrelid in ('public.simhub_measurement_events'::regclass,
                         'public.simhub_lap_summaries'::regclass)
-        and tgname in ('pitwall_learning_capture_event','pitwall_learning_capture_lap')),
-    2, 'T06 de twee triggers zijn de capturetriggers');
+        and tgname in ('pitwall_learning_capture_event_ins',
+                       'pitwall_learning_capture_event_upd',
+                       'pitwall_learning_capture_lap_ins',
+                       'pitwall_learning_capture_lap_upd')),
+    4, 'T06 de vier triggers zijn de capturetriggers');
+  -- Alle vier zijn FOR EACH STATEMENT; geen row-trigger meer per meting.
+  perform pg_temp.eq(
+    (select count(*) from pg_trigger
+      where not tgisinternal
+        and tgrelid in ('public.simhub_measurement_events'::regclass,
+                        'public.simhub_lap_summaries'::regclass)
+        and (tgtype & 1) = 0),
+    4, 'T06 alle capturetriggers zijn statement-level');
 
   perform pg_temp.eq(
     (select count(*) from pg_trigger

@@ -237,6 +237,133 @@ begin
   perform pg_temp.expect(v_blocked, 'T08 ongeldige foutcode wordt geweigerd');
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- Regressies uit de bounded-review: NULL-outcome, beleidsgebonden claim en
+-- een begrensde dead-letter-sweep. Zelfde transactie en rollback.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_dev text := 'd0000000-0000-4000-8000-000000000001';
+  v_owner uuid := 'a0000000-0000-4000-8000-000000000001';
+  v_rev uuid;
+  v_job uuid;
+  v_claim jsonb;
+  v_token uuid;
+  v_blocked boolean;
+  v_dead integer;
+  k integer;
+begin
+  update pitwall_learning.jobs
+     set status = 'done', finished_at = now(), updated_at = now(),
+         lease_token = null, lease_owner = null, lease_expires_at = null
+   where status <> 'done';
+
+  -- -----------------------------------------------------------------------
+  -- NULL is geen retry
+  -- -----------------------------------------------------------------------
+  perform pitwall_learning.capture_source_revision(
+    'measurement_event', v_dev, pg_temp.uid(400), 1, md5('job-400'),
+    now(), now(), '{"kind":"job"}'::jsonb);
+  select id into v_rev from pitwall_learning.source_revisions where source_uid = pg_temp.uid(400);
+  select id into v_job from pitwall_learning.jobs where source_revision_id = v_rev;
+  v_claim := pitwall_learning.claim_jobs(1, 30);
+  v_token := (v_claim->0->>'lease_token')::uuid;
+
+  v_blocked := false;
+  begin
+    perform pitwall_learning.finish_job(v_job, v_token, NULL);
+  exception when others then
+    v_blocked := true;
+  end;
+  perform pg_temp.expect(v_blocked,
+    'T08 finish_job met NULL-outcome wordt expliciet geweigerd');
+  perform pg_temp.eq((select status from pitwall_learning.jobs where id = v_job),
+                     'leased', 'T08 NULL-outcome laat de lease ongemoeid');
+  perform pitwall_learning.finish_job(v_job, v_token, 'done');
+
+  -- -----------------------------------------------------------------------
+  -- Ingetrokken policy / gewijzigde policyversie / verwijderde owner
+  -- -----------------------------------------------------------------------
+  perform pitwall_learning.capture_source_revision(
+    'measurement_event', v_dev, pg_temp.uid(401), 1, md5('job-401'),
+    now(), now(), '{"kind":"job"}'::jsonb);
+  select id into v_rev from pitwall_learning.source_revisions where source_uid = pg_temp.uid(401);
+
+  update pitwall_learning.account_policy set capture_enabled = false
+   where owner_user_id = v_owner;
+  perform pg_temp.eq(jsonb_array_length(pitwall_learning.claim_jobs(5, 30)), 0,
+    'T08 ingetrokken capturepolicy maakt de job niet claimbaar');
+
+  update pitwall_learning.account_policy
+     set capture_enabled = true, policy_version = policy_version + 1
+   where owner_user_id = v_owner;
+  perform pg_temp.eq(jsonb_array_length(pitwall_learning.claim_jobs(5, 30)), 0,
+    'T08 gewijzigde policyversie maakt de oude job niet claimbaar');
+
+  update pitwall_learning.account_policy set policy_version = 1
+   where owner_user_id = v_owner;
+  v_claim := pitwall_learning.claim_jobs(1, 30);
+  perform pg_temp.eq(v_claim->0->>'source_revision_id', v_rev::text,
+    'T08 geldige policy maakt de job weer claimbaar');
+  perform pitwall_learning.finish_job(
+    (v_claim->0->>'job_id')::uuid, (v_claim->0->>'lease_token')::uuid, 'done');
+
+  -- -----------------------------------------------------------------------
+  -- Dead-letter-sweep is begrensd op 50 per claim
+  -- -----------------------------------------------------------------------
+  update pitwall_learning.jobs
+     set status = 'done', finished_at = now(), updated_at = now(),
+         lease_token = null, lease_owner = null, lease_expires_at = null
+   where status <> 'done';
+
+  for k in 1..60 loop
+    perform pitwall_learning.capture_source_revision(
+      'measurement_event', v_dev, pg_temp.uid(500 + k), 1, md5('job-500-' || k),
+      now(), now(), '{"kind":"job"}'::jsonb);
+  end loop;
+  update pitwall_learning.jobs j
+     set status = 'pending', attempts = 3, next_attempt_at = now() - interval '1 minute',
+         finished_at = null, updated_at = now()
+   where j.source_revision_id in (
+     select r.id from pitwall_learning.source_revisions r
+      where r.source_uid in (select pg_temp.uid(500 + g) from generate_series(1, 60) g));
+
+  perform pitwall_learning.capture_source_revision(
+    'measurement_event', v_dev, pg_temp.uid(499), 1, md5('job-499'),
+    now(), now(), '{"kind":"job"}'::jsonb);
+
+  v_claim := pitwall_learning.claim_jobs(1, 30);
+  select count(*) into v_dead from pitwall_learning.jobs where status = 'dead';
+  perform pg_temp.eq(v_dead, 50,
+    'T08 dead-letter-sweep verwerkt per claim maximaal 50 rijen');
+  perform pg_temp.eq(v_claim->0->>'source_revision_id',
+    (select id::text from pitwall_learning.source_revisions where source_uid = pg_temp.uid(499)),
+    'T08 begrensde sweep blokkeert of vertekent een gezonde claim niet');
+
+  v_claim := pitwall_learning.claim_jobs(1, 30);
+  perform pg_temp.eq(jsonb_array_length(v_claim), 0,
+    'T08 tweede sweep ruimt de rest op en claimt niets extra');
+
+  -- -----------------------------------------------------------------------
+  -- Verwijderde owner: bewijs blijft, job wordt niet meer geclaimd
+  -- -----------------------------------------------------------------------
+  update pitwall_learning.jobs
+     set status = 'done', finished_at = now(), updated_at = now(),
+         lease_token = null, lease_owner = null, lease_expires_at = null
+   where status <> 'done';
+  perform pitwall_learning.capture_source_revision(
+    'measurement_event', v_dev, pg_temp.uid(402), 1, md5('job-402'),
+    now(), now(), '{"kind":"job"}'::jsonb);
+
+  delete from auth.users where id = v_owner;
+  perform pg_temp.eq(jsonb_array_length(pitwall_learning.claim_jobs(5, 30)), 0,
+    'T08 verwijderde owner maakt de job niet claimbaar');
+  perform pg_temp.expect(
+    (select owner_user_id is null from pitwall_learning.source_revisions
+      where source_uid = pg_temp.uid(402)),
+    'T08 verwijderde owner laat het bewijs geanonimiseerd bestaan');
+end $$;
+
 do $$
 declare
   v_fail integer;

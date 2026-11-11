@@ -32,6 +32,16 @@ $guard$;
 SET LOCAL ROLE supabase_admin;
 
 -- 1. Capturetriggers weg. Dit is de enige wijziging aan public-tabellen.
+DROP TRIGGER IF EXISTS pitwall_learning_capture_event_ins
+  ON public.simhub_measurement_events;
+DROP TRIGGER IF EXISTS pitwall_learning_capture_event_upd
+  ON public.simhub_measurement_events;
+DROP TRIGGER IF EXISTS pitwall_learning_capture_lap_ins
+  ON public.simhub_lap_summaries;
+DROP TRIGGER IF EXISTS pitwall_learning_capture_lap_upd
+  ON public.simhub_lap_summaries;
+-- Compatibiliteit met de eerste reviewronde (twee row-triggers). Op een
+-- verse forward bestaan deze niet; op een reeds opgebouwde testkloon wel.
 DROP TRIGGER IF EXISTS pitwall_learning_capture_event
   ON public.simhub_measurement_events;
 DROP TRIGGER IF EXISTS pitwall_learning_capture_lap

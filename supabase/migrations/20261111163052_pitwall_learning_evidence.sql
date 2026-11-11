@@ -4,8 +4,11 @@
 --
 -- Scope:
 --   * nieuw, privé schema pitwall_learning (owner supabase_admin);
---   * immutable source_revisions uit precies twee bestaande brontabellen;
---   * jobs met lease/token/expiry/backoff/dead-letter (max 3 pogingen);
+--   * immutable source_revisions uit precies twee bestaande brontabellen,
+--     gevuld door vier statement-level capturetriggers (INSERT/UPDATE per
+--     brontabel) met set-based, begrensde capture;
+--   * jobs met lease/token/expiry/backoff/dead-letter (max 3 pogingen),
+--     begrensde dead-letter-sweep en policygebonden claim/export;
 --   * één dedicated, beperkte LOGIN-rol pitwall_learning_worker;
 --   * account_policy en runtime_settings met kill switches, standaard uit;
 --   * P2+-tabellen (examples/predictions/evaluations/models/deployments)
@@ -295,6 +298,11 @@ CREATE INDEX jobs_claim_idx
 CREATE INDEX jobs_expiry_idx
   ON pitwall_learning.jobs (lease_expires_at)
   WHERE status = 'leased';
+-- Begrensde dead-letter-sweep: alleen uitputtelijke, niet-gedode jobs. De
+-- sweep in claim_jobs gebruikt deze index met LIMIT + SKIP LOCKED.
+CREATE INDEX jobs_deadletter_idx
+  ON pitwall_learning.jobs (attempts, created_at)
+  WHERE status IN ('pending', 'leased');
 
 -- ---------------------------------------------------------------------------
 -- 7. P2+-containers. In P1 bewust leeg en zonder enige applicatiegrants.
@@ -437,12 +445,155 @@ ALTER TABLE pitwall_learning.evaluations        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pitwall_learning.deployments        ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
--- 9. Capture. Eén gedeelde, private helper doet de poort (global capture +
+-- 9. Capture. Eén set-based private helper doet de poort (global capture +
 --    expliciete per-account policy), de owner-at-receipt-resolutie en de
---    idempotente insert. De triggerfuncties bouwen alleen een kleine
---    allowlisted payload; geen volledig frame, geen note, geen driver_name,
---    geen tokens en geen raw JSON.
+--    idempotente insert voor een hele statementset. De statement-triggers
+--    bouwen alleen een kleine allowlisted payload per rij; geen volledig
+--    frame, geen note, geen driver_name, geen tokens en geen raw JSON.
+--
+--    Waarom statement-level: de ingest schrijft een batch in één INSERT (en
+--    bij een nieuwe revisie één UPDATE). Een row-trigger zou per rij
+--    dezelfde poort-SELECTs en EXISTS-checks doen; dat is onbegrensd werk
+--    binnen de ingest-transactie. De trigger vuurt nu één keer per statement
+--    en de helper schrijft de revisions en jobs in twee set-based statements.
+--    De brontransactie, ACK, duplicaten en revisieclassificatie blijven
+--    ongewijzigd: dit is alleen observatie na de schrijfactie.
 -- ---------------------------------------------------------------------------
+CREATE FUNCTION pitwall_learning.capture_source_revisions(
+  p_source_kind text,
+  p_rows jsonb
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pitwall_learning, pg_temp
+SET lock_timeout = '50ms'
+AS $fn$
+DECLARE
+  v_jobs integer := 0;
+BEGIN
+  IF p_source_kind NOT IN ('measurement_event', 'lap_summary') THEN
+    RAISE EXCEPTION 'invalid source kind' USING ERRCODE = 'PWL10';
+  END IF;
+  IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' THEN
+    RAISE EXCEPTION 'capture rows must be an array' USING ERRCODE = 'PWL11';
+  END IF;
+  -- Dezelfde bovengrens als de ingest-batch. Nooit een onbegrensde scan of
+  -- insert vanuit deze helper.
+  IF jsonb_array_length(p_rows) > 200 THEN
+    RAISE EXCEPTION 'capture row batch exceeds 200' USING ERRCODE = 'PWL12';
+  END IF;
+
+  -- Globaal expliciet aan. Ontbrekende instelling of FALSE betekent: niets
+  -- vastleggen, geen fout en geen wijziging aan de ACK.
+  IF NOT EXISTS (
+    SELECT 1 FROM pitwall_learning.runtime_settings rs
+     WHERE rs.id = 1 AND rs.capture_enabled
+  ) THEN
+    RETURN 0;
+  END IF;
+
+  -- Eén statement voor de hele set: per rij de owner-at-receipt, de echte
+  -- policy (inclusief policyversie) en de bestaande revisiehistorie. De
+  -- EXISTS-checks van de oude row-trigger zijn hier twee set-based
+  -- aggregaten tegen dezelfde index.
+  WITH input AS (
+    SELECT x.value->>'device_id'                                   AS device_id,
+           (x.value->>'source_uid')::uuid                          AS source_uid,
+           (x.value->>'record_revision')::integer                   AS record_revision,
+           x.value->>'content_hash'                                 AS content_hash,
+           nullif(x.value->>'observed_at', '')::timestamptz         AS observed_at,
+           coalesce(nullif(x.value->>'source_received_at', '')::timestamptz,
+                    clock_timestamp())                            AS source_received_at,
+           x.value->'payload'                                       AS payload
+      FROM jsonb_array_elements(p_rows) x
+  ), admitted AS (
+    -- Alleen een bewezen UUID-tekst wordt gecast; nooit blind TEXT naar UUID.
+    SELECT i.device_id, i.source_uid, i.record_revision, i.content_hash,
+           i.observed_at, i.source_received_at, i.payload,
+           d.owner_user_id, ap.policy_version
+      FROM input i
+      JOIN public.simhub_devices d
+        ON d.id = CASE
+                    WHEN i.device_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN i.device_id::uuid
+                  END
+      JOIN pitwall_learning.account_policy ap
+        ON ap.owner_user_id = d.owner_user_id
+       AND ap.capture_enabled
+     WHERE i.payload IS NOT NULL
+       AND jsonb_typeof(i.payload) = 'object'
+       AND pg_column_size(i.payload) <= 16384
+  ), hist AS (
+    SELECT a.device_id, a.source_uid,
+           bool_or(r.record_revision > a.record_revision) AS stale,
+           bool_or(r.record_revision = a.record_revision
+                   AND r.content_hash IS DISTINCT FROM a.content_hash) AS conflict
+      FROM admitted a
+      JOIN pitwall_learning.source_revisions r
+        ON r.source_kind = p_source_kind
+       AND r.device_id = a.device_id
+       AND r.source_uid = a.source_uid
+     GROUP BY a.device_id, a.source_uid
+  ), ins AS (
+    INSERT INTO pitwall_learning.source_revisions (
+      source_kind, device_id, source_uid, record_revision, content_hash,
+      observed_at, source_received_at, server_receipt_at, receipt_commit_visible,
+      as_of_quality, owner_user_id, owner_basis, account_policy_version,
+      canonical_context, context_status, training_eligible, extractor_version,
+      payload, quality_reasons
+    )
+    SELECT
+      p_source_kind, a.device_id, a.source_uid, a.record_revision, a.content_hash,
+      a.observed_at, a.source_received_at, clock_timestamp(), false,
+      'as_of_unverifiable', a.owner_user_id, 'device_owner_at_receipt', a.policy_version,
+      NULL, 'blocked_missing_identity', false, 'pitwall-learning-p1-capture-1',
+      a.payload,
+      -- Context is in P1 aantoonbaar onvolledig. Geen defaults en geen
+      -- 100%-/false-waarden; alleen expliciete redenen.
+      ARRAY[
+        'car_unknown',
+        'track_unknown',
+        'compound_unknown',
+        'historical_owner_unverified',
+        'owner_at_receipt_only',
+        'driver_identity_unverified',
+        'context_incomplete',
+        'non_training_eligible',
+        'as_of_unverifiable',
+        'server_receipt_precommit'
+      ]::text[]
+      || CASE WHEN a.observed_at IS NULL
+              THEN ARRAY['observed_at_missing']::text[] ELSE ARRAY[]::text[] END
+      || CASE WHEN a.observed_at > a.source_received_at + interval '5 seconds'
+              THEN ARRAY['clock_skew']::text[] ELSE ARRAY[]::text[] END
+      || CASE WHEN a.observed_at IS NOT NULL
+               AND a.source_received_at - a.observed_at > interval '5 minutes'
+              THEN ARRAY['late_delivery']::text[] ELSE ARRAY[]::text[] END
+      || CASE WHEN coalesce(h.stale, false)
+              THEN ARRAY['stale_revision_delivered_late']::text[] ELSE ARRAY[]::text[] END
+      || CASE WHEN coalesce(h.conflict, false)
+              THEN ARRAY['source_hash_revision_conflict']::text[] ELSE ARRAY[]::text[] END
+      FROM admitted a
+      LEFT JOIN hist h
+        ON h.device_id = a.device_id AND h.source_uid = a.source_uid
+    ON CONFLICT (source_kind, device_id, source_uid, record_revision, content_hash)
+    DO NOTHING
+    RETURNING id
+  )
+  INSERT INTO pitwall_learning.jobs (source_revision_id, kind)
+  SELECT ins.id, 'source_validate' FROM ins
+  ON CONFLICT (source_revision_id, kind) DO NOTHING;
+
+  GET DIAGNOSTICS v_jobs = ROW_COUNT;
+  RETURN v_jobs;
+END
+$fn$;
+
+-- Smalle, expliciete single-row API voor tests en beheer. De triggers
+-- gebruiken de set-based helper hierboven; deze wrapper houdt de bestaande
+-- contractvorm (één revisie per aanroep) zonder de oude per-rij triggerpaden
+-- terug te brengen.
 CREATE FUNCTION pitwall_learning.capture_source_revision(
   p_source_kind text,
   p_device_id text,
@@ -457,267 +608,301 @@ RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, pitwall_learning, pg_temp
+SET lock_timeout = '50ms'
 AS $fn$
 DECLARE
-  v_capture boolean;
-  v_policy_version integer;
-  v_owner uuid;
-  v_reasons text[];
-  v_received timestamptz := coalesce(p_source_received_at, clock_timestamp());
   v_id uuid;
 BEGIN
-  IF p_source_kind NOT IN ('measurement_event', 'lap_summary') THEN
-    RAISE EXCEPTION 'invalid source kind' USING ERRCODE = 'PWL10';
-  END IF;
+  PERFORM pitwall_learning.capture_source_revisions(
+    p_source_kind,
+    jsonb_build_array(jsonb_build_object(
+      'device_id', p_device_id,
+      'source_uid', p_source_uid,
+      'record_revision', p_record_revision,
+      'content_hash', p_content_hash,
+      'observed_at', p_observed_at,
+      'source_received_at', p_source_received_at,
+      'payload', p_payload
+    ))
+  );
 
-  -- Globaal én per account expliciet aan. Ontbrekende policy betekent niet
-  -- "ingeschreven": er wordt niets vastgelegd.
-  SELECT rs.capture_enabled INTO v_capture
-    FROM pitwall_learning.runtime_settings rs
-   WHERE rs.id = 1;
-  IF v_capture IS NOT TRUE THEN
-    RETURN NULL;
-  END IF;
-
-  -- device_id is in de bron TEXT; simhub_devices.id is UUID. Alleen een
-  -- bewezen UUID-tekst wordt gecast. Nooit blind TEXT naar UUID.
-  IF p_device_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    SELECT d.owner_user_id INTO v_owner
-      FROM public.simhub_devices d
-     WHERE d.id = p_device_id::uuid;
-  END IF;
-  IF v_owner IS NULL THEN
-    RETURN NULL;
-  END IF;
-
-  SELECT ap.capture_enabled, ap.policy_version
-    INTO v_capture, v_policy_version
-    FROM pitwall_learning.account_policy ap
-   WHERE ap.owner_user_id = v_owner;
-  IF v_capture IS NOT TRUE THEN
-    RETURN NULL;
-  END IF;
-
-  IF p_payload IS NULL OR jsonb_typeof(p_payload) <> 'object' THEN
-    RAISE EXCEPTION 'payload must be an object' USING ERRCODE = 'PWL11';
-  END IF;
-  IF pg_column_size(p_payload) > 16384 THEN
-    RAISE EXCEPTION 'payload exceeds 16 KiB' USING ERRCODE = 'PWL12';
-  END IF;
-
-  -- Context is in P1 aantoonbaar onvolledig. Geen defaults, geen 100%- of
-  -- false-waarden en geen kopie uit een latere latest-snapshot.
-  v_reasons := ARRAY[
-    'car_unknown',
-    'track_unknown',
-    'compound_unknown',
-    'historical_owner_unverified',
-    'owner_at_receipt_only',
-    'driver_identity_unverified',
-    'context_incomplete',
-    'non_training_eligible',
-    'as_of_unverifiable',
-    'server_receipt_precommit'
-  ];
-
-  IF p_observed_at IS NULL THEN
-    v_reasons := array_append(v_reasons, 'observed_at_missing');
-  ELSE
-    IF p_observed_at > v_received + interval '5 seconds' THEN
-      v_reasons := array_append(v_reasons, 'clock_skew');
-    END IF;
-    IF v_received - p_observed_at > interval '5 minutes' THEN
-      v_reasons := array_append(v_reasons, 'late_delivery');
-    END IF;
-  END IF;
-
-  IF EXISTS (
-    SELECT 1
-      FROM pitwall_learning.source_revisions r
-     WHERE r.source_kind = p_source_kind
-       AND r.device_id = p_device_id
-       AND r.source_uid = p_source_uid
-       AND r.record_revision > p_record_revision
-  ) THEN
-    v_reasons := array_append(v_reasons, 'stale_revision_delivered_late');
-  END IF;
-
-  IF EXISTS (
-    SELECT 1
-      FROM pitwall_learning.source_revisions r
-     WHERE r.source_kind = p_source_kind
-       AND r.device_id = p_device_id
-       AND r.source_uid = p_source_uid
-       AND r.record_revision = p_record_revision
-       AND r.content_hash <> p_content_hash
-  ) THEN
-    v_reasons := array_append(v_reasons, 'source_hash_revision_conflict');
-  END IF;
-
-  INSERT INTO pitwall_learning.source_revisions (
-    source_kind, device_id, source_uid, record_revision, content_hash,
-    observed_at, source_received_at, server_receipt_at, receipt_commit_visible,
-    as_of_quality, owner_user_id, owner_basis, account_policy_version,
-    canonical_context, context_status, training_eligible, extractor_version,
-    payload, quality_reasons
-  ) VALUES (
-    p_source_kind, p_device_id, p_source_uid, p_record_revision, p_content_hash,
-    p_observed_at, v_received, clock_timestamp(), false,
-    'as_of_unverifiable', v_owner, 'device_owner_at_receipt', v_policy_version,
-    NULL, 'blocked_missing_identity', false, 'pitwall-learning-p1-capture-1',
-    p_payload, v_reasons
-  )
-  ON CONFLICT (source_kind, device_id, source_uid, record_revision, content_hash)
-  DO NOTHING
-  RETURNING id INTO v_id;
-
-  IF v_id IS NOT NULL THEN
-    INSERT INTO pitwall_learning.jobs (source_revision_id, kind)
-    VALUES (v_id, 'source_validate')
-    ON CONFLICT (source_revision_id, kind) DO NOTHING;
-  END IF;
+  SELECT r.id INTO v_id
+    FROM pitwall_learning.source_revisions r
+   WHERE r.source_kind = p_source_kind
+     AND r.device_id = p_device_id
+     AND r.source_uid = p_source_uid
+     AND r.record_revision = p_record_revision
+     AND r.content_hash = p_content_hash;
 
   RETURN v_id;
 END
 $fn$;
 
-CREATE FUNCTION pitwall_learning.capture_measurement_event()
+-- ---------------------------------------------------------------------------
+-- 9a. Statement-triggers op events. Alleen INSERT en UPDATE; geen trigger op
+--     frames, simhub_telemetry_latest, simhub_devices of andere tabellen.
+--     Een UPDATE telt alleen als record_revision of content_hash werkelijk
+--     verschilt; een latere received_at-write maakt geen schijnrevisie.
+-- ---------------------------------------------------------------------------
+CREATE FUNCTION pitwall_learning.capture_measurement_events_insert()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, pitwall_learning, pg_temp
+SET lock_timeout = '50ms'
 AS $fn$
-DECLARE
-  v_old_lock text;
-  v_payload jsonb;
 BEGIN
-  v_old_lock := current_setting('lock_timeout');
+  -- Goedkope poort vóór het bouwen van payloads: staat capture uit, dan
+  -- kost een batch alleen deze ene indexprobe.
+  IF NOT EXISTS (
+    SELECT 1 FROM pitwall_learning.runtime_settings rs
+     WHERE rs.id = 1 AND rs.capture_enabled
+  ) THEN
+    RETURN NULL;
+  END IF;
 
-  BEGIN
-    -- De capture mag de ingest nooit laten wachten. Alleen deze
-    -- (sub)transactie krijgt 50 ms; daarna wordt de oude waarde hersteld.
-    PERFORM set_config('lock_timeout', '50ms', true);
-
-    v_payload := jsonb_strip_nulls(jsonb_build_object(
-      'kind', NEW.kind,
-      'observed_session_id', NEW.observed_session_id,
-      'delivered_session_id', NEW.delivered_session_id,
-      'segment_id', NEW.segment_id,
-      'observed_at', NEW.observed_at,
-      'session_time_seconds', NEW.session_time_seconds,
-      'sdk_tick', NEW.sdk_tick,
-      'wear_before', NEW.wear_before,
-      'wear_after', NEW.wear_after,
-      'set_generation', NEW.set_generation,
-      'confidence', NEW.confidence,
-      'evidence', CASE WHEN NEW.evidence IS NULL THEN NULL
-                       ELSE NEW.evidence - 'note' END
-    ));
-
-    PERFORM pitwall_learning.capture_source_revision(
-      'measurement_event', NEW.device_id, NEW.event_uid,
-      NEW.record_revision, NEW.content_hash, NEW.observed_at,
-      NEW.received_at, v_payload
-    );
-  EXCEPTION WHEN others THEN
-    -- Vaste code, geen payload, geen secrets, geen logtabelwrite in de
-    -- handler. De bronschrijver en zijn ACK blijven ongewijzigd.
-    RAISE WARNING 'pitwall_learning capture skipped' USING ERRCODE = 'PWL01';
-  END;
-
-  PERFORM set_config('lock_timeout', v_old_lock, true);
-  RETURN NEW;
+  PERFORM pitwall_learning.capture_source_revisions(
+    'measurement_event',
+    (SELECT coalesce(jsonb_agg(jsonb_build_object(
+        'device_id', n.device_id,
+        'source_uid', n.event_uid,
+        'record_revision', n.record_revision,
+        'content_hash', n.content_hash,
+        'observed_at', n.observed_at,
+        'source_received_at', n.received_at,
+        'payload', jsonb_strip_nulls(jsonb_build_object(
+          'kind', n.kind,
+          'observed_session_id', n.observed_session_id,
+          'delivered_session_id', n.delivered_session_id,
+          'segment_id', n.segment_id,
+          'observed_at', n.observed_at,
+          'session_time_seconds', n.session_time_seconds,
+          'sdk_tick', n.sdk_tick,
+          'wear_before', n.wear_before,
+          'wear_after', n.wear_after,
+          'set_generation', n.set_generation,
+          'confidence', n.confidence,
+          'evidence', CASE WHEN n.evidence IS NULL THEN NULL
+                           ELSE n.evidence - 'note' END
+        ))
+      )), '[]'::jsonb)
+      FROM new_rows n)
+  );
+  RETURN NULL;
 EXCEPTION WHEN others THEN
-  BEGIN
-    PERFORM set_config('lock_timeout', coalesce(v_old_lock, '0'), true);
-  EXCEPTION WHEN others THEN
-    NULL;
-  END;
-  RAISE WARNING 'pitwall_learning capture unavailable' USING ERRCODE = 'PWL03';
-  RETURN NEW;
+  -- Vaste code, geen payload, geen secrets, geen logtabelwrite. De
+  -- bronschrijver en zijn ACK blijven ongewijzigd.
+  RAISE WARNING 'pitwall_learning capture skipped' USING ERRCODE = 'PWL01';
+  RETURN NULL;
 END
 $fn$;
 
-CREATE FUNCTION pitwall_learning.capture_lap_summary()
+CREATE FUNCTION pitwall_learning.capture_measurement_events_update()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, pitwall_learning, pg_temp
+SET lock_timeout = '50ms'
 AS $fn$
-DECLARE
-  v_old_lock text;
-  v_payload jsonb;
 BEGIN
-  v_old_lock := current_setting('lock_timeout');
+  IF NOT EXISTS (
+    SELECT 1 FROM pitwall_learning.runtime_settings rs
+     WHERE rs.id = 1 AND rs.capture_enabled
+  ) THEN
+    RETURN NULL;
+  END IF;
 
-  BEGIN
-    PERFORM set_config('lock_timeout', '50ms', true);
-
-    -- Geen current_driver_name/id, geen note, geen raw coverage-input.
-    -- Alleen de kleine, gevalideerde aggregatievelden.
-    v_payload := jsonb_strip_nulls(jsonb_build_object(
-      'observed_session_id', NEW.observed_session_id,
-      'delivered_session_id', NEW.delivered_session_id,
-      'segment_id', NEW.segment_id,
-      'lap_number', NEW.lap_number,
-      'started_at', NEW.started_at,
-      'ended_at', NEW.ended_at,
-      'aggregation_version', NEW.aggregation_version,
-      'complete', NEW.complete,
-      'invalid_reasons', NEW.invalid_reasons,
-      'pit_lap', NEW.pit_lap,
-      'driver_changed', NEW.driver_changed,
-      'track_temp_c_mean', NEW.track_temp_c_mean,
-      'track_temp_c_min', NEW.track_temp_c_min,
-      'track_temp_c_max', NEW.track_temp_c_max,
-      'air_temp_c_mean', NEW.air_temp_c_mean,
-      'fuel_start_litres', NEW.fuel_start_litres,
-      'fuel_end_litres', NEW.fuel_end_litres,
-      'fuel_level_integral_litre_seconds', NEW.fuel_level_integral_litre_seconds,
-      'fuel_added_litres_observed', NEW.fuel_added_litres_observed,
-      'abs_lat_accel_integral_g_seconds', NEW.abs_lat_accel_integral_g_seconds,
-      'lat_accel_squared_integral_g2_seconds', NEW.lat_accel_squared_integral_g2_seconds,
-      'max_abs_lat_accel_g', NEW.max_abs_lat_accel_g,
-      'abs_long_accel_integral_g_seconds', NEW.abs_long_accel_integral_g_seconds,
-      'valid_duration_seconds', NEW.valid_duration_seconds,
-      'sample_count', NEW.sample_count,
-      'max_gap_seconds', NEW.max_gap_seconds,
-      'coverage', NEW.coverage
-    ));
-
-    PERFORM pitwall_learning.capture_source_revision(
-      'lap_summary', NEW.device_id, NEW.summary_uid,
-      NEW.record_revision, NEW.content_hash,
-      coalesce(NEW.started_at, NEW.ended_at), NEW.received_at, v_payload
-    );
-  EXCEPTION WHEN others THEN
-    RAISE WARNING 'pitwall_learning capture skipped' USING ERRCODE = 'PWL01';
-  END;
-
-  PERFORM set_config('lock_timeout', v_old_lock, true);
-  RETURN NEW;
+  PERFORM pitwall_learning.capture_source_revisions(
+    'measurement_event',
+    (SELECT coalesce(jsonb_agg(jsonb_build_object(
+        'device_id', n.device_id,
+        'source_uid', n.event_uid,
+        'record_revision', n.record_revision,
+        'content_hash', n.content_hash,
+        'observed_at', n.observed_at,
+        'source_received_at', n.received_at,
+        'payload', jsonb_strip_nulls(jsonb_build_object(
+          'kind', n.kind,
+          'observed_session_id', n.observed_session_id,
+          'delivered_session_id', n.delivered_session_id,
+          'segment_id', n.segment_id,
+          'observed_at', n.observed_at,
+          'session_time_seconds', n.session_time_seconds,
+          'sdk_tick', n.sdk_tick,
+          'wear_before', n.wear_before,
+          'wear_after', n.wear_after,
+          'set_generation', n.set_generation,
+          'confidence', n.confidence,
+          'evidence', CASE WHEN n.evidence IS NULL THEN NULL
+                           ELSE n.evidence - 'note' END
+        ))
+      )), '[]'::jsonb)
+      FROM new_rows n
+      JOIN old_rows o ON o.id = n.id
+     WHERE (n.record_revision, n.content_hash)
+           IS DISTINCT FROM (o.record_revision, o.content_hash))
+  );
+  RETURN NULL;
 EXCEPTION WHEN others THEN
-  BEGIN
-    PERFORM set_config('lock_timeout', coalesce(v_old_lock, '0'), true);
-  EXCEPTION WHEN others THEN
-    NULL;
-  END;
-  RAISE WARNING 'pitwall_learning capture unavailable' USING ERRCODE = 'PWL03';
-  RETURN NEW;
+  RAISE WARNING 'pitwall_learning capture skipped' USING ERRCODE = 'PWL01';
+  RETURN NULL;
 END
 $fn$;
 
--- Alleen INSERT en een UPDATE die de revisie/hash werkelijk meeneemt. Een
--- latere received_at-write zonder nieuwe versie maakt geen schijnrevisie.
-CREATE TRIGGER pitwall_learning_capture_event
-  AFTER INSERT OR UPDATE OF record_revision, content_hash
-  ON public.simhub_measurement_events
-  FOR EACH ROW EXECUTE FUNCTION pitwall_learning.capture_measurement_event();
+-- ---------------------------------------------------------------------------
+-- 9b. Statement-triggers op rondeaggregaten. Geen current_driver_name/id,
+--     geen note, geen raw coverage-input: alleen de kleine, gevalideerde
+--     aggregatievelden.
+-- ---------------------------------------------------------------------------
+CREATE FUNCTION pitwall_learning.capture_lap_summaries_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pitwall_learning, pg_temp
+SET lock_timeout = '50ms'
+AS $fn$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pitwall_learning.runtime_settings rs
+     WHERE rs.id = 1 AND rs.capture_enabled
+  ) THEN
+    RETURN NULL;
+  END IF;
 
-CREATE TRIGGER pitwall_learning_capture_lap
-  AFTER INSERT OR UPDATE OF record_revision, content_hash
-  ON public.simhub_lap_summaries
-  FOR EACH ROW EXECUTE FUNCTION pitwall_learning.capture_lap_summary();
+  PERFORM pitwall_learning.capture_source_revisions(
+    'lap_summary',
+    (SELECT coalesce(jsonb_agg(jsonb_build_object(
+        'device_id', n.device_id,
+        'source_uid', n.summary_uid,
+        'record_revision', n.record_revision,
+        'content_hash', n.content_hash,
+        'observed_at', coalesce(n.started_at, n.ended_at),
+        'source_received_at', n.received_at,
+        'payload', jsonb_strip_nulls(jsonb_build_object(
+          'observed_session_id', n.observed_session_id,
+          'delivered_session_id', n.delivered_session_id,
+          'segment_id', n.segment_id,
+          'lap_number', n.lap_number,
+          'started_at', n.started_at,
+          'ended_at', n.ended_at,
+          'aggregation_version', n.aggregation_version,
+          'complete', n.complete,
+          'invalid_reasons', n.invalid_reasons,
+          'pit_lap', n.pit_lap,
+          'driver_changed', n.driver_changed,
+          'track_temp_c_mean', n.track_temp_c_mean,
+          'track_temp_c_min', n.track_temp_c_min,
+          'track_temp_c_max', n.track_temp_c_max,
+          'air_temp_c_mean', n.air_temp_c_mean,
+          'fuel_start_litres', n.fuel_start_litres,
+          'fuel_end_litres', n.fuel_end_litres,
+          'fuel_level_integral_litre_seconds', n.fuel_level_integral_litre_seconds,
+          'fuel_added_litres_observed', n.fuel_added_litres_observed,
+          'abs_lat_accel_integral_g_seconds', n.abs_lat_accel_integral_g_seconds,
+          'lat_accel_squared_integral_g2_seconds', n.lat_accel_squared_integral_g2_seconds,
+          'max_abs_lat_accel_g', n.max_abs_lat_accel_g,
+          'abs_long_accel_integral_g_seconds', n.abs_long_accel_integral_g_seconds,
+          'valid_duration_seconds', n.valid_duration_seconds,
+          'sample_count', n.sample_count,
+          'max_gap_seconds', n.max_gap_seconds,
+          'coverage', n.coverage
+        ))
+      )), '[]'::jsonb)
+      FROM new_rows n)
+  );
+  RETURN NULL;
+EXCEPTION WHEN others THEN
+  RAISE WARNING 'pitwall_learning capture skipped' USING ERRCODE = 'PWL01';
+  RETURN NULL;
+END
+$fn$;
+
+CREATE FUNCTION pitwall_learning.capture_lap_summaries_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pitwall_learning, pg_temp
+SET lock_timeout = '50ms'
+AS $fn$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pitwall_learning.runtime_settings rs
+     WHERE rs.id = 1 AND rs.capture_enabled
+  ) THEN
+    RETURN NULL;
+  END IF;
+
+  PERFORM pitwall_learning.capture_source_revisions(
+    'lap_summary',
+    (SELECT coalesce(jsonb_agg(jsonb_build_object(
+        'device_id', n.device_id,
+        'source_uid', n.summary_uid,
+        'record_revision', n.record_revision,
+        'content_hash', n.content_hash,
+        'observed_at', coalesce(n.started_at, n.ended_at),
+        'source_received_at', n.received_at,
+        'payload', jsonb_strip_nulls(jsonb_build_object(
+          'observed_session_id', n.observed_session_id,
+          'delivered_session_id', n.delivered_session_id,
+          'segment_id', n.segment_id,
+          'lap_number', n.lap_number,
+          'started_at', n.started_at,
+          'ended_at', n.ended_at,
+          'aggregation_version', n.aggregation_version,
+          'complete', n.complete,
+          'invalid_reasons', n.invalid_reasons,
+          'pit_lap', n.pit_lap,
+          'driver_changed', n.driver_changed,
+          'track_temp_c_mean', n.track_temp_c_mean,
+          'track_temp_c_min', n.track_temp_c_min,
+          'track_temp_c_max', n.track_temp_c_max,
+          'air_temp_c_mean', n.air_temp_c_mean,
+          'fuel_start_litres', n.fuel_start_litres,
+          'fuel_end_litres', n.fuel_end_litres,
+          'fuel_level_integral_litre_seconds', n.fuel_level_integral_litre_seconds,
+          'fuel_added_litres_observed', n.fuel_added_litres_observed,
+          'abs_lat_accel_integral_g_seconds', n.abs_lat_accel_integral_g_seconds,
+          'lat_accel_squared_integral_g2_seconds', n.lat_accel_squared_integral_g2_seconds,
+          'max_abs_lat_accel_g', n.max_abs_lat_accel_g,
+          'abs_long_accel_integral_g_seconds', n.abs_long_accel_integral_g_seconds,
+          'valid_duration_seconds', n.valid_duration_seconds,
+          'sample_count', n.sample_count,
+          'max_gap_seconds', n.max_gap_seconds,
+          'coverage', n.coverage
+        ))
+      )), '[]'::jsonb)
+      FROM new_rows n
+      JOIN old_rows o ON o.id = n.id
+     WHERE (n.record_revision, n.content_hash)
+           IS DISTINCT FROM (o.record_revision, o.content_hash))
+  );
+  RETURN NULL;
+EXCEPTION WHEN others THEN
+  RAISE WARNING 'pitwall_learning capture skipped' USING ERRCODE = 'PWL01';
+  RETURN NULL;
+END
+$fn$;
+
+CREATE TRIGGER pitwall_learning_capture_event_ins
+  AFTER INSERT ON public.simhub_measurement_events
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION pitwall_learning.capture_measurement_events_insert();
+
+CREATE TRIGGER pitwall_learning_capture_event_upd
+  AFTER UPDATE ON public.simhub_measurement_events
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION pitwall_learning.capture_measurement_events_update();
+
+CREATE TRIGGER pitwall_learning_capture_lap_ins
+  AFTER INSERT ON public.simhub_lap_summaries
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION pitwall_learning.capture_lap_summaries_insert();
+
+CREATE TRIGGER pitwall_learning_capture_lap_upd
+  AFTER UPDATE ON public.simhub_lap_summaries
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION pitwall_learning.capture_lap_summaries_update();
+
 
 -- ---------------------------------------------------------------------------
 -- 10. Worker-API. Alleen deze drie functies worden aan de workerrol
@@ -784,6 +969,20 @@ BEGIN
 
   -- Een job die zijn maximum al heeft bereikt en niet meer leased is, gaat
   -- naar dead-letter in plaats van voor altijd opnieuw aangeboden te worden.
+  -- Deze sweep is begrensd (LIMIT) en slaat rijen over die een andere sessie
+  -- vasthoudt (SKIP LOCKED). Zonder die twee grenzen zou één gelockte
+  -- dead-letter-rij elke claim van een andere, gezonde job blokkeren en zou
+  -- de sweep zelf onbegrensd zijn.
+  WITH exhausted AS (
+    SELECT j.id
+      FROM pitwall_learning.jobs j
+     WHERE j.status IN ('pending', 'leased')
+       AND j.attempts >= j.max_attempts
+       AND (j.status = 'pending' OR j.lease_expires_at <= v_now)
+     ORDER BY j.lease_expires_at NULLS FIRST, j.created_at
+     FOR UPDATE SKIP LOCKED
+     LIMIT 50
+  )
   UPDATE pitwall_learning.jobs j
      SET status = 'dead',
          last_error_code = coalesce(j.last_error_code, 'attempts_exhausted'),
@@ -792,19 +991,27 @@ BEGIN
          lease_expires_at = NULL,
          finished_at = v_now,
          updated_at = v_now
-   WHERE j.status IN ('pending', 'leased')
-     AND j.attempts >= j.max_attempts
-     AND (j.status = 'pending' OR j.lease_expires_at <= v_now);
+    FROM exhausted e
+   WHERE j.id = e.id;
 
+  -- Alleen jobs waarvan de revision nog steeds een bestaande owner, een
+  -- bestaande policy en dezelfde policyversie heeft. Een ingetrokken policy,
+  -- een gewijzigde policyversie of een verwijderde owner maakt de job niet
+  -- claimbaar; de capture-rij blijft intussen immutable bewaard.
   WITH candidates AS (
     SELECT j.id
       FROM pitwall_learning.jobs j
+      JOIN pitwall_learning.source_revisions r ON r.id = j.source_revision_id
+      JOIN auth.users u ON u.id = r.owner_user_id
+      JOIN pitwall_learning.account_policy ap ON ap.owner_user_id = r.owner_user_id
      WHERE j.status IN ('pending', 'leased')
        AND j.attempts < j.max_attempts
        AND j.next_attempt_at <= v_now
        AND (j.status = 'pending' OR j.lease_expires_at <= v_now)
+       AND ap.capture_enabled
+       AND ap.policy_version = r.account_policy_version
      ORDER BY j.next_attempt_at, j.created_at
-     FOR UPDATE SKIP LOCKED
+     FOR UPDATE OF j SKIP LOCKED
      LIMIT p_limit
   ), claimed AS (
     UPDATE pitwall_learning.jobs j
@@ -857,19 +1064,29 @@ BEGIN
   IF session_user NOT IN ('pitwall_learning_worker', 'postgres', 'supabase_admin') THEN
     RAISE EXCEPTION 'not a pitwall learning worker' USING ERRCODE = '42501';
   END IF;
-  IF p_outcome NOT IN ('done', 'retry') THEN
+  -- NULL is geen geldige uitkomst. Zonder deze expliciete check zou
+  -- `NULL NOT IN (...)` NULL opleveren, de foutcontrole overslaan en de job
+  -- stilzwijgend als retry wegzetten.
+  IF p_outcome IS NULL OR p_outcome NOT IN ('done', 'retry') THEN
     RAISE EXCEPTION 'outcome must be done or retry' USING ERRCODE = '22023';
   END IF;
   IF p_error_code IS NOT NULL AND p_error_code !~ '^[a-z0-9_.:-]{1,64}$' THEN
     RAISE EXCEPTION 'invalid error code' USING ERRCODE = '22023';
   END IF;
 
-  SELECT * INTO v_job
-    FROM pitwall_learning.jobs j
-   WHERE j.id = p_job_id
-   FOR UPDATE;
+  -- Begrensd: nooit wachten op een rij die een andere afwerker vasthoudt.
+  -- NOWAIT geeft direct een vaste uitkomst zonder details; de job blijft
+  -- leased en de token blijft geldig.
+  BEGIN
+    SELECT * INTO v_job
+      FROM pitwall_learning.jobs j
+     WHERE j.id = p_job_id
+     FOR UPDATE NOWAIT;
+  EXCEPTION WHEN lock_not_available THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'job_busy');
+  END;
 
-  IF NOT FOUND THEN
+  IF v_job.id IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'not_found');
   END IF;
   IF v_job.status <> 'leased' THEN
@@ -941,10 +1158,22 @@ SECURITY DEFINER
 SET search_path = pg_catalog, pitwall_learning, pg_temp
 AS $fn$
 DECLARE
+  v_enabled boolean;
   v_out jsonb;
 BEGIN
   IF session_user NOT IN ('pitwall_learning_worker', 'postgres', 'supabase_admin') THEN
     RAISE EXCEPTION 'not a pitwall learning worker' USING ERRCODE = '42501';
+  END IF;
+
+  -- Fail-closed: de export is alleen geldig zolang de workerflag aan staat en
+  -- het huidige accountbeleid deze revisie nog steeds dekt. Een ingetrokken
+  -- policy, een gewijzigde policyversie of een verwijderde owner geeft NULL,
+  -- geen payload. De immutable rij zelf blijft bewaard.
+  SELECT rs.worker_enabled INTO v_enabled
+    FROM pitwall_learning.runtime_settings rs
+   WHERE rs.id = 1;
+  IF v_enabled IS NOT TRUE THEN
+    RETURN NULL;
   END IF;
 
   SELECT jsonb_build_object(
@@ -962,7 +1191,11 @@ BEGIN
          )
     INTO v_out
     FROM pitwall_learning.source_revisions r
-   WHERE r.id = p_revision_id;
+    JOIN auth.users u ON u.id = r.owner_user_id
+    JOIN pitwall_learning.account_policy ap ON ap.owner_user_id = r.owner_user_id
+   WHERE r.id = p_revision_id
+     AND ap.capture_enabled
+     AND ap.policy_version = r.account_policy_version;
 
   RETURN v_out;
 END
@@ -992,8 +1225,16 @@ GRANT EXECUTE ON FUNCTION pitwall_learning.finish_job(uuid, uuid, text, text)
 GRANT EXECUTE ON FUNCTION pitwall_learning.worker_get_revision(uuid)
   TO pitwall_learning_worker;
 
--- Supabase's default privileges staan buiten dit schema; binnen dit nieuwe
--- schema worden ze expliciet geneutraliseerd voor toekomstige objecten.
+-- Defense-in-depth voor defaults die ooit per rol/schema zijn gezet. Let op:
+-- ALTER DEFAULT PRIVILEGES kan de ingebouwde, globale PostgreSQL-defaults
+-- NIET intrekken. Een REVOKE op een default-ACL die nooit is gezet, is een
+-- no-op; er ontstaat geen "negatieve" default. Nieuwe functies die hier later
+-- door supabase_admin (of een andere rol) worden aangemaakt, krijgen dus
+-- gewoon PUBLIC EXECUTE tenzij de aanmakende migratie dat expliciet
+-- intrekt. Deze statements zijn daarom GEEN sluitende garantie voor
+-- toekomstige objecten: elke latere toevoeging moet vóór COMMIT expliciet
+-- REVOKE ALL krijgen, net als de objecten hierboven. De probe in
+-- supabase/tests/pitwall-learning-schema.sql bewijst dat onderscheid.
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA pitwall_learning
   REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA pitwall_learning

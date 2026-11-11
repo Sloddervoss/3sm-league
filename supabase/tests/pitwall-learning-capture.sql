@@ -131,6 +131,7 @@ do $$
 declare
   v_before bigint;
   v_after bigint;
+  v_null_before bigint;
   v_jobs_before bigint;
   v_ack jsonb;
   v_row pitwall_learning.source_revisions%rowtype;
@@ -257,9 +258,42 @@ begin
     1, 'T07 capture maakt precies één source_validate-job');
 
   -- -----------------------------------------------------------------------
+  -- Set-based: 200 events in één ingest-statement
+  -- -----------------------------------------------------------------------
+  v_before := pg_temp.rev_count((select device from t_ids));
+  v_jobs_before := (select count(*) from pitwall_learning.jobs);
+  v_ack := pg_temp.batch(
+    (select jsonb_agg(pg_temp.event(1000 + k)) from generate_series(1, 200) k), null);
+  perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,accepted}'), 200,
+                     'T07 batch van 200 events wordt volledig geaccepteerd');
+  perform pg_temp.eq(pg_temp.rev_count((select device from t_ids)), v_before + 200,
+                     'T07 batch van 200 events legt 200 bronrevisies vast');
+  perform pg_temp.eq((select count(*) from pitwall_learning.jobs), v_jobs_before + 200,
+                     'T07 batch van 200 events maakt 200 jobs');
+
+  -- Policy/owner worden per rij in dezelfde set geëvalueerd; één set met een
+  -- device zonder policy levert alleen de bevoegde rij op.
+  perform pitwall_learning.capture_source_revisions('measurement_event', jsonb_build_array(
+    jsonb_build_object('device_id', (select device::text from t_ids),
+                       'source_uid', pg_temp.uid(1300), 'record_revision', 1,
+                       'content_hash', md5('mixed-allowed'), 'observed_at', now(),
+                       'source_received_at', now(),
+                       'payload', jsonb_build_object('kind', 'pit_entry')),
+    jsonb_build_object('device_id', (select device_nopolicy::text from t_ids),
+                       'source_uid', pg_temp.uid(1301), 'record_revision', 1,
+                       'content_hash', md5('mixed-denied'), 'observed_at', now(),
+                       'source_received_at', now(),
+                       'payload', jsonb_build_object('kind', 'pit_entry'))));
+  perform pg_temp.eq(
+    (select count(*) from pitwall_learning.source_revisions
+      where source_uid in (pg_temp.uid(1300), pg_temp.uid(1301))),
+    1, 'T07 set-capture past de accountpolicy per rij toe');
+
+  -- -----------------------------------------------------------------------
   -- Duplicaat UID/revisie/hash: replay en eenzelfde-versie UPDATE
   -- -----------------------------------------------------------------------
   v_before := pg_temp.rev_count((select device from t_ids));
+  v_jobs_before := (select count(*) from pitwall_learning.jobs);
   v_ack := pg_temp.batch(jsonb_build_array(pg_temp.event(10)), null);
   perform pg_temp.eq(jsonb_array_length(v_ack #> '{events,duplicates}'), 1,
                      'T07 replay is een duplicaat-ACK');
@@ -406,7 +440,13 @@ begin
   -- Owner-verwijdering: alleen anonimiseren, nooit bewijs verwijderen
   -- -----------------------------------------------------------------------
   v_before := (select count(*) from pitwall_learning.source_revisions
-                where owner_user_id = (select owner from t_ids));
+                where device_id = (select device::text from t_ids)
+                  and owner_user_id = (select owner from t_ids));
+  -- Er kunnen al geanonimiseerde rijen van eerdere (teruggedraaide) probes
+  -- bestaan; de assertie is daarom een delta, geen absolute stand.
+  v_null_before := (select count(*) from pitwall_learning.source_revisions
+                     where device_id = (select device::text from t_ids)
+                       and owner_user_id is null and owner_basis = 'none');
   v_text := (select payload::text from pitwall_learning.source_revisions
               where source_uid = pg_temp.uid(10) and record_revision = 1);
 
@@ -414,8 +454,9 @@ begin
 
   perform pg_temp.eq(
     (select count(*) from pitwall_learning.source_revisions
-      where owner_user_id is null and owner_basis = 'none'),
-    v_before,
+      where device_id = (select device::text from t_ids)
+        and owner_user_id is null and owner_basis = 'none'),
+    v_null_before + v_before,
     'T07 owner-verwijdering anonimiseert alle betrokken bewijsrijen');
   perform pg_temp.eq(
     (select payload::text from pitwall_learning.source_revisions

@@ -169,6 +169,49 @@ begin
     'T08 worker_get_revision lekt geen owner-id');
 
   -- -----------------------------------------------------------------------
+  -- Export is fail-closed: flag, huidige policy en policyversie
+  -- -----------------------------------------------------------------------
+  update pitwall_learning.runtime_settings set worker_enabled = false where id = 1;
+  execute 'set local role pitwall_learning_worker';
+  select pitwall_learning.worker_get_revision(v_rev) into v_out;
+  execute 'reset role';
+  perform pg_temp.expect(v_out is null,
+    'T08 worker_get_revision exporteert niets bij worker_enabled=false');
+
+  update pitwall_learning.runtime_settings set worker_enabled = true where id = 1;
+  update pitwall_learning.account_policy set capture_enabled = false
+   where owner_user_id = 'a0000000-0000-4000-8000-000000000001';
+  execute 'set local role pitwall_learning_worker';
+  select pitwall_learning.worker_get_revision(v_rev) into v_out;
+  execute 'reset role';
+  perform pg_temp.expect(v_out is null,
+    'T08 worker_get_revision exporteert niets bij ingetrokken policy');
+
+  update pitwall_learning.account_policy
+     set capture_enabled = true, policy_version = policy_version + 1
+   where owner_user_id = 'a0000000-0000-4000-8000-000000000001';
+  execute 'set local role pitwall_learning_worker';
+  select pitwall_learning.worker_get_revision(v_rev) into v_out;
+  execute 'reset role';
+  perform pg_temp.expect(v_out is null,
+    'T08 worker_get_revision exporteert niets na policyversiewijziging');
+
+  update pitwall_learning.account_policy set policy_version = 1
+   where owner_user_id = 'a0000000-0000-4000-8000-000000000001';
+  execute 'set local role pitwall_learning_worker';
+  select pitwall_learning.worker_get_revision(v_rev) into v_out;
+  execute 'reset role';
+  perform pg_temp.expect(v_out ? 'payload',
+    'T08 worker_get_revision exporteert weer bij geldige policy');
+
+  delete from auth.users where id = 'a0000000-0000-4000-8000-000000000001';
+  execute 'set local role pitwall_learning_worker';
+  select pitwall_learning.worker_get_revision(v_rev) into v_out;
+  execute 'reset role';
+  perform pg_temp.expect(v_out is null,
+    'T08 worker_get_revision exporteert niets na ownerverwijdering');
+
+  -- -----------------------------------------------------------------------
   -- Geen PUBLIC-grants op tabellen/functies van het private schema
   -- -----------------------------------------------------------------------
   select count(*) into v_count
