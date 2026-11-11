@@ -75,16 +75,24 @@ zonder dat een gebruiker een willekeurige bewijsrij kan wijzigen.
 
 ## 3. Capture (T07)
 
-Triggers:
+Vier **statement-level** triggers, twee per brontabel:
 
 ```text
-AFTER INSERT OR UPDATE OF record_revision, content_hash
-  ON public.simhub_measurement_events
-  ON public.simhub_lap_summaries
+AFTER INSERT ON public.simhub_measurement_events
+  REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT
+AFTER UPDATE ON public.simhub_measurement_events
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT
+AFTER INSERT ON public.simhub_lap_summaries
+  REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT
+AFTER UPDATE ON public.simhub_lap_summaries
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT
 ```
 
 Geen trigger op frames, `simhub_telemetry_latest`, `simhub_devices` of andere
-tabellen. De trigger bouwt een kleine allowlist:
+tabellen. Een UPDATE telt alleen wanneer `record_revision` of `content_hash`
+werkelijk verschilt; een latere `received_at`-write maakt geen schijnrevisie.
+
+Per statement bouwt de trigger dezelfde allowlist als voorheen:
 
 - events: `kind`, observed/delivered session, segment, `observed_at`,
   `session_time_seconds`, `sdk_tick`, wear before/after, set generation,
@@ -96,6 +104,23 @@ tabellen. De trigger bouwt een kleine allowlist:
 Niet in de payload: `current_driver_name`, `current_driver_id`, `note`,
 tokens, volledige frames, `paceHistory`, `car_id`, `track_name`,
 `track_config`, `compound`.
+
+De trigger geeft de hele set in één jsonb-array aan
+`capture_source_revisions(kind, rows)`. Die private helper doet:
+
+1. de globale `runtime_settings.capture_enabled`-poort (één indexprobe; bij
+   `false` bouwt de trigger niet eens payloads);
+2. de owner-at-receipt-resolutie en de per-account policy in dezelfde
+   set-based join; een ontbrekende policy, een uitgeschakelde policy of een
+   onbekend device levert voor die rij niets op, zonder de rest te blokkeren;
+3. de bestaande-revisiehistorie (stale/conflict-redenen) als één aggregaat;
+4. de revisions en `source_validate`-jobs in twee set-based statements
+   (`INSERT ... RETURNING` → jobs).
+
+De helper is begrensd op 200 rijen (dezelfde bovengrens als de ingest) en
+heeft `lock_timeout = '50ms'` als functie-lokale `SET`, zodat de waarde bij
+succes én bij een fout automatisch wordt hersteld. Er is geen handmatige
+`set_config`/restore meer.
 
 Capture gebeurt alleen als **beide** waar zijn:
 
@@ -139,11 +164,11 @@ binnenkomt krijgt `stale_revision_delivered_late`.
 
 ### Lock- en foutgedrag
 
-De trigger zet in zijn eigen (sub)transactie `lock_timeout = '50ms'` en
-herstelt de oude waarde vóór terugkeer. De volledige capture, inclusief de
-runtime/policy/device-SELECTs, zit in een `EXCEPTION`-guard. Een fout levert
-alleen een vaste `WARNING` met SQLSTATE `PWL01` (of `PWL03` voor de buitenste
-guard), zonder payload, secrets of logtabelwrite. De ingest-ACK en replay
+De capturefuncties zetten `lock_timeout = '50ms'` als functie-lokale `SET`
+(auto-herstel bij succes en bij een fout). De volledige capture, inclusief
+poort, owner/policy-join en de set-based inserts, zit in een `EXCEPTION`-guard
+in de trigger. Een fout levert alleen een vaste `WARNING` met SQLSTATE
+`PWL01`, zonder payload, secrets of logtabelwrite. De ingest-ACK en replay
 blijven ongewijzigd.
 
 Belangrijke grens: als capture door een lock of fout wordt overgeslagen, is
@@ -158,15 +183,26 @@ bij T25 of een aparte, begrensde reconciliatie.
 `source_validate` of `example_build`. Capture maakt één `source_validate`-job
 per nieuwe bronrevisie.
 
-- `claim_jobs(limit, lease_seconds)`: `FOR UPDATE SKIP LOCKED`, alleen
-  `pending` of verlopen `leased`, verhoogt `attempts`, zet een nieuw
-  `lease_token` en `lease_expires_at`. `worker_enabled = false` geeft `[]`.
+- `claim_jobs(limit, lease_seconds)`: doet eerst een **begrensde**
+  dead-letter-sweep (`LIMIT 50`, `FOR UPDATE SKIP LOCKED`) en claimt daarna
+  met `FOR UPDATE OF j SKIP LOCKED`, alleen `pending` of verlopen `leased`.
+  Een gelockte uitputtelijke rij blokkeert een claim van een andere, gezonde
+  job dus niet. De claim joint `source_revisions`, `auth.users` en
+  `account_policy`: een ingetrokken policy, een gewijzigde policyversie of een
+  verwijderde owner maakt de job niet claimbaar. `worker_enabled = false`
+  geeft `[]`.
 - `finish_job(job_id, lease_token, outcome, error_code)`:
-  `done` of `retry`. `retry` plant 5 s, 10 s, daarna dead-letter; na drie
-  pogingen is de job `dead` en nooit meer claimbaar. Verkeerd/verlopen token
-  wordt geweigerd.
-- `worker_get_revision(id)`: geeft alleen de allowlisted revision terug, geen
-  tabel.
+  `done` of `retry`; `NULL` en iedere andere waarde worden expliciet
+  geweigerd (geen stille retry). `retry` plant 5 s, 10 s, daarna dead-letter;
+  na drie pogingen is de job `dead` en nooit meer claimbaar. Verkeerd/verlopen
+  token wordt geweigerd. De rij wordt met `FOR UPDATE NOWAIT` geladen: houdt
+  een andere afwerker dezelfde jobrij vast, dan volgt direct
+  `{ok:false,error:'job_busy'}` zonder wachten; lease en token blijven geldig.
+- `worker_get_revision(id)`: fail-closed. Geeft `NULL` wanneer
+  `worker_enabled` uit staat, de owner niet meer bestaat, de capturepolicy is
+  ingetrokken of `policy_version` niet meer gelijk is aan de versie op de
+  revisie. Alleen bij een geldige, actuele policy komt de allowlisted revisie
+  terug; nooit een tabel.
 
 Rol `pitwall_learning_worker`:
 
@@ -190,10 +226,18 @@ worden fully qualified aangesproken.
   `PUBLIC`, `anon`, `authenticated`, `service_role` en de workerrol.
 - Daarna alleen de drie worker-EXECUTEs en schema-USAGE voor de worker.
 - RLS aan op alle nieuwe tabellen, nul policies.
-- Default privileges voor `supabase_admin` in het nieuwe schema zijn expliciet
-  geneutraliseerd; `pg_default_acl` bevat geen app-grants.
 - Geen nieuwe grant of policy op een gedeelde public-tabel. De enige
-  public-wijziging is het plaatsen van de twee capturetriggers.
+  public-wijziging is het plaatsen van de vier capturetriggers.
+- `ALTER DEFAULT PRIVILEGES ... REVOKE` in dit schema is **geen** sluitende
+  garantie voor toekomstige objecten. PostgreSQL's ingebouwde globale default
+  (met name `PUBLIC EXECUTE` op functies) wordt er niet door ingetrokken; een
+  REVOKE op een default-ACL die nooit is gezet is een no-op. De bestaande
+  objecten zijn dicht door de expliciete `REVOKE ALL` hierboven. Elke latere
+  toevoeging aan dit schema moet vóór COMMIT expliciet
+  `REVOKE ALL ... FROM PUBLIC, anon, authenticated, service_role` krijgen.
+  De probe in `pitwall-learning-schema.sql` maakt een nieuwe functie aan en
+  bewijst dat die zonder per-object-revoke nog steeds door `anon` uitvoerbaar
+  is.
 
 ## 6. Retentie en accountbeleid
 
@@ -208,7 +252,8 @@ aparte poorten. De P2+-tabellen zijn leeg.
 
 `supabase/rollbacks/20261111163052_pitwall_learning_evidence.sql`:
 
-- verwijdert de twee capturetriggers;
+- verwijdert de vier capturetriggers (en, op een reeds opgebouwde testkloon,
+  de twee historische row-triggers);
 - zet alle vier kill switches op `false`;
 - trekt schema/tabel/functie/sequence-rechten van de worker in;
 - zet de workerrol op `NOLOGIN` en `CONNECTION LIMIT 0`;
@@ -231,60 +276,110 @@ stilzwijgend.
 Commando:
 
 ```bash
-python3 scripts/pitwall-learning/rehearse-p1.py
+python3 scripts/pitwall-learning/rehearse-p1.py --samples 30
 ```
 
-Logs: `/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/`
-(`red.log`, `green-*.log`, `concurrency.log`, `lock-ack.log`, `perf.log`,
-`rollback.log`, `forward-clean-probe.log`, `forward-conflict.log`,
-`baseline-before.json`, `baseline-after.json`, `summary.json`).
+Logs: `/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/bounded-review/`
+(`green-*.log`, `concurrency.log`, `deadletter-lock.log`, `worker-login.log`,
+`finish-busy.log`, `lock-ack.log`, `perf-wire.log`, `perf-warmup.log`,
+`perf-cpu-attribution.log`, `perf-db-only-stress.log`, `rollback.log`,
+`forward-clean-probe.log`, `forward-conflict.log`, `summary.json`,
+`baseline-*.json`). De oudere P1-logs in de bovenliggende map zijn niet
+overschreven.
+
+De kloon was al forward met de eerste reviewronde. De harness heeft die
+schema-versie **niet blind opnieuw** geforward: de oude schema's/rol zijn
+herschreven naar `pitwall_learning_v1_archive` /
+`pitwall_learning_worker_v1_archive`, het echte forward-bestand is op een
+afwezige namespace toegepast en alle bewijs-, job- en policyrijen zijn met
+expliciete kolommen gekopieerd. Een row-image-checksum (`md5(to_jsonb(r))`)
+binnen dezelfde transactie bewijst dat de kopie byte-identiek is; bij verschil
+gaat de hele transactie terug. De oude schema's blijven als archief staan (er
+is niets gedropt).
 
 Resultaten:
 
 | Bewijs | Uitkomst |
 |---|---|
-| Schema/rol/constraints/RLS/grants | 102/102 PASS |
-| Capture/dedupe/revisie/late/context/immutability/owner-delete | 54/54 PASS |
-| Jobs/lease/backoff/dead-letter | 35/35 PASS |
-| Echte rolprobes anon/auth/service/worker/TRUNCATE | 28/28 PASS |
-| Twee connecties: A claimt, B krijgt `[]` in 431 ms | PASS |
+| Schema/rol/constraints/RLS/grants/default-probe | 108/108 PASS |
+| Capture/dedupe/revisie/late/context/immutability/owner-delete/200-set | 58/58 PASS |
+| Jobs/lease/backoff/dead-letter/NULL/policy/owner | 45/45 PASS |
+| Echte rolprobes anon/auth/service/worker/TRUNCATE | 33/33 PASS |
+| Twee connecties: A claimt, B krijgt `[]` in 582 ms | PASS |
+| Gelockte dead-letter-rij: B claimt de gezonde job in 505 ms; rij blijft `pending` tot A loslaat | PASS |
+| Echte worker-LOGIN over trust-Unixsocket: `session_user=current_user=pitwall_learning_worker`; claim/export/finish ok; capture en tabel-SELECT geweigerd | PASS |
+| `finish_job` op een door een andere sessie gelockte rij: `job_busy` in 441 ms, lease/token intact, daarna `done` | PASS |
 | Crashreclaim na lease-expiry: dezelfde job, poging 2, nieuw token; oude token `lease_mismatch` | PASS |
-| Lock op `source_revisions`: ACK accepted in 646 ms, `PWL01`, `lock_timeout` terug op 0, 0 capture, replay duplicate | PASS |
-| Rollback-dry-run: bewijs behouden, public exact, worker/LOGIN uit | PASS |
-| Forward from absent namespace (rolled-back probe): 9 tabellen, 2 triggers, rolflags, 0 rijen | PASS |
+| Lock op `source_revisions`: ACK accepted in 448 ms, `PWL01`, `lock_timeout` terug op 0, 0 capture, replay duplicate | PASS |
+| Rollback-dry-run: bewijs behouden, public exact, worker/LOGIN uit, 4 triggers weg | PASS |
+| Forward from absent namespace (rolled-back probe): 9 tabellen, 4 triggers, rolflags, 0 rijen, definities byte-identiek aan live | PASS |
 | Forward op bestaand schema: geweigerd | PASS |
 
-De RED-log is opgenomen door de tests tegen een tijdelijk weggerenderde
-schema in een teruggedraaide transactie te draaien; de tests falen zonder
-schema en zijn daarna groen. De worktree was op het moment van de harness al
-forward, dus de oorspronkelijke pre-implementatie-run is niet als aparte
-committed state bewaard.
+De RED-evidence tegen de oude implementatie staat in
+`red-01-row-triggers.log` (twee row-triggers), `red-02-deadletter-lock.log`
+(claim van een gezonde job liep in een statement-timeout terwijl een andere
+sessie een uitgeputte job vasthield), `red-03-finish-null.log`
+(`NULL`-outcome werd als retry geaccepteerd) en `red-04-worker-export.log`
+(export bleef payload geven bij workerflag uit, ingetrokken policy,
+policyversiewijziging en verwijderde owner). De schema-afwezigheids-RED staat
+in `red-schema-absence.log`.
 
-### Performance — open productiepoort
+### Performance — poort niet gehaald
 
-Gemeten op de 0,5 CPU-kloon, 200-event batches, elke batch in een eigen
-teruggedraaide transactie, vijf metingen per fase:
+Productiegrens blijft **p95 ≤ 10% én ≤ 20 ms** (strengste van de twee); er is
+niets versoepeld.
 
-| Fase | p50 | p95 |
-|---|---:|---:|
-| capture uit | 2206,8 ms | 2407,0 ms |
-| capture aan | 2510,8 ms | 2941,2 ms |
-| toename | +304,0 ms (+13,8%) | +534,3 ms (+22,2%) |
+Meetopzet op de vastgepinde 0,5 CPU-kloon (PG15.19):
 
-Dat is **geen PASS** voor de vastgepinde productiepoort (p95 ≤ 10% én ≤ 20 ms,
-strengste grens). De functionele bewijslaag is groen, maar de performancepoort
-is op deze kloon niet gehaald; dit is een open productieblocker. De meting is
-geen live-loadtest en de host is zwaar begrensd, maar dat mag niet als PASS
-worden gelezen.
+- **primair frame (wire-representatief)**: 20 events met wear + evidence en
+  3 volledige rondeaggregaten. Gemeten payload: events 12.691 B + laps
+  3.231 B = 15.922 B (limiet 16.384) en body 16.022 B (limiet 24.576);
+  alle 20 events + 3 laps geaccepteerd. Geen `perf_probe`-kind.
+- drie fasen per paired ronde: triggers afwezig (echte voormigratie),
+  installed capture uit, installed capture aan;
+- 30 paired rondes na één weggegooide warm-up, fasevolgorde wisselt per ronde;
+- nearest-rank p95 (`ceil(p*n)-1`), geen interpolatie of extrapolatie;
+- 200-event meting staat **apart** als DB-only stress en is geen wire-frame.
+
+| Fase | p50 | p95 | min | max |
+|---|---:|---:|---:|---:|
+| triggers afwezig | 409,0 ms | 712,7 ms | 231,6 ms | 796,7 ms |
+| installed, capture uit | 329,7 ms | 578,0 ms | 295,1 ms | 672,3 ms |
+| installed, capture aan | 481,8 ms | 988,3 ms | 312,8 ms | 1035,9 ms |
+
+Paired p95-toename: **+633,4 ms (+88,9%)** versus afwezig en **+666,0 ms
+(+115,2%)** versus installed-off. Dat is **FAIL** voor de poort.
+
+Omdat de host aantoonbaar overbelast is (load average 13,7 op 4 cores, kloon
+hard op 0,5 CPU) is ter attributie ook backend-CPU-tijd gemeten
+(`/proc/self/stat` utime+stime, ABBA per ronde, 20 rondes × 4 frames). Ook die
+secundaire meting haalt de grens niet: p50 **+22,5 ms**, p95 **+53,8 ms**,
+max **+83,8 ms** per frame. De wall-clock p95 is dus deels steal, maar de
+CPU-attributie wijst op een reële toename boven 20 ms.
+
+DB-only stress (200 events, 10 rondes, expliciet géén wire-frame en niet
+gebruikt voor de poort): p50 2133,5 → 3316,4 ms, p95 3101,5 → 4824,8 ms.
+
+**Conclusie: de performancepoort is niet gehaald op de vastgepinde kloon.**
+De functionele en concurrency-bewijzen zijn groen, maar dit blijft een open
+productieblocker. De meting is geen live-loadtest en de host is zwaar
+begrensd; dat verklaart een deel van de wall-clock-ruis, maar de CPU-p95 ligt
+ook boven de grens. Er is daarom geen PASS uitgesproken en geen grens
+verruimd.
 
 ## 9. Overige open grenzen
 
 - Geen productie-DDL, geen push/main, geen deploy, geen Edge/connector/UI.
-- Geen wachtwoordprovisioning voor `pitwall_learning_worker`; de operator moet
-  dat buiten SQL doen. De tests gebruiken `SET ROLE`, niet een echte login.
+- `pitwall_learning_worker` heeft geen wachtwoord. De harness bewijst een
+  echte LOGIN-sessie over de private trust-Unixsocket (`/work`) met
+  `session_user = current_user = pitwall_learning_worker`, een positieve
+  claim/export/finish en de weigering van capture/tabellen. Voor productie
+  blijft auth-/wachtwoordprovisioning buiten SQL een aparte beheeractie.
 - Geen retentieworker, geen modeltraining/scoring/promotie, geen adviespad.
 - Capture-fout/backfill is niet in P1 opgelost (zie §3).
 - `server_receipt_at` is geen first-visible/knownAt-bewijs (zie §3).
 - De rollback bewaart het private schema; opnieuw forwarden vereist een
   expliciete beheeractie.
-- De performancepoort is niet gehaald (zie §8).
+- De performancepoort is niet gehaald (zie §8): open productieblocker.
+- `ALTER DEFAULT PRIVILEGES` is geen garantie voor toekomstige objecten;
+  per-object-revoke vóór COMMIT blijft verplicht (zie §5).
