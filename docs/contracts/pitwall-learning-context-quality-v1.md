@@ -218,9 +218,12 @@ geïmporteerd:
 - per groep minimaal 80% van het rondevenster;
 - groepen worden **afzonderlijk** getoetst en nooit bij elkaar opgeteld.
 
-`complete: true` is niet voldoende: de groepen moeten dat ook aantonen. Anders
-wordt de coverage `rejected` en blijft het target geblokkeerd. `complete: false`
-of ontbrekend wordt nooit uit de coverage afgeleid.
+`complete: true` is niet voldoende: de fuelgroep moet dat ook aantonen. Anders
+wordt de coverage `rejected` en blijft fuel geblokkeerd. `complete: false` of
+ontbrekend wordt nooit uit de coverage afgeleid. Fuel toetst alleen de
+fuelgroep; de overall `coverage.status` wordt `rejected` als een andere groep
+faalt, maar dat blokkeert fuel niet. `complete` is een bronassertie over de
+gehele ronde en blijft voor fuel een expliciete voorwaarde.
 
 ### Afwezig, nul en onbekend
 
@@ -281,15 +284,15 @@ al is aangesloten:
 
 - Eerste RED-run tegen stubs: **26 van 28** tests faalden op echt gedrag;
   2 passeerden omdat zij alleen `null`/drempelconstanten controleerden.
-  Log: `artifacts/3sm/pitwall-learning-p2-context-quality/red-targeted.log`.
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-context-quality/red-targeted.log`.
 - Definitieve gerichte Vitest: **33/33 geslaagd** in 2 testbestanden.
-  Log: `green-targeted-final-preflight.log`.
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-context-quality/green-targeted-final-preflight.log`.
 - ESLint op de vier nieuwe bestanden: **schoon**.
 - Projecttypecheck: **exact 16 bestaande baselinefouten**, nul learningfouten.
-  Log: `typecheck-after.log`.
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-context-quality/typecheck-after.log`.
 - Volledige suite: **1980 geslaagd, 1 bestaande fout** in
   `tyreTelemetryContract.test.ts` (dezelfde baselinefout; niet aangeraakt).
-  Log: `full-suite-final.log`.
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-context-quality/full-suite-final.log`.
 - Geen remote databasequery, mutatie, push, merge of deploy uitgevoerd.
 
 ## Resterende onzekerheden
