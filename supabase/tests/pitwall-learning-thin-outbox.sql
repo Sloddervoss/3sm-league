@@ -264,6 +264,33 @@ begin
     'T09 200-eventbatch blijft <= 256 KiB');
 
   -- -----------------------------------------------------------------------
+  -- 2b. Een batch boven 256 KiB wordt geweigerd, niet in stukken geknipt
+  -- -----------------------------------------------------------------------
+  v_batches_before := (select count(*) from pitwall_learning.capture_batches);
+  v_blocked := false;
+  begin
+    perform pitwall_learning.capture_source_batch('measurement_event',
+      (select jsonb_agg(jsonb_build_object(
+          'device_id', 'd0000000-0000-4000-8000-000000000001',
+          'source_uid', pg_temp.uid(5000 + k),
+          'record_revision', 1,
+          'content_hash', md5('oversized-' || k),
+          'observed_at', now(),
+          'source_received_at', now(),
+          'payload', jsonb_build_object('kind', 'oversized', 'blob', repeat('x', 16000))))
+         from generate_series(1, 17) k));
+  exception when others then
+    v_blocked := true;
+  end;
+  perform pg_temp.expect(v_blocked,
+    'T09 batch boven 256 KiB wordt expliciet geweigerd');
+  perform pg_temp.eq((select count(*) from pitwall_learning.capture_batches), v_batches_before,
+    'T09 geweigerde oversized batch laat geen half record achter');
+  perform pg_temp.eq((select count(*) from pitwall_learning.source_revisions
+                       where source_uid between pg_temp.uid(5001) and pg_temp.uid(5017)), 0,
+    'T09 geweigerde oversized batch materialiseert niets');
+
+  -- -----------------------------------------------------------------------
   -- 3. Outboxfout mag de ingest-ACK nooit beïnvloeden
   -- -----------------------------------------------------------------------
   create or replace function pg_temp.fail_batch_insert()
