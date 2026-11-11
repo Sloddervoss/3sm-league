@@ -511,6 +511,39 @@ def order_sequence() -> list[list[str]]:
     return sequence
 
 
+def run_order_index(run: int) -> int:
+    """Return the calibrated order index actually used for a 1-based run."""
+    cycle = (run - 1) // ORDERS_PER_CYCLE
+    return (((run - 1) % ORDERS_PER_CYCLE) + cycle) % ORDERS_PER_CYCLE
+
+
+def maintenance_boundary_summary(sequence: list[list[str]]) -> list[dict]:
+    """Describe each maintenance boundary and the first round after it.
+
+    Both the boundary and the after-boundary fields are derived from the same
+    index and sequence used by the measurement loop.  The final boundary has
+    no following round, so its after-boundary fields are null instead of
+    repeating the boundary round.
+    """
+    summary = []
+    for boundary in range(MAINTENANCE_INTERVAL, ROUNDS + 1,
+                          MAINTENANCE_INTERVAL):
+        after = boundary + 1
+        has_after = after <= ROUNDS
+        summary.append({
+            "boundary_round": boundary,
+            "cycle": (boundary - 1) // ORDERS_PER_CYCLE,
+            "boundary_order_index": run_order_index(boundary),
+            "boundary_order": sequence[boundary - 1],
+            "first_round_after_boundary": after if has_after else None,
+            "first_order_index_after_boundary":
+                run_order_index(after) if has_after else None,
+            "first_order_after_boundary":
+                sequence[after - 1] if has_after else None,
+        })
+    return summary
+
+
 def position_counts(sequence: list[list[str]]) -> dict[str, dict[str, int]]:
     counts = {phase: {str(i): 0 for i in range(1, 6)} for phase in PHASES}
     for order in sequence:
@@ -1317,11 +1350,7 @@ def run_experiment(protocol_path: Path, container_id: str,
     _write_json(root / "order-design.json", {
         "sequence": sequence,
         "phase_position_counts": expected_positions,
-        "first_order_after_each_maintenance_boundary": [
-            {"run": run, "order_index": (run % 10),
-             "order": sequence[run - 1]}
-            for run in range(10, 201, 10)
-        ],
+        "maintenance_boundaries": maintenance_boundary_summary(sequence),
     })
 
     samples: list[dict] = []
@@ -1342,7 +1371,7 @@ def run_experiment(protocol_path: Path, container_id: str,
         for run in range(1, ROUNDS + 1):
             cycle = (run - 1) // ORDERS_PER_CYCLE
             order = sequence[run - 1]
-            order_index = (((run - 1) % ORDERS_PER_CYCLE) + cycle) % ORDERS_PER_CYCLE
+            order_index = run_order_index(run)
             before = collect_resources(container_id, stage="pre_round", run=run)
             write_snapshot(before)
             _stop_on_resources(container_id, before, stage="pre_round")

@@ -204,12 +204,53 @@ class OrderDesignTests(unittest.TestCase):
             block = sequence[cycle * 10:(cycle + 1) * 10]
             self.assertEqual(sorted(block), sorted(base))
 
-    def test_first_order_after_maintenance_rotates_through_all_ten(self):
-        sequence = cp.order_sequence()
-        firsts = [sequence[round_no - 1] for round_no in range(10, 201, 10)]
-        self.assertEqual(len(firsts), 20)
-        self.assertEqual(Counter(tuple(order) for order in firsts),
+    def test_boundary_round_order_rotates_through_all_ten(self):
+        summary = cp.maintenance_boundary_summary(cp.order_sequence())
+        boundaries = [tuple(entry["boundary_order"]) for entry in summary]
+        self.assertEqual(len(boundaries), 20)
+        self.assertEqual(Counter(boundaries),
                          Counter({tuple(order): 2 for order in cp.rehearse.calibrated_phase_orders(cp.PHASES)}))
+
+    def test_boundary_and_after_indices_match_the_actual_run_rotation(self):
+        # Independently observed from the frozen samples/rounds: run 10 has
+        # index 9, run 11 index 1, run 20 index 0, run 21 index 2, ...,
+        # run 200 index 8.  The pair is (boundary round, first round after).
+        summary = cp.maintenance_boundary_summary(cp.order_sequence())
+        self.assertEqual(
+            [(entry["boundary_round"],
+              entry["boundary_order_index"],
+              entry["first_round_after_boundary"],
+              entry["first_order_index_after_boundary"])
+             for entry in summary],
+            [(10, 9, 11, 1), (20, 0, 21, 2), (30, 1, 31, 3),
+             (40, 2, 41, 4), (50, 3, 51, 5), (60, 4, 61, 6),
+             (70, 5, 71, 7), (80, 6, 81, 8), (90, 7, 91, 9),
+             (100, 8, 101, 0), (110, 9, 111, 1), (120, 0, 121, 2),
+             (130, 1, 131, 3), (140, 2, 141, 4), (150, 3, 151, 5),
+             (160, 4, 161, 6), (170, 5, 171, 7), (180, 6, 181, 8),
+             (190, 7, 191, 9), (200, 8, None, None)])
+
+    def test_first_order_after_boundary_is_the_next_measured_round(self):
+        # Synthetic sequence makes the slice unambiguous: index i contains
+        # ["order-i"].  Boundary 10 is sequence[9]; the first measurement after
+        # it is run 11 = sequence[10], not the boundary round again.
+        sequence = [[f"order-{index}"] for index in range(200)]
+        summary = cp.maintenance_boundary_summary(sequence)
+        first = summary[0]
+        self.assertEqual(first["boundary_order"], ["order-9"])
+        self.assertEqual(first["first_order_after_boundary"], ["order-10"])
+        self.assertEqual(first["first_round_after_boundary"], 11)
+        self.assertEqual(first["first_order_index_after_boundary"], 1)
+
+    def test_last_boundary_has_no_following_round(self):
+        summary = cp.maintenance_boundary_summary(cp.order_sequence())
+        last = summary[-1]
+        self.assertEqual(last["boundary_round"], 200)
+        self.assertEqual(last["boundary_order_index"], 8)
+        self.assertEqual(last["boundary_order"], cp.order_sequence()[199])
+        self.assertIsNone(last["first_round_after_boundary"])
+        self.assertIsNone(last["first_order_index_after_boundary"])
+        self.assertIsNone(last["first_order_after_boundary"])
 
     def test_maintenance_boundaries_are_the_ten_round_boundaries(self):
         data = protocol_data()
