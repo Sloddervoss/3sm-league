@@ -1,9 +1,52 @@
 # Pitwall learning P1 — gecontroleerde 200-ronde prestatieproef
 
-Status: **vooraf vastgelegd protocol; meting volgt na setup van de private kloon.**
-Deze proef vervangt de open 40-ronde meting niet met een nieuw oordeel op dezelfde
-data. Het is één nieuwe, vooraf gepinde meting op een nieuwe private kloon. De
-oude uitkomst blijft historisch `INCONCLUSIVE`; er wordt niets herschreven.
+Status: **COMPLETE — de vooraf vastgelegde gate is PASS; ouderlijke review en
+vrijgave staan nog open.** De meting is één keer uitgevoerd op een nieuwe private
+kloon. Deze proef vervangt de open 40-ronde meting niet met een nieuw oordeel op
+dezelfde data; de oude uitkomst blijft historisch `INCONCLUSIVE`. Er is niets
+herschreven en de drempel is niet veranderd.
+
+## Uitkomst van de ene vooraf vastgelegde run
+
+Uitgevoerd op commit `db18331cc50489062660da13fcb43a36c371eb55` (schone
+worktree), container
+`b896f2b95cd13e7da6f490ddf2d2e8853ae1609854c411689d616c4153239c5b`,
+protocolhash `e3b3ee152b9769bd7adba7af0ee16bea6277050f84a10d81c61bf840a162816f`.
+
+| Fase | n | p50 ms | p95 ms | min ms | max ms | >120 ms | >150 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| absent | 200 | 63,178 | 145,319 | 56,458 | 253,550 | 19 | 8 |
+| absent_aa | 200 | 63,101 | 149,503 | 55,980 | 263,945 | 25 | 10 |
+| off | 200 | 62,927 | 136,436 | 56,952 | 189,571 | 18 | 6 |
+| off_aa | 200 | 62,891 | 138,227 | 56,308 | 220,527 | 18 | 6 |
+| on | 200 | 66,292 | **159,842** | 59,073 | 284,107 | 19 | 11 |
+
+```text
+primair:  p95(on) - p95(absent) = +14,523 ms  (+9,994% van 145,319 ms)  PASS
+secundair: p95(on) - p95(off)   = +23,406 ms  (+17,155%)
+A/A absent: +4,184 ms  (+2,879%)   binnen budget
+A/A off:    +1,791 ms  (+1,313%)   binnen budget
+contractfouten: 0 / 1000 samples
+```
+
+De primaire uitkomst ligt met **9,994%** net onder de vastgelegde 10%-grens en
+met **14,523 ms** onder de 20 ms-grens. De A/A-controle is met absolute delta's
+binnen beide budgetten. Daarom is de vooraf vastgelegde classificatie **PASS**.
+De 95%-bootstrapdiagnostiek (10.000 resamples, vaste seed) is
+**−28,076 … +39,999 ms** met mediaan +10,940 ms; die interval is breed en bevat
+nul. Dat is expliciet **diagnostiek, geen vervanging van de p95-gate** en het
+verandert de uitslag niet. De kleine marge betekent wel dat de robuustheid van
+deze PASS beperkt is; de parent moet dat bij de review wegen. Er is niet
+opnieuw gemeten en er is geen drempel, quantiel of fase vervangen.
+
+Operationeel bewijs: 1000 gemeten samples (200 per fase, ieder 40× op iedere
+positie), 4000 RPC's inclusief 3000 warmups, 20 onderhoudsgrenzen, 421
+resource-snapshots, 0 contractfouten, identieke logische rowcounts/fingerprints
+vóór en na, en een identieke read-only productiereferentie. De private kloon
+draait nog voor ouderlijke readback; er staan 0 jobs/0 capture-/bronrijen in.
+De image-healthcheck meldt `unhealthy` omdat de kloon bewust geen TCP-listener
+heeft; de Unix-socket en alle metingen werkten wel.
+
 
 ## Scope en non-goals
 
@@ -144,11 +187,20 @@ Bestanden:
 - `resources.jsonl` — cgroup CPU-throttling, memory, pids, I/O, OOM-events,
   `/proc`-diagnostiek en Postgres-statistieken, buiten de klok;
 - `maintenance.jsonl` — commando's, duur, voor/na-statistieken;
-- `raw-notices.log`, `result.json`, `result-summary.md`, `FINAL-SHA256SUMS`.
+- `raw-notices.log`, `result.json`, `result-summary.md`, `FINAL-SHA256SUMS`;
+- `verification.json` en `independent-verification.txt` — herberekening uit de
+  ruwe JSONL zonder de driver te importeren.
 
 De 95%-bootstrapintervallen (10.000 resamples, vaste seed) staan alleen als
 diagnostiek in `result.json`. Ze vervangen de p95-gate niet en veranderen geen
 drempel.
+
+### Setup-smoke (niet in de meting)
+
+Vóór de eigenlijke run is één `absent`-fase met dezelfde SQL-route en drie
+warmups uitgevoerd en teruggerold, als setupvalidatie van de verse kloon. Die
+call is **niet** opgenomen in de 1000 samples en niet in de gate. Hij staat in
+`setup/smoke-phase.log` en bevestigde 20+3 ACK, 0 capture en de bytebudgetten.
 
 ## Uitvoering
 

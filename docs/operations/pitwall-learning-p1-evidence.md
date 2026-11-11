@@ -279,6 +279,13 @@ asserties falen op de oude done-only gate) en daarna groen in
 
 ## 7. Performance — gekalibreerde 40-ronde meting: INCONCLUSIVE, geen PASS
 
+> **Nieuwe, apart vooraf vastgelegde meting:** de gecontroleerde 200-ronde run in
+> `docs/operations/pitwall-learning-p1-controlled-perf.md` gaf p95 absent
+> 145,319 ms → on 159,842 ms (+14,523 ms / +9,994%), A/A binnen budget en 0
+> contractfouten: volgens de ongewijzigde gate **PASS**, met brede
+> bootstrapdiagnostiek. De 40-ronde-uitkomst hieronder blijft historisch
+> `INCONCLUSIVE` en is niet herschreven.
+
 Productiegrens blijft **p95 ≤ 10% én ≤ 20 ms** (strengste van de twee); er is
 niets versoepeld. De primaire gate is het verschil tussen de fase-p95's
 (`on` minus `absent`) en het percentage van de baseline-p95. De per-ronde
