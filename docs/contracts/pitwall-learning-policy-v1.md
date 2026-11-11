@@ -1,6 +1,17 @@
 # Pitwall learning — beleidsvoorstel v1
 
-**Status: P1-LOKALE BOUWGO ONTVANGEN; NIET OP PRODUCTIE GEACTIVEERD.** Vincent bevestigde op 11 november 2026 met “go p1” het voorgestelde eerste bereik: persoonlijk leren, geen nieuwe pooling, retentie 7/180/90 dagen en afgeschermde lokale bouw/tests van de bewijslaag. Dit is geen GO voor productie-DDL, publicatie, autonome promotie of modeladvies. De bestaande fuelroute, bandenpool en hun instellingen worden niet aangepast.
+**Status: P1 lokaal afgerond; vervolg-GO voor afgeschermde P2-bouw ontvangen. Niet op productie geactiveerd.**
+
+P2 begint vanaf `79ca3381ee880bb145c91c9804da7584fc2b683a` na de afgeronde
+P1-bouwacceptatie en Vincents vervolgopdracht (Discord `1570215019860332665`).
+Dit staat lokale context-/kwaliteitskwalificatie, fysieke setintervallen en
+stopsegmenten toe (T09–T12). T13 blijft conditioneel op een bewezen broncontractgat;
+geen connector-/Edge-publicatie of geïnstalleerde DLL-wissel zonder aparte GO.
+Geen productie-DDL, historische seed, nieuwe pooling, fitting/modeladvies,
+autonome promotie, UI-copy/publicatie of start van P3 onder dit fasebesluit.
+Account- en retentiegrenzen hieronder blijven ongewijzigd.
+
+Vincent bevestigde op 11 november 2026 met “go p1” het voorgestelde eerste bereik: persoonlijk leren, geen nieuwe pooling, retentie 7/180/90 dagen en afgeschermde lokale bouw/tests van de bewijslaag. Dit is geen GO voor productie-DDL, publicatie, autonome promotie of modeladvies. De bestaande fuelroute, bandenpool en hun instellingen worden niet aangepast.
 
 De hieronder genoemde account-/retentiekeuzes gelden als bouwcontract voor P1. De promotiegrenzen blijven een voorstel voor een latere aparte poort; geen productie-account is hierdoor automatisch ingeschreven of gewijzigd.
 
