@@ -232,7 +232,7 @@ Resultaten:
 | Bewijs | Uitkomst |
 |---|---|
 | Schema/rol/constraints/RLS/grants/default-probe | **124/124 PASS** |
-| Dunne outbox/budget/materialisatie/idempotentie/privacy | **74/74 PASS** |
+| Dunne outbox/budget/materialisatie/idempotentie/privacy | **77/77 PASS** |
 | Capture/dedupe/revisie/late/context/immutability/owner-delete/200-set | **58/58 PASS** |
 | Jobs/lease/backoff/dead-letter/NULL/policy/owner | **45/45 PASS** |
 | Echte rolprobes anon/auth/service/worker/TRUNCATE | **36/36 PASS** |
@@ -273,49 +273,51 @@ Meetopzet op de vastgepinde **1 CPU**-kloon (PG15.19, 512 MiB, network none):
 
 | Fase | p50 | p95 |
 |---|---:|---:|
-| triggers afwezig | 159,5 ms | 285,6 ms |
-| afwezig A/A | 111,4 ms | 251,5 ms |
-| installed, capture uit | 116,6 ms | 163,8 ms |
-| installed uit A/A | 131,1 ms | 200,5 ms |
-| installed, capture aan | 158,9 ms | 259,9 ms |
+| triggers afwezig | 164,6 ms | 265,4 ms |
+| afwezig A/A | 107,9 ms | 184,4 ms |
+| installed, capture uit | 124,4 ms | 211,5 ms |
+| installed uit A/A | 137,9 ms | 237,1 ms |
+| installed, capture aan | 162,6 ms | 288,6 ms |
 
 Primaire fase-p95:
 
 ```text
-on - absent   = -25,702 ms  (-9,0% van 285,614 ms)
-on - off      = +96,123 ms  (+58,7% van 163,789 ms)
+on - absent   = +23,163 ms  (+8,7% van 265,440 ms)
+on - off      = +77,079 ms  (+36,4% van 211,524 ms)
 ```
 
 Diagnostische paired p95:
 
 ```text
-on - absent   = +170,316 ms  (+59,6%)
-on - off      = +168,598 ms  (+102,9%)
+on - absent   = +199,225 ms  (+75,1%)
+on - off      = +170,124 ms  (+80,4%)
 ```
 
 De A/A-controle is **niet binnen budget**:
 
 ```text
-afwezig A/A - afwezig = -34,129 ms  (-11,9%)
-uit A/A - uit         = +36,695 ms  (+22,4%)
+afwezig A/A - afwezig = -81,084 ms  (-30,5%)
+uit A/A - uit         = +25,534 ms  (+12,1%)
 ```
 
 Daarom is de uitkomst **INCONCLUSIVE**, niet PASS en niet FAIL. De primaire
-fase-p95 tegen `absent` zou numeriek binnen de grens vallen, maar dezelfde
-baselinefasen wijken in een echte A/A-herhaling meer af dan het budget. Dat is
-precies de tijdruis die de negatieve controle moest blootleggen. De secundaire
-vergelijking tegen `installed-off` valt bovendien buiten de grens.
+fase-p95 tegen `absent` zit met +23,2 ms boven de absolute 20 ms-grens (het
+percentage blijft met 8,7% onder de 10%-grens); de secundaire vergelijking
+tegen `installed-off` valt ruim buiten de grens. Omdat dezelfde baselinefasen
+in een echte A/A-herhaling meer dan het budget afwijken, is er geen geldige
+PASS/FAIL-uitspraak over de primaire meting. Dat is precies de tijdruis die de
+negatieve controle moest blootleggen.
 
 De oude 0,5 CPU-meting blijft ongewijzigd staan als **FAIL**:
 712,714 → 988,294 ms = **+275,580 ms / +38,666%**, met paired p95 +633,432 ms.
 Die oude FAIL is niet weggepoetst en de drempel is niet verruimd.
 
-CPU-attributie (secundair, geen ingest-latencyclaim): p50 **+11,25 ms**,
-p95 **+31,25 ms** per frame (20 rondes × 4 frames, ABBA). DB-only stress
-(200 events, 10 rondes, expliciet geen wire-frame): p95 1005,1 → 645,8 ms.
+CPU-attributie (secundair, geen ingest-latencyclaim): p50 **-7,5 ms**,
+p95 **+33,75 ms** per frame (20 rondes × 4 frames, ABBA). DB-only stress
+(200 events, 10 rondes, expliciet geen wire-frame): p95 833,9 → 918,9 ms.
 
 Het batchbewijs voor de wire-vorm: **2 batchrecords**, **23 items**,
-**2.805 bytes** batchpayload, **0 nieuwe revisies** en **+2 jobs** in de
+**2.811 bytes** batchpayload, **0 nieuwe revisies** en **+2 jobs** in de
 ingest-transactie. Dat is de bedoelde dunne brug; de rest gebeurt in de
 begrensde materialisatiestap.
 
