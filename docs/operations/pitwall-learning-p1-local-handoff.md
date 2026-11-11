@@ -2,11 +2,11 @@
 
 ## Besluit
 
-**Functionele bouw: PASS. Codekwaliteit: APPROVED. Performancepoort: de nieuwe
-gecontroleerde 200-ronde run is volgens de vooraf vastgelegde regel PASS; de
-onafhankelijke parentreview en vrijgave staan nog open.**
-P1 heeft dus nog geen productie-GO en nog geen volledige faseacceptatie tot die
-review is afgerond. P2 is niet gestart.
+**Lokale P1-bouwacceptatie: PASS. Functionele review en codekwaliteit: APPROVED.**
+De gecontroleerde 200-ronde proef voldoet aan de vooraf vastgelegde p95-regel;
+de onafhankelijke spec-/qualityreview en herkeuring van de bewijsreparaties zijn afgerond.
+Dit is een lokale puntmeting met zeer kleine marge, geen robuuste productiegarantie.
+Productievalidatie/uitrol zijn niet goedgekeurd. P2 is niet gestart.
 Geen push, main-merge, uitrol, training of nieuw zichtbaar advies.
 Productiefrontendwijzigingen: NONE. PRODUCTIEWIJZIGING: NEE.
 
@@ -52,7 +52,7 @@ horen bij latere, afzonderlijk toegestane fasen.
   en voegen de ontbrekende SQL-guard bij finish-busy claim toe. Bytebudgetregressies
   eerst rood, daarna groen; de bewaakte busy-probe echt uitgevoerd. SQL is ongewijzigd.
 
-## Open prestatiepoort
+## Gecontroleerde lokale prestatiepoort en historische uitkomsten
 
 De onderstaande 40-ronde-uitkomst blijft **historisch INCONCLUSIVE** en wordt
 niet herschreven. De apart vooraf vastgelegde 200-ronde gecontroleerde run staat
@@ -60,9 +60,11 @@ in `docs/operations/pitwall-learning-p1-controlled-perf.md`: p95 absent
 145,319 ms → on 159,842 ms, **+14,523 ms / +9,994%**, A/A binnen budget
 (+4,184 ms/+2,879% en +1,791 ms/+1,313%), 0 contractfouten op 1000 samples.
 Dat is volgens de ongewijzigde gate **PASS**, met een brede bootstrapdiagnostiek
-(−28,076 … +39,999 ms) die alleen ter informatie dient. De parent moet de
-robuustheid en de kleine marge onafhankelijk beoordelen; er is niets opnieuw
-gemeten en er is geen drempel of quantiel vervangen. Geen productie-GO, geen P2.
+(−28,076 … +39,999 ms) die alleen ter informatie dient. Parent en onafhankelijke
+review hebben de ruwe samples, preregistratie en kleine marge gecontroleerd.
+De gerichte herkeuring op `77779b5ae1996eace337293dffdd70d2d8ff2f58` is APPROVED.
+Volgordesamenvatting en provenance zijn als apart erratum hersteld, zonder de meetdata
+of numerieke gate te wijzigen. Geen robuuste productiegarantie, productie-GO of P2.
 
 De oude 40-ronde-meting: 40 rondes, vijf gebalanceerde fasen, iedere fase eigen
 backend, drie volledige ongetimede warmups na DDL/flagsetup en distinct identifiers.
@@ -75,15 +77,16 @@ Geen doorgaan met herhalen totdat toevallig groen wordt gemeten.
 - De vastgelegde grens blijft **≤20 ms EN ≤10%**. Uitslag: INCONCLUSIVE, geen PASS.
 
 Dit is geen betrouwbare productieschatting of bewijs dat de oorzaak alleen hostruis is.
-Een afzonderlijk gecontroleerde prestatievalidatie is nodig voordat P1 mag worden
-geaccepteerd of capture ooit wordt geactiveerd. Niet alvast P2 of productie starten.
+De later uitgevoerde gecontroleerde validatie hierboven sluit de lokale bouwpoort.
+Voor capture-activatie blijft afzonderlijke productievalidatie/GO nodig.
+Niet alvast P2 of productie starten.
 Oudere cold-backend-metingen en de 0,5-CPU-FAIL blijven historische, niet vergelijkbare
 bewijzen; ze worden niet tot PASS herschreven.
 
 ## Restgrenzen en bewijsintegriteit
 
 - Applicatierollen mogen private tabellen niet TRUNCATE-en; een bevoegde operator kan
-  zonder de verwijderde brede FK toch jobs verwezen. Geen handmatige private TRUNCATE;
+  zonder de verwijderde brede FK toch verweesde jobs achterlaten. Geen private TRUNCATE;
   latere retentie moet referenties expliciet afhandelen.
 - Een direct-SQL item >16 KiB kan stil worden gefilterd. Normale bronconstraints begrenzen
   huidige wire-items; geen volledigheidsclaim voor geprivilegieerde oversize-inserts.
@@ -92,12 +95,16 @@ bewijzen; ze worden niet tot PASS herschreven.
   effectieve expliciete grants tellen er vier.
 - Een vroege builderstart overschreef zes historische thin-outbox-probelogs; vijf oude
   green-logs zijn uit onafhankelijke reviewkopieën teruggezet. Die historische directory
-  wordt niet als byte-bevroren origineel gepresenteerd. De definitieve gekalibreerde
-  uitvoer plus onafhankelijke reviewlogs vormen het actuele bewijs.
+  wordt niet als byte-bevroren origineel gepresenteerd. Die gekalibreerde uitvoer
+  blijft historisch bewijs; de actuele gecontroleerde run en reviews staan hieronder.
 
-Privé bewijsroot: `/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/`.
-Definitieve review: `quality-calibrated-review/review.md`; meting: `calibrated-perf-review/`.
-Parentstatus, build-/testlogs, dump/TOC en SHA-256-manifest staan daar afzonderlijk.
+Historische bewijsroot: `/home/hermes/artifacts/3sm/pitwall-learning-p1-20261111/`;
+SQL-review: `quality-calibrated-review/review.md` onder die root.
+Actuele meetdata: `/home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-20261111/`.
+Definitieve delta-review: `/home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-review-final-20261111/`.
+Apart erratum: `/home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-evidence-fix-20261111/`.
+Parentherberekening en backup/cleanup: `/home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-parent-20261111/`.
+De oorspronkelijke 192- en 34-regelige manifesten blijven ongewijzigd en verifieerbaar.
 
 De netwerkloze testcontainer is na een custom-format backup met geverifieerde TOC
 verwijderd en afwezig gecontroleerd. De dump bevat uitsluitend synthetische rijen plus
