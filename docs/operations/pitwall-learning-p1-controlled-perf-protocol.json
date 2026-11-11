@@ -1,0 +1,225 @@
+{
+  "protocol_version": "3sm.pitwall-learning.p1.controlled-perf.v1",
+  "experiment_id": "pitwall-learning-p1-controlled-20261111",
+  "status": "PREREGISTERED_BEFORE_DATABASE_MEASUREMENT",
+  "registered_at_utc": "2026-11-11T21:50:39Z",
+  "purpose": "One expanded, controlled local measurement of the P1 capture-trigger overhead so the open performance gate can be classified as PASS, FAIL or INCONCLUSIVE without repeating measurements until green.",
+  "no_repeat_rule": "Exactly one 200-round run. A second run is forbidden. An INCONCLUSIVE or FAIL result is returned unchanged; no threshold, quantile or phase substitution is allowed.",
+  "target": {
+    "host": "3sm-docker",
+    "container_name": "pitwall-learning-p1-controlled-20261111",
+    "container_label": "3sm.test=pitwall-learning-p1-controlled",
+    "image": "supabase/postgres:15.19.0.004",
+    "image_id": "sha256:1aabcd9cfb8a58ecde50a6092b207bcbb5f6bdc45546fde35cfda5d3ab39c065",
+    "network": "none",
+    "published_ports": [],
+    "readonly_rootfs": true,
+    "user": "100:101",
+    "tmpfs": {
+      "path": "/work",
+      "size_bytes": 402653184,
+      "uid": 100,
+      "gid": 101
+    },
+    "memory_bytes": 536870912,
+    "nano_cpus": 1000000000,
+    "pids_limit": 64,
+    "preload_libraries": "",
+    "shared_buffers": "32MB",
+    "work_mem": "4MB",
+    "max_connections": 20,
+    "max_worker_processes": 2,
+    "database": "pitwall_learning_p1_rehearsal",
+    "data_directory": "/work/data",
+    "unix_socket_directory": "/work",
+    "connection": "ssh -o BatchMode=yes 3sm-docker docker exec -i <container-id> psql -X -qAt -v ON_ERROR_STOP=1 -h /work -U postgres -d pitwall_learning_p1_rehearsal",
+    "production_changed": false
+  },
+  "dataset": {
+    "frame": "wire-max-shape",
+    "events_per_frame": 20,
+    "laps_per_frame": 3,
+    "event_kind": "wear_refresh_confirmed",
+    "event_fields": "wearBefore, wearAfter and evidence included",
+    "lap_fields": "full lap aggregate including coverage",
+    "fixture": "supabase/tests/fixtures/pitwall-learning-p1-fixtures.sql",
+    "warmup_frames_per_phase": 3,
+    "warmup_identities": "distinct eventUid/eventId/summaryUid/summaryId and lap wearObservationIds per warm-up",
+    "measured_identities": "fixed measured UUID/eventId/summaryId identities, reused only inside rolled-back transactions",
+    "source_job_materialization_during_ingest": 0
+  },
+  "design": {
+    "rounds": 200,
+    "cycles": 20,
+    "orders_per_cycle": 10,
+    "phase_names": [
+      "absent",
+      "absent_aa",
+      "off",
+      "off_aa",
+      "on"
+    ],
+    "phase_order_source": "rehearse-p1.calibrated_phase_orders (5 Latin rotations plus 5 rotations of the reversed order)",
+    "cycle_order_rotation": "the ten fixed orders are applied in a per-cycle phase-shifted sequence so the first order after each ten-round maintenance boundary rotates through all ten orders; every 10-round cycle still contains each of the ten orders exactly once",
+    "fresh_backend_per_phase": true,
+    "transaction": "BEGIN ... ROLLBACK per phase; every phase runs in its own psql backend",
+    "ddl_and_flag_before_warmups": true,
+    "warmup_ingests_per_phase": 3,
+    "timed_calls_per_phase": 1,
+    "rounds_per_cycle": 10,
+    "maintenance_boundary_rounds": [
+      10,
+      20,
+      30,
+      40,
+      50,
+      60,
+      70,
+      80,
+      90,
+      100,
+      110,
+      120,
+      130,
+      140,
+      150,
+      160,
+      170,
+      180,
+      190,
+      200
+    ],
+    "measured_samples": 1000,
+    "warmup_rpcs": 3000,
+    "total_rpcs": 4000,
+    "position_target_per_phase": {
+      "1": 40,
+      "2": 40,
+      "3": 40,
+      "4": 40,
+      "5": 40
+    }
+  },
+  "statistic": {
+    "quantile": "nearest-rank p95",
+    "formula": "sorted[ceil(0.95*n)-1], no interpolation or extrapolation",
+    "n_per_phase": 200,
+    "primary_basis": "phase p95(on) - phase p95(absent)"
+  },
+  "gate": {
+    "delta_ms_max": 20.0,
+    "delta_pct_max": 10.0,
+    "delta_pct_basis": "p95(absent)",
+    "pass_requires": "delta_ms <= 20.0 AND delta_pct <= 10.0 AND A/A control in budget AND zero measurement-contract errors",
+    "threshold_changed": false,
+    "p50_substitution_allowed": false
+  },
+  "aa_control": {
+    "pairs": [
+      "absent_aa versus absent",
+      "off_aa versus off"
+    ],
+    "absolute_delta": true,
+    "delta_ms_max": 20.0,
+    "delta_pct_max": 10.0,
+    "negative_delta_counts_as_noise": true,
+    "out_of_budget_result": "INCONCLUSIVE"
+  },
+  "contract": {
+    "ack_events": 20,
+    "ack_laps": 3,
+    "ack_identities_exact": true,
+    "on": {
+      "batch_rows": 2,
+      "batch_items": 23,
+      "event_batch_rows": 1,
+      "event_batch_items": 20,
+      "lap_batch_rows": 1,
+      "lap_batch_items": 3,
+      "source_revision_delta": 0,
+      "job_delta": 2
+    },
+    "off_and_absent": {
+      "batch_rows": 0,
+      "batch_items": 0,
+      "event_batch_rows": 0,
+      "event_batch_items": 0,
+      "lap_batch_rows": 0,
+      "lap_batch_items": 0,
+      "source_revision_delta": 0,
+      "job_delta": 0
+    },
+    "byte_budgets": {
+      "event_plus_lap_part_bytes_max": 16384,
+      "body_bytes_max": 24576,
+      "raw_batch_text_bytes_max": 262144
+    },
+    "every_record_checked": true,
+    "violation_result": "FAIL"
+  },
+  "maintenance": {
+    "interval_rounds": 10,
+    "outside_measured_phases": true,
+    "commands": [
+      "GUARD: current_database()=pitwall_learning_p1_rehearsal AND data_directory=/work/data AND unix_socket_directories=/work AND current_user=postgres",
+      "VACUUM (ANALYZE) public.simhub_measurement_events;",
+      "VACUUM (ANALYZE) public.simhub_lap_summaries;",
+      "VACUUM (ANALYZE) pitwall_learning.capture_batches;",
+      "VACUUM (ANALYZE) pitwall_learning.source_revisions;",
+      "VACUUM (ANALYZE) pitwall_learning.jobs;",
+      "CHECKPOINT;"
+    ],
+    "forbidden": [
+      "TRUNCATE",
+      "DELETE of committed proof rows",
+      "changing autovacuum, fsync or synchronous_commit"
+    ],
+    "preserve_logical_rows_and_fingerprints": true
+  },
+  "resources": {
+    "collected_outside_clocked_rpc_window": true,
+    "per_round_before_and_after": true,
+    "cgroup": [
+      "/sys/fs/cgroup/cpu.stat",
+      "/sys/fs/cgroup/memory.current",
+      "/sys/fs/cgroup/memory.peak",
+      "/sys/fs/cgroup/memory.events",
+      "/sys/fs/cgroup/pids.current",
+      "/sys/fs/cgroup/io.stat"
+    ],
+    "host_proc": [
+      "/proc/loadavg",
+      "/proc/stat (first cpu line and ctxt; host-wide diagnostic)",
+      "/proc/meminfo"
+    ],
+    "postgres": [
+      "pg_stat_database",
+      "pg_stat_bgwriter",
+      "pg_stat_wal",
+      "pg_stat_activity count",
+      "pg_stat_user_tables for the touched source/private tables",
+      "pg_database_size(current_database())"
+    ],
+    "tmpfs_free_min_bytes_to_start": 100663296,
+    "tmpfs_free_min_bytes_to_continue": 67108864,
+    "memory_current_max_bytes_to_continue": 482344960,
+    "oom_kill_stops_run": true
+  },
+  "uncertainty": {
+    "method": "seeded percentile bootstrap of the nearest-rank p95 difference",
+    "resamples": 10000,
+    "seed": 20261111,
+    "confidence": 0.95,
+    "role": "diagnostic_only_not_gate_and_not_replacement_statistic",
+    "reported_as": "diagnostic_only_not_gate_and_not_replacement_statistic"
+  },
+  "stop_rules": [
+    "Any psql exit code other than 0 stops the run.",
+    "A phase not producing exactly one parsed P1PERF record stops the run.",
+    "Any container identity, label, network, image, user, memory, CPU, pids or tmpfs mismatch stops before measurement.",
+    "Any database/data_directory/socket/current_user guard mismatch stops before measurement.",
+    "Any measurement-contract error marks the completed run FAIL; it is never retried.",
+    "tmpfs free below 64 MiB, cgroup memory.current at or above 460 MiB, or an OOM kill stops the run.",
+    "No phase, sample, threshold or quantile is replaced after inspecting the result."
+  ]
+}
