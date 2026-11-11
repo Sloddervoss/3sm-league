@@ -1,10 +1,13 @@
 # Pitwall learning P1 — gecontroleerde 200-ronde prestatieproef
 
 Status: **COMPLETE — de vooraf vastgelegde gate is PASS; ouderlijke review en
-vrijgave staan nog open.** De meting is één keer uitgevoerd op een nieuwe private
-kloon. Deze proef vervangt de open 40-ronde meting niet met een nieuw oordeel op
-dezelfde data; de oude uitkomst blijft historisch `INCONCLUSIVE`. Er is niets
-herschreven en de drempel is niet veranderd.
+vrijgave staan nog open.** De geldige meting is één keer uitgevoerd op een nieuwe
+private kloon. Daaraan vooraf ging één geweigerde preflight-aanroep
+(`21:59:06Z`, exit 1) die geen meting startte en geen sample opleverde; zie
+[Eerste aanroep en proofroot](#eerste-aanroep-en-proofroot). Deze proef vervangt
+de open 40-ronde meting niet met een nieuw oordeel op dezelfde data; de oude
+uitkomst blijft historisch `INCONCLUSIVE`. Er is niets herschreven en de
+drempel is niet veranderd.
 
 ## Uitkomst van de ene vooraf vastgelegde run
 
@@ -42,8 +45,13 @@ opnieuw gemeten en er is geen drempel, quantiel of fase vervangen.
 Operationeel bewijs: 1000 gemeten samples (200 per fase, ieder 40× op iedere
 positie), 4000 RPC's inclusief 3000 warmups, 20 onderhoudsgrenzen, 421
 resource-snapshots, 0 contractfouten, identieke logische rowcounts/fingerprints
-vóór en na, en een identieke read-only productiereferentie. De private kloon
-draait nog voor ouderlijke readback; er staan 0 jobs/0 capture-/bronrijen in.
+vóór en na, en een identieke read-only productiereferentie. De private kloon is
+na een read-only ouderlijke validatie verwijderd; het backup-/cleanup-bewijs en
+de TOC-geverifieerde dump staan in
+`/home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-parent-20261111/`
+(`controlled-clone-backup.json`, `controlled-clone-cleanup.json`, `.dump`/`.toc`;
+dump-sha256 `5b68324f1a73ab5d1afafc6c34cfcdae8dcf74510f6122d847944768c6f9ec20`).
+Er stonden 0 jobs/0 capture-/bronrijen in.
 De image-healthcheck meldt `unhealthy` omdat de kloon bewust geen TCP-listener
 heeft; de Unix-socket en alle metingen werkten wel.
 
@@ -73,9 +81,13 @@ docs/operations/pitwall-learning-p1-controlled-perf-protocol.sha256
 
 Het protocol is vóór de eerste DB-meting gecommit. De driver weigert een
 protocol zonder kloppende sha256-sidecar, een andere dan 200 rondes, minder dan
-drie warmups, een ruimere drempel, een andere image of een niet-lege proofroot.
-De sidecar is de bytehash van het JSON-bestand; de driver schrijft dezelfde hash
-vóór de meting naar de proofroot.
+drie warmups, een ruimere drempel of een andere image. Voor de proofroot geldt
+een strikte allowlist: een niet-bestaand pad wordt als `0700`-directory
+aangemaakt; een bestaand pad moet een directory zijn en mag uitsluitend de
+al bestaande submappen `setup/` en `tdd/` bevatten. Iedere andere entry wordt
+geweigerd — een andere map, een los bestand en ook een leeg bestand zoals
+`run-console.log`. De sidecar is de bytehash van het JSON-bestand; de driver
+schrijft dezelfde hash vóór de meting naar de proofroot.
 
 Kern van het ontwerp:
 
@@ -174,11 +186,16 @@ fingerprints worden vóór en na vergeleken.
 
 ## Bewijs
 
-De proofroot is nieuw en `0700`:
+De proofroot voor de meetoutput is `0700`:
 
 ```text
 /home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-20261111/
 ```
+
+De root was nieuw voor de meetoutput, maar niet leeg: `setup/` (inclusief de
+setup-smoke) en `tdd/` bestonden al vóór de run. De driver staat precies die
+twee submappen toe. Elk ander bestand of elke andere map wordt geweigerd, ook
+een leeg bestand; de driver schrijft zelf geen `run-console.log` in de root.
 
 Bestanden:
 
@@ -200,9 +217,36 @@ Bestanden:
 - `final-state.json` — read-only eindstaat van de kloon en van alle
   productiecontainers (naam/id/image/starttijd), zonder writes.
 
+De bevroren `order-design.json` in deze root bevat een foutieve afgeleide
+samenvatting: `order_index` stond op alle grenzen op 0 en de "first order after"
+was de grensronde zelf. Dat bestand is niet overschreven. De gecorrigeerde,
+uit dezelfde 200 rondes afgeleide versie staat in
+`/home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-evidence-fix-20261111/order-design.corrected.json`
+met `order-design.provenance.json`; `samples.jsonl`, `rounds.jsonl` en
+`result.json` zijn ongewijzigd.
+
 De 95%-bootstrapintervallen (10.000 resamples, vaste seed) staan alleen als
 diagnostiek in `result.json`. Ze vervangen de p95-gate niet en veranderen geen
 drempel.
+
+### Eerste aanroep en proofroot
+
+De eerste `run`-aanroep startte op `2026-11-11T21:59:06Z` als proces
+`proc_7943dedba5fa` (pid 1108782). De shell-command redirectte stdout/stderr
+naar `<proofroot>/run-console.log`, waardoor er vóór de driverstart al een
+niet-toegestaan bestand in de root stond. `prepare_proof_root` weigerde:
+
+```text
+REFUSED: proof root already contains files: .../run-console.log
+```
+
+Het proces eindigde met exit 1. Er is géén `run-start.json`, geen sample en
+geen meting gestart: dit is een geweigerde preflight, geen weggegooide meting.
+Het consolebestand is om `21:59:31Z` verwijderd; de niet-gevoelige refusaltekst
+is bewaard in de ouder-transcriptregels 203-206 en in
+`/home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-evidence-fix-20261111/provenance/refused-preflight.json`.
+De geldige run startte om `21:59:34Z` op commit `db18331c`, met protocolcommit
+`758bb861` van `21:56:11Z`; dat is de enige 200-ronde meting.
 
 ### Setup-smoke (niet in de meting)
 
@@ -210,6 +254,26 @@ Vóór de eigenlijke run is één `absent`-fase met dezelfde SQL-route en drie
 warmups uitgevoerd en teruggerold, als setupvalidatie van de verse kloon. Die
 call is **niet** opgenomen in de 1000 samples en niet in de gate. Hij staat in
 `setup/smoke-phase.log` en bevestigde 20+3 ACK, 0 capture en de bytebudgetten.
+
+### Bekende beperkingen van het bewijs
+
+- `preflight.json`/`postflight.json` bevatten de sleutel `tcp_listeners`. Die
+  telt `pg_stat_activity`-rijen met `backend_type='client backend'` en is dus
+  géén TCP-listener-bewijs. De echte no-TCP-bewijzen zijn
+  `inet_server_addr() IS NULL`, `server_addr: null`, `listen_addresses=''`,
+  Docker `NetworkMode=none` en nul gepubliceerde poorten.
+- `tdd/red.log` is een importfout (`ModuleNotFoundError`), geen behaviorale red
+  test. De metadata-regressie in deze fix is wél een echte behaviorale RED: de
+  oude samenvatting faalde op de indices en de next-round-slice en is daarna
+  groen.
+- Postflightfouten worden in `postflight-error.json` vastgelegd, maar laten de
+  gate niet falen. In deze run was postflight schoon (identieke identiteit en
+  nul logische rowcounts), dus de run-status PASS is ongewijzigd. Een toekomstige
+  run zou fail-closed moeten zijn; dat is hier niet achteraf gewijzigd.
+- De 32 tests in `test_controlled_perf.py` zijn unit tests en voeren geen SQL
+  uit. De 4.000-RPC-telling is ontwerp-afgeleid (1.000 timed + 3.000 warmups);
+  de onafhankelijke tabelstatistieken van de kloon (80.080/12.012 inserts, 1.600
+  batches/jobs) corroboreren de 4.000 werkelijke ingests.
 
 ## Uitvoering
 
@@ -225,7 +289,7 @@ call is **niet** opgenomen in de 1000 samples en niet in de gate. Hij staat in
   --proof-root /home/hermes/artifacts/3sm/pitwall-learning-p1-controlled-20261111
 ```
 
-De driver meet alleen vanaf een schone worktree. Na de ene run wordt niet
+De driver meet alleen vanaf een schone worktree. Na de geldige run is niet
 opnieuw gestart. Bij een contractfout, SQL-fout, identiteitsfout,
 ruimte-/geheugendruk of OOM stopt de run en blijven de partial evidence en
 `abort.json` staan. Een INCONCLUSIVE- of FAIL-uitslag wordt ongewijzigd
@@ -241,7 +305,8 @@ PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -m unittest \
 ```
 
 De nieuwe tests dekken: 200-ronde/1000-sample/4000-RPC-protocol, 40×5
-positiebalans, 20 tien-ordercycles, roterende onderhoudsgrens, p95-in-plaats-van-
+positiebalans, 20 tien-ordercycles, de werkelijke roterende grensindices en
+next-round-order (niet de grensronde zelf), p95-in-plaats-van-
 p50, absolute A/A-ruis, contractfouten in willekeurig welk laat sample,
 bytebudgetten per record, weigering van niet-200-protocollen en
 container/DB-grendels vóór iedere psql-aanroep. De 20 bestaande harness tests
