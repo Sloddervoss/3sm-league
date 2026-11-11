@@ -47,6 +47,10 @@ draait nog voor ouderlijke readback; er staan 0 jobs/0 capture-/bronrijen in.
 De image-healthcheck meldt `unhealthy` omdat de kloon bewust geen TCP-listener
 heeft; de Unix-socket en alle metingen werkten wel.
 
+Dit blijft een meting op één lokale 1-CPU-kloon. Het is **geen
+productieschatting** en bewijst niet dat de oorzaak van de resterende tail
+hostruis is. Er is geen productie-GO, geen P2 en geen model-/UI-/Edge-wijziging.
+
 
 ## Scope en non-goals
 
@@ -189,7 +193,9 @@ Bestanden:
 - `maintenance.jsonl` — commando's, duur, voor/na-statistieken;
 - `raw-notices.log`, `result.json`, `result-summary.md`, `FINAL-SHA256SUMS`;
 - `verification.json` en `independent-verification.txt` — herberekening uit de
-  ruwe JSONL zonder de driver te importeren.
+  ruwe JSONL zonder de driver te importeren;
+- `final-state.json` — read-only eindstaat van de kloon en van alle
+  productiecontainers (naam/id/image/starttijd), zonder writes.
 
 De 95%-bootstrapintervallen (10.000 resamples, vaste seed) staan alleen als
 diagnostiek in `result.json`. Ze vervangen de p95-gate niet en veranderen geen
