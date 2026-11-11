@@ -41,6 +41,17 @@ select 'd0000000-0000-4000-8000-000000000001'::uuid as device,
        'a0000000-0000-4000-8000-000000000001'::uuid as owner,
        'a0000000-0000-4000-8000-000000000002'::uuid as owner_nopolicy;
 
+-- Alleen batches die binnen deze test na de markering ontstaan worden
+-- gematerialiseerd; een achtergebleven batch van een eerdere probe mag de
+-- telasserties niet verstoren.
+create temp table t_mark (ts timestamptz not null);
+insert into t_mark values (clock_timestamp());
+
+create or replace function pg_temp.mark()
+returns void language sql as $$
+  update t_mark set ts = clock_timestamp()
+$$;
+
 create or replace function pg_temp.uid(p_n integer)
 returns uuid language sql immutable as $$
   select ('00000000-0000-4000-8000-' || lpad(p_n::text, 12, '0'))::uuid
@@ -116,11 +127,84 @@ returns jsonb language sql immutable as $$
            'coverage', pg_temp.coverage_full()) || p_extra
 $$;
 
+create or replace function pg_temp.materialize_batch(p_batch uuid)
+returns jsonb language plpgsql as $$
+declare
+  v_job uuid;
+  v_token uuid;
+  v_res jsonb;
+begin
+  select id into v_job from pitwall_learning.jobs
+   where capture_batch_id = p_batch and kind = 'materialize_capture_batch';
+  if v_job is null then raise exception 'no materialize job for batch %', p_batch; end if;
+  update pitwall_learning.jobs
+     set status = 'leased', attempts = greatest(attempts, 1),
+         lease_token = gen_random_uuid(), lease_owner = 'capture-test',
+         lease_expires_at = now() + interval '60 seconds',
+         updated_at = now(), finished_at = null
+   where id = v_job
+   returning lease_token into v_token;
+  v_res := pitwall_learning.materialize_capture_batch(v_job, v_token);
+  if v_res->>'status' is distinct from 'done' then
+    raise exception 'materialize failed: %', v_res;
+  end if;
+  return v_res;
+end $$;
+
+create or replace function pg_temp.materialize_pending()
+returns integer language plpgsql as $$
+declare
+  v_batch uuid;
+  v_count integer := 0;
+begin
+  for v_batch in select id from pitwall_learning.capture_batches
+                  where materialized_at is null
+                    and received_at >= (select ts from t_mark) loop
+    perform pg_temp.materialize_batch(v_batch);
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end $$;
+
 create or replace function pg_temp.batch(p_events jsonb, p_laps jsonb)
-returns jsonb language sql as $$
-  select public.simhub_persist_measurement_batch(
-    (select device from t_ids), 'sess-p1', p_events, p_laps)
-$$;
+returns jsonb language plpgsql as $$
+declare
+  v_ack jsonb;
+begin
+  perform pg_temp.mark();
+  v_ack := public.simhub_persist_measurement_batch(
+    (select device from t_ids), 'sess-p1', p_events, p_laps);
+  perform pg_temp.materialize_pending();
+  return v_ack;
+end $$;
+
+-- Testhelper: capture één rij en materialiseer die meteen via de echte RPC.
+create or replace function pg_temp.capture_one(
+  p_kind text, p_device text, p_uid uuid, p_rev integer, p_hash text,
+  p_observed timestamptz, p_received timestamptz, p_payload jsonb)
+returns uuid language plpgsql as $$
+declare
+  v_res jsonb;
+  v_batch uuid;
+  v_id uuid;
+begin
+  perform pg_temp.mark();
+  v_res := pitwall_learning.capture_source_batch(p_kind, jsonb_build_array(
+    jsonb_build_object('device_id', p_device, 'source_uid', p_uid,
+                       'record_revision', p_rev, 'content_hash', p_hash,
+                       'observed_at', p_observed,
+                       'source_received_at', p_received,
+                       'payload', p_payload)));
+  if jsonb_array_length(v_res->'batches') = 0 then
+    return null;
+  end if;
+  v_batch := (v_res #>> '{batches,0,batch_id}')::uuid;
+  perform pg_temp.materialize_batch(v_batch);
+  select id into v_id from pitwall_learning.source_revisions
+   where source_kind = p_kind and device_id = p_device and source_uid = p_uid
+     and record_revision = p_rev and content_hash = p_hash;
+  return v_id;
+end $$;
 
 create or replace function pg_temp.rev_count(p_device uuid)
 returns bigint language sql as $$
@@ -268,12 +352,13 @@ begin
                      'T07 batch van 200 events wordt volledig geaccepteerd');
   perform pg_temp.eq(pg_temp.rev_count((select device from t_ids)), v_before + 200,
                      'T07 batch van 200 events legt 200 bronrevisies vast');
-  perform pg_temp.eq((select count(*) from pitwall_learning.jobs), v_jobs_before + 200,
-                     'T07 batch van 200 events maakt 200 jobs');
+  perform pg_temp.eq((select count(*) from pitwall_learning.jobs), v_jobs_before + 201,
+                     'T07 batch van 200 events maakt 200 source-jobs plus één batchjob');
 
   -- Policy/owner worden per rij in dezelfde set geëvalueerd; één set met een
   -- device zonder policy levert alleen de bevoegde rij op.
-  perform pitwall_learning.capture_source_revisions('measurement_event', jsonb_build_array(
+  perform pg_temp.mark();
+  perform pitwall_learning.capture_source_batch('measurement_event', jsonb_build_array(
     jsonb_build_object('device_id', (select device::text from t_ids),
                        'source_uid', pg_temp.uid(1300), 'record_revision', 1,
                        'content_hash', md5('mixed-allowed'), 'observed_at', now(),
@@ -284,6 +369,7 @@ begin
                        'content_hash', md5('mixed-denied'), 'observed_at', now(),
                        'source_received_at', now(),
                        'payload', jsonb_build_object('kind', 'pit_entry'))));
+  perform pg_temp.materialize_pending();
   perform pg_temp.eq(
     (select count(*) from pitwall_learning.source_revisions
       where source_uid in (pg_temp.uid(1300), pg_temp.uid(1301))),
@@ -311,12 +397,14 @@ begin
   -- -----------------------------------------------------------------------
   -- Nieuwe revisie: oude rij blijft, nieuwe rij komt ernaast
   -- -----------------------------------------------------------------------
+  perform pg_temp.mark();
   update public.simhub_measurement_events
      set record_revision = 2,
          content_hash = md5('p1-rev-2'),
          wear_after = pg_temp.wear(88.0),
          received_at = now()
    where device_id = (select device::text from t_ids) and event_uid = pg_temp.uid(10);
+  perform pg_temp.materialize_pending();
 
   perform pg_temp.eq(pg_temp.rev_count((select device from t_ids)), v_before + 1,
                      'T07 nieuwe revisie voegt één rij toe');
@@ -336,9 +424,11 @@ begin
     '88.0', 'T07 nieuwe revisie-payload is vastgelegd');
 
   -- Zelfde revisie, andere hash: bewijs van een revision_conflict blijft staan.
+  perform pg_temp.mark();
   update public.simhub_measurement_events
      set content_hash = md5('p1-rev-2-conflict')
    where device_id = (select device::text from t_ids) and event_uid = pg_temp.uid(10);
+  perform pg_temp.materialize_pending();
 
   perform pg_temp.eq(
     (select count(*) from pitwall_learning.source_revisions
@@ -372,10 +462,10 @@ begin
   -- -----------------------------------------------------------------------
   -- Stale revisie die later wordt afgeleverd (directe helper)
   -- -----------------------------------------------------------------------
-  perform pitwall_learning.capture_source_revision(
+  perform pg_temp.capture_one(
     'measurement_event', (select device::text from t_ids), pg_temp.uid(12),
     2, md5('p1-stale-2'), now(), now(), '{"kind":"late"}'::jsonb);
-  perform pitwall_learning.capture_source_revision(
+  perform pg_temp.capture_one(
     'measurement_event', (select device::text from t_ids), pg_temp.uid(12),
     1, md5('p1-stale-1'), now(), now(), '{"kind":"late"}'::jsonb);
   perform pg_temp.expect(

@@ -59,18 +59,64 @@ begin
   end if;
 end $$;
 
+create or replace function pg_temp.materialize_batch(p_batch uuid)
+returns jsonb language plpgsql as $$
+declare
+  v_job uuid;
+  v_token uuid;
+  v_res jsonb;
+begin
+  select id into v_job from pitwall_learning.jobs
+   where capture_batch_id = p_batch and kind = 'materialize_capture_batch';
+  update pitwall_learning.jobs
+     set status = 'leased', attempts = greatest(attempts, 1),
+         lease_token = gen_random_uuid(), lease_owner = 'access-test',
+         lease_expires_at = now() + interval '60 seconds',
+         updated_at = now(), finished_at = null
+   where id = v_job
+   returning lease_token into v_token;
+  v_res := pitwall_learning.materialize_capture_batch(v_job, v_token);
+  if v_res->>'status' is distinct from 'done' then
+    raise exception 'materialize failed: %', v_res;
+  end if;
+  return v_res;
+end $$;
+
+create or replace function pg_temp.capture_one(
+  p_device text, p_uid uuid, p_rev integer, p_hash text, p_payload jsonb)
+returns uuid language plpgsql as $$
+declare
+  v_res jsonb;
+  v_batch uuid;
+  v_id uuid;
+begin
+  v_res := pitwall_learning.capture_source_batch('measurement_event', jsonb_build_array(
+    jsonb_build_object('device_id', p_device, 'source_uid', p_uid,
+                       'record_revision', p_rev, 'content_hash', p_hash,
+                       'observed_at', now(), 'source_received_at', now(),
+                       'payload', p_payload)));
+  if jsonb_array_length(v_res->'batches') = 0 then
+    return null;
+  end if;
+  v_batch := (v_res #>> '{batches,0,batch_id}')::uuid;
+  perform pg_temp.materialize_batch(v_batch);
+  select id into v_id from pitwall_learning.source_revisions
+   where source_kind = 'measurement_event' and device_id = p_device
+     and source_uid = p_uid and record_revision = p_rev and content_hash = p_hash;
+  return v_id;
+end $$;
+
 do $$
 declare
   v_rev uuid;
   v_out jsonb;
   v_count integer;
 begin
-  perform pitwall_learning.capture_source_revision(
-    'measurement_event', 'd0000000-0000-4000-8000-000000000001',
+  v_rev := pg_temp.capture_one(
+    'd0000000-0000-4000-8000-000000000001',
     '00000000-0000-4000-8000-000000000777', 1, md5('access-probe'),
-    now(), now(), '{"kind":"access"}'::jsonb);
-  select id into v_rev from pitwall_learning.source_revisions
-   where source_uid = '00000000-0000-4000-8000-000000000777';
+    '{"kind":"access"}'::jsonb);
+  perform pg_temp.expect(v_rev is not null, 'T08 access-testrevisie bestaat');
 
   -- -----------------------------------------------------------------------
   -- anon
@@ -121,11 +167,14 @@ begin
     'T06 service_role kan claim_jobs niet uitvoeren');
 
   -- -----------------------------------------------------------------------
-  -- worker: alleen schema-USAGE en drie functies
+  -- worker: alleen schema-USAGE en vier functies
   -- -----------------------------------------------------------------------
   perform pg_temp.expect_denied('pitwall_learning_worker',
     'select count(*) from pitwall_learning.source_revisions',
     'T08 worker heeft geen directe SELECT op evidence');
+  perform pg_temp.expect_denied('pitwall_learning_worker',
+    'select count(*) from pitwall_learning.capture_batches',
+    'T08 worker heeft geen directe SELECT op batches');
   perform pg_temp.expect_denied('pitwall_learning_worker',
     'select count(*) from pitwall_learning.jobs',
     'T08 worker heeft geen directe SELECT op jobs');
@@ -145,7 +194,7 @@ begin
     'select pitwall_learning.enqueue_job(''00000000-0000-4000-8000-000000000777'',''example_build'')',
     'T08 worker kan geen jobs enqueuen');
   perform pg_temp.expect_denied('pitwall_learning_worker',
-    'select pitwall_learning.capture_source_revision(''measurement_event'',''d0000000-0000-4000-8000-000000000001'',''00000000-0000-4000-8000-000000000778'',1,md5(''x''),now(),now(),''{}'')',
+    'select pitwall_learning.capture_source_batch(''measurement_event'',''[]''::jsonb)',
     'T08 worker kan de capture-helper niet aanroepen');
 
   perform pg_temp.expect_allowed('pitwall_learning_worker',
@@ -157,6 +206,9 @@ begin
   perform pg_temp.expect_allowed('pitwall_learning_worker',
     'select pitwall_learning.finish_job(''00000000-0000-4000-8000-000000000000''::uuid, ''00000000-0000-4000-8000-000000000001''::uuid, ''done'')',
     'T08 worker mag finish_job uitvoeren');
+  perform pg_temp.expect_allowed('pitwall_learning_worker',
+    'select pitwall_learning.materialize_capture_batch(''00000000-0000-4000-8000-000000000000''::uuid, ''00000000-0000-4000-8000-000000000001''::uuid)',
+    'T08 worker mag materialize_capture_batch uitvoeren');
 
   -- De bronfunctie geeft alleen de allowlisted revision, geen tabel.
   execute 'set local role pitwall_learning_worker';

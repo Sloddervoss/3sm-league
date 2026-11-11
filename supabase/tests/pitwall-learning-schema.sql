@@ -9,7 +9,7 @@
 --   * de vijfdelige identiteit en de jobs-uniciteit zijn echte constraints;
 --   * geen USAGE/SELECT/INSERT/UPDATE/DELETE/EXECUTE voor
 --     PUBLIC/anon/authenticated/service_role;
---   * de workerrol heeft alleen schema-USAGE en drie EXECUTE-grants;
+--   * de workerrol heeft alleen schema-USAGE en vier EXECUTE-grants;
 --   * bestaande public-relations, -policies, -ACLs en de ingest-functie zijn
 --     ongewijzigd; alleen vier statement-level capturetriggers zijn toegevoegd.
 -- ============================================================================
@@ -50,10 +50,11 @@ begin
   select count(*) into v_count
     from pg_class c join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'pitwall_learning' and c.relkind = 'r';
-  perform pg_temp.eq(v_count, 9, 'T06 negen private tabellen');
+  perform pg_temp.eq(v_count, 10, 'T06 tien private tabellen');
 
   for v_table in
-    select unnest(array['runtime_settings','account_policy','source_revisions','jobs',
+    select unnest(array['runtime_settings','account_policy','capture_batches',
+                        'source_revisions','jobs',
                         'models','examples','predictions','evaluations','deployments'])
   loop
     perform pg_temp.expect(
@@ -91,6 +92,60 @@ begin
       where schemaname = 'pitwall_learning'
         and indexname in ('jobs_claim_idx', 'jobs_expiry_idx', 'jobs_deadletter_idx')),
     3, 'T06 jobclaim en dead-letter hebben begrensde indexen');
+
+  -- Batch-outbox en jobreferentie zijn echte constraints, niet alleen
+  -- afspraken in de worker.
+  perform pg_temp.eq(
+    (select count(*) from pg_indexes
+      where schemaname = 'pitwall_learning' and indexname = 'jobs_batch_kind_key'),
+    1, 'T06 jobs heeft één unieke materialisatiejob per batch');
+  select pg_get_constraintdef(oid) into v_text
+    from pg_constraint
+   where conrelid = 'pitwall_learning.jobs'::regclass
+     and conname = 'jobs_reference_shape';
+  perform pg_temp.expect(
+    v_text like '%source_revision_id IS NOT NULL%'
+    and v_text like '%capture_batch_id IS NULL%'
+    and v_text like '%materialize_capture_batch%',
+    'T06 jobreferentie is exact één van revision of batch');
+  perform pg_temp.eq(
+    (select count(*) from pg_constraint
+      where conrelid = 'pitwall_learning.source_revisions'::regclass
+        and conname = 'source_revisions_batch_fkey'),
+    1, 'T06 revisie heeft een provenance-FK naar de batch');
+  select pg_get_constraintdef(oid) into v_text
+    from pg_constraint
+   where conrelid = 'pitwall_learning.capture_batches'::regclass
+     and conname = 'capture_batches_payload_shape';
+  perform pg_temp.expect(
+    v_text like '%jsonb_array_length(payload) = item_count%'
+    and v_text like '%262144%',
+    'T06 batchpayload is begrensd op item_count en 256 KiB');
+  perform pg_temp.eq(
+    (select count(*) from pg_constraint
+      where conrelid = 'pitwall_learning.capture_batches'::regclass
+        and conname = 'capture_batches_materialization_shape'),
+    1, 'T06 batchmateriaalbewijs heeft een shape-constraint');
+  perform pg_temp.eq(
+    (select count(*) from pg_trigger
+      where tgrelid = 'pitwall_learning.capture_batches'::regclass
+        and tgname = 'capture_batches_immutable' and not tgisinternal),
+    1, 'T06 capture_batches heeft een immutability-trigger');
+  perform pg_temp.eq(
+    (select count(*) from pg_trigger
+      where tgrelid = 'pitwall_learning.jobs'::regclass
+        and tgname = 'jobs_materialization_proof' and not tgisinternal),
+    1, 'T06 jobs heeft een materiaalbewijs-trigger');
+  perform pg_temp.eq(
+    (select count(*) from pg_trigger
+      where tgrelid = 'pitwall_learning.jobs'::regclass
+        and tgname = 'jobs_source_revision_valid' and not tgisinternal),
+    1, 'T06 jobs heeft een smalle source-revisionvalidatie');
+  perform pg_temp.eq(
+    (select count(*) from pg_constraint
+      where conrelid = 'pitwall_learning.jobs'::regclass
+        and conname = 'jobs_revision_fkey'),
+    0, 'T06 jobs heeft geen brede FK-lock naar source_revisions');
 
   select pg_get_constraintdef(oid) into v_text
     from pg_constraint
@@ -192,7 +247,8 @@ begin
     'T06 worker heeft schema-USAGE');
 
   for v_table in
-    select unnest(array['runtime_settings','account_policy','source_revisions','jobs',
+    select unnest(array['runtime_settings','account_policy','capture_batches',
+                        'source_revisions','jobs',
                         'models','examples','predictions','evaluations','deployments'])
   loop
     perform pg_temp.expect(
@@ -241,12 +297,16 @@ begin
       'pitwall_learning.worker_get_revision(uuid)', 'EXECUTE'),
     'T06 worker mag worker_get_revision uitvoeren');
   perform pg_temp.expect(
+    has_function_privilege('pitwall_learning_worker',
+      'pitwall_learning.materialize_capture_batch(uuid,uuid)', 'EXECUTE'),
+    'T06 worker mag materialize_capture_batch uitvoeren');
+  perform pg_temp.expect(
     not has_function_privilege('pitwall_learning_worker',
       'pitwall_learning.enqueue_job(uuid,text)', 'EXECUTE'),
     'T06 worker mag geen jobs enqueuen');
   perform pg_temp.expect(
     not has_function_privilege('pitwall_learning_worker',
-      'pitwall_learning.capture_source_revision(text,text,uuid,integer,text,timestamp with time zone,timestamp with time zone,jsonb)', 'EXECUTE'),
+      'pitwall_learning.capture_source_batch(text,jsonb)', 'EXECUTE'),
     'T06 worker mag de capture-helper niet aanroepen');
 
   -- -----------------------------------------------------------------------
@@ -257,19 +317,19 @@ begin
    where n.nspname = 'pitwall_learning'
      and p.prosecdef
      and p.proconfig @> array['search_path=pg_catalog, pitwall_learning, pg_temp'];
-  perform pg_temp.eq(v_count, 11,
-    'T06 alle elf private functies zijn SECDEF met gepinde search_path');
+  perform pg_temp.eq(v_count, 14,
+    'T06 alle veertien private functies zijn SECDEF met gepinde search_path');
 
   -- Capture werkt met een vaste, functie-lokale lock_timeout. Geen
   -- handmatige set_config/restore meer die door een fout kan blijven hangen.
   perform pg_temp.eq(
     (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'pitwall_learning'
-        and p.proname in ('capture_source_revisions','capture_source_revision',
+        and p.proname in ('capture_source_batch',
                           'capture_measurement_events_insert','capture_measurement_events_update',
                           'capture_lap_summaries_insert','capture_lap_summaries_update')
         and p.proconfig @> array['lock_timeout=50ms']),
-    6, 'T06 alle capturefuncties hebben functie-lokale lock_timeout=50ms');
+    5, 'T06 alle capturefuncties hebben functie-lokale lock_timeout=50ms');
   perform pg_temp.eq(
     (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'pitwall_learning'
@@ -286,7 +346,7 @@ begin
   select string_agg(pg_get_functiondef(p.oid), E'\n') into v_text
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'pitwall_learning'
-     and p.proname in ('capture_source_revisions','capture_source_revision',
+     and p.proname in ('capture_source_batch',
                        'capture_measurement_events_insert','capture_measurement_events_update',
                        'capture_lap_summaries_insert','capture_lap_summaries_update');
   perform pg_temp.expect(v_text not like '%simhub_telemetry_latest%',

@@ -28,6 +28,111 @@ returns uuid language sql immutable as $$
   select ('00000000-0000-4000-8000-' || lpad(p_n::text, 12, '0'))::uuid
 $$;
 
+create or replace function pg_temp.materialize_batch(p_batch uuid)
+returns jsonb language plpgsql as $$
+declare
+  v_job uuid;
+  v_token uuid;
+  v_res jsonb;
+begin
+  select id into v_job from pitwall_learning.jobs
+   where capture_batch_id = p_batch and kind = 'materialize_capture_batch';
+  if v_job is null then raise exception 'no materialize job for batch %', p_batch; end if;
+  update pitwall_learning.jobs
+     set status = 'leased', attempts = greatest(attempts, 1),
+         lease_token = gen_random_uuid(), lease_owner = 'jobs-test',
+         lease_expires_at = now() + interval '60 seconds',
+         updated_at = now(), finished_at = null
+   where id = v_job
+   returning lease_token into v_token;
+  v_res := pitwall_learning.materialize_capture_batch(v_job, v_token);
+  if v_res->>'status' is distinct from 'done' then
+    raise exception 'materialize failed: %', v_res;
+  end if;
+  return v_res;
+end $$;
+
+create or replace function pg_temp.materialize_pending()
+returns integer language plpgsql as $$
+declare
+  v_batch uuid;
+  v_count integer := 0;
+begin
+  for v_batch in select id from pitwall_learning.capture_batches where materialized_at is null loop
+    perform pg_temp.materialize_batch(v_batch);
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end $$;
+
+create or replace function pg_temp.capture_one(
+  p_device text, p_uid uuid, p_rev integer, p_hash text, p_payload jsonb)
+returns uuid language plpgsql as $$
+declare
+  v_res jsonb;
+  v_batch uuid;
+  v_id uuid;
+begin
+  v_res := pitwall_learning.capture_source_batch('measurement_event', jsonb_build_array(
+    jsonb_build_object('device_id', p_device, 'source_uid', p_uid,
+                       'record_revision', p_rev, 'content_hash', p_hash,
+                       'observed_at', now(), 'source_received_at', now(),
+                       'payload', p_payload)));
+  if jsonb_array_length(v_res->'batches') = 0 then
+    return null;
+  end if;
+  v_batch := (v_res #>> '{batches,0,batch_id}')::uuid;
+  perform pg_temp.materialize_batch(v_batch);
+  select id into v_id from pitwall_learning.source_revisions
+   where source_kind = 'measurement_event' and device_id = p_device
+     and source_uid = p_uid and record_revision = p_rev and content_hash = p_hash;
+  return v_id;
+end $$;
+
+create or replace function pg_temp.capture_many(p_base integer, p_count integer)
+returns void language plpgsql as $$
+declare
+  v_rows jsonb;
+  v_res jsonb;
+  v_batch uuid;
+begin
+  select jsonb_agg(jsonb_build_object(
+           'device_id', 'd0000000-0000-4000-8000-000000000001',
+           'source_uid', pg_temp.uid(p_base + k),
+           'record_revision', 1,
+           'content_hash', md5('job-' || (p_base + k)),
+           'observed_at', now(),
+           'source_received_at', now(),
+           'payload', jsonb_build_object('kind', 'job')))
+    into v_rows
+    from generate_series(1, p_count) k;
+  v_res := pitwall_learning.capture_source_batch('measurement_event', v_rows);
+  v_batch := (v_res #>> '{batches,0,batch_id}')::uuid;
+  perform pg_temp.materialize_batch(v_batch);
+end $$;
+
+-- Ruim achtergebleven jobs van eerdere probes op zonder een batchjob
+-- onterecht als done te markeren.
+create or replace function pg_temp.quiesce_jobs()
+returns void language plpgsql as $$
+begin
+  update pitwall_learning.jobs
+     set status = 'done',
+         lease_token = null, lease_owner = null, lease_expires_at = null,
+         finished_at = coalesce(finished_at, now()),
+         updated_at = now()
+   where status <> 'done'
+     and kind in ('source_validate', 'example_build');
+  update pitwall_learning.jobs
+     set status = 'dead',
+         lease_token = null, lease_owner = null, lease_expires_at = null,
+         last_error_code = coalesce(last_error_code, 'harness_quiesce'),
+         finished_at = coalesce(finished_at, now()),
+         updated_at = now()
+   where status <> 'done'
+     and kind = 'materialize_capture_batch';
+end $$;
+
 do $$
 declare
   v_dev text := 'd0000000-0000-4000-8000-000000000001';
@@ -50,24 +155,14 @@ declare
   v_blocked boolean;
 begin
   -- Isoleer van eerder test-/fixturewerk in deze transactie.
-  update pitwall_learning.jobs
-     set status = 'done',
-         lease_token = null,
-         lease_owner = null,
-         lease_expires_at = null,
-         finished_at = coalesce(finished_at, now()),
-         updated_at = now()
-   where status <> 'done';
+  perform pg_temp.quiesce_jobs();
 
-  perform pitwall_learning.capture_source_revision(
-    'measurement_event', v_dev, pg_temp.uid(100), 1, md5('job-100'),
-    now(), now(), '{"kind":"job"}'::jsonb);
-  perform pitwall_learning.capture_source_revision(
-    'measurement_event', v_dev, pg_temp.uid(101), 1, md5('job-101'),
-    now(), now(), '{"kind":"job"}'::jsonb);
-  perform pitwall_learning.capture_source_revision(
-    'measurement_event', v_dev, pg_temp.uid(102), 1, md5('job-102'),
-    now(), now(), '{"kind":"job"}'::jsonb);
+  perform pg_temp.capture_one(
+    v_dev, pg_temp.uid(100), 1, md5('job-100'), '{"kind":"job"}'::jsonb);
+  perform pg_temp.capture_one(
+    v_dev, pg_temp.uid(101), 1, md5('job-101'), '{"kind":"job"}'::jsonb);
+  perform pg_temp.capture_one(
+    v_dev, pg_temp.uid(102), 1, md5('job-102'), '{"kind":"job"}'::jsonb);
 
   select id into v_rev from pitwall_learning.source_revisions
    where source_uid = pg_temp.uid(100);
@@ -253,17 +348,13 @@ declare
   v_dead integer;
   k integer;
 begin
-  update pitwall_learning.jobs
-     set status = 'done', finished_at = now(), updated_at = now(),
-         lease_token = null, lease_owner = null, lease_expires_at = null
-   where status <> 'done';
+  perform pg_temp.quiesce_jobs();
 
   -- -----------------------------------------------------------------------
   -- NULL is geen retry
   -- -----------------------------------------------------------------------
-  perform pitwall_learning.capture_source_revision(
-    'measurement_event', v_dev, pg_temp.uid(400), 1, md5('job-400'),
-    now(), now(), '{"kind":"job"}'::jsonb);
+  perform pg_temp.capture_one(
+    v_dev, pg_temp.uid(400), 1, md5('job-400'), '{"kind":"job"}'::jsonb);
   select id into v_rev from pitwall_learning.source_revisions where source_uid = pg_temp.uid(400);
   select id into v_job from pitwall_learning.jobs where source_revision_id = v_rev;
   v_claim := pitwall_learning.claim_jobs(1, 30);
@@ -284,9 +375,8 @@ begin
   -- -----------------------------------------------------------------------
   -- Ingetrokken policy / gewijzigde policyversie / verwijderde owner
   -- -----------------------------------------------------------------------
-  perform pitwall_learning.capture_source_revision(
-    'measurement_event', v_dev, pg_temp.uid(401), 1, md5('job-401'),
-    now(), now(), '{"kind":"job"}'::jsonb);
+  perform pg_temp.capture_one(
+    v_dev, pg_temp.uid(401), 1, md5('job-401'), '{"kind":"job"}'::jsonb);
   select id into v_rev from pitwall_learning.source_revisions where source_uid = pg_temp.uid(401);
 
   update pitwall_learning.account_policy set capture_enabled = false
@@ -311,16 +401,9 @@ begin
   -- -----------------------------------------------------------------------
   -- Dead-letter-sweep is begrensd op 50 per claim
   -- -----------------------------------------------------------------------
-  update pitwall_learning.jobs
-     set status = 'done', finished_at = now(), updated_at = now(),
-         lease_token = null, lease_owner = null, lease_expires_at = null
-   where status <> 'done';
+  perform pg_temp.quiesce_jobs();
 
-  for k in 1..60 loop
-    perform pitwall_learning.capture_source_revision(
-      'measurement_event', v_dev, pg_temp.uid(500 + k), 1, md5('job-500-' || k),
-      now(), now(), '{"kind":"job"}'::jsonb);
-  end loop;
+  perform pg_temp.capture_many(500, 60);
   update pitwall_learning.jobs j
      set status = 'pending', attempts = 3, next_attempt_at = now() - interval '1 minute',
          finished_at = null, updated_at = now()
@@ -328,12 +411,15 @@ begin
      select r.id from pitwall_learning.source_revisions r
       where r.source_uid in (select pg_temp.uid(500 + g) from generate_series(1, 60) g));
 
-  perform pitwall_learning.capture_source_revision(
-    'measurement_event', v_dev, pg_temp.uid(499), 1, md5('job-499'),
-    now(), now(), '{"kind":"job"}'::jsonb);
+  perform pg_temp.capture_one(
+    v_dev, pg_temp.uid(499), 1, md5('job-499'), '{"kind":"job"}'::jsonb);
 
   v_claim := pitwall_learning.claim_jobs(1, 30);
-  select count(*) into v_dead from pitwall_learning.jobs where status = 'dead';
+  select count(*) into v_dead from pitwall_learning.jobs
+   where status = 'dead'
+     and source_revision_id in (
+       select r.id from pitwall_learning.source_revisions r
+        where r.source_uid in (select pg_temp.uid(500 + g) from generate_series(1, 60) g));
   perform pg_temp.eq(v_dead, 50,
     'T08 dead-letter-sweep verwerkt per claim maximaal 50 rijen');
   perform pg_temp.eq(v_claim->0->>'source_revision_id',
@@ -347,13 +433,9 @@ begin
   -- -----------------------------------------------------------------------
   -- Verwijderde owner: bewijs blijft, job wordt niet meer geclaimd
   -- -----------------------------------------------------------------------
-  update pitwall_learning.jobs
-     set status = 'done', finished_at = now(), updated_at = now(),
-         lease_token = null, lease_owner = null, lease_expires_at = null
-   where status <> 'done';
-  perform pitwall_learning.capture_source_revision(
-    'measurement_event', v_dev, pg_temp.uid(402), 1, md5('job-402'),
-    now(), now(), '{"kind":"job"}'::jsonb);
+  perform pg_temp.quiesce_jobs();
+  perform pg_temp.capture_one(
+    v_dev, pg_temp.uid(402), 1, md5('job-402'), '{"kind":"job"}'::jsonb);
 
   delete from auth.users where id = v_owner;
   perform pg_temp.eq(jsonb_array_length(pitwall_learning.claim_jobs(5, 30)), 0,
