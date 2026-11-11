@@ -687,8 +687,8 @@ export function assessRecordQuality(
     }
 
     const observedContext =
-      options !== undefined && Object.prototype.hasOwnProperty.call(options, "observedContext")
-        ? (options.observedContext ?? null)
+      options?.observedContext !== undefined
+        ? options.observedContext
         : buildCanonicalContext({ source, payload });
     const referenceContext = options?.referenceContext ?? null;
     const contexts = Object.fromEntries(
