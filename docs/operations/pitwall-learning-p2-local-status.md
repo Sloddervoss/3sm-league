@@ -34,12 +34,23 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
 
 ## Nog uit te voeren binnen P2
 
-- **T12 gebouwd, review gestart:** geïsoleerd vanaf de T11-integratie;
-  bruto duur en netto verlies gescheiden. Bron `0559d220d1ae0d447e794373064e57893333f426`.
-  Parent-run **371/371 learningtests**; dit is nog geen SPEC-/qualityacceptatie.
-  Nog niet geïntegreerd.
-- **T13 conditioneel:** echte broncontractgaten bewijzen en minimaal oplossen;
-  geen connectorpublicatie of DLL-wissel zonder afzonderlijke GO.
+- **T12 SPEC geaccepteerd, quality gestart:** actuele herstelbron
+  `157389c02b5c4a8340eb550d307fab5529cacccc`.
+  Parent-run **419/419 learningtests**; onafhankelijke SPEC-herkeuring PASS.
+  De vier resterende foutproeven falen op de bevroren voorganger `8787ea56`
+  en slagen op deze bron; ook onafhankelijke permutatie- en servicebindingproeven
+  zijn groen. De eerdere bron `0559d220` en de bijbehorende afwijzingen blijven
+  afzonderlijk bewaard. Nog geen qualityacceptatie of lokale integratie.
+  Bewijs: `pitwall-learning-p2-pit-canonical-spec-recheck/` en parent-resultaat
+  `pitwall-learning-p2-context-quality-parent/pit-fixed-157389c0.json`.
+  Afzonderlijke kwaliteitsreview: `deleg_c278a78f`, op exact dezelfde bron.
+- **T13 bronhiaten bewezen, herstelcontract nog open:** producerflags en nul-bijtanken,
+  context bij waarneming, archief/capture, bestaande pairingbinding en gedeeltelijke
+  SDK-sessietokens zijn onderzocht op `docs/pitwall-learning-p2-source-gaps`.
+  Geen nieuwe ownerregistratie aannemen als het bestaande pairingpad bruikbaar is;
+  actuele pairingdata bewijst geen historische recordbinding. Geen contract- of
+  connectorimplementatie afgerond. Connectorpublicatie en DLL-wissel behouden hun
+  afzonderlijke GO-poort.
 
 ## Beperkingen en vervolgnotities
 
