@@ -423,6 +423,23 @@ internal static class MeasurementObservationPipelineTests
             && op11f != null,
             "context blijft car-1/GP; refuel=1.5 over 3 stappen na wissel; code=" + Code(op11));
 
+        // OP11b — alleen de layout (trackConfig) wijzigt, dezelfde car/trackId:
+        // ook dan breekt de keten en blijft de StartLap-context staan.
+        sampler = Sampler();
+        for (var tick = 0; tick < 10; tick++)
+            sampler.Offer(Sample(tick * 50L, 1, 60, false, context: Context()));
+        for (var tick = 10; tick < 14; tick++)
+            sampler.Offer(Sample(tick * 50L, 1, 60.5 + (tick - 10) * 0.5, false,
+                context: Context("car-1", 123, "Testbaan", "National")));
+        var op11b = CloseByNextLap(sampler, 750);
+        var op11bF = Facts(op11b);
+        var op11bR = Nested(op11bF, "refuel");
+        var op11bC = Nested(op11bF, "context");
+        Check("OP11b", op11bF != null && op11bC != null && (string)op11bC["trackConfig"] == "Grand Prix"
+            && op11bR != null && Number(op11bR, "observedAddedLitres") == 1.5
+            && Integer(op11bR, "positiveSteps") == 3,
+            "layout-only wissel: context=GP, refuel=1.5/3; code=" + Code(op11b));
+
         // OP12 — trackId ontbreekt bij StartLap: contextgroep vervalt, maar
         // pit/refuel/naam blijven geldige feiten.
         sampler = Sampler();
