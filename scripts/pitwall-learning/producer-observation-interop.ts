@@ -242,5 +242,78 @@ check(
   `rows=${edgeOff.rows.length} rejected=${edgeOff.rejected.length}`,
 );
 
+// T13-S2B: rows produced by the actual sampler -> accumulator -> explicit
+// composer -> DataContractJsonSerializer path. The legacy row is the real
+// pre-S2B pipeline row; both are synthetic fixtures, not live telemetry.
+const pipelineDevice = "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE";
+const pipelineLegacyRow = JSON.parse(readText("pipeline-legacy.row.json"));
+const pipelineObservedRow = JSON.parse(readText("pipeline-observed.row.json"));
+
+const pipelineOn = parseLapSummariesReport(
+  [pipelineLegacyRow, pipelineObservedRow],
+  {
+    observationCapture: "on",
+    authenticatedDeviceId: pipelineDevice,
+  },
+);
+check(
+  "PIPELINE-ENVELOPE-ON",
+  pipelineOn.blockError === null &&
+    pipelineOn.received === 2 &&
+    pipelineOn.rows.length === 2 &&
+    pipelineOn.rejected.length === 0 &&
+    !("observation" in pipelineOn.rows[0]) &&
+    pipelineOn.rows[1].observation?.interval.samples === 60 &&
+    pipelineOn.rows[1].observation?.interval.edgeAfterSeconds === 0.05 &&
+    pipelineOn.rows[1].observation?.capture.deviceId === pipelineDevice &&
+    pipelineOn.rows[1].observedSessionId === "sim-a",
+  `rows=${pipelineOn.rows.length} rejected=${pipelineOn.rejected.length} samples=${
+    pipelineOn.rows[1]?.observation?.interval.samples ?? "-"
+  }`,
+);
+
+const pipelineOff = parseLapSummariesReport(
+  [pipelineLegacyRow, pipelineObservedRow],
+  {},
+);
+check(
+  "PIPELINE-ENVELOPE-OFF",
+  pipelineOff.rows.length === 1 &&
+    pipelineOff.rejected.length === 1 &&
+    pipelineOff.rejected[0].reason.includes("unknown fields"),
+  `rows=${pipelineOff.rows.length} rejected=${pipelineOff.rejected.length}`,
+);
+
+const pipelineWrongDevice = parseLapSummariesReport([pipelineObservedRow], {
+  observationCapture: "on",
+  authenticatedDeviceId: "99999999-8888-4777-8666-555555555555",
+});
+check(
+  "PIPELINE-DEVICE-MISMATCH",
+  pipelineWrongDevice.rows.length === 0 &&
+    pipelineWrongDevice.rejected.length === 1 &&
+    pipelineWrongDevice.rejected[0].reason.includes(
+      "observation_device_mismatch",
+    ),
+  `rows=${pipelineWrongDevice.rows.length} rejected=${pipelineWrongDevice.rejected.length}`,
+);
+
+// Synthetic row-window control around the same real C# observation bytes.
+const pipelineBadWindow = JSON.parse(JSON.stringify(pipelineObservedRow));
+pipelineBadWindow.endedAt = "2026-09-27T10:00:02.900Z";
+const pipelineWindow = parseLapSummariesReport([pipelineBadWindow], {
+  observationCapture: "on",
+  authenticatedDeviceId: pipelineDevice,
+});
+check(
+  "PIPELINE-WINDOW-MISMATCH",
+  pipelineWindow.rows.length === 0 &&
+    pipelineWindow.rejected.length === 1 &&
+    pipelineWindow.rejected[0].reason.includes(
+      "observation_interval_outside_row",
+    ),
+  `rows=${pipelineWindow.rows.length} rejected=${pipelineWindow.rejected.length}`,
+);
+
 console.log(`SUMMARY PASS=${passed} FAIL=${failed}`);
 Deno.exit(failed === 0 ? 0 : 1);
