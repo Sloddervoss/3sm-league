@@ -118,11 +118,31 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   ook de suite-tellingen en falende bestandsidentiteit zijn gelijk. Geen nieuwe
   regressie aangetroffen; dit is geen volledig groene suite. Bewijs:
   `full-vitest-7876f494-retry.json` en `full-vitest-7876f494-retry.log`.
-  Geen plugin-/sampler-/ledger-/verzendintegratie in S2A; geen updater-, versie-,
-  instellingen- of geïnstalleerde-DLL-wijziging. Volgende begrensde lokale stap:
-  S2B sampler/accumulator-adapter en StartLap-freeze. Tot de aparte opslag- en
-  verzendroute bestaat, mogen observaties niet in de normale v1-outbox terechtkomen.
-  Sidecar, lease en de hele keten blijven afzonderlijk te toetsen vóór enige activatie.
+  S2A zelf omvat geen plugin-/sampler-/ledger-/verzendintegratie; geen updater-,
+  versie-, instellingen- of geïnstalleerde-DLL-wijziging.
+  **T13-S2B geaccepteerd en lokaal geïntegreerd:** gereviewde bron
+  `f72eb54802d108342011b33128919031b395618d`, onafhankelijke SPEC PASS en
+  QUALITY APPROVED; integratie `1d7d2b628ee3e4babfd23568a72f17f2bdff96ec`.
+  De volledige gereviewde runtime-, project-, test- en interopbron is bytegelijk.
+  De oorspronkelijke `2ccd73e7` blijft frozen: de quality-blokker Q1 telde een
+  brandstofstap over een SDK-sessiewissel. De minimale contextkey-reparatie en
+  afzonderlijke OP25/OP26-mutantkills sluiten dit; OP27 bewijst de positieve controle.
+  Parent op de integratie: offline restore/build exit 0, 0 warnings/errors;
+  **37/37 pipeline**, **55/55 observation**, **391/391 measurement**,
+  **747/747 volledige C#-harnastests inclusief soak**, **50/50 C#→Deno-interop**,
+  alle exits 0; eigen export 52 bestanden. Geen volledige SDK-/Windows-pluginbuild.
+  Deze componenttests vervangen niet de open P2-Vite-buildpoort of andere baseline-schuld.
+  StartLap bevriest context/binding; pairing-fences gelden ook op overgeslagen ticks.
+  De gewone v1-outbox bevat ook bij lokale opt-in geen observations; capture blijft
+  standaard uit, zonder plugin-/instellingenbedrading of productieactivatie.
+  **Q2 expliciet open:** hergebruik van een door legacy genormaliseerd non-UTC
+  sample kan provenance verliezen. Huidige plugin maakt verse UTC-samples;
+  oplossen en testen vóór bedrading van enige sample-reusing/non-UTC caller.
+  Volgende begrensde lokale stap: afzonderlijk duurzaam observation-ledger;
+  sendlease, ACK en complete eindketen blijven apart te bouwen/toetsen vóór activatie.
+  Bewijs: `pitwall-learning-p2-observation-sampler-session-spec-recheck/`,
+  `pitwall-learning-p2-observation-sampler-session-quality-recheck/` en
+  `pitwall-learning-p2-observation-sampler-integration/` onder de artifactroot.
   Bewijs: `pitwall-learning-p2-observation-producer-bounds-spec-recheck/`,
   `pitwall-learning-p2-observation-producer-quality-review/`,
   `pitwall-learning-p2-observation-producer-test-quality-recheck/` en

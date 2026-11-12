@@ -14,8 +14,11 @@ status en bewijs: `docs/operations/pitwall-learning-p2-local-status.md`.
 S2A pure C#-observatiekern is lokaal geïntegreerd als `7876f494` uit `1dfa5eed`
 (SPEC op bytegelijke runtime `9bd252bf`, quality APPROVED inclusief twee mutant-kills).
 Parent C#-harnas 710/710 en serializer→Deno-interop 37/37; geen volledige plugin-/SDK-build.
-S2B-adapter en aparte sidecar/verzendroute moeten nog worden gebouwd; observaties mogen
-niet alvast naar de bestaande v1-outbox worden gestuurd.
+S2B-adapter is na SPEC PASS en QUALITY APPROVED op `f72eb548` lokaal geïntegreerd
+als `1d7d2b62`; parent 37 pipeline/747 volledige C#-harnastests/50 interop PASS.
+SDK-sessievelden onderbreken de fuelketen; gewone v1-outbox blijft observation-vrij.
+Q2 non-UTC sample-hergebruik blijft open: oplossen vóór bedrading van zo'n caller.
+Afzonderlijk duurzaam sidecar-ledger, sendlease en ACK blijven te bouwen/toetsen.
 Alle schakelaars blijven uit; geen productieapply/Edge-deploy/producerrelease.
 Rollback houdt historie en nieuwe writer intact; flag-only heractivatie mist de
 forward-P1-projectie en is niet ondersteund. Producer/outbox/quarantaine en echte
