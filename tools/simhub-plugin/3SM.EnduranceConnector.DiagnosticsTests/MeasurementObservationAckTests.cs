@@ -912,6 +912,9 @@ internal static class MeasurementObservationAckTests
         Check("OA26 faal ná de switch: volledige snapshotverzoening bevestigt de levering en telt exact één keer",
             afterApply.Status == ObservationAckApplyStatus.Applied && afterApply.Stored
             && afterApply.DeliveredCount == 1
+            && faultStore2.EntryCount == 0
+            && faultStore2.Find(rowW.SummaryUid, 1) == null
+            && faultStore2.DeliveredTotal == 1
             && restartedFault2.EntryCount == 0 && restartedFault2.DeliveredTotal == 1,
             "after=" + afterApply.Status + " restartTotal=" + restartedFault2.DeliveredTotal);
 
@@ -1160,6 +1163,20 @@ internal static class MeasurementObservationAckTests
             && termStore.QuarantineTotal == 1
             && termStore.Find(termRow.SummaryUid, 1).RowJson == termRow.ToJson(),
             "durable=" + termApply.Rows[0].Durable + " entries=" + termStore.EntryCount);
+
+        var termDefer = ObservationAckResolver.Resolve(
+            Ack(Series(true, 1, "[]", "[]", "[]",
+                "[" + Rejection(termRow.SummaryUid, null, "observation_unavailable") + "]", null)),
+            Batch(Obs(termRow)), Binding());
+        var termDeferApply = termStore.ApplyAck(termDefer, T0.AddMinutes(5));
+        Check("OA40c een later tijdelijk ACK heropent quarantaine niet",
+            termDeferApply.Status == ObservationAckApplyStatus.NoChanges
+            && termDeferApply.Rows[0].Durable == ObservationAckDurableOutcome.QuarantineTerminal
+            && termStore.Find(termRow.SummaryUid, 1).State == ObservationLedgerState.Quarantine
+            && termStore.Find(termRow.SummaryUid, 1).Attempts == 0
+            && termStore.Find(termRow.SummaryUid, 1).NextAttemptUtc == null,
+            "durable=" + termDeferApply.Rows[0].Durable
+            + " state=" + termStore.Find(termRow.SummaryUid, 1).State);
 
         var termRestart = Store(dirTerm);
         Check("OA40b herstart behoudt quarantaine, reden, teller en exacte rowJson",
