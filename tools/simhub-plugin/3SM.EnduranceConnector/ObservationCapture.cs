@@ -399,14 +399,6 @@ namespace ThreeSM.EnduranceConnector
                 return ObservationCaptureResult.Refused(ObservationCaptureCodes.BoundsInconsistent,
                     "negatieve edge", null);
             }
-            // De goedgekeurde serverclassifier staat exact 1 ms toe. Een grotere
-            // edge zou daar gegarandeerd als observation_edge_mismatch worden
-            // geweigerd; de builder laat de rij dan liever legacy door.
-            if (edgeBeforeMs > 1 || edgeAfterMs > 1)
-            {
-                return ObservationCaptureResult.Refused(ObservationCaptureCodes.EdgeMismatch,
-                    "edge groter dan 1 ms", null);
-            }
             var unknownMs = edgeBeforeMs + edgeAfterMs;
             if (_maxGapMs > 1000L) unknownMs += _maxGapMs;
             if (edgeBeforeMs > ObservationContract.MaxSeconds * 1000L
