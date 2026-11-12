@@ -90,7 +90,13 @@ export type TyreStartContinuity =
   | "reanchored_after_break";
 
 export type TyreNewTyreBasis =
-  | "connector_confirmed_set_generation"
+  /**
+   * Composiet bewijs: `kind=wear_refresh_confirmed` + `evidence.source=tire_sets_used`
+   * + wearstijging én een per-hoek toename van de connector-setgeneratie. De
+   * generatie is geen onafhankelijke teller; zij is door de connector uit
+   * dezelfde wearstijging afgeleid.
+   */
+  | "refresh_with_set_generation_increment"
   | "trusted_executed_service"
   | null;
 
@@ -207,6 +213,11 @@ export interface TyreCornerInterval {
   };
   readonly corner: TyreCorner;
   readonly status: TyreIntervalStatus;
+  /**
+   * Fysieke bruikbaarheid van dít gesloten interval (closed + observeerbaar
+   * verlies). Dit is geen training-eligibility, geen contextmatch en geen
+   * bewijs dat het interval in een globaal model mag worden gepoold.
+   */
   readonly usable: boolean;
   readonly startContinuity: TyreStartContinuity;
   readonly start: TyreIntervalEndpoint | null;
@@ -217,7 +228,12 @@ export interface TyreCornerInterval {
   readonly distance: TyreIntervalDistance;
   readonly physical: {
     readonly generation: TyreIntervalGenerationRef;
-    readonly endConfirmedService: boolean;
+    /**
+     * Waar: deze hoek kreeg op de eindgrens aantoonbaar een nieuwe band
+     * (composiet refreshbewijs of uitgevoerd servicebewijs). Dit is niet
+     * hetzelfde als een waargenomen of uitgevoerde pitstop.
+     */
+    readonly endPerformedNewTyreConfirmed: boolean;
     readonly endRealRefreshConfirmed: boolean;
     readonly selectedServiceObserved: boolean;
   };
@@ -225,7 +241,8 @@ export interface TyreCornerInterval {
   readonly provenance: TyreIntervalProvenance;
   readonly t10: {
     readonly scalarAggregateAmbiguity: boolean;
-    readonly targetEligible: boolean;
+    /** True alleen wanneer álle observaties in dit interval T10-eligible zijn. */
+    readonly targetEligibleAll: boolean;
     readonly blockingReasons: readonly string[];
     readonly warningReasons: readonly string[];
   };
@@ -349,7 +366,7 @@ interface OpenInterval {
   readonly t10Blocking: Set<string>;
   readonly t10Warning: Set<string>;
   scalarAggregateAmbiguity: boolean;
-  targetEligible: boolean;
+  targetEligibleAll: boolean;
   readonly warnings: Set<string>;
   readonly reasons: Set<string>;
   lastObserved: TyreIntervalEndpoint;
@@ -694,29 +711,118 @@ function knownString(value: { readonly status: string; readonly value: unknown }
     : null;
 }
 
+type DimensionValueKind = "string" | "compound" | "regime";
+
+function isContextDimensionShape(raw: unknown, kind: DimensionValueKind): boolean {
+  if (!isPlainRecord(raw)) return false;
+  if (raw.status !== "known" && raw.status !== "unknown") return false;
+  if (
+    raw.provenance !== null &&
+    raw.provenance !== "inline_observed" &&
+    raw.provenance !== "verified_historical_anchor"
+  ) {
+    return false;
+  }
+  if (!Array.isArray(raw.reasons) || raw.reasons.some((reason) => typeof reason !== "string")) {
+    return false;
+  }
+  if (raw.status === "unknown") return raw.value === null;
+  if (kind === "string") return shortIdentifier(raw.value) !== null;
+  if (kind === "compound") {
+    const value = raw.value;
+    return (
+      typeof value === "number" &&
+      Number.isSafeInteger(value) &&
+      value >= 0 &&
+      value <= 255
+    );
+  }
+  return raw.value === "dry" || raw.value === "wet";
+}
+
+function isNullableString(value: unknown): boolean {
+  return value === null || typeof value === "string";
+}
+
+function isContextSourceShape(raw: unknown): boolean {
+  if (!isPlainRecord(raw)) return false;
+  if (raw.sourceKind !== "measurement_event" && raw.sourceKind !== "lap_summary") return false;
+  if (shortIdentifier(raw.deviceId, 120) === null) return false;
+  if (typeof raw.sourceUid !== "string") return false;
+  if (typeof raw.recordRevision !== "number") return false;
+  if (typeof raw.contentHash !== "string") return false;
+  if (!hasOwn(raw, "observedAt") || !isNullableString(raw.observedAt)) return false;
+  if (typeof raw.sourceReceivedAt !== "string") return false;
+  if (!isNullableString(raw.observedSessionId)) return false;
+  if (!isNullableString(raw.deliveredSessionId)) return false;
+  return isNullableString(raw.segmentId);
+}
+
+/**
+ * Controleert de volledige vorm van elke contextwaarde die T11 werkelijk leest.
+ * Een CanonicalContext is invoer, geen bewijs: een ontbrekende of verkeerd
+ * gevormde tak moet als `observed_context_invalid` worden afgewezen en mag
+ * nooit een TypeError in de kwalificatie- of streamlaag veroorzaken.
+ */
+function isValidObservedContextShape(raw: unknown): boolean {
+  if (!isPlainRecord(raw)) return false;
+  if (typeof raw.schemaVersion !== "string" || typeof raw.policyVersion !== "string") return false;
+  if (!isContextSourceShape(raw.source)) return false;
+  if (!isPlainRecord(raw.identity)) return false;
+
+  const identity = raw.identity;
+  if (!isContextDimensionShape(identity.owner, "string")) return false;
+  if (!isContextDimensionShape(identity.driver, "string")) return false;
+  if (!isContextDimensionShape(identity.device, "string")) return false;
+  if (!isContextDimensionShape(raw.car, "string")) return false;
+  if (!isContextDimensionShape(raw.track, "string")) return false;
+  if (!isContextDimensionShape(raw.layout, "string")) return false;
+  if (!isContextDimensionShape(raw.compound, "compound")) return false;
+  if (!isContextDimensionShape(raw.regime, "regime")) return false;
+
+  if (!isPlainRecord(raw.ownerAtReceipt)) return false;
+  const receipt = raw.ownerAtReceipt;
+  if (!isNullableString(receipt.userId)) return false;
+  if (receipt.basis !== "at_receipt_only" && receipt.basis !== "none") return false;
+  // De builder kent een receipt-owner alleen met basis at_receipt_only en
+  // andersom. Een tegenstrijdig paar is geen geldige onbekende context.
+  if ((receipt.userId === null) !== (receipt.basis === "none")) return false;
+
+  if (
+    raw.contextStatus !== "complete" &&
+    raw.contextStatus !== "partial" &&
+    raw.contextStatus !== "unknown"
+  ) {
+    return false;
+  }
+  return (
+    Array.isArray(raw.reasons) &&
+    raw.reasons.every((reason) => typeof reason === "string")
+  );
+}
+
 function streamKey(prepared: PreparedObservation): string {
   const context = prepared.context;
   const owner = context === null ? null : knownString(context.identity.owner);
   if (owner !== null) {
-    // Binnen één account mogen devices/sessies elkaar alleen via een
-    // gecontroleerde continuity-check raken. De stream blijft daarom bij het
-    // account (en de sessie) en niet bij het afleverende device.
-    const link =
-      prepared.sessionId !== null
-        ? ["session", prepared.sessionId]
-        : ["device", prepared.source.deviceId];
-    return JSON.stringify(["tyre-stream-v1", ["owner", owner], link]);
+    // Binnen één account groepeert de fysieke reeks op de bekende auto (of
+    // expliciet "auto onbekend"), niet op de SDK-sessie. Een sessiebreuk moet
+    // immers als continuïteitsbreuk zichtbaar blijven; de SDK-sessie is
+    // context, geen fysieke identiteit. Zonder bekende auto blijven devices
+    // binnen het account bij elkaar zodat een bewezen car/session-handoff nog
+    // kan continueren; zonder bewijs breekt de continuïteitscontrole.
+    const car = knownString(context?.car);
+    return JSON.stringify(["tyre-stream-v1", ["owner", owner], ["car", car ?? "car_unknown"]]);
   }
+  // Zonder geobserveerde owner is de receipt-owner uitsluitend een
+  // privacyscheiding, nooit observatie-identiteit. Devices worden nooit
+  // samengevoegd en de SDK-sessie bepaalt de stream niet.
   const receiptOwner = context?.ownerAtReceipt.userId ?? null;
   const partition =
     receiptOwner !== null
       ? ["receipt", receiptOwner, "device", prepared.source.deviceId]
       : ["device", prepared.source.deviceId];
-  return JSON.stringify([
-    "tyre-stream-v1",
-    partition,
-    ["session", prepared.sessionId ?? ""],
-  ]);
+  return JSON.stringify(["tyre-stream-v1", partition]);
 }
 
 function strongCarSessionLink(left: PreparedObservation, right: PreparedObservation): boolean {
@@ -864,21 +970,47 @@ function createStreamState(): StreamState {
   };
 }
 
-function pushRef(open: OpenInterval, ref: TyreIntervalSourceRef): void {
-  const exists = open.refs.some(
-    (candidate) =>
-      candidate.sourceUid === ref.sourceUid &&
-      candidate.recordRevision === ref.recordRevision &&
-      candidate.contentHash === ref.contentHash,
+function sameRef(left: TyreIntervalSourceRef, right: TyreIntervalSourceRef): boolean {
+  return (
+    left.sourceUid === right.sourceUid &&
+    left.recordRevision === right.recordRevision &&
+    left.contentHash === right.contentHash
   );
+}
+
+function pushRef(open: OpenInterval, ref: TyreIntervalSourceRef): void {
+  const exists = open.refs.some((candidate) => sameRef(candidate, ref));
   if (!exists) open.refs.push(ref);
+}
+
+/**
+ * Houdt de provenance begrensd maar verliest nooit de fysieke start- of
+ * eindgrens. Start- en eindrefs zijn samen voldoende om de fysieke
+ * closed/censored-beslissing en de gebruikte revisie/hash te reproduceren;
+ * tussenliggende refs zijn auditcontext voor waarschuwingen en kwaliteit.
+ * Ontbrekende tussenrefs worden expliciet met `observationRefsTruncated`
+ * gemarkeerd, niet stilzwijgend weggelaten.
+ */
+function boundedObservationRefs(
+  refs: readonly TyreIntervalSourceRef[],
+  end: TyreIntervalEndpoint | null,
+): TyreIntervalSourceRef[] {
+  if (refs.length <= MAX_OBSERVATION_REFS) return [...refs];
+  const bounded = refs.slice(0, MAX_OBSERVATION_REFS);
+  if (end !== null && !bounded.some((ref) => sameRef(ref, end.sourceRef))) {
+    bounded[MAX_OBSERVATION_REFS - 1] = end.sourceRef;
+  }
+  return bounded;
 }
 
 function addT10(open: OpenInterval, summary: TyreObservationQualitySummary): void {
   for (const reason of summary.blockingReasons) open.t10Blocking.add(reason);
   for (const reason of summary.warningReasons) open.t10Warning.add(reason);
   if (summary.scalarAggregateReason !== null) open.scalarAggregateAmbiguity = true;
-  open.targetEligible = summary.t10TargetEligible;
+  // Intervalbreed: één ineligible observatie maakt het hele interval niet
+  // eligible. Dit voorkomt dat de laatste observatie een eerder geblokkeerde
+  // meting stil overschrijft terwijl de blockingReasons blijven staan.
+  open.targetEligibleAll = open.targetEligibleAll && summary.t10TargetEligible;
 }
 
 function startInterval(
@@ -910,7 +1042,7 @@ function startInterval(
     t10Blocking: new Set(prepared.quality.blockingReasons),
     t10Warning: new Set(prepared.quality.warningReasons),
     scalarAggregateAmbiguity: prepared.quality.scalarAggregateReason !== null,
-    targetEligible: prepared.quality.t10TargetEligible,
+    targetEligibleAll: prepared.quality.t10TargetEligible,
     warnings: new Set(prepared.warnings),
     reasons: new Set(),
     lastObserved: start,
@@ -1038,7 +1170,7 @@ function buildInterval(
   observedLossPercent: number | null,
   distance: TyreIntervalDistance,
   physical: {
-    readonly endConfirmedService: boolean;
+    readonly endPerformedNewTyreConfirmed: boolean;
     readonly endRealRefreshConfirmed: boolean;
   },
   extraReasons: readonly string[],
@@ -1066,7 +1198,7 @@ function buildInterval(
     distance,
     physical: {
       generation: open.generation,
-      endConfirmedService: physical.endConfirmedService,
+      endPerformedNewTyreConfirmed: physical.endPerformedNewTyreConfirmed,
       endRealRefreshConfirmed: physical.endRealRefreshConfirmed,
       selectedServiceObserved: open.selectedServiceObserved,
     },
@@ -1074,14 +1206,14 @@ function buildInterval(
     provenance: {
       start: open.start,
       end,
-      observationRefs: open.refs.slice(0, MAX_OBSERVATION_REFS),
+      observationRefs: boundedObservationRefs(open.refs, end),
       observationRefsTruncated: open.refs.length > MAX_OBSERVATION_REFS,
       startQuality: open.startQuality,
       endQuality: null,
     },
     t10: {
       scalarAggregateAmbiguity: open.scalarAggregateAmbiguity,
-      targetEligible: open.targetEligible,
+      targetEligibleAll: open.targetEligibleAll,
       blockingReasons: limitReasons([...open.t10Blocking]),
       warningReasons: limitReasons([...open.t10Warning]),
     },
@@ -1146,7 +1278,7 @@ function closeIntervalAtBoundary(
     lastObserved,
     observedLossPercent,
     distance,
-    { endConfirmedService: performedNewTyre, endRealRefreshConfirmed: realRefreshConfirmed },
+    { endPerformedNewTyreConfirmed: performedNewTyre, endRealRefreshConfirmed: realRefreshConfirmed },
     reasons,
     [],
   );
@@ -1177,7 +1309,7 @@ function finalizeCensored(state: CornerState, corner: TyreCorner): TyreCornerInt
     open.lastObserved,
     null,
     distance,
-    { endConfirmedService: false, endRealRefreshConfirmed: false },
+    { endPerformedNewTyreConfirmed: false, endRealRefreshConfirmed: false },
     ["interval_open_at_input_end"],
     [],
   );
@@ -1209,7 +1341,7 @@ function finalizeBroken(
     open.lastObserved,
     null,
     distance,
-    { endConfirmedService: false, endRealRefreshConfirmed: false },
+    { endPerformedNewTyreConfirmed: false, endRealRefreshConfirmed: false },
     [reason],
     [],
   );
@@ -1305,7 +1437,7 @@ function factsForCorner(
   const basis: TyreNewTyreBasis = trusted
     ? "trusted_executed_service"
     : derived
-      ? "connector_confirmed_set_generation"
+      ? "refresh_with_set_generation_increment"
       : null;
 
   return {
@@ -1350,6 +1482,18 @@ function prepareObservation(
   const observedSessionId = readOptionalIdentifier(payload, "observed_session_id");
   const segmentId = readOptionalIdentifier(payload, "segment_id");
   const sessionTimeSeconds = readSessionTime(payload);
+
+  if (
+    input.observedContext !== undefined &&
+    input.observedContext !== null &&
+    !isValidObservedContextShape(input.observedContext)
+  ) {
+    return {
+      index: raw.index,
+      sourceUid: raw.source.sourceUid,
+      reasons: ["observed_context_invalid"],
+    };
+  }
 
   const annotations = isPlainRecord(input.annotations) ? input.annotations : undefined;
   const assessment = assessRecordQuality(
@@ -1456,7 +1600,31 @@ function prepareObservation(
       observedSessionId,
       segmentId,
     });
-    context = binding.bound ? binding.context : null;
+    if (!binding.bound) {
+      return {
+        index: raw.index,
+        sourceUid: raw.source.sourceUid,
+        reasons: limitReasons(["observed_context_binding_failed", ...binding.reasons]),
+      };
+    }
+    context = binding.context;
+    // De T09-binding vergelijkt alleen context.source met de envelope. De
+    // identiteitsdevice moet hetzelfde afleverende device zijn; anders zou een
+    // bron-bindende context met een tegenstrijdige identity.device als match
+    // doorgaan. Onbekend claimt nooit een match (de shape-check hierboven
+    // staat geen non-null waarde bij status unknown toe).
+    const identityDevice = context?.identity.device;
+    if (
+      identityDevice !== undefined &&
+      identityDevice.status === "known" &&
+      identityDevice.value !== raw.source.deviceId
+    ) {
+      return {
+        index: raw.index,
+        sourceUid: raw.source.sourceUid,
+        reasons: ["observed_context_binding_failed", "observed_context_device_mismatch"],
+      };
+    }
   }
 
   const resetOrTow = readResetOrTow(assessment);
@@ -1527,7 +1695,7 @@ function processObservation(
     const after = prepared.wearAfter.values[corner];
     const performed = fact.performedNewTyreConfirmed;
 
-    if (prepared.kind === "wear_refresh_confirmed") {
+    if (prepared.kind === "wear_refresh_confirmed" && prepared.realRefreshConfirmed) {
       if (cornerState.open !== null) {
         const closed = closeIntervalAtBoundary(
           cornerState,
@@ -1535,7 +1703,7 @@ function processObservation(
           prepared,
           before,
           performed,
-          true,
+          prepared.realRefreshConfirmed,
         );
         if (closed !== null) intervals.push(closed);
         contributed = true;
@@ -1595,6 +1763,22 @@ function processObservation(
       if (fact.valueIncreased === true) {
         breakCorner(cornerState, corner, "wear_increase_unconfirmed", intervals);
         contributed = true;
+        if (prepared.kind === "session_start") {
+          // De oude band breekt onbekend, maar de gemeten startwaarde van het
+          // nieuwe segment is een echte waarneming. Bewaar die als nieuwe
+          // continuïteitsband zonder een nieuwe fysieke set te claimen: alleen
+          // een bevestigde refresh of uitgevoerde service verhoogt de
+          // generatie.
+          ensureGeneration(cornerState, prepared);
+          startInterval(
+            cornerState,
+            corner,
+            prepared,
+            after,
+            "reanchored_after_break",
+            false,
+          );
+        }
         continue;
       }
       if (prepared.kind === "session_start") {
@@ -1679,6 +1863,9 @@ export function buildTyreIntervals(
   if (cutoffValue !== null && !isInstant(cutoffValue)) return null;
   const cutoffMs = cutoffValue === null ? null : Date.parse(cutoffValue);
   const referenceContext = options?.referenceContext ?? null;
+  // Een historische referentie mag een andere bron-UID hebben, maar moet wel
+  // de volledige CanonicalContext-vorm hebben die de vergelijking leest.
+  if (referenceContext !== null && !isValidObservedContextShape(referenceContext)) return null;
 
   const emptyCutoff = (): TyreIntervalCutoffInfo => ({
     provided: cutoffValue !== null,
@@ -1738,22 +1925,6 @@ export function buildTyreIntervals(
 
   for (const group of groups.values()) {
     const first = group[0];
-    const hashesByRevision = new Map<number, Set<string>>();
-    for (const record of group) {
-      const hashes = hashesByRevision.get(record.source.recordRevision) ?? new Set<string>();
-      hashes.add(record.source.contentHash);
-      hashesByRevision.set(record.source.recordRevision, hashes);
-    }
-    const conflict = [...hashesByRevision.values()].some((hashes) => hashes.size > 1);
-    if (conflict) {
-      rejected.push({
-        index: Math.min(...group.map((record) => record.index)),
-        sourceUid: first.source.sourceUid,
-        reasons: ["source_revision_conflict"],
-      });
-      continue;
-    }
-
     const withinCutoff =
       cutoffMs === null
         ? group
@@ -1768,12 +1939,32 @@ export function buildTyreIntervals(
       continue;
     }
 
-    const maxRevision = Math.max(...group.map((record) => record.source.recordRevision));
+    // De receipt-cutoff wordt vóór conflict- en revisieselectie toegepast. Een
+    // rij die na de cutoff ontvangen is, hoort niet in deze momentopname en
+    // mag een pre-cutoff revisie niet tot conflict of ongeldige hoogste
+    // revisie promoveren. Binnen de cutoff blijft het conflictbeleid streng.
+    if (withinCutoff.length < group.length) futureRevisionsExcluded = true;
+    const hashesByRevision = new Map<number, Set<string>>();
+    for (const record of withinCutoff) {
+      const hashes = hashesByRevision.get(record.source.recordRevision) ?? new Set<string>();
+      hashes.add(record.source.contentHash);
+      hashesByRevision.set(record.source.recordRevision, hashes);
+    }
+    const conflict = [...hashesByRevision.values()].some((hashes) => hashes.size > 1);
+    if (conflict) {
+      rejected.push({
+        index: Math.min(...group.map((record) => record.index)),
+        sourceUid: first.source.sourceUid,
+        reasons: ["source_revision_conflict"],
+      });
+      continue;
+    }
+
     const maxWithin = Math.max(...withinCutoff.map((record) => record.source.recordRevision));
     const chosen = withinCutoff
       .filter((record) => record.source.recordRevision === maxWithin)
       .sort((left, right) => left.index - right.index)[0];
-    const futureExcluded = maxWithin < maxRevision;
+    const futureExcluded = withinCutoff.length < group.length;
     if (futureExcluded) futureRevisionsExcluded = true;
     selected.push({ record: chosen, futureExcluded });
   }

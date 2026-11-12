@@ -288,7 +288,7 @@ describe("fysieke bandintervallen (T11)", () => {
       expect(fl[0].status).toBe("closed");
       expect(fl[0].usable).toBe(true);
       expect(fl[0].observedLossPercent).toBe(6);
-      expect(fl[0].physical.endConfirmedService).toBe(true);
+      expect(fl[0].physical.endPerformedNewTyreConfirmed).toBe(true);
       expect(fl[1].start?.wearPercent).toBe(100);
       expect(fl[1].physical.generation.sequence).toBe(1);
       expect(fl[1].physical.generation.newTyreConfirmedAtStart).toBe(true);
@@ -298,7 +298,7 @@ describe("fysieke bandintervallen (T11)", () => {
         const intervals = cornerIntervals(result, corner);
         expect(intervals).toHaveLength(2);
         expect(intervals[0].observedLossPercent).toBe(6);
-        expect(intervals[0].physical.endConfirmedService).toBe(false);
+        expect(intervals[0].physical.endPerformedNewTyreConfirmed).toBe(false);
         expect(intervals[1].start?.wearPercent).toBe(94);
         expect(intervals[1].physical.generation.sequence).toBe(0);
         expect(intervals[1].physical.generation.newTyreConfirmedAtStart).toBe(false);
@@ -1206,7 +1206,7 @@ describe("fysieke bandintervallen (T11)", () => {
       expect(interval.startContinuity).toBe("confirmed_new_tyre");
       expect(interval.physical.generation.newTyreConfirmedAtStart).toBe(true);
       expect(interval.physical.endRealRefreshConfirmed).toBe(true);
-      expect(interval.physical.endConfirmedService).toBe(false);
+      expect(interval.physical.endPerformedNewTyreConfirmed).toBe(false);
       expect(result.observations.some((observation) => observation.observationRef.kind === "pit_service_completed")).toBe(false);
     });
 
@@ -1275,6 +1275,475 @@ describe("fysieke bandintervallen (T11)", () => {
       expect(result.intervals).toHaveLength(0);
       expect(result.reasons).toContain("batch_too_large");
       expect(buildTyreIntervals({ not: "an array" })).toBeNull();
+    });
+  });
+
+  describe("SPEC-blokkers T11 (discriminante regressies)", () => {
+    it("B1: een wear_refresh_confirmed zonder tire_sets_used-bewijs is geen grens", () => {
+      const start = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const unconfirmed = event({
+        n: 2,
+        kind: "wear_refresh_confirmed",
+        at: at(10),
+        before: 96,
+        after: 96,
+        gen: 0,
+        evidenceSource: null,
+      });
+
+      const result = build([start, unconfirmed]);
+      expect(result.observations[1].facts.realRefreshConfirmed).toBe(false);
+      expect(result.observations[1].warnings).toContain("refresh_evidence_missing");
+      const intervals = cornerIntervals(result, "fl");
+      expect(intervals).toHaveLength(1);
+      expect(intervals[0].status).toBe("censored");
+      expect(intervals[0].usable).toBe(false);
+      expect(intervals[0].end).toBeNull();
+      expect(intervals[0].lastObserved?.wearPercent).toBe(96);
+      expect(intervals[0].physical.endRealRefreshConfirmed).toBe(false);
+      expect(intervals[0].physical.endPerformedNewTyreConfirmed).toBe(false);
+      expect(JSON.stringify(result)).not.toContain("confirmed_refresh");
+    });
+
+    it("B1b: een onbevestigde refresh met wearstijging breekt alleen de geraakte hoek", () => {
+      const start = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const worn = event({ n: 2, kind: "wear_value_changed", at: at(10), before: 100, after: 96, gen: 0 });
+      const unconfirmed = event({
+        n: 3,
+        kind: "wear_refresh_confirmed",
+        at: at(20),
+        before: [96, 96, 96, 96],
+        after: [100, 96, 96, 96],
+        gen: [1, 0, 0, 0],
+        evidenceSource: null,
+      });
+
+      const result = build([start, worn, unconfirmed]);
+      const fl = cornerIntervals(result, "fl");
+      expect(fl).toHaveLength(1);
+      expect(fl[0].status).toBe("unknown");
+      expect(fl[0].reasons).toContain("wear_increase_unconfirmed");
+      expect(fl[0].physical.endRealRefreshConfirmed).toBe(false);
+      expect(fl[0].physical.generation.sequence).toBe(0);
+      expect(result.observations[2].facts.corners.fl.performedNewTyreConfirmed).toBe(false);
+      for (const corner of ["fr", "rl", "rr"] as const) {
+        const intervals = cornerIntervals(result, corner);
+        expect(intervals).toHaveLength(1);
+        expect(intervals[0].status).toBe("censored");
+        expect(intervals[0].lastObserved?.wearPercent).toBe(96);
+      }
+    });
+
+    it("B2: ontbrekende identity in observedContext wordt afgewezen, niet geworpen", () => {
+      const e = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const context = JSON.parse(JSON.stringify(contextFor(e))) as Json;
+      delete context.identity;
+
+      expect(() => build([{ ...e, observedContext: context }])).not.toThrow();
+      const result = build([{ ...e, observedContext: context }]);
+      expect(result.rejected).toHaveLength(1);
+      expect(result.rejected[0].reasons).toContain("observed_context_invalid");
+      expect(result.intervals).toHaveLength(0);
+    });
+
+    it("B2b: ontbrekende ownerAtReceipt in observedContext wordt afgewezen, niet geworpen", () => {
+      const e = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const context = JSON.parse(JSON.stringify(contextFor(e))) as Json;
+      delete context.ownerAtReceipt;
+      (context.identity as Json).owner = {
+        status: "unknown",
+        value: null,
+        reason: "owner_unknown",
+        provenance: "none",
+      };
+
+      expect(() => build([{ ...e, observedContext: context }])).not.toThrow();
+      const result = build([{ ...e, observedContext: context }]);
+      expect(result.rejected).toHaveLength(1);
+      expect(result.rejected[0].reasons).toContain("observed_context_invalid");
+      expect(result.intervals).toHaveLength(0);
+    });
+
+    it("B2c: verkeerd gevormde geneste contextwaarden worden per geval afgewezen", () => {
+      const e = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const valid = JSON.parse(JSON.stringify(contextFor(e))) as Json;
+      const mutate = (change: (context: Json) => void): Json => {
+        const copy = JSON.parse(JSON.stringify(valid)) as Json;
+        change(copy);
+        return copy;
+      };
+      const cases: Array<[string, Json]> = [
+        ["identity scalar", mutate((context) => { context.identity = 5; })],
+        ["identity array", mutate((context) => { context.identity = []; })],
+        ["identity empty object", mutate((context) => { context.identity = {}; })],
+        ["owner scalar", mutate((context) => { (context.identity as Json).owner = "owner"; })],
+        ["owner empty object", mutate((context) => { (context.identity as Json).owner = {}; })],
+        [
+          "device unknown with non-null value",
+          mutate((context) => {
+            (context.identity as Json).device = {
+              status: "unknown",
+              value: "device-a",
+              provenance: null,
+              reasons: [],
+            };
+          }),
+        ],
+        ["ownerAtReceipt array", mutate((context) => { context.ownerAtReceipt = []; })],
+        ["source scalar", mutate((context) => { context.source = "source"; })],
+        ["compound string value", mutate((context) => { (context.compound as Json).value = "3"; })],
+        ["contextStatus invalid", mutate((context) => { context.contextStatus = "certified"; })],
+        ["reasons scalar", mutate((context) => { context.reasons = "none"; })],
+      ];
+
+      for (const [label, context] of cases) {
+        expect(() => build([{ ...e, observedContext: context }]), label).not.toThrow();
+        const result = build([{ ...e, observedContext: context }]);
+        expect(result.rejected, label).toHaveLength(1);
+        expect(result.rejected[0].reasons, label).toContain("observed_context_invalid");
+        expect(result.intervals, label).toHaveLength(0);
+      }
+    });
+
+    it("B2d: een verkeerd gevormde historische referenceContext levert null", () => {
+      const e = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const reference = JSON.parse(JSON.stringify(contextFor(e))) as Json;
+      delete reference.identity;
+      expect(
+        buildTyreIntervals([e], {
+          referenceContext: reference as unknown as CanonicalContext,
+        }),
+      ).toBeNull();
+    });
+
+    it("B3: identity.device moet met de bron-envelope overeenkomen", () => {
+      const e = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0, device: "device-b" });
+      const context = JSON.parse(JSON.stringify(contextFor(e))) as CanonicalContext;
+      (context.identity.device as { status: string; value: unknown }).value = "device-a";
+
+      const result = build([{ ...e, observedContext: context }]);
+      expect(result.rejected).toHaveLength(1);
+      expect(result.rejected[0].reasons).toContain("observed_context_device_mismatch");
+      expect(result.intervals).toHaveLength(0);
+    });
+
+    it("B4: een session_start na een onbevestigde stijging start een nieuwe meetband", () => {
+      const start = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const worn = event({ n: 2, kind: "wear_value_changed", at: at(10), before: 100, after: 96, gen: 0 });
+      const rejoin = event({ n: 3, kind: "session_start", at: at(20), before: 96, after: 100, gen: 0 });
+      const later = event({ n: 4, kind: "wear_value_changed", at: at(30), before: 100, after: 98, gen: 0 });
+
+      const result = build([start, worn, rejoin, later]);
+      const intervals = cornerIntervals(result, "fl");
+      expect(intervals).toHaveLength(2);
+      expect(intervals[0].status).toBe("unknown");
+      expect(intervals[0].reasons).toContain("wear_increase_unconfirmed");
+      expect(intervals[1].start?.wearPercent).toBe(100);
+      expect(intervals[1].lastObserved?.wearPercent).toBe(98);
+      expect(intervals[1].startContinuity).toBe("reanchored_after_break");
+      expect(intervals[1].physical.generation.sequence).toBe(0);
+      expect(intervals[1].physical.generation.newTyreConfirmedAtStart).toBe(false);
+    });
+
+    it("B4b: een latere echte refresh sluit de meetband zonder de generatie te verzinnen", () => {
+      const start = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const worn = event({ n: 2, kind: "wear_value_changed", at: at(10), before: 100, after: 96, gen: 0 });
+      const rejoin = event({ n: 3, kind: "session_start", at: at(20), before: 96, after: 100, gen: 0 });
+      const later = event({ n: 4, kind: "wear_value_changed", at: at(30), before: 100, after: 98, gen: 0 });
+      const refresh = event({
+        n: 5,
+        kind: "wear_refresh_confirmed",
+        at: at(40),
+        before: 98,
+        after: 98,
+        gen: 0,
+        evidenceSource: "tire_sets_used",
+      });
+
+      const result = build([start, worn, rejoin, later, refresh]);
+      const intervals = cornerIntervals(result, "fl");
+      expect(intervals).toHaveLength(3);
+      expect(intervals[1].status).toBe("closed");
+      expect(intervals[1].usable).toBe(true);
+      expect(intervals[1].observedLossPercent).toBe(2);
+      expect(intervals[1].physical.generation.sequence).toBe(0);
+      expect(intervals[1].physical.endRealRefreshConfirmed).toBe(true);
+      expect(intervals[2].start?.wearPercent).toBe(98);
+      expect(intervals[2].startContinuity).toBe("confirmed_refresh");
+    });
+
+    it("B5: een sessiegrens sluit de oude band als unknown/session_boundary", () => {
+      const first = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const worn = event({ n: 2, kind: "wear_value_changed", at: at(10), before: 100, after: 96, gen: 0 });
+      const other = event({
+        n: 3,
+        kind: "session_start",
+        at: at(20),
+        before: null,
+        after: 80,
+        gen: 0,
+        session: OTHER_SESSION,
+      });
+
+      const result = build([first, worn, other]);
+      const intervals = cornerIntervals(result, "fl");
+      expect(intervals).toHaveLength(2);
+      expect(intervals[0].status).toBe("unknown");
+      expect(intervals[0].reasons).toContain("session_boundary");
+      expect(intervals[0].physical.generation.sequence).toBe(0);
+      expect(intervals[1].start?.wearPercent).toBe(80);
+      expect(intervals[1].startContinuity).toBe("reanchored_after_break");
+    });
+
+    it("B5b: ook met bekende owner/car blijft de sessiebreuk een expliciete grens", () => {
+      const first = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const worn = event({ n: 2, kind: "wear_value_changed", at: at(10), before: 100, after: 96, gen: 0 });
+      const other = event({
+        n: 3,
+        kind: "session_start",
+        at: at(20),
+        before: null,
+        after: 80,
+        gen: 0,
+        session: OTHER_SESSION,
+      });
+
+      const result = build([contextWith(first), contextWith(worn), contextWith(other)]);
+      const intervals = cornerIntervals(result, "fl");
+      expect(intervals).toHaveLength(2);
+      expect(intervals[0].status).toBe("unknown");
+      expect(intervals[0].reasons).toContain("session_boundary");
+      expect(intervals[1].start?.wearPercent).toBe(80);
+      expect(intervals[1].physical.generation.sequence).toBe(0);
+    });
+
+    it("B5c: een echte batch-einde blijft censored zonder sessiebreuk", () => {
+      const first = event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 });
+      const worn = event({ n: 2, kind: "wear_value_changed", at: at(10), before: 100, after: 96, gen: 0 });
+      const result = build([first, worn]);
+      const interval = firstCorner(result, "fl");
+      expect(interval.status).toBe("censored");
+      expect(interval.reasons).toContain("interval_open_at_input_end");
+      expect(interval.reasons).not.toContain("session_boundary");
+    });
+
+    it("B6: een conflict ná de cutoff vergiftigt de pre-cutoff snapshot niet", () => {
+      const current = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 100,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(21),
+        receivedAt: "2026-11-11T10:00:00.000Z",
+      });
+      const futureConflict = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 90,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(22),
+        receivedAt: "2026-11-11T12:00:00.000Z",
+      });
+
+      const result = build([current, futureConflict], {
+        sourceReceivedBefore: "2026-11-11T11:00:00.000Z",
+      });
+      expect(result.rejected).toHaveLength(0);
+      expect(result.cutoff.futureRevisionsExcluded).toBe(true);
+      expect(result.intervals).toHaveLength(4);
+      expect(firstCorner(result, "fl").start?.wearPercent).toBe(100);
+      expect(JSON.stringify(result.intervals)).not.toContain(hash(22));
+    });
+
+    it("B6b: zonder cutoff blijft eenzelfde revisie met andere hash een conflict", () => {
+      const left = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 100,
+        gen: 0,
+        resultHash: hash(31),
+      });
+      const right = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 90,
+        gen: 0,
+        resultHash: hash(32),
+      });
+      const result = build([left, right]);
+      expect(result.rejected).toHaveLength(1);
+      expect(result.rejected[0].reasons).toContain("source_revision_conflict");
+      expect(result.intervals).toHaveLength(0);
+    });
+
+    it("B6c: een conflict binnen de cutoff blijft ook quarantaine", () => {
+      const left = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 100,
+        gen: 0,
+        resultHash: hash(41),
+        receivedAt: "2026-11-11T10:00:00.000Z",
+      });
+      const right = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 90,
+        gen: 0,
+        resultHash: hash(42),
+        receivedAt: "2026-11-11T10:30:00.000Z",
+      });
+      const result = build([left, right], {
+        sourceReceivedBefore: "2026-11-11T11:00:00.000Z",
+      });
+      expect(result.rejected).toHaveLength(1);
+      expect(result.rejected[0].reasons).toContain("source_revision_conflict");
+      expect(result.intervals).toHaveLength(0);
+    });
+
+    it("B6d: een ongeldige hoogste revisie valt niet terug op een oudere geldige revisie", () => {
+      const valid = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 100,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(51),
+      });
+      const invalidHighest = event({
+        n: 1,
+        kind: "not_a_tyre_kind",
+        at: at(10),
+        before: null,
+        after: 90,
+        gen: 0,
+        revision: 2,
+        resultHash: hash(52),
+      });
+      const result = build([valid, invalidHighest]);
+      expect(result.intervals).toHaveLength(0);
+      expect(result.rejected).toHaveLength(1);
+      expect(result.rejected[0].reasons).toContain("unsupported_measurement_kind");
+    });
+
+    it("B6e: een ongeldige hoogste revisie ná de cutoff kan de pre-cutoff revisie niet vergiftigen", () => {
+      const valid = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 100,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(61),
+        receivedAt: "2026-11-11T10:00:00.000Z",
+      });
+      const futureInvalid = event({
+        n: 1,
+        kind: "not_a_tyre_kind",
+        at: at(10),
+        before: null,
+        after: 90,
+        gen: 0,
+        revision: 5,
+        resultHash: hash(62),
+        receivedAt: "2026-11-11T12:00:00.000Z",
+      });
+      const result = build([valid, futureInvalid], {
+        sourceReceivedBefore: "2026-11-11T11:00:00.000Z",
+      });
+      expect(result.rejected).toHaveLength(0);
+      expect(result.cutoff.futureRevisionsExcluded).toBe(true);
+      expect(result.intervals).toHaveLength(4);
+      expect(firstCorner(result, "fl").start?.wearPercent).toBe(100);
+    });
+
+    it("API-label: composietgeneratie heet geen uitgevoerde service en t10 is ALL-semantiek", () => {
+      const start = event({
+        n: 1,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 100,
+        gen: 0,
+        driverChanged: true,
+      });
+      const second = event({ n: 2, kind: "wear_value_changed", at: at(10), before: 100, after: 96, gen: 0 });
+      const close = event({
+        n: 3,
+        kind: "wear_refresh_confirmed",
+        at: at(20),
+        before: 96,
+        after: [100, 96, 96, 96],
+        gen: [1, 0, 0, 0],
+        evidenceSource: "tire_sets_used",
+      });
+
+      const result = build([contextWith(start), contextWith(second), contextWith(close)], {
+        referenceContext: contextFor(second),
+      });
+      const interval = firstCorner(result, "fl");
+      expect(result.observations[0].quality.t10TargetEligible).toBe(false);
+      expect(result.observations[1].quality.t10TargetEligible).toBe(true);
+      expect(interval.t10.targetEligibleAll).toBe(false);
+      expect(interval.t10.blockingReasons).toContain("driver_changed_in_lap");
+      expect(result.observations[2].facts.corners.fl.performedNewTyreBasis).toBe(
+        "refresh_with_set_generation_increment",
+      );
+      expect(interval.physical.endPerformedNewTyreConfirmed).toBe(true);
+      expect(interval.physical.selectedServiceObserved).toBe(false);
+    });
+
+    it("provenance: begrenst refs maar behoudt altijd start- en eindgrens", () => {
+      const events: Array<TyreIntervalObservationInput & { source: Json; payload: Json }> = [
+        event({ n: 1, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 }),
+      ];
+      for (let n = 2; n <= 65; n += 1) {
+        events.push(
+          event({
+            n,
+            kind: "wear_value_changed",
+            at: at(n * 10),
+            before: 100,
+            after: 100,
+            gen: 0,
+          }),
+        );
+      }
+      events.push(
+        event({
+          n: 66,
+          kind: "wear_refresh_confirmed",
+          at: at(660),
+          before: 100,
+          after: 100,
+          gen: 0,
+          evidenceSource: "tire_sets_used",
+        }),
+      );
+
+      const interval = firstCorner(build(events), "fl");
+      expect(interval.status).toBe("closed");
+      expect(interval.provenance.observationRefs).toHaveLength(64);
+      expect(interval.provenance.observationRefsTruncated).toBe(true);
+      expect(interval.provenance.observationRefs[0].sourceUid).toBe(uid(1));
+      expect(interval.provenance.observationRefs[63].sourceUid).toBe(uid(66));
     });
   });
 });
