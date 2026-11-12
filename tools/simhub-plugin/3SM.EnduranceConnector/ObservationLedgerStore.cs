@@ -720,8 +720,8 @@ namespace ThreeSM.EnduranceConnector
                 _quarantineTotal = quarantineTotal;
                 _deliveredTotal = deliveredTotal;
                 _actualBytes = actual;
-                _reservedBytes = reserved;
                 _reservations.Remove(key);
+                RecomputeReserved();
                 return CaptureResult(ObservationLedgerCaptureStatus.Captured, candidate,
                     null, "adopted_committed_entry", false);
             }
@@ -733,7 +733,7 @@ namespace ThreeSM.EnduranceConnector
             _quarantineTotal = quarantineTotal;
             _deliveredTotal = deliveredTotal;
             _actualBytes = actual;
-            _reservedBytes = reserved;
+            RecomputeReserved();
             return CaptureResult(ObservationLedgerCaptureStatus.NotCommitted, candidate,
                 null, "target_unchanged_after_uncertain_switch", false);
         }
@@ -793,14 +793,16 @@ namespace ThreeSM.EnduranceConnector
                     return ReservationReleaseOutcome.Conflict;
                 }
                 AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
-                    diskDeliveredTotal, diskActual, diskReserved);
+                    diskDeliveredTotal, diskActual);
                 _reservations.Remove(key);
+                RecomputeReserved();
                 return ReservationReleaseOutcome.Adopted;
             }
 
             AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
-                diskDeliveredTotal, diskActual, diskReserved);
+                diskDeliveredTotal, diskActual);
             _reservations.Remove(key);
+            RecomputeReserved();
             return ReservationReleaseOutcome.Released;
         }
 
@@ -866,7 +868,7 @@ namespace ThreeSM.EnduranceConnector
                 expectedQuarantineTotal, expectedDeliveredTotal, diskEntries,
                 diskCaptureRefused, diskQuarantineTotal, diskDeliveredTotal);
             AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
-                diskDeliveredTotal, diskActual, diskReserved);
+                diskDeliveredTotal, diskActual);
             if (!matches) diagnostic = "target_snapshot_mismatch";
             return matches;
         }
@@ -907,14 +909,28 @@ namespace ThreeSM.EnduranceConnector
         }
 
         private void AdoptSnapshot(List<ObservationLedgerEntry> entries, int captureRefused,
-            int quarantineTotal, int deliveredTotal, long actual, long reserved)
+            int quarantineTotal, int deliveredTotal, long actual)
         {
             _entries = entries;
             _captureRefused = captureRefused;
             _quarantineTotal = quarantineTotal;
             _deliveredTotal = deliveredTotal;
             _actualBytes = actual;
-            _reservedBytes = reserved;
+            // De schijf-snapshot kent alleen duurzame rijen. Een onopgeloste
+            // reservering is nog een echte claim op het budget en moet in het
+            // gerapporteerde worst-state blijven meetellen, zonder dubbeltelling
+            // van een UID/revisie die inmiddels duurzaam bestaat.
+            RecomputeReserved();
+        }
+
+        /// <summary>
+        /// Herberekent het gerapporteerde worst-case budget uit de gezaghebbende
+        /// duurzame rijen plus alle nog onopgeloste, niet-aliasing reserveringen.
+        /// </summary>
+        private void RecomputeReserved()
+        {
+            int count;
+            _reservedBytes = EffectiveWorst(_entries, out count);
         }
 
         private ObservationLedgerCaptureResult Refuse(ObservationLedgerCandidate candidate,
@@ -1094,6 +1110,16 @@ namespace ThreeSM.EnduranceConnector
                         "ack_duplicate_row_plan");
                 }
 
+                // De aangeboden identiteit is pas bewijs als ook de exacte
+                // bytes en de binding nog de duurzame rij zijn. Deze fence staat
+                // vóór élke muterende branch (delivery, deferred, quarantaine).
+                if (!string.Equals(entry.RowJson, row.Offered.RowJson, StringComparison.Ordinal))
+                {
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.IdentityConflict,
+                        "ack_row_json_conflict");
+                    continue;
+                }
+
                 if (row.Outcome == ObservationAckClass.Accepted
                     || row.Outcome == ObservationAckClass.Duplicate
                     || row.Outcome == ObservationAckClass.Superseded)
@@ -1105,14 +1131,6 @@ namespace ThreeSM.EnduranceConnector
                         plan[rowIndex] = new AckPlan(
                             ObservationAckDurableOutcome.QuarantineTerminal,
                             "quarantine_is_terminal");
-                        continue;
-                    }
-                    if (!string.Equals(entry.RowJson, row.Offered.RowJson, StringComparison.Ordinal))
-                    {
-                        // Een oud ACK voor dezelfde UID/revisie maar andere
-                        // bytes mag nooit de huidige rij verwijderen.
-                        plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.IdentityConflict,
-                            "ack_row_json_conflict");
                         continue;
                     }
                     removed[entryIndex] = true;
@@ -1335,6 +1353,9 @@ namespace ThreeSM.EnduranceConnector
                 _reservations.Remove(IdentityKey(delivered[index].Entry.Uid,
                     delivered[index].Entry.RecordRevision));
             }
+            // Na een onzekere verzoening kan AdoptSnapshot de nog niet
+            // vrijgegeven alias hebben meegeteld; dit is het gezaghebbende moment.
+            RecomputeReserved();
         }
 
         private int CountDeferred(AckPlan[] plan)

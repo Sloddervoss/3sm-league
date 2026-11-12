@@ -359,6 +359,12 @@ namespace ThreeSM.EnduranceConnector
             var blockError = BoundedBlockCode(Text(lapsObject, "block_error"));
             if (!stored)
                 return FailAll(batch, expectedBinding, "ack_not_stored", true, blockError);
+            if (blockError != null)
+            {
+                // Een geblokkeerde reeks kan nooit tegelijk een geslaagde
+                // opslag zijn. De tegenstrijdigheid is geen leveringsbewijs.
+                return FailAll(batch, expectedBinding, "ack_store_block_error", true, blockError);
+            }
 
             List<object> accepted;
             List<object> duplicates;
@@ -464,14 +470,19 @@ namespace ThreeSM.EnduranceConnector
                 AddDiagnostic(diagnostics, "ack_conflicting_decisions");
                 return;
             }
-            if (!cell.DeliverySeen || Rank(kind) < Rank(cell.DeliveryKind))
-                cell.DeliveryKind = kind;
-            cell.DeliverySeen = true;
-            if (revisionValid)
+            if (cell.DeliverySeen)
             {
-                if (!cell.DeliveredRevision.HasValue || revision > cell.DeliveredRevision.Value)
-                    cell.DeliveredRevision = revision;
+                // Twee leveringsbesluiten voor dezelfde UID zijn geen
+                // meerderheidsstem: ook dezelfde soort, een gelijke revisie of
+                // een ongeldige tweede revisie maakt de rij ambigu.
+                cell.Ambiguous = true;
+                cell.Diagnostic = "ack_duplicate_delivery";
+                AddDiagnostic(diagnostics, "ack_duplicate_delivery");
+                return;
             }
+            cell.DeliveryKind = kind;
+            cell.DeliverySeen = true;
+            if (revisionValid) cell.DeliveredRevision = revision;
         }
 
         private static void ReadRejected(List<object> values, ObservationOfferedBatch batch,
@@ -487,14 +498,17 @@ namespace ThreeSM.EnduranceConnector
                 }
                 string id = null;
                 var idRaw = record.ContainsKey("id") ? record["id"] : null;
+                var idPresent = idRaw != null;
                 if (idRaw != null)
                 {
                     id = idRaw as string;
                     if (id != null) id = id.Trim();
                     if (string.IsNullOrEmpty(id)) id = null;
                 }
+                var indexRaw = record.ContainsKey("index") ? record["index"] : null;
+                var indexPresent = indexRaw != null;
                 var index = ReadIndex(record);
-                if (record.ContainsKey("index") && !index.HasValue)
+                if (indexPresent && !index.HasValue)
                     AddDiagnostic(diagnostics, "ack_index_invalid");
                 var reason = Text(record, "reason") ?? "unknown";
 
@@ -515,13 +529,36 @@ namespace ThreeSM.EnduranceConnector
                 if (!idKnown && id != null) AddDiagnostic(diagnostics, "ack_unknown_uid");
                 if (index.HasValue && !indexKnown) AddDiagnostic(diagnostics, "ack_index_out_of_range");
 
-                if (idKnown && indexKnown && idIndex != index.Value)
+                if (idKnown && indexKnown)
                 {
-                    // De twee identificaties wijzen naar verschillende rijen.
-                    // Geen van beide is dan betrouwbaar; raak geen enkele rij aan.
-                    MarkAmbiguous(cells[idIndex], "ack_index_id_conflict", diagnostics);
-                    MarkAmbiguous(cells[index.Value], "ack_index_id_conflict", diagnostics);
-                    continue;
+                    if (idIndex != index.Value)
+                    {
+                        // De twee identificaties wijzen naar verschillende rijen.
+                        // Geen van beide is dan betrouwbaar; raak geen enkele rij aan.
+                        MarkAmbiguous(cells[idIndex], "ack_index_id_conflict", diagnostics);
+                        MarkAmbiguous(cells[index.Value], "ack_index_id_conflict", diagnostics);
+                        continue;
+                    }
+                }
+                else if (idKnown)
+                {
+                    // Een aanwezige maar ongeldige/buiten-bereik index mag niet
+                    // stilzwijgend op de id terugvallen.
+                    if (indexPresent)
+                    {
+                        MarkAmbiguous(cells[idIndex], "ack_ambiguous_identifier", diagnostics);
+                        continue;
+                    }
+                }
+                else if (indexKnown)
+                {
+                    // Een aanwezige maar onbekende/ongeldige id mag niet
+                    // stilzwijgend op de index terugvallen.
+                    if (idPresent)
+                    {
+                        MarkAmbiguous(cells[index.Value], "ack_ambiguous_identifier", diagnostics);
+                        continue;
+                    }
                 }
 
                 int target = -1;
@@ -529,7 +566,7 @@ namespace ThreeSM.EnduranceConnector
                 else if (indexKnown) target = index.Value;
                 else
                 {
-                    if (id == null && !index.HasValue)
+                    if (!idPresent && !indexPresent)
                         AddDiagnostic(diagnostics, "ack_rejection_unattributed");
                     continue;
                 }
@@ -749,17 +786,6 @@ namespace ThreeSM.EnduranceConnector
                 case ObservationAckClass.Duplicate: return ObservationLegacyAckClass.Duplicate;
                 case ObservationAckClass.Superseded: return ObservationLegacyAckClass.Superseded;
                 default: return ObservationLegacyAckClass.None;
-            }
-        }
-
-        private static int Rank(ObservationAckClass kind)
-        {
-            switch (kind)
-            {
-                case ObservationAckClass.Accepted: return 3;
-                case ObservationAckClass.Duplicate: return 2;
-                case ObservationAckClass.Superseded: return 1;
-                default: return 0;
             }
         }
 
