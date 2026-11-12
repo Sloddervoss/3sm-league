@@ -360,6 +360,28 @@ internal static class FaseDTests
         // Wordt alleen met de hand gebruikt; de normale run doet niets speciaals.
         if (args != null && args.Length > 0)
         {
+            // Owned child for the real SIGKILL preserve proof. Load() streams the
+            // invalid target into the preserve slot; the parent kills this process
+            // while that copy is in flight.
+            if (args.Length == 2 && string.Equals(args[0], "--ledger-preserve-child",
+                    StringComparison.Ordinal))
+            {
+                try
+                {
+                    var childStore = new ObservationLedgerStore(args[1]);
+                    Console.WriteLine("CHILD_PRESERVE_COMPLETE entries=" + childStore.EntryCount
+                        + " preserved=" + (File.Exists(childStore.PreservePath)
+                            ? new FileInfo(childStore.PreservePath).Length : -1L)
+                        + " failedClosed=" + childStore.IsFailedClosed);
+                    return 0;
+                }
+                catch (Exception childError)
+                {
+                    Console.WriteLine("CHILD_PRESERVE_FAILED=" + childError.GetType().Name
+                        + ":" + childError.Message);
+                    return 1;
+                }
+            }
             if (string.Equals(args[0], "--only-driver-ratings", StringComparison.Ordinal))
             {
                 Group("DriverRatingTests", () => DriverRatingTests.Run(Check));

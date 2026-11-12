@@ -123,6 +123,26 @@ Pad (later door de plugin te kiezen):
 - Groottelimiet en UTF-8-decoding vinden plaats vóór deserialisatie; een te
   groot bestand wordt stroommatig naar de preserve-slot gekopieerd.
 
+## Reparatie-erratum (B1-B4)
+
+- Een reservering bewaart de exacte oorspronkelijke `rowJson` en
+  `enqueuedAtUtc`, niet alleen het budget. Dezelfde UID/revisie met andere
+  bytes is conflict, ook bij gelijk budget; het origineel blijft retrybaar.
+- Een definitieve pre-switch pairing-/quotumweigering geeft de ongebruikte
+  reservering vrij, maar pas nadat de target is teruggelezen. Staat de
+  identiteit daar al met exact dezelfde bytes, dan wordt de volledige
+  snapshot geadopteerd; is de target onleesbaar, dan blijft de store fail
+  closed in plaats van mogelijk bewijs vrij te geven.
+- Elke state-transitie gebruikt dezelfde zekerheid als capture: een
+  after-switch fout leest de volledige snapshot met tellers terug en adopteert
+  die bij overeenkomst. Zo blijft een duurzaam gecommitte quarantaine
+  terminaal en kan een stale `Defer`/`Capture` die niet overschrijven.
+- De preserve wordt eerst stroommatig naar `*.preserved.tmp` geschreven,
+  duurzaam geflusht en daarna met eenzelfde-volume rename gepubliceerd. Een
+  achtergebleven staging is nooit gezaghebbend; bij herstart wordt de intacte
+  target opnieuw als geheel gekopieerd en de eerste complete preserve blijft
+  onaangeroerd.
+
 ## Bewijs (echte exits)
 
 Uitgevoerd in `/home/hermes/wt/pitwall-learning-p2-observation-ledger`, met

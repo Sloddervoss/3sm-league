@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -659,6 +662,317 @@ internal static class MeasurementObservationLedgerTests
             && !badBakStore.Capture(Candidate(Row(Uid()))).Captured,
             "ontbrekende target met ongeldige bak start niet als verse lege ledger");
 
+        // =============================================== B1/B2/B3/B4 repair
+        // B1: a reserved identity may only be retried with the exact original
+        // candidate. A different payload with the same budget must refuse.
+        var b1Dir = NewDirectory();
+        var b1Store = Store(b1Dir);
+        var b1Uid = Uid();
+        var b1Original = Candidate(Row(b1Uid, "AAAA"));
+        var b1Replacement = Candidate(Row(b1Uid, "BBBB"));
+        var b1OriginalBudget = ObservationLedgerBudget.EntryWorstBytes(b1Original.Uid,
+            b1Original.RecordRevision, b1Original.RowJson, b1Original.Binding,
+            b1Original.EnqueuedAtUtc);
+        var b1ReplacementBudget = ObservationLedgerBudget.EntryWorstBytes(b1Replacement.Uid,
+            b1Replacement.RecordRevision, b1Replacement.RowJson, b1Replacement.Binding,
+            b1Replacement.EnqueuedAtUtc);
+        ObservationLedgerCaptureResult b1First;
+        Chmod(b1Dir, "0555");
+        try { b1First = b1Store.Capture(b1Original); }
+        finally { Chmod(b1Dir, "0755"); }
+        var b1Substitution = b1Store.Capture(b1Replacement);
+        var b1ReservationsAfterSubstitution = b1Store.ReservationCount;
+        var b1EntryAfterSubstitution = b1Store.Find(b1Uid, 1);
+        var b1RetryOriginal = b1Store.Capture(b1Original);
+        var b1Reload = Store(b1Dir);
+        Check("OL34", b1First.Status == ObservationLedgerCaptureStatus.NotCommitted
+            && b1ReservationsAfterSubstitution == 1
+            && b1Original.RowJson != b1Replacement.RowJson
+            && b1OriginalBudget == b1ReplacementBudget
+            && b1Substitution.Status == ObservationLedgerCaptureStatus.RefusedConflict
+            && b1Substitution.Diagnostic == "identity_payload_conflict"
+            && b1EntryAfterSubstitution == null
+            && b1ReservationsAfterSubstitution == 1
+            && b1RetryOriginal.Captured && b1Store.ReservationCount == 0
+            && b1Store.Find(b1Uid, 1).RowJson == b1Original.RowJson
+            && b1Reload.Find(b1Uid, 1).RowJson == b1Original.RowJson,
+            "gereserveerde identiteit weigert een andere payload met hetzelfde budget; het origineel blijft retrybaar"
+            + "; first=" + b1First.Status + " second=" + b1Substitution.Status
+            + " resAfterSub=" + b1ReservationsAfterSubstitution
+            + " retry=" + b1RetryOriginal.Status
+            + " resNow=" + b1Store.ReservationCount
+            + " budgets=" + b1OriginalBudget + "/" + b1ReplacementBudget);
+
+        var b1ControlStore = Store(NewDirectory());
+        var b1ControlFirst = b1ControlStore.Capture(b1Original);
+        var b1ControlSecond = b1ControlStore.Capture(b1Replacement);
+        Check("OL34b", b1ControlFirst.Captured
+            && b1ControlSecond.Status == ObservationLedgerCaptureStatus.RefusedConflict
+            && b1ControlSecond.Diagnostic == "identity_payload_conflict"
+            && b1ControlStore.Find(b1Uid, 1).RowJson == b1Original.RowJson,
+            "positieve controle: normaal gecommitte rij weigert dezelfde identiteit met andere payload");
+
+        // B2: a definite binding-change refusal releases the unused reservation,
+        // so all 64 slots remain available; the old UID never reaches disk.
+        var b2Dir = NewDirectory();
+        var b2Fence = new ObservationBindingFence(Binding());
+        var b2Store = Store(b2Dir, b2Fence);
+        var b2Uid = Uid();
+        var b2Old = Candidate(Row(b2Uid));
+        ObservationLedgerCaptureResult b2First;
+        Chmod(b2Dir, "0555");
+        try { b2First = b2Store.Capture(b2Old); }
+        finally { Chmod(b2Dir, "0755"); }
+        var b2ReservedBefore = b2Store.ReservationCount;
+        b2Fence.Rebind(Binding(OtherDevice, 8));
+        var b2Refusal = b2Store.Capture(b2Old);
+        var b2ReservationsAfterRefusal = b2Store.ReservationCount;
+        var b2Accepted = 0;
+        for (var index = 0; index < 64; index++)
+        {
+            var acceptedResult = b2Store.Capture(Candidate(Row(Uid(), device: OtherDevice),
+                Binding(OtherDevice, 8)));
+            if (acceptedResult.Status == ObservationLedgerCaptureStatus.Captured) b2Accepted++;
+        }
+        var b2Overflow = b2Store.Capture(Candidate(Row(Uid(), device: OtherDevice),
+            Binding(OtherDevice, 8)));
+        var b2Reload = Store(b2Dir, new ObservationBindingFence(Binding(OtherDevice, 8)));
+        Check("OL35", b2First.Status == ObservationLedgerCaptureStatus.NotCommitted
+            && b2ReservedBefore == 1
+            && b2Refusal.Status == ObservationLedgerCaptureStatus.RefusedBindingChanged
+            && b2Refusal.ReasonCode == ObservationLedgerReasons.CaptureBindingChanged
+            && b2ReservationsAfterRefusal == 0
+            && b2Accepted == 64 && b2Store.EntryCount == 64
+            && b2Store.ReservationCount == 0
+            && b2Overflow.Status == ObservationLedgerCaptureStatus.RefusedQuota
+            && b2Reload.Find(b2Uid, 1) == null,
+            "definitieve bindingweigering geeft de reservering vrij: 64 nieuwe rijen passen en de oude UID staat niet op schijf"
+            + "; first=" + b2First.Status + " refusal=" + b2Refusal.Status
+            + " reservations=" + b2ReservationsAfterRefusal + " accepted=" + b2Accepted
+            + " overflow=" + b2Overflow.Status);
+
+        var b2ControlStore = Store(NewDirectory(), new ObservationBindingFence(Binding(OtherDevice, 8)));
+        var b2ControlAccepted = 0;
+        for (var index = 0; index < 64; index++)
+        {
+            var result = b2ControlStore.Capture(Candidate(Row(Uid(), device: OtherDevice),
+                Binding(OtherDevice, 8)));
+            if (result.Status == ObservationLedgerCaptureStatus.Captured) b2ControlAccepted++;
+        }
+        Check("OL35b", b2ControlAccepted == 64 && b2ControlStore.EntryCount == 64
+            && b2ControlStore.ReservationCount == 0,
+            "positieve controle: zonder stale reservering worden 64 nieuwe bindingrijen geaccepteerd");
+
+        // A readback first proves absence. If a previous uncertain switch already
+        // published the identity, it is adopted instead of blanket-released.
+        var b2cDir = NewDirectory();
+        var b2cFence = new ObservationBindingFence(Binding());
+        var b2cStore = Store(b2cDir, b2cFence);
+        var b2cCandidate = Candidate(Row(Uid()));
+        ObservationLedgerCaptureResult b2cFirst;
+        Chmod(b2cDir, "0555");
+        try { b2cFirst = b2cStore.Capture(b2cCandidate); }
+        finally { Chmod(b2cDir, "0755"); }
+        var b2cWitness = Store(NewDirectory());
+        var b2cWitnessCapture = b2cWitness.Capture(b2cCandidate);
+        File.Copy(b2cWitness.Path, b2cStore.Path, true);
+        b2cFence.Rebind(Binding(OtherDevice, 8));
+        var b2cAdoption = b2cStore.Capture(b2cCandidate);
+        Check("OL35c", b2cFirst.Status == ObservationLedgerCaptureStatus.NotCommitted
+            && b2cWitnessCapture.Captured
+            && b2cAdoption.Status == ObservationLedgerCaptureStatus.AlreadyCaptured
+            && b2cStore.EntryCount == 1 && b2cStore.ReservationCount == 0
+            && b2cStore.Find(b2cCandidate.Uid, 1).RowJson == b2cCandidate.RowJson,
+            "mogelijk-gecommitte identiteit wordt bij vrijgave eerst teruggelezen en geadopteerd, niet blind vrijgegeven"
+            + "; first=" + b2cFirst.Status + " adoption=" + b2cAdoption.Status
+            + " entries=" + b2cStore.EntryCount + " res=" + b2cStore.ReservationCount);
+
+        // B3: after-switch uncertainty must reconcile the authoritative full
+        // snapshot; the durable quarantine is adopted and stays terminal.
+        var b3Dir = NewDirectory();
+        var b3Faults = new Faults();
+        var b3Store = Store(b3Dir, null, null, null, b3Faults);
+        var b3Candidate = Candidate(Row(Uid()));
+        var b3Capture = b3Store.Capture(b3Candidate);
+        b3Faults.AfterSwitchFailures = 1;
+        var b3Quarantine = b3Store.Quarantine(b3Candidate.Uid, 1,
+            ObservationLedgerReasons.ObservationInvalidTimestamp);
+        var b3Entry = b3Store.Find(b3Candidate.Uid, 1);
+        var b3Defer = b3Store.Defer(b3Candidate.Uid, 1,
+            ObservationLedgerReasons.ObservationUnavailable, T0.AddMinutes(3), T0.AddMinutes(4));
+        var b3Reload = Store(b3Dir);
+        var b3ReloadEntry = b3Reload.Find(b3Candidate.Uid, 1);
+        Check("OL36", b3Capture.Captured
+            && b3Quarantine.Status == ObservationLedgerTransitionStatus.Committed
+            && b3Quarantine.Diagnostic == null
+            && b3Entry.State == ObservationLedgerState.Quarantine
+            && b3Entry.ReasonCode == ObservationLedgerReasons.ObservationInvalidTimestamp
+            && b3Store.QuarantineTotal == 1
+            && b3Defer.Status == ObservationLedgerTransitionStatus.RefusedInvalidReason
+            && b3Defer.Diagnostic == "quarantine_is_terminal"
+            && b3Store.QuarantineTotal == 1
+            && b3ReloadEntry.State == ObservationLedgerState.Quarantine
+            && b3ReloadEntry.ReasonCode == ObservationLedgerReasons.ObservationInvalidTimestamp
+            && b3ReloadEntry.RowJson == b3Candidate.RowJson
+            && b3Reload.QuarantineTotal == 1,
+            "na-switch onzekerheid leest de volledige snapshot terug, adopteert quarantaine en blokkeert Defer"
+            + "; q=" + b3Quarantine.Status + "/" + b3Quarantine.Diagnostic
+            + " memory=" + b3Entry.State + " total=" + b3Store.QuarantineTotal
+            + " defer=" + b3Defer.Status + "/" + b3Defer.Diagnostic
+            + " reload=" + b3ReloadEntry.State + "/" + b3Reload.QuarantineTotal);
+
+        var b3bDir = NewDirectory();
+        var b3bFaults = new Faults();
+        var b3bStore = Store(b3bDir, null, null, null, b3bFaults);
+        var b3bCandidate = Candidate(Row(Uid()));
+        b3bStore.Capture(b3bCandidate);
+        b3bFaults.BeforeSwitchFailures = 1;
+        var b3bQuarantine = b3bStore.Quarantine(b3bCandidate.Uid, 1,
+            ObservationLedgerReasons.ObservationInvalidTimestamp);
+        var b3bMemory = b3bStore.Find(b3bCandidate.Uid, 1);
+        var b3bMemoryTotal = b3bStore.QuarantineTotal;
+        var b3bDisk = Store(b3bDir);
+        var b3bRetry = b3bStore.Quarantine(b3bCandidate.Uid, 1,
+            ObservationLedgerReasons.ObservationInvalidTimestamp);
+        var b3bReload = Store(b3bDir);
+        Check("OL36b", b3bQuarantine.Status == ObservationLedgerTransitionStatus.NotCommitted
+            && b3bMemory.State == ObservationLedgerState.Pending
+            && b3bMemoryTotal == 0
+            && b3bDisk.Find(b3bCandidate.Uid, 1).State == ObservationLedgerState.Pending
+            && b3bDisk.QuarantineTotal == 0
+            && b3bRetry.Status == ObservationLedgerTransitionStatus.Committed
+            && b3bReload.Find(b3bCandidate.Uid, 1).State == ObservationLedgerState.Quarantine
+            && b3bReload.QuarantineTotal == 1,
+            "pre-switch transitiefout laat oude schijf-/geheugenstatus intact en een legitieme retry toe"
+            + "; q=" + b3bQuarantine.Status + " memory=" + b3bMemory.State
+            + " total=" + b3bMemoryTotal
+            + " disk=" + b3bDisk.Find(b3bCandidate.Uid, 1).State
+            + "/" + b3bDisk.QuarantineTotal
+            + " retry=" + b3bRetry.Status + "/" + b3bRetry.Diagnostic
+            + " reload=" + b3bReload.Find(b3bCandidate.Uid, 1).State
+            + "/" + b3bReload.QuarantineTotal);
+
+        var b3cDir = NewDirectory();
+        var b3cFaults = new Faults();
+        var b3cStore = Store(b3cDir, null, null, null, b3cFaults);
+        var b3cCandidate = Candidate(Row(Uid()));
+        b3cStore.Capture(b3cCandidate);
+        b3cFaults.AfterSwitchFailures = 1;
+        var b3cDefer = b3cStore.Defer(b3cCandidate.Uid, 1,
+            ObservationLedgerReasons.ContainsUnknownFields, T0.AddMinutes(3), T0.AddMinutes(4));
+        var b3cReload = Store(b3cDir);
+        var b3cResumed = b3cReload.Find(b3cCandidate.Uid, 1);
+        Check("OL36c", b3cDefer.Status == ObservationLedgerTransitionStatus.Committed
+            && b3cStore.Find(b3cCandidate.Uid, 1).State == ObservationLedgerState.Deferred
+            && b3cResumed.State == ObservationLedgerState.Pending
+            && b3cResumed.Attempts == 1 && b3cResumed.NextAttemptUtc.HasValue
+            && b3cResumed.RowJson == b3cCandidate.RowJson,
+            "na-switch onzekere Defer wordt teruggelezen als committed en houdt attempts/nextAttempt over herstart"
+            + "; defer=" + b3cDefer.Status + "/" + b3cDefer.Diagnostic
+            + " memory=" + b3cStore.Find(b3cCandidate.Uid, 1).State
+            + " reload=" + b3cResumed.State + "/" + b3cResumed.Attempts);
+
+        // B4: a real child process is SIGKILLed during the streamed preserve.
+        // The partial staging slot is never final evidence; restart redoes the
+        // whole file atomically.
+        const long b4Bytes = 128L * 1024 * 1024;
+        var b4Dir = NewDirectory();
+        var b4Store = Store(b4Dir);
+        var b4Candidate = Candidate(Row(Uid()));
+        b4Store.Capture(b4Candidate);
+        var b4Path = b4Store.Path;
+        var b4Preserved = b4Store.PreservePath;
+        var b4Staging = b4Preserved + ".tmp";
+        File.Copy(b4Path, b4Path + ".bak", true);
+        File.Delete(b4Preserved);
+        if (File.Exists(b4Staging)) File.Delete(b4Staging);
+        WriteFilledFile(b4Path, b4Bytes, (byte)'x');
+        var b4OriginalHash = Sha256(b4Path);
+
+        var b4Start = Stopwatch.StartNew();
+        var b4SawStaging = false;
+        var b4FinalAtKill = false;
+        var b4Killed = false;
+        var b4StagingAtKill = -1L;
+        var b4FinalAtKillLength = -1L;
+        using (var child = Process.Start(ChildStartInfo(b4Path)))
+        {
+            while (b4Start.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                if (File.Exists(b4Staging))
+                {
+                    var stagedLength = new FileInfo(b4Staging).Length;
+                    if (stagedLength >= 65536 && stagedLength < b4Bytes)
+                    {
+                        b4SawStaging = true;
+                        break;
+                    }
+                }
+                if (File.Exists(b4Preserved))
+                {
+                    var finalLength = new FileInfo(b4Preserved).Length;
+                    if (finalLength >= 65536)
+                    {
+                        b4FinalAtKill = true;
+                        break;
+                    }
+                }
+                if (child.HasExited) break;
+                Thread.Sleep(1);
+            }
+            if (!child.HasExited && (b4SawStaging || b4FinalAtKill))
+            {
+                child.Kill();
+                b4Killed = true;
+            }
+            child.WaitForExit(10000);
+            if (File.Exists(b4Staging)) b4StagingAtKill = new FileInfo(b4Staging).Length;
+            if (File.Exists(b4Preserved)) b4FinalAtKillLength = new FileInfo(b4Preserved).Length;
+            try { child.StandardOutput.ReadToEnd(); } catch (Exception) { }
+        }
+        var b4Reload = Store(b4Dir);
+        var b4PreservedLength = File.Exists(b4Reload.PreservePath)
+            ? new FileInfo(b4Reload.PreservePath).Length : -1L;
+        var b4PreservedHash = File.Exists(b4Reload.PreservePath) ? Sha256(b4Reload.PreservePath) : null;
+        var b4Restored = b4Reload.Find(b4Candidate.Uid, 1);
+        Check("OL37", b4SawStaging && b4Killed && !b4FinalAtKill
+            && b4FinalAtKillLength == -1
+            && b4StagingAtKill >= 65536 && b4StagingAtKill < b4Bytes
+            && !b4Reload.IsFailedClosed && b4Reload.EntryCount == 1
+            && b4Restored != null && b4Restored.RowJson == b4Candidate.RowJson
+            && b4PreservedLength == b4Bytes
+            && string.Equals(b4PreservedHash, b4OriginalHash, StringComparison.Ordinal)
+            && !File.Exists(b4Staging),
+            "SIGKILL tijdens streamen laat alleen een onvolledige staging achter; herstart bewaart het hele 128 MiB-bestand atomisch"
+            + "; sawStaging=" + b4SawStaging + " killed=" + b4Killed
+            + " finalAtKill=" + b4FinalAtKill + "/" + b4FinalAtKillLength
+            + " stagingAtKill=" + b4StagingAtKill
+            + " preserved=" + b4PreservedLength + " hashEqual=" + string.Equals(b4PreservedHash,
+                b4OriginalHash, StringComparison.Ordinal)
+            + " entries=" + b4Reload.EntryCount + " closed=" + b4Reload.IsFailedClosed);
+
+        var b4bDir = NewDirectory();
+        var b4bStore = Store(b4bDir);
+        var b4bCandidate = Candidate(Row(Uid()));
+        b4bStore.Capture(b4bCandidate);
+        File.Copy(b4bStore.Path, b4bStore.Path + ".bak", true);
+        File.Delete(b4bStore.PreservePath);
+        const long b4bBytes = 2L * 1024 * 1024;
+        WriteFilledFile(b4bStore.Path, b4bBytes, (byte)'y');
+        var b4bHash = Sha256(b4bStore.Path);
+        var b4bReload = Store(b4bDir);
+        var b4bPreservedLength = File.Exists(b4bReload.PreservePath)
+            ? new FileInfo(b4bReload.PreservePath).Length : -1L;
+        Check("OL37b", !b4bReload.IsFailedClosed && b4bReload.EntryCount == 1
+            && b4bPreservedLength == b4bBytes
+            && string.Equals(Sha256(b4bReload.PreservePath), b4bHash, StringComparison.Ordinal)
+            && !File.Exists(b4bReload.PreservePath + ".tmp")
+            && b4bReload.Find(b4bCandidate.Uid, 1).RowJson == b4bCandidate.RowJson,
+            "positieve controle zonder crash: 2 MiB wordt in één keer volledig bewaard en de bak herstelt"
+            + "; preserved=" + b4bPreservedLength + " entries=" + b4bReload.EntryCount);
+
+        try { Directory.Delete(b4Dir, true); } catch (Exception) { }
+
         return count;
     }
 
@@ -671,5 +985,80 @@ internal static class MeasurementObservationLedgerTests
             if (left[index] != right[index]) return false;
         }
         return true;
+    }
+
+    private static void Chmod(string path, string mode)
+    {
+        var info = new ProcessStartInfo
+        {
+            FileName = "/bin/chmod",
+            UseShellExecute = false
+        };
+        info.ArgumentList.Add(mode);
+        info.ArgumentList.Add(path);
+        using (var process = Process.Start(info))
+        {
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new IOException("chmod " + mode + " failed with exit " + process.ExitCode);
+        }
+    }
+
+    private static void WriteFilledFile(string path, long bytes, byte value)
+    {
+        using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write,
+            FileShare.None, 1024 * 1024))
+        {
+            var buffer = new byte[64 * 1024];
+            for (var index = 0; index < buffer.Length; index++) buffer[index] = value;
+            var remaining = bytes;
+            while (remaining > 0)
+            {
+                var count = (int)Math.Min(buffer.Length, remaining);
+                stream.Write(buffer, 0, count);
+                remaining -= count;
+            }
+            stream.Flush(true);
+        }
+    }
+
+    private static string Sha256(string path)
+    {
+        using (var sha = SHA256.Create())
+        using (var stream = File.OpenRead(path))
+        {
+            var hash = sha.ComputeHash(stream);
+            var text = new StringBuilder(hash.Length * 2);
+            for (var index = 0; index < hash.Length; index++)
+                text.Append(hash[index].ToString("x2", CultureInfo.InvariantCulture));
+            return text.ToString();
+        }
+    }
+
+    private static ProcessStartInfo ChildStartInfo(string ledgerPath)
+    {
+        var info = new ProcessStartInfo
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        var processPath = Environment.ProcessPath;
+        var assemblyPath = Assembly.GetEntryAssembly() == null
+            ? null : Assembly.GetEntryAssembly().Location;
+        if (!string.IsNullOrEmpty(processPath)
+            && !string.Equals(Path.GetFileNameWithoutExtension(processPath), "dotnet",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            info.FileName = processPath;
+        }
+        else
+        {
+            info.FileName = string.IsNullOrEmpty(processPath) ? "dotnet" : processPath;
+            if (!string.IsNullOrEmpty(assemblyPath)) info.ArgumentList.Add(assemblyPath);
+        }
+        info.ArgumentList.Add("--ledger-preserve-child");
+        info.ArgumentList.Add(ledgerPath);
+        return info;
     }
 }

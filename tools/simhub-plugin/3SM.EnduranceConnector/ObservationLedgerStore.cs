@@ -68,11 +68,15 @@ namespace ThreeSM.EnduranceConnector
         public void Preserve(string sourcePath, string destinationPath)
         {
             if (File.Exists(destinationPath)) return;
+            // Stream into one fixed staging slot, flush it durably, then publish
+            // with a same-volume rename. A process killed mid-copy can therefore
+            // only leave staging, never a partial authoritative .preserved.
+            var stagingPath = destinationPath + ".tmp";
             try
             {
                 using (var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read,
                     FileShare.Read, 64 * 1024, FileOptions.SequentialScan))
-                using (var destination = new FileStream(destinationPath, FileMode.CreateNew,
+                using (var destination = new FileStream(stagingPath, FileMode.Create,
                     FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.WriteThrough))
                 {
                     var buffer = new byte[64 * 1024];
@@ -83,10 +87,16 @@ namespace ThreeSM.EnduranceConnector
                     }
                     destination.Flush(true);
                 }
+                if (File.Exists(destinationPath))
+                {
+                    File.Delete(stagingPath);
+                    return;
+                }
+                File.Move(stagingPath, destinationPath);
             }
             catch
             {
-                try { if (File.Exists(destinationPath)) File.Delete(destinationPath); }
+                try { if (File.Exists(stagingPath)) File.Delete(stagingPath); }
                 catch (Exception) { }
                 throw;
             }
@@ -115,6 +125,7 @@ namespace ThreeSM.EnduranceConnector
         private readonly string _tempPath;
         private readonly string _backupPath;
         private readonly string _preservePath;
+        private readonly string _preserveTempPath;
         private readonly ObservationLedgerOptions _options;
         private readonly IObservationLedgerFileSystem _files;
         private readonly IObservationLedgerFaults _faults;
@@ -134,6 +145,24 @@ namespace ThreeSM.EnduranceConnector
         {
             public long Budget;
             public ObservationPairingBinding Binding;
+            // Immutable exact original payload. A reservation is not a budget
+            // placeholder: a retry must present these same bytes.
+            public string RowJson;
+        }
+
+        private enum SwitchOutcome
+        {
+            Committed,
+            FailedBeforeSwitch,
+            Uncertain
+        }
+
+        private enum ReservationReleaseOutcome
+        {
+            Released,
+            Adopted,
+            Conflict,
+            Unresolved
         }
 
         public ObservationLedgerStore(string path)
@@ -157,6 +186,7 @@ namespace ThreeSM.EnduranceConnector
             _tempPath = path + ".tmp";
             _backupPath = path + ".bak";
             _preservePath = path + ".preserved";
+            _preserveTempPath = _preservePath + ".tmp";
             BindingFence = bindingFence ?? new ObservationBindingFence(null);
             _options = options ?? new ObservationLedgerOptions();
             _files = files ?? new ObservationLedgerFileSystem();
@@ -360,7 +390,9 @@ namespace ThreeSM.EnduranceConnector
                     var sameBudget = reservation.Budget == EntryBudget(newEntry);
                     var sameBinding = ObservationBindingFence.SameBinding(reservation.Binding,
                         candidate.Binding);
-                    if (!sameBudget || !sameBinding)
+                    var samePayload = string.Equals(reservation.RowJson, candidate.RowJson,
+                        StringComparison.Ordinal);
+                    if (!sameBudget || !sameBinding || !samePayload)
                     {
                         return CaptureResult(ObservationLedgerCaptureStatus.RefusedConflict,
                             candidate, null, "identity_payload_conflict", false);
@@ -372,7 +404,8 @@ namespace ThreeSM.EnduranceConnector
                     _reservations[key] = new Reservation
                     {
                         Budget = budget,
-                        Binding = candidate.Binding
+                        Binding = candidate.Binding,
+                        RowJson = candidate.RowJson
                     };
                 }
 
@@ -475,13 +508,33 @@ namespace ThreeSM.EnduranceConnector
 
                 if (!fenceRan)
                 {
-                    if (!reservationExists) _reservations.Remove(key);
+                    var release = ReleaseReservationForDefiniteRefusal(key);
+                    if (release == ReservationReleaseOutcome.Adopted)
+                    {
+                        return CaptureResult(ObservationLedgerCaptureStatus.AlreadyCaptured,
+                            candidate, null, "adopted_committed_entry", false);
+                    }
+                    if (release == ReservationReleaseOutcome.Conflict)
+                    {
+                        return CaptureResult(ObservationLedgerCaptureStatus.RefusedConflict,
+                            candidate, null, "identity_payload_conflict", false);
+                    }
                     return Refuse(candidate, ObservationLedgerReasons.CaptureBindingChanged,
                         "binding_changed_before_commit");
                 }
                 if (quotaRefusal)
                 {
-                    if (!reservationExists) _reservations.Remove(key);
+                    var release = ReleaseReservationForDefiniteRefusal(key);
+                    if (release == ReservationReleaseOutcome.Adopted)
+                    {
+                        return CaptureResult(ObservationLedgerCaptureStatus.AlreadyCaptured,
+                            candidate, null, "adopted_committed_entry", false);
+                    }
+                    if (release == ReservationReleaseOutcome.Conflict)
+                    {
+                        return CaptureResult(ObservationLedgerCaptureStatus.RefusedConflict,
+                            candidate, null, "identity_payload_conflict", false);
+                    }
                     return Refuse(candidate, ObservationLedgerReasons.ObservationCaptureRefused,
                         "quota_exceeded_before_switch");
                 }
@@ -616,10 +669,23 @@ namespace ThreeSM.EnduranceConnector
             }
 
             string writeError;
-            if (!TryWriteSnapshot(json, out writeError))
+            var outcome = TryWriteSnapshot(json, out writeError);
+            if (outcome == SwitchOutcome.FailedBeforeSwitch)
             {
                 return Transition(ObservationLedgerTransitionStatus.NotCommitted,
                     reasonCode, "precommit_io:" + writeError);
+            }
+            if (outcome == SwitchOutcome.Uncertain)
+            {
+                string reconcile;
+                if (ReconcileFullSnapshot(entries, _captureRefused, nextQuarantine,
+                        _deliveredTotal, out reconcile))
+                {
+                    return Transition(ObservationLedgerTransitionStatus.Committed,
+                        reasonCode, null);
+                }
+                return Transition(ObservationLedgerTransitionStatus.NotCommitted,
+                    reasonCode, "uncertain_switch:" + writeError + ";" + reconcile);
             }
 
             _entries = entries;
@@ -687,6 +753,154 @@ namespace ThreeSM.EnduranceConnector
                 null, "target_unchanged_after_uncertain_switch", false);
         }
 
+        /// <summary>
+        /// A definite pre-switch refusal may drop an unpublished claim, but only
+        /// after the authoritative target proves that the identity is absent. A
+        /// previous uncertain switch may have published it; then the full durable
+        /// snapshot is adopted instead of being overwritten or forgotten.
+        /// </summary>
+        private ReservationReleaseOutcome ReleaseReservationForDefiniteRefusal(string key)
+        {
+            Reservation reservation;
+            if (!_reservations.TryGetValue(key, out reservation))
+                return ReservationReleaseOutcome.Released;
+
+            if (!SafeExists(_path))
+            {
+                _reservations.Remove(key);
+                return ReservationReleaseOutcome.Released;
+            }
+
+            List<ObservationLedgerEntry> diskEntries;
+            int diskCaptureRefused;
+            int diskQuarantineTotal;
+            int diskDeliveredTotal;
+            long diskActual;
+            long diskReserved;
+            string readError;
+            if (!TryReadSnapshot(_path, false, out diskEntries, out diskCaptureRefused,
+                    out diskQuarantineTotal, out diskDeliveredTotal, out diskActual,
+                    out diskReserved, out readError))
+            {
+                // Absence cannot be proven: keep the claim and stop mutating.
+                _failedClosed = true;
+                _persistenceError = "reservation_release_readback_failed:" + readError;
+                return ReservationReleaseOutcome.Unresolved;
+            }
+
+            ObservationLedgerEntry durable = null;
+            for (var index = 0; index < diskEntries.Count; index++)
+            {
+                if (IdentityKey(diskEntries[index].Uid, diskEntries[index].RecordRevision) == key)
+                {
+                    durable = diskEntries[index];
+                    break;
+                }
+            }
+
+            if (durable != null)
+            {
+                if (!string.Equals(durable.RowJson, reservation.RowJson, StringComparison.Ordinal)
+                    || !ObservationBindingFence.SameBinding(durable.Binding, reservation.Binding))
+                {
+                    _failedClosed = true;
+                    _persistenceError = "reservation_release_identity_conflict";
+                    return ReservationReleaseOutcome.Conflict;
+                }
+                AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
+                    diskDeliveredTotal, diskActual, diskReserved);
+                _reservations.Remove(key);
+                return ReservationReleaseOutcome.Adopted;
+            }
+
+            AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
+                diskDeliveredTotal, diskActual, diskReserved);
+            _reservations.Remove(key);
+            return ReservationReleaseOutcome.Released;
+        }
+
+        /// <summary>
+        /// Reconciles the whole durable snapshot after an uncertain switch. The
+        /// expected snapshot is compared field by field (savedAtUtc is not part of
+        /// identity). Whatever is on disk is authoritative for memory.
+        /// </summary>
+        private bool ReconcileFullSnapshot(IList<ObservationLedgerEntry> expectedEntries,
+            int expectedCaptureRefused, int expectedQuarantineTotal, int expectedDeliveredTotal,
+            out string diagnostic)
+        {
+            diagnostic = null;
+            List<ObservationLedgerEntry> diskEntries;
+            int diskCaptureRefused;
+            int diskQuarantineTotal;
+            int diskDeliveredTotal;
+            long diskActual;
+            long diskReserved;
+            string readError;
+            if (!TryReadSnapshot(_path, false, out diskEntries, out diskCaptureRefused,
+                    out diskQuarantineTotal, out diskDeliveredTotal, out diskActual,
+                    out diskReserved, out readError))
+            {
+                _failedClosed = true;
+                _persistenceError = "uncertain_switch_unreadable:" + readError;
+                diagnostic = "target_unreadable";
+                return false;
+            }
+
+            var matches = SnapshotEquals(expectedEntries, expectedCaptureRefused,
+                expectedQuarantineTotal, expectedDeliveredTotal, diskEntries,
+                diskCaptureRefused, diskQuarantineTotal, diskDeliveredTotal);
+            AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
+                diskDeliveredTotal, diskActual, diskReserved);
+            if (!matches) diagnostic = "target_snapshot_mismatch";
+            return matches;
+        }
+
+        private static bool SnapshotEquals(IList<ObservationLedgerEntry> left,
+            int leftCaptureRefused, int leftQuarantineTotal, int leftDeliveredTotal,
+            IList<ObservationLedgerEntry> right, int rightCaptureRefused,
+            int rightQuarantineTotal, int rightDeliveredTotal)
+        {
+            if (leftCaptureRefused != rightCaptureRefused
+                || leftQuarantineTotal != rightQuarantineTotal
+                || leftDeliveredTotal != rightDeliveredTotal
+                || left.Count != right.Count)
+                return false;
+            for (var index = 0; index < left.Count; index++)
+            {
+                if (!SameEntry(left[index], right[index])) return false;
+            }
+            return true;
+        }
+
+        private static bool SameEntry(ObservationLedgerEntry left, ObservationLedgerEntry right)
+        {
+            return string.Equals(left.Uid, right.Uid, StringComparison.Ordinal)
+                && left.RecordRevision == right.RecordRevision
+                && left.State == right.State
+                && string.Equals(left.RowJson, right.RowJson, StringComparison.Ordinal)
+                && left.Reason == right.Reason
+                && string.Equals(left.CaptureDeviceId, right.CaptureDeviceId,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(left.CaptureOwnerUserId, right.CaptureOwnerUserId,
+                    StringComparison.OrdinalIgnoreCase)
+                && left.PairingGeneration == right.PairingGeneration
+                && left.PairingGenerationKnown == right.PairingGenerationKnown
+                && left.EnqueuedAtUtc == right.EnqueuedAtUtc
+                && left.Attempts == right.Attempts
+                && left.NextAttemptUtc == right.NextAttemptUtc;
+        }
+
+        private void AdoptSnapshot(List<ObservationLedgerEntry> entries, int captureRefused,
+            int quarantineTotal, int deliveredTotal, long actual, long reserved)
+        {
+            _entries = entries;
+            _captureRefused = captureRefused;
+            _quarantineTotal = quarantineTotal;
+            _deliveredTotal = deliveredTotal;
+            _actualBytes = actual;
+            _reservedBytes = reserved;
+        }
+
         private ObservationLedgerCaptureResult Refuse(ObservationLedgerCandidate candidate,
             string reasonCode, string diagnostic)
         {
@@ -712,16 +926,32 @@ namespace ThreeSM.EnduranceConnector
                 }
 
                 string writeError;
-                if (actual <= reserved && reserved <= EffectiveMaxBytes
-                    && TryWriteSnapshot(json, out writeError))
+                if (actual > reserved || reserved > EffectiveMaxBytes)
                 {
-                    _actualBytes = actual;
-                    _reservedBytes = reserved;
-                    persisted = true;
+                    if (_captureRefused > 0) _captureRefused--;
                 }
                 else
                 {
-                    if (_captureRefused > 0) _captureRefused--;
+                    var outcome = TryWriteSnapshot(json, out writeError);
+                    if (outcome == SwitchOutcome.Committed)
+                    {
+                        _actualBytes = actual;
+                        _reservedBytes = reserved;
+                        persisted = true;
+                    }
+                    else if (outcome == SwitchOutcome.Uncertain)
+                    {
+                        string reconcile;
+                        if (ReconcileFullSnapshot(_entries, _captureRefused, _quarantineTotal,
+                                _deliveredTotal, out reconcile))
+                        {
+                            persisted = true;
+                        }
+                    }
+                    else
+                    {
+                        if (_captureRefused > 0) _captureRefused--;
+                    }
                 }
             }
             var status = reasonCode == ObservationLedgerReasons.CaptureBindingChanged
@@ -813,6 +1043,7 @@ namespace ThreeSM.EnduranceConnector
             try
             {
                 _faults.BeforePreserve();
+                RecoverInterruptedPreserve();
                 if (SafeExists(_preservePath)) return;
                 _files.Preserve(_path, _preservePath);
             }
@@ -822,14 +1053,30 @@ namespace ThreeSM.EnduranceConnector
             }
         }
 
+        /// <summary>
+        /// A staged copy is never authoritative, whether or not a complete final
+        /// preserve already exists. The source target is still intact at this
+        /// point, so recovery restarts the whole-file copy deterministically.
+        /// </summary>
+        private void RecoverInterruptedPreserve()
+        {
+            if (!SafeExists(_preserveTempPath)) return;
+            try { _files.Delete(_preserveTempPath); }
+            catch (Exception) { /* Preserve truncates staging and only publishes atomically. */ }
+        }
+
         private bool Restore(byte[] bytes, string reason)
         {
             string writeError;
-            if (!TryWriteBytes(bytes, out writeError))
+            var outcome = TryWriteBytes(bytes, out writeError);
+            if (outcome == SwitchOutcome.FailedBeforeSwitch)
             {
                 _persistenceError = reason + "_failed:" + writeError;
                 return false;
             }
+            // Committed or uncertain: the re-read below is the authority. An
+            // uncertain switch that did publish the valid backup is accepted
+            // instead of being reported as a failed restore.
             // Re-read the just-restored target through the normal validator.
             List<ObservationLedgerEntry> entries;
             int captureRefused;
@@ -854,27 +1101,29 @@ namespace ThreeSM.EnduranceConnector
             return true;
         }
 
-        private bool TryWriteSnapshot(string json, out string error)
+        private SwitchOutcome TryWriteSnapshot(string json, out string error)
         {
             return TryWriteBytes(StrictUtf8.GetBytes(json), out error);
         }
 
-        private bool TryWriteBytes(byte[] bytes, out string error)
+        private SwitchOutcome TryWriteBytes(byte[] bytes, out string error)
         {
             error = null;
+            var switched = false;
             try
             {
                 _files.WriteTemporary(_tempPath, bytes);
                 _faults.BeforeSwitch();
+                switched = true;
                 if (SafeExists(_path)) _files.Replace(_tempPath, _path, _backupPath);
                 else _files.Move(_tempPath, _path);
                 _faults.AfterSwitch();
-                return true;
+                return SwitchOutcome.Committed;
             }
             catch (Exception exception)
             {
                 error = exception.GetType().Name + ":" + exception.Message;
-                return false;
+                return switched ? SwitchOutcome.Uncertain : SwitchOutcome.FailedBeforeSwitch;
             }
         }
 
