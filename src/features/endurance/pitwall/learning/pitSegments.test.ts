@@ -166,9 +166,11 @@ describe("pit segment semantics (synthetic trusted facts, not historical coverag
   });
 });
 
+const SERVICE_BINDING = { sourceKind: "measurement_event", deviceId: "device", sourceUid: "00000000-0000-0000-0000-000000000001", recordRevision: 1, contentHash: "a".repeat(32), observedSessionId: "sdk", physicalCarId: "chassis", physicalSessionId: "race", layoutId: "layout", ownerUserId: "11111111-1111-1111-1111-111111111111" };
+
 describe("service semantics", () => {
   const interval = (component: string, start: string, end: string) => ({ component, startAt: t(start), endAt: t(end), performed: true });
-  const service = { intervals: [interval("fuel", "00:10", "00:30"), interval("tyres", "00:20", "00:40"), interval("fuel", "00:22", "00:25")], complete: true };
+  const service = { binding: { ...SERVICE_BINDING }, intervals: [interval("fuel", "00:10", "00:30"), interval("tyres", "00:20", "00:40"), interval("fuel", "00:22", "00:25")], complete: true };
   it("computes partial overlap and nesting as actual union, not max or sum", () => {
     const result = assessPitSegment({ ...fixture(), services: service })!;
     expect(result.serviceUnionSeconds).toBe(30);
@@ -340,12 +342,12 @@ describe("source capability and exact chronology regressions", () => {
     expect(derivePitSegments({ asOf: a.asOf, segments: [a, b] })?.[0].netDeltaSeconds).toBe(30);
   });
   it("service rules bind to the actual physical session and layout", () => {
-    const services = { intervals: [], complete: true, components: [{ component: "fuel", seconds: 20 }], componentsComplete: true,
+    const services = { binding: { ...SERVICE_BINDING }, intervals: [], complete: true, components: [{ component: "fuel", seconds: 20 }], componentsComplete: true,
       ruleset: { id: "rule", verified: true, mode: "parallel", physicalSessionId: "other", layoutId: "layout" } };
     expect(assessPitSegment({ ...fixture(), services })?.predictedServiceSeconds).toBeNull();
   });
   it("unknown measured component has only partial descriptive union", () => {
-    const services = { complete: true, intervals: [{ component: "unknown", performed: true, startAt: t("00:10"), endAt: t("00:30") }] };
+    const services = { binding: { ...SERVICE_BINDING }, complete: true, intervals: [{ component: "unknown", performed: true, startAt: t("00:10"), endAt: t("00:30") }] };
     const result = assessPitSegment({ ...fixture(), services })!;
     expect(result.serviceUnionSeconds).toBe(20); expect(result.serviceCoverage).toBe("partial");
     expect(result.serviceReasons).toContain("service_component_unknown");
@@ -363,5 +365,192 @@ describe("source capability and exact chronology regressions", () => {
     Object.assign(input.outcome.evidence.payload, { started_at: t("06:50.0000001"), ended_at: t("08:00.0000001") });
     expect(assessPitSegment(input)?.reasons).toContain("source_window_future");
     expect(assessPitSegment(input)?.netDeltaSeconds).toBeNull();
+  });
+});
+
+describe("retry idempotency and semantic revision identity", () => {
+  const derive = (segments: unknown[], asOf = fixture().asOf) => derivePitSegments({ asOf, segments })!;
+  it("treats a later outcome receipt of the same revision as a retry in either order", () => {
+    const a = fixture(), b = structuredClone(a);
+    b.outcome.evidence.source.sourceReceivedAt = t("04:00");
+    b.reference.evidence.source.sourceReceivedAt = t("03:30");
+    const x = derive([a, b]), y = derive([b, a]);
+    expect(x).toHaveLength(1); expect(x[0].netDeltaSeconds).toBe(30);
+    expect(x[0].reasons).not.toContain("revision_or_adapter_conflict");
+    expect(y).toEqual(x);
+  });
+  it("keeps aliased context evidence bound when the canonical retry is selected", () => {
+    const a = fixture(), b = structuredClone(a);
+    b.outcome.evidence.contextEvidence.source = b.outcome.evidence.source;
+    b.outcome.evidence.source.sourceReceivedAt = t("04:00");
+    expect(derive([b, a])[0].netDeltaSeconds).toBe(30);
+  });
+  it("quarantines adapter-fact disagreement at the same revision and hash, in every reason array", () => {
+    const a = fixture(), b = structuredClone(a);
+    b.outcome.endAt = t("01:20");
+    const x = derive([a, b]), y = derive([b, a]);
+    expect(x).toEqual(y);
+    expect(x[0].netDeltaSeconds).toBeNull();
+    expect(x[0].reasons).toContain("revision_or_adapter_conflict");
+    expect(x[0].predictorReasons).toContain("revision_or_adapter_conflict");
+    expect(x[0].serviceReasons).toContain("revision_or_adapter_conflict");
+    expect(x[0].grossPitLaneSeconds).toBe(50);
+  });
+  it("still quarantines a conflicting hash at the highest revision", () => {
+    const a = fixture(), b = structuredClone(a);
+    b.outcome.evidence.source.contentHash = "b".repeat(32);
+    expect(derive([a, b])[0].netDeltaSeconds).toBeNull();
+  });
+  it("ignores a retry that only becomes visible after asOf", () => {
+    const a = fixture(), b = structuredClone(a);
+    b.outcome.evidence.source.sourceReceivedAt = t("05:00.0000001");
+    b.reference.evidence.source.sourceReceivedAt = t("03:30");
+    const x = derive([a, b]);
+    expect(x).toHaveLength(1); expect(x[0].netDeltaSeconds).toBe(30);
+  });
+});
+
+describe("pairing retries, bounds and native ordering", () => {
+  const pair = (events: unknown[], asOf = t("05:00")) => pairPitTelemetryEvents({ asOf, events });
+  it("ignores a later visibility retry instead of breaking a valid pair", () => {
+    const entry = edge("pit_entry", t("00:10"), 1), exit = edge("pit_exit", t("01:00"), 2);
+    const retry = structuredClone(entry); retry.availableAt = t("04:00");
+    for (const events of [[retry, entry, exit], [exit, entry, retry]]) {
+      const r = pair(events)!;
+      expect(r).toHaveLength(1); expect(r[0].grossPitLaneSeconds).toBe(50);
+    }
+  });
+  it("filters a retry that is only visible after asOf", () => {
+    const entry = edge("pit_entry", t("00:10"), 1), exit = edge("pit_exit", t("01:00"), 2);
+    const retry = structuredClone(entry); retry.availableAt = t("05:00.0000001");
+    const r = pair([entry, exit, retry])!;
+    expect(r).toHaveLength(1); expect(r[0].grossPitLaneSeconds).toBe(50);
+  });
+  it("dedupes an exact unbound duplicate into one orphan and never pairs it", () => {
+    const a = edge("pit_entry", t("00:10"), 1); delete (a.row as Record<string, unknown>).event_id;
+    const b = edge("pit_exit", t("01:00"), 2); delete (b.row as Record<string, unknown>).event_id;
+    const one = pair([a, a])!;
+    expect(one).toHaveLength(1);
+    expect(one[0].entry).toEqual(a.row); expect(one[0].grossPitLaneSeconds).toBeNull();
+    expect(pair([a, b, a, b])).toHaveLength(2);
+    expect(pair([a, b])!.every(x => x.grossPitLaneSeconds === null)).toBe(true);
+  });
+  it("uses native sequence only when both edges have one", () => {
+    const at = t("00:10");
+    const e1 = edge("pit_entry", at, 1), x2 = edge("pit_exit", at, 2);
+    const zero = pair([e1, x2])!;
+    expect(zero).toHaveLength(1); expect(zero[0].grossPitLaneSeconds).toBe(0);
+    expect(zero[0].reasons).toContain("pitlane_zero");
+    const e2 = edge("pit_entry", at, 2), x1 = edge("pit_exit", at, 1);
+    const reversed = pair([e2, x1])!;
+    expect(reversed).toHaveLength(2);
+    expect(reversed.every(x => x.grossPitLaneSeconds === null)).toBe(true);
+    const noSeqEntry = structuredClone(e1), noSeqExit = structuredClone(x2);
+    delete (noSeqEntry.row as Record<string, unknown>).sequence; delete (noSeqExit.row as Record<string, unknown>).sequence;
+    expect(pair([noSeqExit, noSeqEntry])).toEqual(pair([noSeqEntry, noSeqExit]));
+    expect((pair([noSeqEntry, noSeqExit])![0].entry as Record<string, unknown>)?.sequence).toBeUndefined();
+  });
+});
+
+describe("service asOf and trusted adapter binding", () => {
+  const interval = (component: string, start: string, end: string, extra: Record<string, unknown> = {}) => ({ component, startAt: t(start), endAt: t(end), performed: true, ...extra });
+  const svc = (intervals: unknown[], extra: Record<string, unknown> = {}) => ({ binding: { ...SERVICE_BINDING }, intervals, complete: true, ...extra });
+  it("does not count an interval that ends after asOf and keeps observed work partial", () => {
+    const input = fixture(); input.asOf = t("00:30");
+    const r = assessPitSegment({ ...input, services: svc([interval("fuel", "00:10", "00:20"), interval("tyres", "00:25", "00:40")]) })!;
+    expect(r.serviceUnionSeconds).toBe(10);
+    expect(r.serviceCoverage).toBe("partial");
+    expect(r.serviceReasons).toContain("service_after_as_of");
+    expect(r.serviceLabelEligible).toBe(false);
+  });
+  it("never clips a future interval end into completed work", () => {
+    const input = fixture(); input.asOf = t("00:30");
+    const r = assessPitSegment({ ...input, services: svc([interval("tyres", "00:25", "00:40")]) })!;
+    expect(r.serviceUnionSeconds).toBeNull();
+    expect(r.serviceCoverage).toBe("unknown");
+    expect(r.serviceReasons).toContain("service_after_as_of");
+  });
+  it("keeps a completed past interval descriptive partial while the pit window is open", () => {
+    const input = fixture(); input.asOf = t("00:30");
+    const r = assessPitSegment({ ...input, services: svc([interval("fuel", "00:10", "00:20")]) })!;
+    expect(r.serviceUnionSeconds).toBe(10);
+    expect(r.serviceCoverage).toBe("partial");
+    expect(r.serviceReasons).toContain("service_pit_window_open");
+    expect(r.netDeltaSeconds).toBeNull();
+  });
+  it("keeps complete coverage for a genuinely closed stop and past intervals", () => {
+    const r = assessPitSegment({ ...fixture(), services: svc([interval("fuel", "00:10", "00:30")], {
+      components: [{ component: "fuel", seconds: 20 }], componentsComplete: true,
+      ruleset: { id: "rule", verified: true, mode: "parallel", physicalSessionId: "race", layoutId: "layout" } }) })!;
+    expect(r.serviceUnionSeconds).toBe(20);
+    expect(r.serviceCoverage).toBe("complete");
+    expect(r.serviceLabelEligible).toBe(true);
+    expect(r.serviceReasons).not.toContain("service_after_as_of");
+  });
+  it("compares the interval end to asOf at 100ns", () => {
+    const input = fixture(); input.asOf = t("00:30");
+    const atBoundary = assessPitSegment({ ...input, services: svc([interval("fuel", "00:10", "00:30")]) })!;
+    expect(atBoundary.serviceUnionSeconds).toBe(20);
+    expect(atBoundary.serviceReasons).not.toContain("service_after_as_of");
+    const after = assessPitSegment({ ...input, services: svc([interval("fuel", "00:10", "00:30.0000001")]) })!;
+    expect(after.serviceUnionSeconds).toBeNull();
+    expect(after.serviceReasons).toContain("service_after_as_of");
+  });
+  it.each(["sourceKind", "deviceId", "sourceUid", "recordRevision", "contentHash", "observedSessionId", "physicalCarId", "physicalSessionId", "layoutId", "ownerUserId"] as const)("rejects a foreign binding %s", key => {
+    const wrong = key === "sourceKind" ? "lap_summary" : key === "recordRevision" ? 2 : key === "sourceUid" || key === "ownerUserId" ? "22222222-2222-2222-2222-222222222222" : key === "contentHash" ? "b".repeat(32) : "other";
+    const r = assessPitSegment({ ...fixture(), services: svc([interval("fuel", "00:10", "00:20")], { binding: { ...SERVICE_BINDING, [key]: wrong } }) })!;
+    expect(r.serviceUnionSeconds).toBeNull(); expect(r.serviceCoverage).toBe("unknown");
+    expect(r.serviceReasons).toContain("service_binding_mismatch");
+  });
+  it.each([undefined, {}, { sourceKind: "measurement_event" }, { ...SERVICE_BINDING, recordRevision: "1" }])("requires an explicit valid binding, not an implicit stop %j", binding => {
+    const services = { intervals: [interval("fuel", "00:10", "00:20")], complete: true };
+    const r = assessPitSegment({ ...fixture(), services: binding === undefined ? services : { ...services, binding } })!;
+    expect(r.serviceUnionSeconds).toBeNull(); expect(r.serviceCoverage).toBe("unknown");
+    expect(r.serviceReasons).toContain("service_binding_missing");
+  });
+  it("never counts an interval asserting another SDK session or layout", () => {
+    const r = assessPitSegment({ ...fixture(), services: svc([interval("fuel", "00:10", "00:20", { sessionId: "other-session", layoutId: "other-layout" })]) })!;
+    expect(r.serviceUnionSeconds).toBeNull(); expect(r.serviceCoverage).toBe("unknown");
+    expect(r.serviceReasons).toContain("service_interval_binding_mismatch");
+    const block = assessPitSegment({ ...fixture(), services: svc([interval("fuel", "00:10", "00:20")], { physicalSessionId: "other" }) })!;
+    expect(block.serviceUnionSeconds).toBeNull(); expect(block.serviceReasons).toContain("service_binding_mismatch");
+    const mixed = assessPitSegment({ ...fixture(), services: svc([
+      interval("fuel", "00:10", "00:20", { observedSessionId: "other-session" }),
+      interval("tyres", "00:25", "00:35"),
+    ]) })!;
+    expect(mixed.serviceUnionSeconds).toBe(10); expect(mixed.serviceCoverage).toBe("partial");
+  });
+  it("documents a real empty union 0 separately from a non-null prediction", () => {
+    const r = assessPitSegment({ ...fixture(), services: svc([], { components: [{ component: "fuel", seconds: 20 }], componentsComplete: true,
+      ruleset: { id: "rule", verified: true, mode: "parallel", physicalSessionId: "race", layoutId: "layout" } }) })!;
+    expect(r.serviceUnionSeconds).toBe(0); expect(r.serviceCoverage).toBe("complete");
+    expect(r.predictedServiceSeconds).toBe(20); expect(r.serviceLabelEligible).toBe(true);
+  });
+});
+
+describe("unknown observation time is not future", () => {
+  it("reports a null observedAt as unknown on both outcome and reference", () => {
+    const input = fixture();
+    input.outcome.evidence.source.observedAt = null;
+    input.reference.evidence.source.observedAt = null;
+    const r = assessPitSegment(input)!;
+    expect(r.reasons).toContain("source_observation_unknown");
+    expect(r.reasons).not.toContain("source_observation_after_as_of");
+    expect(r.reasons).toContain("reference_source_observation_unknown");
+    expect(r.netDeltaSeconds).toBeNull();
+  });
+  it("still reports a genuinely later observedAt as after asOf", () => {
+    const input = fixture(); input.outcome.evidence.source.observedAt = t("06:00");
+    const r = assessPitSegment(input)!;
+    expect(r.reasons).toContain("source_observation_after_as_of");
+    expect(r.reasons).not.toContain("source_observation_unknown");
+  });
+});
+
+describe("legacy rounding tolerance is exact and inclusive", () => {
+  it.each([[49.999, false], [49.998, true], [50, false], [50.001, false], [50.002, true]] as const)("measured %s disagrees=%s", (measured, disagrees) => {
+    const r = describeLegacyPitStop({ pit_entry_at: t("00:10"), pit_exit_at: t("01:00"), pit_lane_seconds: measured })!;
+    expect(r.grossPitLaneSeconds).toBe(50);
+    expect(r.reasons.includes("legacy_duration_disagrees")).toBe(disagrees);
   });
 });

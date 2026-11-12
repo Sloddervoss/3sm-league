@@ -113,7 +113,10 @@ function span(value: unknown, asOf: unknown): QualifiedSpan {
   if (!source || !payload) r.push("source_evidence_missing");
   else {
     if (!before(source.sourceReceivedAt, asOf)) r.push("source_after_as_of");
-    if (!before(source.observedAt, asOf)) r.push("source_observation_after_as_of");
+    // A null observation time is explicitly legal T09 input and is UNKNOWN,
+    // not evidence that the observation happened after asOf.
+    if (source.observedAt === null) r.push("source_observation_unknown");
+    else if (!before(source.observedAt, asOf)) r.push("source_observation_after_as_of");
     if (!id(payload.observed_session_id) || !id(payload.segment_id)) r.push("source_continuity_unknown");
     r.push(...(binding?.reasons ?? []));
     // T10's pit_loss target intentionally has no stop label. Reuse its source
@@ -157,14 +160,77 @@ function anchor(value: unknown): PitSegmentAnchors | null {
     orientation: "forward", lapWrap: a.lapWrap as 0 | 1, start: a.start, end: a.end };
 }
 
-function services(value: unknown, start: unknown, end: unknown, clean: boolean, session: unknown, layout: unknown) {
+interface StopIdentity {
+  sourceKind: string | null; deviceId: string | null; sourceUid: string | null;
+  recordRevision: number | null; contentHash: string | null;
+  observedSessionId: string | null; physicalCarId: string | null;
+  physicalSessionId: string | null; layoutId: string | null; ownerUserId: string | null;
+}
+function stopIdentity(span: QualifiedSpan): StopIdentity {
+  const context = span.context;
+  return {
+    sourceKind: span.source?.sourceKind ?? null, deviceId: span.source?.deviceId ?? null,
+    sourceUid: span.source?.sourceUid ?? null, recordRevision: span.source?.recordRevision ?? null,
+    contentHash: span.source?.contentHash ?? null,
+    observedSessionId: context?.source.observedSessionId ?? null,
+    physicalCarId: id(span.row.physicalCarId) ? span.row.physicalCarId : null,
+    physicalSessionId: id(span.row.physicalSessionId) ? span.row.physicalSessionId : null,
+    layoutId: context?.layout.value ?? null, ownerUserId: context?.identity.owner.value ?? null,
+  };
+}
+const BINDING_FIELDS = ["sourceKind", "deviceId", "sourceUid", "recordRevision", "contentHash", "observedSessionId", "physicalCarId", "physicalSessionId", "layoutId", "ownerUserId"] as const;
+/** Local trusted-adapter evidence, never a wire/DB field. */
+function bindingStatus(value: unknown, at: StopIdentity): "ok" | "service_binding_missing" | "service_binding_mismatch" {
+  const binding = object(value);
+  if (!binding) return "service_binding_missing";
+  let missing = false, mismatch = false;
+  for (const key of BINDING_FIELDS) {
+    const expected = at[key];
+    // Context-derived dimensions may themselves be unknown; never invent them.
+    if (expected === null) { if (key === "sourceKind" || key === "deviceId" || key === "sourceUid" || key === "recordRevision" || key === "contentHash" || key === "physicalCarId" || key === "physicalSessionId") missing = true; continue; }
+    const actual = binding[key];
+    const valid = key === "recordRevision" ? Number.isSafeInteger(actual)
+      : key === "sourceKind" ? actual === "measurement_event" || actual === "lap_summary"
+      : typeof actual === "string" && actual.length > 0;
+    if (!valid) missing = true;
+    else if (actual !== expected) mismatch = true;
+  }
+  return mismatch ? "service_binding_mismatch" : missing ? "service_binding_missing" : "ok";
+}
+const INTERVAL_IDENTITY: Readonly<Record<string, keyof StopIdentity>> = {
+  sourceKind: "sourceKind", deviceId: "deviceId", sourceUid: "sourceUid", recordRevision: "recordRevision",
+  contentHash: "contentHash", observedSessionId: "observedSessionId", sessionId: "observedSessionId",
+  physicalCarId: "physicalCarId", physicalSessionId: "physicalSessionId", layoutId: "layoutId", ownerUserId: "ownerUserId",
+};
+/** Per-interval identity claims must agree with the bound outcome; silence inherits the block binding. */
+function intervalBinding(value: Row, at: StopIdentity): boolean {
+  for (const [key, field] of Object.entries(INTERVAL_IDENTITY)) {
+    if (!(key in value)) continue;
+    const expected = at[field], actual = value[key];
+    if (expected === null) return false;
+    if (field === "recordRevision" ? !Number.isSafeInteger(actual) : typeof actual !== "string" || actual.length === 0) return false;
+    if (actual !== expected) return false;
+  }
+  return !("binding" in value) || bindingStatus(value.binding, at) === "ok";
+}
+
+function services(value: unknown, start: unknown, end: unknown, asOf: unknown, clean: boolean, span: QualifiedSpan) {
   const row = object(value) ?? {};
   const r: string[] = [];
-  const intervals = row.intervals;
   if (!clean) r.push("service_source_unqualified");
+  const identity = stopIdentity(span);
+  const binding = bindingStatus(row.binding, identity);
+  // Stray block-level identity claims are evidence too, not ignorable extras.
+  const bound = binding === "ok" && intervalBinding(row, identity);
+  if (binding !== "ok") r.push(binding);
+  else if (!bound) r.push("service_binding_mismatch");
+  const intervals = row.intervals;
+  const closed = before(end, asOf);
   let union: number | null = null;
   let complete = false;
-  if (Array.isArray(intervals) && intervals.length <= 32) {
+  let future = false;
+  if (!bound) r.push("service_intervals_unbound");
+  else if (Array.isArray(intervals) && intervals.length <= 32) {
     const valid: [bigint, bigint][] = [];
     let invalid = false;
     for (const item of intervals) {
@@ -172,6 +238,9 @@ function services(value: unknown, start: unknown, end: unknown, clean: boolean, 
       const a = ticks(i?.startAt), b = ticks(i?.endAt);
       if (!i || i.performed !== true || !id(i.component) || a === null || b === null || b < a ||
           !before(start, i.startAt) || !before(i.endAt, end)) { invalid = true; continue; }
+      if (!intervalBinding(i, identity)) { invalid = true; r.push("service_interval_binding_mismatch"); continue; }
+      // Visibility, not clipping: an asserted end after asOf is not measured work yet.
+      if (!before(i.endAt, asOf)) { future = true; r.push("service_after_as_of"); continue; }
       valid.push([a, b]);
       if (["repair", "tow"].includes(i.component)) r.push("nonstandard_service");
       if (!["fuel", "tyres", "repair", "tow", "stationary"].includes(i.component)) {
@@ -179,7 +248,7 @@ function services(value: unknown, start: unknown, end: unknown, clean: boolean, 
       }
     }
     if (invalid) r.push("service_interval_invalid_or_unperformed");
-    if (valid.length || (intervals.length === 0 && row.complete === true)) {
+    if (valid.length || (intervals.length === 0 && row.complete === true && closed)) {
       valid.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
       let total = 0n, right: bigint | null = null;
       for (const [a, b] of valid) {
@@ -188,15 +257,17 @@ function services(value: unknown, start: unknown, end: unknown, clean: boolean, 
         if (right === null || b > right) right = b;
       }
       union = Number(total) / 1e7;
-      complete = row.complete === true && !invalid;
+      // Completeness is a claim about the whole closed stop, not just the intervals.
+      complete = row.complete === true && !invalid && !future && closed;
     }
   } else r.push("service_intervals_missing_or_invalid");
+  if (!closed) r.push("service_pit_window_open");
   if (!complete) r.push("service_coverage_incomplete");
   const rules = object(row.ruleset);
   let predicted: number | null = null;
   // Prediction composition is deliberately separate from measured interval union.
   const components = Array.isArray(row.components) && row.components.length <= 16 ? row.components.map(object) : [];
-  if (rules?.verified === true && id(rules.id) && id(session) && id(layout) && rules.physicalSessionId === session && rules.layoutId === layout &&
+  if (rules?.verified === true && id(rules.id) && id(span.row.physicalSessionId) && id(identity.layoutId) && rules.physicalSessionId === span.row.physicalSessionId && rules.layoutId === identity.layoutId &&
       ["parallel", "sequential"].includes(rules.mode as string) && components.length > 0 &&
       components.every(x => x && ["fuel", "tyres"].includes(x.component as string) && typeof x.seconds === "number" && Number.isFinite(x.seconds) && x.seconds >= 0) &&
       new Set(components.map(x => x!.component)).size === components.length && row.componentsComplete === true) {
@@ -243,10 +314,10 @@ export function assessPitSegment(input: unknown): PitSegmentAssessment | null {
   if (typeof row.maxReferenceAgeSeconds !== "number" || !Number.isSafeInteger(row.maxReferenceAgeSeconds) || row.maxReferenceAgeSeconds < 0 || row.maxReferenceAgeSeconds > 31536000) p.push("reference_age_policy_invalid");
   else if (referenceEnd !== null && cutoff - referenceEnd > BigInt(row.maxReferenceAgeSeconds) * 10000000n) p.push("reference_stale");
   if (net === null) p.push("reference_unqualified");
-  const service = services(row.services, row.pitEntryAt, row.pitExitAt,
+  const service = services(row.services, row.pitEntryAt, row.pitExitAt, row.asOf,
     outcome.reasons.length === 0 && outcome.context !== null && compareCanonicalContexts(outcome.context, outcome.context, "pit_loss").contextMatch && gross !== null && gross > 0 &&
       before(outcome.row.startAt, row.pitEntryAt) && before(row.pitExitAt, outcome.row.endAt),
-    outcome.row.physicalSessionId, outcome.context?.layout.value);
+    outcome);
   if (service.reasons.includes("nonstandard_service")) r.push("nonstandard_service_not_pit_loss_label");
   if (net !== null && net < 0) r.push("negative_delta_not_pit_loss_label");
   const instant = (v: unknown) => isInstant(v) ? v : null;
@@ -259,6 +330,27 @@ export function assessPitSegment(input: unknown): PitSegmentAssessment | null {
     serviceLabelEligible: service.eligible, predictedServiceSeconds: service.predicted,
     reasons: reasons(r), predictorReasons: reasons(p), serviceReasons: service.reasons,
     provenance: [outcome.source, reference.source].filter((x): x is SourceRecordEnvelope => x !== null) };
+}
+
+const DELIVERY_SOURCES: readonly (readonly string[])[] = [
+  ["outcome", "evidence", "source"],
+  ["outcome", "evidence", "contextEvidence", "source"],
+  ["reference", "evidence", "source"],
+  ["reference", "evidence", "contextEvidence", "source"],
+];
+/**
+ * Adapter facts that decide a conflict, excluding delivery metadata. A retry of
+ * the same P1 revision delivers identical facts at another receipt time; that is
+ * visibility, not a second stop or a semantic disagreement.
+ */
+function segmentFacts(row: Row): string {
+  const copy = JSON.parse(JSON.stringify(row));
+  for (const path of DELIVERY_SOURCES) {
+    let node: unknown = copy;
+    for (const key of path) node = object(node)?.[key];
+    if (object(node)) delete (node as Row).sourceReceivedAt;
+  }
+  return signature(copy);
 }
 
 /** Filter receipt first, then dedupe/correct same outcome UID; never create extra stops. */
@@ -275,26 +367,39 @@ export function derivePitSegments(input: unknown): PitSegmentAssessment[] | null
   }
   return [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).flatMap(([, rows]) => {
     const source = (r: Row) => parseSourceRecordEnvelope(object(object(r.outcome)?.evidence)?.source)!;
-    const revision = Math.max(...rows.map(r => source(r).recordRevision));
-    let latest = rows.filter(r => source(r).recordRevision === revision);
     const refSource = (r: Row) => parseSourceRecordEnvelope(object(object(r.reference)?.evidence)?.source);
-    const available = latest.filter(r => !refSource(r) || before(refSource(r)!.sourceReceivedAt, batch.asOf));
-    if (available.length) latest = available;
-    const referenceKeys = new Set(latest.map(r => {
+    const revision = Math.max(...rows.map(r => source(r).recordRevision));
+    let pool = rows.filter(r => source(r).recordRevision === revision);
+    // Availability is filtered before identity selection, at full 100ns precision.
+    const referenceAvailable = pool.filter(r => !refSource(r) || before(refSource(r)!.sourceReceivedAt, batch.asOf));
+    if (referenceAvailable.length) pool = referenceAvailable;
+    const referenceKeys = new Set(pool.map(r => {
       const s = refSource(r); return s ? JSON.stringify([s.sourceKind, s.deviceId, s.sourceUid]) : null;
     }));
-    if (referenceKeys.size === 1 && refSource(latest[0])) {
-      const referenceRevision = Math.max(...latest.map(r => refSource(r)!.recordRevision));
-      latest = latest.filter(r => refSource(r)!.recordRevision === referenceRevision);
+    if (referenceKeys.size === 1 && refSource(pool[0])) {
+      const referenceRevision = Math.max(...pool.map(r => refSource(r)!.recordRevision));
+      pool = pool.filter(r => refSource(r)!.recordRevision === referenceRevision);
     }
-    const variants = [...new Set(latest.map(signature))].sort();
-    const result = assessPitSegment({ ...JSON.parse(variants[0]), asOf: batch.asOf });
+    const variants = new Map<string, Row[]>();
+    for (const row of pool) {
+      const facts = segmentFacts(row);
+      variants.set(facts, [...(variants.get(facts) ?? []), row]);
+    }
+    const facts = [...variants.keys()].sort();
+    // Canonical representative: fixed facts first, then the earliest receipt.
+    const chosen = variants.get(facts[0])!.sort((a, b) => {
+      const x = ticks(source(a).sourceReceivedAt)!, y = ticks(source(b).sourceReceivedAt)!;
+      return x < y ? -1 : x > y ? 1 : 0;
+    })[0];
+    const result = assessPitSegment({ ...chosen, asOf: batch.asOf });
     if (!result) return [];
-    // Adapter facts that disagree for the SAME revision are conflicts too.
-    if (variants.length > 1) {
+    // A different hash or adapter fact for the SAME highest revision is a conflict.
+    if (facts.length > 1) {
       result.netDeltaSeconds = null; result.pitLossLabelEligible = false;
       result.predictorReferenceEligible = false; result.serviceLabelEligible = false;
-      result.reasons = reasons([...result.reasons, "revision_or_adapter_conflict"]);
+      for (const key of ["reasons", "predictorReasons", "serviceReasons"] as const) {
+        result[key] = reasons([...result[key], "revision_or_adapter_conflict"]);
+      }
     }
     return [result];
   });
@@ -310,16 +415,24 @@ export interface LegacyPitStopDiagnostic {
   reasons: string[];
 }
 
+/** Versioned inclusive tolerance: stored legacy seconds are rounded to 1 ms. */
+const LEGACY_DURATION_TOLERANCE_TICKS = 10000n;
+
 /** Real legacy columns. No manufactured P1 sourceKind/revision/hash/context. */
 export function describeLegacyPitStop(input: unknown): LegacyPitStopDiagnostic | null {
   const row = object(input);
   if (!row) return null;
   const measured = typeof row.pit_lane_seconds === "number" && Number.isFinite(row.pit_lane_seconds) && row.pit_lane_seconds >= 0 ? row.pit_lane_seconds : null;
   const elapsed = duration(row.pit_entry_at, row.pit_exit_at);
+  const elapsedTicks = elapsed === null ? null : ticks(row.pit_exit_at)! - ticks(row.pit_entry_at)!;
+  const measuredTicks = measured === null ? null : BigInt(Math.round(measured * 1e7));
+  const disagreement = elapsedTicks !== null && measuredTicks !== null
+    ? (elapsedTicks > measuredTicks ? elapsedTicks - measuredTicks : measuredTicks - elapsedTicks) > LEGACY_DURATION_TOLERANCE_TICKS
+    : false;
   return { table: "endurance_pit_stops", identifiers: { id: row.id ?? null, event_id: row.event_id ?? null, team_id: row.team_id ?? null, race_run_id: row.race_run_id ?? null, device_id: row.device_id ?? null, session_id: row.session_id ?? null },
     pitEntryAt: isInstant(row.pit_entry_at) ? row.pit_entry_at : null, pitExitAt: isInstant(row.pit_exit_at) ? row.pit_exit_at : null,
     grossPitLaneSeconds: elapsed ?? measured, netDeltaSeconds: null,
-    reasons: ["legacy_revision_hash_anchors_unknown", ...(elapsed === null ? ["legacy_entry_exit_incomplete_or_invalid"] : []), ...(elapsed !== null && measured !== null && Math.abs(elapsed - measured) > 0.001 ? ["legacy_duration_disagrees"] : [])] };
+    reasons: ["legacy_revision_hash_anchors_unknown", ...(elapsed === null ? ["legacy_entry_exit_incomplete_or_invalid"] : []), ...(disagreement ? ["legacy_duration_disagrees"] : [])] };
 }
 
 export interface PairedPitEdges {
@@ -333,7 +446,10 @@ export interface PairedPitEdges {
 export function pairPitTelemetryEvents(input: unknown): PairedPitEdges[] | null {
   const batch = object(input);
   if (!batch || !isInstant(batch.asOf) || !Array.isArray(batch.events) || batch.events.length > PIT_SEGMENT_BATCH_LIMIT) return null;
-  const groups = new Map<string, Row[]>();
+  interface Held { row: Row; continuity: unknown; semantic: string; at: bigint; available: bigint }
+  // Group by raw partition for bound events; unbound rows may only be grouped by
+  // their own exact semantic content, never by arrival index.
+  const groups = new Map<string, Map<string, Held>>();
   for (const value of batch.events) {
     const item = object(value), row = object(item?.row);
     if (!item || !isInstant(item.availableAt)) return null;
@@ -343,8 +459,15 @@ export function pairPitTelemetryEvents(input: unknown): PairedPitEdges[] | null 
     if (!isInstant(row.captured_at)) return null;
     if (!before(row.captured_at, batch.asOf)) continue;
     const keys = [row.event_id, row.team_id, row.race_run_id, row.device_id, row.session_id];
-    const key = keys.every(id) ? JSON.stringify(["bound", keys]) : JSON.stringify(["unbound", groups.size]);
-    groups.set(key, [...(groups.get(key) ?? []), item]);
+    const bound = keys.every(id);
+    // Visibility (availableAt) is deliberately not part of semantic identity.
+    const semantic = signature([row, item.continuity ?? null]);
+    const key = bound ? JSON.stringify(["bound", keys]) : JSON.stringify(["unbound", semantic]);
+    const held: Held = { row, continuity: item.continuity ?? null, semantic, at: ticks(row.captured_at)!, available: ticks(item.availableAt)! };
+    const group = groups.get(key) ?? new Map<string, Held>();
+    const prior = group.get(semantic);
+    if (!prior || held.available < prior.available) group.set(semantic, held);
+    groups.set(key, group);
   }
   const result: PairedPitEdges[] = [];
   const orphan = (row: Row, reason: string) => {
@@ -353,26 +476,32 @@ export function pairPitTelemetryEvents(input: unknown): PairedPitEdges[] | null 
       grossPitLaneSeconds: null, reasons: [reason],
     });
   };
-  for (const [, items] of [...groups].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
-    const sorted = items.sort((a, b) => {
-      const x = ticks(object(a.row)?.captured_at)!, y = ticks(object(b.row)?.captured_at)!;
-      const sa = signature(a), sb = signature(b);
-      return x < y ? -1 : x > y ? 1 : sa < sb ? -1 : sa > sb ? 1 : 0;
-    });
-    const seen = new Map<string, string>();
+  const native = (row: Row) => id(row.event_key) && Number.isSafeInteger(row.sequence);
+  const identity = (row: Row) => native(row) ? JSON.stringify(["native", row.event_key, row.sequence]) : JSON.stringify(["row", signature(row)]);
+  for (const [, group] of [...groups].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+    const items = [...group.values()];
     const conflicts = new Set<string>();
-    const identity = (row: Row) => JSON.stringify([row.event_key, row.sequence]);
-    for (const item of sorted) {
-      const row = object(item.row)!;
-      const key = identity(row), content = signature(item);
-      if (seen.has(key) && seen.get(key) !== content) conflicts.add(key);
-      seen.set(key, content);
+    const seen = new Map<string, string>();
+    for (const item of items) {
+      const key = identity(item.row);
+      if (seen.has(key) && seen.get(key) !== item.semantic) conflicts.add(key);
+      seen.set(key, item.semantic);
     }
+    items.sort((a, b) => {
+      if (a.at !== b.at) return a.at < b.at ? -1 : 1;
+      // SQL orders captured_at, sequence. Use sequence only when both edges have
+      // one; never fabricate a zero for unknown sequence.
+      if (native(a.row) && native(b.row)) {
+        const delta = (a.row.sequence as number) - (b.row.sequence as number);
+        if (delta !== 0) return delta < 0 ? -1 : 1;
+      }
+      return a.semantic < b.semantic ? -1 : a.semantic > b.semantic ? 1 : 0;
+    });
     let open: { row: Row; link: string } | null = null;
     let lastLap: number | null = null;
     const emitted = new Set<string>();
-    for (const item of sorted) {
-      const row = object(item.row)!;
+    for (const item of items) {
+      const row = item.row;
       const key = identity(row);
       if (emitted.has(key)) continue;
       emitted.add(key);
