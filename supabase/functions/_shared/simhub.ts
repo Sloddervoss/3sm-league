@@ -12,12 +12,22 @@ import {
   parseLapSummariesReport,
   parseMeasurementEventsReport,
   parseSchemaRevision,
+  type LapObservationCaptureMode,
   type LapSummary,
   type MeasurementEvent,
   type SeriesReport,
   type SimHubCapabilities,
   type SimHubEnvironment,
 } from "./simhubExtensions.ts";
+
+/**
+ * T13-S1. Alleen de parser-schakelaar; verder verandert de V3-envelope niet.
+ * De Edge geeft deze door vanuit zijn eigen env-vlag + DB-probe, nooit vanuit
+ * de payload van de client.
+ */
+export type TelemetryV3ParseOptions = {
+  observationCapture?: LapObservationCaptureMode;
+};
 
 export type SimHubFlag = "green" | "yellow" | "red" | "white" | "checkered" | "unknown";
 
@@ -480,7 +490,10 @@ const rootKeys = (
   return accepted.accepted;
 };
 
-export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnvelope => {
+export const parseTelemetryV3Envelope = (
+  input: unknown,
+  options: TelemetryV3ParseOptions = {},
+): NormalizedTelemetryEnvelope => {
   const root = asRecord(input, "payload");
   // `source` is optioneel en additief: de connector meldt hier zijn eigen versie
   // (connectorVersion) naast de SimHub-versie (simHubVersion). Zonder deze sleutel
@@ -532,7 +545,9 @@ export const parseTelemetryV3Envelope = (input: unknown): NormalizedTelemetryEnv
   // levert een blockError op en verder geen rijen.
   const measurementReport = {
     events: parseMeasurementEventsReport(root.measurementEvents),
-    laps: parseLapSummariesReport(root.lapSummaries),
+    laps: parseLapSummariesReport(root.lapSummaries, {
+      observationCapture: options.observationCapture,
+    }),
   };
   if (measurementReport.events.blockError) {
     console.warn("[ingest] measurementEvents-reeks afgekeurd:", measurementReport.events.blockError);

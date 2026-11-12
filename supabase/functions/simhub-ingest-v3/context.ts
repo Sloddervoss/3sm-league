@@ -1,5 +1,8 @@
 import { parseTelemetryV3Envelope, normalizeTelemetryEnvelope } from "../_shared/simhub.ts";
-import type { NormalizedTelemetryEnvelope } from "../_shared/simhub.ts";
+import type {
+  NormalizedTelemetryEnvelope,
+  TelemetryV3ParseOptions,
+} from "../_shared/simhub.ts";
 
 export type ResolvedTelemetryContext = {
   deviceId: string | null;
@@ -55,6 +58,7 @@ export const resolveTelemetryContext = async (
     rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
   },
   sha256: (s: string) => Promise<string>,
+  parseOptions: TelemetryV3ParseOptions = {},
 ): Promise<ResolvedTelemetryContext> => {
   // 1. Hash token and look up device
   const tokenHash = await sha256(token);
@@ -83,7 +87,7 @@ export const resolveTelemetryContext = async (
     const root = rawBody as Record<string, unknown>;
     const version = root?.protocolVersion;
     if (version === 3) {
-      normalized = parseTelemetryV3Envelope(rawBody);
+      normalized = parseTelemetryV3Envelope(rawBody, parseOptions);
     } else if (version === 1 || version === 2) {
       normalized = normalizeTelemetryEnvelope(rawBody);
     } else {
