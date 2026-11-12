@@ -1,17 +1,22 @@
 # Pitwall learning — canonieke context en recordkwaliteit v1 (P2/T09–T10)
 
-**Status:** lokale, pure bouw op `feat/pitwall-learning-p2-context-quality`; niet
+**Status:** lokale, pure bouw op `fix/pitwall-learning-p2-quality-binding`; niet
 gepusht, niet gemerged, niet gedeployed en niet op productie geactiveerd.
 **PRODUCTIEWIJZIGING: NEE.** Geen SQL, Edge Function, UI, connector, package of
 bestaand contract gewijzigd.
+
+Deze revisie herstelt twee bewezen fail-open paden uit de eerste P2-bouw:
+een aangeleverde `observedContext` werd niet aan de invoerbron gebonden, en
+`invalid_reasons`/root-gatmetadata werden wel gelezen maar niet in de
+targetkwalificatie gebruikt.
 
 Bron:
 - `src/features/endurance/pitwall/learning/context.ts` + `context.test.ts` (T09)
 - `src/features/endurance/pitwall/learning/quality.ts` + `quality.test.ts` (T10)
 
-Codecommits:
-- `b02771bbdd3d1ef3678fed30991c0fc9887414ea` — canonieke context
-- `d71b0ac6d78e60a8a5c22f80a05189bec2f392b2` — targetgerichte recordkwaliteit
+De oorspronkelijke P2-commits (`b02771bb`, `d71b0ac6`) staan op de oude
+contextworktree; deze branch bouwt daarop voort en wijzigt alleen de vijf
+P2-bestanden (inclusief dit document).
 
 Beide modules zijn deterministisch en hebben geen React, I/O, netwerk, database,
 `Date.now`, modelselectie, training of promotie. De bestaande P1-contracten en de
@@ -23,6 +28,15 @@ klassieke/endurance/poller/baselinepaden zijn niet aangepast.
 parseSourceRecordEnvelope(input: unknown): SourceRecordEnvelope | null
 
 buildCanonicalContext(input: unknown): CanonicalContext | null
+
+bindObservedContextToObservation(
+  observed: CanonicalContext | null,
+  observation: {
+    source: SourceRecordEnvelope;
+    observedSessionId: string | null;
+    segmentId: string | null;
+  },
+): { context: CanonicalContext | null; bound: boolean; reasons: string[] }
 
 compareCanonicalContexts(
   observed: CanonicalContext | null,
@@ -52,7 +66,8 @@ compareCanonicalContexts(
       observedSessionId: string;
       sourceUid: string;
       recordRevision: number;
-      observedAt: string | null;
+      contentHash: string;
+      observedAt: string;             // null bewijst geen anker
     };
     ownerUserId?: string | null;
     driverId?: string | null;
@@ -104,10 +119,13 @@ observatieclaim blijft owner `unknown` met `owner_at_receipt_only` of
   verschillende domeinen. Ongelijkheid is geen late-delivery- of
   contextfout-bewijs.
 - Een verified anchor moet exact binden op `deviceId`, `observedSessionId`,
-  `sourceUid`, `recordRevision` en `observedAt`. Elke afwijking levert een aparte
-  stabiele reden (`anchor_device_mismatch`, `anchor_session_mismatch`,
-  `anchor_source_uid_mismatch`, `anchor_revision_mismatch`,
+  `sourceUid`, `recordRevision`, `contentHash` en `observedAt`. Elke afwijking
+  levert een aparte stabiele reden (`anchor_device_mismatch`,
+  `anchor_session_mismatch`, `anchor_source_uid_mismatch`,
+  `anchor_revision_mismatch`, `anchor_hash_mismatch`,
   `anchor_observed_at_mismatch`) en maakt de claim volledig ongeldig.
+  `observedAt: null` is geen bewijs van het waarnemingsmoment en geeft
+  `anchor_observed_at_missing`.
 - `observed_at` moet een volledige ISO-instant met `Z` of expliciete offset zijn.
   Datum-zonder-tijd en tijd-zonder-zone worden geweigerd; er wordt nooit
   middernacht of een impliciete zone ingevuld.
@@ -117,6 +135,34 @@ observatieclaim blijft owner `unknown` met `owner_at_receipt_only` of
 - `currentSnapshot` wordt nooit gelezen. Als het veld aanwezig is, verschijnt
   `current_snapshot_ignored`; car/track/layout/compound/owner worden dan niet
   gevuld. Een latere `simhub_telemetry_latest` mag dus nooit oude context worden.
+
+### Binding van een aangeleverde observatiecontext
+
+Een `CanonicalContext` is een waarde, geen bewijs. Daarom moet een context die
+als `options.observedContext` wordt aangeleverd exact bij de invoerobservatie
+horen:
+
+- `sourceKind`, `deviceId`, `sourceUid`, `recordRevision`, `contentHash`,
+  `observedAt` en `sourceReceivedAt` moeten exact gelijk zijn; elke afwijking
+  geeft een eigen `observed_context_*_mismatch`;
+- `observed_session_id` en `segment_id` mogen niet tegenspreken wanneer beide
+  kanten een waarde hebben (`observed_context_session_mismatch`,
+  `observed_context_segment_mismatch`);
+- `delivered_session_id` wordt nooit vergeleken; dat is transport, geen
+  observatie-identiteit;
+- een verkeerde schema-/policyversie of niet-objectcontext geeft
+  `observed_context_version_mismatch` respectievelijk `observed_context_invalid`.
+
+`null` blijft een geldige onbekende context en wordt nooit stilletjes
+vervangen. Een mislukte binding levert `context: null`, `bound: false` en
+redenen; `assessRecordQuality` voegt `observed_context_binding_failed` plus de
+specifieke reden aan **elk** target toe. De module bouwt de identiteit dan niet
+opnieuw uit een andere optie. Alleen wanneer `observedContext` helemaal
+ontbreekt, bouwt T10 een expliciet onbekende context uit precies de invoer.
+
+De `referenceContext` is een historisch record en hoeft **niet** dezelfde
+`sourceUid`/revisie te hebben. Alleen de contextdimensies worden vergeleken;
+de bronbinding geldt uitsluitend voor de observatie.
 
 ### Driverhandoff
 
@@ -180,8 +226,10 @@ Invoer:
 
 Als `observedContext` ontbreekt, bouwt de module een context zonder claims; die
 is dan expliciet onbekend. `referenceContext: null` of weglaten betekent onbekend,
-nooit match. De caller kan een al gebouwde T09-context aanleveren; de module
-vergelijkt per target.
+nooit match. De caller kan een al gebouwde T09-context aanleveren; die wordt
+eerst via `bindObservedContextToObservation` aan de invoerbron gebonden en pas
+daarna per target vergeleken. Een context van een ander record kwalificeert dus
+nooit, ook niet als hij toevallig gelijk is aan de referentie.
 
 ### Uitvoer
 
@@ -189,13 +237,15 @@ vergelijkt per target.
 
 - `reported.complete`, `pitLap`, `driverChanged`, `resetOrTow` als
   `{ status: "observed" | "absent" | "invalid", value, reason }`;
+- `reported.kind` voor de eventvorm en `reported.invalidReasons` plus
+  `invalidReasonsStatus: "absent" | "observed" | "invalid"`;
 - `reported.gap` met `exceedsPolicy: boolean | null`;
-- `reported.invalidReasons` als aparte metadata, niet als modelkenmerk;
 - `coverage.status: "certified" | "rejected" | "incomplete" | "unknown"` plus
   per groep `fuel`, `temperature`, `load` de samples, duur, gap,
   coveredFraction en `meetsPolicy`;
 - `fuel.startLitres`, `endLitres`, `usedLitres`, `addedLitres`;
-- `wear.beforePercent`, `afterPercent`;
+- `wear.before`/`wear.after` met de vier echte hoeken, plus
+  `wear.beforePercent`/`afterPercent` als scalaire samenvatting;
 - `targets.fuel`, `targets.pit_loss`, `targets.tyre_wear`, `targets.tyre_pace`,
   elk met `eligible`, `blockingReasons`, `warningReasons` en een `label`
   (`available`/`missing`/`invalid`, waarde, eenheid, sourceClass).
@@ -224,6 +274,93 @@ ontbrekend wordt nooit uit de coverage afgeleid. Fuel toetst alleen de
 fuelgroep; de overall `coverage.status` wordt `rejected` als een andere groep
 faalt, maar dat blokkeert fuel niet. `complete` is een bronassertie over de
 gehele ronde en blijft voor fuel een expliciete voorwaarde.
+
+### `invalid_reasons` is targetinformatie, geen decoratie
+
+De echte connector schrijft een begrensde set redenen. Herkomst:
+
+- `CoverageRules.Evaluate` (`MeasurementEvent.cs`):
+  `coverage_window_missing`, `coverage_missing:<groep>`,
+  `coverage_samples:<groep>`, `coverage_gap:<groep>`,
+  `coverage_duration:<groep>`, `coverage_duration:window`;
+- `TelemetrySampler.CloseCurrent`: `session_changed`, `session_time_reset`,
+  `lap_boundary_gap`;
+- `MeasurementPipeline.End` / `EnduranceConnectorPlugin`: `session_end`,
+  `plugin_stop` (en `lap_closed` als sluitcode).
+
+`reset_detected` is **geen** bestaande SDK-reden; een echte reset heet
+`session_time_reset`. Een onbekende code wordt niet als reset of als
+onschuldig hernoemd: die faalt gesloten met `invalid_reason_unrecognized`.
+
+Beleid:
+
+- `scripts/pitwall-learning/audit-sources.sql` eist voor een structurele
+  fuelkandidaat `array_length(invalid_reasons,1)=0`. Daarom sluit **elke
+  niet-lege lijst** de lap-targets met `source_invalid_reasons`, ook een
+  onbekende token. De specifieke codes hieronder blijven als detailreden
+  zichtbaar;
+- `session_changed`, `session_time_reset`, `lap_boundary_gap`, `session_end`,
+  `plugin_stop`, `lap_closed`, `coverage_window_missing` en
+  `coverage_duration:window` zijn globaal: ze blokkeren elk target met
+  `invalid_reason_global` plus `invalid_reason:<code>`;
+- `coverage_*:<groep>` wordt per groep geduid. Een fuelreden blokkeert fuel
+  (`invalid_reason_group` of `invalid_reason_contradicts_coverage`); een
+  temperatuur- of loadreden wordt niet als fuelreden hernoemd, maar de
+  niet-lege lijst sluit via de auditregel alsnog de lap-targets;
+- een reden die de eigen coveragecijfers tegenspreekt (bijvoorbeeld
+  `coverage_gap:fuel` terwijl de fuelgroep een gat van 1 s haalt) maakt
+  `coverage.status` `unknown` en blokkeert het betrokken target;
+- een malformed/niet-array `invalid_reasons` wordt nooit stil `[]`: het record
+  faalt gesloten met `invalid_reasons_malformed` en `source_invalid_reasons`.
+
+### Root-`max_gap_seconds`
+
+Het rootveld is in P1 een afgeleide: `CoverageRules.MaxGap` neemt het maximum
+van de drie groepsgaten. Daarom:
+
+- een rootgat dat groter is dan elk groepspunt is tegenstrijdig; beide bronnen
+  worden dan niet vertrouwd (`max_gap_seconds_contradicts_coverage_gap`),
+  `coverage.status` wordt `unknown` en de lap-targets falen gesloten. Het
+  rootgetal zelf wordt daarbij niet als targetautoriteit gebruikt;
+- een consistent rootgat wijst naar de groep met dat maximum. Alleen die groep
+  wordt op zijn eigen drempel beoordeeld; een temperatuurgat van 3 s bij een
+  fuelgat van 1 s blokkeert fuel dus niet, ook al meldt `reported.gap` een
+  waarde boven 2 s;
+- een ongeldige/negatieve rootwaarde blokkeert met `reported_gap_invalid` plus
+  de veldreden; een ontbrekend rootgat blijft onbekend en laat de
+  groepsscores intact.
+
+### Conservatieve P1-auditvelden
+
+`scripts/pitwall-learning/audit-sources.sql` is de canonieke, conservatieve
+fitgate voor een structurele fuelkandidaat. T10 spiegelt die eisen in plaats van
+NULL naar false of 0 te vertalen. Fuel is daarom alleen eligible als:
+
+- `driver_changed` **bewezen false** is; NULL/afwezig blokkeert met
+  `driver_changed_unknown`, want onbekend bewijst niet dat dezelfde rijder de
+  hele ronde reed;
+- `lap_number` een positief geheel getal is; ontbrekend geeft
+  `lap_number_missing`, ongeldig `lap_number_invalid`;
+- `observed_session_id` en `segment_id` aanwezig zijn; anders
+  `observed_session_missing` respectievelijk `segment_id_missing`;
+- `fuel_added_litres_observed` expliciet numeriek `0` is; ontbrekend geeft
+  `refuel_unknown`, malformed (bijvoorbeeld `"0"`) geeft
+  `fuel_added_litres_observed_invalid`. Een echte 0 blijft een echte 0; er
+  wordt geen legacy-0 verzonnen.
+
+De labelwaarde mag apart beschikbaar blijven (bijvoorbeeld `start - end`), maar
+`eligible` is false zolang een van deze bronvoorwaarden niet bewezen is. De
+waarden worden nergens als `false`/`0` teruggeschreven.
+
+### Toekomstig rondevenster
+
+`started_at`/`ended_at` worden tegen `sourceReceivedAt` getoetst met een
+expliciete, versiegebonden marge van
+`QUALITY_MAX_WINDOW_FUTURE_SKEW_SECONDS = 300`. Er wordt geen `Date.now`
+gebruikt. Een venster dat verder in de toekomst ligt dan die marge levert
+`coverage_window_future`, `windowSeconds: null` en een niet-gecertificeerde
+coverage; de lap-targets falen gesloten. Ontbrekende of onparseerbare tijden
+blijven `coverage_window_missing`/`coverage_window_order`.
 
 ### Afwezig, nul en onbekend
 
@@ -257,6 +394,28 @@ aanwezig; fuel-0 blijft als waarde `0` staan maar krijgt de aparte blokkade
 `fuel_zero_rate` (geen bruikbare rate), terwijl wear-0 een geldige waarde kan
 blijven.
 
+### Wear is per hoek, geen scalar
+
+De echte P1-kolommen `simhub_measurement_events.wear_before`/`wear_after` zijn
+`jsonb` en de connector schrijft `{ version: 1, scale: "remaining_percent",
+fl, fr, rl, rr }`. Een scalar `wear_after: 42` is dus geen geldige bronvorm.
+T10 leest die vorm niet langer als wear:
+
+- een scalar/ander object faalt met `wear_shape_unsupported`;
+- een verkeerde versie of scale faalt met `wear_version_unsupported` /
+  `wear_scale_unsupported`;
+- ontbrekende of buiten 0–100 vallende hoeken falen met `wear_corner_invalid`;
+- alleen wanneer alle vier hoeken gelijk zijn, is de scalaire
+  `wear.afterPercent` bruikbaar. Anders blijven de hoeken bewaard maar is het
+  targetlabel ambigu (`wear_corner_ambiguous`), omdat een scalar zonder hoek
+  vier echte waarden zou verzinnen. Per-hoekkwalificatie is T11.
+
+Een `measurement_event` telt alleen als wearbron bij een werkelijk ankertype:
+`session_start`, `wear_value_changed`, `pit_service_completed` of
+`wear_refresh_confirmed` (`TyreAnchorTracker.cs`). Een willekeurig `kind` geeft
+`wear_source_kind_unknown`. Dit maakt nog geen refresh- of setbewijs; dat blijft
+T11.
+
 ## Bronrealiteit en eerlijke gaten
 
 Deze laag is een **domeincontract voor een latere adapter**, geen bewijs dat P1
@@ -284,17 +443,23 @@ al is aangesloten:
 
 ## Verificatie (lokaal, echte runs)
 
-- Eerste RED-run tegen stubs: **26 van 28** tests faalden op echt gedrag;
-  2 passeerden omdat zij alleen `null`/drempelconstanten controleerden.
-  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-context-quality/red-targeted.log`.
-- Definitieve gerichte Vitest: **33/33 geslaagd** in 2 testbestanden.
-  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-context-quality/green-targeted-final-preflight.log`.
-- ESLint op de vier nieuwe bestanden: **schoon**.
+- RED vóór de reparatie: **8 van 26** gerichte qualitytests faalden op echt
+  gedrag (contextbinding, SDK-redenen, malformed redenlijst, root-gat, wear).
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-quality-binding/0700/red-quality-binding.log`.
+- Gerichte Vitest na reparatie: **44/44 geslaagd** in 2 testbestanden.
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-quality-binding/0700/green-targeted-5.log`.
+- Onafhankelijke SPEC-probes (13) tegen de nieuwe modules: **13/13 geslaagd**.
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-quality-binding/0700/review-probes-run-2.log`.
+- Ouderlijke probe (aangepast aan contentHash-binding): positive fuel **true**;
+  andere device/UID/sessie/segment, onbekende reden, echte resetreden en
+  root-gat 30/1 **false**.
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-quality-binding/0700/probe-output-final.json`.
+- ESLint op de vier nieuwe TS-bestanden: **schoon**.
 - Projecttypecheck: **exact 16 bestaande baselinefouten**, nul learningfouten.
-  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-context-quality/typecheck-after.log`.
-- Volledige suite: **1980 geslaagd, 1 bestaande fout** in
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-quality-binding/0700/typecheck-final.log`.
+- Volledige suite: **1991 geslaagd, 1 bestaande fout** in
   `tyreTelemetryContract.test.ts` (dezelfde baselinefout; niet aangeraakt).
-  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-context-quality/full-suite-final.log`.
+  Log: `/home/hermes/artifacts/3sm/pitwall-learning-p2-quality-binding/0700/full-suite-final.log`.
 - Geen remote databasequery, mutatie, push, merge of deploy uitgevoerd.
 
 ## Resterende onzekerheden
