@@ -17,8 +17,10 @@
  * Het inhoudelijke contract staat in docs/contracts/measurement-ids-v1.md.
  *
  * Geen Deno- of npm-imports: dit bestand is met vitest en met `deno test` te
- * draaien.
+ * draaien. De enige import is de pure, I/O-vrije T13-parser.
  */
+import { classifyLapObservation } from "./observationV1.ts";
+import type { ObservationV1 } from "./observationV1.ts";
 
 /** Bovengrens aan het aantal onbekende rootkeys in één frame. */
 export const MaxUnknownRootKeys = 32;
@@ -641,6 +643,37 @@ export type LapSummary = {
   validDurationSeconds: number | null;
   pitVisitIds: string[] | null;
   wearObservationIds: string[] | null;
+  /**
+   * T13-S1. Alleen aanwezig als de opt-in `observationCapture`-modus het blok
+   * valideerde en accepteerde. De property wordt bij afwezigheid volledig
+   * weggelaten: geen `null`, zodat een legacy-rij bytegelijk blijft en de
+   * bestaande hash niet verandert.
+   */
+  observation?: ObservationV1;
+};
+
+/**
+ * T13-S1 parser-schakelaar. Geen clientveld: de Edge kiest de modus op basis
+ * van zijn eigen env-vlag en de DB-probe.
+ *
+ *  - `off`         (default) — exact het oude gedrag: `observation` is een
+ *                  onbekend veld en kost alleen die rij.
+ *  - `unavailable` — het blok is bekend maar er is geen bewezen DB-ontvanger.
+ *                  Een rij met het blok wordt expliciet afgekeurd; er wordt
+ *                  niets gestript en er gaat niets naar de database.
+ *  - `on`          — valideren met de goedgekeurde pure parser en meesturen.
+ */
+export type LapObservationCaptureMode = "off" | "unavailable" | "on";
+
+export type LapSummaryParseOptions = {
+  observationCapture?: LapObservationCaptureMode;
+  /**
+   * T13-S1. De onafhankelijk geauthenticeerde device-UUID uit de
+   * token-opzoeking (`context.ts`), nooit een veld uit de payload. Verplicht
+   * zodra een rij een observation draagt; zonder geldige waarde wordt die rij
+   * afgekeurd en dus nooit stil als legacy opgeslagen.
+   */
+  authenticatedDeviceId?: string;
 };
 
 const lapKeys = [
@@ -674,10 +707,18 @@ const optReasonArray = (value: unknown, path: string, max: number): string[] | n
   });
 };
 
-export const parseLapSummary = (value: unknown, index: number): LapSummary => {
+export const parseLapSummary = (
+  value: unknown,
+  index: number,
+  options: LapSummaryParseOptions = {},
+): LapSummary => {
   const path = `payload.lapSummaries[${index}]`;
   const record = asObject(value, path);
-  allowKeys(record, lapKeys, path);
+  const mode: LapObservationCaptureMode = options.observationCapture ?? "off";
+  // `off` houdt exact de oude allowlist: het blok is dan een onbekend veld en
+  // kost alleen deze rij. Alleen de expliciete opt-in maakt de sleutel bekend.
+  if (mode === "off") allowKeys(record, lapKeys, path);
+  else allowKeys(record, [...lapKeys, "observation"], path);
 
   const summaryUid = optUid(record.summaryUid, `${path}.summaryUid`);
   if (summaryUid === null) throw new Error(`${path}.summaryUid is required`);
@@ -769,7 +810,7 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
     invalidReasons = [...new Set([...(invalidReasons ?? []), ...verdict.reasons])].slice(0, 16);
   }
 
-  return {
+  const summary: LapSummary = {
     summaryUid,
     summaryId,
     segmentId,
@@ -797,6 +838,30 @@ export const parseLapSummary = (value: unknown, index: number): LapSummary => {
     pitVisitIds: optIdArray(record.pitVisitIds, `${path}.pitVisitIds`, 32),
     wearObservationIds: optIdArray(record.wearObservationIds, `${path}.wearObservationIds`, 64),
   };
+
+  // T13-S1: alleen in de expliciete opt-in-modi is de sleutel bekend. In
+  // `unavailable` wordt de rij geweigerd zonder iets te strippen; in `on` gaat
+  // de RAUWE record door de goedgekeurde classifier. Dat gebeurt vóór
+  // optTimestamp/Date.parse, zodat de 7-cijferige tijdstrings en de ruwe
+  // row-bounds intact blijven voor de venster- en edgecontrole. De classifier
+  // kent de serveridentiteit uit de tokencontext, nooit uit capture.deviceId.
+  if (mode !== "off" && Object.prototype.hasOwnProperty.call(record, "observation")) {
+    if (mode === "unavailable") {
+      throw new Error(`${path}.observation is unavailable`);
+    }
+    const classified = classifyLapObservation({
+      row: record,
+      authenticatedDeviceId: options.authenticatedDeviceId,
+    });
+    if (classified.disposition !== "accept") {
+      // reject én quarantine kosten alleen deze rij; de reeks en het frame
+      // blijven doorlopen. `legacy` is hier onbereikbaar: de property bestaat.
+      throw new Error(`${path}.observation is invalid: ${classified.code}`);
+    }
+    summary.observation = classified.observation;
+  }
+
+  return summary;
 };
 
 // ---------------------------------------------------------------------------
@@ -870,8 +935,17 @@ const identifyEntry = (entry: unknown): string | null => {
 export const parseMeasurementEventsReport = (value: unknown): SeriesReport<MeasurementEvent> =>
   parseSeries("payload.measurementEvents", value, MaxMeasurementEventsPerFrame, parseMeasurementEvent, identifyEntry);
 
-export const parseLapSummariesReport = (value: unknown): SeriesReport<LapSummary> =>
-  parseSeries("payload.lapSummaries", value, MaxLapSummariesPerFrame, parseLapSummary, identifyEntry);
+export const parseLapSummariesReport = (
+  value: unknown,
+  options: LapSummaryParseOptions = {},
+): SeriesReport<LapSummary> =>
+  parseSeries(
+    "payload.lapSummaries",
+    value,
+    MaxLapSummariesPerFrame,
+    (entry, index) => parseLapSummary(entry, index, options),
+    identifyEntry,
+  );
 
 /**
  * Compatibiliteitsvorm voor aanroepers die alleen de goedgekeurde rijen willen:
