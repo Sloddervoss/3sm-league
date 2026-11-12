@@ -291,7 +291,14 @@ function claimBindingMatches(
   }
   if (binding.sourceUid !== source.sourceUid) reasons.push("anchor_source_uid_mismatch");
   if (binding.recordRevision !== source.recordRevision) reasons.push("anchor_revision_mismatch");
-  if (binding.observedAt !== source.observedAt) reasons.push("anchor_observed_at_mismatch");
+  if (binding.contentHash !== source.contentHash) reasons.push("anchor_hash_mismatch");
+  if (source.observedAt === null) {
+    // null === null bewijst geen waarnemingsmoment; een historisch anker zonder
+    // tijd is geen volledige binding.
+    reasons.push("anchor_observed_at_missing");
+  } else if (binding.observedAt !== source.observedAt) {
+    reasons.push("anchor_observed_at_mismatch");
+  }
   return { matches: reasons.length === 0, reasons };
 }
 
@@ -561,6 +568,85 @@ function compareDimension(
   return left === right
     ? { status: "match", reason: null }
     : { status: "mismatch", reason: `context_${dimension}_mismatch` };
+}
+
+export interface ObservedContextBindingInput {
+  readonly source: SourceRecordEnvelope;
+  readonly observedSessionId: string | null;
+  readonly segmentId: string | null;
+}
+
+export interface ObservedContextBinding {
+  /** Null betekent: gebruik geen context. Bij een mislukte binding nooit een halve context. */
+  readonly context: CanonicalContext | null;
+  readonly bound: boolean;
+  readonly reasons: readonly string[];
+}
+
+/**
+ * Bindt een aangeleverde observatiecontext aan precies de invoerobservatie.
+ *
+ * Een CanonicalContext is een waarde, geen bewijs. Zonder deze controle zou een
+ * context van record A een record B kwalificeren zodra hij toevallig op de
+ * referentie lijkt. Daarom moeten alle onveranderlijke bronvelden exact gelijk
+ * zijn; observed_session_id en segment_id mogen niet tegenspreken wanneer beide
+ * kanten ze kennen. De transport-sessie wordt hier nooit vergeleken: dat is een
+ * ander domein.
+ *
+ * `null` is een geldige onbekende context. Een mislukte binding levert
+ * `context: null`, `bound: false` en stabiele redenen; de caller moet die
+ * redenen als blokkade gebruiken en mag de identiteit niet opnieuw verzinnen.
+ */
+export function bindObservedContextToObservation(
+  observed: CanonicalContext | null,
+  observation: ObservedContextBindingInput,
+): ObservedContextBinding {
+  if (observed === null) return { context: null, bound: true, reasons: [] };
+  if (!isPlainRecord(observed) || !isPlainRecord(observed.source)) {
+    return { context: null, bound: false, reasons: ["observed_context_invalid"] };
+  }
+
+  const context = observed as CanonicalContext;
+  const reasons: string[] = [];
+  let sourceMismatch = false;
+  if (
+    context.schemaVersion !== CONTEXT_SCHEMA_VERSION ||
+    context.policyVersion !== CONTEXT_POLICY_VERSION
+  ) {
+    reasons.push("observed_context_version_mismatch");
+    sourceMismatch = true;
+  }
+
+  const source = observation.source;
+  for (const [label, left, right] of [
+    ["source_kind", context.source.sourceKind, source.sourceKind],
+    ["device", context.source.deviceId, source.deviceId],
+    ["source_uid", context.source.sourceUid, source.sourceUid],
+    ["revision", context.source.recordRevision, source.recordRevision],
+    ["content_hash", context.source.contentHash, source.contentHash],
+    ["observed_at", context.source.observedAt, source.observedAt],
+    ["source_received_at", context.source.sourceReceivedAt, source.sourceReceivedAt],
+  ] as const) {
+    if (left !== right) {
+      reasons.push(`observed_context_${label}_mismatch`);
+      sourceMismatch = true;
+    }
+  }
+
+  if (context.source.observedSessionId !== observation.observedSessionId) {
+    reasons.push("observed_context_session_mismatch");
+    sourceMismatch = true;
+  }
+  if (context.source.segmentId !== observation.segmentId) {
+    reasons.push("observed_context_segment_mismatch");
+    sourceMismatch = true;
+  }
+
+  if (reasons.length > 0) {
+    if (sourceMismatch) reasons.push("context_source_mismatch");
+    return { context: null, bound: false, reasons: sortedUnique(reasons) };
+  }
+  return { context, bound: true, reasons: [] };
 }
 
 /** Vergelijkt twee contexten per dimensie voor precies één target. */

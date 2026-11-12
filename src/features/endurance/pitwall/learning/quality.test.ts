@@ -72,14 +72,22 @@ function payload(overrides: Json = {}): Json {
   };
 }
 
+/**
+ * Echte P1-vorm: `wear_before`/`wear_after` zijn jsonb-objecten met vier
+ * hoeken, version en scale. Een scalaire wearwaarde bestaat niet op de draad.
+ */
+function wear(overrides: Json = {}): Json {
+  return { version: 1, scale: "remaining_percent", fl: 64, fr: 64, rl: 64, rr: 64, ...overrides };
+}
+
 function eventPayload(overrides: Json = {}): Json {
   return {
-    kind: "tyre_reading",
+    kind: "wear_value_changed",
     observed_session_id: "obs-event-session",
     delivered_session_id: "delivery-event-1",
     segment_id: "seg-event",
-    wear_before: 64,
-    wear_after: 62,
+    wear_before: wear(),
+    wear_after: wear({ fl: 62, fr: 62, rl: 62, rr: 62 }),
     ...overrides,
   };
 }
@@ -90,6 +98,7 @@ function binding(src: Json, data: Json): Json {
     observedSessionId: data.observed_session_id,
     sourceUid: src.sourceUid,
     recordRevision: src.recordRevision,
+    contentHash: src.contentHash,
     observedAt: src.observedAt,
   };
 }
@@ -170,7 +179,8 @@ describe("recordkwaliteit (T10)", () => {
     expect(assessment.reported.pitLap.value).not.toBe(false);
     expect(assessment.targets.fuel.eligible).toBe(false);
     expect(assessment.targets.fuel.blockingReasons).toContain("pit_lap_unknown");
-    expect(assessment.targets.fuel.warningReasons).toContain("driver_changed_unknown");
+    expect(assessment.targets.fuel.blockingReasons).toContain("driver_changed_unknown");
+    expect(assessment.targets.fuel.warningReasons).not.toContain("driver_changed_unknown");
   });
 
   it("scheidt bewezen pitronde van bewezen niet-pitronde", () => {
@@ -364,7 +374,10 @@ describe("recordkwaliteit (T10)", () => {
       sourceUid: EVENT_UUID,
       observedAt: "2026-11-11T10:05:00.123Z",
     });
-    const eventData = eventPayload({ wear_after: 0, wear_before: 5 });
+    const eventData = eventPayload({
+      wear_after: wear({ fl: 0, fr: 0, rl: 0, rr: 0 }),
+      wear_before: wear({ fl: 5, fr: 5, rl: 5, rr: 5 }),
+    });
     const observed = observedContext({}, eventSource, eventData);
     const assessment = assess(
       { source: eventSource, payload: eventData, annotations: { resetOrTow: false } },
@@ -461,6 +474,344 @@ describe("recordkwaliteit (T10)", () => {
     expect(QUALITY_MIN_SAMPLES_PER_GROUP).toBe(10);
     expect(QUALITY_MIN_COVERED_FRACTION).toBe(0.8);
     expect(QUALITY_MAX_GAP_SECONDS).toBe(2);
+  });
+
+  it("bindt een aangeleverde observedContext aan de invoerbron, niet aan zichzelf", () => {
+    const observed = observedContext();
+    const reference = referenceContext();
+    const data = payload();
+    const cases: Array<{ name: string; src: Json; reason: string }> = [
+      { name: "sourceKind", src: source({ sourceKind: "measurement_event" }), reason: "observed_context_source_kind_mismatch" },
+      { name: "deviceId", src: source({ deviceId: "device-b" }), reason: "observed_context_device_mismatch" },
+      { name: "sourceUid", src: source({ sourceUid: OTHER_UUID }), reason: "observed_context_source_uid_mismatch" },
+      { name: "recordRevision", src: source({ recordRevision: 2 }), reason: "observed_context_revision_mismatch" },
+      { name: "contentHash", src: source({ contentHash: "fedcba9876543210fedcba9876543210" }), reason: "observed_context_content_hash_mismatch" },
+      {
+        name: "observedAt",
+        src: source({ observedAt: "2026-11-11T10:00:00.124Z" }),
+        reason: "observed_context_observed_at_mismatch",
+      },
+      {
+        name: "sourceReceivedAt",
+        src: source({ sourceReceivedAt: "2026-11-11T10:00:02.457Z" }),
+        reason: "observed_context_source_received_at_mismatch",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const assessment = assess(
+        qualityInput({ source: testCase.src, payload: data }),
+        observed,
+        reference,
+      );
+      expect(assessment.targets.fuel.eligible, testCase.name).toBe(false);
+      expect(assessment.targets.fuel.blockingReasons, testCase.name).toContain(testCase.reason);
+      expect(assessment.targets.fuel.blockingReasons, testCase.name).toContain(
+        "observed_context_binding_failed",
+      );
+      expect(assessment.reasons, testCase.name).toContain("observed_context_binding_failed");
+    }
+
+    const session = assess(
+      qualityInput({ payload: payload({ observed_session_id: "obs-session-other" }) }),
+      observed,
+      reference,
+    );
+    expect(session.targets.fuel.eligible).toBe(false);
+    expect(session.targets.fuel.blockingReasons).toContain("observed_context_session_mismatch");
+
+    const segment = assess(
+      qualityInput({ payload: payload({ segment_id: "seg-other" }) }),
+      observed,
+      reference,
+    );
+    expect(segment.targets.fuel.eligible).toBe(false);
+    expect(segment.targets.fuel.blockingReasons).toContain("observed_context_segment_mismatch");
+
+    // Transport-sessie is een ander domein: ongelijkheid is geen contextfout.
+    const transport = assess(
+      qualityInput({ payload: payload({ delivered_session_id: "delivery-other" }) }),
+      observed,
+      reference,
+    );
+    expect(transport.targets.fuel.eligible).toBe(true);
+  });
+
+  it("laat een onbekende observedContext onbekend en een andere referentie gewoon matchen", () => {
+    const unknown = assess(qualityInput(), null, referenceContext());
+    expect(unknown.targets.fuel.eligible).toBe(false);
+    expect(unknown.targets.fuel.blockingReasons).toContain("context_owner_unknown");
+    expect(unknown.targets.fuel.blockingReasons).not.toContain("observed_context_binding_failed");
+
+    // De referentie is een historisch record met een andere sourceUid; dat mag.
+    const observed = observedContext();
+    const reference = referenceContext();
+    expect(reference.source.sourceUid).not.toBe(observed.source.sourceUid);
+    const positive = assess(qualityInput(), observed, reference);
+    expect(positive.targets.fuel.eligible).toBe(true);
+  });
+
+  it("gebruikt echte SDK-redenen en blokkeert reset-, sessie- en sprongclaims targetbreed", () => {
+    const cases = ["session_time_reset", "session_changed", "lap_boundary_gap", "session_end", "plugin_stop"];
+    for (const reason of cases) {
+      const assessment = assess(
+        qualityInput({ payload: payload({ invalid_reasons: [reason] }) }),
+      );
+      expect(assessment.targets.fuel.eligible, reason).toBe(false);
+      expect(assessment.targets.fuel.blockingReasons, reason).toContain("invalid_reason_global");
+      expect(assessment.targets.fuel.blockingReasons, reason).toContain(`invalid_reason:${reason}`);
+      expect(assessment.reported.complete.value, reason).toBe(true);
+      expect(assessment.reported.resetOrTow.value, reason).toBe(false);
+    }
+  });
+
+  it("behandelt een onbekende reden fail-closed zonder hem als reset te hernoemen", () => {
+    const assessment = assess(
+      qualityInput({ payload: payload({ invalid_reasons: ["reset_detected"] }) }),
+    );
+
+    expect(assessment.targets.fuel.eligible).toBe(false);
+    expect(assessment.targets.fuel.blockingReasons).toContain("invalid_reason_unrecognized");
+    expect(assessment.targets.fuel.blockingReasons).toContain("invalid_reason:reset_detected");
+    expect(assessment.reported.invalidReasons).toEqual(["reset_detected"]);
+  });
+
+  it("scopet echte coverage-redenen per groep en detecteert tegenspraak", () => {
+    const fuelReason = assess(
+      qualityInput({
+        payload: payload({
+          invalid_reasons: ["coverage_gap:fuel"],
+          coverage: {
+            fuel: coverageGroup({ maxGapSeconds: 1 }),
+            temperature: coverageGroup(),
+            load: coverageGroup(),
+          },
+        }),
+      }),
+    );
+    expect(fuelReason.targets.fuel.eligible).toBe(false);
+    expect(fuelReason.targets.fuel.blockingReasons).toContain(
+      "invalid_reason_contradicts_coverage",
+    );
+    expect(fuelReason.targets.fuel.blockingReasons).toContain("invalid_reason:coverage_gap:fuel");
+
+    // Een temperatuurprobleem mag een onafhankelijk fuel-label niet blind maken.
+    const thermalOnly = assess(
+      qualityInput({
+        payload: payload({
+          invalid_reasons: ["coverage_gap:temperature"],
+          max_gap_seconds: 1,
+          coverage: {
+            fuel: coverageGroup({ maxGapSeconds: 1 }),
+            temperature: coverageGroup({ maxGapSeconds: 1 }),
+            load: coverageGroup({ maxGapSeconds: 1 }),
+          },
+        }),
+      }),
+    );
+    expect(thermalOnly.targets.fuel.eligible).toBe(false);
+    expect(thermalOnly.targets.fuel.blockingReasons).toContain("source_invalid_reasons");
+    // De specifieke temperatuurreden wordt niet als fuelreden hernoemd; alleen
+    // de generieke P1-auditregel sluit de lap-target.
+    expect(thermalOnly.targets.fuel.blockingReasons).not.toContain(
+      "invalid_reason:coverage_gap:temperature",
+    );
+    expect(thermalOnly.coverage.status).toBe("unknown");
+    expect(thermalOnly.coverage.reasons).toContain(
+      "invalid_reason_contradicts_coverage:coverage_gap:temperature",
+    );
+
+    // Een consistente temperatuurfout laat de fuelgroep ook ongemoeid op
+    // groepsniveau, maar de niet-lege invalid_reasons blijft de auditgrens.
+    const thermalFail = assess(
+      qualityInput({
+        payload: payload({
+          invalid_reasons: ["coverage_gap:temperature"],
+          max_gap_seconds: 3,
+          coverage: {
+            fuel: coverageGroup({ maxGapSeconds: 1 }),
+            temperature: coverageGroup({ maxGapSeconds: 3 }),
+            load: coverageGroup({ maxGapSeconds: 1 }),
+          },
+        }),
+      }),
+    );
+    expect(thermalFail.targets.fuel.eligible).toBe(false);
+    expect(thermalFail.targets.fuel.blockingReasons).toContain("source_invalid_reasons");
+    expect(thermalFail.coverage.status).toBe("rejected");
+  });
+
+  it("faalt gesloten op een malformed invalid_reasons-lijst", () => {
+    const assessment = assess(
+      qualityInput({ payload: payload({ invalid_reasons: "not-a-list" }) }),
+    );
+
+    expect(assessment.targets.fuel.eligible).toBe(false);
+    expect(assessment.targets.fuel.blockingReasons).toContain("invalid_reasons_malformed");
+  });
+
+  it("weigert een toekomstig rondevenster tegen sourceReceivedAt", () => {
+    const assessment = assess(
+      qualityInput({
+        payload: payload({
+          started_at: "2099-01-01T10:00:00Z",
+          ended_at: "2099-01-01T10:02:00Z",
+        }),
+      }),
+    );
+
+    expect(assessment.coverage.windowSeconds).toBeNull();
+    expect(assessment.coverage.status).not.toBe("certified");
+    expect(assessment.targets.fuel.eligible).toBe(false);
+    expect(assessment.targets.fuel.blockingReasons).toContain("coverage_window_future");
+  });
+
+  it("eist een expliciete numerieke nul voor refuel en een volledige lapidentiteit", () => {
+    const noRefuelData = payload();
+    delete noRefuelData.fuel_added_litres_observed;
+    const missingRefuel = assess(qualityInput({ payload: noRefuelData }));
+    expect(missingRefuel.targets.fuel.eligible).toBe(false);
+    expect(missingRefuel.targets.fuel.blockingReasons).toContain("refuel_unknown");
+
+    const malformedRefuel = assess(
+      qualityInput({ payload: payload({ fuel_added_litres_observed: "0" }) }),
+    );
+    expect(malformedRefuel.targets.fuel.eligible).toBe(false);
+    expect(malformedRefuel.targets.fuel.blockingReasons).toContain(
+      "fuel_added_litres_observed_invalid",
+    );
+
+    const noLapData = payload();
+    delete noLapData.lap_number;
+    const missingLap = assess(qualityInput({ payload: noLapData }));
+    expect(missingLap.targets.fuel.eligible).toBe(false);
+    expect(missingLap.targets.fuel.blockingReasons).toContain("lap_number_missing");
+
+    const invalidLap = assess(qualityInput({ payload: payload({ lap_number: 0 }) }));
+    expect(invalidLap.targets.fuel.eligible).toBe(false);
+    expect(invalidLap.targets.fuel.blockingReasons).toContain("lap_number_invalid");
+
+    const missingDriver = assess(
+      qualityInput({ payload: payload({ driver_changed: null }) }),
+    );
+    expect(missingDriver.targets.fuel.eligible).toBe(false);
+    expect(missingDriver.targets.fuel.blockingReasons).toContain("driver_changed_unknown");
+
+    const noSessionData = payload();
+    delete noSessionData.observed_session_id;
+    const missingSession = assess(qualityInput({ payload: noSessionData }), null, referenceContext());
+    expect(missingSession.targets.fuel.eligible).toBe(false);
+    expect(missingSession.targets.fuel.blockingReasons).toContain("observed_session_missing");
+
+    const noSegmentData = payload();
+    delete noSegmentData.segment_id;
+    const missingSegment = assess(qualityInput({ payload: noSegmentData }), null, referenceContext());
+    expect(missingSegment.targets.fuel.eligible).toBe(false);
+    expect(missingSegment.targets.fuel.blockingReasons).toContain("segment_id_missing");
+  });
+
+  it("behandelt een tegenstrijdig root-gat als onbekend en blokkerend", () => {
+    const contradictory = assess(
+      qualityInput({
+        payload: payload({
+          max_gap_seconds: 30,
+          coverage: {
+            fuel: coverageGroup({ maxGapSeconds: 1 }),
+            temperature: coverageGroup({ maxGapSeconds: 1 }),
+            load: coverageGroup({ maxGapSeconds: 1 }),
+          },
+        }),
+      }),
+    );
+    expect(contradictory.reported.gap.exceedsPolicy).toBe(true);
+    expect(contradictory.targets.fuel.eligible).toBe(false);
+    expect(contradictory.targets.fuel.blockingReasons).toContain(
+      "max_gap_seconds_contradicts_coverage_gap",
+    );
+    expect(contradictory.targets.fuel.blockingReasons).not.toContain(
+      "reported_max_gap_exceeds_policy",
+    );
+    expect(contradictory.coverage.status).toBe("unknown");
+
+    // Een consistent rootgat wijst naar de temperatuurgroep; fuel blijft eigen beleid.
+    const thermalGap = assess(
+      qualityInput({
+        payload: payload({
+          max_gap_seconds: 30,
+          coverage: {
+            fuel: coverageGroup({ maxGapSeconds: 1 }),
+            temperature: coverageGroup({ maxGapSeconds: 30 }),
+            load: coverageGroup({ maxGapSeconds: 1 }),
+          },
+        }),
+      }),
+    );
+    expect(thermalGap.reported.gap.exceedsPolicy).toBe(true);
+    expect(thermalGap.targets.fuel.eligible).toBe(true);
+    expect(thermalGap.coverage.status).toBe("rejected");
+
+    const invalid = assess(
+      qualityInput({ payload: payload({ max_gap_seconds: -1 }) }),
+    );
+    expect(invalid.targets.fuel.eligible).toBe(false);
+    expect(invalid.targets.fuel.blockingReasons).toContain("reported_gap_invalid");
+  });
+
+  it("accepteert alleen echte wear-objecten met een bekend ankertype", () => {
+    const eventSource = source({
+      sourceKind: "measurement_event",
+      sourceUid: EVENT_UUID,
+      observedAt: "2026-11-11T10:05:00.123Z",
+    });
+    const observed = (data: Json) => observedContext({}, eventSource, data);
+
+    const positiveData = eventPayload({
+      wear_after: wear({ fl: 0, fr: 0, rl: 0, rr: 0 }),
+    });
+    const positive = assess(
+      { source: eventSource, payload: positiveData, annotations: { resetOrTow: false } },
+      observed(positiveData),
+      referenceContext(),
+    );
+    expect(positive.targets.tyre_wear.eligible).toBe(true);
+    expect(positive.targets.tyre_wear.label).toMatchObject({
+      status: "available",
+      value: 0,
+      unit: "percent_remaining",
+    });
+
+    const arbitraryKindData = eventPayload({ kind: "tyre_reading" });
+    const arbitraryKind = assess(
+      { source: eventSource, payload: arbitraryKindData, annotations: { resetOrTow: false } },
+      observed(arbitraryKindData),
+      referenceContext(),
+    );
+    expect(arbitraryKind.targets.tyre_wear.eligible).toBe(false);
+    expect(arbitraryKind.targets.tyre_wear.blockingReasons).toContain("wear_source_kind_unknown");
+
+    const scalarData = eventPayload({ wear_after: 42 });
+    const scalar = assess(
+      { source: eventSource, payload: scalarData, annotations: { resetOrTow: false } },
+      observed(scalarData),
+      referenceContext(),
+    );
+    expect(scalar.targets.tyre_wear.eligible).toBe(false);
+    expect(scalar.wear.afterPercent).toMatchObject({
+      status: "invalid",
+      reason: "wear_shape_unsupported",
+    });
+
+    const cornerData = eventPayload({ wear_after: wear({ fl: 60, fr: 61, rl: 62, rr: 63 }) });
+    const corner = assess(
+      { source: eventSource, payload: cornerData, annotations: { resetOrTow: false } },
+      observed(cornerData),
+      referenceContext(),
+    );
+    expect(corner.targets.tyre_wear.eligible).toBe(false);
+    expect(corner.wear.afterPercent).toMatchObject({
+      status: "invalid",
+      reason: "wear_corner_ambiguous",
+    });
   });
 
   it("is deterministisch, gesorteerd/gededupliceerd en muteert niet", () => {

@@ -56,6 +56,7 @@ function binding(src: Json = source(), data: Json = payload()): Json {
     observedSessionId: data.observed_session_id,
     sourceUid: src.sourceUid,
     recordRevision: src.recordRevision,
+    contentHash: src.contentHash,
     observedAt: src.observedAt,
   };
 }
@@ -300,6 +301,11 @@ describe("canonicale context (T09)", () => {
         reason: "anchor_revision_mismatch",
       },
       {
+        name: "contentHash",
+        binding: { ...binding(src, data), contentHash: "fedcba9876543210fedcba9876543210" },
+        reason: "anchor_hash_mismatch",
+      },
+      {
         name: "tijd",
         binding: { ...binding(src, data), observedAt: "2026-11-11T10:00:00.124Z" },
         reason: "anchor_observed_at_mismatch",
@@ -326,6 +332,23 @@ describe("canonicale context (T09)", () => {
       }),
     );
     expect(missingBinding.reasons).toContain("anchor_binding_missing");
+  });
+
+  it("bewijst geen historisch anker zonder waarnemingsmoment", () => {
+    const src = source({ observedAt: null });
+    const data = payload();
+    const context = mustContext(
+      buildCanonicalContext({
+        source: src,
+        payload: data,
+        claims: fullClaims(src, data),
+      }),
+    );
+
+    expect(context.car.status).toBe("unknown");
+    expect(context.contextStatus).not.toBe("complete");
+    expect(context.reasons).toContain("anchor_observed_at_missing");
+    expect(context.reasons).not.toContain("anchor_observed_at_mismatch");
   });
 
   it("scheidt owner-, driver- en device-ongelijkheid", () => {
