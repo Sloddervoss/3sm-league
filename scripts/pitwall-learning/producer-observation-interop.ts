@@ -61,6 +61,16 @@ const check = (id: string, ok: boolean, evidence: string): void => {
   }
 };
 
+// Only the classifier's tolerance is a limit on the ERROR between declared
+// and actual edge. The edge magnitude itself is unbounded up to 86400 s.
+const expectedEdges: Record<string, { before: number; after: number }> = {
+  "edge-after-50": { before: 0, after: 0.05 },
+  "edge-before-50": { before: 0.05, after: 0 },
+  "edge-both-50": { before: 0.05, after: 0.05 },
+  "edge-after-90s": { before: 0, after: 89.95 },
+  "edge-20hz": { before: 0, after: 0.05 },
+};
+
 const names = [...Deno.readDirSync(directory)]
   .map((entry) => entry.name)
   .filter((name) => name.endsWith(".meta.json"))
@@ -140,6 +150,21 @@ for (const metaFile of names) {
         "server JSON.stringify(parsed) equals C# bytes",
       );
     }
+    const expectedEdge = expectedEdges[meta.case];
+    if (expectedEdge) {
+      check(
+        `${id}-EDGE`,
+        parsed.ok &&
+          parsed.observation.interval.edgeBeforeSeconds ===
+            expectedEdge.before &&
+          parsed.observation.interval.edgeAfterSeconds === expectedEdge.after,
+        `edgeBefore=${expectedEdge.before} edgeAfter=${expectedEdge.after} parsed=${
+          parsed.ok
+            ? `${parsed.observation.interval.edgeBeforeSeconds}/${parsed.observation.interval.edgeAfterSeconds}`
+            : "no"
+        }`,
+      );
+    }
   }
 }
 
@@ -174,6 +199,47 @@ check(
     offReport.rejected.length === 1 &&
     offReport.rejected[0].reason.includes("unknown fields"),
   `rows=${offReport.rows.length} rejected=${offReport.rejected.length}`,
+);
+
+// The same real opt-in envelope path on actual rows whose observation edges
+// are the normal 50 ms (and the approved 90 s) values.
+const edgeRows = [
+  JSON.parse(readText("edge-after-50.row.json")),
+  JSON.parse(readText("edge-before-50.row.json")),
+  JSON.parse(readText("edge-after-90s.row.json")),
+];
+const edgeOn = parseLapSummariesReport(edgeRows, {
+  observationCapture: "on",
+  authenticatedDeviceId: "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE",
+});
+check(
+  "ENVELOPE-EDGE-ON",
+  edgeOn.blockError === null &&
+    edgeOn.received === 3 &&
+    edgeOn.rows.length === 3 &&
+    edgeOn.rejected.length === 0 &&
+    edgeOn.rows[0].observation?.interval.samples === 3 &&
+    edgeOn.rows[0].observation?.interval.edgeBeforeSeconds === 0 &&
+    edgeOn.rows[0].observation?.interval.edgeAfterSeconds === 0.05 &&
+    edgeOn.rows[1].observation?.interval.samples === 2 &&
+    edgeOn.rows[1].observation?.interval.edgeBeforeSeconds === 0.05 &&
+    edgeOn.rows[1].observation?.interval.edgeAfterSeconds === 0 &&
+    edgeOn.rows[2].observation?.interval.samples === 2 &&
+    edgeOn.rows[2].observation?.interval.edgeAfterSeconds === 89.95,
+  `rows=${edgeOn.rows.length} rejected=${edgeOn.rejected.length} edges=${
+    edgeOn.rows.map((row) =>
+      `${row.observation?.interval.edgeBeforeSeconds}/${row.observation?.interval.edgeAfterSeconds}`
+    ).join(",")
+  } blockError=${edgeOn.blockError ?? "null"}`,
+);
+
+const edgeOff = parseLapSummariesReport(edgeRows, {});
+check(
+  "ENVELOPE-EDGE-OFF",
+  edgeOff.rows.length === 0 &&
+    edgeOff.rejected.length === 3 &&
+    edgeOff.rejected.every((row) => row.reason.includes("unknown fields")),
+  `rows=${edgeOff.rows.length} rejected=${edgeOff.rejected.length}`,
 );
 
 console.log(`SUMMARY PASS=${passed} FAIL=${failed}`);
