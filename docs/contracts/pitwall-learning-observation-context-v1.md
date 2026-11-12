@@ -1,215 +1,267 @@
-# T13 — minimale observatiecontext v1 (voorstel, niet geïmplementeerd)
+# T13 — capture-only observatiecontract v1 (voorstel, niet geïmplementeerd)
 
-Status: **PROPOSAL**. Geen productiecode, migratie, SDK-verificatie of release.
-Baseline `d8127e657e94fdb829d3c07175d4f591738debcc` op
-`docs/pitwall-learning-p2-observation-contract`. Input voor contractreview; niets
-hier is een gebouwde of geaccepteerde implementatie. `aggregationVersion: 2` en
-`observation.version: 1` zijn voorstellen, geen bestaande feiten. SDK-paden zijn
-**UNVERIFIED** tenzij code is geciteerd.
+Status: **PROPOSAL / capture-only**. Geen productiecode, migratie, SDK-read, build, deploy of leeractivatie. Baseline
+`e36f33b0a835c76fd7a80348fb1f6bb2890dc931`. Dit document vervangt de 215-regelversie op `e36f33b0`; de oude
+probe-uitkomsten blijven geldig en worden hier niet herschreven. `observation.version: 1` is een voorstel, geen bestaand
+feit. SDK-paden zijn **UNVERIFIED** tenzij geciteerd.
 
-## 1. Doel en grens
+## 0. Besluit en grens
+Deze slice levert alleen **bewijsopslag**: een optioneel, onveranderlijk `observation`-blok per afgeronde ronde,
+server-first en achter een default-off flag. Het blok bevat positieve waarnemingen en descriptoren, **geen enkele
+`false`/`0`-kwalificatie**. Daarom kan deze slice geen `pitLap:false`, `fuelAdded:0`, `driverChanged:false` of
+`resetOrTow:false` produceren en ook T10-fuel niet eligible maken. brandstofleren, T10-activatie, fit/publish, P3, UI,
+DB-deploy en Edge-deploy blijven buiten scope.
 
-Lever per afgeronde ronde één optioneel, onveranderlijk `observation`-blok met
-alleen bewezen bronfeiten voor brandstofkwalificatie. Geen model, fitting, worker,
-DB-schrijfactie, Edge-deploy, UI, pit- of bandenmodel. Pitverlies,
-service-uitvoering, compound/regime en wear blijven aparte bronhiaten (§9).
-Het blok is **additief** op `lapSummaries[]`, vervangt geen bestaand veld,
-wijzigt geen `summaryUid`/`recordRevision`/`contentHash` en wordt nooit bij
-verzending uit de actuele frame- of settingsstaat aangevuld.
+T09/T10 worden niet gewijzigd. De enige ownerbasis in deze slice is de bestaande serverwaarde `device_owner_at_receipt`
+(of `none`) in het P1-`owner_basis`-veld; een historische owner mag volgens het reeds geaccepteerde T09-model van de
+ontvangstowner afwijken wanneer daarvoor geldig historisch bewijs bestaat. Deze slice levert dat bewijs niet en voegt dus
+**geen** regel toe die `owner_observation` gelijkstelt aan `owner_receipt`.
 
-## 2. Bewezen bronbasis
+## 1. Onveranderlijke regels
+1. Afwezigheid is onbekend. Een ontbrekend feit wordt weggelaten, nooit als `false`, `0`, lege string of `null`
+   geschreven.
+2. Een aanwezig feit is positief of descriptief: `pitRoad.value` alleen `true`, `refuel` alleen bij een waargenomen
+   positieve stap. Een sample bewijst alleen de waargenomen samples, niet "alles tussen twee samples"; "infinite
+   continuous sampling" en "aantoonbaar volledig" worden hier niet gebruikt.
+3. Geen enkele waarde wordt bij verzending uit de actuele frame-, settings- of pairingstaat aangevuld. Het blok wordt
+   één keer bij rondeclose geserialiseerd.
+4. `summaryUid`, `recordRevision`, `currentDriverName`, `driverChanged`, `pitLap`, `pitVisitIds`,
+   `fuelAddedLitresObserved` en bestaande coverage worden nooit door `observation` overschreven of genormaliseerd.
+5. Geen token, owner-ID of pairinggeneratie over de draad. Geen accountoverschrijdende pooling; personal training
+   blijft geblokkeerd.
 
-| Feit | Werkelijke bron | Bewezen gedrag |
-|---|---|---|
-| Rondevenster/reden | `TelemetrySampler.cs:143-169,251-275` | sluit op sessiewissel, achteruitlopende sessietijd, lapwissel of gat; `startedAt` = eerste sample |
-| `pitLap` | `LapAccumulator.cs:297,363-364` | alleen `true` bij `OnPitRoad == true`, anders `null`; nooit `false` |
-| Ruw pitkanaal | `EnduranceConnectorPlugin.cs:995` | `OnPitRoad` uit `RawChannelReader.ReadBool`; ontbrekend = `null` |
-| `fuelAdded` per ronde | `LapAccumulator.cs:310-317,440-444` | alleen positieve delta wordt opgeteld; waargenomen 0 verdwijnt naar `null` |
-| Pitdelta/0 | `PitServiceTracker.cs:293-315` | `before`+`after` vereist; delta ≤ 0,01 L wordt echte `0`, anders `null` |
-| Driverwissel | `LapAccumulator.cs:298-303,362` | alleen naamverschil → `true`; gelijke/ontbrekende namen bewijzen geen identiteit |
-| Context/sample | `TelemetryContractsV3.cs:280-289`; `LapAccumulator.cs:16-58`; plugin `:961-1001` | frame heeft carId/trackName/trackConfig/trackId; `TelemetrySample` mist car/track/layout/compound/regime |
-| Sessietoken | plugin `:1009-1017` | `sim-<uniqueId>-s<num>`; zonder uniqueId is `sim-s0` mogelijk |
-| Ownerbinding | `ConnectorSettings.cs:20`; plugin `:1219-1247,1295-1300` | pairing bewaart `DeviceId`+`BoundOwnerUserId`+token onder `_settingsGate`; unpair wist beide |
-| P1-archief | migratie `20261111163052…:905-960` | expliciete kolomprojectie; `current_driver_name/id` en `note` niet gecaptured |
-| Rijhash | migratie `20261031200500…:75-100` | md5 over vaste velden; nieuwe velden vallen buiten de hash, dus eenzelfde-revisiecollisie is mogelijk |
-| Oude receiver | `simhubExtensions.ts:66-68,646-680` | onbekende sleutel **binnen** een laprow is een rijafwijzing |
-| Rijafwijzing | `MeasurementOutbox.cs:401-411` | afgekeurde rij wordt definitief uit de outbox verwijderd, met reden/teller |
-| T10-poort | `quality.ts:778-818` | fuel vereist `pit_lap`, `driver_changed`, `reset_or_tow` bewezen false en `fuel_added` expliciet 0 |
-| T09-eisen | `context.ts:120-129` | fuel blokkeert op owner, driver, device, car, track, layout |
-
-## 3. Wat de bestaande bron werkelijk kan vullen
-
-| Dimensie | Bewijsbaar bij waarneming | Niet bewijsbaar |
-|---|---|---|
-| `pitRoad` | rauw kanaal aanwezig op elke tick, geen `true` | kanaal ontbreekt of gat > drempel |
-| `refuel` | volledige fuelbedekking + geen positieve stap + bezoekdelta 0 | fuelkanaal ontbreekt, bezoekdelta onbekend |
-| `driverContinuity` | niet-lege naam op elke tick, exact gelijk | duurzame driver-ID; gelijke namen |
-| `resetOrTow` | **nee** in huidige code | elke `false` zonder bewezen kanaal |
-| `car/track/layout` | per tick constant uit frame | wijziging/missing tijdens ronde |
-| `owner/device` | declaratie uit pairing-snapshot | servergeverifieerde historie; oude outbox |
-| `compound/regime` | nee in `TelemetrySample` | apart bronhiaat |
-| `observedSession` | onderdeel-id's uit SDK | sterke globale sessie-identiteit |
-
-`driverContinuity` is continuïteit van de waargenomen naam, geen driveridentiteit.
-`player.Id`/`currentDriverId`-semantiek is UNVERIFIED en wordt niet als
-iRacing-user-ID gebruikt. Numerieke strings worden niet gerepareerd.
-
-## 4. Wire-voorstel (exact)
-
-Pad `payload.lapSummaries[i].observation`. Optioneel; afwezig = alle feiten
-onbekend (oude producer). Geen `null` binnen het blok: een feit is aanwezig en
-bewezen, of afwezig en onbekend. Onbekende subsleutel = rijafwijzing, net als
-elders. `version` verplicht `1`; andere waarde = `observation_version_unsupported`.
-Blokcap 2048 bytes.
-
+## 2. Wire-vorm (exact)
+Pad `payload.lapSummaries[i].observation`. Optioneel; afwezig = onbekend. `"observation": null`, `{}`, een onbekende
+subsleutel of een `null` binnen het blok is een **rijafwijzing** (`contains unknown fields` / `observation_null`), geen
+hele-frame-afwijzing. Exacte allowlist:
 ```json
 {"observation":{
   "version":1,
-  "window":{"firstSampleAt":"2026-11-12T10:00:00.000Z","lastSampleAt":"2026-11-12T10:01:59.000Z","samples":120,"maxGapSeconds":1.2},
-  "pitRoad":{"value":false,"samples":120,"maxGapSeconds":1.2,"coveredSeconds":118.8},
-  "refuel":{"value":0,"samples":120,"maxGapSeconds":1.2,"basis":"no_positive_step"},
-  "driverContinuity":{"value":"unchanged","samples":120},
-  "context":{"carId":"1321","trackId":42,"trackName":"Circuit de Spa-Francorchamps","trackConfig":"Endurance",
-    "deviceId":"11111111-1111-4111-8111-111111111111","ownerUserId":"22222222-2222-4222-8222-222222222222",
-    "ownerBasis":"pairing_binding_snapshot","sessionUniqueId":987654,"sessionNumber":0,"samples":120,"maxGapSeconds":1.2}
+  "capture":{"deviceId":"11111111-1111-4111-8111-111111111111"},
+  "interval":{"firstSampleAt":"2026-11-12T10:00:00.100Z","lastSampleAt":"2026-11-12T10:01:59.900Z",
+    "samples":239,"maxGapSeconds":1.2,"unknownSeconds":0.8,
+    "edgeBeforeSeconds":0.1,"edgeAfterSeconds":0.1},
+  "pitRoad":{"value":true,"firstAt":"2026-11-12T10:00:41.200Z","samples":239,
+    "maxGapSeconds":1.2,"unknownSeconds":0.8},
+  "refuel":{"observedAddedLitres":2.4,"firstAt":"2026-11-12T10:00:58.400Z","positiveSteps":2,
+    "resolutionLitres":0.01,"maxUndetectedLitres":0.01},
+  "driverNameContinuity":{"value":"unchanged","samples":239,"maxGapSeconds":1.2},
+  "context":{"carId":"1321","trackId":42,"trackName":"Circuit de Spa-Francorchamps",
+    "trackConfig":"Endurance","sessionUniqueId":987654,"sessionNumber":0,"samples":239}
 }}
 ```
 
-Typen/caps: tijden gezoneerde ISO-instant, `first >= startedAt`, `last <= endedAt`;
-`samples` 1..1.000.000; `maxGapSeconds`/`coveredSeconds` 0..86.400;
-`refuel.value` 0..300; `driverContinuity.value` ∈ {`unchanged`,`changed`};
-`trackId` 1..2147483647; `sessionUniqueId`
-0..2147483647; `sessionNumber` 0..1000; strings 1..128 zonder controls; `carId`
-raw SimHub-string. `resetOrTow` is gereserveerd maar nog niet uitzendbaar: de
-basis-allowlist is leeg tot een echte trace. Een blok zonder minstens één feit
-(`pitRoad`, `refuel`, `driverContinuity` of `context`) wordt niet uitgezonden.
-Legacy-mapping (één bron van waarheid): `pitRoad.value:false` → `pitLap:false`;
-`refuel.value:0` → `fuelAddedLitresObserved:0`;
-`driverContinuity:"unchanged"` → `driverChanged:false`; `"changed"` →
-`driverChanged:true` zonder `currentDriverName`. Ontbrekend feit → veld
-weglaten (blijft `null`). `aggregationVersion` = 2 zodra `observation` aanwezig
-is, anders 1; oude rijen blijven byte-identiek. `complete`/`coverage` blijven de
-bestaande dekkinsregels.
+`interval` is de enige verplichte descriptorgroep na `version` en `capture`. `capture.deviceId` is de bevroren
+entrywaarde, niet de settings op verzendmoment. `pitRoad` ontbreekt zonder positieve `OnPitRoad`-sample. `refuel`
+ontbreekt zonder positieve fuelstap. `driverNameContinuity` en `context` ontbreken als één sample in de ronde een lege,
+ontbrekende of afwijkende waarde had; ze zijn dan onbekend, niet `false`.
 
-## 5. Wie bevriest wat, wanneer
+Typen en caps (JSON, geen impliciete coercie):
 
-- **Lapstart** (`TelemetrySampler.StartLap`): eerste sample zet `window.firstSampleAt`,
-  `context`-startwaarden en de pairing-snapshot (`DeviceId`, `BoundOwnerUserId`,
-  lokale bindingsgeneratie) onder `_settingsGate`; de generatie gaat **niet** over de draad.
-- **Elke tick**: `lastSampleAt`, `samples`, `maxGapSeconds`; ontbrekende of
-  tegenstrijdige waarneming maakt dat feit definitief onbekend.
-- **Rondeclose**: `LapAccumulator.Close` schrijft het blok één keer; daarna alleen
-  serialisatie. Outbox bewaart `RowJson` letterlijk (`MeasurementOutbox.cs:20-34`).
-- **Sessie/segment**: `LapAggregate` krijgt zijn eigen `observedSessionId` bij
-  `StartLap`; `EnqueueSummary` (`:235-241`) gebruikt niet de actuele sessie van later.
-- **Pairingwissel**: pair/unpair verhoogt de lokale generatie; wijkt die of
-  `DeviceId`/`ownerUserId` bij close af, dan vervalt dat contextfeit. Oude
-  outboxrijen worden nooit herschreven en dragen hun eigen bevroren waarden; na
-  pair A→B blijft een A-rij dus A-waarden houden en de mismatch is zichtbaar,
-  maar er is geen sessie- of ownerbackfill.
-- **Laatste frame**: nooit. Geen `currentSnapshot`, latest identity,
-  observed-session-backfill of herberekening van oude hashes.
+| Veld | Regel |
+|---|---|
+| `version` | exact `1`; anders `observation_version_unsupported` |
+| `capture.deviceId` | RFC4122-tekst, 36 tekens, vergeleken met geauthenticeerd device |
+| tijden | ISO-8601 UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`, binnen `[startedAt, endedAt]`, `first <= last` |
+| `samples` | integer 1..1.000.000; `samples == interval.samples` voor elk aanwezig feit |
+| `maxGapSeconds`, `unknownSeconds`, edge-velden | getal 0..86.400; `unknownSeconds` = som van edge-offsets + alle volledige gaten > 1,0 s (bovengrens, geen continuïteitsclaim) |
+| `pitRoad.value` | alleen `true`; `firstAt` verplicht en binnen het interval |
+| `refuel` | `observedAddedLitres` > 0 en <= 300; `firstAt` verplicht en binnen het interval; `positiveSteps` 1..10.000 |
+| `resolutionLitres` | getal 0,001..1; `maxUndetectedLitres` >= `resolutionLitres` en <= 300. Laatstgenoemde is de bewezen bovengrens van een tankstap die volledig tussen twee geaccepteerde fuelsamples kan vallen; zonder bewezen bound wordt `refuel` weggelaten |
+| `driverNameContinuity.value` | `unchanged` of `changed`; beschrijvend, nooit driveridentiteit |
+| `context.carId` | ruwe SimHub-string, 1..64 UTF-8-bytes, geen controls |
+| `trackName`, `trackConfig` | 1..128 UTF-8-bytes, ruw (geen trim/casefold), geen controls |
+| `trackId` | integer 1..2147483647; `sessionUniqueId` 0..2147483647 en `sessionNumber` 0..1000 zijn optioneel; afwezig = onbekend |
 
-## 6. False/0-regels (geen "afwezigheid van tegenspraak")
+`context` bevat **geen** `ownerUserId`, `ownerBasis`, `driverId`, `currentDriverName`, `driverChanged`, `resetOrTow`,
+`compound` of `regime`. `driverCarIdx` is geen user-ID en wordt niet gemapt.
 
-Algemeen: `false`/`0` alleen als het feit aanwezig is én de dekking aantoonbaar
-volledig. Ontbrekende dekking, gat, ontbrekend kanaal of onbekende bezoekdelta →
-feit weglaten. `window.samples >= 10`, `maxGapSeconds <= 2`,
-`coveredSeconds >= 0,8 × (last-first)` gelden voor elk feit dat `false`/`0` claimt.
-Een observerregel is pas geldig na een **positieve** controle op een echte of
-frozen trace: dezelfde regel moet op een bekende pitronde `true` en op een
-normale ronde `false` geven. Alleen "geen `true` gezien" is geen validatie; die
-controle is hier nog niet uitgevoerd, dus de capability blijft default off.
+Bytecaps zijn twee verschillende maten, met aparte namen en aparte tests:
 
-- **pitRoad=false**: kanaal op *elke* tick (`feit.samples == window.samples`), nul
-  `true`; één ontbrekende tick → onbekend. `true` vereist ≥1 `true`-waarneming.
-- **refuel=0**: `coverage.fuel` voldoet aan de bestaande P1-regels,
-  `refuel.samples == coverage.fuel.sampleCount`, elke opeenvolgende fuelwaarde
-  aanwezig, geen stap > 0,01 L, en elk rakend pitbezoek heeft delta `0` of er is
-  geen bezoek. `fuel_delta_unobserved` → onbekend.
-- **driverContinuity=unchanged**: niet-lege naam op elke tick, exact ordinal
-  gelijk (na `Trim`), `samples == window.samples`; dit zegt niets over een
-  duurzame driver-ID.
-- **resetOrTow**: geen bestaande bron. `session_time_reset` is een close-reden,
-  geen tow-bewijs; `false` hieruit afleiden is verboden. Kandidaatkanalen
-  (`PlayerCarTowTime`, `IsOnTrack`, `SessionState`) zijn **UNVERIFIED** en mogen
-  pas na een frozen trace + capability een basis krijgen.
-- **context**: dimensie alleen aanwezig als elke tick dezelfde niet-lege waarde
-  had; `context.samples == window.samples`. Owner/device vereisen dezelfde
-  bindingsgeneratie bij start en laatste tick. `trackName`/`trackConfig` ruw
-  bewaren (geen trim/casefold); canonieke mapping expliciet in de adapter:
-  `iracing-track:<trackId>`, `iracing-trackconfig:<trackId>:<exacte trackConfig>`,
-  `simhub-car:<raw carId>`. `driverCarIdx` wordt nooit als user-ID gemapt.
+- **wire**: compacte UTF-8 van de `observation`-waarde, gemeten met `TextEncoder`/`JSON.stringify`, **<= 2048 bytes**.
+  De producer weigert een feit dat niet meer past; hij knipt nooit midden in een feit en vervangt het blok dan door
+  "afwezig" met een zichtbare teller. UTF-8-bytes, dus multibyte-tekens tellen vol mee.
+- **DB**: `pg_column_size(observation) <= 4096` als aparte `observation_jsonb_size`-constraint. jsonb-binairformaat is
+  geen wire-bytemaat; deze grens is **niet uitgevoerd** en wordt hier niet als PG-bewijs geclaimd.
 
-## 7. Compatibiliteit (werkelijk parsergedrag)
+## 3. Producer: bevriezen en capturen
+- **Lapstart** (`TelemetrySampler.StartLap`): `LapAggregate` krijgt eigen `ObservedSessionId` en `SegmentId`;
+  `LapAccumulator` opent `interval` en snapshot `DeviceId`, `BoundOwnerUserId` en `PairingGeneration` onder
+  `_settingsGate`. `ObservedSessionId`/`SegmentId` komen daarna nooit uit de actuele pipeline- of settingsstaat.
+- **Per tick**: alleen `interval`, positieve `pitRoad`, positieve fuelstap, naamcontinuïteit en constante context
+  bijwerken. Ontbrekend kanaal, gat of tegenstrijdige waarneming maakt dat feit definitief onbekend; het wordt niet
+  later "gerepareerd".
+- **Rondeclose**: `LapAccumulator.Close` schrijft het blok één keer. `MeasurementLapSummaryRecord.ToJson()`
+  serialiseert het; daarna wijzigt niets meer. `EnqueueLap` bewaart `RowJson` letterlijk.
+- **Pit/fuel**: `PitServiceTracker` mag een netto delta <= 0,01 L als *waargenomen netto nul* blijven registreren,
+  maar dat wordt **niet** als `refuel:0` of "geen refuel" geëxporteerd. `NotePitVisit` blijft `pitLap:true` zetten;
+  observatie overschrijft dat nooit.
+- **Naam**: `DriverNameContinuity` is alleen "de niet-lege namen verschilden niet" (of "verschilden"). Het is geen
+  bewijs van dezelfde persoon en wordt niet naar `driverChanged` gemapt. `LapAccumulator.cs:298-303` zet alleen
+  `driverChanged:true` bij naamverschil; de afwezigheid van `true` is geen `false`-bewijs.
+- **Capability**: `ObservationV1Enabled` default `false`; alleen bij aan zendt de plugin `observation` en adverteert
+  hij `observationV1:1`. De flag verandert geen bestaande velden of `aggregationVersion`.
 
-Bewezen met `probe-old-receiver.ts` tegen de echte `parseLapSummariesReport`:
-oude rij = 1 accepted/0 rejected; dezelfde rij met `observation` = 0/1 met
-`contains unknown fields`; een onbekende **root**key wordt geaccepteerd en
-genegeerd (556 chars). De parser keurt dus de laprow af, niet het frame; de
-outbox verwijdert die rij definitief (`MeasurementOutbox.cs:401-411`).
+## 4. Outbox, device en owner (B3)
+`OutboxEntry` krijgt naast `Uid/Series/RecordRevision/RowJson/EnqueuedAt` drie **lokale** velden: `CaptureDeviceId`,
+`CaptureOwnerUserId` en `PairingGeneration`. Ze worden bij enqueue bevroren, niet in `RowJson` geschreven, niet gelogd
+met token en niet naar de server gestuurd. De bestaande `RowJson` blijft byte-identiek.
+
+- **Pair/unpair**: verhoogt `PairingGeneration` (persisted in `ConnectorSettings`). `simhub_exchange_pairing_code`
+  maakt een nieuwe `simhub_devices`-rij met een nieuwe `owner_user_id`; er is geen bestaande owner-mutatie-RPC. De
+  oude rij blijft bestaan. De plugin bewaart geen oude token in de outbox.
+- **Verzenden**: een entry waarvan `CaptureDeviceId` of `PairingGeneration` niet meer bij de huidige
+  `Settings` past, wordt **niet** met het huidige token verzonden. Hij gaat naar een aparte, append-only
+  quarantainelijst met zijn exacte `RowJson` en reden (`stale_pairing_generation` / `device_changed`), telt niet mee
+  voor `MaxLaps` en blokkeert nieuwe B-records niet. Geen stille drop, geen UID/hash-herschrijving. De lijst is
+  begrensd (64 entries/1 MiB); bij vol weigert de producer nieuwe observation-capture zichtbaar, maar gewone laprows
+  blijven doorlopen.
+- **Pre-upgrade entries** zonder bevroren identiteit worden niet onder een ander token geraden. Als het outboxbestand
+  geen file-level deviceidentiteit heeft, worden ze bij de eerste load gequarantaineerd (`identity_unknown`) in plaats
+  van verzonden. Dit is de prijs van niet-accountoverschrijdend verzenden; het is expliciet en zichtbaar.
+- **Server**: de geauthenticeerde `p_device_id` is leidend. Bij een `observation.capture.deviceId` die daarvan
+  afwijkt, blijft de **kernrij** geaccepteerd en krijgt het blok de serverstatus
+  `quarantined_device_mismatch`; het wordt niet in P1 capture geprojecteerd en niet als feit gebruikt. Geen
+  whole-frame-fail, geen stille drop. `owner_user_id` komt alleen uit `simhub_devices` op ontvangstmoment; de payload
+  bevat er geen. `observation_status` is `text`: null als `observation` null is, anders `accepted` of
+  `quarantined_device_mismatch`.
+- **P1**: `capture_source_batch` blijft `owner_basis = 'device_owner_at_receipt'` of `'none'` gebruiken.
+  `pairing_binding_snapshot` bestaat niet en wordt niet toegevoegd. De item-JSON bevat geen owner-ID; `observation`
+  wordt alleen geprojecteerd bij `observation_status='accepted'`. `capture_batches`/`source_revisions` blijven
+  immutable.
+- **T09**: `owner_at_receipt_only` blijft de enige ownerwaarde in deze slice. Een inline `ownerUserId`-claim wordt
+  niet als `known` doorgegeven. Het bestaande T09-model mag een historische owner later wel van de ontvangstowner
+  laten afwijken; dat vereist apart, geverifieerd bewijs en wordt hier niet ingevuld. Ownerhistorie blijft dus open;
+  deze slice claimt geen complete persoonsleer.
+
+## 5. Geen false/0: per-feitdekking (B2)
+De huidige `complete`-regels zijn **geen** volledig bewijs:
+
+- C# `MeasurementEvent.cs:698-716` telt de drie groepen op en toetst 80 % op de som; server
+  `simhubExtensions.ts:581-598` toetst elke groep apart tegen het venster. Een producer-`complete` kan dus bij ~26,7 %
+  per groep passeren.
+- De echte validator laat 96,05 s van 120 s toe (`pass:true`), met 23,95 s onwaargenomen. Dat is gereproduceerd in de
+  reviewprobe.
+- `PitServiceTracker.cs:293-315` maakt van delta <= 0,01 L een waargenomen `0`; dat is netto nul, geen bewijs dat er
+  niet getankt is.
+
+Daarom in deze slice: **geen enkele negatieve kwalificatie**. Wat wel wordt opgeslagen is per feit het interval
+(`firstSampleAt`, `lastSampleAt`, `samples`, `maxGapSeconds`, `unknownSeconds`, edge-offsets) en de positieve
+gebeurtenis. `unknownSeconds` en de edges maken later een negatieve toets mogelijk, maar leveren die nu niet.
+
+Een toekomstige `false`/`0`-regel (aparte poort, niet in v1) moet minstens vereisen:
+`firstSampleAt` <= `startedAt` + `sampleTolerance`, `lastSampleAt` >= `endedAt` - `sampleTolerance`,
+`unknownSeconds == 0`, `maxGapSeconds` <= `gapTolerance`,
+een expliciete `basis` (`observed_no_true` / `observed_no_positive_step`), `resolutionLitres`, `maxUndetectedLitres > 0`
+en een **positieve** controle op een bekende pitronde én een normale ronde. `maxUndetectedLitres > 0` betekent voor T10
+altijd "onbekend", nooit `0`. Tot die poort blijft T10 `reset_or_tow_unknown` + `driver_changed_unknown` houden.
+
+## 6. Hashes, revisies en aggregatieversie (B4)
+- De bestaande `simhub_lap_row_hash(p)` blijft **exact** de huidige formule (`20261031200500:75-100`). Bestaande rijen
+  worden niet herschreven en blijven byte-identiek.
+- `simhub_lap_row_hash_v2(p)` is dezelfde formule plus `'hashVersion', 2` en `'observation', p.observation`. Selectie
+  is **conditioneel**: `observation IS NULL` -> bestaande v1; anders v2. Er komt geen hashversie in het wire-protocol
+  en geen nieuwe rootkey; de hash wordt server-side berekend.
+- Alle hash-callsites worden expliciet bijgewerkt: fallback-insert (`:233`), fallback-update (`:238`) en fast path
+  (`:1057-1077`). De fast path bouwt zijn record uit losse velden en moet `observation` daarom apart opnemen;
+  `jsonb_populate_record` alleen is niet genoeg. De P1-capture berekent geen eigen hash maar neemt het serverberekende
+  `content_hash` over.
+- Zelfde `device_id` + `summaryUid` + `recordRevision` + verschillende `observation` geeft verschillende hash ->
+  **`revision_conflict`**, nooit `duplicate`. Zelfde hash -> `duplicate`. Hogere `recordRevision` -> `superseded`
+  (bestaande `supersedesSummaryUid`); lagere -> `stale_revision`. De outbox herserialiseert `RowJson` nooit; een
+  nieuwe revisie is een nieuwe enqueue, geen in-place wijziging.
+- `aggregationVersion` is **geen** featureflag. Hij blijft 1 in deze slice; alleen een werkelijke aggregatiewijziging
+  mag hem verhogen. `observation.version` is de eigen schema-/capabilityversie.
+- Geen `historicalKnownAt`/`firstVisibleAt`: alleen `observed_at` (sample) en `source_received_at` (transport) blijven
+  bestaande, niet-bewezen-tijden.
+
+## 7. Aggregaten en sessie/segment (B6)
+`LapAggregate` heeft nu `SegmentId` maar geen `ObservedSessionId`; `MeasurementPipeline.EnqueueSummary` (`:235-241`)
+leest `_observedSessionId` uit de pipeline. Een late close kan daardoor de sessie van later gebruiken. Fix:
+`LapAggregate` krijgt `ObservedSessionId` bij `StartLap`; `ToSummary` gebruikt dat veld en krijgt geen sessieparameter
+meer. `SegmentId` blijft zoals het is. De bestaande sessiewissel sluit de ronde vóór vervanging (`:83-90`), maar dat is
+orderafhankelijk; de structurele freeze is leidend. `LapAccumulator`/`PitLap` kan `true` zijn door
+`NotePitVisit` zonder positieve `OnPitRoad`-sample. Dat blijft zo; `pitRoad:false` bestaat in deze slice niet en
+kan dus niets overschrijven. Netto-nul fuel wordt niet genormaliseerd naar "geen refuel".
+
+## 8. Compatibiliteit en rollback (B5)
+Bestaand, reproduceerbaar parsergedrag: een oude rij wordt geaccepteerd; `aggregationVersion:2` zonder `observation`
+wordt geaccepteerd; een rij met `observation` wordt rij-level afgewezen (`contains unknown fields`); de ACK merge toont
+de afwijzing en `ApplySeries` verwijdert die rij definitief (`MeasurementOutbox.cs:401-411`).
 
 | Producer | Receiver | Uitkomst | Status |
 |---|---|---|---|
-| oud | oud | huidig gedrag; `observation` afwezig | huidig |
-| oud | nieuw | accepted; alle feiten onbekend; geen backfill | verwacht |
-| nieuw, feature off | oud | rij identiek aan oud (geen `observation`, aggVersion 1) | ontwerp |
-| nieuw, feature on | oud | laprow rejected (`contains unknown fields`), core-frame + andere rijen accepted, rij uit outbox verwijderd | **bewezen (probe)** |
-| nieuw, feature on | nieuw | accepted, opgeslagen, gecaptured | ontwerp |
-| nieuw, feature off | nieuw | als oude producer; onbekend | ontwerp |
-| rollback nieuw→oud | nieuw feature on | laprows gaan verloren; eerst flag off, outbox drainen, dán serverrollback | ontwerp |
+| oud | oud | huidig; geen `observation` | bestaand |
+| oud | nieuw | accepted; onbekend; geen backfill | ontwerp |
+| nieuw, flag off | oud | rij identiek aan oud (geen blok, aggVersion 1) | ontwerp |
+| nieuw, flag on | oud | laprow rejected; core-frame/andere rijen accepted; rij uit outbox verwijderd | **bewezen (oude probe)** |
+| nieuw, flag on | nieuw | accepted; devicecheck; capture | ontwerp |
+| rollback nieuw -> oud | nieuw, flag on | **verboden** zolang een observation-rij in outbox/capture kan zitten | ontwerp |
 
-Server-first is verplicht: kolom nullable, parser additief, feature-flag default
-`false`, geen verplichte rootkey, geen whole-frame-reject. Er wordt **geen**
-arbitraire oude-servercompatibiliteit geclaimd. Autoupdater/ACK-contract blijft:
-20 events/3 laps/16.384 meetbytes/24.576 body; de planner stelt niet-passende
-rijen uit (`MeasurementFrame.cs:69-137`). Synthetische meting
-(`probe-payload-budget.ts`): 3 rijen 2.756 → 4.490 bytes (+1.734), headroom
-11.894; 20 events kunnen alsnog tot deferral leiden.
+Rollback is alleen **compatible-reader**: nieuwe reader blijft draaien, flag off, kolom blijft staan, geen destructieve
+drop. "Flag off" stopt alleen nieuwe blokken; het leegt geen offline wachtrijen. Naar een pre-observation-reader terug
+mag alleen na bewezen lege observation-wachtrijen (quarantaine plus export) of met een reader die het blok
+accepteert/negeert. Kolom droppen is geen normale rollback en vereist expliciete GO. Ook een plugin-DLL-rollback is
+geen normale rollback zolang observation-rijen in de outbox staan: de oude plugin kent de frozen identiteit niet en kan
+een A-rij onder B verzenden. Eerst quarantaine/exporteren of een plugin die het bestand kent.
 
-## 8. Minimale samenhangende bouwslice
+## 9. Wat de SDK wel/niet levert (geen live probe)
+- `GeneratedSessionData.cs:245` bevat `DriverInfo.Drivers[].UserID` (`long`) en `CarIdx`; `:63` heeft
+  `WeekendInfo.SubSessionID`. `vars.txt:201` heeft `PlayerCarTowTime` ("being towed if time > 0, s"); `:273`
+  heeft `SessionUniqueID`-telemetrie.
+- De plugin leest nu `WeekendInfo.SessionUniqueID` (`EnduranceConnectorPlugin.cs:1011`), niet `SubSessionID`; dat is
+  een bestaande, niet-veranderde bron en niet dezelfde waarde als de telemetrie-`SessionUniqueID`. `PlayerCarTowTime`
+  is een plausibel raw-channel maar **niet aangesloten** en **runtime-unverified**. `UserID` is sessie-YAML, geen
+  telemetrienummer; `CarIdx` alleen is geen user-ID; een afgeronde `ReadInt` is geen strikte ID-parse.
+- De directe reader kan ruwe telemetrie lezen (`:1755-1786`), maar dat bewijst geen runtimewaarde. Een
+  sessie-YAML-lezer voor `UserID` moet die aan de actieve `CarIdx` binden en de freshness bij een driverwissel
+  bewijzen; dat is niet gedaan. Geen SSH/netwerk/GUI/SDK-read/build in deze slice en geen nieuw SDK-veld nodig voor
+  deze capture-only slice totdat een runtimeprobe het tegendeel bewijst.
+- Daarom: geen `resetOrTow` in v1, geen driver-ID uit naam, T10 fuel blijft niet-eligible. `PlayerCarTowTime > 0` zou
+  later alleen een positieve tow kunnen bewijzen; `false` vereist nog steeds dekking en een echte trace.
 
-| Laag | Wijziging |
-|---|---|
-| Producer | `TelemetrySample` krijgt car/track/layout/sessiecomponenten + onveranderlijke bindingssnapshot; `LapAccumulator` houdt per feit dekking bij en bouwt `observation`; `MeasurementEvent.cs` krijgt `MeasurementLapObservationV1Dto` + `Validate()`; plugin vult sample/snapshot; `MeasurementPipeline` bevriest sessie/segment per aggregate; `ConnectorSettings.ObservationV1Enabled=false`; capability `observationV1:1` alleen bij aan. |
-| Validator | `simhubExtensions.ts`: `lapKeys` + `parseLapObservation` met exacte keys/typen/caps; onbekende subsleutel/versie → rijafwijzing; afwezig → null. |
-| DB | Nieuwe migratie: `simhub_lap_summaries.observation jsonb` nullable + CHECK (object, `pg_column_size <= 2048`); `simhub_persist_measurement_batch` neemt het veld over; `simhub_lap_row_hash` én alle bestaande hash-callsites voegen `observation` **alleen toe als niet-null** (legacy-hash identiek, geen backfill); nieuwe capturetriggers projecteren `n.observation`; P1-migratie blijft bevroren. |
-| Adapter | `src/features/endurance/pitwall/learning/observationV1.ts` (T12-gebied, apart reviewen): mapt `observation` naar T10-annotaties en T09-claims; weigert context als `deviceId` niet aan de source-envelope hangt; claimt nooit een driver-ID uit een naam. Zonder blok: exact de huidige blokkades (probe: 10 redenen). |
-| Tests | C#-unit: false/0-regels, ontbrekend kanaal, gat, driverwissel, pairingwissel, session/segment-freeze, caps; Deno: parser + bytebudget; Vitest: adapter + T10 met/zonder blok; SQL: legacy-hash vóór/na gelijk, capture bevat `observation`, oude rijen ongewijzigd. |
+## 10. Minimale bouwslice en tests (PENDING)
 
-Rollback: feature-flag off (oude rijen), daarna migratie-down pas nadat alle
-writers uit zijn; kolom drop is destructief en vereist expliciete GO. Geen
-bestaande hash of archive-payload herschrijven.
+| Laag | Bestand | Wijziging |
+|---|---|---|
+| Validator | `supabase/functions/_shared/simhubExtensions.ts` | `lapKeys` + exacte `parseLapObservation`; afwezig = null; onbekend/versie = rijafwijzing |
+| Persist | `supabase/functions/simhub-ingest-v3/persist.ts` | devicecheck, `observation_status`, geen owner uit payload |
+| DB | nieuwe migratie | nullable `observation`, `observation_status`, hash-v2, captureprojectie zonder owner, aparte jsonb-cap |
+| Producer | `MeasurementEvent.cs` | DTO/`Validate()`; geen driver/reset-afleiding |
+| Producer | `LapAccumulator.cs` | per-feitdekking, positieven, geen `false`/`0` |
+| Producer | `MeasurementPipeline.cs` | `ObservedSessionId`/`SegmentId` in `LapAggregate` |
+| Producer | `MeasurementOutbox.cs` | frozen device/owner/generation, quarantainelijst |
+| Producer | `EnduranceConnectorPlugin.cs`, `ConnectorSettings.cs` | snapshot, flag default off, capability |
+| Adapter | `src/features/endurance/pitwall/learning/observationV1.ts` | neutrale module (niet T12); geen ownerclaim, geen naam->driver |
 
-## 9. Wat dit niet oplost
+Tests, allemaal **PENDING** tot de bouw: C#-unit (geen `false`/`0`, gat, ontbrekend kanaal, pairingwissel, sessiefreeze,
+caps); Deno-parser (afwezig, `null`, onbekende subkey, multibyte, 2048-byte grens); Vitest-adapter (afwezig = huidige
+blokkades, geen driver-ID uit naam, owner niet inline); SQL (v1-hash identiek, v2 alleen bij blok; zelfde revisie
+verschillend blok = `revision_conflict`, capture zonder owner).
 
-- **Driveridentiteit**: geen bewezen duurzame SDK-ID; `player.Id`/`CarIdx` is
-  UNVERIFIED en naamresolutie is geen observatie. T09 `driver` blijft onbekend en
-  T10 fuel **niet eligible**, ook met een perfect observation-blok.
-- **Reset/tow**: geen kanaal; `false` is niet produceerbaar, dus T10 blijft
-  `reset_or_tow_unknown`.
-- **Owner**: pairing is een producerdeclaratie, geen servergeverifieerde historie;
-  accountoverschrijdend leren vereist een aparte beleidsbeslissing.
-- **Pit/tyres**: service-uitvoering en netto pitverlies vereisen surveyankers;
-  compound/regime/wear vereisen eigen bronnen. Niet hier opgelost.
-- **Sessie**: `sim-s0` blijft zwak; dit contract bindt op UID/hash/device/segment.
+## 11. B1-B6-closure
 
-## 10. Acceptatiechecklist (voor de bouw, niet nu)
-
-- [ ] 3 probes exit 0: oude rij accepted, geneste observatie rejected, rootkey
-      bounded; T10-blokkades exact; 3 rondes < 16.384 bytes.
-- [ ] Geen `false`/`0` zonder feit + dekking + basis; tests voor ontbrekend
-      kanaal, gat, onbekende bezoekdelta en reset/tow; **positieve** pit/normale-
-      ronde-controle op een echte of frozen trace vóór activatie.
-- [ ] Legacy-hash en oude archive-payload byte-identiek; geen backfill.
-- [ ] Oude receiver: alleen laprow rejected, frame/andere rijen + ACK intact;
-      feature-flag default off en server-first bewezen.
-- [ ] Capture bevat `observation`; oude rijen en `current_driver_name`-gedrag
-      ongewijzigd; geen extra triggerquery/timingexperiment.
-- [ ] Adapter: observation afwezig → huidige blokkades; aanwezig → alleen
-      bewezen velden; nooit driver-ID uit naam; context mismatch → onbekend.
-- [ ] Rollback: flag off → drain → migratie-down; geen data-rewrite.
-- [ ] Contractreview GO vóór enige producer/DB-code; net48/build/updater blijven
-      een aparte poort.
+| Punt | Oplossing in dit contract | Restrisico |
+|---|---|---|
+| B1 naam->driver | `driverNameContinuity` alleen descriptief; geen `driverChanged`-mapping; T10 blijft geblokkeerd | duurzame SDK-identiteit nog niet bewezen |
+| B2 80 %/false/0 | geen `false`/`0` in v1; per-feitinterval, edges, `unknownSeconds`, resolution; toekomstige negatieve poort expliciet | negatieve kwalificatie nog niet produceerbaar |
+| B3 owner/device | geen owner op wire/P1-item; outbox freeze; server devicecheck + quarantaine; owner alleen `device_owner_at_receipt`/`none` | historische owner blijft onbekend; apart bewijs nodig |
+| B4 hash/revisie | v1 ongewijzigd, v2 conditioneel incl. blok;zelfde revisie+ander blok = conflict; geen featureflag | DB-cap en SQL-tests niet uitgevoerd |
+| B5 rollback | alleen compatible-reader; flag off leegt geen wachtrij; geen kolomdrop | oude offline clients blijven onbewezen |
+| B6 aggregate/schema | sessie/segment freeze in `LapAggregate`; neutrale module; exacte shape/caps | SDK-bron en runtime blijven UNVERIFIED |
+## 12. Acceptatie voor deze capture-only slice
+- [ ] Server-first: parser accepteert een geldig blok; afwezig/`null`/onbekende subkey/versie gedrag is exact; geen
+      whole-frame-fail.
+- [ ] Device mismatch: kernrij blijft accepted, blok krijgt `quarantined_device_mismatch`, capture bevat het niet.
+- [ ] Geen owner-ID in wire, P1-item of adapterclaim; `owner_basis` blijft `device_owner_at_receipt`/`none`.
+- [ ] Geen `false`/`0` in enige producer- of adapterroute; bestaande `pitLap:true`/`fuelAdded>0`/`driverChanged:true`
+      blijven staan.
+- [ ] Hash v1 byte-identiek voor oude rijen; v2 alleen met blok;zelfde revisie met ander blok is `revision_conflict`.
+- [ ] Outbox: A-rij nooit onder B-token; quarantaine zonder stille drop of capaciteitsverlies voor nieuwe B-rijen.
+- [ ] Rollback: flag off + reader retained; geen drainclaim, geen kolomdrop.
+- [ ] `ObservationV1Enabled=false` default; T10 fuel niet eligible; geen
+      productie/DB/Edge/C#-build/UI/publicatie/P3/fitting.
+- [ ] Open: SDK-identiteit, reset/tow-bron, negatieve dekking, DB-tests, Vite-build (guard blokkeerde 1 MiB; niet
+      omzeild).
 
 **PRODUCTIEWIJZIGING: NEE.**
