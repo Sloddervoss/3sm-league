@@ -52,13 +52,24 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   `pitwall-learning-p2-pit-reason-quality-recheck/` en parent-rapporten
   `integrated-d8127e65.json` / `full-d8127e65-retry600.json`.
   Eerdere afgewezen bronversies, foutproeven en errata blijven afzonderlijk bewaard.
-- **T13 bronhiaten bewezen, minimaal observatiecontract gestart:** producerflags en nul-bijtanken,
-  context bij waarneming, archief/capture, bestaande pairingbinding en gedeeltelijke
-  SDK-sessietokens zijn onderzocht op `docs/pitwall-learning-p2-source-gaps`.
-  Geen nieuwe ownerregistratie aannemen als het bestaande pairingpad bruikbaar is;
-  actuele pairingdata bewijst geen historische recordbinding. Geen contract- of
-  connectorimplementatie afgerond. Connectorpublicatie en DLL-wissel behouden hun
-  afzonderlijke GO-poort.
+- **T13 pure core geaccepteerd en lokaal geïntegreerd:** bron
+  `5025896bdbdd17cfe7526dcd055ac2d029deb9b9`, SPEC PASS en quality APPROVED.
+  Integratie: `fc74bc2437f363f2c452ddc4c45d2f86757ed99e`.
+  Parent op die integratie: **216/216 Deno-tests** en **458/458 learningtests**,
+  beide exit 0; de drie T13-bestanden zijn bytegelijk aan de gereviewde bron.
+  De parser en meetrij-scopebeslissing zijn nog niet aan de receiver gekoppeld;
+  geen complete T13-gegevensketen, bruikbare brandstofpopulatie of leeractivatie bewezen.
+  Bewijs: `pitwall-learning-p2-observation-numeric-spec-recheck/`,
+  `pitwall-learning-p2-observation-core-quality-review/` en parent-log/resultaat
+  `observation-fc74bc24.log` / `learning-fc74bc24.json`.
+- **T13-S1 server-capturebouw gestart:** verse branch
+  `feat/pitwall-learning-p2-observation-server` vanaf `fc74bc24`.
+  Begrensde lokale bouw van parseraansluiting, devicegrens per meetrij,
+  conditionele observation-hash en P1-captureprojectie; feature standaard uit.
+  SQL-verificatie uitsluitend met synthetische fixtures in één geïsoleerde
+  testcontainer, zonder netwerk/poorten/productiemounts; geen productie-DDL/data.
+  Producer/outbox/SDK-verificatie, connectorpublicatie en DLL-wissel zijn niet
+  inbegrepen. P3/fitting, UI-publicatie en modelactivatie blijven gesloten.
 
 ## Beperkingen en vervolgnotities
 
