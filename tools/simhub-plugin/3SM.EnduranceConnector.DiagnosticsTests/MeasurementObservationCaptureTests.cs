@@ -57,6 +57,21 @@ internal static class MeasurementObservationCaptureTests
         return Convert.ToInt32(value[key], CultureInfo.InvariantCulture);
     }
 
+    private static Dictionary<string, object> Interval(ObservationCaptureResult result)
+    {
+        return result.HasObservation ? Nested(Parse(result.ToJson()), "interval") : null;
+    }
+
+    private static string EdgeEvidence(ObservationCaptureResult result)
+    {
+        var interval = Interval(result);
+        if (interval == null) return "code=" + result.Code + " (geen observation)";
+        return "code=" + result.Code
+            + " edgeBefore=" + Number(interval, "edgeBeforeSeconds").ToString(CultureInfo.InvariantCulture)
+            + " edgeAfter=" + Number(interval, "edgeAfterSeconds").ToString(CultureInfo.InvariantCulture)
+            + " unknown=" + Number(interval, "unknownSeconds").ToString(CultureInfo.InvariantCulture);
+    }
+
     public static int Run(Action<string, bool, string> check)
     {
         var count = 0;
@@ -86,15 +101,17 @@ internal static class MeasurementObservationCaptureTests
             && (bool)ob02p["value"],
             "samples=1 maxGap=0 first=last pit.firstAt=first");
 
-        // OB03 — twee samples 50 ms, kleine edgeAfter.
+        // OB03 — twee samples 50 ms, rij eindigt 90 s na de start. Dit is de
+        // goedgekeurde matrixvorm; de edge is een echt tijdsverschil, geen cap.
         var ob03 = ObservationCapture.Build(Binding(), null,
-            new[] { Sample(0, pit: true), Sample(50, pit: true) }, At(0), At(51));
-        var ob03j = Parse(ob03.ToJson());
-        var ob03i = Nested(ob03j, "interval");
-        Check("OB03", Number(ob03i, "maxGapSeconds") == 0.05
-            && Number(ob03i, "edgeAfterSeconds") == 0.001
-            && Number(ob03i, "unknownSeconds") >= 0.001,
-            "maxGap=0.05 edgeAfter=0.001 unknown=" + Number(ob03i, "unknownSeconds"));
+            new[] { Sample(0, pit: true), Sample(50, pit: true) }, At(0), At(90000));
+        var ob03i = Interval(ob03);
+        Check("OB03", ob03.HasObservation && ob03.Code == ObservationCaptureCodes.Accepted
+            && Number(ob03i, "maxGapSeconds") == 0.05
+            && Number(ob03i, "edgeBeforeSeconds") == 0
+            && Number(ob03i, "edgeAfterSeconds") == 89.95
+            && Number(ob03i, "unknownSeconds") == 89.95,
+            "twee 50ms-samples, rij 0..90s: " + EdgeEvidence(ob03));
 
         // OB04 — interne gap 1,2 s telt volledig in unknown.
         var ob04 = ObservationCapture.Build(Binding(), null,
@@ -282,6 +299,31 @@ internal static class MeasurementObservationCaptureTests
         Check("OB23", ob23.HasObservation && !Parse(ob23.ToJson()).ContainsKey("refuel"),
             "geen step onder 0.001 L");
 
+        // OB23-AT/ABOVE — de wirekorrel is 0.001 L met AwayFromZero. Dit is
+        // bestaand geaccepteerd producergedrag (§3.4), geen sensormeting en
+        // geen nieuw negatief feit: de echte C#-runtimewaarden zijn leidend.
+        var ob23At = ObservationCapture.Build(Binding(), null, new[]
+        {
+            Sample(0, fuel: 60, name: "A"), Sample(1000, fuel: 60.0005, name: "A")
+        }, At(0), At(1000));
+        var ob23AtR = ob23At.HasObservation && Parse(ob23At.ToJson()).ContainsKey("refuel")
+            ? Nested(Parse(ob23At.ToJson()), "refuel") : null;
+        Check("OB23-AT", ob23At.HasObservation && ob23AtR != null
+            && Number(ob23AtR, "observedAddedLitres") == 0.001
+            && Integer(ob23AtR, "positiveSteps") == 1
+            && Number(ob23AtR, "resolutionLitres") == 0.001,
+            "60 -> 60.0005: step=" + (ob23AtR == null ? "none" : Number(ob23AtR, "observedAddedLitres").ToString(CultureInfo.InvariantCulture)));
+
+        var ob23Above = ObservationCapture.Build(Binding(), null, new[]
+        {
+            Sample(0, fuel: 60, name: "A"), Sample(1000, fuel: 60.0006, name: "A")
+        }, At(0), At(1000));
+        var ob23AboveR = ob23Above.HasObservation ? Nested(Parse(ob23Above.ToJson()), "refuel") : null;
+        Check("OB23-ABOVE", ob23Above.HasObservation && ob23AboveR != null
+            && Number(ob23AboveR, "observedAddedLitres") == 0.001
+            && Integer(ob23AboveR, "positiveSteps") == 1,
+            "60 -> 60.0006: step=" + (ob23AboveR == null ? "none" : Number(ob23AboveR, "observedAddedLitres").ToString(CultureInfo.InvariantCulture)));
+
         // OB24 — eerste naam leeg, daarna bekend: geen claim.
         var ob24 = ObservationCapture.Build(Binding(), null, new[]
         {
@@ -334,10 +376,116 @@ internal static class MeasurementObservationCaptureTests
         Check("OB28", !ob28.HasObservation && ob28.Code == ObservationCaptureCodes.SampleOutsideWindow,
             "100ns vóór rijstart -> geweigerd, geen EPS");
 
-        var edge = ObservationCapture.Build(Binding(), null,
-            new[] { Sample(0, pit: true) }, At(0), At(2));
-        Check("OBS-EDGE", edge.Code == ObservationCaptureCodes.EdgeMismatch,
-            "edge >1 ms zou server-edge_mismatch zijn -> lokaal legacy: " + edge.Code);
+        // OBS-EDGE-AFTER-50 — normale 20 Hz-lap: laatste sample 50 ms vóór
+        // rowEnd. De edge is een waar tijdsverschil; 50 ms is geen fout.
+        var edgeAfter50 = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(0, pit: true), Sample(1000, pit: true), Sample(2000, pit: true) },
+            At(0), At(2050));
+        var edgeAfter50i = Interval(edgeAfter50);
+        Check("OBS-EDGE-AFTER-50", edgeAfter50.HasObservation
+            && edgeAfter50.Code == ObservationCaptureCodes.Accepted
+            && edgeAfter50.Observation.Interval.EdgeAfterSeconds == 0.05
+            && edgeAfter50i != null
+            && Number(edgeAfter50i, "edgeBeforeSeconds") == 0
+            && Number(edgeAfter50i, "edgeAfterSeconds") == 0.05
+            && Number(edgeAfter50i, "unknownSeconds") == 0.05,
+            "samples 0/1000/2000, row 0..2050: " + EdgeEvidence(edgeAfter50));
+
+        // OBS-EDGE-BEFORE-50 — eerste sample 50 ms na rowStart.
+        var edgeBefore50 = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(50, pit: true), Sample(1050, pit: true) }, At(0), At(1050));
+        var edgeBefore50i = Interval(edgeBefore50);
+        Check("OBS-EDGE-BEFORE-50", edgeBefore50.HasObservation
+            && edgeBefore50.Code == ObservationCaptureCodes.Accepted
+            && edgeBefore50.Observation.Interval.EdgeBeforeSeconds == 0.05
+            && edgeBefore50i != null
+            && Number(edgeBefore50i, "edgeBeforeSeconds") == 0.05
+            && Number(edgeBefore50i, "edgeAfterSeconds") == 0
+            && Number(edgeBefore50i, "unknownSeconds") == 0.05,
+            "samples 50/1050, row 0..1050: " + EdgeEvidence(edgeBefore50));
+
+        // OBS-EDGE-BOTH-50 — beide randen zijn accurate 50 ms.
+        var edgeBoth50 = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(50, pit: true), Sample(1050, pit: true), Sample(2050, pit: true) },
+            At(0), At(2100));
+        var edgeBoth50i = Interval(edgeBoth50);
+        Check("OBS-EDGE-BOTH-50", edgeBoth50.HasObservation
+            && edgeBoth50.Code == ObservationCaptureCodes.Accepted
+            && edgeBoth50.Observation.Interval.EdgeBeforeSeconds == 0.05
+            && edgeBoth50.Observation.Interval.EdgeAfterSeconds == 0.05
+            && edgeBoth50i != null
+            && Number(edgeBoth50i, "unknownSeconds") == 0.1,
+            "samples 50/1050/2050, row 0..2100: " + EdgeEvidence(edgeBoth50));
+
+        // OBS-EDGE-20HZ — de echte TelemetrySampler-vorm: de volgende tick
+        // sluit de vorige lap, dus de laatste geaccepteerde sample ligt 50 ms
+        // vóór rowEnd. Dit is niet als nul-edge weg te redeneren.
+        var edge20Hz = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(0, pit: true), Sample(89950, pit: true) }, At(0), At(90000));
+        var edge20Hzi = Interval(edge20Hz);
+        Check("OBS-EDGE-20HZ", edge20Hz.HasObservation
+            && edge20Hz.Code == ObservationCaptureCodes.Accepted
+            && edge20Hz.Observation.Interval.EdgeAfterSeconds == 0.05
+            && edge20Hzi != null
+            && Number(edge20Hzi, "maxGapSeconds") == 89.95
+            && Number(edge20Hzi, "edgeBeforeSeconds") == 0
+            && Number(edge20Hzi, "edgeAfterSeconds") == 0.05
+            && Number(edge20Hzi, "unknownSeconds") == 90.0,
+            "samples 0/89950, row 0..90000 (next tick): " + EdgeEvidence(edge20Hz));
+
+        // OBS-CAP-EDGE/UNKNOWN — de 86 400 s-grenzen zijn inclusief en gelden
+        // per veld én voor de onbekende som; geen clamp en geen EPS.
+        var edgeCapInclusive = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(0, pit: true) }, At(0), At(86400000));
+        var edgeCapOver = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(0, pit: true) }, At(0), At(86400001));
+        var unknownCapInclusive = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(43200000, pit: true) }, At(0), At(86400000));
+        var unknownCapOver = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(43200000, pit: true) }, At(0), At(86400001));
+        Check("OBS-CAP-EDGE-86400", edgeCapInclusive.HasObservation
+            && Number(Interval(edgeCapInclusive), "edgeAfterSeconds") == 86400
+            && Number(Interval(edgeCapInclusive), "unknownSeconds") == 86400,
+            "edgeAfter=86400 inclusief: " + EdgeEvidence(edgeCapInclusive));
+        Check("OBS-CAP-EDGE-86400-001", edgeCapOver.Code == ObservationCaptureCodes.InvalidNumber,
+            "edgeAfter=86400.001 -> " + edgeCapOver.Code);
+        Check("OBS-CAP-UNKNOWN-86400", unknownCapInclusive.HasObservation
+            && Number(Interval(unknownCapInclusive), "edgeBeforeSeconds") == 43200
+            && Number(Interval(unknownCapInclusive), "edgeAfterSeconds") == 43200
+            && Number(Interval(unknownCapInclusive), "unknownSeconds") == 86400,
+            "before+after=86400 inclusief: " + EdgeEvidence(unknownCapInclusive));
+        Check("OBS-CAP-UNKNOWN-86400-001", unknownCapOver.Code == ObservationCaptureCodes.InvalidNumber,
+            "before+after=86400.001 (elk veld <= cap) -> " + unknownCapOver.Code);
+
+        // OBS-UNKNOWN-EDGES — edges en maxGap>1 s tellen exact op, zonder
+        // clamp naar het venster of naar een kleinere waarde.
+        var unknownEdges = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(50, pit: true), Sample(1250, pit: true) }, At(0), At(1300));
+        var unknownEdgesi = Interval(unknownEdges);
+        Check("OBS-UNKNOWN-EDGES", unknownEdges.HasObservation
+            && Number(unknownEdgesi, "maxGapSeconds") == 1.2
+            && Number(unknownEdgesi, "edgeBeforeSeconds") == 0.05
+            && Number(unknownEdgesi, "edgeAfterSeconds") == 0.05
+            && Number(unknownEdgesi, "unknownSeconds") == 1.3,
+            "edges .05+.05 + maxGap 1.2: " + EdgeEvidence(unknownEdges));
+
+        // OBS-BOUNDS-REVERSE / OBS-UTC — ongeldige grenzen en niet-UTC blijven
+        // een harde lokale weigering.
+        var reverse = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(1500, pit: true) }, At(2000), At(1000));
+        Check("OBS-BOUNDS-REVERSE", !reverse.HasObservation
+            && reverse.Code == ObservationCaptureCodes.BoundsInconsistent,
+            "rowEnd vóór rowStart -> " + reverse.Code);
+
+        var localSample = ObservationCapture.Build(Binding(), null,
+            new[] { new ObservationSample(DateTime.SpecifyKind(T0, DateTimeKind.Local), true, null, "A", "ctx-a") },
+            T0, At(0));
+        var unspecifiedRow = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(0, pit: true) },
+            DateTime.SpecifyKind(T0, DateTimeKind.Unspecified), At(0));
+        Check("OBS-UTC", localSample.Code == ObservationCaptureCodes.InvalidTimestamp
+            && unspecifiedRow.Code == ObservationCaptureCodes.InvalidTimestamp,
+            "local sample=" + localSample.Code + ", unspecified row=" + unspecifiedRow.Code);
 
         // OB29 — trim/ordinal is gelijk aan de legacy-normalisatie.
         var ob29 = ObservationCapture.Build(Binding(), null, new[]
@@ -487,12 +635,13 @@ internal static class MeasurementObservationCaptureTests
         return count;
     }
 
-    private static MeasurementLapSummaryRecord Row(ObservationCaptureResult result, DateTime started, DateTime ended)
+    private static MeasurementLapSummaryRecord Row(ObservationCaptureResult result, DateTime started, DateTime ended,
+        string summaryUid = "33333333-3333-4333-8333-333333333333", string summaryId = "summary-obs-1")
     {
         return new MeasurementLapSummaryRecord
         {
-            SummaryUid = "33333333-3333-4333-8333-333333333333",
-            SummaryId = "summary-obs-1",
+            SummaryUid = summaryUid,
+            SummaryId = summaryId,
             SegmentId = "segment-obs-1",
             ObservedSessionId = "sim-s0",
             LapNumber = 4,
@@ -550,6 +699,56 @@ internal static class MeasurementObservationCaptureTests
         var partial = ObservationCapture.Build(Binding(), null,
             new[] { Sample(0, pit: true) }, At(0), At(0));
         WriteObservation(directory, "single-pit", partial, At(0), At(0), "accept", null);
+
+        // Echte builder-output voor normale 20 Hz-randen. De positieve fixtures
+        // komen uit Build; alleen de aparte foutcontrole hieronder gebruikt
+        // synthetische rowmetadata.
+        var edgeAfter50 = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(0, pit: true), Sample(1000, pit: true), Sample(2000, pit: true) },
+            At(0), At(2050));
+        WriteObservation(directory, "edge-after-50", edgeAfter50, At(0), At(2050), "accept", "observation_accepted");
+        Write(directory, "edge-after-50.row.json",
+            Row(edgeAfter50, At(0), At(2050), "44444444-4444-4444-8444-444444444444", "summary-edge-after-50").ToJson());
+
+        var edgeBefore50 = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(50, pit: true), Sample(1050, pit: true) }, At(0), At(1050));
+        WriteObservation(directory, "edge-before-50", edgeBefore50, At(0), At(1050), "accept", "observation_accepted");
+        Write(directory, "edge-before-50.row.json",
+            Row(edgeBefore50, At(0), At(1050), "55555555-5555-4555-8555-555555555555", "summary-edge-before-50").ToJson());
+
+        var edgeBoth50 = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(50, pit: true), Sample(1050, pit: true), Sample(2050, pit: true) },
+            At(0), At(2100));
+        WriteObservation(directory, "edge-both-50", edgeBoth50, At(0), At(2100), "accept", "observation_accepted");
+
+        var edgeAfter90 = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(0, pit: true), Sample(50, pit: true) }, At(0), At(90000));
+        WriteObservation(directory, "edge-after-90s", edgeAfter90, At(0), At(90000), "accept", "observation_accepted");
+        Write(directory, "edge-after-90s.row.json",
+            Row(edgeAfter90, At(0), At(90000), "66666666-6666-4666-8666-666666666666", "summary-edge-after-90s").ToJson());
+
+        var edge20Hz = ObservationCapture.Build(Binding(), null,
+            new[] { Sample(0, pit: true), Sample(89950, pit: true) }, At(0), At(90000));
+        WriteObservation(directory, "edge-20hz", edge20Hz, At(0), At(90000), "accept", "observation_accepted");
+        Write(directory, "edge-20hz.row.json",
+            Row(edge20Hz, At(0), At(90000), "77777777-7777-4777-8777-777777777777", "summary-edge-20hz").ToJson());
+
+        // Synthetische foutcontrole: de echte builderbytes van edge-after-50
+        // krijgen opzettelijk een 2 ms te wijde row. Het verschil tussen
+        // declared .05 en actual .052 is 2 ms > 1 ms tolerantie; de grootte
+        // .05 zelf is geldig. Dit is geen builderoutput en geen magnitude-cap.
+        WriteMeta(directory, new FixtureMeta
+        {
+            Case = "edge-error-2ms",
+            Kind = "observation",
+            Expect = "reject",
+            Code = "observation_edge_mismatch",
+            ObservationFile = "edge-after-50.observation.json",
+            StartedAt = "2026-09-27T10:00:00.000Z",
+            EndedAt = "2026-09-27T10:00:02.052Z",
+            AuthenticatedDeviceId = Device,
+            Note = "synthetische rowmetadata rond echte builderbytes; error 2 ms > 1 ms, edge .05 is legaal"
+        });
 
         var gap = ObservationCapture.Build(Binding(), null, new[]
         {
