@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text;
 
 namespace ThreeSM.EnduranceConnector
@@ -55,6 +56,15 @@ namespace ThreeSM.EnduranceConnector
             Append(builder, "car", current.CarId);
             Append(builder, "session", observedSessionId);
             Append(builder, "segment", segmentId);
+            // De sterke numerieke SDK-sessievelden horen bij de ketencontinuïteit.
+            // Ze zijn geen pairingfence en veranderen de bevroren StartLap-context
+            // of het observationresultaat niet; alleen de fuelstapketen breekt.
+            AppendOptional(builder, "sessionUniqueId", current.SessionUniqueId.HasValue
+                ? current.SessionUniqueId.Value.ToString(CultureInfo.InvariantCulture)
+                : null);
+            AppendOptional(builder, "sessionNumber", current.SessionNumber.HasValue
+                ? current.SessionNumber.Value.ToString(CultureInfo.InvariantCulture)
+                : null);
             AppendOptional(builder, "trackId", current.TrackId.HasValue
                 ? current.TrackId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 : null);
