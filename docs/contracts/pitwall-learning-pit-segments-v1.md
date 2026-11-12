@@ -163,12 +163,13 @@ owner van DEZELFDE uitkomst. Ontbrekende, malformed of niet-verifieerbare
 binding levert `service_binding_missing`; een aantoonbaar andere waarde levert
 `service_binding_mismatch`. In beide gevallen is er geen stop-specifieke
 performed-unie en geen complete dekking (`union=null`, `coverage=unknown`),
-ook al bevat de input intervallen. Een interval mag daarnaast eigen
-identiteitsclaims dragen (`binding`, of direct `sourceKind/deviceId/sourceUid/
+ook al bevat de input intervallen. Losse identiteitsclaims op blokniveau of per
+interval (`binding`, of direct `sourceKind/deviceId/sourceUid/
 recordRevision/contentHash/observedSessionId/sessionId/physicalCarId/
 physicalSessionId/layoutId/ownerUserId`); die moeten exact bij de uitkomst
-passen, anders wordt alleen dat interval uitgesloten met
-`service_interval_binding_mismatch`. `sessionId` is in deze lokale
+passen. Een afwijking op blokniveau is `service_binding_mismatch`; per interval
+wordt alleen dat interval uitgesloten met `service_interval_binding_mismatch`.
+`sessionId` is in deze lokale
 service-evidence de observed SDK-sessie, niet de transportkolom. Zo worden
 stale/cross-contextintervallen nooit stil als performed voor een andere stop
 geteld. Dit is geen cryptografische authenticatie: de caller is trusted, maar
