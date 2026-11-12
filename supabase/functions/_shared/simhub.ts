@@ -27,6 +27,11 @@ import {
  */
 export type TelemetryV3ParseOptions = {
   observationCapture?: LapObservationCaptureMode;
+  /**
+   * T13-S1. Server-side geauthenticeerde device-UUID. De Edge vult dit in
+   * `context.ts` uit de tokenrij; een client kan dit veld niet zetten.
+   */
+  authenticatedDeviceId?: string;
 };
 
 export type SimHubFlag = "green" | "yellow" | "red" | "white" | "checkered" | "unknown";
@@ -547,6 +552,7 @@ export const parseTelemetryV3Envelope = (
     events: parseMeasurementEventsReport(root.measurementEvents),
     laps: parseLapSummariesReport(root.lapSummaries, {
       observationCapture: options.observationCapture,
+      authenticatedDeviceId: options.authenticatedDeviceId,
     }),
   };
   if (measurementReport.events.blockError) {

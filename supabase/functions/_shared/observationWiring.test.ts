@@ -25,6 +25,12 @@ const ROW_START = "2026-11-12T10:00:00.000Z";
 const ROW_END = "2026-11-12T10:00:20.000Z";
 const encoder = new TextEncoder();
 
+// Fixture-API-wijziging (T13-S1 B1): in `on`-modus moet een geobserveerde
+// fixture nu een echte `authenticatedDeviceId` meegeven, precies zoals de
+// productiecontext hem uit de tokenrij invult. Dit is een aangescherpte
+// productie-eis, geen afgezwakte assertie: de oude parse-only route accepteerde
+// de rij zonder identiteit en is verwijderd.
+
 function assert(
   condition: unknown,
   message = "assertion failed",
@@ -146,6 +152,7 @@ Deno.test("T13S1-004 on accepts a valid block and preserves every raw value", ()
 
   const report = parseLapSummariesReport([lap(UUID_A, 1, { observation })], {
     observationCapture: "on",
+    authenticatedDeviceId: UUID_A,
   });
   assertEqual(report.rows.length, 1, "accepted rows");
   const parsed = report.rows[0].observation;
@@ -186,6 +193,7 @@ Deno.test("T13S1-004 on accepts a valid block and preserves every raw value", ()
 Deno.test("T13S1-005 on omits the property entirely for a legacy row", () => {
   const report = parseLapSummariesReport([lap(UUID_A, 1)], {
     observationCapture: "on",
+    authenticatedDeviceId: UUID_A,
   });
   const row = report.rows[0];
   assert(!("observation" in row), "no observation property");
@@ -204,7 +212,7 @@ Deno.test("T13S1-006 explicit null is a row rejection, never legacy; neighbours 
         observation: validObservation(),
       }),
     ],
-    { observationCapture: "on" },
+    { observationCapture: "on", authenticatedDeviceId: UUID_A },
   );
   assertEqual(report.blockError, null, "frame stays healthy");
   assertEqual(report.received, 3, "received");
@@ -225,7 +233,7 @@ Deno.test("T13S1-007 negative facts are row rejections", () => {
       lap(UUID_A, 1, { observation: falsePit }),
       lap(UUID_B, 2, { observation: zeroFuel }),
     ],
-    { observationCapture: "on" },
+    { observationCapture: "on", authenticatedDeviceId: UUID_A },
   );
   assertEqual(report.rows.length, 0, "nothing accepted");
   assertEqual(report.rejected.length, 2, "both rejected");
@@ -242,6 +250,7 @@ Deno.test("T13S1-008 invalid UUID format is rejected before any case comparison"
   observation.capture.deviceId = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5";
   const report = parseLapSummariesReport([lap(UUID_A, 1, { observation })], {
     observationCapture: "on",
+    authenticatedDeviceId: UUID_A,
   });
   assertEqual(report.rows.length, 0, "rejected");
   assert(
@@ -270,6 +279,7 @@ Deno.test("T13S1-009 2048-byte wire cap is inclusive and fails before the key wa
     lap(UUID_A, 1, { observation: exactly }),
   ], {
     observationCapture: "on",
+    authenticatedDeviceId: UUID_A,
   });
   assert(
     atLimit.rejected[0].reason.includes("observation_unknown_key"),
@@ -282,6 +292,7 @@ Deno.test("T13S1-009 2048-byte wire cap is inclusive and fails before the key wa
     lap(UUID_A, 1, { observation: over }),
   ], {
     observationCapture: "on",
+    authenticatedDeviceId: UUID_A,
   });
   assert(
     tooBig.rejected[0].reason.includes("observation_too_large"),
@@ -295,6 +306,7 @@ Deno.test("T13S1-010 multibyte padding counts as bytes, not characters", () => {
   (observation as Record<string, unknown>).pad = "é".repeat(1200);
   const report = parseLapSummariesReport([lap(UUID_A, 1, { observation })], {
     observationCapture: "on",
+    authenticatedDeviceId: UUID_A,
   });
   assert(
     report.rejected[0].reason.includes("observation_too_large"),
@@ -308,7 +320,7 @@ Deno.test("T13S1-011 one observed row never aborts the series or the frame", () 
       lap(UUID_A, 1, { observation: "not-an-object" }),
       lap(UUID_B, 2),
     ],
-    { observationCapture: "on" },
+    { observationCapture: "on", authenticatedDeviceId: UUID_A },
   );
   assertEqual(report.blockError, null, "block error");
   assertEqual(report.rows.length, 1, "legacy survives");
@@ -444,6 +456,7 @@ Deno.test("T13S1-015 V3 envelope: default rejects, opt-in carries the block", ()
     v3Frame({ observation: validObservation() }),
     {
       observationCapture: "on",
+      authenticatedDeviceId: UUID_A,
     },
   );
   assertEqual(on.measurementReport!.laps.rows.length, 1, "opt-in accepts");

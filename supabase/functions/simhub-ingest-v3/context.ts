@@ -87,7 +87,14 @@ export const resolveTelemetryContext = async (
     const root = rawBody as Record<string, unknown>;
     const version = root?.protocolVersion;
     if (version === 3) {
-      normalized = parseTelemetryV3Envelope(rawBody, parseOptions);
+      // T13-S1: de observation-classifier krijgt de device-UUID uit DEZE
+      // token-opzoeking. De override staat bewust hier, niet bij de aanroeper:
+      // ook een toekomstige caller kan zo geen payload-device of zelfgekozen
+      // UUID als "geauthenticeerd" doorgeven.
+      normalized = parseTelemetryV3Envelope(rawBody, {
+        ...parseOptions,
+        authenticatedDeviceId: dev.id,
+      });
     } else if (version === 1 || version === 2) {
       normalized = normalizeTelemetryEnvelope(rawBody);
     } else {

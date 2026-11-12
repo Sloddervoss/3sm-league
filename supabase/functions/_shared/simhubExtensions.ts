@@ -19,7 +19,7 @@
  * Geen Deno- of npm-imports: dit bestand is met vitest en met `deno test` te
  * draaien. De enige import is de pure, I/O-vrije T13-parser.
  */
-import { parseLapObservation } from "./observationV1.ts";
+import { classifyLapObservation } from "./observationV1.ts";
 import type { ObservationV1 } from "./observationV1.ts";
 
 /** Bovengrens aan het aantal onbekende rootkeys in één frame. */
@@ -667,6 +667,13 @@ export type LapObservationCaptureMode = "off" | "unavailable" | "on";
 
 export type LapSummaryParseOptions = {
   observationCapture?: LapObservationCaptureMode;
+  /**
+   * T13-S1. De onafhankelijk geauthenticeerde device-UUID uit de
+   * token-opzoeking (`context.ts`), nooit een veld uit de payload. Verplicht
+   * zodra een rij een observation draagt; zonder geldige waarde wordt die rij
+   * afgekeurd en dus nooit stil als legacy opgeslagen.
+   */
+  authenticatedDeviceId?: string;
 };
 
 const lapKeys = [
@@ -834,17 +841,24 @@ export const parseLapSummary = (
 
   // T13-S1: alleen in de expliciete opt-in-modi is de sleutel bekend. In
   // `unavailable` wordt de rij geweigerd zonder iets te strippen; in `on` gaat
-  // het blok door de goedgekeurde pure parser en blijven de ruwe waarden
-  // (UUID-case, tijdprecisie, getallen) ongewijzigd.
+  // de RAUWE record door de goedgekeurde classifier. Dat gebeurt vóór
+  // optTimestamp/Date.parse, zodat de 7-cijferige tijdstrings en de ruwe
+  // row-bounds intact blijven voor de venster- en edgecontrole. De classifier
+  // kent de serveridentiteit uit de tokencontext, nooit uit capture.deviceId.
   if (mode !== "off" && Object.prototype.hasOwnProperty.call(record, "observation")) {
     if (mode === "unavailable") {
       throw new Error(`${path}.observation is unavailable`);
     }
-    const parsed = parseLapObservation(record.observation);
-    if (!parsed.ok) {
-      throw new Error(`${path}.observation is invalid: ${parsed.code}`);
+    const classified = classifyLapObservation({
+      row: record,
+      authenticatedDeviceId: options.authenticatedDeviceId,
+    });
+    if (classified.disposition !== "accept") {
+      // reject én quarantine kosten alleen deze rij; de reeks en het frame
+      // blijven doorlopen. `legacy` is hier onbereikbaar: de property bestaat.
+      throw new Error(`${path}.observation is invalid: ${classified.code}`);
     }
-    summary.observation = parsed.observation;
+    summary.observation = classified.observation;
   }
 
   return summary;
