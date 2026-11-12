@@ -235,7 +235,13 @@ namespace ThreeSM.EnduranceConnector
         private void EnqueueSummary(LapAggregate aggregate)
         {
             if (aggregate == null) return;
-            var record = aggregate.ToSummary(_ids.NewSummaryUid(), _ids.NextSummaryLabel(aggregate.LapNumber), _observedSessionId);
+            // T13-S2B: de gewone rij gebruikt de bij StartLap bevroren sessie.
+            // Alleen handmatig gebouwde legacy-aggregaatfixtures vallen terug op
+            // de aangeleverde sessie. Er wordt hier nooit een observation gezet.
+            var observedSessionId = aggregate.HasFrozenObservedSession
+                ? aggregate.FrozenObservedSessionId
+                : _observedSessionId;
+            var record = aggregate.ToSummary(_ids.NewSummaryUid(), _ids.NextSummaryLabel(aggregate.LapNumber), observedSessionId);
             string reason;
             if (!_outbox.EnqueueLap(record, out reason)) _lastEnqueueProblem = "lap_not_queued:" + reason;
             _completedLaps++;
