@@ -7,7 +7,7 @@
 | P1 `pitwall_learning.source_revisions` | Alleen `measurement_event`/`lap_summary`; private vijfdelige bronidentiteit `(source_kind,device_id,source_uid,record_revision,content_hash)`, oorspronkelijke observed/received-tijden, compacte payload. Eventpayload heeft o.a. kind, SDK-/delivered-session, segment, session-time, tick, wear, generation en evidence zonder note. | Capture omvat NIET de bovenstaande telemetry-/stoptabellen. Geen historische fysieke pitankers, uitgevoerd-serviceklok, damage/tow/reset/gap-certificaat, owner/car/track/layout of first-known-time. Een legacy stop wordt nooit een gefabriceerd P1-event. |
 | Connector `PitServiceTracker` / `TyreAnchorTracker` | Bezoek op ruwe OnPitRoad-flank; lokaal entry/exit session-time/ticks; fuel-leveldelta; serviceverzoeken. `pit_service_completed` bij ongewijzigde wear heeft lage confidence en bewijst geen uitgevoerde bandenwissel. | Verzoeken/flags zijn geen uitvoering. Lokale visitklokken worden niet als stopklokken in de P1-payload gecaptured. Geen bewezen per-component uitgevoerde serviceseconden. |
 | Bestaand `strategy/computePitLoss` | Pure bestaande berekening op een expliciet servicevrije pitlanebasis, plus langzaamste servicecomponent. | Ontvangt geen bewezen servicevrije basis uit `pit_lane_seconds`. T12 roept deze functie bewust NIET met bruto data aan en wijzigt dit readonly pad niet. |
-| Optionele trusted adaptergrens in deze module | Kan apart geverifieerde, brongebonden context, gemeten A→B-tijden/locaties, normale baantraversal, fysieke identiteit, continuïteit, beschikbaarheid van exacte referentiefacts en uitgevoerde componentintervallen aanleveren. | Dit zijn LOKALE domeinfacts, GEEN bestaande DB-kolommen, wire-/SDK-velden, connectorrelease of nieuwe capture. Zonder die facts blijft netto onbekend; positieve tests zijn uitsluitend synthetisch. |
+| Optionele trusted adaptergrens in deze module | Kan apart geverifieerde, brongebonden context, gemeten A→B-tijden/locaties, normale baantraversal, fysieke identiteit, continuïteit, beschikbaarheid van exacte referentiefacts en uitgevoerde componentintervallen aanleveren. Service-intervallen dragen een expliciete binding aan de vijfdelige uitkomstbron, SDK-sessie, fysieke car/sessie, layout en owner. | Dit zijn LOKALE domeinfacts, GEEN bestaande DB-kolommen, wire-/SDK-velden, connectorrelease of nieuwe capture. Zonder die facts blijft netto onbekend en is er geen stop-specifieke performed-service; positieve tests zijn uitsluitend synthetisch. |
 
 Repository-trace (alleen gelezen; geen productiequery):
 
@@ -137,6 +137,12 @@ via Date.parse gelezen; de fractie wordt apart exact toegevoegd. Dit voorkomt
 dubbele fractie/timezone, pre-1970-truncatie en Date.UTC's jaar-0..99-special-case.
 Geen private T11-helper geïmporteerd en geen tweede datumframework.
 
+Een expliciet `observedAt:null` is onbekend, niet toekomstig:
+`source_observation_unknown` (reference: `reference_source_observation_unknown`).
+Alleen een geldige waarde met ticks > `asOf` krijgt
+`source_observation_after_as_of`. Onbekend blijft conservatief netto blokkeren en
+wordt nooit false of 0.
+
 ## Services
 
 Optionele `services` heeft `intervals` (maximaal 32) van
@@ -148,6 +154,44 @@ maar nooit complete standaardcomponentdekking; ongeldige/onuitgevoerde intervall
 zijn geen 0. Een gedeeltelijk bekende unie is `partial`, geen volledige servicetijd.
 `stationary` betreft een gemeten stilstandsinterval, niet automatisch brandstof/banden.
 
+`services` is lokale trusted-adapterevidence, GEEN DB-/wireveld. Iedere
+performed-claim vereist een expliciet `binding`:
+`{sourceKind,deviceId,sourceUid,recordRevision,contentHash,observedSessionId,
+physicalCarId,physicalSessionId,layoutId,ownerUserId}` — de vijfdelige
+T09-bronidentiteit plus de gebonden SDK-sessie, fysieke car/sessie, layout en
+owner van DEZELFDE uitkomst. Ontbrekende, malformed of niet-verifieerbare
+binding levert `service_binding_missing`; een aantoonbaar andere waarde levert
+`service_binding_mismatch`. In beide gevallen is er geen stop-specifieke
+performed-unie en geen complete dekking (`union=null`, `coverage=unknown`),
+ook al bevat de input intervallen. Een interval mag daarnaast eigen
+identiteitsclaims dragen (`binding`, of direct `sourceKind/deviceId/sourceUid/
+recordRevision/contentHash/observedSessionId/sessionId/physicalCarId/
+physicalSessionId/layoutId/ownerUserId`); die moeten exact bij de uitkomst
+passen, anders wordt alleen dat interval uitgesloten met
+`service_interval_binding_mismatch`. `sessionId` is in deze lokale
+service-evidence de observed SDK-sessie, niet de transportkolom. Zo worden
+stale/cross-contextintervallen nooit stil als performed voor een andere stop
+geteld. Dit is geen cryptografische authenticatie: de caller is trusted, maar
+de binding voorkomt accidentele cross-ride-associatie.
+
+Beschikbaarheid geldt ook voor services, met 100ns-vergelijking. Een interval
+met `endAt > asOf` is nog niet uitgevoerd/waargenomen: het wordt niet
+meegeteld en niet tot `asOf` geclipt; `service_after_as_of` maakt de dekking
+onvolledig. Een volledig voor `asOf` afgerond interval in een nog open pitwindow
+(`pitExitAt > asOf`) blijft als descriptieve gemeten unie bewaard, maar
+`serviceCoverage` is dan `partial` met `service_pit_window_open`, nooit
+`complete`, en `serviceLabelEligible` blijft false. `complete` vereist dus een
+gesloten stop én alle intervallen volledig voor `asOf`. Een gesloten stop met
+geldige volledig voorbije intervallen blijft positief `complete`.
+
+Een expliciet `intervals: []` met `complete:true` is een echte, bevestigde
+nulmeting en levert unie 0. Dat staat los van een niet-nulle
+`predictedServiceSeconds` uit een geverifieerde compositie: meting 0 en
+predictie 20 zijn verschillende feiten. `serviceLabelEligible` zegt dan dat de
+meting compleet is en de compositie geldig is, niet dat een getraind model 20
+seconde voorspelt of dat 0 en 20 moeten overeenkomen. Een onbekende of
+ontbrekende intervallijst is geen bevestigde 0 en levert geen complete dekking.
+
 Afzonderlijke optionele compositie:
 `components=[{component:fuel|tyres,seconds}]` (maximaal 16, geen dubbele component),
 `componentsComplete:true`, `ruleset={id,verified:true,mode:parallel|sequential,
@@ -155,9 +199,10 @@ physicalSessionId,layoutId}`. Alleen een aan de uitkomst gekoppelde bevestigde r
 mag respectievelijk max of som uitdrukken; geen universele aanname. Onbekend component
 is niet 0. Niet-standaard repair/tow wordt niet tot normale servicekosten verheven.
 `predictedServiceSeconds` is deze expliciete rekencompositie, geen model/fitting en
-niet de gemeten unie. `serviceLabelEligible` vereist daarnaast complete gemeten unie,
-gekwalificeerde bron/context en geen repair/tow. Unknown rules blokkeren component- /
-economische aannames, niet onafhankelijk bruto of goed geankerde netto delta.
+niet de gemeten unie. `serviceLabelEligible` vereist daarnaast een geldige
+stopbinding, complete gemeten unie, gekwalificeerde bron/context en geen repair/tow.
+Unknown rules blokkeren component- / economische aannames, niet onafhankelijk bruto
+of goed geankerde netto delta.
 
 ## Automatische pairing, retries en revisies
 
@@ -168,31 +213,63 @@ DB-/wirevelden. `continuity={ownerUserId,observedSessionId,layoutId,physicalCarI
 physicalSessionId,continuityId,flags}` attesteert identiteit en een volledig geverifieerd
 continu venster. Zonder dat bewijs blijven edges orphan/descriptief.
 
-Eerst expliciete beschikbare records filteren, dan exact op captured_at sorteren en
-retries dedupliceren. Partitionering is event/team/run/device/transport-session;
-verandering van owner/SDK-session/layout/physical identity/continuity, unknown flags,
-zichtbare lapcounterreset, conflicten of ongeldige edgeflags verbreken open pairing.
-Een beschikbaar event zonder ordentijd maakt de batch ongeldig, niet onzichtbaar.
-Open entry en orphan exit blijven afzonderlijke diagnoses met null duur. Nultijd blijft
-0 met reden. Output bevat de oorspronkelijke entry/exit-rijen; geen P1-provenanceclaim.
-`availableAt` bewijst zichtbaarheid van het adapteritem, niet first-known-time voor
-voorspellingen. Caller moet relevante tussenliggende breuken meeleveren of via het
-continuïteitscertificaat uitsluiten: deze module doet geen verborgen historie-/DBscan.
+Eerst expliciete beschikbare records filteren (`availableAt <= asOf`, 100ns),
+dan exact op captured_at sorteren (bij gelijke tijd native `sequence` als
+tie-break wanneer beide edges die hebben; nooit een verzonnen 0), en retries
+dedupliceren. `availableAt` is zichtbaarheid van het adapteritem, geen
+eventinhoud en geen immutable knownAt: een latere retry van dezelfde rij en
+dezelfde continuity is hetzelfde event, geen conflict en geen extra orphan.
+Deduplicatie/conflict gebruikt de semantische rij plus continuity, exclusief
+`availableAt`. Unbound rijen (ontbrekende native partitiekeys) worden
+uitsluitend op exact gelijke semantische rij+continuity gededupliceerd tot één
+orphan; zij worden nooit gepaird en verschillende ongerelateerde unbound rijen
+worden niet samengevoegd. Partitionering is
+event/team/run/device/transport-session; verandering van
+owner/SDK-session/layout/physical identity/continuity, unknown flags,
+zichtbare lapcounterreset, conflicten of ongeldige edgeflags verbreken open
+pairing. Een beschikbaar event zonder ordentijd maakt de batch ongeldig, niet
+onzichtbaar. Open entry en orphan exit blijven afzonderlijke diagnoses met null
+duur. Nultijd blijft 0 met reden. Output bevat de oorspronkelijke entry/exit-rijen;
+geen P1-provenanceclaim. `availableAt` bewijst zichtbaarheid van het adapteritem,
+niet first-known-time voor voorspellingen. Caller moet relevante tussenliggende
+breuken meeleveren of via het continuïteitscertificaat uitsluiten: deze module doet
+geen verborgen historie-/DBscan.
 
 `derivePitSegments({asOf,segments})` verwerkt maximaal 100 adapteranalyses. Eerst
-receipt-cutoff, dan per outcome `(sourceKind,deviceId,sourceUid)` hoogste revisie.
-Gelijke hoogste revisie/hash/facts is één stop, ook bij andere JSON-keyvolgorde.
-Een referentierevisie wordt eveneens pas na receipt-filter gekozen. Conflicterende
-hoogste revisie/hash of adapterfacts blokkeren labels deterministisch; latere revisies
-maken geen onafhankelijke stop. Nieuwe aanroep herleidt de output opnieuw zonder
-bronrijen te muteren. Verschillende reference-UID's voor één outcome worden conservatief
-niet willekeurig gekozen. Redenen zijn vaste, gesorteerde unieke codes; hoogstens twee
-bronrefs per analyse. Geen nieuwe stop-UID/hash voor mutable legacydata.
+receipt-cutoff (`<= asOf`, 100ns), dan per outcome
+`(sourceKind,deviceId,sourceUid)` de hoogste beschikbare revisie. Binnen die
+hoogste revisie bepaalt de vijfdelige P1-identiteit plus de inhoudelijke
+adapterfacts of iets een retry/correctie of een conflict is. Deliverymetadata
+(`sourceReceivedAt` op outcome/reference en hun contextEvidence-source) is geen
+semantische identiteit: dezelfde vijfdelige identiteit met identieke facts is
+één stop, ook bij een latere receipt of andere JSON-keyvolgorde. De
+representative is deterministisch en order-onafhankelijk: eerst availability
+filteren, dan de canonieke vroegste receipt binnen de gekozen facts. Daarbij
+blijft de gekozen rij intact, zodat `contextEvidence.source` correct gebonden
+blijft. Echte causale facts (knownAt, context, flags, timing, anchors,
+servicebewijs) worden niet als deliveryruis verwijderd.
+
+Een andere hoogste hash, of afwijkende adapterfacts bij dezelfde hoogste
+revisie, blijft een conflict: netto en alle labels false,
+`revision_or_adapter_conflict` in `reasons`, `predictorReasons` én
+`serviceReasons`. Toekomstige (na `asOf` ontvangen) revisies/conflicten worden
+vóór deze selectie gefilterd en vergiftigen geen beschikbare stop; er is geen
+fallback naar een ongeldige hoogste revisie. Een referentierevisie wordt
+eveneens pas na receipt-filter gekozen. Nieuwe aanroep herleidt de output
+opnieuw zonder bronrijen te muteren. Verschillende reference-UID's voor één
+outcome worden conservatief niet willekeurig gekozen. Redenen zijn vaste,
+gesorteerde unieke codes; hoogstens twee bronrefs per analyse. Geen nieuwe
+stop-UID/hash voor mutable legacydata.
 
 `describeLegacyPitStop(row)` bewaart echte legacy-identifiers zonder string-sentinels,
 berekent waar mogelijk entry→exit of bewaart een geldig opgeslagen bruto getal met
 incomplete-/disagreediagnose. Netto blijft altijd null. Deze API heeft bewust geen
-historische as-of- of revisiegarantie.
+historische as-of- of revisiegarantie. De disagreement-tolerantie is versioned en
+exact: een opgeslagen duur die ≤ 10000 ticks (1 ms, inclusief) van de
+entry→exit-tickduur afwijkt, is geen disagreement; pas daarboven volgt
+`legacy_duration_disagrees`. De bruto duur blijft de exacte entry→exit-seconden
+(of een geldige opgeslagen waarde) en wordt niet in een andere eenheid
+geherinterpreteerd.
 
 ## Bewijs en T13-grens
 
@@ -200,10 +277,15 @@ Tests in `pitSegments.test.ts` bevatten positieve synthetische niet-null control
 een echte gedrags-RED vóór netto-implementatie, traced P1-/telemetry-/stopvormen,
 T09-binding/T10-coverage-integratie, adverse/unknown flags, overlappende services,
 correcties/conflicten, orphan edges, layout/ankermismatch, signed delta, stale/future
-references en micro/100ns/calendar/offsetgrenzen. Geen historische nauwkeurigheidsclaim.
+references en micro/100ns/calendar/offsetgrenzen. Daarnaast zijn retry-idempotentie
+met latere receipt/`availableAt`, unbound deduplicatie, service-`asOf`, service-
+contextbinding, NULL-`observedAt` en de legacy-tickgrens als regressies vastgelegd.
+Geen historische nauwkeurigheidsclaim.
 
-Eigen logs en final-REPORT.md staan uitsluitend onder
-`/home/hermes/artifacts/3sm/pitwall-learning-p2-pit-segments/` (0700).
+Eigen logs en final-REPORT.md van deze herstelronde staan uitsluitend onder
+`/home/hermes/artifacts/3sm/pitwall-learning-p2-pit-evidence/` (0700). De
+oorspronkelijke bouwlogs blijven onveranderd in
+`/home/hermes/artifacts/3sm/pitwall-learning-p2-pit-segments/`.
 Parent verricht afzonderlijke SPEC- en QUALITY-review en finalintegration/build.
 
 T13 kan later de bewezen gaten beoordelen: duurzame pit-edge/stopcapture, fysieke
