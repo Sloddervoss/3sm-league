@@ -44,9 +44,9 @@ aangeroepen.
 
 - Offline restore/build van `3SM.EnduranceConnector.DiagnosticsTests` met lege
   lokale source: restore exit 0, build exit 0.
-- `--only-observation`: 40 PASS / 0 FAIL, exit 0.
-- `--only-measurement`: 299 oude + 40 nieuwe = 339 PASS / 0 FAIL, exit 0.
-- Volledige DiagnosticsTests: 695 PASS / 0 FAIL, exit 0 (inclusief 60 s soak).
+- `--only-observation`: 42 PASS / 0 FAIL, exit 0.
+- `--only-measurement`: 299 oude + 42 nieuwe = 341 PASS / 0 FAIL, exit 0.
+- Volledige DiagnosticsTests: 697 PASS / 0 FAIL, exit 0 (inclusief 60 s soak).
 - `net48` C# 7.3-subsetbuild van `MeasurementIds.cs` + `MeasurementEvent.cs` +
   `ObservationCapture.cs` met de echte reference assemblies: exit 0, 0 warnings.
   Dit is **geen** plugin-/SimHub-build.

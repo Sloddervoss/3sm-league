@@ -136,8 +136,9 @@ internal static class MeasurementObservationCaptureTests
         var ob08r = Nested(Parse(ob08.ToJson()), "refuel");
         Check("OB08", Number(ob08r, "observedAddedLitres") == 2.4
             && Integer(ob08r, "positiveSteps") == 1
-            && (string)ob08r["firstAt"] == "2026-09-27T10:00:01.000Z",
-            "added=2.4 steps=1 firstAt=step");
+            && (string)ob08r["firstAt"] == "2026-09-27T10:00:01.000Z"
+            && !ob08r.ContainsKey("maxUndetectedLitres"),
+            "added=2.4 steps=1 firstAt=step; onbekende bound weggelaten");
 
         // OB09 — twee stappen, geen netto totaal.
         var ob09 = ObservationCapture.Build(Binding(), null, new[]
@@ -362,6 +363,28 @@ internal static class MeasurementObservationCaptureTests
         }, At(0), At(3000));
         Check("OBS-NUM", nonFinite.HasObservation && !Parse(nonFinite.ToJson()).ContainsKey("refuel"),
             "NaN/Infinity geen step, geen exception");
+
+        // Extra: ongeldige optionele contextgetallen vervallen, groep blijft.
+        var rangeContext = new ObservationLapContext("car-1", 123, "Testbaan", "GP", -1, 1001);
+        var range = ObservationCapture.Build(Binding(), rangeContext,
+            new[] { Sample(0, name: "A"), Sample(1000, fuel: -1, name: "A"), Sample(2000, fuel: 62, name: "A") },
+            At(0), At(2000));
+        var rangeJson = Parse(range.ToJson());
+        var rangeCtx = Nested(rangeJson, "context");
+        Check("OBS-RANGE", range.HasObservation && rangeCtx.ContainsKey("carId")
+            && !rangeCtx.ContainsKey("sessionUniqueId") && !rangeCtx.ContainsKey("sessionNumber")
+            && !rangeJson.ContainsKey("refuel"),
+            "negatief fuel en buiten-bereik sessievelden -> geen feit/geen crash");
+
+        // Extra: een som boven 300 L laat de refuelgroep vallen, niet afkappen.
+        var refuelCap = ObservationCapture.Build(Binding(), null, new[]
+        {
+            Sample(0, fuel: 0, name: "A"), Sample(1000, fuel: 300, name: "A"), Sample(2000, fuel: 300.5, name: "A")
+        }, At(0), At(2000));
+        Check("OBS-REFUEL-CAP", refuelCap.HasObservation
+            && !Parse(refuelCap.ToJson()).ContainsKey("refuel")
+            && refuelCap.OmittedGroups.Contains("refuel"),
+            "som >300 L -> groep weg, geen afgekapt totaal");
 
         // Extra: ongeldige UUID en casing/behoud.
         var invalidBinding = new ObservationPairingBinding("not-a-uuid", Owner, 1, true);
