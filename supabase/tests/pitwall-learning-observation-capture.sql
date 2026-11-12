@@ -695,5 +695,13 @@ BEGIN
     'public.simhub_observation_v1_available()', 'EXECUTE'), 'J6 service_role may probe');
   PERFORM pg_temp.ok(NOT has_function_privilege('anon',
     'public.simhub_observation_v1_valid(jsonb)', 'EXECUTE'), 'J7 anon cannot call the validator');
+  PERFORM pg_temp.ok(
+    (SELECT bool_and(p.prosecdef)
+        AND bool_and(array_to_string(p.proconfig, ',') LIKE '%search_path=%')
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND p.proname IN ('simhub_observation_capture_enabled',
+                          'simhub_observation_v1_available')),
+    'J8 SECURITY DEFINER helpers pin search_path');
 END
 $j$;

@@ -109,12 +109,12 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
 Uitslag (lokaal, disposable container `pitwall-learning-p2-observation-s1`,
 `0666ebe3698cd53a8f203d21b25031fdff1c621ef85358e911a5c1ec5816d6cb`):
 
-- **SQL: 111 PASS-regels, alle stages exit 0.** Pre 4, capturematrix 83,
+- **SQL: 112 PASS-regels, alle stages exit 0.** Pre 4, capturematrix 84,
   post-rollback 17, concurrency-verificatie 7. `04b` bewijst dat een tweede
   forward-toepassing met exit 3 wordt geweigerd; `07b` bewijst dat de rollback
   idempotent is.
-- **Deno:** `observationV1.test.ts` 216/216; nieuwe wiring 14/14; hele
-  `_shared`-map 293 passed / 2 failed. Die twee failures
+- **Deno:** `observationV1.test.ts` 216/216; nieuwe wiring 15/15; hele
+  `_shared`-map 294 passed / 2 failed. Die twee failures
   (`plugin08_protocol_test`, `plugin08_isolation_test`) falen identiek op de
   exacte base `fc74` (279 passed / 2 failed) en zijn dus geen regressie.
 - **Vitest:** 2284 passed / 1 failed; dezelfde failure
