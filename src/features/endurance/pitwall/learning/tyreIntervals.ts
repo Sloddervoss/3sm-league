@@ -29,6 +29,16 @@ export const TYRE_INTERVAL_MAX_REASONS = 32;
 /** Zelfde drempel als de connector gebruikt voor een wearwijziging. */
 export const TYRE_INTERVAL_WEAR_CHANGE_PERCENT = 0.05;
 
+/**
+ * Bron-instant zonder fractie of met 1–7 fractiecijfers. De vorm is identiek aan `isInstant`;
+ * die validator blijft de kalender-, zone- en bereikpoort. Hier wordt alleen
+ * de al toegelaten tekst in exacte seconden en 100ns-ticks gesplitst, zodat
+ * een vergelijking geen milliseconde-afronding van `Date.parse` erft.
+ */
+const INSTANT_PARTS_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,7}))?(Z|[+-]\d{2}:\d{2})$/;
+const INSTANT_TICKS_PER_SECOND = 10_000_000n;
+
 export const TYRE_INTERVAL_WEAR_ANCHOR_KINDS = [
   "session_start",
   "wear_value_changed",
@@ -326,7 +336,8 @@ interface PreparedObservation {
   readonly payload: PlainRecord;
   readonly assessment: RecordQualityAssessment;
   readonly kind: string;
-  readonly observedAtMs: number;
+  /** Exacte broninstant in 100ns-ticks; nooit afgerond naar milliseconden. */
+  readonly observedAtTicks: bigint;
   readonly sessionId: string | null;
   readonly segmentId: string | null;
   readonly sessionTimeSeconds: number | null;
@@ -801,6 +812,57 @@ function isValidObservedContextShape(raw: unknown): boolean {
   );
 }
 
+/**
+ * Exacte dagen sinds 1970-01-01 in de proleptische Gregoriaanse kalender.
+ * Bewust geen `Date.UTC`: die schuift jaren 0–99 naar 1900+jaar en kan een
+ * pre-1970-instant dus niet zonder extra special case representeren.
+ */
+function daysFromCivil(year: number, month: number, day: number): number {
+  const shiftedYear = month <= 2 ? year - 1 : year;
+  const era = Math.floor(shiftedYear / 400);
+  const yearOfEra = shiftedYear - era * 400;
+  const monthIndex = month > 2 ? month - 3 : month + 9;
+  const dayOfYear = Math.floor((153 * monthIndex + 2) / 5) + day - 1;
+  const dayOfEra =
+    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  return era * 146097 + dayOfEra - 719468;
+}
+
+/**
+ * Zet een door `isInstant` toegelaten bron-instant om in exacte 100ns-ticks.
+ * Fractiecijfers worden rechts aangevuld tot 7; er wordt nooit een decimale
+ * milliseconde bij een seconde opgeteld. Zowel `Z`, `+00:00` als `-00:00`
+ * betekenen dezelfde UTC-instant, en een zone-offset wordt in hele seconden
+ * verrekend. `null` betekent: geen geldige instant volgens dezelfde poort.
+ */
+function instantTicks(value: string): bigint | null {
+  if (!isInstant(value)) return null;
+  const match = INSTANT_PARTS_PATTERN.exec(value);
+  if (match === null) return null;
+
+  const fraction = (match[7] ?? "").padEnd(7, "0");
+  const zone = match[8];
+  let offsetSeconds = 0;
+  if (zone !== "Z") {
+    const direction = zone[0] === "-" ? -1 : 1;
+    offsetSeconds =
+      direction * (Number(zone.slice(1, 3)) * 3600 + Number(zone.slice(4, 6)) * 60);
+  }
+
+  const seconds =
+    daysFromCivil(Number(match[1]), Number(match[2]), Number(match[3])) * 86400 +
+    Number(match[4]) * 3600 +
+    Number(match[5]) * 60 +
+    Number(match[6]) -
+    offsetSeconds;
+  return BigInt(seconds) * INSTANT_TICKS_PER_SECOND + BigInt(fraction);
+}
+
+function compareTicks(left: bigint, right: bigint): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
 function streamKey(prepared: PreparedObservation): string {
   const context = prepared.context;
   const owner = context === null ? null : knownString(context.identity.owner);
@@ -812,7 +874,14 @@ function streamKey(prepared: PreparedObservation): string {
     // binnen het account bij elkaar zodat een bewezen car/session-handoff nog
     // kan continueren; zonder bewijs breekt de continuïteitscontrole.
     const car = knownString(context?.car);
-    return JSON.stringify(["tyre-stream-v1", ["owner", owner], ["car", car ?? "car_unknown"]]);
+    // De auto-identiteit is een getagde tuple, geen magic string. Anders zou
+    // een geldige car-ID die letterlijk "car_unknown" is, samenvallen met een
+    // onbekende auto en als één fysieke stream worden verwerkt.
+    return JSON.stringify([
+      "tyre-stream-v1",
+      ["owner", owner],
+      ["car", car === null ? ["unknown"] : ["known", car]],
+    ]);
   }
   // Zonder geobserveerde owner is de receipt-owner uitsluitend een
   // privacyscheiding, nooit observatie-identiteit. Devices worden nooit
@@ -1578,6 +1647,12 @@ function prepareObservation(
   warnings.push(...distance.warnings);
 
   const observedAt = raw.source.observedAt as string;
+  // parseSourceRecordEnvelope heeft deze instant al door `isInstant`
+  // toegelaten; dezelfde parser moet hier dus slagen.
+  const observedAtTicks = instantTicks(observedAt);
+  if (observedAtTicks === null) {
+    return { index: raw.index, sourceUid: raw.source.sourceUid, reasons: ["observed_at_missing"] };
+  }
   if (
     hasOwn(payload, "observed_at") &&
     payload["observed_at"] !== null &&
@@ -1635,7 +1710,7 @@ function prepareObservation(
     payload,
     assessment,
     kind,
-    observedAtMs: Date.parse(observedAt),
+    observedAtTicks,
     sessionId: observedSessionId,
     segmentId,
     sessionTimeSeconds,
@@ -1861,7 +1936,8 @@ export function buildTyreIntervals(
 
   const cutoffValue = options?.sourceReceivedBefore ?? null;
   if (cutoffValue !== null && !isInstant(cutoffValue)) return null;
-  const cutoffMs = cutoffValue === null ? null : Date.parse(cutoffValue);
+  const cutoffTicks = cutoffValue === null ? null : instantTicks(cutoffValue);
+  if (cutoffValue !== null && cutoffTicks === null) return null;
   const referenceContext = options?.referenceContext ?? null;
   // Een historische referentie mag een andere bron-UID hebben, maar moet wel
   // de volledige CanonicalContext-vorm hebben die de vergelijking leest.
@@ -1926,9 +2002,12 @@ export function buildTyreIntervals(
   for (const group of groups.values()) {
     const first = group[0];
     const withinCutoff =
-      cutoffMs === null
+      cutoffTicks === null
         ? group
-        : group.filter((record) => Date.parse(record.source.sourceReceivedAt) <= cutoffMs);
+        : group.filter((record) => {
+            const receivedTicks = instantTicks(record.source.sourceReceivedAt);
+            return receivedTicks !== null && receivedTicks <= cutoffTicks;
+          });
     if (withinCutoff.length === 0) {
       futureRevisionsExcluded = true;
       rejected.push({
@@ -1984,7 +2063,8 @@ export function buildTyreIntervals(
   }
 
   const sorted = [...prepared].sort((left, right) => {
-    if (left.observedAtMs !== right.observedAtMs) return left.observedAtMs - right.observedAtMs;
+    const timeOrder = compareTicks(left.observedAtTicks, right.observedAtTicks);
+    if (timeOrder !== 0) return timeOrder;
     const leftTime = left.sessionTimeSeconds ?? Number.POSITIVE_INFINITY;
     const rightTime = right.sessionTimeSeconds ?? Number.POSITIVE_INFINITY;
     if (leftTime !== rightTime) return leftTime - rightTime;
@@ -2018,9 +2098,10 @@ export function buildTyreIntervals(
     TYRE_CORNERS.map((corner, index) => [corner, index]),
   );
   intervals.sort((left, right) => {
-    const leftStart = left.start === null ? 0 : Date.parse(left.start.observedAt);
-    const rightStart = right.start === null ? 0 : Date.parse(right.start.observedAt);
-    if (leftStart !== rightStart) return leftStart - rightStart;
+    const leftStart = left.start === null ? 0n : (instantTicks(left.start.observedAt) ?? 0n);
+    const rightStart = right.start === null ? 0n : (instantTicks(right.start.observedAt) ?? 0n);
+    const startOrder = compareTicks(leftStart, rightStart);
+    if (startOrder !== 0) return startOrder;
     const cornerDifference =
       (cornerOrder.get(left.corner) ?? 0) - (cornerOrder.get(right.corner) ?? 0);
     if (cornerDifference !== 0) return cornerDifference;
@@ -2031,9 +2112,10 @@ export function buildTyreIntervals(
   });
 
   observations.sort((left, right) => {
-    const leftTime = Date.parse(left.observationRef.observedAt);
-    const rightTime = Date.parse(right.observationRef.observedAt);
-    if (leftTime !== rightTime) return leftTime - rightTime;
+    const leftTime = instantTicks(left.observationRef.observedAt) ?? 0n;
+    const rightTime = instantTicks(right.observationRef.observedAt) ?? 0n;
+    const timeOrder = compareTicks(leftTime, rightTime);
+    if (timeOrder !== 0) return timeOrder;
     return left.observationRef.sourceUid.localeCompare(right.observationRef.sourceUid);
   });
 

@@ -1746,4 +1746,435 @@ describe("fysieke bandintervallen (T11)", () => {
       expect(interval.provenance.observationRefs[63].sourceUid).toBe(uid(66));
     });
   });
+
+  describe("bronprecisie en streamidentiteit", () => {
+    it.each(["", ".1", ".12", ".123", ".1234", ".12345", ".123456", ".1234567"])(
+      "vergelijkt cutoff en bewaart bronstrings met fractie %s",
+      (fraction) => {
+        const cutoff = `2026-11-11T10:00:00${fraction}Z`;
+        const receivedAt = `2026-11-11T04:30:00${fraction}-05:30`;
+        const ticks = (fraction.slice(1) || "0").padEnd(7, "0");
+        const nextTicks = String(Number(ticks) + 1).padStart(7, "0");
+        const current = event({
+          n: 1001, kind: "session_start", at: receivedAt, after: 100, gen: 0,
+          receivedAt,
+        });
+        const future = event({
+          n: 1001, kind: "session_start", at: receivedAt, after: 90, gen: 0,
+          revision: 2, resultHash: hash(1002),
+          receivedAt: `2026-11-11T10:00:00.${nextTicks}Z`,
+        });
+        const result = build([future, current], { sourceReceivedBefore: cutoff });
+        expect(result.rejected).toEqual([]);
+        expect(result.cutoff.futureRevisionsExcluded).toBe(true);
+        expect(result.cutoff.sourceReceivedBefore).toBe(cutoff);
+        const start = firstCorner(result, "fl").start;
+        expect(start?.wearPercent).toBe(100);
+        expect(start?.observedAt).toBe(receivedAt);
+        expect(start?.sourceRef.sourceReceivedAt).toBe(receivedAt);
+        // BigInt is uitsluitend intern; de complete publieke uitvoer blijft JSON.
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
+    it.each([
+      ["0000-02-29T23:59:59.9999999Z", "0000-03-01T00:00:00Z"],
+      ["0099-12-31T23:59:59.9999999Z", "0100-01-01T00:00:00Z"],
+      ["1968-02-29T23:59:59.9999999Z", "1968-03-01T00:00:00Z"],
+      ["2000-02-29T23:59:59.9999999Z", "2000-03-01T00:00:00Z"],
+      ["1900-02-28T23:59:59.9999999Z", "1900-03-01T00:00:00Z"],
+    ])("ordent kalendergrens %s vóór %s", (early, late) => {
+      const start = event({ n: 1102, kind: "session_start", at: early, after: 100, gen: 0 });
+      const worn = event({
+        n: 1101, kind: "wear_value_changed", at: late, before: 100, after: 90, gen: 0,
+      });
+      const result = build([worn, start]);
+      expect(result.rejected).toEqual([]);
+      expect(firstCorner(result, "fl").lastObserved?.wearPercent).toBe(90);
+      expect(uidsOf(firstCorner(result, "fl"))).toEqual([uid(1102), uid(1101)]);
+      const snapshot = build([start, worn], { sourceReceivedBefore: early });
+      expect(snapshot.cutoff.futureRevisionsExcluded).toBe(true);
+      expect(snapshot.observations).toHaveLength(1);
+      expect(snapshot.observations[0].observationRef.sourceUid).toBe(uid(1102));
+    });
+
+    it.each([
+      "2026-11-11", "2026-11-11T10:00:00", "2026-02-29T00:00:00Z",
+      "1900-02-29T00:00:00Z", "0099-02-29T00:00:00Z", "2026-04-31T00:00:00Z",
+      "2026-11-11T10:00:00+14:01", "2026-11-11T10:00:00.12345678Z",
+    ])("weigert ongeldige instant %s als cutoff én bron", (invalid) => {
+      const value = event({ n: 1201, kind: "session_start", at: invalid, after: 100, gen: 0 });
+      expect(buildTyreIntervals([], { sourceReceivedBefore: invalid })).toBeNull();
+      expect(build([value]).rejected[0].reasons).toContain("source_envelope_invalid");
+      const invalidReceipt = event({
+        n: 1202, kind: "session_start", at: at(0), after: 100, gen: 0, receivedAt: invalid,
+      });
+      expect(build([invalidReceipt]).rejected[0].reasons).toContain("source_envelope_invalid");
+    });
+
+    it("ordent intervalstarts exact en behoudt publieke generatierefs bij streamencoding", () => {
+      const early = contextWith(event({
+        n: 1302, kind: "session_start", at: "2026-11-11T10:00:00.0000001Z", after: 100, gen: 0,
+      }));
+      const late = contextWith(event({
+        n: 1301, kind: "session_start", at: "2026-11-11T10:00:00.0000002Z", after: 100, gen: 0,
+      }), { carId: "car-other" });
+      const result = build([late, early]);
+      expect(cornerIntervals(result, "fl").map((interval) => interval.start?.sourceRef.sourceUid))
+        .toEqual([uid(1302), uid(1301)]);
+      const generation = firstCorner(result, "fl").physical.generation;
+      expect(generation).toEqual({
+        sequence: 0, startSourceUid: uid(1302), startKind: "session_start",
+        newTyreConfirmedAtStart: false, newTyreConfirmationBasis: null,
+      });
+      expect(firstCorner(build([early]), "fl").physical.generation).toEqual(generation);
+    });
+
+    it("behandelt gelijke observed-instants met andere notatie als gelijk vóór session-time", () => {
+      const start = event({
+        n: 1401, kind: "session_start", at: "2026-11-11T10:00:00.1234567Z", after: 100, gen: 0,
+      });
+      const worn = event({
+        n: 1402, kind: "wear_value_changed", at: "2026-11-11T11:00:00.1234567+01:00",
+        before: 100, after: 90, gen: 0,
+      });
+      const result = build([worn, start]);
+      expect(uidsOf(firstCorner(result, "fl"))).toEqual([uid(1401), uid(1402)]);
+      expect(firstCorner(result, "fl").lastObserved?.observedAt)
+        .toBe("2026-11-11T11:00:00.1234567+01:00");
+    });
+
+    it("sluit een revisie 900 microseconden na een whole-ms cutoff uit", () => {
+      const current = event({
+        n: 1,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000Z",
+        before: null,
+        after: 100,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(701),
+        receivedAt: "2026-11-11T10:00:01.000000Z",
+      });
+      const future = event({
+        n: 1,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000Z",
+        before: null,
+        after: 90,
+        gen: 0,
+        revision: 2,
+        resultHash: hash(702),
+        receivedAt: "2026-11-11T10:00:01.000900Z",
+      });
+
+      const result = build([current, future], {
+        sourceReceivedBefore: "2026-11-11T10:00:01.000Z",
+      });
+      expect(result.cutoff.futureRevisionsExcluded).toBe(true);
+      expect(result.cutoff.asOfVerified).toBe(false);
+      expect(result.rejected).toHaveLength(0);
+      expect(firstCorner(result, "fl").start?.wearPercent).toBe(100);
+      expect(firstCorner(result, "fl").start?.sourceRef.recordRevision).toBe(1);
+      expect(firstCorner(result, "fl").start?.sourceRef.contentHash).toBe(hash(701));
+      expect(firstCorner(result, "fl").warnings).toContain("future_source_revision_excluded");
+    });
+
+    it("laat een zelfde-revisie hashconflict 900 microseconden na de cutoff niet quarantainen", () => {
+      const current = event({
+        n: 2,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000Z",
+        before: null,
+        after: 100,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(703),
+        receivedAt: "2026-11-11T10:00:02.000000Z",
+      });
+      const future = event({
+        n: 2,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000Z",
+        before: null,
+        after: 90,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(704),
+        receivedAt: "2026-11-11T10:00:02.000900Z",
+      });
+
+      const result = build([current, future], {
+        sourceReceivedBefore: "2026-11-11T10:00:02.000Z",
+      });
+      expect(result.cutoff.futureRevisionsExcluded).toBe(true);
+      expect(result.rejected).toHaveLength(0);
+      expect(cornerIntervals(result, "fl")).toHaveLength(1);
+      expect(firstCorner(result, "fl").start?.wearPercent).toBe(100);
+      expect(JSON.stringify(result.intervals)).not.toContain(hash(704));
+    });
+
+    it("includeert de cutoff op 100ns en sluit één tick later uit, ook met offset", () => {
+      const equal = event({
+        n: 3,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000Z",
+        before: null,
+        after: 100,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(705),
+        // Zelfde instant als de cutoff, maar met offset en 6 fractiecijfers.
+        receivedAt: "2026-11-11T12:00:02.000000+02:00",
+      });
+      const oneTickLater = event({
+        n: 3,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000Z",
+        before: null,
+        after: 90,
+        gen: 0,
+        revision: 2,
+        resultHash: hash(706),
+        receivedAt: "2026-11-11T10:00:02.0000001Z",
+      });
+
+      const result = build([equal, oneTickLater], {
+        sourceReceivedBefore: "2026-11-11T10:00:02.0000000-00:00",
+      });
+      expect(result.cutoff.futureRevisionsExcluded).toBe(true);
+      expect(firstCorner(result, "fl").start?.wearPercent).toBe(100);
+      expect(firstCorner(result, "fl").start?.sourceRef.recordRevision).toBe(1);
+    });
+
+    it("includeert een rij één tick vóór de cutoff en verkiest die revisie", () => {
+      const current = event({
+        n: 4,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000Z",
+        before: null,
+        after: 100,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(707),
+        receivedAt: "2026-11-11T10:00:00.000000Z",
+      });
+      const lastBefore = event({
+        n: 4,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000Z",
+        before: null,
+        after: 90,
+        gen: 0,
+        revision: 2,
+        resultHash: hash(708),
+        receivedAt: "2026-11-11T10:00:03.9999999Z",
+      });
+
+      const result = build([current, lastBefore], {
+        sourceReceivedBefore: "2026-11-11T10:00:04.0000000Z",
+      });
+      expect(result.cutoff.futureRevisionsExcluded).toBe(false);
+      expect(firstCorner(result, "fl").start?.wearPercent).toBe(90);
+      expect(firstCorner(result, "fl").start?.sourceRef.recordRevision).toBe(2);
+    });
+
+    it("vergelijkt fracties exact over de negatieve epochgrens", () => {
+      const current = event({
+        n: 5,
+        kind: "session_start",
+        at: "1969-12-31T23:59:59.000Z",
+        before: null,
+        after: 100,
+        gen: 0,
+        revision: 1,
+        resultHash: hash(709),
+        receivedAt: "1969-12-31T23:59:59.9999999Z",
+      });
+      const future = event({
+        n: 5,
+        kind: "session_start",
+        at: "1969-12-31T23:59:59.000Z",
+        before: null,
+        after: 90,
+        gen: 0,
+        revision: 2,
+        resultHash: hash(710),
+        receivedAt: "1970-01-01T00:00:00.0000000Z",
+      });
+
+      const result = build([current, future], {
+        sourceReceivedBefore: "1969-12-31T23:59:59.9999999Z",
+      });
+      expect(result.cutoff.futureRevisionsExcluded).toBe(true);
+      expect(firstCorner(result, "fl").start?.wearPercent).toBe(100);
+
+      const earlier = build([current], {
+        sourceReceivedBefore: "1969-12-31T23:59:59.5000000Z",
+      });
+      expect(earlier.rejected).toHaveLength(1);
+      expect(earlier.rejected[0].reasons).toContain("observation_after_cutoff");
+      expect(earlier.intervals).toHaveLength(0);
+    });
+
+    it("behandelt jaren 0000 en 0099 zonder Date.UTC-eeuwverschuiving", () => {
+      for (const day of ["0000-01-01", "0099-01-01"]) {
+        const current = event({
+          n: 6,
+          kind: "session_start",
+          at: `${day}T00:00:00.0000000Z`,
+          before: null,
+          after: 100,
+          gen: 0,
+          revision: 1,
+          resultHash: hash(711),
+          receivedAt: `${day}T00:00:00.0000000Z`,
+        });
+        const future = event({
+          n: 6,
+          kind: "session_start",
+          at: `${day}T00:00:00.0000000Z`,
+          before: null,
+          after: 90,
+          gen: 0,
+          revision: 2,
+          resultHash: hash(712),
+          receivedAt: `${day}T00:00:00.0000001Z`,
+        });
+
+        const result = build([current, future], {
+          sourceReceivedBefore: `${day}T00:00:00.0000000Z`,
+        });
+        expect(result.cutoff.futureRevisionsExcluded).toBe(true);
+        expect(firstCorner(result, "fl").start?.wearPercent).toBe(100);
+      }
+    });
+
+    it("weigert datum-zonder-tijd en tijd-zonder-zone als cutoff", () => {
+      const start = event({
+        n: 7,
+        kind: "session_start",
+        at: at(0),
+        before: null,
+        after: 100,
+        gen: 0,
+      });
+      expect(buildTyreIntervals([start], { sourceReceivedBefore: "2026-11-11" })).toBeNull();
+      expect(
+        buildTyreIntervals([start], { sourceReceivedBefore: "2026-11-11T10:00:00" }),
+      ).toBeNull();
+      expect(
+        buildTyreIntervals([start], {
+          sourceReceivedBefore: "2026-11-11T10:00:00.00000000Z",
+        }),
+      ).toBeNull();
+    });
+
+    it("ordent waarnemingen binnen één milliseconde op 100ns ondanks omgekeerde UID", () => {
+      const start = event({
+        n: 1,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000000Z",
+        before: null,
+        after: 100,
+        gen: 0,
+      });
+      const early = event({
+        n: 3,
+        kind: "wear_value_changed",
+        at: "2026-11-11T10:00:10.000100Z",
+        before: 100,
+        after: 94,
+        gen: 0,
+      });
+      const late = event({
+        n: 2,
+        kind: "wear_value_changed",
+        at: "2026-11-11T10:00:10.000900Z",
+        before: 94,
+        after: 92,
+        gen: 0,
+      });
+
+      // Invoervolgorde en UID-volgorde zijn tegengesteld aan de chronologie.
+      const result = build([start, late, early]);
+      expect(firstCorner(result, "fl").lastObserved?.wearPercent).toBe(92);
+      expect(uidsOf(firstCorner(result, "fl"))).toEqual([uid(1), uid(3), uid(2)]);
+      expect(result.observations.map((observation) => observation.observationRef.sourceUid)).toEqual([
+        uid(1),
+        uid(3),
+        uid(2),
+      ]);
+    });
+
+    it("ordent een sessiegrens 100ns later ook wanneer de UID lager is", () => {
+      const startA = event({
+        n: 10,
+        kind: "session_start",
+        at: "2026-11-11T10:00:00.000000Z",
+        after: 100,
+        before: null,
+        gen: 0,
+        session: "obs-session-1",
+      });
+      const earlyA = event({
+        n: 11,
+        kind: "wear_value_changed",
+        at: "2026-11-11T10:01:00.0000001Z",
+        before: 100,
+        after: 96,
+        gen: 0,
+        session: "obs-session-1",
+      });
+      const lateB = event({
+        n: 9,
+        kind: "session_start",
+        at: "2026-11-11T10:01:00.0000002Z",
+        before: null,
+        after: 100,
+        gen: 0,
+        session: "obs-session-2",
+      });
+
+      const result = build([startA, lateB, earlyA]);
+      const intervals = cornerIntervals(result, "fl");
+      expect(intervals).toHaveLength(2);
+      expect(intervals[0].start?.wearPercent).toBe(100);
+      expect(intervals[0].lastObserved?.wearPercent).toBe(96);
+      expect(intervals[0].reasons).toContain("session_boundary");
+      expect(intervals[1].start?.wearPercent).toBe(100);
+    });
+
+    it("houdt dezelfde bekende auto in één fysieke stream", () => {
+      const start = contextWith(
+        event({ n: 801, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 }),
+      );
+      const worn = contextWith(
+        event({ n: 802, kind: "wear_value_changed", at: at(10), before: 100, after: 90, gen: 0 }),
+      );
+      const result = build([start, worn]);
+      expect(cornerIntervals(result, "fl")).toHaveLength(1);
+      expect(firstCorner(result, "fl").start?.wearPercent).toBe(100);
+      expect(firstCorner(result, "fl").start?.sourceRef.sourceUid).toBe(uid(801));
+    });
+
+    it("scheidt een onbekende auto van een geldige car-ID die letterlijk car_unknown is", () => {
+      const unknown = contextWith(
+        event({ n: 901, kind: "session_start", at: at(0), before: null, after: 100, gen: 0 }),
+        { carId: null },
+      );
+      const literal = contextWith(
+        event({ n: 902, kind: "session_start", at: at(10), before: null, after: 100, gen: 0 }),
+        { carId: "car_unknown" },
+      );
+      const result = build([unknown, literal]);
+      const intervals = cornerIntervals(result, "fl");
+      expect(intervals).toHaveLength(2);
+      expect(intervals.map((interval) => interval.start?.sourceRef.sourceUid)).toEqual([
+        uid(901),
+        uid(902),
+      ]);
+      expect(intervals.map((interval) => interval.start?.wearPercent)).toEqual([100, 100]);
+    });
+  });
 });
