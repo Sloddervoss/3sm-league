@@ -215,21 +215,23 @@ function intervalBinding(value: Row, at: StopIdentity): boolean {
 }
 
 function services(value: unknown, start: unknown, end: unknown, asOf: unknown, clean: boolean, span: QualifiedSpan) {
+  const supplied = object(value) !== null;
   const row = object(value) ?? {};
   const r: string[] = [];
   if (!clean) r.push("service_source_unqualified");
   const identity = stopIdentity(span);
-  const binding = bindingStatus(row.binding, identity);
+  const binding = supplied ? bindingStatus(row.binding, identity) : "service_binding_missing";
   // Stray block-level identity claims are evidence too, not ignorable extras.
-  const bound = binding === "ok" && intervalBinding(row, identity);
-  if (binding !== "ok") r.push(binding);
-  else if (!bound) r.push("service_binding_mismatch");
+  const bound = supplied && binding === "ok" && intervalBinding(row, identity);
+  if (supplied && binding !== "ok") r.push(binding);
+  else if (supplied && !bound) r.push("service_binding_mismatch");
   const intervals = row.intervals;
   const closed = before(end, asOf);
   let union: number | null = null;
   let complete = false;
   let future = false;
-  if (!bound) r.push("service_intervals_unbound");
+  if (!supplied) r.push("service_intervals_missing_or_invalid");
+  else if (!bound) r.push("service_intervals_unbound");
   else if (Array.isArray(intervals) && intervals.length <= 32) {
     const valid: [bigint, bigint][] = [];
     let invalid = false;
@@ -261,7 +263,7 @@ function services(value: unknown, start: unknown, end: unknown, asOf: unknown, c
       complete = row.complete === true && !invalid && !future && closed;
     }
   } else r.push("service_intervals_missing_or_invalid");
-  if (!closed) r.push("service_pit_window_open");
+  if (supplied && !closed) r.push("service_pit_window_open");
   if (!complete) r.push("service_coverage_incomplete");
   const rules = object(row.ruleset);
   let predicted: number | null = null;

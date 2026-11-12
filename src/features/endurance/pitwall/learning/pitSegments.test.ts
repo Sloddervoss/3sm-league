@@ -171,6 +171,13 @@ const SERVICE_BINDING = { sourceKind: "measurement_event", deviceId: "device", s
 describe("service semantics", () => {
   const interval = (component: string, start: string, end: string) => ({ component, startAt: t(start), endAt: t(end), performed: true });
   const service = { binding: { ...SERVICE_BINDING }, intervals: [interval("fuel", "00:10", "00:30"), interval("tyres", "00:20", "00:40"), interval("fuel", "00:22", "00:25")], complete: true };
+  it("does not invent a service-binding defect when no service evidence is supplied", () => {
+    const result = assessPitSegment(fixture())!;
+    expect(result.serviceUnionSeconds).toBeNull();
+    expect(result.serviceCoverage).toBe("unknown");
+    expect(result.serviceReasons).not.toContain("service_binding_missing");
+    expect(result.serviceReasons).not.toContain("service_intervals_unbound");
+  });
   it("computes partial overlap and nesting as actual union, not max or sum", () => {
     const result = assessPitSegment({ ...fixture(), services: service })!;
     expect(result.serviceUnionSeconds).toBe(30);
