@@ -408,6 +408,43 @@ SELECT jsonb_build_object(
     executed[-1]["detail"] = result
 
 
+def forward_state() -> dict[str, object]:
+    """Readback van de werkelijke objecten, niet alleen aantallen."""
+    sql = """
+SELECT jsonb_build_object(
+  'flag', (SELECT observation_enabled FROM pitwall_learning.runtime_settings WHERE id=1),
+  'column', (SELECT jsonb_build_object('type', atttypid::regtype::text,
+                                       'nullable', NOT attnotnull,
+                                       'storage', attstorage::text)
+               FROM pg_attribute
+              WHERE attrelid='public.simhub_lap_summaries'::regclass
+                AND attname='observation'),
+  'writer_gates', (SELECT jsonb_object_agg(p.proname, jsonb_build_object(
+      'row_gate', position('simhub_observation_row_disposition' in pg_get_functiondef(p.oid)) > 0,
+      'v2_hash', position('simhub_lap_row_hash_v2' in pg_get_functiondef(p.oid)) > 0,
+      'off_gate', position('observation_unavailable' in pg_get_functiondef(p.oid)) > 0))
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+   WHERE n.nspname='public' AND p.proname IN
+     ('simhub_persist_measurement_batch','simhub_apply_lap_row')),
+  'p1_projection', (SELECT jsonb_object_agg(p.proname,
+      pg_get_functiondef(p.oid) LIKE '%''observation'', n.observation%')
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+   WHERE n.nspname='pitwall_learning' AND p.proname LIKE 'capture_lap_summaries_%'),
+  'function_md5', (SELECT jsonb_object_agg(p.proname || '(' ||
+      pg_get_function_identity_arguments(p.oid) || ')',
+      md5(pg_get_functiondef(p.oid)))
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+   WHERE n.nspname='public' AND p.proname IN (
+     'simhub_observation_v1_valid','simhub_observation_text_valid',
+     'simhub_observation_ts_valid','simhub_observation_ts_le',
+     'simhub_observation_row_disposition','simhub_lap_row_hash_v2',
+     'simhub_observation_capture_enabled','simhub_observation_v1_available'))
+);
+"""
+    proc = psql(DB, sql, "05b-forward-object-readback", single_transaction=False)
+    return json.loads(proc.stdout.decode().strip().splitlines()[-1])
+
+
 def main() -> int:
     ART.mkdir(parents=True, exist_ok=True)
     LOGS.mkdir(parents=True, exist_ok=True)
@@ -431,6 +468,7 @@ def main() -> int:
         MIGRATION.read_text(), "04b-forward-reapply-refused",
         "already exists; refusing to adopt it")
     before = object_inventory("05-inventory-after-forward")
+    state = forward_state()
     psql(DB, CAPTURE_TEST.read_text(), "06-capture-tests")
     run_concurrency_stage()
     psql(DB, ROLLBACK.read_text(), "07-rollback")
@@ -449,6 +487,7 @@ def main() -> int:
         "stages": executed,
         "pass_lines_total": total_passes,
         "inventory_after_forward": before,
+        "forward_state": state,
         "inventory_after_rollback": after,
     }
     (ART / "run.json").write_text(json.dumps(report, indent=2) + "\n")
