@@ -13,8 +13,11 @@ De resolver is tegen de werkelijke bron gebouwd:
   levert  `measurements.events`/`measurements.laps` met `received`, `accepted`,
   `duplicates`, `superseded`, `rejected`, `block_error`, `stored`.
 - `supabase/functions/_shared/simhubAggregates.ts` — bij `stored:false` worden
-  `accepted`/`duplicates`/`superseded` leeggemaakt. `stored:false` is dus nooit
-  een per-rij-succes.
+  `accepted`/`duplicates`/`superseded` leeggemaakt, maar een echte
+  parserafwijzing blijft in `rejected` staan (`stage:"parser"`). Die rij is
+  onder `stored:false` geen leverings- of quarantainebewijs: hij blijft exact
+  bewaard voor een latere geldige ACK. Zie de erratum bij het oorspronkelijke
+  rapport.
 - `supabase/functions/_shared/simhubAggregates.ts` — `AckId` is
   `{ id, recordRevision }` en `jsonResponse` serialiseert dat als
   `recordRevision` (camelCase). Dit is de **werkelijke Edge-wirevorm**.
@@ -45,7 +48,10 @@ De resolver is tegen de werkelijke bron gebouwd:
 - De resolver vertaalt `rejected.index` altijd tegen deze volledige lijst.
   `[OBS, legacy, OBS]` op index 0/1/2 raakt dus precies die rij. Een
   id/index-conflict markeert beide betrokken rijen `NotDelivered`; er wordt
-  niets opgeruimd.
+  niets opgeruimd. Hetzelfde geldt als één van beide identifiers aanwezig maar
+  ongeldig, onbekend of buiten bereik is: er is dan geen terugval op de andere
+  identifier. Alleen een ontbrekende (`absent`/`null`) identifier staat de
+  bestaande id-only- of index-only-vorm toe.
 
 ## Per-rij-union
 
@@ -59,12 +65,22 @@ De resolver is tegen de werkelijke bron gebouwd:
 
 - Ontbrekende, negatieve, fractionele, overflow- en stringrevisies worden
   nooit als succes gelezen. Een kale UID is voor OBS dus `NotDelivered`.
-- Alleen de negen vaste `observation_invalid_*`-codes zijn permanent benoemd;
-  elke andere suffix of onbekende servercode wordt één vaste lokale
-  `server_rejected_unknown`.
+- De vaste permanente mapping staat in
+  `ObservationAckReasons.MapPermanent`: achttien expliciete codes, waaronder de
+  negen `observation_invalid_*`-categorieën en onder meer
+  `observation_device_mismatch`, `observation_device_invalid`,
+  `auth_device_invalid`, `observation_null`, `observation_invalid`,
+  `row_invalid`, `revision_conflict`, `stale_revision` en
+  `observation_absent`. Elke andere of onbekende servercode wordt één vaste
+  lokale `server_rejected_unknown`.
 - `stored:false`, ontbrekende `measurements`/`laps`, onparseerbare JSON en een
   onveilige/onbegrensde `block_error` leveren geen delivery en geen teller.
   Een `block_error` wordt voor diagnose tot een korte tokenvorm begrensd.
+- `stored:true` samen met een niet-lege `block_error` is een tegenstrijdig
+  antwoord en levert eveneens niets: geen cleanup, geen teller, `Stored=false`.
+- Twee leveringsbesluiten voor dezelfde UID (accepted/duplicate/superseded,
+  gelijke of verschillende revisie, in elke volgorde) worden niet gecoalesceerd
+  en zijn `NotDelivered`. Eén legitiem besluit per UID blijft geldig.
 
 ## Atomaire toepassing
 
