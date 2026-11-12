@@ -100,12 +100,28 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   PairingBinding en historische LapContext zijn gescheiden; het afzonderlijke
   observation-ledger laat de normale v1-wachtrij en oude DLL-lezer ongemoeid.
   Dit is contractacceptatie, geen runtime- of net48/SDK-bewijs.
-  **T13-S2A lokale bouw gestart** in een verse werkboom vanaf `743c447c`:
-  pure C#-observatiekern, optioneel DTO-lid, geregistreerde diagnostische tests en
-  echte C#-serialisatie tegen de ongewijzigde serverparser. Geen plugin-/sampler-/
-  ledger-/verzendintegratie in deze deelstap; geen updater-, versie-, instellingen-
-  of geïnstalleerde-DLL-wijziging. De nog te bouwen sidecar, lease en hele keten
-  blijven afzonderlijk te toetsen vóór enige activatie.
+  **T13-S2A geaccepteerd en lokaal geïntegreerd:** bron
+  `1dfa5eedf169c7bfacadcf78c768a9801db32f82`, integratie
+  `7876f49469d8534d25474b245a810f1aea046bd5`. SPEC PASS op de bytegelijke
+  runtime van `9bd252bf`; kwaliteitsherkeuring APPROVED op `1dfa5eed` na twee
+  strikt test-only correcties die de null-fuel- en null-name-mutanten afvangen.
+  Gereviewde bron-, test-, project- en interopbestanden zijn bytegelijk aan de integratie.
+  Parent op de integratie: offline projectbuild exit 0; **55/55 observation**,
+  **354/354 measurement**, **710/710 volledige C#-harnastests** en **37/37 echte
+  C#-serializer→Deno-interoproeven**, alle exits 0. Dit is geen volledige
+  Windows/SimHub-net48-pluginbuild of live SDK-bewijs; net48-bewijs is alleen subsetcompilatie.
+  De eerste volledige Vitest-poging op `7876f494` eindigde in een tooltransport-timeout
+  na 420 s, zonder JSON-resultaat en zonder resterend Vitest-proces; oorzaak niet bewezen.
+  Een afzonderlijke tracked herhaling loopt; die verificatie is nog open, geen PASS-claim.
+  Geen plugin-/sampler-/ledger-/verzendintegratie in S2A; geen updater-, versie-,
+  instellingen- of geïnstalleerde-DLL-wijziging. Volgende begrensde lokale stap:
+  S2B sampler/accumulator-adapter en StartLap-freeze. Tot de aparte opslag- en
+  verzendroute bestaat, mogen observaties niet in de normale v1-outbox terechtkomen.
+  Sidecar, lease en de hele keten blijven afzonderlijk te toetsen vóór enige activatie.
+  Bewijs: `pitwall-learning-p2-observation-producer-bounds-spec-recheck/`,
+  `pitwall-learning-p2-observation-producer-quality-review/`,
+  `pitwall-learning-p2-observation-producer-test-quality-recheck/` en
+  `pitwall-learning-p2-observation-producer-integration/` onder de artifactroot.
   P3/fitting, UI-publicatie en modelactivatie blijven gesloten; de Vite-buildpoort blijft open.
 
 ## Beperkingen en vervolgnotities

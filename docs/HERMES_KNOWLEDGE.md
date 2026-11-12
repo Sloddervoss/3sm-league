@@ -11,6 +11,11 @@ T13 alleen bij een bewezen broncontractgat; publicatie blijft een afzonderlijke 
 T09–T12 en de T13-pure core zijn lokaal geaccepteerd. T13-S1 servercapture is na
 SPEC PASS en QUALITY APPROVED op `ce5d62c3` lokaal geïntegreerd als `58820eed`;
 status en bewijs: `docs/operations/pitwall-learning-p2-local-status.md`.
+S2A pure C#-observatiekern is lokaal geïntegreerd als `7876f494` uit `1dfa5eed`
+(SPEC op bytegelijke runtime `9bd252bf`, quality APPROVED inclusief twee mutant-kills).
+Parent C#-harnas 710/710 en serializer→Deno-interop 37/37; geen volledige plugin-/SDK-build.
+S2B-adapter en aparte sidecar/verzendroute moeten nog worden gebouwd; observaties mogen
+niet alvast naar de bestaande v1-outbox worden gestuurd.
 Alle schakelaars blijven uit; geen productieapply/Edge-deploy/producerrelease.
 Rollback houdt historie en nieuwe writer intact; flag-only heractivatie mist de
 forward-P1-projectie en is niet ondersteund. Producer/outbox/quarantaine en echte
