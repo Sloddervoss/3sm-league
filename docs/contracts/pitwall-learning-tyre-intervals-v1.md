@@ -1,9 +1,14 @@
 # Pitwall learning — fysieke bandintervallen per wiel v1 (P2/T11)
 
-**Status:** lokale, pure bouw op `feat/pitwall-learning-p2-tyre-intervals`;
-niet gepusht, niet gemerged, niet gedeployed en niet op productie geactiveerd.
+**Status:** lokale, pure T11-precisie-/identiteitsreparatie op
+`fix/pitwall-learning-p2-tyre-time-precision`, basis
+`3f18cdd8039d35c2b78a6380d576eb752be137bb`.
+Niet gepusht, niet gemerged, niet gedeployed en niet op productie geactiveerd.
+De eerdere kwaliteitsreview op die basis was `REQUEST_CHANGES` (B-Q1).
+Deze implementatie is **niet APPROVED**: onafhankelijke SPEC- en quality-herkeuring
+zijn nodig op het exacte nieuwe HEAD voordat de parent verder integreert.
 **PRODUCTIEWIJZIGING: NEE.** Geen SQL, Edge Function, UI, connector, package of
-bestaand contract gewijzigd.
+ander learningcontract gewijzigd.
 
 Deze module kwalificeert **fysieke bandintervallen per hoek** uit onbewerkte P1-
 bronrevisies. Zij doet geen voorspelling, fit, rate-schatting, bandenkeuze,
@@ -191,6 +196,12 @@ de rest van de batch niet. De batch is begrensd op 4096 records
   zichtbaar blijven. Een accountgrens is een expliciete caller-/adaptergrens,
   geen bewijs van fysieke gelijkheid; onbekende owners op hetzelfde device
   worden nooit tot één trainingsreeks gepoold.
+- De auto-identiteit is nullable en intern getagd: `["unknown"]` tegenover
+  `["known", carId]`. Een geldige letterlijke car-ID `"car_unknown"` blijft dus
+  gescheiden van onbekende auto; er is geen magic-string-sentinel. Dezelfde
+  bekende auto binnen hetzelfde account blijft één stream onder de bestaande
+  continuïteitschecks. Zonder geobserveerde owner blijven de bestaande
+  device-/receipt-privacypartities ongewijzigd.
 
 ### 2.2 Optioneel trustbewijs
 
@@ -349,8 +360,15 @@ basiswissel of een daling is nooit een plausibele afstand.
 
 ### 3.5 Correcties, duplicaten en as-of
 
-- De fysieke generatie is een interne tuple van stream, hoek en origin-UID; de
-  output bevat geen owner- of device-identifier in die generatiereferentie.
+- De fysieke generatie wordt per stream en hoek bijgehouden met origin-UID.
+  Er is geen `generationKey`-veld of -gebruik in de huidige learningmodule of
+  haar consumers. De publieke `physical.generation` bevat `sequence`,
+  `startSourceUid`, `startKind` en bevestigingsmetadata, geen streamkey, owner
+  of device. De interne tagged-car-encoding verandert die publieke referentie
+  niet voor een normale, ongewijzigde stream; correcties/duplicaten blijven
+  dezelfde fysieke generatie. Bij de gerepareerde sentinel-collisie of een
+  eerder verkeerd geordende sub-ms-reeks kunnen de intervallen terecht anders
+  uitvallen: dat is gecorrigeerde identiteit/chronologie, geen ID-migratie.
 - Een replay met dezelfde UID en hash is idempotent. Een hogere revisie van
   dezelfde UID vervangt de waarde zonder een tweede onafhankelijke set te maken.
   De interval-provenance verwijst naar de werkelijk gebruikte revisie en hash,
@@ -375,6 +393,32 @@ basiswissel of een daling is nooit een plausibele afstand.
 - Observaties worden op `observed_at` gesorteerd, met `session_time_seconds` als
   tweede sleutel. Bij een exacte gelijke stand is de restorde UID-deterministisch;
   dat is een stabiele uitvoer, geen fysiek ordeningsbewijs.
+
+### 3.6 Volledige instantprecisie (B-Q1)
+
+Alle T11 receipt-cutoff- en chronologievergelijkingen gebruiken exacte interne
+`bigint`-ticks van 100 ns, niet `Date.parse`-milliseconden of een float-epochfractie.
+Het bestaande T09 `isInstant` blijft de ongewijzigde kalender-/zone-/bereikpoort;
+T11 ontleedt alleen de reeds geldige tekst. Geen dependency of tweede publieke
+datum-API. Toegestaan zijn geen fractie of 1–7 fractiecijfers, `Z` en geldige
+expliciete zone-offsets. Date-only, ontbrekende zone, ongeldige kalender of meer
+dan zeven fractiecijfers worden niet gerepareerd of aangevuld.
+
+- De cutoff is inclusief: exact gelijk wordt meegenomen, één 100ns-tick later
+  wordt uitgesloten, ook bij verschillende fractielengtes of offsetnotaties.
+- De offset wordt in hele seconden verrekend; fracties worden rechts tot zeven
+  cijfers aangevuld. De proleptisch-Gregoriaanse dagberekening ondersteunt ook
+  pre-1970, jaar 0000/0099 en leap days zonder `Date.UTC`-verschuiving van 0–99.
+- Dezelfde precisie geldt voor verwerking op `observedAt`, de uiteindelijke
+  intervalstartsortering en de observatie-uitvoer. UID of simulatiesessietijd
+  mag geen ongelijke instants binnen dezelfde milliseconde omdraaien.
+- Bronstrings, cutofftekst, wear-eenheden en metadata blijven exact bewaard;
+  er komt geen `bigint` in de publieke JSON-uitvoer en er verandert geen schema-
+  of policyversie. Een datumformaat bewijst geen betere bronklok.
+- Deze precisie repareert uitsluitend bronmomentopname en chronologie. De
+  receipt-cutoff blijft vóór conflicten/revisieselectie, zonder terugval van een
+  ongeldige hoogste revisie binnen de snapshot. Zij bewijst nooit `knownAt`,
+  geverifieerde as-of, live vooraf-uitgegeven voorspelling of trainingskwaliteit.
 
 ## 4. T10-integratie
 
@@ -447,6 +491,40 @@ fysieke of persoonlijke gelijkheid.
 | Provenance | `future_source_revision_excluded`, `payload_observed_at_mismatch`, `observed_session_missing`, `observed_session_link_unknown`, `repeated_session_start`, `device_handoff_strong_link`, `driver_handoff_strong_link` |
 
 ## 7. Verificatie (lokaal, echte runs)
+
+### 7.1 Precisie-/identiteitsreparatie vanaf 3f18cdd8
+
+Bewijsroot: `/home/hermes/artifacts/3sm/pitwall-learning-p2-tyre-time-precision/`
+(mode `0700`). Bestaande RED-/initiële logs zijn behouden; nieuwe runs hebben
+`final-*`-namen. Exact opgeleverd HEAD en commandoregels staan in
+`final-REPORT.md` en `final-exitcodes.json` in die root.
+
+- T11: **92/92** tests groen, exit 0 (`final-t11.log`): de 58 bestaande tests
+  plus 34 extra gevallen voor cutoff, kalender, notatie, chronologie, JSON en
+  streamidentiteit.
+- Alle learningtests: **257/257** in 4 bestanden, exit 0
+  (`final-learning.log`). Beide runs gebruiken alleen `--maxWorkers=1`.
+- Originele kwaliteitsreviewprobes: **5/5** precisie/sentinel inclusief positieve
+  controles, exit 0 (`final-precision-sentinel.log`); daarnaast **32/32** gewone
+  kwaliteitsprobes, exit 0 (`final-quality.log`). Externe Vitest-config en
+  `T11_LEARNING_DIR` wijzen naar deze modules; de bevroren reviewroot is niet
+  beschreven of aangepast.
+- ESLint uitsluitend de twee gewijzigde TS-bestanden: exit 0
+  (`final-eslint.log`).
+- `tsc -p tsconfig.app.json --noEmit --pretty false`: exit 2, **16 bestaande
+  diagnostics**. De volledige uitvoer is bytegelijk aan de kwaliteitsreviewlog
+  `08-typecheck.log`, inclusief alle diagnostic identities en vervolgtekst;
+  nul learningdiagnostics (`final-typecheck.log`,
+  `final-typecheck-comparison.json`). De bestaande target/lib zijn ES2020:
+  BigInt-literals passen zonder configwijziging.
+- `git diff --check`: exit 0. Geen volledige suite/build, netwerkonderzoek,
+  productie, DB, Edge, UI, connector of packages; parent doet integratie na
+  onafhankelijke SPEC- en quality-herkeuring op exact nieuw HEAD.
+
+Dit zijn synthetische module-/regressiebewijzen, geen historisch bronkwaliteits-
+onderzoek, live-pitwallclaim, modelvalidatie of onafhankelijke goedkeuring.
+
+### 7.2 Eerdere kwalificatiereparatie (historisch bewijs)
 
 Deze afgeschermde reparatieronde is uitgevoerd op basis van
 `c516b1d13b870f9c053088fc55c14c4d62877d49`. Alle nieuwe logs staan onder
