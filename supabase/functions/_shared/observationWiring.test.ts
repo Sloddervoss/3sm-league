@@ -349,12 +349,12 @@ Deno.test("T13S1-013 probe is cached for the TTL and retried afterwards", () => 
 
 Deno.test("T13S1-014 probe treats every error shape as unavailable", async () => {
   assertEqual(
-    await probeObservationV1(async () => ({ data: true, error: null })),
+    await probeObservationV1(() => ({ data: true, error: null })),
     true,
     "scalar true",
   );
   assertEqual(
-    await probeObservationV1(async () => ({
+    await probeObservationV1(() => ({
       data: [{ available: true }],
       error: null,
     })),
@@ -362,7 +362,7 @@ Deno.test("T13S1-014 probe treats every error shape as unavailable", async () =>
     "object row",
   );
   assertEqual(
-    await probeObservationV1(async () => ({
+    await probeObservationV1(() => ({
       data: null,
       error: { code: "PGRST202" },
     })),
@@ -370,14 +370,14 @@ Deno.test("T13S1-014 probe treats every error shape as unavailable", async () =>
     "missing function",
   );
   assertEqual(
-    await probeObservationV1(async () => {
+    await probeObservationV1(() => {
       throw new Error("network");
     }),
     false,
     "throw",
   );
   assertEqual(
-    await probeObservationV1(async () => ({ data: "true", error: null })),
+    await probeObservationV1(() => ({ data: "true", error: null })),
     false,
     "garbage",
   );

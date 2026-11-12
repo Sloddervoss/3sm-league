@@ -130,7 +130,10 @@ Deno.serve(async (request) => {
       // De probe staat vóór het parsen: zonder bewezen ontvanger wordt een rij
       // met `observation` expliciet afgekeurd in plaats van stil gestript.
       if (OBSERVATION_V1_ENABLED && shouldProbeObservation(observationCapability, Date.now())) {
-        const available = await probeObservationV1((fn, args) => service.rpc(fn, args));
+        const available = await probeObservationV1(async (fn, args) => {
+          const { data, error } = await service.rpc(fn, args);
+          return { data, error };
+        });
         observationCapability = afterObservationProbe(available, Date.now());
         if (!available) {
           console.warn(

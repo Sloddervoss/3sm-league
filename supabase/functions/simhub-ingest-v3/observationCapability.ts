@@ -63,10 +63,12 @@ export const observationCaptureMode = (
   return capability.available ? "on" : "unavailable";
 };
 
+type ProbeResult = { data: unknown; error: unknown };
+
 type ProbeRpc = (
   fn: string,
   args: Record<string, unknown>,
-) => Promise<{ data: unknown; error: unknown }>;
+) => ProbeResult | Promise<ProbeResult>;
 
 /**
  * Vraagt de database of de observation-package aanwezig én actief is.
