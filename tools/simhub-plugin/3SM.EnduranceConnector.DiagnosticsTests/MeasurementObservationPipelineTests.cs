@@ -266,20 +266,22 @@ internal static class MeasurementObservationPipelineTests
         sampler = Sampler();
         for (var index = 0; index < 11; index++) sampler.Offer(Sample(index * 50L, 1, 60, false));
         var acceptedBefore = sampler.AcceptedCount;
-        var duplicate = Sample(500, 1, 70, true);
+        var duplicate = Sample(500, 1, 70, true, name: "");
         sampler.Offer(duplicate);
-        var throttled = Sample(510, 1, 80, true, tick: 510);
+        var throttled = Sample(510, 1, 80, true, name: "", tick: 510);
         sampler.Offer(throttled);
         var acceptedAfterSkips = sampler.AcceptedCount;
         var op04 = CloseByNextLap(sampler, 1050);
         var op04f = Facts(op04);
         var op04i = Nested(op04f, "interval");
+        var op04n = Nested(op04f, "driverNameContinuity");
         Check("OP04", acceptedBefore == 11 && acceptedAfterSkips == 11
             && sampler.DuplicateTickCount == 1 && sampler.ThrottledCount == 1
             && op04f != null && Integer(op04i, "samples") == 11
             && !op04f.ContainsKey("pitRoad") && !op04f.ContainsKey("refuel")
+            && op04n != null && (string)op04n["value"] == "unchanged"
             && sampler.AcceptedCount == 12,
-            "accepted=11 duplicate=1 throttled=1 samples=11 geen pit/refuel; totaal accepted=12");
+            "accepted=11 duplicate=1 throttled=1 samples=11 geen pit/refuel/naamclaim; totaal accepted=12");
 
         // OP05 — een pairingwissel op een duplicate/rate-limited tick weigert
         // de observation, zonder het aantal samples op te blazen.
