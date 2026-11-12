@@ -107,7 +107,7 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
 | A14 | gelijktijdige retry en revisie blijven atomair | twee echte psql-sessies |
 
 Uitslag (lokaal, disposable container `pitwall-learning-p2-observation-s1`,
-`0666ebe3698cd53a8f203d21b25031fdff1c621ef85358e911a5c1ec5816d6cb`):
+`dc19271fbf323cad898ecdfb59ac5b6e11bec13767d0bee7454419a32ac11d2d`):
 
 - **SQL: 112 PASS-regels, alle stages exit 0.** Pre 4, capturematrix 84,
   post-rollback 17, concurrency-verificatie 7. `04b` bewijst dat een tweede

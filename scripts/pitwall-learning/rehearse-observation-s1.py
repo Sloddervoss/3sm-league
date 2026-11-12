@@ -164,11 +164,11 @@ def ensure_container() -> str:
         net = docker("inspect", CONTAINER, "--format", "{{.HostConfig.NetworkMode}}").stdout.decode().strip()
         user = docker("inspect", CONTAINER, "--format", "{{.Config.User}}").stdout.decode().strip()
         if running != "true" or net != "none" or user != "postgres" or IMAGE_ID not in image:
-            raise SystemExit(
-                f"container {CONTAINER} exists but is not our test container: "
-                f"running={running} image={image} net={net} user={user}")
-        return docker("inspect", CONTAINER, "--format", "{{.Id}}").stdout.decode().strip()
-
+            # Rest van een mislukte start: exact deze testcontainer opruimen en
+            # opnieuw opbouwen. Nooit een andere container aanraken.
+            docker("rm", "-f", CONTAINER)
+        else:
+            return docker("inspect", CONTAINER, "--format", "{{.Id}}").stdout.decode().strip()
     image = docker("image", "inspect", IMAGE_ID, "--format", "{{.Id}}").stdout.decode().strip()
     if not image:
         raise SystemExit("cached image is missing; refusing to pull")
@@ -188,11 +188,15 @@ def ensure_container() -> str:
         "--network", "none",
         "--memory", "768m", "--memory-swap", "768m", "--cpus", "1",
         "--tmpfs", "/work:rw,size=512m,mode=0777",
+        "--no-healthcheck",
         "--user", "postgres",
         "--entrypoint", "/bin/bash",
-        IMAGE_ID, "-c", inner,
+        # ssh voegt argumenten samen zonder te quoten; de remote shell moet de
+        # scripttekst als één argument aan `bash -c` geven.
+        IMAGE_ID, "-c", "'" + inner + "'",
     )
     if proc.returncode != 0:
+        docker("rm", "-f", CONTAINER)
         raise SystemExit(f"docker run failed: {proc.stderr.decode()}")
     container_id = proc.stdout.decode().strip()
 
@@ -204,6 +208,28 @@ def ensure_container() -> str:
     else:
         raise SystemExit("postgres did not become ready")
     return container_id
+
+
+def container_limits() -> dict[str, object]:
+    """Read-only bewijs van de opgelegde grenzen (geen aanname)."""
+    def one(template: str) -> str:
+        return docker("inspect", CONTAINER, "--format", template).stdout.decode().strip()
+
+    return {
+        "id": one("{{.Id}}"),
+        "image": one("{{.Config.Image}}"),
+        "user": one("{{.Config.User}}"),
+        "network_mode": one("{{.HostConfig.NetworkMode}}"),
+        "memory_bytes": one("{{.HostConfig.Memory}}"),
+        "memory_swap_bytes": one("{{.HostConfig.MemorySwap}}"),
+        "nano_cpus": one("{{.HostConfig.NanoCpus}}"),
+        "tmpfs": one("{{.HostConfig.Tmpfs}}"),
+        "port_bindings": one("{{.HostConfig.PortBindings}}"),
+        "binds": one("{{.HostConfig.Binds}}"),
+        "readonly_rootfs": one("{{.HostConfig.ReadonlyRootfs}}"),
+        "healthcheck": one("{{.Config.Healthcheck}}"),
+        "running": one("{{.State.Running}}"),
+    }
 
 
 def rebuild_database() -> None:
@@ -417,6 +443,7 @@ def main() -> int:
     report = {
         "container": CONTAINER,
         "container_id": container_id,
+        "limits": container_limits(),
         "image": IMAGE_ID,
         "identity": identity,
         "stages": executed,
