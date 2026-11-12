@@ -38,6 +38,7 @@
     <Compile Include="..\3SM.EnduranceConnector\MeasurementEvent.cs" Link="MeasurementEvent.cs" />
     <!-- T13-S2A: de pure observatiekern deelt exact dezelfde bron als de plugin. -->
     <Compile Include="..\3SM.EnduranceConnector\ObservationCapture.cs" Link="ObservationCapture.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ObservationSampling.cs" Link="ObservationSampling.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetrySampler.cs" Link="TelemetrySampler.cs" />
     <Compile Include="..\3SM.EnduranceConnector\LapAccumulator.cs" Link="LapAccumulator.cs" />
     <Compile Include="..\3SM.EnduranceConnector\PitServiceTracker.cs" Link="PitServiceTracker.cs" />
