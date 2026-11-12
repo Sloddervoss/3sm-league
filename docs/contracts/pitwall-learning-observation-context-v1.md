@@ -1,14 +1,18 @@
-# T13 — capture-only observatiecontract v1 (uitvoerbare pure kern, UNWIRED)
+# T13 — capture-only observatiecontract v1 (pure kern + servercapture)
 
-Status: **EXECUTABLE PURE CORE / NIET AANGESLOTEN**. Deze versie vervangt de 267-regelvoorsteltekst op
-`a374af6ed4ddeb0e41756c510bbf89c0e50c5b26`. De parser en de meetrij-scopebeslissing staan in:
+Status: **PURE CORE + SERVER-SIDE CAPTURE, DEFAULT UIT, NIET UITGEROLD.** Deze versie vervangt de
+267-regelvoorsteltekst op `a374af6ed4ddeb0e41756c510bbf89c0e50c5b26`. De parser en de
+meetrij-scopebeslissing staan in:
 
 - `supabase/functions/_shared/observationV1.ts` — pure module, geen imports, I/O, logs, klok of SDK.
 - `supabase/functions/_shared/observationV1.test.ts` — Deno-tests, uitsluitend synthetische fixtures.
 
-`simhub-ingest-v3`, `persist.ts`, de outbox, de C#-producer, SQL, P1, de UI en de Edge-deploy zijn **niet**
-gewijzigd. De bestaande receiver wijst een rij met `observation` nog steeds af (`contains unknown fields`); dat is
-bewust UNWIRED en geen integratieclaim. Er is geen build-GO voor de hele keten.
+T13-S1 sluit de serverkant aan: de Edge-parser kent het blok alleen in een expliciete opt-in-modus
+(`SIMHUB_OBSERVATION_V1_ENABLED`, default `false`), de database heeft een nullable kolom met rijpoort en
+conditionele hash v2, en P1 projecteert uitsluitend de geaccepteerde ruwe observation. Alle schakelaars staan
+default UIT; er is geen deploy, geen productieapply en geen producerrelease. De C#-producer, de outbox en de
+UI zijn niet gewijzigd. Zie `docs/operations/pitwall-learning-p2-observation-server-t13-s1.md` voor de
+bouw, de testmatrix en de resterende blokkades.
 
 ## 0. Grens en niet-claims
 
@@ -136,8 +140,9 @@ hoofd-/kleine letter als UUID-equivalent worden vergeleken. Het ruwe token blijf
 `urn:`/accolade-reparatie). Een ongeldig auth-device levert nooit `accept` op voor een observed row.
 
 Bytegrens: compacte `JSON.stringify` + `TextEncoder` van de hele `observation`-waarde is <= **2048 bytes**;
-2049 wordt vóór de key-walk geweigerd. Multibyte-tekens tellen vol. De **DB**-grens (`pg_column_size <= 4096`) is
-een aparte jsonb-maat en blijft onuitgevoerd/PENDING; dat is geen wirebewijs.
+2049 wordt vóór de key-walk geweigerd. Multibyte-tekens tellen vol. De **DB**-grens is een aparte jsonb-maat:
+`pg_column_size(observation) <= 4096` op een kolom met `STORAGE EXTERNAL`, zodat TOAST-compressie de meting
+niet kan verkleinen. De wire- en DB-grens zijn afzonderlijk getest (2048 exact / 4096 exact, daarna geweigerd).
 
 ## 4. Meetrij-scope (B3)
 
@@ -151,11 +156,11 @@ een aparte jsonb-maat en blijft onuitgevoerd/PENDING; dat is geen wirebewijs.
 5. Match plus geldige ruwe `row.startedAt`/`row.endedAt`, interval binnen de row en edges binnen **1 ms**
    (`OBSERVATION_EDGE_TOLERANCE_SECONDS`, inclusief; meer dan 1 ms sluit, exact zonder epsilon) -> `accept`.
 
-De row-scope is de enige beslissing. Het V3-kernframe en andere meetrijen blijven buiten dit resultaat en kunnen
-door een toekomstige caller doorlopen. De stateless batchtest bewijst: B-rij gequarantaineerd, A-rij accepted,
-legacy-rij accepted; een kapotte rij stopt de volgende niet. Er is geen ACK- of quarantaineopslag geïmplementeerd.
-De toekomstige servergate hoort in `simhub_persist_v3` -> `simhub_persist_measurement_batch` /
-`simhub_apply_lap_row`, niet in `simhub-ingest-v3/persist.ts` (dat laatste doet alleen telemetrie-events/latest).
+De row-scope is de enige beslissing. Het V3-kernframe en andere meetrijen blijven buiten dit resultaat en
+blijven doorlopen. De servergate staat in `simhub_persist_v3` -> `simhub_persist_measurement_batch` /
+`simhub_apply_lap_row` (niet in `persist.ts`, dat alleen telemetrie-events/latest doet). Een mismatch weigert de
+hele meetrij met `observation_device_mismatch`: geen `simhub_lap_summaries`-insert/update en dus geen P1-capture.
+De afwijzing is een rij-ACK-diagnose; er is geen quarantainetabel en geen retry-/data-lifecycleclaim.
 
 Owner staat niet op de wire en niet in P1-item-JSON. Een toekomstige lokale verzendcheck vergelijkt
 `CaptureDeviceId` **en** `CaptureOwnerUserId` **en** `PairingGeneration`; ontbreekt een van de drie bij lapstart,
@@ -170,15 +175,18 @@ geen promotie van ownerhistorie.
   weglaten. Dit is nooit `driverChanged` of rijderidentiteit. De producer blijft PENDING.
 - **B2 negatief:** de parser kan geen `pitRoad:false`, `refuel:0` of andere negatieve kwalificatie produceren.
   `unknownSeconds`/edges zijn tellers, geen volledigheidsclaim. De 80 %-regel wordt hier niet gebruikt of hersteld.
-- **B4 hash/revisie:** **niet geïmplementeerd.** Normatief voor later: hash v2 over de canonieke **gevalideerde
-  ruwe** observation, vóór `observation_status` en vóór P1-filtering. `observation_status` is server-afgeleid en
+- **B4 hash/revisie:** **server-side geïmplementeerd** (`simhub_lap_row_hash_v2`). Hash v2 gaat over de
+  canonieke **gevalideerde ruwe** observation, vóór `observation_status` en vóór P1-filtering. `observation_status` is server-afgeleid en
   staat niet op de wire of in de hash. v1 blijft ongewijzigd bij afwezigheid; v2 alleen bij non-null. Zelfde
   `device_id`+`summaryUid`+`recordRevision` met een andere ruwe observation is `revision_conflict`, nooit
   `duplicate`. De bestaande SQL ordent alleen op `recordRevision`; `supersedesSummaryUid` wordt ge-COALESCEd en
   zit in de hash, maar is **geen** ordeningsgate. P1 neemt de opgeslagen serverhash over; geen in-place
   serialisatie. Alleen accepted blokken bereiken de hash.
-- **B5 rollback:** **niet geïmplementeerd.** Alleen compatible-reader: flag off, reader en kolom behouden, geen
-  destructieve drop en geen drainclaim. Een flag-off maakt oude offline wachtrijen niet veilig; aparte deploy-GO.
+- **B5 rollback:** geïmplementeerd als **data-preserving disable-amendment**: flag off, kolom/constraints/hash-
+  functies en alle historische rijen blijven, P1-projectie terug naar de P1-vorm. De oude schrijver komt niet
+  terug (die zou observation stil strippen); een observation-rij wordt na rollback expliciet
+  `observation_unavailable` geweigerd. Een flag-off maakt oude offline wachtrijen niet veilig; dat blijft een
+  aparte deploy-GO.
 - **B6 aggregate/schema:** de pure shape/caps en UUID/context-regels zijn uitvoerbaar. `ObservedSessionId`/
   `SegmentId` bij `StartLap` blijven een producer-PENDING fix; de parser leest ze niet uit de actuele pipeline.
 - **Bounded quarantaine (toekomst):** nooit een stale entry verzenden. Elke entry is **append-only en immutable**:
@@ -203,10 +211,11 @@ unknown keys op elk niveau, UUID-case en ongeldige tokens, row-vs-frame-scope, 8
 geen owners, multibyte-caps 2048/2049, 100 ns-tijdprecisie, exacte 1 ms/ULP/subnormale/scientific-getalgrenzen,
 refuel zonder bound, input-immutabiliteit en de echte legacy/mixed `parseLapSummariesReport`-afwijzing.
 
-**PENDING / geen claim:** C#-producer en `ObservationV1Enabled` (default off), outbox freeze/quarantaine,
-`simhub_persist_v3`/`simhub_persist_measurement_batch`/`simhub_apply_lap_row`, SQL-migratie en hash-vectoren,
-`pg_column_size`, P1-projectie, ACK-afhandeling, DB/Edge/SDK/live-tests, UI, deploy en Vite-build (guard niet
-omzeild). De SDK-bronnen (`SessionUniqueID`, `SubSessionID`, `UserID`, `PlayerCarTowTime`) blijven bekend maar
+**Sinds T13-S1 bewezen (lokaal, disposable):** `simhub_persist_v3`/`simhub_persist_measurement_batch`/
+`simhub_apply_lap_row` met rijpoort, SQL-migratie, `pg_column_size`-grens, P1-projectie, hash-vectoren,
+retry/conflict/revisie, gelijktijdige retry en revisie, en de rollback-cyclus. **PENDING / geen claim:**
+C#-producer en `ObservationV1Enabled`, outbox freeze/quarantaine, Edge-deploy, productieapply, SDK/live-tests,
+UI en Vite-build (guard niet omzeild). De SDK-bronnen (`SessionUniqueID`, `SubSessionID`, `UserID`, `PlayerCarTowTime`) blijven bekend maar
 UNVERIFIED/ongesloten; hun bestaan of afwezigheid wordt hier niet als runtimebewijs gebruikt. Dit is **geen**
 GO voor de complete keten.
 
@@ -217,6 +226,7 @@ GO voor de complete keten.
 - [x] Exacte shared interval-shape, optionele refuel-bound, 2048-byte cap, raw UUID/tijd behouden.
 - [x] Geen `false`/`0`-feit, geen owner/PII op de wire, geen completeness-claim.
 - [x] Echte Deno-tests (216) en echte receiver-afwijzing als bewijs; geen DB/netwerk/SSH/GUI.
-- [ ] Producer, outbox, SQL/hash, P1, ACK, Edge-wiring en deploy — aparte GO.
+- [x] Parser-opt-in, SQL/hash, rijpoort, P1-projectie, ACK-diagnose en rollback — lokaal getest.
+- [ ] Producer, outbox, Edge-deploy en productieapply — aparte GO.
 
 **PRODUCTIEWIJZIGING: NEE.**

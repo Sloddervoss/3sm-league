@@ -87,7 +87,7 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
   herclassificeren); dat is hier expliciet géén "veilige" rollback.
 - bestaande observation-rijen en hun P1-revisies blijven staan.
 
-## 6. Acceptatiematrix (bewijs, geen plan)
+## 6. Acceptatiematrix en resultaat
 
 | # | Eis | Bewijs |
 |---|---|---|
@@ -104,6 +104,41 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
 | A11 | ACL: anon/authenticated geen rechten | SQL catalog |
 | A12 | learning-regressie | bestaande suite |
 | A13 | geen hele-frame-abort bij één kapotte rij | Deno + SQL |
+| A14 | gelijktijdige retry en revisie blijven atomair | twee echte psql-sessies |
+
+Uitslag (lokaal, disposable container `pitwall-learning-p2-observation-s1`,
+`0666ebe3698cd53a8f203d21b25031fdff1c621ef85358e911a5c1ec5816d6cb`):
+
+- **SQL: 111 PASS-regels, alle stages exit 0.** Pre 4, capturematrix 83,
+  post-rollback 17, concurrency-verificatie 7. `04b` bewijst dat een tweede
+  forward-toepassing met exit 3 wordt geweigerd; `07b` bewijst dat de rollback
+  idempotent is.
+- **Deno:** `observationV1.test.ts` 216/216; nieuwe wiring 14/14; hele
+  `_shared`-map 293 passed / 2 failed. Die twee failures
+  (`plugin08_protocol_test`, `plugin08_isolation_test`) falen identiek op de
+  exacte base `fc74` (279 passed / 2 failed) en zijn dus geen regressie.
+- **Vitest:** 2284 passed / 1 failed; dezelfde failure
+  (`tyreTelemetryContract.test.ts`) faalt al op `fc74`. De pitwall-subset is
+  1184/1184 groen.
+- **DB-identiteit:** `current_database = pitwall_learning_p2_observation_s1`,
+  `data_directory = /work/data`, `inet_server_addr = NULL`, PostgreSQL 15.19.
+- **Na rollback:** kolom + beide constraints aanwezig, flag `false`, 11
+  meetrijen waarvan 5 met observation, 2 capture-batches en 2
+  source-revisies ongewijzigd aanwezig.
+- **Bekende v1-vector:** `c4b83791d22eb561980e76bdb63bb657`, vóór de migratie
+  vastgelegd en erna bytegelijk teruggelezen.
+
+Twee ontwerpdetails die tijdens de test zijn vastgelegd:
+
+1. De kolom heeft `STORAGE EXTERNAL`. Zonder dat comprimeert TOAST een grote
+   jsonb en dan meet `pg_column_size` de gecomprimeerde waarde; de 4096-grens
+   zou dan een 4097-byte maar goed comprimeerbare waarde doorlaten.
+2. De SQL-validator is een **structurele** subset (allowlist, types, caps,
+   UUID, kalender/tijdorde, feit-aanwezigheid). De exacte decimale
+   budgetinvarianten en `interval`-binnen-de-meetrij blijven eigendom van de
+   goedgekeurde TS-parser op de Edge. Een directe service-role-aanroep kan dus
+   geen PII/owner toevoegen en niet van device wisselen, maar is geen tweede
+   volledige implementatie van de parser.
 
 ## 7. Niet-claims
 
@@ -113,5 +148,23 @@ volledigheidsclaim en geen "waarheid" van `sessionUniqueId`/`sessionNumber`.
 De SQL-guard is een **structurele** subset (allowlist, types, caps, UUID,
 tijdorde, feit-aanwezigheid); de exacte decimale budgetinvarianten blijven
 eigendom van de goedgekeurde TS-parser, die als enige de wire-rijen aanlevert.
+
+## 8. Restpunten en blokkades
+
+- **Producer blijft OFF.** Er is geen C#-wijziging, geen outbox-freeze en geen
+  quarantaineopslag. Zonder producer kan geen enkele productie-rij het blok
+  aanleveren.
+- **Edge-deploy en productieapply zijn niet gedaan.** De env-vlag staat default
+  `false`; de DB-flag staat default `false`. Activeren vereist een aparte,
+  goedgekeurde deploy (migratie -> Edge -> producer).
+- **Bytebudget:** drie geobserveerde rondes voegen tot ~6 KiB toe aan de
+  meetbatch. Komt een frame boven `MaxMeasurementBatchBytes` (16 KiB), dan
+  markeert de bestaande Edge-flow de hele lap-reeks zichtbaar als
+  `payload_too_large` en houdt de outbox die rijen vast; er wordt niets stil
+  gestript. Dat gedrag is niet veranderd en niet als performance-GO getest.
+- **SQL-guard is structureel, niet de volledige parser** (zie §6). De
+  interval-binnen-de-meetrij- en decimale budgetregels blijven Edge-only.
+- **Geen performance- of productieclaim.** De P1 timed singletrial is niet
+  herhaald; er is geen benchmark-GO.
 
 **PRODUCTIEWIJZIGING: NEE.**
