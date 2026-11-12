@@ -112,7 +112,12 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   Windows/SimHub-net48-pluginbuild of live SDK-bewijs; net48-bewijs is alleen subsetcompilatie.
   De eerste volledige Vitest-poging op `7876f494` eindigde in een tooltransport-timeout
   na 420 s, zonder JSON-resultaat en zonder resterend Vitest-proces; oorzaak niet bewezen.
-  Een afzonderlijke tracked herhaling loopt; die verificatie is nog open, geen PASS-claim.
+  De afzonderlijke tracked herhaling is afgerond met **exit 1: 2284 PASS / 1 bestaande FAIL**,
+  geen overgeslagen tests. De volledige failure-identiteit én foutmelding zijn na
+  expliciete worktreepadnormalisatie exact gelijk aan de gepinde T12-baseline;
+  ook de suite-tellingen en falende bestandsidentiteit zijn gelijk. Geen nieuwe
+  regressie aangetroffen; dit is geen volledig groene suite. Bewijs:
+  `full-vitest-7876f494-retry.json` en `full-vitest-7876f494-retry.log`.
   Geen plugin-/sampler-/ledger-/verzendintegratie in S2A; geen updater-, versie-,
   instellingen- of geïnstalleerde-DLL-wijziging. Volgende begrensde lokale stap:
   S2B sampler/accumulator-adapter en StartLap-freeze. Tot de aparte opslag- en
