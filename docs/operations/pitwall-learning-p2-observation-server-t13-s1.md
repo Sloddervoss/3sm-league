@@ -126,8 +126,8 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
 Uitslag (lokaal, disposable container `pitwall-learning-p2-observation-s1`,
 `dc19271fbf323cad898ecdfb59ac5b6e11bec13767d0bee7454419a32ac11d2d`):
 
-- **SQL: 220 PASS-regels, alle stages exit 0.** Pre 4, capturematrix 84,
-  role/NULL-matrix 106, post-rollback 19, concurrency-verificatie 7. `04b`
+- **SQL: 298 PASS-regels, alle stages exit 0.** Pre 4, capturematrix 84,
+  role/NULL-matrix 184, post-rollback 19, concurrency-verificatie 7. `04b`
   bewijst dat een tweede forward-toepassing met exit 3 wordt geweigerd; `07b`
   bewijst dat de rollback idempotent is.
 - **Deno:** `observationV1.test.ts` 216/216 (bytegelijk bestand); wiring +

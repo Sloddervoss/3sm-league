@@ -230,6 +230,9 @@ DECLARE
   v_case record;
   v_ok boolean;
   v_disp text;
+  v_result text;
+  v_uid uuid;
+  v_i integer := 0;
 BEGIN
   FOR v_case IN
     SELECT c->>'name' AS name, c->'value' AS value
@@ -284,6 +287,18 @@ BEGIN
     PERFORM pg_temp.ok(v_ok IS FALSE, 'B3 ' || (v_case.name) || ' rejected by validator');
     PERFORM pg_temp.ok(v_disp = 'observation_invalid',
                        'B3 ' || (v_case.name) || ' rejected by disposition');
+    -- Dezelfde matrix door de DIRECTE service_role-terugval, niet alleen door
+    -- de batch/validator. Zo is elke missing/null/wrongtype/enum ook op het
+    -- fallbackpad bewezen fail-closed.
+    v_i := v_i + 1;
+    v_uid := md5(v_case.name || ':fallback')::uuid;
+    v_result := public.simhub_apply_lap_row(
+      pg_temp.apply_row(v_uid, 100 + v_i, v_case.value));
+    PERFORM pg_temp.ok(v_result = 'rejected:' || v_disp,
+                       'B3 fallback ' || (v_case.name) || ' rejected by apply');
+    PERFORM pg_temp.ok(NOT EXISTS (SELECT 1 FROM public.simhub_lap_summaries
+                                    WHERE summary_uid = v_uid),
+                       'B3 fallback ' || (v_case.name) || ' stored nothing');
   END LOOP;
 END
 $b3$;
