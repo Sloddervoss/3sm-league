@@ -10,6 +10,7 @@
 // deno-lint-ignore-file no-explicit-any -- fixtures zijn bewust mutabele JSON-objecten
 
 import { parseLapSummariesReport } from "./simhubExtensions.ts";
+import { parseTelemetryV3Envelope } from "./simhub.ts";
 import {
   afterObservationProbe,
   initialObservationCapability,
@@ -379,5 +380,95 @@ Deno.test("T13S1-014 probe treats every error shape as unavailable", async () =>
     await probeObservationV1(async () => ({ data: "true", error: null })),
     false,
     "garbage",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Envelope-niveau: de opt-in bereikt de echte V3-parser
+// ---------------------------------------------------------------------------
+
+function v3Frame(extraLap: Record<string, unknown> = {}) {
+  return {
+    protocolVersion: 3,
+    sequence: 42,
+    capturedAt: "2026-11-12T10:00:00.000Z",
+    transportSessionId: "sess-1",
+    identity: {
+      currentDriverId: "Driver One",
+      currentDriverName: "Driver One",
+      carId: "car",
+      carName: "Car",
+      trackName: "Track",
+      trackConfig: "GP",
+    },
+    session: {
+      isInCar: true,
+      sessionTimeSeconds: 1000,
+      sessionTimeRemainingSeconds: 100,
+      sessionLapsRemaining: 5,
+      flags: ["green"],
+      sessionState: "racing",
+    },
+    timing: {
+      currentLapElapsedSeconds: 40,
+      lastLapTimeSeconds: 120.5,
+      bestLapTimeSeconds: 120.5,
+      completedLaps: 3,
+    },
+    position: { position: 3, classPosition: 2, gapToLeaderSeconds: 1.5 },
+    track: { lapDistancePct: 0.4, trackSurface: "on_track", onPitRoad: false },
+    fuel: { fuelLitres: 40.5, fuelPct: 0.5 },
+    raceState: { incidents: 0 },
+    pitService: {
+      pitServiceFlagsRaw: 0,
+      requiredRepairSeconds: 0,
+      optionalRepairSeconds: 0,
+    },
+    lapSummaries: [{ ...lap(UUID_A, 1), ...extraLap }],
+  };
+}
+
+Deno.test("T13S1-015 V3 envelope: default rejects, opt-in carries the block", () => {
+  const off = parseTelemetryV3Envelope(
+    v3Frame({ observation: validObservation() }),
+  );
+  assertEqual(off.measurementReport!.laps.rows.length, 0, "default rejects");
+  assert(
+    off.measurementReport!.laps.rejected[0].reason.includes(
+      "contains unknown fields",
+    ),
+    "default keeps the old reason",
+  );
+
+  const on = parseTelemetryV3Envelope(
+    v3Frame({ observation: validObservation() }),
+    {
+      observationCapture: "on",
+    },
+  );
+  assertEqual(on.measurementReport!.laps.rows.length, 1, "opt-in accepts");
+  assertEqual(on.lapSummaries!.length, 1, "row reaches the batch DTO");
+  assertEqual(
+    on.lapSummaries![0].observation!.capture.deviceId,
+    UUID_A,
+    "observation survives the envelope",
+  );
+
+  const unavailable = parseTelemetryV3Envelope(
+    v3Frame({ observation: validObservation() }),
+    {
+      observationCapture: "unavailable",
+    },
+  );
+  assertEqual(
+    unavailable.measurementReport!.laps.rows.length,
+    0,
+    "unavailable rejects",
+  );
+  assert(
+    unavailable.measurementReport!.laps.rejected[0].reason.includes(
+      "unavailable",
+    ),
+    "explicit unavailable reason",
   );
 });
