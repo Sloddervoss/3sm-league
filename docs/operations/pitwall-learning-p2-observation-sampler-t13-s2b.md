@@ -58,9 +58,9 @@ netwerkwijziging. Alle release-/activatiepoorten blijven apart.
 
 - Offline restore/build van `3SM.EnduranceConnector.DiagnosticsTests` met lege
   lokale source: restore exit 0, build exit 0 (0 warnings).
-- `--only-observation-pipeline`: 32 PASS / 0 FAIL, exit 0.
-- `--only-measurement`: 354 oude + 32 nieuwe = 386 PASS / 0 FAIL, exit 0.
-- Volledige DiagnosticsTests: 710 oude + 32 nieuwe = 742 PASS / 0 FAIL, exit 0
+- `--only-observation-pipeline`: 33 PASS / 0 FAIL, exit 0.
+- `--only-measurement`: 354 oude + 33 nieuwe = 387 PASS / 0 FAIL, exit 0.
+- Volledige DiagnosticsTests: 710 oude + 33 nieuwe = 743 PASS / 0 FAIL, exit 0
   (inclusief 60 s soak).
 - `net48` C# 7.3-subsetbuild van de gedeelde meetlaag incl.
   `ObservationSampling.cs`: exit 0, 0 warnings. Dit is **geen** plugin-/SimHub-
