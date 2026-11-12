@@ -80,6 +80,8 @@
     <!-- T13-S2C1: aparte duurzame observation-ledger (version 1, 64/1 MiB). -->
     <Compile Include="ObservationLedger.cs" />
     <Compile Include="ObservationLedgerStore.cs" />
+    <!-- T13-S2C2a: ACK-classificatie en duurzame per-rij-toepassing. -->
+    <Compile Include="ObservationAck.cs" />
     <Compile Include="LapAccumulator.cs" />
     <!-- 0.7.2.0: pitbezoeken (intentie vs resultaat) en wear-ankers met bewijs. -->
     <Compile Include="PitServiceTracker.cs" />
