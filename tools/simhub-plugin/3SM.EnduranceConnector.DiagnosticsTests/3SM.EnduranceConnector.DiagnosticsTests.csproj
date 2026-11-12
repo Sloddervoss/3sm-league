@@ -42,6 +42,8 @@
     <!-- T13-S2C1: durable observation-ledger, echte filesystemtests. -->
     <Compile Include="..\3SM.EnduranceConnector\ObservationLedger.cs" Link="ObservationLedger.cs" />
     <Compile Include="..\3SM.EnduranceConnector\ObservationLedgerStore.cs" Link="ObservationLedgerStore.cs" />
+    <!-- T13-S2C2a: ACK-classificatie en duurzame per-rij-toepassing. -->
+    <Compile Include="..\3SM.EnduranceConnector\ObservationAck.cs" Link="ObservationAck.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetrySampler.cs" Link="TelemetrySampler.cs" />
     <Compile Include="..\3SM.EnduranceConnector\LapAccumulator.cs" Link="LapAccumulator.cs" />
     <Compile Include="..\3SM.EnduranceConnector\PitServiceTracker.cs" Link="PitServiceTracker.cs" />
