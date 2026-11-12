@@ -222,9 +222,24 @@ namespace ThreeSM.EnduranceConnector
                 _failedClosed = false;
                 _persistenceError = null;
 
-                var targetExists = SafeExists(_path);
-                var backupExists = SafeExists(_backupPath);
-                var orphanTemp = !targetExists && !backupExists && SafeExists(_tempPath);
+                bool targetExists;
+                bool backupExists;
+                bool tempExists;
+                try
+                {
+                    targetExists = _files.Exists(_path);
+                    backupExists = _files.Exists(_backupPath);
+                    tempExists = _files.Exists(_tempPath);
+                }
+                catch (Exception exception)
+                {
+                    // An unreadable directory is not a fresh install.
+                    _failedClosed = true;
+                    _persistenceError = "exists_failed:" + exception.GetType().Name;
+                    return;
+                }
+
+                var orphanTemp = !targetExists && !backupExists && tempExists;
                 if (!targetExists && !orphanTemp)
                 {
                     byte[] backupBytes;
@@ -549,9 +564,15 @@ namespace ThreeSM.EnduranceConnector
                 var entry = _entries[index];
                 if (entry.State == ObservationLedgerState.Quarantine)
                 {
-                    // Quarantine is terminal; no counter or payload rewrite.
-                    return Transition(ObservationLedgerTransitionStatus.Committed,
-                        ObservationLedgerReasons.ToToken(reason), "already_quarantined");
+                    // Quarantine is terminal; a repeated identical reason is a no-op,
+                    // a different reason may not rewrite the frozen evidence.
+                    if (entry.Reason == reason)
+                    {
+                        return Transition(ObservationLedgerTransitionStatus.Committed,
+                            ObservationLedgerReasons.ToToken(reason), "already_quarantined");
+                    }
+                    return Transition(ObservationLedgerTransitionStatus.RefusedInvalidReason,
+                        ObservationLedgerReasons.ToToken(reason), "quarantine_is_terminal");
                 }
                 return TransitionCommit(index,
                     entry.WithState(ObservationLedgerState.Quarantine, reason, entry.Attempts, null),
