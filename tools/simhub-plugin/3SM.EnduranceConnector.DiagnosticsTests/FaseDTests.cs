@@ -360,6 +360,28 @@ internal static class FaseDTests
         // Wordt alleen met de hand gebruikt; de normale run doet niets speciaals.
         if (args != null && args.Length > 0)
         {
+            // Owned child for the real SIGKILL preserve proof. Load() streams the
+            // invalid target into the preserve slot; the parent kills this process
+            // while that copy is in flight.
+            if (args.Length == 2 && string.Equals(args[0], "--ledger-preserve-child",
+                    StringComparison.Ordinal))
+            {
+                try
+                {
+                    var childStore = new ObservationLedgerStore(args[1]);
+                    Console.WriteLine("CHILD_PRESERVE_COMPLETE entries=" + childStore.EntryCount
+                        + " preserved=" + (File.Exists(childStore.PreservePath)
+                            ? new FileInfo(childStore.PreservePath).Length : -1L)
+                        + " failedClosed=" + childStore.IsFailedClosed);
+                    return 0;
+                }
+                catch (Exception childError)
+                {
+                    Console.WriteLine("CHILD_PRESERVE_FAILED=" + childError.GetType().Name
+                        + ":" + childError.Message);
+                    return 1;
+                }
+            }
             if (string.Equals(args[0], "--only-driver-ratings", StringComparison.Ordinal))
             {
                 Group("DriverRatingTests", () => DriverRatingTests.Run(Check));
@@ -375,6 +397,12 @@ internal static class FaseDTests
             if (string.Equals(args[0], "--only-observation-pipeline", StringComparison.Ordinal))
             {
                 Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-observation-ledger", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
@@ -406,6 +434,7 @@ internal static class FaseDTests
                 Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
                 Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
                 Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
+                Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
@@ -439,6 +468,7 @@ internal static class FaseDTests
             baselineChecks += Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
             baselineChecks += Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
             baselineChecks += Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
