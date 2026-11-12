@@ -311,6 +311,14 @@ internal static class MeasurementObservationCaptureTests
             && Integer(ob26r, "positiveSteps") == 1,
             "geen 2L over wissel; daarna +1L");
 
+        // Extra: een tijdsgat boven 1 s is geen betrouwbare fuelketen.
+        var gapFuel = ObservationCapture.Build(Binding(), null, new[]
+        {
+            Sample(0, fuel: 60, name: "A"), Sample(1500, fuel: 62, name: "A")
+        }, At(0), At(1500));
+        Check("OBS-GAP-FUEL", gapFuel.HasObservation && !Parse(gapFuel.ToJson()).ContainsKey("refuel"),
+            "fuelstap over 1,5 s gap wordt niet gebrugd");
+
         // OB27 — samples>1 met gelijke gequantiseerde tijd wordt lokaal geweigerd.
         var ob27 = ObservationCapture.Build(Binding(), null, new[]
         {

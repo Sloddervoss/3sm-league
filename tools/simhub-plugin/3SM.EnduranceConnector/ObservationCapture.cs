@@ -215,6 +215,7 @@ namespace ThreeSM.EnduranceConnector
 
         private DateTime? _firstPitRoadAt;
         private double? _previousFuel;
+        private long? _previousFuelAtMs;
         private string _previousContextKey;
         private DateTime? _firstRefuelAt;
         private int _positiveSteps;
@@ -301,12 +302,15 @@ namespace ThreeSM.EnduranceConnector
                 // Onbekend/ongeldig niveau breekt de keten; er wordt geen 0 of
                 // negatieve brandstof als feit verzonnen.
                 _previousFuel = null;
+                _previousFuelAtMs = null;
                 _previousContextKey = null;
             }
             else
             {
                 var contextKey = string.IsNullOrEmpty(sample.ContextKey) ? null : sample.ContextKey;
                 if (_previousFuel.HasValue
+                    && _previousFuelAtMs.HasValue
+                    && atMs - _previousFuelAtMs.Value <= 1000L
                     && _previousContextKey != null
                     && contextKey != null
                     && string.Equals(_previousContextKey, contextKey, StringComparison.Ordinal))
@@ -320,6 +324,7 @@ namespace ThreeSM.EnduranceConnector
                     }
                 }
                 _previousFuel = fuel;
+                _previousFuelAtMs = atMs;
                 _previousContextKey = contextKey;
             }
         }
