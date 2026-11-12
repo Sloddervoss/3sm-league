@@ -343,6 +343,27 @@ internal static class MeasurementObservationAckTests
             "rev=" + equalSuperRes.Rows[0].AcknowledgedRevision
             + " total=" + storeE1.DeliveredTotal);
 
+        var rowEdge = Row(Uid(36));
+        var storeEdge = Store(NewDirectory());
+        storeEdge.Capture(Candidate(rowEdge));
+        var camelAck = "{\"id\":\"" + rowEdge.SummaryUid + "\",\"recordRevision\":1}";
+        var edgeRes = ObservationAckResolver.Resolve(
+            Ack(Series(true, 1, "[" + camelAck + "]", "[]", "[]", "[]", null)),
+            Batch(Obs(rowEdge)), Binding());
+        var edgeApply = storeEdge.ApplyAck(edgeRes, T0.AddMinutes(3));
+        var conflictAck = "{\"id\":\"" + rowEdge.SummaryUid
+            + "\",\"record_revision\":1,\"recordRevision\":2}";
+        var conflictRes = ObservationAckResolver.Resolve(
+            Ack(Series(true, 1, "[" + conflictAck + "]", "[]", "[]", "[]", null)),
+            Batch(Obs(rowEdge)), Binding());
+        Check("OA05c de echte Edge-camel `recordRevision` wordt gelezen; een conflicterende dubbele vorm blijft onbewezen",
+            edgeRes.Rows[0].Outcome == ObservationAckClass.Accepted
+            && edgeApply.Status == ObservationAckApplyStatus.Applied
+            && edgeApply.Stored && storeEdge.EntryCount == 0
+            && conflictRes.Rows[0].Outcome == ObservationAckClass.NotDelivered
+            && conflictRes.Rows[0].Diagnostic == "ack_revision_missing",
+            "edge=" + edgeRes.Rows[0].Outcome + " conflict=" + conflictRes.Rows[0].Diagnostic);
+
         var rowF = Row(Uid(4), revision: 2);
         storeB.Capture(Candidate(rowF));
         var lowRes = ObservationAckResolver.Resolve(

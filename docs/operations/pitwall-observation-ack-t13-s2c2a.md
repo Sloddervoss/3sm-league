@@ -10,19 +10,24 @@ pipeline/sender-wiring, geen echte `%APPDATA%`-file, geen DB/Edge/release.
 De resolver is tegen de werkelijke bron gebouwd:
 
 - `supabase/functions/_shared/simhubAggregates.ts` — `mergeMeasurementAck`
-  levert `measurements.events`/`measurements.laps` met `received`, `accepted`,
-  `duplicates`, `superseded`, `rejected`, `block_error`, `stored`. Delivery-IDs
-  zijn `{id, record_revision}`; een kale string is alleen een oude vorm en
-  heeft géén revisie.
+  levert  `measurements.events`/`measurements.laps` met `received`, `accepted`,
+  `duplicates`, `superseded`, `rejected`, `block_error`, `stored`.
 - `supabase/functions/_shared/simhubAggregates.ts` — bij `stored:false` worden
   `accepted`/`duplicates`/`superseded` leeggemaakt. `stored:false` is dus nooit
   een per-rij-succes.
+- `supabase/functions/_shared/simhubAggregates.ts` — `AckId` is
+  `{ id, recordRevision }` en `jsonResponse` serialiseert dat als
+  `recordRevision` (camelCase). Dit is de **werkelijke Edge-wirevorm**.
 - `supabase/migrations/20261031200200_plugin08_complete_coverage.sql` (en de
-  latere fast-path/supersedes-migraties) — `lp_acc`/`lp_dup`/`lp_sup` bevatten
-  `{'id', 'record_revision'}`; `rejected` bevat
+  latere fast-path/supersedes-migraties) — de database levert
+  `{'id', 'record_revision'}` (snake_case); `rejected` bevat
   `{'id', 'index', 'reason'}`. De database-index is de positie in de
   oorspronkelijke parserreeks; de Edge vertaalt hem met `acceptedIndexes`
   terug naar de volledige aangeboden payload.
+- De resolver leest daarom **beide bronvormen** (`record_revision` en
+  `recordRevision`). Staan ze samen met een verschillende of ongeldige waarde,
+  dan blijft de revisie onbewezen. De bestaande legacy-parser leest alleen
+  snake_case; die baseline wordt hier niet gerepareerd.
 - `supabase/functions/_shared/simhubExtensions.ts` — de echte redenvorm is
   `${path}.observation is invalid: ${code}` en
   `${path} contains unknown fields`.

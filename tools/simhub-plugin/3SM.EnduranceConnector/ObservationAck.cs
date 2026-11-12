@@ -624,14 +624,34 @@ namespace ThreeSM.EnduranceConnector
                 ObservationLegacyAckClass.None, null, "ack_row_not_mentioned", null);
         }
 
+        /// <summary>
+        /// De database levert <c>record_revision</c>; de Edge-ACK bouwt
+        /// <c>AckId</c> met <c>recordRevision</c> en serialiseert dat veld zo.
+        /// Beide echte vormen worden gelezen. Staan ze er samen met een
+        /// verschillende of ongeldige waarde, dan is de revisie onbewezen.
+        /// </summary>
         private static int? ReadRevision(Dictionary<string, object> record)
         {
-            object raw;
-            if (!record.TryGetValue("record_revision", out raw) || raw == null) return null;
-            int revision;
-            if (!StrictInteger(raw, 1, MeasurementContract.MaxRecordRevision, out revision))
+            object snakeRaw;
+            object camelRaw;
+            var hasSnake = record.TryGetValue("record_revision", out snakeRaw) && snakeRaw != null;
+            var hasCamel = record.TryGetValue("recordRevision", out camelRaw) && camelRaw != null;
+            if (!hasSnake && !hasCamel) return null;
+
+            var snake = 0;
+            var camel = 0;
+            if (hasSnake && !StrictInteger(snakeRaw, 1, MeasurementContract.MaxRecordRevision,
+                    out snake))
+            {
                 return null;
-            return revision;
+            }
+            if (hasCamel && !StrictInteger(camelRaw, 1, MeasurementContract.MaxRecordRevision,
+                    out camel))
+            {
+                return null;
+            }
+            if (hasSnake && hasCamel && snake != camel) return null;
+            return hasSnake ? snake : camel;
         }
 
         private static int? ReadIndex(Dictionary<string, object> record)
