@@ -32,19 +32,27 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   `pitwall-learning-p2-tyre-time-precision-quality-recheck/` onder de artifactroot.
 - Fysieke bruikbaarheid blijft afzonderlijk van trainingsgeschiktheid en advies.
 
-## Nog uit te voeren binnen P2
+## T12-acceptatie en resterende P2-poorten
 
-- **T12 SPEC geaccepteerd, quality gestart:** actuele herstelbron
-  `157389c02b5c4a8340eb550d307fab5529cacccc`.
-  Parent-run **419/419 learningtests**; onafhankelijke SPEC-herkeuring PASS.
-  De vier resterende foutproeven falen op de bevroren voorganger `8787ea56`
-  en slagen op deze bron; ook onafhankelijke permutatie- en servicebindingproeven
-  zijn groen. De eerdere bron `0559d220` en de bijbehorende afwijzingen blijven
-  afzonderlijk bewaard. Nog geen qualityacceptatie of lokale integratie.
-  Bewijs: `pitwall-learning-p2-pit-canonical-spec-recheck/` en parent-resultaat
-  `pitwall-learning-p2-context-quality-parent/pit-fixed-157389c0.json`.
-  Afzonderlijke kwaliteitsreview: `deleg_c278a78f`, op exact dezelfde bron.
-- **T13 bronhiaten bewezen, herstelcontract nog open:** producerflags en nul-bijtanken,
+- **T12 geaccepteerd en lokaal geïntegreerd:** gereviewde bron
+  `9ce954ea13cad9390e9ef2364a794b7274f98b14`, SPEC PASS en quality APPROVED.
+  Integratiecommit: `d8127e657e94fdb829d3c07175d4f591738debcc`.
+  De drie T12-bestanden zijn bytegelijk aan de geaccepteerde bron.
+  Parent-integratie: **458/458 learningtests** geslaagd.
+  Volledige suite: **2284 geslaagd / 1 bestaande fout**; de volledige testidentiteit
+  en foutmelding zijn, na expliciete worktreepadnormalisatie, gelijk aan de P1-baseline.
+  Geen nieuwe falende test. Eerste volledige run timeout na 180 s zonder JSON-rapport;
+  geen overgebleven testproces gevonden. Herhaling met 600 s: echte exit 1 en JSON-resultaat.
+  **Vite-integratiebuild ONBEVESTIGD:** foreground-aanroepen werden als serverstart
+  geweigerd; de vervolgens gevraagde tracked background-build werd vóór uitvoering
+  door de gateway-lifecycleguard geblokkeerd: Vite-chunk `node.js` overschrijdt diens
+  script-scangrens van 1 MiB. Geen build-PASS claim, geen guardomzeiling/configwijziging.
+  Dit blijft een open P2-integratiepoort, geen aangetoonde broncode-buildfout.
+  Bewijs: `pitwall-learning-p2-pit-reason-spec-recheck/`,
+  `pitwall-learning-p2-pit-reason-quality-recheck/` en parent-rapporten
+  `integrated-d8127e65.json` / `full-d8127e65-retry600.json`.
+  Eerdere afgewezen bronversies, foutproeven en errata blijven afzonderlijk bewaard.
+- **T13 bronhiaten bewezen, minimaal observatiecontract gestart:** producerflags en nul-bijtanken,
   context bij waarneming, archief/capture, bestaande pairingbinding en gedeeltelijke
   SDK-sessietokens zijn onderzocht op `docs/pitwall-learning-p2-source-gaps`.
   Geen nieuwe ownerregistratie aannemen als het bestaande pairingpad bruikbaar is;
