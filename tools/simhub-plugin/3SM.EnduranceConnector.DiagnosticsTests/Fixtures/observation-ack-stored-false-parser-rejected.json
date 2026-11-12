@@ -1,0 +1,30 @@
+{
+  "measurements": {
+    "events": {
+      "received": 0,
+      "accepted": [],
+      "duplicates": [],
+      "superseded": [],
+      "rejected": [],
+      "block_error": "db_down",
+      "stored": false
+    },
+    "laps": {
+      "received": 1,
+      "accepted": [],
+      "duplicates": [],
+      "superseded": [],
+      "rejected": [
+        {
+          "id": "00000000-0000-4000-8000-000000000902",
+          "index": 0,
+          "reason": "observation_null",
+          "stage": "parser"
+        }
+      ],
+      "block_error": "db_down",
+      "stored": false
+    }
+  }
+}
+
