@@ -18,7 +18,11 @@ S2B-adapter is na SPEC PASS en QUALITY APPROVED op `f72eb548` lokaal geïntegree
 als `1d7d2b62`; parent 37 pipeline/747 volledige C#-harnastests/50 interop PASS.
 SDK-sessievelden onderbreken de fuelketen; gewone v1-outbox blijft observation-vrij.
 Q2 non-UTC sample-hergebruik blijft open: oplossen vóór bedrading van zo'n caller.
-Afzonderlijk duurzaam sidecar-ledger, sendlease en ACK blijven te bouwen/toetsen.
+S2C1 duurzaam ledger na SPEC PASS en QUALITY APPROVED op `c5cb018e` lokaal
+geïntegreerd als `7106b7fa`; parent 57 ledger/448 measurement/804 volledige
+C#-harnastests en 50 interop PASS. Exacte RowJson, 64/1MiB-reservering,
+crashvaste preserve en niet-definitieve onzekerheid zijn getest; geen delivery-API.
+ACK-afhandeling, async sendlease en alle producer-/pluginbedrading blijven open.
 Alle schakelaars blijven uit; geen productieapply/Edge-deploy/producerrelease.
 Rollback houdt historie en nieuwe writer intact; flag-only heractivatie mist de
 forward-P1-projectie en is niet ondersteund. Producer/outbox/quarantaine en echte

@@ -138,7 +138,7 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   **Q2 expliciet open:** hergebruik van een door legacy genormaliseerd non-UTC
   sample kan provenance verliezen. Huidige plugin maakt verse UTC-samples;
   oplossen en testen vóór bedrading van enige sample-reusing/non-UTC caller.
-  Volgende begrensde lokale stap: afzonderlijk duurzaam observation-ledger;
+  De afzonderlijke duurzame opslag volgt hieronder als S2C1;
   sendlease, ACK en complete eindketen blijven apart te bouwen/toetsen vóór activatie.
   Bewijs: `pitwall-learning-p2-observation-sampler-session-spec-recheck/`,
   `pitwall-learning-p2-observation-sampler-session-quality-recheck/` en
@@ -148,6 +148,29 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   `pitwall-learning-p2-observation-producer-test-quality-recheck/` en
   `pitwall-learning-p2-observation-producer-integration/` onder de artifactroot.
   P3/fitting, UI-publicatie en modelactivatie blijven gesloten; de Vite-buildpoort blijft open.
+
+## T13-S2C1 — duurzaam ledger lokaal geaccepteerd
+
+- Gereviewde bron `c5cb018e6d84201ca062130c5b784267ecbbef4d`: onafhankelijke
+  SPEC PASS en QUALITY APPROVED; lokale integratie
+  `7106b7fa2a71421c3ba77102b3a1422f77ceafdf`. Alle gereviewde bestanden bytegelijk.
+- Vier oorspronkelijke crash-/retryfouten en drie aanvullende runtimefouten zijn
+  met onderscheidende old/new-proeven gesloten. De drie testgaten zijn met
+  afzonderlijke mutantkills OL41/OL42/OL43 gesloten; geen productiebeleid gewijzigd.
+- Parent op de exacte integratie: offline restore/build exit 0, 0 warnings/errors;
+  **57/57 ledgertests**, **448/448 meetlaagtests**, **804/804 volledige C#-harnastests
+  inclusief soak** en **50/50 C#→Deno-interop**, alle exits 0. Eigen export: 52 bestanden.
+- Eén los ledgerbestand, onveranderlijke RowJson, 64 entries/1 MiB worst-state
+  UTF-8-reservering, duurzame deferred/quarantine-overgangen en atomische preserve.
+  Onzekere readback geeft geen definitieve legacy-terugvalstatus; geen delivery-API.
+- Bewijs: `pitwall-learning-p2-observation-ledger-certainty-spec-recheck/`,
+  `pitwall-learning-p2-observation-ledger-certainty-quality-recheck/` en
+  `pitwall-learning-p2-observation-ledger-integration/` onder de artifactroot.
+  Afgewezen bronnen/rapporten en mislukte pogingen blijven apart beschreven.
+- Volgende begrensde stap: ACK-classificatie en duurzame per-rij-afhandeling;
+  async sendlease, echte beide verzendcallers en plugin-/settingsbedrading volgen
+  afzonderlijk. Geen activering, SDK-/Windows-runtime, productie of volledige
+  P2-buildclaim. Sampler-Q2 (hergebruik non-UTC sample) blijft expliciet open.
 
 ## Beperkingen en vervolgnotities
 
