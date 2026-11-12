@@ -72,6 +72,8 @@
          dezelfde bestanden compileren als de plugin. -->
     <Compile Include="MeasurementIds.cs" />
     <Compile Include="MeasurementEvent.cs" />
+    <!-- T13-S2A: pure observation-builder + optionele wire-DTO's. -->
+    <Compile Include="ObservationCapture.cs" />
     <Compile Include="TelemetrySampler.cs" />
     <Compile Include="LapAccumulator.cs" />
     <!-- 0.7.2.0: pitbezoeken (intentie vs resultaat) en wear-ankers met bewijs. -->

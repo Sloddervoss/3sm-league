@@ -144,6 +144,12 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "validDurationSeconds", Order = 31, EmitDefaultValue = false)] public double? ValidDurationSeconds { get; set; }
         [DataMember(Name = "pitVisitIds", Order = 32, EmitDefaultValue = false)] public string[] PitVisitIds { get; set; }
         [DataMember(Name = "wearObservationIds", Order = 33, EmitDefaultValue = false)] public string[] WearObservationIds { get; set; }
+        /// <summary>
+        /// T13-S2A: optioneel observatieblok. De producer vult dit nergens
+        /// automatisch; alleen een expliciet gezette waarde gaat mee. Null laat
+        /// de sleutel volledig weg, zodat een legacy-rij bytegelijk blijft.
+        /// </summary>
+        [DataMember(Name = "observation", Order = 34, EmitDefaultValue = false)] public MeasurementObservationV1Dto Observation { get; set; }
     }
 
     /// <summary>
@@ -468,6 +474,11 @@ namespace ThreeSM.EnduranceConnector
         public double? ValidDurationSeconds { get; set; }
         public string[] PitVisitIds { get; set; }
         public string[] WearObservationIds { get; set; }
+        /// <summary>
+        /// T13-S2A: optioneel, alleen expliciet gezet door de pure builder. Er is
+        /// geen productiepad dat dit automatisch vult.
+        /// </summary>
+        public MeasurementObservationV1Dto Observation { get; set; }
 
         public MeasurementLapSummaryRecord()
         {
@@ -520,7 +531,8 @@ namespace ThreeSM.EnduranceConnector
                 MaxGapSeconds = R(MaxGapSeconds),
                 ValidDurationSeconds = R(ValidDurationSeconds),
                 PitVisitIds = Ids(PitVisitIds),
-                WearObservationIds = Ids(WearObservationIds)
+                WearObservationIds = Ids(WearObservationIds),
+                Observation = Observation
             };
         }
 
