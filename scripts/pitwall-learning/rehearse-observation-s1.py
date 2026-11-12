@@ -32,7 +32,12 @@ import sys
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ART = pathlib.Path("/home/hermes/artifacts/3sm/pitwall-learning-p2-observation-server")
+# De oude reviewer-root blijft bevroren. Deze reparatieronde schrijft alleen
+# naar de nieuwe bewijsroot; een expliciete env-override blijft mogelijk.
+ART = pathlib.Path(os.environ.get(
+    "PITWALL_T13_ART",
+    "/home/hermes/artifacts/3sm/pitwall-learning-p2-observation-server-evidence",
+))
 LOGS = ART / "logs"
 
 CONTAINER = "pitwall-learning-p2-observation-s1"
@@ -51,12 +56,35 @@ BASELINE_FIXTURE = ROOT / "supabase/tests/fixtures/pitwall-learning-p2-observati
 STUB = ROOT / "supabase/tests/fixtures/plugin08_stub_schema.sql"
 PRE_TEST = ROOT / "supabase/tests/pitwall-learning-observation-pre.sql"
 CAPTURE_TEST = ROOT / "supabase/tests/pitwall-learning-observation-capture.sql"
+ROLE_TEST = ROOT / "supabase/tests/pitwall-learning-observation-role-null.sql"
 POST_TEST = ROOT / "supabase/tests/pitwall-learning-observation-post-rollback.sql"
+LATEST_OUTER_WRAPPER = ROOT / "supabase/migrations/20261110231000_pitwall_pace_storage.sql"
 
 CHAIN = sorted((ROOT / "supabase/migrations").glob("2026103118*.sql"))
 CHAIN += sorted((ROOT / "supabase/migrations").glob("2026103119*.sql"))
 CHAIN += sorted((ROOT / "supabase/migrations").glob("2026103120*.sql"))
 CHAIN.append(ROOT / "supabase/migrations/20261111163052_pitwall_learning_evidence.sql")
+
+# Eerlijke scope-label voor de harness: de T13-writer/hash-bodies zijn de
+# actuele 20261031200500-versies, maar de buitenste persist_v3-wrapper uit
+# 20261110231000 vereist het volledige PACE-schema en past niet op deze
+# T13-fixture. We claimen daarom NIET dat de oude wrapper de nieuwste is.
+CHAIN_SCOPE = {
+    "label": "older_wrapper_fixture",
+    "batch_writer_under_test": "public.simhub_persist_measurement_batch from 20261031200500",
+    "outer_wrapper_in_db": "simhub_persist_v3 fixture from an older migration",
+    "omitted": [
+        "20261101113047_pace_capture.sql",
+        "20261110231000_pitwall_pace_storage.sql",
+    ],
+    "reason": "full PACE schema prerequisites are outside the T13-S1 fixture",
+    "current_rpc_case": "role/null test calls the actual simhub_persist_measurement_batch RPC as service_role",
+}
+
+CURRENT_BATCH_DISPATCH = (
+    "v_agg_ack := public.simhub_persist_measurement_batch"
+    "(d.id, p_session_id, p_events, p_laps);"
+)
 
 GUARD_TEST = """DO $harness_guard$ BEGIN
   IF current_database() <> '%s'
@@ -277,6 +305,10 @@ SELECT jsonb_build_object(
     FROM pg_constraint WHERE conrelid='public.simhub_lap_summaries'::regclass
       AND conname LIKE '%observation%'),
   'flag', (SELECT observation_enabled FROM pitwall_learning.runtime_settings WHERE id=1),
+  'flags', (SELECT jsonb_build_object(
+      'observation_enabled', observation_enabled,
+      'capture_enabled', capture_enabled)
+    FROM pitwall_learning.runtime_settings WHERE id=1),
   'functions', (SELECT coalesce(jsonb_agg(p.proname || '(' ||
         pg_get_function_identity_arguments(p.oid) || ')' ORDER BY p.proname), '[]'::jsonb)
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -408,11 +440,34 @@ SELECT jsonb_build_object(
     executed[-1]["detail"] = result
 
 
+def current_wrapper_dispatch_check() -> dict[str, object]:
+    """Bewijs dat de nieuwste wrapper nog steeds dezelfde batchdispatch heeft.
+
+    De wrapper wordt niet toegepast (PACE-schema buiten scope), maar de
+    aanroepregel in de canonieke migratie moet onveranderd zijn. Anders zou de
+    functionele batchtest hieronder niet op de actuele dispatch lijken.
+    """
+    text = LATEST_OUTER_WRAPPER.read_text()
+    present = CURRENT_BATCH_DISPATCH in text
+    if not present:
+        raise SystemExit(
+            "current persist_v3 wrapper no longer dispatches the expected batch call")
+    return {
+        "file": str(LATEST_OUTER_WRAPPER.relative_to(ROOT)),
+        "dispatch_present": present,
+        "dispatch": CURRENT_BATCH_DISPATCH,
+    }
+
+
 def forward_state() -> dict[str, object]:
     """Readback van de werkelijke objecten, niet alleen aantallen."""
     sql = """
 SELECT jsonb_build_object(
   'flag', (SELECT observation_enabled FROM pitwall_learning.runtime_settings WHERE id=1),
+  'flags', (SELECT jsonb_build_object(
+      'observation_enabled', observation_enabled,
+      'capture_enabled', capture_enabled)
+    FROM pitwall_learning.runtime_settings WHERE id=1),
   'column', (SELECT jsonb_build_object('type', atttypid::regtype::text,
                                        'nullable', NOT attnotnull,
                                        'storage', attstorage::text)
@@ -471,6 +526,7 @@ def main() -> int:
     state = forward_state()
     psql(DB, CAPTURE_TEST.read_text(), "06-capture-tests")
     run_concurrency_stage()
+    psql(DB, ROLE_TEST.read_text(), "06f-role-null-matrix")
     psql(DB, ROLLBACK.read_text(), "07-rollback")
     # De rollback is idempotent: een tweede keer mag niets kapotmaken.
     psql(DB, ROLLBACK.read_text(), "07b-rollback-reapply")
@@ -484,6 +540,8 @@ def main() -> int:
         "limits": container_limits(),
         "image": IMAGE_ID,
         "identity": identity,
+        "chain_scope": CHAIN_SCOPE,
+        "current_wrapper_dispatch": current_wrapper_dispatch_check(),
         "stages": executed,
         "pass_lines_total": total_passes,
         "inventory_after_forward": before,

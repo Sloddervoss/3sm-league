@@ -54,6 +54,13 @@ prototype-keys of circulaire objecten) en muteert de input niet. Elke fout heeft
 `quarantine`/`reject` andere rijen en het kernframe verwerken. ACK-afhandeling en quarantaineopslag zijn nog niet
 geïmplementeerd.
 
+De V3-caller bindt deze functie op de **ruwe** lap-rij (`startedAt`/`endedAt` en de
+7-cijferige observation-tijden nog ongeparsed) en geeft de device-UUID uit de
+token-opzoeking mee als `authenticatedDeviceId`. Nooit `observation.capture.deviceId` als
+"geauthenticeerd" gebruiken. `parseLapSummariesReport` doet dit in de `on`-modus; een
+observed rij zonder geldige serverdevice wordt rij-level afgekeurd, terwijl een legacy
+rij zonder die sleutel ongewijzigd blijft.
+
 ## 2. Wire-vorm (exact)
 
 Pad `payload.lapSummaries[i].observation`. Optioneel; afwezig = onbekend. `null`, `{}`, een onbekende subsleutel,

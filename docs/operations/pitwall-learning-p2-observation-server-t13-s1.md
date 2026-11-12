@@ -12,7 +12,8 @@ Eén samenhangend serverpad voor het optionele `observation`-blok uit
 
 ```
 payload.lapSummaries[i].observation
-  -> simhubExtensions.parseLapSummariesReport (approved parseLapObservation)
+  -> simhubExtensions.parseLapSummariesReport
+     (approved classifyLapObservation op de RAUWE rij + token-device)
   -> simhub_persist_v3 -> simhub_persist_measurement_batch
   -> row-level device fence (p_device_id, niet de client)
   -> conditionele hash v2 / bestaande hash v1
@@ -45,11 +46,20 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
   weigert **de hele meetrij** met `observation_device_mismatch`: geen
   `simhub_lap_summaries`-insert/update en dus ook geen P1-capture voor die rij.
   Andere rijen en het kernframe lopen door.
+- De Edge roept `classifyLapObservation` op de ruwe rij vóór enige
+  `Date.parse`/PG-cast. Daarmee vallen een interval buiten de meetrij, een
+  verkeerde edge en zelfs 100 ns buiten de grens per rij af; de 7-cijferige
+  ruwe tijdstrings en UUID-case blijven ongewijzigd. De geauthenticeerde
+  device-UUID komt uit de token-opzoeking in `context.ts` en overschrijft elk
+  callerveld.
 - De weigering is een rij-ACK-diagnose (`measurements.laps.rejected[]`,
   `stage: "database"`). Er is **geen** quarantainetabel en geen retry- of
   data-lifecyclebewijs; lokale quarantaine in de producer is C#-werk voor later.
 - `simhub_apply_lap_row` (de rij-voor-rij terugval) heeft dezelfde poort, zodat
   ook een directe service-role-aanroep geen vreemde observation-rij schrijft.
+  Omdat die functie SECURITY INVOKER is, krijgt `service_role` uitsluitend
+  EXECUTE op de pure helperketen (dispositie -> validator -> ts/text-helpers);
+  `PUBLIC`/`anon`/`authenticated` blijven geweigerd.
 
 ## 4. Hash en P1
 
@@ -102,7 +112,7 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
 | A2 | geaccepteerd blok, ruwe waarden behouden, geen owner | Deno-integratietest |
 | A3 | `null`/`false`/`0` = rijafwijzing, geen framefout | Deno + SQL |
 | A4 | device-mismatch = hele rij geen insert/P1, andere rijen door | SQL |
-| A5 | directe RPC-bypass schrijft geen vreemde rij | SQL |
+| A5 | directe service-role RPC-bypass schrijft geen vreemde rij | SQL als echte `SET ROLE service_role` |
 | A6 | v1-hash bekend vector onveranderd; v2 alleen bij non-null | SQL (pre/post) |
 | A7 | retry/conflict/revisie/supersede | SQL |
 | A8 | P1-projectie zonder owner, hash = rijhash | SQL |
@@ -116,21 +126,21 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
 Uitslag (lokaal, disposable container `pitwall-learning-p2-observation-s1`,
 `dc19271fbf323cad898ecdfb59ac5b6e11bec13767d0bee7454419a32ac11d2d`):
 
-- **SQL: 112 PASS-regels, alle stages exit 0.** Pre 4, capturematrix 84,
-  post-rollback 17, concurrency-verificatie 7. `04b` bewijst dat een tweede
-  forward-toepassing met exit 3 wordt geweigerd; `07b` bewijst dat de rollback
-  idempotent is.
-- **Deno:** `observationV1.test.ts` 216/216; nieuwe wiring 15/15; hele
-  `_shared`-map 294 passed / 2 failed. Die twee failures
+- **SQL: 220 PASS-regels, alle stages exit 0.** Pre 4, capturematrix 84,
+  role/NULL-matrix 106, post-rollback 19, concurrency-verificatie 7. `04b`
+  bewijst dat een tweede forward-toepassing met exit 3 wordt geweigerd; `07b`
+  bewijst dat de rollback idempotent is.
+- **Deno:** `observationV1.test.ts` 216/216 (bytegelijk bestand); wiring +
+  venster + context 23/23. Hele
+  `_shared`-map 302 passed / 2 failed. Die twee failures
   (`plugin08_protocol_test`, `plugin08_isolation_test`) falen identiek op de
   exacte base `fc74` (279 passed / 2 failed) en zijn dus geen regressie.
-- **Vitest:** 2284 passed / 1 failed; dezelfde failure
-  (`tyreTelemetryContract.test.ts`) faalt al op `fc74`. De pitwall-subset is
-  1184/1184 groen.
+- **Vitest:** de learning-subset (`pitwall/learning` + learningRepository)
+  is 464/464 groen.
 - **DB-identiteit:** `current_database = pitwall_learning_p2_observation_s1`,
   `data_directory = /work/data`, `inet_server_addr = NULL`, PostgreSQL 15.19.
-- **Na rollback:** kolom + beide constraints aanwezig, flag `false`, 11
-  meetrijen waarvan 5 met observation, 2 capture-batches en 2
+- **Na rollback:** kolom + beide constraints aanwezig, beide flags `false`, 15
+  meetrijen waarvan 7 met observation, 6 capture-batches en 2
   source-revisies ongewijzigd aanwezig.
 - **Bekende v1-vector:** `c4b83791d22eb561980e76bdb63bb657`, vóór de migratie
   vastgelegd en erna bytegelijk teruggelezen.
@@ -140,8 +150,10 @@ Twee ontwerpdetails die tijdens de test zijn vastgelegd:
 1. De kolom heeft `STORAGE EXTERNAL`. Zonder dat comprimeert TOAST een grote
    jsonb en dan meet `pg_column_size` de gecomprimeerde waarde; de 4096-grens
    zou dan een 4097-byte maar goed comprimeerbare waarde doorlaten.
-2. De SQL-validator is een **structurele** subset (allowlist, types, caps,
-   UUID, kalender/tijdorde, feit-aanwezigheid). De exacte decimale
+2. De SQL-validator is een **structurele** subset (allowlist, expliciete
+   sleutel-presence, types, caps, UUID, kalender/tijdorde, feit-aanwezigheid).
+   Ontbrekende verplichte sleutels en expliciete JSON-`null` falen nu closed;
+   een leeg descriptor-object telt niet als feit. De exacte decimale
    budgetinvarianten en `interval`-binnen-de-meetrij blijven eigendom van de
    goedgekeurde TS-parser op de Edge. Een directe service-role-aanroep kan dus
    geen PII/owner toevoegen en niet van device wisselen, maar is geen tweede

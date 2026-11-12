@@ -60,10 +60,13 @@ BEGIN
     AND v_hist.record_revision = 2, 'R3 historical observation row retained');
   PERFORM pg_temp.ok(v_hist.content_hash = public.simhub_lap_row_hash_v2(v_hist),
     'R4 historical v2 hash retained and still correct');
-  -- Vijf geaccepteerde observation-rijen uit de matrix (D, F, I en de twee
-  -- concurrency-races); geen enkele is door de rollback verwijderd of gestript.
+  -- Zeven geaccepteerde observation-rijen (matrix + concurrency + de twee
+  -- service_role-positives); geen enkele is door de rollback verwijderd of
+  -- gestript.
   PERFORM pg_temp.ok(
-    (SELECT count(*) FROM public.simhub_lap_summaries WHERE observation IS NOT NULL) = 5,
+    -- 5 uit de oorspronkelijke matrix + 2 uit de B2 service_role-directe
+    -- aanvallen (legacy telt niet); de reparatieronde mag geen historie wissen.
+    (SELECT count(*) FROM public.simhub_lap_summaries WHERE observation IS NOT NULL) = 7,
     'R5 all accepted observed rows retained, none erased');
   PERFORM pg_temp.ok(
     (SELECT count(*) FROM pitwall_learning.capture_batches) > 0,
@@ -179,8 +182,24 @@ BEGIN
    ORDER BY b.received_at DESC LIMIT 1;
   SELECT e INTO v_item FROM jsonb_array_elements(v_batch) e
    WHERE e->>'source_uid' = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-  PERFORM pg_temp.ok(v_item IS NOT NULL AND NOT (v_item ? 'observation'),
+  -- Positieve controle op dezelfde expressievorm: de assertie hieronder is
+  -- anders vacuous (observation zit onder payload, niet op de item-root).
+  PERFORM pg_temp.ok(
+    (jsonb_build_object('payload', jsonb_build_object('observation', '{}'::jsonb))
+      ->'payload') ? 'observation',
+    'R17a control proves payload/observation presence is detectable');
+  PERFORM pg_temp.ok(v_item IS NOT NULL AND NOT (v_item->'payload' ? 'observation'),
     'R17 post-rollback legacy P1 payload has no observation key');
+
+  -- Laat de test-DB niet met capture_enabled=true achter; dit is teststaat,
+  -- geen serveractivatie.
+  UPDATE pitwall_learning.runtime_settings
+     SET capture_enabled = false
+   WHERE id = 1;
+  PERFORM pg_temp.ok(
+    (SELECT NOT observation_enabled AND NOT capture_enabled
+       FROM pitwall_learning.runtime_settings WHERE id = 1),
+    'R18 final flags observation_enabled=false and capture_enabled=false');
 
   DROP TABLE IF EXISTS public.t13_test_vectors;
 END
