@@ -8,6 +8,14 @@ Scopebesluit: `docs/contracts/pitwall-learning-policy-v1.md`.
 T09/T10 worden eerst als pure modules gebouwd; geen DB-/UI-/connectoruitrol,
 nieuwe pooling, modeladvies of P3. Bestaande bronhiaten blijven expliciet onbekend.
 T13 alleen bij een bewezen broncontractgat; publicatie blijft een afzonderlijke GO.
+T09–T12 en de T13-pure core zijn lokaal geaccepteerd. T13-S1 servercapture is na
+SPEC PASS en QUALITY APPROVED op `ce5d62c3` lokaal geïntegreerd als `58820eed`;
+status en bewijs: `docs/operations/pitwall-learning-p2-local-status.md`.
+Alle schakelaars blijven uit; geen productieapply/Edge-deploy/producerrelease.
+Rollback houdt historie en nieuwe writer intact; flag-only heractivatie mist de
+forward-P1-projectie en is niet ondersteund. Producer/outbox/quarantaine en echte
+SDK-verificatie blijven open; de Vite-integratiebuild is niet uitgevoerd wegens
+de gateway-scangrens en mag niet als PASS worden behandeld.
 
 ## Zelflerende pitwall — P1 fasegrens
 

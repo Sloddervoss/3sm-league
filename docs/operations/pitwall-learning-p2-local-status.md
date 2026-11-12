@@ -57,19 +57,47 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   Integratie: `fc74bc2437f363f2c452ddc4c45d2f86757ed99e`.
   Parent op die integratie: **216/216 Deno-tests** en **458/458 learningtests**,
   beide exit 0; de drie T13-bestanden zijn bytegelijk aan de gereviewde bron.
-  De parser en meetrij-scopebeslissing zijn nog niet aan de receiver gekoppeld;
+  Op die pure-core-integratie waren parser en meetrij-scopebeslissing nog niet aan de receiver gekoppeld;
   geen complete T13-gegevensketen, bruikbare brandstofpopulatie of leeractivatie bewezen.
   Bewijs: `pitwall-learning-p2-observation-numeric-spec-recheck/`,
   `pitwall-learning-p2-observation-core-quality-review/` en parent-log/resultaat
   `observation-fc74bc24.log` / `learning-fc74bc24.json`.
-- **T13-S1 server-capturebouw gestart:** verse branch
-  `feat/pitwall-learning-p2-observation-server` vanaf `fc74bc24`.
-  Begrensde lokale bouw van parseraansluiting, devicegrens per meetrij,
-  conditionele observation-hash en P1-captureprojectie; feature standaard uit.
-  SQL-verificatie uitsluitend met synthetische fixtures in één geïsoleerde
-  testcontainer, zonder netwerk/poorten/productiemounts; geen productie-DDL/data.
-  Producer/outbox/SDK-verificatie, connectorpublicatie en DLL-wissel zijn niet
-  inbegrepen. P3/fitting, UI-publicatie en modelactivatie blijven gesloten.
+- **T13-S1 geaccepteerd en lokaal geïntegreerd:** gereviewde bron
+  `ce5d62c34d78c2d9e32de9bf0835f53db2a90a4e`, onafhankelijke SPEC PASS en
+  afzonderlijke QUALITY APPROVED. Integratiecommit:
+  `58820eed28b6e80c420fe952c20b27f348a39a6b`.
+  Alle gereviewde server-, SQL-, rollback-, test- en contractbestanden zijn bytegelijk
+  aan de kandidaat. De eerder afgewezen `724c841f` blijft ongewijzigd bewaard.
+  De echte Edge-parser classificeert de ruwe meetrij met de device-ID uit de
+  tokenopzoeking; ontbrekende identiteit, vreemde devices en onjuiste rondevensters
+  worden per rij afgewezen. De service-role fallback werkt met minimale helperrechten;
+  verplichte SQL-velden en expliciete nulls worden fail-closed gevalideerd.
+  Parent op de integratie: **239/239 Deno-runtime-tests** (`--no-check --deny-net`),
+  **458/458 learningtests**; volledige Vitest-suite **2284 PASS / 1 bestaande FAIL**.
+  De volledige foutidentiteit en genormaliseerde foutmelding zijn exact gelijk aan
+  de gepinde T12-baseline; geen nieuwe falende test. De volledige Deno-typegraph blijft
+  baseline-rood; runtime PASS is geen typecheck- of build-PASS.
+  SPEC en quality draaiden elk de **298 SQL-harnasasserties**; onafhankelijke
+  aanvullende rol-/NULL- en mutatieproeven staan in hun afzonderlijke rapporten.
+  SQL-verificatie uitsluitend met synthetische fixtures in de geïsoleerde container
+  `pitwall-learning-p2-observation-s1` (geen netwerk/poorten/productiemounts).
+  Parent-readback: 15 laprows, 7 observations, 6 capturebatches, 2 sourcerevisies;
+  `observation_enabled=false` en `capture_enabled=false`.
+  Nieuwe lokale migratie en gepaarde data-preserving rollback:
+  `20261112134500_pitwall_learning_observation_capture.sql`; **niet op productie toegepast**.
+  Feature blijft standaard uit. Het harnas gebruikt expliciet een `older_wrapper_fixture`;
+  actuele batchschrijver is uitgevoerd, nieuwste outer-wrapperdispatch alleen brongecontroleerd.
+  Heractiveren na rollback vereist ook herstel van de forward-P1-projectie; alleen een
+  flag omschakelen is geen ondersteunde heractivatie. Directe trusted-role table-DML heeft
+  alleen size/device-CHECKs, niet de volledige writer-shapevalidatie; dit is geen clientpad.
+  Bewijs: `pitwall-learning-p2-observation-server-spec-recheck/`,
+  `pitwall-learning-p2-observation-server-quality-review/` en parent-resultaten
+  `pitwall-learning-p2-observation-server-evidence/integrated-58820eed-*`.
+  Producer/outbox/quarantaine, echte SDK-verificatie, connectorpublicatie en DLL-wissel
+  zijn niet inbegrepen; geen complete T13- of leeractivatieclaim. De volgende lokale
+  stap is het bron- en inpassingsonderzoek voor de producer/outbox, zonder publicatie
+  of wijziging van updater, versienummers of geïnstalleerde DLL's.
+  P3/fitting, UI-publicatie en modelactivatie blijven gesloten; de Vite-buildpoort blijft open.
 
 ## Beperkingen en vervolgnotities
 
