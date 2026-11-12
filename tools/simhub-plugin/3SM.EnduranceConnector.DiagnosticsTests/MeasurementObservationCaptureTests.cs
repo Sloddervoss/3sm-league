@@ -132,8 +132,8 @@ internal static class MeasurementObservationCaptureTests
         // OB06 — null breekt de fuelketen; geen verzonnen 2 L.
         var ob06 = ObservationCapture.Build(Binding(), null, new[]
         {
-            Sample(0, fuel: 60, name: "A"), Sample(1000, fuel: null, name: "A"), Sample(2000, fuel: 62, name: "A")
-        }, At(0), At(2000));
+            Sample(0, fuel: 60, name: "A"), Sample(500, fuel: null, name: "A"), Sample(1000, fuel: 62, name: "A")
+        }, At(0), At(1000));
         Check("OB06", ob06.HasObservation && !Parse(ob06.ToJson()).ContainsKey("refuel"),
             "geen refuel over null");
 
@@ -203,9 +203,14 @@ internal static class MeasurementObservationCaptureTests
         {
             Sample(0, pit: true, name: "A"), Sample(1000, pit: true, name: ""), Sample(2000, pit: true, name: "A")
         }, At(0), At(2000));
+        var ob14Null = ObservationCapture.Build(Binding(), null, new[]
+        {
+            Sample(0, pit: true, name: "A"), Sample(500, pit: true, name: null), Sample(1000, pit: true, name: "A")
+        }, At(0), At(1000));
         Check("OB14", ob14.HasObservation && !Parse(ob14.ToJson()).ContainsKey("driverNameContinuity")
-            && Parse(ob14.ToJson()).ContainsKey("pitRoad"),
-            "lege naam omits groep, pit blijft");
+            && Parse(ob14.ToJson()).ContainsKey("pitRoad")
+            && ob14Null.HasObservation && !Parse(ob14Null.ToJson()).ContainsKey("driverNameContinuity"),
+            "lege/ontbrekende naam omits groep, pit blijft");
 
         var ob15 = ObservationCapture.Build(Binding(), null, new[]
         {
