@@ -60,6 +60,9 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
 - Zelfde `device_id` + `summary_uid` + `record_revision` met een andere
   observation = `revision_conflict`; exacte herverzending = `duplicate`; hogere
   revisie = `superseded`. Ordering blijft uitsluitend `record_revision`.
+- Hash v2 is een **server-side** formule; de Edge berekent geen hash en er is
+  dus geen cross-language canonicalisatiecontract. P1 neemt de opgeslagen
+  serverhash over.
 - `observation` is revisie-inhoud, geen pointer: een hogere revisie zonder blok
   schrijft NULL (de oudere P1-revisie blijft immutable bewaard). Er is geen
   COALESCE-retentie zoals bij `supersedes_summary_uid`; dat is bewust, zodat hash
@@ -85,7 +88,11 @@ alleen als de hele DB-package aanwezig is (kolom + guard + hash v2 + flag).
   expliciet `observation_unavailable` geweigerd. De oude schrijver terugzetten
   zou zo'n rij juist stil accepteren en strippen (en de v2-hash als conflict
   herclassificeren); dat is hier expliciet géén "veilige" rollback.
-- bestaande observation-rijen en hun P1-revisies blijven staan.
+- bestaande observation-rijen en hun P1-revisies blijven staan;
+- een observation-rij die ná de rollback opnieuw wordt aangeboden krijgt
+  `observation_unavailable` en dus **geen** ACK. Hij blijft in de wachtrij
+  (deferred) in plaats van stil opgeruimd. Dat is bewust en geen drain-claim:
+  de producer/outbox moet zo'n rij bewaren of zichtbaar quarantainen.
 
 ## 6. Acceptatiematrix en resultaat
 
