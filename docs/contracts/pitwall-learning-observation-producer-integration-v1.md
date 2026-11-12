@@ -616,7 +616,9 @@ candidate.
    budget volgt uit het schema en de getypeerde grenzen, niet uit een nieuwe
    willekeurige drempel. De som van de entry-budgetten plus de begrensde
    root-tellers en overhead moet binnen **64 unieke entries** en **1 MiB
-   UTF-8** passen; een in-flight alias is dezelfde entry en telt niet extra.
+   UTF-8** passen. Nog niet gecommitte reserveringen, ook bij een IO-retry,
+   tellen in diezelfde begroting mee totdat hun uitkomst definitief is;
+   een in-flight alias is dezelfde entry en telt niet extra.
    Past de candidate niet, dan wordt hij **zichtbaar verworpen**
    (`observation_capture_refused` plus teller), uit het geheugen verwijderd en
    vervangen door een **nieuwe gewone legacy-laprow vanaf de bron** met een
@@ -639,13 +641,20 @@ Faalt de pure build vóór de reservering, dan gaat de ronde als gewone
 legacy-rij door (`observation_build_refused`). Wordt de candidate door het
 quotum geweigerd, dan geldt dezelfde zichtbare terugval: candidate weg,
 nieuwe legacy-rij vanaf de bron, geen gepubliceerde OBS-UID. Faalt de
-sidecar-commit of is de epoch/hercontrole onwaar, dan rapporteert de ledger
-`NotCommitted`; de candidate wordt **niet** als captured/`pending`
-gepubliceerd, niet verzonden en niet als legacy herschreven. Dezelfde
-UID/revisie/`RowJson` wordt opnieuw aangeboden. Als een commit onzeker is
-(crash of IO-fout), wordt eerst in de ledger naar die UID/revisie gezocht; is
-de entry daar al duurzaam aanwezig, dan wordt die geadopteerd in plaats van
-een tweede entry of een nieuwe UID te maken.
+sidecar-commit door IO, dan rapporteert de ledger `NotCommitted`; zonder
+duurzaam bewijs wordt geen captured succes of delivery geclaimd. Bij een
+**definitief vóór de commit geweigerde** epoch-/quotumhercontrole geldt stap 4:
+candidate en reservering vervallen zichtbaar en er mag een nieuwe legacy-rij
+vanaf de bron ontstaan. Dit is geen IO-retry.
+Bij een **onzekere** commit (crash of IO-fout) blijven dezelfde
+UID/revisie/`RowJson` en hun reservering behouden; er wordt nog geen legacy-rij
+gemaakt. Zoek eerst na herstel naar die UID/revisie. Een aanwezige duurzame
+entry wordt geadopteerd; bij inmiddels gewijzigde `PairingBinding` volgt de
+bestaande quarantaineprocedure, niet opnieuw verzenden. Alleen na definitief
+bewijs dat niets gecommit is, kan de candidate bij een gewijzigde binding
+worden geweigerd volgens stap 4. Bij ongewijzigde binding wordt dezelfde
+candidate opnieuw geprobeerd. Zo kan één onzekere commit nooit zowel een
+gecapturde OBS-rij als een vervangende legacy-rij publiceren.
 
 De bestaande legacy-`EnqueueLap` houdt zijn huidige gedrag, inclusief de
 bestaande eigenschap dat een mislukte `SaveLocked` niet als `false` wordt
@@ -707,9 +716,12 @@ snapshot ziet er conceptueel zo uit:
   het doel nog niet, dan volgt een atomaire `File.Move(tmp, target)` op
   dezelfde volume. Er is **geen** niet-atomaire `File.Copy`-overwrite en geen
   "twee bestanden atomair"-claim.
-- **Faalsemantiek:** faalt serialisatie, flush, replace of rename, dan blijft
-  de vorige gecommitte snapshot onaangeroerd, wordt `NotCommitted` /
-  `NotDelivered` gerapporteerd en wordt geen captured succes geclaimd. De
+- **Faalsemantiek:** faalt serialisatie of een IO-stap aantoonbaar vóór de
+  atomaire switch, dan blijft de vorige gecommitte snapshot onaangeroerd.
+  Bij een onzekere switch wordt de gecommitte staat eerst hersteld/uitgelezen
+  volgens §5.1; de fout alleen bewijst niet welke snapshot duurzaam staat.
+  Zonder die vaststelling wordt `NotCommitted` / `NotDelivered`
+  gerapporteerd en geen captured succes geclaimd. De
   candidate blijft in memory als niet-gecommitte `NotCommitted`-staat en
   wordt niet als `pending`/captured gepubliceerd; de volgende commitpoging
   hergebruikt dezelfde UID/revisie/`RowJson`. Is de commit onzeker
