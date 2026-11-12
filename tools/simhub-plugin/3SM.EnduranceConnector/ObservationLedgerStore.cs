@@ -508,34 +508,14 @@ namespace ThreeSM.EnduranceConnector
 
                 if (!fenceRan)
                 {
-                    var release = ReleaseReservationForDefiniteRefusal(key);
-                    if (release == ReservationReleaseOutcome.Adopted)
-                    {
-                        return CaptureResult(ObservationLedgerCaptureStatus.AlreadyCaptured,
-                            candidate, null, "adopted_committed_entry", false);
-                    }
-                    if (release == ReservationReleaseOutcome.Conflict)
-                    {
-                        return CaptureResult(ObservationLedgerCaptureStatus.RefusedConflict,
-                            candidate, null, "identity_payload_conflict", false);
-                    }
-                    return Refuse(candidate, ObservationLedgerReasons.CaptureBindingChanged,
+                    return RefusalAfterReleaseReadback(candidate, key,
+                        ObservationLedgerReasons.CaptureBindingChanged,
                         "binding_changed_before_commit");
                 }
                 if (quotaRefusal)
                 {
-                    var release = ReleaseReservationForDefiniteRefusal(key);
-                    if (release == ReservationReleaseOutcome.Adopted)
-                    {
-                        return CaptureResult(ObservationLedgerCaptureStatus.AlreadyCaptured,
-                            candidate, null, "adopted_committed_entry", false);
-                    }
-                    if (release == ReservationReleaseOutcome.Conflict)
-                    {
-                        return CaptureResult(ObservationLedgerCaptureStatus.RefusedConflict,
-                            candidate, null, "identity_payload_conflict", false);
-                    }
-                    return Refuse(candidate, ObservationLedgerReasons.ObservationCaptureRefused,
+                    return RefusalAfterReleaseReadback(candidate, key,
+                        ObservationLedgerReasons.ObservationCaptureRefused,
                         "quota_exceeded_before_switch");
                 }
                 if (committed)
@@ -706,7 +686,9 @@ namespace ThreeSM.EnduranceConnector
             long actual;
             long reserved;
             string error;
-            if (!TryReadSnapshot(_path, true, out recoveredEntries, out captureRefused,
+            // Exact durable adoption: an uncertain capture must not resume unrelated
+            // deferred rows. A real Load restart keeps the accepted Resume behavior.
+            if (!TryReadSnapshot(_path, false, out recoveredEntries, out captureRefused,
                     out quarantineTotal, out deliveredTotal, out actual, out reserved, out error))
             {
                 _failedClosed = true;
@@ -817,6 +799,37 @@ namespace ThreeSM.EnduranceConnector
                 diskDeliveredTotal, diskActual, diskReserved);
             _reservations.Remove(key);
             return ReservationReleaseOutcome.Released;
+        }
+
+        /// <summary>
+        /// Maps the definitive-refusal readback to one result policy for both the
+        /// binding and quota branches. Only a successful readback that proves the
+        /// identity absent may produce a definite refusal. An unresolved readback
+        /// leaves the reservation and failed-closed state intact and returns a
+        /// non-definitive status, so no caller can turn it into a fresh legacy row.
+        /// </summary>
+        private ObservationLedgerCaptureResult RefusalAfterReleaseReadback(
+            ObservationLedgerCandidate candidate, string key, string reasonCode, string diagnostic)
+        {
+            var release = ReleaseReservationForDefiniteRefusal(key);
+            if (release == ReservationReleaseOutcome.Adopted)
+            {
+                return CaptureResult(ObservationLedgerCaptureStatus.AlreadyCaptured,
+                    candidate, null, "adopted_committed_entry", false);
+            }
+            if (release == ReservationReleaseOutcome.Conflict)
+            {
+                return CaptureResult(ObservationLedgerCaptureStatus.RefusedConflict,
+                    candidate, null, "identity_payload_conflict", false);
+            }
+            if (release == ReservationReleaseOutcome.Unresolved)
+            {
+                // No proof that nothing was committed: do not call Refuse and do
+                // not increment/persist captureRefused. The reservation stays.
+                return CaptureResult(ObservationLedgerCaptureStatus.Uncertain, candidate,
+                    null, "reservation_release_unresolved:" + diagnostic, false);
+            }
+            return Refuse(candidate, reasonCode, diagnostic);
         }
 
         /// <summary>
@@ -1482,6 +1495,21 @@ namespace ThreeSM.EnduranceConnector
                     return false;
                 }
                 nextAttempt = parsedNext;
+            }
+            if (state == ObservationLedgerState.Deferred)
+            {
+                // A deferred row is only meaningful with a retry attempt and a
+                // next-attempt timestamp; the store itself always writes both.
+                if (attempts < 1)
+                {
+                    error = "entry_" + index + "_deferred_attempts";
+                    return false;
+                }
+                if (!nextAttempt.HasValue)
+                {
+                    error = "entry_" + index + "_deferred_next_attempt";
+                    return false;
+                }
             }
             if (state == ObservationLedgerState.Quarantine && nextAttempt.HasValue)
             {

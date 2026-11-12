@@ -971,9 +971,390 @@ internal static class MeasurementObservationLedgerTests
             "positieve controle zonder crash: 2 MiB wordt in één keer volledig bewaard en de bak herstelt"
             + "; preserved=" + b4bPreservedLength + " entries=" + b4bReload.EntryCount);
 
+        // =============================================== second quality repair
+        // Q1: an unreadable target may already contain the identity. The
+        // returned status must stay non-definitive, keep the reservation and
+        // failed-closed state, and never authorize a fresh legacy row.
+        var q1Dir = NewDirectory();
+        var q1Fence = new ObservationBindingFence(Binding());
+        var q1Store = Store(q1Dir, q1Fence);
+        var q1Uid = Uid();
+        var q1Candidate = Candidate(Row(q1Uid));
+        Chmod(q1Dir, "0555");
+        ObservationLedgerCaptureResult q1First;
+        try { q1First = q1Store.Capture(q1Candidate); }
+        finally { Chmod(q1Dir, "0755"); }
+        var q1Witness = Store(NewDirectory());
+        var q1WitnessResult = q1Witness.Capture(q1Candidate);
+        File.Copy(q1Witness.Path, q1Store.Path, true);
+        var q1Before = File.ReadAllBytes(q1Store.Path);
+        q1Fence.Rebind(Binding(OtherDevice, 8));
+        Chmod(q1Store.Path, "0000");
+        ObservationLedgerCaptureResult q1Refusal;
+        try { q1Refusal = q1Store.Capture(q1Candidate); }
+        finally { Chmod(q1Store.Path, "0644"); }
+        var q1After = File.ReadAllBytes(q1Store.Path);
+        var q1Reload = Store(q1Dir, new ObservationBindingFence(Binding(OtherDevice, 8)));
+        var q1Disk = q1Reload.Find(q1Uid, 1);
+        Check("OL38", q1First.Status == ObservationLedgerCaptureStatus.NotCommitted
+            && q1WitnessResult.Captured
+            && q1Refusal.Status == ObservationLedgerCaptureStatus.Uncertain
+            && q1Refusal.Status != ObservationLedgerCaptureStatus.RefusedBindingChanged
+            && q1Refusal.Status != ObservationLedgerCaptureStatus.RefusedQuota
+            && q1Refusal.ReasonCode == null
+            && q1Refusal.ReservationCount == 1 && q1Store.ReservationCount == 1
+            && q1Store.IsFailedClosed
+            && q1Store.CaptureRefused == 0 && q1Reload.CaptureRefused == 0
+            && EqualsBytes(q1Before, q1After)
+            && q1Disk != null && q1Disk.Uid == q1Uid && q1Disk.RecordRevision == 1
+            && q1Disk.RowJson == q1Candidate.RowJson,
+            "onleesbare readback na bindingsweigering geeft geen definitieve status; reservering en exacte diskidentiteit blijven"
+            + "; first=" + q1First.Status + " refusal=" + q1Refusal.Status + "/" + q1Refusal.Diagnostic
+            + " res=" + q1Store.ReservationCount + " closed=" + q1Store.IsFailedClosed
+            + " counters=" + q1Store.CaptureRefused + "/" + q1Reload.CaptureRefused
+            + " diskExact=" + (q1Disk != null && q1Disk.RowJson == q1Candidate.RowJson)
+            + " bytesUnchanged=" + EqualsBytes(q1Before, q1After));
+
+        // Control A: absent target proves absence, so a definitive release and
+        // a RefusedBindingChanged result remain legitimate.
+        var q1aDir = NewDirectory();
+        var q1aFence = new ObservationBindingFence(Binding());
+        var q1aStore = Store(q1aDir, q1aFence);
+        var q1aCandidate = Candidate(Row(Uid()));
+        Chmod(q1aDir, "0555");
+        ObservationLedgerCaptureResult q1aFirst;
+        try { q1aFirst = q1aStore.Capture(q1aCandidate); }
+        finally { Chmod(q1aDir, "0755"); }
+        q1aFence.Rebind(Binding(OtherDevice, 8));
+        var q1aRefusal = q1aStore.Capture(q1aCandidate);
+        Check("OL38b", q1aFirst.Status == ObservationLedgerCaptureStatus.NotCommitted
+            && q1aRefusal.Status == ObservationLedgerCaptureStatus.RefusedBindingChanged
+            && q1aStore.ReservationCount == 0 && !q1aStore.IsFailedClosed,
+            "positieve controle: afwezige target geeft na readback een legitieme definitieve bindingweigering"
+            + "; first=" + q1aFirst.Status + " refusal=" + q1aRefusal.Status
+            + " res=" + q1aStore.ReservationCount + " closed=" + q1aStore.IsFailedClosed);
+
+        // Control B: a readable target with the exact identity is adopted.
+        var q1bDir = NewDirectory();
+        var q1bFence = new ObservationBindingFence(Binding());
+        var q1bStore = Store(q1bDir, q1bFence);
+        var q1bCandidate = Candidate(Row(Uid()));
+        Chmod(q1bDir, "0555");
+        ObservationLedgerCaptureResult q1bFirst;
+        try { q1bFirst = q1bStore.Capture(q1bCandidate); }
+        finally { Chmod(q1bDir, "0755"); }
+        var q1bWitness = Store(NewDirectory());
+        q1bWitness.Capture(q1bCandidate);
+        File.Copy(q1bWitness.Path, q1bStore.Path, true);
+        q1bFence.Rebind(Binding(OtherDevice, 8));
+        var q1bAdoption = q1bStore.Capture(q1bCandidate);
+        Check("OL38c", q1bFirst.Status == ObservationLedgerCaptureStatus.NotCommitted
+            && q1bAdoption.Status == ObservationLedgerCaptureStatus.AlreadyCaptured
+            && q1bStore.ReservationCount == 0 && q1bStore.EntryCount == 1
+            && !q1bStore.IsFailedClosed
+            && q1bStore.Find(q1bCandidate.Uid, 1).RowJson == q1bCandidate.RowJson,
+            "positieve controle: leesbare target met dezelfde identiteit wordt geadopteerd"
+            + "; first=" + q1bFirst.Status + " adoption=" + q1bAdoption.Status
+            + " res=" + q1bStore.ReservationCount + " entries=" + q1bStore.EntryCount);
+
+        // Q2: deferred rows require attempts>=1 and a non-null next attempt;
+        // malformed targets are preserved whole and fail closed without backup.
+        var q2Dir = NewDirectory();
+        var q2Store = Store(q2Dir);
+        var q2Candidate = Candidate(Row(Uid()));
+        q2Store.Capture(q2Candidate);
+        var q2Defer = q2Store.Defer(q2Candidate.Uid, 1,
+            ObservationLedgerReasons.ObservationUnavailable, T0.AddMinutes(3), T0.AddMinutes(4));
+        if (File.Exists(q2Store.Path + ".bak")) File.Delete(q2Store.Path + ".bak");
+        var q2Mutated = NullNextAttempt(ReadText(q2Store.Path));
+        File.WriteAllText(q2Store.Path, q2Mutated, Utf8);
+        var q2Reload = Store(q2Dir);
+        Check("OL39", q2Defer.Committed && q2Reload.IsFailedClosed
+            && q2Reload.EntryCount == 0
+            && q2Reload.PersistenceError == "invalid_snapshot:entry_0_deferred_next_attempt"
+            && File.Exists(q2Reload.PreservePath)
+            && EqualsBytes(File.ReadAllBytes(q2Reload.PreservePath), Utf8.GetBytes(q2Mutated))
+            && !File.Exists(q2Store.Path + ".bak"),
+            "deferred met nextAttemptUtc:null wordt als geheel bewaard en fail-closed geweigerd"
+            + "; error=" + (q2Reload.PersistenceError ?? "")
+            + " entries=" + q2Reload.EntryCount
+            + " preserved=" + File.Exists(q2Reload.PreservePath));
+
+        var q2bDir = NewDirectory();
+        var q2bStore = Store(q2bDir);
+        var q2bCandidate = Candidate(Row(Uid()));
+        q2bStore.Capture(q2bCandidate);
+        var q2bDefer = q2bStore.Defer(q2bCandidate.Uid, 1,
+            ObservationLedgerReasons.ObservationUnavailable, T0.AddMinutes(3), T0.AddMinutes(4));
+        if (File.Exists(q2bStore.Path + ".bak")) File.Delete(q2bStore.Path + ".bak");
+        var q2bMutated = ReplaceOnce(ReadText(q2bStore.Path), "\"attempts\":1", "\"attempts\":0");
+        File.WriteAllText(q2bStore.Path, q2bMutated, Utf8);
+        var q2bReload = Store(q2bDir);
+        Check("OL39b", q2bDefer.Committed && q2bReload.IsFailedClosed
+            && q2bReload.EntryCount == 0
+            && q2bReload.PersistenceError == "invalid_snapshot:entry_0_deferred_attempts"
+            && File.Exists(q2bReload.PreservePath)
+            && EqualsBytes(File.ReadAllBytes(q2bReload.PreservePath), Utf8.GetBytes(q2bMutated)),
+            "deferred met attempts:0 wordt als geheel bewaard en fail-closed geweigerd"
+            + "; error=" + (q2bReload.PersistenceError ?? "")
+            + " entries=" + q2bReload.EntryCount);
+
+        var q2cDir = NewDirectory();
+        var q2cStore = Store(q2cDir);
+        var q2cCandidate = Candidate(Row(Uid()));
+        q2cStore.Capture(q2cCandidate);
+        var q2cDefer = q2cStore.Defer(q2cCandidate.Uid, 1,
+            ObservationLedgerReasons.ContainsUnknownFields, T0.AddMinutes(3), T0.AddMinutes(4));
+        var q2cReload = Store(q2cDir);
+        var q2cResumed = q2cReload.Find(q2cCandidate.Uid, 1);
+        Check("OL39c", q2cDefer.Committed && !q2cReload.IsFailedClosed
+            && q2cResumed != null && q2cResumed.State == ObservationLedgerState.Pending
+            && q2cResumed.Reason == null && q2cResumed.Attempts == 1
+            && q2cResumed.NextAttemptUtc == T0.AddMinutes(4)
+            && q2cResumed.Uid == q2cCandidate.Uid && q2cResumed.RecordRevision == 1
+            && q2cResumed.RowJson == q2cCandidate.RowJson,
+            "positieve controle: geldige deferred hervat na echte herstart als pending met datum/attempts/exacte bytes"
+            + "; state=" + (q2cResumed == null ? "null" : q2cResumed.State.ToString())
+            + " attempts=" + (q2cResumed == null ? -1 : q2cResumed.Attempts)
+            + " next=" + (q2cResumed == null ? "null" : MeasurementTime.Format(q2cResumed.NextAttemptUtc)));
+
+        // Q3: uncertain capture reads the exact durable state (no Resume), so an
+        // unrelated deferred row survives both memory and the retry commit.
+        var q3Dir = NewDirectory();
+        var q3Files = new WrappedFileSystem(new ObservationLedgerFileSystem());
+        var q3Store = Store(q3Dir, null, null, q3Files);
+        var q3A = Candidate(Row(Uid()));
+        q3Store.Capture(q3A);
+        var q3Defer = q3Store.Defer(q3A.Uid, 1,
+            ObservationLedgerReasons.ObservationUnavailable, T0.AddMinutes(3), T0.AddMinutes(4));
+        var q3NextText = MeasurementTime.Format(T0.AddMinutes(4));
+        var q3B = Candidate(Row(Uid()));
+        q3Files.ThrowBeforeReplace = true;
+        var q3Uncertain = q3Store.Capture(q3B);
+        q3Files.ThrowBeforeReplace = false;
+        var q3MemoryUncertain = q3Store.Find(q3A.Uid, 1);
+        var q3RawUncertain = EntryObject(q3Store.Path, q3A.Uid);
+        var q3Retry = q3Store.Capture(q3B);
+        var q3MemoryCommitted = q3Store.Find(q3A.Uid, 1);
+        var q3RawCommitted = EntryObject(q3Store.Path, q3A.Uid);
+        var q3Restart = Store(q3Dir);
+        var q3Restarted = q3Restart.Find(q3A.Uid, 1);
+        Check("OL40", q3Defer.Committed
+            && q3Uncertain.Status == ObservationLedgerCaptureStatus.NotCommitted
+            && q3MemoryUncertain.State == ObservationLedgerState.Deferred
+            && (string)q3RawUncertain["state"] == "deferred"
+            && (string)q3RawUncertain["reason"] == ObservationLedgerReasons.ObservationUnavailable
+            && q3Retry.Captured
+            && q3MemoryCommitted.State == ObservationLedgerState.Deferred
+            && q3MemoryCommitted.ReasonCode == ObservationLedgerReasons.ObservationUnavailable
+            && q3MemoryCommitted.Attempts == 1
+            && q3MemoryCommitted.NextAttemptUtc == T0.AddMinutes(4)
+            && q3MemoryCommitted.Uid == q3A.Uid && q3MemoryCommitted.RecordRevision == 1
+            && q3MemoryCommitted.RowJson == q3A.RowJson
+            && (string)q3RawCommitted["state"] == "deferred"
+            && (string)q3RawCommitted["reason"] == ObservationLedgerReasons.ObservationUnavailable
+            && (double)q3RawCommitted["attempts"] == 1
+            && (string)q3RawCommitted["nextAttemptUtc"] == q3NextText
+            && (string)q3RawCommitted["uid"] == q3A.Uid
+            && (double)q3RawCommitted["recordRevision"] == 1
+            && (string)q3RawCommitted["rowJson"] == q3A.RowJson
+            && q3Restarted.State == ObservationLedgerState.Pending
+            && q3Restarted.Attempts == 1
+            && q3Restarted.NextAttemptUtc == T0.AddMinutes(4)
+            && q3Restarted.RowJson == q3A.RowJson,
+            "onzekere capture adopteert exacte deferred staat; retry behoudt reason/attempts/datum/UID/revisie/rowJson op schijf en in geheugen"
+            + "; uncertain=" + q3Uncertain.Status
+            + " memory=" + q3MemoryCommitted.State + "/" + q3MemoryCommitted.ReasonCode
+            + " raw=" + (string)q3RawCommitted["state"] + "/" + (string)q3RawCommitted["reason"]
+            + " retry=" + q3Retry.Status
+            + " restart=" + q3Restarted.State + "/" + q3Restarted.Attempts);
+
+        var q3cDir = NewDirectory();
+        var q3cStore = Store(q3cDir);
+        var q3cA = Candidate(Row(Uid()));
+        q3cStore.Capture(q3cA);
+        q3cStore.Defer(q3cA.Uid, 1, ObservationLedgerReasons.ObservationUnavailable,
+            T0.AddMinutes(3), T0.AddMinutes(4));
+        q3cStore.Capture(Candidate(Row(Uid())));
+        var q3cMemory = q3cStore.Find(q3cA.Uid, 1);
+        var q3cRaw = EntryObject(q3cStore.Path, q3cA.Uid);
+        Check("OL40b", q3cMemory.State == ObservationLedgerState.Deferred
+            && q3cMemory.ReasonCode == ObservationLedgerReasons.ObservationUnavailable
+            && (string)q3cRaw["state"] == "deferred"
+            && (string)q3cRaw["reason"] == ObservationLedgerReasons.ObservationUnavailable,
+            "positieve controle: een normale capture zonder fout laat de bestaande deferred rij ongemoeid"
+            + "; memory=" + q3cMemory.State + "/" + q3cMemory.ReasonCode
+            + " raw=" + (string)q3cRaw["state"] + "/" + (string)q3cRaw["reason"]);
+
+        // Q4: independently serialized worst snapshot. The oracle is not
+        // ObservationLedgerBudget and must cover quarantine, the longest reason,
+        // max generation/attempts/counters and the widest fixed UTC dates.
+        var q4Candidate = Candidate(Row(Uid()));
+        var q4MaxDate = new DateTime(9999, 12, 31, 23, 59, 59, 999, DateTimeKind.Utc);
+        var q4Entry = new ObservationLedgerEntryDto(q4Candidate.Uid, q4Candidate.RecordRevision,
+            ObservationLedgerState.Quarantine, q4Candidate.RowJson,
+            ObservationLedgerReasons.ObservationInvalidTimestamp, Device, Owner,
+            long.MaxValue, true, q4MaxDate, int.MaxValue, q4MaxDate);
+        var q4Snapshot = new ObservationLedgerSnapshotDto(ObservationLedgerSnapshotDto.CurrentVersion,
+            q4MaxDate, new ObservationLedgerCountersDto(int.MaxValue, int.MaxValue, int.MaxValue),
+            new List<ObservationLedgerEntryDto> { q4Entry });
+        var q4OracleJson = MeasurementJson.Serialize(q4Snapshot);
+        var q4Oracle = Utf8.GetByteCount(q4OracleJson);
+        var q4LowOptions = new ObservationLedgerOptions { MaxSnapshotBytes = (int)q4Oracle - 1 };
+        var q4LowStore = Store(NewDirectory(), null, q4LowOptions);
+        var q4Low = q4LowStore.Capture(q4Candidate);
+        var q4OkOptions = new ObservationLedgerOptions { MaxSnapshotBytes = (int)q4Oracle };
+        var q4OkStore = Store(NewDirectory(), null, q4OkOptions);
+        var q4Ok = q4OkStore.Capture(q4Candidate);
+        Check("OL41", q4Low.Status == ObservationLedgerCaptureStatus.RefusedQuota
+            && q4LowStore.EntryCount == 0
+            && q4Ok.Captured && q4OkStore.EntryCount == 1
+            && q4Ok.ReservedBytes == q4Oracle,
+            "onafhankelijke UTF-8 worst-state-oracle: oracle-1 byte weigert quotum, exact oracle past"
+            + "; oracle=" + q4Oracle + " max=" + q4LowOptions.MaxSnapshotBytes
+            + " low=" + q4Low.Status + "/" + q4LowStore.EntryCount
+            + " ok=" + q4Ok.Status + "/" + q4OkStore.EntryCount
+            + " reserved=" + q4Ok.ReservedBytes);
+
+        // Q5: duplicate identity in a canonical snapshot is corrupt evidence.
+        // One first capture has no .bak; the whole invalid file is preserved.
+        var q5Dir = NewDirectory();
+        var q5Store = Store(q5Dir);
+        var q5Candidate = Candidate(Row(Uid()));
+        q5Store.Capture(q5Candidate);
+        var q5Mutated = DuplicateFirstEntry(ReadText(q5Store.Path));
+        File.WriteAllText(q5Store.Path, q5Mutated, Utf8);
+        var q5Reload = Store(q5Dir);
+        Check("OL42", q5Reload.IsFailedClosed && q5Reload.EntryCount == 0
+            && q5Reload.PersistenceError == "invalid_snapshot:entry_1_duplicate"
+            && File.Exists(q5Reload.PreservePath)
+            && EqualsBytes(File.ReadAllBytes(q5Reload.PreservePath), Utf8.GetBytes(q5Mutated))
+            && !File.Exists(q5Store.Path + ".bak"),
+            "dubbele identiteit wordt fail-closed bewaard zonder duplicaten te laden"
+            + "; error=" + (q5Reload.PersistenceError ?? "")
+            + " entries=" + q5Reload.EntryCount
+            + " preserved=" + File.Exists(q5Reload.PreservePath)
+            + " hasBackup=" + File.Exists(q5Store.Path + ".bak"));
+
+        var q5bDir = NewDirectory();
+        var q5bStore = Store(q5bDir);
+        var q5bCandidate = Candidate(Row(Uid()));
+        q5bStore.Capture(q5bCandidate);
+        var q5bReload = Store(q5bDir);
+        Check("OL42b", !q5bReload.IsFailedClosed && q5bReload.EntryCount == 1
+            && q5bReload.Find(q5bCandidate.Uid, 1).RowJson == q5bCandidate.RowJson,
+            "positieve controle: één canonieke entry laadt normaal zonder duplicaat"
+            + "; closed=" + q5bReload.IsFailedClosed + " entries=" + q5bReload.EntryCount);
+
+        // Q6: an uncertain switch during a DEFINITE refusal (target absent)
+        // reconciles the persisted captureRefused counter instead of dropping it.
+        var q6Dir = NewDirectory();
+        var q6Fence = new ObservationBindingFence(Binding());
+        var q6Faults = new Faults();
+        var q6Store = Store(q6Dir, q6Fence, null, null, q6Faults);
+        var q6Candidate = Candidate(Row(Uid()));
+        Chmod(q6Dir, "0555");
+        ObservationLedgerCaptureResult q6First;
+        try { q6First = q6Store.Capture(q6Candidate); }
+        finally { Chmod(q6Dir, "0755"); }
+        var q6Reserved = q6Store.ReservationCount;
+        q6Fence.Rebind(Binding(OtherDevice, 8));
+        q6Faults.AfterSwitchFailures = 1;
+        var q6Refusal = q6Store.Capture(q6Candidate);
+        var q6Reload = Store(q6Dir, new ObservationBindingFence(Binding(OtherDevice, 8)));
+        Check("OL43", q6First.Status == ObservationLedgerCaptureStatus.NotCommitted
+            && q6Reserved == 1
+            && q6Refusal.Status == ObservationLedgerCaptureStatus.RefusedBindingChanged
+            && q6Refusal.CounterPersisted
+            && q6Store.CaptureRefused == 1 && q6Reload.CaptureRefused == 1
+            && q6Refusal.ReservationCount == 0 && q6Store.ReservationCount == 0
+            && q6Store.EntryCount == 0 && q6Reload.EntryCount == 0
+            && q6Store.DeliveredTotal == 0 && q6Reload.DeliveredTotal == 0
+            && !q6Store.IsFailedClosed,
+            "na-switch onzekerheid tijdens definitieve weigering verzoent de teller met schijf (1/1) en levert niets af"
+            + "; first=" + q6First.Status + " reserved=" + q6Reserved
+            + " refusal=" + q6Refusal.Status + " persisted=" + q6Refusal.CounterPersisted
+            + " counters=" + q6Store.CaptureRefused + "/" + q6Reload.CaptureRefused
+            + " res=" + q6Store.ReservationCount + " entries=" + q6Store.EntryCount
+            + " delivered=" + q6Store.DeliveredTotal + "/" + q6Reload.DeliveredTotal);
+
         try { Directory.Delete(b4Dir, true); } catch (Exception) { }
 
         return count;
+    }
+
+    private static string ReadText(string path)
+    {
+        return File.ReadAllText(path, Utf8);
+    }
+
+    private static Dictionary<string, object> EntryObject(string path, string uid)
+    {
+        var root = Json(path);
+        var values = (List<object>)root["entries"];
+        for (var index = 0; index < values.Count; index++)
+        {
+            var entry = (Dictionary<string, object>)values[index];
+            if (string.Equals((string)entry["uid"], uid, StringComparison.Ordinal)) return entry;
+        }
+        return null;
+    }
+
+    private static string ReplaceOnce(string text, string oldValue, string newValue)
+    {
+        var index = text.IndexOf(oldValue, StringComparison.Ordinal);
+        if (index < 0
+            || text.IndexOf(oldValue, index + oldValue.Length, StringComparison.Ordinal) >= 0)
+            throw new InvalidOperationException("expected exactly one occurrence of " + oldValue);
+        return text.Substring(0, index) + newValue + text.Substring(index + oldValue.Length);
+    }
+
+    private static string NullNextAttempt(string text)
+    {
+        const string key = "\"nextAttemptUtc\":";
+        var start = text.IndexOf(key, StringComparison.Ordinal);
+        if (start < 0) throw new InvalidOperationException("nextAttemptUtc not found");
+        var valueStart = start + key.Length;
+        if (valueStart >= text.Length || text[valueStart] != '"')
+            throw new InvalidOperationException("nextAttemptUtc is not a string");
+        var valueEnd = text.IndexOf('"', valueStart + 1);
+        if (valueEnd < 0) throw new InvalidOperationException("nextAttemptUtc is not closed");
+        return text.Substring(0, valueStart) + "null" + text.Substring(valueEnd + 1);
+    }
+
+    private static string DuplicateFirstEntry(string text)
+    {
+        const string marker = "\"entries\":[";
+        var open = text.IndexOf(marker, StringComparison.Ordinal);
+        if (open < 0) throw new InvalidOperationException("entries not found");
+        var start = open + marker.Length;
+        if (start >= text.Length || text[start] != '{')
+            throw new InvalidOperationException("first entry is not an object");
+        var depth = 0;
+        var inString = false;
+        var escape = false;
+        var end = -1;
+        for (var index = start; index < text.Length; index++)
+        {
+            var character = text[index];
+            if (inString)
+            {
+                if (escape) escape = false;
+                else if (character == '\\') escape = true;
+                else if (character == '"') inString = false;
+                continue;
+            }
+            if (character == '"') inString = true;
+            else if (character == '{') depth++;
+            else if (character == '}')
+            {
+                depth--;
+                if (depth == 0) { end = index + 1; break; }
+            }
+        }
+        if (end < 0) throw new InvalidOperationException("first entry is not closed");
+        var first = text.Substring(start, end - start);
+        return text.Substring(0, start) + first + "," + first + text.Substring(end);
     }
 
     private static bool EqualsBytes(byte[] left, byte[] right)

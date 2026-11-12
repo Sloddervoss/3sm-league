@@ -125,8 +125,9 @@ Pad (later door de plugin te kiezen):
 
 ## Reparatie-erratum (B1-B4)
 
-- Een reservering bewaart de exacte oorspronkelijke `rowJson` en
-  `enqueuedAtUtc`, niet alleen het budget. Dezelfde UID/revisie met andere
+- Een reservering bewaart het exacte oorspronkelijke budget, de binding en de
+  `rowJson`; de candidate-enqueuetijd is geen B1-identiteit en wordt niet in de
+  reservering opgeslagen. Dezelfde UID/revisie met andere
   bytes is conflict, ook bij gelijk budget; het origineel blijft retrybaar.
 - Een definitieve pre-switch pairing-/quotumweigering geeft de ongebruikte
   reservering vrij, maar pas nadat de target is teruggelezen. Staat de
