@@ -584,6 +584,25 @@ internal static class MeasurementObservationPipelineTests
             "rij A=" + (rowA == null ? "-" : rowA.ObservedSessionId)
                 + " rij B=" + (rowB == null ? "-" : rowB.ObservedSessionId));
 
+        // OP19b — dezelfde freeze via de pipeline wanneer de sessie bij start
+        // onbekend is en pas bij een volgende BeginSession bekend wordt.
+        MeasurementOutbox unknownOutbox;
+        var unknownPipeline = Pipeline(new SamplerOptions(), out unknownOutbox, null);
+        for (var tick = 0; tick < 10; tick++)
+            Emit(unknownPipeline, tick * 50L, 1, 50, false, null);
+        unknownPipeline.BeginSession(SessionB);
+        for (var tick = 0; tick < 10; tick++)
+            Emit(unknownPipeline, 1000 + tick * 50L, 2, 49, false, SessionB);
+        unknownPipeline.End("synthetic_end");
+        var unknownRows = unknownOutbox.Due(At(10000), 20, 5).Laps;
+        var unknownRowA = unknownRows.Count > 0 ? ReadRow(unknownRows[0]) : null;
+        var unknownRowB = unknownRows.Count > 1 ? ReadRow(unknownRows[1]) : null;
+        Check("OP19b", unknownRowA != null && unknownRowA.ObservedSessionId == null
+            && unknownRows[0].RowJson.IndexOf("observedSessionId", StringComparison.Ordinal) < 0
+            && unknownRowB != null && unknownRowB.ObservedSessionId == SessionB
+            && unknownPipeline.ObservedSessionId == SessionB,
+            "pipeline onbekend→B: rij A sessie=null, rij B=sim-b");
+
         // OP20 — één sample: first==last, maxGap=0 en de echte .05 edge bij
         // een volgende tick; geen kunstmatige nul-tick.
         sampler = Sampler();
