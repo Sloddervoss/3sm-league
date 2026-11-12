@@ -797,6 +797,29 @@ internal static class MeasurementObservationPipelineTests
         Write(directory, meta.Case + ".meta.json", MeasurementJson.Serialize(meta));
     }
 
+    private static void WriteSessionBoundaryFixture(string directory, string name,
+        LapAggregate aggregate, string note)
+    {
+        var observation = aggregate.ObservationResult;
+        var row = aggregate.ToObservationSummary("88888888-8888-4888-8888-888888888888",
+            "summary-" + name);
+        Write(directory, name + ".observation.json", observation.ToJson());
+        Write(directory, name + ".row.json", row.ToJson());
+        WriteMeta(directory, new FixtureMeta
+        {
+            Case = name,
+            Kind = "observation",
+            Expect = "accept",
+            Code = "observation_accepted",
+            ObservationFile = name + ".observation.json",
+            RowFile = name + ".row.json",
+            StartedAt = MeasurementTime.Format(aggregate.StartedAtUtc),
+            EndedAt = MeasurementTime.Format(aggregate.EndedAtUtc),
+            AuthenticatedDeviceId = Device,
+            Note = "synthetisch; echte pipelinebytes met " + note
+        });
+    }
+
     public static void ExportFixtures(string directory)
     {
         Directory.CreateDirectory(directory);
@@ -861,6 +884,16 @@ internal static class MeasurementObservationPipelineTests
             AuthenticatedDeviceId = Device,
             Note = "synthetisch te vroeg rij-einde rond echte observationbytes"
         });
+
+        // Echte bytes van dezelfde pipeline-reeks over een SDK-sessiegrens:
+        // alleen sessionUniqueId of sessionNumber wijzigt. De observation blijft
+        // geldig; de fuelketen breekt en de StartLap-context blijft 42/3.
+        var uniqueBoundary = SessionBoundaryLap(43, 3, out _);
+        WriteSessionBoundaryFixture(directory, "pipeline-session-uniqueid-change", uniqueBoundary,
+            "sessionUniqueId 42->43 op de grens");
+        var numberBoundary = SessionBoundaryLap(42, 4, out _);
+        WriteSessionBoundaryFixture(directory, "pipeline-session-number-change", numberBoundary,
+            "sessionNumber 3->4 op de grens");
 
         // De gewone outbox van dezelfde representatieve reeks blijft
         // observation-vrij en wordt als echte legacy-rij geclassificeerd.
