@@ -1340,6 +1340,31 @@ internal static class MeasurementObservationAckTests
 
         // Missing identifiers (property absent or null) still permit the
         // existing id-only and index-only formats.
+        var mixedAmbigA = Row(Uid(915));
+        var mixedAmbigB = Row(Uid(916), observation: false);
+        var mixedAmbigC = Row(Uid(917));
+        var mixedAmbigStore = Store(NewDirectory());
+        mixedAmbigStore.Capture(Candidate(mixedAmbigA));
+        mixedAmbigStore.Capture(Candidate(mixedAmbigC));
+        var mixedAmbigRes = ObservationAckResolver.Resolve(
+            Ack(Series(true, 3, "[" + Id(mixedAmbigA.SummaryUid, 1) + "]", "[]", "[]",
+                "[{\"id\":\"" + mixedAmbigC.SummaryUid
+                + "\",\"index\":99,\"reason\":\"observation_null\"}]", null)),
+            Batch(Obs(mixedAmbigA), Legacy(mixedAmbigB), Obs(mixedAmbigC)), Binding());
+        var mixedAmbigApply = mixedAmbigStore.ApplyAck(mixedAmbigRes, T0.AddMinutes(3));
+        Check("OA44d mixed [OBS,legacy,OBS]: onbruikbare index raakt alleen de bedoelde OBS-rij",
+            mixedAmbigRes.Rows[0].Outcome == ObservationAckClass.Accepted
+            && mixedAmbigRes.Rows[1].LegacyOutcome == ObservationLegacyAckClass.None
+            && mixedAmbigRes.Rows[2].Outcome == ObservationAckClass.NotDelivered
+            && mixedAmbigRes.Rows[2].Diagnostic == "ack_ambiguous_identifier"
+            && mixedAmbigApply.Status == ObservationAckApplyStatus.Applied
+            && mixedAmbigApply.DeliveredCount == 1
+            && mixedAmbigStore.Find(mixedAmbigA.SummaryUid, 1) == null
+            && mixedAmbigStore.Find(mixedAmbigC.SummaryUid, 1) != null
+            && mixedAmbigStore.QuarantineTotal == 0,
+            "A=" + mixedAmbigRes.Rows[0].Outcome + " legacy=" + mixedAmbigRes.Rows[1].LegacyOutcome
+            + " C=" + mixedAmbigRes.Rows[2].Outcome + "/" + mixedAmbigRes.Rows[2].Diagnostic);
+
         var missingIdRow = Row(Uid(913));
         var missingIdStore = Store(NewDirectory());
         missingIdStore.Capture(Candidate(missingIdRow));
@@ -1374,6 +1399,7 @@ internal static class MeasurementObservationAckTests
             new[] { "accepted-lower-then-higher", Id(Uid(920), 1) + "," + Id(Uid(920), 2), "", "" },
             new[] { "valid-plus-string-revision", Id(Uid(920), 1)
                 + ",{\"id\":\"" + Uid(920) + "\",\"record_revision\":\"1\"}", "", "" },
+            new[] { "accepted-plus-superseded", Id(Uid(920), 1), "", Id(Uid(920), 2) },
             new[] { "missing-revision-then-valid", "{\"id\":\"" + Uid(920) + "\"},"
                 + Id(Uid(920), 1), "", "" },
             new[] { "duplicate-plus-superseded", "", Id(Uid(920), 1), Id(Uid(920), 2) }
@@ -1616,7 +1642,7 @@ internal static class MeasurementObservationAckTests
             var missingFromPack = compileItems.Where(item => !scpItems.Contains(item)).ToList();
             sourcePackOk = compileItems.Contains("ObservationAck.cs")
                 && scpItems.Contains("ObservationAck.cs")
-                && ackTestCsproj.Contains("ObservationAck.cs")
+                && ackTestCsproj.Contains("Link=\"ObservationAck.cs\"")
                 && compileItems.Contains("ObservationLedger.cs")
                 && compileItems.Contains("ObservationLedgerStore.cs")
                 && scpItems.Contains("ObservationLedger.cs")
