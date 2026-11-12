@@ -1486,6 +1486,85 @@ internal static class MeasurementObservationAckTests
             && blockStore.DeliveredTotal == 1,
             "status=" + consistentBlockApply.Status + " total=" + blockStore.DeliveredTotal);
 
+        // Een aanwezig maar verkeerd getypeerd block_error is geen afwezigheid.
+        // Elk geval krijgt een eigen ledger/store/UID; alleen `null`, een
+        // ontbrekend veld en de lege string mogen nog leveren.
+        var malformedBlocks = new[]
+        {
+            new KeyValuePair<string, string>("zero", "0"),
+            new KeyValuePair<string, string>("positive", "123"),
+            new KeyValuePair<string, string>("fraction", "1.5"),
+            new KeyValuePair<string, string>("true", "true"),
+            new KeyValuePair<string, string>("false", "false"),
+            new KeyValuePair<string, string>("empty-array", "[]"),
+            new KeyValuePair<string, string>("array", "[1]"),
+            new KeyValuePair<string, string>("empty-object", "{}"),
+            new KeyValuePair<string, string>("object", "{\"code\":\"too_many\"}")
+        };
+        for (var malformedIndex = 0; malformedIndex < malformedBlocks.Length; malformedIndex++)
+        {
+            var malformed = malformedBlocks[malformedIndex];
+            var malformedRow = Row(Uid(940 + malformedIndex));
+            var malformedStore = Store(NewDirectory());
+            malformedStore.Capture(Candidate(malformedRow));
+            var malformedBefore = File.ReadAllBytes(malformedStore.Path);
+            var malformedWire = Ack(Series(true, 1,
+                "[" + Id(malformedRow.SummaryUid, 1) + "]", "[]", "[]", "[]", null))
+                .Replace("\"block_error\":null", "\"block_error\":" + malformed.Value);
+            var malformedRes = ObservationAckResolver.Resolve(malformedWire,
+                Batch(Obs(malformedRow)), Binding());
+            var malformedApply = malformedStore.ApplyAck(malformedRes, T0.AddMinutes(3));
+            var malformedAfter = File.ReadAllBytes(malformedStore.Path);
+            var malformedEntry = malformedStore.Find(malformedRow.SummaryUid, 1);
+            var malformedDisk = Json(malformedStore.Path);
+            var malformedCounters = (Dictionary<string, object>)malformedDisk["counters"];
+            Check("OA46c " + malformed.Key + " block_error is geen afwezigheid",
+                malformedRes.HasMeasurements && !malformedRes.SeriesStored
+                && malformedRes.Diagnostic == "ack_store_block_error"
+                && malformedRes.BlockErrorCode == "ack_blocked"
+                && AllRows(malformedRes, ObservationAckClass.NotDelivered)
+                && malformedApply.Status == ObservationAckApplyStatus.NoChanges
+                && !malformedApply.Stored && malformedApply.DeliveredCount == 0
+                && malformedEntry != null
+                && malformedEntry.State == ObservationLedgerState.Pending
+                && malformedEntry.RowJson == malformedRow.ToJson()
+                && (double)malformedCounters["deliveredTotal"] == 0
+                && (double)malformedCounters["quarantineTotal"] == 0
+                && malformedBefore.SequenceEqual(malformedAfter),
+                "block=" + malformed.Value + " stored=" + malformedRes.SeriesStored
+                + " diag=" + malformedRes.Diagnostic + " status=" + malformedApply.Status
+                + " delivered=" + malformedApply.DeliveredCount
+                + " entries=" + malformedStore.EntryCount
+                + " entry=" + (malformedEntry == null ? "missing" : malformedEntry.State.ToString())
+                + " diskUnchanged=" + malformedBefore.SequenceEqual(malformedAfter));
+        }
+
+        var positiveBlockForms = new[] { "absent", "null", "empty" };
+        for (var positiveIndex = 0; positiveIndex < positiveBlockForms.Length; positiveIndex++)
+        {
+            var positiveForm = positiveBlockForms[positiveIndex];
+            var positiveRow = Row(Uid(950 + positiveIndex));
+            var positiveStore = Store(NewDirectory());
+            positiveStore.Capture(Candidate(positiveRow));
+            var positiveWire = Ack(Series(true, 1,
+                "[" + Id(positiveRow.SummaryUid, 1) + "]", "[]", "[]", "[]", null));
+            if (positiveForm == "absent")
+                positiveWire = positiveWire.Replace(",\"block_error\":null", "");
+            else if (positiveForm == "empty")
+                positiveWire = positiveWire.Replace("\"block_error\":null", "\"block_error\":\"\"");
+            var positiveRes = ObservationAckResolver.Resolve(positiveWire,
+                Batch(Obs(positiveRow)), Binding());
+            var positiveApply = positiveStore.ApplyAck(positiveRes, T0.AddMinutes(3));
+            Check("OA46d positieve controle block_error " + positiveForm,
+                positiveRes.SeriesStored
+                && positiveApply.Status == ObservationAckApplyStatus.Applied
+                && positiveApply.Stored && positiveApply.DeliveredCount == 1
+                && positiveStore.EntryCount == 0 && positiveStore.DeliveredTotal == 1,
+                "stored=" + positiveRes.SeriesStored + " status=" + positiveApply.Status
+                + " delivered=" + positiveApply.DeliveredCount
+                + " total=" + positiveStore.DeliveredTotal);
+        }
+
         // ================================ B6 actual stored:false wire shape
         var storedFalseFixture = Path.Combine(AppContext.BaseDirectory, "Fixtures",
             "observation-ack-stored-false-parser-rejected.json");

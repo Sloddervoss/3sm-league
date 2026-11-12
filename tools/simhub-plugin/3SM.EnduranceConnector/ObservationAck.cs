@@ -356,7 +356,15 @@ namespace ThreeSM.EnduranceConnector
                 return FailAll(batch, expectedBinding, "ack_store_unproven", true);
             stored = (bool)storedRaw;
 
-            var blockError = BoundedBlockCode(Text(lapsObject, "block_error"));
+            bool blockTypeInvalid;
+            var blockError = ReadBlockError(lapsObject, out blockTypeInvalid);
+            if (blockTypeInvalid)
+            {
+                // Een aanwezig maar verkeerd getypeerd blokveld is geen
+                // afwezigheid. Zonder tekst is er ook geen bruikbare code;
+                // het antwoord levert daarom niets en blijft bounded.
+                return FailAll(batch, expectedBinding, "ack_store_block_error", true, "ack_blocked");
+            }
             if (!stored)
                 return FailAll(batch, expectedBinding, "ack_not_stored", true, blockError);
             if (blockError != null)
@@ -716,6 +724,27 @@ namespace ThreeSM.EnduranceConnector
             if (!source.TryGetValue(key, out value)) return null;
             var text = value as string;
             return string.IsNullOrEmpty(text) ? null : text;
+        }
+
+        /// <summary>
+        /// Leest het blokveld met expliciete aanwezigheids- en typecontrole.
+        /// Ontbreken en <c>null</c> betekenen geen blok; een lege string valt
+        /// via <see cref="BoundedBlockCode"/> ook weg. Elke andere niet-string
+        /// waarde is aanwezig maar onbruikbaar en mag nooit als afwezigheid
+        /// doorgaan.
+        /// </summary>
+        private static string ReadBlockError(Dictionary<string, object> source, out bool invalidType)
+        {
+            invalidType = false;
+            if (source == null) return null;
+            object raw;
+            if (!source.TryGetValue("block_error", out raw) || raw == null) return null;
+            if (!(raw is string))
+            {
+                invalidType = true;
+                return null;
+            }
+            return BoundedBlockCode((string)raw);
         }
 
         private static bool TryArray(Dictionary<string, object> source, string key,
