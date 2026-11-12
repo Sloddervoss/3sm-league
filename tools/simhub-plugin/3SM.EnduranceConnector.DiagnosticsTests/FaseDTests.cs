@@ -366,6 +366,19 @@ internal static class FaseDTests
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
+            if (string.Equals(args[0], "--only-observation", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--export-observation-fixtures", StringComparison.Ordinal))
+            {
+                if (args.Length < 2) throw new ArgumentException("doelmap ontbreekt");
+                MeasurementObservationCaptureTests.ExportFixtures(args[1]);
+                Console.WriteLine("EXPORTED " + args[1]);
+                return 0;
+            }
             if (string.Equals(args[0], "--dump-v3", StringComparison.Ordinal))
             {
                 Console.Write(V3PayloadFixtureTests.Serialize(V3PayloadFixtureTests.BuildRepresentativeFrame()));
@@ -384,6 +397,7 @@ internal static class FaseDTests
                 Group("MeasurementTransportTests", () => MeasurementTransportTests.Run(Check));
                 Group("ControlClientTests", () => ControlClientTests.Run(Check));
                 Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
+                Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
@@ -415,6 +429,7 @@ internal static class FaseDTests
             baselineChecks += Group("MeasurementTransportTests", () => MeasurementTransportTests.Run(Check));
             baselineChecks += Group("ControlClientTests", () => ControlClientTests.Run(Check));
             baselineChecks += Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
