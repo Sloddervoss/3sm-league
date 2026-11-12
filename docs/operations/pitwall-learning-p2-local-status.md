@@ -94,9 +94,18 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   `pitwall-learning-p2-observation-server-quality-review/` en parent-resultaten
   `pitwall-learning-p2-observation-server-evidence/integrated-58820eed-*`.
   Producer/outbox/quarantaine, echte SDK-verificatie, connectorpublicatie en DLL-wissel
-  zijn niet inbegrepen; geen complete T13- of leeractivatieclaim. De volgende lokale
-  stap is het bron- en inpassingsonderzoek voor de producer/outbox, zonder publicatie
-  of wijziging van updater, versienummers of geïnstalleerde DLL's.
+  zijn niet inbegrepen; geen complete T13- of leeractivatieclaim.
+- **Producer-bouwcontract lokaal geaccepteerd:** `acd6ea3931c241824f03d3c123ec0393dd903a23`,
+  onafhankelijke gerichte preflight PASS; docs-integratie `743c447cdfcdd502c7046141336599a3a4b9bc8e`.
+  PairingBinding en historische LapContext zijn gescheiden; het afzonderlijke
+  observation-ledger laat de normale v1-wachtrij en oude DLL-lezer ongemoeid.
+  Dit is contractacceptatie, geen runtime- of net48/SDK-bewijs.
+  **T13-S2A lokale bouw gestart** in een verse werkboom vanaf `743c447c`:
+  pure C#-observatiekern, optioneel DTO-lid, geregistreerde diagnostische tests en
+  echte C#-serialisatie tegen de ongewijzigde serverparser. Geen plugin-/sampler-/
+  ledger-/verzendintegratie in deze deelstap; geen updater-, versie-, instellingen-
+  of geïnstalleerde-DLL-wijziging. De nog te bouwen sidecar, lease en hele keten
+  blijven afzonderlijk te toetsen vóór enige activatie.
   P3/fitting, UI-publicatie en modelactivatie blijven gesloten; de Vite-buildpoort blijft open.
 
 ## Beperkingen en vervolgnotities
