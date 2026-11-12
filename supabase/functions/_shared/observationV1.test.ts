@@ -20,6 +20,7 @@ const UUID_B = "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e";
 const UUID_A_UPPER = UUID_A.toUpperCase();
 const ROW_START = "2026-11-12T10:00:00.000Z";
 const ROW_END = "2026-11-12T10:00:20.000Z";
+const SAMPLE_START = "2026-11-12T10:00:00.050Z";
 const encoder = new TextEncoder();
 
 function assert(
@@ -115,6 +116,45 @@ function variant(
 
 function withInterval(patch: Record<string, unknown>): Record<string, any> {
   return variant((value) => Object.assign(value.interval, patch));
+}
+
+/** Minimal fact-free fixture, so numeric bounds are not coupled to fact times. */
+function minimalObservation(
+  interval: Record<string, unknown>,
+): Record<string, any> {
+  return {
+    version: 1,
+    capture: { deviceId: UUID_A },
+    interval: {
+      firstSampleAt: ROW_START,
+      lastSampleAt: ROW_END,
+      samples: 2,
+      maxGapSeconds: 19.9,
+      unknownSeconds: 0,
+      edgeBeforeSeconds: 0,
+      edgeAfterSeconds: 0,
+      ...interval,
+    },
+    driverNameContinuity: { value: "unchanged" },
+  };
+}
+
+/**
+ * Adjacent IEEE-754 double for a positive finite value. Test-only input
+ * generator: the expected decision still comes from the literal 1 ms/0.4975/
+ * 19.9/0.1 bounds, not from copying the module's comparison formula.
+ */
+function nextFloat(value: number, direction: 1 | -1): number {
+  assert(value > 0, "nextFloat is defined for positive test values");
+  const buffer = new ArrayBuffer(8);
+  const view = new DataView(buffer);
+  view.setFloat64(0, value);
+  const bits = (BigInt(view.getUint32(0)) << 32n) |
+    BigInt(view.getUint32(4));
+  const next = direction > 0 ? bits + 1n : bits - 1n;
+  view.setUint32(0, Number(next >> 32n));
+  view.setUint32(4, Number(next & 0xffff_ffffn));
+  return view.getFloat64(0);
 }
 
 function expectOk(value: unknown): ObservationV1 {
@@ -1596,6 +1636,274 @@ Deno.test("T13-181 an 80 %-like 120 s coverage never becomes a false/0 or comple
   assert(!("pitLap" in parsed), "no false pitLap");
   assert(!("fuelAdded" in parsed), "no zero fuel fact");
   assert(!("driverChanged" in parsed), "no false driverChanged");
+});
+
+// ---------------------------------------------------------------------------
+// Exact numeric bounds: literal 1 ms edges and exact scalar stats
+// ---------------------------------------------------------------------------
+
+Deno.test("T13-200 edge difference of exactly 1 ms is accepted", () => {
+  const row = {
+    observation: variant((value) => {
+      value.interval.edgeBeforeSeconds = 0;
+    }),
+    startedAt: "2026-11-12T10:00:00.049Z",
+    endedAt: ROW_END,
+  };
+  expectDisposition(row, "accept", UUID_A, "observation_accepted");
+});
+
+Deno.test("T13-201 edge 1 ms + 0.5 ns is rejected", () => {
+  // Actual before-edge is 0 (row and first sample both start at .050).
+  const row = {
+    observation: variant((value) => {
+      value.interval.edgeBeforeSeconds = 0.0010000005;
+      value.interval.unknownSeconds = 0.0510000005;
+    }),
+    startedAt: SAMPLE_START,
+    endedAt: ROW_END,
+  };
+  expectDisposition(
+    row,
+    "reject",
+    UUID_A,
+    "observation_edge_mismatch",
+  );
+});
+
+Deno.test("T13-202 edge 1 ms + 100 ns is still rejected", () => {
+  const row = {
+    observation: variant((value) => {
+      value.interval.edgeBeforeSeconds = 0;
+    }),
+    startedAt: "2026-11-12T10:00:00.0489999Z",
+    endedAt: ROW_END,
+  };
+  expectDisposition(
+    row,
+    "reject",
+    UUID_A,
+    "observation_edge_mismatch",
+  );
+});
+
+Deno.test("T13-203 edge one ULP over 1 ms rejects, one ULP under accepts", () => {
+  const over = nextFloat(0.001, 1);
+  const under = nextFloat(0.001, -1);
+  assert(over > 0.001, "one ULP above 1 ms must be greater");
+  assert(under < 0.001, "one ULP below 1 ms must be smaller");
+
+  expectDisposition(
+    {
+      observation: variant((value) => {
+        value.interval.edgeBeforeSeconds = over;
+        value.interval.unknownSeconds = 1;
+      }),
+      startedAt: SAMPLE_START,
+      endedAt: ROW_END,
+    },
+    "reject",
+    UUID_A,
+    "observation_edge_mismatch",
+  );
+
+  const accepted = classify({
+    observation: variant((value) => {
+      value.interval.edgeBeforeSeconds = under;
+      value.interval.unknownSeconds = 1;
+    }),
+    startedAt: SAMPLE_START,
+    endedAt: ROW_END,
+  });
+  assertEquals(accepted.disposition, "accept", "one ULP under 1 ms");
+});
+
+Deno.test("T13-204 maxGap below the exact mean is rejected", () => {
+  // Original SPEC P31 literal, then the adjacent double just below 0.4975.
+  expectError(
+    withInterval({ maxGapSeconds: 0.4974999999 }),
+    "observation_max_gap_inconsistent",
+    "observation.interval.maxGapSeconds",
+  );
+  const below = nextFloat(0.4975, -1);
+  assert(below < 0.4975, "one ULP below the mean");
+  expectError(
+    withInterval({ maxGapSeconds: below }),
+    "observation_max_gap_inconsistent",
+    "observation.interval.maxGapSeconds",
+  );
+});
+
+Deno.test("T13-205 maxGap one ULP above the exact mean is accepted", () => {
+  const above = nextFloat(0.4975, 1);
+  assert(above > 0.4975, "one ULP above the mean");
+  const parsed = expectOk(withInterval({ maxGapSeconds: above }));
+  assertEquals(
+    parsed.interval.maxGapSeconds,
+    above,
+    "accepted maxGap is not rounded",
+  );
+});
+
+Deno.test("T13-206 maxGap above the exact span is rejected", () => {
+  // Original SPEC P32 literal, then the adjacent double just above 19.9.
+  expectError(
+    withInterval({
+      maxGapSeconds: 19.9000000001,
+      unknownSeconds: 20.0000000002,
+    }),
+    "observation_max_gap_inconsistent",
+    "observation.interval.maxGapSeconds",
+  );
+  const above = nextFloat(19.9, 1);
+  assert(above > 19.9, "one ULP above the span");
+  expectError(
+    withInterval({ maxGapSeconds: above }),
+    "observation_max_gap_inconsistent",
+    "observation.interval.maxGapSeconds",
+  );
+});
+
+Deno.test("T13-207 maxGap one ULP below the exact span is accepted", () => {
+  const below = nextFloat(19.9, -1);
+  assert(below < 19.9, "one ULP below the span");
+  // maxGap > 1 means the full gap is part of the unknown lower bound; with
+  // edges 0.05+0.05 the only consistent unknown is the 20.0 s lap window.
+  expectOk(withInterval({ maxGapSeconds: below, unknownSeconds: 20 }));
+});
+
+Deno.test("T13-208 unknown below the edge sum is rejected", () => {
+  // Original SPEC P33 literal, then the adjacent double just below 0.1.
+  expectError(
+    withInterval({ unknownSeconds: 0.0999999999 }),
+    "observation_unknown_seconds_inconsistent",
+    "observation.interval.unknownSeconds",
+  );
+  const below = nextFloat(0.1, -1);
+  assert(below < 0.1, "one ULP below the edges");
+  expectError(
+    withInterval({ unknownSeconds: below }),
+    "observation_unknown_seconds_inconsistent",
+    "observation.interval.unknownSeconds",
+  );
+});
+
+Deno.test("T13-209 unknown exactly equal to the edge sum is accepted", () => {
+  const parsed = expectOk(withInterval({ unknownSeconds: 0.1 }));
+  assertEquals(parsed.interval.unknownSeconds, 0.1, "exact unknown");
+});
+
+Deno.test("T13-210 0.1 + 0.2 edges need exactly 0.3, not a float artefact", () => {
+  const accepted = withInterval({
+    edgeBeforeSeconds: 0.1,
+    edgeAfterSeconds: 0.2,
+    unknownSeconds: 0.3,
+  });
+  expectOk(accepted);
+
+  const rejected = withInterval({
+    edgeBeforeSeconds: 0.1,
+    edgeAfterSeconds: 0.2,
+    unknownSeconds: 0.2999999999,
+  });
+  expectError(
+    rejected,
+    "observation_unknown_seconds_inconsistent",
+    "observation.interval.unknownSeconds",
+  );
+});
+
+Deno.test("T13-211 scientific 3e-7 stats close exactly in both directions", () => {
+  const interval = {
+    firstSampleAt: "2026-11-12T10:00:00.000Z",
+    lastSampleAt: "2026-11-12T10:00:00.0000003Z",
+    samples: 2,
+    maxGapSeconds: 3e-7,
+    unknownSeconds: 0,
+    edgeBeforeSeconds: 0,
+    edgeAfterSeconds: 0,
+  };
+  expectOk(minimalObservation(interval));
+
+  const over = nextFloat(3e-7, 1);
+  const under = nextFloat(3e-7, -1);
+  expectError(
+    minimalObservation({ ...interval, maxGapSeconds: over }),
+    "observation_max_gap_inconsistent",
+    "observation.interval.maxGapSeconds",
+  );
+  expectError(
+    minimalObservation({ ...interval, maxGapSeconds: under }),
+    "observation_max_gap_inconsistent",
+    "observation.interval.maxGapSeconds",
+  );
+  expectError(
+    minimalObservation({ ...interval, unknownSeconds: over }),
+    "observation_unknown_seconds_inconsistent",
+    "observation.interval.unknownSeconds",
+  );
+});
+
+Deno.test("T13-212 subnormal counters are positive and overage is closed", () => {
+  const subnormal = Number.MIN_VALUE;
+  const interval = {
+    firstSampleAt: ROW_START,
+    lastSampleAt: ROW_START,
+    samples: 1,
+    maxGapSeconds: 0,
+    unknownSeconds: subnormal,
+    edgeBeforeSeconds: subnormal,
+    edgeAfterSeconds: 0,
+  };
+  const parsed = expectOk(minimalObservation(interval));
+  assertEquals(
+    parsed.interval.unknownSeconds,
+    subnormal,
+    "subnormal unknown preserved",
+  );
+  assertEquals(
+    parsed.interval.edgeBeforeSeconds,
+    subnormal,
+    "subnormal edge preserved",
+  );
+
+  expectError(
+    minimalObservation({
+      ...interval,
+      unknownSeconds: nextFloat(subnormal, 1),
+    }),
+    "observation_unknown_seconds_inconsistent",
+    "observation.interval.unknownSeconds",
+  );
+});
+
+Deno.test("T13-213 large sample count uses the exact cross-product mean", () => {
+  const interval = {
+    firstSampleAt: "2026-11-12T10:00:00.000Z",
+    lastSampleAt: "2026-11-12T10:00:00.999999Z",
+    samples: 1_000_000,
+    maxGapSeconds: 0.000001,
+    unknownSeconds: 0,
+    edgeBeforeSeconds: 0,
+    edgeAfterSeconds: 0,
+  };
+  const parsed = expectOk(minimalObservation(interval));
+  assertEquals(parsed.interval.samples, 1_000_000, "samples");
+
+  // 0.999999 s over 999999 intervals is exactly 1e-6 s.
+  expectError(
+    minimalObservation({
+      ...interval,
+      maxGapSeconds: nextFloat(0.000001, -1),
+    }),
+    "observation_max_gap_inconsistent",
+    "observation.interval.maxGapSeconds",
+  );
+  const above = minimalObservation({
+    ...interval,
+    maxGapSeconds: nextFloat(0.000001, 1),
+  });
+  expectOk(above);
 });
 
 // ---------------------------------------------------------------------------

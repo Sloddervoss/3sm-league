@@ -31,9 +31,69 @@ export const OBSERVATION_V1_MAX_SECONDS = 86_400;
  */
 export const OBSERVATION_EDGE_TOLERANCE_SECONDS = 0.001;
 
-const NUMERIC_EPSILON = 1e-9;
 const TIMESTAMP_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,7}))?Z$/;
+const DECIMAL_PATTERN = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/;
+
+/**
+ * Exact internal comparison basis for the bounded `interval` numbers.
+ *
+ * JSON parsing has already collapsed the wire token into an IEEE-754 double,
+ * so the original lexeme is not recoverable here. Comparisons therefore use
+ * the canonical round-trip decimal representation (`value.toString()`) as an
+ * exact decimal rational and cross-multiply it against integer-nanosecond
+ * quantities. This is decimal canonical-value semantics, not binary-float
+ * epsilon repair, and it makes no claim about the lost wire token.
+ */
+type Rational = { n: bigint; d: bigint };
+
+const pow10 = (exponent: number): bigint => 10n ** BigInt(exponent);
+
+const rationalOf = (value: number): Rational => {
+  const match = DECIMAL_PATTERN.exec(value.toString());
+  if (match === null) {
+    // Unreachable for a finite number; keeps the helper total without throwing.
+    return { n: 0n, d: 1n };
+  }
+  const fraction = match[3] ?? "";
+  const exponent = match[4] === undefined ? 0 : Number(match[4]);
+  const coefficient = BigInt(`${match[1]}${match[2]}${fraction}`);
+  const scale = fraction.length - exponent;
+  return scale >= 0
+    ? { n: coefficient, d: pow10(scale) }
+    : { n: coefficient * pow10(-scale), d: 1n };
+};
+
+const compareRational = (left: Rational, right: Rational): number => {
+  const a = left.n * right.d;
+  const b = right.n * left.d;
+  return a < b ? -1 : a > b ? 1 : 0;
+};
+
+const addRational = (left: Rational, right: Rational): Rational => ({
+  n: left.n * right.d + right.n * left.d,
+  d: left.d * right.d,
+});
+
+const subtractRational = (left: Rational, right: Rational): Rational => ({
+  n: left.n * right.d - right.n * left.d,
+  d: left.d * right.d,
+});
+
+const EDGE_TOLERANCE = rationalOf(OBSERVATION_EDGE_TOLERANCE_SECONDS);
+const ONE_SECOND: Rational = { n: 1n, d: 1n };
+
+/** |reported - actualNs/1e9| <= exactly 1/1000 s. */
+const edgeWithinTolerance = (reported: number, actualNs: bigint): boolean => {
+  const difference = subtractRational(rationalOf(reported), {
+    n: actualNs,
+    d: 1_000_000_000n,
+  });
+  const absolute = difference.n < 0n
+    ? { n: -difference.n, d: difference.d }
+    : difference;
+  return compareRational(absolute, EDGE_TOLERANCE) <= 0;
+};
 // Existing receiver contract: canonical RFC 4122 text, version 1..5 and
 // variant 8/9/a/b. Format is checked before any semantic comparison.
 const UUID_PATTERN =
@@ -313,9 +373,6 @@ const timestampIn = (
   return { ok: true, value: parsed };
 };
 
-const secondsBetween = (later: bigint, earlier: bigint): number =>
-  Number(later - earlier) / 1_000_000_000;
-
 const parseCapture = (value: unknown): ObservationV1["capture"] | Failure => {
   if (!isRecord(value)) {
     return fail("observation_invalid_type", "observation.capture");
@@ -443,10 +500,14 @@ const parseInterval = (value: unknown): ObservationV1["interval"] | Failure => {
     return fail("observation_time_order", "observation.interval.firstSampleAt");
   }
 
-  const span = secondsBetween(lastAt.value, firstAt.value);
+  const spanNs = lastAt.value - firstAt.value;
   const count = sampleCount.value;
+  const span: Rational = { n: spanNs, d: 1_000_000_000n };
+  const maxGapExact = rationalOf(maxGapValue.value);
+  const edgeBeforeExact = rationalOf(edgeBeforeValue.value);
+  const edgeAfterExact = rationalOf(edgeAfterValue.value);
   if (count === 1) {
-    if (span !== 0) {
+    if (spanNs !== 0n) {
       return fail(
         "observation_bounds_inconsistent",
         "observation.interval.samples",
@@ -459,17 +520,23 @@ const parseInterval = (value: unknown): ObservationV1["interval"] | Failure => {
       );
     }
   } else {
-    if (span <= 0) {
+    if (spanNs <= 0n) {
       return fail(
         "observation_bounds_inconsistent",
         "observation.interval.samples",
       );
     }
-    const averageGap = span / (count - 1);
-    if (
-      maxGapValue.value + NUMERIC_EPSILON < averageGap ||
-      maxGapValue.value > span + NUMERIC_EPSILON
-    ) {
+    const maxGapBudget: Rational = {
+      n: maxGapExact.n * BigInt(count - 1),
+      d: maxGapExact.d,
+    };
+    if (compareRational(maxGapBudget, span) < 0) {
+      return fail(
+        "observation_max_gap_inconsistent",
+        "observation.interval.maxGapSeconds",
+      );
+    }
+    if (compareRational(maxGapExact, span) > 0) {
       return fail(
         "observation_max_gap_inconsistent",
         "observation.interval.maxGapSeconds",
@@ -477,16 +544,19 @@ const parseInterval = (value: unknown): ObservationV1["interval"] | Failure => {
     }
   }
 
-  const edgeSum = edgeBeforeValue.value + edgeAfterValue.value;
-  const lowerUnknown = edgeSum +
-    (maxGapValue.value > 1 ? maxGapValue.value : 0);
-  if (unknownValue.value + NUMERIC_EPSILON < lowerUnknown) {
+  const edges = addRational(edgeBeforeExact, edgeAfterExact);
+  const lowerUnknown = compareRational(maxGapExact, ONE_SECOND) > 0
+    ? addRational(edges, maxGapExact)
+    : edges;
+  const unknownExact = rationalOf(unknownValue.value);
+  if (compareRational(unknownExact, lowerUnknown) < 0) {
     return fail(
       "observation_unknown_seconds_inconsistent",
       "observation.interval.unknownSeconds",
     );
   }
-  if (unknownValue.value > span + edgeSum + NUMERIC_EPSILON) {
+  const upperUnknown = addRational(span, edges);
+  if (compareRational(unknownExact, upperUnknown) > 0) {
     return fail(
       "observation_unknown_seconds_inconsistent",
       "observation.interval.unknownSeconds",
@@ -1010,11 +1080,11 @@ export function classifyLapObservation(
     );
   }
 
-  const actualBefore = secondsBetween(firstNs, startedNs);
-  const actualAfter = secondsBetween(endedNs, lastNs);
   if (
-    Math.abs(actualBefore - parsed.observation.interval.edgeBeforeSeconds) >
-      OBSERVATION_EDGE_TOLERANCE_SECONDS + NUMERIC_EPSILON
+    !edgeWithinTolerance(
+      parsed.observation.interval.edgeBeforeSeconds,
+      firstNs - startedNs,
+    )
   ) {
     return reject(
       "observation_edge_mismatch",
@@ -1022,8 +1092,10 @@ export function classifyLapObservation(
     );
   }
   if (
-    Math.abs(actualAfter - parsed.observation.interval.edgeAfterSeconds) >
-      OBSERVATION_EDGE_TOLERANCE_SECONDS + NUMERIC_EPSILON
+    !edgeWithinTolerance(
+      parsed.observation.interval.edgeAfterSeconds,
+      endedNs - lastNs,
+    )
   ) {
     return reject(
       "observation_edge_mismatch",

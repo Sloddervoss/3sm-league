@@ -117,6 +117,14 @@ waren fout; geldig is minimaal `1,4`. `maxGap 0,6` met `unknown 0,2` en edges `0
 betekent alleen "geen getelde gap boven de drempel/geen edge", **niet** "complete lap".
 Deze invarianten zijn scalaire consistentiechecks; ze zijn geen cryptografisch volledigheidsbewijs.
 
+Numerieke vergelijking van edges en stats gebeurt **exact** op de canonieke decimale round-trip-representatie van
+de gevalideerde double (`Number.prototype.toString()`), intern als BigInt-breuk vergeleken met
+integer-nanoseconden. Er is geen binaire epsilon, geen `Math.round(num*1e9)` en geen clamping of afronding van
+publieke DTO-waarden. De oorspronkelijke wire-lexeem is na de JSON-parse niet meer beschikbaar; dit is dus
+canonical-value-semantiek en geen claim op tokenidentiteit. `samples>1` vereist een strikt positieve
+`last-first`; `first==last` met `samples>1` wordt als `observation_bounds_inconsistent` geweigerd (bewuste,
+strengere availability-keuze dan de ongelijkheden alleen).
+
 Tijden: de echte C#-producer schrijft `MeasurementTime.WireFormat = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'"` (exact 3
 decimalen, UTC; `MeasurementIds.cs:194-205`). De parser accepteert bounded ISO-UTC met 0..7 fractiecijfers, houdt
 het ruwe token ongewijzigd en vergelijkt exact in nanoseconden. `Date.parse` wordt niet gebruikt: 100 ns-verschil
@@ -141,7 +149,7 @@ een aparte jsonb-maat en blijft onuitgevoerd/PENDING; dat is geen wirebewijs.
 4. Geldig blok maar `capture.deviceId` != auth-device (UUID-equivalent na formatcontrole) -> `quarantine`:
    `observation_device_mismatch`. Voor die rij: geen insert/update van `simhub_lap_summaries`, geen P1-capture.
 5. Match plus geldige ruwe `row.startedAt`/`row.endedAt`, interval binnen de row en edges binnen **1 ms**
-   (`OBSERVATION_EDGE_TOLERANCE_SECONDS`) -> `accept`.
+   (`OBSERVATION_EDGE_TOLERANCE_SECONDS`, inclusief; meer dan 1 ms sluit, exact zonder epsilon) -> `accept`.
 
 De row-scope is de enige beslissing. Het V3-kernframe en andere meetrijen blijven buiten dit resultaat en kunnen
 door een toekomstige caller doorlopen. De stateless batchtest bewijst: B-rij gequarantaineerd, A-rij accepted,
@@ -173,9 +181,15 @@ geen promotie van ownerhistorie.
   destructieve drop en geen drainclaim. Een flag-off maakt oude offline wachtrijen niet veilig; aparte deploy-GO.
 - **B6 aggregate/schema:** de pure shape/caps en UUID/context-regels zijn uitvoerbaar. `ObservedSessionId`/
   `SegmentId` bij `StartLap` blijven een producer-PENDING fix; de parser leest ze niet uit de actuele pipeline.
-- **Bounded quarantaine (toekomst):** nooit een stale entry verzenden; 64 entries/1 MiB met zichtbare, getelde
-  retentie/evictie (export indien nodig), normale B-capaciteit behouden, geen stille drop, overflow-teller plus
-  reden en een expliciet retentiebeleid vóór activatie. "Nooit evicten" én "onbegrensd" is geen geldige combinatie.
+- **Bounded quarantaine (toekomst):** nooit een stale entry verzenden. Elke entry is **append-only en immutable**:
+  hij bewaart de **exacte gevalideerde `RowJson`** (de ruwe meetrij) en de ruwe `observation` plus de
+  quarantainereden, ongewijzigd. Er is **geen reserialisatie, geen UID/hash-herschrijving en geen stille drop**.
+  De lijst is begrensd op 64 entries/1 MiB met een **zichtbare, getelde** retentie/evictie (met reden, export
+  indien nodig) en een expliciet retentiebeleid vóór activatie; retentie/evictie is nooit stil. Bij 64 entries of
+  1 MiB **weigert de producer nieuwe observation-capture zichtbaar** (overflow-teller plus reden), terwijl **gewone
+  laprows blijven doorlopen** en de normale B-capaciteit behouden blijft. Rollback blijft compatible-reader-only
+  zoals bij B5.
+  "Nooit evicten" én "onbegrensd" is geen geldige combinatie.
 
 Refuel is alleen een **waargenomen positieve stap** (`observedAddedLitres`), niet de werkelijke totaal getankte
 hoeveelheid. `maxUndetectedLitres` mag ontbreken wanneer onbekend; afwezigheid blokkeert de positieve capture niet
@@ -183,11 +197,11 @@ en zegt niets over onzichtbare fuel. Zonder fysieke/SDK-proof wordt geen totaal 
 
 ## 6. Wat bewezen is en wat PENDING blijft
 
-Bewezen in deze slice (Deno 2.9.7, echte exits): **202 tests, 0 failures**, `deno test --deny-net`, plus
+Bewezen in deze slice (Deno 2.9.7, echte exits): **216 tests, 0 failures**, `deno test --deny-net`, plus
 `deno check` en `deno fmt --check` op de twee TS-bestanden. De tests dekken onder andere afwezig/`null`/versie/
 unknown keys op elk niveau, UUID-case en ongeldige tokens, row-vs-frame-scope, 80 %-onwaarheid, naamcontinuïteit,
-geen owners, multibyte-caps 2048/2049, 100 ns-tijdprecisie, refuel zonder bound, input-immutabiliteit en de echte
-legacy/mixed `parseLapSummariesReport`-afwijzing.
+geen owners, multibyte-caps 2048/2049, 100 ns-tijdprecisie, exacte 1 ms/ULP/subnormale/scientific-getalgrenzen,
+refuel zonder bound, input-immutabiliteit en de echte legacy/mixed `parseLapSummariesReport`-afwijzing.
 
 **PENDING / geen claim:** C#-producer en `ObservationV1Enabled` (default off), outbox freeze/quarantaine,
 `simhub_persist_v3`/`simhub_persist_measurement_batch`/`simhub_apply_lap_row`, SQL-migratie en hash-vectoren,
@@ -202,7 +216,7 @@ GO voor de complete keten.
 - [x] Match = accept; device-mismatch = row-quarantine; frame/andere rijen blijven mogelijk.
 - [x] Exacte shared interval-shape, optionele refuel-bound, 2048-byte cap, raw UUID/tijd behouden.
 - [x] Geen `false`/`0`-feit, geen owner/PII op de wire, geen completeness-claim.
-- [x] Echte Deno-tests (202) en echte receiver-afwijzing als bewijs; geen DB/netwerk/SSH/GUI.
+- [x] Echte Deno-tests (216) en echte receiver-afwijzing als bewijs; geen DB/netwerk/SSH/GUI.
 - [ ] Producer, outbox, SQL/hash, P1, ACK, Edge-wiring en deploy — aparte GO.
 
 **PRODUCTIEWIJZIGING: NEE.**
