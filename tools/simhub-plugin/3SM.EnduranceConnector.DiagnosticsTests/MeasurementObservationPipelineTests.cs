@@ -151,6 +151,70 @@ internal static class MeasurementObservationPipelineTests
         }
     }
 
+    // Echte pipeline-reeks voor de SDK-sessiecontextgrens: tien 100 ms-ticks
+    // (met één eerdere 0,5 L-stap), daarna vier stijgende ticks. Alleen de
+    // meegegeven numerieke SDK-sessievelden verschillen van de StartLap-context.
+    private static LapAggregate SessionBoundaryLap(int? sessionUniqueId, int? sessionNumber,
+        out MeasurementOutbox outbox)
+    {
+        var pipeline = Pipeline(new SamplerOptions { ObservationCaptureEnabled = true }, out outbox);
+        for (var tick = 0; tick < 10; tick++)
+        {
+            Emit(pipeline, tick * 100L, 1, tick == 4 ? 59.5 : 60.0, tick == 2);
+        }
+        for (var tick = 10; tick < 14; tick++)
+        {
+            Emit(pipeline, tick * 100L, 1, 60.5 + (tick - 10) * 0.5, false,
+                context: Context(sessionUniqueId: sessionUniqueId, sessionNumber: sessionNumber));
+        }
+        var laps = pipeline.End("synthetic_session_boundary");
+        return laps.Count == 1 ? laps[0] : null;
+    }
+
+    private static bool SessionBoundaryFacts(LapAggregate aggregate, MeasurementOutbox outbox,
+        double expectedLitres, int expectedSteps, int expectedUnique, int expectedNumber, out string evidence)
+    {
+        evidence = "geen aggregaat";
+        if (aggregate == null) return false;
+        var facts = Facts(aggregate);
+        var refuel = Nested(facts, "refuel");
+        var context = Nested(facts, "context");
+        var interval = Nested(facts, "interval");
+        var capture = Nested(facts, "capture");
+        var pitRoad = Nested(facts, "pitRoad");
+        var name = Nested(facts, "driverNameContinuity");
+        var rows = outbox.Due(At(10000), 20, 5).Laps;
+        var row = rows.Count == 1 ? ReadRow(rows[0]) : null;
+        var summary = aggregate.ToSummary("88888888-8888-4888-8888-888888888888",
+            "summary-session-boundary", SessionA);
+        var ok = aggregate.ObservationResult != null
+            && aggregate.ObservationResult.HasObservation
+            && aggregate.ObservationResult.Code == ObservationCaptureCodes.Accepted
+            && interval != null && Integer(interval, "samples") == 14
+            && refuel != null && Number(refuel, "observedAddedLitres") == expectedLitres
+            && Integer(refuel, "positiveSteps") == expectedSteps
+            && context != null && Integer(context, "sessionUniqueId") == expectedUnique
+            && Integer(context, "sessionNumber") == expectedNumber
+            && (string)context["carId"] == "car-1"
+            && capture != null && (string)capture["deviceId"] == Device
+            && ObservationBindingRules.SamePairing(aggregate.ObservationPairingBinding, Binding())
+            && pitRoad != null && (bool)pitRoad["value"]
+            && name != null && (string)name["value"] == "unchanged"
+            && summary.ToJson().IndexOf("observation", StringComparison.Ordinal) < 0
+            && rows.Count == 1 && row != null && row.Observation == null
+            && rows[0].RowJson.IndexOf("observation", StringComparison.Ordinal) < 0;
+        evidence = "code=" + Code(aggregate)
+            + " samples=" + (interval == null ? "-" : interval["samples"].ToString())
+            + " refuel=" + (refuel == null
+                ? "-" : refuel["observedAddedLitres"] + "L/" + refuel["positiveSteps"])
+            + " ctx=" + (context == null
+                ? "-" : context["sessionUniqueId"] + "/" + context["sessionNumber"])
+            + " binding=" + (aggregate.ObservationPairingBinding != null)
+            + " outboxObservation=" + (rows.Count == 1
+                && rows[0].RowJson.IndexOf("observation", StringComparison.Ordinal) >= 0);
+        return ok;
+    }
+
     // Dezelfde representatieve reeks als de vóór S2B vastgelegde golden.
     private static string GoldenPipelineJson(bool observationEnabled)
     {
@@ -674,6 +738,28 @@ internal static class MeasurementObservationPipelineTests
         Check("OP24", !invalidOutcome.Accepted && invalidOutcome.Reason == "observed_at_missing"
             && emptyDrain.Count == 0 && sampler.Current == null && sampler.RejectedCount == 1,
             "default-tijd geweigerd zonder ronde/observation");
+
+        // OP25 — alleen SessionUniqueId wijzigt (42->43) op de eerste van vier
+        // stijgende ticks. De 0,5 L van die grens is geen refuelstap; de eerdere
+        // 0,5 L-stap blijft, de StartLap-context blijft 42/3 en de gewone
+        // ToSummary/outbox blijven observation-vrij.
+        var op25 = SessionBoundaryLap(43, 3, out var op25Outbox);
+        Check("OP25", SessionBoundaryFacts(op25, op25Outbox, 2.0, 4, 42, 3, out var op25Evidence),
+            "uniqueId 42->43 breekt keten: " + op25Evidence
+                + "; verwacht 2.0L/4 (0.5 eerder + 1.5 na grens), ctx 42/3");
+
+        // OP26 — dezelfde reeks met alleen SessionNumber 3->4.
+        var op26 = SessionBoundaryLap(42, 4, out var op26Outbox);
+        Check("OP26", SessionBoundaryFacts(op26, op26Outbox, 2.0, 4, 42, 3, out var op26Evidence),
+            "sessionNumber 3->4 breekt keten: " + op26Evidence
+                + "; verwacht 2.0L/4 (0.5 eerder + 1.5 na grens), ctx 42/3");
+
+        // OP27 — controle met dezelfde SDK-sessie: de identieke grensstijging
+        // 60,0->60,5 telt dan wél en levert 2,5 L over 5 stappen.
+        var op27 = SessionBoundaryLap(42, 3, out var op27Outbox);
+        Check("OP27", SessionBoundaryFacts(op27, op27Outbox, 2.5, 5, 42, 3, out var op27Evidence),
+            "zelfde SDK-sessie telt grensstijging: " + op27Evidence
+                + "; verwacht 2.5L/5 (0.5 eerder + 2.0 na grens)");
 
         return count;
     }
