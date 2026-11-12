@@ -20,12 +20,24 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
 - `pitwall-learning-p2-context-quality-parent/integrated-0da53e0e.json`
 - `pitwall-learning-p2-context-quality-parent/build-0da53e0e.log`
 
+## T11 geaccepteerd en lokaal geïntegreerd
+
+- Gereviewde bron: `efb289bd0573e8ef25673504a6289e4983722cf5`.
+- Onafhankelijke SPEC: PASS; afzonderlijke quality: APPROVED.
+- Lokale integratie: `84de1e893bbf7c052313adf11e54610f1d929f90`.
+- Parent-run: **257/257 learningtests**, Vite-build exit 0.
+- Volledige tijdprecisie en getagde streamidentiteit gerepareerd; oude verworpen
+  bronversies en harnas-errata afzonderlijk bewaard. Geen modelkwaliteitsclaim.
+- Bewijs: `pitwall-learning-p2-tyre-time-precision-spec-review-isolated/` en
+  `pitwall-learning-p2-tyre-time-precision-quality-recheck/` onder de artifactroot.
+- Fysieke bruikbaarheid blijft afzonderlijk van trainingsgeschiktheid en advies.
+
 ## Nog uit te voeren binnen P2
 
-- **T11 gestart:** fysieke bandintervallen per wiel, geïsoleerd vanaf de
-  integratiecommit. Geen fysieke vervanging afleiden uit alleen een teller,
-  wearstijging of herhaalde last_available-waarde. Geen fitting.
-- **T12 nog niet gestart:** stopsegmenten; bruto duur en netto verlies gescheiden.
+- **T12 gebouwd, review gestart:** geïsoleerd vanaf de T11-integratie;
+  bruto duur en netto verlies gescheiden. Bron `0559d220d1ae0d447e794373064e57893333f426`.
+  Parent-run **371/371 learningtests**; dit is nog geen SPEC-/qualityacceptatie.
+  Nog niet geïntegreerd.
 - **T13 conditioneel:** echte broncontractgaten bewijzen en minimaal oplossen;
   geen connectorpublicatie of DLL-wissel zonder afzonderlijke GO.
 
