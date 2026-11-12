@@ -16,6 +16,13 @@ function fixture() {
     reference: { normalTrack: true, startAt: t("00:00").replace("12:", "11:"), endAt: t("00:40").replace("12:", "11:"), anchors: { ...anchors }, flags, evidence: evidence(2, t("00:40").replace("12:", "11:")), physicalCarId: "chassis", physicalSessionId: "race", knownAt: t("00:00").replace("12:", "11:") },
   };
 }
+/** Separate, non-aliased context envelopes so a delivery receipt can diverge per record. */
+function splitContexts() {
+  const f = fixture();
+  f.outcome.evidence.contextEvidence.source = { ...f.outcome.evidence.source };
+  f.reference.evidence.contextEvidence.source = { ...f.reference.evidence.source };
+  return f;
+}
 
 describe("pit segment semantics (synthetic trusted facts, not historical coverage)", () => {
   it("retains gross without inventing a reference", () => {
@@ -177,6 +184,52 @@ describe("service semantics", () => {
     expect(result.serviceCoverage).toBe("unknown");
     expect(result.serviceReasons).not.toContain("service_binding_missing");
     expect(result.serviceReasons).not.toContain("service_intervals_unbound");
+  });
+  it("treats plain {} services as a neutral empty document, not a binding defect", () => {
+    const result = assessPitSegment({ ...fixture(), services: {} })!;
+    expect(result.serviceUnionSeconds).toBeNull();
+    expect(result.serviceCoverage).toBe("unknown");
+    expect(result.serviceReasons).toContain("service_intervals_missing_or_invalid");
+    expect(result.serviceReasons).not.toContain("service_binding_missing");
+    expect(result.serviceReasons).not.toContain("service_intervals_unbound");
+  });
+  it("cannot verify a complete binding when the outcome context is absent", () => {
+    const input = fixture();
+    delete (input.outcome.evidence as { contextEvidence?: unknown }).contextEvidence;
+    const result = assessPitSegment({ ...input, services: service })!;
+    expect(result.serviceUnionSeconds).toBeNull();
+    expect(result.serviceCoverage).toBe("unknown");
+    expect(result.serviceLabelEligible).toBe(false);
+    expect(result.serviceReasons).toContain("service_binding_unverifiable");
+    expect(result.serviceReasons).not.toContain("service_binding_mismatch");
+  });
+  it("cannot verify a binding when an expected context scope value is unknown", () => {
+    const input = fixture();
+    delete (input.outcome.evidence.contextEvidence.claims as { layoutId?: string }).layoutId;
+    const result = assessPitSegment({ ...input, services: service })!;
+    expect(result.serviceUnionSeconds).toBeNull();
+    expect(result.serviceCoverage).toBe("unknown");
+    expect(result.serviceReasons).toContain("service_binding_unverifiable");
+  });
+  it("keeps a demonstrably foreign known field as mismatch even with unknown context", () => {
+    const input = fixture();
+    delete (input.outcome.evidence as { contextEvidence?: unknown }).contextEvidence;
+    const result = assessPitSegment({ ...input, services: {
+      ...service, binding: { ...SERVICE_BINDING, sourceUid: "22222222-2222-2222-2222-222222222222" },
+    } })!;
+    expect(result.serviceUnionSeconds).toBeNull();
+    expect(result.serviceCoverage).toBe("unknown");
+    expect(result.serviceReasons).toContain("service_binding_mismatch");
+  });
+  it("does not compose a verified prediction when its stop binding is unverifiable", () => {
+    const input = fixture();
+    delete (input.outcome.evidence.contextEvidence.claims as { ownerUserId?: string }).ownerUserId;
+    const services = { ...service, components: [{ component: "fuel", seconds: 20 }], componentsComplete: true,
+      ruleset: { id: "rule", verified: true, mode: "parallel", physicalSessionId: "race", layoutId: "layout" } };
+    const result = assessPitSegment({ ...input, services })!;
+    expect(result.predictedServiceSeconds).toBeNull();
+    expect(result.serviceLabelEligible).toBe(false);
+    expect(result.serviceReasons).toContain("service_binding_unverifiable");
   });
   it("computes partial overlap and nesting as actual union, not max or sum", () => {
     const result = assessPitSegment({ ...fixture(), services: service })!;
@@ -391,6 +444,66 @@ describe("retry idempotency and semantic revision identity", () => {
     b.outcome.evidence.contextEvidence.source = b.outcome.evidence.source;
     b.outcome.evidence.source.sourceReceivedAt = t("04:00");
     expect(derive([b, a])[0].netDeltaSeconds).toBe(30);
+  });
+  it("prefers an own-bound retry over an earlier non-aliased context receipt, either order", () => {
+    const a = splitContexts();
+    a.outcome.evidence.contextEvidence.source.sourceReceivedAt = t("04:00");
+    const b = structuredClone(a);
+    b.outcome.evidence.source.sourceReceivedAt = t("04:30");
+    b.outcome.evidence.contextEvidence.source.sourceReceivedAt = t("04:30");
+    for (const segments of [[a, b], [b, a]]) {
+      const r = derive(segments);
+      expect(r).toHaveLength(1);
+      expect(r[0].grossPitLaneSeconds).toBe(50);
+      expect(r[0].netDeltaSeconds).toBe(30);
+      expect(r[0].reasons).not.toContain("revision_or_adapter_conflict");
+    }
+  });
+  it("binds each side to its own envelope when reference context receipts diverge", () => {
+    const a = splitContexts();
+    a.reference.evidence.contextEvidence.source.sourceReceivedAt = t("04:00");
+    const b = structuredClone(a);
+    b.reference.evidence.source.sourceReceivedAt = t("04:30");
+    b.reference.evidence.contextEvidence.source.sourceReceivedAt = t("04:30");
+    const x = derive([a, b]), y = derive([b, a]);
+    expect(x).toEqual(y);
+    expect(x[0].netDeltaSeconds).toBe(30);
+  });
+  it("keeps neither-bound retries closed and deterministic without splicing contexts", () => {
+    const a = splitContexts();
+    a.outcome.evidence.contextEvidence.source.sourceReceivedAt = t("04:00");
+    const b = splitContexts();
+    b.reference.evidence.contextEvidence.source.sourceReceivedAt = t("04:00");
+    const x = derive([a, b]), y = derive([b, a]);
+    expect(x).toEqual(y);
+    expect(x[0].grossPitLaneSeconds).toBe(50);
+    expect(x[0].netDeltaSeconds).toBeNull();
+    expect(x[0].pitLossLabelEligible).toBe(false);
+  });
+  it("prefers a fully bound retry over an earlier unbound JSON-deep-cloned copy", () => {
+    const a = splitContexts();
+    a.outcome.evidence.contextEvidence.source.sourceReceivedAt = t("04:00");
+    a.reference.evidence.contextEvidence.source.sourceReceivedAt = t("04:00");
+    const b = JSON.parse(JSON.stringify(a)) as typeof a;
+    b.outcome.evidence.source.sourceReceivedAt = t("04:30");
+    b.outcome.evidence.contextEvidence.source.sourceReceivedAt = t("04:30");
+    b.reference.evidence.source.sourceReceivedAt = t("04:30");
+    b.reference.evidence.contextEvidence.source.sourceReceivedAt = t("04:30");
+    for (const segments of [[a, b], [b, a]]) {
+      expect(derive(segments)[0].netDeltaSeconds).toBe(30);
+    }
+  });
+  it("does not let a future own-bound retry rescue an earlier unbound candidate", () => {
+    const a = splitContexts();
+    a.outcome.evidence.contextEvidence.source.sourceReceivedAt = t("04:00");
+    const b = structuredClone(a);
+    b.outcome.evidence.source.sourceReceivedAt = t("05:00.0000001");
+    b.outcome.evidence.contextEvidence.source.sourceReceivedAt = t("05:00.0000001");
+    const x = derive([a, b]), y = derive([b, a]);
+    expect(x).toEqual(y);
+    expect(x[0].netDeltaSeconds).toBeNull();
+    expect(x[0].grossPitLaneSeconds).toBe(50);
+    expect(x[0].reasons).toContain("observed_context_source_received_at_mismatch");
   });
   it("quarantines adapter-fact disagreement at the same revision and hash, in every reason array", () => {
     const a = fixture(), b = structuredClone(a);

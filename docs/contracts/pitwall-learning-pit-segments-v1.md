@@ -159,11 +159,18 @@ performed-claim vereist een expliciet `binding`:
 `{sourceKind,deviceId,sourceUid,recordRevision,contentHash,observedSessionId,
 physicalCarId,physicalSessionId,layoutId,ownerUserId}` — de vijfdelige
 T09-bronidentiteit plus de gebonden SDK-sessie, fysieke car/sessie, layout en
-owner van DEZELFDE uitkomst. Ontbrekende, malformed of niet-verifieerbare
-binding levert `service_binding_missing`; een aantoonbaar andere waarde levert
-`service_binding_mismatch`. In beide gevallen is er geen stop-specifieke
-performed-unie en geen complete dekking (`union=null`, `coverage=unknown`),
-ook al bevat de input intervallen. Losse identiteitsclaims op blokniveau of per
+owner van DEZELFDE uitkomst. Alle tien verwachte scopevelden moeten aantoonbaar
+bekend zijn. Een ontbrekende of malformed binding levert
+`service_binding_missing`; een welgevormde binding waarvan een verwacht
+scopeveld zelf onbekend is, is niet verifieerbaar en levert
+`service_binding_unverifiable` (null==null is geen match, en een onbekend
+verwacht veld wordt nooit overgeslagen); een aantoonbaar andere waarde levert
+`service_binding_mismatch`. In alle drie gevallen is er geen stop-specifieke
+performed-unie, geen complete dekking en geen compositie/predictielabel
+(`union=null`, `coverage=unknown`, `predictedServiceSeconds=null`,
+`serviceLabelEligible=false`), ook al bevat de input intervallen. Een
+welgevormde binding met een bekend maar fout veld blijft `mismatch`, ook als een
+ander verwacht scopeveld onbekend is. Losse identiteitsclaims op blokniveau of per
 interval (`binding`, of direct `sourceKind/deviceId/sourceUid/
 recordRevision/contentHash/observedSessionId/sessionId/physicalCarId/
 physicalSessionId/layoutId/ownerUserId`); die moeten exact bij de uitkomst
@@ -174,6 +181,13 @@ service-evidence de observed SDK-sessie, niet de transportkolom. Zo worden
 stale/cross-contextintervallen nooit stil als performed voor een andere stop
 geteld. Dit is geen cryptografische authenticatie: de caller is trusted, maar
 de binding voorkomt accidentele cross-ride-associatie.
+
+Een geheel afwezige `services` (undefined/null) is UNKNOWN zonder verzonnen
+bindingdefect. Een expliciet leeg document `services:{}` is neutraal leeg: ook
+UNKNOWN met `service_intervals_missing_or_invalid`, maar zonder
+`service_binding_missing` of `service_intervals_unbound`. `binding:{}` is wel
+een aangeleverde malformed binding en blijft `service_binding_missing`; een
+aangeleverde vreemde claim is nooit "geen evidence".
 
 Beschikbaarheid geldt ook voor services, met 100ns-vergelijking. Een interval
 met `endAt > asOf` is nog niet uitgevoerd/waargenomen: het wordt niet
@@ -245,9 +259,15 @@ adapterfacts of iets een retry/correctie of een conflict is. Deliverymetadata
 semantische identiteit: dezelfde vijfdelige identiteit met identieke facts is
 één stop, ook bij een latere receipt of andere JSON-keyvolgorde. De
 representative is deterministisch en order-onafhankelijk: eerst availability
-filteren, dan de canonieke vroegste receipt binnen de gekozen facts. Daarbij
-blijft de gekozen rij intact, zodat `contextEvidence.source` correct gebonden
-blijft. Echte causale facts (knownAt, context, flags, timing, anchors,
+filteren, dan binnen de gekozen facts een rij verkiezen waarvan zowel de
+outcome- als de reference-contextEvidence aan de eigen bron-envelope bindt
+(nooit context van een andere rij lenen), en pas daarna de canonieke vroegste
+outcome-receipt met referentie-receipt en volledige facts als totale
+tie-break. Zo wint een latere volledig gebonden retry van een eerdere
+ongebonden dubbel; zijn geen kandidaten volledig gebonden, dan blijft het
+resultaat gesloten/null en nog steeds order-onafhankelijk. De gekozen rij
+blijft intact, zodat `contextEvidence.source` correct gebonden blijft. Echte
+causale facts (knownAt, context, flags, timing, anchors,
 servicebewijs) worden niet als deliveryruis verwijderd.
 
 Een andere hoogste hash, of afwijkende adapterfacts bij dezelfde hoogste

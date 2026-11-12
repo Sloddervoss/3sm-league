@@ -179,23 +179,27 @@ function stopIdentity(span: QualifiedSpan): StopIdentity {
   };
 }
 const BINDING_FIELDS = ["sourceKind", "deviceId", "sourceUid", "recordRevision", "contentHash", "observedSessionId", "physicalCarId", "physicalSessionId", "layoutId", "ownerUserId"] as const;
+type BindingStatus = "ok" | "service_binding_missing" | "service_binding_mismatch" | "service_binding_unverifiable";
 /** Local trusted-adapter evidence, never a wire/DB field. */
-function bindingStatus(value: unknown, at: StopIdentity): "ok" | "service_binding_missing" | "service_binding_mismatch" {
+function bindingStatus(value: unknown, at: StopIdentity): BindingStatus {
   const binding = object(value);
   if (!binding) return "service_binding_missing";
-  let missing = false, mismatch = false;
+  let missing = false, mismatch = false, unverifiable = false;
   for (const key of BINDING_FIELDS) {
-    const expected = at[key];
-    // Context-derived dimensions may themselves be unknown; never invent them.
-    if (expected === null) { if (key === "sourceKind" || key === "deviceId" || key === "sourceUid" || key === "recordRevision" || key === "contentHash" || key === "physicalCarId" || key === "physicalSessionId") missing = true; continue; }
-    const actual = binding[key];
+    const expected = at[key], actual = binding[key];
     const valid = key === "recordRevision" ? Number.isSafeInteger(actual)
       : key === "sourceKind" ? actual === "measurement_event" || actual === "lap_summary"
       : typeof actual === "string" && actual.length > 0;
-    if (!valid) missing = true;
-    else if (actual !== expected) mismatch = true;
+    // Missing/malformed claims stay missing, never a neutral "none".
+    if (!valid) { missing = true; continue; }
+    // Every expected scope value must be provable. An unknown expected value
+    // cannot be validated against a claim that does have a value; null==null is
+    // not a match, and skipping the dimension would let unknown context leak a
+    // stop-specific union/complete label.
+    if (expected === null) { unverifiable = true; continue; }
+    if (actual !== expected) mismatch = true;
   }
-  return mismatch ? "service_binding_mismatch" : missing ? "service_binding_missing" : "ok";
+  return mismatch ? "service_binding_mismatch" : missing ? "service_binding_missing" : unverifiable ? "service_binding_unverifiable" : "ok";
 }
 const INTERVAL_IDENTITY: Readonly<Record<string, keyof StopIdentity>> = {
   sourceKind: "sourceKind", deviceId: "deviceId", sourceUid: "sourceUid", recordRevision: "recordRevision",
@@ -215,22 +219,27 @@ function intervalBinding(value: Row, at: StopIdentity): boolean {
 }
 
 function services(value: unknown, start: unknown, end: unknown, asOf: unknown, clean: boolean, span: QualifiedSpan) {
-  const supplied = object(value) !== null;
-  const row = object(value) ?? {};
+  const record = object(value);
+  const supplied = record !== null;
+  // A plain {} document is explicitly empty, not a malformed performed claim.
+  // binding:{} is still a malformed binding; absence is not "none".
+  const neutralEmpty = record !== null && Object.keys(record).length === 0;
+  const evidenced = supplied && !neutralEmpty;
+  const row = record ?? {};
   const r: string[] = [];
   if (!clean) r.push("service_source_unqualified");
   const identity = stopIdentity(span);
-  const binding = supplied ? bindingStatus(row.binding, identity) : "service_binding_missing";
+  const binding = evidenced ? bindingStatus(row.binding, identity) : "service_binding_missing";
   // Stray block-level identity claims are evidence too, not ignorable extras.
-  const bound = supplied && binding === "ok" && intervalBinding(row, identity);
-  if (supplied && binding !== "ok") r.push(binding);
-  else if (supplied && !bound) r.push("service_binding_mismatch");
+  const bound = evidenced && binding === "ok" && intervalBinding(row, identity);
+  if (evidenced && binding !== "ok") r.push(binding);
+  else if (evidenced && !bound) r.push("service_binding_mismatch");
   const intervals = row.intervals;
   const closed = before(end, asOf);
   let union: number | null = null;
   let complete = false;
   let future = false;
-  if (!supplied) r.push("service_intervals_missing_or_invalid");
+  if (!evidenced) r.push("service_intervals_missing_or_invalid");
   else if (!bound) r.push("service_intervals_unbound");
   else if (Array.isArray(intervals) && intervals.length <= 32) {
     const valid: [bigint, bigint][] = [];
@@ -263,13 +272,14 @@ function services(value: unknown, start: unknown, end: unknown, asOf: unknown, c
       complete = row.complete === true && !invalid && !future && closed;
     }
   } else r.push("service_intervals_missing_or_invalid");
-  if (supplied && !closed) r.push("service_pit_window_open");
+  if (evidenced && !closed) r.push("service_pit_window_open");
   if (!complete) r.push("service_coverage_incomplete");
   const rules = object(row.ruleset);
   let predicted: number | null = null;
-  // Prediction composition is deliberately separate from measured interval union.
+  // Prediction composition is deliberately separate from measured interval union,
+  // but it is still stop-specific: an unverifiable binding cannot support it.
   const components = Array.isArray(row.components) && row.components.length <= 16 ? row.components.map(object) : [];
-  if (rules?.verified === true && id(rules.id) && id(span.row.physicalSessionId) && id(identity.layoutId) && rules.physicalSessionId === span.row.physicalSessionId && rules.layoutId === identity.layoutId &&
+  if (bound && rules?.verified === true && id(rules.id) && id(span.row.physicalSessionId) && id(identity.layoutId) && rules.physicalSessionId === span.row.physicalSessionId && rules.layoutId === identity.layoutId &&
       ["parallel", "sequential"].includes(rules.mode as string) && components.length > 0 &&
       components.every(x => x && ["fuel", "tyres"].includes(x.component as string) && typeof x.seconds === "number" && Number.isFinite(x.seconds) && x.seconds >= 0) &&
       new Set(components.map(x => x!.component)).size === components.length && row.componentsComplete === true) {
@@ -355,6 +365,50 @@ function segmentFacts(row: Row): string {
   return signature(copy);
 }
 
+/**
+ * A chosen retry row must keep its whole-record provenance: the outcome context
+ * binds to the outcome envelope and the reference context to the reference
+ * envelope. Never compare one side to the other record's envelope, and never
+ * splice a context from another candidate to make an unbound row look bound.
+ */
+function ownContextsBound(row: Row): boolean {
+  const side = (value: unknown): boolean => {
+    const r = object(value), evidence = object(r?.evidence);
+    const source = parseSourceRecordEnvelope(evidence?.source), payload = object(evidence?.payload);
+    if (!source || !payload) return false;
+    const bound = bindObservedContextToObservation(buildCanonicalContext(evidence?.contextEvidence), {
+      source, observedSessionId: id(payload.observed_session_id) ? payload.observed_session_id : null,
+      segmentId: id(payload.segment_id) ? payload.segment_id : null,
+    });
+    return bound.bound && bound.context !== null;
+  };
+  return side(row.outcome) && side(row.reference);
+}
+
+/**
+ * Canonical representative of one identical-facts retry variant. Binding
+ * validity is structural and precedes delivery time; the total receipt/fact
+ * order is deterministic and independent of input order. Measurements and
+ * labels are never ranking inputs.
+ */
+function canonicalRepresentative(rows: Row[]): Row {
+  const candidates = rows.map(row => {
+    const outcomeSource = parseSourceRecordEnvelope(object(object(row.outcome)?.evidence)?.source);
+    const referenceSource = parseSourceRecordEnvelope(object(object(row.reference)?.evidence)?.source);
+    return { row, bound: ownContextsBound(row),
+      outcomeReceipt: ticks(outcomeSource?.sourceReceivedAt) ?? 0n,
+      referenceReceipt: ticks(referenceSource?.sourceReceivedAt) ?? 0n,
+      facts: signature(row) };
+  });
+  candidates.sort((a, b) => {
+    if (a.bound !== b.bound) return a.bound ? -1 : 1;
+    if (a.outcomeReceipt !== b.outcomeReceipt) return a.outcomeReceipt < b.outcomeReceipt ? -1 : 1;
+    if (a.referenceReceipt !== b.referenceReceipt) return a.referenceReceipt < b.referenceReceipt ? -1 : 1;
+    return a.facts < b.facts ? -1 : a.facts > b.facts ? 1 : 0;
+  });
+  return candidates[0].row;
+}
+
 /** Filter receipt first, then dedupe/correct same outcome UID; never create extra stops. */
 export function derivePitSegments(input: unknown): PitSegmentAssessment[] | null {
   const batch = object(input);
@@ -388,11 +442,9 @@ export function derivePitSegments(input: unknown): PitSegmentAssessment[] | null
       variants.set(facts, [...(variants.get(facts) ?? []), row]);
     }
     const facts = [...variants.keys()].sort();
-    // Canonical representative: fixed facts first, then the earliest receipt.
-    const chosen = variants.get(facts[0])!.sort((a, b) => {
-      const x = ticks(source(a).sourceReceivedAt)!, y = ticks(source(b).sourceReceivedAt)!;
-      return x < y ? -1 : x > y ? 1 : 0;
-    })[0];
+    // Canonical representative: binding-valid whole rows first, then the
+    // deterministic earliest receipt/fact order. Input order is never a tie-break.
+    const chosen = canonicalRepresentative(variants.get(facts[0])!);
     const result = assessPitSegment({ ...chosen, asOf: batch.asOf });
     if (!result) return [];
     // A different hash or adapter fact for the SAME highest revision is a conflict.
