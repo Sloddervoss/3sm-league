@@ -39,6 +39,9 @@
     <!-- T13-S2A: de pure observatiekern deelt exact dezelfde bron als de plugin. -->
     <Compile Include="..\3SM.EnduranceConnector\ObservationCapture.cs" Link="ObservationCapture.cs" />
     <Compile Include="..\3SM.EnduranceConnector\ObservationSampling.cs" Link="ObservationSampling.cs" />
+    <!-- T13-S2C1: durable observation-ledger, echte filesystemtests. -->
+    <Compile Include="..\3SM.EnduranceConnector\ObservationLedger.cs" Link="ObservationLedger.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ObservationLedgerStore.cs" Link="ObservationLedgerStore.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetrySampler.cs" Link="TelemetrySampler.cs" />
     <Compile Include="..\3SM.EnduranceConnector\LapAccumulator.cs" Link="LapAccumulator.cs" />
     <Compile Include="..\3SM.EnduranceConnector\PitServiceTracker.cs" Link="PitServiceTracker.cs" />
