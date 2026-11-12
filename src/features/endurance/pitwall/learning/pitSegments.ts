@@ -218,6 +218,30 @@ function intervalBinding(value: Row, at: StopIdentity): boolean {
   return !("binding" in value) || bindingStatus(value.binding, at) === "ok";
 }
 
+/**
+ * Loose block-level claims are evidence too, but silence inherits `binding`.
+ * A provided claim whose expected value is known must match exactly; malformed
+ * or foreign values are a hard mismatch, even when another expected scope field
+ * is unknown. A claim on an unknown expected value cannot be proven wrong, so
+ * it only makes the block unverifiable unless another claim is demonstrably
+ * foreign. This mirrors bindingStatus's mismatch > missing > unverifiable order.
+ */
+function blockClaimStatus(row: Row, at: StopIdentity): BindingStatus {
+  const status = bindingStatus(row.binding, at);
+  let unknown = false;
+  for (const [key, field] of Object.entries(INTERVAL_IDENTITY)) {
+    if (!(key in row)) continue;
+    const expected = at[field], actual = row[key];
+    if (expected === null) { unknown = true; continue; }
+    const valid = field === "recordRevision" ? Number.isSafeInteger(actual)
+      : field === "sourceKind" ? actual === "measurement_event" || actual === "lap_summary"
+      : typeof actual === "string" && actual.length > 0;
+    if (!valid || actual !== expected) return "service_binding_mismatch";
+  }
+  if (status !== "ok") return status;
+  return unknown ? "service_binding_unverifiable" : status;
+}
+
 function services(value: unknown, start: unknown, end: unknown, asOf: unknown, clean: boolean, span: QualifiedSpan) {
   const record = object(value);
   const supplied = record !== null;
@@ -229,7 +253,7 @@ function services(value: unknown, start: unknown, end: unknown, asOf: unknown, c
   const r: string[] = [];
   if (!clean) r.push("service_source_unqualified");
   const identity = stopIdentity(span);
-  const binding = evidenced ? bindingStatus(row.binding, identity) : "service_binding_missing";
+  const binding = evidenced ? blockClaimStatus(row, identity) : "service_binding_missing";
   // Stray block-level identity claims are evidence too, not ignorable extras.
   const bound = evidenced && binding === "ok" && intervalBinding(row, identity);
   if (evidenced && binding !== "ok") r.push(binding);
@@ -479,10 +503,18 @@ export function describeLegacyPitStop(input: unknown): LegacyPitStopDiagnostic |
   const measured = typeof row.pit_lane_seconds === "number" && Number.isFinite(row.pit_lane_seconds) && row.pit_lane_seconds >= 0 ? row.pit_lane_seconds : null;
   const elapsed = duration(row.pit_entry_at, row.pit_exit_at);
   const elapsedTicks = elapsed === null ? null : ticks(row.pit_exit_at)! - ticks(row.pit_entry_at)!;
-  const measuredTicks = measured === null ? null : BigInt(Math.round(measured * 1e7));
-  const disagreement = elapsedTicks !== null && measuredTicks !== null
-    ? (elapsedTicks > measuredTicks ? elapsedTicks - measuredTicks : measuredTicks - elapsedTicks) > LEGACY_DURATION_TOLERANCE_TICKS
-    : false;
+  // Ordinary JSON seconds can exceed the exact 100ns tick range. Convert to
+  // BigInt only when the scaled value is a safe integer; never pass an
+  // overflowed Number (Infinity) to BigInt. The finite stored value itself is
+  // still preserved as gross below.
+  const scaledMeasure = measured === null ? null : Math.round(measured * 1e7);
+  const measuredTicks = scaledMeasure !== null && Number.isSafeInteger(scaledMeasure) ? BigInt(scaledMeasure) : null;
+  const disagreement = elapsed === null || elapsedTicks === null || measured === null ? false
+    : measuredTicks !== null
+      ? (elapsedTicks > measuredTicks ? elapsedTicks - measuredTicks : measuredTicks - elapsedTicks) > LEGACY_DURATION_TOLERANCE_TICKS
+      // Beyond exact ticks (> ~28.5 years) compare exact seconds instead of an
+      // unsafe Number*1e7 product; any such value is far outside the 1 ms band.
+      : Math.abs(elapsed - measured) > 0.001;
   return { table: "endurance_pit_stops", identifiers: { id: row.id ?? null, event_id: row.event_id ?? null, team_id: row.team_id ?? null, race_run_id: row.race_run_id ?? null, device_id: row.device_id ?? null, session_id: row.session_id ?? null },
     pitEntryAt: isInstant(row.pit_entry_at) ? row.pit_entry_at : null, pitExitAt: isInstant(row.pit_exit_at) ? row.pit_exit_at : null,
     grossPitLaneSeconds: elapsed ?? measured, netDeltaSeconds: null,

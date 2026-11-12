@@ -673,4 +673,148 @@ describe("legacy rounding tolerance is exact and inclusive", () => {
     expect(r.grossPitLaneSeconds).toBe(50);
     expect(r.reasons.includes("legacy_duration_disagrees")).toBe(disagrees);
   });
+  it.each([[50.001, false], [50.0010001, true]] as const)("keeps the 1 ms boundary at the exact tick, measured %s disagrees=%s", (measured, disagrees) => {
+    const r = describeLegacyPitStop({ pit_entry_at: t("00:10"), pit_exit_at: t("01:00"), pit_lane_seconds: measured })!;
+    expect(r.grossPitLaneSeconds).toBe(50);
+    expect(r.reasons.includes("legacy_duration_disagrees")).toBe(disagrees);
+  });
+});
+
+describe("finite legacy seconds never overflow BigInt", () => {
+  it.each([1e308, Number.MAX_VALUE])("preserves a stored finite gross %s when entry/exit is missing", value => {
+    const r = describeLegacyPitStop({ id: "raw-ID", pit_lane_seconds: value })!;
+    expect(r.grossPitLaneSeconds).toBe(value);
+    expect(r.netDeltaSeconds).toBeNull();
+    expect(r.identifiers.id).toBe("raw-ID");
+    expect(r.reasons).toContain("legacy_revision_hash_anchors_unknown");
+    expect(r.reasons).toContain("legacy_entry_exit_incomplete_or_invalid");
+    expect(r.reasons).not.toContain("legacy_duration_disagrees");
+    expect(r).not.toHaveProperty("recordRevision");
+    expect(r).not.toHaveProperty("contentHash");
+    expect(() => JSON.stringify(r)).not.toThrow();
+  });
+  it.each([1e308, Number.MAX_VALUE])("prefers exact elapsed and diagnoses an unrepresentably huge stored value %s", value => {
+    const r = describeLegacyPitStop({ pit_entry_at: t("00:10"), pit_exit_at: t("01:00"), pit_lane_seconds: value })!;
+    expect(r.grossPitLaneSeconds).toBe(50);
+    expect(r.netDeltaSeconds).toBeNull();
+    expect(r.reasons).toContain("legacy_duration_disagrees");
+  });
+  it("keeps ordinary zero and fifty seconds unchanged", () => {
+    const zero = describeLegacyPitStop({ pit_lane_seconds: 0 })!;
+    expect(zero.grossPitLaneSeconds).toBe(0);
+    expect(zero.reasons).not.toContain("legacy_duration_disagrees");
+    const fifty = describeLegacyPitStop({ pit_entry_at: t("00:10"), pit_exit_at: t("01:00"), pit_lane_seconds: 50 })!;
+    expect(fifty.grossPitLaneSeconds).toBe(50);
+    expect(fifty.reasons).not.toContain("legacy_duration_disagrees");
+  });
+});
+
+describe("loose block-level claims are evaluated independently of the main binding", () => {
+  const interval = (component: string, start: string, end: string) => ({ component, startAt: t(start), endAt: t(end), performed: true });
+  const svc = (intervals: unknown[], extra: Record<string, unknown> = {}) => ({ binding: { ...SERVICE_BINDING }, intervals, complete: true, ...extra });
+  const unknownLayout = () => {
+    const input = fixture();
+    delete (input.outcome.evidence.contextEvidence.claims as { layoutId?: string }).layoutId;
+    return input;
+  };
+  const FOREIGN_UID = "22222222-2222-2222-2222-222222222222";
+  const WRONG = {
+    sourceKind: "lap_summary", deviceId: "other-device", sourceUid: FOREIGN_UID,
+    recordRevision: 2, contentHash: "b".repeat(32), observedSessionId: "other-session",
+    sessionId: "other-session", physicalCarId: "other-car", physicalSessionId: "other-race",
+    layoutId: "other-layout", ownerUserId: FOREIGN_UID,
+  } as const;
+  const SCOPE = ["sourceKind", "deviceId", "sourceUid", "recordRevision", "contentHash", "observedSessionId", "physicalCarId", "physicalSessionId", "layoutId", "ownerUserId"] as const;
+
+  it("Q1: a known foreign loose block claim beats the main binding's unverifiable status", () => {
+    const f = fixture();
+    const positive = assessPitSegment({ ...f, services: svc([interval("fuel", "00:10", "00:30")]) })!;
+    expect(positive.serviceUnionSeconds).toBe(20);
+    expect(positive.serviceCoverage).toBe("complete");
+    expect(positive.grossPitLaneSeconds).toBe(50);
+    expect(positive.netDeltaSeconds).toBe(30);
+    expect(positive.serviceReasons).not.toContain("service_binding_mismatch");
+
+    const input = unknownLayout();
+    const r = assessPitSegment({ ...input, services: svc([interval("fuel", "00:10", "00:20")], { ownerUserId: FOREIGN_UID }) })!;
+    expect(r.serviceReasons).toEqual([
+      "service_binding_mismatch", "service_coverage_incomplete", "service_intervals_unbound",
+      "service_ruleset_or_components_unknown", "service_source_unqualified",
+    ]);
+    expect(r.serviceUnionSeconds).toBeNull();
+    expect(r.serviceCoverage).toBe("unknown");
+    expect(r.serviceLabelEligible).toBe(false);
+    expect(r.predictedServiceSeconds).toBeNull();
+  });
+
+  it.each(SCOPE)("rejects each of the ten known foreign block claims: %s", key => {
+    const r = assessPitSegment({ ...fixture(), services: svc([interval("fuel", "00:10", "00:20")], { [key]: WRONG[key] }) })!;
+    expect(r.serviceReasons).toContain("service_binding_mismatch");
+    expect(r.serviceReasons).not.toContain("service_binding_unverifiable");
+    expect(r.serviceUnionSeconds).toBeNull();
+    expect(r.serviceCoverage).toBe("unknown");
+    expect(r.serviceLabelEligible).toBe(false);
+  });
+
+  it.each(SCOPE.filter(key => key !== "layoutId"))("known foreign %s wins over another unknown expected field", key => {
+    const r = assessPitSegment({ ...unknownLayout(), services: svc([interval("fuel", "00:10", "00:20")], { [key]: WRONG[key] }) })!;
+    expect(r.serviceReasons).toContain("service_binding_mismatch");
+    expect(r.serviceReasons).not.toContain("service_binding_unverifiable");
+    expect(r.serviceUnionSeconds).toBeNull();
+  });
+
+  it.each([
+    { ownerUserId: FOREIGN_UID, layoutId: "other-layout" },
+    { layoutId: "other-layout", ownerUserId: FOREIGN_UID },
+  ])("mixed known/unknown block claims are order independent %#", claims => {
+    const r = assessPitSegment({ ...unknownLayout(), services: svc([interval("fuel", "00:10", "00:20")], claims) })!;
+    expect(r.serviceReasons).toContain("service_binding_mismatch");
+    expect(r.serviceReasons).not.toContain("service_binding_unverifiable");
+  });
+
+  it("a claim on an unknown expected field alone stays unverifiable, not mismatch", () => {
+    const r = assessPitSegment({ ...unknownLayout(), services: svc([interval("fuel", "00:10", "00:20")], { layoutId: "other-layout" }) })!;
+    expect(r.serviceReasons).toContain("service_binding_unverifiable");
+    expect(r.serviceReasons).not.toContain("service_binding_mismatch");
+    expect(r.serviceUnionSeconds).toBeNull();
+    expect(r.serviceCoverage).toBe("unknown");
+    expect(r.predictedServiceSeconds).toBeNull();
+    expect(r.serviceLabelEligible).toBe(false);
+  });
+
+  it("silent loose claims inherit the main binding", () => {
+    const r = assessPitSegment({ ...unknownLayout(), services: svc([interval("fuel", "00:10", "00:20")]) })!;
+    expect(r.serviceReasons).toContain("service_binding_unverifiable");
+    expect(r.serviceReasons).not.toContain("service_binding_mismatch");
+  });
+
+  it.each([
+    ["recordRevision", "1"], ["recordRevision", 1.5], ["sourceKind", "nonsense"],
+    ["ownerUserId", ""], ["observedSessionId", 42], ["sessionId", null],
+  ] as const)("a malformed known-field block claim %s=%j is mismatch", (key, value) => {
+    const r = assessPitSegment({ ...fixture(), services: svc([interval("fuel", "00:10", "00:20")], { [key]: value }) })!;
+    expect(r.serviceReasons).toContain("service_binding_mismatch");
+    expect(r.serviceUnionSeconds).toBeNull();
+  });
+
+  it("treats the sessionId alias as the observed SDK session at block level", () => {
+    const foreign = assessPitSegment({ ...fixture(), services: svc([interval("fuel", "00:10", "00:20")], { sessionId: "other-session" }) })!;
+    expect(foreign.serviceReasons).toContain("service_binding_mismatch");
+    const matching = assessPitSegment({ ...fixture(), services: svc([interval("fuel", "00:10", "00:30")], { sessionId: "sdk", ownerUserId: SERVICE_BINDING.ownerUserId, recordRevision: 1 }) })!;
+    expect(matching.serviceReasons).not.toContain("service_binding_mismatch");
+    expect(matching.serviceReasons).not.toContain("service_binding_unverifiable");
+    expect(matching.serviceUnionSeconds).toBe(20);
+    expect(matching.serviceCoverage).toBe("complete");
+  });
+
+  it("a per-interval deviation remains an interval mismatch, not a block mismatch", () => {
+    const r = assessPitSegment({ ...fixture(), services: svc([
+      interval("fuel", "00:10", "00:20"),
+      { ...interval("tyres", "00:25", "00:35"), sessionId: "other-session" },
+    ]) })!;
+    expect(r.serviceReasons).toContain("service_interval_binding_mismatch");
+    expect(r.serviceReasons).not.toContain("service_binding_mismatch");
+    expect(r.serviceUnionSeconds).toBe(10);
+    expect(r.serviceCoverage).toBe("partial");
+  });
 });
