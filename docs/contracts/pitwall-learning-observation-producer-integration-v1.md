@@ -13,9 +13,11 @@ die bouw en niet een publicatie- of versiebesluit. **Deze tekst is nog niet
 geaccepteerd als bouwbasis**: een onafhankelijke delta-SPEC moet de hier
 gekozen sidecar-architectuur eerst bevestigen.
 
-Bewijsroot van deze correctie (0700):
-`/home/hermes/artifacts/3sm/pitwall-learning-p2-producer-contract-fix/`. De
-oude bron- en probebestanden onder
+Bewijsroot van deze F1/F2-correctie (0700):
+`/home/hermes/artifacts/3sm/pitwall-learning-p2-producer-binding-budget/`. De
+eerdere bewijsroot
+`/home/hermes/artifacts/3sm/pitwall-learning-p2-producer-contract-fix/` blijft
+ongewijzigd; de oude bron- en probebestanden onder
 `/home/hermes/artifacts/3sm/pitwall-learning-p2-producer-source/` blijven
 ongewijzigd en worden hier alleen geciteerd.
 
@@ -70,7 +72,7 @@ concrete gaten:
    coverage-tellers zijn per groep en niet het observation-interval.
 3. `ObservedSessionId` wordt bij **flush** uit de pipeline-globale waarde gezet,
    niet bij `StartLap`; car/track-context zit helemaal niet in het meetmonster.
-4. `OutboxEntry` heeft geen lokale capture-binding (device/owner/generatie) en
+4. `OutboxEntry` heeft geen lokale `PairingBinding` (device/owner/generatie) en
    geen observation-markering; een na een accountwissel verzonden oude rij kan
    niet lokaal geïsoleerd worden.
 5. `ApplySeries` verwijdert een afgekeurde rij, ongeacht de reden. Een
@@ -97,9 +99,9 @@ delta-SPEC en geen implementatiedetail.
 |---|---|---|
 | A1 | `measurement-outbox.json` blijft `Version=1` met de bestaande 32-lap-/512 KiB-legacylane en bestaande lezer. Er wordt **geen** `FileVersion=2` en geen extra observationveld in dit bestand geschreven. | Oude DLL's en rollback lezen de gewone wachtrij byte-stabiel; de 512 KiB-char-bug en `EnqueueLap`-savefout blijven bestaande legacy-eigenschappen (§5.2, §9.3). |
 | A2 | Observation-rijen leven **uitsluitend** in `observation-ledger-v1.json` (nieuwe, versiegebonden bestandsnaam) met een eigen `version` en eigen schema. | De 32-lapqueue kan een observation-rij nooit evicten; de sidecar kan de gewone queue nooit corrumperen. |
-| A3 | De keuze **observation of legacy** valt vóór UID-toewijzing, serialisatie, reservering en enqueue. | Nooit dezelfde `(UID, recordRevision)` in beide lanes, en nooit twee verschillende hashes voor dezelfde UID/revisie. |
+| A3 | De keuze **observation of legacy** valt vóór elke duurzame publicatie. Een observation-candidate mag in geheugen een voorlopige UID en geserialiseerde bytes hebben, maar is dan niet captured, niet gereserveerd, niet gepersisteerd en niet verzonden. | Nooit dezelfde `(UID, recordRevision)` in beide lanes, en nooit twee verschillende hashes voor dezelfde UID/revisie; alleen de duurzaam gecommitte lane publiceert de UID. |
 | A4 | Een eenmaal bevroren observation-rij wordt **nooit** gestript, herserialiseerd, van een nieuwe UID voorzien of alsnog als legacy aangeboden. | Een serverafwijzing leidt tot sidecar-quarantaine, niet tot een tweede legacy-kopie. |
-| A5 | Alleen vooraf gereserveerde, complete bindingen worden observation; quota-vol, disabled, onvolledige binding of bouwfout betekent een **gewone legacy-laprow vanaf het begin**. | `observation`-afwezigheid is een capturebeslissing, geen mislukte serialisatie. |
+| A5 | Alleen een duurzaam gecommitte observation met een complete `PairingBinding` wordt observation; quota-vol, disabled, onvolledige `PairingBinding` of bouwfout betekent een **gewone legacy-laprow vanaf het begin**. Een ontbrekende `LapContext` alleen is geen weigeringsgrond. | `observation`-afwezigheid is een capturebeslissing, geen mislukte serialisatie. |
 | A6 | De sidecar is één atomic snapshot-bestand met `pending`/`deferred`/`quarantine`; delivery verwijdert de entry in dezelfde commit. Er is geen tweede bestand en geen "twee bestanden atomair"-claim. | Een sidecar-commit kan de gewone queue niet impliciet wijzigen of weggooien. |
 | A7 | De oude DLL opent alleen het vaste pad `measurement-outbox.json`; hij enumereert de map niet en raakt `observation-ledger-v1.json` niet aan. | Rollback bewaart de sidecar bytegelijk; de oude DLL start met de gewone queue en zonder observationverzending. |
 | A8 | De sidecar is **niet** de productiewaarheid en wordt niet geüpload, gedeployed of geëxporteerd zonder expliciete, getelde operatoractie. | Retentie/overflow zijn lokaal en zichtbaar; geen stille drop. |
@@ -118,7 +120,7 @@ en zijn geen veilige rollback.
 
 | Noodzaak | Bestaande lokale bron | Herkomst | Status vandaag | Kleinste inpassing |
 |---|---|---|---|---|
-| `capture.deviceId` | `ConnectorSettings.DeviceId` (`ConnectorSettings.cs:16`), gezet uit `PairingResponse.DeviceId` (`TelemetryContracts.cs:71-77`, plugin `EnduranceConnectorPlugin.cs:1233`) | Server-issued device-UUID uit de pairingresponse | **aanwezig**; geen lokale freeze, geen outboxmetadata | Bij `StartLap` `DeviceId` + `BoundOwnerUserId` + lokale generatie vastleggen; alleen bij complete binding observation maken |
+| `capture.deviceId` | `ConnectorSettings.DeviceId` (`ConnectorSettings.cs:16`), gezet uit `PairingResponse.DeviceId` (`TelemetryContracts.cs:71-77`, plugin `EnduranceConnectorPlugin.cs:1233`) | Server-issued device-UUID uit de pairingresponse | **aanwezig**; geen lokale freeze, geen outboxmetadata | Bij `StartLap` `PairingBinding` (device/owner/generatie) vastleggen; alleen bij een complete `PairingBinding` observation maken |
 | owner (lokaal, nooit op de draad) | `ConnectorSettings.BoundOwnerUserId` (`:20`), gezet uit `PairingResponse.OwnerUserId` (`:1236`) | Server-issued owner-UUID uit de pairingresponse | **aanwezig**; alleen voor `IsPaired` | Lokale `CaptureOwnerUserId` op de outbox-entry; nooit serialiseren |
 | apparaatnaam / connector | `ConnectorSettings.ConnectorId` (`:29`, default `Environment.MachineName`), verstuurd als `PairingRequest.ConnectorId`/`DeviceName` (`EnduranceConnectorPlugin.cs:1193-1199`) | MachineName, geen serveridentiteit | **aanwezig maar niet identiek** aan `DeviceId` | Niet als `capture.deviceId` gebruiken |
 | servercontrole | `GET /simhub-control` (`ConnectorControlClient.cs:62-124`) | Alleen beleid: frequentie, budget, features | **geen apparaat-/owneridentiteit**; `KnownFeatures` (`ConnectorControlContracts.cs:101-106`) kent geen `observation` | Niet als identiteitsbron gebruiken; server-first deploy blijft nodig |
@@ -135,8 +137,8 @@ simrijder           = V3Identity.CurrentDriverId  (iRacing/SimHub)
 
 `IsPaired` (`EnduranceConnectorPlugin.cs:129`) eist token + `DeviceId` +
 `BoundOwnerUserId`, maar bewijst niet dat het token bij dat device hoort. De
-server is de enige autoriteit; de producer moet de binding alleen **lokaal
-bevriezen** en nooit een token/device-relatie verzinnen.
+server is de enige autoriteit; de producer moet de `PairingBinding` alleen
+**lokaal bevriezen** en nooit een token/device-relatie verzinnen.
 
 ### 2.2 Sessie, segment en context
 
@@ -182,7 +184,7 @@ geaccepteerde samples van de ronde.
 |---|---|---|---|
 | gewone laprij + UID + revisie | `OutboxEntry` (`MeasurementOutbox.cs:20-34`), `Enqueue` (`:211-231`), `EnqueueLap` (`:241-260`) | **aanwezig**; `RowJson` wordt één keer bij enqueue geserialiseerd; alleen voor legacy-rijen | Ongewijzigd laten; observation krijgt zijn eigen entry in de sidecar, met dezelfde UID-factory maar nooit in deze lijst |
 | normale persistente wachtrij | `OutboxFileDto` (`:144-155`), `Load` (`:503-539`), `Restore` (`:541-571`), `SaveLocked` (`:579-627`) | **aanwezig**; `Version=1`, 32 laps/512 KiB, `File.Replace` met **niet-atomaire `File.Copy`-fallback** en zonder `Flush(true)`; `SaveLocked` vergelijkt `json.Length` (UTF-16) | **Niet wijzigen**: geen `FileVersion=2`, geen observationveld. Legacy-durability/char-bug blijft een aparte, bestaande eigenschap (§5.2, §9.3) |
-| observation-sidecar | Geen | **ontbreekt** | Nieuw `observation-ledger-v1.json`: één snapshot met eigen `version`, pending/deferred/quarantine, immutable `rowJson`, binding en reden |
+| observation-sidecar | Geen | **ontbreekt** | Nieuw `observation-ledger-v1.json`: één snapshot met eigen `version`, pending/deferred/quarantine, immutable `rowJson`, `PairingBinding` en lokale reden |
 | restart | `InitMeasurementLayer` (`EnduranceConnectorPlugin.cs:876-899`), `Load` (`:883`) | **aanwezig** voor de gewone queue; zelfde UID/RowJson komen terug | Sidecar apart laden; oude DLL laadt hem nooit. Geen normalisatie of herserialisatie van `rowJson` |
 | drain/plan | `Due` (`MeasurementOutbox.cs:295-314`), `MeasurementFramePlanner.Plan` (`MeasurementFrame.cs:74-122`), `SendAsync` (`:253-359`) | **aanwezig**; 3 laps/20 events/16.384 B metingen en 24.576 B body; alleen de gewone queue | Sidecar-pending toevoegen aan dezelfde planstap, maar nooit uit de 32-lapqueue; `Due` blijft legacy-only |
 | ACK per rij | `MeasurementAckParser.Parse` (`MeasurementOutbox.cs:681-722`), `ApplyAck` (`:323-362`), `ApplySeries` (`:364-413`) | **aanwezig**; accepted/duplicate/superseded verwijderen, `stored:false` houdt alles; `rejected` verwijdert altijd | Per-rij terminale union (`Delivered`/`Deferred`/`Quarantined`/`NotDelivered`); sidecar-rijen via sidecar-commit, legacy via bestaand pad |
@@ -204,7 +206,7 @@ verplicht; minstens één feitgroep moet aanwezig zijn.
 
 | Wireveld | Bestaande bron | Inpassing | Runtimebewijs |
 |---|---|---|---|
-| `capture.deviceId` | `Settings.DeviceId`, server-UUID uit pairing | UUID-formaat eerst; bij `StartLap` bevriezen; alleen emitteren bij complete binding | Pairingcontract, geen live meting nodig |
+| `capture.deviceId` | `Settings.DeviceId`, server-UUID uit pairing | UUID-formaat eerst; bij `StartLap` in de `PairingBinding` bevriezen; alleen emitteren bij een complete `PairingBinding` | Pairingcontract, geen live meting nodig |
 
 ### 3.2 `interval` (7 stats)
 
@@ -289,7 +291,9 @@ keten. Een daling is geen negatieve brandstofficht en wordt niet van de som
 afgetrokken. De netto `PitResult.FuelAddedLitresObserved` is **niet** de bron
 voor dit veld. Een stap telt alleen als de delta na de gedeclareerde
 3-decimalenkorrel ten minste 0,001 L is; kleinere ruis wordt niet als stap
-geteld.
+geteld. Een car/context-wissel verwijdert **geen** reeds getelde positieve
+stappen en geen bevroren `LapContext`; alleen de refuel-keten vanaf de wissel
+begint opnieuw.
 
 `refuel` wordt niet van `pitRoad` afgeleid: het is een waargenomen positieve
 brandstofstap, niet "de auto stond in de pit". De twee groepen zijn
@@ -341,6 +345,11 @@ wordt niet als negatieve waarheid op de draad gezet.
 contextgroep** weggelaten; er wordt geen lege string, `0` of `"unknown"`
 ingevuld. `sessionUniqueId`/`sessionNumber` worden alleen meegestuurd als de
 ruwe waarde bekend is. `sim-s0` wordt nooit als `sessionUniqueId` gebruikt.
+Een ontbrekende of onvolledige `LapContext` maakt de `PairingBinding` **niet**
+onvolledig en is op zichzelf nooit een reden om de hele observation te
+weigeren; alleen de contextgroep vervalt (OB16/PL07/PL22). Ontbreekt daardoor
+elke feitgroep, dan geldt de bestaande OBS-weigeringsregel voor een lege
+observation onveranderd.
 
 ### 3.7 Velden die expliciet **niet** bestaan
 
@@ -353,32 +362,48 @@ worden niet gebruikt; zie §7.
 
 ### 4.1 Wat bij `StartLap` bevroren moet worden
 
-Bij de eerste geaccepteerde tick van een ronde legt de producer één
-`CaptureBinding` vast:
+Bij de eerste geaccepteerde tick van een ronde legt de producer twee
+gescheiden records vast:
 
 ```
-captureDeviceId       = Settings.DeviceId           (UUID, verplicht)
-captureOwnerUserId    = Settings.BoundOwnerUserId   (UUID, lokaal verplicht)
-pairingGeneration     = lokale teller               (verplicht, lokaal)
+PairingBinding (identiteitsfence; alleen dit record bepaalt Close/Due/Send/ACK)
+captureDeviceId        = Settings.DeviceId           (UUID, verplicht)
+captureOwnerUserId     = Settings.BoundOwnerUserId   (UUID, lokaal verplicht)
+pairingGeneration      = lokale teller               (verplicht, lokaal)
 pairingGenerationKnown = true alleen bij een bewezen teller
-observedSessionId     = de op dat moment bekende sessiestring
-segmentId             = het op dat moment geldende segment
+
+LapContext (beschrijvende rondecontext; geen identiteitsfence)
+observedSessionId      = de op dat moment bekende sessiestring
+segmentId              = het op dat moment geldende segment
 carId/trackId/trackName/trackConfig
 sessionUniqueId?/sessionNumber?
 ```
 
-De accumulator krijgt deze waarden bij constructie (`TelemetrySampler.StartLap`,
-`:260-267`) en geeft ze bij `Close` mee aan `LapAggregate`. `MeasurementPipeline`
-mag bij `EnqueueSummary` (`:235-242`) **niet** opnieuw de actuele globale
-`_observedSessionId` invullen; `LapAggregate.ToSummary` gebruikt de bevroren
-waarde. `SegmentId` is al op de accumulator bevroren; dat blijft zo.
+`PairingBinding` is de **enige** capture-time fence. Een ontbrekende of
+gewijzigde `LapContext` maakt de `PairingBinding` niet ongeldig, kan geen
+gezonde oude OBS-queue na een sessiewissel quarantainen en is nooit een reden
+om een observation te weigeren. `LapContext` wordt bij `StartLap` bevroren en
+in de rij gebruikt; is hij onvolledig, dan vervalt alleen de contextgroep
+(§3.6), niet de hele observation. Ontbreekt daardoor elke feitgroep, dan
+geldt de bestaande OBS-weigeringsregel onveranderd.
 
-De binding is een **capture-time fence**. De observation-vs-legacy-beslissing
-valt pas bij `Close`/`EnqueueSummary`, maar altijd vóór UID-toewijzing,
-serialisatie en reservering (A3/A5). Verandert de actuele binding tussen
-`StartLap` en die beslissing, dan wordt geen observation gebouwd en gaat de
-ronde als gewone legacy-rij door. Is er al een observation bevroren, dan geldt
-§4.3: nooit strippen, nooit een nieuwe UID.
+De accumulator krijgt beide records bij constructie (`TelemetrySampler.StartLap`,
+`:260-267`) en geeft ze bij `Close` mee aan `LapAggregate`.
+`MeasurementPipeline` mag bij `EnqueueSummary` (`:235-242`) **niet** opnieuw
+de actuele globale `_observedSessionId` invullen; `LapAggregate.ToSummary`
+gebruikt de bevroren `LapContext`. `SegmentId` is al op de accumulator
+bevroren; dat blijft zo. Een car/contextwissel midden in de ronde breekt de
+refuel-keten (§3.4) maar verwijdert geen eerdere positieve feiten en geen
+bevroren `LapContext`.
+
+De `PairingBinding` is een **capture-time fence**. De observation-vs-legacy-
+beslissing valt bij `Close`/`EnqueueSummary`, na het bouwen van een
+voorlopige in-memory candidate maar vóór enige duurzame UID-publicatie,
+reservering, persistentie of verzending (A3/A5, §5.1). Verandert de actuele
+`PairingBinding` tussen `StartLap` en die beslissing, dan wordt geen
+observation gebouwd en gaat de ronde als gewone legacy-rij door. Is er al een
+observation duurzaam gecommit, dan geldt §4.3: nooit strippen, nooit een
+nieuwe UID. Een wijziging van alleen `LapContext` valt hier niet onder.
 
 ### 4.2 `PairingGeneration`
 
@@ -409,36 +434,49 @@ gescheiden.
 
 ### 4.3 Isolatie bij token-/device-/accountwissel
 
-- Bij `StartLap`: als `DeviceId`, `BoundOwnerUserId`, de generatie of
-  `pairingGenerationKnown` onvolledig is, wordt **geen observation** gemaakt;
-  de laprow blijft legacy.
-- Bij `Close`: als de actuele binding niet gelijk is aan de bij `StartLap`
-  bevroren binding, wordt **geen observation gebouwd**. De laprow zelf blijft
-  geldig en gaat als gewone legacy-rij door; er wordt niets achteraf in een al
-  geserialiseerde rij geschreven.
-- **Vóór UID/serialisatie:** de keuze observation of legacy is definitief.
-  Observation krijgt een sidecar-entry; legacy krijgt een gewone
-  `OutboxEntry`. Dezelfde `(UID, recordRevision)` komt nooit in beide lanes.
-- **Na bevriezing:** een observation-entry wordt nooit gestript, nooit
-  herserialiseerd, nooit van een nieuwe UID voorzien en nooit alsnog als
-  legacy aangeboden. Een bindingswissel of serverafwijzing leidt tot
-  sidecar-quarantaine met de exacte `rowJson`.
+- Bij `StartLap`: als één van de vier `PairingBinding`-velden (`DeviceId`,
+  `BoundOwnerUserId`, generatie, `pairingGenerationKnown`) onvolledig is,
+  wordt **geen observation** gemaakt; de laprow blijft legacy. Een ontbrekend
+  of onvolledig `LapContext` is **geen** bindingsfout: alleen de contextgroep
+  vervalt (§3.6).
+- Bij `Close`: als de actuele **`PairingBinding`** niet gelijk is aan de bij
+  `StartLap` bevroren `PairingBinding`, wordt **geen observation gebouwd**. De
+  laprow zelf blijft geldig en gaat als gewone legacy-rij door; er wordt niets
+  achteraf in een al geserialiseerde rij geschreven. Een gewijzigde
+  `LapContext` (sessie, segment, car/track) valt hier **niet** onder: de
+  bevroren context blijft in de rij en de observation blijft geldig.
+- **Vóór duurzame publicatie:** de keuze observation of legacy is definitief
+  vóór enige duurzame UID-publicatie, ledger-reservering, persistentie of
+  verzending. Een observation-candidate mag in geheugen al een voorlopige UID
+  en geserialiseerde bytes hebben; die zijn niet gepubliceerd en niet
+  gereserveerd (§5.1). Na een geslaagde commit krijgt observation zijn
+  sidecar-entry; legacy krijgt een gewone `OutboxEntry`. Dezelfde
+  `(UID, recordRevision)` komt nooit in beide lanes.
+- **Na bevriezing:** een duurzaam gecommitte observation-entry wordt nooit
+  gestript, nooit herserialiseerd, nooit van een nieuwe UID voorzien en nooit
+  alsnog als legacy aangeboden. Een **`PairingBinding`**-wissel of
+  serverafwijzing leidt tot sidecar-quarantaine met de exacte `rowJson`. Een
+  wijziging van alleen `LapContext` quarantineert geen gezonde rij.
 - **Bij `EnqueueLap` met observation:** de sidecar-commit is de enige
   persistentie. De gewone `MeasurementOutbox` krijgt deze rij niet te zien.
-- **Bij `Due`/planning:** een observation-entry waarvan de binding niet gelijk
-  is aan de actuele binding wordt **niet verzonden**. De exacte `rowJson` gaat
-  in dezelfde sidecar-snapshot naar `quarantine` met reden
-  `capture_binding_changed`; de teller is zichtbaar. Legacy-laprijen lopen
-  gewoon door.
+- **Bij `Due`/planning:** een observation-entry waarvan de **`PairingBinding`**
+  niet gelijk is aan de actuele `PairingBinding` wordt **niet verzonden**. De
+  exacte `rowJson` gaat in dezelfde sidecar-snapshot naar `quarantine` met
+  reden `capture_binding_changed`; de teller is zichtbaar. Een nieuwe sessie,
+  een nieuw segment of een andere car/track is **geen** dergelijke wissel.
+  Legacy-laprijen lopen gewoon door.
 - **Na een herstart:** dezelfde regel blijft gelden; een oude rij wordt nooit
-  met het nieuwe token/device gecombineerd.
+  met het nieuwe token/device gecombineerd. Een nieuwe actieve sessie is geen
+  `PairingBinding`-wissel: bestaande oude OBS-rijen worden met hun bevroren
+  `LapContext` gedraind (§5.3, PL16/PL23).
 - **Rollback:** een oude DLL kent de sidecar niet en laat hem bytegelijk staan
   (§4.5). Observation-rijen worden dan niet verzonden; ze zijn niet stil
   gedropt.
 
-De server blijft de authenticatieautoriteit: de tokenopzoeking in
-`context.ts` levert de geauthenticeerde device-UUID, en `capture.deviceId` moet
-daarmee overeenkomen. De lokale binding voorkomt dat de producer zelf een
+Deze splitsing verslapt de serverautoriteit **niet**. De server blijft de
+authenticatieautoriteit: de tokenopzoeking in `context.ts` levert de
+geauthenticeerde device-UUID, en `capture.deviceId` moet daarmee
+overeenkomen. De lokale `PairingBinding` voorkomt dat de producer zelf een
 verkeerde combinatie aanbiedt; ze vervangt de servercontrole niet. Een zuiver
 server-side owner-rebind zonder lokale pairingupdate is voor de producer niet
 zichtbaar; de server resolveert owner bij ontvangst en blijft daarvoor de
@@ -451,8 +489,8 @@ tegelijk lopen.
 
 De bestaande productieroute `EnduranceConnectorPlugin.SendV3Async`
 (`:2290-2329`) snapshot het token bij capture (`:773-816`) en post later zonder
-nieuwe bindingcontrole; `AcknowledgeMeasurements` (`:2351-2368`) past de ACK
-zonder generatiecheck toe. `MeasurementSender.SendAsync`
+nieuwe `PairingBinding`-controle; `AcknowledgeMeasurements` (`:2351-2368`)
+past de ACK zonder generatiecheck toe. `MeasurementSender.SendAsync`
 (`MeasurementFrame.cs:253-359`) is de **testroute**, niet de productiecaller.
 Beide moeten dezelfde regel gebruiken. De volgende concrete grens vervangt de
 losse "check vlak vóór POST"-formule:
@@ -471,21 +509,28 @@ losse "check vlak vóór POST"-formule:
 2. **Immutable `SendEnvelope`.** Onder de lease wordt één onveranderlijke
    envelope gebouwd met:
    - `token` (alleen in geheugen; nooit in sidecar, log, `RowJson` of schijf),
-   - `deviceId`, `ownerUserId`, `pairingGeneration`/`epoch`,
+   - de volledige **`PairingBinding`** (`deviceId`, `ownerUserId`,
+     `pairingGeneration`/`epoch`, `pairingGenerationKnown`),
    - de batch-`(uid, recordRevision, rowJson)`-lijst.
    De envelope is de enige bron voor de POST en de ACK-commit; er wordt niet
-   opnieuw uit globale settings gelezen tijdens de request.
-3. **Drie fences.** Capture-time: §4.1. Plan-time: entries met een andere
-   binding gaan naar quarantaine. Send-time: direct vóór de
-   `HttpRequestMessage` wordt de envelope nogmaals met de actuele
-   settings/generatie vergeleken; bij verschil wordt **niet gepost** en gaan de
-   exacte rijen in dezelfde sidecar-commit naar `capture_binding_changed`.
+   opnieuw uit globale settings gelezen tijdens de request. De historische
+   `LapContext` zit alleen in `rowJson`; de envelope vergelijkt hem **niet**
+   met de actuele sessie/segment/car/track.
+3. **Drie fences, uitsluitend op `PairingBinding`.** Capture-time: §4.1.
+   Plan-time: entries met een andere `PairingBinding` gaan naar quarantaine.
+   Send-time: direct vóór de `HttpRequestMessage` wordt de envelope
+   `PairingBinding` nogmaals met de actuele settings/generatie vergeleken; bij
+   verschil wordt **niet gepost** en gaan de exacte rijen in dezelfde
+   sidecar-commit naar `capture_binding_changed`. Een verschil in
+   `LapContext` (nieuwe sessie, segment of car/track) is geen fence en leidt
+   nooit tot quarantaine of weigering.
 4. **ACK-epochcheck.** De ACK wordt alleen onder dezelfde lease en tegen
    dezelfde epoch gecommit. Is de epoch/generatie gewijzigd, of is de ACK
    stale/onparseerbaar, dan volgt **geen** delivery-cleanup en worden geen
    OBS-records weggegooid: de entry blijft `pending`/`deferred` met een
    zichtbare `ack_stale_epoch`-diagnose. Alleen een bekende lokale
-   bindingswijziging quarantineert de exacte rij.
+   **`PairingBinding`**-wijziging quarantineert de exacte rij; een
+   `LapContext`-wijziging doet dat nooit.
 5. **Time-out is geen mislukte serverwrite.** Na een requesttime-out,
    cancel of verbroken response blijft de entry met dezelfde UID, revisie en
    `rowJson` staan en wordt hij opnieuw aangeboden. De server dedupliceert op
@@ -538,42 +583,69 @@ als gewone wachtrij laden. Dat is geen aanname maar volgt uit de vaste paden.
 
 ## 5. Observation-sidecar-trace: capture → reserve → persist → restart → drain → ACK → cleanup
 
-### 5.1 Capturebeslissing, reservering en enqueue
+### 5.1 Capturebeslissing, voorlopige candidate, reservering en enqueue
 
 De volgorde is bindend en voorkomt zowel dubbele UID's als een mislukte
-"observation" die alsnog legacy wordt:
+"observation" die alsnog legacy wordt. De **commitgrens** is de atomaire
+sidecar-snapshot: alles daarvóór is een niet-gepubliceerde in-memory
+candidate.
 
 1. **Eligibility (preflight).** Settings `ObservationV1Enabled`, een complete
-   `CaptureBinding` met bekende generatie, een geldige bouwbaarheid (nog geen
-   serialisatie) en beschikbare sidecar-ruimte (alleen een telling, **nog geen
-   reservering**). Is één daarvan onwaar, dan is de uitkomst **legacy vanaf
-   het begin**; er wordt geen UID voor observation gereserveerd en geen
-   observation gebouwd.
-2. **Reserveer vóór freeze.** De sidecar reserveert één unieke
-   `(uid, recordRevision)`-slot en de UTF-8-bytes van de toekomstige entry
-   (inclusief `rowJson`, binding, reden en JSON-escaping) binnen 64 entries/1
-   MiB. De preflight meet de exacte snapshotgrootte alsof de entry al is
-   toegevoegd, inclusief tellers; de telling loopt over
-   `pending`/`deferred`/`quarantine`, en een in-flight entry is dezelfde entry
-   en telt niet extra. Bij vol: `observation_capture_refused` zichtbaar
-   omhoog, gewone laprow gaat door. Er wordt niets geëvict.
-3. **Bouw en serialiseer één keer.** De pure builder maakt het
-   `observation`-blok; `RowJson = record.ToJson()` wordt één keer gemaakt en
-   daarna nooit meer herschreven. De ruwe observation is het exacte,
-   ongewijzigde deel van die `rowJson`.
-4. **Commit de sidecar vóór succes.** Pas als de sidecar-snapshot duurzaam is
-   gecommit, is de observation "captured". De entry gaat naar `pending`.
+   `PairingBinding` met bekende generatie, een geldige bouwbaarheid (nog geen
+   serialisatie) en een adviserende sidecar-telling (nog geen reservering).
+   Een ontbrekende of gewijzigde `LapContext` is **geen** weigeringsgrond;
+   hij bepaalt alleen welke contextgroep in de rij komt. Is de
+   `PairingBinding` onvolledig of ontbreekt elke feitgroep, dan is de uitkomst
+   **legacy vanaf het begin**; er wordt geen observation-UID gereserveerd en
+   geen observation gebouwd.
+2. **Bouw één voorlopige candidate.** De pure builder maakt het
+   `observation`-blok en de laprow. De candidate krijgt een **voorlopige**
+   UID en `recordRevision` en wordt één keer geserialiseerd
+   (`RowJson = record.ToJson()`). Die bytes zijn nog **niet** captured, niet
+   gereserveerd, niet gepersisteerd, niet verzonden en geen ledger-entry of
+   identiteitsreservering. Na serialisatie wordt de candidate niet meer
+   gemuteerd; een latere weigering strippt hem niet en hergebruikt zijn UID
+   niet. De ruwe observation blijft het exacte, ongewijzigde deel van die
+   `rowJson`.
+3. **Reserveer op de werkelijke bytes, onder de ledgerlock.** De ledger meet
+   de exacte UTF-8-snapshot alsof deze candidate is toegevoegd, inclusief
+   `rowJson`, `PairingBinding`, state/reason-envelope, tellers en
+   JSON-escaping. Elke entry krijgt een conservatief worst-state-budget dat
+   alle toegestane states (`pending`/`deferred`/`quarantine`), de maximale
+   lokale reason-code, de tellerbreedte en de vaste datumvelden dekt; dat
+   budget volgt uit het schema en de getypeerde grenzen, niet uit een nieuwe
+   willekeurige drempel. De som van de entry-budgetten plus de begrensde
+   root-tellers en overhead moet binnen **64 unieke entries** en **1 MiB
+   UTF-8** passen; een in-flight alias is dezelfde entry en telt niet extra.
+   Past de candidate niet, dan wordt hij **zichtbaar verworpen**
+   (`observation_capture_refused` plus teller), uit het geheugen verwijderd en
+   vervangen door een **nieuwe gewone legacy-laprow vanaf de bron** met een
+   eigen legacy-UID. De verworpen candidate-UID wordt nooit gepubliceerd of
+   hergebruikt.
+4. **Hercontroleer en commit atomair.** Vlak vóór de atomaire commit worden
+   de actuele `PairingBinding` en het quotum opnieuw tegen dezelfde candidate
+   gecontroleerd. Bij een `PairingBinding`-wissel of quotumoverschrijding
+   wordt niet gecommit; de candidate wordt verworpen en de ronde gaat als
+   **nieuwe** legacy-rij vanaf de bron door. Anders commit de ledger de
+   volledige snapshot (temp + `Flush(true)` + `File.Replace`/atomic rename).
+   Pas na die duurzame commit is de observation captured en staat hij als
+   `pending` in de ledger. Er is geen `captured=true`-claim daarvóór.
 5. **Legacy blijft gescheiden.** Een gewone laprow gaat via het bestaande
    `EnqueueLap`/`Add`-pad naar `measurement-outbox.json`. Een observation-rij
    komt daar nooit in; dezelfde `(UID, recordRevision)` bestaat dus maar in
    één lane.
 
-Faalt de pure build ná reservering maar vóór freeze, dan wordt de reservering
-vrijgegeven en gaat de ronde als gewone legacy-rij door
-(`observation_build_refused`). Faalt de sidecar-commit ná freeze, dan blijft de
-entry **in memory pending/NotCommitted** staan, wordt hij niet verzonden en
-wordt hij niet als legacy herschreven; de commit wordt opnieuw geprobeerd en
-de fout is zichtbaar. Er is geen `captured=true`-claim zonder duurzame commit.
+Faalt de pure build vóór de reservering, dan gaat de ronde als gewone
+legacy-rij door (`observation_build_refused`). Wordt de candidate door het
+quotum geweigerd, dan geldt dezelfde zichtbare terugval: candidate weg,
+nieuwe legacy-rij vanaf de bron, geen gepubliceerde OBS-UID. Faalt de
+sidecar-commit of is de epoch/hercontrole onwaar, dan rapporteert de ledger
+`NotCommitted`; de candidate wordt **niet** als captured/`pending`
+gepubliceerd, niet verzonden en niet als legacy herschreven. Dezelfde
+UID/revisie/`RowJson` wordt opnieuw aangeboden. Als een commit onzeker is
+(crash of IO-fout), wordt eerst in de ledger naar die UID/revisie gezocht; is
+de entry daar al duurzaam aanwezig, dan wordt die geadopteerd in plaats van
+een tweede entry of een nieuwe UID te maken.
 
 De bestaande legacy-`EnqueueLap` houdt zijn huidige gedrag, inclusief de
 bestaande eigenschap dat een mislukte `SaveLocked` niet als `false` wordt
@@ -605,6 +677,7 @@ snapshot ziet er conceptueel zo uit:
       "captureDeviceId": "…",
       "captureOwnerUserId": "…",
       "pairingGeneration": 3,
+      "pairingGenerationKnown": true,
       "enqueuedAtUtc": "2026-11-12T11:59:00.000Z",
       "attempts": 0,
       "nextAttemptUtc": null
@@ -617,7 +690,11 @@ snapshot ziet er conceptueel zo uit:
   duurzame per-entry `reason`; `deferred` heeft `attempts`/`nextAttemptUtc`.
   `rowJson` is de exacte, onveranderlijke payload; de ruwe observation is
   daarin bytegelijk aanwezig. Er is geen tweede payloadkopie die kan
-  divergeren.
+  divergeren. De vier `capture*`/`pairing*`-velden zijn samen de
+  **`PairingBinding`**; de `LapContext` staat uitsluitend in `rowJson` en
+  wordt bij `Due`/send nooit als fence met de actuele context vergeleken.
+  `reason` is een begrensde lokale code (§5.5), nooit een ruwe HTTP-body,
+  exceptiontekst of onbegrensde serverstring.
 - **Delivery verwijdert de entry in dezelfde snapshot-commit.** Er is geen
   aparte, onbegrensde delivered-tombstone. Een replay-ACK voor een afwezige
   UID is een `ack_unknown_uid`-diagnose en maakt de rij niet opnieuw aan;
@@ -633,9 +710,14 @@ snapshot ziet er conceptueel zo uit:
 - **Faalsemantiek:** faalt serialisatie, flush, replace of rename, dan blijft
   de vorige gecommitte snapshot onaangeroerd, wordt `NotCommitted` /
   `NotDelivered` gerapporteerd en wordt geen captured succes geclaimd. De
-  entry blijft in memory en de volgende commitpoging hergebruikt dezelfde
-  UID/revisie. Een verse file waarbij geen atomaire rename mogelijk is, gaat
-  **fail closed**: observationcapture stopt zichtbaar; legacy loopt door.
+  candidate blijft in memory als niet-gecommitte `NotCommitted`-staat en
+  wordt niet als `pending`/captured gepubliceerd; de volgende commitpoging
+  hergebruikt dezelfde UID/revisie/`RowJson`. Is de commit onzeker
+  (crash/IO), dan wordt eerst in de ledger naar die UID/revisie gezocht en
+  een al duurzaam aanwezige entry geadopteerd in plaats van een tweede entry
+  of nieuwe UID te maken. Een verse file waarbij geen atomaire rename
+  mogelijk is, gaat **fail closed**: observationcapture stopt zichtbaar;
+  legacy loopt door.
 - **Herstel:** bij startup is alleen een volledig gevalideerde `target`
   gezaghebbend. Een achtergebleven `*.tmp` is nooit gezaghebbend en wordt
   deterministisch genegeerd/opgeruimd. Ontbreekt of faalt `target`, dan wordt
@@ -646,10 +728,27 @@ snapshot ziet er conceptueel zo uit:
   (`observation-ledger-v1.preserved`) en observation gaat fail closed; de
   gewone queue blijft laden en doorlopen. Een tweede preserve overschrijft de
   eerste niet; er ontstaan geen onbegrensde `.corrupt-*`-kopieën.
-- **Budget** wordt gemeten op de exacte UTF-8-serialisatie van de snapshot
-  (dus inclusief `rowJson`, ruwe observation, binding, reden, counters en
-  JSON-escaping), niet op `string.Length` en niet op een schatting. 64 unieke
-  entries en 1 MiB zijn de harde bovengrens voor **alle** states samen.
+- **Budget en reservering.** Het budget wordt gemeten op de exacte
+  UTF-8-serialisatie van de snapshot (dus inclusief `rowJson`, ruwe
+  observation, `PairingBinding`, lokale `reason`, counters en JSON-escaping),
+  niet op `string.Length` en niet op een schatting. 64 unieke
+  `(uid, recordRevision)`-entries en 1 MiB zijn de harde bovengrens voor
+  **alle** states samen; een in-flight alias is dezelfde entry. Per entry
+  reserveert de ledger bij de eerste commit één conservatief
+  worst-state-budget: de exacte `rowJson`-bytes plus de maximale
+  entry-metadata (`uid`, `recordRevision`, de volledige `PairingBinding`,
+  `enqueuedAtUtc`, `attempts`, `nextAttemptUtc`), de duurste
+  state/reason-envelope over `pending`/`deferred`/`quarantine`, de
+  tellerbreedte en de vaste datumvelden. De root heeft alleen `version`,
+  `savedAtUtc`, de drie begrensde tellers en de entries-array; er is geen
+  vrije metadata of append-history. Het budget volgt uit het schema en de
+  getypeerde/enumerated waarden, niet uit een nieuwe numerieke drempel.
+  Vóór **elke** state-commit serialiseert de ledger de werkelijke
+  candidate-snapshot en verifieert `actualBytes <= reservedBudget <= 1 MiB`
+  en `uniqueEntries <= 64`. Metadata en ruwe observation worden nooit
+  geclamped; een `pending`-payload wordt nooit geëvict om ruimte voor een
+  reden te maken. Past een overgang niet, dan wordt hij zichtbaar geweigerd
+  en blijft de entry in zijn vorige state.
 - **Legacy-durability blijft baseline.** `measurement-outbox.json` houdt zijn
   `Version=1`, 32-lapqueue, 512 KiB-charvergelijking en de bestaande
   `File.Replace`/`File.Copy`-fallback zonder `Flush(true)`. Deze correctie
@@ -683,7 +782,9 @@ snapshot ziet er conceptueel zo uit:
   werken. De plugin start niet met een lege sidecar alsof er niets was.
 - Na de herstart is de actieve sessie nieuw; bestaande UID's en rijen worden
   bij de volgende frames gedraind. De bevroren `ObservedSessionId` in de rij
-  blijft de oude waarde (test O10/PL16).
+  blijft de oude waarde (test O10/PL16/PL23). Dit is **geen**
+  `PairingBinding`-wissel en geen quarantainegrond: oude sessie-/segmentrijen
+  worden met hun bevroren `LapContext` verzonden.
 
 ### 5.4 Drain en plan
 
@@ -691,9 +792,10 @@ snapshot ziet er conceptueel zo uit:
   **legacy-only**. De sidecar levert zijn eigen `pending`/`deferred`-entries
   op `nextAttemptUtc`.
 - De observation-sendlease (§4.4) wordt genomen vóór het bouwen van de
-  `SendEnvelope`. Daarna worden de actuele binding en generatie nogmaals
-  gecontroleerd; een mismatch gaat in dezelfde sidecar-commit naar
-  quarantaine en wordt niet gepost.
+  `SendEnvelope`. Daarna worden de actuele `PairingBinding` en generatie
+  nogmaals gecontroleerd; een mismatch gaat in dezelfde sidecar-commit naar
+  quarantaine en wordt niet gepost. Een gewijzigde `LapContext` is geen
+  mismatch.
 - `MeasurementFramePlanner.Plan` (`MeasurementFrame.cs:74-122`) kiest eerst
   de gewone legacy-laps/events binnen de bestaande maxima (3 laps, 20 events,
   16.384 B metingen, 24.576 B body, UTF-8); sidecar-`pending`/`deferred` vult
@@ -709,6 +811,15 @@ snapshot ziet er conceptueel zo uit:
   als productiecaller gelabeld.
 - Een volle sidecar blokkeert geen gewone laprows en een gewone 32/33-evictie
   kan geen observation-entry raken: die staat niet in die lijst.
+
+De ACK-`index` van een afgewezen rij verwijst naar de **oorspronkelijke,
+volledige aangeboden batchvolgorde** vóór de splitsing in OBS- en
+legacy-rijen. De caller bouwt daarom één geordende offer-lijst van alle
+aangeboden rijen (OBS en legacy samen), resolveert `id`/`index` daartegen en
+routeert pas daarna per rij naar de sidecar-ledger of de bestaande legacy
+`ApplySeries`. Een index mag nooit tegen een legacy-only lijst worden
+geresolveerd; een afwijzing van de ene UID verwijdert nooit een andere UID
+(test OQ34, mixed `[OBS, legacy, OBS]`).
 
 ### 5.5 ACK: per-rij terminale uitkomst
 
@@ -760,6 +871,32 @@ genoemde code valt per definitie in `Quarantined` en kan niet als
 wordt al vóór serialisatie geweigerd en is dan een gewone legacy-rij vanaf het
 begin; een eenmaal bevroren observation wordt nooit alsnog legacy.
 
+De actuele parser-/SQL-codes `observation_invalid_version`,
+`observation_invalid_type`, `observation_invalid_integer`,
+`observation_invalid_number`, `observation_invalid_timestamp`,
+`observation_invalid_uuid`, `observation_invalid_text`,
+`observation_invalid_control`, `observation_invalid_enum` en
+`observation_absent` zijn expliciet **permanent** (`Quarantined`). De lijst is
+illustratief, niet uitputtend: een niet-genoemde code blijft
+unknown → `Quarantined`.
+
+De sidecar bewaart als `reason`/diagnose uitsluitend een deterministische,
+begrensde lokale code, nooit de ruwe HTTP-body, exceptiontekst of een
+onbegrensde serverstring. De vaste codes zijn: `capture_binding_changed`,
+`observation_capture_refused`, `observation_build_refused`,
+`observation_unavailable`, `contains_unknown_fields`,
+`observation_device_mismatch`, `observation_device_invalid`,
+`auth_device_invalid`, `observation_null`, `observation_invalid`,
+`row_invalid`, `revision_conflict`, `stale_revision`, `observation_absent`,
+de negen vaste `observation_invalid_*`-categorieën hierboven, en
+`server_rejected_unknown` voor elk overig fragment. Een onbekende
+serverafwijzing mapt dus op één vaste lokale code en blijft `Quarantined`;
+de classificatie blijft ook voor non-ACK-fouten veilig en er wordt geen ruwe
+fouttekst onbegrensd gelogd, geen token/credential bewaard en geen serverbody
+als bewijs bewaard.
+De behouden bewijswaarde is de exacte `rowJson` + ruwe observation + lokale
+code. Een optionele, begrensde diagnostic is toegestaan maar geen contracteis.
+
 **Quarantaine is een sidecar-statecommit, geen delivery.** De exacte
 `rowJson` en reden worden in dezelfde snapshot gecommit; er volgt geen
 `MarkAttempt`-succes en geen `Delivered`-teller. Een stale/epoch-mismatch-ACK
@@ -808,12 +945,12 @@ P0–P8-plan.
 |---|---|---|---|
 | `LapAccumulator.cs` | `LapAccumulator`-velden (`:194-234`) | `_acceptedSamples`, `_maxGapSeconds`, `_prevSampleAtUtc`, `_firstPitRoadAtUtc`, `_refuel...`, `_driverNameMissing`, `_observedSessionId`, contextvelden | Alle interval-/pit-/refuel-/contextfeiten komen uit dezelfde geaccepteerde tickstroom |
 | `LapAccumulator.cs` | `Add` (`:249-307`) | Teller/gap/pitroad/refuel/naamflag/context bijwerken; geen waarde verzinnen bij `null` | `null` breekt de keten; `false`/`0` worden geen feit |
-| `LapAccumulator.cs` | `Close` (`:333-387`) | `LapAggregate` vullen met de observation-bronstate en bevroren context/sessie | De builder draait op de afgesloten ronde, niet op globale flushstate |
-| `LapAccumulator.cs` | `LapAggregate` (`:395-423`), `ToSummary` (`:457-492`) | `ObservedSessionId` en observation-source/`Observation` meenemen; `ToSummary` gebruikt de bevroren sessie | Geen flush-globale sessie meer |
-| `TelemetrySampler.cs` | `StartLap` (`:260-267`) | `ObservedSessionId` en capture-context aan de accumulator meegeven | Freeze op de eerste geaccepteerde tick |
+| `LapAccumulator.cs` | `Close` (`:333-387`) | `LapAggregate` vullen met de observation-bronstate en bevroren `LapContext`/`PairingBinding` | De builder draait op de afgesloten ronde, niet op globale flushstate |
+| `LapAccumulator.cs` | `LapAggregate` (`:395-423`), `ToSummary` (`:457-492`) | `ObservedSessionId` (uit `LapContext`) en observation-source/`Observation` meenemen; `ToSummary` gebruikt de bevroren sessie | Geen flush-globale sessie meer |
+| `TelemetrySampler.cs` | `StartLap` (`:260-267`) | `LapContext` + `PairingBinding` aan de accumulator meegeven | Freeze op de eerste geaccepteerde tick |
 | `TelemetrySampler.cs` | `CloseCurrent` (`:269-275`) | Bevroren sessie meegeven aan `LapAccumulator.Close` | Ook bij sessie-/lapwissel de oude sessie houden |
 | `MeasurementPipeline.cs` | `EnqueueSummary` (`:235-242`) | Geen actuele `_observedSessionId` meer doorgeven; laat de record de bevroren waarde gebruiken | Sluit het flush-gat |
-| `TelemetrySample` (`LapAccumulator.cs:16-67`) | nieuwe contextvelden | `CarId`, `TrackId`, `TrackName`, `TrackConfig`, `SessionUniqueId?`, `SessionNumber?`, `CaptureBinding` | De plugin vult ze per tick; de sampler bevriest ze bij `StartLap` |
+| `TelemetrySample` (`LapAccumulator.cs:16-67`) | nieuwe contextvelden | `CarId`, `TrackId`, `TrackName`, `TrackConfig`, `SessionUniqueId?`, `SessionNumber?`, `PairingBinding`, `LapContext` | De plugin vult ze per tick; de sampler bevriest beide bij `StartLap` |
 
 De accumulator bewaart de ruwe ticktijden voor de bestaande coverage, maar de
 observation-builder quantiseert **altijd** eerst naar de `.fff`-wire-instanten
@@ -825,7 +962,7 @@ observation-builder quantiseert **altijd** eerst naar de `.fff`-wire-instanten
 | Bestand | Methode/plek | Kleinste wijziging | Waarom |
 |---|---|---|---|
 | `MeasurementOutbox.cs` | bestaande `OutboxEntry`/`OutboxFileDto`/`Load`/`SaveLocked` | **Ongewijzigd** laten: `Version=1`, 32 laps/512 KiB, bestaande legacy-drop | Oude lezer en rollback blijven byte-stabiel; geen observationveld in dit bestand |
-| nieuw `3SM.EnduranceConnector/ObservationLedger.cs` | snapshot-DTO + `TryReserve`, `Commit`, `Load`, `Recover`, `MoveToQuarantine`, `RemoveDelivered` | Eigen `version`; 64 unieke entries/1 MiB UTF-8; één temp+`Flush(true)`+`File.Replace`/atomic rename; per-entry `rowJson`, binding, state, reason, attempts; fail-closed preserve | Alle observation-lifecycle in één atomic snapshot, los van de gewone queue |
+| nieuw `3SM.EnduranceConnector/ObservationLedger.cs` | snapshot-DTO + `TryReserve(candidateBytes)`, `Commit`, `Load`, `Recover`, `MoveToQuarantine`, `RemoveDelivered` | Eigen `version`; 64 unieke entries/1 MiB UTF-8; reservering op de geserialiseerde candidate vóór duurzame commit; één temp+`Flush(true)`+`File.Replace`/atomic rename; per-entry `rowJson`, `PairingBinding`, state, lokale reason, attempts; fail-closed preserve | Alle observation-lifecycle in één atomic snapshot, los van de gewone queue |
 | nieuw `3SM.EnduranceConnector/ObservationSendCoordinator.cs` | async lease + `SendEnvelope` | Eén `SemaphoreSlim(1,1)` over `Pair`-HTTP/settingscommit, `Unpair`, DPAPI-clear en de bounded OBS-send/ACK; capture-/plan-/send-fence; stale-epochcheck | Geen check-then-POST-TOCTOU en geen GUI-block |
 | `MeasurementFrame.cs` | `MeasurementFramePlanner.Plan` (`:74-122`) | Sidecar-`pending`/`deferred` toevoegen naast de gewone `Due`; nooit dezelfde UID in beide lanes; UTF-8-budgetten | Observation-rijen mengen met het frame zonder de 32-lapqueue te gebruiken |
 | `MeasurementFrame.cs` | `MeasurementSender.SendAsync` (`:253-359`) | Zelfde per-rij-terminalregel en sidecar-commit als de productiecaller; nadrukkelijk **testroute** | Regressie/transporttests gebruiken dezelfde regel |
@@ -839,7 +976,7 @@ observation-builder quantiseert **altijd** eerst naar de `.fff`-wire-instanten
 |---|---|---|---|
 | `ConnectorSettings.cs` | velden (`:7-111`) | `ObservationV1Enabled = false` (lokaal, default uit) + `PairingGeneration` (`long`) + `PairingGenerationKnown` (lokaal) | Veilige default; onbekende bestaande install maakt geen observation; geen server-/wirecontractwijziging |
 | `EnduranceConnectorPlugin.cs` | `InitMeasurementLayer` (`:876-899`) | Na de gewone `Load` de sidecar laden; sidecarfout geïsoleerd van de gewone queue | Legacy blijft werken bij sidecar- of versiefout |
-| `EnduranceConnectorPlugin.cs` | `BuildMeasurementSample` (`:961-1002`) | Contextvelden en `CaptureBinding` vullen uit dezelfde bronnen als `CaptureV3` (`:1490-1495`, `TrackIdentityReader`); `OnPitRoad` raw-only | Context/sessie horen bij de tick, niet bij flush; geen `_pitLap` als observationfeit |
+| `EnduranceConnectorPlugin.cs` | `BuildMeasurementSample` (`:961-1002`) | `LapContext` en `PairingBinding` vullen uit dezelfde bronnen als `CaptureV3` (`:1490-1495`, `TrackIdentityReader`); `OnPitRoad` raw-only | Context/sessie horen bij de tick, niet bij flush; geen `_pitLap` als observationfeit |
 | `EnduranceConnectorPlugin.cs` | `PairCoreAsync` (`:1185-1265`), `Unpair` (`:1282-1322`), DPAPI-clear | Lease nemen **vóór** de eerste token-/settingswijziging en vasthouden over de pairing-HTTP + commit; generatie ophogen; persistfout/overflow ⇒ observation dicht | Lokale pair/server-rebind racet niet met een oude OBS-send; legacy blijft ongewijzigd |
 | `EnduranceConnectorPlugin.cs` | `SendV3Async`/`AcknowledgeMeasurements` | Onder dezelfde lease: envelope, plan-/send-fence, ACK-epochcheck, per-rij-union | Productiecaller krijgt dezelfde veilige regel als de testroute |
 | `ConnectorControlContracts.cs` | `KnownFeatures` (`:101-106`) | **niet nu** uitbreiden; een `observation`-feature is een apart servercontract | Geen clientflag verzinnen; server-first deploy blijft voorwaarde |
@@ -867,8 +1004,8 @@ de build; een "onbekend" wordt nooit als PASS of als `false`/`0` behandeld.
 
 | # | Poort | PASS | FAIL |
 |---|---|---|---|
-| G01 | Binding bij `StartLap` | `DeviceId` UUID (v1–v5, variant 8/9/a/b, case behouden) + `BoundOwnerUserId` UUID + **bekende** generatie >0; anders geen observation, laprow legacy | Observation met ontbrekende/partiële/onbekende binding |
-| G02 | Sessie/segment freeze | `ObservedSessionId` en `SegmentId` op `StartLap` bevroren; flush gebruikt die waarden | Flush gebruikt actuele globale sessie/segment |
+| G01 | `PairingBinding` bij `StartLap` | `DeviceId` UUID (v1–v5, variant 8/9/a/b, case behouden) + `BoundOwnerUserId` UUID + **bekende** generatie >0; anders geen observation, laprow legacy. Een ontbrekende `LapContext` blokkeert niet; alleen de contextgroep vervalt | Observation met ontbrekende/partiële/onbekende `PairingBinding`, of een `LapContext`-wijziging die als bindingsfout wordt behandeld |
+| G02 | `LapContext`-freeze | `ObservedSessionId` en `SegmentId` op `StartLap` bevroren; flush gebruikt die waarden; een latere sessie-/segmentwissel maakt de rij niet ongeldig | Flush gebruikt actuele globale sessie/segment, of een sessiewissel diskwalificeert/quarantaineert de oude rij |
 | G03 | `sim-s0` | Niet als `sessionUniqueId` geparseerd; veld weggelaten | `sim-s0` → `0` of een verzonnen numerieke sessie |
 | G04 | Interval/quantisatie | `samples>=1`; `samples==1` ⇒ `first==last`/`maxGap==0`; `samples>1` ⇒ gequantiseerde `last>first`; zelfde gequantiseerde first/last ⇒ geen observation; `maxGap`/`unknown` exact uit `.fff`-instanten | Ongeldige combinatie, ruwe-`DateTime`-rekenwerk of een volledigheidsclaim |
 | G05 | `pitRoad` | Alleen een geaccepteerde `OnPitRoad==true` + `firstAt` binnen interval; `_pitLap`/`NotePitVisit`-fuel zijn geen bron | `false`, `0`, `firstAt` buiten interval, of een fuel-afgeleide `pitRoad` |
@@ -879,10 +1016,10 @@ de build; een "onbekend" wordt nooit als PASS of als `false`/`0` behandeld.
 | G10 | Bytebudget | Compacte observation <= **2048 UTF-8-bytes** (`MeasurementJson.Bytes`/`Encoding.UTF8.GetByteCount`); meting 16.384 B en frame 24.576 B; sidecar 1 MiB; groter ⇒ geen observation, geen strip | `string.Length`, 2049+ toch verzonden, of een ongemeten multibytewaarde |
 | G11 | Legacy | Afwezig `observation` ⇒ exact de bestaande laprow/hash/ACK; `measurement-outbox.json` blijft `Version=1` | Een lege observation, een "no fact"-marker of een v2-legacybestand |
 | G12 | `RowJson`-immutabiliteit | Na capture/sidecar-save/load/quarantaine bytegelijk; UID/revisie/ruwe waarden en de ruwe observation-string (UUID-case, tijdprecisie) ongewijzigd | Hervormen, strippen, opnieuw serialiseren of UID/revisie wijzigen |
-| G13 | ACK-classificatie | `accepted`/`duplicate`/`superseded` (revisie >= lokaal) = `Delivered`; tijdelijke codes (`observation is unavailable`, `observation_unavailable`, `contains unknown fields`) = `Deferred` met auto-retry; permanente codes (`observation_device_mismatch`, `observation_device_invalid`, `auth_device_invalid`, `observation_null`, `observation_invalid`, `row_invalid`, `revision_conflict`, `stale_revision`, `observation is invalid: CODE`) = `Quarantined`; **elke onbekende code = `Quarantined`** | Afgekeurde observation als `Rejected*` verwijderen, als delivery tellen of een onbekende code laten vallen |
-| G14 | Sidecar-begroting | 64 unieke observation-entries/1 MiB UTF-8 over pending+deferred+quarantine+inflight samen; per-entry duurzame reden; geen automatische evictie | Stille evictie, onbegrensde groei, dubbele telling of verlies zonder teller/reden |
-| G15 | Overflow/reservering | Reservering vóór freeze; bij vol alleen nieuwe observation-capture zichtbaar weigeren (teller+reden); gewone laprows blijven doorlopen; nooit 64 quarantine + 32 outstanding = 96 | Nieuwe observation stil weigeren, laprows blokkeren of een observation-rij uit de 32-lane evicten |
-| G16 | Bindingwissel/verzending | `SendEnvelope` + lease; capture-/plan-/send-fence; oude observation-rijen nooit met nieuw token verzonden; stale ACK geen cleanup; `capture_binding_changed` naar sidecar-quarantaine; legacy loopt door | Check-then-POST-TOCTOU, oude rij met nieuw device/account, of een stale ACK die een rij opruimt |
+| G13 | ACK-classificatie | `accepted`/`duplicate`/`superseded` (revisie >= lokaal) = `Delivered`; tijdelijke codes (`observation is unavailable`, `observation_unavailable`, `contains unknown fields`) = `Deferred` met auto-retry; permanente codes (`observation_device_mismatch`, `observation_device_invalid`, `auth_device_invalid`, `observation_null`, `observation_invalid`, `row_invalid`, `revision_conflict`, `stale_revision`, `observation_absent`, de vaste `observation_invalid_*`-categorieën, `observation is invalid: CODE`) = `Quarantined`; **elke onbekende code = `Quarantined` met vaste lokale code**; `index` resolveert tegen de volledige aangeboden batch, niet legacy-only | Afgekeurde observation als `Rejected*` verwijderen, als delivery tellen, een onbekende code laten vallen, of een mixed-index tegen de legacy-lijst verwijderen |
+| G14 | Sidecar-begroting | 64 unieke observation-entries/1 MiB UTF-8 over pending+deferred+quarantine+inflight samen; per-entry worst-state-reservering en duurzame lokale reason-code; geen automatische evictie | Stille evictie, onbegrensde groei, dubbele telling, onbegrensde reason-tekst of verlies zonder teller/reden |
+| G15 | Overflow/reservering | Candidate één keer serialiseren; reserveren op de **werkelijke** UTF-8-bytes plus worst-state-metadata; `PairingBinding` en quotum vóór atomic commit hercontroleren; bij vol zichtbaar weigeren (teller+reden) en een **nieuwe** legacy-rij vanaf de bron maken; nooit 64 quarantine + 32 outstanding = 96 | Reserveren op niet-bestaande future bytes, candidate strippen/hergebruiken als legacy, een gecommitte OBS-UID hergebruiken, metadata clampen of een pending payload evicten |
+| G16 | `PairingBinding`-wissel/verzending | `SendEnvelope` + lease; capture-/plan-/send-fence uitsluitend op `PairingBinding`; oude observation-rijen nooit met nieuw token verzonden; stale ACK geen cleanup; `capture_binding_changed` naar sidecar-quarantaine; `LapContext`-wissel nooit quarantaine; legacy loopt door | Check-then-POST-TOCTOU, oude rij met nieuw device/account, een sessie-/carwissel als bindingsfout, of een stale ACK die een rij opruimt |
 | G17 | Server-first/lokale proof | Productieactivering is een aparte GO (Edge `on` + DB-probe/flag, pas daarna producer); unit-/SI-proof draait alleen tegen een lokale synthetische Deno-parser + geïsoleerde DB-fixture; producer default uit | Productie-Edge/DB/env of een echte netwerkwrite gebruiken als unitproof, of producer aan terwijl server `off` is |
 | G18 | Geen SDK-verzinsel | Alleen bronnen uit §2; `SubSessionID`/`UserID`/`PlayerCarTowTime` niet gebruiken zonder lokaal bewijs | Een onbewezen SDK-veld als feit op de draad |
 | G19 | Exacte vorm | `version:1`; alleen de zeven toegestane rootkeys; `capture` alleen `deviceId`; `interval` alleen de zeven stats; geen onbekende subsleutel; `null` in een known veld = rijafwijzing | Extra key, verkeerde versie of `null` dat als "onbekend" wordt geaccepteerd |
@@ -893,16 +1030,18 @@ de build; een "onbekend" wordt nooit als PASS of als `false`/`0` behandeld.
 
 De 1 MiB-sidecargrens wordt gemeten als de **volledige UTF-8-serialisatie van
 de snapshot**, inclusief alle `rowJson`-payloads, de ruwe observation daarin,
-binding, per-entry reden, tellers en JSON-escaping; niet als een
-gecomprimeerde of geschatte waarde en niet als `string.Length`. De 64-entry-
-en 1 MiB-grens gelden voor **alle** states samen (pending, deferred,
-quarantine en in-flight alias). Retentie is binnen die grens onbeperkt: er is
-**geen automatische evictie**. Exporteren of wissen is een expliciete, getelde
-operatoractie. Bij 64 entries of 1 MiB weigert de producer nieuwe
-observation-capture zichtbaar (overflowteller plus reden), terwijl gewone
-laprows blijven doorlopen. De gewone 32-lapqueue is een aparte, onafhankelijke
-grens; 64 quarantine + 32 outstanding is nooit een geldige gecombineerde
-bovengrens.
+`PairingBinding`, per-entry lokale reason, tellers en JSON-escaping; niet als
+een gecomprimeerde of geschatte waarde en niet als `string.Length`. De
+64-entry- en 1 MiB-grens gelden voor **alle** states samen (pending, deferred,
+quarantine en in-flight alias). Per entry geldt daarnaast het van het schema
+afgeleide worst-state-budget uit §5.2; er is geen extra numerieke drempel.
+Retentie is binnen die grens onbeperkt: er is **geen automatische evictie**.
+Exporteren of wissen is een expliciete, getelde operatoractie. Bij 64 entries
+of 1 MiB weigert de producer een nieuwe observation-capture zichtbaar
+(overflowteller plus reden), verwijdert de niet-gecommitte candidate en maakt
+een nieuwe gewone legacy-rij vanaf de bron; gewone laprows blijven doorlopen.
+De gewone 32-lapqueue is een aparte, onafhankelijke grens; 64 quarantine + 32
+outstanding is nooit een geldige gecombineerde bovengrens.
 
 ## 8. P/F-testmatrix voor de latere lokale bouw
 
@@ -966,11 +1105,15 @@ tegen een actieve productie-Edge, productie-env of productie-DB.
 | PL14 | `NotePitVisit`-fuel zonder `OnPitRoad=true` | Geen `pitRoad`; `_pitLap` beïnvloedt de observation niet |
 | PL15 | car/context-wissel midden in ronde met fuelstap | Geen refuel-stap over de wissel; keten start opnieuw |
 | PL16 | crash/restart met pending en in-flight sidecar-entry | Eén entry per UID/revisie; opnieuw aanbieden met dezelfde `rowJson`; geen dubbel budget |
-| PL17 | quota vol vóór freeze | `observation_capture_refused`; gewone legacy-laprow vanaf het begin; geen observation |
-| PL18 | sidecar-commit mislukt na freeze | `NotCommitted`/niet verzonden; geen legacy-herschrijving; vorige snapshot blijft; legacy-queue loopt door |
+| PL17 | quota vol bij capture | `observation_capture_refused`; niet-gecommitte candidate verworpen; **nieuwe** gewone legacy-laprow vanaf de bron; geen observation-UID gepubliceerd |
+| PL18 | sidecar-commit mislukt na reservering | `NotCommitted`/niet verzonden; geen legacy-herschrijving; vorige snapshot blijft; legacy-queue loopt door |
 | PL19 | oude DLL start met normale v1-queue + sidecar | Oude lezer laadt alleen de gewone queue; sidecar bytegelijk; geen OBS-send |
 | PL20 | bestaande paired install zonder generatie | `known=false`; geen observation; re-pair zet 1; legacy blijft werken |
 | PL21 | generatie-persistfout of overflow | Observation dicht; legacy ongewijzigd; geen wraparound/oude generatie |
+| PL22 | `LapContext` ontbreekt of wijzigt, `PairingBinding` gelijk | Observation blijft geldig en verzendbaar; alleen contextgroep/refuel-keten beïnvloed; geen quarantaine en geen identiteitsverlies |
+| PL23 | normale nieuwe sessie na restart met oude pending OBS | Oude OBS-rijen worden met bevroren `LapContext` gedraind; geen `capture_binding_changed`, geen quarantaine |
+| PL24 | quota weigert een voorlopige candidate | Candidate-UID nooit gepubliceerd/gereserveerd; verse legacy-rij vanaf de bron met eigen UID; teller zichtbaar |
+| PL25 | `LapContext`-wissel tijdens bouw, `PairingBinding` gelijk | Candidate blijft geldig; geen tweede UID; context blijft de `StartLap`-waarde |
 
 ### 8.3 Sidecar/quarantaine/ACK (OQ)
 
@@ -986,29 +1129,33 @@ tegen een actieve productie-Edge, productie-env of productie-DB.
 | OQ08 | `observation_unavailable` | `Deferred` met backoff; entry blijft; geen quarantine, geen `Rejected*` |
 | OQ09 | `contains unknown fields` (Edge `off`) | `Deferred` met backoff; automatisch herstel zonder gebruikersvraag |
 | OQ10 | `observation_device_mismatch` | `Quarantined`; exacte `rowJson` + reden; geen confirmed |
-| OQ11 | `observation_invalid`/`observation_null` | `Quarantined`; producentbug zichtbaar |
+| OQ11 | `observation_invalid_version`/`observation_invalid_timestamp`/`observation_null` | `Quarantined`; producentbug zichtbaar; onbekende `observation_invalid_*`-suffix → vaste lokale `server_rejected_unknown` |
 | OQ12 | legacy-rij afgekeurd (`wear_after_contract`) | Bestaand dropgedrag met teller (regressie) |
-| OQ13 | 64 entries over pending+deferred+quarantine | Accept; 65e → `observation_capture_refused` vóór freeze; gewone laprow gaat door; nooit 96 |
-| OQ14 | 1 MiB UTF-8-snapshot | Exacte grens accept; +1 byte (multibyte) → overflow zichtbaar; geen truncatie |
+| OQ13 | 64 entries over pending+deferred+quarantine | Accept; 65e → `observation_capture_refused` vóór duurzame commit; gewone laprow gaat door; nooit 96 |
+| OQ14 | 1 MiB UTF-8-snapshot | Exacte grens accept; +1 byte (multibyte) → overflow zichtbaar; candidate verworpen; geen truncatie |
 | OQ15 | retentie/evictie | Geen stille evictie; alleen expliciete, getelde export/clear |
 | OQ16 | restart na quarantaine | Quarantaine, state en tellers blijven; `rowJson` bytegelijk |
-| OQ17 | bindingwissel vóór send | `capture_binding_changed`; niet verzonden; sidecar-commit |
-| OQ18 | legacy-rij na bindingwissel | Wordt gewoon verzonden |
+| OQ17 | `PairingBinding`-wissel vóór send | `capture_binding_changed`; niet verzonden; sidecar-commit; een `LapContext`-wissel geeft dit niet |
+| OQ18 | legacy-rij na `PairingBinding`-wissel | Wordt gewoon verzonden |
 | OQ19 | quarantaine-entry | `rowJson` en ruwe observation bytegelijk; geen reserialisatie |
-| OQ20 | herstart na bindingwissel | Oude observation wordt niet met nieuw token/device verzonden |
-| OQ21 | onbekende afwijzingscode | `Quarantined` (fail closed); nooit legacy-drop |
+| OQ20 | herstart na `PairingBinding`-wissel | Oude observation wordt niet met nieuw token/device verzonden; een nieuwe sessie alleen is geen wissel |
+| OQ21 | onbekende afwijzingscode | `Quarantined` (fail closed); vaste lokale code; nooit legacy-drop |
 | OQ22 | poging tot strippen/nieuwe UID na freeze | Geweigerd; dezelfde UID/revisie/`rowJson` blijft |
-| OQ23 | sidecar-write mislukt | `NotCommitted`/`NotDelivered`; vorige snapshot blijft; geen captured succes; entry blijft in memory |
+| OQ23 | sidecar-write mislukt | `NotCommitted`/`NotDelivered`; vorige snapshot blijft; geen captured succes; candidate blijft niet-gecommit in memory |
 | OQ24 | sidecar met onbekende versie/corrupt | Hele bestand bounded bewaard; observation fail closed; gewone queue laadt en loopt door |
 | OQ25 | oude DLL opent alleen `measurement-outbox.json` | Sidecar bytegelijk; geen directory-enumeratie, geen `.corrupt` van de sidecar |
 | OQ26 | crash na commit vóór ACK; dubbele pending | Eén entry per UID/revisie; geen dubbel budget/delivery; retry idempotent |
-| OQ27 | quota vol bij capture | Gewone legacy-laprow vanaf het begin; geen observation-UID; teller zichtbaar |
+| OQ27 | quota vol bij capture | Candidate verworpen; verse legacy-laprow vanaf de bron; geen observation-UID gepubliceerd; teller zichtbaar |
 | OQ28 | stale/epoch-mismatch ACK | Geen delivery-cleanup, geen discard; entry blijft `pending`/`deferred`; `ack_stale_epoch` |
 | OQ29 | requesttime-out terwijl server al schreef | Retry met dezelfde UID/revisie/`rowJson`; server duplicate; geen nieuwe hash |
 | OQ30 | quarantaine-statecommit | Alleen sidecar-state; geen `Delivered`, geen succes-`MarkAttempt` |
 | OQ31 | crash met `.tmp`/`.bak` | Alleen volledig gevalideerde target/bak; `.tmp` nooit gezaghebbend; deterministisch herstel |
 | OQ32 | productiecaller `SendV3Async`/`AcknowledgeMeasurements` | Zelfde per-rij-union als `SendAsync`; `remaining.Count==0` alleen is geen succes |
 | OQ33 | nieuwe lezer met normale v1-queue + eigen sidecar | Gewone queue bytegelijk geladen; sidecar-schema geladen; geen normalisatie of vermenging |
+| OQ34 | mixed ACK-index `[OBS, legacy, OBS]` | `index` resolveert tegen de volledige aangeboden batch vóór splitsing; alleen de bedoelde UID wordt geraakt; geen legacy-only index |
+| OQ35 | multibyte-entry en langste reason bij `deferred -> quarantine` | Werkelijke UTF-8-snapshot blijft <= gereserveerd worst-state-budget <= 1 MiB; geen truncatie/clamp |
+| OQ36 | gelijktijdige reserve/commit van twee candidates | Onder de ledgerlock wordt tegen de laatste gecommitte snapshot gemeten; één wint, de ander ziet het nieuwe quotum; geen overshoot of dubbel budget |
+| OQ37 | in-flight entry en telling | In-flight alias is dezelfde `(uid, recordRevision)` en telt één keer voor 64/1 MiB; geen tweede entry |
 
 ### 8.4 Server-interop (SI; lokaal, synthetische Deno-parser + geïsoleerde DB)
 
@@ -1197,20 +1344,23 @@ beslist of die build start. De releasegates staan apart in §11.1.
    Geen SimHub-referentie.
 2. **Ronde-accumulatie**: `LapAccumulator` uitbreiden met all-sample
    intervalstate, eerste pitroad-tijd, positieve brandstofstappen,
-   lege-naamflag en bevroren context/sessie; `TelemetrySampler.StartLap`
-   vult de freeze; `MeasurementPipeline.EnqueueSummary` gebruikt die freeze.
+   lege-naamflag en bevroren `LapContext`/`PairingBinding`;
+   `TelemetrySampler.StartLap` vult de freeze; `MeasurementPipeline.EnqueueSummary`
+   gebruikt die freeze.
 3. **Sidecar-ledger**: `ObservationLedger.cs` met één atomic snapshot,
-   64 unieke entries/1 MiB UTF-8, reservering vóór freeze, per-entry reden,
-   crashherstel en bounded preserve. `measurement-outbox.json` blijft
-   `Version=1` en wordt niet uitgebreid.
+   64 unieke entries/1 MiB UTF-8, reservering op de geserialiseerde candidate
+   vóór duurzame commit, per-entry lokale reason, crashherstel en bounded
+   preserve. `measurement-outbox.json` blijft `Version=1` en wordt niet
+   uitgebreid.
 4. **Sendlease en ACK**: `ObservationSendCoordinator` + `SendEnvelope` +
-   `ObservationAckClassifier`; capture-/plan-/send-fence, stale-epochcheck,
-   per-rij-union en dezelfde regel in `SendV3Async`/
-   `AcknowledgeMeasurements` en de `SendAsync`-testroute.
+   `ObservationAckClassifier`; capture-/plan-/send-fence uitsluitend op
+   `PairingBinding`, stale-epochcheck, per-rij-union en dezelfde regel in
+   `SendV3Async`/`AcknowledgeMeasurements` en de `SendAsync`-testroute.
 5. **Plugin-bedrading**: `ConnectorSettings` lokaal `ObservationV1Enabled=false`,
    `PairingGeneration`/`PairingGenerationKnown`; `BuildMeasurementSample` vult
-   context/binding; `Pair`/`Unpair`/DPAPI-clear nemen de lease en hogen de
-   generatie op; persistfout/overflow sluit observation zonder legacy te raken.
+   `LapContext`/`PairingBinding`; `Pair`/`Unpair`/DPAPI-clear nemen de lease en
+   hogen de generatie op; persistfout/overflow sluit observation zonder legacy
+   te raken.
 6. **Testbedrading**: nieuwe pure testgroepen registreren in `FaseDTests`, de
    `.csproj`-lijsten bijwerken (pas bij de latere build), de bestaande
    299-meetlaagsubset plus de nieuwe OB/PL/OQ-tests draaien. De SI-tests draaien
@@ -1241,15 +1391,15 @@ noemt de tests die een latere build moet draaien; ze zijn hier niet uitgevoerd.
 
 | Item | Contractdeel | Dekking | Latere test |
 |---|---|---|---|
-| B1 terminale delivery/`Stored` | §4.4, §5.5, §6.C | Per-rij `Delivered`/`Deferred`/`Quarantined`/`NotDelivered`; alleen accepted/duplicate/superseded met revisie >= lokaal; geen succes-`MarkAttempt`; beide callers | OQ02–OQ11, OQ21, OQ28, OQ30, OQ32 |
-| B2 sendfence/lease | §4.3, §4.4, §5.4, §6.C | `SendEnvelope`, één async lease over pair-HTTP/settings/DPAPI en bounded send/ACK; capture-/plan-/send-fence; stale-epoch; timeout=geen mislukte write | PL06, PL11–PL12, OQ17, OQ20, OQ28, OQ29 |
-| B3 atomic durable sidecar | §5.1–§5.3, §5.6, §6.C | Eén snapshot, temp+`Flush(true)`+replace/rename, fail-closed, vorige snapshot, crash-idempotent, per-entry reden; geen `LastRejectionReason`-claim in de gewone file | OQ16, OQ19, OQ23–OQ26, OQ29, OQ31 |
-| B4 quota/reservering | §5.1, §5.2, §7 G14/G15 | 64 unieke entries/1 MiB UTF-8 over alle states; reservering vóór freeze; gewone 32-lapqueue onafhankelijk; nooit 96 | OQ13–OQ15, OQ27, PL17 |
+| B1 terminale delivery/`Stored` | §4.4, §5.4, §5.5, §6.C | Per-rij `Delivered`/`Deferred`/`Quarantined`/`NotDelivered`; alleen accepted/duplicate/superseded met revisie >= lokaal; geen succes-`MarkAttempt`; beide callers; mixed ACK-index tegen de volledige offer-batch | OQ02–OQ11, OQ21, OQ28, OQ30, OQ32, OQ34 |
+| B2 sendfence/lease | §4.3, §4.4, §5.4, §6.C | `SendEnvelope`, één async lease over pair-HTTP/settings/DPAPI en bounded send/ACK; capture-/plan-/send-fence uitsluitend op `PairingBinding`; stale-epoch; timeout=geen mislukte write; `LapContext` nooit fence | PL06, PL11–PL12, PL22–PL23, OQ17, OQ20, OQ28, OQ29 |
+| B3 atomic durable sidecar | §5.1–§5.3, §5.6, §6.C | Eén snapshot, temp+`Flush(true)`+replace/rename, fail-closed, vorige snapshot, crash-idempotent, per-entry lokale reason; geen `LastRejectionReason`-claim in de gewone file | OQ16, OQ19, OQ23–OQ26, OQ29, OQ31, OQ35 |
+| B4 quota/reservering | §5.1, §5.2, §7 G14/G15 | 64 unieke entries/1 MiB UTF-8 over alle states; candidate één keer serialiseren; reserveren op werkelijke bytes + worst-state-budget; `PairingBinding`/quotum vóór atomic commit hercontroleren; quota-refusal → verse legacy vanaf bron; gewone 32-lapqueue onafhankelijk; nooit 96 | OQ13–OQ15, OQ27, OQ35–OQ37, PL17, PL24 |
 | B5 oude lezer/rollback | §4.5, §5.2, §5.3, §7 G20 | Normale queue blijft v1; oude DLL opent alleen vast pad; sidecar blijft bij rollback; onbekende versie fail closed + bounded preserve | PL19, OQ24, OQ25, OQ33 |
 | B6 UTF-8-caps | §3.2, §5.2, §7 G10 | 2048 observation, 16.384 meting, 24.576 frame, 1 MiB sidecar met `MeasurementJson.Bytes`; 512 KiB-legacybug blijft baseline | OB19, OB30, OQ14, SI06 |
 | B7 lokale proof/scope | §8.4, §11, §11.1, §7 G17 | Alleen lokale synthetische Deno-parser + geïsoleerde DB; productieactivering/DLL/Edge aparte GO | SI01–SI09 |
 | C1 `pitRoad` | §2.3, §3.3, §7 G05 | Alleen geaccepteerde `OnPitRoad==true`; `_pitLap`/`NotePitVisit`-fuel nooit observationbron | OB25, PL14 |
-| C2 fail-closed codes | §5.5, §7 G13, §6.C | Tijdelijke codes → Deferred auto-retry; permanente/onbekende → Quarantine; prefixnormalisatie; geen legacy-drop | OQ08–OQ11, OQ21, SI07, SI09 |
+| C2 fail-closed codes | §5.5, §7 G13, §6.C | Tijdelijke codes → Deferred auto-retry; permanente/onbekende → Quarantine; actuele `observation_invalid_*`/`observation_absent` permanent; vaste lokale reason-code; prefixnormalisatie; geen legacy-drop | OQ08–OQ11, OQ21, SI07, SI09 |
 | C3 quantisatie | §3.2, §7 G04, §8.1 | Alle stats/edges uit dezelfde `.fff`-instant; same-ms `samples>1` ⇒ geen observation; geen EPS/clamp | OB20, OB27, OB28, SI08 |
 | Minor initial epoch | §4.2, §7 G23 | Bestaande install `known=false`; re-pair=1; persistfout/overflow dicht; legacy ongewijzigd | PL20, PL21 |
 | Minor naam/refuel | §3.4, §3.5, §7 G06/G07 | Trim/ordinal; alle namen bekend; car/context-wissel breekt refuel | OB26, OB29, PL15 |
