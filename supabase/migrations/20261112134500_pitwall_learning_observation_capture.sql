@@ -125,6 +125,7 @@ CREATE FUNCTION public.simhub_observation_ts_le(p_left text, p_right text)
 RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
+SET search_path = pg_catalog, public
 AS $fn$
   SELECT left(p_left, 19) < left(p_right, 19)
       OR (
@@ -138,6 +139,7 @@ CREATE FUNCTION public.simhub_observation_ts_valid(p_value text)
 RETURNS boolean
 LANGUAGE plpgsql
 IMMUTABLE
+SET search_path = pg_catalog, public
 AS $fn$
 BEGIN
   IF p_value IS NULL
@@ -163,6 +165,7 @@ CREATE FUNCTION public.simhub_observation_text_valid(p_value text, p_max integer
 RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
+SET search_path = pg_catalog, public
 AS $fn$
   SELECT p_value IS NOT NULL
      AND octet_length(p_value) BETWEEN 1 AND p_max
@@ -181,6 +184,7 @@ CREATE FUNCTION public.simhub_observation_v1_valid(p jsonb)
 RETURNS boolean
 LANGUAGE plpgsql
 IMMUTABLE
+SET search_path = pg_catalog, public
 AS $fn$
 DECLARE
   v_key text;
@@ -200,25 +204,38 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF jsonb_typeof(p->'version') <> 'number' OR (p->>'version')::numeric <> 1 THEN
+  -- version: verplicht, getal en exact 1. De expliciete `?`-toets is nodig:
+  -- jsonb_typeof(missing) is SQL NULL, en `NULL <> 'number'` is geen TRUE.
+  IF NOT (p ? 'version')
+     OR jsonb_typeof(p->'version') IS DISTINCT FROM 'number'
+     OR (p->>'version')::numeric IS DISTINCT FROM 1 THEN
     RETURN false;
   END IF;
 
-  -- capture: alleen deviceId, canoniek UUID-formaat.
-  IF jsonb_typeof(p->'capture') <> 'object' THEN RETURN false; END IF;
+  -- capture: verplicht object met exact deviceId. Het deviceId wordt hier
+  -- alleen op vorm gecontroleerd; de identiteitsvergelijking gebeurt in
+  -- simhub_observation_row_disposition tegen het serverdevice.
+  IF NOT (p ? 'capture')
+     OR jsonb_typeof(p->'capture') IS DISTINCT FROM 'object' THEN
+    RETURN false;
+  END IF;
   IF EXISTS (
     SELECT 1 FROM jsonb_object_keys(p->'capture') AS k WHERE k <> 'deviceId'
   ) THEN
     RETURN false;
   END IF;
-  IF jsonb_typeof(p->'capture'->'deviceId') <> 'string'
+  IF NOT (p->'capture' ? 'deviceId')
+     OR jsonb_typeof(p->'capture'->'deviceId') IS DISTINCT FROM 'string'
      OR (p->'capture'->>'deviceId') !~* v_uuid THEN
     RETURN false;
   END IF;
 
-  -- interval: exact de zeven coverage-velden.
+  -- interval: verplicht object met exact de zeven coverage-velden.
+  IF NOT (p ? 'interval')
+     OR jsonb_typeof(p->'interval') IS DISTINCT FROM 'object' THEN
+    RETURN false;
+  END IF;
   v_iv := p->'interval';
-  IF jsonb_typeof(v_iv) <> 'object' THEN RETURN false; END IF;
   IF EXISTS (
     SELECT 1 FROM jsonb_object_keys(v_iv) AS k
      WHERE k NOT IN ('firstSampleAt', 'lastSampleAt', 'samples',
@@ -227,8 +244,10 @@ BEGIN
   ) THEN
     RETURN false;
   END IF;
-  IF jsonb_typeof(v_iv->'firstSampleAt') <> 'string'
-     OR jsonb_typeof(v_iv->'lastSampleAt') <> 'string' THEN
+  IF NOT (v_iv ? 'firstSampleAt')
+     OR NOT (v_iv ? 'lastSampleAt')
+     OR jsonb_typeof(v_iv->'firstSampleAt') IS DISTINCT FROM 'string'
+     OR jsonb_typeof(v_iv->'lastSampleAt') IS DISTINCT FROM 'string' THEN
     RETURN false;
   END IF;
   v_first := v_iv->>'firstSampleAt';
@@ -241,59 +260,62 @@ BEGIN
     RETURN false;
   END IF;
 
-  IF jsonb_typeof(v_iv->'samples') <> 'number'
+  IF NOT (v_iv ? 'samples')
+     OR jsonb_typeof(v_iv->'samples') IS DISTINCT FROM 'number'
      OR (v_iv->>'samples')::numeric < 1
      OR (v_iv->>'samples')::numeric > 1000000
-     OR (v_iv->>'samples')::numeric <> trunc((v_iv->>'samples')::numeric) THEN
+     OR (v_iv->>'samples')::numeric
+        IS DISTINCT FROM trunc((v_iv->>'samples')::numeric) THEN
     RETURN false;
   END IF;
 
-  IF jsonb_typeof(v_iv->'maxGapSeconds') <> 'number'
+  IF NOT (v_iv ? 'maxGapSeconds')
+     OR NOT (v_iv ? 'unknownSeconds')
+     OR NOT (v_iv ? 'edgeBeforeSeconds')
+     OR NOT (v_iv ? 'edgeAfterSeconds')
+     OR jsonb_typeof(v_iv->'maxGapSeconds') IS DISTINCT FROM 'number'
+     OR jsonb_typeof(v_iv->'unknownSeconds') IS DISTINCT FROM 'number'
+     OR jsonb_typeof(v_iv->'edgeBeforeSeconds') IS DISTINCT FROM 'number'
+     OR jsonb_typeof(v_iv->'edgeAfterSeconds') IS DISTINCT FROM 'number'
      OR (v_iv->>'maxGapSeconds')::numeric < 0
      OR (v_iv->>'maxGapSeconds')::numeric > 86400
-     OR jsonb_typeof(v_iv->'unknownSeconds') <> 'number'
      OR (v_iv->>'unknownSeconds')::numeric < 0
      OR (v_iv->>'unknownSeconds')::numeric > 86400
-     OR jsonb_typeof(v_iv->'edgeBeforeSeconds') <> 'number'
      OR (v_iv->>'edgeBeforeSeconds')::numeric < 0
      OR (v_iv->>'edgeBeforeSeconds')::numeric > 86400
-     OR jsonb_typeof(v_iv->'edgeAfterSeconds') <> 'number'
      OR (v_iv->>'edgeAfterSeconds')::numeric < 0
      OR (v_iv->>'edgeAfterSeconds')::numeric > 86400 THEN
     RETURN false;
   END IF;
 
-  -- Minstens één descriptief feit; capture-only bestaat niet.
-  IF p ? 'pitRoad' THEN v_fact := v_fact + 1; END IF;
-  IF p ? 'refuel' THEN v_fact := v_fact + 1; END IF;
-  IF p ? 'driverNameContinuity' THEN v_fact := v_fact + 1; END IF;
-  IF p ? 'context' THEN v_fact := v_fact + 1; END IF;
-  IF v_fact < 1 THEN RETURN false; END IF;
-
-  -- pitRoad: alleen {value:true, firstAt}; false/0 is een verboden negatief feit.
+  -- pitRoad: alleen {value:true, firstAt}; false/0/null is een verboden feit.
   IF p ? 'pitRoad' THEN
-    IF jsonb_typeof(p->'pitRoad') <> 'object' THEN RETURN false; END IF;
+    IF jsonb_typeof(p->'pitRoad') IS DISTINCT FROM 'object' THEN RETURN false; END IF;
     IF EXISTS (
       SELECT 1 FROM jsonb_object_keys(p->'pitRoad') AS k
        WHERE k NOT IN ('value', 'firstAt')
     ) THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'pitRoad'->'value') <> 'boolean'
+    IF NOT (p->'pitRoad' ? 'value')
+       OR jsonb_typeof(p->'pitRoad'->'value') IS DISTINCT FROM 'boolean'
        OR (p->'pitRoad'->>'value')::boolean IS NOT TRUE THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'pitRoad'->'firstAt') <> 'string'
+    IF NOT (p->'pitRoad' ? 'firstAt')
+       OR jsonb_typeof(p->'pitRoad'->'firstAt') IS DISTINCT FROM 'string'
        OR NOT public.simhub_observation_ts_valid(p->'pitRoad'->>'firstAt')
        OR NOT public.simhub_observation_ts_le(v_first, p->'pitRoad'->>'firstAt')
        OR NOT public.simhub_observation_ts_le(p->'pitRoad'->>'firstAt', v_last) THEN
       RETURN false;
     END IF;
+    v_fact := v_fact + 1;
   END IF;
 
-  -- refuel: alleen een waargenomen positieve stap.
+  -- refuel: alleen een waargenomen positieve stap; alle vier de kernvelden
+  -- zijn verplicht zodra het blok aanwezig is.
   IF p ? 'refuel' THEN
-    IF jsonb_typeof(p->'refuel') <> 'object' THEN RETURN false; END IF;
+    IF jsonb_typeof(p->'refuel') IS DISTINCT FROM 'object' THEN RETURN false; END IF;
     IF EXISTS (
       SELECT 1 FROM jsonb_object_keys(p->'refuel') AS k
        WHERE k NOT IN ('observedAddedLitres', 'firstAt', 'positiveSteps',
@@ -301,53 +323,66 @@ BEGIN
     ) THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'refuel'->'observedAddedLitres') <> 'number'
-       OR (p->'refuel'->>'observedAddedLitres')::numeric <= 0
+    IF NOT (p->'refuel' ? 'observedAddedLitres')
+       OR NOT (p->'refuel' ? 'positiveSteps')
+       OR NOT (p->'refuel' ? 'resolutionLitres')
+       OR NOT (p->'refuel' ? 'firstAt')
+       OR jsonb_typeof(p->'refuel'->'observedAddedLitres') IS DISTINCT FROM 'number'
+       OR jsonb_typeof(p->'refuel'->'positiveSteps') IS DISTINCT FROM 'number'
+       OR jsonb_typeof(p->'refuel'->'resolutionLitres') IS DISTINCT FROM 'number'
+       OR jsonb_typeof(p->'refuel'->'firstAt') IS DISTINCT FROM 'string' THEN
+      RETURN false;
+    END IF;
+    IF (p->'refuel'->>'observedAddedLitres')::numeric <= 0
        OR (p->'refuel'->>'observedAddedLitres')::numeric > 300 THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'refuel'->'positiveSteps') <> 'number'
-       OR (p->'refuel'->>'positiveSteps')::numeric < 1
+    IF (p->'refuel'->>'positiveSteps')::numeric < 1
        OR (p->'refuel'->>'positiveSteps')::numeric > 10000
        OR (p->'refuel'->>'positiveSteps')::numeric
-          <> trunc((p->'refuel'->>'positiveSteps')::numeric) THEN
+          IS DISTINCT FROM trunc((p->'refuel'->>'positiveSteps')::numeric) THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'refuel'->'resolutionLitres') <> 'number'
-       OR (p->'refuel'->>'resolutionLitres')::numeric < 0.001
+    IF (p->'refuel'->>'resolutionLitres')::numeric < 0.001
        OR (p->'refuel'->>'resolutionLitres')::numeric > 1 THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'refuel'->'firstAt') <> 'string'
-       OR NOT public.simhub_observation_ts_valid(p->'refuel'->>'firstAt')
+    IF NOT public.simhub_observation_ts_valid(p->'refuel'->>'firstAt')
        OR NOT public.simhub_observation_ts_le(v_first, p->'refuel'->>'firstAt')
        OR NOT public.simhub_observation_ts_le(p->'refuel'->>'firstAt', v_last) THEN
       RETURN false;
     END IF;
     IF p->'refuel' ? 'maxUndetectedLitres' THEN
-      IF jsonb_typeof(p->'refuel'->'maxUndetectedLitres') <> 'number'
+      IF jsonb_typeof(p->'refuel'->'maxUndetectedLitres') IS DISTINCT FROM 'number'
          OR (p->'refuel'->>'maxUndetectedLitres')::numeric
             < (p->'refuel'->>'resolutionLitres')::numeric
          OR (p->'refuel'->>'maxUndetectedLitres')::numeric > 300 THEN
         RETURN false;
       END IF;
     END IF;
+    v_fact := v_fact + 1;
   END IF;
 
   IF p ? 'driverNameContinuity' THEN
-    IF jsonb_typeof(p->'driverNameContinuity') <> 'object' THEN RETURN false; END IF;
+    IF jsonb_typeof(p->'driverNameContinuity') IS DISTINCT FROM 'object' THEN RETURN false; END IF;
     IF EXISTS (
       SELECT 1 FROM jsonb_object_keys(p->'driverNameContinuity') AS k WHERE k <> 'value'
     ) THEN
       RETURN false;
     END IF;
-    IF p->'driverNameContinuity'->>'value' NOT IN ('unchanged', 'changed') THEN
+    IF NOT (p->'driverNameContinuity' ? 'value')
+       OR jsonb_typeof(p->'driverNameContinuity'->'value') IS DISTINCT FROM 'string'
+       OR (p->'driverNameContinuity'->>'value') IS NULL
+       OR (p->'driverNameContinuity'->>'value') NOT IN ('unchanged', 'changed') THEN
       RETURN false;
     END IF;
+    v_fact := v_fact + 1;
   END IF;
 
+  -- context: de vier identiteitsvelden zijn verplicht; session-velden zijn
+  -- optioneel maar een expliciete null of verkeerd type is ongeldig.
   IF p ? 'context' THEN
-    IF jsonb_typeof(p->'context') <> 'object' THEN RETURN false; END IF;
+    IF jsonb_typeof(p->'context') IS DISTINCT FROM 'object' THEN RETURN false; END IF;
     IF EXISTS (
       SELECT 1 FROM jsonb_object_keys(p->'context') AS k
        WHERE k NOT IN ('carId', 'trackId', 'trackName', 'trackConfig',
@@ -355,44 +390,53 @@ BEGIN
     ) THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'context'->'carId') <> 'string'
+    IF NOT (p->'context' ? 'carId')
+       OR jsonb_typeof(p->'context'->'carId') IS DISTINCT FROM 'string'
        OR NOT public.simhub_observation_text_valid(p->'context'->>'carId', 64) THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'context'->'trackName') <> 'string'
+    IF NOT (p->'context' ? 'trackName')
+       OR jsonb_typeof(p->'context'->'trackName') IS DISTINCT FROM 'string'
        OR NOT public.simhub_observation_text_valid(p->'context'->>'trackName', 128) THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'context'->'trackConfig') <> 'string'
+    IF NOT (p->'context' ? 'trackConfig')
+       OR jsonb_typeof(p->'context'->'trackConfig') IS DISTINCT FROM 'string'
        OR NOT public.simhub_observation_text_valid(p->'context'->>'trackConfig', 128) THEN
       RETURN false;
     END IF;
-    IF jsonb_typeof(p->'context'->'trackId') <> 'number'
+    IF NOT (p->'context' ? 'trackId')
+       OR jsonb_typeof(p->'context'->'trackId') IS DISTINCT FROM 'number'
        OR (p->'context'->>'trackId')::numeric < 1
        OR (p->'context'->>'trackId')::numeric > 2147483647
        OR (p->'context'->>'trackId')::numeric
-          <> trunc((p->'context'->>'trackId')::numeric) THEN
+          IS DISTINCT FROM trunc((p->'context'->>'trackId')::numeric) THEN
       RETURN false;
     END IF;
     IF p->'context' ? 'sessionUniqueId' THEN
-      IF jsonb_typeof(p->'context'->'sessionUniqueId') <> 'number'
+      IF jsonb_typeof(p->'context'->'sessionUniqueId') IS DISTINCT FROM 'number'
          OR (p->'context'->>'sessionUniqueId')::numeric < 0
          OR (p->'context'->>'sessionUniqueId')::numeric > 2147483647
          OR (p->'context'->>'sessionUniqueId')::numeric
-            <> trunc((p->'context'->>'sessionUniqueId')::numeric) THEN
+            IS DISTINCT FROM trunc((p->'context'->>'sessionUniqueId')::numeric) THEN
         RETURN false;
       END IF;
     END IF;
     IF p->'context' ? 'sessionNumber' THEN
-      IF jsonb_typeof(p->'context'->'sessionNumber') <> 'number'
+      IF jsonb_typeof(p->'context'->'sessionNumber') IS DISTINCT FROM 'number'
          OR (p->'context'->>'sessionNumber')::numeric < 0
          OR (p->'context'->>'sessionNumber')::numeric > 1000
          OR (p->'context'->>'sessionNumber')::numeric
-            <> trunc((p->'context'->>'sessionNumber')::numeric) THEN
+            IS DISTINCT FROM trunc((p->'context'->>'sessionNumber')::numeric) THEN
         RETURN false;
       END IF;
     END IF;
+    v_fact := v_fact + 1;
   END IF;
+
+  -- Alleen volledig gevalideerde descriptoren tellen; een leeg object is hier
+  -- dus nooit een feit (het is hierboven al afgekeurd).
+  IF v_fact < 1 THEN RETURN false; END IF;
 
   RETURN true;
 EXCEPTION WHEN others THEN
@@ -407,6 +451,7 @@ CREATE FUNCTION public.simhub_observation_row_disposition(p_row jsonb, p_device_
 RETURNS text
 LANGUAGE plpgsql
 IMMUTABLE
+SET search_path = pg_catalog, public
 AS $fn$
 DECLARE
   v_obs jsonb;
@@ -1861,6 +1906,17 @@ REVOKE ALL ON FUNCTION public.simhub_observation_v1_available() FROM PUBLIC, ano
 GRANT EXECUTE ON FUNCTION public.simhub_observation_capture_enabled() TO service_role;
 GRANT EXECUTE ON FUNCTION public.simhub_observation_v1_available() TO service_role;
 GRANT EXECUTE ON FUNCTION public.simhub_lap_row_hash_v2(public.simhub_lap_summaries) TO service_role;
+-- De gedocumenteerde directe terugval `simhub_apply_lap_row` is SECURITY
+-- INVOKER. De service_role roept hem rechtstreeks aan en heeft daarom EXECUTE
+-- nodig op de volledige pure helperketen: dispositie -> validator ->
+-- ts/text-helpers. Alleen service_role; PUBLIC/anon/authenticated blijven
+-- expliciet geweigerd. Zo blijft dit een minimale grant en geen
+-- SECURITY DEFINER-permission-bypass.
+GRANT EXECUTE ON FUNCTION public.simhub_observation_row_disposition(jsonb, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.simhub_observation_v1_valid(jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.simhub_observation_ts_le(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.simhub_observation_ts_valid(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.simhub_observation_text_valid(text, integer) TO service_role;
 
 COMMENT ON FUNCTION public.simhub_observation_v1_available() IS
   'T13-S1 reader capability for the Edge. True only when the full package exists and observation_enabled is on. service_role only.';
