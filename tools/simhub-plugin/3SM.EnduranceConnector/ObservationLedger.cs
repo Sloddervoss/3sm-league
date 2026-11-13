@@ -550,6 +550,15 @@ namespace ThreeSM.EnduranceConnector
             }
         }
 
+        /// <summary>
+        /// Alleen-lezen epochcontrole. De aanroeper houdt de storelock al vast;
+        /// deze lock is dezelfde fence die een lokale rebind moet nemen.
+        /// </summary>
+        internal bool IsCurrent(ObservationPairingBinding expected)
+        {
+            lock (_gate) { return SameBinding(_current, expected); }
+        }
+
         internal static bool SameBinding(ObservationPairingBinding left, ObservationPairingBinding right)
         {
             if (left == null || right == null) return left == right;

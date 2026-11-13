@@ -11,6 +11,9 @@ namespace ThreeSM.EnduranceConnector
     {
         public int MaxEntries = 64;
         public int MaxSnapshotBytes = 1024 * 1024;
+        /// <summary>Bounded backoff for a temporary observation rejection.</summary>
+        public double BackoffBaseSeconds = 2.0;
+        public double BackoffMaxSeconds = 60.0;
         internal Func<DateTime> Clock = delegate { return DateTime.UtcNow; };
     }
 
@@ -201,7 +204,7 @@ namespace ThreeSM.EnduranceConnector
         public int ReservationCount { get { lock (_gate) { return _reservations.Count; } } }
         public int CaptureRefused { get { lock (_gate) { return _captureRefused; } } }
         public int QuarantineTotal { get { lock (_gate) { return _quarantineTotal; } } }
-        /// <summary>Zero until a real revision-sufficient ACK integration exists.</summary>
+        /// <summary>Cumulative confirmed observation deliveries; never derived from an empty queue.</summary>
         public int DeliveredTotal { get { lock (_gate) { return _deliveredTotal; } } }
         public long ActualBytes { get { lock (_gate) { return _actualBytes; } } }
         public long ReservedBytes { get { lock (_gate) { return _reservedBytes; } } }
@@ -717,8 +720,8 @@ namespace ThreeSM.EnduranceConnector
                 _quarantineTotal = quarantineTotal;
                 _deliveredTotal = deliveredTotal;
                 _actualBytes = actual;
-                _reservedBytes = reserved;
                 _reservations.Remove(key);
+                RecomputeReserved();
                 return CaptureResult(ObservationLedgerCaptureStatus.Captured, candidate,
                     null, "adopted_committed_entry", false);
             }
@@ -730,7 +733,7 @@ namespace ThreeSM.EnduranceConnector
             _quarantineTotal = quarantineTotal;
             _deliveredTotal = deliveredTotal;
             _actualBytes = actual;
-            _reservedBytes = reserved;
+            RecomputeReserved();
             return CaptureResult(ObservationLedgerCaptureStatus.NotCommitted, candidate,
                 null, "target_unchanged_after_uncertain_switch", false);
         }
@@ -790,14 +793,16 @@ namespace ThreeSM.EnduranceConnector
                     return ReservationReleaseOutcome.Conflict;
                 }
                 AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
-                    diskDeliveredTotal, diskActual, diskReserved);
+                    diskDeliveredTotal, diskActual);
                 _reservations.Remove(key);
+                RecomputeReserved();
                 return ReservationReleaseOutcome.Adopted;
             }
 
             AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
-                diskDeliveredTotal, diskActual, diskReserved);
+                diskDeliveredTotal, diskActual);
             _reservations.Remove(key);
+            RecomputeReserved();
             return ReservationReleaseOutcome.Released;
         }
 
@@ -863,7 +868,7 @@ namespace ThreeSM.EnduranceConnector
                 expectedQuarantineTotal, expectedDeliveredTotal, diskEntries,
                 diskCaptureRefused, diskQuarantineTotal, diskDeliveredTotal);
             AdoptSnapshot(diskEntries, diskCaptureRefused, diskQuarantineTotal,
-                diskDeliveredTotal, diskActual, diskReserved);
+                diskDeliveredTotal, diskActual);
             if (!matches) diagnostic = "target_snapshot_mismatch";
             return matches;
         }
@@ -904,14 +909,28 @@ namespace ThreeSM.EnduranceConnector
         }
 
         private void AdoptSnapshot(List<ObservationLedgerEntry> entries, int captureRefused,
-            int quarantineTotal, int deliveredTotal, long actual, long reserved)
+            int quarantineTotal, int deliveredTotal, long actual)
         {
             _entries = entries;
             _captureRefused = captureRefused;
             _quarantineTotal = quarantineTotal;
             _deliveredTotal = deliveredTotal;
             _actualBytes = actual;
-            _reservedBytes = reserved;
+            // De schijf-snapshot kent alleen duurzame rijen. Een onopgeloste
+            // reservering is nog een echte claim op het budget en moet in het
+            // gerapporteerde worst-state blijven meetellen, zonder dubbeltelling
+            // van een UID/revisie die inmiddels duurzaam bestaat.
+            RecomputeReserved();
+        }
+
+        /// <summary>
+        /// Herberekent het gerapporteerde worst-case budget uit de gezaghebbende
+        /// duurzame rijen plus alle nog onopgeloste, niet-aliasing reserveringen.
+        /// </summary>
+        private void RecomputeReserved()
+        {
+            int count;
+            _reservedBytes = EffectiveWorst(_entries, out count);
         }
 
         private ObservationLedgerCaptureResult Refuse(ObservationLedgerCandidate candidate,
@@ -980,6 +999,477 @@ namespace ThreeSM.EnduranceConnector
             return new ObservationLedgerCaptureResult(status, candidate.Uid,
                 candidate.RecordRevision, reasonCode, diagnostic, _entries.Count,
                 _reservations.Count, _actualBytes, _reservedBytes, counterPersisted);
+        }
+
+        /// <summary>
+        /// Past één geclassificeerd ACK atomair toe. De methode accepteert geen
+        /// caller-boolean en geen losse UID: alleen een echte
+        /// <see cref="ObservationAckResolution"/> met de volledige aangeboden
+        /// batch en de pairing-epoch waaronder die is aangeboden.
+        /// </summary>
+        public ObservationAckApplyResult ApplyAck(ObservationAckResolution resolution, DateTime nowUtc)
+        {
+            if (resolution == null) throw new ArgumentNullException("resolution");
+            if (resolution.Batch == null) throw new ArgumentException("ack_batch_missing", "resolution");
+            if (nowUtc.Kind != DateTimeKind.Utc)
+                return AckNoChange(ObservationAckApplyStatus.RefusedInvalid, resolution,
+                    "apply_time_not_utc");
+
+            var expected = resolution.ExpectedBinding;
+            lock (_gate)
+            {
+                if (_failedClosed)
+                    return AckNoChange(ObservationAckApplyStatus.RefusedStoreFailedClosed,
+                        resolution, "ledger_failed_closed");
+                if (expected == null || !expected.IsComplete)
+                    return AckNoChange(ObservationAckApplyStatus.RefusedStaleEpoch,
+                        resolution, "ack_binding_incomplete");
+                if (!BindingFence.IsCurrent(expected))
+                    return AckNoChange(ObservationAckApplyStatus.RefusedStaleEpoch,
+                        resolution, "ack_stale_epoch");
+                if (!resolution.HasMeasurements || !resolution.SeriesStored)
+                {
+                    // stored:false, geen measurements of een onparseerbaar ACK is
+                    // geen leveringsbewijs: niets verwijderen, niets tellen.
+                    return AckNoChange(ObservationAckApplyStatus.NoChanges, resolution,
+                        resolution.Diagnostic ?? "ack_not_stored");
+                }
+
+                ObservationAckApplyResult applied = null;
+                var ran = BindingFence.TryExecuteIfCurrent(expected, delegate
+                {
+                    applied = ApplyAckLocked(resolution, nowUtc, expected);
+                });
+                if (!ran)
+                {
+                    return AckNoChange(ObservationAckApplyStatus.RefusedStaleEpoch,
+                        resolution, "ack_stale_epoch");
+                }
+                return applied;
+            }
+        }
+
+        private ObservationAckApplyResult ApplyAckLocked(ObservationAckResolution resolution,
+            DateTime nowUtc, ObservationPairingBinding expected)
+        {
+            var plan = new AckPlan[resolution.Rows.Count];
+            var entries = new List<ObservationLedgerEntry>(_entries);
+            var removed = new bool[entries.Count];
+            var replacements = new Dictionary<int, ObservationLedgerEntry>();
+            var deliveredIndexes = new List<int>();
+            var delivered = new List<DeliveredAckRow>();
+            var indexByIdentity = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (var index = 0; index < entries.Count; index++)
+            {
+                indexByIdentity[IdentityKey(entries[index].Uid, entries[index].RecordRevision)] = index;
+            }
+
+            for (var rowIndex = 0; rowIndex < resolution.Rows.Count; rowIndex++)
+            {
+                var row = resolution.Rows[rowIndex];
+                if (row.Lane != ObservationAckLane.Observation)
+                {
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.NotDelivered, null);
+                    continue;
+                }
+                if (!ObservationBindingFence.SameBinding(row.Offered.Binding, expected))
+                {
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.StaleEpoch,
+                        "ack_stale_offer_binding");
+                    continue;
+                }
+                if (row.Outcome == ObservationAckClass.NotDelivered)
+                {
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.NotDelivered,
+                        row.Diagnostic);
+                    continue;
+                }
+
+                int entryIndex;
+                if (!indexByIdentity.TryGetValue(
+                        IdentityKey(row.Uid, row.RecordRevision), out entryIndex))
+                {
+                    // Geen tombstone en geen geschiedenis: een replay of een
+                    // onbekende UID levert alleen een diagnose, nooit een teller
+                    // of een nieuwe entry.
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.UnknownUid,
+                        "ack_unknown_uid");
+                    continue;
+                }
+
+                var entry = entries[entryIndex];
+                if (!ObservationBindingFence.SameBinding(entry.Binding, expected))
+                {
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.StaleEpoch,
+                        "ack_stale_epoch");
+                    continue;
+                }
+                if (removed[entryIndex] || replacements.ContainsKey(entryIndex))
+                {
+                    return AckNoChange(ObservationAckApplyStatus.RefusedInvalid, resolution,
+                        "ack_duplicate_row_plan");
+                }
+
+                // De aangeboden identiteit is pas bewijs als ook de exacte
+                // bytes en de binding nog de duurzame rij zijn. Deze fence staat
+                // vóór élke muterende branch (delivery, deferred, quarantaine).
+                if (!string.Equals(entry.RowJson, row.Offered.RowJson, StringComparison.Ordinal))
+                {
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.IdentityConflict,
+                        "ack_row_json_conflict");
+                    continue;
+                }
+
+                if (row.Outcome == ObservationAckClass.Accepted
+                    || row.Outcome == ObservationAckClass.Duplicate
+                    || row.Outcome == ObservationAckClass.Superseded)
+                {
+                    if (entry.State == ObservationLedgerState.Quarantine)
+                    {
+                        // Quarantaine is terminaal. Een later ACK maakt daar geen
+                        // stille deliverable van; alleen een expliciete operatoractie mag dat.
+                        plan[rowIndex] = new AckPlan(
+                            ObservationAckDurableOutcome.QuarantineTerminal,
+                            "quarantine_is_terminal");
+                        continue;
+                    }
+                    removed[entryIndex] = true;
+                    deliveredIndexes.Add(entryIndex);
+                    delivered.Add(new DeliveredAckRow(entry, entryIndex));
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.DeliveredRemoved, null);
+                    continue;
+                }
+
+                ObservationLedgerReason reason;
+                if (!ObservationLedgerReasons.TryParse(row.ReasonCode, out reason))
+                {
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.NotDelivered,
+                        "ack_reason_invalid");
+                    continue;
+                }
+
+                if (row.Outcome == ObservationAckClass.Deferred)
+                {
+                    if (!ObservationLedgerReasons.IsDeferred(reason))
+                    {
+                        plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.NotDelivered,
+                            "ack_reason_not_deferred");
+                        continue;
+                    }
+                    if (entry.State == ObservationLedgerState.Quarantine)
+                    {
+                        // Quarantaine is terminaal; een later tijdelijk ACK
+                        // haalt hem niet terug alsof hij nog pending was.
+                        plan[rowIndex] = new AckPlan(
+                            ObservationAckDurableOutcome.QuarantineTerminal,
+                            "quarantine_is_terminal");
+                        continue;
+                    }
+                    if (entry.Attempts == int.MaxValue)
+                    {
+                        plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.NotDelivered,
+                            "attempts_overflow");
+                        continue;
+                    }
+                    var attempts = entry.Attempts + 1;
+                    var next = ObservationLedgerCandidate.TruncateToMilliseconds(
+                        nowUtc.AddSeconds(BackoffSeconds(attempts)));
+                    replacements[entryIndex] = entry.WithState(ObservationLedgerState.Deferred,
+                        reason, attempts, next);
+                    plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.DeferredPersisted,
+                        null);
+                    continue;
+                }
+
+                if (row.Outcome == ObservationAckClass.Quarantined)
+                {
+                    if (!ObservationLedgerReasons.IsQuarantine(reason))
+                    {
+                        plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.NotDelivered,
+                            "ack_reason_not_permanent");
+                        continue;
+                    }
+                    if (entry.State == ObservationLedgerState.Quarantine)
+                    {
+                        plan[rowIndex] = new AckPlan(
+                            ObservationAckDurableOutcome.QuarantineTerminal,
+                            "quarantine_is_terminal");
+                        continue;
+                    }
+                    replacements[entryIndex] = entry.WithState(ObservationLedgerState.Quarantine,
+                        reason, entry.Attempts, null);
+                    plan[rowIndex] = new AckPlan(
+                        ObservationAckDurableOutcome.QuarantinedPersisted, null);
+                    continue;
+                }
+
+                plan[rowIndex] = new AckPlan(ObservationAckDurableOutcome.NotDelivered,
+                    "ack_outcome_unsupported");
+            }
+
+            var deliveredAdded = delivered.Count;
+            var quarantineAdded = 0;
+            foreach (var pair in replacements)
+            {
+                if (pair.Value.State == ObservationLedgerState.Quarantine
+                    && entries[pair.Key].State != ObservationLedgerState.Quarantine)
+                {
+                    quarantineAdded++;
+                }
+            }
+
+            if (deliveredAdded == 0 && replacements.Count == 0)
+            {
+                return AckResult(ObservationAckApplyStatus.NoChanges, resolution, plan,
+                    0, 0, 0, "no_durable_changes");
+            }
+            if (_deliveredTotal > int.MaxValue - deliveredAdded)
+            {
+                return AckNoChange(ObservationAckApplyStatus.RefusedCounterOverflow,
+                    resolution, "delivered_total_overflow");
+            }
+            if (_quarantineTotal > int.MaxValue - quarantineAdded)
+            {
+                return AckNoChange(ObservationAckApplyStatus.RefusedCounterOverflow,
+                    resolution, "quarantine_total_overflow");
+            }
+
+            var nextEntries = new List<ObservationLedgerEntry>(
+                entries.Count - deliveredIndexes.Count + replacements.Count);
+            for (var index = 0; index < entries.Count; index++)
+            {
+                if (removed[index]) continue;
+                ObservationLedgerEntry replacement;
+                if (replacements.TryGetValue(index, out replacement)) nextEntries.Add(replacement);
+                else nextEntries.Add(entries[index]);
+            }
+
+            int effectiveCount;
+            var reserved = EffectiveWorst(nextEntries, out effectiveCount);
+            if (effectiveCount > EffectiveMaxEntries || reserved > EffectiveMaxBytes)
+            {
+                return AckNoChange(ObservationAckApplyStatus.RefusedQuota, resolution,
+                    "ack_transition_budget_exceeded");
+            }
+
+            var nextDelivered = _deliveredTotal + deliveredAdded;
+            var nextQuarantine = _quarantineTotal + quarantineAdded;
+            var savedAt = ClockNow();
+            string json;
+            long actual;
+            try
+            {
+                json = ObservationLedgerSnapshotCodec.Serialize(nextEntries, _captureRefused,
+                    nextQuarantine, nextDelivered, savedAt);
+                actual = ObservationLedgerBudget.Utf8(json);
+            }
+            catch (Exception error)
+            {
+                return AckNoChange(ObservationAckApplyStatus.NotCommitted, resolution,
+                    "snapshot_serialize_failed:" + error.GetType().Name);
+            }
+            if (actual > reserved || reserved > EffectiveMaxBytes)
+            {
+                return AckNoChange(ObservationAckApplyStatus.RefusedQuota, resolution,
+                    "ack_transition_budget_exceeded");
+            }
+
+            var guard = new Func<bool>(delegate
+            {
+                // Onder de fence, onmiddellijk vóór de switch: epoch én de
+                // exacte UID/revisie/RowJson van elke te verwijderen rij.
+                if (!BindingFence.IsCurrent(expected)) return false;
+                return VerifyAckPlan(entries, nextEntries, delivered);
+            });
+
+            string writeError;
+            var outcome = TryWriteSnapshot(json, guard, out writeError);
+            if (outcome == SwitchOutcome.FailedBeforeSwitch)
+            {
+                if (!BindingFence.IsCurrent(expected))
+                {
+                    return AckNoChange(ObservationAckApplyStatus.RefusedStaleEpoch, resolution,
+                        "ack_stale_epoch_before_switch");
+                }
+                return AckNoChange(ObservationAckApplyStatus.NotCommitted, resolution,
+                    "precommit_io:" + writeError);
+            }
+            if (outcome == SwitchOutcome.Uncertain)
+            {
+                string reconcile;
+                if (ReconcileFullSnapshot(nextEntries, _captureRefused, nextQuarantine,
+                        nextDelivered, out reconcile))
+                {
+                    ReleaseDeliveredReservations(delivered);
+                    return AckResult(ObservationAckApplyStatus.Applied, resolution, plan,
+                        deliveredAdded, CountDeferred(plan), quarantineAdded, null);
+                }
+                // De volledige snapshot op schijf is niet de verwachte. Er is
+                // geen tweede legacy-fallback en geen gok: fail closed.
+                _failedClosed = true;
+                _persistenceError = "ack_uncertain_switch_mismatch:" + reconcile;
+                return AckUncertain(resolution, plan, "ack_uncertain_switch_mismatch");
+            }
+
+            _entries = nextEntries;
+            _quarantineTotal = nextQuarantine;
+            _deliveredTotal = nextDelivered;
+            _actualBytes = actual;
+            _reservedBytes = reserved;
+            ReleaseDeliveredReservations(delivered);
+            return AckResult(ObservationAckApplyStatus.Applied, resolution, plan,
+                deliveredAdded, CountDeferred(plan), quarantineAdded, null);
+        }
+
+        private bool VerifyAckPlan(IList<ObservationLedgerEntry> before,
+            IList<ObservationLedgerEntry> after, IList<DeliveredAckRow> delivered)
+        {
+            for (var index = 0; index < delivered.Count; index++)
+            {
+                var item = delivered[index];
+                if (item.Index < 0 || item.Index >= before.Count) return false;
+                var source = before[item.Index];
+                if (!string.Equals(source.Uid, item.Entry.Uid, StringComparison.OrdinalIgnoreCase)
+                    || source.RecordRevision != item.Entry.RecordRevision
+                    || !string.Equals(source.RowJson, item.Entry.RowJson, StringComparison.Ordinal)
+                    || !ObservationBindingFence.SameBinding(source.Binding, item.Entry.Binding))
+                {
+                    return false;
+                }
+                var key = IdentityKey(item.Entry.Uid, item.Entry.RecordRevision);
+                for (var other = 0; other < after.Count; other++)
+                {
+                    if (IdentityKey(after[other].Uid, after[other].RecordRevision) == key)
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        private void ReleaseDeliveredReservations(IList<DeliveredAckRow> delivered)
+        {
+            for (var index = 0; index < delivered.Count; index++)
+            {
+                _reservations.Remove(IdentityKey(delivered[index].Entry.Uid,
+                    delivered[index].Entry.RecordRevision));
+            }
+            // Na een onzekere verzoening kan AdoptSnapshot de nog niet
+            // vrijgegeven alias hebben meegeteld; dit is het gezaghebbende moment.
+            RecomputeReserved();
+        }
+
+        private int CountDeferred(AckPlan[] plan)
+        {
+            var count = 0;
+            for (var index = 0; index < plan.Length; index++)
+                if (plan[index] != null
+                    && plan[index].Durable == ObservationAckDurableOutcome.DeferredPersisted)
+                    count++;
+            return count;
+        }
+
+        private double BackoffSeconds(int attempts)
+        {
+            var max = _options.BackoffMaxSeconds;
+            if (double.IsNaN(max) || double.IsInfinity(max) || max <= 0) max = 60.0;
+            if (max > 86400.0) max = 86400.0;
+            var baseSeconds = _options.BackoffBaseSeconds;
+            if (double.IsNaN(baseSeconds) || double.IsInfinity(baseSeconds) || baseSeconds <= 0)
+                baseSeconds = 2.0;
+            var exponent = Math.Max(0, attempts - 1);
+            var seconds = baseSeconds * Math.Pow(2, exponent);
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds)) return max;
+            return Math.Min(seconds, max);
+        }
+
+        private ObservationAckApplyResult AckNoChange(ObservationAckApplyStatus status,
+            ObservationAckResolution resolution, string diagnostic)
+        {
+            var rows = new List<ObservationAckApplyRowResult>(resolution.Rows.Count);
+            for (var index = 0; index < resolution.Rows.Count; index++)
+            {
+                var row = resolution.Rows[index];
+                rows.Add(new ObservationAckApplyRowResult(row,
+                    ObservationAckDurableOutcome.NotDelivered,
+                    row.Diagnostic ?? diagnostic));
+            }
+            return new ObservationAckApplyResult(status, rows, 0, 0, 0, 0, false,
+                diagnostic, _actualBytes, _reservedBytes, _entries.Count, _deliveredTotal,
+                _quarantineTotal, resolution.BlockErrorCode);
+        }
+
+        private ObservationAckApplyResult AckUncertain(ObservationAckResolution resolution,
+            AckPlan[] plan, string diagnostic)
+        {
+            var rows = new List<ObservationAckApplyRowResult>(resolution.Rows.Count);
+            for (var index = 0; index < resolution.Rows.Count; index++)
+            {
+                var row = resolution.Rows[index];
+                var durable = row.Lane == ObservationAckLane.Observation
+                    ? ObservationAckDurableOutcome.Uncertain
+                    : ObservationAckDurableOutcome.NotDelivered;
+                rows.Add(new ObservationAckApplyRowResult(row, durable, diagnostic));
+            }
+            return new ObservationAckApplyResult(ObservationAckApplyStatus.Uncertain, rows,
+                0, 0, 0, 0, false, diagnostic, _actualBytes, _reservedBytes, _entries.Count,
+                _deliveredTotal, _quarantineTotal, resolution.BlockErrorCode);
+        }
+
+        private ObservationAckApplyResult AckResult(ObservationAckApplyStatus status,
+            ObservationAckResolution resolution, AckPlan[] plan, int deliveredCount,
+            int deferredCount, int quarantinedCount, string diagnostic)
+        {
+            var rows = new List<ObservationAckApplyRowResult>(resolution.Rows.Count);
+            var observationCount = 0;
+            var deliveredRows = 0;
+            var allDelivered = true;
+            var unknown = 0;
+            for (var index = 0; index < resolution.Rows.Count; index++)
+            {
+                var row = resolution.Rows[index];
+                var item = plan[index] ?? new AckPlan(ObservationAckDurableOutcome.NotDelivered,
+                    row.Diagnostic ?? diagnostic);
+                rows.Add(new ObservationAckApplyRowResult(row, item.Durable,
+                    item.Diagnostic ?? row.Diagnostic));
+                if (row.Lane != ObservationAckLane.Observation) continue;
+                observationCount++;
+                if (item.Durable == ObservationAckDurableOutcome.DeliveredRemoved)
+                    deliveredRows++;
+                else allDelivered = false;
+                if (item.Durable == ObservationAckDurableOutcome.UnknownUid) unknown++;
+            }
+            var stored = status == ObservationAckApplyStatus.Applied
+                && observationCount > 0
+                && allDelivered
+                && deliveredRows == observationCount
+                && resolution.AllObservationsDelivered;
+            return new ObservationAckApplyResult(status, rows, deliveredCount, deferredCount,
+                quarantinedCount, unknown, stored, diagnostic, _actualBytes, _reservedBytes,
+                _entries.Count, _deliveredTotal, _quarantineTotal, resolution.BlockErrorCode);
+        }
+
+        private sealed class AckPlan
+        {
+            public AckPlan(ObservationAckDurableOutcome durable, string diagnostic)
+            {
+                Durable = durable;
+                Diagnostic = diagnostic;
+            }
+
+            public ObservationAckDurableOutcome Durable { get; private set; }
+            public string Diagnostic { get; private set; }
+        }
+
+        private sealed class DeliveredAckRow
+        {
+            public DeliveredAckRow(ObservationLedgerEntry entry, int index)
+            {
+                Entry = entry;
+                Index = index;
+            }
+
+            public ObservationLedgerEntry Entry { get; private set; }
+            public int Index { get; private set; }
         }
 
         private ObservationLedgerTransitionResult Transition(ObservationLedgerTransitionStatus status,
@@ -1081,7 +1571,7 @@ namespace ThreeSM.EnduranceConnector
         private bool Restore(byte[] bytes, string reason)
         {
             string writeError;
-            var outcome = TryWriteBytes(bytes, out writeError);
+            var outcome = TryWriteBytes(bytes, null, out writeError);
             if (outcome == SwitchOutcome.FailedBeforeSwitch)
             {
                 _persistenceError = reason + "_failed:" + writeError;
@@ -1116,10 +1606,15 @@ namespace ThreeSM.EnduranceConnector
 
         private SwitchOutcome TryWriteSnapshot(string json, out string error)
         {
-            return TryWriteBytes(StrictUtf8.GetBytes(json), out error);
+            return TryWriteBytes(StrictUtf8.GetBytes(json), null, out error);
         }
 
-        private SwitchOutcome TryWriteBytes(byte[] bytes, out string error)
+        private SwitchOutcome TryWriteSnapshot(string json, Func<bool> guard, out string error)
+        {
+            return TryWriteBytes(StrictUtf8.GetBytes(json), guard, out error);
+        }
+
+        private SwitchOutcome TryWriteBytes(byte[] bytes, Func<bool> guard, out string error)
         {
             error = null;
             var switched = false;
@@ -1127,6 +1622,14 @@ namespace ThreeSM.EnduranceConnector
             {
                 _files.WriteTemporary(_tempPath, bytes);
                 _faults.BeforeSwitch();
+                // De laatste identiteits-/epochcontrole gebeurt onder dezelfde
+                // fence en vlak vóór de publicerende switch. Een geweigerde
+                // guard laat target en geheugen ongemoeid.
+                if (guard != null && !guard())
+                {
+                    error = "guard_rejected_before_switch";
+                    return SwitchOutcome.FailedBeforeSwitch;
+                }
                 switched = true;
                 if (SafeExists(_path)) _files.Replace(_tempPath, _path, _backupPath);
                 else _files.Move(_tempPath, _path);
