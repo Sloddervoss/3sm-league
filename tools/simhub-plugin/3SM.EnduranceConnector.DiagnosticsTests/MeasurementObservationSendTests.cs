@@ -438,7 +438,9 @@ internal static class MeasurementObservationSendTests
                 return Task.FromResult(JsonResponse(200,
                     "{\"measurements\":{\"events\":" + events + ",\"laps\":" + laps + "}}"));
             };
-            var coordinator = Coordinator(store, outbox, handler, null);
+            var http = new HttpClient(handler, false);
+            var coordinator = Coordinator(store, outbox,
+                new HttpObservationSendTransport(http, 65536), null);
             var result = Send(coordinator);
 
             var request0 = handler.RequestAt(0);
@@ -460,6 +462,7 @@ internal static class MeasurementObservationSendTests
                 && result.LegacyCleanupApplied && result.LegacyAck != null
                 && result.LegacyAck.Stored && result.LegacyAck.Removed == 2
                 && outbox.LapCount == 0 && outbox.EventCount == 0
+                && http.DefaultRequestHeaders.Authorization == null
                 && !ContainsSentinel(LedgerText(store)) && !ContainsSentinel(result.ToString()),
                 "status=" + result.Status + " rows=" + request0.Bytes.Length
                 + " obsIndex=" + obsIndex + " legacyIndex=" + legacyIndex
