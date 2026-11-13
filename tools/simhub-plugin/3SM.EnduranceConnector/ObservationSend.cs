@@ -1161,7 +1161,8 @@ namespace ThreeSM.EnduranceConnector
                 if (!bulk.Committed)
                 {
                     return new ObservationSendAttemptResult(ObservationSendStatus.Refused,
-                        attemptId, "build_quarantine_" + bulk.Diagnostic) { Posted = false };
+                        attemptId, "build_quarantine_" + bulk.Diagnostic) { Posted = false,
+                        ObservationQuarantined = quarantined };
                 }
                 quarantined += bulk.ChangedCount;
             }

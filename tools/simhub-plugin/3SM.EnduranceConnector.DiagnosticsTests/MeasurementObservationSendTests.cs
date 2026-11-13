@@ -352,6 +352,25 @@ internal static class MeasurementObservationSendTests
         }
     }
 
+    /// <summary>Fails the N-th snapshot switch after <see cref="Arm"/>. Captures run
+    /// before arming, so each plan-time bulk quarantine gets its own counted call.</summary>
+    private sealed class PlanBulkFaults : IObservationLedgerFaults
+    {
+        private int _failAt;
+        private int _armedCalls;
+        public string Message = "synthetic plan-switch failure";
+        public void Arm(int failAt) { _failAt = failAt; _armedCalls = 0; }
+        public void Disarm() { _failAt = 0; }
+        public void BeforePreserve() { }
+        public void BeforeSwitch()
+        {
+            if (_failAt == 0) return;
+            _armedCalls++;
+            if (_armedCalls == _failAt) throw new IOException(Message);
+        }
+        public void AfterSwitch() { }
+    }
+
     /// <summary>Rebinds the fence after the coordinator's pre-send check but before the
     /// transport creates its HttpRequestMessage. Proves the final guard.</summary>
     private sealed class RebindingTransport : IObservationSendTransport
@@ -2540,6 +2559,186 @@ internal static class MeasurementObservationSendTests
                 + "/req=" + asyncHandler.RequestCount + "/state="
                 + (asyncEntry == null ? "null" : asyncEntry.State.ToString())
                 + "/attempts=" + (asyncEntry == null ? -1 : asyncEntry.Attempts));
+        }
+
+        // OS41 — H2-F1: the first plan-time bulk quarantine (binding change) commits,
+        // then the second (legal duplicate-lane build refusal) fails before its
+        // switch. The durable first transition must still be reported, and a retry
+        // from that real partial state must count only the newly committed row.
+        // Controls cover both writes committing and failure of the first write.
+        {
+            var dir = NewDirectory();
+            var fence = new ObservationBindingFence(Binding());
+            var faults = new PlanBulkFaults { Message = "synthetic second plan-switch failure" };
+            var store = Store(dir, fence, null, faults);
+            var outbox = Outbox(dir);
+            var stale = Row(Uid(750));
+            var staleFrozen = Capture(store, stale);
+            fence.Rebind(Binding(8));
+            var refused = Row(Uid(751));
+            var refusedFrozen = Capture(store, refused, Binding(8));
+            var legacy = Row(Uid(751), false);
+            string reason;
+            if (!outbox.EnqueueLap(legacy, out reason))
+                throw new InvalidOperationException(reason);
+
+            faults.Arm(2); // captures already ran; only the two plan bulk writes remain
+            var handler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(legacy.SummaryUid, 1)); }
+            };
+            var coordinator = Coordinator(store, outbox, handler, null);
+            var result = Send(coordinator);
+            var staleEntry = store.Find(stale.SummaryUid, 1);
+            var refusedEntry = store.Find(refused.SummaryUid, 1);
+            var leaseFree = WaitUntil(() => !coordinator.LeaseHeld, 1000);
+            var reloaded = Store(dir, new ObservationBindingFence(Binding(8)));
+            var reloadedStale = reloaded.Find(stale.SummaryUid, 1);
+            var reloadedRefused = reloaded.Find(refused.SummaryUid, 1);
+            var mainTotal = store.QuarantineTotal;
+            var mainDelivered = store.DeliveredTotal;
+            var mainEntries = store.EntryCount;
+            var mainLaps = outbox.LapCount;
+            var mainRequests = handler.RequestCount;
+
+            faults.Disarm();
+            var retry = Send(coordinator, now: T0.AddMinutes(4));
+            var retryStale = store.Find(stale.SummaryUid, 1);
+            var retryRefused = store.Find(refused.SummaryUid, 1);
+            var retryReload = Store(dir, new ObservationBindingFence(Binding(8)));
+            var retryBody = handler.RequestCount == 0 ? null : handler.RequestAt(0).Body;
+
+            // Positive control: the same two plan writes commit when no fault is armed
+            // and the legacy ACK still owns only the legacy lap.
+            var okDir = NewDirectory();
+            var okFence = new ObservationBindingFence(Binding());
+            var okStore = Store(okDir, okFence);
+            var okOutbox = Outbox(okDir);
+            var okStale = Row(Uid(750));
+            var okStaleFrozen = Capture(okStore, okStale);
+            okFence.Rebind(Binding(8));
+            var okRefused = Row(Uid(751));
+            var okRefusedFrozen = Capture(okStore, okRefused, Binding(8));
+            var okLegacy = Row(Uid(751), false);
+            string okReason;
+            if (!okOutbox.EnqueueLap(okLegacy, out okReason))
+                throw new InvalidOperationException(okReason);
+            var okHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(okLegacy.SummaryUid, 1)); }
+            };
+            var okResult = Send(Coordinator(okStore, okOutbox, okHandler, null));
+            var okStaleEntry = okStore.Find(okStale.SummaryUid, 1);
+            var okRefusedEntry = okStore.Find(okRefused.SummaryUid, 1);
+            var okBody = okHandler.RequestCount == 0 ? null : okHandler.RequestAt(0).Body;
+
+            // Control: failure of the first write reports zero and commits nothing.
+            var firstDir = NewDirectory();
+            var firstFence = new ObservationBindingFence(Binding());
+            var firstFaults = new PlanBulkFaults { Message = "synthetic first plan-switch failure" };
+            var firstStore = Store(firstDir, firstFence, null, firstFaults);
+            var firstOutbox = Outbox(firstDir);
+            var firstStale = Row(Uid(750));
+            var firstStaleFrozen = Capture(firstStore, firstStale);
+            firstFence.Rebind(Binding(8));
+            var firstRefused = Row(Uid(751));
+            var firstRefusedFrozen = Capture(firstStore, firstRefused, Binding(8));
+            var firstLegacy = Row(Uid(751), false);
+            string firstReason;
+            if (!firstOutbox.EnqueueLap(firstLegacy, out firstReason))
+                throw new InvalidOperationException(firstReason);
+            firstFaults.Arm(1);
+            var firstHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(firstLegacy.SummaryUid, 1)); }
+            };
+            var firstCoordinator = Coordinator(firstStore, firstOutbox, firstHandler, null);
+            var firstResult = Send(firstCoordinator);
+            var firstStaleEntry = firstStore.Find(firstStale.SummaryUid, 1);
+            var firstRefusedEntry = firstStore.Find(firstRefused.SummaryUid, 1);
+            var firstLeaseFree = WaitUntil(() => !firstCoordinator.LeaseHeld, 1000);
+
+            Check("OS41 mislukte tweede plan-bulkwrite behoudt de al gecommitte quarantainetelling; retry telt alleen de nieuwe rij",
+                result.Status == ObservationSendStatus.Refused
+                && !result.Posted
+                && result.Diagnostic == "build_quarantine_precommit_io:IOException:synthetic second plan-switch failure"
+                && result.ObservationQuarantined == 1
+                && result.ObservationDelivered == 0
+                && mainTotal == 1 && mainDelivered == 0 && mainEntries == 2
+                && mainLaps == 1 && mainRequests == 0 && leaseFree
+                && staleEntry != null && staleEntry.State == ObservationLedgerState.Quarantine
+                && staleEntry.ReasonCode == ObservationLedgerReasons.CaptureBindingChanged
+                && staleEntry.RowJson == staleFrozen
+                && ObservationBindingFence.SameBinding(staleEntry.Binding, Binding())
+                && refusedEntry != null && refusedEntry.State == ObservationLedgerState.Pending
+                && refusedEntry.RowJson == refusedFrozen
+                && ObservationBindingFence.SameBinding(refusedEntry.Binding, Binding(8))
+                && reloaded.QuarantineTotal == 1 && reloaded.DeliveredTotal == 0
+                && reloadedStale != null && reloadedStale.State == ObservationLedgerState.Quarantine
+                && reloadedStale.RowJson == staleFrozen
+                && ObservationBindingFence.SameBinding(reloadedStale.Binding, Binding())
+                && reloadedRefused != null && reloadedRefused.State == ObservationLedgerState.Pending
+                && reloadedRefused.RowJson == refusedFrozen
+                && ObservationBindingFence.SameBinding(reloadedRefused.Binding, Binding(8))
+                && retry.Status == ObservationSendStatus.Delivered
+                && retry.Posted && retry.HttpStatus == 200
+                && retry.ObservationQuarantined == 1
+                && store.QuarantineTotal == 2 && store.DeliveredTotal == 0
+                && store.EntryCount == 2 && outbox.LapCount == 0
+                && retryStale != null && retryStale.State == ObservationLedgerState.Quarantine
+                && retryStale.RowJson == staleFrozen
+                && ObservationBindingFence.SameBinding(retryStale.Binding, Binding())
+                && retryRefused != null && retryRefused.State == ObservationLedgerState.Quarantine
+                && retryRefused.ReasonCode == ObservationLedgerReasons.ObservationBuildRefused
+                && retryRefused.RowJson == refusedFrozen
+                && ObservationBindingFence.SameBinding(retryRefused.Binding, Binding(8))
+                && handler.RequestCount == 1
+                && retryBody != null
+                && retryBody.IndexOf(legacy.SummaryUid, StringComparison.Ordinal) >= 0
+                && retryBody.IndexOf(stale.SummaryUid, StringComparison.Ordinal) < 0
+                && retryReload.QuarantineTotal == 2 && retryReload.DeliveredTotal == 0
+                && okResult.Status == ObservationSendStatus.Delivered
+                && okResult.ObservationQuarantined == 2
+                && okResult.LegacyAck != null && okResult.LegacyAck.Stored
+                && okResult.LegacyAck.ConfirmedLaps == 1
+                && okStore.QuarantineTotal == 2 && okStore.DeliveredTotal == 0
+                && okStaleEntry != null && okStaleEntry.State == ObservationLedgerState.Quarantine
+                && okStaleEntry.ReasonCode == ObservationLedgerReasons.CaptureBindingChanged
+                && okStaleEntry.RowJson == okStaleFrozen
+                && ObservationBindingFence.SameBinding(okStaleEntry.Binding, Binding())
+                && okRefusedEntry != null && okRefusedEntry.State == ObservationLedgerState.Quarantine
+                && okRefusedEntry.ReasonCode == ObservationLedgerReasons.ObservationBuildRefused
+                && okRefusedEntry.RowJson == okRefusedFrozen
+                && ObservationBindingFence.SameBinding(okRefusedEntry.Binding, Binding(8))
+                && okOutbox.LapCount == 0 && okHandler.RequestCount == 1
+                && okBody != null
+                && okBody.IndexOf(okLegacy.SummaryUid, StringComparison.Ordinal) >= 0
+                && okBody.IndexOf(okStale.SummaryUid, StringComparison.Ordinal) < 0
+                && firstResult.Status == ObservationSendStatus.Refused
+                && firstResult.Diagnostic == "binding_quarantine_precommit_io:IOException:synthetic first plan-switch failure"
+                && firstResult.ObservationQuarantined == 0
+                && firstStore.QuarantineTotal == 0 && firstStore.DeliveredTotal == 0
+                && firstStore.EntryCount == 2
+                && firstStaleEntry != null && firstStaleEntry.State == ObservationLedgerState.Pending
+                && firstStaleEntry.RowJson == firstStaleFrozen
+                && firstRefusedEntry != null && firstRefusedEntry.State == ObservationLedgerState.Pending
+                && firstRefusedEntry.RowJson == firstRefusedFrozen
+                && firstOutbox.LapCount == 1 && firstHandler.RequestCount == 0
+                && firstLeaseFree,
+                "main=" + result.Status + "/posted=" + result.Posted + "/diag=" + result.Diagnostic
+                + "/q=" + result.ObservationQuarantined + "/store=" + mainTotal
+                + "/" + mainDelivered + "/entries=" + mainEntries + "/laps=" + mainLaps
+                + "/req=" + mainRequests + "/leaseFree=" + leaseFree
+                + " retry=" + retry.Status + "/q=" + retry.ObservationQuarantined
+                + "/store=" + store.QuarantineTotal + "/" + store.DeliveredTotal
+                + "/entries=" + store.EntryCount + "/req=" + handler.RequestCount
+                + " ok=" + okResult.Status + "/q=" + okResult.ObservationQuarantined
+                + "/ack=" + (okResult.LegacyAck == null ? "null"
+                    : okResult.LegacyAck.ConfirmedLaps.ToString(CultureInfo.InvariantCulture))
+                + "/store=" + okStore.QuarantineTotal + "/req=" + okHandler.RequestCount
+                + " first=" + firstResult.Status + "/q=" + firstResult.ObservationQuarantined
+                + "/diag=" + firstResult.Diagnostic + "/store=" + firstStore.QuarantineTotal
+                + "/req=" + firstHandler.RequestCount);
         }
 
         return count;
