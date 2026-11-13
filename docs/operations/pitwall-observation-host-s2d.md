@@ -1,7 +1,22 @@
 # S2D lokale observation-producerbedrading (default-off)
 
-Status: bron en gedeelde host lokaal aangesloten; geen activatie, publicatie of SDK-runtimebewijs.
-Onafhankelijke SPEC, daarna QUALITY, blijven vereist vóór parentintegratie.
+Status: bron en gedeelde host lokaal geaccepteerd en geïntegreerd als `cd5b46cf`;
+geen activatie, publicatie of SDK-runtimebewijs. Bron `5389fcc3` heeft onafhankelijke
+SPEC PASS; strikt test-only `8dd96fc0` sluit de drie Important quality-testgaten
+onafhankelijk APPROVED (QSTOP/QMIX/QDYNAMIC, M10/M11/M12).
+Parent-integratie: normale offline Release-build, 65 host, 997 volledige C#-harnas-
+asserties inclusief soak, 16 wiring en 50 serializer→Deno-interoproeven PASS;
+52 eigen serializer-exportbestanden, alle zes stages exit 0. De selecties overlappen.
+Bewijs onder `/home/hermes/artifacts/3sm/pitwall-learning-p2-observation-host-`
+met suffixen `spec-cli/`, `quality-native/`, `coverage-quality/` en `integration/`.
+Dit draagt ongewijzigd runtimebewijs over, geen nieuwe volledige SDK-buildclaim.
+
+**Updater-vrijgavepoort:** ondersteunde oude geïnstalleerde releases moeten via
+hun bestaande automatische updatepad naar de toekomstige nieuwe bevroren DLL.
+Geen nieuwe verplichte bootstrap of handmatige vervanging. Updaterbron, signing
+trust, manifestcontract en bestaande updateblokken zijn behouden; de echte
+oude→nieuwe Windows-installatie/herstart/geladen-versie/verse-telemetrieproef
+blijft vóór vrijgave verplicht en is nog niet uitgevoerd.
 
 ## Werkelijke bronroute
 

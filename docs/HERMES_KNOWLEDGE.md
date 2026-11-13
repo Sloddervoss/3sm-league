@@ -35,14 +35,23 @@ Shutdown/reporting bron `44a5c817` is na onafhankelijke gerichte SPEC/QUALITY
 geïntegreerd als `8d1bf8b0`; parent 41 send/576 measurement/932 full C#/50 interop
 PASS, 52 exports. R1 Dispose na commit, R2 alle plan-quarantaine-uitkomsten en
 sync-throw Posted-flag gesloten; OS41 onderscheidt partiële commit en retry.
-W1 unpair/incomplete binding vereist legacy-bypass in latere callerbedrading.
-Beide echte sendcallers, capture→ledger en plugin/settings/DPAPI/
-PairingGeneration-bedrading blijven open; geen complete producerketen geclaimd.
-Alle schakelaars blijven uit; geen productieapply/Edge-deploy/producerrelease.
+S2D-bronbedrading `5389fcc3` heeft SPEC PASS en ongewijzigde runtime-QUALITY;
+drie Important testgaten zijn met strikt test-only bron `8dd96fc0` onafhankelijk
+APPROVED gesloten. Integratie `cd5b46cf`: parent 65 host/997 volledige C#-harnas-
+asserties/16 wiring/50 interop PASS, 52 eigen exports; alle zes stages exit 0.
+Dezelfde productiehost verzorgt capture→lazy ledger en centrale SendV3/Pair/Unpair/
+End; één centrale productie-SEND-caller, MeasurementSender.SendAsync is testroute.
+W1 caller-bypass/tokenmissing-grens is op de gedeelde host getoetst; Q2 blijft
+beperkt tot de bestaande verse-UTC-once caller, geen samplehergebruik introduceren.
+Default-off en receiver-readiness=false blijven behouden. Geen productieapply,
+Edge-deploy, geïnstalleerde DLL-wissel of producerrelease. Volledige vendor-SDK/
+Windows-build en runtime blijven open; subset/harnastests zijn daar geen bewijs voor.
+De bestaande automatische oude→nieuwe updateketen is een harde vrijgavepoort:
+geen nieuwe verplichte bootstrap, sleutel-/manifest-/kanaalwijziging of handmatige
+DLL-wissel als vervangend bewijs. Bewezen bronbehoud is geen echte installatieproef.
 Rollback houdt historie en nieuwe writer intact; flag-only heractivatie mist de
-forward-P1-projectie en is niet ondersteund. Producer/outbox/quarantaine en echte
-SDK-verificatie blijven open; de Vite-integratiebuild is niet uitgevoerd wegens
-de gateway-scangrens en mag niet als PASS worden behandeld.
+forward-P1-projectie en is niet ondersteund. Receiverhandshake/activatie en de
+Vite-integratiebuild blijven open; de gateway-scangrens is geen build-PASS.
 
 ## Zelflerende pitwall — P1 fasegrens
 

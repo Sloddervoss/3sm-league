@@ -246,19 +246,38 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
 - Bewijs: `pitwall-learning-p2-observation-send-{lease-spec-recheck,quality-review,
   coverage-quality-recheck,integration}/` onder `/home/hermes/artifacts/3sm/`.
 
-## S2D producer-host: bron lokaal aangesloten, review nog open
+## S2D producer-host: lokaal geaccepteerd en geïntegreerd
 
-- Eén SDK-vrije productiehost verbindt Init, samplebouw/Observe, post-pit capture,
-  session_end/plugin_stop, centrale SendV3 en Pair/Unpair/End. Dezelfde bron is
-  gelinkt in het uitvoerende harnas (`--only-observation-host`).
-- Parentamendement: ledger-vrije coordinatorinitialisatie met één gedeeld fence en
-  lazy real-storeprovider. De geaccepteerde ledger/ACK/core/sampler zijn byte-ongewijzigd.
-- Default-off en productie-readiness expliciet false: geen activering of nieuwe
-  handshake-/capabilityclaim. De oude V3-feature-off- en lokale bridge-methodbodies
-  worden byte-identiek gehouden; MeasurementSender.SendAsync blijft testroute.
-- Implementatie-/bewijsgrens en rollback: [lokale S2D-notitie](pitwall-observation-host-s2d.md).
-  Onafhankelijke SPEC, daarna QUALITY, nog vereist; geen volledige SDK-/Windows-
-  of DPAPI/GUI/runtimeclaim en geen parentintegratie- of releasegoedkeuring.
+- Bronbedrading `5389fcc3ca72474bfecb46bb0ecafee85281dc34`: onafhankelijke SPEC PASS;
+  volledige QUALITY vond geen aangetoonde runtimefout, maar drie Important testgaten.
+- Strikt test-only herstel `8dd96fc0e1340962c27773eda9e394c937c08276`: één testbestand
+  +83 regels, alle 2260 overige tracked bestanden bytegelijk. Gerichte onafhankelijke
+  QUALITY APPROVED: Q1 Stop-flush, Q2 conflicterende gemengde ACK en Q3 eligibility-
+  wissel zonder volgende tick gesloten; M10/M11/M12 bouwen en falen uitsluitend op
+  hun bedoelde assertions. Ongewijzigde runtime-SPEC/QUALITY expliciet overgedragen.
+- Lokale integratie `cd5b46cf1dc32921006d73c253bd72492a1fa557`; volledige Git-boom
+  bytegelijk aan gereviewde kandidaat vóór deze statusdocumentatie.
+- Parent op de integratie: normale offline Release-build exit 0; **65 host / 997
+  volledige C#-harnasasserties inclusief soak / 16 wiring / 50 C#→Deno-interop PASS**,
+  alle zes stages exit 0; eigen serializer-export **52 bestanden**. Selector-totalen
+  overlappen. Dit is geen volledige vendor-pluginbuild of geïnstalleerde runtime.
+- Eén productiehost verbindt Init, verse UTC-samples, pipeline/capture, centrale
+  SendV3, Pair/Unpair en End met dezelfde lazy store/fence/lease. Eén centrale
+  productie-SEND-caller; `MeasurementSender.SendAsync` is een testroute. Eerdere
+  formuleringen over twee productiecallers worden hiermee gecorrigeerd.
+- Default-off en productie-readiness blijven expliciet false. SDK-/Windows-/WPF-/
+  DPAPI-runtime, receiverhandshake, activatie en publicatie blijven afzonderlijke poorten.
+- **Harde updaterpoort:** de ondersteunde geïnstalleerde oude release moet via de
+  bestaande automatische keten naar de toekomstige nieuwe bevroren release kunnen.
+  Geen nieuwe verplichte bootstrap of handmatige DLL-wissel als vervangend bewijs.
+  Updaterbron, versies, sleutels, manifest en updateblokken zijn behouden; `release.sh`
+  verschilt alleen door het nieuwe broninventaristoken en is niet uitgevoerd.
+  Echte oude DLL→nieuwe DLL download/stage/handshake/afsluiten/installatie/herstart,
+  geladen versie en verse telemetrie moeten vóór vrijgave nog worden bewezen.
+- Bewijs: `pitwall-learning-p2-observation-host-{spec-cli,quality-native,coverage,
+  coverage-quality,integration}/` onder `/home/hermes/artifacts/3sm/`.
+  De oorspronkelijke afgewezen/onderbroken pogingen en mutanten blijven bewaard.
+- Implementatie en terugval: [lokale S2D-notitie](pitwall-observation-host-s2d.md).
 
 ## Beperkingen en vervolgnotities
 
