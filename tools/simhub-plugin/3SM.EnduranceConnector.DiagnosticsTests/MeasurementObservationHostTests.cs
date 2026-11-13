@@ -1376,6 +1376,22 @@ internal static class MeasurementObservationHostTests
             !numeric.ObservationPairingGenerationKnown && numeric.ObservationPairingGeneration == -1
             && !numeric.ObservationPairingGenerationPoisoned && !numeric.ObservationPairingGenerationRecoverable,
             "numeric invalid marker policy is unchanged: raw retained, marker cleared, closed, no new poison");
+
+        // OWN QUALITY probe: a poisoned tombstone that (through a corrupted/partial document)
+        // still carries a numeric raw value next to a stale marker must never take a successor.
+        // The poison guard wins over the marker; the raw evidence must not be blessed/advanced.
+        var poisoned = SettingsCompatibilityTests.Deserialize(
+            "{\"SchemaVersion\":8,\"ObservationPairingGeneration\":7,"
+            + "\"ObservationPairingGenerationKnown\":false,"
+            + "\"ObservationPairingGenerationPoisoned\":true,"
+            + "\"ObservationPairingGenerationRecoverable\":true}");
+        poisoned.CommitNewPair(NewDevice, Owner, NewPairToken, string.Empty,
+            raw => "synthetic-protected", () => { }, error => { });
+        poisoned = Restart(poisoned);
+        check("PAIR-lost-poison-successor-control", !poisoned.ObservationPairingGenerationKnown
+            && poisoned.ObservationPairingGeneration == 7 && poisoned.ObservationPairingGenerationPoisoned
+            && !poisoned.ObservationPairingGenerationRecoverable && !poisoned.ObservationBinding().IsComplete,
+            "poisoned evidence never takes a successor even when a stale marker is present");
     }
 
     private static async Task LazyLease(Action<string, bool, string> check)
