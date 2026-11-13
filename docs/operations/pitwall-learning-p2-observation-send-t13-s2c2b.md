@@ -249,6 +249,35 @@ DEFERRED. `Posted=false` is geen serverbewijs; `Posted=true` is geen
 leveringsclaim. De feature blijft default-off; echte Pair/Unpair-GUI, settings,
 DPAPI, plugin-sender en productieactivatie zijn niet gewired.
 
+## Erratum na targeted QUALITY-review (S2C2b-H2-F1)
+
+De targeted review op `19466a65` vond één Important H2-restpunt: faalt de tweede
+plan-time bulk-quarantaine vóór de switch, dan verdween de al duurzaam
+gecommitte eerste quarantaine uit het resultaat (`q=0` terwijl
+`QuarantineTotal=1`). Alleen de refusal-return van de build-quarantaine geeft nu
+de werkelijke `quarantined` mee. Store-, ACK-, rollback- en identiteitsbeleid
+zijn niet gewijzigd en er is geen globale tellerdelta gebruikt.
+
+OS41 dekt met de bestaande `IObservationLedgerFaults`-seam de twee-rijfixture
+(binding-change A plus legale duplicate-lane build-refusal B met dezelfde UID als
+de legacy lap), armt pas na de captures en faalt uitsluitend de tweede
+`BeforeSwitch`. Bewezen: `Refused` met
+`diag=build_quarantine_precommit_io:IOException`, `q=1`, disk/reload
+A=`Quarantine`/B=`Pending` met exacte UID/revisie/RowJson/binding, totaal 1,
+geen request en vrije lease. Controls: zonder fault committen beide groepen
+(`q=2`, legacy-ACK werkt) en een fout op de eerste write geeft `q=0` zonder
+commit. Een retry vanaf de echte partiële toestand telt alleen de nieuwe rij
+(`q=1`, totaal 2) zonder rij- of identiteitsherschrijving.
+
+TDD: dezelfde eindtestfile bouwt op `19466a65` met 0 fouten en geeft daar
+`PASS=40 FAIL=1` (exact OS41, `q=0`); op de nieuwe runtime `PASS=41 FAIL=0`.
+De publieke P14-probe (retarget, asserties ongewijzigd) is oud `FAIL` (`q=0`) en
+nieuw `PASS` (`q=1`). OS01–OS40 en de H1/H3-code zijn byte-ongewijzigd. ACK 87,
+ledger 57, pipeline 37, observation 55, measurement 576 en de volledige run 932
+checks zijn groen; net48-subset compileert met 0 fouten, de 52 fixtures zijn
+byte-identiek en Deno check/50 interopchecks zijn groen. W1 en Q2 blijven
+DEFERRED; de feature blijft default-off en ongewijzigd ongewired.
+
 ## Niet-claims
 
 - Geen productieveiligheid op basis van deze testcoördinator alleen.
