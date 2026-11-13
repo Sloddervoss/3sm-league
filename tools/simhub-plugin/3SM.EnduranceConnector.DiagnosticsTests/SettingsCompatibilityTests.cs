@@ -79,6 +79,19 @@ internal static class SettingsCompatibilityTests
         catch (Exception error) { strictFailure = error; }
         Check("S21", strictFailure == null && strict != null && strict.DeviceId == settings.DeviceId,
             "volledig 0.7.1.2-bestand laadt ook met een lezer die ieder lid eist" + (strictFailure == null ? string.Empty : ": " + strictFailure.Message));
+        Check("S22", !settings.ObservationEnabled && !settings.ObservationPairingGeneration.HasValue
+            && !settings.ObservationPairingGenerationKnown && !settings.ObservationPairingGenerationPoisoned
+            && !DeserializeStrict(SerializeStrict(settings)).ObservationBinding().IsComplete
+            && strict != null && !strict.ObservationPairingGenerationPoisoned,
+            "historical paired config stays unknown on load/restart, including absent OptionalField poison marker");
+        var invalid = new ConnectorSettings { ObservationPairingGenerationKnown = true };
+        invalid.InvalidateObservationGeneration();
+        var invalidRestart = Deserialize(Serialize(invalid));
+        var invalidStrict = DeserializeStrict(SerializeStrict(invalid));
+        Check("S23", invalidRestart.ObservationPairingGenerationPoisoned && invalidStrict.ObservationPairingGenerationPoisoned
+            && !invalidRestart.ObservationPairingGenerationKnown && !invalidStrict.ObservationPairingGenerationKnown
+            && !invalidRestart.ObservationPairingGeneration.HasValue && !invalidStrict.ObservationPairingGeneration.HasValue,
+            "NULL+known-invalid evidence survives invalidation and both actual settings serializer roundtrips");
         return count;
     }
 

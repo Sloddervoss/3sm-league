@@ -252,6 +252,16 @@ def main():
         and '/3SM.EnduranceConnector.Updater/{AssemblyInfo.cs,Program.cs,3SM.EnduranceConnector.Updater.csproj}' in release,
         "all six static embedded inputs and updater source COPY tokens present; generated updater EXE/full SDK build separate OPEN gate")
 
+    pair = raw_plugin[raw_plugin.index("private async Task<bool> PairCoreAsync("):raw_plugin.index("public Task<bool> UnpairAsync(")]
+    check("W13-real-pair-commit", "lock (_settingsGate)" in pair
+        and pair.index("!result.Paired") < pair.index("!IsDeviceToken(result.DeviceToken)")
+        < pair.index("!IsGuid(result.DeviceId)") < pair.index("_deviceToken = Settings.CommitNewPair(")
+        and "result.DeviceToken, _deviceToken, ProtectToken," in pair
+        and '() => this.SaveCommonSettings("ConnectorSettings", Settings)' in pair
+        and "Settings.InvalidateObservationGeneration();" in raw_plugin
+        and 'Compile Include="..\\3SM.EnduranceConnector\\ConnectorSettings.cs"' in tests_csproj,
+        "static validated Pair under settings gate calls SAME linked production protect/save commit; host lease checked by W08/W09/runtime")
+
     print("SUMMARY PASS=" + str(passed) + " FAIL=" + str(failed))
     return 0 if failed == 0 else 1
 

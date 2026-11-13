@@ -1245,7 +1245,7 @@ namespace ThreeSM.EnduranceConnector
                 Settings.DeviceTokenProtected = string.Empty;
                 Settings.DeviceId = string.Empty;
                 Settings.BoundOwnerUserId = string.Empty;
-                Settings.ObservationPairingGenerationKnown = false;
+                Settings.InvalidateObservationGeneration();
                 try { this.SaveCommonSettings("ConnectorSettings", Settings); }
                 catch (Exception error) { SimHub.Logging.Current.Warn("3SM pairing: authorization invalidation save failed: " + error.GetType().Name); }
             }
@@ -1289,41 +1289,10 @@ namespace ThreeSM.EnduranceConnector
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             if (Volatile.Read(ref _ending) != 0) throw new OperationCanceledException(cancellationToken);
-                            var oldProtected = Settings.DeviceTokenProtected;
-                            var oldDeviceId = Settings.DeviceId;
-                            var oldRaceId = Settings.BoundRaceId;
-                            var oldTeamId = Settings.BoundTeamId;
-                            var oldOwnerId = Settings.BoundOwnerUserId;
-                            var oldCentral = Settings.UseCentralRelay;
-                            var oldToken = _deviceToken;
-                            try
-                            {
-                                var nextGeneration = Settings.NextObservationGeneration();
-                                Settings.DeviceTokenProtected = ProtectToken(result.DeviceToken);
-                                Settings.ObservationPairingGeneration = nextGeneration;
-                                Settings.ObservationPairingGenerationKnown = nextGeneration.HasValue;
-                                Settings.DeviceId = result.DeviceId;
-                                Settings.BoundRaceId = string.Empty;
-                                Settings.BoundTeamId = string.Empty;
-                                Settings.BoundOwnerUserId = result.OwnerUserId;
-                                Settings.UseCentralRelay = true;
-                                this.SaveCommonSettings("ConnectorSettings", Settings);
-                                _deviceToken = result.DeviceToken;
-                            }
-                            catch
-                            {
-                                Settings.DeviceTokenProtected = oldProtected;
-                                Settings.DeviceId = oldDeviceId;
-                                Settings.BoundRaceId = oldRaceId;
-                                Settings.BoundTeamId = oldTeamId;
-                                Settings.BoundOwnerUserId = oldOwnerId;
-                                Settings.UseCentralRelay = oldCentral;
-                                _deviceToken = oldToken;
-                                Settings.ObservationPairingGenerationKnown = false;
-                                try { this.SaveCommonSettings("ConnectorSettings", Settings); }
-                                catch (Exception rollbackError) { SimHub.Logging.Current.Warn("3SM Endurance pairingrollback kon niet worden opgeslagen: " + rollbackError); }
-                                throw;
-                            }
+                            _deviceToken = Settings.CommitNewPair(result.DeviceId, result.OwnerUserId,
+                                result.DeviceToken, _deviceToken, ProtectToken,
+                                () => this.SaveCommonSettings("ConnectorSettings", Settings),
+                                rollbackError => SimHub.Logging.Current.Warn("3SM Endurance pairingrollback kon niet worden opgeslagen: " + rollbackError));
                         }
                     }
                 }

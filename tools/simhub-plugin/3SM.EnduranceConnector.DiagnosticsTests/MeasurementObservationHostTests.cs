@@ -60,6 +60,11 @@ internal static class MeasurementObservationHostTests
         StorageFaults(counted);
         GoldenOff(counted);
         Epochs(counted);
+        PairMetadata(counted);
+        FreshPair(counted).GetAwaiter().GetResult();
+        PairFailures(counted).GetAwaiter().GetResult();
+        LatePairCommit(counted).GetAwaiter().GetResult();
+        PairStoredFences(counted).GetAwaiter().GetResult();
         return count;
     }
 
@@ -555,6 +560,297 @@ internal static class MeasurementObservationHostTests
         check("OH43", settings.NextObservationGeneration() == null, "overflow cannot wrap/reuse epoch");
         settings.ObservationPairingGeneration = 7;
         check("OH44", settings.NextObservationGeneration() == 8, "proven persisted high-watermark advances monotonically");
+    }
+
+    private const string NewDevice = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
+    private static readonly string OldPairToken = new string('a', 43);
+    private static readonly string NewPairToken = new string('b', 43);
+
+    private static ConnectorSettings PairedSettings()
+    {
+        return new ConnectorSettings { DeviceId = Device, BoundOwnerUserId = Owner,
+            DeviceTokenProtected = "synthetic-protected-old", UseCentralRelay = true,
+            BoundRaceId = "old-race", BoundTeamId = "old-team" };
+    }
+
+    private static ConnectorSettings Restart(ConnectorSettings settings)
+    {
+        return SettingsCompatibilityTests.Deserialize(SettingsCompatibilityTests.Serialize(settings));
+    }
+
+    private static void PairMetadata(Action<string, bool, string> check)
+    {
+        foreach (var mode in new[] { "absent", "zero", "known", "null-known", "present-unknown", "negative", "max", "overflow", "poison" })
+        {
+            var settings = PairedSettings();
+            settings.ObservationPairingGeneration = mode == "zero" ? 0 : mode == "known" || mode == "present-unknown" ? 7
+                : mode == "negative" ? -1 : mode == "max" ? 9007199254740991L : mode == "overflow" ? long.MaxValue : (long?)null;
+            settings.ObservationPairingGenerationKnown = mode != "absent" && mode != "present-unknown" && mode != "poison";
+            settings.ObservationPairingGenerationPoisoned = mode == "poison";
+            var original = settings.ObservationPairingGeneration;
+            var expected = mode == "absent" || mode == "zero" ? 1 : mode == "known" ? 8 : (long?)null;
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                if (attempt > 0) settings = Restart(settings);
+                var token = settings.CommitNewPair(attempt % 2 == 0 ? NewDevice : Device, Owner,
+                    NewPairToken, OldPairToken, raw => "synthetic-protected", () => { }, error => { });
+                check("PAIR-meta-" + mode + "-" + attempt, token == NewPairToken
+                    && settings.ObservationPairingGenerationKnown == expected.HasValue
+                    && settings.ObservationPairingGeneration == (expected ?? original)
+                    && (mode != "null-known" || settings.ObservationPairingGenerationPoisoned),
+                    "actual commit preserves refusal evidence across repeated Pair and serializer restart; legacy Pair succeeds independently");
+                if (expected.HasValue) expected++;
+            }
+        }
+        foreach (var mode in new[] { "same-device", "case-device", "same-token" })
+        {
+            var settings = PairedSettings();
+            settings.CommitNewPair(mode == "same-device" ? Device : mode == "case-device" ? Device.ToUpperInvariant() : NewDevice,
+                Owner, mode == "same-token" ? OldPairToken : NewPairToken, OldPairToken,
+                raw => "synthetic-protected", () => { }, error => { });
+            check("PAIR-not-fresh-" + mode, !settings.ObservationPairingGenerationKnown && !settings.ObservationPairingGeneration.HasValue,
+                "syntactic success does not certify freshness; UUID comparison is case-insensitive and raw tokens exact");
+        }
+    }
+
+    private static async Task FreshPair(Action<string, bool, string> check)
+    {
+        foreach (var changedOwner in new[] { false, true })
+        {
+            var dir = DirectoryFor("fresh-pair-" + changedOwner);
+            var settings = PairedSettings();
+            var memoryToken = OldPairToken;
+            var path = Path.Combine(dir, "settings.json");
+            var owner = changedOwner ? "22222222-3333-4444-8555-666666666666" : Owner;
+            var calls = 0; var order = string.Empty;
+            ObservationLedgerStore store = null;
+            var legacy = new MeasurementOutbox(Path.Combine(dir, "legacy.json"));
+            using (var http = new HttpClient(new Handler()))
+            using (var host = new ObservationProducerHost(legacy, new MeasurementIdFactory(),
+                new ObservationProducerIdentity(memoryToken, settings.ObservationBinding()), () => true, () => true,
+                fence => { calls++; return store = new ObservationLedgerStore(Path.Combine(dir, "obs.json"), fence); },
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1);
+                check("PAIR-historical-" + changedOwner, calls == 0 && !Restart(settings).ObservationBinding().IsComplete
+                    && !settings.ObservationEnabled && settings.NextObservationGeneration() == null,
+                    "paired historical load/restart/decrypted memory token cannot adopt missing generation or access sidecar");
+                var old = host.Snapshot();
+                var result = await host.TransitionAsync(cancel =>
+                {
+                    memoryToken = settings.CommitNewPair(NewDevice, owner, NewPairToken, memoryToken, raw =>
+                    {
+                        order += "protect;";
+                        check("PAIR-protect-order-" + changedOwner, host.Coordinator.LeaseHeld && !host.Snapshot().HasAuthorization
+                            && memoryToken == OldPairToken && settings.DeviceId == Device && raw == NewPairToken,
+                            "real commit protection is below lease, before settings/memory publication, and protects the NEW raw token");
+                        return "synthetic-protected-new";
+                    }, () =>
+                    {
+                        order += "save;";
+                        check("PAIR-save-order-" + changedOwner, memoryToken == OldPairToken && !host.Snapshot().HasAuthorization
+                            && settings.DeviceId == NewDevice && settings.BoundOwnerUserId == owner
+                            && settings.DeviceTokenProtected == "synthetic-protected-new" && settings.UseCentralRelay
+                            && settings.BoundRaceId == "" && settings.BoundTeamId == ""
+                            && settings.ObservationPairingGeneration == 1 && settings.ObservationPairingGenerationKnown,
+                            "combined real commit state saved before raw token/identity publication");
+                        File.WriteAllText(path, SettingsCompatibilityTests.Serialize(settings));
+                    }, error => { });
+                    return Task.FromResult(new ObservationProducerIdentity(memoryToken, settings.ObservationBinding()));
+                }, CancellationToken.None);
+                var disk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+                check("PAIR-fresh-" + changedOwner, result.Committed && order == "protect;save;" && disk.ObservationBinding().IsComplete
+                    && !disk.ObservationEnabled && !settings.ObservationEnabled
+                    && disk.DeviceId == NewDevice && disk.BoundOwnerUserId == owner && memoryToken == NewPairToken
+                    && host.Snapshot().Binding.PairingGeneration == 1, "durable new composite fence, same/new owner; local initialization only");
+                var blocked = 0;
+                await host.SendAsync(() => "{}", Endpoint, old, T0, null,
+                    () => { blocked++; return Task.CompletedTask; }, CancellationToken.None);
+                Tick(host, 2, 1); Tick(host, 3, 2);
+                check("PAIR-unknown-start-" + changedOwner, blocked == 0 && calls == 0 && legacy.LapCount == 1,
+                    "old identity queued work rejected; unknown-start lap not upgraded at close");
+                Tick(host, 4, 2); Tick(host, 5, 3);
+                check("PAIR-future-start-" + changedOwner, calls == 1 && store.EntryCount == 1 && legacy.LapCount == 1
+                    && store.Entries[0].RowJson.Contains(NewDevice), "only future StartLap eligible with independent synthetic policy/readiness gates");
+            }
+        }
+    }
+
+    private static async Task PairFailures(Action<string, bool, string> check)
+    {
+        foreach (var history in new[] { "absent", "known", "null-known", "present-unknown", "negative", "max", "overflow" })
+        foreach (var failure in new[] { "protect", "save", "rollback", "cancel" })
+        {
+            var settings = PairedSettings();
+            settings.ObservationPairingGeneration = history == "known" || history == "present-unknown" ? 7
+                : history == "negative" ? -1 : history == "max" ? 9007199254740991L : history == "overflow" ? long.MaxValue : (long?)null;
+            settings.ObservationPairingGenerationKnown = history != "absent" && history != "present-unknown";
+            var original = settings.ObservationPairingGeneration;
+            var dir = DirectoryFor("pair-fail-" + history + "-" + failure);
+            var file = Path.Combine(dir, "settings.json");
+            var memoryToken = OldPairToken; var saves = 0; var rollbackFailures = 0;
+            string lastSaveJson = null; var seamKnown = true; var seamDevice = (string)null; var seamProtected = (string)null;
+            using (var http = new HttpClient(new Handler()))
+            using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy.json")), new MeasurementIdFactory(),
+                new ObservationProducerIdentity(memoryToken, settings.ObservationBinding()), () => false, () => false,
+                fence => { throw new InvalidOperationException("disabled"); }, new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0))
+            {
+                var result = await host.TransitionAsync(cancel =>
+                {
+                    try
+                    {
+                        memoryToken = settings.CommitNewPair(NewDevice, Owner, NewPairToken, memoryToken,
+                            raw => { if (failure == "protect") throw new IOException("synthetic protect"); return "synthetic-protected-new"; },
+                            () =>
+                            {
+                                saves++;
+                                lastSaveJson = SettingsCompatibilityTests.Serialize(settings);
+                                if (failure == "cancel") throw new OperationCanceledException();
+                                if (failure == "rollback" || (failure == "save" && saves == 1)) throw new IOException("synthetic save");
+                                File.WriteAllText(file, SettingsCompatibilityTests.Serialize(settings));
+                            }, error => { rollbackFailures++; });
+                        return Task.FromResult(new ObservationProducerIdentity(memoryToken, settings.ObservationBinding()));
+                    }
+                    catch
+                    {
+                        seamKnown = settings.ObservationPairingGenerationKnown;
+                        seamDevice = settings.DeviceId;
+                        seamProtected = settings.DeviceTokenProtected;
+                        // Same conservative invalidation used by PairCoreAsync's outer catch.
+                        memoryToken = string.Empty;
+                        settings.DeviceTokenProtected = settings.DeviceId = settings.BoundOwnerUserId = string.Empty;
+                        settings.InvalidateObservationGeneration();
+                        return Task.FromResult<ObservationProducerIdentity>(null);
+                    }
+                }, CancellationToken.None);
+                var attempted = failure != "protect" && (history == "absent" || history == "known");
+                var expectedRaw = attempted ? (history == "absent" ? 1 : 8) : original;
+                var lastSave = lastSaveJson == null ? null : SettingsCompatibilityTests.Deserialize(lastSaveJson);
+                check("PAIR-fail-" + history + "-" + failure, !result.Committed && !host.Snapshot().HasAuthorization
+                    && memoryToken == "" && !settings.ObservationPairingGenerationKnown
+                    && settings.ObservationPairingGeneration == expectedRaw
+                    && (history != "null-known" || settings.ObservationPairingGenerationPoisoned)
+                    && rollbackFailures == (failure == "rollback" || failure == "cancel" ? 1 : 0)
+                    && !seamKnown && seamDevice == Device && seamProtected == "synthetic-protected-old"
+                    && lastSave != null && lastSave.DeviceId == Device
+                    && lastSave.DeviceTokenProtected == "synthetic-protected-old"
+                    && !lastSave.ObservationPairingGenerationKnown
+                    && lastSave.ObservationPairingGeneration == expectedRaw,
+                    "actual protect/save/rollback-save/cancel failure preserves raw evidence and never publishes/restores OBS authority");
+                settings = Restart(settings);
+                settings.CommitNewPair(NewDevice, Owner, NewPairToken, memoryToken, raw => "synthetic-new", () => { }, error => { });
+                check("PAIR-fail-repeat-" + history + "-" + failure,
+                    settings.ObservationPairingGenerationKnown == (history == "absent" && failure == "protect")
+                    && (history == "absent" && failure == "protect" || settings.ObservationPairingGeneration == expectedRaw),
+                    "later new identity is prospective; refused/attempted history cannot become absent; pre-mutation pristine protect failure may retry");
+            }
+        }
+    }
+
+    private static async Task LatePairCommit(Action<string, bool, string> check)
+    {
+        foreach (var outcome in new[] { "committed", "unknown" })
+        {
+            var dir = DirectoryFor("late-real-pair-" + outcome);
+            var settings = PairedSettings();
+            var entered = Barrier(); var release = Barrier();
+            var memory = OldPairToken; var saves = 0;
+            using (var http = new HttpClient(new Handler()))
+            using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy.json")), new MeasurementIdFactory(),
+                new ObservationProducerIdentity(memory, settings.ObservationBinding()), () => false, () => false,
+                fence => { throw new InvalidOperationException("disabled"); }, new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0,
+                new ObservationSendOptions { PairTransitionTimeoutMilliseconds = 50 }))
+            {
+                var old = host.Snapshot();
+                var pair = host.TransitionAsync(cancel =>
+                {
+                    try
+                    {
+                        memory = settings.CommitNewPair(NewDevice, Owner, NewPairToken, memory, raw => "synthetic-protected", () =>
+                        {
+                            saves++;
+                            entered.TrySetResult(true);
+                            if (!release.Task.Wait(5000)) throw new TimeoutException("synthetic delayed save");
+                            // A switched file followed by an exception cannot certify commit.
+                            if (saves == 1) File.WriteAllText(Path.Combine(dir, "settings.json"), SettingsCompatibilityTests.Serialize(settings));
+                            if (outcome == "unknown") throw new IOException("synthetic unknown save and rollback outcome");
+                        }, error => { });
+                        return Task.FromResult(new ObservationProducerIdentity(memory, settings.ObservationBinding()));
+                    }
+                    catch
+                    {
+                        memory = string.Empty;
+                        settings.InvalidateObservationGeneration();
+                        return Task.FromResult<ObservationProducerIdentity>(null);
+                    }
+                }, CancellationToken.None);
+                await Bounded(entered.Task); await Bounded(pair);
+                check("PAIR-late-timeout-" + outcome, pair.Result.Status == ObservationPairTransitionStatus.TimedOut
+                    && host.Coordinator.LeaseHeld && !host.Snapshot().HasAuthorization && memory == OldPairToken,
+                    "actual production commit save is still running after public cancellation/timeout; no early publication");
+                var sends = 0;
+                await host.SendAsync(() => "{}", Endpoint, old, T0, null,
+                    () => { sends++; return Task.CompletedTask; }, CancellationToken.None);
+                host.Stop();
+                check("PAIR-late-owned-" + outcome, sends == 0 && !host.Settlement.IsCompleted && host.Coordinator.LeaseHeld,
+                    "actual unsettled save retains lease/lifetime; queued old object cannot send");
+                release.TrySetResult(true); await Bounded(host.Settlement);
+                check("PAIR-late-terminal-" + outcome, !host.Coordinator.LeaseHeld
+                    && (outcome == "committed" ? host.Coordinator.CurrentBinding.PairingGeneration == 1
+                        && host.Coordinator.CurrentBinding.PairingGenerationKnown && memory == NewPairToken
+                        : !host.Snapshot().HasAuthorization && !settings.ObservationPairingGenerationKnown
+                            && settings.ObservationPairingGeneration == 1 && memory == "" && saves == 2),
+                    "only proven terminal durable commit publishes; unknown switched-file plus failed rollback never certifies authority");
+            }
+        }
+    }
+
+    private static async Task PairStoredFences(Action<string, bool, string> check)
+    {
+        var dir = DirectoryFor("pair-stored-fences");
+        var path = Path.Combine(dir, "obs.json");
+        ObservationLedgerEntry frozen;
+        using (var http = new HttpClient(new Handler()))
+        {
+            using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy-a.json")), new MeasurementIdFactory(),
+                Identity(1, OldPairToken), () => true, () => true, fence => new ObservationLedgerStore(path, fence),
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 2);
+                frozen = new ObservationLedgerStore(path, new ObservationBindingFence(host.Snapshot().Binding)).Entries[0];
+            }
+            // Historical A settings have no generation; new B/1 must not adopt A/1 rows.
+            var settings = PairedSettings(); var memory = OldPairToken;
+            ObservationLedgerStore store = null;
+            using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy-b.json")), new MeasurementIdFactory(),
+                new ObservationProducerIdentity(memory, settings.ObservationBinding()), () => true, () => true,
+                fence => store = new ObservationLedgerStore(path, fence), new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                var old = host.Snapshot();
+                await host.TransitionAsync(cancel =>
+                {
+                    memory = settings.CommitNewPair(NewDevice, Owner, NewPairToken, memory, raw => "synthetic-protected", () => { }, error => { });
+                    return Task.FromResult(new ObservationProducerIdentity(memory, settings.ObservationBinding()));
+                }, CancellationToken.None);
+                await host.SendAsync(() => "{}", Endpoint, host.Snapshot(), T0.AddMinutes(2), null, () => Task.CompletedTask, CancellationToken.None);
+                var retained = store.Find(frozen.Uid, frozen.RecordRevision);
+                check("PAIR-old-stored-row", retained != null && retained.RowJson == frozen.RowJson
+                    && retained.State == ObservationLedgerState.Quarantine && store.ReservationCount == 0,
+                    "restart A/1 -> actual B/1 commit preserves exact UID/revision/RowJson and quarantines instead of relabel/send");
+                await host.TransitionAsync(cancel =>
+                {
+                    memory = settings.CommitNewPair(Device, Owner, OldPairToken, memory, raw => "synthetic-old-reply", () => { }, error => { });
+                    return Task.FromResult(new ObservationProducerIdentity(memory, settings.ObservationBinding()));
+                }, CancellationToken.None);
+                var sends = 0;
+                await host.SendAsync(() => "{}", Endpoint, old, T0.AddMinutes(3), null,
+                    () => { sends++; return Task.CompletedTask; }, CancellationToken.None);
+                retained = store.Find(frozen.Uid, frozen.RecordRevision);
+                check("PAIR-returned-old-identity", sends == 0 && settings.ObservationPairingGeneration == 2
+                    && retained.State == ObservationLedgerState.Quarantine && retained.RowJson == frozen.RowJson,
+                    "B -> attempted old A is prospective A/2, not global UUID history; old object and quarantined A/1 never resurrect");
+            }
+        }
     }
 
     private static async Task LazyLease(Action<string, bool, string> check)

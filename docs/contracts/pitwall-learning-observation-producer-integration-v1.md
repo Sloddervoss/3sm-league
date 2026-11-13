@@ -407,30 +407,48 @@ nieuwe UID. Een wijziging van alleen `LapContext` valt hier niet onder.
 
 ### 4.2 `PairingGeneration`
 
-Er bestaat vandaag geen `PairingGeneration` in `ConnectorSettings` of in de
-pairingresponse. De kleinste veilige inpassing is een **lokale** `long`-teller
-die bij elke geslaagde `Pair`, elke `Unpair` en elke DPAPI-token-clear
-omhooggaat en additief in `ConnectorSettings` wordt bewaard. Dit is geen
-servercontract en gaat niet over de draad. Zonder deze teller kan een oude
-observation-rij na een accountwissel niet betrouwbaar van een nieuwe worden
-gescheiden.
+`ConnectorSettings` bewaart een **lokale** nullable `long`-high-watermark plus
+`ObservationPairingGenerationKnown`; de pairingresponse krijgt geen nieuw veld.
+De fence is samengesteld uit device, owner, generatie en knownness, niet een
+globale/servervolgorde. Een bewezen geldige teller wordt bij een geslaagde Pair
+verhoogd; invalidatie bewaart de ruwe high-watermark maar wist autorisatie.
+Dit is geen servercontract en gaat niet over de draad.
 
 - **Bestaande paired install zonder teller:** de teller is afwezig. De plugin
   leest dat als `pairingGeneration=0` én `pairingGenerationKnown=false`; dat is
   een veilige onbekende, geen verzonnen generatie. G01 vereist een bekende
   generatie >0, dus zo'n installatie maakt **geen observation** tot een
-  geslaagde re-pair de teller op 1 zet. De legacy-rijen blijven normaal werken.
-- **Volgorde:** `Pair`/`Unpair`/DPAPI-clear hogen de teller op **binnen de
-  observation-sendlease** (§4.4), zodat een oude OBS-send niet met de nieuwe
-  generatie kan racen.
+  daadwerkelijk nieuwe re-pair de teller op 1 zet. Alleen de gevalideerde nieuwe
+  exchange mag dit doen: device én raw token verschillen van de vorige identiteit
+  waar beschikbaar, en de metadata is werkelijk afwezig (NULL, known=false,
+  geen poisonmarker). De eigenaar mag gelijk blijven of veranderen. Load/restart,
+  decrypt, control en ingest initialiseren niets; generieke
+  `NextObservationGeneration()` adopteert nooit onbekende metadata. De legacy-rijen
+  en automatische updates blijven normaal werken; re-pair is optioneel.
+- **Volgorde:** Pair-validatie, protect en gecombineerde settings-save gebeuren
+  **binnen de observation-sendlease** (§4.4) en de bestaande settingsgate.
+  Device/owner/protected token/generatie/knownness worden samen opgeslagen vóór
+  publicatie van memory token en hostidentiteit. Unpair/onzekerheid maakt oude
+  autorisatie niet opnieuw geldig; oud queued werk blijft aan zijn identityobject
+  gebonden. Alleen toekomstige StartLap mag de nieuwe fence gebruiken.
 - **Persistfout:** als de nieuwe generatie niet duurzaam kan worden bewaard,
   wordt `pairingGenerationKnown=false` en gaat observation **dicht**; de
-  bestaande legacy-queue en legacy-send blijven ongewijzigd. De plugin gaat
-  niet terug naar de oude generatie alsof er niets is gebeurd.
-- **Overflow:** de teller is begrensd op `long`; bij overflow of een niet
-  representeerbare waarde gaat observation **dicht** (fail closed) tot een
-  expliciete re-pair. Er wordt niet gewrapt en geen negatieve/oude generatie
-  hergebruikt.
+  bestaande legacy-queue en onafhankelijke legacy-send blijven ongewijzigd.
+  De mislukte Pair zelf krijgt geen herstelde oude autorisatie. Protect/save,
+  rollback-save, cancellation of onbekende uitkomst bewijzen geen serverundo of
+  crash-atomiciteit. De lease blijft tot daadwerkelijke callbacksettlement;
+  uitsluitend een bewezen late commit mag publiceren.
+- **Bereik en bewijsbehoud:** bewezen tellers liggen in 0..9007199254740991;
+  alleen een strikt hogere representeerbare opvolger is toegestaan. Een nieuwe
+  afwezige teller start op 1, nooit verzonnen bekende 0. Negatief, boven bereik,
+  maximum, NULL+known=true of present+known=false wordt niet gereset/geadopteerd,
+  ook niet door herhaalde Pair. De ruwe waarde blijft behouden bij weigering of
+  failure. Eén additief OptionalField `ObservationPairingGenerationPoisoned`
+  bewaart NULL+known-invalid nadat knownness wordt gewist; anders zou die corrupte
+  toestand niet meer van werkelijke afwezigheid te onderscheiden zijn. Deze
+  marker geeft geen autoriteit en heeft geen automatische reset. Een later
+  werkelijk nieuwe identiteit is uitsluitend prospectief, nooit backfill van
+  eerdere rondes, rijen of mislukte bindings.
 
 ### 4.3 Isolatie bij token-/device-/accountwissel
 

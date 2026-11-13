@@ -27,11 +27,14 @@ namespace ThreeSM.EnduranceConnector
         public long? ObservationPairingGeneration;
         [System.Runtime.Serialization.OptionalField]
         public bool ObservationPairingGenerationKnown = false;
+        // Clearing knownness must not turn NULL+known-invalid into pristine absence.
+        [System.Runtime.Serialization.OptionalField]
+        public bool ObservationPairingGenerationPoisoned = false;
 
         public ObservationPairingBinding ObservationBinding()
         {
             var generation = ObservationPairingGeneration;
-            var known = ObservationPairingGenerationKnown && generation.HasValue
+            var known = !ObservationPairingGenerationPoisoned && ObservationPairingGenerationKnown && generation.HasValue
                 && generation.Value >= 0 && generation.Value <= 9007199254740991L;
             return new ObservationPairingBinding(DeviceId, BoundOwnerUserId, generation ?? 0, known);
         }
@@ -43,6 +46,65 @@ namespace ThreeSM.EnduranceConnector
             var binding = ObservationBinding();
             return binding.PairingGenerationKnown && binding.PairingGeneration < 9007199254740991L
                 ? (long?)(binding.PairingGeneration + 1) : null;
+        }
+
+        public void InvalidateObservationGeneration()
+        {
+            if (ObservationPairingGenerationKnown && !ObservationPairingGeneration.HasValue)
+                ObservationPairingGenerationPoisoned = true;
+            ObservationPairingGenerationKnown = false;
+        }
+
+        // Caller holds _settingsGate and the shared host transition lease. Inputs have
+        // already passed the real Pair response validation. This is the production
+        // protect/combined-save boundary, also executed by the local runtime tests.
+        // Return the raw token only after durable save, never via a publication callback.
+        public string CommitNewPair(string device, string owner, string token, string priorToken,
+            Func<string, string> protect, Action save, Action<Exception> rollbackFailed)
+        {
+            var oldProtected = DeviceTokenProtected;
+            var oldDevice = DeviceId;
+            var oldOwner = BoundOwnerUserId;
+            var oldRace = BoundRaceId;
+            var oldTeam = BoundTeamId;
+            var oldCentral = UseCentralRelay;
+            try
+            {
+                var next = NextObservationGeneration();
+                var fresh = !string.Equals(device, oldDevice, StringComparison.OrdinalIgnoreCase)
+                    && (string.IsNullOrEmpty(priorToken) || !string.Equals(token, priorToken, StringComparison.Ordinal));
+                if (!next.HasValue && fresh && !ObservationPairingGeneration.HasValue
+                    && !ObservationPairingGenerationKnown && !ObservationPairingGenerationPoisoned)
+                    next = 1;
+                var protectedToken = protect(token);
+                // Preserve invalid/overflow/lost-provenance evidence on refusal.
+                if (next.HasValue) ObservationPairingGeneration = next;
+                InvalidateObservationGeneration();
+                ObservationPairingGenerationKnown = next.HasValue;
+                DeviceTokenProtected = protectedToken;
+                DeviceId = device;
+                BoundOwnerUserId = owner;
+                BoundRaceId = string.Empty;
+                BoundTeamId = string.Empty;
+                UseCentralRelay = true;
+                save();
+                return token;
+            }
+            catch
+            {
+                DeviceTokenProtected = oldProtected;
+                DeviceId = oldDevice;
+                BoundOwnerUserId = oldOwner;
+                BoundRaceId = oldRace;
+                BoundTeamId = oldTeam;
+                UseCentralRelay = oldCentral;
+                // A local rollback is not server undo. Keep attempted high-watermark
+                // and refuse restored OBS authority, including when rollback save fails.
+                InvalidateObservationGeneration();
+                try { save(); }
+                catch (Exception error) { rollbackFailed(error); }
+                throw;
+            }
         }
 
         // Geavanceerde lokale fallback voor ontwikkeling en offline simulatie.
