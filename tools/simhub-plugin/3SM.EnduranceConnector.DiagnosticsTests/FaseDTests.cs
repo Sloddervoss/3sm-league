@@ -424,6 +424,12 @@ internal static class FaseDTests
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
+            if (string.Equals(args[0], "--only-observation-readiness", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationReadinessTests", () => MeasurementObservationReadinessTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
             if (string.Equals(args[0], "--export-observation-fixtures", StringComparison.Ordinal))
             {
                 if (args.Length < 2) throw new ArgumentException("doelmap ontbreekt");
@@ -493,6 +499,7 @@ internal static class FaseDTests
             baselineChecks += Group("MeasurementObservationAckTests", () => MeasurementObservationAckTests.Run(Check));
             baselineChecks += Group("MeasurementObservationSendTests", () => MeasurementObservationSendTests.Run(Check));
             baselineChecks += Group("MeasurementObservationHostTests", () => MeasurementObservationHostTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationReadinessTests", () => MeasurementObservationReadinessTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();

@@ -60,6 +60,7 @@ MEASUREMENT_FILES = [
     "ObservationLedger.cs",
     "ObservationLedgerStore.cs",
     "ObservationAck.cs",
+    "ObservationReadiness.cs",
     "TrackIdentityReader.cs",
 ]
 
@@ -228,11 +229,30 @@ def main():
             end += 1
         return raw_plugin[start:end]
 
-    check("W10-legacy-frozen", hashlib.sha256(method_body("SendLegacyV3Async").encode()).hexdigest()
+    # S2E1 response-observer extension. The accepted feature-off body must still be
+    # recoverable byte-for-byte by removing ONLY the exact new observer statements;
+    # this is a documented new integration contract, not a replaced pin.
+    readiness_inserts = [
+        "            var readinessRequest = BeginObservationReadiness(identity);\n",
+        "                        ObserveObservationReadiness(readinessRequest, (int)response.StatusCode, responseBody);\n",
+        "                FailObservationReadiness(readinessRequest, ObservationReadinessReasons.TransportFailure);\n",
+    ]
+    legacy_body = method_body("SendLegacyV3Async")
+    reconstructed = legacy_body
+    inserted_once = True
+    for statement in readiness_inserts:
+        if legacy_body.count(statement) != 1:
+            inserted_once = False
+        reconstructed = reconstructed.replace(statement, "")
+    check("W10-legacy-frozen", inserted_once
+        and hashlib.sha256(reconstructed.encode()).hexdigest()
         == "5516934f67077f0ac08cd1081897c79b0f264e796a7893e34ab4434b58409704"
+        and hashlib.sha256(legacy_body.encode()).hexdigest()
+        == "c2cde952e8a28ba6282abc2b8c85bf141951e353a56a956add2a020798f75591"
         and hashlib.sha256(method_body("SendAsync").encode()).hexdigest()
         == "2ed2836376734ce44c2f4d6ba970f9b63e5586fcc89ab8f9393f974e4e016caa",
-        "exact accepted production V3 feature-off body and unrelated local bridge body unchanged")
+        "removing only the 3 new observer statements reproduces the accepted feature-off body exactly;"
+        " the exact new body is pinned and the unrelated bridge body is unchanged")
 
     release = read(ROOT / "release.sh")
     scp_match = re.search(r"/3SM.EnduranceConnector/\{([^}]+)\}", release)
@@ -242,9 +262,10 @@ def main():
     compile_names = [e.attrib["Include"] for e in tree.findall(".//m:Compile", ns)]
     check("W11-source-inventory", set(compile_names).issubset(tokens)
         and "3SM.EnduranceConnector.csproj" in tokens
-        and hashlib.sha256(release.replace(",ObservationProducerHost.cs}", "}").encode()).hexdigest()
+        and hashlib.sha256(release.replace(
+            ",ObservationProducerHost.cs,ObservationReadiness.cs}", "}").encode()).hexdigest()
         == "3711565092bc6c2eba76d542f63ad691c47d23749e90e841159dbab48855b638",
-        "all Compile/SCP tokens covered; release is byte-frozen except the required new source token (NOT executed)")
+        "all Compile/SCP tokens covered; release is byte-frozen except the two required source tokens (NOT executed)")
     resources = [e.attrib["Include"].replace("\\", "/") for e in tree.findall(".//m:EmbeddedResource", ns)]
     inputs = [name for name in resources if "$(Configuration)" not in name]
     check("W12-resource-inputs", all((PLUGIN / name).is_file() for name in inputs)
@@ -261,6 +282,31 @@ def main():
         and "Settings.InvalidateObservationGeneration();" in raw_plugin
         and 'Compile Include="..\\3SM.EnduranceConnector\\ConnectorSettings.cs"' in tests_csproj,
         "static validated Pair under settings gate calls SAME linked production protect/save commit; host lease checked by W08/W09/runtime")
+
+    readiness = read(PLUGIN / "ObservationReadiness.cs")
+    check("W14-readiness-seams",
+        "new ObservationReadinessCache(() => _readinessClock.ElapsedMilliseconds)" in raw_plugin
+        and "new ObservationReadinessTransportObserver(" in raw_plugin
+        and "new HttpObservationSendTransport(_http, 16384)" in raw_plugin
+        and "null, _observationReadiness);" in raw_plugin
+        and "ObserveObservationReadiness(readinessRequest, (int)response.StatusCode, responseBody);" in raw_plugin
+        and "FailObservationReadiness(readinessRequest, ObservationReadinessReasons.TransportFailure);" in raw_plugin
+        and "cache.Publish(request, httpStatus, responseBody)" in raw_plugin
+        and "public const long TtlMilliseconds = 60000;" in readiness
+        and "class ObservationReadinessTransportObserver" in readiness
+        and "MeasurementJson.DeserializeDictionary" in readiness
+        and "TcpClient" not in readiness and "File." not in readiness
+        and "new HttpClientHandler" not in readiness,
+        "one memory-only cache feeds the legacy 202 observer and the mixed transport decorator; no POST/disk/timer/global handler")
+
+    check("W15-host-readiness-predicate",
+        "cache.IsReadyFor(identity.Binding, true)" in host
+        and "PublishReadinessIdentity(ObservationReadinessReasons.IdentityChanged);" in host
+        and "InvalidateReadinessLifetime(ObservationReadinessReasons.HostStopped);" in host
+        and "lock (_settingsGate)" not in readiness
+        and "IObservationSendTransport" in readiness
+        and "ObservationReadinessCache readiness = null)" in host,
+        "binding-aware provider replaces the constant false; host gate -> cache lock only; old host API preserved")
 
     print("SUMMARY PASS=" + str(passed) + " FAIL=" + str(failed))
     return 0 if failed == 0 else 1

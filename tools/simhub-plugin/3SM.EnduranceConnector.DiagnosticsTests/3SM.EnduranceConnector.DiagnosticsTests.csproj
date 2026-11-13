@@ -47,6 +47,8 @@
     <!-- T13-S2C2b: bounded async send lifecycle, envelope, planner and transport. -->
     <Compile Include="..\3SM.EnduranceConnector\ObservationSend.cs" Link="ObservationSend.cs" />
     <Compile Include="..\3SM.EnduranceConnector\ObservationProducerHost.cs" Link="ObservationProducerHost.cs" />
+    <!-- S2E1: memory-only readiness reader/cache plus both response seams. SimHub-vrij. -->
+    <Compile Include="..\3SM.EnduranceConnector\ObservationReadiness.cs" Link="ObservationReadiness.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TrackIdentityReader.cs" Link="TrackIdentityReader.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetrySampler.cs" Link="TelemetrySampler.cs" />
     <Compile Include="..\3SM.EnduranceConnector\LapAccumulator.cs" Link="LapAccumulator.cs" />

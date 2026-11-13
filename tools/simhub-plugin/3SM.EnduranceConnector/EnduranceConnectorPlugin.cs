@@ -105,6 +105,11 @@ namespace ThreeSM.EnduranceConnector
         private MeasurementOutbox _measurementOutbox;
         private MeasurementPipeline _measurementPipeline;
         private ObservationProducerHost _observationHost;
+        // S2E1: memory-only readiness. Created once with the host; no disk, timer,
+        // extra POST or control capability. Without a legitimate policy fact every
+        // response keeps this false.
+        private ObservationReadinessCache _observationReadiness;
+        private readonly Stopwatch _readinessClock = Stopwatch.StartNew();
         private string _lastObservationCaptureDiagnostic;
         private MeasurementSender _measurementSender;
         private ConnectorControlClient _controlClient;
@@ -891,14 +896,17 @@ namespace ThreeSM.EnduranceConnector
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "3SM Endurance Connector");
                 _measurementOutbox = new MeasurementOutbox(Path.Combine(dataDirectory, "measurement-outbox.json"));
                 _measurementOutbox.Load();                       // herstel na een herstart
+                _observationReadiness = new ObservationReadinessCache(() => _readinessClock.ElapsedMilliseconds);
                 _observationHost = new ObservationProducerHost(_measurementOutbox, new MeasurementIdFactory(),
                     new ObservationProducerIdentity(_deviceToken, Settings.ObservationBinding()),
                     () => Volatile.Read(ref Settings.ObservationEnabled),
-                    () => false, // no proven receiver handshake exists; activation is a separate gate
+                    () => false, // historical fallback; the binding-aware cache predicate supersedes it
                     fence => new ObservationLedgerStore(Path.Combine(dataDirectory, "observation-ledger-v1.json"), fence),
-                    new HttpObservationSendTransport(_http, 16384),
+                    new ObservationReadinessTransportObserver(
+                        new HttpObservationSendTransport(_http, 16384), _observationReadiness),
                     () => ConnectorCapabilities.Implemented().ToJson(),
-                    new MeasurementLimits { MaxFrameBodyBytes = MaxPayloadBytes }, () => DateTime.UtcNow);
+                    new MeasurementLimits { MaxFrameBodyBytes = MaxPayloadBytes }, () => DateTime.UtcNow,
+                    null, _observationReadiness);
                 _measurementPipeline = _observationHost.Pipeline;
                 _measurementSender = new MeasurementSender(_measurementOutbox, _http,
                     () => ConnectorCapabilities.Implemented().ToJson(), new MeasurementLimits { MaxFrameBodyBytes = MaxPayloadBytes });
@@ -910,6 +918,7 @@ namespace ThreeSM.EnduranceConnector
             {
                 if (_observationHost != null) _observationHost.Dispose();
                 _observationHost = null;
+                _observationReadiness = null;
                 _measurementOutbox = null;
                 _measurementPipeline = null;
                 _measurementSender = null;
@@ -2364,7 +2373,7 @@ namespace ThreeSM.EnduranceConnector
             {
                 if (_observationHost == null)
                 {
-                    await SendLegacyV3Async(envelope, endpoint, token, cancellationToken).ConfigureAwait(false);
+                    await SendLegacyV3Async(envelope, endpoint, token, identity, cancellationToken).ConfigureAwait(false);
                     return;
                 }
                 var pace = envelope.PaceCapture;
@@ -2376,7 +2385,7 @@ namespace ThreeSM.EnduranceConnector
                     finally { envelope.PaceCapture = pace; }
                 }, endpoint, identity, attemptUtc,
                     body => PaceCaptureBuffer.AppendWithinBudget(body, pace),
-                    () => SendLegacyV3Async(envelope, endpoint, token, cancellationToken), cancellationToken).ConfigureAwait(false);
+                    () => SendLegacyV3Async(envelope, endpoint, token, identity, cancellationToken), cancellationToken).ConfigureAwait(false);
                 if (result != null)
                 {
                     DiagnosticsClient diagnostics;
@@ -2400,10 +2409,12 @@ namespace ThreeSM.EnduranceConnector
 
         // Feature-off branch retained: core trim -> legacy measurements -> pace ->
         // one POST -> original parser/ACK/backoff. MeasurementSender.SendAsync remains a test route.
-        private async Task SendLegacyV3Async(TelemetryEnvelopeV3 envelope, Uri endpoint, string token, CancellationToken cancellationToken)
+        private async Task SendLegacyV3Async(TelemetryEnvelopeV3 envelope, Uri endpoint, string token,
+            ObservationProducerIdentity identity, CancellationToken cancellationToken)
         {
             var attemptUtc = DateTime.UtcNow;
             var ingestResultRecorded = false;
+            var readinessRequest = BeginObservationReadiness(identity);
             DiagnosticsClient diagnosticsAtAttempt;
             lock (_diagnosticsGate) diagnosticsAtAttempt = _diagnostics;
             if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestAttempt(attemptUtc);
@@ -2436,6 +2447,7 @@ namespace ThreeSM.EnduranceConnector
                         if (!response.IsSuccessStatusCode) throw new HttpRequestException("relay HTTP " + (int)response.StatusCode);
                         // Alleen een echt gelezen antwoord kan een bevestiging per rij bevatten.
                         responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        ObserveObservationReadiness(readinessRequest, (int)response.StatusCode, responseBody);
                     }
                 }
                 if (Volatile.Read(ref _ending) == 0) Status = "V3 " + envelope.TransportSessionId.Substring(0, Math.Min(8, envelope.TransportSessionId.Length)) + " · seq " + envelope.Sequence;
@@ -2447,12 +2459,51 @@ namespace ThreeSM.EnduranceConnector
             catch (Exception error)
             {
                 if (!ingestResultRecorded && diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestResult(attemptUtc, 0, false);
+                FailObservationReadiness(readinessRequest, ObservationReadinessReasons.TransportFailure);
                 MarkMeasurementAttempt(measurementPlan);
                 if (Volatile.Read(ref _ending) == 0) Status = "Relayfout · " + error.Message;
             }
             finally
             {
                 Volatile.Write(ref _sendBusy, 0);
+            }
+        }
+
+        // S2E1: narrow response observer for the feature-off legacy 202. Memory-only;
+        // it never changes ACK, status, replay, retries, leases, disposal, RowJson or
+        // normal telemetry, and no exception may escape an already accepted response.
+        private ObservationReadinessRequest BeginObservationReadiness(ObservationProducerIdentity identity)
+        {
+            var cache = _observationReadiness;
+            if (cache == null) return null;
+            try { return cache.BeginRequest(identity); }
+            catch (Exception) { return null; }
+        }
+
+        private void ObserveObservationReadiness(ObservationReadinessRequest request,
+            int httpStatus, string responseBody)
+        {
+            try
+            {
+                var cache = _observationReadiness;
+                if (cache != null) cache.Publish(request, httpStatus, responseBody);
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM readiness: antwoord niet verwerkt: " + error.GetType().Name);
+            }
+        }
+
+        private void FailObservationReadiness(ObservationReadinessRequest request, string reasonCode)
+        {
+            try
+            {
+                var cache = _observationReadiness;
+                if (cache != null) cache.Fail(request, reasonCode);
+            }
+            catch (Exception error)
+            {
+                SimHub.Logging.Current.Warn("3SM readiness: mislukking niet verwerkt: " + error.GetType().Name);
             }
         }
 

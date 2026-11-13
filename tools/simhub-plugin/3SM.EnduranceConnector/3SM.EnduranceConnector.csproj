@@ -84,6 +84,7 @@
     <Compile Include="ObservationAck.cs" />
     <Compile Include="ObservationSend.cs" />
     <Compile Include="ObservationProducerHost.cs" />
+    <Compile Include="ObservationReadiness.cs" />
     <Compile Include="LapAccumulator.cs" />
     <!-- 0.7.2.0: pitbezoeken (intentie vs resultaat) en wear-ankers met bewijs. -->
     <Compile Include="PitServiceTracker.cs" />
