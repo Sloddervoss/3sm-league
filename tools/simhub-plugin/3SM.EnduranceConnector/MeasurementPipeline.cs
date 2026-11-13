@@ -50,6 +50,7 @@ namespace ThreeSM.EnduranceConnector
         private readonly MeasurementOutbox _outbox;
         private readonly MeasurementIdFactory _ids;
         private readonly TelemetrySampler _sampler;
+        private readonly Func<LapAggregate, bool> _observationSink;
         private PitServiceTracker _pits;
         private TyreAnchorTracker _anchors;
         private string _segmentId;
@@ -62,7 +63,12 @@ namespace ThreeSM.EnduranceConnector
             : this(outbox, ids, new SamplerOptions()) { }
 
         public MeasurementPipeline(MeasurementOutbox outbox, MeasurementIdFactory ids, SamplerOptions samplerOptions)
+            : this(outbox, ids, samplerOptions, null) { }
+
+        public MeasurementPipeline(MeasurementOutbox outbox, MeasurementIdFactory ids, SamplerOptions samplerOptions,
+            Func<LapAggregate, bool> observationSink)
         {
+            _observationSink = observationSink;
             if (outbox == null) throw new ArgumentNullException("outbox");
             if (ids == null) throw new ArgumentNullException("ids");
             _outbox = outbox;
@@ -235,6 +241,13 @@ namespace ThreeSM.EnduranceConnector
         private void EnqueueSummary(LapAggregate aggregate)
         {
             if (aggregate == null) return;
+            // Observe and End arrive here only AFTER pit attribution. A consumed
+            // observation never also enters the version-1 legacy outbox.
+            if (_observationSink != null && _observationSink(aggregate))
+            {
+                _completedLaps++;
+                return;
+            }
             // T13-S2B: de gewone rij gebruikt de bij StartLap bevroren sessie.
             // Alleen handmatig gebouwde legacy-aggregaatfixtures vallen terug op
             // de aangeleverde sessie. Er wordt hier nooit een observation gezet.
