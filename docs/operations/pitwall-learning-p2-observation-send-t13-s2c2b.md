@@ -5,7 +5,7 @@ PRODUCTIECALLERS GEBONDEN.** Productiewijziging: **NEE**.
 
 Nieuwe bibliotheek `ObservationSend.cs`, twee minimale bulkhelpers in
 `ObservationLedgerStore` (`QuarantineMany`, `DeferMany`) en een geregistreerde
-testgroep `MeasurementObservationSendTests`. Geen plugin-, settings-,
+testgroep `MeasurementObservationSendTests`. Geen plugin-code-, settings-,
 Pair/Unpair-GUI-, DPAPI-, pipeline- of samplerwijziging. `release.sh` is alleen
 als bronlijst aangevuld en **niet uitgevoerd**. Er is geen echt HTTP-request,
 geen echte token, geen `%APPDATA%`, SDK, DB, Edge, SSH, Windows- of GUI-actie
