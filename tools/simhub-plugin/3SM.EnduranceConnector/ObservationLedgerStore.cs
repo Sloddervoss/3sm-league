@@ -114,6 +114,37 @@ namespace ThreeSM.EnduranceConnector
     }
 
     /// <summary>
+    /// Outcome of a bounded bulk state transition. It exists so a plan-time
+    /// quarantine or a transport-time deferral is one durable snapshot, not one
+    /// commit per row. Only exact existing identities (UID/revision/RowJson) are
+    /// eligible; a conflict refuses the whole batch instead of mutating a subset.
+    /// </summary>
+    public sealed class ObservationLedgerBulkResult
+    {
+        internal ObservationLedgerBulkResult(ObservationLedgerTransitionStatus status,
+            int changedCount, int notFoundCount, string diagnostic, long actualBytes,
+            long reservedBytes, int entryCount)
+        {
+            Status = status;
+            ChangedCount = changedCount;
+            NotFoundCount = notFoundCount;
+            Diagnostic = diagnostic;
+            ActualBytes = actualBytes;
+            ReservedBytes = reservedBytes;
+            EntryCount = entryCount;
+        }
+
+        public ObservationLedgerTransitionStatus Status { get; private set; }
+        public bool Committed { get { return Status == ObservationLedgerTransitionStatus.Committed; } }
+        public int ChangedCount { get; private set; }
+        public int NotFoundCount { get; private set; }
+        public string Diagnostic { get; private set; }
+        public long ActualBytes { get; private set; }
+        public long ReservedBytes { get; private set; }
+        public int EntryCount { get; private set; }
+    }
+
+    /// <summary>
     /// Durable version-1 observation sidecar. One full snapshot, one atomic switch,
     /// no second payload copy and no delivery shortcut.
     /// </summary>
@@ -613,6 +644,192 @@ namespace ThreeSM.EnduranceConnector
                 return TransitionCommit(index,
                     entry.WithState(ObservationLedgerState.Quarantine, reason, entry.Attempts, null),
                     true, ObservationLedgerReasons.ToToken(reason));
+            }
+        }
+
+        /// <summary>
+        /// Quarantines several exact existing rows in one durable snapshot. Used by
+        /// the plan-time binding fence; a missing row is skipped, an identity
+        /// conflict refuses the whole batch.
+        /// </summary>
+        public ObservationLedgerBulkResult QuarantineMany(
+            IList<ObservationLedgerEntry> expected, string reasonCode)
+        {
+            if (expected == null || expected.Count == 0)
+                return BulkResult(ObservationLedgerTransitionStatus.Committed, 0, 0,
+                    "no_rows");
+            ObservationLedgerReason reason;
+            if (!ObservationLedgerReasons.TryParse(reasonCode, out reason))
+                reason = ObservationLedgerReason.ServerRejectedUnknown;
+            if (!ObservationLedgerReasons.IsQuarantine(reason))
+                return BulkResult(ObservationLedgerTransitionStatus.RefusedInvalidReason, 0, 0,
+                    "deferred_reason_not_permanent");
+
+            lock (_gate)
+            {
+                if (_failedClosed)
+                    return BulkResult(ObservationLedgerTransitionStatus.RefusedStoreFailedClosed,
+                        0, 0, "ledger_failed_closed");
+
+                var replacements = new Dictionary<int, ObservationLedgerEntry>();
+                var notFound = 0;
+                for (var index = 0; index < expected.Count; index++)
+                {
+                    var wanted = expected[index];
+                    if (wanted == null) continue;
+                    var entryIndex = IndexOf(wanted.Uid, wanted.RecordRevision);
+                    if (entryIndex < 0) { notFound++; continue; }
+                    var entry = _entries[entryIndex];
+                    if (!string.Equals(entry.RowJson, wanted.RowJson, StringComparison.Ordinal)
+                        || !ObservationBindingFence.SameBinding(entry.Binding, wanted.Binding))
+                    {
+                        return BulkResult(ObservationLedgerTransitionStatus.RefusedInvalidReason,
+                            0, notFound, "bulk_identity_conflict");
+                    }
+                    if (entry.State == ObservationLedgerState.Quarantine) continue;
+                    if (replacements.ContainsKey(entryIndex)) continue;
+                    replacements[entryIndex] = entry.WithState(ObservationLedgerState.Quarantine,
+                        reason, entry.Attempts, null);
+                }
+
+                if (replacements.Count == 0)
+                    return BulkResult(ObservationLedgerTransitionStatus.Committed, 0, notFound,
+                        "no_changes");
+                return BulkCommit(replacements, true, ObservationLedgerReasons.ToToken(reason),
+                    notFound);
+            }
+        }
+
+        /// <summary>
+        /// Defers several exactly offered observation rows in one durable snapshot,
+        /// with the accepted bounded backoff. Used after a transport failure; the UID,
+        /// revision and RowJson never change.
+        /// </summary>
+        public ObservationLedgerBulkResult DeferMany(IList<ObservationOfferedRow> rows,
+            string reasonCode, DateTime nowUtc)
+        {
+            if (rows == null || rows.Count == 0)
+                return BulkResult(ObservationLedgerTransitionStatus.Committed, 0, 0,
+                    "no_rows");
+            ObservationLedgerReason reason;
+            if (!ObservationLedgerReasons.TryParse(reasonCode, out reason)
+                || !ObservationLedgerReasons.IsDeferred(reason))
+                return BulkResult(ObservationLedgerTransitionStatus.RefusedInvalidReason, 0, 0,
+                    "invalid_deferred_reason");
+            if (nowUtc.Kind != DateTimeKind.Utc)
+                return BulkResult(ObservationLedgerTransitionStatus.RefusedInvalidReason, 0, 0,
+                    "invalid_defer_time");
+
+            lock (_gate)
+            {
+                if (_failedClosed)
+                    return BulkResult(ObservationLedgerTransitionStatus.RefusedStoreFailedClosed,
+                        0, 0, "ledger_failed_closed");
+
+                var replacements = new Dictionary<int, ObservationLedgerEntry>();
+                var notFound = 0;
+                for (var index = 0; index < rows.Count; index++)
+                {
+                    var offered = rows[index];
+                    if (offered == null || offered.Lane != ObservationAckLane.Observation)
+                    {
+                        notFound++;
+                        continue;
+                    }
+                    var entryIndex = IndexOf(offered.Uid, offered.RecordRevision);
+                    if (entryIndex < 0) { notFound++; continue; }
+                    var entry = _entries[entryIndex];
+                    if (!string.Equals(entry.RowJson, offered.RowJson, StringComparison.Ordinal)
+                        || !ObservationBindingFence.SameBinding(entry.Binding, offered.Binding))
+                    {
+                        return BulkResult(ObservationLedgerTransitionStatus.RefusedInvalidReason,
+                            0, notFound, "bulk_identity_conflict");
+                    }
+                    if (entry.State == ObservationLedgerState.Quarantine) continue;
+                    if (entry.Attempts == int.MaxValue) { notFound++; continue; }
+                    if (replacements.ContainsKey(entryIndex)) continue;
+                    var attempts = entry.Attempts + 1;
+                    var next = ObservationLedgerCandidate.TruncateToMilliseconds(
+                        nowUtc.AddSeconds(BackoffSeconds(attempts)));
+                    replacements[entryIndex] = entry.WithState(ObservationLedgerState.Deferred,
+                        reason, attempts, next);
+                }
+
+                if (replacements.Count == 0)
+                    return BulkResult(ObservationLedgerTransitionStatus.Committed, 0, notFound,
+                        "no_changes");
+                return BulkCommit(replacements, false, ObservationLedgerReasons.ToToken(reason),
+                    notFound);
+            }
+        }
+
+        private ObservationLedgerBulkResult BulkCommit(
+            Dictionary<int, ObservationLedgerEntry> replacements, bool quarantined,
+            string reasonCode, int notFound)
+        {
+            var entries = new List<ObservationLedgerEntry>(_entries);
+            foreach (var pair in replacements) entries[pair.Key] = pair.Value;
+
+            int count;
+            var reserved = EffectiveWorst(entries, out count);
+            if (count > EffectiveMaxEntries || reserved > EffectiveMaxBytes)
+                return BulkResult(ObservationLedgerTransitionStatus.RefusedQuota, 0, notFound,
+                    "transition_budget_exceeded");
+
+            var changed = replacements.Count;
+            if (quarantined && _quarantineTotal > int.MaxValue - changed)
+                return BulkResult(ObservationLedgerTransitionStatus.RefusedInvalidReason, 0,
+                    notFound, "quarantine_total_overflow");
+            var nextQuarantine = _quarantineTotal + (quarantined ? changed : 0);
+
+            string json;
+            long actual;
+            try
+            {
+                json = ObservationLedgerSnapshotCodec.Serialize(entries, _captureRefused,
+                    nextQuarantine, _deliveredTotal, ClockNow());
+                actual = ObservationLedgerBudget.Utf8(json);
+            }
+            catch (Exception error)
+            {
+                return BulkResult(ObservationLedgerTransitionStatus.NotCommitted, 0, notFound,
+                    "snapshot_serialize_failed:" + error.GetType().Name);
+            }
+            if (actual > reserved || reserved > EffectiveMaxBytes)
+                return BulkResult(ObservationLedgerTransitionStatus.RefusedQuota, 0, notFound,
+                    "transition_budget_exceeded");
+
+            string writeError;
+            var outcome = TryWriteSnapshot(json, out writeError);
+            if (outcome == SwitchOutcome.FailedBeforeSwitch)
+                return BulkResult(ObservationLedgerTransitionStatus.NotCommitted, 0, notFound,
+                    "precommit_io:" + writeError);
+            if (outcome == SwitchOutcome.Uncertain)
+            {
+                string reconcile;
+                if (ReconcileFullSnapshot(entries, _captureRefused, nextQuarantine,
+                        _deliveredTotal, out reconcile))
+                    return BulkResult(ObservationLedgerTransitionStatus.Committed, changed,
+                        notFound, reasonCode);
+                return BulkResult(ObservationLedgerTransitionStatus.NotCommitted, 0, notFound,
+                    "uncertain_switch:" + writeError + ";" + reconcile);
+            }
+
+            _entries = entries;
+            _quarantineTotal = nextQuarantine;
+            _actualBytes = actual;
+            _reservedBytes = reserved;
+            return BulkResult(ObservationLedgerTransitionStatus.Committed, changed, notFound,
+                reasonCode);
+        }
+
+        private ObservationLedgerBulkResult BulkResult(ObservationLedgerTransitionStatus status,
+            int changed, int notFound, string diagnostic)
+        {
+            lock (_gate)
+            {
+                return new ObservationLedgerBulkResult(status, changed, notFound, diagnostic,
+                    _actualBytes, _reservedBytes, _entries.Count);
             }
         }
 

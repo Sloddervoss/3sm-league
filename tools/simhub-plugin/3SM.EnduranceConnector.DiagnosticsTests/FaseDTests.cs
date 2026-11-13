@@ -412,6 +412,12 @@ internal static class FaseDTests
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
+            if (string.Equals(args[0], "--only-observation-send", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationSendTests", () => MeasurementObservationSendTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
             if (string.Equals(args[0], "--export-observation-fixtures", StringComparison.Ordinal))
             {
                 if (args.Length < 2) throw new ArgumentException("doelmap ontbreekt");
@@ -442,6 +448,7 @@ internal static class FaseDTests
                 Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
                 Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
                 Group("MeasurementObservationAckTests", () => MeasurementObservationAckTests.Run(Check));
+                Group("MeasurementObservationSendTests", () => MeasurementObservationSendTests.Run(Check));
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
@@ -477,6 +484,7 @@ internal static class FaseDTests
             baselineChecks += Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
             baselineChecks += Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
             baselineChecks += Group("MeasurementObservationAckTests", () => MeasurementObservationAckTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationSendTests", () => MeasurementObservationSendTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();
