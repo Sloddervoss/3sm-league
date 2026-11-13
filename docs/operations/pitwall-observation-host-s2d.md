@@ -59,10 +59,26 @@ Capturediagnostiek gebruikt vaste categorieën en wordt alleen bij statuswisseli
 `ConnectorSettings.ObservationEnabled` is standaard false. De nieuwe settingsvelden zijn
 OptionalField zodat ook de strikte bestaande serializer oude settings blijft lezen.
 Nullable `ObservationPairingGeneration` plus `ObservationPairingGenerationKnown`
-onderscheiden ontbrekende metadata van echte bekende nul. Ontbrekend, negatief,
-onveilig bereik of overflow levert geen nieuwe bekende epoch op. Een gevalideerde
-Pair-commit kan alleen een bewezen bekende high-watermark verhogen en bewaart epoch,
-device, owner en DPAPI-token samen. Historische settings worden niet geadopteerd of gemigreerd.
+onderscheiden ontbrekende metadata van echte bekende nul. De bounded lokale repair
+voegt uitsluitend in de nieuwe Pair-commit afwezig→1 toe: na bestaande responsevalidatie
+moeten device én raw token verschillen van de vorige identiteit waar beschikbaar,
+en moet metadata werkelijk NULL+known=false zonder poisonmarker zijn. Owner mag gelijk
+blijven of wijzigen. De generieke successor adopteert niets. Een bewezen bekende
+high-watermark verhoogt strikt binnen 0..9007199254740991; negatief, maximum, boven
+bereik of verloren provenance weigert OBS en bewaart de ruwe waarde, ook na herhaalde
+Pair/failure. Eén OptionalField `ObservationPairingGenerationPoisoned` bewaart
+NULL+known-invalid bij invalidatie; anders zou known=false de fout als afwezig maskeren.
+Historische settings blijven onbekend op load/restart/decrypt/control/ingest.
+
+`ConnectorSettings.CommitNewPair` is de kleine gedeelde productie-protect/savegrens,
+werkelijk aangeroepen door `PairCoreAsync` binnen de bestaande `_settingsGate` en
+hostlease. Hij bewaart generatie/device/owner/DPAPI-token samen vóór terugkeer van
+het raw token voor memory-publicatie; rollback-save herstelt nooit OBS-knownness.
+Lokale tests voeren exact deze commitbron uit met geïnjecteerde protect/save en echte
+host/pipeline/store; dit is geen uitvoering van SimHub/DPAPI/HTTP-exchange zelf.
+De historische PASS-records hierboven blijven ongewijzigd. De gewijzigde daadwerkelijke
+Pair-adapter vereist na onafhankelijke SPEC→QUALITY een NIEUWE volledige Windows/
+vendor-SDK-compile; de eerdere compile dekt deze bronwijziging niet.
 
 De productie-readinessprovider retourneert expliciet false: er bestaat nog geen bewezen
 receiverhandshake voor deze feature. Tests injecteren readiness op dezelfde hostseam.
