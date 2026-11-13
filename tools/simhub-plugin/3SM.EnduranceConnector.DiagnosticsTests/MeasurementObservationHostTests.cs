@@ -1,0 +1,623 @@
+using System;
+using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using ThreeSM.EnduranceConnector;
+
+// Local synthetic inputs only. The same production coordinator/host sources are linked.
+internal static class MeasurementObservationHostTests
+{
+    private const string Device = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    private const string Owner = "11111111-2222-4333-8444-555555555555";
+    private static readonly DateTime T0 = new DateTime(2026, 11, 13, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly Uri Endpoint = new Uri("https://synthetic.invalid/no-network");
+
+    private static string DirectoryFor(string name)
+    {
+        var root = Environment.GetEnvironmentVariable("S2D_ARTIFACT_ROOT") ?? Path.GetTempPath();
+        var path = Path.Combine(root, "host-" + name + "-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private sealed class Handler : HttpMessageHandler
+    {
+        public int Calls;
+        public string Body;
+        public string Authorization;
+        public string ContentType;
+        public string Response = "{\"stored\":false}";
+        public Func<string, string> Reply;
+        public TaskCompletionSource<bool> Entered;
+        public TaskCompletionSource<bool> Release;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancel)
+        {
+            Calls++;
+            Body = await request.Content.ReadAsStringAsync();
+            Authorization = request.Headers.Authorization.ToString();
+            ContentType = request.Content.Headers.ContentType.ToString();
+            if (Entered != null) Entered.TrySetResult(true);
+            if (Release != null) await Release.Task; // intentionally ignore cancellation: real late settlement test
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Reply == null ? Response : Reply(Body)) };
+        }
+    }
+
+    public static int Run(Action<string, bool, string> check)
+    {
+        var count = 0;
+        Action<string, bool, string> counted = (name, ok, evidence) => { count++; check(name, ok, evidence); };
+        LazyLease(counted).GetAwaiter().GetResult();
+        LazyFailures(counted).GetAwaiter().GetResult();
+        DefaultOff(counted).GetAwaiter().GetResult();
+        Vertical(counted).GetAwaiter().GetResult();
+        Lifecycle(counted).GetAwaiter().GetResult();
+        Concurrency(counted).GetAwaiter().GetResult();
+        FinalBudgetAndKillRestart(counted).GetAwaiter().GetResult();
+        StorageFaults(counted);
+        GoldenOff(counted);
+        Epochs(counted);
+        return count;
+    }
+
+    private static ObservationProducerIdentity Identity(long generation = 7, string token = "synthetic-token")
+    {
+        return new ObservationProducerIdentity(token, new ObservationPairingBinding(Device, Owner, generation, true));
+    }
+
+    private static TaskCompletionSource<bool> Barrier()
+    {
+        return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    private static async Task Bounded(Task task)
+    {
+        if (await Task.WhenAny(task, Task.Delay(5000)) != task) throw new TimeoutException("synthetic barrier timeout");
+        await task;
+    }
+
+    private static void Tick(ObservationProducerHost host, int tick, int lap, string car = "car-a")
+    {
+        host.Observe(() =>
+        {
+            var sample = new TelemetrySample
+            {
+                ObservedAtUtc = T0.AddMilliseconds(tick * 500), SdkTick = tick,
+                SessionTimeSeconds = tick * 0.5, LapNumber = lap, ObservedSessionId = "sim-42-s3",
+                CurrentDriverName = "Synthetisch Één", OnPitRoad = true, FuelLitres = 50 - tick * 0.1
+            };
+            host.BindSample(sample, new ObservationLapContext(car, 123, "Track É", "GP", 42, 3));
+            return sample;
+        });
+    }
+
+    private static string AckAll(string body)
+    {
+        var json = MeasurementJson.DeserializeDictionary(body);
+        Func<string, string> series = key =>
+        {
+            var ids = new System.Collections.Generic.List<string>();
+            object value;
+            if (json.TryGetValue(key, out value))
+                foreach (var item in (System.Collections.IEnumerable)value)
+                {
+                    var row = (System.Collections.Generic.Dictionary<string, object>)item;
+                    ids.Add("{\"id\":\"" + row[key == "lapSummaries" ? "summaryUid" : "eventUid"]
+                        + "\",\"recordRevision\":" + row["recordRevision"] + "}");
+                }
+            return "{\"received\":" + ids.Count + ",\"accepted\":[" + string.Join(",", ids)
+                + "],\"duplicates\":[],\"superseded\":[],\"rejected\":[],\"stored\":true}";
+        };
+        return "{\"measurements\":{\"events\":" + series("measurementEvents") + ",\"laps\":" + series("lapSummaries") + "}}";
+    }
+
+    private static async Task DefaultOff(Action<string, bool, string> check)
+    {
+        foreach (var mode in new[] { "off", "unready", "incomplete" })
+        {
+            var dir = DirectoryFor(mode);
+            var path = Path.Combine(dir, "observation.json");
+            File.WriteAllText(path, "synthetic corrupt evidence");
+            File.WriteAllText(path + ".tmp", "synthetic temp evidence");
+            File.WriteAllText(path + ".bak", "synthetic backup evidence");
+            var calls = 0;
+            var handler = new Handler();
+            var outbox = new MeasurementOutbox(Path.Combine(dir, "legacy.json"));
+            using (var http = new HttpClient(handler))
+            using (var host = new ObservationProducerHost(outbox, new MeasurementIdFactory(),
+                mode == "incomplete" ? new ObservationProducerIdentity("synthetic-token", new ObservationPairingBinding(Device, Owner, 0, false)) : Identity(),
+                () => mode != "off", () => mode != "unready", fence => { calls++; return new ObservationLedgerStore(path, fence); },
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 2);
+                host.EndSession("session_end");
+                var builds = 0;
+                var oldCalls = 0;
+                await host.SendAsync(() => { builds++; return "{}"; }, Endpoint, host.Snapshot(), T0.AddMinutes(2), null,
+                    async () =>
+                    {
+                        oldCalls++;
+                        using (var request = new HttpRequestMessage(HttpMethod.Post, Endpoint))
+                        {
+                            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "synthetic-token");
+                            request.Content = new StringContent("{\"core\":\"É\",\"pace\":true}", Encoding.UTF8, "application/json");
+                            using (await http.SendAsync(request)) { }
+                        }
+                    }, CancellationToken.None);
+                check("OH10-" + mode, calls == 0 && builds == 0 && oldCalls == 1 && handler.Calls == 1
+                    && handler.Authorization == "Bearer synthetic-token" && handler.ContentType == "application/json; charset=utf-8"
+                    && outbox.LapCount > 0, "real ticks/end use legacy; no OBS provider/plan; exact synthetic old HTTP header/body");
+                host.Stop();
+                await Bounded(host.Settlement);
+            }
+            check("OH11-" + mode, calls == 0 && File.ReadAllText(path) == "synthetic corrupt evidence"
+                && File.ReadAllText(path + ".tmp") == "synthetic temp evidence" && File.ReadAllText(path + ".bak") == "synthetic backup evidence"
+                && !File.Exists(path + ".preserved"), "disabled/ineligible constructor/ticks/send/end/dispose preserve all file bytes");
+        }
+    }
+
+    private static async Task Vertical(Action<string, bool, string> check)
+    {
+        var dir = DirectoryFor("vertical");
+        var path = Path.Combine(dir, "observation.json");
+        var handler = new Handler { Reply = AckAll };
+        var calls = 0;
+        ObservationLedgerStore store = null;
+        var legacy = new MeasurementOutbox(Path.Combine(dir, "legacy.json"));
+        using (var http = new HttpClient(handler))
+        {
+            Func<ObservationBindingFence, ObservationLedgerStore> provider = fence =>
+            { calls++; store = new ObservationLedgerStore(path, fence); return store; };
+            using (var host = new ObservationProducerHost(legacy, new MeasurementIdFactory(), Identity(), () => true, () => true,
+                provider, new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 1); Tick(host, 3, 2);
+                check("OH20", calls == 1 && store.EntryCount == 1 && legacy.LapCount == 0 && host.PendingCandidate == null,
+                    "actual tick/lap pipeline consumes OBS once into the real store, not v1");
+                Tick(host, 4, 2);
+                host.EndSession("session_end");
+                check("OH21", store.EntryCount == 2 && legacy.LapCount == 0 && store.ReservationCount == 0,
+                    "session_end shares post-pit sink and durable capture");
+            }
+            var before = new ObservationLedgerStore(path, new ObservationBindingFence(Identity().Binding));
+            var expectedRows = before.EntryCount;
+            var oldPipeline = new MeasurementPipeline(legacy, new MeasurementIdFactory());
+            oldPipeline.Observe(new TelemetrySample { ObservedAtUtc = T0, LapNumber = 1, SessionTimeSeconds = 0, OnPitRoad = true });
+            oldPipeline.Observe(new TelemetrySample { ObservedAtUtc = T0.AddSeconds(1), LapNumber = 1, SessionTimeSeconds = 1, OnPitRoad = false });
+            oldPipeline.End("session_end");
+            using (var host = new ObservationProducerHost(legacy, new MeasurementIdFactory(), Identity(), () => true, () => true,
+                provider, new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(2)))
+            {
+                var bypass = 0;
+                var result = await host.SendAsync(() => "{\"core\":\"É\"}", Endpoint, host.Snapshot(), T0.AddMinutes(3),
+                    body => PaceCaptureBuffer.AppendWithinBudget(body, new PaceCaptureFrame { ObservedSessionId = "sim-42-s3", SegmentId = "synthetic-segment" }),
+                    () => { bypass++; return Task.CompletedTask; }, CancellationToken.None);
+                check("OH22", result != null && result.ObservationDelivered == expectedRows && result.LegacyCleanupApplied
+                    && handler.Calls == 1 && bypass == 0 && calls == 2 && store.DeliveredTotal == expectedRows && store.EntryCount == 0,
+                    "restart -> same lazy store/fence -> single mixed POST -> one ACK owner/counters");
+                check("OH23", handler.Body.Contains("lapSummaries") && handler.Body.IndexOf("paceCapture", StringComparison.Ordinal)
+                    > handler.Body.IndexOf("lapSummaries", StringComparison.Ordinal) && handler.Authorization == "Bearer synthetic-token"
+                    && handler.ContentType == "application/json; charset=utf-8" && Encoding.UTF8.GetByteCount(handler.Body) <= 24576,
+                    "UTF8 body, auth/contenttype, measurements-before-pace in final frozen envelope");
+                var disk = new ObservationLedgerStore(path, new ObservationBindingFence(Identity().Binding));
+                check("OH24", disk.DeliveredTotal == expectedRows && disk.EntryCount == 0, "ACK counters proven by disk readback");
+                // Core-only remains on exactly one old callback rather than being lost to HasRows=false.
+                await host.SendAsync(() => "{}", Endpoint, host.Snapshot(), T0.AddMinutes(4), null,
+                    async () =>
+                    {
+                        bypass++;
+                        using (var request = new HttpRequestMessage(HttpMethod.Post, Endpoint))
+                        {
+                            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "synthetic-token");
+                            request.Content = new StringContent("{\"coreOnly\":true,\"paceCapture\":{\"fixture\":true}}", Encoding.UTF8, "application/json");
+                            using (await http.SendAsync(request)) { }
+                        }
+                    }, CancellationToken.None);
+                check("OH25", bypass == 1 && handler.Calls == 2 && handler.Body == "{\"coreOnly\":true,\"paceCapture\":{\"fixture\":true}}",
+                    "nothing-due launches exactly one actual independent core/pace POST, not a lost HasRows=false frame");
+            }
+        }
+    }
+
+    private static async Task Lifecycle(Action<string, bool, string> check)
+    {
+        var dir = DirectoryFor("lifecycle");
+        var providerCalls = 0;
+        var handler = new Handler();
+        var entered = Barrier(); var release = Barrier();
+        using (var http = new HttpClient(handler))
+        using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy.json")), new MeasurementIdFactory(),
+            Identity(), () => true, () => false, fence => { providerCalls++; return new ObservationLedgerStore(Path.Combine(dir, "obs.json"), fence); },
+            new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0,
+            new ObservationSendOptions { LeaseWaitMilliseconds = 50, PairTransitionTimeoutMilliseconds = 50 }))
+        {
+            var old = host.Snapshot();
+            var pair = host.TransitionAsync(async cancel =>
+            {
+                check("OH30", host.Coordinator.LeaseHeld && providerCalls == 0, "lease before synthetic server/settings side effect, even with readiness false");
+                entered.TrySetResult(true);
+                await release.Task; // model a late committed callback ignoring cancellation
+                return Identity(8, "synthetic-new-token");
+            }, CancellationToken.None);
+            await Bounded(entered.Task);
+            await Bounded(pair);
+            check("OH31", pair.Result.Status == ObservationPairTransitionStatus.TimedOut && host.Coordinator.LeaseHeld
+                && !host.Snapshot().HasAuthorization, "bounded public timeout does not restore old auth or release callback lease");
+            var legacyCalls = 0;
+            await host.SendAsync(() => "{}", Endpoint, old, T0, null,
+                () => { legacyCalls++; return Task.CompletedTask; }, CancellationToken.None);
+            check("OH32", legacyCalls == 0 && handler.Calls == 0, "old queued identity blocked during unknown server commit");
+            host.Stop();
+            check("OH33", !host.Settlement.IsCompleted && host.Coordinator.LeaseHeld, "End retains actual late callback/resources");
+            release.TrySetResult(true);
+            await Bounded(host.Settlement);
+            check("OH34", !host.Coordinator.LeaseHeld && host.Coordinator.CurrentBinding.PairingGeneration == 8 && providerCalls == 0,
+                "actual callback settles and publishes under original fence before terminal resource release");
+        }
+        // Timeout after transport has begun never invokes an independent old POST.
+        var sendDir = DirectoryFor("transport-timeout");
+        var sendHandler = new Handler { Entered = Barrier(), Release = Barrier() };
+        using (var http = new HttpClient(sendHandler))
+        using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(sendDir, "legacy.json")), new MeasurementIdFactory(),
+            Identity(), () => true, () => true, fence => new ObservationLedgerStore(Path.Combine(sendDir, "obs.json"), fence),
+            new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1),
+            new ObservationSendOptions { RequestTimeoutMilliseconds = 50 }))
+        {
+            Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 2);
+            var bypass = 0;
+            var result = await host.SendAsync(() => "{}", Endpoint, host.Snapshot(), T0.AddMinutes(2), null,
+                () => { bypass++; return Task.CompletedTask; }, CancellationToken.None);
+            check("OH35", result.Status == ObservationSendStatus.TimedOut && !result.SafeToBypass && sendHandler.Calls == 1 && bypass == 0,
+                "transport-start timeout cannot authorize a second POST");
+            host.Stop();
+            check("OH36", !host.Settlement.IsCompleted, "actual HTTP task remains owned beyond timeout");
+            sendHandler.Release.TrySetResult(true);
+            await Bounded(host.Settlement);
+        }
+    }
+
+    private static async Task LegacyRequest(HttpClient http, string token, string body)
+    {
+        using (var request = new HttpRequestMessage(HttpMethod.Post, Endpoint))
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+            using (await http.SendAsync(request)) { }
+        }
+    }
+
+    private static async Task Concurrency(Action<string, bool, string> check)
+    {
+        var dir = DirectoryFor("concurrent-first-store");
+        var path = Path.Combine(dir, "observation.json");
+        var calls = 0;
+        var entered = Barrier();
+        ObservationLedgerStore store = null;
+        using (var release = new ManualResetEventSlim(false))
+        using (var http = new HttpClient(new Handler()))
+        using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy.json")), new MeasurementIdFactory(),
+            Identity(), () => true, () => true, fence =>
+            {
+                Interlocked.Increment(ref calls);
+                entered.TrySetResult(true);
+                if (!release.Wait(5000)) throw new TimeoutException("synthetic first-load barrier");
+                return store = new ObservationLedgerStore(path, fence);
+            }, new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+        {
+            var old = host.Snapshot();
+            var capture = Task.Run(() => { Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 2); });
+            await Bounded(entered.Task);
+            var send = Task.Run(() => host.SendAsync(() => "{\"epoch\":7}", Endpoint, old, T0.AddMinutes(2), null,
+                () => LegacyRequest(http, "synthetic-token", "{\"epoch\":7}"), CancellationToken.None));
+            var pair = Task.Run(() => host.TransitionAsync(cancel =>
+            {
+                check("OH70", host.Coordinator.LeaseHeld, "concurrent Pair still owns the existing lease before adapter side effects");
+                return Task.FromResult(Identity(8, "synthetic-new-token"));
+            }, CancellationToken.None));
+            release.Set();
+            await Bounded(Task.WhenAll(capture, send, pair));
+            check("OH71", calls == 1 && store != null && host.Coordinator.CurrentBinding.PairingGeneration == 8
+                && object.ReferenceEquals(store.BindingFence.Current, host.Coordinator.CurrentBinding),
+                "first capture/first send/Pair converge on exactly one real store and the very same fence object");
+            var blocked = 0;
+            await host.SendAsync(() => "{\"epoch\":7}", Endpoint, old, T0.AddMinutes(3), null,
+                () => { blocked++; return Task.CompletedTask; }, CancellationToken.None);
+            check("OH72", blocked == 0, "queued old identity cannot use the newly committed authorization");
+        }
+
+        foreach (var mode in new[] { "save-failed", "unknown-result", "unpair" })
+        {
+            var local = DirectoryFor(mode);
+            var handler = new Handler();
+            using (var http = new HttpClient(handler))
+            using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(local, "legacy.json")), new MeasurementIdFactory(),
+                Identity(), () => false, () => false, fence => { throw new InvalidOperationException("disabled provider"); },
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0))
+            {
+                var old = host.Snapshot();
+                var result = await host.TransitionAsync(cancel =>
+                {
+                    check("OH73-" + mode, host.Coordinator.LeaseHeld, "first fake DPAPI/save/clear action is below shared transition lease");
+                    if (mode == "save-failed") throw new IOException("synthetic commit/save failed; local rollback is not server rollback");
+                    return Task.FromResult(mode == "unpair" ? new ObservationProducerIdentity(null,
+                        new ObservationPairingBinding(null, null, 7, false)) : null);
+                }, CancellationToken.None);
+                await host.SendAsync(() => "{}", Endpoint, old, T0, null,
+                    () => LegacyRequest(http, "synthetic-token", "{\"old\":true}"), CancellationToken.None);
+                await host.SendAsync(() => "{}", Endpoint, host.Snapshot(), T0, null,
+                    () => LegacyRequest(http, "synthetic-token", "{\"new\":true}"), CancellationToken.None);
+                check("OH74-" + mode, !host.Snapshot().HasAuthorization && handler.Calls == 0
+                    && (mode == "unpair" ? result.Committed : !result.Committed),
+                    "unknown/save-failed/Unpair leaves no old auth or authless POST, with actual request count zero");
+            }
+        }
+    }
+
+    private static async Task FinalBudgetAndKillRestart(Action<string, bool, string> check)
+    {
+        var dir = DirectoryFor("final-budget");
+        var path = Path.Combine(dir, "observation.json");
+        var handler = new Handler { Response = "{\"measurements\":{\"laps\":{\"received\":1,\"stored\":true,\"accepted\":[],\"duplicates\":[],\"superseded\":[],\"rejected\":[{\"index\":0,\"reason\":\"observation_unavailable\",\"stage\":\"parser\"}]}}}" };
+        using (var http = new HttpClient(handler))
+        {
+            using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy.json")), new MeasurementIdFactory(),
+                Identity(), () => true, () => true, fence => new ObservationLedgerStore(path, fence),
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 2);
+                var bypass = 0;
+                var result = await host.SendAsync(() => "{\"core\":\"É\"}", Endpoint, host.Snapshot(), T0.AddMinutes(2),
+                    body => body + new string(' ', 24576 - Encoding.UTF8.GetByteCount(body)),
+                    () => { bypass++; return Task.CompletedTask; }, CancellationToken.None);
+                check("OH80", result != null && !result.SafeToBypass && handler.Calls == 1 && bypass == 0
+                    && result.BodyBytes == 24576 && Encoding.UTF8.GetByteCount(handler.Body) == 24576,
+                    "nonASCII mixed body + prefreeze finalizer hits exact 24576 UTF8 bytes, one POST (synthetic whitespace padding)");
+                var second = await host.SendAsync(() => "{}", Endpoint, host.Snapshot(), T0.AddMinutes(4),
+                    body => body + new string(' ', 24577 - Encoding.UTF8.GetByteCount(body)),
+                    () => { bypass++; return LegacyRequest(http, "synthetic-token", "{\"legacyOnly\":true}"); }, CancellationToken.None);
+                check("OH81", second == null && handler.Calls == 2 && bypass == 1 && handler.Body == "{\"legacyOnly\":true}",
+                    "24577 refused before envelope/transport, exactly one independent legacy/core POST, never OBS downgrade");
+            }
+            // A real prior store now contains deferred/pending records plus a valid backup.
+            File.WriteAllText(path + ".tmp", "synthetic leftover evidence");
+            var target = File.ReadAllBytes(path);
+            var backup = File.ReadAllBytes(path + ".bak");
+            var provider = 0;
+            using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "kill-legacy.json")), new MeasurementIdFactory(),
+                Identity(), () => false, () => true, fence => { provider++; return new ObservationLedgerStore(path, fence); },
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0))
+            {
+                host.Stop();
+                await Bounded(host.Settlement);
+            }
+            check("OH82", provider == 0 && Encoding.UTF8.GetString(target).Contains("\"state\":\"deferred\"")
+                && Convert.ToBase64String(File.ReadAllBytes(path)) == Convert.ToBase64String(target)
+                && Convert.ToBase64String(File.ReadAllBytes(path + ".bak")) == Convert.ToBase64String(backup)
+                && File.ReadAllText(path + ".tmp") == "synthetic leftover evidence" && !File.Exists(path + ".preserved"),
+                "kill over restart leaves actual deferred/backup/temp bytes untouched, with zero provider/filesystem calls");
+        }
+    }
+
+    private sealed class Faults : IObservationLedgerFaults
+    {
+        public bool Before;
+        public bool After;
+        public bool ReadBlocked;
+        public void BeforePreserve() { }
+        public void BeforeSwitch() { if (Before) throw new IOException("synthetic before-switch"); }
+        public void AfterSwitch()
+        {
+            if (!After) return;
+            ReadBlocked = true;
+            throw new IOException("synthetic uncertain switch");
+        }
+    }
+
+    private sealed class Files : IObservationLedgerFileSystem
+    {
+        private readonly IObservationLedgerFileSystem _real = new ObservationLedgerFileSystem();
+        private readonly Faults _faults;
+        public Files(Faults faults) { _faults = faults; }
+        public bool Exists(string path) { return _real.Exists(path); }
+        public long Length(string path) { return _real.Length(path); }
+        public byte[] ReadAllBytes(string path)
+        { if (_faults.ReadBlocked) throw new IOException("synthetic unreadable readback"); return _real.ReadAllBytes(path); }
+        public void WriteTemporary(string path, byte[] bytes) { _real.WriteTemporary(path, bytes); }
+        public void Replace(string temp, string target, string backup) { _real.Replace(temp, target, backup); }
+        public void Move(string temp, string target) { _real.Move(temp, target); }
+        public void Delete(string path) { _real.Delete(path); }
+        public void Preserve(string source, string target) { _real.Preserve(source, target); }
+    }
+
+    private static void StorageFaults(Action<string, bool, string> check)
+    {
+        foreach (var mode in new[] { "before", "uncertain", "corrupt", "quota" })
+        {
+            var dir = DirectoryFor(mode);
+            var path = Path.Combine(dir, "observation.json");
+            if (mode == "corrupt") File.WriteAllText(path, "synthetic corrupt target");
+            var faults = new Faults { Before = mode == "before", After = mode == "uncertain" };
+            var outbox = new MeasurementOutbox(Path.Combine(dir, "legacy.json"));
+            ObservationLedgerStore store = null;
+            var enabled = true;
+            using (var http = new HttpClient(new Handler()))
+            using (var host = new ObservationProducerHost(outbox, new MeasurementIdFactory(), Identity(), () => enabled, () => true,
+                fence => store = new ObservationLedgerStore(path, fence,
+                    new ObservationLedgerOptions { MaxEntries = mode == "quota" ? 1 : 64 }, new Files(faults), faults),
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 2);
+                var candidate = host.PendingCandidate;
+                if (mode == "before")
+                {
+                    check("OH50", candidate != null && store.ReservationCount == 1 && outbox.LapCount == 0,
+                        "NotCommitted keeps one exact reserved candidate; no dual publish");
+                    var bytes = candidate.RowJson;
+                    faults.Before = false;
+                    Tick(host, 3, 2);
+                    var entry = store.Find(candidate.Uid, candidate.RecordRevision);
+                    check("OH51", host.PendingCandidate == null && entry != null && entry.RowJson == bytes && store.ReservationCount == 0 && outbox.LapCount == 0,
+                        "actual retry adopts original UID/revision/RowJson; normal ID factory not called again");
+                }
+                else if (mode == "uncertain")
+                {
+                    var uid = candidate == null ? null : candidate.Uid;
+                    var bytes = candidate == null ? null : candidate.RowJson;
+                    Tick(host, 3, 3); Tick(host, 4, 4);
+                    check("OH52", candidate != null && store.IsFailedClosed && object.ReferenceEquals(candidate, host.PendingCandidate)
+                        && store.ReservationCount == 1 && outbox.LapCount == 0, "unreadable post-switch outcome blocks new OBS, bounded at one original candidate/reservation");
+                    var disk = new ObservationLedgerStore(path, new ObservationBindingFence(Identity().Binding));
+                    check("OH53", uid != null && disk.Find(uid, candidate.RecordRevision).RowJson == bytes,
+                        "real committed disk bytes survive uncertain readback; no fabricated fallback identity");
+                    enabled = false;
+                    Tick(host, 5, 5); host.EndSession("session_end");
+                    check("OH54", object.ReferenceEquals(candidate, host.PendingCandidate) && outbox.LapCount > 0,
+                        "kill does not erase pending evidence; independent legacy pipeline still works");
+                }
+                else if (mode == "corrupt")
+                {
+                    check("OH55", store.IsFailedClosed && File.Exists(path + ".preserved") && host.PendingCandidate != null && outbox.LapCount == 0,
+                        "eligible positive control initializes real store and preserves corruption normally, without fallback");
+                }
+                else
+                {
+                    Tick(host, 3, 2); Tick(host, 4, 3);
+                    var due = outbox.Due(T0.AddMinutes(2), 20, 3);
+                    check("OH56", store.EntryCount == 1 && store.ReservationCount == 0 && outbox.LapCount == 1 && host.PendingCandidate == null
+                        && !due.Laps[0].RowJson.Contains("\"observation\"") && due.Laps[0].Uid != store.Entries[0].Uid,
+                        "definitive quota refusal creates a fresh legacy row from source, never strips/reuses the captured OBS identity");
+                }
+            }
+        }
+    }
+
+    private static void GoldenOff(Action<string, bool, string> check)
+    {
+        var dir = DirectoryFor("golden-off");
+        Func<MeasurementIdFactory> ids = () =>
+        {
+            var next = 0;
+            return new MeasurementIdFactory(() => new Guid("00000000-0000-4000-8000-" + (++next).ToString("D12", System.Globalization.CultureInfo.InvariantCulture)));
+        };
+        var oldOutbox = new MeasurementOutbox(Path.Combine(dir, "old.json"));
+        var newOutbox = new MeasurementOutbox(Path.Combine(dir, "new.json"));
+        var oldPipeline = new MeasurementPipeline(oldOutbox, ids());
+        using (var http = new HttpClient(new Handler()))
+        using (var host = new ObservationProducerHost(newOutbox, ids(), Identity(), () => false, () => true,
+            fence => { throw new InvalidOperationException("disabled golden must never initialize"); },
+            new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0))
+        {
+            for (var tick = 0; tick < 4; tick++)
+            {
+                var sample = new TelemetrySample { ObservedAtUtc = T0.AddSeconds(tick), SdkTick = tick,
+                    SessionTimeSeconds = tick, LapNumber = tick < 2 ? 1 : 2, OnPitRoad = tick == 1,
+                    FuelLitres = 50 - tick, CurrentDriverName = "Één", ObservedSessionId = "sim-42-s3" };
+                oldPipeline.Observe(sample);
+                var current = new TelemetrySample { ObservedAtUtc = sample.ObservedAtUtc, SdkTick = sample.SdkTick,
+                    SessionTimeSeconds = sample.SessionTimeSeconds, LapNumber = sample.LapNumber, OnPitRoad = sample.OnPitRoad,
+                    FuelLitres = sample.FuelLitres, CurrentDriverName = sample.CurrentDriverName, ObservedSessionId = sample.ObservedSessionId };
+                host.BindSample(current, null);
+                host.Observe(current);
+            }
+            oldPipeline.End("session_end"); host.EndSession("session_end");
+            var oldSender = new MeasurementSender(oldOutbox, http, () => "{}", null);
+            var newSender = new MeasurementSender(newOutbox, http, () => "{}", null);
+            MeasurementBatchPlan oldPlan, newPlan;
+            var core = "{\"protocolVersion\":3,\"core\":\"É\"}";
+            var oldBody = oldSender.BuildBody(core, Encoding.UTF8.GetByteCount(core), T0.AddMinutes(1), out oldPlan);
+            var newBody = newSender.BuildBody(core, Encoding.UTF8.GetByteCount(core), T0.AddMinutes(1), out newPlan);
+            var pace = new PaceCaptureFrame { ObservedSessionId = "sim-42-s3", SegmentId = "synthetic-segment" };
+            oldBody = PaceCaptureBuffer.AppendWithinBudget(oldBody, pace);
+            newBody = PaceCaptureBuffer.AppendWithinBudget(newBody, pace);
+            check("OH60", oldBody == newBody && oldPlan.Batch.Laps.Count == newPlan.Batch.Laps.Count && !newBody.Contains("\"observation\""),
+                "deterministic IDs/timestamps: old pipeline vs actual disabled host identical UTF8 legacy body");
+            File.WriteAllText(Path.Combine(dir, "default-off-golden.json"), newBody, new UTF8Encoding(false));
+            var oldAck = oldOutbox.ApplyAck(MeasurementAckParser.Parse(AckAll(oldBody), oldPlan.Batch), T0.AddMinutes(2));
+            var newAck = newOutbox.ApplyAck(MeasurementAckParser.Parse(AckAll(newBody), newPlan.Batch), T0.AddMinutes(2));
+            check("OH61", oldOutbox.LapCount == newOutbox.LapCount && oldAck.Stored == newAck.Stored,
+                "unchanged legacy parser and ACK effect agree for deterministic old/new body");
+        }
+    }
+
+    private static void Epochs(Action<string, bool, string> check)
+    {
+        var settings = new ConnectorSettings { DeviceId = Device, BoundOwnerUserId = Owner };
+        check("OH40", !settings.ObservationEnabled && !settings.ObservationBinding().IsComplete && settings.NextObservationGeneration() == null,
+            "default/missing generation is not known zero");
+        settings.ObservationPairingGenerationKnown = true;
+        check("OH41", !settings.ObservationBinding().IsComplete && settings.NextObservationGeneration() == null, "known bit without value is incomplete");
+        settings.ObservationPairingGeneration = -1;
+        check("OH42", !settings.ObservationBinding().IsComplete && settings.NextObservationGeneration() == null, "negative metadata failclosed");
+        settings.ObservationPairingGeneration = 9007199254740991L;
+        check("OH43", settings.NextObservationGeneration() == null, "overflow cannot wrap/reuse epoch");
+        settings.ObservationPairingGeneration = 7;
+        check("OH44", settings.NextObservationGeneration() == 8, "proven persisted high-watermark advances monotonically");
+    }
+
+    private static async Task LazyLease(Action<string, bool, string> check)
+    {
+        var path = Path.Combine(DirectoryFor("lazy"), "observation.json");
+        File.WriteAllText(path, "synthetic corrupt target");
+        File.WriteAllText(path + ".bak", "synthetic backup evidence");
+        File.WriteAllText(path + ".tmp", "synthetic temporary evidence");
+        var fence = new ObservationBindingFence(null);
+        var calls = 0;
+        var tokens = 0;
+        var handler = new Handler();
+        using (var http = new HttpClient(handler))
+        using (var coordinator = ObservationSendCoordinator.CreateLazy(fence, () =>
+        {
+            calls++;
+            return new ObservationLedgerStore(path, fence);
+        }, new MeasurementOutbox(path + ".legacy"), new HttpObservationSendTransport(http, 16384),
+            () => { tokens++; return "synthetic-token"; }, () => "{}", new ObservationSendOptions(), null))
+        {
+            var initial = coordinator.CurrentBinding;
+            var send = await coordinator.SendOnceAsync("{}", Endpoint, T0, CancellationToken.None);
+            check("OH01", send.Status == ObservationSendStatus.Disabled && calls == 0 && tokens == 0 && handler.Calls == 0,
+                "disabled has no provider/token/HTTP");
+            var pair = await coordinator.PairAsync(cancel =>
+            {
+                check("OH02", coordinator.LeaseHeld && calls == 0, "pair callback owns existing lease without storage");
+                return Task.FromResult(ObservationPairCommit.CommittedWith(new ObservationPairingBinding(Device, Owner, 7, true)));
+            }, CancellationToken.None);
+            check("OH03", pair.Committed && coordinator.CurrentBinding.PairingGeneration == 7 && calls == 0,
+                "same fence published without storage");
+            await coordinator.UnpairAsync(cancel => Task.FromResult(ObservationPairCommit.CommittedWith(
+                new ObservationPairingBinding(null, null, 7, false))), CancellationToken.None);
+            check("OH04", !coordinator.CurrentBinding.IsComplete && calls == 0 &&
+                File.ReadAllText(path) == "synthetic corrupt target" && File.ReadAllText(path + ".bak") == "synthetic backup evidence" &&
+                File.ReadAllText(path + ".tmp") == "synthetic temporary evidence" && !File.Exists(path + ".preserved"),
+                "unpair and disabled restart evidence untouched");
+        }
+        check("OH05", calls == 0, "dispose does not initialize store");
+    }
+
+    private static async Task LazyFailures(Action<string, bool, string> check)
+    {
+        foreach (var mode in new[] { "null", "mismatch", "exception" })
+        {
+            var path = Path.Combine(DirectoryFor(mode), "observation.json");
+            var fence = new ObservationBindingFence(new ObservationPairingBinding(Device, Owner, 7, true));
+            var calls = 0;
+            var handler = new Handler();
+            using (var http = new HttpClient(handler))
+            using (var coordinator = ObservationSendCoordinator.CreateLazy(fence, () =>
+            {
+                calls++;
+                if (mode == "exception") throw new IOException("synthetic");
+                if (mode == "null") return null;
+                return new ObservationLedgerStore(path, new ObservationBindingFence(fence.Current));
+            }, new MeasurementOutbox(path + ".legacy"), new HttpObservationSendTransport(http, 16384),
+                () => "synthetic-token", () => "{}", new ObservationSendOptions { Enabled = true }, null))
+            {
+                var result = await coordinator.SendOnceAsync("{}", Endpoint, T0, CancellationToken.None);
+                await coordinator.SendOnceAsync("{}", Endpoint, T0, CancellationToken.None);
+                check("OH06-" + mode, result.Status == ObservationSendStatus.Refused && handler.Calls == 0 && calls == 1,
+                    "bad provider fails closed once; no POST or duplicate initialization");
+            }
+        }
+    }
+}
