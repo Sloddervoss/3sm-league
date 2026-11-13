@@ -352,6 +352,25 @@ internal static class MeasurementObservationSendTests
         }
     }
 
+    /// <summary>Fails the N-th snapshot switch after <see cref="Arm"/>. Captures run
+    /// before arming, so each plan-time bulk quarantine gets its own counted call.</summary>
+    private sealed class PlanBulkFaults : IObservationLedgerFaults
+    {
+        private int _failAt;
+        private int _armedCalls;
+        public string Message = "synthetic plan-switch failure";
+        public void Arm(int failAt) { _failAt = failAt; _armedCalls = 0; }
+        public void Disarm() { _failAt = 0; }
+        public void BeforePreserve() { }
+        public void BeforeSwitch()
+        {
+            if (_failAt == 0) return;
+            _armedCalls++;
+            if (_armedCalls == _failAt) throw new IOException(Message);
+        }
+        public void AfterSwitch() { }
+    }
+
     /// <summary>Rebinds the fence after the coordinator's pre-send check but before the
     /// transport creates its HttpRequestMessage. Proves the final guard.</summary>
     private sealed class RebindingTransport : IObservationSendTransport
@@ -368,6 +387,31 @@ internal static class MeasurementObservationSendTests
         {
             _fence.Rebind(Binding(8));
             return _inner.SendAsync(envelope, bindingGuard, cancellationToken);
+        }
+    }
+
+    /// <summary>Synchronous transport invocation failure: no send task is handed back,
+    /// so no HTTP handler can have been entered by this call.</summary>
+    private sealed class SyncThrowTransport : IObservationSendTransport
+    {
+        public int Calls;
+        public Task<ObservationTransportResponse> SendAsync(SendEnvelope envelope,
+            Func<bool> bindingGuard, CancellationToken cancellationToken)
+        {
+            Calls++;
+            throw new InvalidOperationException("synthetic synchronous transport throw");
+        }
+    }
+
+    /// <summary>A transport that returns no task at all; also a proven no-start.</summary>
+    private sealed class NullTaskTransport : IObservationSendTransport
+    {
+        public int Calls;
+        public Task<ObservationTransportResponse> SendAsync(SendEnvelope envelope,
+            Func<bool> bindingGuard, CancellationToken cancellationToken)
+        {
+            Calls++;
+            return null;
         }
     }
 
@@ -1869,8 +1913,10 @@ internal static class MeasurementObservationSendTests
 
         // OS34 — exact UTF-8 body boundary and the bulk helper's terminal/identity
         // guards. These are the reviewer-added discriminating checks: OS04 checks
-        // the clamps but not a body exactly at the 24.576-byte boundary, and OS33
-        // only offers single-row bulk batches.
+        // the clamps but not an OBS body exactly at this fixture's 2088-byte full
+        // boundary (2088 includes the OBS row, 2087 defers it), under the separate
+        // 24576-byte configured upper cap; no padded 24576-byte body is built.
+        // OS33 only offers single-row bulk batches.
         {
             var dir = NewDirectory();
             var store = Store(dir);
@@ -1987,6 +2033,712 @@ internal static class MeasurementObservationSendTests
                 + " terminal=" + terminalOk + "/" + repeat.ChangedCount + "/"
                 + revive.ChangedCount + "/" + bulkStore.QuarantineTotal
                 + " identity=" + identityOk + "/" + mismatch.Status);
+        }
+
+        // OS35 — H1: Dispose during an active send must keep the durable terminal
+        // result and must not fault the caller from _lease.Release() in finally.
+        // New sends/pairs are refused, a bounded waiter that started before the
+        // Dispose settles without a POST, and a repeated Dispose is harmless.
+        {
+            var dir = NewDirectory();
+            var store = Store(dir);
+            var outbox = Outbox(dir);
+            var obs = Row(Uid(700));
+            var frozen = Capture(store, obs);
+            var gate = Gate();
+            var handler = new CapturingHandler
+            {
+                Respond = async delegate(int position, CapturedRequest request, CancellationToken token)
+                {
+                    await gate.Task.ConfigureAwait(false);
+                    return Accepted(obs.SummaryUid, 1);
+                }
+            };
+            var options = Enabled(5000);
+            options.LeaseWaitMilliseconds = 2000;
+            var coordinator = Coordinator(store, outbox, handler, null, options);
+            var activeTask = coordinator.SendOnceAsync(Core, Endpoint, T0.AddMinutes(3),
+                CancellationToken.None);
+            if (!WaitUntil(() => handler.FirstEntered.IsSet, 3000))
+                throw new InvalidOperationException("active send not entered");
+            var waitingTask = coordinator.SendOnceAsync(Core, Endpoint, T0.AddMinutes(4),
+                CancellationToken.None);
+            var waiterPending = WaitUntil(() => coordinator.PendingLeaseWaiters == 1, 3000);
+            var heldBeforeDispose = coordinator.LeaseHeld;
+            coordinator.Dispose();
+            coordinator.Dispose();
+            var heldAfterDispose = coordinator.LeaseHeld;
+
+            Exception newSendError = null;
+            try { Send(coordinator, now: T0.AddMinutes(5)); }
+            catch (Exception error) { newSendError = error; }
+            var newPairInvoked = false;
+            Exception newPairError = null;
+            try
+            {
+                coordinator.PairAsync(delegate
+                {
+                    newPairInvoked = true;
+                    return Task.FromResult(ObservationPairCommit.CommittedWith(Binding(8)));
+                }, CancellationToken.None).GetAwaiter().GetResult();
+            }
+            catch (Exception error) { newPairError = error; }
+
+            gate.TrySetResult(true);
+            var activeFinished = Task.WhenAny(activeTask, Task.Delay(3000))
+                .GetAwaiter().GetResult() == activeTask;
+            Exception activeError = null;
+            ObservationSendAttemptResult active = null;
+            if (activeFinished)
+            {
+                try { active = activeTask.GetAwaiter().GetResult(); }
+                catch (Exception error) { activeError = error; }
+            }
+            var waitingFinished = Task.WhenAny(waitingTask, Task.Delay(3000))
+                .GetAwaiter().GetResult() == waitingTask;
+            Exception waitingError = null;
+            ObservationSendAttemptResult waiting = null;
+            if (waitingFinished)
+            {
+                try { waiting = waitingTask.GetAwaiter().GetResult(); }
+                catch (Exception error) { waitingError = error; }
+            }
+            coordinator.Dispose();
+
+            var controlDir = NewDirectory();
+            var controlStore = Store(controlDir);
+            var controlOutbox = Outbox(controlDir);
+            var controlRow = Row(Uid(701));
+            Capture(controlStore, controlRow);
+            var controlHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(controlRow.SummaryUid, 1)); }
+            };
+            var normal = Send(Coordinator(controlStore, controlOutbox, controlHandler, null));
+
+            Check("OS35 Dispose tijdens actieve send bewaart het commit-resultaat; nieuwe send/pair geweigerd; bounded waiter zonder POST geweigerd",
+                activeFinished && waitingFinished
+                && activeError == null && active != null
+                && active.Status == ObservationSendStatus.Delivered
+                && active.Posted && active.Offered != null
+                && active.Offered.Rows.Count == 1
+                && active.Offered.Rows[0].RowJson == frozen
+                && waiterPending && heldBeforeDispose && heldAfterDispose
+                && waitingError == null && waiting != null
+                && waiting.Status == ObservationSendStatus.Refused
+                && waiting.Diagnostic == "disposed" && !waiting.Posted
+                && newSendError is ObjectDisposedException
+                && newPairError is ObjectDisposedException && !newPairInvoked
+                && handler.RequestCount == 1
+                && store.DeliveredTotal == 1 && store.EntryCount == 0
+                && normal.Status == ObservationSendStatus.Delivered
+                && controlHandler.RequestCount == 1,
+                "active=" + (active == null ? "null" : active.Status.ToString())
+                + "/err=" + (activeError == null ? "none" : activeError.GetType().Name)
+                + " waiting=" + (waiting == null ? "null" : waiting.Status.ToString())
+                + "/" + (waiting == null ? null : waiting.Diagnostic)
+                + "/err=" + (waitingError == null ? "none" : waitingError.GetType().Name)
+                + " waiterPending=" + waiterPending
+                + " held=" + heldBeforeDispose + "/" + heldAfterDispose
+                + " newSend=" + (newSendError == null ? "none" : newSendError.GetType().Name)
+                + " newPair=" + (newPairError == null ? "none" : newPairError.GetType().Name)
+                + " invoked=" + newPairInvoked
+                + " req=" + handler.RequestCount + " total=" + store.DeliveredTotal
+                + " control=" + normal.Status + "/" + controlHandler.RequestCount);
+        }
+
+        // OS36 — H1/B1: Dispose during an in-flight pair keeps the committed
+        // publication; Dispose while a timed-out callback still owns the lease
+        // must not release that lease early. The late committed generation is
+        // still published before the lease finally settles, and no new work runs.
+        {
+            var dir = NewDirectory();
+            var store = Store(dir);
+            var outbox = Outbox(dir);
+            var gate = Gate();
+            var entered = new ManualResetEventSlim(false);
+            var coordinator = Coordinator(store, outbox, new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(JsonResponse(200, "{}")); }
+            }, null, Enabled(5000));
+            var pairTask = coordinator.PairAsync(async delegate
+            {
+                entered.Set();
+                await gate.Task.ConfigureAwait(false);
+                return ObservationPairCommit.CommittedWith(Binding(8));
+            }, CancellationToken.None);
+            if (!WaitUntil(() => entered.IsSet, 3000))
+                throw new InvalidOperationException("pair callback not entered");
+            coordinator.Dispose();
+            coordinator.Dispose();
+            var pairLeaseHeld = coordinator.LeaseHeld;
+            gate.TrySetResult(true);
+            Exception pairError = null;
+            ObservationPairTransitionResult pair = null;
+            try { pair = pairTask.GetAwaiter().GetResult(); }
+            catch (Exception error) { pairError = error; }
+            var pairGeneration = coordinator.CurrentBinding == null ? -1
+                : coordinator.CurrentBinding.PairingGeneration;
+
+            // Normal pair control on a fresh coordinator.
+            var controlDir = NewDirectory();
+            var controlStore = Store(controlDir);
+            var controlOutbox = Outbox(controlDir);
+            var control = Coordinator(controlStore, controlOutbox, new CapturingHandler(), null)
+                .PairAsync(delegate
+                {
+                    return Task.FromResult(ObservationPairCommit.CommittedWith(Binding(9)));
+                }, CancellationToken.None).GetAwaiter().GetResult();
+
+            // Late callback owner: the bounded pair call returns TimedOut while the
+            // callback still owns the lease. Dispose must not free it early.
+            var lateDir = NewDirectory();
+            var lateFence = new ObservationBindingFence(Binding());
+            var lateStore = Store(lateDir, lateFence);
+            var lateOutbox = Outbox(lateDir);
+            var lateObs = Row(Uid(702));
+            var lateFrozen = Capture(lateStore, lateObs);
+            var lateHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(lateObs.SummaryUid, 1)); }
+            };
+            var lateOptions = Enabled(5000);
+            lateOptions.PairTransitionTimeoutMilliseconds = 80;
+            lateOptions.LeaseWaitMilliseconds = 200;
+            var lateCoordinator = Coordinator(lateStore, lateOutbox, lateHandler, null,
+                lateOptions);
+            var lateEntered = new ManualResetEventSlim(false);
+            var lateGate = Gate();
+            var lateDone = false;
+            var lateTask = lateCoordinator.PairAsync(async delegate
+            {
+                lateEntered.Set();
+                await lateGate.Task.ConfigureAwait(false);
+                lateDone = true;
+                return ObservationPairCommit.CommittedWith(Binding(8));
+            }, CancellationToken.None);
+            if (!WaitUntil(() => lateEntered.IsSet, 3000))
+                throw new InvalidOperationException("late pair callback not entered");
+            var latePair = lateTask.GetAwaiter().GetResult();
+            var heldAtTimeout = lateCoordinator.LeaseHeld;
+            lateCoordinator.Dispose();
+            lateCoordinator.Dispose();
+            var heldAfterDispose = lateCoordinator.LeaseHeld;
+            var generationAfterDispose = lateCoordinator.CurrentBinding.PairingGeneration;
+            Exception newSendError = null;
+            try { Send(lateCoordinator); }
+            catch (Exception error) { newSendError = error; }
+            lateGate.TrySetResult(true);
+            var released = WaitUntil(() => !lateCoordinator.LeaseHeld, 3000);
+            var publishedGeneration = lateCoordinator.CurrentBinding.PairingGeneration;
+            var lateEntry = lateStore.Find(lateObs.SummaryUid, 1);
+            var noRequest = lateHandler.RequestCount == 0;
+            Exception afterSettleError = null;
+            try { Send(lateCoordinator, now: T0.AddMinutes(5)); }
+            catch (Exception error) { afterSettleError = error; }
+
+            Check("OS36 Dispose tijdens pair en tijdens late pair-eigenaar bewaart respectievelijk publiceert de commit en geeft de lease pas na settlement vrij",
+                pairError == null && pair != null && pair.Committed
+                && pairGeneration == 8 && pairLeaseHeld
+                && control.Status == ObservationPairTransitionStatus.Committed
+                && control.PublishedBinding != null
+                && control.PublishedBinding.PairingGeneration == 9
+                && latePair.Status == ObservationPairTransitionStatus.TimedOut
+                && !latePair.Committed && heldAtTimeout && heldAfterDispose
+                && generationAfterDispose == 7 && lateDone
+                && newSendError is ObjectDisposedException
+                && released && publishedGeneration == 8
+                && lateEntry != null && lateEntry.RowJson == lateFrozen
+                && lateEntry.State != ObservationLedgerState.Quarantine
+                && noRequest && afterSettleError is ObjectDisposedException,
+                "pair=" + (pair == null ? "null" : pair.Status.ToString())
+                + "/err=" + (pairError == null ? "none" : pairError.GetType().Name)
+                + " gen=" + pairGeneration + " held=" + pairLeaseHeld
+                + " control=" + control.Status + "/" + control.PublishedBinding.PairingGeneration
+                + " late=" + latePair.Status + " heldAtTimeout=" + heldAtTimeout
+                + " heldAfterDispose=" + heldAfterDispose
+                + " genAfterDispose=" + generationAfterDispose + " lateDone=" + lateDone
+                + " released=" + released + " published=" + publishedGeneration
+                + " entry=" + (lateEntry == null ? "null" : lateEntry.State.ToString())
+                + " req=" + lateHandler.RequestCount
+                + " afterSettle=" + (afterSettleError == null ? "none"
+                    : afterSettleError.GetType().Name));
+        }
+
+        // OS37 — H2: plan-time quarantine is real durable state even when the same
+        // attempt posts and cleans up a legacy sibling. The reported count must be
+        // the actual transition count, survive restart, and not be counted again
+        // by a repeated attempt.
+        {
+            var dir = NewDirectory();
+            var fence = new ObservationBindingFence(Binding());
+            var store = Store(dir, fence);
+            var outbox = Outbox(dir);
+            var obs = Row(Uid(710));
+            var frozen = Capture(store, obs);
+            var legacy = Row(Uid(711), false);
+            string reason;
+            if (!outbox.EnqueueLap(legacy, out reason))
+                throw new InvalidOperationException(reason);
+            fence.Rebind(Binding(8));
+            var handler = new CapturingHandler
+            {
+                Respond = delegate
+                {
+                    return Task.FromResult(Accepted(legacy.SummaryUid, 1));
+                }
+            };
+            var coordinator = Coordinator(store, outbox, handler, null);
+            var result = Send(coordinator);
+            var entry = store.Find(obs.SummaryUid, 1);
+            var reloaded = Store(dir, new ObservationBindingFence(Binding(8)));
+            var reloadedEntry = reloaded.Find(obs.SummaryUid, 1);
+            var repeat = Send(coordinator, now: T0.AddMinutes(4));
+            var body = handler.RequestCount == 0 ? null : handler.RequestAt(0).Body;
+
+            Check("OS37 plan-time quarantaine naast legacy-levering telt één keer, overleeft restart en telt niet opnieuw",
+                result.Status == ObservationSendStatus.Delivered
+                && result.Posted && result.HttpStatus == 200
+                && result.ObservationQuarantined == 1
+                && result.OfferedObservationRows == 0
+                && entry != null && entry.State == ObservationLedgerState.Quarantine
+                && entry.ReasonCode == ObservationLedgerReasons.CaptureBindingChanged
+                && entry.RowJson == frozen
+                && reloaded.QuarantineTotal == 1 && reloaded.DeliveredTotal == 0
+                && reloadedEntry != null
+                && reloadedEntry.State == ObservationLedgerState.Quarantine
+                && reloadedEntry.RowJson == frozen
+                && outbox.LapCount == 0 && handler.RequestCount == 1
+                && body != null && body.IndexOf(obs.SummaryUid, StringComparison.Ordinal) < 0
+                && repeat.Status == ObservationSendStatus.NothingDue
+                && repeat.ObservationQuarantined == 0
+                && store.QuarantineTotal == 1,
+                "status=" + result.Status + " reported=" + result.ObservationQuarantined
+                + " state=" + (entry == null ? "null" : entry.State.ToString())
+                + " reload=" + reloaded.QuarantineTotal + "/" + reloaded.DeliveredTotal
+                + " laps=" + outbox.LapCount + " req=" + handler.RequestCount
+                + " repeat=" + repeat.Status + "/" + repeat.ObservationQuarantined);
+        }
+
+        // OS38 — H2: one attempt can both quarantine a stale row at plan time and
+        // quarantine another OBS row through the accepted ACK. Both are real store
+        // transitions and are reported together, exactly once, with legacy cleanup.
+        {
+            var dir = NewDirectory();
+            var fence = new ObservationBindingFence(Binding());
+            var store = Store(dir, fence);
+            var outbox = Outbox(dir);
+            var stale = Row(Uid(720));
+            var staleFrozen = Capture(store, stale);
+            var legacy = Row(Uid(721), false);
+            string reason;
+            if (!outbox.EnqueueLap(legacy, out reason))
+                throw new InvalidOperationException(reason);
+            fence.Rebind(Binding(8));
+            var offered = Row(Uid(722));
+            var offeredFrozen = Capture(store, offered, Binding(8));
+            var handler = new CapturingHandler
+            {
+                Respond = delegate
+                {
+                    return Task.FromResult(JsonResponse(200, LapAck(true, 2,
+                        "[" + Id(legacy.SummaryUid, 1) + "]", "[]", "[]",
+                        "[" + Rejection(offered.SummaryUid, null,
+                            ObservationLedgerReasons.ObservationInvalidNumber) + "]", null)));
+                }
+            };
+            var coordinator = Coordinator(store, outbox, handler, null);
+            var result = Send(coordinator);
+            var staleEntry = store.Find(stale.SummaryUid, 1);
+            var offeredEntry = store.Find(offered.SummaryUid, 1);
+            var reloaded = Store(dir, new ObservationBindingFence(Binding(8)));
+            var body = handler.RequestAt(0).Body;
+            var repeat = Send(coordinator, now: T0.AddMinutes(4));
+
+            Check("OS38 plan- én ACK-quarantaine in één poging worden samen exact gerapporteerd en duurzaam bewaard",
+                result.Status == ObservationSendStatus.PartiallyDelivered
+                && result.Posted && result.HttpStatus == 200
+                && result.ObservationQuarantined == 2
+                && result.ObservationDelivered == 0
+                && result.LedgerApply != null
+                && result.LedgerApply.QuarantinedCount == 1
+                && result.LedgerApply.DeliveredCount == 0
+                && staleEntry != null
+                && staleEntry.State == ObservationLedgerState.Quarantine
+                && staleEntry.ReasonCode == ObservationLedgerReasons.CaptureBindingChanged
+                && staleEntry.RowJson == staleFrozen
+                && offeredEntry != null
+                && offeredEntry.State == ObservationLedgerState.Quarantine
+                && offeredEntry.ReasonCode == ObservationLedgerReasons.ObservationInvalidNumber
+                && offeredEntry.RowJson == offeredFrozen
+                && store.QuarantineTotal == 2 && store.DeliveredTotal == 0
+                && store.EntryCount == 2 && outbox.LapCount == 0
+                && reloaded.QuarantineTotal == 2 && reloaded.DeliveredTotal == 0
+                && reloaded.Find(stale.SummaryUid, 1) != null
+                && reloaded.Find(offered.SummaryUid, 1) != null
+                && body.IndexOf(stale.SummaryUid, StringComparison.Ordinal) < 0
+                && body.IndexOf(offered.SummaryUid, StringComparison.Ordinal) >= 0
+                && body.IndexOf(legacy.SummaryUid, StringComparison.Ordinal) >= 0
+                && repeat.Status == ObservationSendStatus.NothingDue
+                && repeat.ObservationQuarantined == 0
+                && store.QuarantineTotal == 2,
+                "status=" + result.Status + " reported=" + result.ObservationQuarantined
+                + " apply=" + (result.LedgerApply == null ? "null"
+                    : result.LedgerApply.QuarantinedCount + "/" + result.LedgerApply.DeliveredCount)
+                + " store=" + store.QuarantineTotal + "/" + store.DeliveredTotal
+                + " entries=" + store.EntryCount + " laps=" + outbox.LapCount
+                + " reload=" + reloaded.QuarantineTotal + " repeat="
+                + repeat.Status + "/" + repeat.ObservationQuarantined);
+        }
+
+        // OS39 — H2 truthfulness on non-delivery paths after a real plan-time
+        // quarantine: a malformed ACK and a canceled in-flight attempt keep the
+        // row and its reason durable while still reporting the quarantine count.
+        {
+            var malformedDir = NewDirectory();
+            var malformedFence = new ObservationBindingFence(Binding());
+            var malformedStore = Store(malformedDir, malformedFence);
+            var malformedOutbox = Outbox(malformedDir);
+            var malformedObs = Row(Uid(730));
+            var malformedFrozen = Capture(malformedStore, malformedObs);
+            var malformedLegacy = Row(Uid(731), false);
+            string malformedReason;
+            if (!malformedOutbox.EnqueueLap(malformedLegacy, out malformedReason))
+                throw new InvalidOperationException(malformedReason);
+            malformedFence.Rebind(Binding(8));
+            var malformedHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(JsonResponse(200, "not-an-ack")); }
+            };
+            var malformed = Send(Coordinator(malformedStore, malformedOutbox,
+                malformedHandler, null));
+            var malformedEntry = malformedStore.Find(malformedObs.SummaryUid, 1);
+            var malformedOk = malformed.Status == ObservationSendStatus.NotDelivered
+                && malformed.Posted
+                && malformed.ObservationQuarantined == 1
+                && malformedEntry != null
+                && malformedEntry.State == ObservationLedgerState.Quarantine
+                && malformedEntry.RowJson == malformedFrozen
+                && malformedStore.DeliveredTotal == 0
+                && malformedOutbox.LapCount == 1
+                && malformedHandler.RequestCount == 1;
+
+            var cancelDir = NewDirectory();
+            var cancelFence = new ObservationBindingFence(Binding());
+            var cancelStore = Store(cancelDir, cancelFence);
+            var cancelOutbox = Outbox(cancelDir);
+            var cancelObs = Row(Uid(732));
+            var cancelFrozen = Capture(cancelStore, cancelObs);
+            var cancelLegacy = Row(Uid(733), false);
+            string cancelReason;
+            if (!cancelOutbox.EnqueueLap(cancelLegacy, out cancelReason))
+                throw new InvalidOperationException(cancelReason);
+            cancelFence.Rebind(Binding(8));
+            var cancelGate = Gate();
+            var cancelHandler = new CapturingHandler
+            {
+                Respond = async delegate(int position, CapturedRequest request, CancellationToken token)
+                {
+                    await cancelGate.Task.ConfigureAwait(false);
+                    return Accepted(cancelLegacy.SummaryUid, 1);
+                }
+            };
+            var cancelCoordinator = Coordinator(cancelStore, cancelOutbox, cancelHandler, null,
+                Enabled(5000));
+            var source = new CancellationTokenSource();
+            var cancelTask = cancelCoordinator.SendOnceAsync(Core, Endpoint,
+                T0.AddMinutes(3), source.Token);
+            if (!WaitUntil(() => cancelHandler.FirstEntered.IsSet, 3000))
+                throw new InvalidOperationException("cancel send not entered");
+            source.Cancel();
+            var canceled = cancelTask.GetAwaiter().GetResult();
+            cancelGate.TrySetResult(true);
+            WaitUntil(() => cancelHandler.Active == 0, 3000);
+            var cancelEntry = cancelStore.Find(cancelObs.SummaryUid, 1);
+            var cancelOk = canceled.Status == ObservationSendStatus.Canceled
+                && canceled.Posted
+                && canceled.ObservationQuarantined == 1
+                && cancelEntry != null
+                && cancelEntry.State == ObservationLedgerState.Quarantine
+                && cancelEntry.RowJson == cancelFrozen
+                && cancelStore.DeliveredTotal == 0
+                && cancelStore.EntryCount == 1
+                && cancelHandler.RequestCount == 1;
+
+            Check("OS39 na plan-time quarantaine blijven malformed-ACK en cancel de rij en teller waarheidsgetrouw rapporteren",
+                malformedOk && cancelOk,
+                "malformed=" + malformedOk + "/" + malformed.Status + "/"
+                + malformed.ObservationQuarantined + " cancel=" + cancelOk + "/"
+                + canceled.Status + "/" + canceled.ObservationQuarantined
+                + "/req=" + cancelHandler.RequestCount + " laps=" + cancelOutbox.LapCount);
+        }
+
+        // OS40 — H3: a synchronous transport invocation failure before a send task
+        // exists is not "posted"; a real handler visit that fails asynchronously
+        // still is. The false flag is diagnostic only: the exact row, identity and
+        // durable counters stay untouched.
+        {
+            var syncDir = NewDirectory();
+            var syncFence = new ObservationBindingFence(Binding());
+            var syncStore = Store(syncDir, syncFence);
+            var syncOutbox = Outbox(syncDir);
+            var syncObs = Row(Uid(740));
+            var syncFrozen = Capture(syncStore, syncObs);
+            var syncLegacy = Row(Uid(741), false);
+            string syncReason;
+            if (!syncOutbox.EnqueueLap(syncLegacy, out syncReason))
+                throw new InvalidOperationException(syncReason);
+            syncFence.Rebind(Binding(8));
+            var syncTransport = new SyncThrowTransport();
+            var sync = Send(Coordinator(syncStore, syncOutbox, syncTransport, null));
+            var syncEntry = syncStore.Find(syncObs.SummaryUid, 1);
+
+            var nullDir = NewDirectory();
+            var nullStore = Store(nullDir);
+            var nullOutbox = Outbox(nullDir);
+            var nullObs = Row(Uid(742));
+            var nullFrozen = Capture(nullStore, nullObs);
+            var nullLegacy = Row(Uid(743), false);
+            string nullReason;
+            if (!nullOutbox.EnqueueLap(nullLegacy, out nullReason))
+                throw new InvalidOperationException(nullReason);
+            var nullTransport = new NullTaskTransport();
+            var nullResult = Send(Coordinator(nullStore, nullOutbox, nullTransport, null));
+            var nullEntry = nullStore.Find(nullObs.SummaryUid, 1);
+
+            var asyncDir = NewDirectory();
+            var asyncStore = Store(asyncDir);
+            var asyncOutbox = Outbox(asyncDir);
+            var asyncObs = Row(Uid(744));
+            var asyncFrozen = Capture(asyncStore, asyncObs);
+            var asyncHandler = new CapturingHandler
+            {
+                Respond = async delegate
+                {
+                    await Task.Yield();
+                    throw new IOException("synthetic async handler failure");
+                }
+            };
+            var asyncResult = Send(Coordinator(asyncStore, asyncOutbox, asyncHandler, null));
+            var asyncEntry = asyncStore.Find(asyncObs.SummaryUid, 1);
+            var asyncRequest = asyncHandler.RequestCount == 1 ? asyncHandler.RequestAt(0) : null;
+
+            Check("OS40 synchrone transportthrow vóór een sendtask meldt Posted=false; een echt bezochte handler met asyncfout blijft Posted=true",
+                sync.Status == ObservationSendStatus.TransportFailed
+                && !sync.Posted && syncTransport.Calls == 1
+                && sync.ObservationQuarantined == 1
+                && syncEntry != null
+                && syncEntry.State == ObservationLedgerState.Quarantine
+                && syncEntry.ReasonCode == ObservationLedgerReasons.CaptureBindingChanged
+                && syncEntry.RowJson == syncFrozen
+                && syncStore.DeliveredTotal == 0 && syncStore.QuarantineTotal == 1
+                && nullResult.Status == ObservationSendStatus.TransportFailed
+                && !nullResult.Posted && nullTransport.Calls == 1
+                && nullEntry != null
+                && nullEntry.State == ObservationLedgerState.Deferred
+                && nullEntry.RowJson == nullFrozen && nullEntry.Attempts == 1
+                && nullStore.DeliveredTotal == 0 && nullStore.QuarantineTotal == 0
+                && asyncResult.Status == ObservationSendStatus.TransportFailed
+                && asyncResult.Posted && asyncResult.HttpStatus == 0
+                && asyncResult.OfferedObservationRows == 1
+                && asyncHandler.RequestCount == 1
+                && asyncRequest != null
+                && asyncRequest.Body != null
+                && asyncRequest.Body.IndexOf(asyncFrozen, StringComparison.Ordinal) >= 0
+                && asyncRequest.Authorization == "Bearer " + Sentinel
+                && asyncEntry != null
+                && asyncEntry.State == ObservationLedgerState.Deferred
+                && asyncEntry.RowJson == asyncFrozen && asyncEntry.Attempts == 1
+                && asyncStore.DeliveredTotal == 0 && asyncStore.QuarantineTotal == 0,
+                "sync=" + sync.Status + "/posted=" + sync.Posted + "/calls="
+                + syncTransport.Calls + "/q=" + sync.ObservationQuarantined
+                + " null=" + nullResult.Status + "/posted=" + nullResult.Posted
+                + "/calls=" + nullTransport.Calls + "/state="
+                + (nullEntry == null ? "null" : nullEntry.State.ToString())
+                + " async=" + asyncResult.Status + "/posted=" + asyncResult.Posted
+                + "/req=" + asyncHandler.RequestCount + "/state="
+                + (asyncEntry == null ? "null" : asyncEntry.State.ToString())
+                + "/attempts=" + (asyncEntry == null ? -1 : asyncEntry.Attempts));
+        }
+
+        // OS41 — H2-F1: the first plan-time bulk quarantine (binding change) commits,
+        // then the second (legal duplicate-lane build refusal) fails before its
+        // switch. The durable first transition must still be reported, and a retry
+        // from that real partial state must count only the newly committed row.
+        // Controls cover both writes committing and failure of the first write.
+        {
+            var dir = NewDirectory();
+            var fence = new ObservationBindingFence(Binding());
+            var faults = new PlanBulkFaults { Message = "synthetic second plan-switch failure" };
+            var store = Store(dir, fence, null, faults);
+            var outbox = Outbox(dir);
+            var stale = Row(Uid(750));
+            var staleFrozen = Capture(store, stale);
+            fence.Rebind(Binding(8));
+            var refused = Row(Uid(751));
+            var refusedFrozen = Capture(store, refused, Binding(8));
+            var legacy = Row(Uid(751), false);
+            string reason;
+            if (!outbox.EnqueueLap(legacy, out reason))
+                throw new InvalidOperationException(reason);
+
+            faults.Arm(2); // captures already ran; only the two plan bulk writes remain
+            var handler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(legacy.SummaryUid, 1)); }
+            };
+            var coordinator = Coordinator(store, outbox, handler, null);
+            var result = Send(coordinator);
+            var staleEntry = store.Find(stale.SummaryUid, 1);
+            var refusedEntry = store.Find(refused.SummaryUid, 1);
+            var leaseFree = WaitUntil(() => !coordinator.LeaseHeld, 1000);
+            var reloaded = Store(dir, new ObservationBindingFence(Binding(8)));
+            var reloadedStale = reloaded.Find(stale.SummaryUid, 1);
+            var reloadedRefused = reloaded.Find(refused.SummaryUid, 1);
+            var mainTotal = store.QuarantineTotal;
+            var mainDelivered = store.DeliveredTotal;
+            var mainEntries = store.EntryCount;
+            var mainLaps = outbox.LapCount;
+            var mainRequests = handler.RequestCount;
+
+            faults.Disarm();
+            var retry = Send(coordinator, now: T0.AddMinutes(4));
+            var retryStale = store.Find(stale.SummaryUid, 1);
+            var retryRefused = store.Find(refused.SummaryUid, 1);
+            var retryReload = Store(dir, new ObservationBindingFence(Binding(8)));
+            var retryBody = handler.RequestCount == 0 ? null : handler.RequestAt(0).Body;
+
+            // Positive control: the same two plan writes commit when no fault is armed
+            // and the legacy ACK still owns only the legacy lap.
+            var okDir = NewDirectory();
+            var okFence = new ObservationBindingFence(Binding());
+            var okStore = Store(okDir, okFence);
+            var okOutbox = Outbox(okDir);
+            var okStale = Row(Uid(750));
+            var okStaleFrozen = Capture(okStore, okStale);
+            okFence.Rebind(Binding(8));
+            var okRefused = Row(Uid(751));
+            var okRefusedFrozen = Capture(okStore, okRefused, Binding(8));
+            var okLegacy = Row(Uid(751), false);
+            string okReason;
+            if (!okOutbox.EnqueueLap(okLegacy, out okReason))
+                throw new InvalidOperationException(okReason);
+            var okHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(okLegacy.SummaryUid, 1)); }
+            };
+            var okResult = Send(Coordinator(okStore, okOutbox, okHandler, null));
+            var okStaleEntry = okStore.Find(okStale.SummaryUid, 1);
+            var okRefusedEntry = okStore.Find(okRefused.SummaryUid, 1);
+            var okBody = okHandler.RequestCount == 0 ? null : okHandler.RequestAt(0).Body;
+
+            // Control: failure of the first write reports zero and commits nothing.
+            var firstDir = NewDirectory();
+            var firstFence = new ObservationBindingFence(Binding());
+            var firstFaults = new PlanBulkFaults { Message = "synthetic first plan-switch failure" };
+            var firstStore = Store(firstDir, firstFence, null, firstFaults);
+            var firstOutbox = Outbox(firstDir);
+            var firstStale = Row(Uid(750));
+            var firstStaleFrozen = Capture(firstStore, firstStale);
+            firstFence.Rebind(Binding(8));
+            var firstRefused = Row(Uid(751));
+            var firstRefusedFrozen = Capture(firstStore, firstRefused, Binding(8));
+            var firstLegacy = Row(Uid(751), false);
+            string firstReason;
+            if (!firstOutbox.EnqueueLap(firstLegacy, out firstReason))
+                throw new InvalidOperationException(firstReason);
+            firstFaults.Arm(1);
+            var firstHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(firstLegacy.SummaryUid, 1)); }
+            };
+            var firstCoordinator = Coordinator(firstStore, firstOutbox, firstHandler, null);
+            var firstResult = Send(firstCoordinator);
+            var firstStaleEntry = firstStore.Find(firstStale.SummaryUid, 1);
+            var firstRefusedEntry = firstStore.Find(firstRefused.SummaryUid, 1);
+            var firstLeaseFree = WaitUntil(() => !firstCoordinator.LeaseHeld, 1000);
+
+            Check("OS41 mislukte tweede plan-bulkwrite behoudt de al gecommitte quarantainetelling; retry telt alleen de nieuwe rij",
+                result.Status == ObservationSendStatus.Refused
+                && !result.Posted
+                && result.Diagnostic == "build_quarantine_precommit_io:IOException:synthetic second plan-switch failure"
+                && result.ObservationQuarantined == 1
+                && result.ObservationDelivered == 0
+                && mainTotal == 1 && mainDelivered == 0 && mainEntries == 2
+                && mainLaps == 1 && mainRequests == 0 && leaseFree
+                && staleEntry != null && staleEntry.State == ObservationLedgerState.Quarantine
+                && staleEntry.ReasonCode == ObservationLedgerReasons.CaptureBindingChanged
+                && staleEntry.RowJson == staleFrozen
+                && ObservationBindingFence.SameBinding(staleEntry.Binding, Binding())
+                && refusedEntry != null && refusedEntry.State == ObservationLedgerState.Pending
+                && refusedEntry.RowJson == refusedFrozen
+                && ObservationBindingFence.SameBinding(refusedEntry.Binding, Binding(8))
+                && reloaded.QuarantineTotal == 1 && reloaded.DeliveredTotal == 0
+                && reloadedStale != null && reloadedStale.State == ObservationLedgerState.Quarantine
+                && reloadedStale.RowJson == staleFrozen
+                && ObservationBindingFence.SameBinding(reloadedStale.Binding, Binding())
+                && reloadedRefused != null && reloadedRefused.State == ObservationLedgerState.Pending
+                && reloadedRefused.RowJson == refusedFrozen
+                && ObservationBindingFence.SameBinding(reloadedRefused.Binding, Binding(8))
+                && retry.Status == ObservationSendStatus.Delivered
+                && retry.Posted && retry.HttpStatus == 200
+                && retry.ObservationQuarantined == 1
+                && store.QuarantineTotal == 2 && store.DeliveredTotal == 0
+                && store.EntryCount == 2 && outbox.LapCount == 0
+                && retryStale != null && retryStale.State == ObservationLedgerState.Quarantine
+                && retryStale.RowJson == staleFrozen
+                && ObservationBindingFence.SameBinding(retryStale.Binding, Binding())
+                && retryRefused != null && retryRefused.State == ObservationLedgerState.Quarantine
+                && retryRefused.ReasonCode == ObservationLedgerReasons.ObservationBuildRefused
+                && retryRefused.RowJson == refusedFrozen
+                && ObservationBindingFence.SameBinding(retryRefused.Binding, Binding(8))
+                && handler.RequestCount == 1
+                && retryBody != null
+                && retryBody.IndexOf(legacy.SummaryUid, StringComparison.Ordinal) >= 0
+                && retryBody.IndexOf(stale.SummaryUid, StringComparison.Ordinal) < 0
+                && retryReload.QuarantineTotal == 2 && retryReload.DeliveredTotal == 0
+                && okResult.Status == ObservationSendStatus.Delivered
+                && okResult.ObservationQuarantined == 2
+                && okResult.LegacyAck != null && okResult.LegacyAck.Stored
+                && okResult.LegacyAck.ConfirmedLaps == 1
+                && okStore.QuarantineTotal == 2 && okStore.DeliveredTotal == 0
+                && okStaleEntry != null && okStaleEntry.State == ObservationLedgerState.Quarantine
+                && okStaleEntry.ReasonCode == ObservationLedgerReasons.CaptureBindingChanged
+                && okStaleEntry.RowJson == okStaleFrozen
+                && ObservationBindingFence.SameBinding(okStaleEntry.Binding, Binding())
+                && okRefusedEntry != null && okRefusedEntry.State == ObservationLedgerState.Quarantine
+                && okRefusedEntry.ReasonCode == ObservationLedgerReasons.ObservationBuildRefused
+                && okRefusedEntry.RowJson == okRefusedFrozen
+                && ObservationBindingFence.SameBinding(okRefusedEntry.Binding, Binding(8))
+                && okOutbox.LapCount == 0 && okHandler.RequestCount == 1
+                && okBody != null
+                && okBody.IndexOf(okLegacy.SummaryUid, StringComparison.Ordinal) >= 0
+                && okBody.IndexOf(okStale.SummaryUid, StringComparison.Ordinal) < 0
+                && firstResult.Status == ObservationSendStatus.Refused
+                && firstResult.Diagnostic == "binding_quarantine_precommit_io:IOException:synthetic first plan-switch failure"
+                && firstResult.ObservationQuarantined == 0
+                && firstStore.QuarantineTotal == 0 && firstStore.DeliveredTotal == 0
+                && firstStore.EntryCount == 2
+                && firstStaleEntry != null && firstStaleEntry.State == ObservationLedgerState.Pending
+                && firstStaleEntry.RowJson == firstStaleFrozen
+                && firstRefusedEntry != null && firstRefusedEntry.State == ObservationLedgerState.Pending
+                && firstRefusedEntry.RowJson == firstRefusedFrozen
+                && firstOutbox.LapCount == 1 && firstHandler.RequestCount == 0
+                && firstLeaseFree,
+                "main=" + result.Status + "/posted=" + result.Posted + "/diag=" + result.Diagnostic
+                + "/q=" + result.ObservationQuarantined + "/store=" + mainTotal
+                + "/" + mainDelivered + "/entries=" + mainEntries + "/laps=" + mainLaps
+                + "/req=" + mainRequests + "/leaseFree=" + leaseFree
+                + " retry=" + retry.Status + "/q=" + retry.ObservationQuarantined
+                + "/store=" + store.QuarantineTotal + "/" + store.DeliveredTotal
+                + "/entries=" + store.EntryCount + "/req=" + handler.RequestCount
+                + " ok=" + okResult.Status + "/q=" + okResult.ObservationQuarantined
+                + "/ack=" + (okResult.LegacyAck == null ? "null"
+                    : okResult.LegacyAck.ConfirmedLaps.ToString(CultureInfo.InvariantCulture))
+                + "/store=" + okStore.QuarantineTotal + "/req=" + okHandler.RequestCount
+                + " first=" + firstResult.Status + "/q=" + firstResult.ObservationQuarantined
+                + "/diag=" + firstResult.Diagnostic + "/store=" + firstStore.QuarantineTotal
+                + "/req=" + firstHandler.RequestCount);
         }
 
         return count;

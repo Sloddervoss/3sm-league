@@ -1,7 +1,8 @@
 # T13-S2C2b — begrensde asynchrone observation-verzendketen
 
-Status: **LOKAAL GEREPAREERD EN GETEST; SPEC/Q-GATE OPEN, NIET GEACTIVEERD EN
-NIET AAN PRODUCTIECALLERS GEBONDEN.** Productiewijziging: **NEE**.
+Status: **LOKAAL GEREPAREERD EN GETEST (INCLUSIEF S2C2b-H
+SHUTDOWNHARDENING); SPEC/Q-GATE OPEN, NIET GEACTIVEERD EN NIET AAN
+PRODUCTIECALLERS GEBONDEN.** Productiewijziging: **NEE**.
 
 Nieuwe bibliotheek `ObservationSend.cs`, twee minimale bulkhelpers in
 `ObservationLedgerStore` (`QuarantineMany`, `DeferMany`) en een geregistreerde
@@ -119,7 +120,7 @@ blijven via de bestaande `EffectiveWorst`-boekhouding lopen.
 
 ## Bewijs
 
-Nieuwe selector: `--only-observation-send` (33 checks). Hij zit ook in
+Nieuwe selector: `--only-observation-send` (40 checks). Hij zit ook in
 `--only-measurement` en de volledige harness. Alle tests zijn synthetisch en
 in-process: echte `ObservationCapture`/ledger/planner, een echte
 `HttpRequestMessage` via een lokale `HttpMessageHandler`, echte ACK-resolutie
@@ -155,13 +156,13 @@ Gebruikte uitkomsten (zie de artifactroot):
 
 | Meting | Uitkomst |
 |---|---|
-| `--only-observation-send` | 33 PASS / 0 FAIL |
+| `--only-observation-send` | 40 PASS / 0 FAIL |
 | `--only-observation-ack` | 87 PASS / 0 FAIL |
 | `--only-observation-ledger` | 57 PASS / 0 FAIL |
 | `--only-observation-pipeline` | 37 PASS / 0 FAIL |
 | `--only-observation` | 55 PASS / 0 FAIL |
-| `--only-measurement` | 568 PASS / 0 FAIL (535 oud + 33 nieuw) |
-| volledige harness inclusief 60 s-soak | 924 PASS / 0 FAIL (891 oud + 33 nieuw) |
+| `--only-measurement` | 575 PASS / 0 FAIL (569 oud + 6 nieuw) |
+| volledige harness inclusief 60 s-soak | 931 PASS / 0 FAIL (925 oud + 6 nieuw) |
 | fixture-export | 52 bestanden, diff met geaccepteerde baseline leeg |
 | Deno interop (`--deny-net`) | 50 PASS / 0 FAIL |
 | net48 C# 7.3 shared subset | compile 0 |
@@ -213,17 +214,69 @@ eindtests zijn tegen zowel oud als nieuw gebouwd.
 | B2 muteerbare `Options` | private readonly genormaliseerde waarden plus defensieve `Options`-kopie | OS32 FAIL | OS32 PASS |
 | B3 `QuarantineMany` zonder binding | `SameBinding`-guard vóór elke bulkrijmutatie, hele batch atomisch geweigerd | OS33 FAIL | OS33 PASS |
 
-De ongewijzigde 30 oude sendchecks, 87 ACK-checks en 57 ledgerchecks blijven
+De ongewijzigde 34 oude sendchecks, 87 ACK-checks en 57 ledgerchecks blijven
 groen. De openbare reviewer-probe (retarget, asserties onveranderd) geeft op de
 oude runtime exact `FAIL=3` voor `PAIR_TIMEOUT_LIVE_CALLBACK`,
 `MUTABLE_OPTIONS_UNBOUND` en `QUARANTINE_BINDING_UNCHECKED`, en op de nieuwe
 runtime `FAIL=0`.
 
-Niet opgelost en apart gedelegeerd: de synchrone transportthrow rapporteert nog
-`Posted=true` bij nul handlerrequests (non-blocking QUALITY-observatie), en het
-Q2 mutable/non-UTC sample-hergebruik blijft DEFERRED zonder nieuwe caller.
-De feature blijft default-off; echte Pair/Unpair-GUI, settings, DPAPI,
-plugin-sender en productieactivatie zijn niet gewired.
+## S2C2b-H — shutdown/result-hardening (OS35–OS40)
+
+Drie kleine runtime-/rapportagepunten zijn vóór enige pluginbedrading
+gerepareerd. De publieke transportinterface is niet herontworpen en er is geen
+nieuwe productiecaller bijgekomen.
+
+| Punt | Reparatie | Bewijs |
+|---|---|---|
+| H1/R1 Dispose tijdens actieve send/pair of late callback | De semaphore wordt pas definitief disposed als alle geregistreerde operaties (inclusief een overgedragen late pairingcallback) gesetteld zijn. Een nieuwe send/pair na `Dispose` blijft `ObjectDisposedException`; een al wachtende bounded waiter krijgt `Refused/disposed` zonder POST. `Release` is defensief begrensd tot `ObjectDisposedException`; operationele/IO/ACK-fouten worden niet generiek geslikt. B1 blijft: de late callback houdt dezelfde lease, publiceert zijn gecommitte binding en geeft pas daarna vrij. | OS35/OS36; Q1/Q1c/Q2 |
+| H2/R2 plan-time quarantaine verdween uit het resultaat | De werkelijke `ChangedCount` van de plan-time quarantaine wordt bij het eindresultaat opgeteld bij de ACK-quarantaine. Alle faal-/cancel-/malformed-paden behouden die teller; een herhaalpoging telt oude quarantaine niet opnieuw en er wordt geen globale tellerdelta gebruikt. | OS37/OS38/OS39; Q17 |
+| H3 `TRANSPORT_THROW_POSTED_FLAG` | Een synchrone transportthrow (of `null`-task) vóór er een sendtask bestaat rapporteert `Posted=false`; een taak die al is teruggegeven en daarna async fault/timeout blijft `Posted=true`. Dit is uitsluitend een lokale diagnostische marker, geen bewijs dat de server niets ontving en geen toestemming voor retry/identiteitsherschrijving/ACK-cleanup. Rij en duurzame counters blijven gelijk. | OS40; Q12 |
+
+De bestaande OS01–OS34-asserties zijn byte-ongewijzigd gebleven; alleen de
+OS34-comment is gecorrigeerd naar de werkelijke 2088-byte fixturegrens onder de
+24576-byte bovengrens (geen nieuwe 24576-byte bodytest). De zes vastgestelde
+mutatieguards (M06/M07/M10/M12/M16/M18) falen nog steeds uitsluitend op OS34.
+
+TDD-bewijs: dezelfde eindtestfile bouwt op de oude basis met 0 fouten en geeft
+daar `PASS=34 FAIL=6` (exact OS35–OS40); op de nieuwe runtime
+`PASS=40 FAIL=0`. De publieke probe geeft oud `PASS=13 FAIL=4`
+(Q1/Q2/Q12/Q17) en nieuw `PASS=17 FAIL=0`, inclusief `Q14 unobserved=0`.
+
+Niet opgelost en apart gedelegeerd: W1 (unpair met onvolledige binding blokkeert
+het mixed coordinatorframe; de toekomstige caller moet de expliciete
+legacy-bypass gebruiken) en het Q2 mutable/non-UTC sample-hergebruik blijven
+DEFERRED. `Posted=false` is geen serverbewijs; `Posted=true` is geen
+leveringsclaim. De feature blijft default-off; echte Pair/Unpair-GUI, settings,
+DPAPI, plugin-sender en productieactivatie zijn niet gewired.
+
+## Erratum na targeted QUALITY-review (S2C2b-H2-F1)
+
+De targeted review op `19466a65` vond één Important H2-restpunt: faalt de tweede
+plan-time bulk-quarantaine vóór de switch, dan verdween de al duurzaam
+gecommitte eerste quarantaine uit het resultaat (`q=0` terwijl
+`QuarantineTotal=1`). Alleen de refusal-return van de build-quarantaine geeft nu
+de werkelijke `quarantined` mee. Store-, ACK-, rollback- en identiteitsbeleid
+zijn niet gewijzigd en er is geen globale tellerdelta gebruikt.
+
+OS41 dekt met de bestaande `IObservationLedgerFaults`-seam de twee-rijfixture
+(binding-change A plus legale duplicate-lane build-refusal B met dezelfde UID als
+de legacy lap), armt pas na de captures en faalt uitsluitend de tweede
+`BeforeSwitch`. Bewezen: `Refused` met
+`diag=build_quarantine_precommit_io:IOException`, `q=1`, disk/reload
+A=`Quarantine`/B=`Pending` met exacte UID/revisie/RowJson/binding, totaal 1,
+geen request en vrije lease. Controls: zonder fault committen beide groepen
+(`q=2`, legacy-ACK werkt) en een fout op de eerste write geeft `q=0` zonder
+commit. Een retry vanaf de echte partiële toestand telt alleen de nieuwe rij
+(`q=1`, totaal 2) zonder rij- of identiteitsherschrijving.
+
+TDD: dezelfde eindtestfile bouwt op `19466a65` met 0 fouten en geeft daar
+`PASS=40 FAIL=1` (exact OS41, `q=0`); op de nieuwe runtime `PASS=41 FAIL=0`.
+De publieke P14-probe (retarget, asserties ongewijzigd) is oud `FAIL` (`q=0`) en
+nieuw `PASS` (`q=1`). OS01–OS40 en de H1/H3-code zijn byte-ongewijzigd. ACK 87,
+ledger 57, pipeline 37, observation 55, measurement 576 en de volledige run 932
+checks zijn groen; net48-subset compileert met 0 fouten, de 52 fixtures zijn
+byte-identiek en Deno check/50 interopchecks zijn groen. W1 en Q2 blijven
+DEFERRED; de feature blijft default-off en ongewijzigd ongewired.
 
 ## Niet-claims
 

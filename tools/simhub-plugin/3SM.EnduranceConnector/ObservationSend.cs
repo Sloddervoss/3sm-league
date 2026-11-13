@@ -711,6 +711,13 @@ namespace ThreeSM.EnduranceConnector
         public TransportCompletion Completion;
         public ObservationTransportResponse Response;
         public string Diagnostic;
+        /// <summary>
+        /// True only when the transport invocation handed back a send task. It is a
+        /// local diagnostic, not a server-receipt proof: a synchronous throw before
+        /// the task exists cannot have entered this transport's handler, while an
+        /// already-returned task may fail or time out after a real handler visit.
+        /// </summary>
+        public bool TaskObtained;
     }
 
     /// <summary>
@@ -738,7 +745,9 @@ namespace ThreeSM.EnduranceConnector
         private long _attemptSequence;
         private long _activeAttempt;
         private int _pendingLeaseWaiters;
+        private int _activeOperations;
         private bool _disposed;
+        private bool _leaseDisposed;
 
         public ObservationSendCoordinator(ObservationLedgerStore ledger, MeasurementOutbox legacy,
             IObservationSendTransport transport, Func<string> tokenProvider,
@@ -778,7 +787,17 @@ namespace ThreeSM.EnduranceConnector
                 };
             }
         }
-        public bool LeaseHeld { get { return _lease.CurrentCount == 0; } }
+        public bool LeaseHeld
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    if (_leaseDisposed) return false;
+                }
+                return _lease.CurrentCount == 0;
+            }
+        }
         public int PendingLeaseWaiters { get { return Volatile.Read(ref _pendingLeaseWaiters); } }
         public ObservationPairingBinding CurrentBinding
         {
@@ -804,137 +823,156 @@ namespace ThreeSM.EnduranceConnector
         public async Task<ObservationPairTransitionResult> TransitionAsync(
             ObservationPairCommitHandler commit, CancellationToken cancellationToken)
         {
-            if (_disposed) throw new ObjectDisposedException("ObservationSendCoordinator");
-            if (commit == null)
-                return new ObservationPairTransitionResult(
-                    ObservationPairTransitionStatus.Refused, false, null, "commit_missing");
-            if (cancellationToken.IsCancellationRequested)
-                return new ObservationPairTransitionResult(
-                    ObservationPairTransitionStatus.Canceled, false, null, "canceled");
-
-            bool acquired;
-            Interlocked.Increment(ref _pendingLeaseWaiters);
-            try
-            {
-                acquired = await _lease.WaitAsync(_leaseWaitMilliseconds,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return new ObservationPairTransitionResult(
-                    ObservationPairTransitionStatus.Canceled, false, null, "canceled");
-            }
-            catch (ObjectDisposedException)
-            {
-                return new ObservationPairTransitionResult(
-                    ObservationPairTransitionStatus.Refused, false, null, "disposed");
-            }
-            finally
-            {
-                Interlocked.Decrement(ref _pendingLeaseWaiters);
-            }
-
-            if (!acquired)
-                return new ObservationPairTransitionResult(
-                    ObservationPairTransitionStatus.LeaseTimeout, false, null, "lease_timeout");
-
-            var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            linked.CancelAfter(_pairTransitionTimeoutMilliseconds);
+            if (!TryBeginOperation())
+                throw new ObjectDisposedException("ObservationSendCoordinator");
             var ownershipHandedOff = false;
             try
             {
-                Task<ObservationPairCommit> task;
+                if (commit == null)
+                    return new ObservationPairTransitionResult(
+                        ObservationPairTransitionStatus.Refused, false, null, "commit_missing");
+                if (cancellationToken.IsCancellationRequested)
+                    return new ObservationPairTransitionResult(
+                        ObservationPairTransitionStatus.Canceled, false, null, "canceled");
+
+                bool acquired;
+                Interlocked.Increment(ref _pendingLeaseWaiters);
                 try
                 {
-                    task = commit(linked.Token);
+                    acquired = await _lease.WaitAsync(_leaseWaitMilliseconds,
+                        cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
                     return new ObservationPairTransitionResult(
-                        ObservationPairTransitionStatus.Canceled, true, null, "canceled");
+                        ObservationPairTransitionStatus.Canceled, false, null, "canceled");
                 }
-                catch (Exception error)
+                catch (ObjectDisposedException)
                 {
                     return new ObservationPairTransitionResult(
-                        ObservationPairTransitionStatus.CallbackFailed, true, null,
-                        "callback_" + error.GetType().Name);
+                        ObservationPairTransitionStatus.Refused, false, null, "disposed");
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _pendingLeaseWaiters);
                 }
 
-                if (task == null)
+                if (!acquired)
                     return new ObservationPairTransitionResult(
-                        ObservationPairTransitionStatus.CallbackFailed, true, null,
-                        "callback_null");
+                        ObservationPairTransitionStatus.LeaseTimeout, false, null, "lease_timeout");
 
-                var delay = Task.Delay(Timeout.Infinite, linked.Token);
-                var winner = await Task.WhenAny(task, delay).ConfigureAwait(false);
-                if (winner != task)
+                if (IsDisposed)
                 {
-                    // The caller's wait is bounded, but the lease is not: the callback
-                    // may still be committing a real local pairing/server change. Hand
-                    // ownership to its terminal continuation, which publishes a late
-                    // committed binding under this same lease and releases it once.
-                    // A callback that never settles keeps future OBS attempts bounded
-                    // on the lease (LeaseTimeout), never inside this transition.
-                    linked.Cancel();
-                    ownershipHandedOff = true;
+                    // This call started before Dispose but never became the active
+                    // owner. It must not invoke a new pairing callback afterwards.
+                    ReleaseLease();
+                    return new ObservationPairTransitionResult(
+                        ObservationPairTransitionStatus.Refused, false, null, "disposed");
+                }
+
+                var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                linked.CancelAfter(_pairTransitionTimeoutMilliseconds);
+                try
+                {
+                    Task<ObservationPairCommit> task;
                     try
                     {
-                        CompleteTransitionAfterTimeout(task, linked);
+                        task = commit(linked.Token);
                     }
-                    catch (Exception)
+                    catch (OperationCanceledException)
                     {
-                        ownershipHandedOff = false;
-                        throw;
+                        return new ObservationPairTransitionResult(
+                            ObservationPairTransitionStatus.Canceled, true, null, "canceled");
                     }
-                    var canceled = cancellationToken.IsCancellationRequested;
-                    return new ObservationPairTransitionResult(
-                        canceled ? ObservationPairTransitionStatus.Canceled
-                            : ObservationPairTransitionStatus.TimedOut,
-                        true, null, canceled ? "canceled" : "pair_timeout");
-                }
+                    catch (Exception error)
+                    {
+                        return new ObservationPairTransitionResult(
+                            ObservationPairTransitionStatus.CallbackFailed, true, null,
+                            "callback_" + error.GetType().Name);
+                    }
 
-                ObservationPairCommit result;
-                try
-                {
-                    result = await task.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    return new ObservationPairTransitionResult(
-                        ObservationPairTransitionStatus.Canceled, true, null, "canceled");
-                }
-                catch (Exception error)
-                {
-                    return new ObservationPairTransitionResult(
-                        ObservationPairTransitionStatus.CallbackFailed, true, null,
-                        "callback_" + error.GetType().Name);
-                }
+                    if (task == null)
+                        return new ObservationPairTransitionResult(
+                            ObservationPairTransitionStatus.CallbackFailed, true, null,
+                            "callback_null");
 
-                if (result == null || !result.Committed)
-                {
-                    return new ObservationPairTransitionResult(
-                        ObservationPairTransitionStatus.CallbackFailed, true, null,
-                        result == null ? "commit_null" : result.ErrorCode);
-                }
-                if (result.Binding == null)
-                {
-                    return new ObservationPairTransitionResult(
-                        ObservationPairTransitionStatus.CallbackFailed, true, null,
-                        "binding_missing");
-                }
+                    var delay = Task.Delay(Timeout.Infinite, linked.Token);
+                    var winner = await Task.WhenAny(task, delay).ConfigureAwait(false);
+                    if (winner != task)
+                    {
+                        // The caller's wait is bounded, but the lease is not: the callback
+                        // may still be committing a real local pairing/server change. Hand
+                        // ownership to its terminal continuation, which publishes a late
+                        // committed binding under this same lease and releases it once.
+                        // A callback that never settles keeps future OBS attempts bounded
+                        // on the lease (LeaseTimeout), never inside this transition.
+                        linked.Cancel();
+                        ownershipHandedOff = true;
+                        try
+                        {
+                            CompleteTransitionAfterTimeout(task, linked);
+                        }
+                        catch (Exception)
+                        {
+                            ownershipHandedOff = false;
+                            throw;
+                        }
+                        var canceled = cancellationToken.IsCancellationRequested;
+                        return new ObservationPairTransitionResult(
+                            canceled ? ObservationPairTransitionStatus.Canceled
+                                : ObservationPairTransitionStatus.TimedOut,
+                            true, null, canceled ? "canceled" : "pair_timeout");
+                    }
 
-                // Publication happens under the same lease, after the callback result.
-                _ledger.BindingFence.Rebind(result.Binding);
-                return new ObservationPairTransitionResult(
-                    ObservationPairTransitionStatus.Committed, true, result.Binding, null);
+                    ObservationPairCommit result;
+                    try
+                    {
+                        result = await task.ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return new ObservationPairTransitionResult(
+                            ObservationPairTransitionStatus.Canceled, true, null, "canceled");
+                    }
+                    catch (Exception error)
+                    {
+                        return new ObservationPairTransitionResult(
+                            ObservationPairTransitionStatus.CallbackFailed, true, null,
+                            "callback_" + error.GetType().Name);
+                    }
+
+                    if (result == null || !result.Committed)
+                    {
+                        return new ObservationPairTransitionResult(
+                            ObservationPairTransitionStatus.CallbackFailed, true, null,
+                            result == null ? "commit_null" : result.ErrorCode);
+                    }
+                    if (result.Binding == null)
+                    {
+                        return new ObservationPairTransitionResult(
+                            ObservationPairTransitionStatus.CallbackFailed, true, null,
+                            "binding_missing");
+                    }
+
+                    // Publication happens under the same lease, after the callback result.
+                    _ledger.BindingFence.Rebind(result.Binding);
+                    return new ObservationPairTransitionResult(
+                        ObservationPairTransitionStatus.Committed, true, result.Binding, null);
+                }
+                finally
+                {
+                    if (!ownershipHandedOff)
+                    {
+                        linked.Dispose();
+                        ReleaseLease();
+                    }
+                }
             }
             finally
             {
-                if (!ownershipHandedOff)
-                {
-                    linked.Dispose();
-                    _lease.Release();
-                }
+                // A handed-off callback keeps this operation (and therefore deferred
+                // semaphore disposal) alive until its terminal continuation settles.
+                if (!ownershipHandedOff) EndOperation();
             }
         }
 
@@ -971,8 +1009,8 @@ namespace ThreeSM.EnduranceConnector
                 {
                     try { linked.Dispose(); }
                     catch (ObjectDisposedException) { }
-                    try { _lease.Release(); }
-                    catch (ObjectDisposedException) { }
+                    ReleaseLease();
+                    EndOperation();
                 }
             }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
@@ -985,77 +1023,99 @@ namespace ThreeSM.EnduranceConnector
         public async Task<ObservationSendAttemptResult> SendOnceAsync(string coreBodyJson,
             Uri endpoint, DateTime nowUtc, CancellationToken cancellationToken)
         {
-            if (_disposed) throw new ObjectDisposedException("ObservationSendCoordinator");
-            if (!_enabled)
-                return new ObservationSendAttemptResult(ObservationSendStatus.Disabled, 0,
-                    "observation_send_disabled");
-            if (string.IsNullOrEmpty(coreBodyJson) || endpoint == null)
-                return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
-                    "invalid_request");
-            if (nowUtc.Kind != DateTimeKind.Utc)
-                return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
-                    "now_not_utc");
-            if (cancellationToken.IsCancellationRequested)
-                return new ObservationSendAttemptResult(ObservationSendStatus.Canceled, 0,
-                    "canceled");
-
-            int coreBytes;
+            if (!TryBeginOperation())
+                throw new ObjectDisposedException("ObservationSendCoordinator");
             try
             {
-                coreBytes = Encoding.UTF8.GetByteCount(coreBodyJson);
-            }
-            catch (Exception error)
-            {
-                return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
-                    "encode_" + error.GetType().Name);
-            }
+                if (!_enabled)
+                    return new ObservationSendAttemptResult(ObservationSendStatus.Disabled, 0,
+                        "observation_send_disabled");
+                if (string.IsNullOrEmpty(coreBodyJson) || endpoint == null)
+                    return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
+                        "invalid_request");
+                if (nowUtc.Kind != DateTimeKind.Utc)
+                    return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
+                        "now_not_utc");
+                if (cancellationToken.IsCancellationRequested)
+                    return new ObservationSendAttemptResult(ObservationSendStatus.Canceled, 0,
+                        "canceled");
 
-            bool acquired;
-            Interlocked.Increment(ref _pendingLeaseWaiters);
-            try
-            {
-                acquired = await _lease.WaitAsync(_leaseWaitMilliseconds,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return new ObservationSendAttemptResult(ObservationSendStatus.Canceled, 0,
-                    "canceled");
-            }
-            catch (ObjectDisposedException)
-            {
-                return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
-                    "disposed");
+                int coreBytes;
+                try
+                {
+                    coreBytes = Encoding.UTF8.GetByteCount(coreBodyJson);
+                }
+                catch (Exception error)
+                {
+                    return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
+                        "encode_" + error.GetType().Name);
+                }
+
+                bool acquired;
+                Interlocked.Increment(ref _pendingLeaseWaiters);
+                try
+                {
+                    acquired = await _lease.WaitAsync(_leaseWaitMilliseconds,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return new ObservationSendAttemptResult(ObservationSendStatus.Canceled, 0,
+                        "canceled");
+                }
+                catch (ObjectDisposedException)
+                {
+                    return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
+                        "disposed");
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _pendingLeaseWaiters);
+                }
+                if (!acquired)
+                {
+                    // A bounded lease wait is a deferred attempt, never a quarantine.
+                    return new ObservationSendAttemptResult(ObservationSendStatus.LeaseTimeout, 0,
+                        "lease_timeout");
+                }
+                if (IsDisposed)
+                {
+                    // This bounded waiter started before Dispose. It must not become a
+                    // new POST after disposal.
+                    ReleaseLease();
+                    return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
+                        "disposed");
+                }
+
+                var attemptId = Interlocked.Increment(ref _attemptSequence);
+                Interlocked.Exchange(ref _activeAttempt, attemptId);
+                try
+                {
+                    try
+                    {
+                        return await SendUnderLeaseAsync(coreBodyJson, coreBytes, endpoint, nowUtc,
+                            attemptId, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception error)
+                    {
+                        // No transport, store or clock exception may escape the owned attempt
+                        // as an unobserved task fault; the caller gets a bounded local code.
+                        return new ObservationSendAttemptResult(ObservationSendStatus.Refused,
+                            attemptId, "unhandled_" + error.GetType().Name);
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _activeAttempt, 0);
+                    }
+                }
+                finally
+                {
+                    ReleaseLease();
+                }
             }
             finally
             {
-                Interlocked.Decrement(ref _pendingLeaseWaiters);
-            }
-            if (!acquired)
-            {
-                // A bounded lease wait is a deferred attempt, never a quarantine.
-                return new ObservationSendAttemptResult(ObservationSendStatus.LeaseTimeout, 0,
-                    "lease_timeout");
-            }
-
-            var attemptId = Interlocked.Increment(ref _attemptSequence);
-            Interlocked.Exchange(ref _activeAttempt, attemptId);
-            try
-            {
-                return await SendUnderLeaseAsync(coreBodyJson, coreBytes, endpoint, nowUtc,
-                    attemptId, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception error)
-            {
-                // No transport, store or clock exception may escape the owned attempt
-                // as an unobserved task fault; the caller gets a bounded local code.
-                return new ObservationSendAttemptResult(ObservationSendStatus.Refused,
-                    attemptId, "unhandled_" + error.GetType().Name);
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _activeAttempt, 0);
-                _lease.Release();
+                EndOperation();
             }
         }
 
@@ -1101,7 +1161,8 @@ namespace ThreeSM.EnduranceConnector
                 if (!bulk.Committed)
                 {
                     return new ObservationSendAttemptResult(ObservationSendStatus.Refused,
-                        attemptId, "build_quarantine_" + bulk.Diagnostic) { Posted = false };
+                        attemptId, "build_quarantine_" + bulk.Diagnostic) { Posted = false,
+                        ObservationQuarantined = quarantined };
                 }
                 quarantined += bulk.ChangedCount;
             }
@@ -1134,12 +1195,14 @@ namespace ThreeSM.EnduranceConnector
             catch (Exception error)
             {
                 return new ObservationSendAttemptResult(ObservationSendStatus.Refused, attemptId,
-                    "token_" + error.GetType().Name) { Offered = plan.Offered, Binding = current };
+                    "token_" + error.GetType().Name) { Offered = plan.Offered, Binding = current,
+                    ObservationQuarantined = quarantined };
             }
             if (string.IsNullOrEmpty(token))
             {
                 return new ObservationSendAttemptResult(ObservationSendStatus.Refused, attemptId,
-                    "token_missing") { Offered = plan.Offered, Binding = current };
+                    "token_missing") { Offered = plan.Offered, Binding = current,
+                    ObservationQuarantined = quarantined };
             }
 
             SendEnvelope envelope;
@@ -1151,7 +1214,8 @@ namespace ThreeSM.EnduranceConnector
             catch (Exception error)
             {
                 return new ObservationSendAttemptResult(ObservationSendStatus.Refused, attemptId,
-                    "envelope_" + error.GetType().Name) { Offered = plan.Offered, Binding = current };
+                    "envelope_" + error.GetType().Name) { Offered = plan.Offered,
+                    Binding = current, ObservationQuarantined = quarantined };
             }
 
             // Send-time fence: a local rebind that bypassed the lease still cannot post
@@ -1173,7 +1237,7 @@ namespace ThreeSM.EnduranceConnector
                 changed.BodyBytes = envelope.BodyBytes;
                 changed.OfferedObservationRows = envelope.Batch.ObservationCount;
                 changed.ObservationRetained = envelope.Batch.ObservationCount - quarantinedNow;
-                changed.ObservationQuarantined = quarantinedNow;
+                changed.ObservationQuarantined = quarantined + quarantinedNow;
                 return changed;
             }
 
@@ -1192,6 +1256,7 @@ namespace ThreeSM.EnduranceConnector
                 result.BodyBytes = envelope.BodyBytes;
                 result.OfferedObservationRows = envelope.Batch.ObservationCount;
                 result.ObservationRetained = envelope.Batch.ObservationCount;
+                result.ObservationQuarantined = quarantined;
                 result.DeferDiagnostic = defer == null ? null : defer.Diagnostic;
                 result.ObservationDeferredPersisted = defer == null ? 0 : defer.ChangedCount;
                 return result;
@@ -1202,12 +1267,13 @@ namespace ThreeSM.EnduranceConnector
                 MarkLegacyFailed(plan, nowUtc);
                 var failed = new ObservationSendAttemptResult(ObservationSendStatus.TransportFailed,
                     attemptId, outcome.Diagnostic);
-                failed.Posted = true;
+                failed.Posted = outcome.TaskObtained;
                 failed.Offered = envelope.Batch;
                 failed.Binding = envelope.Binding;
                 failed.BodyBytes = envelope.BodyBytes;
                 failed.OfferedObservationRows = envelope.Batch.ObservationCount;
                 failed.ObservationRetained = envelope.Batch.ObservationCount;
+                failed.ObservationQuarantined = quarantined;
                 failed.DeferDiagnostic = defer == null ? null : defer.Diagnostic;
                 failed.ObservationDeferredPersisted = defer == null ? 0 : defer.ChangedCount;
                 return failed;
@@ -1231,7 +1297,7 @@ namespace ThreeSM.EnduranceConnector
                 changed.BodyBytes = envelope.BodyBytes;
                 changed.OfferedObservationRows = envelope.Batch.ObservationCount;
                 changed.ObservationRetained = envelope.Batch.ObservationCount - quarantinedNow;
-                changed.ObservationQuarantined = quarantinedNow;
+                changed.ObservationQuarantined = quarantined + quarantinedNow;
                 return changed;
             }
 
@@ -1248,6 +1314,7 @@ namespace ThreeSM.EnduranceConnector
                 http.BodyBytes = envelope.BodyBytes;
                 http.OfferedObservationRows = envelope.Batch.ObservationCount;
                 http.ObservationRetained = envelope.Batch.ObservationCount;
+                http.ObservationQuarantined = quarantined;
                 http.DeferDiagnostic = defer == null ? null : defer.Diagnostic;
                 http.ObservationDeferredPersisted = defer == null ? 0 : defer.ChangedCount;
                 return http;
@@ -1261,15 +1328,16 @@ namespace ThreeSM.EnduranceConnector
                     attemptId, "late_response_ignored");
                 late.Offered = envelope.Batch;
                 late.Binding = envelope.Binding;
+                late.ObservationQuarantined = quarantined;
                 return late;
             }
 
-            return ApplyAckAndLegacy(envelope, plan, response, nowUtc, attemptId);
+            return ApplyAckAndLegacy(envelope, plan, response, nowUtc, attemptId, quarantined);
         }
 
         private ObservationSendAttemptResult ApplyAckAndLegacy(SendEnvelope envelope,
             ObservationSendPlan plan, ObservationTransportResponse response, DateTime nowUtc,
-            long attemptId)
+            long attemptId, int planQuarantined)
         {
             ObservationAckResolution resolution = null;
             ObservationAckApplyResult applied = null;
@@ -1325,6 +1393,7 @@ namespace ThreeSM.EnduranceConnector
             result.Binding = envelope.Binding;
             result.BodyBytes = envelope.BodyBytes;
             result.OfferedObservationRows = envelope.Batch.ObservationCount;
+            result.ObservationQuarantined = planQuarantined;
             result.Ack = resolution;
             result.LedgerApply = applied;
             result.LegacyAck = legacyOutcome;
@@ -1333,7 +1402,7 @@ namespace ThreeSM.EnduranceConnector
             if (applied != null)
             {
                 result.ObservationDelivered = applied.DeliveredCount;
-                result.ObservationQuarantined = applied.QuarantinedCount;
+                result.ObservationQuarantined = planQuarantined + applied.QuarantinedCount;
                 result.ObservationRetained = envelope.Batch.ObservationCount
                     - applied.DeliveredCount;
                 if (applied.Status == ObservationAckApplyStatus.Uncertain)
@@ -1464,7 +1533,8 @@ namespace ThreeSM.EnduranceConnector
                 return new TransportOutcome
                 {
                     Completion = TransportCompletion.Failed,
-                    Diagnostic = "transport_" + error.GetType().Name
+                    Diagnostic = "transport_" + error.GetType().Name,
+                    TaskObtained = false
                 };
             }
             if (task == null)
@@ -1473,7 +1543,8 @@ namespace ThreeSM.EnduranceConnector
                 return new TransportOutcome
                 {
                     Completion = TransportCompletion.Failed,
-                    Diagnostic = "transport_null"
+                    Diagnostic = "transport_null",
+                    TaskObtained = false
                 };
             }
 
@@ -1490,7 +1561,8 @@ namespace ThreeSM.EnduranceConnector
                 {
                     Completion = canceled ? TransportCompletion.Canceled
                         : TransportCompletion.TimedOut,
-                    Diagnostic = canceled ? "canceled" : "request_timeout"
+                    Diagnostic = canceled ? "canceled" : "request_timeout",
+                    TaskObtained = true
                 };
             }
 
@@ -1500,7 +1572,8 @@ namespace ThreeSM.EnduranceConnector
                 return new TransportOutcome
                 {
                     Completion = TransportCompletion.Completed,
-                    Response = response
+                    Response = response,
+                    TaskObtained = true
                 };
             }
             catch (OperationCanceledException)
@@ -1510,7 +1583,8 @@ namespace ThreeSM.EnduranceConnector
                     Completion = cancellationToken.IsCancellationRequested
                         ? TransportCompletion.Canceled : TransportCompletion.TimedOut,
                     Diagnostic = cancellationToken.IsCancellationRequested
-                        ? "canceled" : "request_timeout"
+                        ? "canceled" : "request_timeout",
+                    TaskObtained = true
                 };
             }
             catch (Exception error)
@@ -1518,7 +1592,8 @@ namespace ThreeSM.EnduranceConnector
                 return new TransportOutcome
                 {
                     Completion = TransportCompletion.Failed,
-                    Diagnostic = "transport_" + error.GetType().Name
+                    Diagnostic = "transport_" + error.GetType().Name,
+                    TaskObtained = true
                 };
             }
             finally
@@ -1619,14 +1694,69 @@ namespace ThreeSM.EnduranceConnector
                 TaskScheduler.Default);
         }
 
+        /// <summary>
+        /// Registers an operation before it may wait for the lease. Dispose uses the
+        /// count to defer semaphore disposal until every active send and every
+        /// handed-off late pairing callback has settled; no drain or blocking wait.
+        /// </summary>
+        private bool TryBeginOperation()
+        {
+            lock (_gate)
+            {
+                if (_disposed) return false;
+                _activeOperations++;
+                return true;
+            }
+        }
+
+        private bool IsDisposed
+        {
+            get
+            {
+                lock (_gate) return _disposed;
+            }
+        }
+
+        private void EndOperation()
+        {
+            var disposeLease = false;
+            lock (_gate)
+            {
+                if (_activeOperations > 0) _activeOperations--;
+                if (_disposed && _activeOperations == 0 && !_leaseDisposed)
+                {
+                    _leaseDisposed = true;
+                    disposeLease = true;
+                }
+            }
+            if (disposeLease) _lease.Dispose();
+        }
+
+        /// <summary>
+        /// Releases the one owned lease without letting a concurrent Dispose mask
+        /// the operation's genuine terminal result. The operation accounting above
+        /// makes this defensive catch unreachable in the normal protocol.
+        /// </summary>
+        private void ReleaseLease()
+        {
+            try { _lease.Release(); }
+            catch (ObjectDisposedException) { }
+        }
+
         public void Dispose()
         {
+            var disposeLease = false;
             lock (_gate)
             {
                 if (_disposed) return;
                 _disposed = true;
+                if (_activeOperations == 0 && !_leaseDisposed)
+                {
+                    _leaseDisposed = true;
+                    disposeLease = true;
+                }
             }
-            _lease.Dispose();
+            if (disposeLease) _lease.Dispose();
         }
     }
 }
