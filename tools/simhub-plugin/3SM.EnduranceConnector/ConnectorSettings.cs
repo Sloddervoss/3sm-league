@@ -30,6 +30,21 @@ namespace ThreeSM.EnduranceConnector
         // Clearing knownness must not turn NULL+known-invalid into pristine absence.
         [System.Runtime.Serialization.OptionalField]
         public bool ObservationPairingGenerationPoisoned = false;
+        // Prospective local proof that the retained raw value was a valid, non-poisoned counter
+        // before it was invalidated. Missing (historical) configs default false: a plain
+        // present-unknown value then stays indistinguishable from lost provenance and closed.
+        [System.Runtime.Serialization.OptionalField]
+        public bool ObservationPairingGenerationRecoverable = false;
+
+        private const long MaxObservationGeneration = 9007199254740991L;
+
+        // Representable, non-poisoned raw evidence. This never grants authority by itself.
+        private bool ObservationGenerationRawSafe()
+        {
+            var generation = ObservationPairingGeneration;
+            return !ObservationPairingGenerationPoisoned && generation.HasValue
+                && generation.Value >= 0 && generation.Value <= MaxObservationGeneration;
+        }
 
         public ObservationPairingBinding ObservationBinding()
         {
@@ -44,14 +59,33 @@ namespace ThreeSM.EnduranceConnector
         public long? NextObservationGeneration()
         {
             var binding = ObservationBinding();
-            return binding.PairingGenerationKnown && binding.PairingGeneration < 9007199254740991L
+            return binding.PairingGenerationKnown && binding.PairingGeneration < MaxObservationGeneration
                 ? (long?)(binding.PairingGeneration + 1) : null;
+        }
+
+        // Strict successor of retained trusted evidence. Only the real new-Pair commit seam
+        // consumes it; load/restart/control/ingest/decrypt/Unpair never allocate a generation.
+        // At the safe maximum no successor exists, so the state stays closed without wrap.
+        private long? RecoverableObservationGeneration()
+        {
+            if (!ObservationPairingGenerationRecoverable || ObservationPairingGenerationKnown
+                || !ObservationGenerationRawSafe()) return null;
+            var raw = ObservationPairingGeneration.Value;
+            return raw < MaxObservationGeneration ? (long?)(raw + 1) : null;
         }
 
         public void InvalidateObservationGeneration()
         {
-            if (ObservationPairingGenerationKnown && !ObservationPairingGeneration.HasValue)
+            var known = ObservationPairingGenerationKnown;
+            var safe = ObservationGenerationRawSafe();
+            if (known && !ObservationPairingGeneration.HasValue)
                 ObservationPairingGenerationPoisoned = true;
+            // A proven valid counter (or a genuinely attempted allocation retained after a
+            // failed save) becomes recoverable. Repeated invalidation keeps that proof only
+            // while the raw value itself stays safe and unpoisoned; unsafe or poisoned
+            // evidence clears it, because receiving a token never blesses numeric metadata.
+            ObservationPairingGenerationRecoverable = safe
+                && (known || ObservationPairingGenerationRecoverable);
             ObservationPairingGenerationKnown = false;
         }
 
@@ -73,14 +107,25 @@ namespace ThreeSM.EnduranceConnector
                 var next = NextObservationGeneration();
                 var fresh = !string.Equals(device, oldDevice, StringComparison.OrdinalIgnoreCase)
                     && (string.IsNullOrEmpty(priorToken) || !string.Equals(token, priorToken, StringComparison.Ordinal));
-                if (!next.HasValue && fresh && !ObservationPairingGeneration.HasValue
-                    && !ObservationPairingGenerationKnown && !ObservationPairingGenerationPoisoned)
-                    next = 1;
+                if (!next.HasValue && fresh)
+                {
+                    if (!ObservationPairingGeneration.HasValue && !ObservationPairingGenerationKnown
+                        && !ObservationPairingGenerationPoisoned)
+                        next = 1;
+                    // Recovery is the strict successor of retained trusted evidence: never a reset
+                    // to 1, never a restored generation/binding and never consumed by restart.
+                    else if (!ObservationPairingGenerationKnown)
+                        next = RecoverableObservationGeneration();
+                }
                 var protectedToken = protect(token);
+                var committed = next.HasValue;
                 // Preserve invalid/overflow/lost-provenance evidence on refusal.
-                if (next.HasValue) ObservationPairingGeneration = next;
+                if (committed) ObservationPairingGeneration = next;
                 InvalidateObservationGeneration();
-                ObservationPairingGenerationKnown = next.HasValue;
+                ObservationPairingGenerationKnown = committed;
+                // The value is proven again by this durable commit; the prospective proof is
+                // only re-established by a later invalidation of a valid counter.
+                if (committed) ObservationPairingGenerationRecoverable = false;
                 DeviceTokenProtected = protectedToken;
                 DeviceId = device;
                 BoundOwnerUserId = owner;
