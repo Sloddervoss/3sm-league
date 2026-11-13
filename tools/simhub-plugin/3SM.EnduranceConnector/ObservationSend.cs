@@ -726,7 +726,12 @@ namespace ThreeSM.EnduranceConnector
         private readonly IObservationSendTransport _transport;
         private readonly Func<string> _tokenProvider;
         private readonly Func<string> _capabilitiesJson;
-        private readonly ObservationSendOptions _options;
+        // Normalized limits are immutable for the coordinator's lifetime. Options
+        // returns a defensive snapshot; no caller can mutate the live bounds.
+        private readonly bool _enabled;
+        private readonly int _leaseWaitMilliseconds;
+        private readonly int _requestTimeoutMilliseconds;
+        private readonly int _pairTransitionTimeoutMilliseconds;
         private readonly MeasurementLimits _limits;
         private readonly object _gate = new object();
 
@@ -748,11 +753,31 @@ namespace ThreeSM.EnduranceConnector
             _transport = transport;
             _tokenProvider = tokenProvider;
             _capabilitiesJson = capabilitiesJson;
-            _options = (options ?? new ObservationSendOptions()).Normalized();
+            var normalized = (options ?? new ObservationSendOptions()).Normalized();
+            _enabled = normalized.Enabled;
+            _leaseWaitMilliseconds = normalized.LeaseWaitMilliseconds;
+            _requestTimeoutMilliseconds = normalized.RequestTimeoutMilliseconds;
+            _pairTransitionTimeoutMilliseconds = normalized.PairTransitionTimeoutMilliseconds;
             _limits = ObservationSendPlanner.ClampLimits(limits);
         }
 
-        public ObservationSendOptions Options { get { return _options; } }
+        /// <summary>
+        /// A defensive snapshot of the normalized configuration. Mutating it can never
+        /// change the live lease or request bounds.
+        /// </summary>
+        public ObservationSendOptions Options
+        {
+            get
+            {
+                return new ObservationSendOptions
+                {
+                    Enabled = _enabled,
+                    LeaseWaitMilliseconds = _leaseWaitMilliseconds,
+                    RequestTimeoutMilliseconds = _requestTimeoutMilliseconds,
+                    PairTransitionTimeoutMilliseconds = _pairTransitionTimeoutMilliseconds
+                };
+            }
+        }
         public bool LeaseHeld { get { return _lease.CurrentCount == 0; } }
         public int PendingLeaseWaiters { get { return Volatile.Read(ref _pendingLeaseWaiters); } }
         public ObservationPairingBinding CurrentBinding
@@ -791,7 +816,7 @@ namespace ThreeSM.EnduranceConnector
             Interlocked.Increment(ref _pendingLeaseWaiters);
             try
             {
-                acquired = await _lease.WaitAsync(_options.LeaseWaitMilliseconds,
+                acquired = await _lease.WaitAsync(_leaseWaitMilliseconds,
                     cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -814,8 +839,8 @@ namespace ThreeSM.EnduranceConnector
                     ObservationPairTransitionStatus.LeaseTimeout, false, null, "lease_timeout");
 
             var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            linked.CancelAfter(_options.PairTransitionTimeoutMilliseconds);
-            var abandoned = false;
+            linked.CancelAfter(_pairTransitionTimeoutMilliseconds);
+            var ownershipHandedOff = false;
             try
             {
                 Task<ObservationPairCommit> task;
@@ -844,9 +869,23 @@ namespace ThreeSM.EnduranceConnector
                 var winner = await Task.WhenAny(task, delay).ConfigureAwait(false);
                 if (winner != task)
                 {
-                    abandoned = true;
-                    ObserveFault(task);
+                    // The caller's wait is bounded, but the lease is not: the callback
+                    // may still be committing a real local pairing/server change. Hand
+                    // ownership to its terminal continuation, which publishes a late
+                    // committed binding under this same lease and releases it once.
+                    // A callback that never settles keeps future OBS attempts bounded
+                    // on the lease (LeaseTimeout), never inside this transition.
                     linked.Cancel();
+                    ownershipHandedOff = true;
+                    try
+                    {
+                        CompleteTransitionAfterTimeout(task, linked);
+                    }
+                    catch (Exception)
+                    {
+                        ownershipHandedOff = false;
+                        throw;
+                    }
                     var canceled = cancellationToken.IsCancellationRequested;
                     return new ObservationPairTransitionResult(
                         canceled ? ObservationPairTransitionStatus.Canceled
@@ -891,11 +930,52 @@ namespace ThreeSM.EnduranceConnector
             }
             finally
             {
-                // An abandoned callback may still observe its token; leaking the CTS is
-                // bounded and safer than disposing it under a running callback.
-                if (!abandoned) linked.Dispose();
-                _lease.Release();
+                if (!ownershipHandedOff)
+                {
+                    linked.Dispose();
+                    _lease.Release();
+                }
             }
+        }
+
+        /// <summary>
+        /// Terminal owner for a pairing callback that outlived the caller's bounded
+        /// wait. It publishes a committed binding while the lease is still held and
+        /// releases the lease exactly once, after the callback has settled.
+        /// </summary>
+        private void CompleteTransitionAfterTimeout(Task<ObservationPairCommit> task,
+            CancellationTokenSource linked)
+        {
+            task.ContinueWith(delegate(Task<ObservationPairCommit> completed)
+            {
+                try
+                {
+                    if (completed.Status == TaskStatus.RanToCompletion)
+                    {
+                        var result = completed.Result;
+                        if (result != null && result.Committed && result.Binding != null)
+                            _ledger.BindingFence.Rebind(result.Binding);
+                    }
+                    else if (completed.IsFaulted)
+                    {
+                        // Observe the terminal fault; the caller already got a bounded
+                        // non-confirmed result and no exception escapes this continuation.
+                        var ignored = completed.Exception;
+                    }
+                }
+                catch (Exception)
+                {
+                    // A terminal callback outcome may never fault the completion owner.
+                }
+                finally
+                {
+                    try { linked.Dispose(); }
+                    catch (ObjectDisposedException) { }
+                    try { _lease.Release(); }
+                    catch (ObjectDisposedException) { }
+                }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
 
         /// <summary>
@@ -906,7 +986,7 @@ namespace ThreeSM.EnduranceConnector
             Uri endpoint, DateTime nowUtc, CancellationToken cancellationToken)
         {
             if (_disposed) throw new ObjectDisposedException("ObservationSendCoordinator");
-            if (!_options.Enabled)
+            if (!_enabled)
                 return new ObservationSendAttemptResult(ObservationSendStatus.Disabled, 0,
                     "observation_send_disabled");
             if (string.IsNullOrEmpty(coreBodyJson) || endpoint == null)
@@ -934,7 +1014,7 @@ namespace ThreeSM.EnduranceConnector
             Interlocked.Increment(ref _pendingLeaseWaiters);
             try
             {
-                acquired = await _lease.WaitAsync(_options.LeaseWaitMilliseconds,
+                acquired = await _lease.WaitAsync(_leaseWaitMilliseconds,
                     cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -1368,7 +1448,7 @@ namespace ThreeSM.EnduranceConnector
             CancellationToken cancellationToken)
         {
             var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            linked.CancelAfter(_options.RequestTimeoutMilliseconds);
+            linked.CancelAfter(_requestTimeoutMilliseconds);
 
             Task<ObservationTransportResponse> task;
             try
@@ -1403,7 +1483,9 @@ namespace ThreeSM.EnduranceConnector
             {
                 var canceled = cancellationToken.IsCancellationRequested;
                 linked.Cancel();
-                ObserveFault(task);
+                // The transport task may still observe its token; dispose the source
+                // only when that task has reached a terminal state.
+                DisposeAfterSettlement(task, linked);
                 return new TransportOutcome
                 {
                     Completion = canceled ? TransportCompletion.Canceled
@@ -1520,14 +1602,20 @@ namespace ThreeSM.EnduranceConnector
             }
         }
 
-        private static void ObserveFault(Task task)
+        private static void DisposeAfterSettlement(Task task, CancellationTokenSource linked)
         {
-            if (task == null) return;
-            task.ContinueWith(delegate(Task failed)
+            if (task == null)
             {
-                var ignored = failed.Exception;
-            }, CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                linked.Dispose();
+                return;
+            }
+            task.ContinueWith(delegate(Task completed)
+            {
+                // Observe a terminal fault and release the owned source only now.
+                var ignored = completed.Exception;
+                try { linked.Dispose(); }
+                catch (ObjectDisposedException) { }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
         }
 

@@ -371,6 +371,24 @@ internal static class MeasurementObservationSendTests
         }
     }
 
+    private static ObservationLedgerEntry WithBinding(ObservationLedgerEntry entry,
+        ObservationPairingBinding binding)
+    {
+        return new ObservationLedgerEntry(entry.Uid, entry.RecordRevision, entry.State,
+            entry.RowJson, entry.Reason, binding.CaptureDeviceId, binding.CaptureOwnerUserId,
+            binding.PairingGeneration, binding.PairingGenerationKnown,
+            entry.EnqueuedAtUtc, entry.Attempts, entry.NextAttemptUtc);
+    }
+
+    private static ObservationOfferedRow Offered(ObservationLedgerEntry entry)
+    {
+        string diagnostic;
+        var row = ObservationOfferedRow.TryCreate(entry.Uid, entry.RecordRevision,
+            entry.RowJson, ObservationAckLane.Observation, entry.Binding, out diagnostic);
+        if (row == null) throw new InvalidOperationException("offered: " + diagnostic);
+        return row;
+    }
+
     // -------------------------------------------------------------------- tests
     public static int Run(Action<string, bool, string> check)
     {
@@ -1481,6 +1499,372 @@ internal static class MeasurementObservationSendTests
                 "status=" + result.Status + " offered="
                 + (result.Offered == null ? -1 : result.Offered.Count)
                 + " events=" + outbox.EventCount);
+        }
+
+        // OS31 — B1: a live pairing callback that outlives the bounded pair wait
+        // keeps the one-owner lease until it reaches a terminal state. No OBS POST
+        // or new pair callback can start while that commit gate is closed; a late
+        // committed generation is published before the lease becomes usable.
+        {
+            var dir = NewDirectory();
+            var fence = new ObservationBindingFence(Binding());
+            var store = Store(dir, fence);
+            var outbox = Outbox(dir);
+            var obs = Row(Uid(300));
+            var frozen = Capture(store, obs);
+            var obs8 = Row(Uid(302));
+            var bypassDirectory = NewDirectory();
+            var bypassOutbox = Outbox(bypassDirectory);
+            string bypassReason;
+            if (!bypassOutbox.EnqueueLap(Row(Uid(301), false), out bypassReason))
+                throw new InvalidOperationException(bypassReason);
+
+            var handler = new CapturingHandler();
+            handler.Respond = delegate(int position, CapturedRequest request, CancellationToken ct)
+            {
+                return Task.FromResult(Accepted(request.Body.IndexOf(obs8.SummaryUid,
+                    StringComparison.Ordinal) >= 0 ? obs8.SummaryUid : obs.SummaryUid, 1));
+            };
+            var options = Enabled(10000);
+            options.LeaseWaitMilliseconds = 200;
+            options.PairTransitionTimeoutMilliseconds = 120;
+            var coordinator = Coordinator(store, outbox, handler, null, options);
+
+            var callbackEntered = new ManualResetEventSlim(false);
+            var callbackGate = Gate();
+            var callbackCommitDone = false;
+            var pairTask = coordinator.PairAsync(async delegate
+            {
+                callbackEntered.Set();
+                await callbackGate.Task.ConfigureAwait(false);
+                callbackCommitDone = true;
+                return ObservationPairCommit.CommittedWith(Binding(8));
+            }, CancellationToken.None);
+            if (!WaitUntil(() => callbackEntered.IsSet, 3000))
+                throw new InvalidOperationException("pair callback not entered");
+
+            var pair = pairTask.GetAwaiter().GetResult();
+            var leaseHeldAfterTimeout = coordinator.LeaseHeld;
+            var sendWhile = Send(coordinator);
+            var noRequestWhileGateClosed = handler.RequestCount == 0;
+            var entryWhile = store.Find(obs.SummaryUid, 1);
+            var ledgerBeforeSettlement = LedgerText(store);
+            var freshPairInvoked = false;
+            var freshPair = coordinator.PairAsync(delegate
+            {
+                freshPairInvoked = true;
+                return Task.FromResult(ObservationPairCommit.CommittedWith(Binding(9)));
+            }, CancellationToken.None).GetAwaiter().GetResult();
+            MeasurementBatchPlan bypassPlan;
+            var bypassBody = ObservationLegacyBypass.BuildBody(Core, bypassOutbox,
+                T0.AddMinutes(3), Caps, Encoding.UTF8.GetByteCount(Core), null, out bypassPlan);
+            var bypassOk = bypassBody != null && bypassPlan.HasMeasurements
+                && bypassPlan.Batch.Laps.Count == 1;
+            var ledgerAfterGateClosed = LedgerText(store);
+
+            callbackGate.TrySetResult(true);
+            var settled = WaitUntil(() => !coordinator.LeaseHeld, 3000);
+            var publishedGeneration = coordinator.CurrentBinding.PairingGeneration;
+
+            var afterSettlement = Send(coordinator, now: T0.AddMinutes(4));
+            var oldRowAfter = store.Find(obs.SummaryUid, 1);
+            var noStalePost = handler.RequestCount == 0;
+            ObservationSendAttemptResult gen8Send = null;
+            if (publishedGeneration == 8)
+            {
+                Capture(store, obs8, Binding(8));
+                gen8Send = Send(coordinator, now: T0.AddMinutes(5));
+            }
+
+            Check("OS31 late pairingcommit houdt de lease, publiceert gen8 vóór een nieuwe send en post nooit onder gen7",
+                pair.Status == ObservationPairTransitionStatus.TimedOut
+                && pair.CallbackInvoked && !pair.Committed
+                && leaseHeldAfterTimeout
+                && sendWhile.Status == ObservationSendStatus.LeaseTimeout
+                && !sendWhile.Posted && noRequestWhileGateClosed
+                && entryWhile != null && entryWhile.RowJson == frozen
+                && entryWhile.State != ObservationLedgerState.Quarantine
+                && ledgerAfterGateClosed == ledgerBeforeSettlement
+                && freshPair.Status == ObservationPairTransitionStatus.LeaseTimeout
+                && !freshPair.CallbackInvoked && !freshPairInvoked
+                && bypassOk && callbackCommitDone
+                && settled && publishedGeneration == 8
+                && afterSettlement.Status == ObservationSendStatus.BindingChanged
+                && afterSettlement.ObservationQuarantined == 1
+                && oldRowAfter != null
+                && oldRowAfter.State == ObservationLedgerState.Quarantine
+                && noStalePost
+                && gen8Send != null
+                && gen8Send.Status == ObservationSendStatus.Delivered
+                && handler.RequestCount == 1
+                && store.DeliveredTotal == 1,
+                "pair=" + pair.Status + " held=" + leaseHeldAfterTimeout
+                + " send=" + sendWhile.Status + " req=" + handler.RequestCount
+                + " noReqClosed=" + noRequestWhileGateClosed
+                + " entryJson=" + (entryWhile != null && entryWhile.RowJson == frozen)
+                + " entryState=" + (entryWhile == null ? "null" : entryWhile.State.ToString())
+                + " ledgerSame=" + (ledgerAfterGateClosed == ledgerBeforeSettlement)
+                + " freshPair=" + freshPair.Status + " invoked=" + freshPairInvoked
+                + " bypass=" + bypassOk + " commitDone=" + callbackCommitDone
+                + " settled=" + settled + " gen=" + publishedGeneration
+                + " after=" + afterSettlement.Status + " quarantined="
+                + afterSettlement.ObservationQuarantined + " oldQuar="
+                + (oldRowAfter == null ? "null" : oldRowAfter.State.ToString())
+                + " noStalePost=" + noStalePost + " gen8Send="
+                + (gen8Send == null ? "null" : gen8Send.Status.ToString())
+                + " total=" + store.DeliveredTotal);
+        }
+
+        // OS32 — B2: normalized options are an immutable snapshot. Mutating the
+        // constructor input or a returned copy can never change request/pair/lease
+        // bounds or switch a default-off coordinator on.
+        {
+            // Configured 100 ms request timeout against a 400 ms handler still times out.
+            var dir = NewDirectory();
+            var store = Store(dir);
+            var outbox = Outbox(dir);
+            var obs = Row(Uid(310));
+            Capture(store, obs);
+            var handler = new CapturingHandler();
+            handler.Respond = async delegate
+            {
+                await Task.Delay(400).ConfigureAwait(false);
+                return Accepted(obs.SummaryUid, 1);
+            };
+            var options = Enabled(100);
+            var coordinator = Coordinator(store, outbox, handler, null, options);
+            var control = Send(coordinator);
+            var controlTimedOut = control.Status == ObservationSendStatus.TimedOut;
+
+            // Constructor input mutation after construction is inert.
+            options.RequestTimeoutMilliseconds = -1;
+            options.LeaseWaitMilliseconds = int.MaxValue;
+            options.PairTransitionTimeoutMilliseconds = -1;
+            options.Enabled = true;
+            var constructorMutation = Send(coordinator, now: T0.AddMinutes(5));
+
+            // Returned snapshot mutation is inert too: -1 / int.MaxValue may not
+            // become an infinite request or lease wait.
+            var exposed = coordinator.Options;
+            exposed.RequestTimeoutMilliseconds = -1;
+            exposed.LeaseWaitMilliseconds = int.MaxValue;
+            exposed.PairTransitionTimeoutMilliseconds = -1;
+            var exposedMutation = Send(coordinator, now: T0.AddMinutes(6));
+            var entryAfter = store.Find(obs.SummaryUid, 1);
+
+            // Returned lease-wait mutation cannot make a held lease wait unbounded.
+            var leaseDir = NewDirectory();
+            var leaseStore = Store(leaseDir);
+            var leaseOutbox = Outbox(leaseDir);
+            var leaseObs = Row(Uid(311));
+            Capture(leaseStore, leaseObs);
+            var leaseHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(leaseObs.SummaryUid, 1)); }
+            };
+            var leaseOptions = Enabled(10000);
+            leaseOptions.LeaseWaitMilliseconds = 80;
+            var leaseCoordinator = Coordinator(leaseStore, leaseOutbox, leaseHandler, null,
+                leaseOptions);
+            var leaseEntered = new ManualResetEventSlim(false);
+            var leaseGate = Gate();
+            var leasePairTask = leaseCoordinator.PairAsync(async delegate
+            {
+                leaseEntered.Set();
+                await leaseGate.Task.ConfigureAwait(false);
+                return ObservationPairCommit.CommittedWith(Binding(8));
+            }, CancellationToken.None);
+            if (!WaitUntil(() => leaseEntered.IsSet, 3000))
+                throw new InvalidOperationException("lease callback not entered");
+            leaseCoordinator.Options.LeaseWaitMilliseconds = int.MaxValue;
+            var leaseSendTask = leaseCoordinator.SendOnceAsync(Core, Endpoint,
+                T0.AddMinutes(3), CancellationToken.None);
+            var leaseBounded = leaseSendTask.Wait(1500);
+            var leaseSend = leaseBounded ? leaseSendTask.GetAwaiter().GetResult() : null;
+            leaseGate.TrySetResult(true);
+            var leasePair = leasePairTask.GetAwaiter().GetResult();
+            if (!leaseBounded) leaseSendTask.GetAwaiter().GetResult();
+
+            // Returned pair-timeout mutation cannot make the caller's pair wait unbounded.
+            var pairDir = NewDirectory();
+            var pairStore = Store(pairDir);
+            var pairOutbox = Outbox(pairDir);
+            var pairHandler = new CapturingHandler();
+            var pairOptions = Enabled(10000);
+            pairOptions.PairTransitionTimeoutMilliseconds = 150;
+            var pairCoordinator = Coordinator(pairStore, pairOutbox, pairHandler, null,
+                pairOptions);
+            pairCoordinator.Options.PairTransitionTimeoutMilliseconds = -1;
+            var pairEntered = new ManualResetEventSlim(false);
+            var pairGate = Gate();
+            var pairTask = pairCoordinator.PairAsync(async delegate
+            {
+                pairEntered.Set();
+                await pairGate.Task.ConfigureAwait(false);
+                return ObservationPairCommit.CommittedWith(Binding(8));
+            }, CancellationToken.None);
+            if (!WaitUntil(() => pairEntered.IsSet, 3000))
+                throw new InvalidOperationException("pair callback not entered");
+            var pairBounded = pairTask.Wait(1500);
+            var pairResult = pairBounded ? pairTask.GetAwaiter().GetResult() : null;
+            pairGate.TrySetResult(true);
+            if (!pairBounded) pairTask.GetAwaiter().GetResult();
+            WaitUntil(() => !pairCoordinator.LeaseHeld, 3000);
+
+            // Default-off stays off and reads no token after both copies are mutated.
+            var offDir = NewDirectory();
+            var offStore = Store(offDir);
+            var offOutbox = Outbox(offDir);
+            var offObs = Row(Uid(312));
+            Capture(offStore, offObs);
+            var offHandler = new CapturingHandler
+            {
+                Respond = delegate { return Task.FromResult(Accepted(offObs.SummaryUid, 1)); }
+            };
+            var offOptions = Enabled();
+            offOptions.Enabled = false;
+            var tokenCalls = 0;
+            var offCoordinator = Coordinator(offStore, offOutbox, offHandler,
+                delegate { tokenCalls++; return Sentinel; }, offOptions);
+            offOptions.Enabled = true;
+            offCoordinator.Options.Enabled = true;
+            var offText = LedgerText(offStore);
+            var offSend = Send(offCoordinator);
+
+            Check("OS32 options zijn een onveranderlijke snapshot; -1/intMax/Enabled-mutatie verandert timeouts, lease en default-off niet",
+                controlTimedOut
+                && constructorMutation.Status == ObservationSendStatus.TimedOut
+                && exposedMutation.Status == ObservationSendStatus.TimedOut
+                && !exposedMutation.ObservationStored
+                && entryAfter != null && store.DeliveredTotal == 0
+                && leaseBounded && leaseSend != null
+                && leaseSend.Status == ObservationSendStatus.LeaseTimeout
+                && !leaseSend.Posted && leaseHandler.RequestCount == 0
+                && leasePair.Committed
+                && pairBounded && pairResult != null
+                && pairResult.Status == ObservationPairTransitionStatus.TimedOut
+                && !pairResult.Committed
+                && offSend.Status == ObservationSendStatus.Disabled
+                && !offSend.Posted && offHandler.RequestCount == 0 && tokenCalls == 0
+                && LedgerText(offStore) == offText,
+                "control=" + control.Status + "/" + controlTimedOut
+                + " ctor=" + constructorMutation.Status
+                + " exposed=" + exposedMutation.Status + " stored="
+                + exposedMutation.ObservationStored + " total=" + store.DeliveredTotal
+                + " leaseBounded=" + leaseBounded + " leaseSend="
+                + (leaseSend == null ? "null" : leaseSend.Status.ToString())
+                + " leaseReq=" + leaseHandler.RequestCount + " pairBounded=" + pairBounded
+                + " pair=" + (pairResult == null ? "null" : pairResult.Status.ToString())
+                + " off=" + offSend.Status + " offReq=" + offHandler.RequestCount
+                + " tokenCalls=" + tokenCalls);
+        }
+
+        // OS33 — B3: QuarantineMany applies the same exact PairingBinding identity
+        // guard as DeferMany. Different generation, owner, device or unknown binding
+        // with identical UID/revision/RowJson refuses the whole batch without a disk,
+        // row or counter mutation; an exact row binding (not the active binding) and
+        // a case-insensitive UUID match remain quarantinable.
+        {
+            var dirA = NewDirectory();
+            var storeA = Store(dirA, new ObservationBindingFence(Binding()));
+            var row = Row(Uid(320));
+            Capture(storeA, row);
+            var entryA = storeA.Find(row.SummaryUid, 1);
+
+            var dirB = NewDirectory();
+            var storeB = Store(dirB, new ObservationBindingFence(Binding(8)));
+            Capture(storeB, row, Binding(8));
+            var entryB = storeB.Find(row.SummaryUid, 1);
+            var rowSame = entryA != null && entryB != null
+                && entryA.Uid == entryB.Uid
+                && entryA.RecordRevision == entryB.RecordRevision
+                && string.Equals(entryA.RowJson, entryB.RowJson, StringComparison.Ordinal);
+            var bindingsSame = entryA != null && entryB != null
+                && ObservationBindingFence.SameBinding(entryA.Binding, entryB.Binding);
+
+            var deferControl = storeB.DeferMany(new[] { Offered(entryA) },
+                ObservationLedgerReasons.ObservationUnavailable, T0.AddMinutes(1));
+            var diskBefore = LedgerText(storeB);
+            var totalBefore = storeB.DeliveredTotal;
+            var quarantineControl = storeB.QuarantineMany(new[] { entryA },
+                ObservationLedgerReasons.CaptureBindingChanged);
+            var stateAfterGeneration = storeB.Find(row.SummaryUid, 1).State;
+            var diskAfterGeneration = LedgerText(storeB);
+
+            var ownerVariant = WithBinding(entryB, new ObservationPairingBinding(Device,
+                OtherDevice, 8, true));
+            var deviceVariant = WithBinding(entryB, new ObservationPairingBinding(OtherDevice,
+                Owner, 8, true));
+            var unknownVariant = WithBinding(entryB, new ObservationPairingBinding(Device,
+                Owner, 8, false));
+            var ownerResult = storeB.QuarantineMany(new[] { ownerVariant },
+                ObservationLedgerReasons.CaptureBindingChanged);
+            var deviceResult = storeB.QuarantineMany(new[] { deviceVariant },
+                ObservationLedgerReasons.CaptureBindingChanged);
+            var unknownResult = storeB.QuarantineMany(new[] { unknownVariant },
+                ObservationLedgerReasons.CaptureBindingChanged);
+            var unchangedAfterVariants = LedgerText(storeB) == diskAfterGeneration
+                && storeB.Find(row.SummaryUid, 1).State == ObservationLedgerState.Pending
+                && storeB.QuarantineTotal == 0;
+            var diskAfterNegatives = LedgerText(storeB);
+
+            // Case-insensitive UUIDs are the same binding, and the offered row's own
+            // binding is authoritative even when it differs from the active fence.
+            var caseBinding = new ObservationPairingBinding(Device.ToUpperInvariant(),
+                Owner.ToUpperInvariant(), 8, true);
+            var caseEntry = WithBinding(entryB, caseBinding);
+            var caseSame = ObservationBindingFence.SameBinding(caseEntry.Binding,
+                entryB.Binding);
+            var caseResult = storeB.QuarantineMany(new[] { caseEntry },
+                ObservationLedgerReasons.CaptureBindingChanged);
+            var reloaded = Store(dirB, new ObservationBindingFence(Binding(8)));
+            var caseState = reloaded.Find(row.SummaryUid, 1);
+
+            var dirC = NewDirectory();
+            var storeC = Store(dirC, new ObservationBindingFence(Binding()));
+            Capture(storeC, row, Binding(7));
+            storeC.BindingFence.Rebind(Binding(8));
+            var foreignEntry = storeC.Find(row.SummaryUid, 1);
+            var foreignBinding = foreignEntry.Binding.PairingGeneration == 7
+                && !ObservationBindingFence.SameBinding(foreignEntry.Binding,
+                    storeC.BindingFence.Current);
+            var foreignResult = storeC.QuarantineMany(new[] { foreignEntry },
+                ObservationLedgerReasons.CaptureBindingChanged);
+
+            Check("OS33 QuarantineMany weigert elke afwijkende PairingBinding atomisch en quarantineert alleen de exacte rijbinding",
+                rowSame && !bindingsSame
+                && deferControl.Status == ObservationLedgerTransitionStatus.RefusedInvalidReason
+                && deferControl.Diagnostic == "bulk_identity_conflict"
+                && !quarantineControl.Committed
+                && quarantineControl.Status == ObservationLedgerTransitionStatus.RefusedInvalidReason
+                && quarantineControl.Diagnostic == "bulk_identity_conflict"
+                && quarantineControl.ChangedCount == 0
+                && diskAfterNegatives == diskBefore
+                && storeB.DeliveredTotal == totalBefore
+                && stateAfterGeneration == ObservationLedgerState.Pending
+                && diskAfterGeneration == diskBefore
+                && !ownerResult.Committed && !deviceResult.Committed && !unknownResult.Committed
+                && ownerResult.Diagnostic == "bulk_identity_conflict"
+                && deviceResult.Diagnostic == "bulk_identity_conflict"
+                && unknownResult.Diagnostic == "bulk_identity_conflict"
+                && unchangedAfterVariants
+                && caseSame && caseResult.Committed && caseResult.ChangedCount == 1
+                && caseState != null && caseState.State == ObservationLedgerState.Quarantine
+                && reloaded.QuarantineTotal == 1
+                && foreignBinding && foreignResult.Committed
+                && foreignResult.ChangedCount == 1,
+                "rowSame=" + rowSame + " bindingsSame=" + bindingsSame
+                + " defer=" + deferControl.Status + "/" + deferControl.Diagnostic
+                + " quarantine=" + quarantineControl.Status + "/"
+                + quarantineControl.Diagnostic + " changed="
+                + quarantineControl.ChangedCount + " state=" + stateAfterGeneration
+                + " diskSame=" + (diskAfterNegatives == diskBefore)
+                + " owner=" + ownerResult.Status + " device=" + deviceResult.Status
+                + " unknown=" + unknownResult.Status
+                + " variantsSame=" + unchangedAfterVariants
+                + " case=" + caseResult.Status + "/" + caseResult.ChangedCount
+                + " caseState=" + (caseState == null ? "null" : caseState.State.ToString())
+                + " foreign=" + foreignResult.Status + "/" + foreignResult.ChangedCount);
         }
 
         return count;

@@ -680,7 +680,8 @@ namespace ThreeSM.EnduranceConnector
                     var entryIndex = IndexOf(wanted.Uid, wanted.RecordRevision);
                     if (entryIndex < 0) { notFound++; continue; }
                     var entry = _entries[entryIndex];
-                    if (!string.Equals(entry.RowJson, wanted.RowJson, StringComparison.Ordinal))
+                    if (!string.Equals(entry.RowJson, wanted.RowJson, StringComparison.Ordinal)
+                        || !ObservationBindingFence.SameBinding(entry.Binding, wanted.Binding))
                     {
                         return BulkResult(ObservationLedgerTransitionStatus.RefusedInvalidReason,
                             0, notFound, "bulk_identity_conflict");

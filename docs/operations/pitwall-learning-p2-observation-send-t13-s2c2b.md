@@ -1,7 +1,7 @@
 # T13-S2C2b — begrensde asynchrone observation-verzendketen
 
-Status: **LOKAAL GEÏMPLEMENTEERD EN GETEST; NIET GEACTIVEERD EN NIET AAN
-PRODUCTIECALLERS GEBONDEN.** Productiewijziging: **NEE**.
+Status: **LOKAAL GEREPAREERD EN GETEST; SPEC/Q-GATE OPEN, NIET GEACTIVEERD EN
+NIET AAN PRODUCTIECALLERS GEBONDEN.** Productiewijziging: **NEE**.
 
 Nieuwe bibliotheek `ObservationSend.cs`, twee minimale bulkhelpers in
 `ObservationLedgerStore` (`QuarantineMany`, `DeferMany`) en een geregistreerde
@@ -39,12 +39,23 @@ geweest.
 - Eén `SemaphoreSlim(1,1)` voor zowel één OBS-poging
   (plan → envelope → POST → ACK-commit) als een lokale
   pairingtransitie (callback → bindingpublicatie).
-- `WaitAsync` met begrensde wachttijd; `finally` geeft de lease vrij op elke
-  uitkomst. Geen `Monitor`, `Task.Wait`/`Result` of UI-lock over een await.
+- `WaitAsync` met begrensde wachttijd. De lease wordt in `finally` exact één
+  keer vrijgegeven, behalve wanneer een pairingcallback de begrensde
+  callerswachtijd overleeft: dan gaat het eigendom over naar een terminale
+  continuatie die pas na callback-settlement publiceert en vrijgeeft. Geen
+  `Monitor`, `Task.Wait`/`Result` of UI-lock over een await.
 - `PairAsync`/`UnpairAsync`/`TransitionAsync`: de lease wordt **vóór** de
   eerste callback-side-effect genomen en pas na een `Committed`-resultaat en
-  publicatie van de binding vrijgegeven. Een mislukte, geannuleerde of
-  verlopen callback publiceert geen nieuwe epoch.
+  publicatie van de binding vrijgegeven. Een mislukte of geannuleerde callback
+  publiceert geen nieuwe epoch. Een callback die de pair-timeout overleeft
+  houdt de lease; een laat committed resultaat wordt onder dezelfde lease
+  gepubliceerd vóór een volgende OBS-poging. Een niet-settelende callback laat
+  volgende pogingen begrensd op `LeaseTimeout`, nooit op een POST onder de
+  oude epoch.
+- `ObservationSendOptions` is een onveranderlijke genormaliseerde snapshot:
+  de coordinator leest alleen private readonly waarden en `Options` geeft een
+  defensieve kopie. `-1`/`int.MaxValue`/`Enabled`-mutatie kan de effectieve
+  lease-, request- of pair-grens niet veranderen.
 - `SendOnceAsync`: default-off (`ObservationSendOptions.Enabled=false`) doet
   geen POST en muteert niets. Een lease-timeout is `LeaseTimeout`/Deferred,
   geen quarantaine en geen send.
@@ -97,15 +108,18 @@ ongewired; er wordt dus geen productie-legacy-cleanup geclaimd.
 ### Bulkhelpers
 
 `ObservationLedgerStore.QuarantineMany` en `DeferMany` muteren meerdere exacte
-bestaande rijen in één snapshot. Ze vergelijken UID/revisie/`RowJson` (en bij
-deferren ook de binding) en weigeren de hele batch bij een identiteitsconflict.
-Quarantaine is terminaal; deferren gebruikt de bestaande bounded backoff en
-verandert UID/revisie/`RowJson` nooit. Reserveringen en de bestaande
-64/1 MiB-tellers blijven via de bestaande `EffectiveWorst`-boekhouding lopen.
+bestaande rijen in één snapshot. Beide vergelijken UID/revisie/`RowJson` én de
+volledige `PairingBinding` (device, owner, generatie, known) en weigeren de hele
+batch atomisch bij een identiteitsconflict. De actieve fence is niet
+autoritatief voor een bestaande rij: een oudere capture-binding met zijn eigen
+exacte rij blijft plan-time quarantineerbaar. Quarantaine is terminaal;
+deferren gebruikt de bestaande bounded backoff en verandert
+UID/revisie/`RowJson` nooit. Reserveringen en de bestaande 64/1 MiB-tellers
+blijven via de bestaande `EffectiveWorst`-boekhouding lopen.
 
 ## Bewijs
 
-Nieuwe selector: `--only-observation-send` (30 checks). Hij zit ook in
+Nieuwe selector: `--only-observation-send` (33 checks). Hij zit ook in
 `--only-measurement` en de volledige harness. Alle tests zijn synthetisch en
 in-process: echte `ObservationCapture`/ledger/planner, een echte
 `HttpRequestMessage` via een lokale `HttpMessageHandler`, echte ACK-resolutie
@@ -128,19 +142,26 @@ Belangrijkste dekking:
 - restart, before/after-switch IO en onafhankelijke rijen;
 - volle sidecar blokkeert legacy niet;
 - event-only frame met lege `lapSummaries`;
-- een afgekeurde OBS-rij draait een geaccepteerde legacy-buur niet terug.
+- een afgekeurde OBS-rij draait een geaccepteerde legacy-buur niet terug;
+- een late pairingcommit die de pair-timeout overleeft houdt de lease, publiceert
+  generatie 8 vóór een volgende send en levert nooit onder generatie 7;
+- `Options`-mutatie (`-1`, `int.MaxValue`, `Enabled`) verandert requesttimeout,
+  leasewacht, pairtimeout of default-off niet;
+- `QuarantineMany` weigert generatie-/owner-/device-/unknown-bindingconflicten
+  atomisch (rij, schijf en tellers ongewijzigd) en quarantineert alleen de
+  exacte eigen rij-binding, ook als die ouder is dan de actieve fence.
 
 Gebruikte uitkomsten (zie de artifactroot):
 
 | Meting | Uitkomst |
 |---|---|
-| `--only-observation-send` | 30 PASS / 0 FAIL |
+| `--only-observation-send` | 33 PASS / 0 FAIL |
 | `--only-observation-ack` | 87 PASS / 0 FAIL |
 | `--only-observation-ledger` | 57 PASS / 0 FAIL |
 | `--only-observation-pipeline` | 37 PASS / 0 FAIL |
 | `--only-observation` | 55 PASS / 0 FAIL |
-| `--only-measurement` | 565 PASS / 0 FAIL (535 oud + 30 nieuw) |
-| volledige harness inclusief 60 s-soak | 921 PASS / 0 FAIL (891 oud + 30 nieuw) |
+| `--only-measurement` | 568 PASS / 0 FAIL (535 oud + 33 nieuw) |
+| volledige harness inclusief 60 s-soak | 924 PASS / 0 FAIL (891 oud + 33 nieuw) |
 | fixture-export | 52 bestanden, diff met geaccepteerde baseline leeg |
 | Deno interop (`--deny-net`) | 50 PASS / 0 FAIL |
 | net48 C# 7.3 shared subset | compile 0 |
@@ -179,6 +200,30 @@ equivalent is, wordt als equivalent vastgelegd en niet als testgat geteld.
 | OQ8 | Q2 mutable non-UTC sample-hergebruik | **ongewijzigd gedelegeerd**; geen caller geïntroduceerd |
 | OQ9 | legacy-cleanup-eigendom in het mixed frame | **implemented binnen de meegegeven outbox**; productiecaller nog niet gewired |
 | OQ10 | volledige offer-index bij mixed ACK | **implemented** en getest |
+
+## Erratum na onafhankelijke SPEC-review (S2C2b)
+
+De review op `8b76526e` vond drie publieke contractfouten. Deze zijn in één
+begrensde revisie gerepareerd; de oude runtime is ongewijzigd en dezelfde
+eindtests zijn tegen zowel oud als nieuw gebouwd.
+
+| Blocker | Reparatie | Oud | Nieuw |
+|---|---|---|---|
+| B1 late pairingcallback | lease-eigendom gaan pas na callback-settlement over; laat committed resultaat publiceert onder dezelfde lease vóór een volgende send; niet-settelende callback laat volgende pogingen op `LeaseTimeout` | OS31 FAIL | OS31 PASS |
+| B2 muteerbare `Options` | private readonly genormaliseerde waarden plus defensieve `Options`-kopie | OS32 FAIL | OS32 PASS |
+| B3 `QuarantineMany` zonder binding | `SameBinding`-guard vóór elke bulkrijmutatie, hele batch atomisch geweigerd | OS33 FAIL | OS33 PASS |
+
+De ongewijzigde 30 oude sendchecks, 87 ACK-checks en 57 ledgerchecks blijven
+groen. De openbare reviewer-probe (retarget, asserties onveranderd) geeft op de
+oude runtime exact `FAIL=3` voor `PAIR_TIMEOUT_LIVE_CALLBACK`,
+`MUTABLE_OPTIONS_UNBOUND` en `QUARANTINE_BINDING_UNCHECKED`, en op de nieuwe
+runtime `FAIL=0`.
+
+Niet opgelost en apart gedelegeerd: de synchrone transportthrow rapporteert nog
+`Posted=true` bij nul handlerrequests (non-blocking QUALITY-observatie), en het
+Q2 mutable/non-UTC sample-hergebruik blijft DEFERRED zonder nieuwe caller.
+De feature blijft default-off; echte Pair/Unpair-GUI, settings, DPAPI,
+plugin-sender en productieactivatie zijn niet gewired.
 
 ## Niet-claims
 
