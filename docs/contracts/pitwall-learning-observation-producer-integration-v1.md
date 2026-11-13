@@ -441,14 +441,33 @@ Dit is geen servercontract en gaat niet over de draad.
 - **Bereik en bewijsbehoud:** bewezen tellers liggen in 0..9007199254740991;
   alleen een strikt hogere representeerbare opvolger is toegestaan. Een nieuwe
   afwezige teller start op 1, nooit verzonnen bekende 0. Negatief, boven bereik,
-  maximum, NULL+known=true of present+known=false wordt niet gereset/geadopteerd,
-  ook niet door herhaalde Pair. De ruwe waarde blijft behouden bij weigering of
-  failure. Eén additief OptionalField `ObservationPairingGenerationPoisoned`
-  bewaart NULL+known-invalid nadat knownness wordt gewist; anders zou die corrupte
-  toestand niet meer van werkelijke afwezigheid te onderscheiden zijn. Deze
-  marker geeft geen autoriteit en heeft geen automatische reset. Een later
-  werkelijk nieuwe identiteit is uitsluitend prospectief, nooit backfill van
-  eerdere rondes, rijen of mislukte bindings.
+  maximum, NULL+known=true of present+known=false **zonder** gemarkeerde
+  provenance wordt niet gereset/geadopteerd, ook niet door herhaalde Pair. De ruwe
+  waarde blijft behouden bij weigering of failure. Eén additief OptionalField
+  `ObservationPairingGenerationPoisoned` bewaart NULL+known-invalid nadat
+  knownness wordt gewist; anders zou die corrupte toestand niet meer van
+  werkelijke afwezigheid te onderscheiden zijn. Deze marker geeft geen autoriteit
+  en heeft geen automatische reset. Een later werkelijk nieuwe identiteit is
+  uitsluitend prospectief, nooit backfill van eerdere rondes, rijen of mislukte
+  bindings.
+- **Herstel na een mislukte Pair:** een gewone mislukte Pair wist autorisatie en
+  knownness maar bewaart de ruwe teller. Invalidatie van een bewezen geldige,
+  niet-gepoisonede teller (of van een werkelijk geprobeerde allocatie die na een
+  mislukte save bewaard blijft) zet één additief OptionalField
+  `ObservationPairingGenerationRecoverable`. Die prospectieve lokale markering
+  overleeft herhaalde invalidatie en restart **uitsluitend** zolang de ruwe waarde
+  veilig en niet-gepoisoned blijft; een ontbrekende historische markering blijft
+  false, zodat een gewone `present+known=false` zonder markering gesloten blijft.
+  Alleen dezelfde nieuwe-Pair-commitseam — na de bestaande responsevalidatie,
+  freshness (nieuw device én raw token waar vorige waarden beschikbaar zijn), de
+  bestaande settingsgate en hostlease — mag de **strikt hogere opvolger** van de
+  gemarkeerde high-watermark verbruiken en samen met device/owner/token duurzaam
+  opslaan vóór publicatie. Geen reset naar 1, geen herstel van de oude
+  generatie/binding en geen generatie uit load/restart/control/ingest/decrypt/
+  Unpair. Op 9007199254740991 bestaat geen opvolger: gesloten zonder
+  wrap/clamp/erase. De markering is prospectief lokaal bewijs, geen
+  serverautoriteit of enrollment, en machtigt op zichzelf geen capture: een
+  lokale fence vervangt de aparte identity-scoped policy-/receiverstatus niet.
 
 ### 4.3 Isolatie bij token-/device-/accountwissel
 
@@ -1431,7 +1450,7 @@ noemt de tests die een latere build moet draaien; ze zijn hier niet uitgevoerd.
 | C1 `pitRoad` | §2.3, §3.3, §7 G05 | Alleen geaccepteerde `OnPitRoad==true`; `_pitLap`/`NotePitVisit`-fuel nooit observationbron | OB25, PL14 |
 | C2 fail-closed codes | §5.5, §7 G13, §6.C | Tijdelijke codes → Deferred auto-retry; permanente/onbekende → Quarantine; actuele `observation_invalid_*`/`observation_absent` permanent; vaste lokale reason-code; prefixnormalisatie; geen legacy-drop | OQ08–OQ11, OQ21, SI07, SI09 |
 | C3 quantisatie | §3.2, §7 G04, §8.1 | Alle stats/edges uit dezelfde `.fff`-instant; same-ms `samples>1` ⇒ geen observation; geen EPS/clamp | OB20, OB27, OB28, SI08 |
-| Minor initial epoch | §4.2, §7 G23 | Bestaande install `known=false`; re-pair=1; persistfout/overflow dicht; legacy ongewijzigd | PL20, PL21 |
+| Minor initial epoch | §4.2, §7 G23 | Bestaande install `known=false`; re-pair=1; mislukte Pair → strikte opvolger van gemarkeerde high-watermark; persistfout/overflow/max dicht; legacy ongewijzigd | PL20, PL21, PAIR-recover-* |
 | Minor naam/refuel | §3.4, §3.5, §7 G06/G07 | Trim/ordinal; alle namen bekend; car/context-wissel breekt refuel | OB26, OB29, PL15 |
 | Evidence-kwaliteit | §9.4, §9.5 | P05/P09 alleen publieke probes; P14–P20 exact; geen net48/SDK/projectgroen | n.v.t. (docs) |
 

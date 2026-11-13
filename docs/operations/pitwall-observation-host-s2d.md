@@ -80,6 +80,28 @@ De historische PASS-records hierboven blijven ongewijzigd. De gewijzigde daadwer
 Pair-adapter vereist na onafhankelijke SPEC→QUALITY een NIEUWE volledige Windows/
 vendor-SDK-compile; de eerdere compile dekt deze bronwijziging niet.
 
+**Kandidaat: herstel na een mislukte Pair (NIET geïntegreerd, geen Windows-bewijs).**
+Een gewone mislukte Pair (`ForgetUnprovenAuthorization`) wist autorisatie en knownness
+en bewaart de ruwe teller; zonder herstel kon een latere geldige Pair die nooit meer
+initialiseren. Invalidatie van een bewezen geldige, niet-gepoisonede teller zet nu één
+extra additief OptionalField `ObservationPairingGenerationRecoverable` (ook voor een
+werkelijk geprobeerde allocatie die na een mislukte save bewaard blijft). Die markering
+overleeft herhaalde invalidatie/restart uitsluitend zolang de ruwe waarde veilig en
+niet-gepoisoned blijft; ontbrekende historische markering blijft false, dus een gewone
+`present+known=false` zonder markering blijft dicht. Alleen dezelfde nieuwe-Pair-
+commitseam, na bestaande responsevalidatie én freshness (nieuw device én raw token waar
+vorige waarden beschikbaar zijn), verbruikt de **strikt hogere opvolger** en slaat die
+samen met device/owner/token duurzaam op vóór publicatie. Geen reset naar 1, geen
+generatie uit load/restart/control/ingest/decrypt/Unpair; op 9007199254740991 blijft
+het dicht zonder wrap/clamp/erase. De oude hostautorisatie blijft ongeldig en een lokale
+fence machtigt geen inzameling zonder de aparte identity-scoped policy-/receiverstatus.
+Bewijs: `--only-observation-host` 204 asserties (inclusief PAIR-recover-*), volledig
+harnas 1142 PASS, oud-productiesnapshot 27 RED op exact de nieuwe verwachtingen, zeven
+semantische mutanten (onmarkeerd vertrouwen, reset naar 1, markering als autoriteit bij
+load, freshness negeren, poison gezegend, max-wrap, markering verliezen bij herhaling)
+elk RED. Dit is een kandidaat die nog onafhankelijke SPEC → QUALITY en een nieuwe
+Windows-compile vereist; geen integratie-, activatie- of releaseclaim.
+
 De productie-readinessprovider retourneert expliciet false: er bestaat nog geen bewezen
 receiverhandshake voor deze feature. Tests injecteren readiness op dezelfde hostseam.
 Opt-in én readiness én complete bekende binding zijn vereist vóór storage/capture/SEND.

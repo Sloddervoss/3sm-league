@@ -294,8 +294,30 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   waarde blijft staan; een latere geslaagde Pair kan die dan niet meer
   initiëren. Dat is fail-closed en raakt bestaande telemetrie/updates niet,
   maar zou de leerroutine permanent stilzetten. Besluit en herstelroute staan
-  in `pitwall-learning-p2-observation-generation-recovery/DECISION.md` en
-  moeten vóór activering zijn opgelost.
+  in `pitwall-learning-p2-observation-generation-recovery/DECISION.md`.
+  Een bounded kandidaat-herstel staat hieronder; hij is nog niet
+  geïntegreerd, niet onafhankelijk geherkeurd en niet Windows-gecompileerd.
+- **Kandidaat-herstel na mislukte Pair (alleen test-/bronbewijs; NIET
+  geïntegreerd):** commits `ba153f76` (tests, RED op oude productie) en
+  `62911676` (bron). Eén additief OptionalField
+  `ObservationPairingGenerationRecoverable` wordt alleen gezet bij invalidatie
+  van een bewezen geldige, niet-gepoisonede teller (of een werkelijk
+  geprobeerde allocatie die na een mislukte save bewaard blijft) en overleeft
+  herhaalde invalidatie/restart uitsluitend zolang de ruwe waarde veilig blijft.
+  Alleen dezelfde nieuwe-Pair-commitseam, na responsevalidatie en freshness,
+  verbruikt de strikt hogere opvolger en slaat die samen met device/owner/token
+  op vóór publicatie. Geen reset naar 1, geen generatie uit load/restart/
+  control/ingest/decrypt/Unpair; max/poison/NULL-known/negatief/buiten bereik/
+  ongemarkeerde historie blijven dicht. Oude autorisatie blijft ongeldig en een
+  lokale fence machtigt geen inzameling zonder de aparte policy-/receiverstatus.
+  Bewijs op deze worktree: offline Release-build exit 0, **204 host**,
+  **1142 volledige C#-harnasasserties inclusief soak**, wiring en 50
+  C#→Deno-interop; oud-productiesnapshot `d096db96` met dezelfde tests:
+  build exit 0 en **27 RED**, exact de nieuwe verwachtingen (geen andere
+  regressie); zeven semantische mutanten elk RED met geldige controles.
+  Vereist nog onafhankelijke SPEC → QUALITY en een **nieuwe** echte
+  Windows-compile van deze gewijzigde Pair-bron; de eerdere compile
+  `2f70eb72` dekt die niet. Geen activatie-, installatie- of releaseclaim.
 - **Harde updaterpoort:** de ondersteunde geïnstalleerde oude release moet via de
   bestaande automatische keten naar de toekomstige nieuwe bevroren release kunnen.
   Geen nieuwe verplichte bootstrap of handmatige DLL-wissel als vervangend bewijs.
