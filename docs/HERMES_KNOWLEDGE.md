@@ -22,7 +22,11 @@ S2C1 duurzaam ledger na SPEC PASS en QUALITY APPROVED op `c5cb018e` lokaal
 geïntegreerd als `7106b7fa`; parent 57 ledger/448 measurement/804 volledige
 C#-harnastests en 50 interop PASS. Exacte RowJson, 64/1MiB-reservering,
 crashvaste preserve en niet-definitieve onzekerheid zijn getest; geen delivery-API.
-ACK-afhandeling, async sendlease en alle producer-/pluginbedrading blijven open.
+ACK-classificatie en duurzame per-rij-afhandeling zijn na runtime-SPEC PASS op
+`71a209a8` en kwaliteitsacceptatie van de bytegelijke runtime op `f000c49c`
+lokaal geïntegreerd als `8e2d4dae`; parent 87 ACK/535 measurement/891 volledige
+C#-harnastests/50 interop PASS. T1/T2 zijn strikt test-only gesloten met M8/M7.
+Async sendlease, verzendplanning/envelope en alle producer-/pluginbedrading blijven open.
 Alle schakelaars blijven uit; geen productieapply/Edge-deploy/producerrelease.
 Rollback houdt historie en nieuwe writer intact; flag-only heractivatie mist de
 forward-P1-projectie en is niet ondersteund. Producer/outbox/quarantaine en echte

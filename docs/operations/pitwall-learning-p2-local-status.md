@@ -167,10 +167,40 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   `pitwall-learning-p2-observation-ledger-certainty-quality-recheck/` en
   `pitwall-learning-p2-observation-ledger-integration/` onder de artifactroot.
   Afgewezen bronnen/rapporten en mislukte pogingen blijven apart beschreven.
-- Volgende begrensde stap: ACK-classificatie en duurzame per-rij-afhandeling;
+- ACK-classificatie en duurzame per-rij-afhandeling volgen hieronder als S2C2a;
   async sendlease, echte beide verzendcallers en plugin-/settingsbedrading volgen
   afzonderlijk. Geen activering, SDK-/Windows-runtime, productie of volledige
   P2-buildclaim. Sampler-Q2 (hergebruik non-UTC sample) blijft expliciet open.
+
+## T13-S2C2a — ACK-classificatie en duurzame afhandeling lokaal geaccepteerd
+
+- Gereviewde runtime `71a209a8d0beaa9f0eabd850bb2fe05e25b3ac95`: SPEC PASS.
+  Definitieve bron `f000c49cd388bc8424f1fc9409da1e13be8ec053`: QUALITY APPROVED;
+  alleen 17 testregels toegevoegd, alle andere tracked bytes gelijk. Runtime-SPEC
+  is expliciet overgedragen, niet opnieuw uitgevoerd. Lokale integratie
+  `8e2d4daef01c6b9c4fb66fbd71067ba8ef3b88d7`; gereviewde bestanden bytegelijk.
+- Parent op de integratie: offline restore/Release build exit 0, 0 warnings/errors;
+  **87/87 ACK**, **57/57 ledger**, **535/535 measurement**, **891/891 volledige
+  C#-harnastests inclusief soak**, **50/50 C#→Deno-interop**, alle exits 0.
+  Eigen DLL-export 52 bestanden. Geen volledige Windows-/SimHub-SDK-build.
+- Per-rij ACK-union, revisie-/payload-/epochfences, volledige gemengde offerindexen,
+  tegenstrijdige metadata fail-closed en atomaire cleanup+tellers zijn getest.
+  Quarantaine blijft terminaal bij zowel accepted als tijdelijk ACK; M8 wordt nu
+  door OA40c/OA40b gedood. M7 bewijst OA26's directe in-memory readback.
+- Bronpack compleet gecontroleerd zonder release-uitvoering. Echte Edge-ACKs
+  bevatten `recordRevision`, DB-ACKs `record_revision`; de nieuwe resolver verwerkt
+  beide veilig. De bestaande legacy-parser is niet gerepareerd. `stored:false`
+  kan parser-rejections bevatten; de geaccepteerde policy blijft NotDelivered,
+  geen cleanup/quarantaine. De eerdere onjuiste bronclaim heeft een apart erratum.
+- Bewijs: `pitwall-learning-p2-observation-ack-block-type-spec-recheck/`,
+  `pitwall-learning-p2-observation-ack-quality-review/`,
+  `pitwall-learning-p2-observation-ack-terminal-quality-recheck/` en
+  `pitwall-learning-p2-observation-ack-integration/` onder de artifactroot.
+- Volgende begrensde stap S2C2b: async observation-sendcoordinator, onveranderlijke
+  envelope en begrensde transport-/ACK-keten. HTTP-tests uitsluitend onderschept,
+  geen externe requests. Bedrading van beide bestaande verzendcallers en lokale
+  Pair/Unpair/settings volgt afzonderlijk; die daadwerkelijke integratie is nog
+  niet bewezen. Geen activation/release; sampler-Q2 en P2-Vite-buildpoort open.
 
 ## Beperkingen en vervolgnotities
 
