@@ -596,18 +596,23 @@ namespace ThreeSM.EnduranceConnector
             AppendRows(builder, lapRows);
             builder.Append("]");
             var series = builder.ToString();
-            var members = MeasurementJson.FrameDeclaresMember(coreBodyJson, "schemaRevision")
-                ? series
-                : Head(capabilitiesJson) + "," + series;
+            var head = new StringBuilder();
+            if (!MeasurementJson.FrameDeclaresMember(coreBodyJson, "schemaRevision"))
+                head.Append("\"schemaRevision\":")
+                    .Append(MeasurementContract.SchemaRevision.ToString(CultureInfo.InvariantCulture));
+            if (!MeasurementJson.FrameDeclaresMember(coreBodyJson, "capabilities"))
+            {
+                if (head.Length > 0) head.Append(',');
+                head.Append("\"capabilities\":").Append(Capabilities(capabilitiesJson));
+            }
+            var members = head.Length == 0 ? series : head.Append(',').Append(series).ToString();
             return MeasurementJson.InjectIntoFrame(coreBodyJson, members);
         }
 
-        private static string Head(string capabilitiesJson)
+        private static string Capabilities(string capabilitiesJson)
         {
-            var capabilities = string.IsNullOrEmpty(capabilitiesJson)
+            return string.IsNullOrEmpty(capabilitiesJson)
                 ? "{\"revision\":1,\"supported\":{}}" : capabilitiesJson;
-            return "\"schemaRevision\":" + MeasurementContract.SchemaRevision
-                + ",\"capabilities\":" + capabilities;
         }
 
         private static void AppendRows(StringBuilder builder, IList<string> rows)

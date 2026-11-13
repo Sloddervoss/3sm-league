@@ -1430,14 +1430,21 @@ internal static class MeasurementObservationSendTests
                 out legacyPlan);
             var schemaCount = CountOccurrences(plan.Body, "\"schemaRevision\"");
             var capsCount = CountOccurrences(plan.Body, "\"capabilities\"");
+            var coreCaps = "{\"protocolVersion\":3,\"capabilities\":{\"revision\":1},\"sequence\":7}";
+            var capsPlan = ObservationSendPlanner.Plan(due, new List<ObservationLedgerEntry>(),
+                Binding(), Caps, coreCaps, Encoding.UTF8.GetByteCount(coreCaps), null, now);
+            var capsOnlySchema = CountOccurrences(capsPlan.Body, "\"schemaRevision\"");
+            var capsOnlyCaps = CountOccurrences(capsPlan.Body, "\"capabilities\"");
             Check("OS29 zonder OBS is de mixed body bytegelijk aan de geaccepteerde legacy-sender",
                 plan.Body == legacyBody
                 && plan.LegacyBatch.Laps.Count == 2 && plan.LegacyBatch.Events.Count == 2
                 && plan.Offered.Count == 2 && plan.ObservationRows == 0
-                && schemaCount == 1 && capsCount == 1,
+                && schemaCount == 1 && capsCount == 1
+                && capsOnlySchema == 1 && capsOnlyCaps == 1,
                 "equal=" + (plan.Body == legacyBody) + " laps=" + plan.LegacyBatch.Laps.Count
                 + " events=" + plan.LegacyBatch.Events.Count
-                + " schemaKeys=" + schemaCount + " capsKeys=" + capsCount);
+                + " schemaKeys=" + schemaCount + " capsKeys=" + capsCount
+                + " capsOnly=" + capsOnlySchema + "/" + capsOnlyCaps);
         }
 
         // OS30 — an event-only frame is a valid empty offered-lap batch.
