@@ -49,6 +49,7 @@ internal static class MeasurementObservationHostTests
     {
         var count = 0;
         Action<string, bool, string> counted = (name, ok, evidence) => { count++; check(name, ok, evidence); };
+        QualityBoundaries(counted).GetAwaiter().GetResult();
         LazyLease(counted).GetAwaiter().GetResult();
         LazyFailures(counted).GetAwaiter().GetResult();
         DefaultOff(counted).GetAwaiter().GetResult();
@@ -620,4 +621,86 @@ internal static class MeasurementObservationHostTests
             }
         }
     }
+    private static async Task QualityBoundaries(Action<string, bool, string> check)
+    {
+        foreach (var enabled in new[] { false, true })
+        {
+            var dir = DirectoryFor("quality-stop-" + enabled);
+            var path = Path.Combine(dir, "obs.json");
+            var legacy = new MeasurementOutbox(Path.Combine(dir, "legacy.json"));
+            var providers = 0;
+            using (var http = new HttpClient(new Handler()))
+            using (var host = new ObservationProducerHost(legacy, new MeasurementIdFactory(), Identity(), () => enabled, () => true,
+                fence => { providers++; return new ObservationLedgerStore(path, fence); },
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1);
+                check("QSTOP-input-" + enabled, providers == 0 && legacy.LapCount == 0, "open aggregate, no completed lap/provider before Stop");
+                host.Stop(); await Bounded(host.Settlement); host.Stop();
+                var disk = enabled && File.Exists(path) ? new ObservationLedgerStore(path, new ObservationBindingFence(Identity().Binding)) : null;
+                check("QSTOP-flush-" + enabled, enabled
+                    ? disk != null && disk.EntryCount == 1 && disk.Entries[0].RowJson.Contains("plugin_stop") && legacy.LapCount == 0 && providers == 1
+                    : legacy.LapCount == 1 && providers == 0 && !File.Exists(path),
+                    "providers=" + providers + " legacy=" + legacy.LapCount + " disk=" + (disk == null ? "absent" : disk.EntryCount + "/" + disk.Entries[0].RowJson));
+            }
+        }
+        foreach (var flag in new[] { "optin", "readiness" })
+        {
+            var dir = DirectoryFor("quality-dynamic-" + flag);
+            var legacy = new MeasurementOutbox(Path.Combine(dir, "legacy.json"));
+            var active = true; var providers = 0;
+            ObservationLedgerStore store = null;
+            using (var http = new HttpClient(new Handler()))
+            using (var host = new ObservationProducerHost(legacy, new MeasurementIdFactory(), Identity(), () => flag != "optin" || active,
+                () => flag != "readiness" || active, fence => { providers++; return store = new ObservationLedgerStore(Path.Combine(dir, "obs.json"), fence); },
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1); active = false; host.EndSession("session_end");
+                check("QDYNAMIC-off-" + flag, host.PendingCandidate == null && providers == 0 && legacy.LapCount == 1,
+                    "pending=" + (host.PendingCandidate != null) + " providers=" + providers + " legacy=" + legacy.LapCount);
+                active = true; Tick(host, 3, 2); Tick(host, 4, 3); Tick(host, 5, 3); Tick(host, 6, 4);
+                check("QDYNAMIC-positive-" + flag, store != null && store.EntryCount > 0 && providers == 1,
+                    "eligible fresh later lap reaches actual store, generation=7; entries=" + (store == null ? -1 : store.EntryCount));
+            }
+        }
+        foreach (var conflict in new[] { false, true })
+        {
+            var dir = DirectoryFor("quality-mixed-" + conflict);
+            var path = Path.Combine(dir, "obs.json");
+            var legacy = new MeasurementOutbox(Path.Combine(dir, "legacy.json"));
+            var old = new MeasurementPipeline(legacy, new MeasurementIdFactory());
+            old.Observe(new TelemetrySample { ObservedAtUtc = T0, LapNumber = 1, SessionTimeSeconds = 0 });
+            old.Observe(new TelemetrySample { ObservedAtUtc = T0.AddSeconds(1), LapNumber = 1, SessionTimeSeconds = 1 });
+            old.End("session_end");
+            var handler = new Handler();
+            handler.Reply = body =>
+            {
+                if (!conflict) return AckAll(body);
+                var rows = (System.Collections.IList)MeasurementJson.DeserializeDictionary(body)["lapSummaries"];
+                var a = (System.Collections.Generic.Dictionary<string, object>)rows[1];
+                var b = (System.Collections.Generic.Dictionary<string, object>)rows[2];
+                return "{\"measurements\":{\"laps\":{\"stored\":true,\"received\":3,\"accepted\":[{\"id\":\"" + b["summaryUid"]
+                    + "\",\"recordRevision\":1}],\"rejected\":[{\"id\":\"" + a["summaryUid"] + "\",\"index\":0,\"reason\":\"observation_invalid\",\"stage\":\"parser\"}]}}}";
+            };
+            using (var http = new HttpClient(handler))
+            using (var host = new ObservationProducerHost(legacy, new MeasurementIdFactory(), Identity(), () => true, () => true,
+                fence => new ObservationLedgerStore(path, fence), new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 2); Tick(host, 3, 2); host.EndSession("session_end");
+                check("QMIX-input-" + conflict, legacy.LapCount == 1, "one real legacy lap before mixed attempt");
+                var bypass = 0;
+                var result = await host.SendAsync(() => "{}", Endpoint, host.Snapshot(), T0.AddMinutes(2), null,
+                    () => { bypass++; return Task.CompletedTask; }, CancellationToken.None);
+                var disk = new ObservationLedgerStore(path, new ObservationBindingFence(Identity().Binding));
+                var retained = !conflict || (disk.EntryCount == 1 && disk.Entries[0].RowJson == result.Offered.Rows[1].RowJson);
+                check("QMIX-trust-" + conflict, result.Offered.Rows.Count == 3 && disk.DeliveredTotal == (conflict ? 1 : 2)
+                    && disk.EntryCount == (conflict ? 1 : 0) && legacy.LapCount == (conflict ? 1 : 0) && retained
+                    && result.ObservationQuarantined == 0 && handler.Calls == 1 && bypass == 0,
+                    "D=" + disk.DeliveredTotal + " E=" + disk.EntryCount + " L=" + legacy.LapCount + " Q=" + result.ObservationQuarantined
+                    + " auth=" + handler.Authorization + " contentType=" + handler.ContentType + " generation=" + result.Binding.PairingGeneration + " body=" + handler.Body);
+                File.WriteAllText(Path.Combine(dir, "request.json"), handler.Body);
+            }
+        }
+    }
+
 }
