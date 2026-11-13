@@ -1867,6 +1867,128 @@ internal static class MeasurementObservationSendTests
                 + " foreign=" + foreignResult.Status + "/" + foreignResult.ChangedCount);
         }
 
+        // OS34 — exact UTF-8 body boundary and the bulk helper's terminal/identity
+        // guards. These are the reviewer-added discriminating checks: OS04 checks
+        // the clamps but not a body exactly at the 24.576-byte boundary, and OS33
+        // only offers single-row bulk batches.
+        {
+            var dir = NewDirectory();
+            var store = Store(dir);
+            var outbox = Outbox(dir);
+            var obs = Row(Uid(600), driver: "Bram éèü");
+            var frozen = Capture(store, obs);
+            var legacy = Row(Uid(601), false, driver: "Légaçy");
+            string boundaryReason;
+            if (!outbox.EnqueueLap(legacy, out boundaryReason))
+                throw new InvalidOperationException(boundaryReason);
+            var due = outbox.Due(T0.AddMinutes(3), int.MaxValue, int.MaxValue);
+            var limits = new MeasurementLimits
+            {
+                MaxLapsPerFrame = 3,
+                MaxEventsPerFrame = 20,
+                MaxMeasurementBatchBytes = 16384,
+                MaxFrameBodyBytes = 24576
+            };
+            var full = ObservationSendPlanner.Plan(due, store.Entries, Binding(), Caps, Core,
+                Encoding.UTF8.GetByteCount(Core), limits, T0.AddMinutes(3));
+            var fullBytes = full.Body == null ? -1 : Encoding.UTF8.GetByteCount(full.Body);
+            var exact = ObservationSendPlanner.Plan(due, store.Entries, Binding(), Caps, Core,
+                Encoding.UTF8.GetByteCount(Core), new MeasurementLimits
+                {
+                    MaxLapsPerFrame = 3,
+                    MaxEventsPerFrame = 20,
+                    MaxMeasurementBatchBytes = 16384,
+                    MaxFrameBodyBytes = fullBytes
+                }, T0.AddMinutes(3));
+            var under = ObservationSendPlanner.Plan(due, store.Entries, Binding(), Caps, Core,
+                Encoding.UTF8.GetByteCount(Core), new MeasurementLimits
+                {
+                    MaxLapsPerFrame = 3,
+                    MaxEventsPerFrame = 20,
+                    MaxMeasurementBatchBytes = 16384,
+                    MaxFrameBodyBytes = fullBytes - 1
+                }, T0.AddMinutes(3));
+            var boundaryOk = full.Offered != null && full.Offered.ObservationCount == 1
+                && full.Body.IndexOf("Bram éèü", StringComparison.Ordinal) >= 0
+                && fullBytes > 0
+                && exact.Offered != null && exact.Offered.ObservationCount == 1
+                && exact.Body == full.Body
+                && under.Offered != null && under.Offered.ObservationCount == 0
+                && under.DeferredObservation == 1
+                && under.Body != null && under.Body.IndexOf(frozen, StringComparison.Ordinal) < 0;
+
+            var bulkDir = NewDirectory();
+            var bulkStore = Store(bulkDir);
+            var first = Row(Uid(602));
+            var second = Row(Uid(603));
+            Capture(bulkStore, first);
+            Capture(bulkStore, second);
+            var entryFirst = bulkStore.Find(first.SummaryUid, 1);
+            var entrySecond = bulkStore.Find(second.SummaryUid, 1);
+            var diskBefore = LedgerText(bulkStore);
+            var atomic = bulkStore.QuarantineMany(
+                new[] { entryFirst, WithBinding(entrySecond, Binding(8)) },
+                ObservationLedgerReasons.CaptureBindingChanged);
+            var atomicOk = atomic.Status == ObservationLedgerTransitionStatus.RefusedInvalidReason
+                && atomic.Diagnostic == "bulk_identity_conflict" && atomic.ChangedCount == 0
+                && bulkStore.Find(first.SummaryUid, 1).State == ObservationLedgerState.Pending
+                && LedgerText(bulkStore) == diskBefore
+                && bulkStore.QuarantineTotal == 0;
+
+            // The same all-or-nothing rule for a multi-row defer batch.
+            var third = Row(Uid(604));
+            var fourth = Row(Uid(605));
+            Capture(bulkStore, third);
+            Capture(bulkStore, fourth);
+            var deferAtomic = bulkStore.DeferMany(new[]
+            {
+                Offered(bulkStore.Find(third.SummaryUid, 1)),
+                Offered(WithBinding(bulkStore.Find(fourth.SummaryUid, 1), Binding(8)))
+            }, ObservationLedgerReasons.ObservationUnavailable, T0.AddMinutes(2));
+            var deferAtomicOk = deferAtomic.Status
+                    == ObservationLedgerTransitionStatus.RefusedInvalidReason
+                && deferAtomic.Diagnostic == "bulk_identity_conflict"
+                && deferAtomic.ChangedCount == 0
+                && bulkStore.Find(third.SummaryUid, 1).State == ObservationLedgerState.Pending
+                && bulkStore.Find(third.SummaryUid, 1).Attempts == 0;
+
+            var quarantine = bulkStore.QuarantineMany(
+                new[] { bulkStore.Find(first.SummaryUid, 1) },
+                ObservationLedgerReasons.CaptureBindingChanged);
+            var repeat = bulkStore.QuarantineMany(
+                new[] { bulkStore.Find(first.SummaryUid, 1) },
+                ObservationLedgerReasons.CaptureBindingChanged);
+            var revive = bulkStore.DeferMany(
+                new[] { Offered(bulkStore.Find(first.SummaryUid, 1)) },
+                ObservationLedgerReasons.ObservationUnavailable, T0.AddMinutes(2));
+            var terminalOk = quarantine.Committed && quarantine.ChangedCount == 1
+                && repeat.Committed && repeat.ChangedCount == 0
+                && revive.ChangedCount == 0
+                && bulkStore.Find(first.SummaryUid, 1).State == ObservationLedgerState.Quarantine
+                && bulkStore.QuarantineTotal == 1;
+
+            var wrongJson = WithBinding(entrySecond, entrySecond.Binding);
+            wrongJson = new ObservationLedgerEntry(wrongJson.Uid, wrongJson.RecordRevision,
+                wrongJson.State, wrongJson.RowJson + " ", wrongJson.Reason,
+                wrongJson.CaptureDeviceId, wrongJson.CaptureOwnerUserId,
+                wrongJson.PairingGeneration, wrongJson.PairingGenerationKnown,
+                wrongJson.EnqueuedAtUtc, wrongJson.Attempts, wrongJson.NextAttemptUtc);
+            var mismatch = bulkStore.DeferMany(new[] { Offered(wrongJson) },
+                ObservationLedgerReasons.ObservationUnavailable, T0.AddMinutes(2));
+            var identityOk = mismatch.Status == ObservationLedgerTransitionStatus.RefusedInvalidReason
+                && mismatch.Diagnostic == "bulk_identity_conflict"
+                && bulkStore.Find(second.SummaryUid, 1).State == ObservationLedgerState.Pending
+                && bulkStore.Find(second.SummaryUid, 1).Attempts == 0;
+
+            Check("OS34 exacte UTF-8 bodygrens en bulk-terminale/identiteitsguards",
+                boundaryOk && atomicOk && deferAtomicOk && terminalOk && identityOk,
+                "boundary=" + boundaryOk + "/" + fullBytes + " atomic=" + atomicOk
+                + " deferAtomic=" + deferAtomicOk
+                + " terminal=" + terminalOk + "/" + repeat.ChangedCount + "/"
+                + revive.ChangedCount + "/" + bulkStore.QuarantineTotal
+                + " identity=" + identityOk + "/" + mismatch.Status);
+        }
+
         return count;
     }
 
