@@ -642,7 +642,8 @@ internal static class MeasurementObservationHostTests
                     {
                         order += "protect;";
                         check("PAIR-protect-order-" + changedOwner, host.Coordinator.LeaseHeld && !host.Snapshot().HasAuthorization
-                            && memoryToken == OldPairToken && settings.DeviceId == Device, "real commit protection is below lease and before settings/memory publication");
+                            && memoryToken == OldPairToken && settings.DeviceId == Device && raw == NewPairToken,
+                            "real commit protection is below lease, before settings/memory publication, and protects the NEW raw token");
                         return "synthetic-protected-new";
                     }, () =>
                     {
@@ -659,6 +660,7 @@ internal static class MeasurementObservationHostTests
                 }, CancellationToken.None);
                 var disk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
                 check("PAIR-fresh-" + changedOwner, result.Committed && order == "protect;save;" && disk.ObservationBinding().IsComplete
+                    && !disk.ObservationEnabled && !settings.ObservationEnabled
                     && disk.DeviceId == NewDevice && disk.BoundOwnerUserId == owner && memoryToken == NewPairToken
                     && host.Snapshot().Binding.PairingGeneration == 1, "durable new composite fence, same/new owner; local initialization only");
                 var blocked = 0;
@@ -687,6 +689,7 @@ internal static class MeasurementObservationHostTests
             var dir = DirectoryFor("pair-fail-" + history + "-" + failure);
             var file = Path.Combine(dir, "settings.json");
             var memoryToken = OldPairToken; var saves = 0; var rollbackFailures = 0;
+            string lastSaveJson = null; var seamKnown = true; var seamDevice = (string)null; var seamProtected = (string)null;
             using (var http = new HttpClient(new Handler()))
             using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy.json")), new MeasurementIdFactory(),
                 new ObservationProducerIdentity(memoryToken, settings.ObservationBinding()), () => false, () => false,
@@ -701,6 +704,7 @@ internal static class MeasurementObservationHostTests
                             () =>
                             {
                                 saves++;
+                                lastSaveJson = SettingsCompatibilityTests.Serialize(settings);
                                 if (failure == "cancel") throw new OperationCanceledException();
                                 if (failure == "rollback" || (failure == "save" && saves == 1)) throw new IOException("synthetic save");
                                 File.WriteAllText(file, SettingsCompatibilityTests.Serialize(settings));
@@ -709,6 +713,9 @@ internal static class MeasurementObservationHostTests
                     }
                     catch
                     {
+                        seamKnown = settings.ObservationPairingGenerationKnown;
+                        seamDevice = settings.DeviceId;
+                        seamProtected = settings.DeviceTokenProtected;
                         // Same conservative invalidation used by PairCoreAsync's outer catch.
                         memoryToken = string.Empty;
                         settings.DeviceTokenProtected = settings.DeviceId = settings.BoundOwnerUserId = string.Empty;
@@ -718,11 +725,17 @@ internal static class MeasurementObservationHostTests
                 }, CancellationToken.None);
                 var attempted = failure != "protect" && (history == "absent" || history == "known");
                 var expectedRaw = attempted ? (history == "absent" ? 1 : 8) : original;
+                var lastSave = lastSaveJson == null ? null : SettingsCompatibilityTests.Deserialize(lastSaveJson);
                 check("PAIR-fail-" + history + "-" + failure, !result.Committed && !host.Snapshot().HasAuthorization
                     && memoryToken == "" && !settings.ObservationPairingGenerationKnown
                     && settings.ObservationPairingGeneration == expectedRaw
                     && (history != "null-known" || settings.ObservationPairingGenerationPoisoned)
-                    && rollbackFailures == (failure == "rollback" || failure == "cancel" ? 1 : 0),
+                    && rollbackFailures == (failure == "rollback" || failure == "cancel" ? 1 : 0)
+                    && !seamKnown && seamDevice == Device && seamProtected == "synthetic-protected-old"
+                    && lastSave != null && lastSave.DeviceId == Device
+                    && lastSave.DeviceTokenProtected == "synthetic-protected-old"
+                    && !lastSave.ObservationPairingGenerationKnown
+                    && lastSave.ObservationPairingGeneration == expectedRaw,
                     "actual protect/save/rollback-save/cancel failure preserves raw evidence and never publishes/restores OBS authority");
                 settings = Restart(settings);
                 settings.CommitNewPair(NewDevice, Owner, NewPairToken, memoryToken, raw => "synthetic-new", () => { }, error => { });
