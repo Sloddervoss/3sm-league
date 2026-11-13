@@ -458,6 +458,14 @@ Dit is geen servercontract en gaat niet over de draad.
   overleeft herhaalde invalidatie en restart **uitsluitend** zolang de ruwe waarde
   veilig en niet-gepoisoned blijft; een ontbrekende historische markering blijft
   false, zodat een gewone `present+known=false` zonder markering gesloten blijft.
+  Een persistente markering zonder ruwe waarde (ontbrekend of expliciet NULL) is
+  verloren high-watermark-bewijs, geen afwezigheid: de afwezig→1-initialisatie
+  vereist daarom óók dat er geen markering is, en invalidatie bewaart dat feit als
+  de bestaande `ObservationPairingGenerationPoisoned`-tombstone vóór de markering
+  vervalt. Zo blijft die corrupte combinatie over restart en herhaalde invalidatie
+  gesloten en nooit als verse 1 te herschrijven. De strikte DataContract-lezer
+  weigert zo'n partieel document; dat is een loader-modelbeperking, niet de
+  beveiliging.
   Alleen dezelfde nieuwe-Pair-commitseam — na de bestaande responsevalidatie,
   freshness (nieuw device én raw token waar vorige waarden beschikbaar zijn), de
   bestaande settingsgate en hostlease — mag de **strikt hogere opvolger** van de
