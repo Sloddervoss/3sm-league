@@ -29,6 +29,7 @@ namespace ThreeSM.EnduranceConnector
         private readonly object _gate = new object();
         private readonly Func<bool> _optIn;
         private readonly Func<bool> _receiverReady;
+        private readonly ObservationReadinessCache _readiness;
         private readonly Func<DateTime> _clock;
         private readonly MeasurementIdFactory _ids;
         private readonly SamplerOptions _samplerOptions = new SamplerOptions();
@@ -47,13 +48,15 @@ namespace ThreeSM.EnduranceConnector
             ObservationProducerIdentity identity, Func<bool> optIn, Func<bool> receiverReady,
             Func<ObservationBindingFence, ObservationLedgerStore> storeProvider,
             IObservationSendTransport transport, Func<string> capabilities, MeasurementLimits limits,
-            Func<DateTime> clock, ObservationSendOptions bounds = null)
+            Func<DateTime> clock, ObservationSendOptions bounds = null,
+            ObservationReadinessCache readiness = null)
         {
             if (storeProvider == null) throw new ArgumentNullException("storeProvider");
             _ids = ids ?? throw new ArgumentNullException("ids");
             _identity = identity ?? new ObservationProducerIdentity(null, null);
             _optIn = optIn ?? delegate { return false; };
             _receiverReady = receiverReady ?? delegate { return false; };
+            _readiness = readiness;
             _clock = clock ?? delegate { return DateTime.UtcNow; };
             var fence = new ObservationBindingFence(_identity.Binding);
             var options = (bounds ?? new ObservationSendOptions()).Normalized();
@@ -62,6 +65,8 @@ namespace ThreeSM.EnduranceConnector
             Coordinator = ObservationSendCoordinator.CreateLazy(fence, () => storeProvider(fence),
                 legacy, new OwnedTransport(this, transport), () => CurrentToken(), capabilities, options, limits);
             Pipeline = new MeasurementPipeline(legacy, ids, _samplerOptions, CaptureSummary);
+            // Constructor-time identity is the first trusted binding; it arms nothing.
+            PublishReadinessIdentity(ObservationReadinessReasons.IdentityChanged);
         }
 
         internal ObservationSendCoordinator Coordinator { get; private set; }
@@ -75,7 +80,47 @@ namespace ThreeSM.EnduranceConnector
         private bool Eligible()
         {
             return !_ended && !_transitioning && _identity.HasAuthorization
-                && _identity.Binding.IsComplete && _optIn() && _receiverReady();
+                && _identity.Binding.IsComplete && _optIn() && ReceiverReady();
+        }
+
+        /// <summary>
+        /// Binding-aware readiness predicate. Called with the host gate held; the
+        /// cache lock is always taken below it (host gate -> cache), never above.
+        /// Without an injected cache the historical provider stays authoritative.
+        /// </summary>
+        private bool ReceiverReady()
+        {
+            var cache = _readiness;
+            if (cache == null) return _receiverReady();
+            var identity = _identity;
+            if (identity == null || !identity.HasAuthorization
+                || identity.Binding == null || !identity.Binding.IsComplete) return false;
+            try { return cache.IsReadyFor(identity.Binding, true); }
+            catch (Exception) { return false; }
+        }
+
+        private void PublishReadinessIdentity(string reasonCode)
+        {
+            var cache = _readiness;
+            if (cache == null) return;
+            var identity = _identity;
+            try
+            {
+                if (identity == null) cache.SetCurrentIdentity(null, false, reasonCode);
+                else cache.SetCurrentIdentity(identity.Binding, identity.HasAuthorization, reasonCode);
+            }
+            catch (Exception)
+            {
+                // Readiness is an observer of the producer: it never alters it.
+            }
+        }
+
+        private void InvalidateReadinessLifetime(string reasonCode)
+        {
+            var cache = _readiness;
+            if (cache == null) return;
+            try { cache.InvalidateLifetime(reasonCode); }
+            catch (Exception) { }
         }
 
         // Only the fresh UTC once-per-tick caller is supported. No owner/context backfill.
@@ -198,6 +243,8 @@ namespace ThreeSM.EnduranceConnector
                             _transitioning = true;
                             // Unknown remote outcome/local rollback never restores old auth.
                             _identity = new ObservationProducerIdentity(null, null);
+                            // Pair/Unpair invalidates readiness before any next HTTP.
+                            PublishReadinessIdentity(ObservationReadinessReasons.IdentityChanged);
                         }
                         var callback = Task.Run(() => CommitIdentityAsync(commit, token));
                         Own(callback);
@@ -215,7 +262,11 @@ namespace ThreeSM.EnduranceConnector
             {
                 var identity = await commit(cancel).ConfigureAwait(false);
                 if (identity == null) return ObservationPairCommit.Failed("identity_unproven");
-                lock (_gate) _identity = identity;
+                lock (_gate)
+                {
+                    _identity = identity;
+                    PublishReadinessIdentity(ObservationReadinessReasons.IdentityChanged);
+                }
                 return ObservationPairCommit.CommittedWith(identity.Binding);
             }
             finally { lock (_gate) _transitioning = false; }
@@ -284,6 +335,8 @@ namespace ThreeSM.EnduranceConnector
             {
                 if (_ended) return;
                 _intakeStopped = true;
+                // Stop/End invalidates readiness by lifetime before any next HTTP.
+                InvalidateReadinessLifetime(ObservationReadinessReasons.HostStopped);
                 Pipeline.End("plugin_stop"); // same post-pit sink, BEFORE closing capture
                 _operations++; // Stop itself owns the source through cancellation/disposal.
                 _ended = true;
