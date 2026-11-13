@@ -940,6 +940,11 @@ namespace ThreeSM.EnduranceConnector
                 return new ObservationSendAttemptResult(ObservationSendStatus.Canceled, 0,
                     "canceled");
             }
+            catch (ObjectDisposedException)
+            {
+                return new ObservationSendAttemptResult(ObservationSendStatus.Refused, 0,
+                    "disposed");
+            }
             finally
             {
                 Interlocked.Decrement(ref _pendingLeaseWaiters);
@@ -957,6 +962,13 @@ namespace ThreeSM.EnduranceConnector
             {
                 return await SendUnderLeaseAsync(coreBodyJson, coreBytes, endpoint, nowUtc,
                     attemptId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception error)
+            {
+                // No transport, store or clock exception may escape the owned attempt
+                // as an unobserved task fault; the caller gets a bounded local code.
+                return new ObservationSendAttemptResult(ObservationSendStatus.Refused,
+                    attemptId, "unhandled_" + error.GetType().Name);
             }
             finally
             {
