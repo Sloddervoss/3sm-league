@@ -68,6 +68,7 @@ internal static class MeasurementObservationHostTests
         PairRecovery(counted).GetAwaiter().GetResult();
         PairRecoveryFailures(counted).GetAwaiter().GetResult();
         PairRecoveryControls(counted);
+        LostRecoveryEvidence(counted).GetAwaiter().GetResult();
         return count;
     }
 
@@ -1161,6 +1162,220 @@ internal static class MeasurementObservationHostTests
                 && !settings.ObservationBinding().IsComplete && settings.NextObservationGeneration() == null,
                 "null-known/negative/out-of-range/max/poisoned evidence stays closed without wrap, reset or capture authority");
         }
+    }
+
+    // SPEC-1: a persisted recoverable marker whose raw counter value is missing/NULL is
+    // lost high-watermark evidence, not a pristine install. It must stay closed, must never
+    // mint a fresh 1, and the invalid fact must survive invalidation, restart and refusal.
+    private static string LostMarkerJson(string mode)
+    {
+        return "{\"SchemaVersion\":8,\"DeviceId\":\"" + Device + "\",\"BoundOwnerUserId\":\"" + Owner
+            + "\",\"DeviceTokenProtected\":\"synthetic-old\",\"UseCentralRelay\":true"
+            + (mode == "explicit-null" ? ",\"ObservationPairingGeneration\":null" : string.Empty)
+            + ",\"ObservationPairingGenerationRecoverable\":true}";
+    }
+
+    private static async Task LostRecoveryEvidence(Action<string, bool, string> check)
+    {
+        foreach (var mode in new[] { "absent", "explicit-null" })
+        {
+            var dir = DirectoryFor("lost-recovery-" + mode);
+            var path = Path.Combine(dir, "settings.json");
+
+            // Loader control: the corrupt/partial document is loadable under the same lenient
+            // POCO model the accepted compatibility tests adopt, yet grants nothing by itself.
+            File.WriteAllText(path, LostMarkerJson(mode));
+            var loaded = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            check("PAIR-lost-raw-load-" + mode,
+                loaded.ObservationPairingGenerationRecoverable && !loaded.ObservationPairingGeneration.HasValue
+                && !loaded.ObservationPairingGenerationKnown && !loaded.ObservationPairingGenerationPoisoned
+                && !loaded.ObservationBinding().IsComplete && loaded.NextObservationGeneration() == null,
+                "marker=true + raw " + mode + " loads without authority and without any next generation");
+
+            // Direct genuine new Pair through the real production commit seam, durable save.
+            File.WriteAllText(path, LostMarkerJson(mode));
+            var direct = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            var directToken = direct.CommitNewPair(NewDevice, Owner, NewPairToken, string.Empty,
+                raw => "synthetic-protected-lost", () => File.WriteAllText(path, SettingsJson(direct)), error => { });
+            var directDisk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            check("PAIR-lost-raw-direct-" + mode,
+                directToken == NewPairToken
+                && !direct.ObservationPairingGenerationKnown && !direct.ObservationPairingGeneration.HasValue
+                && !direct.ObservationBinding().IsComplete && direct.NextObservationGeneration() == null
+                && !directDisk.ObservationPairingGenerationKnown && !directDisk.ObservationPairingGeneration.HasValue
+                && directDisk.ObservationPairingGenerationPoisoned && !directDisk.ObservationPairingGenerationRecoverable,
+                "a direct fresh Pair neither mints 1 nor erases the proof: raw stays NULL, durable poison tombstone records the lost counter");
+
+            // Restart on those durable bytes, then another genuinely fresh Pair.
+            var restarted = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            restarted.CommitNewPair(OtherDevice, Owner, NewPairToken, string.Empty,
+                raw => "synthetic-protected-next", () => File.WriteAllText(path, SettingsJson(restarted)), error => { });
+            var restartedDisk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            check("PAIR-lost-raw-restart-pair-" + mode,
+                !restarted.ObservationPairingGenerationKnown && !restarted.ObservationPairingGeneration.HasValue
+                && restarted.ObservationPairingGenerationPoisoned
+                && !restartedDisk.ObservationPairingGenerationKnown && !restartedDisk.ObservationPairingGeneration.HasValue
+                && restartedDisk.ObservationPairingGenerationPoisoned,
+                "restart + genuinely fresh Pair stays closed and keeps the lost-proof tombstone durable");
+
+            // An actual invalidation of the corrupt document (failed Pair / Forget path) must
+            // not silently drop the evidence, and a later restart + fresh Pair must stay closed.
+            File.WriteAllText(path, LostMarkerJson(mode));
+            var invalidated = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            invalidated.InvalidateObservationGeneration();
+            File.WriteAllText(path, SettingsJson(invalidated));
+            var afterInvalidateRestart = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            afterInvalidateRestart.CommitNewPair(NewDevice, Owner, NewPairToken, string.Empty,
+                raw => "synthetic-protected", () => File.WriteAllText(path, SettingsJson(afterInvalidateRestart)), error => { });
+            var afterInvalidateDisk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            check("PAIR-lost-raw-invalidate-" + mode,
+                invalidated.ObservationPairingGenerationPoisoned && !invalidated.ObservationPairingGenerationRecoverable
+                && !invalidated.ObservationPairingGeneration.HasValue && !invalidated.ObservationPairingGenerationKnown
+                && !afterInvalidateRestart.ObservationPairingGenerationKnown
+                && !afterInvalidateRestart.ObservationPairingGeneration.HasValue
+                && !afterInvalidateDisk.ObservationPairingGenerationKnown
+                && !afterInvalidateDisk.ObservationPairingGeneration.HasValue
+                && afterInvalidateDisk.ObservationPairingGenerationPoisoned,
+                "invalidation of marker-with-lost-raw keeps a durable invalid fact; restart + fresh Pair never gets 1");
+
+            // Repeated invalidation/restart plus multiple fresh Pairs must not converge on pristine.
+            File.WriteAllText(path, LostMarkerJson(mode));
+            var repeated = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            var devices = new[] { NewDevice, OtherDevice, "dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb" };
+            for (var attempt = 0; attempt < 4; attempt++)
+            {
+                if (attempt > 0) repeated = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+                repeated.InvalidateObservationGeneration();
+                File.WriteAllText(path, SettingsJson(repeated));
+                repeated.CommitNewPair(devices[attempt % devices.Length], Owner, NewPairToken, string.Empty,
+                    raw => "synthetic-protected", () => File.WriteAllText(path, SettingsJson(repeated)), error => { });
+            }
+            var repeatedDisk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            check("PAIR-lost-raw-repeat-" + mode,
+                !repeatedDisk.ObservationPairingGenerationKnown && !repeatedDisk.ObservationPairingGeneration.HasValue
+                && repeatedDisk.ObservationPairingGenerationPoisoned && !repeatedDisk.ObservationPairingGenerationRecoverable
+                && repeatedDisk.NextObservationGeneration() == null,
+                "repeated invalidation/restart/multiple fresh Pairs keep raw NULL and a sticky invalid fact, never a generation");
+
+            // A failed protect must not erase the evidence on its way out.
+            File.WriteAllText(path, LostMarkerJson(mode));
+            var protectFailure = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            var protectThrew = false;
+            try
+            {
+                protectFailure.CommitNewPair(NewDevice, Owner, NewPairToken, string.Empty,
+                    raw => { throw new IOException("synthetic protect"); },
+                    () => File.WriteAllText(path, SettingsJson(protectFailure)), error => { });
+            }
+            catch (IOException) { protectThrew = true; }
+            var protectDisk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            var protectRestart = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            protectRestart.CommitNewPair(OtherDevice, Owner, NewPairToken, string.Empty,
+                raw => "synthetic-protected", () => File.WriteAllText(path, SettingsJson(protectRestart)), error => { });
+            var protectAfter = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            check("PAIR-lost-raw-failed-protect-" + mode,
+                protectThrew
+                && !protectFailure.ObservationPairingGenerationKnown && !protectFailure.ObservationPairingGeneration.HasValue
+                && protectFailure.ObservationPairingGenerationPoisoned
+                && !protectDisk.ObservationPairingGenerationKnown && protectDisk.ObservationPairingGenerationPoisoned
+                && !protectRestart.ObservationPairingGenerationKnown && !protectRestart.ObservationPairingGeneration.HasValue
+                && !protectAfter.ObservationPairingGenerationKnown && !protectAfter.ObservationPairingGeneration.HasValue,
+                "a failed protect preserves the lost-proof tombstone; a later fresh Pair still cannot mint 1");
+
+            // A failed save writes nothing back, so the original lost-proof bytes stay intact;
+            // the in-memory state must already be closed and stay closed after restart.
+            File.WriteAllText(path, LostMarkerJson(mode));
+            var saveFailure = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            var saveThrew = false; var rollbackErrors = 0;
+            try
+            {
+                saveFailure.CommitNewPair(NewDevice, Owner, NewPairToken, string.Empty,
+                    raw => "synthetic-protected", () => { throw new IOException("synthetic save"); },
+                    error => { rollbackErrors++; });
+            }
+            catch (IOException) { saveThrew = true; }
+            var saveDisk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            var saveRestart = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            saveRestart.CommitNewPair(OtherDevice, Owner, NewPairToken, string.Empty,
+                raw => "synthetic-protected", () => File.WriteAllText(path, SettingsJson(saveRestart)), error => { });
+            var saveAfter = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            check("PAIR-lost-raw-failed-save-" + mode,
+                saveThrew && rollbackErrors == 1
+                && !saveFailure.ObservationPairingGenerationKnown && !saveFailure.ObservationPairingGeneration.HasValue
+                && saveFailure.ObservationPairingGenerationPoisoned
+                && saveDisk.ObservationPairingGenerationRecoverable && !saveDisk.ObservationPairingGeneration.HasValue
+                && !saveRestart.ObservationPairingGenerationKnown && !saveRestart.ObservationPairingGeneration.HasValue
+                && !saveAfter.ObservationPairingGenerationKnown && !saveAfter.ObservationPairingGeneration.HasValue,
+                "a failed save leaves the original lost-proof bytes intact; in-memory and restarted state stay closed");
+
+            // Real host transition: the same corrupt document must publish no observation
+            // authority and open no ledger even with independent policy/readiness injected true.
+            File.WriteAllText(path, LostMarkerJson(mode));
+            var hostSettings = SettingsCompatibilityTests.Deserialize(File.ReadAllText(path));
+            var memory = string.Empty; var ledgerCalls = 0;
+            using (var http = new HttpClient(new Handler()))
+            using (var host = new ObservationProducerHost(new MeasurementOutbox(Path.Combine(dir, "legacy-host.json")),
+                new MeasurementIdFactory(), new ObservationProducerIdentity(memory, hostSettings.ObservationBinding()),
+                () => true, () => true,
+                fence => { ledgerCalls++; return new ObservationLedgerStore(Path.Combine(dir, "obs-host.json"), fence); },
+                new HttpObservationSendTransport(http, 16384), () => "{}", null, () => T0.AddMinutes(1)))
+            {
+                await host.TransitionAsync(cancel =>
+                {
+                    memory = hostSettings.CommitNewPair(NewDevice, Owner, NewPairToken, memory,
+                        raw => "synthetic-protected-host", () => File.WriteAllText(path, SettingsJson(hostSettings)), error => { });
+                    return Task.FromResult(new ObservationProducerIdentity(memory, hostSettings.ObservationBinding()));
+                }, CancellationToken.None);
+                Tick(host, 0, 1); Tick(host, 1, 1); Tick(host, 2, 2);
+                check("PAIR-lost-raw-host-" + mode,
+                    !host.Snapshot().Binding.IsComplete && !host.Snapshot().Binding.PairingGenerationKnown
+                    && host.Snapshot().Binding.PairingGeneration != 1 && ledgerCalls == 0
+                    && !hostSettings.ObservationPairingGenerationKnown
+                    && !hostSettings.ObservationPairingGeneration.HasValue
+                    && !SettingsCompatibilityTests.Deserialize(File.ReadAllText(path)).ObservationPairingGenerationKnown,
+                    "a real host transition on the lost-proof document publishes no observation binding, opens no ledger and keeps raw NULL");
+                host.Stop();
+                await Bounded(host.Settlement);
+            }
+        }
+
+        // Positive control: a genuinely pristine absent document (marker false) still receives
+        // exactly the accepted fresh 1; the guard must not reject all legacy Pairs.
+        var pristinePath = Path.Combine(DirectoryFor("lost-pristine-control"), "settings.json");
+        File.WriteAllText(pristinePath, "{\"SchemaVersion\":8}");
+        var pristine = SettingsCompatibilityTests.Deserialize(File.ReadAllText(pristinePath));
+        pristine.CommitNewPair(NewDevice, Owner, NewPairToken, string.Empty,
+            raw => "synthetic-protected", () => File.WriteAllText(pristinePath, SettingsJson(pristine)), error => { });
+        var pristineDisk = SettingsCompatibilityTests.Deserialize(File.ReadAllText(pristinePath));
+        check("PAIR-lost-pristine-control",
+            pristine.ObservationPairingGenerationKnown && pristine.ObservationPairingGeneration == 1
+            && pristineDisk.ObservationPairingGenerationKnown && pristineDisk.ObservationPairingGeneration == 1,
+            "genuinely pristine absent settings (marker=false) still receive exactly fresh 1");
+
+        // Positive control: safe proven evidence with its raw value present still recovers to
+        // the strict successor after a real durable Pair.
+        var healthyPath = Path.Combine(DirectoryFor("lost-healthy-control"), "settings.json");
+        var healthy = KnownGeneration(1);
+        healthy.InvalidateObservationGeneration();
+        File.WriteAllText(healthyPath, SettingsJson(healthy));
+        var healthyRestart = SettingsCompatibilityTests.Deserialize(File.ReadAllText(healthyPath));
+        healthyRestart.CommitNewPair(NewDevice, Owner, NewPairToken, string.Empty,
+            raw => "synthetic-protected", () => File.WriteAllText(healthyPath, SettingsJson(healthyRestart)), error => { });
+        check("PAIR-lost-healthy-control",
+            healthyRestart.ObservationPairingGenerationKnown && healthyRestart.ObservationPairingGeneration == 2
+            && SettingsCompatibilityTests.Deserialize(File.ReadAllText(healthyPath)).ObservationPairingGeneration == 2,
+            "a safe proven marker with raw 1 still recovers to exactly 2 after a real durable Pair");
+
+        // Control: unsafe numeric markers keep their existing policy (raw retained, marker
+        // cleared, closed) - the lost-raw tombstone must not widen poison to numeric evidence.
+        var numeric = new ConnectorSettings { ObservationPairingGeneration = -1, ObservationPairingGenerationRecoverable = true };
+        numeric.InvalidateObservationGeneration();
+        numeric.CommitNewPair(NewDevice, Owner, NewPairToken, string.Empty,
+            raw => "synthetic-protected", () => { }, error => { });
+        check("PAIR-lost-numeric-marker-control",
+            !numeric.ObservationPairingGenerationKnown && numeric.ObservationPairingGeneration == -1
+            && !numeric.ObservationPairingGenerationPoisoned && !numeric.ObservationPairingGenerationRecoverable,
+            "numeric invalid marker policy is unchanged: raw retained, marker cleared, closed, no new poison");
     }
 
     private static async Task LazyLease(Action<string, bool, string> check)
