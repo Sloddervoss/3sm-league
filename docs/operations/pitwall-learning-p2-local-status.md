@@ -196,11 +196,41 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   `pitwall-learning-p2-observation-ack-quality-review/`,
   `pitwall-learning-p2-observation-ack-terminal-quality-recheck/` en
   `pitwall-learning-p2-observation-ack-integration/` onder de artifactroot.
-- Volgende begrensde stap S2C2b: async observation-sendcoordinator, onveranderlijke
-  envelope en begrensde transport-/ACK-keten. HTTP-tests uitsluitend onderschept,
-  geen externe requests. Bedrading van beide bestaande verzendcallers en lokale
-  Pair/Unpair/settings volgt afzonderlijk; die daadwerkelijke integratie is nog
-  niet bewezen. Geen activation/release; sampler-Q2 en P2-Vite-buildpoort open.
+- Die afzonderlijke S2C2b-module is inmiddels lokaal geaccepteerd; zie hieronder.
+  Bedrading van beide bestaande verzendcallers en lokale Pair/Unpair/settings is
+  nog niet bewezen. Geen activation/release; sampler-Q2 en P2-Vite-buildpoort open.
+
+## T13-S2C2b zelfstandige verzendketen lokaal geaccepteerd
+
+- Runtime-SPEC PASS en volledige runtime-QUALITY APPROVED op `447878bd`.
+  Finale bron `3562e413f88577956d32afe7b0bdf5a4fc8c6b63` versterkt uitsluitend
+  één testbestand (+122 regels); alle 2257 overige tracked blobs bytegelijk.
+  Runtime-SPEC expliciet overgedragen, geen nieuwe SPEC-uitvoering geclaimd.
+  Gerichte onafhankelijke QUALITY APPROVED: OS34 doodt alle zes eerder
+  overlevende UTF-8-/bulkidentiteits-/atomiciteits-/terminaliteitsmutanten.
+- Lokale integratie `7616cd5faf9dd21e288181787b767f74fb7eb5f9`; gereviewde
+  bronbestanden bytegelijk. Parent offline restore/Release-build exit 0;
+  **34 send / 87 ACK / 57 ledger / 37 pipeline / 55 pure / 569 measurement /
+  925 volledige C#-harnasasserties inclusief soak / 50 C#→Deno-interop**, alle
+  geslaagd, alle stage-exits 0; eigen serializer-export 52 bestanden.
+- Eén async lease bewaakt plan/envelope/transport/ACK en lokale pairingcallbacks.
+  Een callback die de timeout overleeft behoudt de lease tot terminale afhandeling;
+  een bevestigde late binding wordt vóór leasehergebruik gepubliceerd.
+  Opties zijn defensief bevroren; bulkquarantaine controleert de exacte rijbinding.
+- OS34 bewijst de exacte **2088-byte** UTF-8-fixturegrens en weigering bij 2087;
+  niet een tot 24576 bytes opgevulde body. De eerdere comment/reportformulering
+  over een exacte 24576-byte body was onjuist; harde bovengrens apart gecontroleerd.
+- Nog open, niet als gerepareerd geboekt: R1 Dispose tijdens actieve operatie kan
+  de caller na duurzame commit laten falen; R2 quarantaine-aantal ontbreekt in
+  gecombineerde legacy-senduitkomst; `TRANSPORT_THROW_POSTED_FLAG` is diagnostisch
+  onjuist bij synchrone transportthrow. Dit zijn begrensde hardeningvervolgpunten.
+  W1: na unpair met incomplete binding weigert de gemengde route; onafhankelijke
+  legacy-bypass blijft beschikbaar, daadwerkelijke callerbedrading moet dit regelen.
+- Default-off, uitsluitend lokale onderschepte HTTP-proeven. Beide echte callers,
+  plugin/settings/DPAPI/PairingGeneration en capture→ledger blijven onbedraad.
+  Geen Windows-/SimHub-SDK-pluginbuild, live HTTP, model-/performance- of activatieclaim.
+- Bewijs: `pitwall-learning-p2-observation-send-{lease-spec-recheck,quality-review,
+  coverage-quality-recheck,integration}/` onder `/home/hermes/artifacts/3sm/`.
 
 ## Beperkingen en vervolgnotities
 

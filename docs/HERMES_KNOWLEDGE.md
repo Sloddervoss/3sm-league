@@ -26,7 +26,15 @@ ACK-classificatie en duurzame per-rij-afhandeling zijn na runtime-SPEC PASS op
 `71a209a8` en kwaliteitsacceptatie van de bytegelijke runtime op `f000c49c`
 lokaal geïntegreerd als `8e2d4dae`; parent 87 ACK/535 measurement/891 volledige
 C#-harnastests/50 interop PASS. T1/T2 zijn strikt test-only gesloten met M8/M7.
-Async sendlease, verzendplanning/envelope en alle producer-/pluginbedrading blijven open.
+Async sendlease/planner/envelope/onderschept transport na runtime-SPEC en QUALITY
+op `447878bd` plus strikt test-only OS34-acceptatie op `3562e413` lokaal geïntegreerd
+als `7616cd5f`; parent 34 send/569 measurement/925 full C#/50 interop PASS,
+52 exportbestanden. Zes overlevende mutanten gedood; alle 2257 niet-testblobs gelijk
+voor SPEC-overdracht. OS34 exacte fixturegrens 2088 bytes, niet 24576-byte padding.
+R1 Dispose-callerfault na commit, R2 quarantaine-aantal en sync-throw Posted-flag
+blijven open hardening; W1 unpair/incomplete binding vereist legacy-bypass in latere
+callerbedrading. Beide echte sendcallers, capture→ledger en plugin/settings/DPAPI/
+PairingGeneration-bedrading blijven open; geen complete producerketen geclaimd.
 Alle schakelaars blijven uit; geen productieapply/Edge-deploy/producerrelease.
 Rollback houdt historie en nieuwe writer intact; flag-only heractivatie mist de
 forward-P1-projectie en is niet ondersteund. Producer/outbox/quarantaine en echte
