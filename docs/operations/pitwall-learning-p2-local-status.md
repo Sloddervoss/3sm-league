@@ -246,6 +246,20 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
 - Bewijs: `pitwall-learning-p2-observation-send-{lease-spec-recheck,quality-review,
   coverage-quality-recheck,integration}/` onder `/home/hermes/artifacts/3sm/`.
 
+## S2D producer-host: bron lokaal aangesloten, review nog open
+
+- Eén SDK-vrije productiehost verbindt Init, samplebouw/Observe, post-pit capture,
+  session_end/plugin_stop, centrale SendV3 en Pair/Unpair/End. Dezelfde bron is
+  gelinkt in het uitvoerende harnas (`--only-observation-host`).
+- Parentamendement: ledger-vrije coordinatorinitialisatie met één gedeeld fence en
+  lazy real-storeprovider. De geaccepteerde ledger/ACK/core/sampler zijn byte-ongewijzigd.
+- Default-off en productie-readiness expliciet false: geen activering of nieuwe
+  handshake-/capabilityclaim. De oude V3-feature-off- en lokale bridge-methodbodies
+  worden byte-identiek gehouden; MeasurementSender.SendAsync blijft testroute.
+- Implementatie-/bewijsgrens en rollback: [lokale S2D-notitie](pitwall-observation-host-s2d.md).
+  Onafhankelijke SPEC, daarna QUALITY, nog vereist; geen volledige SDK-/Windows-
+  of DPAPI/GUI/runtimeclaim en geen parentintegratie- of releasegoedkeuring.
+
 ## Beperkingen en vervolgnotities
 
 - Historische P1-records missen meerdere context-/resetvelden; onbekend blijft
