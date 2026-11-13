@@ -31,9 +31,12 @@ op `447878bd` plus strikt test-only OS34-acceptatie op `3562e413` lokaal geïnte
 als `7616cd5f`; parent 34 send/569 measurement/925 full C#/50 interop PASS,
 52 exportbestanden. Zes overlevende mutanten gedood; alle 2257 niet-testblobs gelijk
 voor SPEC-overdracht. OS34 exacte fixturegrens 2088 bytes, niet 24576-byte padding.
-R1 Dispose-callerfault na commit, R2 quarantaine-aantal en sync-throw Posted-flag
-blijven open hardening; W1 unpair/incomplete binding vereist legacy-bypass in latere
-callerbedrading. Beide echte sendcallers, capture→ledger en plugin/settings/DPAPI/
+Shutdown/reporting bron `44a5c817` is na onafhankelijke gerichte SPEC/QUALITY
+geïntegreerd als `8d1bf8b0`; parent 41 send/576 measurement/932 full C#/50 interop
+PASS, 52 exports. R1 Dispose na commit, R2 alle plan-quarantaine-uitkomsten en
+sync-throw Posted-flag gesloten; OS41 onderscheidt partiële commit en retry.
+W1 unpair/incomplete binding vereist legacy-bypass in latere callerbedrading.
+Beide echte sendcallers, capture→ledger en plugin/settings/DPAPI/
 PairingGeneration-bedrading blijven open; geen complete producerketen geclaimd.
 Alle schakelaars blijven uit; geen productieapply/Edge-deploy/producerrelease.
 Rollback houdt historie en nieuwe writer intact; flag-only heractivatie mist de

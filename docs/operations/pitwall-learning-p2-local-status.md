@@ -220,12 +220,26 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
 - OS34 bewijst de exacte **2088-byte** UTF-8-fixturegrens en weigering bij 2087;
   niet een tot 24576 bytes opgevulde body. De eerdere comment/reportformulering
   over een exacte 24576-byte body was onjuist; harde bovengrens apart gecontroleerd.
-- Nog open, niet als gerepareerd geboekt: R1 Dispose tijdens actieve operatie kan
-  de caller na duurzame commit laten falen; R2 quarantaine-aantal ontbreekt in
-  gecombineerde legacy-senduitkomst; `TRANSPORT_THROW_POSTED_FLAG` is diagnostisch
-  onjuist bij synchrone transportthrow. Dit zijn begrensde hardeningvervolgpunten.
-  W1: na unpair met incomplete binding weigert de gemengde route; onafhankelijke
-  legacy-bypass blijft beschikbaar, daadwerkelijke callerbedrading moet dit regelen.
+- Shutdown-/rapportageverharding is geaccepteerd op finale bron
+  `44a5c81717b7f42c4f4100ff1ac1a87f360155b6`; lokale integratie
+  `8d1bf8b0b8689f022c61c4f61c440f40fb45f715`. H1 Dispose en H3 POST-diagnostiek
+  onafhankelijk SPEC/QUALITY goedgekeurd op `19466a65` en bytegelijk overgedragen;
+  H2-F1 apart SPEC PASS / QUALITY APPROVED op `44a5c817`. OS41 faalt uitsluitend
+  op de oude initializer; nieuwe code rapporteert eerdere duurzame quarantaine
+  ook als de tweede planwrite faalt. First-write-failure, all-success, partial-retry
+  en nul nieuwe commits bij een niet-nul historische teller zijn gecontroleerd.
+- Parent op die integratie: offline restore/Release-build 0 warnings/errors;
+  **41 send / 87 ACK / 57 ledger / 37 pipeline / 55 pure / 576 measurement /
+  932 volledige C#-harnasasserties inclusief soak / 50 C#→Deno-interop** geslaagd,
+  alle stage-exits 0; eigen serializer-export 52 bestanden. R1/R2/POST-flag nu
+  gerepareerd, geen nieuwe Windows-/SDK-build geclaimd.
+- W1 blijft open: na unpair met incomplete binding weigert de gemengde route;
+  onafhankelijke legacy-bypass blijft beschikbaar, daadwerkelijke callerbedrading
+  moet dit regelen. Sampler-Q2 blijft een afzonderlijke caller-voorwaarde.
+- Nieuwe bewijzen: `pitwall-learning-p2-observation-send-plan-count-spec-cli/`,
+  `pitwall-learning-p2-observation-send-plan-count-quality-cli/` en
+  `pitwall-learning-p2-observation-send-shutdown-integration/`. De eerder
+  onderbroken SPEC-workers leverden geen oordeel en gelden niet als software-FAIL.
 - Default-off, uitsluitend lokale onderschepte HTTP-proeven. Beide echte callers,
   plugin/settings/DPAPI/PairingGeneration en capture→ledger blijven onbedraad.
   Geen Windows-/SimHub-SDK-pluginbuild, live HTTP, model-/performance- of activatieclaim.
