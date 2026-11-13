@@ -104,6 +104,8 @@ namespace ThreeSM.EnduranceConnector
         // gewoon door: meten is een toevoeging, geen voorwaarde.
         private MeasurementOutbox _measurementOutbox;
         private MeasurementPipeline _measurementPipeline;
+        private ObservationProducerHost _observationHost;
+        private string _lastObservationCaptureDiagnostic;
         private MeasurementSender _measurementSender;
         private ConnectorControlClient _controlClient;
 
@@ -755,6 +757,7 @@ namespace ThreeSM.EnduranceConnector
                 string token;
                 TelemetryEnvelopeV3 envelope;
                 TelemetryEnvelope localEnvelope = null;
+                ObservationProducerIdentity producerIdentity = null;
                 lock (_settingsGate)
                 {
                     var central = Settings.UseCentralRelay;
@@ -771,6 +774,7 @@ namespace ThreeSM.EnduranceConnector
                     {
                         endpoint = BuildRelayEndpoint(V3IngestFunction);
                         token = _deviceToken;
+                        if (_observationHost != null) producerIdentity = _observationHost.Snapshot();
                     }
                     else
                     {
@@ -812,7 +816,7 @@ namespace ThreeSM.EnduranceConnector
                         return;
                     }
                     _activeSend = envelope != null
-                        ? Task.Run(async () => await SendV3Async(envelope, endpoint, token, _shutdown.Token).ConfigureAwait(false))
+                        ? Task.Run(async () => await SendV3Async(envelope, endpoint, token, producerIdentity, _shutdown.Token).ConfigureAwait(false))
                         : Task.Run(async () => await SendAsync(localEnvelope, endpoint, token, _shutdown.Token).ConfigureAwait(false));
                 }
             }
@@ -831,14 +835,15 @@ namespace ThreeSM.EnduranceConnector
             lock (_sendGate)
             {
                 Interlocked.Exchange(ref _ending, 1);
-                _shutdown.Cancel();
                 activeSend = _activeSend;
                 activePairing = _activePairing;
             }
             DisposeDiagnostics();
             // Meetlaag eerst afsluiten: de laatste ronde en een open pitbezoek worden nog
             // bewaard in de outbox voordat de HTTP-client verdwijnt.
-            EndMeasurementSession("plugin_stop");
+            if (_observationHost != null) _observationHost.Stop();
+            else EndMeasurementSession("plugin_stop");
+            _shutdown.Cancel();
             // Directe SDK-lezer: alleen de eigen read-only handle vrijgeven. Nooit een
             // exception laten ontsnappen tijdens SimHub-shutdown.
             try
@@ -848,18 +853,23 @@ namespace ThreeSM.EnduranceConnector
                 if (irSdk != null) irSdk.Dispose();
             }
             catch (Exception irSdkError) { SimHub.Logging.Current.Warn("3SM iRacing-SDK: sluiten mislukt: " + irSdkError.Message); }
-            try { Task.WaitAll(new[] { activeSend, activePairing }, TimeSpan.FromSeconds(5)); } catch { }
-            lock (_settingsGate)
+            var owned = _observationHost == null ? Task.FromResult(0) : _observationHost.Settlement;
+            // End is a synchronous SDK hook, not permission to block the UI thread.
+            // Keep HTTP/CTS/settings alive until the ACTUAL callbacks/transports settle,
+            // not merely the coordinator's bounded public timeout task.
+            _ = Task.Run(async () =>
             {
-                this.SaveCommonSettings("ConnectorSettings", Settings);
-                _deviceToken = string.Empty;
-            }
-            if (activeSend.IsCompleted && activePairing.IsCompleted)
-            {
+                try { await Task.WhenAll(activeSend, activePairing, owned).ConfigureAwait(false); }
+                catch (Exception error) { SimHub.Logging.Current.Warn("3SM shutdown: " + error.GetType().Name); }
+                lock (_settingsGate)
+                {
+                    try { this.SaveCommonSettings("ConnectorSettings", Settings); }
+                    catch (Exception error) { SimHub.Logging.Current.Warn("3SM shutdown settings: " + error.GetType().Name); }
+                    _deviceToken = string.Empty;
+                }
                 _http.Dispose();
                 _shutdown.Dispose();
-            }
-            else SimHub.Logging.Current.Warn("3SM Endurance: shutdowntaak liep na vijf seconden nog; resources worden niet voortijdig disposed.");
+            });
             Status = "Gestopt";
         }
 
@@ -881,7 +891,15 @@ namespace ThreeSM.EnduranceConnector
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "3SM Endurance Connector");
                 _measurementOutbox = new MeasurementOutbox(Path.Combine(dataDirectory, "measurement-outbox.json"));
                 _measurementOutbox.Load();                       // herstel na een herstart
-                _measurementPipeline = new MeasurementPipeline(_measurementOutbox, new MeasurementIdFactory());
+                _observationHost = new ObservationProducerHost(_measurementOutbox, new MeasurementIdFactory(),
+                    new ObservationProducerIdentity(_deviceToken, Settings.ObservationBinding()),
+                    () => Volatile.Read(ref Settings.ObservationEnabled),
+                    () => false, // no proven receiver handshake exists; activation is a separate gate
+                    fence => new ObservationLedgerStore(Path.Combine(dataDirectory, "observation-ledger-v1.json"), fence),
+                    new HttpObservationSendTransport(_http, 16384),
+                    () => ConnectorCapabilities.Implemented().ToJson(),
+                    new MeasurementLimits { MaxFrameBodyBytes = MaxPayloadBytes }, () => DateTime.UtcNow);
+                _measurementPipeline = _observationHost.Pipeline;
                 _measurementSender = new MeasurementSender(_measurementOutbox, _http,
                     () => ConnectorCapabilities.Implemented().ToJson(), new MeasurementLimits { MaxFrameBodyBytes = MaxPayloadBytes });
                 _controlClient = new ConnectorControlClient(new Uri(ProductionRelayBaseUrl), _http, string.Empty,
@@ -890,6 +908,8 @@ namespace ThreeSM.EnduranceConnector
             }
             catch (Exception error)
             {
+                if (_observationHost != null) _observationHost.Dispose();
+                _observationHost = null;
                 _measurementOutbox = null;
                 _measurementPipeline = null;
                 _measurementSender = null;
@@ -907,8 +927,8 @@ namespace ThreeSM.EnduranceConnector
             if (_measurementPipeline == null || !running || !isInCar || data.NewData == null) return;
             try
             {
-                var sample = BuildMeasurementSample(manager, data);
-                if (sample != null) _measurementPipeline.Observe(sample);
+                if (_observationHost != null) _observationHost.Observe(() => BuildMeasurementSample(manager, data));
+                ReportObservationCaptureStatus();
             }
             catch (Exception error)
             {
@@ -918,11 +938,26 @@ namespace ThreeSM.EnduranceConnector
             }
         }
 
+        private void ReportObservationCaptureStatus()
+        {
+            if (_observationHost == null) return;
+            var code = _observationHost.LastCaptureDiagnostic;
+            if (string.Equals(code, _lastObservationCaptureDiagnostic, StringComparison.Ordinal)) return;
+            _lastObservationCaptureDiagnostic = code;
+            if (string.IsNullOrEmpty(code) || code == "Captured" || code == "AlreadyCaptured") return;
+            // Fixed local categories only, once per state change; no payload/token/IO text.
+            SimHub.Logging.Current.Warn("3SM observation capture: " + code);
+        }
+
         /// <summary>Sluit de meetsessie af met een expliciete reden; nooit stilzwijgend laten hangen.</summary>
         private void EndMeasurementSession(string reason)
         {
             if (_measurementPipeline == null) return;
-            try { _measurementPipeline.End(reason); }
+            try
+            {
+                if (_observationHost != null) _observationHost.EndSession(reason);
+                ReportObservationCaptureStatus();
+            }
             catch (Exception error) { SimHub.Logging.Current.Warn("3SM meetlaag: afsluiten mislukt: " + error.Message); }
         }
 
@@ -971,7 +1006,7 @@ namespace ThreeSM.EnduranceConnector
             var trackTemp = RoundTyreValue(channels.ReadNumber("TrackTempCrew", MinAmbientTempC, MaxAmbientTempC), 1);
             if (!trackTemp.HasValue) trackTemp = RoundTyreValue(channels.ReadNumber("TrackTemp", MinAmbientTempC, MaxAmbientTempC), 1);
 
-            return new TelemetrySample
+            var sample = new TelemetrySample
             {
                 ObservedAtUtc = DateTime.UtcNow,
                 // De SDK-tick is de harde ontdubbeling: SimHub's DataUpdate kan met ongewijzigde
@@ -999,6 +1034,14 @@ namespace ThreeSM.EnduranceConnector
                 FuelLitres = CaptureValueRules.FuelLitres(GetNullableDouble(manager, Settings.FuelProperty, false)),
                 Wear = ReadMeasurementWear(channels),
             };
+            if (_observationHost != null) _observationHost.BindSample(sample, new ObservationLapContext(
+                FirstNonEmpty(snapshot.CarId, GetNullableString(manager, Settings.CarIdProperty)),
+                TrackIdentityReader.Read(snapshot),
+                FirstNonEmpty(snapshot.TrackName, GetNullableString(manager, Settings.TrackNameProperty)),
+                FirstNonEmpty(snapshot.TrackConfig, GetNullableString(manager, Settings.TrackConfigProperty)),
+                GetNullableInt(manager, "DataCorePlugin.GameRawData.SessionData.WeekendInfo.SessionUniqueID"),
+                channels.ReadInt("SessionNum", 0, 1000)));
+            return sample;
         }
 
         /// <summary>
@@ -1177,8 +1220,34 @@ namespace ThreeSM.EnduranceConnector
             lock (_sendGate)
             {
                 if (Volatile.Read(ref _ending) != 0 || Interlocked.CompareExchange(ref _pairingBusy, 1, 0) != 0) return Task.FromResult(false);
-                _activePairing = Task.Run(async () => await PairCoreAsync(code, _shutdown.Token).ConfigureAwait(false));
+                _activePairing = Task.Run(async () => await PairWithHostAsync(code, _shutdown.Token).ConfigureAwait(false));
                 return _activePairing;
+            }
+        }
+
+        private async Task<bool> PairWithHostAsync(string code, CancellationToken cancellationToken)
+        {
+            if (_observationHost == null) { Volatile.Write(ref _pairingBusy, 0); return false; }
+            var result = await _observationHost.TransitionAsync(async cancel =>
+            {
+                if (!await PairCoreAsync(code, cancel).ConfigureAwait(false)) return null;
+                lock (_settingsGate) return new ObservationProducerIdentity(_deviceToken, Settings.ObservationBinding());
+            }, cancellationToken).ConfigureAwait(false);
+            if (!result.CallbackInvoked) Volatile.Write(ref _pairingBusy, 0);
+            return result.Committed;
+        }
+
+        private void ForgetUnprovenAuthorization()
+        {
+            lock (_settingsGate)
+            {
+                _deviceToken = string.Empty;
+                Settings.DeviceTokenProtected = string.Empty;
+                Settings.DeviceId = string.Empty;
+                Settings.BoundOwnerUserId = string.Empty;
+                Settings.ObservationPairingGenerationKnown = false;
+                try { this.SaveCommonSettings("ConnectorSettings", Settings); }
+                catch (Exception error) { SimHub.Logging.Current.Warn("3SM pairing: authorization invalidation save failed: " + error.GetType().Name); }
             }
         }
 
@@ -1229,7 +1298,10 @@ namespace ThreeSM.EnduranceConnector
                             var oldToken = _deviceToken;
                             try
                             {
+                                var nextGeneration = Settings.NextObservationGeneration();
                                 Settings.DeviceTokenProtected = ProtectToken(result.DeviceToken);
+                                Settings.ObservationPairingGeneration = nextGeneration;
+                                Settings.ObservationPairingGenerationKnown = nextGeneration.HasValue;
                                 Settings.DeviceId = result.DeviceId;
                                 Settings.BoundRaceId = string.Empty;
                                 Settings.BoundTeamId = string.Empty;
@@ -1247,6 +1319,7 @@ namespace ThreeSM.EnduranceConnector
                                 Settings.BoundOwnerUserId = oldOwnerId;
                                 Settings.UseCentralRelay = oldCentral;
                                 _deviceToken = oldToken;
+                                Settings.ObservationPairingGenerationKnown = false;
                                 try { this.SaveCommonSettings("ConnectorSettings", Settings); }
                                 catch (Exception rollbackError) { SimHub.Logging.Current.Warn("3SM Endurance pairingrollback kon niet worden opgeslagen: " + rollbackError); }
                                 throw;
@@ -1266,10 +1339,12 @@ namespace ThreeSM.EnduranceConnector
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                ForgetUnprovenAuthorization();
                 return false;
             }
             catch (Exception error)
             {
+                ForgetUnprovenAuthorization();
                 Status = "Pairing mislukt · " + error.Message;
                 return false;
             }
@@ -1279,9 +1354,33 @@ namespace ThreeSM.EnduranceConnector
             }
         }
 
-        public void Unpair()
+        public Task<bool> UnpairAsync()
         {
-            if (Volatile.Read(ref _pairingBusy) != 0) { Status = "Pairing is nog bezig"; return; }
+            lock (_sendGate)
+            {
+                if (_observationHost == null || Volatile.Read(ref _ending) != 0
+                    || Interlocked.CompareExchange(ref _pairingBusy, 1, 0) != 0) return Task.FromResult(false);
+                _activePairing = Task.Run(async () =>
+                {
+                    var result = await _observationHost.TransitionAsync(cancel =>
+                    {
+                        try
+                        {
+                            cancel.ThrowIfCancellationRequested();
+                            if (!UnpairCore()) return Task.FromResult<ObservationProducerIdentity>(null);
+                            lock (_settingsGate) return Task.FromResult(new ObservationProducerIdentity(_deviceToken, Settings.ObservationBinding()));
+                        }
+                        finally { Volatile.Write(ref _pairingBusy, 0); }
+                    }, _shutdown.Token).ConfigureAwait(false);
+                    if (!result.CallbackInvoked) Volatile.Write(ref _pairingBusy, 0);
+                    return result.Committed;
+                });
+                return _activePairing;
+            }
+        }
+
+        private bool UnpairCore()
+        {
             lock (_settingsGate)
             {
                 var oldToken = _deviceToken;
@@ -1310,8 +1409,9 @@ namespace ThreeSM.EnduranceConnector
                     Settings.BoundOwnerUserId = oldOwnerId;
                     try { this.SaveCommonSettings("ConnectorSettings", Settings); }
                     catch (Exception rollbackError) { SimHub.Logging.Current.Warn("3SM Endurance unpairrollback kon niet worden opgeslagen: " + rollbackError); }
+                    ForgetUnprovenAuthorization();
                     Status = "Lokaal vergeten mislukt · " + error.Message;
-                    return;
+                    return false;
                 }
             }
             ApplyDiagnosticsSettings();
@@ -1320,6 +1420,7 @@ namespace ThreeSM.EnduranceConnector
             SyncOverlayAuth(true);
             Status = "Lokaal vergeten · trek het device ook op de 3SM-site in";
             OnPropertyChanged("IsPaired");
+            return true;
         }
 
         // De overlay-client wordt één keer in Init gemaakt; pair/unpair wijzigen alleen
@@ -2287,7 +2388,50 @@ namespace ThreeSM.EnduranceConnector
             return number;
         }
 
-        private async Task SendV3Async(TelemetryEnvelopeV3 envelope, Uri endpoint, string token, CancellationToken cancellationToken)
+        private async Task SendV3Async(TelemetryEnvelopeV3 envelope, Uri endpoint, string token,
+            ObservationProducerIdentity identity, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (_observationHost == null)
+                {
+                    await SendLegacyV3Async(envelope, endpoint, token, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                var pace = envelope.PaceCapture;
+                var attemptUtc = DateTime.UtcNow;
+                var result = await _observationHost.SendAsync(() =>
+                {
+                    envelope.PaceCapture = null;
+                    try { return SerializeWithinBudget(envelope); }
+                    finally { envelope.PaceCapture = pace; }
+                }, endpoint, identity, attemptUtc,
+                    body => PaceCaptureBuffer.AppendWithinBudget(body, pace),
+                    () => SendLegacyV3Async(envelope, endpoint, token, cancellationToken), cancellationToken).ConfigureAwait(false);
+                if (result != null)
+                {
+                    DiagnosticsClient diagnostics;
+                    lock (_diagnosticsGate) diagnostics = _diagnostics;
+                    if (diagnostics != null)
+                    {
+                        diagnostics.RecordIngestAttempt(attemptUtc);
+                        diagnostics.RecordIngestResult(attemptUtc, result.HttpStatus,
+                            result.HttpStatus >= 200 && result.HttpStatus < 300);
+                    }
+                    if (Volatile.Read(ref _ending) == 0) Status = "V3 " + envelope.TransportSessionId.Substring(0, Math.Min(8, envelope.TransportSessionId.Length)) + " · seq " + envelope.Sequence;
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+            catch (Exception error)
+            {
+                if (Volatile.Read(ref _ending) == 0) Status = "Relayfout · " + error.Message;
+            }
+            finally { Volatile.Write(ref _sendBusy, 0); }
+        }
+
+        // Feature-off branch retained: core trim -> legacy measurements -> pace ->
+        // one POST -> original parser/ACK/backoff. MeasurementSender.SendAsync remains a test route.
+        private async Task SendLegacyV3Async(TelemetryEnvelopeV3 envelope, Uri endpoint, string token, CancellationToken cancellationToken)
         {
             var attemptUtc = DateTime.UtcNow;
             var ingestResultRecorded = false;

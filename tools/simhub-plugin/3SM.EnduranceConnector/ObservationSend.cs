@@ -666,6 +666,8 @@ namespace ThreeSM.EnduranceConnector
         public long AttemptId { get; private set; }
         public string Diagnostic { get; private set; }
         public bool Posted { get; internal set; }
+        // Explicit local pre-transport proof; Posted=false alone never authorizes fallback.
+        public bool SafeToBypass { get; internal set; }
         public int HttpStatus { get; internal set; }
         public int BodyBytes { get; internal set; }
         public ObservationPairingBinding Binding { get; internal set; }
@@ -728,7 +730,11 @@ namespace ThreeSM.EnduranceConnector
     public sealed class ObservationSendCoordinator : IDisposable
     {
         private readonly SemaphoreSlim _lease = new SemaphoreSlim(1, 1);
-        private readonly ObservationLedgerStore _ledger;
+        private ObservationLedgerStore _ledger;
+        private readonly ObservationBindingFence _bindingFence;
+        private readonly Func<ObservationLedgerStore> _ledgerProvider;
+        private bool _initializationAttempted;
+        private string _initializationFailure;
         private readonly MeasurementOutbox _legacy;
         private readonly IObservationSendTransport _transport;
         private readonly Func<string> _tokenProvider;
@@ -741,9 +747,12 @@ namespace ThreeSM.EnduranceConnector
         private readonly int _pairTransitionTimeoutMilliseconds;
         private readonly MeasurementLimits _limits;
         private readonly object _gate = new object();
+        private readonly TaskCompletionSource<bool> _settlement = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Settlement { get { return _settlement.Task; } }
 
         private long _attemptSequence;
         private long _activeAttempt;
+        private long _transportInvocationAttempt;
         private int _pendingLeaseWaiters;
         private int _activeOperations;
         private bool _disposed;
@@ -758,6 +767,7 @@ namespace ThreeSM.EnduranceConnector
             if (legacy == null) throw new ArgumentNullException("legacy");
             if (transport == null) throw new ArgumentNullException("transport");
             _ledger = ledger;
+            _bindingFence = ledger.BindingFence;
             _legacy = legacy;
             _transport = transport;
             _tokenProvider = tokenProvider;
@@ -768,6 +778,87 @@ namespace ThreeSM.EnduranceConnector
             _requestTimeoutMilliseconds = normalized.RequestTimeoutMilliseconds;
             _pairTransitionTimeoutMilliseconds = normalized.PairTransitionTimeoutMilliseconds;
             _limits = ObservationSendPlanner.ClampLimits(limits);
+        }
+
+        // Explicit factory avoids ambiguity with existing constructor(null, ...) calls.
+        public static ObservationSendCoordinator CreateLazy(ObservationBindingFence fence,
+            Func<ObservationLedgerStore> provider, MeasurementOutbox legacy,
+            IObservationSendTransport transport, Func<string> tokenProvider,
+            Func<string> capabilitiesJson, ObservationSendOptions options, MeasurementLimits limits)
+        {
+            return new ObservationSendCoordinator(fence, provider, legacy, transport,
+                tokenProvider, capabilitiesJson, options, limits);
+        }
+
+        private ObservationSendCoordinator(ObservationBindingFence fence,
+            Func<ObservationLedgerStore> provider, MeasurementOutbox legacy,
+            IObservationSendTransport transport, Func<string> tokenProvider,
+            Func<string> capabilitiesJson, ObservationSendOptions options, MeasurementLimits limits)
+        {
+            if (fence == null) throw new ArgumentNullException("fence");
+            if (provider == null) throw new ArgumentNullException("provider");
+            if (legacy == null) throw new ArgumentNullException("legacy");
+            if (transport == null) throw new ArgumentNullException("transport");
+            _bindingFence = fence;
+            _ledgerProvider = provider;
+            _legacy = legacy;
+            _transport = transport;
+            _tokenProvider = tokenProvider;
+            _capabilitiesJson = capabilitiesJson;
+            var normalized = (options ?? new ObservationSendOptions()).Normalized();
+            _enabled = normalized.Enabled;
+            _leaseWaitMilliseconds = normalized.LeaseWaitMilliseconds;
+            _requestTimeoutMilliseconds = normalized.RequestTimeoutMilliseconds;
+            _pairTransitionTimeoutMilliseconds = normalized.PairTransitionTimeoutMilliseconds;
+            _limits = ObservationSendPlanner.ClampLimits(limits);
+        }
+
+        // Called only under this coordinator's lease. A bad provider is terminal for
+        // this instance: never invoke a second constructor/Load after ambiguous IO.
+        private bool EnsureLedgerUnderLease()
+        {
+            if (_ledger != null) return true;
+            if (_initializationAttempted) return false;
+            _initializationAttempted = true;
+            try
+            {
+                var store = _ledgerProvider();
+                if (store == null) { _initializationFailure = "ledger_null"; return false; }
+                if (!object.ReferenceEquals(store.BindingFence, _bindingFence))
+                { _initializationFailure = "ledger_fence_mismatch"; return false; }
+                _ledger = store;
+                return true;
+            }
+            catch (Exception)
+            {
+                _initializationFailure = "ledger_provider_failed";
+                return false;
+            }
+        }
+
+        /// <summary>Nonblocking tick-side capture, using the very same lease/store as SEND.
+        /// The host must check opt-in/readiness before calling. False retains the exact
+        /// candidate at the caller, never authorizes a legacy copy.</summary>
+        public bool TryCapture(ObservationLedgerCandidate candidate,
+            out ObservationLedgerCaptureResult result, Func<bool> eligible = null)
+        {
+            result = null;
+            if (!_enabled || candidate == null || !_bindingFence.IsCurrent(candidate.Binding)) return false;
+            if (!TryBeginOperation()) return false;
+            var acquired = false;
+            try
+            {
+                acquired = _lease.Wait(0);
+                if (!acquired || IsDisposed || !_bindingFence.IsCurrent(candidate.Binding)
+                    || (eligible != null && !eligible()) || !EnsureLedgerUnderLease()) return false;
+                result = _ledger.Capture(candidate);
+                return true;
+            }
+            finally
+            {
+                if (acquired) ReleaseLease();
+                EndOperation();
+            }
         }
 
         /// <summary>
@@ -801,7 +892,7 @@ namespace ThreeSM.EnduranceConnector
         public int PendingLeaseWaiters { get { return Volatile.Read(ref _pendingLeaseWaiters); } }
         public ObservationPairingBinding CurrentBinding
         {
-            get { return _ledger.BindingFence.Current; }
+            get { return _bindingFence.Current; }
         }
 
         /// <summary>
@@ -955,7 +1046,7 @@ namespace ThreeSM.EnduranceConnector
                     }
 
                     // Publication happens under the same lease, after the callback result.
-                    _ledger.BindingFence.Rebind(result.Binding);
+                    _bindingFence.Rebind(result.Binding);
                     return new ObservationPairTransitionResult(
                         ObservationPairTransitionStatus.Committed, true, result.Binding, null);
                 }
@@ -992,7 +1083,7 @@ namespace ThreeSM.EnduranceConnector
                     {
                         var result = completed.Result;
                         if (result != null && result.Committed && result.Binding != null)
-                            _ledger.BindingFence.Rebind(result.Binding);
+                            _bindingFence.Rebind(result.Binding);
                     }
                     else if (completed.IsFaulted)
                     {
@@ -1020,8 +1111,18 @@ namespace ThreeSM.EnduranceConnector
         /// One bounded OBS attempt. Default-off: when <see cref="ObservationSendOptions.Enabled"/>
         /// is false nothing is read, posted or mutated.
         /// </summary>
-        public async Task<ObservationSendAttemptResult> SendOnceAsync(string coreBodyJson,
+        public Task<ObservationSendAttemptResult> SendOnceAsync(string coreBodyJson,
             Uri endpoint, DateTime nowUtc, CancellationToken cancellationToken)
+        {
+            return SendOnceAsync(coreBodyJson, endpoint, nowUtc, cancellationToken, null, null);
+        }
+
+        // Runtime eligibility is checked under the lease BEFORE lazy storage and
+        // again before transport. Finalize only appends optional pace within budget,
+        // after the base measurement plan and before immutable envelope creation.
+        public async Task<ObservationSendAttemptResult> SendOnceAsync(string coreBodyJson,
+            Uri endpoint, DateTime nowUtc, CancellationToken cancellationToken,
+            Func<bool> eligible, Func<string, string> finalizeBody)
         {
             if (!TryBeginOperation())
                 throw new ObjectDisposedException("ObservationSendCoordinator");
@@ -1093,8 +1194,10 @@ namespace ThreeSM.EnduranceConnector
                 {
                     try
                     {
-                        return await SendUnderLeaseAsync(coreBodyJson, coreBytes, endpoint, nowUtc,
-                            attemptId, cancellationToken).ConfigureAwait(false);
+                        var result = await SendUnderLeaseAsync(coreBodyJson, coreBytes, endpoint, nowUtc,
+                            attemptId, cancellationToken, eligible, finalizeBody).ConfigureAwait(false);
+                        result.SafeToBypass = Interlocked.Read(ref _transportInvocationAttempt) != attemptId;
+                        return result;
                     }
                     catch (Exception error)
                     {
@@ -1121,9 +1224,18 @@ namespace ThreeSM.EnduranceConnector
 
         private async Task<ObservationSendAttemptResult> SendUnderLeaseAsync(
             string coreBodyJson, int coreBodyBytes, Uri endpoint, DateTime nowUtc,
-            long attemptId, CancellationToken cancellationToken)
+            long attemptId, CancellationToken cancellationToken, Func<bool> eligible,
+            Func<string, string> finalizeBody)
         {
-            var current = _ledger.BindingFence.Current;
+            if (eligible != null && !eligible())
+                return new ObservationSendAttemptResult(ObservationSendStatus.Disabled, attemptId, "host_not_eligible");
+            var current = _bindingFence.Current;
+            if (_ledgerProvider != null && (current == null || !current.IsComplete))
+                return new ObservationSendAttemptResult(ObservationSendStatus.Refused, attemptId, "binding_incomplete");
+            if (!EnsureLedgerUnderLease())
+                return new ObservationSendAttemptResult(ObservationSendStatus.Refused, attemptId, _initializationFailure);
+            if (_ledgerProvider != null && _ledger.IsFailedClosed)
+                return new ObservationSendAttemptResult(ObservationSendStatus.Refused, attemptId, "ledger_failed_closed");
             var legacyDue = _legacy.Due(nowUtc, int.MaxValue, int.MaxValue);
             var observationDue = DueObservation(nowUtc);
 
@@ -1208,7 +1320,10 @@ namespace ThreeSM.EnduranceConnector
             SendEnvelope envelope;
             try
             {
-                envelope = SendEnvelope.Create(token, endpoint, current, plan.Offered, plan.Body,
+                var finalBody = finalizeBody == null ? plan.Body : finalizeBody(plan.Body);
+                if (Encoding.UTF8.GetByteCount(finalBody) > _limits.MaxFrameBodyBytes)
+                    throw new InvalidOperationException("final_body_too_large");
+                envelope = SendEnvelope.Create(token, endpoint, current, plan.Offered, finalBody,
                     attemptId);
             }
             catch (Exception error)
@@ -1220,7 +1335,7 @@ namespace ThreeSM.EnduranceConnector
 
             // Send-time fence: a local rebind that bypassed the lease still cannot post
             // rows under the old binding.
-            if (!_ledger.BindingFence.IsCurrent(envelope.Binding))
+            if (!_bindingFence.IsCurrent(envelope.Binding))
             {
                 var rows = ObservationRows(envelope);
                 var quarantinedNow = 0;
@@ -1241,6 +1356,9 @@ namespace ThreeSM.EnduranceConnector
                 return changed;
             }
 
+            if (eligible != null && !eligible())
+                return new ObservationSendAttemptResult(ObservationSendStatus.Disabled, attemptId, "host_not_eligible");
+            Interlocked.Exchange(ref _transportInvocationAttempt, attemptId);
             var outcome = await SendBoundedAsync(envelope, cancellationToken).ConfigureAwait(false);
             if (outcome.Completion == TransportCompletion.Canceled
                 || outcome.Completion == TransportCompletion.TimedOut)
@@ -1524,7 +1642,7 @@ namespace ThreeSM.EnduranceConnector
             {
                 task = _transport.SendAsync(envelope, delegate
                 {
-                    return _ledger.BindingFence.IsCurrent(envelope.Binding);
+                    return _bindingFence.IsCurrent(envelope.Binding);
                 }, linked.Token);
             }
             catch (Exception error)
@@ -1729,7 +1847,11 @@ namespace ThreeSM.EnduranceConnector
                     disposeLease = true;
                 }
             }
-            if (disposeLease) _lease.Dispose();
+            if (disposeLease)
+            {
+                _lease.Dispose();
+                _settlement.TrySetResult(true);
+            }
         }
 
         /// <summary>
@@ -1756,7 +1878,11 @@ namespace ThreeSM.EnduranceConnector
                     disposeLease = true;
                 }
             }
-            if (disposeLease) _lease.Dispose();
+            if (disposeLease)
+            {
+                _lease.Dispose();
+                _settlement.TrySetResult(true);
+            }
         }
     }
 }

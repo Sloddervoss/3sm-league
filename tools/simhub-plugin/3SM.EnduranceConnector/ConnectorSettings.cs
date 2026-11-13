@@ -19,6 +19,32 @@ namespace ThreeSM.EnduranceConnector
         public string BoundTeamId = string.Empty;
         public string BoundOwnerUserId = string.Empty;
 
+        // Internal source-only opt-in/kill switch. No UI, handshake claim or migration.
+        [System.Runtime.Serialization.OptionalField]
+        public bool ObservationEnabled = false;
+        // Nullable distinguishes absent historical metadata from a real persisted epoch.
+        [System.Runtime.Serialization.OptionalField]
+        public long? ObservationPairingGeneration;
+        [System.Runtime.Serialization.OptionalField]
+        public bool ObservationPairingGenerationKnown = false;
+
+        public ObservationPairingBinding ObservationBinding()
+        {
+            var generation = ObservationPairingGeneration;
+            var known = ObservationPairingGenerationKnown && generation.HasValue
+                && generation.Value >= 0 && generation.Value <= 9007199254740991L;
+            return new ObservationPairingBinding(DeviceId, BoundOwnerUserId, generation ?? 0, known);
+        }
+
+        // Missing/corrupt/overflow history is NOT adopted as known zero. Only a validated
+        // new Pair commit may persist this next value together with device/owner/token.
+        public long? NextObservationGeneration()
+        {
+            var binding = ObservationBinding();
+            return binding.PairingGenerationKnown && binding.PairingGeneration < 9007199254740991L
+                ? (long?)(binding.PairingGeneration + 1) : null;
+        }
+
         // Geavanceerde lokale fallback voor ontwikkeling en offline simulatie.
         public string BridgeUrl = "http://127.0.0.1:8787";
         public string PairingToken = "local-3sm-simhub-spike";

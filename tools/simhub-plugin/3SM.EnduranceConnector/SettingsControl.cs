@@ -179,7 +179,7 @@ namespace ThreeSM.EnduranceConnector
                 pairingCode.Text = string.Empty;
                 refreshBinding();
             };
-            unpairButton.Click += delegate { _plugin.Unpair(); refreshBinding(); };
+            unpairButton.Click += async delegate { await _plugin.UnpairAsync(); refreshBinding(); };
 
             return stack;
         }

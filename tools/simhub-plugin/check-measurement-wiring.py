@@ -15,8 +15,10 @@ doet die controle wel, op de bron:
 Exitcode 0 = alles PASS, 1 = minstens één FAIL. Alleen lezen, niets schrijven.
 """
 
+import hashlib
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -26,7 +28,7 @@ TESTS = ROOT / "3SM.EnduranceConnector.DiagnosticsTests"
 # veld in de plugin -> bronbestand met de klasse waarvan de leden tellen
 FIELD_SOURCES = {
     "_measurementOutbox": ("MeasurementOutbox.cs", "MeasurementOutbox"),
-    "_measurementPipeline": ("MeasurementPipeline.cs", "MeasurementPipeline"),
+    "_observationHost": ("ObservationProducerHost.cs", "ObservationProducerHost"),
     "_measurementSender": ("MeasurementFrame.cs", "MeasurementSender"),
     "_controlClient": ("ConnectorControlClient.cs", "ConnectorControlClient"),
     "_sessionTime": ("SessionTelemetryReader.cs", "SessionTelemetryReader"),
@@ -51,6 +53,14 @@ MEASUREMENT_FILES = [
     "CaptureValueRules.cs",
     "IrSdkChannels.cs",
     "IrSdkMemoryReader.cs",
+    "ObservationProducerHost.cs",
+    "ObservationSend.cs",
+    "ObservationCapture.cs",
+    "ObservationSampling.cs",
+    "ObservationLedger.cs",
+    "ObservationLedgerStore.cs",
+    "ObservationAck.cs",
+    "TrackIdentityReader.cs",
 ]
 
 passed = 0
@@ -188,6 +198,59 @@ def main():
         observe_at = gate_at = -1
     check("W07", observe_at > 0 and gate_at > observe_at,
           "het monster wordt vóór de pairing-poort aangeboden (teken " + str(observe_at) + " < " + str(gate_at) + ")")
+
+    # S2D source-only checks. These are not SDK/plugin execution evidence.
+    raw_plugin = read(PLUGIN / "EnduranceConnectorPlugin.cs")
+    host = read(PLUGIN / "ObservationProducerHost.cs")
+    check("W08-host-callgraph", all(token in raw_plugin for token in (
+        "new ObservationProducerHost(", "_observationHost.Observe(() => BuildMeasurementSample",
+        "_observationHost.BindSample(sample, new ObservationLapContext(",
+        "_observationHost.EndSession(reason)", "_observationHost.SendAsync(",
+        "_observationHost.TransitionAsync(", "_observationHost.Stop()", "_observationHost.Settlement"))
+        and "new MeasurementPipeline(legacy, ids, _samplerOptions, CaptureSummary)" in host
+        and "Coordinator.TryCapture(candidate, out result, Eligible)" in host,
+        "static real Init/sample/End/send/Pair/Unpair/shutdown -> shared host -> real pipeline/capture seam")
+    check("W09-lease-boundary", "Coordinator.TransitionAsync(token =>" in host
+        and host.index("Coordinator.TransitionAsync(token =>") < host.index("Task.Run(() => CommitIdentityAsync(commit, token))")
+        and "await _plugin.UnpairAsync()" in read(PLUGIN / "SettingsControl.cs")
+        and "Task.WaitAll" not in raw_plugin,
+        "static callback execution below the existing coordinator lease; awaited UI Unpair; nonblocking SDK End")
+
+    # Freeze exact legacy method bodies from accepted 63ae1661, not a rewritten parser policy.
+    def method_body(name):
+        match = re.search(r"private async Task " + name + r"\(", raw_plugin)
+        if match is None:
+            return ""
+        start = raw_plugin.index("{", match.start())
+        depth, end = 1, start + 1
+        while depth:
+            depth += (raw_plugin[end] == "{") - (raw_plugin[end] == "}")
+            end += 1
+        return raw_plugin[start:end]
+
+    check("W10-legacy-frozen", hashlib.sha256(method_body("SendLegacyV3Async").encode()).hexdigest()
+        == "5516934f67077f0ac08cd1081897c79b0f264e796a7893e34ab4434b58409704"
+        and hashlib.sha256(method_body("SendAsync").encode()).hexdigest()
+        == "2ed2836376734ce44c2f4d6ba970f9b63e5586fcc89ab8f9393f974e4e016caa",
+        "exact accepted production V3 feature-off body and unrelated local bridge body unchanged")
+
+    release = read(ROOT / "release.sh")
+    scp_match = re.search(r"/3SM.EnduranceConnector/\{([^}]+)\}", release)
+    tokens = set(scp_match.group(1).split(",")) if scp_match is not None else set()
+    ns = {"m": "http://schemas.microsoft.com/developer/msbuild/2003"}
+    tree = ET.fromstring(csproj)
+    compile_names = [e.attrib["Include"] for e in tree.findall(".//m:Compile", ns)]
+    check("W11-source-inventory", set(compile_names).issubset(tokens)
+        and "3SM.EnduranceConnector.csproj" in tokens
+        and hashlib.sha256(release.replace(",ObservationProducerHost.cs}", "}").encode()).hexdigest()
+        == "3711565092bc6c2eba76d542f63ad691c47d23749e90e841159dbab48855b638",
+        "all Compile/SCP tokens covered; release is byte-frozen except the required new source token (NOT executed)")
+    resources = [e.attrib["Include"].replace("\\", "/") for e in tree.findall(".//m:EmbeddedResource", ns)]
+    inputs = [name for name in resources if "$(Configuration)" not in name]
+    check("W12-resource-inputs", all((PLUGIN / name).is_file() for name in inputs)
+        and '/overlay' in release and '/3SM.EnduranceConnector/Assets/*' in release
+        and '/3SM.EnduranceConnector.Updater/{AssemblyInfo.cs,Program.cs,3SM.EnduranceConnector.Updater.csproj}' in release,
+        "all six static embedded inputs and updater source COPY tokens present; generated updater EXE/full SDK build separate OPEN gate")
 
     print("SUMMARY PASS=" + str(passed) + " FAIL=" + str(failed))
     return 0 if failed == 0 else 1
