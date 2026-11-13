@@ -274,6 +274,28 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   Dit is GEEN release; geïnstalleerde en Desktop-DLL zijn voor/na ongewijzigd.
   WPF/DPAPI/GUI/SDK-runtime, receiverhandshake, activatie en publicatie blijven open.
   Bewijs: `pitwall-learning-p2-observation-host-windows/` onder de artifactroot.
+- **Verse-Pair-initialisatie lokaal geaccepteerd en geïntegreerd.** Eerdere
+  aanname dat hiervoor een servernumerieke epoch/SQL-kolom nodig was, is
+  onafhankelijk weerlegd: het bestaande contract definieert een lokale
+  samengestelde fence (device+owner+generatie). Bron `d5d0c3c0` initialiseert
+  generatie 1 uitsluitend na een werkelijk nieuwe, gevalideerde, duurzaam
+  gecommitte Pair met nieuw device én token; onbekende historie wordt niet
+  geadopteerd. SPEC PASS; QUALITY vond de seam correct maar vier
+  testbewijsgaten. Strikt test-only `2c8ffd74` sluit die; gerichte hercontrole
+  APPROVED met eigen mutanten en positieve controles.
+- Lokale integratie **`d9bf8d75e6569526fb058f33429ca608f6fd835d`**; Git-boom
+  bytegelijk aan de gereviewde kandidaat. Parent op de integratie: offline
+  Release-build exit 0; **171 host / 1105 volledige C#-harnasasserties inclusief
+  soak / 17 wiring / 50 C#→Deno-interop**, zes stages exit 0, 52 exports.
+- Updater/versie/sleutel/manifest blijven bytegelijk; versie nog `0.7.6.2`.
+  Geen SQL-, server- of UI-wijziging.
+- **Open vóór activering:** één mislukte koppelpoging wist lokaal de
+  token/device/owner en maakt de bewezen generatie onbekend terwijl de ruwe
+  waarde blijft staan; een latere geslaagde Pair kan die dan niet meer
+  initiëren. Dat is fail-closed en raakt bestaande telemetrie/updates niet,
+  maar zou de leerroutine permanent stilzetten. Besluit en herstelroute staan
+  in `pitwall-learning-p2-observation-generation-recovery/DECISION.md` en
+  moeten vóór activering zijn opgelost.
 - **Harde updaterpoort:** de ondersteunde geïnstalleerde oude release moet via de
   bestaande automatische keten naar de toekomstige nieuwe bevroren release kunnen.
   Geen nieuwe verplichte bootstrap of handmatige DLL-wissel als vervangend bewijs.
