@@ -265,8 +265,15 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   SendV3, Pair/Unpair en End met dezelfde lazy store/fence/lease. Eén centrale
   productie-SEND-caller; `MeasurementSender.SendAsync` is een testroute. Eerdere
   formuleringen over twee productiecallers worden hiermee gecorrigeerd.
-- Default-off en productie-readiness blijven expliciet false. SDK-/Windows-/WPF-/
-  DPAPI-runtime, receiverhandshake, activatie en publicatie blijven afzonderlijke poorten.
+- Default-off en productie-readiness blijven expliciet false. De volledige
+  Windows/SimHub-SDK-compile-only build op Beest is geslaagd vanaf `2f70eb72`:
+  48 echte Compile-items, 0 errors / 1 CS0169-warning; alle 119 bronbestanden
+  gehasht vóór bouwen. Embedded updater en productie-public-key in de echte
+  oude/nieuwe DLL gecontroleerd; geen testsleutel. Nieuwe compile-only DLL blijft
+  versie `0.7.6.2`, SHA-256 `5e24dbdf96276ef0c71ef14fb014d3c14d4c6a8a474fb2de9f36f84012ca0753`.
+  Dit is GEEN release; geïnstalleerde en Desktop-DLL zijn voor/na ongewijzigd.
+  WPF/DPAPI/GUI/SDK-runtime, receiverhandshake, activatie en publicatie blijven open.
+  Bewijs: `pitwall-learning-p2-observation-host-windows/` onder de artifactroot.
 - **Harde updaterpoort:** de ondersteunde geïnstalleerde oude release moet via de
   bestaande automatische keten naar de toekomstige nieuwe bevroren release kunnen.
   Geen nieuwe verplichte bootstrap of handmatige DLL-wissel als vervangend bewijs.

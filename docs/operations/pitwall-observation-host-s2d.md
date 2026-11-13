@@ -120,14 +120,34 @@ Bronpakket/command-exits/golden/mutanten staan onder
 Het oorspronkelijke blockerbewijs en REPORT.txt blijven onaangeroerd.
 
 De wiring-/SCP-inventorytest is statisch. release.sh kreeg alleen het vereiste nieuwe
-bronnamentoken en is niet uitgevoerd. Gedeelde net8/net48-subsetcompilatie bewijst NIET de
-volledige plugin, vendorbindings, echte WPF/DPAPI/GUI of updater. Geautoriseerde
-GameReaderCommon/SimHub.Plugins/SimHub.Logging/log4net en volledige Windows/SDK-build/runtime
-blijven een aparte OPEN gate. Handshake en activatie zijn eveneens apart deferred.
+bronnamentoken en is niet uitgevoerd. De volledige Windows/SimHub-SDK **compile-only**
+checkpoint is daarna op Beest geslaagd vanaf docs-only bron `2f70eb72`: echte MSBuild
+2022/net48, alle 48 Compile-items aantoonbaar in de plugincompilerregel, 0 errors en
+1 CS0169-warning voor `_pitLimiterSinceMs`. Geen groene-waarschuwingvrije buildclaim.
+Alle 119 gearchiveerde bronbestanden zijn vóór compilatie op SHA-256 gecontroleerd.
+De werkelijke embedded updater is gelijk aan de afzonderlijk gebouwde updaterbytes;
+productie-public-key is in de echte oude geïnstalleerde DLL en de nieuwe DLL gelijk,
+de testsleutel ontbreekt. Geen vervangende SDK-stubs of gewijzigde projectbestanden.
+
+Dit is **geen releaseartefact**: assemblyversie blijft `0.7.6.2`, byteLength 835072,
+SHA-256 `5e24dbdf96276ef0c71ef14fb014d3c14d4c6a8a474fb2de9f36f84012ca0753`.
+De compile-only DLL staat uitsluitend in de aparte bouw-/bewijsmap. Bestaande
+geïnstalleerde en Desktop-DLL's zijn vóór/na bytegelijk; geen SimHub-GUIactie,
+installatie, versie-/manifest-/kanaalwijziging of publicatie uitgevoerd.
+Bewijs: `/home/hermes/artifacts/3sm/pitwall-learning-p2-observation-host-windows/`.
+Een eerste parent-loginspectie las de UTF-16LE-buildlog ten onrechte als UTF-8 en
+vond daardoor geen compilerregel; de BOM-bewuste controle corrigeert alleen deze
+inspectie. De geslaagde Windows-build is niet herhaald of als mislukt hernoemd.
+
+Echte WPF/DPAPI/GUI/SDK-runtime, Windows-afsluitvolgorde en de bestaande automatische
+oude→nieuwe installatieketen blijven OPEN. De huidige gelijke versie wordt niet als
+nieuwe update aangeboden; een toekomstige vrijgave vereist een goedgekeurde hogere
+versie en de echte upgradeproef. Receiverhandshake en activatie blijven apart open.
 
 Website/frontend: geen impact verwacht; production frontend changes NONE.
 Backend/API en database/RLS/migrations: geen impact verwacht, geen contractwijziging.
 Bot: geen impact verwacht. Auth/rollen: alleen lokale connectorpairing/lifecyclebron geraakt;
-geen website-/serverrollen gewijzigd. Deployment: alleen statische sourceinventory toegevoegd;
-geen release/build-scriptuitvoering, versie/updater/public DLL/push/merge/deploy.
+geen website-/serverrollen gewijzigd. Deployment: afzonderlijke compile-only bouwmap,
+geen geïnstalleerde DLL-/Desktop-wijziging, versie-/manifest-/kanaalwijziging, publiek
+artefact, push/main-merge of deploy. `release.sh` is niet uitgevoerd.
 PRODUCTIEWIJZIGING: NEE.

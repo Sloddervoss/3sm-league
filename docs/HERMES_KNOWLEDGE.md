@@ -45,7 +45,10 @@ W1 caller-bypass/tokenmissing-grens is op de gedeelde host getoetst; Q2 blijft
 beperkt tot de bestaande verse-UTC-once caller, geen samplehergebruik introduceren.
 Default-off en receiver-readiness=false blijven behouden. Geen productieapply,
 Edge-deploy, geïnstalleerde DLL-wissel of producerrelease. Volledige vendor-SDK/
-Windows-build en runtime blijven open; subset/harnastests zijn daar geen bewijs voor.
+Windows-compile-only build vanaf `2f70eb72` op Beest PASS: 48 Compile-items,
+0 errors / 1 CS0169-warning, echte embedded updater en productie-public-key
+vergeleken. Installed/Desktop-DLL's ongewijzigd; compile-only versie blijft0.7.6.2,
+geen releaseartefact. Echte WPF/DPAPI/SDK-runtime en Windows-afsluiting blijven open.
 De bestaande automatische oude→nieuwe updateketen is een harde vrijgavepoort:
 geen nieuwe verplichte bootstrap, sleutel-/manifest-/kanaalwijziging of handmatige
 DLL-wissel als vervangend bewijs. Bewezen bronbehoud is geen echte installatieproef.
