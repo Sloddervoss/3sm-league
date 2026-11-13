@@ -80,6 +80,13 @@ namespace ThreeSM.EnduranceConnector
             var safe = ObservationGenerationRawSafe();
             if (known && !ObservationPairingGeneration.HasValue)
                 ObservationPairingGenerationPoisoned = true;
+            // A recoverable marker without a raw value is lost high-watermark evidence, not
+            // pristine absence. Keep that fact as the existing poison tombstone before the
+            // marker is dropped, so repeated invalidation/restart cannot launder it into a
+            // fresh generation 1. A marker with a still-present raw value keeps the existing
+            // policy: it survives only while that value stays safe and unpoisoned.
+            if (ObservationPairingGenerationRecoverable && !ObservationPairingGeneration.HasValue)
+                ObservationPairingGenerationPoisoned = true;
             // A proven valid counter (or a genuinely attempted allocation retained after a
             // failed save) becomes recoverable. Repeated invalidation keeps that proof only
             // while the raw value itself stays safe and unpoisoned; unsafe or poisoned
@@ -110,7 +117,7 @@ namespace ThreeSM.EnduranceConnector
                 if (!next.HasValue && fresh)
                 {
                     if (!ObservationPairingGeneration.HasValue && !ObservationPairingGenerationKnown
-                        && !ObservationPairingGenerationPoisoned)
+                        && !ObservationPairingGenerationPoisoned && !ObservationPairingGenerationRecoverable)
                         next = 1;
                     // Recovery is the strict successor of retained trusted evidence: never a reset
                     // to 1, never a restored generation/binding and never consumed by restart.
