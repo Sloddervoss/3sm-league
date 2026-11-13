@@ -46,7 +46,6 @@ namespace ThreeSM.EnduranceConnector
         public int LeaseWaitMilliseconds = 2000;
         public int RequestTimeoutMilliseconds = 15000;
         public int PairTransitionTimeoutMilliseconds = 15000;
-        public int MaxResponseBytes = 65536;
 
         internal ObservationSendOptions Normalized()
         {
@@ -55,7 +54,6 @@ namespace ThreeSM.EnduranceConnector
             copy.LeaseWaitMilliseconds = Clamp(LeaseWaitMilliseconds, 1, 60000);
             copy.RequestTimeoutMilliseconds = Clamp(RequestTimeoutMilliseconds, 1, 120000);
             copy.PairTransitionTimeoutMilliseconds = Clamp(PairTransitionTimeoutMilliseconds, 1, 120000);
-            copy.MaxResponseBytes = Clamp(MaxResponseBytes, 1024, 262144);
             return copy;
         }
 
@@ -481,7 +479,6 @@ namespace ThreeSM.EnduranceConnector
                 offered.Add(row);
             }
 
-            string errorCode = null;
             if (legacyOfferFailed)
             {
                 return new ObservationSendPlan(legacyPlan, bindingChanged, refused, null,
@@ -579,11 +576,11 @@ namespace ThreeSM.EnduranceConnector
             if (batch.Count == 0 && eventRows.Count == 0)
             {
                 return new ObservationSendPlan(legacyPlan, bindingChanged, refused, null,
-                    null, 0, deferred, errorCode);
+                    null, 0, deferred, null);
             }
 
             return new ObservationSendPlan(legacyPlan, bindingChanged, refused, batch,
-                finalBody, MeasurementJson.Bytes(finalMeasurement), deferred, errorCode);
+                finalBody, MeasurementJson.Bytes(finalMeasurement), deferred, null);
         }
 
         private static string BuildBody(string coreBodyJson, IList<string> eventRows,
@@ -770,16 +767,16 @@ namespace ThreeSM.EnduranceConnector
         public Task<ObservationPairTransitionResult> PairAsync(
             ObservationPairCommitHandler commit, CancellationToken cancellationToken)
         {
-            return TransitionAsync("pair", commit, cancellationToken);
+            return TransitionAsync(commit, cancellationToken);
         }
 
         public Task<ObservationPairTransitionResult> UnpairAsync(
             ObservationPairCommitHandler commit, CancellationToken cancellationToken)
         {
-            return TransitionAsync("unpair", commit, cancellationToken);
+            return TransitionAsync(commit, cancellationToken);
         }
 
-        public async Task<ObservationPairTransitionResult> TransitionAsync(string operation,
+        public async Task<ObservationPairTransitionResult> TransitionAsync(
             ObservationPairCommitHandler commit, CancellationToken cancellationToken)
         {
             if (_disposed) throw new ObjectDisposedException("ObservationSendCoordinator");
