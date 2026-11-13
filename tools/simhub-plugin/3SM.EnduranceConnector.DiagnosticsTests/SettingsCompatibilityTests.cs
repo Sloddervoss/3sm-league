@@ -92,6 +92,40 @@ internal static class SettingsCompatibilityTests
             && !invalidRestart.ObservationPairingGenerationKnown && !invalidStrict.ObservationPairingGenerationKnown
             && !invalidRestart.ObservationPairingGeneration.HasValue && !invalidStrict.ObservationPairingGeneration.HasValue,
             "NULL+known-invalid evidence survives invalidation and both actual settings serializer roundtrips");
+
+        // The recoverable-provenance marker is additive: a historical file predating it loads as
+        // "no former proof", and the strict reader (S21) still accepts the full 0.7.1.2 file.
+        Check("S24", Serialize(settings).Contains("\"ObservationPairingGenerationRecoverable\":false"),
+            "historical 0.7.1.2 settings gain the additive marker as false, never as former proof");
+        var present = new ConnectorSettings { ObservationPairingGeneration = 7 };
+        var presentJson = Serialize(present);
+        var presentLoad = Deserialize(presentJson);
+        var presentStrict = DeserializeStrict(presentJson);
+        Check("S25", !presentLoad.ObservationBinding().IsComplete && presentLoad.NextObservationGeneration() == null
+            && !presentStrict.ObservationBinding().IsComplete && presentStrict.NextObservationGeneration() == null,
+            "plain present-unknown without the marker is not recoverable proof on both actual serializers");
+        var markedJson = presentJson.Replace("\"ObservationPairingGenerationRecoverable\":false",
+            "\"ObservationPairingGenerationRecoverable\":true");
+        var markedLoad = Deserialize(markedJson);
+        var markedStrict = DeserializeStrict(markedJson);
+        Check("S26", markedJson != presentJson
+            && !markedLoad.ObservationBinding().IsComplete && markedLoad.NextObservationGeneration() == null
+            && !markedStrict.ObservationBinding().IsComplete && markedStrict.NextObservationGeneration() == null,
+            "the persisted marker alone never grants capture authority; only a later real new Pair may consume it");
+        var cleared = Deserialize(markedJson);
+        cleared.InvalidateObservationGeneration();
+        cleared.InvalidateObservationGeneration();
+        var repeatedProof = !cleared.ObservationBinding().IsComplete && cleared.NextObservationGeneration() == null
+            && Serialize(cleared).Contains("\"ObservationPairingGenerationRecoverable\":true");
+        cleared.ObservationPairingGeneration = -1;
+        cleared.InvalidateObservationGeneration();
+        cleared.ObservationPairingGeneration = 7;
+        cleared.InvalidateObservationGeneration();
+        cleared.CommitNewPair("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "11111111-2222-4333-8444-555555555555",
+            new string('b', 43), string.Empty, raw => "synthetic-protected", () => { }, error => { });
+        Check("S27", repeatedProof && !cleared.ObservationPairingGenerationKnown
+            && cleared.ObservationPairingGeneration == 7,
+            "repeated invalidation preserves the marker only while raw evidence stays safe; an unsafe raw value clears the proof");
         return count;
     }
 
