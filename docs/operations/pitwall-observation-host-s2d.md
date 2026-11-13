@@ -80,6 +80,39 @@ De historische PASS-records hierboven blijven ongewijzigd. De gewijzigde daadwer
 Pair-adapter vereist na onafhankelijke SPEC→QUALITY een NIEUWE volledige Windows/
 vendor-SDK-compile; de eerdere compile dekt deze bronwijziging niet.
 
+**Kandidaat: herstel na een mislukte Pair (NIET geïntegreerd, geen Windows-bewijs).**
+Een gewone mislukte Pair (`ForgetUnprovenAuthorization`) wist autorisatie en knownness
+en bewaart de ruwe teller; zonder herstel kon een latere geldige Pair die nooit meer
+initialiseren. Invalidatie van een bewezen geldige, niet-gepoisonede teller zet nu één
+extra additief OptionalField `ObservationPairingGenerationRecoverable` (ook voor een
+werkelijk geprobeerde allocatie die na een mislukte save bewaard blijft). Die markering
+overleeft herhaalde invalidatie/restart uitsluitend zolang de ruwe waarde veilig en
+niet-gepoisoned blijft; ontbrekende historische markering blijft false, dus een gewone
+`present+known=false` zonder markering blijft dicht. Een persistente markering zonder
+ruwe waarde (ontbrekend of expliciet NULL) is verloren high-watermark-bewijs, geen
+afwezigheid: de afwezig→1-initializer eist daarom óók dat er geen markering is, en
+invalidatie bewaart dat feit als de bestaande `ObservationPairingGenerationPoisoned`-
+tombstone vóór de markering vervalt. Zo wordt zo'n corrupte combinatie nooit een verse 1
+en blijft ze over herhaalde invalidatie/restart heen zichtbaar; de strikte
+DataContract-lezer weigert dat partiële document (aparte loader-modelbeperking, niet de
+guard). Alleen dezelfde nieuwe-Pair-
+commitseam, na bestaande responsevalidatie én freshness (nieuw device én raw token waar
+vorige waarden beschikbaar zijn), verbruikt de **strikt hogere opvolger** en slaat die
+samen met device/owner/token duurzaam op vóór publicatie. Geen reset naar 1, geen
+generatie uit load/restart/control/ingest/decrypt/Unpair; op 9007199254740991 blijft
+het dicht zonder wrap/clamp/erase. De oude hostautorisatie blijft ongeldig en een lokale
+fence machtigt geen inzameling zonder de aparte identity-scoped policy-/receiverstatus.
+Bewijs: `--only-observation-host` 223 asserties (inclusief PAIR-recover-* en
+PAIR-lost-raw-*), volledig harnas 1166 PASS. Tegen d977-productie zijn exact de nieuwe
+SPEC-1-verwachtingen RED: 14 `PAIR-lost-raw-*`-hostasserties plus `SL29-absent` en
+`SL29-explicit-null` (de eerdere d096-snapshot gaf daarnaast 24 PAIR + S24/S26/S27 RED).
+De zeven eerder gerapporteerde semantische mutanten (onmarkeerd vertrouwen, reset naar 1,
+markering als autoriteit bij load, freshness negeren, poison gezegend, max-wrap,
+markering verliezen bij herhaling) blijven van toepassing; de twee nieuwe SPEC-1-guards
+(pristine-afwezigheid en bewijsbehoudende invalidatie) zijn elk in een geïsoleerde
+mutant build-0/RED bewezen. Dit is een kandidaat die nog onafhankelijke SPEC → QUALITY
+en een nieuwe Windows-compile vereist; geen integratie-, activatie- of releaseclaim.
+
 De productie-readinessprovider retourneert expliciet false: er bestaat nog geen bewezen
 receiverhandshake voor deze feature. Tests injecteren readiness op dezelfde hostseam.
 Opt-in én readiness én complete bekende binding zijn vereist vóór storage/capture/SEND.
