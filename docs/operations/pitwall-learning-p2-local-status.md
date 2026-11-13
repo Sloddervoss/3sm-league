@@ -289,35 +289,41 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   soak / 17 wiring / 50 C#→Deno-interop**, zes stages exit 0, 52 exports.
 - Updater/versie/sleutel/manifest blijven bytegelijk; versie nog `0.7.6.2`.
   Geen SQL-, server- of UI-wijziging.
-- **Open vóór activering:** één mislukte koppelpoging wist lokaal de
-  token/device/owner en maakt de bewezen generatie onbekend terwijl de ruwe
-  waarde blijft staan; een latere geslaagde Pair kan die dan niet meer
-  initiëren. Dat is fail-closed en raakt bestaande telemetrie/updates niet,
-  maar zou de leerroutine permanent stilzetten. Besluit en herstelroute staan
-  in `pitwall-learning-p2-observation-generation-recovery/DECISION.md`.
-  Een bounded kandidaat-herstel staat hieronder; hij is nog niet
-  geïntegreerd, niet onafhankelijk geherkeurd en niet Windows-gecompileerd.
-- **Kandidaat-herstel na mislukte Pair (alleen test-/bronbewijs; NIET
-  geïntegreerd):** commits `ba153f76` (tests, RED op oude productie) en
-  `62911676` (bron). Eén additief OptionalField
-  `ObservationPairingGenerationRecoverable` wordt alleen gezet bij invalidatie
-  van een bewezen geldige, niet-gepoisonede teller (of een werkelijk
-  geprobeerde allocatie die na een mislukte save bewaard blijft) en overleeft
-  herhaalde invalidatie/restart uitsluitend zolang de ruwe waarde veilig blijft.
-  Alleen dezelfde nieuwe-Pair-commitseam, na responsevalidatie en freshness,
-  verbruikt de strikt hogere opvolger en slaat die samen met device/owner/token
-  op vóór publicatie. Geen reset naar 1, geen generatie uit load/restart/
-  control/ingest/decrypt/Unpair; max/poison/NULL-known/negatief/buiten bereik/
-  ongemarkeerde historie blijven dicht. Oude autorisatie blijft ongeldig en een
-  lokale fence machtigt geen inzameling zonder de aparte policy-/receiverstatus.
-  Bewijs op deze worktree: offline Release-build exit 0, **204 host**,
-  **1142 volledige C#-harnasasserties inclusief soak**, wiring en 50
-  C#→Deno-interop; oud-productiesnapshot `d096db96` met dezelfde tests:
-  build exit 0 en **27 RED**, exact de nieuwe verwachtingen (geen andere
-  regressie); zeven semantische mutanten elk RED met geldige controles.
-  Vereist nog onafhankelijke SPEC → QUALITY en een **nieuwe** echte
-  Windows-compile van deze gewijzigde Pair-bron; de eerdere compile
-  `2f70eb72` dekt die niet. Geen activatie-, installatie- of releaseclaim.
+- **Herstel na een mislukte Pair lokaal geaccepteerd en geïntegreerd** als
+  `b2e280717762badb5802bdb4203dc058217691f9` (boom exact gelijk aan
+  `8caef5ba4e30c46ff869660e41d9ce262c88a2a8`). Runtime `5a5237e9` heeft
+  onafhankelijke SPEC PASS; de strikt test-only aanvulling `8caef5ba` heeft
+  gerichte QUALITY APPROVED, Q-1 gesloten. Het vroegere permanent geblokkeerde
+  tellerherstel is daarmee lokaal opgelost, niet geactiveerd.
+- Eén additief OptionalField `ObservationPairingGenerationRecoverable` bewaart
+  uitsluitend bewezen, veilige en niet-gepoisonede tellerhistorie na invalidatie
+  of een werkelijk geprobeerde allocatie. Alleen een nieuwe geldige Pair in de
+  bestaande commitseam verbruikt de strikt hogere opvolger, duurzaam opgeslagen
+  samen met device/owner/token vóór publicatie. Herhaalde invalidatie/restart is
+  geen autorisatie. Ongemarkeerde historie, poison, ongeldige bereiken en maximum
+  blijven dicht. Een markering zonder ruwe waarde wordt een blijvende bestaande
+  poison-tombstone; ze kan nooit als verse afwezigheid naar 1 worden gewassen.
+  Oude autorisatie en oude meetrij-identiteiten worden niet hersteld.
+- **Parent-integratie opnieuw uitgevoerd:** offline Release-build, **224 host**,
+  **1167 volledige C#-harnasasserties inclusief soak**, **17 wiring**, **50
+  C#→Deno-interop**, **52 serializer-exportbestanden**; zes stages exit 0.
+  Alle builds/toestand van deze integratierun staan in een eigen artifactkopie,
+  niet in de bevroren reviewwerkboom. Selecties overlappen en zijn niet optelbaar.
+  De originele afgekeurde SPEC-1-kandidaat en de QUALITY-testgap blijven bewaard;
+  de definitieve onafhankelijke hercontroles sluiten beide op exacte bronbytes.
+- **Nieuwe volledige Windows/net48/SimHub-build PASS vanaf `b2e28071`:** alle
+  119 gearchiveerde bronbestanden op Beest gehasht; alle 48 Compile-items in de
+  echte compilerregel; 0 errors / 1 bestaande CS0169-warning. DLL 836096 bytes,
+  compile-only `0.7.6.2`, SHA-256
+  `3ccc0ad37288f8f2a542eee7f42131a4f5c6ded632f0aeaff1a10c3d46f4bec2`.
+  Recoveryveld en host zitten in de echte DLL; embedded updater gelijk aan de
+  afzonderlijk in dezelfde build gebouwde updater; productie-public-key gelijk
+  aan de oude geïnstalleerde DLL, testsleutel afwezig. Installed/Desktop-DLL's
+  vóór/na ongewijzigd. Dit vervangt niet de echte runtime- of upgradeproef.
+  Zie [Windows-bewijs](pitwall-observation-recovery-windows-build.md).
+  Artifactroots: `pitwall-learning-p2-observation-generation-recovery-`
+  met suffixen `null-proof-spec/`, `quality/`, `coverage-quality/`,
+  `integration/` en `windows/`. Geen activatie-, installatie- of releaseclaim.
 - **Harde updaterpoort:** de ondersteunde geïnstalleerde oude release moet via de
   bestaande automatische keten naar de toekomstige nieuwe bevroren release kunnen.
   Geen nieuwe verplichte bootstrap of handmatige DLL-wissel als vervangend bewijs.

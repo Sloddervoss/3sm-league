@@ -1,7 +1,8 @@
 # S2D lokale observation-producerbedrading (default-off)
 
-Status: bron en gedeelde host lokaal geaccepteerd en geïntegreerd als `cd5b46cf`;
-geen activatie, publicatie of SDK-runtimebewijs. Bron `5389fcc3` heeft onafhankelijke
+Status van de oorspronkelijke S2D-bronbedrading: lokaal geaccepteerd en geïntegreerd
+als `cd5b46cf`; de latere Pair/recovery-integratie is `b2e28071` (zie hieronder).
+Geen activatie, publicatie of SDK-runtimebewijs. Bron `5389fcc3` heeft onafhankelijke
 SPEC PASS; strikt test-only `8dd96fc0` sluit de drie Important quality-testgaten
 onafhankelijk APPROVED (QSTOP/QMIX/QDYNAMIC, M10/M11/M12).
 Parent-integratie: normale offline Release-build, 65 host, 997 volledige C#-harnas-
@@ -76,11 +77,15 @@ hostlease. Hij bewaart generatie/device/owner/DPAPI-token samen vóór terugkeer
 het raw token voor memory-publicatie; rollback-save herstelt nooit OBS-knownness.
 Lokale tests voeren exact deze commitbron uit met geïnjecteerde protect/save en echte
 host/pipeline/store; dit is geen uitvoering van SimHub/DPAPI/HTTP-exchange zelf.
-De historische PASS-records hierboven blijven ongewijzigd. De gewijzigde daadwerkelijke
-Pair-adapter vereist na onafhankelijke SPEC→QUALITY een NIEUWE volledige Windows/
-vendor-SDK-compile; de eerdere compile dekt deze bronwijziging niet.
+De historische PASS-records hierboven blijven ongewijzigd. De latere Pair-adapter en
+het herstel hieronder zijn samen opnieuw volledig Windows/vendor-SDK-gecompileerd
+vanaf `b2e28071`; het oude bewijs `2f70eb72` wordt niet naar deze bron doorgetrokken.
 
-**Kandidaat: herstel na een mislukte Pair (NIET geïntegreerd, geen Windows-bewijs).**
+**Herstel na een mislukte Pair lokaal geaccepteerd en geïntegreerd als `b2e28071`.**
+SPEC PASS op runtime `5a5237e9`; strikt test-only `8caef5ba` QUALITY APPROVED.
+De integratieboom is exact gelijk aan de geaccepteerde kandidaat. Een nieuwe volledige
+Windows/net48/SimHub-compile vanaf deze integratie is PASS, geen SDK-runtimebewijs;
+zie [bevroren buildbewijs en open updatepoort](pitwall-observation-recovery-windows-build.md).
 Een gewone mislukte Pair (`ForgetUnprovenAuthorization`) wist autorisatie en knownness
 en bewaart de ruwe teller; zonder herstel kon een latere geldige Pair die nooit meer
 initialiseren. Invalidatie van een bewezen geldige, niet-gepoisonede teller zet nu één
@@ -102,16 +107,19 @@ samen met device/owner/token duurzaam op vóór publicatie. Geen reset naar 1, g
 generatie uit load/restart/control/ingest/decrypt/Unpair; op 9007199254740991 blijft
 het dicht zonder wrap/clamp/erase. De oude hostautorisatie blijft ongeldig en een lokale
 fence machtigt geen inzameling zonder de aparte identity-scoped policy-/receiverstatus.
-Bewijs: `--only-observation-host` 223 asserties (inclusief PAIR-recover-* en
-PAIR-lost-raw-*), volledig harnas 1166 PASS. Tegen d977-productie zijn exact de nieuwe
+Definitief parentbewijs op `b2e28071`: `--only-observation-host` **224** asserties,
+volledig harnas **1167 PASS inclusief soak**, **17 wiring**, **50 interop**, **52
+exports**; zes stages exit 0. Historisch tegen d977-productie waren exact de nieuwe
 SPEC-1-verwachtingen RED: 14 `PAIR-lost-raw-*`-hostasserties plus `SL29-absent` en
-`SL29-explicit-null` (de eerdere d096-snapshot gaf daarnaast 24 PAIR + S24/S26/S27 RED).
-De zeven eerder gerapporteerde semantische mutanten (onmarkeerd vertrouwen, reset naar 1,
-markering als autoriteit bij load, freshness negeren, poison gezegend, max-wrap,
-markering verliezen bij herhaling) blijven van toepassing; de twee nieuwe SPEC-1-guards
-(pristine-afwezigheid en bewijsbehoudende invalidatie) zijn elk in een geïsoleerde
-mutant build-0/RED bewezen. Dit is een kandidaat die nog onafhankelijke SPEC → QUALITY
-en een nieuwe Windows-compile vereist; geen integratie-, activatie- of releaseclaim.
+`SL29-explicit-null`; de twee nieuwe guards zijn elk build-0/RED bewezen. QUALITY
+vond geen runtimefout, maar één overlevende poison-guardmutant; de exact uitgevoerde
++16-regelige test is ongewijzigd gecommit als `8caef5ba`. Gerichte onafhankelijke
+hercontrole: echte bron host224/0, dezelfde semantische mutant build0/host223/1,
+geldige pristine/recoverycontroles groen; QUALITY APPROVED, Q-1 gesloten.
+Tussen de bevroren test-only kandidaat `8caef5ba` en runtime/SPEC-bron `5a5237e9`
+zijn alle 2260 andere tracked entries gelijk; de latere integratiedocumentatie niet.
+Nieuwe volledige Windows/net48/vendor-SDK-build op `b2e28071` PASS:48 Compile-items,
+0 errors/1 bestaande warning. Geen SDK-runtime-, activatie- of releaseclaim.
 
 De productie-readinessprovider retourneert expliciet false: er bestaat nog geen bewezen
 receiverhandshake voor deze feature. Tests injecteren readiness op dezelfde hostseam.

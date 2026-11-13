@@ -52,10 +52,22 @@ geen releaseartefact. Echte WPF/DPAPI/SDK-runtime en Windows-afsluiting blijven 
 Verse-Pair-lokale-fence `d5d0c3c0` (SPEC PASS; test-only `2c8ffd74` APPROVED) is
 geïntegreerd als `d9bf8d75`: parent 171 host/1105 volledige C#-harnasasserties/
 17 wiring/50 interop PASS, 52 exports. Geen servernumerieke epoch of SQL nodig;
-updater/versie/manifest bytegelijk, versie 0.7.6.2. Vóór activering moet nog worden
-opgelost dat één mislukte koppelpoging de bewezen generatie onbekend maakt terwijl de
-ruwe waarde blijft staan (fail-closed; telemetrie/updates onaangetast), zie
-`pitwall-learning-p2-observation-generation-recovery/DECISION.md`.
+updater/versie/manifest bytegelijk, versie 0.7.6.2. Het daaropvolgende herstel na
+mislukte Pair is na SPEC PASS op runtime `5a5237e9` en strikt test-only QUALITY
+APPROVED op `8caef5ba` geïntegreerd als `b2e28071` (boom exact gelijk aan8ca).
+Parent opnieuw: offline build /224 host /1167 full inclusief soak /17 wiring /
+50 interop,52 exports; zes stages exit0 in eigen artifactkopie. Eén optioneel
+recoverable-kenmerk bewaart uitsluitend bewezen veilige tellerhistorie; alleen
+nieuwe geldige duurzame Pair neemt de strikt hogere opvolger. Historisch onbekend,
+poison/max/ongeldig blijven dicht. Marker-zonder-raw blijft poison-tombstone, geen
+reset naar1; oude autorisatie/meetrij-identiteit wordt niet hersteld. Volledige echte
+Windows/net48/SimHub-compile vanaf `b2e28071` PASS:119 bronhashes/48 Compile-items,
+0 errors/1 bestaande CS0169-warning; DLL836096bytes SHA256
+`3ccc0ad37288f8f2a542eee7f42131a4f5c6ded632f0aeaff1a10c3d46f4bec2`.
+Embedded updater gelijk aan dezelfde build, productiepublickey oud/nieuw gelijk,
+testsleutel afwezig; installed/Desktop vóór/na ongewijzigd. Compile-only0.7.6.2,
+geen release/installatie/activatie. Echte SDK/DPAPI/runtime/Windows-shutdown en
+ontvangerreadiness blijven open. Bewijs: `docs/operations/pitwall-observation-recovery-windows-build.md`.
 De bestaande automatische oude→nieuwe updateketen is een harde vrijgavepoort:
 geen nieuwe verplichte bootstrap, sleutel-/manifest-/kanaalwijziging of handmatige
 DLL-wissel als vervangend bewijs. Bewezen bronbehoud is geen echte installatieproef.
