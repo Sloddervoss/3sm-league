@@ -153,10 +153,11 @@ namespace ThreeSM.EnduranceConnector
                 _observedSessionId, _segmentId);
             _capture.AddSample(new ObservationSample(sample.ObservedAtUtc, sample.OnPitRoad,
                 sample.FuelLitres, sample.CurrentDriverName, key,
-                sample.CurrentDriverId, sample.ObservationSchemaVersion));
+                sample.CurrentDriverId, sample.ObservationSchemaVersion, sample.ResetOrTow,
+                sample.ResetSourceTime, sample.ResetSourceLap, sample.SdkTick));
         }
 
-        public ObservationCaptureResult Close(DateTime startedAtUtc, DateTime endedAtUtc)
+        public ObservationCaptureResult Close(DateTime startedAtUtc, DateTime endedAtUtc, string[] reasons)
         {
             if (!_enabled) return null;
             if (_startRefusal != null)
@@ -174,7 +175,12 @@ namespace ThreeSM.EnduranceConnector
                 return ObservationCaptureResult.Refused(ObservationSamplingCodes.TimestampNotUtc,
                     "een geaccepteerd punt had geen oorspronkelijk UTC-tijd", null);
             }
-            return _capture.Build(startedAtUtc, endedAtUtc);
+            var discontinuity = false;
+            if (reasons != null)
+                foreach (var reason in reasons)
+                    if (reason == "session_time_reset" || reason == "lap_counter_reset"
+                        || reason == "lap_boundary_gap" || reason == "session_changed") discontinuity = true;
+            return _capture.Build(startedAtUtc, endedAtUtc, discontinuity);
         }
     }
 }

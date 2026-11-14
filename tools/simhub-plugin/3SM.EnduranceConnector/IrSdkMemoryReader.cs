@@ -149,6 +149,44 @@ namespace ThreeSM.EnduranceConnector
             return !string.IsNullOrEmpty(name) && _variables != null && _variables.ContainsKey(name);
         }
 
+        // Require the published scalar SDK type, not a similarly named coercible value.
+        public double? ReadScalar(string name, int type)
+        {
+            IrSdkVariable variable;
+            if (_variables == null || !_variables.TryGetValue(name, out variable)
+                || variable.Type != type || variable.Count != 1) return null;
+            if (type == TypeBool)
+            {
+                var position = (long)_dataOffset + variable.Offset;
+                if (position < _dataOffset || position >= (long)_dataOffset + _dataLength
+                    || position >= _length || _image[position] > 1) return null;
+            }
+            return ReadNumber(name);
+        }
+
+        /// <summary>
+        /// Positive tow time is an observed tow. Zero is safe only with player in
+        /// active car physics on the track (irsdk_TrkLoc OnTrack=3). Other physical
+        /// states are unknown, not inferred reset events or proof of absence.
+        /// </summary>
+        public bool? ReadResetOrTow()
+        {
+            var tow = ReadScalar("PlayerCarTowTime", TypeFloat);
+            if (!tow.HasValue || tow.Value < 0 || tow.Value > 86400) return null;
+            if (tow.Value > 0) return true;
+            return ReadScalar("IsOnTrack", TypeBool) == 1
+                && ReadScalar("IsOnTrackCar", TypeBool) == 1
+                && ReadScalar("PlayerTrackSurface", TypeInt) == 3 ? (bool?)false : null;
+        }
+
+        // The production BuildMeasurementSample seam, also exercised on byte images.
+        public static void PopulateResetEvidence(TelemetrySample sample, IrSdkImage image)
+        {
+            sample.ResetOrTow = image == null ? null : image.ReadResetOrTow();
+            sample.ResetSourceTime = image == null ? null : image.ReadScalar("SessionTime", TypeDouble);
+            sample.ResetSourceLap = image == null ? null : image.ReadScalar("Lap", TypeInt);
+        }
+
         /// <summary>
         /// Numerieke waarde van het kanaal, of null. Null betekent: niet verbonden, kanaal
         /// bestaat niet, type is geen getal, waarde valt buiten de buffer, of NaN/oneindig.

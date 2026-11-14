@@ -394,6 +394,12 @@ internal static class FaseDTests
                 Console.WriteLine("RESULT passed=" + passed + " failed=" + failed);
                 return failed == 0 ? 0 : 1;
             }
+            if (string.Equals(args[0], "--only-reset-tow-source", StringComparison.Ordinal))
+            {
+                Group("ResetTowSourceTests", () => ResetTowSourceTests.Run(Check));
+                Console.WriteLine("RESULT passed=" + passed + " failed=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
             if (string.Equals(args[0], "--only-observation", StringComparison.Ordinal))
             {
                 Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
@@ -500,6 +506,7 @@ internal static class FaseDTests
             baselineChecks += Group("ControlClientTests", () => ControlClientTests.Run(Check));
             baselineChecks += Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
             baselineChecks += Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
+            baselineChecks += Group("ResetTowSourceTests", () => ResetTowSourceTests.Run(Check));
             baselineChecks += Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
             baselineChecks += Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
             baselineChecks += Group("MeasurementObservationAckTests", () => MeasurementObservationAckTests.Run(Check));

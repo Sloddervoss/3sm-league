@@ -1044,6 +1044,7 @@ namespace ThreeSM.EnduranceConnector
                 FuelLitres = CaptureValueRules.FuelLitres(GetNullableDouble(manager, Settings.FuelProperty, false)),
                 Wear = ReadMeasurementWear(channels),
             };
+            IrSdkImage.PopulateResetEvidence(sample, sdk);
             if (_observationHost != null) _observationHost.BindSample(sample, new ObservationLapContext(
                 FirstNonEmpty(snapshot.CarId, GetNullableString(manager, Settings.CarIdProperty)),
                 TrackIdentityReader.Read(snapshot),

@@ -160,15 +160,19 @@ namespace ThreeSM.EnduranceConnector
                 if (SessionChanged(sample))
                 {
                     CloseCurrent(_lastAcceptedUtc ?? _current.StartedAtUtc, new[] { "session_changed" });
+                    if (sample.ResetOrTow != true) sample.ResetOrTow = null;
                 }
                 else if (SessionTimeWentBackwards(sample))
                 {
                     CloseCurrent(_lastAcceptedUtc ?? _current.StartedAtUtc, new[] { "session_time_reset" });
+                    sample.ResetOrTow = true;
                 }
                 else if (LapChanged(sample, out var gap))
                 {
-                    var reasons = gap ? new[] { "lap_boundary_gap" } : null;
+                    var reasons = sample.LapNumber < _currentLapNumber ? new[] { "lap_counter_reset" }
+                        : gap ? new[] { "lap_boundary_gap" } : null;
                     CloseCurrent(at, reasons);
+                    if (reasons != null) sample.ResetOrTow = true;
                 }
             }
 

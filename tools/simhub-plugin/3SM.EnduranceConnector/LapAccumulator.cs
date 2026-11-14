@@ -56,6 +56,9 @@ namespace ThreeSM.EnduranceConnector
         // Simulator source ID, never the paired account owner.
         public string CurrentDriverId { get; set; }
         public int ObservationSchemaVersion { get; set; }
+        public bool? ResetOrTow { get; set; }
+        public double? ResetSourceTime { get; set; }
+        public double? ResetSourceLap { get; set; }
 
         /// <summary>Ruwe SDK <c>OnPitRoad</c>, geen SimHub-fallback naar false.</summary>
         public bool? OnPitRoad { get; set; }
@@ -444,7 +447,7 @@ namespace ThreeSM.EnduranceConnector
                 FrozenObservedSessionId = _frozenObservedSessionId,
                 ObservationPairingBinding = _observation.Enabled ? _observation.PairingBinding : null,
                 ObservationContext = _observation.Enabled ? _observation.LapContext : null,
-                ObservationResult = _observation.Close(_startedAtUtc, ended)
+                ObservationResult = _observation.Close(_startedAtUtc, ended, extraReasons)
             };
             return aggregate;
         }

@@ -130,7 +130,8 @@ namespace ThreeSM.EnduranceConnector
         private readonly string _contextKey;
 
         public ObservationSample(DateTime observedAtUtc, bool? onPitRoad, double? fuelLitres,
-            string driverName, string contextKey, string driverId = null, int schemaVersion = 1)
+            string driverName, string contextKey, string driverId = null, int schemaVersion = 1,
+            bool? resetOrTow = null, double? sourceTime = null, double? sourceLap = null, long? sourceTick = null)
         {
             _observedAtUtc = observedAtUtc;
             _onPitRoad = onPitRoad;
@@ -139,6 +140,10 @@ namespace ThreeSM.EnduranceConnector
             _contextKey = contextKey;
             DriverId = driverId;
             SchemaVersion = schemaVersion;
+            ResetOrTow = resetOrTow;
+            SourceTime = sourceTime;
+            SourceLap = sourceLap;
+            SourceTick = sourceTick;
         }
 
         public DateTime ObservedAtUtc { get { return _observedAtUtc; } }
@@ -148,6 +153,10 @@ namespace ThreeSM.EnduranceConnector
         public string ContextKey { get { return _contextKey; } }
         public string DriverId { get; private set; }
         public int SchemaVersion { get; private set; }
+        public bool? ResetOrTow { get; private set; }
+        public double? SourceTime { get; private set; }
+        public double? SourceLap { get; private set; }
+        public long? SourceTick { get; private set; }
     }
 
     /// <summary>
@@ -236,6 +245,11 @@ namespace ThreeSM.EnduranceConnector
         private string _driverId;
         private bool _driverChanged;
         private string _qualityContext;
+        private bool _resetKnown = true;
+        private bool _resetObserved;
+        private double? _sourceTime;
+        private double? _sourceLap;
+        private long? _sourceTick;
 
         public ObservationCapture(ObservationPairingBinding binding, ObservationLapContext context)
         {
@@ -284,6 +298,25 @@ namespace ThreeSM.EnduranceConnector
             }
 
             _qualityContext = sample.ContextKey;
+            if (!sample.ResetOrTow.HasValue) _resetKnown = false;
+            if (sample.ResetOrTow == true) _resetObserved = true;
+            var sourceKnown = sample.SourceTime.HasValue && ObservationRules.IsFinite(sample.SourceTime.Value)
+                && sample.SourceTime.Value >= 0 && sample.SourceLap.HasValue
+                && ObservationRules.IsFinite(sample.SourceLap.Value) && sample.SourceLap.Value >= 0
+                && sample.SourceLap.Value <= int.MaxValue && sample.SourceLap.Value == Math.Truncate(sample.SourceLap.Value)
+                && sample.SourceTick.HasValue && sample.SourceTick.Value >= 0;
+            if (!sourceKnown) _resetKnown = false;
+            if (sourceKnown && _sourceTime.HasValue && _sourceLap.HasValue && _sourceTick.HasValue)
+            {
+                if (sample.SourceTime.Value < _sourceTime.Value || sample.SourceLap.Value < _sourceLap.Value
+                    || sample.SourceTick.Value < _sourceTick.Value) _resetObserved = true;
+                if (sample.SourceTime.Value <= _sourceTime.Value || sample.SourceTime.Value - _sourceTime.Value > 1
+                    || sample.SourceLap.Value != _sourceLap.Value || sample.SourceTick.Value <= _sourceTick.Value)
+                    _resetKnown = false;
+            }
+            _sourceTime = sourceKnown ? sample.SourceTime : null;
+            _sourceLap = sourceKnown ? sample.SourceLap : null;
+            _sourceTick = sourceKnown ? sample.SourceTick : null;
             if (string.IsNullOrEmpty(sample.ContextKey)) _qualityCovered = false;
             if (!sample.OnPitRoad.HasValue) _pitKnown = false;
             if (!sample.FuelLitres.HasValue || !ObservationRules.IsFinite(sample.FuelLitres.Value)
@@ -370,7 +403,8 @@ namespace ThreeSM.EnduranceConnector
         /// Bouwt met expliciete rijgrenzen. De grenzen moeten bekende UTC zijn;
         /// een onbekende zone, MinValue of een negatieve edge wordt geweigerd.
         /// </summary>
-        public ObservationCaptureResult Build(DateTime rowStartedAtUtc, DateTime rowEndedAtUtc)
+        public ObservationCaptureResult Build(DateTime rowStartedAtUtc, DateTime rowEndedAtUtc,
+            bool lifecycleDiscontinuity = false)
         {
             if (_binding == null || !_binding.IsComplete)
             {
@@ -511,7 +545,8 @@ namespace ThreeSM.EnduranceConnector
                 _version == 2 ? new MeasurementFuelQualityDto(
                     _firstPitRoadAt.HasValue ? (bool?)true : _qualityCovered && _pitKnown ? (bool?)false : null,
                     _positiveSteps > 0 ? (bool?)true : _qualityCovered && _fuelKnown && _driverKnown && _sampleCount > 1 ? (bool?)false : null,
-                    null, // No existing source proves absence of reset/tow. Unsupported != false.
+                    _resetObserved || lifecycleDiscontinuity ? (bool?)true : _resetKnown && _qualityCovered && _sampleCount > 1
+                        && edgeBeforeMs <= 1000L && edgeAfterMs <= 1000L ? (bool?)false : null,
                     _qualityCovered && _driverKnown && !_driverChanged ? _driverId : null,
                     _driverChanged ? (bool?)true : _qualityCovered && _driverKnown ? (bool?)false : null) : null);
             var json = MeasurementJson.Serialize(dto);
