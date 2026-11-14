@@ -25,15 +25,25 @@ def main():
         L.psql_clone_ok(f"UPDATE pitwall_learning.account_policy SET capture_enabled=true WHERE owner_user_id='{U.owner(2)}'")
         L.psql_clone_ok(f"UPDATE public.simhub_devices SET revoked_at=NULL, device_status='active_unbound', endurance_event_id=NULL, endurance_team_id=NULL, device_role=NULL WHERE id='{U.device(2)}'")
         time.sleep(0.6)
-        body = U.frame(21000+index); body['lapSummaries'] = [U.lap(2, 10000+index)]
+        # Fresh sequence and fresh summary UID per attempt: a retry must not
+        # collide with the replay guard or with a row an earlier attempt wrote.
+        start = int(L.psql_clone_ok("SELECT coalesce(max(last_sequence),0) FROM public.simhub_devices "
+                                    "WHERE id::text LIKE 'd5000000-%'").strip()) + 10
+        body = U.frame(start + index); body['lapSummaries'] = [U.lap(2, start + 100 + index)]
         body['ownerUserId'] = U.owner(3); body['deviceId'] = U.device(3)
         before = U.counts()
         change = (f"UPDATE pitwall_learning.account_policy SET capture_enabled=false,policy_version=policy_version+1 WHERE owner_user_id='{U.owner(2)}'"
                   if mode == 'permission' else
                   f"UPDATE public.simhub_devices SET revoked_at=now(),device_status='revoked',endurance_event_id=NULL,endurance_team_id=NULL,device_role=NULL WHERE id='{U.device(2)}'")
+        # The racer holds the device row for 6s: long enough that the frame is
+        # provably waiting at persist when the change commits, and short enough
+        # to stay under this database's 8s `statement_timeout` for the
+        # `authenticator` role — a blocked persist that is cancelled by that
+        # limit surfaces as a 500 before the racer ever commits, which would
+        # test the timeout instead of the race.
         sql = (f"BEGIN; SET LOCAL statement_timeout='30s'; SET LOCAL idle_in_transaction_session_timeout='30s'; "
                f"SET application_name='{APP}'; SELECT id FROM public.simhub_devices WHERE id='{U.device(2)}' FOR UPDATE; "
-               f"SELECT pg_sleep(12); {change}; COMMIT;")
+               f"SELECT pg_sleep(6); {change}; COMMIT;")
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             lock = pool.submit(L.psql_clone, sql)
             for _ in range(60):
