@@ -1,5 +1,14 @@
 # Pitwall learning — beleidsvoorstel v1
 
+**Nieuw GO (14 november 2026):** Discord `1571219534478708778` autoriseert de
+normale uitbreiding van bestaande plugin/pitwall, inclusief persoonlijke fuel-
+fitting en de volledige leveringsketen. De P1/P2-only verboden hieronder zijn
+historische scopes, geen veto op dit nieuwe GO. Persoonlijk-eerst, geen nieuwe
+pooling, opt-out/privacy en 7/180/90-dagenretentie blijven gelden. Automatische
+persoonlijke eligibility/defaults zijn gevraagd maar nog niet geïmplementeerd
+in de huidige partial build; er is geen productie-enrollment of activatie.
+Werkelijke bouwstatus: `docs/operations/pitwall-learning-normal-update.md`.
+
 **Status: P1 lokaal afgerond; vervolg-GO voor afgeschermde P2-bouw ontvangen. Niet op productie geactiveerd.**
 
 P2 begint vanaf `79ca3381ee880bb145c91c9804da7584fc2b683a` na de afgeronde
