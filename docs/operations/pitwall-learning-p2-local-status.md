@@ -366,8 +366,22 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
 - Niet-blokkerende cosmetische/aanvullende testpunten uit de ene review blijven uitgesteld;
   geen extra audit of test-only modelronde. Production frontend changes: NONE.
 
-## S2E2 backend-policy-publisher lokaal gebouwd
+## S2E2 backend-policy-publisher lokaal geaccepteerd en geïntegreerd
 
+- Bron `88f0b7e200d6cd3553d05036bd03d81e30cabeb9`: één onafhankelijke run,
+  SPEC PASS gevolgd door QUALITY APPROVED. Geen blokkerende punten.
+  Integratie `e939c32aa5dd73d9d6ebf4a9b8e5a108e3c39277`, boom exact gelijk aan
+  de gereviewde kandidaat; parent geselecteerde Deno12 en preflight6 opnieuw PASS.
+  SQL-/wire-/rolbewijs expliciet overgedragen: reviewer voerde de18 stages opnieuw
+  uit, inclusief verwachte duplicate-forward-refusal (exit3), exacte rollback-
+  object/data-inventaris en zeven PG→Edge→C#-gevallen. Geen derde volledige SQL-run.
+- Parent heeft beide exacte testcontainer-ID's, isolatie en post-rollbacktoestand
+  zelf teruggelezen en de twee eigen wegwerpcontainers daarna verwijderd;
+  afwezigheid van beide ID's is geverifieerd. Ruwe bewijzen blijven bewaard.
+  De KiB→MiB-resourceguard en het stoppen met productiecontainerinspectie zijn
+  vóór de ene review gerepareerd; dezelfde zes unitproeven zijn rood op b931,
+  groen op88. Een casingfout in de parent-cleanupcontrole is als scaffoldfout
+  bewaard en hersteld; geen SQL- of productfout.
 - Nieuwe additieve migratie `20261114000945_pitwall_learning_observation_policy.sql`:
   alleen `public.simhub_observation_policy_v1(text)` plus ACL, met paired
   rollback die uitsluitend die functie dropt. Geen tabellen/kolommen/private
@@ -381,14 +395,23 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   tokenhash. Default off betekent nul extra RPC's; fout/timeout/ontbrekende RPC
   laat het veld weg zonder de 202/ACK te veranderen.
 - Bewezen in een nieuwe wegwerp-PG15.19-instance: echte forward/rollback,
-  effectieve ACL (service_role ja; anon/authenticated/nested-leden nee;
-  directe private read nee), readonly lookup, A-toegestaan/B-geweigerd plus
+  effectieve ACL (service_role en nested-service ja; anon/authenticated en
+  nested-authenticated nee; directe private read nee), readonly lookup, A-toegestaan/B-geweigerd plus
   intrekking op de bestaande P1-guard, en een cross-language
   PG→Edge-composer→echte net8 `ObservationReadinessReader`-proef.
 - Contract en grenzen:
   [observation-policy-publisher v1](../contracts/pitwall-learning-observation-policy-publisher-v1.md).
   Geen deploy, enrollment, clientactivatie of performance-PASS; de bestaande
-  +10%/+20 ms-p95-poort blijft open.
+  +10%/+20 ms-p95-poort blijft open. De750ms-bovengrens is geen latencybudget
+  of garantie voor de totale requestdeadline. Ook volledige Edge-entrytypecheck
+  blijft open (remote import niet cached); helper/tests zijn wel gecontroleerd.
+- Client/updater blijven bytegelijk aan648996af; de bewezen Windows-build431d
+  wordt daarom overgedragen, niet opnieuw gebouwd. De fixture is minimaal met
+  oudere wrapper, geen live-schema/full-ingestkloon. Volgende echte poort:
+  read-only live-catalogus/schemabasis en geïsoleerde realistische clone-/latencyproef;
+  geen productie-DDL, deployment, enrollment of activering onder deze acceptatie.
+- Bewijs onder `/home/hermes/artifacts/3sm/pitwall-learning-p2-observation-policy-`
+  met suffixen `publisher/`, `publisher-review/`, `publisher-integration/`.
 
 ## Beperkingen en vervolgnotities
 

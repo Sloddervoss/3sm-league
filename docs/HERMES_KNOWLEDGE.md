@@ -77,8 +77,19 @@ settingsopt-infalse; geen SQL/Edge/account/UIwijziging. Volledige echte Windows/
 SimHub-compile431d PASS:121bronhashes49Compile-items,0errors/1bestaandewarning;
 DLL869376bytes SHA256 `801e0958bb76c961c883c2f029e0517791614ca0e87d54d327ed02e796e7b15f`.
 Installed/Desktopunchanged, updaterembedding/keygecontroleerd, compile-only0.7.6.2.
-Volgende afhankelijkheid: backend-accountpolicyprojectie en bestaande learning-policy-
-handhaving testen; geenservernumericepoch. User-approvedproportionelewerkwijze:
+S2E2 backend-policyprojectie heeft in één onafhankelijke run SPEC PASS en QUALITY
+APPROVED op88f0b7e; integratiee939c32a is boomgelijk. Eén readonlyservice-roleRPC
+pluspairedrollback, optioneelpolicyfeit in bestaande acceptedV3response. Geen
+private-schema-grant, nieuweownerclaim, pooling/enrollment ofclientwijziging.
+ParentDeno12/preflight6PASS; reviewer18SQL/wirestages en7PG→Edge→C#gevallen
+uitgevoerd. Exactrollbackinventaris/data gelijk; parentlasbeideisolateIDs/DBstaat
+zelfterug en ruimde uitsluitend die tweecontainers op, afwezigheidgeverifieerd.
+Windows431d/clientbytebewijs overgedragen, geenherbouw. Full-ingestproductieclone,
+actuelecatalogus, remoteEdge-entrytypecheck en p95(+10%EN20ms) blijvenOPEN.
+750mslookupboundis geenvolledigerequestdeadlinegarantie. Geen productieapply,
+deploy, enrollment, optin ofmodelgebruik. Geenservernumeriekeepoch nodig.
+Volgende afhankelijkheid is read-only live-schema/cataloogvoorbereiding en echte
+geïsoleerdeclone-/latencyrehearsal, nietnogeenclientreview. User-approvedproportionelewerkwijze:
 ééncoherentpakket/éénonafhankelijkereview, alleblockerssamen, bytecarryvoorongewijzigd
 bewijs; geenextra modelronde voor exactaluitgevoerdetestpatch. Productie/installatie/
 activering en echte automatischeupgrade blijven afzonderlijkeGO/acceptatiepoorten.
