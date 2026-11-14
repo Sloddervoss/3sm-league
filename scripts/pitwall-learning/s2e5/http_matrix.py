@@ -119,7 +119,11 @@ def matrix():
     a = case('eligible-fresh-observation-write', 2, 2, [lap(2, 1)], expect_capture=True)
     assert a['response']['json']['observation']['mode'] == 'on'
     assert a['response']['json']['observation']['policy']['captureAllowed'] is True
-    assert a['response']['json']['observation']['policy']['policyVersion'] == 1
+    # The published version is whatever the single policy row says right now;
+    # earlier write-time race stages bump it, so it must never be hard-coded.
+    current_version = int(L.psql_clone_ok(
+        f"SELECT policy_version FROM pitwall_learning.account_policy WHERE owner_user_id='{U.owner(2)}'").strip())
+    assert a['response']['json']['observation']['policy']['policyVersion'] == current_version
     assert a['after']['observations'] == a['before']['observations'] + 1
     R.save('ZERO-HOP.json', {'case': a['case'], 'persist_delta': a['extra_call_delta'][PERSIST],
                              'policy_delta': a['extra_call_delta'][POLICY],
@@ -147,15 +151,28 @@ def matrix():
     assert a['response']['json']['measurements']['laps']['accepted']
     assert a['after']['observations'] == a['before']['observations']
 
+    # Closed capture core: the global switch is off while the account policy is
+    # still positive. The frame is accepted, the policy fact is published, and
+    # the pre-existing trigger captures nothing — without any extra hop.
+    R.guard()
+    L.psql_clone_ok("UPDATE pitwall_learning.runtime_settings SET capture_enabled=false WHERE id=1")
+    try:
+        a = case('global-capture-closed-no-batch', 2, 8, [lap(2, 5)], expect_capture=False)
+        assert a['response']['json']['observation']['policy']['captureAllowed'] is True
+        assert a['after']['observations'] == a['before']['observations']
+    finally:
+        R.guard()
+        L.psql_clone_ok("UPDATE pitwall_learning.runtime_settings SET capture_enabled=true WHERE id=1")
+
     # Discriminating real-HTTP control: remove the separate policy RPC entirely.
     # The old code lost the policy here; the embedded fact must survive it.
     R.guard()
     L.psql_clone_ok(f"ALTER FUNCTION public.{POLICY}(text) RENAME TO s2e5_saved_policy_v1; NOTIFY pgrst,'reload schema';")
     time.sleep(3)
     try:
-        a = case('policy-rpc-absent-embedded-still-published', 2, 7, [lap(2, 4)], expect_capture=True)
+        a = case('policy-rpc-absent-embedded-still-published', 2, 9, [lap(2, 4)], expect_capture=True)
         assert a['response']['json']['observation']['policy']['captureAllowed'] is True
-        assert a['response']['json']['observation']['policy']['policyVersion'] == 1
+        assert a['response']['json']['observation']['policy']['policyVersion'] == current_version
     finally:
         R.guard()
         L.psql_clone_ok(f"ALTER FUNCTION public.s2e5_saved_policy_v1(text) RENAME TO {POLICY}; NOTIFY pgrst,'reload schema';")
