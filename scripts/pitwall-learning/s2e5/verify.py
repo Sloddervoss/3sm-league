@@ -12,7 +12,9 @@ def allocate(memory='640m', swap='1280m', client='512m', client_swap='1024m'):
     handles = R.owned_handles()
     before = {k: (v['memory'], v['cpus']) for k, v in handles.items()}
     R.run(f'docker update --memory {memory} --memory-swap {swap} {L.DB_CONTAINER}','compiler-db-budget')
-    R.run(f'docker update --memory {client} --memory-swap {client_swap} --cpus 0.4 {R.CLIENT}','compiler-client-budget')
+    # CPU stays untouched: the phase total (2.0) is already fully allocated, and
+    # the compiler only needs headroom in memory.
+    R.run(f'docker update --memory {client} --memory-swap {client_swap} {R.CLIENT}','compiler-client-budget')
     after = R.owned_handles()
     total_mem = sum(v['memory'] for v in after.values())
     total_cpu = sum(v['cpus'] for v in after.values())
