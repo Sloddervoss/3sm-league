@@ -26,6 +26,7 @@ import {
   probeObservationV1,
   shouldProbeObservation,
 } from "./observationCapability.ts";
+import { maybeComposeObservationPolicy } from "../_shared/observationPolicyV1.ts";
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -160,8 +161,9 @@ Deno.serve(async (request) => {
       // mee en hoort niet in simhub_telemetry_latest.v3_normalized, want die
       // snapshot is browserleesbaar. De database heeft daarnaast een trigger die
       // de sleutels alsnog verwijdert (tweede wachter).
+      const tokenHash = await sha256Hex(token);
       const baseArguments = {
-        p_token_hash: await sha256Hex(token),
+        p_token_hash: tokenHash,
         p_session_id: context.normalized!.transportSessionId,
         p_sequence: context.normalized!.sequence,
         p_captured_at: context.normalized!.capturedAt,
@@ -337,6 +339,17 @@ Deno.serve(async (request) => {
         console.error("simhub-ingest-v3 opponent sampling non-fatal", (sampleErr as Error).message ?? "unknown");
       }
 
+      // S2E2: optioneel identity-scoped policyfeit voor de client. Alleen na
+      // een geaccepteerde V3-write en een bewezen 'on'-ontvanger, met dezelfde
+      // al gevalideerde tokenhash als de schrijf-RPC (nooit een owner uit de
+      // body). Hooguit één begrensde lookup; ontbrekende RPC, fout, timeout of
+      // malformaat laat `policy` weg en de bestaande 202/ACK ongewijzigd.
+      const policy = await maybeComposeObservationPolicy(
+        observationMode,
+        tokenHash,
+        (fn, args) => service.rpc(fn, args),
+      );
+
       return jsonResponse(request, {
         accepted: true,
         receivedAt: row.received_at,
@@ -346,6 +359,7 @@ Deno.serve(async (request) => {
           enabled: OBSERVATION_V1_ENABLED,
           mode: observationMode,
           available: observationCapability.available,
+          ...(policy ? { policy } : {}),
         },
       }, 202);
     }
