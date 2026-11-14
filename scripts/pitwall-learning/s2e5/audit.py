@@ -106,9 +106,23 @@ def disable():
     # no permission to alter an existing row or add any further rows is waived.
     assert after == after_probe, 'remaining rollbacks changed retained data'
     retained_equal = True
+    finish_disable(before, after_s2e5, after_probe, after, records, fallback)
+
+
+def finish_disable(before, after_s2e5, after_probe, after, records, fallback):
+    """Validate the already-rolled-back lab and finish the OFF/HTTP proof."""
+    R.guard()
+    expected_probe_tables = {'public.simhub_lap_summaries',
+                             'pitwall_learning.capture_batches', 'pitwall_learning.jobs'}
+    assert after_s2e5 == before
+    assert {k for k in before if before[k] != after_probe[k]} == expected_probe_tables
+    assert all(after_probe[k]['rows'] == before[k]['rows'] + 1 for k in expected_probe_tables)
+    retained_equal = after == after_probe
+    assert retained_equal
+    assert Z.retained_data() == after, 'lab data changed since the saved rollback state'
     expected = json.loads(L.psql_clone_ok("""SELECT json_build_object(
  'policy_rpc_absent',to_regprocedure('public.simhub_observation_policy_v1(text)') IS NULL,
- 'persist_back_to_three_columns',(SELECT count(*)=3 FROM unnest((SELECT p.proargmodes FROM pg_proc p WHERE p.oid='public.simhub_persist_v3(text,text,bigint,timestamptz,jsonb,text,jsonb,jsonb)'::regprocedure)) m WHERE m='o'),
+ 'persist_back_to_three_columns',(SELECT cardinality(proallargtypes)-pronargs=3 FROM pg_proc WHERE oid='public.simhub_persist_v3(text,text,bigint,timestamptz,jsonb,text,jsonb,jsonb)'::regprocedure),
  'capture_triggers_absent',NOT EXISTS(SELECT FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND t.tgname LIKE 'pitwall_learning_capture%'),
  'all_switches_off',(SELECT NOT(capture_enabled OR worker_enabled OR shadow_enabled OR advice_enabled OR observation_enabled) FROM pitwall_learning.runtime_settings WHERE id=1),
  'worker_no_login',(SELECT NOT rolcanlogin AND rolconnlimit=0 FROM pg_roles WHERE rolname='pitwall_learning_worker'),
@@ -169,7 +183,23 @@ def disable():
     R.checkpoint('s2e5-finished-safe-disabled-retained-owned-lab', handles='FINAL-HANDLES.json')
 
 
+def resume_finish():
+    """Resume after a metadata assertion without replaying completed rollbacks."""
+    R.guard()
+    assert not (ART/'SAFE-DISABLE.json').exists()
+    read = lambda name: json.loads((ART/name).read_text())
+    before = read('rollback-retained-before.json')
+    after_s2e5 = read('rollback-retained-after-s2e5-rollback.json')
+    after_probe = read('rollback-retained-after-fallback-proof.json')
+    after = read('rollback-retained-after.json')
+    records = read('ROLLBACK-ORDER.json')
+    assert [r['file'] for r in records] == [lab.NEW_MIGRATION] + list(reversed([m for m in M.MIGRATIONS if m != lab.NEW_MIGRATION]))
+    assert all(r['exit'] == 0 for r in records)
+    finish_disable(before, after_s2e5, after_probe, after, records,
+                   read('FUNCTIONAL-FALLBACK.json')[0])
+
+
 if __name__ == '__main__':
     import sys
-    {'acl': acl, 'source': source_proof, 'disable': disable,
+    {'acl': acl, 'source': source_proof, 'disable': disable, 'finish-saved': resume_finish,
      'rollback-one': lambda: rollback_file(lab.NEW_MIGRATION)}[sys.argv[1]]()
