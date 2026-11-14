@@ -139,7 +139,7 @@ def file_sha256(path: pathlib.Path) -> str:
 
 
 def preflight() -> dict[str, object]:
-    """Read-only: host, daemon, image, resources, reserved name, prod container."""
+    """Read-only: host, daemon, image, resources and reserved test name only."""
     hostname = remote("hostname")
     if hostname.returncode != 0 or not hostname.stdout.strip():
         raise StageError("3sm-docker hostname check failed")
@@ -158,8 +158,9 @@ def preflight() -> dict[str, object]:
             f"reserved container name {CONTAINER!r} already exists; refusing to adopt it"
         )
 
+    # /proc/meminfo reports KiB; compare and report MiB, just like df -Pm.
     mem_avail = int(remote(
-        "awk", "'/MemAvailable/{print $2}'", "/proc/meminfo").stdout.decode().strip())
+        "awk", "'/MemAvailable/{print $2}'", "/proc/meminfo").stdout.decode().strip()) // 1024
     disk_probe = remote("df", "-Pm", "/var/lib/docker")
     if disk_probe.returncode != 0:
         disk_probe = remote("df", "-Pm", "/")
@@ -169,7 +170,6 @@ def preflight() -> dict[str, object]:
     if disk_avail < 4096:
         raise StageError(f"not enough free disk: {disk_avail} MiB")
 
-    prod = docker("inspect", "supabase-db", "--format", "{{.Id}}")
     return {
         "hostname": hostname.stdout.decode().strip(),
         "docker_daemon": daemon.stdout.decode().strip(),
@@ -177,7 +177,7 @@ def preflight() -> dict[str, object]:
         "mem_available_mib": mem_avail,
         "disk_available_mib": disk_avail,
         "reserved_name_free": True,
-        "production_container_inspected": prod.returncode == 0,
+        "production_container_inspected": False,
         "production_container_untouched": True,
     }
 
