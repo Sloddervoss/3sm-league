@@ -9,8 +9,8 @@ import json
 import math
 import tarfile
 
-import benchmark as B
 import lab
+import benchmark as B  # noqa: E402  (the s2e3 path is added when lab is imported)
 from lab import ART, OLD, ROOT, L, R, U, C
 
 DID = 'd5000000-0000-4000-8000-000000000099'
