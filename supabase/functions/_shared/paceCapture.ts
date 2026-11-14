@@ -59,10 +59,11 @@ export const parsePaceCapture = (value: unknown): PaceCapture | null => {
         if (!origin || !["valid", "incomplete", "sum_mismatch", "missing_lap"].includes(d.reason as string)) throw Error("pace_diagnostic");
         sectorDiagnostic = {source: origin, count: num(d.count, 1, 16, true), sumSeconds: opt(d.sumSeconds, 0.001, 86400), reportedSeconds: opt(d.reportedSeconds, 0.001, 86400), errorSeconds: opt(d.errorSeconds, -86400, 86400), reason: d.reason as SectorDiagnostic["reason"]};
       }
-      const extensions = Object.fromEntries([
+      const extensionEntries: [string, unknown][] = [
         ["sectorCount", sectorCount], ["sectorLap", opt(m.sectorLap, 1, 100000, true)], ["sectorSource", source(m.sectorSource)], ["sectorErrorSeconds", opt(m.sectorErrorSeconds, -86400, 86400)],
         ["bestSectorSource", source(m.bestSectorSource)], ["bestSectorErrorSeconds", opt(m.bestSectorErrorSeconds, -86400, 86400)], ["sectorDiagnostic", sectorDiagnostic],
-      ].filter(([key]) => Object.prototype.hasOwnProperty.call(m, key)));
+      ];
+      const extensions = Object.fromEntries(extensionEntries.filter(([key]) => Object.prototype.hasOwnProperty.call(m, key)));
       return {...extensions, id: text(m.id), observedSessionTimeSeconds: num(m.observedSessionTimeSeconds, 0, 86400), lastLapSeconds, bestLapSeconds,
         lastLapSectorSeconds: m.lapValid === false ? null : validatedSectors(m.lastLapSectorSeconds, lastLapSeconds, sectorCount), bestLapSectorSeconds: validatedSectors(m.bestLapSectorSeconds, bestLapSeconds, sectorCount),
         bestSectorSeconds: m.bestSectorSeconds == null ? null : list(m.bestSectorSeconds, 16).length === (sectorCount ?? 3) ? (m.bestSectorSeconds as unknown[]).map(x => opt(x, 0.001, 86400)) : null,

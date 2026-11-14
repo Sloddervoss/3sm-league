@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
 import { assertAllowedOrigin, consumeEdgeRateLimit, jsonResponse, readBoundedJson, sha256Hex } from "../_shared/simhub.ts";
 import { resolveTelemetryContext } from "./context.ts";
+import type { TelemetryContextClient } from "./context.ts";
 import { tyreObservationTiming } from "../_shared/tyreObservation.ts";
 import {
   MaxMeasurementBatchBytes,
@@ -36,6 +37,25 @@ declare const Deno: {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+// Adapt the fixed SDK's thenables at the boundary rather than structurally
+// expanding its generic client into the context resolver's small read port.
+const contextClient: TelemetryContextClient = {
+  from: (table) => ({
+    select: (columns) => ({
+      eq: (column, value) => ({
+        maybeSingle: async (): Promise<{ data: unknown; error: unknown }> => {
+          const { data, error } = await service.from(table).select(columns).eq(column, value).maybeSingle();
+          return { data, error };
+        },
+      }),
+    }),
+  }),
+  rpc: async (fn, args): Promise<{ data: unknown; error: unknown }> => {
+    const { data, error } = await service.rpc(fn, args);
+    return { data, error };
+  },
+};
 
 /**
  * Heeft de database de acht-argumentversie van simhub_persist_v3?
@@ -143,7 +163,7 @@ Deno.serve(async (request) => {
         }
       }
       const observationMode = observationCaptureMode(OBSERVATION_V1_ENABLED, observationCapability);
-      const context = await resolveTelemetryContext(token, rawBody, service, sha256Hex, {
+      const context = await resolveTelemetryContext(token, rawBody, contextClient, sha256Hex, {
         observationCapture: observationMode,
       });
 
@@ -246,6 +266,15 @@ Deno.serve(async (request) => {
         return jsonResponse(request, { error: "internal_error", measurements, aggregates: aggregateStatus }, 500);
       }
 
+      // Read-only, fail-closed and bounded by the existing 750ms deadline.
+      // Start only after core acceptance; overlap existing best-effort history
+      // writes, never core authorization/persistence, and join before response.
+      const pendingPolicy = maybeComposeObservationPolicy(
+        observationMode,
+        tokenHash,
+        (fn, args) => service.rpc(fn, args),
+      );
+
       // 0.7.4.0: bewezen rondetijden van de connector. Best-effort, net als de
       // tegenstandersteekproef hieronder: een fout kost de tijd, niet het frame.
       try {
@@ -344,11 +373,7 @@ Deno.serve(async (request) => {
       // al gevalideerde tokenhash als de schrijf-RPC (nooit een owner uit de
       // body). Hooguit één begrensde lookup; ontbrekende RPC, fout, timeout of
       // malformaat laat `policy` weg en de bestaande 202/ACK ongewijzigd.
-      const policy = await maybeComposeObservationPolicy(
-        observationMode,
-        tokenHash,
-        (fn, args) => service.rpc(fn, args),
-      );
+      const policy = await pendingPolicy;
 
       return jsonResponse(request, {
         accepted: true,
