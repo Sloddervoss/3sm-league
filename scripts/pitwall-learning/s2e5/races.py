@@ -30,6 +30,7 @@ def main():
         start = int(L.psql_clone_ok("SELECT coalesce(max(last_sequence),0) FROM public.simhub_devices "
                                     "WHERE id::text LIKE 'd5000000-%'").strip()) + 10
         body = U.frame(start + index); body['lapSummaries'] = [U.lap(2, start + 100 + index)]
+        body['lapSummaries'][0]['lapNumber'] = index + 1
         body['ownerUserId'] = U.owner(3); body['deviceId'] = U.device(3)
         before = U.counts()
         change = (f"UPDATE pitwall_learning.account_policy SET capture_enabled=false,policy_version=policy_version+1 WHERE owner_user_id='{U.owner(2)}'"

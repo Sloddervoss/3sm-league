@@ -1,5 +1,48 @@
 # S2E5 — observation policy in de bestaande persist-transactie
 
+## Gerichte S1/S2/S3-reparatie (2026-11-14)
+
+De onderstaande oorspronkelijke proef blijft numeriek PASS, maar de onafhankelijke
+review wees die bron functioneel af: SPEC BLOCKED; QUALITY NOT REACHED. Die
+uitkomst en de oude artefacten zijn niet vervangen of kwijtgescholden.
+
+De reparatie bouwt op `3c117c7a2ab92b9e7fb2460484cc91f907ceca9c`, op
+`fix/pitwall-learning-s2e5-policy-repair`. Alleen de huidige ongepubliceerde
+S2E5-migratie en paired rollback worden aangepast; oudere migraties blijven gelijk.
+
+- S1: Edge componeert `observationPolicyRequested` pas na parser/contextvalidatie
+  in het bestaande normalized argument, en overschrijft een vervalste bodywaarde.
+  SQL leest account_policy alleen bij JSON boolean true. Ontbrekend, false,
+  verkeerd type en unavailable betekenen nul private policy-scans en NULL in het
+  nog steeds aanwezige vierde resultaatveld. Intent is geen toestemming: token,
+  device, rol en de echte `d.owner_user_id` blijven de autoriteit.
+- S2: de optionele tabel-lock is NOWAIT; impliciete lock-wachttijd wordt maximaal
+  5ms (of de strengere bestaande lock_timeout). Minder dan 25ms resterend op de
+  al lopende statement_timeout slaat het optionele werk over. Caller-GUCs worden
+  hersteld; statement_timeout wordt nooit aangepast/herstart en query_canceled
+  wordt niet gevangen. Een globale annulering blijft atomair afbreken, ook vóór
+  core-acceptatie. Dit is geen belofte dat corewerk onder iedere globale deadline
+  past. De ON-lockproeven gebruiken geen meetbatch/policyrij en lezen gecommitteerde
+  corewrites vanuit een andere sessie; een verstreken budget mag die proef niet
+  maskeren. PG15 timeout/exception-documentatie staat bij het nieuwe bewijs.
+- S3: één guard omvat de gehele rollbackactie, inclusief DDL/ACL/NOTIFY. Alleen
+  een echte vier-output preimage activeert herstel. Herhaling op drie outputs en
+  een ontbrekende functie zijn aantoonbaar no-op op functie-inventaris/ACL.
+- De entrytests behouden failed-core, identiteit, default-off en oldDB-fallback,
+  met herstelde late rejection na timeout en expliciete policy/history-overlap.
+  Het harnas kan via `S2E5_ARTIFACT_ROOT` naar een nieuwe private bewijsroot. Hoge
+  transportsequenties/UIDs in de behouden lab worden niet als lapNumber gebruikt.
+- De bestaande exclusief overgedragen lab wordt hergebruikt, zonder nieuwe stack
+  of schemaherstel: alleen de vier eigen capturetriggers, twee goedgekeurde
+  S1-projecties en de phase-RPCs worden gecontroleerd hersteld. Worker blijft dicht.
+
+Nieuw bewijs (exacte bevroren SHA, exits, één eigen preregistratie/proef en
+safe-disable):
+`/home/hermes/artifacts/3sm/pitwall-learning-p2-policy-hop-repair-20261114/REPORT.md`.
+Oud builder-/reviewbewijs blijft read-only. Een onafhankelijke gerichte SPEC-recheck
+en daarna QUALITY op de nieuwe SHA blijven aparte poorten; buildertests zijn geen
+zelfcertificering. Geen productie, push, merge of deploy.
+
 ## Scope en bron
 
 Lokale bouw/test na Vincent's keuze voor optie 2. Geen productie-apply, deployment,

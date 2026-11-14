@@ -29,6 +29,7 @@ BEGIN
     SELECT 1 FROM pg_proc p
      WHERE p.oid = v_new
        AND p.proargnames @> ARRAY['observation_policy']
+       AND cardinality(p.proallargtypes) - p.pronargs = 4
   ) THEN
     RAISE NOTICE 'public.simhub_persist_v3 already has the previous shape; nothing to roll back';
     RETURN;
@@ -40,9 +41,8 @@ BEGIN
     RAISE EXCEPTION 'rollback must run as migration owner or superuser'
       USING ERRCODE = 'PWL55';
   END IF;
-END
-$guard$;
-
+  -- RETURN above must gate the ENTIRE action, not only the guard block.
+  EXECUTE $restore$
 CREATE TEMP TABLE pwl_persist_preimage_rollback ON COMMIT DROP AS
 SELECT p.proowner, p.proacl
   FROM pg_proc p
@@ -674,5 +674,9 @@ COMMENT ON FUNCTION public.simhub_persist_v3(text,text,bigint,timestamptz,jsonb,
   'Schrijft één V3-frame weg en geeft sinds 0.7.2.0 het meetrapport terug in measurement_ack (per rij accepted/duplicate/superseded/rejected met reden). Een fout in de meetbatch kost nooit het frame.';
 
 NOTIFY pgrst, 'reload schema';
+
+  $restore$;
+END
+$guard$;
 
 COMMIT;

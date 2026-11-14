@@ -11,6 +11,7 @@ Stages: setup | candidate | sql | typecheck | functional | matrix | regression
 """
 import hashlib
 import json
+import os
 import pathlib
 import shlex
 import shutil
@@ -19,7 +20,7 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 OLD = pathlib.Path('/home/hermes/artifacts/3sm/pitwall-learning-p2-readonly-clone-20261114')
-ART = pathlib.Path('/home/hermes/artifacts/3sm/pitwall-learning-p2-policy-hop-20261114')
+ART = pathlib.Path(os.environ.get('S2E5_ARTIFACT_ROOT', '/home/hermes/artifacts/3sm/pitwall-learning-p2-policy-hop-20261114'))
 sys.path.insert(0, str(ROOT / 'scripts/pitwall-learning/s2e3'))
 import s2e3lib as L  # noqa: E402
 
@@ -84,6 +85,8 @@ def remember(name, meta):
         'labels':meta['Config'].get('Labels'), 'memory':meta['HostConfig']['Memory'],
         'cpus':meta['HostConfig']['NanoCpus']}
     R.save('resource-ledger.json', records)
+    with (ART/'resource-ledger-history.jsonl').open('a') as history:
+        history.write(json.dumps({'name': name, **records[name]}, sort_keys=True)+'\n')
     L.log('created-handles', name=name, **records[name])
 
 _ORIG.setdefault('assert_owned', L.assert_owned)

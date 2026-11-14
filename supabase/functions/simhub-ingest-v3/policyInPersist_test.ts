@@ -55,6 +55,8 @@ type Mode =
   | "absent-fallback-missing"
   | "absent-fallback-throw"
   | "absent-fallback-late"
+  | "absent-fallback-late-reject"
+  | "core-failed"
   | "core-replayed"
   | "core-rate-limited"
   | "revoked"
@@ -84,6 +86,8 @@ Deno.test({
     let calls: string[] = [];
     let persistArgs: Record<string, unknown> | null = null;
     let policyArgs: Record<string, unknown> | null = null;
+    let policyPending = false;
+    let historyOverlapped = false;
     const did = "d5000000-0000-4000-8000-000000000003";
     const token = "s2e5-synthetic-device-token-000000000000";
     const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)))]
@@ -118,6 +122,11 @@ Deno.test({
         if (name === PERSIST) {
           persistArgs = args;
           assert(args.p_token_hash === hash, "persist must use the authenticated token hash");
+          assert(args.p_v3_normalized.observationPolicyRequested === true, "ON intent missing at SQL boundary");
+          if (mode === "core-failed") {
+            return new Response(JSON.stringify({ code: "XX000", message: "synthetic" }),
+              { status: 500, headers: { "Content-Type": "application/json" } });
+          }
           const result = mode === "core-replayed"
             ? "replayed"
             : (mode === "core-rate-limited" ? "rate_limited" : "accepted");
@@ -139,8 +148,20 @@ Deno.test({
             return new Response(JSON.stringify({ code: "PGRST202", message: "missing" }),
               { status: 404, headers: { "Content-Type": "application/json" } });
           }
-          if (mode === "absent-fallback-late") await new Promise(resolve => setTimeout(resolve, 900));
+          if (mode === "absent-fallback-late") {
+            policyPending = true;
+            await new Promise(resolve => setTimeout(resolve, 900));
+            policyPending = false;
+          }
+          if (mode === "absent-fallback-late-reject") {
+            await new Promise(resolve => setTimeout(resolve, 900));
+            throw new Error("synthetic late rejection");
+          }
           return reply({ captureAllowed: true, policyVersion: 4 });
+        }
+        if (name === "simhub_record_lap_times") {
+          historyOverlapped = policyPending;
+          return reply(null);
         }
         if (name === "simhub_record_tyre_observations") return reply(null);
         throw new Error("unexpected URL " + url.pathname);
@@ -161,6 +182,10 @@ Deno.test({
           ownerUserId: "forged-owner",
           tokenHash: "f".repeat(64),
           deviceId: "forged-device",
+          observationPolicyRequested: { owner: "forged-owner", mode: "on" },
+          ...(current === "absent-fallback-late" ? {
+            lapTimes: [{ carId: "synthetic", sessionKey: "synthetic:1:0", lap: 7, seconds: 121.456, source: "sdk" }],
+          } : {}),
         };
         const response = await handler!(new Request("http://s2e5.invalid/functions/v1/simhub-ingest-v3", {
           method: "POST",
@@ -244,10 +269,19 @@ Deno.test({
         assert(!("policy" in json.observation), "late fallback published a policy");
         assert(elapsed < 5000, `fallback deadline lost: ${elapsed}ms`);
         assert(count(POLICY) === 1, "late fallback must read exactly once");
+        assert(count("simhub_record_lap_times") === 1 && historyOverlapped, "policy/history no longer overlap");
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
 
       // (d) failed or replayed core: zero policy work, no observation block.
-      for (const [current, status] of [["core-replayed", 409], ["core-rate-limited", 429]] as [Mode, number][]) {
+      {
+        const { response, json } = await run("absent-fallback-late-reject");
+        assert(response.status === 202, "late rejecting fallback lost core");
+        assert(!("policy" in json.observation), "late rejection published policy");
+        await new Promise(resolve => setTimeout(resolve, 250));
+        assert(count(POLICY) === 1, "late rejection retried");
+      }
+      for (const [current, status] of [["core-replayed", 409], ["core-rate-limited", 429], ["core-failed", 500]] as [Mode, number][]) {
         const { response, json } = await run(current);
         assert(response.status === status, `${current}: core status changed`);
         assert(count(POLICY) === 0, `${current}: policy read on a failed core`);
@@ -270,8 +304,8 @@ Deno.test({
   },
 });
 
-Deno.test({
-  name: "real entry: default off does zero policy work even though the field is present",
+for (const setting of ["false", "absent", "unavailable"]) Deno.test({
+  name: `real entry: ${setting} overrides forged intent before SQL and does no policy hop`,
   fn: async () => {
     const originalFetch = globalThis.fetch;
     const originalServe = Deno.serve;
@@ -286,18 +320,22 @@ Deno.test({
     try {
       Deno.env.set(env[0], "http://s2e5.invalid");
       Deno.env.set(env[1], "synthetic-lab-service-key");
-      Deno.env.set(env[2], "false");
+      if (setting === "absent") Deno.env.delete(env[2]);
+      else Deno.env.set(env[2], setting === "unavailable" ? "true" : "false");
       Deno.serve = ((callback: typeof handler) => { handler = callback; return {}; }) as typeof Deno.serve;
-      globalThis.fetch = async (input) => {
+      globalThis.fetch = async (input, init) => {
         const url = new URL(String(input));
         const name = url.pathname.split("/").at(-1)!;
         calls.push(name);
         const reply = (body: unknown) =>
           new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
+        if (name === "simhub_observation_v1_available") return reply(false);
         if (name === "simhub_devices") {
           return reply({ id: "d5000000-0000-4000-8000-000000000004", owner_user_id: "owner", revoked_at: null, connector_id: "lab", endurance_event_id: null, endurance_team_id: null });
         }
         if (name === "simhub_persist_v3") {
+          const args = JSON.parse(String(init?.body));
+          assert(args.p_v3_normalized.observationPolicyRequested === false, "forged intent reached SQL");
           // The database would still return the column; the Edge must not use it.
           return reply([{ result: "accepted", received_at: "synthetic", observation_policy: { captureAllowed: true, policyVersion: 2 } }]);
         }
@@ -306,18 +344,18 @@ Deno.test({
         throw new Error("unexpected URL " + url.pathname);
       };
       // A distinct module instance so the env flag is read as "false".
-      await import(new URL("./index.ts?s2e5-flag-off", import.meta.url).href);
+      await import(new URL(`./index.ts?s2e5-mode-${setting}`, import.meta.url).href);
       assert(handler, "actual entry did not register handler");
       const response = await handler!(new Request("http://s2e5.invalid/functions/v1/simhub-ingest-v3", {
         method: "POST",
         headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...fixture, capturedAt: new Date().toISOString(), sequence: 1 }),
+        body: JSON.stringify({ ...fixture, observationPolicyRequested: true, capturedAt: new Date().toISOString(), sequence: 1 }),
       }));
       const json = (await response.json()) as unknown as Reply;
       assert(response.status === 202, "flag off lost core");
       assert(!calls.includes("simhub_observation_policy_v1"), "flag off queried the policy RPC");
-      assert(!calls.includes("simhub_observation_v1_available"), "flag off probed the observation RPC");
-      assert(json.observation.enabled === false, "flag off not reported");
+      assert(calls.includes("simhub_observation_v1_available") === (setting === "unavailable"), "mode probe mismatch");
+      assert(json.observation.enabled === (setting === "unavailable"), "flag not reported");
       assert(json.observation.mode !== "on", "mode not off");
       assert(!("policy" in json.observation), "flag off published a policy");
     } finally {

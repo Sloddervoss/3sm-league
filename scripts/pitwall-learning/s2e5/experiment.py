@@ -13,11 +13,11 @@ import lab
 import benchmark as B  # noqa: E402  (the s2e3 path is added when lab is imported)
 from lab import ART, OLD, ROOT, L, R, U, C
 
-DID = 'd5000000-0000-4000-8000-000000000099'
-OID = 'a5000000-0000-4000-8000-000000000099'
+DID = 'd5000000-0000-4000-8000-000000000098'
+OID = 'a5000000-0000-4000-8000-000000000098'
 REG = 'REGISTERED-BENCHMARK.json'
-SESSION = 's2e5-benchmark-single-valid-run'
-TRAFFIC_SESSION = 's2e5-benchmark-measured-synthetic-session'
+SESSION = 's2e5-repair-benchmark-single-valid-run'
+TRAFFIC_SESSION = 's2e5-repair-benchmark-measured-synthetic-session'
 # Exact, name-based: a matrix that silently lost, renamed or duplicated a case
 # must block registration instead of passing a count check. Recorded in
 # REPORT.md alongside the run.
@@ -61,6 +61,12 @@ def register():
     assert not (ART/REG).exists(), 'Immutable registration already exists'
     assert json.loads((ART/'ENTRY-TYPECHECK.json').read_text())['cand']['exit'] == 0
     assert all(x['exit'] == 0 for x in json.loads((ART/'REGRESSIONS.json').read_text()).values())
+    contained = json.loads((ART/'CONTAINED-POLICY-CONTROLS.json').read_text())
+    assert all(contained[k]['exit'] == 0 and contained[k]['committed_last_sequence'] == 1
+               for k in ('locked_on_0', 'locked_on_2ms', 'locked_on_50ms'))
+    assert contained['core_cancellation'] == {'exit': 3, 'no_core_write': True, 'policy_requested': True}
+    assert json.loads((ART/'ROLLBACK-CONTROLS.json').read_text())['exit'] == 0
+    assert json.loads((ART/'SQL-CONTRACTS.json').read_text())['forward']['exit'] == 0
     matrix = json.loads((ART/'functional-feature-on.json').read_text())
     names = [entry['case'] for entry in matrix]
     assert len(names) == len(set(names)), 'duplicate case name in the matrix run'
@@ -76,7 +82,7 @@ def register():
     L.write_private(ART/'benchmark-token.json', json.dumps({'token': token}))
     th = L.hashlib.sha256(token.encode()).hexdigest()
     for db in C.DB_FOR.values():
-        L.psql_clone_ok(L.CLONE_GUARD+f"INSERT INTO auth.users(id,email,aud,role,is_sso_user) VALUES('{OID}','s2e5-benchmark@example.invalid','authenticated','authenticated',false); INSERT INTO public.simhub_devices(id,owner_user_id,token_hash,device_name,connector_id,device_status) VALUES('{DID}','{OID}','{th}','S2E5 synthetic benchmark','s2e5-benchmark','active_unbound');", db=db)
+        L.psql_clone_ok(L.CLONE_GUARD+f"INSERT INTO auth.users(id,email,aud,role,is_sso_user) VALUES('{OID}','s2e5-repair-benchmark@example.invalid','authenticated','authenticated',false); INSERT INTO public.simhub_devices(id,owner_user_id,token_hash,device_name,connector_id,device_status) VALUES('{DID}','{OID}','{th}','S2E5 repair synthetic benchmark','s2e5-repair-benchmark','active_unbound');", db=db)
     L.psql_clone_ok(f"INSERT INTO pitwall_learning.account_policy(owner_user_id,capture_enabled,policy_version) VALUES('{OID}',true,1)")
     pairs = []
     for i in range(240):
@@ -112,6 +118,11 @@ def register():
         'dataset_sha256': sha(ART/'benchmark-dataset.json'),
         'runner_sha256': sha(ROOT/'scripts/pitwall-learning/s2e3/http_benchmark.ts'),
         'control_hashes': {str(p.relative_to(ROOT)): sha(p) for p in sorted((ROOT/'scripts/pitwall-learning/s2e5').glob('*.py'))},
+        'repair_acceptance_hashes': {name: sha(ART/name) for name in (
+            'REPAIR-PROBES.json', 'CONTAINED-POLICY-CONTROLS.json', 'ROLLBACK-CONTROLS.json',
+            'SQL-CONTRACTS.json', 'ENTRY-TYPECHECK.json', 'REGRESSIONS.json',
+            'LEGACY-CONTROL.json', 'functional-feature-on.json', 'WRITE-TIME-RACES.json',
+            'FUNCTIONAL-AUTHORITY.json', 'FUNCTIONAL-CHANGED-PERMISSIONS.json', 'PATH-ACL.json')},
         'handoff_hashes': {str(p.relative_to(ROOT)): sha(p) for p in sorted((ROOT/'scripts/pitwall-learning/s2e3').glob('*.py'))
                            + sorted((ROOT/'scripts/pitwall-learning/s2e3').glob('*.ts'))},
         'baseline': 'OLD actual captured LIVE source and live-shaped schema; not the S2E4 candidate',

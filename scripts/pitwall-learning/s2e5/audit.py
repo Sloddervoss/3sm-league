@@ -76,6 +76,8 @@ def disable():
     after_s2e5 = Z.retained_data()
     R.save('rollback-retained-after-s2e5-rollback.json', after_s2e5)
     assert after_s2e5 == before, 'the S2E5 rollback alone must not touch retained rows'
+    import rollback_controls
+    rollback_controls.main()
     time.sleep(5)
     R.prove_route()
     fallback = H.fallback_http()
@@ -148,13 +150,16 @@ def finish_disable(before, after_s2e5, after_probe, after, records, fallback):
     for v, i in ((1, 0), (2, 1), (3, 4)):
         b = U.frame(seq) if v == 3 else U.legacy(v, seq)
         if v == 3:
-            b['lapSummaries'] = [U.lap(4, 900, False)]
+            row = U.lap(4, seq, False); row['lapNumber'] = 900
+            b['lapSummaries'] = [row]
         r = U.send('cand', i, b)
         http.append({'version': v, 'request': b, 'response': r})
         assert r['status'] == 202, r
         if v == 3:
             assert r['json']['measurements']['laps']['accepted']
-    b = U.frame(seq + 1); b['lapSummaries'] = [U.lap(4, 901)]
+    b = U.frame(seq + 1)
+    row = U.lap(4, seq + 1); row['lapNumber'] = 901
+    b['lapSummaries'] = [row]
     r = U.send('cand', 4, b)
     http.append({'case': 'observation-disabled-no-core-loss', 'request': b, 'response': r})
     assert r['status'] == 202 and r['json']['measurements']['laps']['rejected']

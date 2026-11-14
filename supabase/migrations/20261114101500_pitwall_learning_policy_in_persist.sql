@@ -133,6 +133,8 @@ DECLARE
   -- S2E5: identity-scoped policyfeit uit dezelfde transactie/tokenhash.
   -- NULL = geen publiceerbaar feit (fout/onbekend); nooit een verzonnen allow.
   v_observation_policy jsonb;
+  v_policy_lock_timeout text;
+  v_policy_statement_ms numeric;
 BEGIN
   IF auth.role() <> 'service_role' THEN
     RETURN QUERY SELECT 'unauthorized'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_unauthorized'), NULL::jsonb; RETURN;
@@ -686,10 +688,26 @@ BEGIN
   --   * een ontbrekende policyrij is GEEN inschrijving -> captureAllowed false;
   --   * capture_enabled is geen boolean-true of policy_version < 1 -> deny;
   --   * de echte policy_version gaat mee en wordt nooit naar 1 omgedoopt.
-  -- Een fout in deze leesactie mag het frame nooit kosten: het blok is
-  -- fail-closed en laat observation_policy dan NULL (de Edge laat het veld weg).
-  BEGIN
-    SELECT jsonb_build_object(
+  -- Afgevangen optionele lees-/lockfouten laten observation_policy NULL (de
+  -- Edge laat het veld weg). Globale query_canceled blijft atomair afbreken.
+  -- Intent is composed by Edge, not permission: d remains the authenticated,
+  -- locked device and the only source of owner authority. Absent/wrong-type
+  -- intent (including old callers) does no private policy work.
+  IF p_v3_normalized -> 'observationPolicyRequested' = 'true'::jsonb THEN
+    v_policy_lock_timeout := current_setting('lock_timeout');
+    v_policy_statement_ms := extract(epoch FROM current_setting('statement_timeout')::interval) * 1000;
+    -- statement_timeout is already running; SET cannot restart/bound an inner
+    -- SELECT. Keep a margin for returning the core ACK, or omit optional work.
+    IF v_policy_statement_ms = 0 OR
+       v_policy_statement_ms - extract(epoch FROM (clock_timestamp() - statement_timestamp())) * 1000 > 25 THEN
+      BEGIN
+        -- Never wait on policy table DDL. Also bound implicit index locks,
+        -- preserving a caller's stricter nonzero lock_timeout. No global
+        -- query_canceled handler: cancellation still aborts core atomically.
+        PERFORM set_config('lock_timeout',
+          least(nullif(extract(epoch FROM v_policy_lock_timeout::interval) * 1000, 0), 5)::text || 'ms', true);
+        LOCK TABLE pitwall_learning.account_policy IN ACCESS SHARE MODE NOWAIT;
+        SELECT jsonb_build_object(
              'captureAllowed',
              (policy.capture_enabled IS TRUE
               AND policy.policy_version IS NOT NULL
@@ -703,12 +721,16 @@ BEGIN
       FROM pitwall_learning.account_policy AS policy
      WHERE policy.owner_user_id = d.owner_user_id;
 
-    IF v_observation_policy IS NULL THEN
-      v_observation_policy := jsonb_build_object('captureAllowed', false, 'policyVersion', NULL);
+        IF v_observation_policy IS NULL THEN
+          v_observation_policy := jsonb_build_object('captureAllowed', false, 'policyVersion', NULL);
+        END IF;
+      EXCEPTION WHEN OTHERS THEN
+        -- Subtransaction rollback also restores the temporary GUC on error.
+        v_observation_policy := NULL;
+      END;
+      PERFORM set_config('lock_timeout', v_policy_lock_timeout, true);
     END IF;
-  EXCEPTION WHEN OTHERS THEN
-    v_observation_policy := NULL;
-  END;
+  END IF;
 
   RETURN QUERY SELECT 'accepted'::text, now_at, v_agg_ack, v_observation_policy;
 END
@@ -745,7 +767,7 @@ REVOKE ALL ON FUNCTION public.simhub_persist_v3(text,text,bigint,timestamptz,jso
 GRANT EXECUTE ON FUNCTION public.simhub_persist_v3(text,text,bigint,timestamptz,jsonb,text,jsonb,jsonb) TO service_role;
 
 COMMENT ON FUNCTION public.simhub_persist_v3(text,text,bigint,timestamptz,jsonb,text,jsonb,jsonb) IS
-  'Schrijft één V3-frame weg en geeft sinds 0.7.2.0 het meetrapport terug in measurement_ack (per rij accepted/duplicate/superseded/rejected met reden). Sinds S2E5 komt het identity-scoped observation-policyfeit in hetzelfde resultaat (observation_policy) uit dezelfde transactie en tokenhash. Een fout in de meetbatch of policy-lookup kost nooit het frame.';
+  'Schrijft één V3-frame weg en geeft sinds 0.7.2.0 het meetrapport terug in measurement_ack (per rij accepted/duplicate/superseded/rejected met reden). Sinds S2E5 komt het optioneel aangevraagde identity-scoped observation-policyfeit in hetzelfde resultaat (observation_policy) uit dezelfde transactie en tokenhash. Optionele policy-lockfouten worden afgevangen; globale query_canceled blijft atomair afbreken.';
 
 NOTIFY pgrst, 'reload schema';
 

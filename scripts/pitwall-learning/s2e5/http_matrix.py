@@ -145,7 +145,11 @@ def matrix():
         # The shared fixture derives the summary UID from the serial; folding in
         # the run's sequence base keeps re-runs from colliding with a row an
         # earlier attempt already wrote (revision_conflict instead of a capture).
-        return U.lap(i, base + serial, observation)
+        row = U.lap(i, base + serial, observation)
+        # Sequence/UID namespace may be high in a retained lab; lapNumber is
+        # an independent bounded domain value, not the transport sequence.
+        row['lapNumber'] = serial
+        return row
 
     def probes():
         return kong_counts()
@@ -258,7 +262,7 @@ def changed_permissions():
     return results
 
 
-def fallback_http(seq=900001):
+def fallback_http(seq=None):
     """Real HTTP proof that an old database without the column still publishes.
 
     Runs while the flag is still on, after ONLY the S2E5 migration was rolled
@@ -266,10 +270,14 @@ def fallback_http(seq=900001):
     to the bounded separate lookup. This is the rollout-order proof.
     """
     R.guard()
+    if seq is None:
+        seq = int(L.psql_clone_ok("SELECT coalesce(max(last_sequence),0) FROM public.simhub_devices WHERE id::text LIKE 'd5000000-%'").strip()) + 10
     before_calls = kong_counts()
     before = U.counts()
     body = U.frame(seq)
-    body['lapSummaries'] = [U.lap(2, 900, False)]
+    row = U.lap(2, seq, False)
+    row['lapNumber'] = 900
+    body['lapSummaries'] = [row]
     r = U.send('cand', 2, body)
     after_calls = kong_counts()
     after = U.counts()

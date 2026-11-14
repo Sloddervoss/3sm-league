@@ -187,7 +187,12 @@ Deno.serve(async (request) => {
         p_session_id: context.normalized!.transportSessionId,
         p_sequence: context.normalized!.sequence,
         p_captured_at: context.normalized!.capturedAt,
-        p_v3_normalized: snapshotDto(context.normalized!),
+        // Compose only after parsing/context validation. Never spread raw body
+        // intent/owner fields into this service-role-only SQL request.
+        p_v3_normalized: {
+          ...snapshotDto(context.normalized!),
+          observationPolicyRequested: observationMode === "on",
+        },
       };
       // 0.7.2.0: de meetreeksen gaan als aparte parameters mee — alleen als er
       // iets te sturen is én de database de signatuur (nog) lijkt te hebben.

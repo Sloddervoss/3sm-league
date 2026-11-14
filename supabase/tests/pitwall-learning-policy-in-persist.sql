@@ -139,6 +139,7 @@ CREATE FUNCTION pg_temp.frame(p_laps integer) RETURNS jsonb
 LANGUAGE sql
 AS $frame$
   SELECT jsonb_build_object(
+    'observationPolicyRequested', true,
     'timing', jsonb_build_object('completedLaps', p_laps),
     'raceState', jsonb_build_object('incidents', 0),
     'track', jsonb_build_object('onPitRoad', false),
@@ -458,6 +459,34 @@ $counter$;
 -- ---------------------------------------------------------------------------
 -- 10. Readonly: de policy-lookup wijzigt geen enkele rij
 -- ---------------------------------------------------------------------------
+-- Explicit SQL-boundary intent controls: these valid cores must NOT be masked
+-- by a failed identity or an early rejection. Only JSON boolean true opts in.
+DO $intent$
+DECLARE
+  v_marker jsonb;
+  v_row record;
+  v_before bigint;
+  v_seq integer := 0;
+BEGIN
+  PERFORM pg_temp.idle();
+  FOREACH v_marker IN ARRAY ARRAY[NULL::jsonb, 'false'::jsonb, '"true"'::jsonb, '"unavailable"'::jsonb] LOOP
+    v_seq := v_seq + 1;
+    PERFORM pg_temp.pause();
+    v_before := pg_temp.policy_scans();
+    SELECT * INTO v_row FROM public.simhub_persist_v3(
+      repeat('a',64), 's2e5-intent', v_seq, now(),
+      (pg_temp.frame(1) - 'observationPolicyRequested') ||
+        CASE WHEN v_marker IS NULL THEN '{}'::jsonb
+             ELSE jsonb_build_object('observationPolicyRequested',v_marker) END);
+    IF v_row.result <> 'accepted' OR v_row.observation_policy IS NOT NULL
+       OR pg_temp.policy_scans() <> v_before THEN
+      RAISE EXCEPTION 'non-ON intent did policy work or lost core: %', v_marker;
+    END IF;
+  END LOOP;
+  RAISE NOTICE 'PASS absent/off/wrong-type/unavailable intent: accepted cores, null policy, zero scans';
+END
+$intent$;
+
 DO $readonly$
 DECLARE
   v_before jsonb;
