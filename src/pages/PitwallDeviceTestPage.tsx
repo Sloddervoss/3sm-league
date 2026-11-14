@@ -40,6 +40,7 @@ import { devicePresence, devicePresenceLabel } from "@/features/endurance/pitwal
 import { PremiumDeviceDock } from "@/features/endurance/pitwall/test-premium/PremiumDeviceDock";
 import { PitwallPremiumView } from "@/features/endurance/pitwall/test-premium/PitwallPremiumView";
 import { usePitwallTestSettings } from "@/features/endurance/pitwall/test-premium/usePitwallTestSettings";
+import { resolveFuelLearning } from "@/features/endurance/pitwall/learning/fuelServing";
 
 const ONLINE_WINDOW_MS = 5 * 60_000;
 
@@ -178,9 +179,13 @@ export default function PitwallDeviceTestPage() {
     queryKey: ["pitwall-test", "sandbox", deviceId],
     enabled: Boolean(user) && Boolean(isSuperAdmin) && Boolean(deviceId),
     queryFn: async () => {
-      const { data, error } = await readRpc("pitwall_sandbox_v1", { p_device_id: deviceId });
+      const [{ data, error }, learning] = await Promise.all([
+        readRpc("pitwall_sandbox_v1", { p_device_id: deviceId }),
+        readRpc("pitwall_fuel_learning_v1", { p_device: deviceId }).catch(() => ({ data: null, error: true })),
+      ]);
       if (error) throw error;
-      return data as {
+      return { ...(data as object), learningFuel: learning.error ? null : learning.data } as {
+        learningFuel?: unknown;
         drivers?: { name: string }[];
         lap_samples?: { lap: number; seconds: number | null; driver: string | null }[];
         pace?: { fastest: number | null; median: number | null; count: number };
@@ -215,7 +220,8 @@ export default function PitwallDeviceTestPage() {
   const tele = detail?.telemetry;
 
   const strategy = useMemo(() => deviceStrategyRow(live ? v3 : null), [v3, live]);
-  const strategyAdvice = usePitwallStrategy({ strategy, v3, nowMs: Date.now() });
+  const learnedFuel = resolveFuelLearning(sandboxQuery.error ? null : sandboxQuery.data?.learningFuel, live ? v3 : null, Date.now());
+  const strategyAdvice = usePitwallStrategy({ strategy, v3, nowMs: Date.now(), learnedFuelUpper: learnedFuel?.upper });
 
   // Het bandenbeeld komt uit de servermeting (ankers), niet uit de live payload:
   // alleen de RPC weet wat er bij de laatste stop gemeten is. Sinds v2 hangt dat

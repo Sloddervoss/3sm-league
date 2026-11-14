@@ -21,6 +21,7 @@ export interface PitwallStrategyInput {
   secondsPerLitre?: number | null;
   tyreSeconds?: number | null;
   fuelPerLapSamples?: number[];
+  learnedFuelUpper?: number | null;
   /** Bandenslijtage per ronde uit de server, als die er al is. */
   tyreSamples?: TyreSample[];
   /** Het bandenbeeld uit de pitwall-RPC (`tyre_estimate`, S2); null als het er niet is. */
@@ -42,6 +43,7 @@ export function usePitwallStrategy(input: PitwallStrategyInput): Advice {
     tyreEstimate,
     nowMs,
   } = input;
+  const learnedFuelUpper = input.learnedFuelUpper;
 
   // De bandenslijtage per ronde komt uit de live stroom: één meting per ronde.
   // De reeks hoort bij deze sessie; een andere transport-sessie begint opnieuw.
@@ -63,6 +65,7 @@ export function usePitwallStrategy(input: PitwallStrategyInput): Advice {
         fuelPerLapSamples,
         tyreSamples: samples,
         tyreEstimate: tyreEstimate ?? null,
+        learnedFuelUpper,
       }),
     );
   }, [
@@ -77,6 +80,7 @@ export function usePitwallStrategy(input: PitwallStrategyInput): Advice {
     tyreSamples,
     tyreEstimate,
     nowMs,
+    learnedFuelUpper,
   ]);
 }
 
