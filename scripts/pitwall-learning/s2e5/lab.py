@@ -164,8 +164,8 @@ OVERLAY = [
     'supabase/functions/_shared/simhub.ts',
     'supabase/functions/_shared/observationPolicyV1.ts',
     'supabase/functions/_shared/observationV1.ts',
-    'supabase/functions/_shared/observationContext.ts',
-    'supabase/functions/_shared/observationWindow.ts',
+    # observationContext/observationWindow are test-only in this repository
+    # (only *.test.ts exist); they are not part of the runtime overlay.
     'supabase/functions/_shared/simhubExtensions.ts',
     'supabase/functions/_shared/simhubAggregates.ts',
     'supabase/functions/_shared/tyreObservation.ts',
