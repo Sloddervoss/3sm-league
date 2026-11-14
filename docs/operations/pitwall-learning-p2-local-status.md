@@ -366,6 +366,30 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
 - Niet-blokkerende cosmetische/aanvullende testpunten uit de ene review blijven uitgesteld;
   geen extra audit of test-only modelronde. Production frontend changes: NONE.
 
+## S2E2 backend-policy-publisher lokaal gebouwd
+
+- Nieuwe additieve migratie `20261114000945_pitwall_learning_observation_policy.sql`:
+  alleen `public.simhub_observation_policy_v1(text)` plus ACL, met paired
+  rollback die uitsluitend die functie dropt. Geen tabellen/kolommen/private
+  grants/return-typewijzigingen.
+- Autoriteit: bestaande `public.simhub_devices.token_hash -> owner_user_id`
+  (`revoked_at IS NULL`) LEFT JOIN `pitwall_learning.account_policy`. Onbekend,
+  ingetrokken, geen policy of `capture_enabled = false` is deny/null; een echte
+  toekomstige `policy_version` blijft staan.
+- Edge: `simhub-ingest-v3` publiceert het optionele `observation.policy` alleen
+  na een geaccepteerde V3-write en mode `on`, met dezelfde al gevalideerde
+  tokenhash. Default off betekent nul extra RPC's; fout/timeout/ontbrekende RPC
+  laat het veld weg zonder de 202/ACK te veranderen.
+- Bewezen in een nieuwe wegwerp-PG15.19-instance: echte forward/rollback,
+  effectieve ACL (service_role ja; anon/authenticated/nested-leden nee;
+  directe private read nee), readonly lookup, A-toegestaan/B-geweigerd plus
+  intrekking op de bestaande P1-guard, en een cross-language
+  PG→Edge-composer→echte net8 `ObservationReadinessReader`-proef.
+- Contract en grenzen:
+  [observation-policy-publisher v1](../contracts/pitwall-learning-observation-policy-publisher-v1.md).
+  Geen deploy, enrollment, clientactivatie of performance-PASS; de bestaande
+  +10%/+20 ms-p95-poort blijft open.
+
 ## Beperkingen en vervolgnotities
 
 - Historische P1-records missen meerdere context-/resetvelden; onbekend blijft
