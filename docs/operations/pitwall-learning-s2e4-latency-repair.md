@@ -87,3 +87,33 @@ Source is frozen for ONE independent SPEC-first/QUALITY-second review after the
 report. This document does not claim that review occurred or grant release GO.
 Backend/API is affected as above; no DB DDL changes. Frontend/bot/deployment:
 geen impact verwacht. Auth/roles: contracts preserved, exercised locally.
+
+## Verified closeout
+
+Frozen candidate/source/harness: `0f33ee19c9459475a2d7a8121bc2453bbf5e2754`.
+Runtime/test repair: `dd5801810a8f069f65f3c3d1aaf15c25f82170ac`.
+The one valid run is **FAIL**: baseline p95 242.11812500000815ms, candidate
+266.8994989999919ms, delta 24.78137399998377ms (10.235241165849494%). Both strict
+limits fail. All 40 warmups + 200 measured samples per arm are retained; no
+validation errors or favorable retry. Candidate wrote five benchmark private
+capture batches and two observed rows, versus baseline three legacy laps.
+
+Registration SHA256:
+`472a31012cf32e2c03d1d48ae12d81a5f99722dae42a3c69a190e348bacbe106`
+Raw SHA256:
+`6074edbb0ba2a44e038f0cddaf0e803cd2cc10ef364b7385bbdd8ed48ca4abad`
+
+Full candidate cached entry check exits 0; 3 entry / 12 policy / 239 observation
+tests pass; the type-fixed serial-order control fails as intended. Actual HTTP
+functional/role/authority/changed-permission cases and controlled persist-blocking
+permission/revocation races pass. Normative safe-disable exits 0, preserves
+preexisting data digests, passes legacy HTTP and leaves all DB switches and the
+candidate lab Edge env flag OFF. Exact retained resources: private
+`FINAL-HANDLES.json`. No production change and no full-byte-restoration claim.
+
+The early name-keyed handle ledger recorded IDs before start but overwrote removed
+helper/replacement history. Append-only creation logging was added before freeze;
+the historical gap is not retroactively repaired or certified complete. Current
+exact IDs are retained. Latency FAIL and this provenance qualification remain
+explicit review inputs. Docs-only closeout carries frozen runtime/harness bytes
+forward unchanged.
