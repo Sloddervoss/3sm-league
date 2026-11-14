@@ -68,6 +68,20 @@ Embedded updater gelijk aan dezelfde build, productiepublickey oud/nieuw gelijk,
 testsleutel afwezig; installed/Desktop vóór/na ongewijzigd. Compile-only0.7.6.2,
 geen release/installatie/activatie. Echte SDK/DPAPI/runtime/Windows-shutdown en
 ontvangerreadiness blijven open. Bewijs: `docs/operations/pitwall-observation-recovery-windows-build.md`.
+S2E1 client-readiness is na één gecombineerde onafhankelijke SPEC PASS/QUALITY
+APPROVED op `b32e7bdf` geïntegreerd als `431d6c99`. Parent32 readiness/224 host/
+1199 full inclsoak/19 wiring/50 interop,52 exports; zeven stages exit0. Beide echte
+antwoordroutes voeden één identity-/lifetime-/requestvolgordegebonden geheugencache;
+alleenability is geen accounttoestemming. Zonder toekomstige scopedpolicy blijftfalse,
+settingsopt-infalse; geen SQL/Edge/account/UIwijziging. Volledige echte Windows/net48/
+SimHub-compile431d PASS:121bronhashes49Compile-items,0errors/1bestaandewarning;
+DLL869376bytes SHA256 `801e0958bb76c961c883c2f029e0517791614ca0e87d54d327ed02e796e7b15f`.
+Installed/Desktopunchanged, updaterembedding/keygecontroleerd, compile-only0.7.6.2.
+Volgende afhankelijkheid: backend-accountpolicyprojectie en bestaande learning-policy-
+handhaving testen; geenservernumericepoch. User-approvedproportionelewerkwijze:
+ééncoherentpakket/éénonafhankelijkereview, alleblockerssamen, bytecarryvoorongewijzigd
+bewijs; geenextra modelronde voor exactaluitgevoerdetestpatch. Productie/installatie/
+activering en echte automatischeupgrade blijven afzonderlijkeGO/acceptatiepoorten.
 De bestaande automatische oude→nieuwe updateketen is een harde vrijgavepoort:
 geen nieuwe verplichte bootstrap, sleutel-/manifest-/kanaalwijziging of handmatige
 DLL-wissel als vervangend bewijs. Bewezen bronbehoud is geen echte installatieproef.

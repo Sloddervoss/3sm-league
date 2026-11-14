@@ -336,6 +336,36 @@ Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
   De oorspronkelijke afgewezen/onderbroken pogingen en mutanten blijven bewaard.
 - Implementatie en terugval: [lokale S2D-notitie](pitwall-observation-host-s2d.md).
 
+## S2E1 client-readiness lokaal geaccepteerd en geïntegreerd
+
+- Gereviewde bron `b32e7bdf28ea63a9d103193635885f41e6253bf0`: één onafhankelijke
+  beoordeling, SPEC PASS gevolgd door QUALITY APPROVED, geen blokkerende punten.
+- Integratie `431d6c9958960b22353fd40a25c1dd19adf3d366`, boom exact gelijk aan
+  de gereviewde kandidaat. Parent: normale offline build, **32 readiness /224 host /
+  1199 volledig inclusief soak /19 wiring /50 interop**,52 exports; zeven stages exit0.
+- De echte legacy- en mixed-antwoordroutes voeden één geheugenlezer. Alleen bestaande
+  receiver-ability is nooit toestemming: zonder een geldig identity-scoped policyfeit
+  blijft readiness false. Policy-subobject en60s TTL zijn lokaal ontwerp, geen reeds
+  gepubliceerd servercontract. Settingsopt-in blijftfalse, geen UI/capability toegevoegd.
+- Echte volledige Windows/net48/SimHub-compile vanaf431d:121 bronbestanden vóór
+  compilatie gehasht, alle49 Compile-items aanwezig,0 fouten/1 bestaandeCS0169-warning.
+  Werkelijke DLL869376bytes, compile-only0.7.6.2, SHA256
+  `801e0958bb76c961c883c2f029e0517791614ca0e87d54d327ed02e796e7b15f`.
+  Nieuwe cache/host/recoveryveld aanwezig; embedded updater gelijk aan dezelfde build,
+  productiepublickey oud/nieuw gelijk en testsleutel afwezig. Installed/Desktop vóór/na
+  ongewijzigd. Geen installatie/SDK-runtime/automatische-upgrade/activatieclaim.
+- Legacy-body pin is bewust uitgebreid met precies drie readonly observerstatements:
+  na verwijderen van uitsluitend die statements is de oude body bytegelijk. ACK/drop/
+  backoff/requestbytes en localbridge blijven gelijk; release.sh alleenbroninventaris.
+- Bewijs onder `/home/hermes/artifacts/3sm/pitwall-learning-p2-observation-readiness-`
+  met suffixen `client/`, `client-review/`, `client-integration/`, `client-windows/`.
+- **Volgende echte afhankelijkheid:** identity-scoped backend-accountpolicyprojectie
+  voor deze receiver, inclusief bestaande learning-policyhandhaving. Er is nog geen
+  consentpublisher, SQL/Edge-deploy of ingeschreven account door dit clientpakket.
+  De oorspronkelijke automatische oude→nieuwe upgradepoort blijft afzonderlijk open.
+- Niet-blokkerende cosmetische/aanvullende testpunten uit de ene review blijven uitgesteld;
+  geen extra audit of test-only modelronde. Production frontend changes: NONE.
+
 ## Beperkingen en vervolgnotities
 
 - Historische P1-records missen meerdere context-/resetvelden; onbekend blijft

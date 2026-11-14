@@ -121,8 +121,10 @@ zijn alle 2260 andere tracked entries gelijk; de latere integratiedocumentatie n
 Nieuwe volledige Windows/net48/vendor-SDK-build op `b2e28071` PASS:48 Compile-items,
 0 errors/1 bestaande warning. Geen SDK-runtime-, activatie- of releaseclaim.
 
-De productie-readinessprovider retourneert expliciet false: er bestaat nog geen bewezen
-receiverhandshake voor deze feature. Tests injecteren readiness op dezelfde hostseam.
+De S2E1-client gebruikt nu een binding-/lifetimegebonden geheugenlezer in plaats van
+alleen de constante false-provider. De bestaande drieveldige receiverstatus zonder
+accountpolicyfeit blijft altijd false; er is nog geen bewezen consentpublisher.
+Tests injecteren de expliciete toekomstige policyvorm op dezelfde echte hostseam.
 Opt-in én readiness én complete bekende binding zijn vereist vóór storage/capture/SEND.
 Er is geen nieuwe capability, handshake, UI-toggle of gebruikersgerichte copy gepubliceerd.
 
