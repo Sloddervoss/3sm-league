@@ -1,5 +1,40 @@
 # S2E5 — observation policy in de bestaande persist-transactie
 
+## Afgerond — lokaal geaccepteerd en geïntegreerd
+
+- Exact gerepareerde/gemeten bron: `a2ab46f584926162090cf0408e54573d6721b4d6`.
+- Onafhankelijke gerichte hercontrole: **SPEC PASS, QUALITY PASS**, geen concrete
+  blokkades. S1 nul private scans bij ontbrekend/UIT/onbeschikbaar intent, S2
+  behouden core onder optionele contention met herstelde GUCs en echte globale
+  cancellation, S3 exacte eerste rollback en herhaal/afwezig-noops opnieuw in
+  PostgreSQL bewezen. Afgekeurde bron en zijn verdict blijven als historie bestaan.
+- Nieuwe vaste proef op dezelfde SHA: **performance PASS**, p95 baseline
+  208.62770000001183 ms → kandidaat 184.2744600000151 ms; delta
+  -24.35323999999673 ms. Alle 480 samples, nul losse policy-HTTP-calls en positieve
+  private capture. Parent en reviewer herberekenden de data onafhankelijk.
+  Geen nieuwe post-run control-hashuitzondering en geen meetherhaling.
+- Parent: volledige entrytypecheck exit 0; 22 gerichte entry/policytests geslaagd.
+  Overige ongewijzigde proef-/reviewinputs expliciet bytegelijk overgedragen.
+- Lokale integratie `af0db2165d816b18278ff22ae0425bbc86083938` op
+  `feat/pitwall-learning-p2`. De volledige integratieboom is exact gelijk aan de
+  geaccepteerde SHA; geen push, main-merge, productie-apply of deployment.
+- Parent las alle zeven eigen container-IDs/images/limieten, zes volumes en het
+  interne netwerk live terug, plus Edgeflag UIT, vijf DB-schakelaars UIT en worker
+  gesloten. Alleen die exact geïdentificeerde resources verwijderd; afwezigheid
+  opnieuw teruggelezen. Alle data/bewijzen blijven privé bewaard.
+
+Dit accepteert het lokale zero-hop innamepakket, niet geheel P2 of een actief
+zelflerend systeem. Productie/testinstallatie, automatische updaterproef, echte
+enrollment, fitting, modelkwaliteit, advies en UI-activatie blijven aparte poorten.
+
+Definitief bewijs:
+`/home/hermes/artifacts/3sm/pitwall-learning-p2-policy-hop-repair-20261114/`;
+review in `../pitwall-learning-p2-policy-hop-repair-review-20261114/REVIEW.md`.
+`PARENT-INDEPENDENT-PERF.json`, `PARENT-LAB-READBACK.json` en
+`PARENT-CLEANUP-VERIFIED.json` zijn eigen parentbewijs, niet alleen buildersamenvattingen.
+
+Hieronder staan de oorspronkelijke bouw-/herstelnotities met hun toenmalige status.
+
 ## Gerichte S1/S2/S3-reparatie (2026-11-14)
 
 De onderstaande oorspronkelijke proef blijft numeriek PASS, maar de onafhankelijke

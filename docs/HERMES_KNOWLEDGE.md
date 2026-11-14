@@ -1,6 +1,22 @@
 # Hermes — repositorykennis
 
-## Actueel — S2E5 numeriek PASS, onafhankelijke review loopt
+## Actueel — S2E5 zero-hop inname lokaal geaccepteerd
+
+Bron/gemeten SHA `a2ab46f584926162090cf0408e54573d6721b4d6` heeft onafhankelijke
+**SPEC PASS + QUALITY PASS + numerieke performance PASS**. S1 UIT/onbeschikbaar
+nul private scans, S2 optionele policy-lock behoudt core/GUCs terwijl globale
+cancellation atomair afbreekt, S3 eerste/herhaal/afwezig rollback correct. Dit zijn
+echte herhaalde SQL-proeven, geen beoordeling uitsluitend uit testtotalen.
+P95 208.62770000001183 → 184.2744600000151 ms; 480/480 samples, nul aparte
+policy-HTTP-hops, capture positief. Parent rekende zelfstandig na, full entrycheck
+exit 0, 22 gerichte regressies groen. Lokale integratie `af0db216` op
+`feat/pitwall-learning-p2` is volledig boomgelijk aan de review-SHA, niet gepusht.
+Lab na live-readback volledig verwijderd/afwezig gecontroleerd; bewijzen behouden.
+Geen productie-/frontend-/pluginactie; geen fitting, advies of UI-activering.
+P2 als geheel niet afgerond. Details/status:
+`docs/operations/pitwall-learning-s2e5-policy-in-persist.md`.
+
+## Historie — eerste S2E5 numerieke PASS, toen nog zonder bronacceptatie
 
 Optie 2 lokaal gebouwd op `a787c8ae`: policy in de bestaande acht-argumenten-persist
 als vierde resultaatveld; paired rollback herstelt de oude definitie. Edge gebruikt

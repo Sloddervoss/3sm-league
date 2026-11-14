@@ -3,7 +3,28 @@
 P2 is nog niet afgerond. Geen toestemming voor productie, P3, fitting, UI-publicatie
 of modelactivatie. Fasebasis: `79ca3381ee880bb145c91c9804da7584fc2b683a`.
 
-## Actueel — S2E5 nul extra policy-hop; numeriek PASS, review loopt
+## Actueel — S2E5 zero-hop inname lokaal geaccepteerd en geïntegreerd
+
+- Geaccepteerde/gemeten bron `a2ab46f584926162090cf0408e54573d6721b4d6`:
+  **SPEC PASS, QUALITY PASS, performance PASS**. De drie concrete oude bevindingen
+  (UIT-private-read, optionele contention/core-cancel, rollback guard-fallthrough)
+  zijn met onafhankelijke echte SQL-proeven gesloten, niet weggeredeneerd.
+- Nieuwe vaste proef: p95 208.62770000001183 → 184.2744600000151 ms, delta
+  -24.35323999999673 ms. Alle 480 samples, nul aparte policy-HTTP-aanroepen,
+  echte capture positief; parent én reviewer rekenden onafhankelijk na.
+  Geen nieuwe control-hashuitzondering of gunstige meetretry.
+- Parent entrytypecheck exit 0 en 22 gerichte regressies groen. Lokale integratie
+  `af0db2165d816b18278ff22ae0425bbc86083938` op `feat/pitwall-learning-p2`,
+  volledige boom bytegelijk aan reviewbron. Geen push of merge naar main.
+- Parent live-readback van alle zeven eigen containers, zes volumes, interne
+  netwerk, flags UIT en worker gesloten; vervolgens uitsluitend deze resources
+  opgeruimd en afwezigheid teruggelezen. Privé bewijs en exports behouden.
+- Details: `docs/operations/pitwall-learning-s2e5-policy-in-persist.md`.
+  Dit is geen P2-eindacceptatie, productie/testinstallatie, echte enrollment,
+  updaterproef, fitting, modeladvies of UI-activering. Production frontend changes:
+  NONE. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — eerste S2E5 numerieke PASS vóór functionele afkeuring
 
 - Optie 2 lokaal gebouwd: policyfeit als vierde resultaatveld van de bestaande
   acht-argumenten-persist, met additieve migratie en exacte paired rollback.
