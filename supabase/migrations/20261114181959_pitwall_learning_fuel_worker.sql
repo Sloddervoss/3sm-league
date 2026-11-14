@@ -3,7 +3,16 @@
 BEGIN;
 ALTER TABLE pitwall_learning.runtime_settings
   ADD COLUMN fuel_collection_started_at timestamptz,
-  ADD COLUMN automatic_personal_enrollment boolean NOT NULL DEFAULT false;
+  ADD COLUMN automatic_personal_enrollment boolean NOT NULL DEFAULT false,
+  ADD COLUMN fuel_last_candidate_at timestamptz;
+ALTER TABLE pitwall_learning.deployments
+  ADD COLUMN owner_user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  ADD COLUMN fuel_context text;
+DROP INDEX pitwall_learning.deployments_one_active_per_surface;
+CREATE UNIQUE INDEX deployments_one_active_per_surface ON pitwall_learning.deployments(target,surface)
+ WHERE state='active' AND owner_user_id IS NULL;
+CREATE UNIQUE INDEX deployments_personal_active_scope ON pitwall_learning.deployments(target,surface,owner_user_id,fuel_context)
+ WHERE state='active' AND owner_user_id IS NOT NULL;
 ALTER TABLE pitwall_learning.models
   ADD COLUMN fuel_parameters jsonb,
   ADD COLUMN fuel_context text,
@@ -129,7 +138,8 @@ BEGIN
     AND e.label->>'context'=p_context AND e.label->>'policyVersion'=a.policy_version::text
     AND e.retention_expires_at>clock_timestamp() ORDER BY e.created_at DESC LIMIT 1000
  ) q;
- RETURN jsonb_build_object('observations',observations,'forecasts',forecasts,'examples',examples_out);
+ RETURN jsonb_build_object('observations',observations,'forecasts',forecasts,'examples',examples_out,
+   'asOf',ceil(extract(epoch FROM clock_timestamp())*1000));
 END $fn$;
 
 CREATE FUNCTION pitwall_learning.fuel_worker_forecast(p_revision uuid,p_baseline jsonb) RETURNS uuid
