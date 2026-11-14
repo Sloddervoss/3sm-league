@@ -42,9 +42,16 @@ def forbidden(*args, **kwargs):
     raise L.GuardError('Production access is disabled in S2E5')
 L.psql_prod_file = forbidden
 # Function default arguments are bound at definition, not at invocation.
-original_psql = L.psql_clone
+# Originals live on the shared s2e3lib module object: this file also runs as
+# `__main__` while the stage modules import it as `lab`, so every patch must be
+# applied on top of the genuine upstream function exactly once.
+if not hasattr(L, '_s2e5_originals'):
+    L._s2e5_originals = {}
+_ORIG = L._s2e5_originals
+_ORIG.setdefault('psql_clone', L.psql_clone)
+_ORIG.setdefault('psql_clone_ok', L.psql_clone_ok)
+original_psql, original_ok = _ORIG['psql_clone'], _ORIG['psql_clone_ok']
 L.psql_clone = lambda sql, db=L.LAB_DB_CAND, **kw: original_psql(sql, db=db, **kw)
-original_ok = L.psql_clone_ok
 L.psql_clone_ok = lambda sql, db=L.LAB_DB_CAND, **kw: original_ok(sql, db=db, **kw)
 
 import clone as C  # noqa: E402
@@ -79,7 +86,8 @@ def remember(name, meta):
     R.save('resource-ledger.json', records)
     L.log('created-handles', name=name, **records[name])
 
-original_owned = L.assert_owned
+_ORIG.setdefault('assert_owned', L.assert_owned)
+original_owned = _ORIG['assert_owned']
 
 def owned(name):
     meta = original_owned(name)
@@ -93,7 +101,8 @@ def owned(name):
     return meta
 L.assert_owned = owned
 
-raw_run = R.run
+_ORIG.setdefault('run', R.run)
+raw_run = _ORIG['run']
 
 def run(command, label, stdin=None, timeout=300):
     """Record exact IDs before start, including non-auto-removed helpers."""
@@ -146,6 +155,56 @@ def guard():
 R.guard=guard
 if LEDGER.exists() and L.DB_CONTAINER in ledger():
     R.EXPECTED_DB=ledger()[L.DB_CONTAINER]['id']
+
+def wait_db(timeout=360):
+    """Wait for the FINAL server, not the image's temporary init instance.
+
+    The supabase/postgres entrypoint initializes a fresh data directory with a
+    throwaway server, stops it and only then starts the real one on the same
+    PGDATA; `pg_isready` is already true during that init window. The postgres
+    command line sets `log_min_messages=fatal`, so the final server never logs
+    its own "ready to accept connections" line: the init-complete marker *after*
+    the shutdown is the real signal, and a working query afterwards proves the
+    final instance is serving.
+    """
+    deadline=time.time()+timeout
+    started=time.time()
+    last=''
+    while time.time()<deadline:
+        p=L.remote(f'docker logs {L.DB_CONTAINER}')
+        text=(p.stdout+p.stderr).decode(errors='replace')
+        init_complete='PostgreSQL init process complete' in text
+        init_pending='running /docker-entrypoint-initdb.d' in text and not init_complete
+        if init_complete or (not init_pending and time.time()-started>90):
+            q=L.remote(f'docker exec {L.DB_CONTAINER} psql -X -q -At -U supabase_admin -d postgres -c "SELECT 1"')
+            if q.returncode==0 and q.stdout.strip()==b'1':
+                print('db ready: final server, init_complete=%s' % init_complete)
+                R.checkpoint('db-final-server-ready', init_complete=init_complete)
+                return
+            last=(q.stdout+q.stderr).decode(errors='replace')
+        time.sleep(3)
+    raise RuntimeError('db not ready: '+last)
+C.wait_db=wait_db
+
+# Kong boots slower than the container's "running" state; the shared prove_route
+# helper raises on a transport error instead of retrying it, so retry the whole
+# read-only proof (it is idempotent) until the proxy actually answers.
+_ORIG.setdefault('prove_route', R.prove_route)
+original_prove_route=_ORIG['prove_route']
+
+def prove_route():
+    last=None
+    for attempt in range(20):
+        try:
+            return original_prove_route()
+        except RuntimeError as error:
+            if 'HTTP client' not in str(error):
+                raise
+            last=error
+            L.log('prove-route-retry', attempt=attempt, error=str(error)[:200])
+            time.sleep(3)
+    raise last if last else RuntimeError('route proof failed')
+R.prove_route=prove_route
 
 # New namespace and synthetic account identities, never reuse prior fixtures.
 U.SESSION='s2e5-functional-fixed-session'
@@ -209,6 +268,76 @@ def build_candidate():
     print('candidate overlay files=%d, delta vs S2E4=%s' % (len(applied), sorted(delta)))
     return delta
 
+def tree_hashes(base):
+    return {str(p.relative_to(base)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(base.rglob('*')) if p.is_file() and p.name != '.env'}
+
+def mirror_tree(src, dst):
+    """Idempotent copy of a captured input tree inside our own artifact root.
+
+    The captured source is authoritative (its dump hash is asserted separately).
+    A pre-existing destination is reused only when it is byte-identical;
+    otherwise it is a stale derived copy in this private root and is replaced,
+    with the differing files recorded.
+    """
+    assert src.is_dir(), 'missing captured input tree: '+str(src)
+    expected = tree_hashes(src)
+    if dst.is_dir():
+        actual = tree_hashes(dst)
+        if actual == expected:
+            L.log('setup-input-tree', tree=dst.name, action='reused-identical', files=len(expected))
+            return 'reused'
+        L.log('setup-input-tree', tree=dst.name, action='replaced-stale-copy',
+              stale=sorted(set(actual.items()) ^ set(expected.items()))[:12])
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns('.env'))
+    assert tree_hashes(dst) == expected, 'copy is not byte-identical: '+str(dst)
+    L.log('setup-input-tree', tree=dst.name, action='copied', files=len(expected))
+    return 'copied'
+
+# ---------------------------------------------------------------- teardown ---
+def teardown_partial():
+    """Remove ONLY a partially built own lab after a setup failure.
+
+    Every resource must carry the S2E5 label and prefix; containers must also
+    match the exact ID recorded in the ledger before the ledger is archived and
+    dropped, so a following `setup` starts from a proven-empty host. This is a
+    recovery helper for our own half-built lab, never an adoption path.
+    """
+    assert LEDGER.exists(), 'no partial lab to remove'
+    recorded=ledger()
+    R.checkpoint('partial-teardown-start', ledger=list(recorded))
+    containers=L.check(L.remote(f"docker ps -a --filter label={L.LABEL} --format '{{{{.Names}}}}'"),
+                       'list-partial-containers').stdout.decode().split()
+    for name in containers:
+        assert name.startswith(L.PREFIX), name
+        meta=original_owned(name)
+        assert name in recorded and recorded[name]['id']==meta['Id'], 'unrecorded container: '+name
+        L.log('teardown-partial', container=name, id=meta['Id'])
+        raw_run('docker rm -f '+meta['Id'], 'rm-'+name)
+    volumes=L.check(L.remote(f"docker volume ls --filter label={L.LABEL} --format '{{{{.Name}}}}'"),
+                    'list-partial-volumes').stdout.decode().split()
+    for volume in volumes:
+        assert volume.startswith(L.PREFIX), volume
+        L.log('teardown-partial', volume=volume)
+        raw_run('docker volume rm '+volume, 'rmv-'+volume)
+    networks=L.check(L.remote(f"docker network ls --filter label={L.LABEL} --format '{{{{.Name}}}}'"),
+                     'list-partial-networks').stdout.decode().split()
+    for network in networks:
+        assert network==L.NET, network
+        L.log('teardown-partial', network=network)
+        raw_run('docker network rm '+network, 'rmnet')
+    for kind, remaining in (('containers', containers), ('volumes', volumes), ('networks', networks)):
+        for name in remaining:
+            p=L.remote(f'docker {kind[:-1]} inspect {name}')
+            assert p.returncode!=0, 'still present: '+name
+    L.write_private(ART/'teardown-partial-ledger.json', json.dumps(recorded, indent=2, sort_keys=True))
+    digest=hashlib.sha256(LEDGER.read_bytes()).hexdigest()
+    LEDGER.unlink()
+    L.log('teardown-partial', ledger_sha256=digest, removed=sorted(recorded))
+    R.checkpoint('partial-teardown-complete', ledger_sha256=digest, archived='teardown-partial-ledger.json')
+    print('partial lab removed:', {'containers':containers,'volumes':volumes,'networks':networks})
+
 # ------------------------------------------------------------------ setup ---
 def setup():
     assert not LEDGER.exists(), 'No adoption or automatic reset'
@@ -219,7 +348,7 @@ def setup():
         shutil.copyfile(OLD/file,ART/file)
         (ART/file).chmod(0o600)
     for tree in ('live-edge-baseline','candidate-edge'):
-        shutil.copytree(OLD/tree,ART/tree,ignore=shutil.ignore_patterns('.env'))
+        mirror_tree(OLD/tree, ART/tree)
     R.save('input-provenance.json', {file:hashlib.sha256((ART/file).read_bytes()).hexdigest() for file in ('prod-schema-public-auth.sql','deno-cache-copy.tar.gz')})
     build_candidate()
     C.up()
@@ -263,6 +392,7 @@ if __name__=='__main__':
     import regression as G
     import races as RA
     commands={'setup':setup,'candidate':build_candidate,'sql':lambda:S.main(sys.argv[2]),
+              'teardown-partial':teardown_partial,
               'typecheck':V.check,'functional':H.functional,'matrix':H.matrix,
               'regression':G.tests,'races':RA.main,'authority':Z.authority,
               'allocate':V.allocate}
