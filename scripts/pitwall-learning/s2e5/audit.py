@@ -80,6 +80,21 @@ def disable():
     R.prove_route()
     fallback = H.fallback_http()
     S.main('post-rollback')
+    # The intentional HTTP fallback probe is a real accepted write. Snapshot
+    # immediately after it, before any further rollback, so its three inserted
+    # rows cannot be confused with a rollback mutation.
+    after_probe = Z.retained_data()
+    R.save('rollback-retained-after-fallback-proof.json', after_probe)
+    expected_probe_tables = {
+        'public.simhub_lap_summaries',
+        'pitwall_learning.capture_batches',
+        'pitwall_learning.jobs',
+    }
+    assert set(before) == set(after_probe)
+    changed_by_probe = {k for k in before if before[k] != after_probe[k]}
+    assert changed_by_probe == expected_probe_tables, changed_by_probe
+    for table in expected_probe_tables:
+        assert after_probe[table]['rows'] == before[table]['rows'] + 1, table
     # 2. Now the rest of the package, in reverse dependency order.
     for name in reversed([m for m in M.MIGRATIONS if m != lab.NEW_MIGRATION]):
         records.append(rollback_file(name))
@@ -87,15 +102,9 @@ def disable():
     time.sleep(3)
     after = Z.retained_data()
     R.save('rollback-retained-after.json', after)
-    # The fallback proof above is a real accepted write and inserts exactly one
-    # legacy lap row; that row is the only difference the retained-data digest
-    # is allowed to show. Everything else must stay byte-identical.
-    laps = 'public.simhub_lap_summaries'
-    moved = sorted(k for k in before if before[k] != after[k])
-    assert moved in ([], [laps]), 'safe-disable changed retained rows: %s' % moved
-    if moved:
-        assert after[laps]['rows'] == before[laps]['rows'] + 1, (before[laps], after[laps])
-    assert all(before[k] == after[k] for k in before if k != laps)
+    # Every remaining rollback must preserve the exact post-probe data digest;
+    # no permission to alter an existing row or add any further rows is waived.
+    assert after == after_probe, 'remaining rollbacks changed retained data'
     retained_equal = True
     expected = json.loads(L.psql_clone_ok("""SELECT json_build_object(
  'policy_rpc_absent',to_regprocedure('public.simhub_observation_policy_v1(text)') IS NULL,
@@ -135,11 +144,11 @@ def disable():
     r = U.send('cand', 4, b)
     http.append({'case': 'observation-disabled-no-core-loss', 'request': b, 'response': r})
     assert r['status'] == 202 and r['json']['measurements']['laps']['rejected']
-    assert Z.retained_data()['pitwall_learning.capture_batches'] == before['pitwall_learning.capture_batches']
+    assert Z.retained_data()['pitwall_learning.capture_batches'] == after_probe['pitwall_learning.capture_batches']
     R.save('ROLLBACK-POSITIVE-EXPECTED-STATE.json', {'verdict': 'PASS_SAFE_DISABLE',
         'checks': expected, 'rollback_only_digest_equal': after_s2e5 == before,
         'retained_equal_except_proof_rows': retained_equal,
-        'proof_rows_added': after[laps]['rows'] - before[laps]['rows'] if moved else 0,
+        'proof_rows_added': {k: after_probe[k]['rows'] - before[k]['rows'] for k in sorted(expected_probe_tables)},
         'http': http, 'fallback': fallback,
         'byte_restoration': 'NOT_PERFORMED; retained private schema/observation column/new writer by normative contract'})
     handles = R.owned_handles()
@@ -154,7 +163,7 @@ def disable():
         'retained_for_reviewer': True, 'all_nonroot_claim': False})
     R.save('SAFE-DISABLE.json', {'records': records, 'retained_equal': retained_equal,
                                  'rollback_only_digest_equal': after_s2e5 == before,
-                                 'proof_rows_added': after[laps]['rows'] - before[laps]['rows'] if moved else 0,
+                                 'proof_rows_added': {k: after_probe[k]['rows'] - before[k]['rows'] for k in sorted(expected_probe_tables)},
                                  'fallback_real_http': fallback['extra_call_delta'],
                                  'verdict': 'PASS'})
     R.checkpoint('s2e5-finished-safe-disabled-retained-owned-lab', handles='FINAL-HANDLES.json')
