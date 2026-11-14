@@ -44,19 +44,21 @@ export type ResolvedTelemetryContext = {
  * Valid unbound/non-primary devices are accepted without team routing.
  * The persistence RPC rechecks binding/registration at write time.
  */
-export const resolveTelemetryContext = async (
-  token: string,
-  rawBody: unknown,
-  supabase: {
+export type TelemetryContextClient = {
     from: (table: string) => {
       select: (cols: string) => {
         eq: (col: string, val: unknown) => {
-          maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
+          maybeSingle: () => PromiseLike<{ data: unknown; error: unknown }>;
         };
       };
     };
-    rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
-  },
+    rpc: (fn: string, params: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>;
+};
+
+export const resolveTelemetryContext = async (
+  token: string,
+  rawBody: unknown,
+  supabase: TelemetryContextClient,
   sha256: (s: string) => Promise<string>,
   parseOptions: TelemetryV3ParseOptions = {},
 ): Promise<ResolvedTelemetryContext> => {

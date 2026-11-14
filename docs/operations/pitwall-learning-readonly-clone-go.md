@@ -1,6 +1,9 @@
 # GO-poort — read-only productiebasis en geïsoleerde clone-/latencyproef
 
-**Status: nog geen GO voor deze stap.** Dit is geen productie-DDL/deploy-/activatievoorstel.
+**Status: GO ontvangen op 14 november 2026, Discord `1571098628259582075`.**
+Uitsluitend onderstaande read-only productievoorbereiding en geïsoleerde cloneproef;
+geen productie-DDL/deploy-/activatie-GO. Uitvoerwerkboom begint op `e36718a6`;
+de functionele codebasis blijft `e939c32a`.
 Bevroren codebasis: `e939c32aa5dd73d9d6ebf4a9b8e5a108e3c39277` op
 `feat/pitwall-learning-p2`, boomgelijk aan onafhankelijk geaccepteerd `88f0b7e`.
 

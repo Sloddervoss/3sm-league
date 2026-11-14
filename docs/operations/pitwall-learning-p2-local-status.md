@@ -3,6 +3,97 @@
 P2 is nog niet afgerond. Geen toestemming voor productie, P3, fitting, UI-publicatie
 of modelactivatie. Fasebasis: `79ca3381ee880bb145c91c9804da7584fc2b683a`.
 
+## Actueel — S2E5 nul extra policy-hop; numeriek PASS, review loopt
+
+- Optie 2 lokaal gebouwd: policyfeit als vierde resultaatveld van de bestaande
+  acht-argumenten-persist, met additieve migratie en exacte paired rollback.
+  De Edge valt uitsluitend bij afwezigheid van het veld terug op de oude losse
+  lookup; aanwezig null/ongeldig blijft fail-closed zonder tweede hop.
+- Gemeten bron `5bb2be5521ebf6cdb1cefa19d57cbaf25a5e17bd`; reviewdoel
+  `4b39b8df64960789fbb89bd8ce6d638a203834ec`. Na de vaste proef wijzigde alleen de
+  post-run rollbackverifier `audit.py`. Dat is een expliciete control-hashuitzondering
+  voor review, geen stil herschreven registratie; runtime/SQL/runner onveranderd.
+- **Numeriek PASS**, zelfstandig door parent herberekend uit alle 480 samples:
+  p95 baseline 253.65473300000303 ms, kandidaat 219.09025599999586 ms;
+  delta -34.56447700000717 ms, onder beide ongewijzigde grenzen. Exact één run,
+  40 warmups + 200 gemeten paren per arm; geen retry of verworpen meetpunten.
+- **Nul aparte policy-HTTP-calls** over de hele run; bestaande capability-probes
+  zijn apart geteld. Positieve private capture bewezen, geen fictieve feature-off-PASS.
+- SQL-contracten, elf HTTP-cases, permissie-/revocatieraces, kandidaat-entrytypecheck
+  en 4/16/239 regressies uitgevoerd. Zelfstandige SPEC/QUALITY-review loopt; geen
+  code-/releaseacceptatie suggereren uit uitsluitend testtotalen of numerieke PASS.
+- Safe-disable na gecorrigeerde post-run audit PASS. De audit scheidt zijn eigen
+  fallbackschrijfproef van rollback-only-digests. Mislukte pogingen bewaard; alleen
+  eigen kandidaat-DB hersteld voor die controle, geen meting herhaald. Daarna alleen
+  resterende OFF/HTTP-verificatie hervat, geen DDL opnieuw afgespeeld.
+- Details: `docs/operations/pitwall-learning-s2e5-policy-in-persist.md` en privé
+  `/home/hermes/artifacts/3sm/pitwall-learning-p2-policy-hop-20261114/REPORT.md`.
+  Geen productie-apply, deploy, enrollment, fitting, test/live-UI of plugininstallatie.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E4 gerichte reparatie gereviewd; latency bleef de blokkade
+
+- Gerichte lokale reparatie op basis `85c73b3e`, branch `fix/pitwall-learning-s2e4-latency`.
+  Bevroren bron/harnas `0f33ee19c9459475a2d7a8121bc2453bbf5e2754`; latere commits zijn
+  docs-only en de runtimebytes zijn bytegelijk overgedragen.
+- Drie bestaande Edge-compilerfouten verholpen met expliciete PACE-tupels, een
+  `PromiseLike`-contextport en een smalle SDK-adapter. **Volledige typecheck van de
+  kandidaat-entry: exit 0.** Live baseline blijft exit 1 met dezelfde drie fouten.
+  Geen `any`-cast, `ts-ignore` of configuratieverruiming.
+- Diagnose: de policy-read was onnodig serieel na de geaccepteerde core-persist.
+  Die leesactie start nu pas na core-succes, overlapt bestaande best-effort
+  history-writes en wordt vóór de 202 samengevoegd. Geen cache, TTL, permissie-,
+  identiteits- of 750ms-deadlinewijziging. SQL is niet gewijzigd.
+- **Performance FAIL blijft geldig:** nieuwe vaste proef, 200 paren + 40 warmups per arm.
+  Baseline p95 242,118125 ms, kandidaat 266,899499 ms; +24,781374 ms / +10,235241%.
+  Beide grenzen (+10% én +20 ms) overschreden. Alle 480 samples behouden, geen herhaling.
+  Parent en reviewer herberekenden dit onafhankelijk uit de ruwe data.
+- Onafhankelijke review op de bevroren SHA: **SPEC PASS, QUALITY APPROVED**,
+  performance FAIL als enige blokkade. Twee eigen negatieve controles (seriële
+  volgorde, te vroege start) falen zoals bedoeld; 3/12/239 regressietests groen.
+- Kwalificaties: baseline is de gevangen live bron, dus de delta is pakket-versus-live
+  en níet "de reparatie kostte 24,78 ms"; oorzaak van de historische tail buiten de
+  aangetoonde seriële afhankelijkheid blijft open; clone-residuen en het onvolledige
+  historische helper-ledger blijven gekwalificeerd; `bun` ontbreekt lokaal.
+- Parent las de achtergebleven labomgeving live terug (7 containers, 6 volumes,
+  intern netwerk, 2944 MiB / 2 CPU, alle schakelaars OFF) en verwijderde uitsluitend
+  die exacte eigen resources; afwezigheid teruggelezen. Bewijs en ruwe samples behouden.
+- **Release/integratie geblokkeerd** door de geldige performance-FAIL. Geen merge,
+  push, deploy, enrollment of activatie. Oude→nieuwe automatische updaterproef blijft
+  apart open. Details: `docs/operations/pitwall-learning-s2e4-latency-repair.md`.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E3 realistische cloneproef uitgevoerd; vrijgave geblokkeerd
+
+- Read-only live-catalogus/schema-export en een geïsoleerde HTTP-proef zijn op
+  14 november 2026 uitgevoerd. Harnas/resultaatbron `9375419860163a3788bc880275e69524d0545c65`;
+  applicatie, migraties en plugin bleven bytegelijk aan de geaccepteerde bron.
+- Werkelijke Kong → Edge → Kong → PostgREST → PostgreSQL-route en de uitgevoerde
+  functionele matrix PASS: feature-on capture, deny/missing/error fail-closed,
+  legacy/core-inname, replay/binding/authority en default-off nul extra calls.
+- **Performance FAIL:** vaste geldige proef, 200 gemeten paren + 40 warmups per arm.
+  p95 baseline 201.1858349999966 ms, kandidaat 251.65781199999037 ms;
+  +50.471976999993785 ms / +25.087241852784835%, boven de strengste 20 ms-grens.
+  Parent herberekende alle 480 ruwe samples onafhankelijk; geen gunstige herhaling.
+- **Volledige Edge-entrytypecheck FAIL in beide armen:** dezelfde drie foutklassen;
+  geen nieuwe typecheckregressie aangetoond, maar geen volledig groen bewijs.
+- Gedocumenteerde **safe-disable rollback PASS**, met behouden datahashes en
+  werkende legacy/core-HTTP. Dit is geen volledige byte-/schemarestauratie;
+  die afzonderlijke poort blijft OPEN. Component-/rol-/publicatieverschillen in
+  de clone en beperkte fresh-write-taildekking blijven expliciete kwalificaties.
+- Parent verifieerde de actuele backendmarkers, exacte resourcehandles en alle
+  bevroren manifestbestanden. Alleen de nog schrijvende uitvoerder-CLI-log was na
+  zijn eigen manifest aangevuld; dit is als erratum vastgelegd, niet weggepoetst.
+- Eigen **7 containers, 6 volumes en 1 intern netwerk verwijderd**; afwezigheid
+  teruggelezen. Privé schema-/catalogusexport en ruwe bewijzen blijven behouden.
+- Details: `docs/operations/pitwall-learning-s2e3-clone-result.md`; privé bewijsroot
+  `/home/hermes/artifacts/3sm/pitwall-learning-p2-readonly-clone-20261114/`, waaronder
+  `PARENT-FINAL-VERIFICATION.json` en `PARENT-CLEANUP-VERIFIED.json`.
+- Vervolg vereist gericht latencyonderzoek/herstel en een vaste nieuwe kandidaat,
+  niet een ongewijzigde herproef tot groen. Oude→nieuwe automatische updaterproef
+  blijft afzonderlijk open. Geen fitting, advies, test/live-UI of productieactivatie.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
 ## T09 / T10 geaccepteerd en lokaal geïntegreerd
 
 - Gereviewde bron: `3422b47e87c2473c7ccfcfb1f6e331233bd91f6d`.

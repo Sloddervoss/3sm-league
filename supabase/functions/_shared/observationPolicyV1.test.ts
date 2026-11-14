@@ -11,9 +11,12 @@
 import {
   composeObservationPolicy,
   maybeComposeObservationPolicy,
+  ObservationPolicyField,
   ObservationPolicyRpc,
   ObservationPolicyTimeoutMs,
   readObservationPolicy,
+  readPersistedObservationPolicy,
+  resolveObservationPolicy,
 } from "./observationPolicyV1.ts";
 
 const TOKEN_HASH = "a".repeat(64);
@@ -196,27 +199,107 @@ Deno.test("the composer performs no caching between calls", async () => {
   assertEqual(calls.length, 2, "each eligible answer asks once, nothing cached");
 });
 
-Deno.test("actual ingest-v3 202 path uses the composer exactly once, optionally", async () => {
+// ---------------------------------------------------------------------------
+// S2E5 — het policyfeit uit het persist-resultaat
+// ---------------------------------------------------------------------------
+
+Deno.test("persisted field: present/absent is distinguished, value is validated", () => {
+  assertEqual(readPersistedObservationPolicy({ [ObservationPolicyField]: { captureAllowed: true, policyVersion: 1 } }),
+    { present: true, policy: { captureAllowed: true, policyVersion: 1 } });
+  assertEqual(readPersistedObservationPolicy({ [ObservationPolicyField]: { captureAllowed: false, policyVersion: null } }),
+    { present: true, policy: { captureAllowed: false, policyVersion: null } });
+  // A null column is "present but unusable": fail-closed, never a fallback hop.
+  assertEqual(readPersistedObservationPolicy({ [ObservationPolicyField]: null }),
+    { present: true, policy: undefined });
+  assertEqual(readPersistedObservationPolicy({ [ObservationPolicyField]: { captureAllowed: 1, policyVersion: 1 } }),
+    { present: true, policy: undefined });
+  // An older database has no column at all: absent, not null.
+  assertEqual(readPersistedObservationPolicy({ result: "accepted", received_at: "x", measurement_ack: null }),
+    { present: false, policy: undefined });
+  assertEqual(readPersistedObservationPolicy(null), { present: false, policy: undefined });
+  assertEqual(readPersistedObservationPolicy("<html>"), { present: false, policy: undefined });
+  // An inherited property is not a response column.
+  assertEqual(readPersistedObservationPolicy(Object.create({ [ObservationPolicyField]: { captureAllowed: true, policyVersion: 1 } })),
+    { present: false, policy: undefined });
+});
+
+Deno.test("resolver: embedded field means zero RPC, absent means exactly one bounded lookup", async () => {
+  const allowed: unknown[] = [];
+  const rpc = (fn: string, args: Record<string, unknown>) => {
+    allowed.push({ fn, args });
+    return { data: { captureAllowed: true, policyVersion: 9 }, error: null };
+  };
+
+  assertEqual(
+    await resolveObservationPolicy("on", { [ObservationPolicyField]: { captureAllowed: true, policyVersion: 2 } }, TOKEN_HASH, rpc),
+    { captureAllowed: true, policyVersion: 2 },
+  );
+  assertEqual(allowed.length, 0, "embedded allow must not query");
+
+  assertEqual(
+    await resolveObservationPolicy("on", { [ObservationPolicyField]: { captureAllowed: false, policyVersion: null } }, TOKEN_HASH, rpc),
+    { captureAllowed: false, policyVersion: null },
+  );
+  assertEqual(allowed.length, 0, "embedded deny must not query");
+
+  // Fail-closed: a null column omits the policy and does NOT recover via a hop.
+  assertEqual(await resolveObservationPolicy("on", { [ObservationPolicyField]: null }, TOKEN_HASH, rpc), undefined);
+  assertEqual(await resolveObservationPolicy("on", { [ObservationPolicyField]: "no" }, TOKEN_HASH, rpc), undefined);
+  assertEqual(allowed.length, 0, "a null column must never trigger the old hop");
+
+  assertEqual(await resolveObservationPolicy("on", { result: "accepted" }, TOKEN_HASH, rpc),
+    { captureAllowed: true, policyVersion: 9 });
+  assertEqual(allowed.length, 1, "absent column falls back exactly once");
+  assertEqual((allowed[0] as Call).fn, ObservationPolicyRpc);
+  assertEqual((allowed[0] as Call).args, { p_token_hash: TOKEN_HASH });
+});
+
+Deno.test("resolver: every off mode does no policy work at all", async () => {
+  const calls: Call[] = [];
+  const rpc = (fn: string, args: Record<string, unknown>) => {
+    calls.push({ fn, args });
+    return { data: { captureAllowed: true, policyVersion: 1 }, error: null };
+  };
+  const present = { [ObservationPolicyField]: { captureAllowed: true, policyVersion: 1 } };
+  for (const mode of ["off", "unavailable", "", "OFF", "on "]) {
+    assertEqual(await resolveObservationPolicy(mode, present, TOKEN_HASH, rpc), undefined, mode);
+    assertEqual(await resolveObservationPolicy(mode, {}, TOKEN_HASH, rpc), undefined, mode);
+  }
+  assertEqual(calls.length, 0, "off modes must not query");
+});
+
+Deno.test("resolver: fallback keeps the existing 750ms deadline", async () => {
+  const hanging = (): Promise<never> => new Promise(() => {});
+  const started = performance.now();
+  const policy = await resolveObservationPolicy("on", {}, TOKEN_HASH, hanging, 20);
+  assertEqual(policy, undefined);
+  assert(performance.now() - started < 1000, "fallback deadline lost");
+});
+
+Deno.test("actual ingest-v3 202 path resolves once, after the accepted gate", async () => {
   const source = await Deno.readTextFile(
     new URL("../simhub-ingest-v3/index.ts", import.meta.url),
   );
-  const occurrences = source.split("maybeComposeObservationPolicy(").length - 1;
-  assertEqual(occurrences, 1, "composer is wired once");
+  const occurrences = source.split("resolveObservationPolicy(").length - 1;
+  assertEqual(occurrences, 1, "resolver is wired once");
+  assertEqual(
+    source.split("maybeComposeObservationPolicy(").length - 1,
+    0,
+    "the entry must not call the raw composer directly",
+  );
 
-  const callAt = source.indexOf("maybeComposeObservationPolicy(");
+  const callAt = source.indexOf("resolveObservationPolicy(");
   const acceptedAt = source.indexOf('if (result !== "accepted")');
   const returnAt = source.indexOf("return jsonResponse(request, {\n        accepted: true,");
   assert(acceptedAt > 0 && returnAt > acceptedAt, "expected accepted 202 block");
   assert(
     callAt > acceptedAt && callAt < returnAt,
-    "composer must run after the accepted gate and before the 202",
+    "resolver must run after the accepted gate and before the 202",
   );
 
   assert(
-    source.includes("observationMode,\n        tokenHash,") ||
-      source.includes("observationMode, tokenHash") ||
-      /maybeComposeObservationPolicy\(\s*observationMode,\s*tokenHash,/.test(source),
-    "composer must receive the resolved mode and validated token hash",
+    /resolveObservationPolicy\(\s*observationMode,\s*row,\s*tokenHash,/.test(source),
+    "resolver must receive the mode, the persist row and the validated token hash",
   );
   assert(
     source.includes("p_token_hash: tokenHash,"),

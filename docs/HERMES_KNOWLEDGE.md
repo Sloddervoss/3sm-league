@@ -1,5 +1,60 @@
 # Hermes — repositorykennis
 
+## Actueel — S2E5 numeriek PASS, onafhankelijke review loopt
+
+Optie 2 lokaal gebouwd op `a787c8ae`: policy in de bestaande acht-argumenten-persist
+als vierde resultaatveld; paired rollback herstelt de oude definitie. Edge gebruikt
+alleen bij AFWEZIG veld de oude fallback; null/ongeldig is fail-closed zonder extra
+hop. Gemeten bron `5bb2be5521ebf6cdb1cefa19d57cbaf25a5e17bd`, reviewdoel
+`4b39b8df64960789fbb89bd8ce6d638a203834ec`. Eén vaste proef numeriek PASS:
+p95 253.65473300000303 → 219.09025599999586 ms; 480/480 samples, nul extra
+policy-HTTP-calls, private capture positief; parent herberekende dit zelfstandig.
+Geen historische FAIL herclassificeerd. Post-run wijzigde alleen `audit.py`, met
+expliciete geregistreerde-control-hashuitzondering en behouden oude bytes; geen
+runtime-/SQL-/runnerwijziging of tijdmetingretry. Safe-disable na fixturecorrecties
+PASS; onafhankelijke SPEC/QUALITY nog OPEN. Zie
+`docs/operations/pitwall-learning-s2e5-policy-in-persist.md`. Geen productieactie,
+plugininstallatie, fitting/advies of UI-activatie. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E4 latency (na S2E3)
+
+S2E4 lokale reparatie op basis `85c73b3e`, branch `fix/pitwall-learning-s2e4-latency`,
+bevroren bron/harnas `0f33ee19c9459475a2d7a8121bc2453bbf5e2754`; latere commits docs-only,
+runtimebytes bytegelijk. Drie bestaande Edge-compilerfouten verholpen (PACE-tupels,
+`PromiseLike`-contextport, smalle SDK-adapter): kandidaat-entry `deno check` exit 0,
+live baseline exit 1 met dezelfde drie fouten; geen `any`/suppressie/configverruiming.
+De policy-read start nu pas na geaccepteerde core-persist, overlapt best-effort
+history-writes en joint vóór de 202; geen cache/TTL/permissie-/identiteits-/750ms-
+wijziging en geen SQL-wijziging. Onafhankelijke review op de bevroren SHA:
+**SPEC PASS, QUALITY APPROVED**, met **performance FAIL** als enige blokkade:
+p95 242,118125 → 266,899499 ms (+24,781374 ms / +10,235241%); beide grenzen
+(+10% én +20 ms) overschreden, 480/480 samples, geen herhaling. Parent en reviewer
+herberekenden dit onafhankelijk. Baseline is de gevangen live bron, dus dit is
+pakket-versus-live, niet "de reparatie kostte 24,78 ms"; historische-tailoorzaak
+buiten de seriële afhankelijkheid blijft open. Release geblokkeerd; geen merge/push/
+deploy/activatie. Labomgeving na readback volledig opgeruimd. Details:
+`docs/operations/pitwall-learning-s2e4-latency-repair.md`. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E3 echte clone-/HTTP-proef
+
+De read-only productie-inventarisatie/schema-export en geïsoleerde proef van
+14 november 2026 zijn uitgevoerd; dit was geen productie-DDL/deploy/activatie-GO.
+Harnas/resultaatbron `9375419860163a3788bc880275e69524d0545c65`, applicatie/migraties/plugin
+ongewijzigd. Echte HTTP-inname en uitgevoerde autorisatie/capturematrix PASS, maar
+**latency FAIL**: 200 paren, p95 201.185835 → 251.657812 ms (+50.471977 ms / +25.08724%),
+maximaal toegestane toename 20 ms. Parent herberekende alle 480 ruwe responses;
+geen gunstige herhaling. Volledige Edge-entrytypecheck FAIL met dezelfde drie
+foutklassen in live bronbaseline en kandidaat. Safe-disable rollback PASS met
+databehoud/legacy-inname; volledige byte-restauratie niet bewezen. Geen whole-DB
+clone-identiteitsclaim: component-/rol-/publicatieverschillen zijn gekwalificeerd.
+Eigen 7 containers/6 volumes/intern netwerk na parent-readback verwijderd en
+afwezig teruggelezen; privé exports/bewijs behouden. Actuele status/details:
+`docs/operations/pitwall-learning-s2e3-clone-result.md` en bovenste S2E3-sectie van
+`docs/operations/pitwall-learning-p2-local-status.md`. Niet opnieuw de livebasis
+ophalen of minimale SQL-fixture testen als vervanging van gericht herstel.
+Oude→nieuwe automatische updaterproef, fitting en UI-/modelactivering blijven open.
+Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
 ## Zelflerende pitwall — P2 lokale bouw gestart
 
 Vervolg-GO na P1: afgeschermde context-/recordkwalificatie, fysieke setintervallen
