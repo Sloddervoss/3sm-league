@@ -18,6 +18,22 @@ OID = 'a5000000-0000-4000-8000-000000000099'
 REG = 'REGISTERED-BENCHMARK.json'
 SESSION = 's2e5-benchmark-single-valid-run'
 TRAFFIC_SESSION = 's2e5-benchmark-measured-synthetic-session'
+# Exact, name-based: a matrix that silently lost, renamed or duplicated a case
+# must block registration instead of passing a count check. Recorded in
+# REPORT.md alongside the run.
+MATRIX_CASES = (
+    'eligible-fresh-observation-write',
+    'ordinary-hot-no-new-measurement',
+    'policy-denied-fresh-row',
+    'policy-row-missing-fresh-row',
+    'revoked-device',
+    'replay',
+    'observation-device-binding-mismatch',
+    'invalid-batch-valid-core',
+    'valid-legacy-measurement-batch',
+    'global-capture-closed-no-batch',
+    'policy-rpc-absent-embedded-still-published',
+)
 
 
 def sha(path):

@@ -77,9 +77,62 @@ def functional():
     R.checkpoint('s2e5-default-off-zero-policy-work-PASS')
 
 
+def policy_version(owner):
+    """The published version must equal the single live row; never hard-coded."""
+    value = L.psql_clone_ok(
+        f"SELECT policy_version FROM pitwall_learning.account_policy WHERE owner_user_id='{owner}'").strip()
+    assert value, 'no policy row for ' + owner
+    return int(value)
+
+
+def prepare_preconditions():
+    """Rebuild the exact state every case below asserts, then prove it.
+
+    The write-time race stages deliberately leave owner 2 denied and device 2
+    revoked, and the "missing row" case needs an owner without any row, so the
+    matrix must own its preconditions instead of inheriting whatever the
+    previous stage left behind. Everything here is synthetic lab state inside
+    the owned candidate database; the resulting rows are recorded.
+    """
+    R.guard()
+    owners = f"'{U.owner(2)}','{U.owner(3)}','{U.owner(4)}'"
+    # Delete first: an inherited row for owner 4 would silently turn the
+    # "missing row" case into a second "denied" case.
+    L.psql_clone_ok(f"DELETE FROM pitwall_learning.account_policy WHERE owner_user_id IN ({owners})")
+    L.psql_clone_ok(
+        "INSERT INTO pitwall_learning.account_policy(owner_user_id,capture_enabled,policy_version) "
+        f"VALUES('{U.owner(2)}',true,1),('{U.owner(3)}',false,3)")
+    L.psql_clone_ok(
+        "UPDATE pitwall_learning.runtime_settings SET capture_enabled=true, observation_enabled=true, "
+        "worker_enabled=false, shadow_enabled=false, advice_enabled=false WHERE id=1")
+    for index in (2, 3, 4):
+        L.psql_clone_ok(
+            "UPDATE public.simhub_devices SET revoked_at=NULL, device_status='active_unbound', "
+            "endurance_event_id=NULL, endurance_team_id=NULL, device_role=NULL "
+            f"WHERE id='{U.device(index)}'")
+    state = json.loads(L.psql_clone_ok(
+        "SELECT coalesce(json_agg(json_build_object('owner',owner_user_id,'capture',capture_enabled,"
+        "'version',policy_version) ORDER BY owner_user_id),'[]'::json) "
+        f"FROM pitwall_learning.account_policy WHERE owner_user_id IN ({owners})"))
+    devices = json.loads(L.psql_clone_ok(
+        "SELECT coalesce(json_agg(json_build_object('device',id,'owner',owner_user_id,"
+        "'status',device_status,'revoked',revoked_at IS NOT NULL) ORDER BY id),'[]'::json) "
+        "FROM public.simhub_devices WHERE id::text LIKE 'd5000000-%'"))
+    settings = json.loads(L.psql_clone_ok(
+        "SELECT row_to_json(t) FROM pitwall_learning.runtime_settings t"))
+    R.save('matrix-preconditions.json', {'policies': state, 'devices': devices, 'settings': settings})
+    assert [(x['owner'], x['capture']) for x in state] == [
+        (U.owner(2), True), (U.owner(3), False)], state
+    assert devices[2]['device'] == U.device(2) and not devices[2]['revoked'], devices
+    assert settings['capture_enabled'] and settings['observation_enabled'], settings
+    assert not any(settings[k] for k in ('worker_enabled', 'shadow_enabled', 'advice_enabled')), settings
+    return state
+
+
 def matrix():
     R.prove_route()
     assert 'SIMHUB_OBSERVATION_V1_ENABLED=true' in L.assert_owned(C.CONTAINERS['cand'][1])['Config']['Env']
+    prepare_preconditions()
     # Sequence numbers must be above whatever the earlier default-off smoke
     # already committed for these devices: a lower number is a replay (409) and
     # would test the replay guard instead of the case at hand.
@@ -97,7 +150,7 @@ def matrix():
     def probes():
         return kong_counts()
 
-    def case(name, i, seq, rows=None, expected=202, expect_capture=None, expect_persist=True):
+    def run_case(name, i, seq, rows=None, expected=202, expect_capture=None, expect_persist=True):
         body = U.frame(base + seq)
         if rows is not None:
             body['lapSummaries'] = rows
@@ -116,38 +169,37 @@ def matrix():
             assert (after['batches'] > before['batches']) == expect_capture, name
         return rec
 
-    a = case('eligible-fresh-observation-write', 2, 2, [lap(2, 1)], expect_capture=True)
+    a = run_case('eligible-fresh-observation-write', 2, 2, [lap(2, 1)], expect_capture=True)
     assert a['response']['json']['observation']['mode'] == 'on'
     assert a['response']['json']['observation']['policy']['captureAllowed'] is True
     # The published version is whatever the single policy row says right now;
-    # earlier write-time race stages bump it, so it must never be hard-coded.
-    current_version = int(L.psql_clone_ok(
-        f"SELECT policy_version FROM pitwall_learning.account_policy WHERE owner_user_id='{U.owner(2)}'").strip())
+    # earlier stages bump it, so it must never be hard-coded.
+    current_version = policy_version(U.owner(2))
     assert a['response']['json']['observation']['policy']['policyVersion'] == current_version
     assert a['after']['observations'] == a['before']['observations'] + 1
     R.save('ZERO-HOP.json', {'case': a['case'], 'persist_delta': a['extra_call_delta'][PERSIST],
                              'policy_delta': a['extra_call_delta'][POLICY],
                              'witness': 'kong access log', 'verdict': 'ZERO_EXTRA_POLICY_HOP'})
 
-    a = case('ordinary-hot-no-new-measurement', 2, 3, expect_capture=False)
-    a = case('policy-denied-fresh-row', 3, 1, [lap(3, 1)], expect_capture=False)
+    a = run_case('ordinary-hot-no-new-measurement', 2, 3, expect_capture=False)
+    a = run_case('policy-denied-fresh-row', 3, 1, [lap(3, 1)], expect_capture=False)
     assert a['response']['json']['observation']['policy']['captureAllowed'] is False
-    a = case('policy-row-missing-fresh-row', 4, 1, [lap(4, 1)], expect_capture=False)
+    a = run_case('policy-row-missing-fresh-row', 4, 1, [lap(4, 1)], expect_capture=False)
     assert a['response']['json']['observation']['policy']['captureAllowed'] is False
-    a = case('revoked-device', 5, 1, expected=401, expect_persist=False)
+    a = run_case('revoked-device', 5, 1, expected=401, expect_persist=False)
     assert a['after'] == a['before']
-    a = case('replay', 2, 3, expected=409)
+    a = run_case('replay', 2, 3, expected=409)
     assert a['after'] == a['before']
     invalid = lap(2, 2); invalid['observation']['capture']['deviceId'] = U.device(3)
-    a = case('observation-device-binding-mismatch', 2, 4, [invalid], expect_capture=False)
+    a = run_case('observation-device-binding-mismatch', 2, 4, [invalid], expect_capture=False)
     assert a['response']['json']['measurements']['laps']['rejected']
-    a = case('invalid-batch-valid-core', 2, 5, {'not': 'array'}, expect_capture=False)
+    a = run_case('invalid-batch-valid-core', 2, 5, {'not': 'array'}, expect_capture=False)
     assert a['response']['json']['measurements']['laps']['block_error']
     # A legacy lap row (no observation block) is still a new measurement: the
     # pre-existing statement trigger captures every accepted lap summary that
     # passes the owner policy, independent of the observation payload. What must
     # NOT happen is an observation value appearing on the row.
-    a = case('valid-legacy-measurement-batch', 2, 6, [lap(2, 3, False)], expect_capture=True)
+    a = run_case('valid-legacy-measurement-batch', 2, 6, [lap(2, 3, False)], expect_capture=True)
     assert a['response']['json']['measurements']['laps']['accepted']
     assert a['after']['observations'] == a['before']['observations']
 
@@ -157,9 +209,16 @@ def matrix():
     R.guard()
     L.psql_clone_ok("UPDATE pitwall_learning.runtime_settings SET capture_enabled=false WHERE id=1")
     try:
-        a = case('global-capture-closed-no-batch', 2, 8, [lap(2, 5)], expect_capture=False)
-        assert a['response']['json']['observation']['policy']['captureAllowed'] is True
-        assert a['after']['observations'] == a['before']['observations']
+        closed = run_case('global-capture-closed-no-batch', 2, 8, [lap(2, 5)], expect_capture=False)
+        assert closed['response']['json']['observation']['policy']['captureAllowed'] is True
+        # `capture_batches` is the private capture artifact and must not move.
+        # The lap row still stores the observation payload it carried: that
+        # row-level column is written by the accepted persist path itself and is
+        # gated by its own parser/trigger rules, not by the capture switch — the
+        # same row it wrote in the eligible case above. Only the capture is
+        # closed, so the observation count grows by exactly this one row.
+        assert closed['after']['batches'] == closed['before']['batches'], closed
+        assert closed['after']['observations'] == closed['before']['observations'] + 1, closed
     finally:
         R.guard()
         L.psql_clone_ok("UPDATE pitwall_learning.runtime_settings SET capture_enabled=true WHERE id=1")
@@ -170,7 +229,7 @@ def matrix():
     L.psql_clone_ok(f"ALTER FUNCTION public.{POLICY}(text) RENAME TO s2e5_saved_policy_v1; NOTIFY pgrst,'reload schema';")
     time.sleep(3)
     try:
-        a = case('policy-rpc-absent-embedded-still-published', 2, 9, [lap(2, 4)], expect_capture=True)
+        a = run_case('policy-rpc-absent-embedded-still-published', 2, 9, [lap(2, 4)], expect_capture=True)
         assert a['response']['json']['observation']['policy']['captureAllowed'] is True
         assert a['response']['json']['observation']['policy']['policyVersion'] == current_version
     finally:
