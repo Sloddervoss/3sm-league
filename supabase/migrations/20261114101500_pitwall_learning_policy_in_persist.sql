@@ -135,7 +135,7 @@ DECLARE
   v_observation_policy jsonb;
 BEGIN
   IF auth.role() <> 'service_role' THEN
-    RETURN QUERY SELECT 'unauthorized'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_unauthorized'); RETURN;
+    RETURN QUERY SELECT 'unauthorized'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_unauthorized'), NULL::jsonb; RETURN;
   END IF;
 
   IF p_token_hash !~ '^[0-9a-f]{64}$'
@@ -143,7 +143,7 @@ BEGIN
      OR p_sequence IS NULL OR p_sequence < 0
      OR p_captured_at IS NULL
      OR jsonb_typeof(p_v3_normalized) <> 'object' THEN
-    RETURN QUERY SELECT 'invalid_payload'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_invalid_payload'); RETURN;
+    RETURN QUERY SELECT 'invalid_payload'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_invalid_payload'), NULL::jsonb; RETURN;
   END IF;
 
   -- Herkomst: de SimHub-versie en de connectorversie zijn twee verschillende
@@ -158,8 +158,8 @@ BEGIN
   IF char_length(v_connector_version) NOT BETWEEN 1 AND 60 THEN v_connector_version := NULL; END IF;
 
   SELECT * INTO d FROM public.simhub_devices WHERE token_hash = p_token_hash FOR UPDATE;
-  IF NOT FOUND THEN RETURN QUERY SELECT 'invalid_device'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_invalid_device'); RETURN; END IF;
-  IF d.revoked_at IS NOT NULL THEN RETURN QUERY SELECT 'revoked'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_revoked'); RETURN; END IF;
+  IF NOT FOUND THEN RETURN QUERY SELECT 'invalid_device'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_invalid_device'), NULL::jsonb; RETURN; END IF;
+  IF d.revoked_at IS NOT NULL THEN RETURN QUERY SELECT 'revoked'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_revoked'), NULL::jsonb; RETURN; END IF;
 
   -- Routing vereist een actieve binding. Een inschrijving is GEEN voorwaarde meer:
   -- de binding is de beheerder beslis, en een ontbrekende registratie mag een
@@ -185,12 +185,12 @@ BEGIN
   END IF;
 
   IF d.last_seen_at IS NOT NULL AND d.last_seen_at > now_at - interval '400 milliseconds' THEN
-    RETURN QUERY SELECT 'rate_limited'::text, now_at, jsonb_build_object('ok', false, 'error', 'frame_rate_limited'); RETURN;
+    RETURN QUERY SELECT 'rate_limited'::text, now_at, jsonb_build_object('ok', false, 'error', 'frame_rate_limited'), NULL::jsonb; RETURN;
   END IF;
   SELECT last_sequence INTO v_session_sequence
   FROM public.simhub_device_sessions WHERE device_id = d.id AND session_id = p_session_id FOR UPDATE;
   IF FOUND AND p_sequence <= v_session_sequence THEN
-    RETURN QUERY SELECT 'replayed'::text, now_at, jsonb_build_object('ok', false, 'error', 'frame_replayed'); RETURN;
+    RETURN QUERY SELECT 'replayed'::text, now_at, jsonb_build_object('ok', false, 'error', 'frame_replayed'), NULL::jsonb; RETURN;
   END IF;
   IF NOT FOUND THEN
     SELECT count(*) INTO v_session_count FROM public.simhub_device_sessions WHERE device_id = d.id;
@@ -207,9 +207,9 @@ BEGIN
         );
       SELECT count(*) INTO v_session_count FROM public.simhub_device_sessions WHERE device_id = d.id;
     END IF;
-    IF v_session_count >= 64 THEN RETURN QUERY SELECT 'session_limit'::text, now_at, jsonb_build_object('ok', false, 'error', 'frame_session_limit'); RETURN; END IF;
+    IF v_session_count >= 64 THEN RETURN QUERY SELECT 'session_limit'::text, now_at, jsonb_build_object('ok', false, 'error', 'frame_session_limit'), NULL::jsonb; RETURN; END IF;
     IF d.last_session_id IS NOT NULL AND (d.last_seen_at > now_at - interval '5 seconds' OR p_sequence > 5) THEN
-      RETURN QUERY SELECT 'replayed'::text, now_at, jsonb_build_object('ok', false, 'error', 'frame_replayed'); RETURN;
+      RETURN QUERY SELECT 'replayed'::text, now_at, jsonb_build_object('ok', false, 'error', 'frame_replayed'), NULL::jsonb; RETURN;
     END IF;
   END IF;
 
@@ -328,7 +328,7 @@ BEGIN
     WHERE device_id = d.id AND session_id = p_session_id AND event_id = e AND team_id = t FOR UPDATE;
     baseline := NOT FOUND;
     IF NOT baseline AND p_sequence <= s.last_sequence THEN
-      RETURN QUERY SELECT 'replayed'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_replayed'); RETURN;
+      RETURN QUERY SELECT 'replayed'::text, NULL::timestamptz, jsonb_build_object('ok', false, 'error', 'frame_replayed'), NULL::jsonb; RETURN;
     END IF;
 
     -- Een nieuwe sessie begint weer bij ronde 0. Zonder deze controle blijft de

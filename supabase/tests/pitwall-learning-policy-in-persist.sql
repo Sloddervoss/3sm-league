@@ -17,8 +17,9 @@
 --   7. de bestaande policy-RPC is qua gedrag ongewijzigd.
 --
 -- Tijdsdiscipline: simhub_persist_v3 heeft een 400ms-rate-limit per device en
--- een 5s-nieuwe-sessie-poort. Elke nieuwe sessie op een hergebruikt device
--- start daarom op sequence 100 en elke herhaalde aanroep wacht 450ms.
+-- een 5s-poort voor een nieuwe sessie op een recent gezien device. Elke nieuwe
+-- sessie op een hergebruikt device wacht daarom 5.2s en begint op een lage
+-- sequence (1), en elke herhaalde aanroep binnen een sessie wacht 450ms.
 -- ============================================================================
 
 BEGIN;
@@ -147,6 +148,10 @@ AS $frame$
 $frame$;
 
 CREATE FUNCTION pg_temp.pause() RETURNS void LANGUAGE sql AS $pause$ SELECT pg_sleep(0.45) $pause$;
+
+-- Een nieuwe sessie op een recent gezien device wordt als replay geweigerd
+-- (last_seen_at binnen 5s). De fixture simuleert daarom een echt idle device.
+CREATE FUNCTION pg_temp.idle() RETURNS void LANGUAGE sql AS $idle$ SELECT pg_sleep(5.2) $idle$;
 
 SET LOCAL request.jwt.claim.role = 'service_role';
 
@@ -277,17 +282,18 @@ BEGIN
     RAISE EXCEPTION 'revoked read the policy table';
   END IF;
 
-  -- rate_limited: eerst een geaccepteerd frame (sequence 100 om de
-  -- 5s-nieuwe-sessie-poort te passeren), daarna direct het volgende frame.
-  PERFORM pg_temp.pause();
+  -- rate_limited: eerst een geaccepteerd frame op een idle device (de
+  -- 5s-poort voor een nieuwe sessie moet echt verstreken zijn, en de eerste
+  -- sequence van een sessie is laag), daarna direct het volgende frame.
+  PERFORM pg_temp.idle();
   SELECT * INTO v_row FROM public.simhub_persist_v3(
-    repeat('a', 64), 's2e5-forward-rate', 100, now(), pg_temp.frame(3));
+    repeat('a', 64), 's2e5-forward-rate', 1, now(), pg_temp.frame(3));
   IF v_row.result <> 'accepted' THEN
     RAISE EXCEPTION 'rate primer was not accepted: %', v_row.result;
   END IF;
   v_before := pg_temp.policy_scans();
   SELECT * INTO v_row FROM public.simhub_persist_v3(
-    repeat('a', 64), 's2e5-forward-rate', 101, now(), pg_temp.frame(3));
+    repeat('a', 64), 's2e5-forward-rate', 2, now(), pg_temp.frame(3));
   v_after := pg_temp.policy_scans();
   IF v_row.result <> 'rate_limited' OR v_row.observation_policy IS NOT NULL THEN
     RAISE EXCEPTION 'rate_limited changed: %, %', v_row.result, v_row.observation_policy;
@@ -300,7 +306,7 @@ BEGIN
   PERFORM pg_temp.pause();
   v_before := pg_temp.policy_scans();
   SELECT * INTO v_row FROM public.simhub_persist_v3(
-    repeat('a', 64), 's2e5-forward-rate', 100, now(), pg_temp.frame(3));
+    repeat('a', 64), 's2e5-forward-rate', 1, now(), pg_temp.frame(3));
   v_after := pg_temp.policy_scans();
   IF v_row.result <> 'replayed' OR v_row.observation_policy IS NOT NULL THEN
     RAISE EXCEPTION 'replayed changed: %, %', v_row.result, v_row.observation_policy;
@@ -337,7 +343,7 @@ DECLARE
   v_row record;
   v_payload jsonb;
 BEGIN
-  PERFORM pg_temp.pause();
+  PERFORM pg_temp.idle();
   v_payload := pg_temp.frame(1) || jsonb_build_object(
     'ownerUserId', 'a5000000-0000-4000-8000-0000000000b2',
     'deviceId', 'd5000000-0000-4000-8000-0000000000b2',
@@ -345,18 +351,22 @@ BEGIN
     'owner', jsonb_build_object('userId', 'a5000000-0000-4000-8000-0000000000b2')
   );
   SELECT * INTO v_row FROM public.simhub_persist_v3(
-    repeat('e', 64), 's2e5-forward-forged', 100, now(), v_payload);
+    repeat('e', 64), 's2e5-forward-forged', 1, now(), v_payload);
   IF v_row.result <> 'accepted' THEN
     RAISE EXCEPTION 'forged frame was not accepted: %', v_row.result;
   END IF;
   IF v_row.observation_policy->>'policyVersion' <> '2' THEN
     RAISE EXCEPTION 'forged payload won: %', v_row.observation_policy;
   END IF;
-  IF EXISTS (
-    SELECT 1 FROM public.simhub_telemetry_latest
-     WHERE device_id = 'd5000000-0000-4000-8000-0000000000b2'
-  ) THEN
-    RAISE EXCEPTION 'forged device received the write';
+  IF (SELECT session_id FROM public.simhub_telemetry_latest
+       WHERE device_id = 'd5000000-0000-4000-8000-0000000000b2')
+     IS DISTINCT FROM 's2e5-forward-b' THEN
+    RAISE EXCEPTION 'forged payload device received the write';
+  END IF;
+  IF (SELECT session_id FROM public.simhub_telemetry_latest
+       WHERE device_id = 'd5000000-0000-4000-8000-0000000000e5')
+     IS DISTINCT FROM 's2e5-forward-forged' THEN
+    RAISE EXCEPTION 'the token-bound device did not receive the write';
   END IF;
   RAISE NOTICE 'PASS forged payload owner/device/hash are ignored; the token binding decides';
 END
@@ -370,12 +380,15 @@ DECLARE
   v_rpc jsonb;
   v_persist record;
   v_hash text;
+  v_seq integer := 0;
 BEGIN
+  PERFORM pg_temp.idle();
   FOREACH v_hash IN ARRAY ARRAY[repeat('a', 64), repeat('b', 64), repeat('c', 64), repeat('e', 64), repeat('9', 64)] LOOP
+    v_seq := v_seq + 1;
     PERFORM pg_temp.pause();
     v_rpc := public.simhub_observation_policy_v1(v_hash);
     SELECT * INTO v_persist FROM public.simhub_persist_v3(
-      v_hash, 's2e5-forward-parity', 100, now(), pg_temp.frame(1));
+      v_hash, 's2e5-forward-parity', v_seq, now(), pg_temp.frame(1));
     IF v_persist.result = 'accepted' THEN
       IF v_persist.observation_policy IS DISTINCT FROM v_rpc THEN
         RAISE EXCEPTION 'policy parity broken for %: rpc=% persist=%', left(v_hash, 8),
@@ -398,11 +411,11 @@ DO $failclosed$
 DECLARE
   v_row record;
 BEGIN
-  PERFORM pg_temp.pause();
+  PERFORM pg_temp.idle();
   ALTER TABLE pitwall_learning.account_policy RENAME TO account_policy_s2e5_hidden;
   BEGIN
     SELECT * INTO v_row FROM public.simhub_persist_v3(
-      repeat('a', 64), 's2e5-forward-failclosed', 100, now(), pg_temp.frame(1));
+      repeat('a', 64), 's2e5-forward-failclosed', 1, now(), pg_temp.frame(1));
   EXCEPTION WHEN OTHERS THEN
     ALTER TABLE pitwall_learning.account_policy_s2e5_hidden RENAME TO account_policy;
     RAISE EXCEPTION 'a policy read failure escaped the function: %', SQLERRM;
@@ -427,10 +440,10 @@ DECLARE
   v_before bigint;
   v_after bigint;
 BEGIN
-  PERFORM pg_temp.pause();
+  PERFORM pg_temp.idle();
   v_before := pg_temp.policy_scans();
   SELECT * INTO v_row FROM public.simhub_persist_v3(
-    repeat('a', 64), 's2e5-forward-counter', 100, now(), pg_temp.frame(1));
+    repeat('a', 64), 's2e5-forward-counter', 1, now(), pg_temp.frame(1));
   v_after := pg_temp.policy_scans();
   IF v_row.result <> 'accepted' THEN
     RAISE EXCEPTION 'counter frame was not accepted: %', v_row.result;
@@ -451,15 +464,15 @@ DECLARE
   v_after jsonb;
 BEGIN
   SELECT jsonb_build_object(
-    'devices_md5', (SELECT md5(coalesce(string_agg(t::text, '|' ORDER BY t.id), '')) FROM public.simhub_devices t),
+    'devices_md5', (SELECT md5(coalesce(string_agg(md5((to_jsonb(t) - 'last_seen_at' - 'last_session_id' - 'last_sequence' - 'updated_at')::text), '|' ORDER BY t.id), '')) FROM public.simhub_devices t),
     'policies_md5', (SELECT md5(coalesce(string_agg(t::text, '|' ORDER BY t.owner_user_id), '')) FROM pitwall_learning.account_policy t)
   ) INTO v_before;
 
-  PERFORM pg_temp.pause();
-  PERFORM public.simhub_persist_v3(repeat('a', 64), 's2e5-forward-readonly', 100, now(), pg_temp.frame(1));
+  PERFORM pg_temp.idle();
+  PERFORM public.simhub_persist_v3(repeat('a', 64), 's2e5-forward-readonly', 1, now(), pg_temp.frame(1));
 
   SELECT jsonb_build_object(
-    'devices_md5', (SELECT md5(coalesce(string_agg(t::text, '|' ORDER BY t.id), '')) FROM public.simhub_devices t),
+    'devices_md5', (SELECT md5(coalesce(string_agg(md5((to_jsonb(t) - 'last_seen_at' - 'last_session_id' - 'last_sequence' - 'updated_at')::text), '|' ORDER BY t.id), '')) FROM public.simhub_devices t),
     'policies_md5', (SELECT md5(coalesce(string_agg(t::text, '|' ORDER BY t.owner_user_id), '')) FROM pitwall_learning.account_policy t)
   ) INTO v_after;
 
