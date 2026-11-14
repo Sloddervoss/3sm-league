@@ -61,7 +61,12 @@ def register():
     assert not (ART/REG).exists(), 'Immutable registration already exists'
     assert json.loads((ART/'ENTRY-TYPECHECK.json').read_text())['cand']['exit'] == 0
     assert all(x['exit'] == 0 for x in json.loads((ART/'REGRESSIONS.json').read_text()).values())
-    assert len(json.loads((ART/'functional-feature-on.json').read_text())) == 12
+    matrix = json.loads((ART/'functional-feature-on.json').read_text())
+    names = [entry['case'] for entry in matrix]
+    assert len(names) == len(set(names)), 'duplicate case name in the matrix run'
+    assert set(names) == set(MATRIX_CASES), (
+        'matrix case set changed: missing=%s unexpected=%s'
+        % (sorted(set(MATRIX_CASES) - set(names)), sorted(set(names) - set(MATRIX_CASES))))
     assert len(json.loads((ART/'WRITE-TIME-RACES.json').read_text())) == 2
     assert json.loads((ART/'LEGACY-CONTROL.json').read_text())['verdict'] == 'EXPECTED_FAIL_OLD_SEPARATE_CALL'
     head = L.check(L.sh(['git', 'rev-parse', 'HEAD']), 'HEAD').stdout.decode().strip()
