@@ -73,6 +73,9 @@ def disable():
     #    fallback. This is the rollout-order evidence.
     records.append(rollback_file(lab.NEW_MIGRATION))
     R.save('ROLLBACK-ORDER.json', records)
+    after_s2e5 = Z.retained_data()
+    R.save('rollback-retained-after-s2e5-rollback.json', after_s2e5)
+    assert after_s2e5 == before, 'the S2E5 rollback alone must not touch retained rows'
     time.sleep(5)
     R.prove_route()
     fallback = H.fallback_http()
@@ -84,7 +87,16 @@ def disable():
     time.sleep(3)
     after = Z.retained_data()
     R.save('rollback-retained-after.json', after)
-    assert before == after, 'safe-disable must retain preexisting evidence/measurement bytes'
+    # The fallback proof above is a real accepted write and inserts exactly one
+    # legacy lap row; that row is the only difference the retained-data digest
+    # is allowed to show. Everything else must stay byte-identical.
+    laps = 'public.simhub_lap_summaries'
+    moved = sorted(k for k in before if before[k] != after[k])
+    assert moved in ([], [laps]), 'safe-disable changed retained rows: %s' % moved
+    if moved:
+        assert after[laps]['rows'] == before[laps]['rows'] + 1, (before[laps], after[laps])
+    assert all(before[k] == after[k] for k in before if k != laps)
+    retained_equal = True
     expected = json.loads(L.psql_clone_ok("""SELECT json_build_object(
  'policy_rpc_absent',to_regprocedure('public.simhub_observation_policy_v1(text)') IS NULL,
  'persist_back_to_three_columns',(SELECT count(*)=3 FROM unnest((SELECT p.proargmodes FROM pg_proc p WHERE p.oid='public.simhub_persist_v3(text,text,bigint,timestamptz,jsonb,text,jsonb,jsonb)'::regprocedure)) m WHERE m='o'),
@@ -103,9 +115,15 @@ def disable():
     env = L.assert_owned(C.CONTAINERS['cand'][1])['Config']['Env']
     assert 'SIMHUB_OBSERVATION_V1_ENABLED=false' in env
     R.prove_route(); source_proof()
+    # These devices already carry committed frames from the earlier stages; a
+    # low sequence number would be rejected as a replay instead of proving the
+    # path under test.
+    high = int(L.psql_clone_ok("SELECT coalesce(max(last_sequence),0) FROM public.simhub_devices "
+                               "WHERE id::text LIKE 'd5000000-%'").strip())
+    seq = high + 10
     http = []
     for v, i in ((1, 0), (2, 1), (3, 4)):
-        b = U.frame(30) if v == 3 else U.legacy(v, 30)
+        b = U.frame(seq) if v == 3 else U.legacy(v, seq)
         if v == 3:
             b['lapSummaries'] = [U.lap(4, 900, False)]
         r = U.send('cand', i, b)
@@ -113,13 +131,15 @@ def disable():
         assert r['status'] == 202, r
         if v == 3:
             assert r['json']['measurements']['laps']['accepted']
-    b = U.frame(31); b['lapSummaries'] = [U.lap(4, 901)]
+    b = U.frame(seq + 1); b['lapSummaries'] = [U.lap(4, 901)]
     r = U.send('cand', 4, b)
     http.append({'case': 'observation-disabled-no-core-loss', 'request': b, 'response': r})
     assert r['status'] == 202 and r['json']['measurements']['laps']['rejected']
     assert Z.retained_data()['pitwall_learning.capture_batches'] == before['pitwall_learning.capture_batches']
     R.save('ROLLBACK-POSITIVE-EXPECTED-STATE.json', {'verdict': 'PASS_SAFE_DISABLE',
-        'checks': expected, 'all_preexisting_data_digest_equal': before == after,
+        'checks': expected, 'rollback_only_digest_equal': after_s2e5 == before,
+        'retained_equal_except_proof_rows': retained_equal,
+        'proof_rows_added': after[laps]['rows'] - before[laps]['rows'] if moved else 0,
         'http': http, 'fallback': fallback,
         'byte_restoration': 'NOT_PERFORMED; retained private schema/observation column/new writer by normative contract'})
     handles = R.owned_handles()
@@ -132,7 +152,9 @@ def disable():
                     L.FUNC_VOLUME+'-cand', L.DENO_VOLUME, L.KONG_CONTAINER+'cfg', L.CLIENT_VOLUME)},
         'cluster': R.guard(), 'edge_flag': False, 'db_all_switches_off': True,
         'retained_for_reviewer': True, 'all_nonroot_claim': False})
-    R.save('SAFE-DISABLE.json', {'records': records, 'retained_equal': before == after,
+    R.save('SAFE-DISABLE.json', {'records': records, 'retained_equal': retained_equal,
+                                 'rollback_only_digest_equal': after_s2e5 == before,
+                                 'proof_rows_added': after[laps]['rows'] - before[laps]['rows'] if moved else 0,
                                  'fallback_real_http': fallback['extra_call_delta'],
                                  'verdict': 'PASS'})
     R.checkpoint('s2e5-finished-safe-disabled-retained-owned-lab', handles='FINAL-HANDLES.json')
