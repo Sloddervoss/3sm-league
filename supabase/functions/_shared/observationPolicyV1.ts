@@ -24,6 +24,13 @@ export const ObservationPolicyTimeoutMs = 750;
 /** Exact de vorm die de database accepteert: lowercase SHA-256, 64 tekens. */
 export const ObservationTokenHashPattern = /^[0-9a-f]{64}$/;
 
+/**
+ * S2E5: de additieve kolom die `simhub_persist_v3` sinds de policy-in-persist-
+ * migratie teruggeeft. De naam staat hier één keer, zodat de Edge en de tests
+ * niet uit elkaar kunnen lopen.
+ */
+export const ObservationPolicyField = "observation_policy";
+
 export type ObservationPolicyV1 = {
   captureAllowed: boolean;
   policyVersion: number | null;
@@ -126,5 +133,52 @@ export const maybeComposeObservationPolicy = async (
   timeoutMs: number = ObservationPolicyTimeoutMs,
 ): Promise<ObservationPolicyV1 | undefined> => {
   if (mode !== "on") return undefined;
+  return await composeObservationPolicy(tokenHash, rpc, timeoutMs);
+};
+
+/**
+ * S2E5 — het policyfeit uit hetzelfde persist-resultaat.
+ *
+ * `present` onderscheidt twee dingen die op het eerste gezicht hetzelfde
+ * lijken:
+ *   * het veld ontbreekt volledig -> deze database heeft de additieve migratie
+ *     niet; de aanroeper mag de bestaande, begrensde losse lookup gebruiken
+ *     (uitrolvolgorde is dan niet fragiel);
+ *   * het veld bestaat maar is null/onbruikbaar -> de leesactie in de database
+ *     is fail-closed mislukt; dan publiceren we niets en doen we ook geen
+ *     tweede hop. Stilzwijgend alsnog een tweede RPC doen zou de oude hop
+ *     terugbrengen op precies het pad dat we wilden verwijderen.
+ */
+export type PersistedObservationPolicy = {
+  present: boolean;
+  policy: ObservationPolicyV1 | undefined;
+};
+
+export const readPersistedObservationPolicy = (
+  row: unknown,
+): PersistedObservationPolicy => {
+  if (!isRecord(row) || !Object.hasOwn(row, ObservationPolicyField)) {
+    return { present: false, policy: undefined };
+  }
+  return { present: true, policy: readObservationPolicy(row[ObservationPolicyField]) };
+};
+
+/**
+ * De enige ingang voor het geaccepteerde 202-pad van de V3-route.
+ *
+ * - mode !== "on": niets doen, niets lezen, geen RPC (default off).
+ * - veld aanwezig: gebruik het feit uit dezelfde transactie; geen extra hop.
+ * - veld afwezig: val terug op de bestaande begrensde lookup (750ms).
+ */
+export const resolveObservationPolicy = async (
+  mode: string,
+  row: unknown,
+  tokenHash: string,
+  rpc: ObservationPolicyRpcFn,
+  timeoutMs: number = ObservationPolicyTimeoutMs,
+): Promise<ObservationPolicyV1 | undefined> => {
+  if (mode !== "on") return undefined;
+  const persisted = readPersistedObservationPolicy(row);
+  if (persisted.present) return persisted.policy;
   return await composeObservationPolicy(tokenHash, rpc, timeoutMs);
 };

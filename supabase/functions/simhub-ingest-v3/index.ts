@@ -27,7 +27,7 @@ import {
   probeObservationV1,
   shouldProbeObservation,
 } from "./observationCapability.ts";
-import { maybeComposeObservationPolicy } from "../_shared/observationPolicyV1.ts";
+import { resolveObservationPolicy } from "../_shared/observationPolicyV1.ts";
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -266,11 +266,16 @@ Deno.serve(async (request) => {
         return jsonResponse(request, { error: "internal_error", measurements, aggregates: aggregateStatus }, 500);
       }
 
-      // Read-only, fail-closed and bounded by the existing 750ms deadline.
-      // Start only after core acceptance; overlap existing best-effort history
-      // writes, never core authorization/persistence, and join before response.
-      const pendingPolicy = maybeComposeObservationPolicy(
+      // S2E5: het identity-scoped policyfeit komt nu mee in het resultaat van
+      // de persist-RPC hierboven — dezelfde service-role-transactie, dezelfde
+      // gevalideerde tokenhash. Er is dus geen tweede hop meer op dit pad.
+      // Alleen als de database de additieve kolom niet kent (oudere database
+      // zonder de migratie) valt dit terug op de bestaande begrensde lookup,
+      // zodat de uitrolvolgorde niet fragiel is. `null` in het veld betekent
+      // fail-closed: dan publiceren we niets en doen we géén tweede hop.
+      const pendingPolicy = resolveObservationPolicy(
         observationMode,
+        row,
         tokenHash,
         (fn, args) => service.rpc(fn, args),
       );
@@ -368,11 +373,11 @@ Deno.serve(async (request) => {
         console.error("simhub-ingest-v3 opponent sampling non-fatal", (sampleErr as Error).message ?? "unknown");
       }
 
-      // S2E2: optioneel identity-scoped policyfeit voor de client. Alleen na
-      // een geaccepteerde V3-write en een bewezen 'on'-ontvanger, met dezelfde
-      // al gevalideerde tokenhash als de schrijf-RPC (nooit een owner uit de
-      // body). Hooguit één begrensde lookup; ontbrekende RPC, fout, timeout of
-      // malformaat laat `policy` weg en de bestaande 202/ACK ongewijzigd.
+      // S2E5: optioneel identity-scoped policyfeit voor de client. Bij een
+      // gemigreerde database komt het uit het persist-resultaat zelf; alleen een
+      // oudere database gebruikt nog de bestaande begrensde fallback. Ontbrekend,
+      // null of malformaat laat `policy` weg en de bestaande 202/ACK blijft
+      // ongewijzigd (fail-closed).
       const policy = await pendingPolicy;
 
       return jsonResponse(request, {
