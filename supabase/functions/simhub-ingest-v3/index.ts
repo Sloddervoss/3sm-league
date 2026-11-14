@@ -27,7 +27,7 @@ import {
   probeObservationV1,
   shouldProbeObservation,
 } from "./observationCapability.ts";
-import { resolveObservationPolicy } from "../_shared/observationPolicyV1.ts";
+import { resolveObservationPolicy, observationUpgradeMetadata } from "../_shared/observationPolicyV1.ts";
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -395,6 +395,8 @@ Deno.serve(async (request) => {
           mode: observationMode,
           available: observationCapability.available,
           ...(policy ? { policy } : {}),
+          ...observationUpgradeMetadata(observationMode, policy,
+            Deno.env.get("SIMHUB_OBSERVATION_V2_DEPLOYED") === "true", context.deviceId, context.ownerUserId),
         },
       }, 202);
     }

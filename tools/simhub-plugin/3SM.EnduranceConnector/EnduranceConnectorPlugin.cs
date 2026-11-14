@@ -899,7 +899,7 @@ namespace ThreeSM.EnduranceConnector
                 _observationReadiness = new ObservationReadinessCache(() => _readinessClock.ElapsedMilliseconds);
                 _observationHost = new ObservationProducerHost(_measurementOutbox, new MeasurementIdFactory(),
                     new ObservationProducerIdentity(_deviceToken, Settings.ObservationBinding()),
-                    () => Volatile.Read(ref Settings.ObservationEnabled),
+                    () => Settings.ObservationOptIn,
                     () => false, // historical fallback; the binding-aware cache predicate supersedes it
                     fence => new ObservationLedgerStore(Path.Combine(dataDirectory, "observation-ledger-v1.json"), fence),
                     new ObservationReadinessTransportObserver(
@@ -1028,6 +1028,7 @@ namespace ThreeSM.EnduranceConnector
                 CurrentDriverName = FirstNonEmpty(snapshot.PlayerName,
                     player == null ? null : player.Name,
                     GetNullableString(manager, Settings.CurrentDriverNameProperty)),
+                CurrentDriverId = player == null ? null : player.Id,
                 ObservedSessionId = BuildObservedSessionId(manager, channels),
                 LatAccelG = DirectSdkNumber(sdk, IrSdkChannels.LatAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
                 LongAccelG = DirectSdkNumber(sdk, IrSdkChannels.LongAccel, 1.0 / IrSdkUnits.StandardGravity, -10, 10, 3),
@@ -2415,6 +2416,7 @@ namespace ThreeSM.EnduranceConnector
             var attemptUtc = DateTime.UtcNow;
             var ingestResultRecorded = false;
             var readinessRequest = BeginObservationReadiness(identity);
+            var readinessHttpStatus = 0;
             DiagnosticsClient diagnosticsAtAttempt;
             lock (_diagnosticsGate) diagnosticsAtAttempt = _diagnostics;
             if (diagnosticsAtAttempt != null) diagnosticsAtAttempt.RecordIngestAttempt(attemptUtc);
@@ -2447,11 +2449,24 @@ namespace ThreeSM.EnduranceConnector
                         if (!response.IsSuccessStatusCode) throw new HttpRequestException("relay HTTP " + (int)response.StatusCode);
                         // Alleen een echt gelezen antwoord kan een bevestiging per rij bevatten.
                         responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        readinessHttpStatus = (int)response.StatusCode;
                         ObserveObservationReadiness(readinessRequest, (int)response.StatusCode, responseBody);
                     }
                 }
                 if (Volatile.Read(ref _ending) == 0) Status = "V3 " + envelope.TransportSessionId.Substring(0, Math.Min(8, envelope.TransportSessionId.Length)) + " · seq " + envelope.Sequence;
                 AcknowledgeMeasurements(measurementPlan, responseBody);
+                if (_observationHost != null)
+                {
+                    try
+                    {
+                        await _observationHost.ObserveIngestAsync(identity, readinessRequest, readinessHttpStatus, responseBody,
+                            CommitProspectiveObservation, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception error)
+                    {
+                        SimHub.Logging.Current.Warn("3SM observation upgrade: " + error.GetType().Name);
+                    }
+                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -2478,6 +2493,22 @@ namespace ThreeSM.EnduranceConnector
             if (cache == null) return null;
             try { return cache.BeginRequest(identity); }
             catch (Exception) { return null; }
+        }
+
+        private ObservationProducerIdentity CommitProspectiveObservation(ObservationProducerIdentity expected)
+        {
+            lock (_settingsGate)
+            {
+                if (Volatile.Read(ref _ending) != 0 || expected == null
+                    || !string.Equals(_deviceToken, expected.Token, StringComparison.Ordinal)
+                    || !string.Equals(Settings.DeviceId, expected.Binding.CaptureDeviceId, StringComparison.Ordinal)
+                    || !string.Equals(Settings.BoundOwnerUserId, expected.Binding.CaptureOwnerUserId, StringComparison.Ordinal)) return null;
+                var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "3SM Endurance Connector", "observation-ledger-v1.json");
+                var pristine = ConnectorSettings.PristineObservationLedger(path);
+                Settings.CommitProspectiveObservation(() => this.SaveCommonSettings("ConnectorSettings", Settings), pristine);
+                return new ObservationProducerIdentity(_deviceToken, Settings.ObservationBinding());
+            }
         }
 
         private void ObserveObservationReadiness(ObservationReadinessRequest request,

@@ -53,6 +53,9 @@ namespace ThreeSM.EnduranceConnector
         public ObservationLapContext ObservationLapContext { get; set; }
 
         public string CurrentDriverName { get; set; }
+        // Simulator source ID, never the paired account owner.
+        public string CurrentDriverId { get; set; }
+        public int ObservationSchemaVersion { get; set; }
 
         /// <summary>Ruwe SDK <c>OnPitRoad</c>, geen SimHub-fallback naar false.</summary>
         public bool? OnPitRoad { get; set; }

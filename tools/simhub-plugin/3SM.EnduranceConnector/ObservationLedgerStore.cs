@@ -2282,7 +2282,7 @@ namespace ThreeSM.EnduranceConnector
                 return false;
             }
             double version;
-            if (!ObservationLedgerCandidate.TryNumber(observation, "version", out version) || version != 1)
+            if (!ObservationLedgerCandidate.TryNumber(observation, "version", out version) || (version != 1 && version != 2))
             {
                 error = "row_observation_version";
                 return false;

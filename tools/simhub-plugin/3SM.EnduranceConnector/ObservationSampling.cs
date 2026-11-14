@@ -152,7 +152,8 @@ namespace ThreeSM.EnduranceConnector
             var key = ObservationContextKey.Build(_context, sample.ObservationLapContext,
                 _observedSessionId, _segmentId);
             _capture.AddSample(new ObservationSample(sample.ObservedAtUtc, sample.OnPitRoad,
-                sample.FuelLitres, sample.CurrentDriverName, key));
+                sample.FuelLitres, sample.CurrentDriverName, key,
+                sample.CurrentDriverId, sample.ObservationSchemaVersion));
         }
 
         public ObservationCaptureResult Close(DateTime startedAtUtc, DateTime endedAtUtc)

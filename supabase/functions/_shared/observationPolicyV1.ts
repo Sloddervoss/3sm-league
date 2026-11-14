@@ -36,6 +36,20 @@ export type ObservationPolicyV1 = {
   policyVersion: number | null;
 };
 
+/** Additive successful-ingest metadata. v2Deployed is an operator deployment
+ * assertion of the paired migration, not a user control and not a new lookup. */
+export const observationUpgradeMetadata = (
+  mode: string, policy: ObservationPolicyV1 | undefined, v2Deployed: boolean,
+  deviceId: string | null, ownerUserId: string | null,
+): Record<string, unknown> => {
+  if (mode !== "on" || policy?.captureAllowed !== true || policy.policyVersion !== 1
+      || deviceId === null || ownerUserId === null) return {};
+  return {
+    identity: { deviceId, ownerUserId },
+    ...(v2Deployed ? { observationSchemas: [1, 2] } : {}),
+  };
+};
+
 type RpcResult = { data: unknown; error: unknown };
 
 export type ObservationPolicyRpcFn = (

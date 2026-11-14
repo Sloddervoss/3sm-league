@@ -244,7 +244,7 @@ Deno.test("T13-004 parser: empty object misses version", () => {
 
 for (
   const [label, version] of [
-    ["2", 2],
+    ["3", 3], // v2 now has its own additive capture contract.
     ["string", "1"],
     ["boolean", true],
     ["fraction", 1.5],
@@ -1496,7 +1496,7 @@ Deno.test("T13-160 batch: B row quarantined while A and legacy rows proceed", ()
 Deno.test("T13-161 batch: malformed observation does not stop the next valid row", () => {
   const rows = [
     {
-      observation: variant((value) => (value.version = 2)),
+      observation: variant((value) => (value.version = 3)),
       startedAt: ROW_START,
       endedAt: ROW_END,
     },

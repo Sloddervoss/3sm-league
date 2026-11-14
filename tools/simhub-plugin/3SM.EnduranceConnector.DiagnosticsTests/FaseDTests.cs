@@ -388,6 +388,12 @@ internal static class FaseDTests
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
+            if (string.Equals(args[0], "--only-normal-observation", StringComparison.Ordinal))
+            {
+                Group("NormalObservationUpgradeTests", () => NormalObservationUpgradeTests.Run(Check));
+                Console.WriteLine("RESULT passed=" + passed + " failed=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
             if (string.Equals(args[0], "--only-observation", StringComparison.Ordinal))
             {
                 Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));

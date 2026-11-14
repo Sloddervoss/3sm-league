@@ -375,7 +375,7 @@ namespace ThreeSM.EnduranceConnector
                 return null;
             }
             double version;
-            if (!TryNumber(observation, "version", out version) || version != 1)
+            if (!TryNumber(observation, "version", out version) || (version != 1 && version != 2))
             {
                 diagnostic = "row_observation_version_invalid";
                 return null;

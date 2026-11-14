@@ -19,9 +19,13 @@ namespace ThreeSM.EnduranceConnector
         public string BoundTeamId = string.Empty;
         public string BoundOwnerUserId = string.Empty;
 
-        // Internal source-only opt-in/kill switch. No UI, handshake claim or migration.
+        // Historical internal switch, retained for rollback; not a recorded privacy choice.
         [System.Runtime.Serialization.OptionalField]
         public bool ObservationEnabled = false;
+        // Normal release: missing preference is enabled; explicit false remains off.
+        [System.Runtime.Serialization.OptionalField]
+        public bool? ObservationPreference;
+        public bool ObservationOptIn { get { return ObservationPreference != false; } }
         // Nullable distinguishes absent historical metadata from a real persisted epoch.
         [System.Runtime.Serialization.OptionalField]
         public long? ObservationPairingGeneration;
@@ -54,8 +58,8 @@ namespace ThreeSM.EnduranceConnector
             return new ObservationPairingBinding(DeviceId, BoundOwnerUserId, generation ?? 0, known);
         }
 
-        // Missing/corrupt/overflow history is NOT adopted as known zero. Only a validated
-        // new Pair commit may persist this next value together with device/owner/token.
+        // Missing/corrupt/overflow history is NOT adopted as known zero. Pair advances
+        // proven history; the separate authenticated upgrade only bootstraps pristine absence.
         public long? NextObservationGeneration()
         {
             var binding = ObservationBinding();
@@ -63,8 +67,45 @@ namespace ThreeSM.EnduranceConnector
                 ? (long?)(binding.PairingGeneration + 1) : null;
         }
 
+        // Authenticated prospective upgrade only, under the host lease and settings gate.
+        // Unknown pre-existing sidecar bytes and invalidated epochs are never adopted.
+        public bool CommitProspectiveObservation(Action save, bool pristineLedger)
+        {
+            if (!ObservationOptIn) return false;
+            if (ObservationBinding().IsComplete) return true;
+            if (!pristineLedger || ObservationPairingGeneration.HasValue
+                || ObservationPairingGenerationKnown || ObservationPairingGenerationPoisoned
+                || ObservationPairingGenerationRecoverable) return false;
+            ObservationPairingGeneration = 1;
+            ObservationPairingGenerationKnown = true;
+            try { save(); return true; }
+            catch
+            {
+                // Uncertain save consumes this epoch, without changing current pairing.
+                ObservationPairingGenerationKnown = false;
+                ObservationPairingGenerationPoisoned = true;
+                try { save(); } catch (Exception) { }
+                return false;
+            }
+        }
+
+        public static bool PristineObservationLedger(string path)
+        {
+            // Exact existing store slots, including an interrupted preserve operation.
+            // File.Exists silently maps permission/IO errors to absence; never use that
+            // result to allocate a new owner epoch.
+            foreach (var suffix in new[] { "", ".bak", ".tmp", ".preserved", ".preserved.tmp" })
+            {
+                try { System.IO.File.GetAttributes(path + suffix); return false; }
+                catch (System.IO.FileNotFoundException) { }
+                catch (System.IO.DirectoryNotFoundException) { }
+                catch (Exception) { return false; }
+            }
+            return true;
+        }
+
         // Strict successor of retained trusted evidence. Only the real new-Pair commit seam
-        // consumes it; load/restart/control/ingest/decrypt/Unpair never allocate a generation.
+        // consumes it; the authenticated ingest upgrade cannot recover invalidated history.
         // At the safe maximum no successor exists, so the state stays closed without wrap.
         private long? RecoverableObservationGeneration()
         {

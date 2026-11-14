@@ -130,13 +130,15 @@ namespace ThreeSM.EnduranceConnector
         private readonly string _contextKey;
 
         public ObservationSample(DateTime observedAtUtc, bool? onPitRoad, double? fuelLitres,
-            string driverName, string contextKey)
+            string driverName, string contextKey, string driverId = null, int schemaVersion = 1)
         {
             _observedAtUtc = observedAtUtc;
             _onPitRoad = onPitRoad;
             _fuelLitres = fuelLitres;
             _driverName = driverName;
             _contextKey = contextKey;
+            DriverId = driverId;
+            SchemaVersion = schemaVersion;
         }
 
         public DateTime ObservedAtUtc { get { return _observedAtUtc; } }
@@ -144,6 +146,8 @@ namespace ThreeSM.EnduranceConnector
         public double? FuelLitres { get { return _fuelLitres; } }
         public string DriverName { get { return _driverName; } }
         public string ContextKey { get { return _contextKey; } }
+        public string DriverId { get; private set; }
+        public int SchemaVersion { get; private set; }
     }
 
     /// <summary>
@@ -224,6 +228,14 @@ namespace ThreeSM.EnduranceConnector
         private bool _namesKnown = true;
         private string _firstName;
         private bool _namesDiffer;
+        private int _version = 1;
+        private bool _qualityCovered = true;
+        private bool _pitKnown = true;
+        private bool _fuelKnown = true;
+        private bool _driverKnown = true;
+        private string _driverId;
+        private bool _driverChanged;
+        private string _qualityContext;
 
         public ObservationCapture(ObservationPairingBinding binding, ObservationLapContext context)
         {
@@ -256,6 +268,7 @@ namespace ThreeSM.EnduranceConnector
 
             if (_sampleCount == 0)
             {
+                _version = sample.SchemaVersion == 2 ? 2 : 1;
                 _firstAt = quantized;
                 _firstAtMs = atMs;
             }
@@ -264,7 +277,31 @@ namespace ThreeSM.EnduranceConnector
                 if (atMs < _lastAtMs) _outOfOrder = true;
                 var gap = atMs - _lastAtMs;
                 if (gap > _maxGapMs) _maxGapMs = gap;
+                if (gap <= 0 || gap > 1000L || sample.SchemaVersion != _version
+                    || string.IsNullOrEmpty(sample.ContextKey)
+                    || !string.Equals(_qualityContext, sample.ContextKey, StringComparison.Ordinal))
+                    _qualityCovered = false;
             }
+
+            _qualityContext = sample.ContextKey;
+            if (string.IsNullOrEmpty(sample.ContextKey)) _qualityCovered = false;
+            if (!sample.OnPitRoad.HasValue) _pitKnown = false;
+            if (!sample.FuelLitres.HasValue || !ObservationRules.IsFinite(sample.FuelLitres.Value)
+                || sample.FuelLitres.Value < 0) _fuelKnown = false;
+            if (!ObservationRules.IsText(sample.DriverId, 128))
+            {
+                _driverKnown = false;
+                if (_version == 2) _qualityCovered = false;
+            }
+            else if (_driverId == null) _driverId = sample.DriverId;
+            else if (!string.Equals(_driverId, sample.DriverId, StringComparison.Ordinal))
+            {
+                _driverChanged = true;
+                _qualityCovered = false;
+                if (_version == 2) { _previousFuel = null; _previousFuelAtMs = null; _previousContextKey = null; }
+            }
+            if (_version == 2 && !_driverKnown)
+            { _previousFuel = null; _previousFuelAtMs = null; _previousContextKey = null; }
 
             _lastAt = quantized;
             _lastAtMs = atMs;
@@ -470,7 +507,13 @@ namespace ThreeSM.EnduranceConnector
             }
 
             var dto = new MeasurementObservationV1Dto(
-                ObservationContract.Version, capture, interval, pitRoad, refuel, continuity, context);
+                _version, capture, interval, pitRoad, refuel, continuity, context,
+                _version == 2 ? new MeasurementFuelQualityDto(
+                    _firstPitRoadAt.HasValue ? (bool?)true : _qualityCovered && _pitKnown ? (bool?)false : null,
+                    _positiveSteps > 0 ? (bool?)true : _qualityCovered && _fuelKnown && _driverKnown && _sampleCount > 1 ? (bool?)false : null,
+                    null, // No existing source proves absence of reset/tow. Unsupported != false.
+                    _qualityCovered && _driverKnown && !_driverChanged ? _driverId : null,
+                    _driverChanged ? (bool?)true : _qualityCovered && _driverKnown ? (bool?)false : null) : null);
             var json = MeasurementJson.Serialize(dto);
             if (ObservationWireBudget.Utf8Bytes(json) > ObservationContract.MaxWireBytes)
             {
@@ -635,6 +678,7 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name = "refuel", Order = 5, EmitDefaultValue = false)] private readonly MeasurementObservationRefuelV1Dto _refuel;
         [DataMember(Name = "driverNameContinuity", Order = 6, EmitDefaultValue = false)] private readonly MeasurementObservationDriverNameContinuityV1Dto _continuity;
         [DataMember(Name = "context", Order = 7, EmitDefaultValue = false)] private readonly MeasurementObservationContextV1Dto _context;
+        [DataMember(Name = "fuelQuality", Order = 8, EmitDefaultValue = false)] private readonly MeasurementFuelQualityDto _fuelQuality;
 
         public MeasurementObservationV1Dto(int version,
             MeasurementObservationCaptureV1Dto capture,
@@ -642,7 +686,7 @@ namespace ThreeSM.EnduranceConnector
             MeasurementObservationPitRoadV1Dto pitRoad,
             MeasurementObservationRefuelV1Dto refuel,
             MeasurementObservationDriverNameContinuityV1Dto continuity,
-            MeasurementObservationContextV1Dto context)
+            MeasurementObservationContextV1Dto context, MeasurementFuelQualityDto fuelQuality = null)
         {
             _version = version;
             _capture = capture;
@@ -651,6 +695,7 @@ namespace ThreeSM.EnduranceConnector
             _refuel = refuel;
             _continuity = continuity;
             _context = context;
+            _fuelQuality = fuelQuality;
         }
 
         public int Version { get { return _version; } }
@@ -660,6 +705,22 @@ namespace ThreeSM.EnduranceConnector
         public MeasurementObservationRefuelV1Dto Refuel { get { return _refuel; } }
         public MeasurementObservationDriverNameContinuityV1Dto DriverNameContinuity { get { return _continuity; } }
         public MeasurementObservationContextV1Dto Context { get { return _context; } }
+        public MeasurementFuelQualityDto FuelQuality { get { return _fuelQuality; } }
+    }
+
+    [DataContract]
+    public sealed class MeasurementFuelQualityDto
+    {
+        [DataMember(Name = "pitRoad", Order = 1)] public bool? PitRoad { get; private set; }
+        [DataMember(Name = "refuel", Order = 2)] public bool? Refuel { get; private set; }
+        [DataMember(Name = "resetOrTow", Order = 3)] public bool? ResetOrTow { get; private set; }
+        [DataMember(Name = "driverId", Order = 4)] public string DriverId { get; private set; }
+        [DataMember(Name = "driverChanged", Order = 5)] public bool? DriverChanged { get; private set; }
+        public MeasurementFuelQualityDto(bool? pitRoad, bool? refuel, bool? resetOrTow, string driverId, bool? driverChanged)
+        {
+            PitRoad = pitRoad; Refuel = refuel; ResetOrTow = resetOrTow;
+            DriverId = driverId; DriverChanged = driverChanged;
+        }
     }
 
     [DataContract]

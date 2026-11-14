@@ -1,5 +1,5 @@
 /**
- * T13 capture-only observation v1 — pure parser and row-scope classifier.
+ * Capture-only observation v1/v2 — shared pure parser and row-scope classifier.
  *
  * This module is deliberately standalone:
  *
@@ -11,8 +11,8 @@
  *  - a bad observation closes only its own measurement row. The current V3
  *    frame and its other rows are outside this function's result shape.
  *
- * It is not wired into `simhub-ingest-v3`, the outbox, the producer or the
- * database. The existing receiver still rejects `observation` by design.
+ * The existing opt-in ingest path uses this parser. v2 adds nullable sampled
+ * fuel-quality facts; all accepted v1 bounds and exact-time rules are retained.
  */
 
 export const OBSERVATION_V1_VERSION = 1 as const;
@@ -101,7 +101,14 @@ const UUID_PATTERN =
 const CONTROL_PATTERN = /\p{Cc}/u;
 
 export type ObservationV1 = {
-  version: 1;
+  version: 1 | 2;
+  fuelQuality?: {
+    pitRoad: boolean | null;
+    refuel: boolean | null;
+    resetOrTow: boolean | null;
+    driverId: string | null;
+    driverChanged: boolean | null;
+  };
   capture: { deviceId: string };
   interval: {
     firstSampleAt: string;
@@ -900,6 +907,7 @@ export function parseLapObservation(value: unknown): ParseLapObservationResult {
       "refuel",
       "driverNameContinuity",
       "context",
+      ...(value.version === 2 ? ["fuelQuality"] : []),
     ],
     "observation",
   );
@@ -907,7 +915,7 @@ export function parseLapObservation(value: unknown): ParseLapObservationResult {
 
   const version = requiredValue(value, "version", "observation.version");
   if (!version.ok) return version;
-  if (version.value !== OBSERVATION_V1_VERSION) {
+  if (version.value !== OBSERVATION_V1_VERSION && version.value !== 2) {
     return fail("observation_invalid_version", "observation.version");
   }
 
@@ -938,7 +946,7 @@ export function parseLapObservation(value: unknown): ParseLapObservationResult {
   }
 
   const observation: ObservationV1 = {
-    version: OBSERVATION_V1_VERSION,
+    version: version.value,
     capture: parsedCapture,
     interval: parsedInterval,
   };
@@ -979,6 +987,40 @@ export function parseLapObservation(value: unknown): ParseLapObservationResult {
     observation.context = parsed;
   }
 
+  if (hasOwn(value, "fuelQuality")) {
+    const quality = value.fuelQuality;
+    const path = "observation.fuelQuality";
+    if (!isRecord(quality)) return fail("observation_invalid_type", path);
+    const keys = ["pitRoad", "refuel", "resetOrTow", "driverId", "driverChanged"];
+    const extra = unknownKey(quality, keys, path);
+    if (extra) return extra;
+    for (const key of keys) {
+      if (!hasOwn(quality, key)) return fail("observation_missing_key", `${path}.${key}`);
+      const raw = quality[key];
+      if (raw === null) continue;
+      if (key === "driverId") {
+        const parsed = textIn(raw, `${path}.${key}`, 128);
+        if (!parsed.ok) return parsed;
+      } else if (typeof raw !== "boolean") return fail("observation_invalid_type", `${path}.${key}`);
+    }
+    observation.fuelQuality = {
+      pitRoad: quality.pitRoad as boolean | null,
+      refuel: quality.refuel as boolean | null,
+      resetOrTow: quality.resetOrTow as boolean | null,
+      driverId: quality.driverId as string | null,
+      driverChanged: quality.driverChanged as boolean | null,
+    };
+    // A reported gap cannot be promoted to an interval-wide negative fact.
+    if (parsedInterval.maxGapSeconds > 1 &&
+      keys.some((key) => quality[key] === false)) {
+      return fail("observation_bounds_inconsistent", path);
+    }
+    if ((observation.pitRoad && quality.pitRoad === false) ||
+      (observation.refuel && quality.refuel === false) ||
+      (quality.driverChanged === true && quality.driverId !== null)) {
+      return fail("observation_bounds_inconsistent", path);
+    }
+  }
   return { ok: true, observation };
 }
 

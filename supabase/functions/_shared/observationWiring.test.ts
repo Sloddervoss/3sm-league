@@ -485,3 +485,20 @@ Deno.test("T13S1-015 V3 envelope: default rejects, opt-in carries the block", ()
     "explicit unavailable reason",
   );
 });
+
+Deno.test("normal v2 optional rejection never rejects ordinary core telemetry", () => {
+  const observation = { ...validObservation(), version: 2, fuelQuality: {
+    pitRoad: true, refuel: true, resetOrTow: null, driverId: "sim-driver", driverChanged: false,
+  } };
+  const options = { observationCapture: "on" as const, authenticatedDeviceId: UUID_A };
+  const good = parseTelemetryV3Envelope(v3Frame({ observation }), options);
+  assertEqual(good.lapSummaries!.length, 1, "v2 accepted");
+  assertEqual(good.lapSummaries![0].observation!.fuelQuality, observation.fuelQuality);
+  const bad = parseTelemetryV3Envelope(v3Frame({ observation: {
+    ...observation, fuelQuality: { ...observation.fuelQuality, resetOrTow: 0 },
+  } }), options);
+  assertEqual(bad.protocolVersion, 3, "ordinary core still parsed");
+  assertEqual(bad.fuel.fuelLitres, 40.5, "ordinary fuel unchanged");
+  assertEqual(bad.measurementReport!.laps.rows.length, 0, "optional row rejected");
+  assertEqual(bad.measurementReport!.laps.rejected.length, 1, "rejection visible");
+});

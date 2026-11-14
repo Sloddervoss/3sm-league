@@ -75,6 +75,54 @@ namespace ThreeSM.EnduranceConnector
         public Task Settlement { get { return _settled.Task; } }
         public ObservationLedgerCandidate PendingCandidate { get { lock (_gate) return _pending; } }
         public ObservationProducerIdentity Snapshot() { lock (_gate) return _identity; }
+        // Only the exact identity used for an authenticated successful HTTP ingest may
+        // trigger this prospective transition. No new Pair or network request is involved.
+        public async Task ObserveIngestAsync(ObservationProducerIdentity expected,
+            ObservationReadinessRequest request, int status, string body,
+            Func<ObservationProducerIdentity, ObservationProducerIdentity> durableUpgrade,
+            CancellationToken cancel)
+        {
+            lock (_gate)
+            {
+                if (!CanSend(expected) || _readiness == null || request == null
+                    || !object.ReferenceEquals(request.Binding, expected.Binding) || !request.Authorized
+                    || !_readiness.IsLatest(request)) return;
+                _readiness.Publish(request, status, body);
+
+                if (!_optIn() || !_readiness.IsReadyFor(expected.Binding, true)
+                    || expected.Binding.IsComplete
+                    || !ObservationReadinessReader.AllowsProspectiveUpgrade(body, expected.Binding)) return;
+                _operations++;
+            }
+            try
+            {
+                using (var linked = CancellationTokenSource.CreateLinkedTokenSource(cancel, _shutdown.Token))
+                {
+                    await Coordinator.TransitionAsync(token =>
+                    {
+                        lock (_gate)
+                        {
+                            if (!CanSend(expected) || token.IsCancellationRequested
+                                || !_readiness.IsLatest(request)
+                                || !_optIn() || !_readiness.IsReadyFor(expected.Binding, true))
+                                return Task.FromResult(ObservationPairCommit.Failed("upgrade_stale"));
+                            _transitioning = true;
+                            try
+                            {
+                                var upgraded = durableUpgrade(expected);
+                                if (upgraded == null) return Task.FromResult(ObservationPairCommit.Failed("upgrade_refused"));
+                                _identity = upgraded;
+                                PublishReadinessIdentity(ObservationReadinessReasons.IdentityChanged);
+                                _readiness.Publish(_readiness.BeginRequest(upgraded), status, body);
+                                return Task.FromResult(ObservationPairCommit.CommittedWith(upgraded.Binding));
+                            }
+                            finally { _transitioning = false; }
+                        }
+                    }, linked.Token).ConfigureAwait(false);
+                }
+            }
+            finally { lock (_gate) { _operations--; CompleteSettlement(); } }
+        }
         private string CurrentToken() { lock (_gate) return _identity.Token; }
 
         private bool Eligible()
@@ -131,6 +179,8 @@ namespace ThreeSM.EnduranceConnector
             {
                 sample.ObservationPairingBinding = Eligible() ? _identity.Binding : null;
                 sample.ObservationLapContext = sameTickContext;
+                sample.ObservationSchemaVersion = Eligible() && _readiness != null
+                    && _readiness.Snapshot().SchemaV2 ? 2 : 1;
             }
         }
 
@@ -170,6 +220,8 @@ namespace ThreeSM.EnduranceConnector
         {
             if (!Eligible()) return false;
             if (aggregate.ObservationResult == null || !aggregate.ObservationResult.HasObservation) return false;
+            if (aggregate.ObservationResult.Observation.Version == 2
+                && (_readiness == null || !_readiness.Snapshot().SchemaV2)) return false;
             if (_pending != null || _captureBlocked)
             {
                 LastCaptureDiagnostic = "capture_closed_unresolved";

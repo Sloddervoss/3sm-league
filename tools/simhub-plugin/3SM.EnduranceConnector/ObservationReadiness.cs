@@ -37,8 +37,8 @@ namespace ThreeSM.EnduranceConnector
     /// Alleen-lezen antwoordvorm die de geaccepteerde Edge V3-202 al heeft:
     /// <c>observation:{enabled,mode,available}</c>. Dit is receiver-ability,
     /// geen accounttoestemming. De optionele <c>policy</c>-substructuur is een
-    /// lokale DRAFT-aanname voor een toekomstig identity-scoped serverfeit; hij
-    /// bestaat nog niet op de server en is geen wire-autoriteit.
+    /// identity-scoped serverfeit uit het bestaande authenticated ingest-resultaat.
+    /// De optionele identity-metadata bevestigt alleen de same-request snapshot.
     /// </summary>
     public static class ObservationReadinessReader
     {
@@ -47,6 +47,43 @@ namespace ThreeSM.EnduranceConnector
 
         /// <summary>De enige ondersteunde policy-versie in dit lokale ontwerp.</summary>
         public const long SupportedPolicyVersion = 1;
+
+        public static bool AllowsProspectiveUpgrade(string json, ObservationPairingBinding binding)
+        {
+            long version; string reason;
+            if (binding == null || !TryRead(json, out version, out reason)) return false;
+            try
+            {
+                var root = MeasurementJson.DeserializeDictionary(json);
+                object accepted;
+                if (!root.TryGetValue("accepted", out accepted) || !(accepted is bool) || !(bool)accepted) return false;
+                var observation = root["observation"] as Dictionary<string, object>;
+                object raw;
+                if (!observation.TryGetValue("identity", out raw)) return false;
+                var identity = raw as Dictionary<string, object>;
+                return identity != null && identity.ContainsKey("deviceId") && identity.ContainsKey("ownerUserId")
+                    && string.Equals(identity["deviceId"] as string, binding.CaptureDeviceId, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(identity["ownerUserId"] as string, binding.CaptureOwnerUserId, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception) { return false; }
+        }
+
+        public static bool SupportsV2(string json)
+        {
+            long version; string reason;
+            if (!TryRead(json, out version, out reason)) return false;
+            try
+            {
+                var observation = MeasurementJson.DeserializeDictionary(json)["observation"] as Dictionary<string, object>;
+                object raw;
+                if (!observation.TryGetValue("observationSchemas", out raw)) return false;
+                var schemas = raw as List<object>;
+                if (schemas == null) return false;
+                foreach (var schema in schemas) if (schema is double && (double)schema == 2) return true;
+            }
+            catch (Exception) { }
+            return false;
+        }
 
         public static bool TryRead(string json, out long policyVersion, out string reasonCode)
         {
@@ -190,7 +227,9 @@ namespace ThreeSM.EnduranceConnector
 
         internal bool Trusted
         {
-            get { return Authorized && Binding != null && Binding.IsComplete; }
+            get { return Authorized && Binding != null
+                && ObservationRules.IsUuid(Binding.CaptureDeviceId)
+                && ObservationRules.IsUuid(Binding.CaptureOwnerUserId); }
         }
     }
 
@@ -198,15 +237,17 @@ namespace ThreeSM.EnduranceConnector
     public sealed class ObservationReadinessState
     {
         internal ObservationReadinessState(bool ready, string reasonCode, long acquiredAtMilliseconds,
-            ObservationPairingBinding binding)
+            ObservationPairingBinding binding, bool schemaV2 = false)
         {
             Ready = ready;
+            SchemaV2 = schemaV2;
             ReasonCode = reasonCode;
             AcquiredAtMilliseconds = acquiredAtMilliseconds;
             Binding = binding;
         }
 
         public bool Ready { get; private set; }
+        public bool SchemaV2 { get; private set; }
         public string ReasonCode { get; private set; }
         public long AcquiredAtMilliseconds { get; private set; }
         internal ObservationPairingBinding Binding { get; private set; }
@@ -215,8 +256,7 @@ namespace ThreeSM.EnduranceConnector
     /// <summary>
     /// Memory-only readiness-cache. Geen disk, geen netwerk, geen extra POST.
     /// De lokale monotone klok wordt geïnjecteerd; TTL, de optionele
-    /// policy-substructuur en de versie-eis zijn lokale DRAFT-keuzes, geen
-    /// bestaand remote contract.
+    /// policy-substructuur en de versie-eis horen bij het ingest readiness-contract.
     ///
     /// Publicatie is atomair en alleen geldig voor de nieuwste aanvraag in
     /// dezelfde host-lifetime en voor exact de huidige identiteit. Een oudere,
@@ -314,7 +354,7 @@ namespace ThreeSM.EnduranceConnector
         /// <summary>Predicaat voor de host: alleen voor exact deze identiteit, vers en geautoriseerd.</summary>
         public bool IsReadyFor(ObservationPairingBinding binding, bool authorized)
         {
-            if (!authorized || binding == null || !binding.IsComplete) return false;
+            if (!authorized || binding == null) return false;
             ObservationReadinessState state;
             ObservationPairingBinding current;
             bool currentAuthorized;
@@ -326,8 +366,8 @@ namespace ThreeSM.EnduranceConnector
             }
             if (!state.Ready) return false;
             if (!currentAuthorized
-                || !ObservationBindingFence.SameBinding(current, binding)
-                || !ObservationBindingFence.SameBinding(state.Binding, binding))
+                || !SameRequestBinding(current, binding)
+                || !SameRequestBinding(state.Binding, binding))
                 return false;
             long now;
             if (!TryNow(out now)) return false;
@@ -356,6 +396,17 @@ namespace ThreeSM.EnduranceConnector
             return request.Epoch == _epoch && request.Sequence == _latestRequest;
         }
 
+        internal bool IsLatest(ObservationReadinessRequest request)
+        {
+            lock (_gate) return request != null && IsCurrent(request);
+        }
+
+        private static bool SameRequestBinding(ObservationPairingBinding left, ObservationPairingBinding right)
+        {
+            // Incomplete epochs require the very same in-memory request snapshot.
+            return object.ReferenceEquals(left, right) || ObservationBindingFence.SameBinding(left, right);
+        }
+
         private ObservationReadinessState Evaluate(ObservationReadinessRequest request, int httpStatus, string body)
         {
             long now;
@@ -365,14 +416,15 @@ namespace ThreeSM.EnduranceConnector
                 return Denied(ObservationReadinessReasons.HttpNonSuccess, now, request.Binding);
             if (!request.Trusted
                 || !_currentAuthorized
-                || !ObservationBindingFence.SameBinding(request.Binding, _current))
+                || !SameRequestBinding(request.Binding, _current))
                 return Denied(ObservationReadinessReasons.RequestUntrusted, now, request.Binding);
 
             long policyVersion;
             string reasonCode;
             if (!ObservationReadinessReader.TryRead(body, out policyVersion, out reasonCode))
                 return Denied(reasonCode, now, request.Binding);
-            return new ObservationReadinessState(true, ObservationReadinessReasons.Ready, now, request.Binding);
+            return new ObservationReadinessState(true, ObservationReadinessReasons.Ready, now, request.Binding,
+                ObservationReadinessReader.SupportsV2(body));
         }
 
         private bool TryNow(out long now)
