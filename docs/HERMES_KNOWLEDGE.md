@@ -1,6 +1,22 @@
 # Hermes — repositorykennis
 
-## Actuele vrijgaveblokkade — S2E4 latency (na S2E3)
+## Actueel — S2E5 numeriek PASS, onafhankelijke review loopt
+
+Optie 2 lokaal gebouwd op `a787c8ae`: policy in de bestaande acht-argumenten-persist
+als vierde resultaatveld; paired rollback herstelt de oude definitie. Edge gebruikt
+alleen bij AFWEZIG veld de oude fallback; null/ongeldig is fail-closed zonder extra
+hop. Gemeten bron `5bb2be5521ebf6cdb1cefa19d57cbaf25a5e17bd`, reviewdoel
+`4b39b8df64960789fbb89bd8ce6d638a203834ec`. Eén vaste proef numeriek PASS:
+p95 253.65473300000303 → 219.09025599999586 ms; 480/480 samples, nul extra
+policy-HTTP-calls, private capture positief; parent herberekende dit zelfstandig.
+Geen historische FAIL herclassificeerd. Post-run wijzigde alleen `audit.py`, met
+expliciete geregistreerde-control-hashuitzondering en behouden oude bytes; geen
+runtime-/SQL-/runnerwijziging of tijdmetingretry. Safe-disable na fixturecorrecties
+PASS; onafhankelijke SPEC/QUALITY nog OPEN. Zie
+`docs/operations/pitwall-learning-s2e5-policy-in-persist.md`. Geen productieactie,
+plugininstallatie, fitting/advies of UI-activatie. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E4 latency (na S2E3)
 
 S2E4 lokale reparatie op basis `85c73b3e`, branch `fix/pitwall-learning-s2e4-latency`,
 bevroren bron/harnas `0f33ee19c9459475a2d7a8121bc2453bbf5e2754`; latere commits docs-only,

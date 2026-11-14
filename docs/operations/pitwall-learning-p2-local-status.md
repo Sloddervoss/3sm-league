@@ -3,7 +3,35 @@
 P2 is nog niet afgerond. Geen toestemming voor productie, P3, fitting, UI-publicatie
 of modelactivatie. Fasebasis: `79ca3381ee880bb145c91c9804da7584fc2b683a`.
 
-## Actueel — S2E4 gerichte reparatie gereviewd; latency blijft de blokkade
+## Actueel — S2E5 nul extra policy-hop; numeriek PASS, review loopt
+
+- Optie 2 lokaal gebouwd: policyfeit als vierde resultaatveld van de bestaande
+  acht-argumenten-persist, met additieve migratie en exacte paired rollback.
+  De Edge valt uitsluitend bij afwezigheid van het veld terug op de oude losse
+  lookup; aanwezig null/ongeldig blijft fail-closed zonder tweede hop.
+- Gemeten bron `5bb2be5521ebf6cdb1cefa19d57cbaf25a5e17bd`; reviewdoel
+  `4b39b8df64960789fbb89bd8ce6d638a203834ec`. Na de vaste proef wijzigde alleen de
+  post-run rollbackverifier `audit.py`. Dat is een expliciete control-hashuitzondering
+  voor review, geen stil herschreven registratie; runtime/SQL/runner onveranderd.
+- **Numeriek PASS**, zelfstandig door parent herberekend uit alle 480 samples:
+  p95 baseline 253.65473300000303 ms, kandidaat 219.09025599999586 ms;
+  delta -34.56447700000717 ms, onder beide ongewijzigde grenzen. Exact één run,
+  40 warmups + 200 gemeten paren per arm; geen retry of verworpen meetpunten.
+- **Nul aparte policy-HTTP-calls** over de hele run; bestaande capability-probes
+  zijn apart geteld. Positieve private capture bewezen, geen fictieve feature-off-PASS.
+- SQL-contracten, elf HTTP-cases, permissie-/revocatieraces, kandidaat-entrytypecheck
+  en 4/16/239 regressies uitgevoerd. Zelfstandige SPEC/QUALITY-review loopt; geen
+  code-/releaseacceptatie suggereren uit uitsluitend testtotalen of numerieke PASS.
+- Safe-disable na gecorrigeerde post-run audit PASS. De audit scheidt zijn eigen
+  fallbackschrijfproef van rollback-only-digests. Mislukte pogingen bewaard; alleen
+  eigen kandidaat-DB hersteld voor die controle, geen meting herhaald. Daarna alleen
+  resterende OFF/HTTP-verificatie hervat, geen DDL opnieuw afgespeeld.
+- Details: `docs/operations/pitwall-learning-s2e5-policy-in-persist.md` en privé
+  `/home/hermes/artifacts/3sm/pitwall-learning-p2-policy-hop-20261114/REPORT.md`.
+  Geen productie-apply, deploy, enrollment, fitting, test/live-UI of plugininstallatie.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E4 gerichte reparatie gereviewd; latency bleef de blokkade
 
 - Gerichte lokale reparatie op basis `85c73b3e`, branch `fix/pitwall-learning-s2e4-latency`.
   Bevroren bron/harnas `0f33ee19c9459475a2d7a8121bc2453bbf5e2754`; latere commits zijn
