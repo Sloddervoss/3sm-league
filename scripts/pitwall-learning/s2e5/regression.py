@@ -96,9 +96,15 @@ def tests():
             text = (p.stdout+p.stderr).decode(errors='replace')
             digest = L.write_private(ART/'regression-legacy-control.log', p.stdout+p.stderr)
             assert p.returncode != 0, 'the old separate-call path still passes the new test'
-            assert 'policy hop still used' in text, 'control failed for an unexpected reason: '+text[-1200:]
+            # Two invariants in the test discriminate: the published value (the
+            # old path publishes the RPC's answer instead of the embedded one)
+            # and the hop count. Whichever fires first is a real failure of the
+            # old path; anything else would mean the control broke for the wrong
+            # reason.
+            reasons = ('wrong policy', 'policy hop still used')
+            assert any(x in text for x in reasons), 'control failed for an unexpected reason: '+text[-1200:]
             R.save('LEGACY-CONTROL.json', {'exit': p.returncode, 'expected': 'non-zero',
-                                           'reason': 'policy hop still used',
+                                           'observed_failure': next(x for x in reasons if x in text),
                                            'sha256': digest, 'verdict': 'EXPECTED_FAIL_OLD_SEPARATE_CALL'})
         finally:
             put_entry(current)
