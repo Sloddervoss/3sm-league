@@ -13,6 +13,21 @@ from lab import ART, L, R, U, C
 
 POLICY = 'simhub_observation_policy_v1'
 PERSIST = 'simhub_persist_v3'
+PROBE = 'simhub_observation_v1_available'
+NAMES = (POLICY, PERSIST, PROBE)
+
+
+def kong_counts():
+    """Count every RPC this package can cause, from the Kong access log.
+
+    The shared helper only counts the two observation RPCs; the persist call is
+    the one that must stay at exactly one per accepted frame, so it is counted
+    here too rather than inferred.
+    """
+    L.assert_owned(C.KONG_CONTAINER)
+    p = L.check(L.remote(f'docker logs {C.KONG_CONTAINER}'), 'kong logs')
+    data = p.stdout + p.stderr
+    return {name: data.count(('/rest/v1/rpc/' + name + ' ').encode()) for name in NAMES}
 
 
 def flag(enabled):
@@ -65,13 +80,25 @@ def functional():
 def matrix():
     R.prove_route()
     assert 'SIMHUB_OBSERVATION_V1_ENABLED=true' in L.assert_owned(C.CONTAINERS['cand'][1])['Config']['Env']
+    # Sequence numbers must be above whatever the earlier default-off smoke
+    # already committed for these devices: a lower number is a replay (409) and
+    # would test the replay guard instead of the case at hand.
+    high = int(L.psql_clone_ok("SELECT coalesce(max(last_sequence),0) FROM public.simhub_devices "
+                               "WHERE id::text LIKE 'd5000000-%'").strip())
+    base = high + 10
     results = []
 
+    def lap(i, serial, observation=True):
+        # The shared fixture derives the summary UID from the serial; folding in
+        # the run's sequence base keeps re-runs from colliding with a row an
+        # earlier attempt already wrote (revision_conflict instead of a capture).
+        return U.lap(i, base + serial, observation)
+
     def probes():
-        return U.kong_counts()
+        return kong_counts()
 
     def case(name, i, seq, rows=None, expected=202, expect_capture=None, expect_persist=True):
-        body = U.frame(seq)
+        body = U.frame(base + seq)
         if rows is not None:
             body['lapSummaries'] = rows
         before = U.counts(); calls = probes()
@@ -89,7 +116,7 @@ def matrix():
             assert (after['batches'] > before['batches']) == expect_capture, name
         return rec
 
-    a = case('eligible-fresh-observation-write', 2, 2, [U.lap(2, 1)], expect_capture=True)
+    a = case('eligible-fresh-observation-write', 2, 2, [lap(2, 1)], expect_capture=True)
     assert a['response']['json']['observation']['mode'] == 'on'
     assert a['response']['json']['observation']['policy']['captureAllowed'] is True
     assert a['response']['json']['observation']['policy']['policyVersion'] == 1
@@ -99,21 +126,26 @@ def matrix():
                              'witness': 'kong access log', 'verdict': 'ZERO_EXTRA_POLICY_HOP'})
 
     a = case('ordinary-hot-no-new-measurement', 2, 3, expect_capture=False)
-    a = case('policy-denied-fresh-row', 3, 1, [U.lap(3, 1)], expect_capture=False)
+    a = case('policy-denied-fresh-row', 3, 1, [lap(3, 1)], expect_capture=False)
     assert a['response']['json']['observation']['policy']['captureAllowed'] is False
-    a = case('policy-row-missing-fresh-row', 4, 1, [U.lap(4, 1)], expect_capture=False)
+    a = case('policy-row-missing-fresh-row', 4, 1, [lap(4, 1)], expect_capture=False)
     assert a['response']['json']['observation']['policy']['captureAllowed'] is False
     a = case('revoked-device', 5, 1, expected=401, expect_persist=False)
     assert a['after'] == a['before']
     a = case('replay', 2, 3, expected=409)
     assert a['after'] == a['before']
-    invalid = U.lap(2, 2); invalid['observation']['capture']['deviceId'] = U.device(3)
+    invalid = lap(2, 2); invalid['observation']['capture']['deviceId'] = U.device(3)
     a = case('observation-device-binding-mismatch', 2, 4, [invalid], expect_capture=False)
     assert a['response']['json']['measurements']['laps']['rejected']
     a = case('invalid-batch-valid-core', 2, 5, {'not': 'array'}, expect_capture=False)
     assert a['response']['json']['measurements']['laps']['block_error']
-    a = case('valid-legacy-measurement-batch', 2, 6, [U.lap(2, 3, False)], expect_capture=False)
+    # A legacy lap row (no observation block) is still a new measurement: the
+    # pre-existing statement trigger captures every accepted lap summary that
+    # passes the owner policy, independent of the observation payload. What must
+    # NOT happen is an observation value appearing on the row.
+    a = case('valid-legacy-measurement-batch', 2, 6, [lap(2, 3, False)], expect_capture=True)
     assert a['response']['json']['measurements']['laps']['accepted']
+    assert a['after']['observations'] == a['before']['observations']
 
     # Discriminating real-HTTP control: remove the separate policy RPC entirely.
     # The old code lost the policy here; the embedded fact must survive it.
@@ -121,7 +153,7 @@ def matrix():
     L.psql_clone_ok(f"ALTER FUNCTION public.{POLICY}(text) RENAME TO s2e5_saved_policy_v1; NOTIFY pgrst,'reload schema';")
     time.sleep(3)
     try:
-        a = case('policy-rpc-absent-embedded-still-published', 2, 7, [U.lap(2, 4)], expect_capture=True)
+        a = case('policy-rpc-absent-embedded-still-published', 2, 7, [lap(2, 4)], expect_capture=True)
         assert a['response']['json']['observation']['policy']['captureAllowed'] is True
         assert a['response']['json']['observation']['policy']['policyVersion'] == 1
     finally:
@@ -158,12 +190,12 @@ def fallback_http(seq=900001):
     to the bounded separate lookup. This is the rollout-order proof.
     """
     R.guard()
-    before_calls = U.kong_counts()
+    before_calls = kong_counts()
     before = U.counts()
     body = U.frame(seq)
     body['lapSummaries'] = [U.lap(2, 900, False)]
     r = U.send('cand', 2, body)
-    after_calls = U.kong_counts()
+    after_calls = kong_counts()
     after = U.counts()
     delta = {k: after_calls[k]-before_calls[k] for k in before_calls}
     rec = {'case': 'old-database-without-column-uses-bounded-fallback', 'request': body,
