@@ -108,8 +108,43 @@ tests pass; the type-fixed serial-order control fails as intended. Actual HTTP
 functional/role/authority/changed-permission cases and controlled persist-blocking
 permission/revocation races pass. Normative safe-disable exits 0, preserves
 preexisting data digests, passes legacy HTTP and leaves all DB switches and the
-candidate lab Edge env flag OFF. Exact retained resources: private
-`FINAL-HANDLES.json`. No production change and no full-byte-restoration claim.
+candidate lab Edge env flag OFF. No production change and no full-byte-restoration
+claim.
+
+## Independent review and parent closeout
+
+ONE independent review on frozen `0f33ee19` returned **SPEC PASS**,
+**QUALITY APPROVED**, and retained **performance FAIL** as the single blocker.
+Release/integration stays BLOCKED by that valid FAIL; SPEC/QUALITY approval covers
+source correctness only and does not waive or reclassify the gate.
+
+Reviewer's own checks: ancestry and scope; real cached-SDK entry typecheck
+(candidate exit 0, captured baseline exit 1 with the same three old errors, no
+`as any`/suppression/config relaxation); re-executed 3/12/239 regressions; two
+reviewer-built negative controls (serial order and early start) that fail exactly
+as intended; full offline recomputation of all 480 benchmark samples reproducing
+the unrounded FAIL; real-trace policy-after-persist 24/24 with 0/24 before and
+23/24 overlap; 146/146 evidence hashes; measured-candidate byte provenance.
+No code defect was found or invented to excuse the FAIL.
+
+Reviewer qualifications carried forward: the baseline operand is the captured
+LIVE source, so the delta is package-versus-live and must not be described as
+"the repair added 24.78 ms"; historical-tail causality beyond the demonstrated
+serial dependency remains open; clone residuals and the incomplete historical
+helper-handle ledger stay qualified; frontend `bun` tooling is absent; the
+n=200 nearest-rank p95 is tail-sensitive but was preregistered and is not
+redefined. The review environment had no Docker CLI, so lab-dependent claims were
+hash- and internally verified as carried evidence.
+
+Parent independently recomputed the frozen samples and confirmed FAIL, verified
+146/146 manifest hashes, and read the retained lab live: seven exact containers,
+six labelled managed volumes, one internal network, 2944 MiB / 2.0 CPU, no host
+ports or binds, candidate Edge
+`SIMHUB_OBSERVATION_V1_ENABLED=false` and all database switches off. It then
+removed only those exact owned resources in verified ID order and read back an
+empty label namespace. Full evidence, exports and raw samples are retained.
+Private review evidence:
+`/home/hermes/artifacts/3sm/pitwall-learning-p2-latency-repair-review-20261114/REVIEW.md`.
 
 The early name-keyed handle ledger recorded IDs before start but overwrote removed
 helper/replacement history. Append-only creation logging was added before freeze;

@@ -3,7 +3,39 @@
 P2 is nog niet afgerond. Geen toestemming voor productie, P3, fitting, UI-publicatie
 of modelactivatie. Fasebasis: `79ca3381ee880bb145c91c9804da7584fc2b683a`.
 
-## Actueel — S2E3 realistische cloneproef uitgevoerd; vrijgave geblokkeerd
+## Actueel — S2E4 gerichte reparatie gereviewd; latency blijft de blokkade
+
+- Gerichte lokale reparatie op basis `85c73b3e`, branch `fix/pitwall-learning-s2e4-latency`.
+  Bevroren bron/harnas `0f33ee19c9459475a2d7a8121bc2453bbf5e2754`; latere commits zijn
+  docs-only en de runtimebytes zijn bytegelijk overgedragen.
+- Drie bestaande Edge-compilerfouten verholpen met expliciete PACE-tupels, een
+  `PromiseLike`-contextport en een smalle SDK-adapter. **Volledige typecheck van de
+  kandidaat-entry: exit 0.** Live baseline blijft exit 1 met dezelfde drie fouten.
+  Geen `any`-cast, `ts-ignore` of configuratieverruiming.
+- Diagnose: de policy-read was onnodig serieel na de geaccepteerde core-persist.
+  Die leesactie start nu pas na core-succes, overlapt bestaande best-effort
+  history-writes en wordt vóór de 202 samengevoegd. Geen cache, TTL, permissie-,
+  identiteits- of 750ms-deadlinewijziging. SQL is niet gewijzigd.
+- **Performance FAIL blijft geldig:** nieuwe vaste proef, 200 paren + 40 warmups per arm.
+  Baseline p95 242,118125 ms, kandidaat 266,899499 ms; +24,781374 ms / +10,235241%.
+  Beide grenzen (+10% én +20 ms) overschreden. Alle 480 samples behouden, geen herhaling.
+  Parent en reviewer herberekenden dit onafhankelijk uit de ruwe data.
+- Onafhankelijke review op de bevroren SHA: **SPEC PASS, QUALITY APPROVED**,
+  performance FAIL als enige blokkade. Twee eigen negatieve controles (seriële
+  volgorde, te vroege start) falen zoals bedoeld; 3/12/239 regressietests groen.
+- Kwalificaties: baseline is de gevangen live bron, dus de delta is pakket-versus-live
+  en níet "de reparatie kostte 24,78 ms"; oorzaak van de historische tail buiten de
+  aangetoonde seriële afhankelijkheid blijft open; clone-residuen en het onvolledige
+  historische helper-ledger blijven gekwalificeerd; `bun` ontbreekt lokaal.
+- Parent las de achtergebleven labomgeving live terug (7 containers, 6 volumes,
+  intern netwerk, 2944 MiB / 2 CPU, alle schakelaars OFF) en verwijderde uitsluitend
+  die exacte eigen resources; afwezigheid teruggelezen. Bewijs en ruwe samples behouden.
+- **Release/integratie geblokkeerd** door de geldige performance-FAIL. Geen merge,
+  push, deploy, enrollment of activatie. Oude→nieuwe automatische updaterproef blijft
+  apart open. Details: `docs/operations/pitwall-learning-s2e4-latency-repair.md`.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E3 realistische cloneproef uitgevoerd; vrijgave geblokkeerd
 
 - Read-only live-catalogus/schema-export en een geïsoleerde HTTP-proef zijn op
   14 november 2026 uitgevoerd. Harnas/resultaatbron `9375419860163a3788bc880275e69524d0545c65`;

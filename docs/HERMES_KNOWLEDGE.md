@@ -1,6 +1,25 @@
 # Hermes — repositorykennis
 
-## Actuele vrijgaveblokkade — S2E3 echte clone-/HTTP-proef
+## Actuele vrijgaveblokkade — S2E4 latency (na S2E3)
+
+S2E4 lokale reparatie op basis `85c73b3e`, branch `fix/pitwall-learning-s2e4-latency`,
+bevroren bron/harnas `0f33ee19c9459475a2d7a8121bc2453bbf5e2754`; latere commits docs-only,
+runtimebytes bytegelijk. Drie bestaande Edge-compilerfouten verholpen (PACE-tupels,
+`PromiseLike`-contextport, smalle SDK-adapter): kandidaat-entry `deno check` exit 0,
+live baseline exit 1 met dezelfde drie fouten; geen `any`/suppressie/configverruiming.
+De policy-read start nu pas na geaccepteerde core-persist, overlapt best-effort
+history-writes en joint vóór de 202; geen cache/TTL/permissie-/identiteits-/750ms-
+wijziging en geen SQL-wijziging. Onafhankelijke review op de bevroren SHA:
+**SPEC PASS, QUALITY APPROVED**, met **performance FAIL** als enige blokkade:
+p95 242,118125 → 266,899499 ms (+24,781374 ms / +10,235241%); beide grenzen
+(+10% én +20 ms) overschreden, 480/480 samples, geen herhaling. Parent en reviewer
+herberekenden dit onafhankelijk. Baseline is de gevangen live bron, dus dit is
+pakket-versus-live, niet "de reparatie kostte 24,78 ms"; historische-tailoorzaak
+buiten de seriële afhankelijkheid blijft open. Release geblokkeerd; geen merge/push/
+deploy/activatie. Labomgeving na readback volledig opgeruimd. Details:
+`docs/operations/pitwall-learning-s2e4-latency-repair.md`. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E3 echte clone-/HTTP-proef
 
 De read-only productie-inventarisatie/schema-export en geïsoleerde proef van
 14 november 2026 zijn uitgevoerd; dit was geen productie-DDL/deploy/activatie-GO.
