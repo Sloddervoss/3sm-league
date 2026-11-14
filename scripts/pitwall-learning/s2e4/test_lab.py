@@ -19,7 +19,7 @@ class IsolationTests(unittest.TestCase):
     def test_default_psql_targets_only_new_candidate(self):
         with patch.object(lab.L,'psql_clone',return_value=subprocess.CompletedProcess([],0,b'ok',b'')) as query:
             self.assertEqual(lab.L.psql_clone_ok('SELECT 1'),'ok')
-            self.assertEqual(query.call_args.kwargs['db'],'pitwall_learning_s2e4_cand')
+            self.assertEqual(query.call_args.args[1],'pitwall_learning_s2e4_cand')
 
     def test_replaced_id_and_mounts_refused(self):
         meta={'Id':'new','Image':'image','Mounts':[],'Config':{},'HostConfig':{}}
