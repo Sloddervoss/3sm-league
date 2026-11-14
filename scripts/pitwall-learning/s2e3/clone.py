@@ -247,7 +247,7 @@ def _tar_tree(base: pathlib.Path) -> bytes:
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         for path in sorted(base.rglob("*")):
-            tf.add(path, arcname=str(path.relative_to(base)))
+            tf.add(path, arcname=str(path.relative_to(base)), recursive=False)
     return buf.getvalue()
 
 

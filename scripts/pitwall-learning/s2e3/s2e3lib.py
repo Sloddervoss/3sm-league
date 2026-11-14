@@ -15,6 +15,7 @@ import pathlib
 import secrets
 import subprocess
 import time
+from typing import Any
 
 ART = pathlib.Path("/home/hermes/artifacts/3sm/pitwall-learning-p2-readonly-clone-20261114")
 LOGS = ART / "logs"
@@ -109,7 +110,7 @@ def record_cmd(stage: str, argv: list[str], p: subprocess.CompletedProcess) -> N
 
 
 # -------------------------------------------------------------- lab auth ---
-def lab_secrets() -> dict[str, str]:
+def lab_secrets() -> dict[str, Any]:
     """Synthetic lab-only credentials; generated once, never printed, 0600."""
     ensure_dirs()
     if SECRETS_FILE.exists():
@@ -147,7 +148,7 @@ class GuardError(RuntimeError):
 
 def container_meta(name: str) -> dict | None:
     p = remote(
-        "docker inspect " + _q(name) + ' --format "{{json .}}"'
+        "docker container inspect " + _q(name) + ' --format "{{json .}}"'
     )
     if p.returncode != 0:
         return None
@@ -191,7 +192,7 @@ def assert_owned(name: str) -> dict:
 
 def assert_absent(name: str, kind: str = "container") -> None:
     if kind == "container":
-        p = remote("docker inspect " + _q(name))
+        p = remote("docker container inspect " + _q(name))
         if p.returncode == 0:
             raise GuardError(f"{name}: container already exists; refusing adoption")
     elif kind == "volume":
