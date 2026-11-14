@@ -1,5 +1,25 @@
 # Hermes — repositorykennis
 
+## Actuele vrijgaveblokkade — S2E3 echte clone-/HTTP-proef
+
+De read-only productie-inventarisatie/schema-export en geïsoleerde proef van
+14 november 2026 zijn uitgevoerd; dit was geen productie-DDL/deploy/activatie-GO.
+Harnas/resultaatbron `9375419860163a3788bc880275e69524d0545c65`, applicatie/migraties/plugin
+ongewijzigd. Echte HTTP-inname en uitgevoerde autorisatie/capturematrix PASS, maar
+**latency FAIL**: 200 paren, p95 201.185835 → 251.657812 ms (+50.471977 ms / +25.08724%),
+maximaal toegestane toename 20 ms. Parent herberekende alle 480 ruwe responses;
+geen gunstige herhaling. Volledige Edge-entrytypecheck FAIL met dezelfde drie
+foutklassen in live bronbaseline en kandidaat. Safe-disable rollback PASS met
+databehoud/legacy-inname; volledige byte-restauratie niet bewezen. Geen whole-DB
+clone-identiteitsclaim: component-/rol-/publicatieverschillen zijn gekwalificeerd.
+Eigen 7 containers/6 volumes/intern netwerk na parent-readback verwijderd en
+afwezig teruggelezen; privé exports/bewijs behouden. Actuele status/details:
+`docs/operations/pitwall-learning-s2e3-clone-result.md` en bovenste S2E3-sectie van
+`docs/operations/pitwall-learning-p2-local-status.md`. Niet opnieuw de livebasis
+ophalen of minimale SQL-fixture testen als vervanging van gericht herstel.
+Oude→nieuwe automatische updaterproef, fitting en UI-/modelactivering blijven open.
+Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
 ## Zelflerende pitwall — P2 lokale bouw gestart
 
 Vervolg-GO na P1: afgeschermde context-/recordkwalificatie, fysieke setintervallen

@@ -3,6 +3,37 @@
 P2 is nog niet afgerond. Geen toestemming voor productie, P3, fitting, UI-publicatie
 of modelactivatie. Fasebasis: `79ca3381ee880bb145c91c9804da7584fc2b683a`.
 
+## Actueel — S2E3 realistische cloneproef uitgevoerd; vrijgave geblokkeerd
+
+- Read-only live-catalogus/schema-export en een geïsoleerde HTTP-proef zijn op
+  14 november 2026 uitgevoerd. Harnas/resultaatbron `9375419860163a3788bc880275e69524d0545c65`;
+  applicatie, migraties en plugin bleven bytegelijk aan de geaccepteerde bron.
+- Werkelijke Kong → Edge → Kong → PostgREST → PostgreSQL-route en de uitgevoerde
+  functionele matrix PASS: feature-on capture, deny/missing/error fail-closed,
+  legacy/core-inname, replay/binding/authority en default-off nul extra calls.
+- **Performance FAIL:** vaste geldige proef, 200 gemeten paren + 40 warmups per arm.
+  p95 baseline 201.1858349999966 ms, kandidaat 251.65781199999037 ms;
+  +50.471976999993785 ms / +25.087241852784835%, boven de strengste 20 ms-grens.
+  Parent herberekende alle 480 ruwe samples onafhankelijk; geen gunstige herhaling.
+- **Volledige Edge-entrytypecheck FAIL in beide armen:** dezelfde drie foutklassen;
+  geen nieuwe typecheckregressie aangetoond, maar geen volledig groen bewijs.
+- Gedocumenteerde **safe-disable rollback PASS**, met behouden datahashes en
+  werkende legacy/core-HTTP. Dit is geen volledige byte-/schemarestauratie;
+  die afzonderlijke poort blijft OPEN. Component-/rol-/publicatieverschillen in
+  de clone en beperkte fresh-write-taildekking blijven expliciete kwalificaties.
+- Parent verifieerde de actuele backendmarkers, exacte resourcehandles en alle
+  bevroren manifestbestanden. Alleen de nog schrijvende uitvoerder-CLI-log was na
+  zijn eigen manifest aangevuld; dit is als erratum vastgelegd, niet weggepoetst.
+- Eigen **7 containers, 6 volumes en 1 intern netwerk verwijderd**; afwezigheid
+  teruggelezen. Privé schema-/catalogusexport en ruwe bewijzen blijven behouden.
+- Details: `docs/operations/pitwall-learning-s2e3-clone-result.md`; privé bewijsroot
+  `/home/hermes/artifacts/3sm/pitwall-learning-p2-readonly-clone-20261114/`, waaronder
+  `PARENT-FINAL-VERIFICATION.json` en `PARENT-CLEANUP-VERIFIED.json`.
+- Vervolg vereist gericht latencyonderzoek/herstel en een vaste nieuwe kandidaat,
+  niet een ongewijzigde herproef tot groen. Oude→nieuwe automatische updaterproef
+  blijft afzonderlijk open. Geen fitting, advies, test/live-UI of productieactivatie.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
 ## T09 / T10 geaccepteerd en lokaal geïntegreerd
 
 - Gereviewde bron: `3422b47e87c2473c7ccfcfb1f6e331233bd91f6d`.

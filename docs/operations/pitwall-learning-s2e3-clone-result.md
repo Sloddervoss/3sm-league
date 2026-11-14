@@ -148,8 +148,8 @@ Bun/node_modules are unavailable in this worktree; root build/lint/test were not
 substituted for full Edge entry checks. The resumed execution changed no frozen
 application or migration file.
 
-Seven currently owned containers, six owned volumes and the original internal
-network remain for parent readback: total 2944MiB / 2 CPU, no host ports/binds,
+At executor handoff, seven owned containers, six owned volumes and the original
+internal network remained for parent readback: total 2944MiB / 2 CPU, no host ports/binds,
 production volumes, Docker socket or privileged containers. Exact retained IDs,
 images, users, mounts and labels are in `FINAL-AUDIT.json` and
 `RESUME-CURRENT-HANDLES.json`. DB ID remains the original approved handle.
@@ -166,3 +166,22 @@ automatic updater rehearsal remains separately required. No production apply,
 deploy, enrollment, activation, model fitting/advice or release permission follows.
 Frontend/bot/deployment/application code: unchanged. Own isolated synthetic DB,
 lab roles/config/resources only were mutated. PRODUCTIEWIJZIGING: NEE.
+
+## Parent verification and closeout
+
+Parent independently recomputed all 480 raw samples and the nearest-rank p95;
+the unrounded FAIL above is confirmed. All 107 manifest entries were checked:
+only the active producer CLI log changed when its final answer was appended
+after manifest creation. All other frozen hashes match; the original manifest
+was not rewritten. See private `PARENT-FINAL-VERIFICATION.json`.
+
+Parent read back the actual read-only HTTP markers through both retained arms,
+verified exact container IDs/images/limits and reran the nine harness guard tests
+(PASS). No mutating functional test or measured run was repeated. Application,
+migrations, plugin and frontend remain byte-identical to the approved baseline.
+
+After that readback, only the exact seven owned containers, six labelled managed
+volumes and original internal network were removed. Each removal and final empty
+label inventory were read back; no phase resource remains. Full private evidence,
+schema export and raw samples are retained. See `PARENT-CLEANUP-VERIFIED.json`.
+Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
