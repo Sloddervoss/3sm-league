@@ -177,6 +177,8 @@ export interface StrategySnapshot {
   plannedDurationMinutes: number | null;
   /** Gemeten verbruik per ronde, één waarde per afgeronde ronde. */
   fuelPerLapSamples: number[];
+  /** Validated learning upper bound; absent preserves the old fuel estimator. */
+  learnedFuelUpper?: number | null;
   /** Waarde uit de vorige sessie of het vorige event, als startpunt. */
   fuelPerLapPrior: number | null;
   /** Leeftijd van de laatste telemetrie in seconden. */

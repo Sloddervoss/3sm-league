@@ -79,6 +79,91 @@ internal static class SettingsCompatibilityTests
         catch (Exception error) { strictFailure = error; }
         Check("S21", strictFailure == null && strict != null && strict.DeviceId == settings.DeviceId,
             "volledig 0.7.1.2-bestand laadt ook met een lezer die ieder lid eist" + (strictFailure == null ? string.Empty : ": " + strictFailure.Message));
+        Check("S22", !settings.ObservationEnabled && !settings.ObservationPairingGeneration.HasValue
+            && !settings.ObservationPairingGenerationKnown && !settings.ObservationPairingGenerationPoisoned
+            && !DeserializeStrict(SerializeStrict(settings)).ObservationBinding().IsComplete
+            && strict != null && !strict.ObservationPairingGenerationPoisoned,
+            "historical paired config stays unknown on load/restart, including absent OptionalField poison marker");
+        var invalid = new ConnectorSettings { ObservationPairingGenerationKnown = true };
+        invalid.InvalidateObservationGeneration();
+        var invalidRestart = Deserialize(Serialize(invalid));
+        var invalidStrict = DeserializeStrict(SerializeStrict(invalid));
+        Check("S23", invalidRestart.ObservationPairingGenerationPoisoned && invalidStrict.ObservationPairingGenerationPoisoned
+            && !invalidRestart.ObservationPairingGenerationKnown && !invalidStrict.ObservationPairingGenerationKnown
+            && !invalidRestart.ObservationPairingGeneration.HasValue && !invalidStrict.ObservationPairingGeneration.HasValue,
+            "NULL+known-invalid evidence survives invalidation and both actual settings serializer roundtrips");
+
+        // The recoverable-provenance marker is additive: a historical file predating it loads as
+        // "no former proof", and the strict reader (S21) still accepts the full 0.7.1.2 file.
+        Check("S24", Serialize(settings).Contains("\"ObservationPairingGenerationRecoverable\":false"),
+            "historical 0.7.1.2 settings gain the additive marker as false, never as former proof");
+        var present = new ConnectorSettings { ObservationPairingGeneration = 7 };
+        var presentJson = Serialize(present);
+        var presentLoad = Deserialize(presentJson);
+        var presentStrict = DeserializeStrict(presentJson);
+        Check("S25", !presentLoad.ObservationBinding().IsComplete && presentLoad.NextObservationGeneration() == null
+            && !presentStrict.ObservationBinding().IsComplete && presentStrict.NextObservationGeneration() == null,
+            "plain present-unknown without the marker is not recoverable proof on both actual serializers");
+        var markedJson = presentJson.Replace("\"ObservationPairingGenerationRecoverable\":false",
+            "\"ObservationPairingGenerationRecoverable\":true");
+        var markedLoad = Deserialize(markedJson);
+        var markedStrict = DeserializeStrict(markedJson);
+        Check("S26", markedJson != presentJson
+            && !markedLoad.ObservationBinding().IsComplete && markedLoad.NextObservationGeneration() == null
+            && !markedStrict.ObservationBinding().IsComplete && markedStrict.NextObservationGeneration() == null,
+            "the persisted marker alone never grants capture authority; only a later real new Pair may consume it");
+        var cleared = Deserialize(markedJson);
+        cleared.InvalidateObservationGeneration();
+        cleared.InvalidateObservationGeneration();
+        var repeatedProof = !cleared.ObservationBinding().IsComplete && cleared.NextObservationGeneration() == null
+            && Serialize(cleared).Contains("\"ObservationPairingGenerationRecoverable\":true");
+        cleared.ObservationPairingGeneration = -1;
+        cleared.InvalidateObservationGeneration();
+        cleared.ObservationPairingGeneration = 7;
+        cleared.InvalidateObservationGeneration();
+        cleared.CommitNewPair("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "11111111-2222-4333-8444-555555555555",
+            new string('b', 43), string.Empty, raw => "synthetic-protected", () => { }, error => { });
+        Check("S27", repeatedProof && !cleared.ObservationPairingGenerationKnown
+            && cleared.ObservationPairingGeneration == 7,
+            "repeated invalidation preserves the marker only while raw evidence stays safe; an unsafe raw value clears the proof");
+
+        // SPEC-1: a persisted recoverable marker whose raw counter is absent or explicitly
+        // NULL is lost high-watermark evidence. Under the lenient POCO loader it must load
+        // without authority, must become the durable poison tombstone on invalidation and must
+        // never be laundered into pristine absence. The strict DataContract reader rejects
+        // that partial document; that loader-model fact is recorded separately, not used as
+        // the guard.
+        foreach (var mode in new[] { "absent", "explicit-null" })
+        {
+            var partial = "{\"SchemaVersion\":8,\"DeviceId\":\"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\""
+                + (mode == "explicit-null" ? ",\"ObservationPairingGeneration\":null" : string.Empty)
+                + ",\"ObservationPairingGenerationRecoverable\":true}";
+            var lost = Deserialize(partial);
+            Check("SL28-" + mode, lost != null && lost.ObservationPairingGenerationRecoverable
+                && !lost.ObservationPairingGeneration.HasValue && !lost.ObservationPairingGenerationKnown
+                && !lost.ObservationBinding().IsComplete && lost.NextObservationGeneration() == null,
+                "marker=true + raw " + mode + " loads under the POCO model without authority or next generation");
+            lost.InvalidateObservationGeneration();
+            var lostRestart = Deserialize(Serialize(lost));
+            lostRestart.CommitNewPair("bbbbbbbb-cccc-4ddd-8eee-ffffffffffff",
+                "11111111-2222-4333-8444-555555555555", new string('b', 43), string.Empty,
+                raw => "synthetic-protected", () => { }, error => { });
+            Check("SL29-" + mode, lost.ObservationPairingGenerationPoisoned
+                && !lost.ObservationPairingGenerationRecoverable && !lost.ObservationPairingGeneration.HasValue
+                && lostRestart.ObservationPairingGenerationPoisoned
+                && !lostRestart.ObservationPairingGenerationKnown && !lostRestart.ObservationPairingGeneration.HasValue
+                && !lostRestart.ObservationBinding().IsComplete
+                && !Serialize(lostRestart).Contains("\"ObservationPairingGenerationRecoverable\":true"),
+                "invalidation of marker-with-lost-raw keeps one durable poison tombstone, never a marker or a generation");
+        }
+        var strictRejected = false;
+        Exception strictError = null;
+        try { DeserializeStrict("{\"SchemaVersion\":8,\"ObservationPairingGenerationRecoverable\":true}"); }
+        catch (Exception error) { strictRejected = true; strictError = error; }
+        Check("SL30", strictRejected
+            && strictError is System.Runtime.Serialization.SerializationException,
+            "the strict DataContract reader rejects the partial marker-without-raw document (loader-model fact, not the guard): "
+            + (strictError == null ? "<accepted>" : strictError.GetType().Name));
         return count;
     }
 

@@ -360,11 +360,95 @@ internal static class FaseDTests
         // Wordt alleen met de hand gebruikt; de normale run doet niets speciaals.
         if (args != null && args.Length > 0)
         {
+            // Owned child for the real SIGKILL preserve proof. Load() streams the
+            // invalid target into the preserve slot; the parent kills this process
+            // while that copy is in flight.
+            if (args.Length == 2 && string.Equals(args[0], "--ledger-preserve-child",
+                    StringComparison.Ordinal))
+            {
+                try
+                {
+                    var childStore = new ObservationLedgerStore(args[1]);
+                    Console.WriteLine("CHILD_PRESERVE_COMPLETE entries=" + childStore.EntryCount
+                        + " preserved=" + (File.Exists(childStore.PreservePath)
+                            ? new FileInfo(childStore.PreservePath).Length : -1L)
+                        + " failedClosed=" + childStore.IsFailedClosed);
+                    return 0;
+                }
+                catch (Exception childError)
+                {
+                    Console.WriteLine("CHILD_PRESERVE_FAILED=" + childError.GetType().Name
+                        + ":" + childError.Message);
+                    return 1;
+                }
+            }
             if (string.Equals(args[0], "--only-driver-ratings", StringComparison.Ordinal))
             {
                 Group("DriverRatingTests", () => DriverRatingTests.Run(Check));
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-normal-observation", StringComparison.Ordinal))
+            {
+                Group("NormalObservationUpgradeTests", () => NormalObservationUpgradeTests.Run(Check));
+                Console.WriteLine("RESULT passed=" + passed + " failed=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-reset-tow-source", StringComparison.Ordinal))
+            {
+                Group("ResetTowSourceTests", () => ResetTowSourceTests.Run(Check));
+                Console.WriteLine("RESULT passed=" + passed + " failed=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-observation", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-observation-pipeline", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-observation-ledger", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-observation-ack", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationAckTests", () => MeasurementObservationAckTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-observation-host", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationHostTests", () => MeasurementObservationHostTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-observation-send", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationSendTests", () => MeasurementObservationSendTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--only-observation-readiness", StringComparison.Ordinal))
+            {
+                Group("MeasurementObservationReadinessTests", () => MeasurementObservationReadinessTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--export-observation-fixtures", StringComparison.Ordinal))
+            {
+                if (args.Length < 2) throw new ArgumentException("doelmap ontbreekt");
+                MeasurementObservationCaptureTests.ExportFixtures(args[1]);
+                MeasurementObservationPipelineTests.ExportFixtures(args[1]);
+                Console.WriteLine("EXPORTED " + args[1]);
+                return 0;
             }
             if (string.Equals(args[0], "--dump-v3", StringComparison.Ordinal))
             {
@@ -384,6 +468,12 @@ internal static class FaseDTests
                 Group("MeasurementTransportTests", () => MeasurementTransportTests.Run(Check));
                 Group("ControlClientTests", () => ControlClientTests.Run(Check));
                 Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
+                Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
+                Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
+                Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
+                Group("MeasurementObservationAckTests", () => MeasurementObservationAckTests.Run(Check));
+                Group("MeasurementObservationSendTests", () => MeasurementObservationSendTests.Run(Check));
+                Group("MeasurementObservationHostTests", () => MeasurementObservationHostTests.Run(Check));
                 Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
                 return failed == 0 ? 0 : 1;
             }
@@ -415,6 +505,14 @@ internal static class FaseDTests
             baselineChecks += Group("MeasurementTransportTests", () => MeasurementTransportTests.Run(Check));
             baselineChecks += Group("ControlClientTests", () => ControlClientTests.Run(Check));
             baselineChecks += Group("MeasurementPipelineTests", () => MeasurementPipelineTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationCaptureTests", () => MeasurementObservationCaptureTests.Run(Check));
+            baselineChecks += Group("ResetTowSourceTests", () => ResetTowSourceTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationPipelineTests", () => MeasurementObservationPipelineTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationLedgerTests", () => MeasurementObservationLedgerTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationAckTests", () => MeasurementObservationAckTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationSendTests", () => MeasurementObservationSendTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationHostTests", () => MeasurementObservationHostTests.Run(Check));
+            baselineChecks += Group("MeasurementObservationReadinessTests", () => MeasurementObservationReadinessTests.Run(Check));
             NonInterferenceDuringDispose("DISABLE_TIMEOUT", "disable during").GetAwaiter().GetResult();
             NonInterferenceDuringDispose("UNPAIR_TIMEOUT", "unpair during").GetAwaiter().GetResult();
             Concurrent60Seconds().GetAwaiter().GetResult();

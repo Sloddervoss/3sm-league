@@ -38,7 +38,27 @@ namespace ThreeSM.EnduranceConnector
         /// <summary>Lokaal segmentsignaal (sessiewissel binnen dezelfde run).</summary>
         public string SegmentId { get; set; }
 
+        /// <summary>
+        /// T13-S2B: optionele capture-identiteit. Alleen de sampler-facing
+        /// aansluiting vult dit; een ontbrekende waarde betekent onbekend en
+        /// levert nooit een observation.
+        /// </summary>
+        public ObservationPairingBinding ObservationPairingBinding { get; set; }
+
+        /// <summary>
+        /// T13-S2B: de context zoals die bij deze tick bekend is. De sampler
+        /// bevriest de eerste waarde voor de rij; latere waarden kunnen alleen
+        /// de fuelstapketen breken, nooit de rijcontext bijwerken.
+        /// </summary>
+        public ObservationLapContext ObservationLapContext { get; set; }
+
         public string CurrentDriverName { get; set; }
+        // Simulator source ID, never the paired account owner.
+        public string CurrentDriverId { get; set; }
+        public int ObservationSchemaVersion { get; set; }
+        public bool? ResetOrTow { get; set; }
+        public double? ResetSourceTime { get; set; }
+        public double? ResetSourceLap { get; set; }
 
         /// <summary>Ruwe SDK <c>OnPitRoad</c>, geen SimHub-fallback naar false.</summary>
         public bool? OnPitRoad { get; set; }
@@ -198,6 +218,9 @@ namespace ThreeSM.EnduranceConnector
         private readonly DateTime _startedAtUtc;
         private readonly string _segmentId;
         private readonly string _firstDriverName;
+        private readonly ObservationLapCapture _observation;
+        private readonly string _frozenObservedSessionId;
+        private readonly bool _hasFrozenObservedSession;
         private readonly List<string> _pitVisitIds = new List<string>();
         private readonly List<string> _wearObservationIds = new List<string>();
         private readonly CoverageTracker _temperature = new CoverageTracker();
@@ -224,6 +247,19 @@ namespace ThreeSM.EnduranceConnector
 
         public LapAccumulator(int lapNumber, DateTime startedAtUtc, string segmentId, string driverName,
             LapAccumulatorOptions options)
+            : this(lapNumber, startedAtUtc, segmentId, driverName, options, false, null, null, null, false)
+        {
+        }
+
+        /// <summary>
+        /// T13-S2B: de echte samplerroute. <paramref name="freezeObservedSession"/>
+        /// is true voor elk door de sampler gemaakt aggregaat; de waarde mag null
+        /// zijn en wordt dan als "onbekend" bevroren in plaats van later gevuld.
+        /// </summary>
+        internal LapAccumulator(int lapNumber, DateTime startedAtUtc, string segmentId, string driverName,
+            LapAccumulatorOptions options, bool observationCaptureEnabled,
+            ObservationPairingBinding observationPairingBinding, ObservationLapContext observationLapContext,
+            string frozenObservedSessionId, bool freezeObservedSession)
         {
             _lapNumber = lapNumber;
             _startedAtUtc = startedAtUtc;
@@ -231,6 +267,10 @@ namespace ThreeSM.EnduranceConnector
             _segmentId = segmentId;
             _firstDriverName = driverName;
             _options = options ?? LapAccumulatorOptions.Default();
+            _frozenObservedSessionId = frozenObservedSessionId;
+            _hasFrozenObservedSession = freezeObservedSession;
+            _observation = new ObservationLapCapture(observationCaptureEnabled, observationPairingBinding,
+                observationLapContext, frozenObservedSessionId, segmentId);
         }
 
         public int LapNumber { get { return _lapNumber; } }
@@ -247,6 +287,16 @@ namespace ThreeSM.EnduranceConnector
         /// uit sessietijd, want sessietijd staat stil in de pit en in pauzes.
         /// </summary>
         public void Add(TelemetrySample sample)
+        {
+            Add(sample, sample != null && sample.ObservedAtUtc.Kind == DateTimeKind.Utc);
+        }
+
+        /// <summary>
+        /// Verwerkt één geaccepteerde tick. <paramref name="timestampUtcKnown"/>
+        /// is de provenance van vóór de legacy UTC-normalisatie; false betekent
+        /// dat deze tick nooit als observationfeit mag doorgaan.
+        /// </summary>
+        internal void Add(TelemetrySample sample, bool timestampUtcKnown)
         {
             if (sample == null) return;
             var dt = _previous == null ? 0.0 : (sample.ObservedAtUtc - _lastAtUtc).TotalSeconds;
@@ -304,6 +354,17 @@ namespace ThreeSM.EnduranceConnector
 
             _previous = sample;
             _lastAtUtc = sample.ObservedAtUtc;
+            _observation.AddAccepted(sample, timestampUtcKnown);
+        }
+
+        /// <summary>
+        /// De capture-fence wordt door de sampler op elke tick aangeboden, ook op
+        /// ticks die niet geaccepteerd worden. Dit telt geen sample en maakt geen
+        /// feit; het kan alleen een latere observation weigeren.
+        /// </summary>
+        internal void ObservePairing(ObservationPairingBinding current)
+        {
+            _observation.ObservePairing(current);
         }
 
         /// <summary>Een pitbezoek dat deze ronde raakt (context, geen identiteit).</summary>
@@ -381,7 +442,12 @@ namespace ThreeSM.EnduranceConnector
                 MaxGapSeconds = coverage == null ? (double?)null : CoverageRules.MaxGap(coverage),
                 ValidDurationSeconds = coverage == null ? (double?)null : CoverageRules.MaxDuration(coverage),
                 PitVisitIds = _pitVisitIds.Count == 0 ? null : _pitVisitIds.ToArray(),
-                WearObservationIds = _wearObservationIds.Count == 0 ? null : _wearObservationIds.ToArray()
+                WearObservationIds = _wearObservationIds.Count == 0 ? null : _wearObservationIds.ToArray(),
+                HasFrozenObservedSession = _hasFrozenObservedSession,
+                FrozenObservedSessionId = _frozenObservedSessionId,
+                ObservationPairingBinding = _observation.Enabled ? _observation.PairingBinding : null,
+                ObservationContext = _observation.Enabled ? _observation.LapContext : null,
+                ObservationResult = _observation.Close(_startedAtUtc, ended, extraReasons)
             };
             return aggregate;
         }
@@ -423,6 +489,28 @@ namespace ThreeSM.EnduranceConnector
         public string[] WearObservationIds { get; set; }
 
         /// <summary>
+        /// T13-S2B: true voor elk door de echte sampler gemaakt aggregaat. De
+        /// waarde <see cref="FrozenObservedSessionId"/> mag dan null zijn en wordt
+        /// niet vervangen door een latere afleversessie.
+        /// </summary>
+        public bool HasFrozenObservedSession { get; set; }
+
+        /// <summary>De sessiestring zoals die bij StartLap bekend was (of null).</summary>
+        public string FrozenObservedSessionId { get; set; }
+
+        /// <summary>Onveranderlijke capture-fence van StartLap.</summary>
+        public ObservationPairingBinding ObservationPairingBinding { get; set; }
+
+        /// <summary>Onveranderlijke beschrijvende context van StartLap.</summary>
+        public ObservationLapContext ObservationContext { get; set; }
+
+        /// <summary>
+        /// Uitkomst van de pure observation-core, of een lokale weigering. Null
+        /// betekent dat observation voor deze ronde niet is ingeschakeld.
+        /// </summary>
+        public ObservationCaptureResult ObservationResult { get; set; }
+
+        /// <summary>
         /// Koppelt een pitbezoek aan deze ronde. Het bezoek-ID is context; de
         /// waargenomen brandstoftoevoer telt maar op één ronde (de ronde waarin de
         /// delta is waargenomen), ook als het bezoek zelf over de finishlijn liep.
@@ -461,7 +549,7 @@ namespace ThreeSM.EnduranceConnector
                 SummaryUid = summaryUid,
                 SummaryId = summaryId,
                 SegmentId = SegmentId,
-                ObservedSessionId = observedSessionId,
+                ObservedSessionId = HasFrozenObservedSession ? FrozenObservedSessionId : observedSessionId,
                 LapNumber = LapNumber,
                 StartedAtUtc = StartedAtUtc,
                 EndedAtUtc = EndedAtUtc,
@@ -489,6 +577,23 @@ namespace ThreeSM.EnduranceConnector
                 PitVisitIds = PitVisitIds,
                 WearObservationIds = WearObservationIds
             };
+        }
+
+        /// <summary>
+        /// T13-S2B: expliciete compositie voor een observation-dragende rij.
+        /// Alleen de caller die deze ronde in de observation-lane plaatst, gebruikt
+        /// dit; de gewone <see cref="ToSummary"/> en de pipeline publiceren nooit
+        /// automatisch een observation. Bij een niet-geaccepteerde observation
+        /// komt null terug en blijft de ronde legacy.
+        /// </summary>
+        public MeasurementLapSummaryRecord ToObservationSummary(string summaryUid, string summaryId)
+        {
+            if (ObservationResult == null || !ObservationResult.HasObservation
+                || ObservationResult.Observation == null) return null;
+            var record = ToSummary(summaryUid, summaryId,
+                HasFrozenObservedSession ? FrozenObservedSessionId : null);
+            record.Observation = ObservationResult.Observation;
+            return record;
         }
     }
 }

@@ -1,0 +1,544 @@
+# Pitwall learning — P2 lokale tussenstand
+
+P2 is nog niet afgerond. Geen toestemming voor productie, P3, fitting, UI-publicatie
+of modelactivatie. Fasebasis: `79ca3381ee880bb145c91c9804da7584fc2b683a`.
+
+## Actueel — S2E5 zero-hop inname lokaal geaccepteerd en geïntegreerd
+
+- Geaccepteerde/gemeten bron `a2ab46f584926162090cf0408e54573d6721b4d6`:
+  **SPEC PASS, QUALITY PASS, performance PASS**. De drie concrete oude bevindingen
+  (UIT-private-read, optionele contention/core-cancel, rollback guard-fallthrough)
+  zijn met onafhankelijke echte SQL-proeven gesloten, niet weggeredeneerd.
+- Nieuwe vaste proef: p95 208.62770000001183 → 184.2744600000151 ms, delta
+  -24.35323999999673 ms. Alle 480 samples, nul aparte policy-HTTP-aanroepen,
+  echte capture positief; parent én reviewer rekenden onafhankelijk na.
+  Geen nieuwe control-hashuitzondering of gunstige meetretry.
+- Parent entrytypecheck exit 0 en 22 gerichte regressies groen. Lokale integratie
+  `af0db2165d816b18278ff22ae0425bbc86083938` op `feat/pitwall-learning-p2`,
+  volledige boom bytegelijk aan reviewbron. Geen push of merge naar main.
+- Parent live-readback van alle zeven eigen containers, zes volumes, interne
+  netwerk, flags UIT en worker gesloten; vervolgens uitsluitend deze resources
+  opgeruimd en afwezigheid teruggelezen. Privé bewijs en exports behouden.
+- Details: `docs/operations/pitwall-learning-s2e5-policy-in-persist.md`.
+  Dit is geen P2-eindacceptatie, productie/testinstallatie, echte enrollment,
+  updaterproef, fitting, modeladvies of UI-activering. Production frontend changes:
+  NONE. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — eerste S2E5 numerieke PASS vóór functionele afkeuring
+
+- Optie 2 lokaal gebouwd: policyfeit als vierde resultaatveld van de bestaande
+  acht-argumenten-persist, met additieve migratie en exacte paired rollback.
+  De Edge valt uitsluitend bij afwezigheid van het veld terug op de oude losse
+  lookup; aanwezig null/ongeldig blijft fail-closed zonder tweede hop.
+- Gemeten bron `5bb2be5521ebf6cdb1cefa19d57cbaf25a5e17bd`; reviewdoel
+  `4b39b8df64960789fbb89bd8ce6d638a203834ec`. Na de vaste proef wijzigde alleen de
+  post-run rollbackverifier `audit.py`. Dat is een expliciete control-hashuitzondering
+  voor review, geen stil herschreven registratie; runtime/SQL/runner onveranderd.
+- **Numeriek PASS**, zelfstandig door parent herberekend uit alle 480 samples:
+  p95 baseline 253.65473300000303 ms, kandidaat 219.09025599999586 ms;
+  delta -34.56447700000717 ms, onder beide ongewijzigde grenzen. Exact één run,
+  40 warmups + 200 gemeten paren per arm; geen retry of verworpen meetpunten.
+- **Nul aparte policy-HTTP-calls** over de hele run; bestaande capability-probes
+  zijn apart geteld. Positieve private capture bewezen, geen fictieve feature-off-PASS.
+- SQL-contracten, elf HTTP-cases, permissie-/revocatieraces, kandidaat-entrytypecheck
+  en 4/16/239 regressies uitgevoerd. Zelfstandige SPEC/QUALITY-review loopt; geen
+  code-/releaseacceptatie suggereren uit uitsluitend testtotalen of numerieke PASS.
+- Safe-disable na gecorrigeerde post-run audit PASS. De audit scheidt zijn eigen
+  fallbackschrijfproef van rollback-only-digests. Mislukte pogingen bewaard; alleen
+  eigen kandidaat-DB hersteld voor die controle, geen meting herhaald. Daarna alleen
+  resterende OFF/HTTP-verificatie hervat, geen DDL opnieuw afgespeeld.
+- Details: `docs/operations/pitwall-learning-s2e5-policy-in-persist.md` en privé
+  `/home/hermes/artifacts/3sm/pitwall-learning-p2-policy-hop-20261114/REPORT.md`.
+  Geen productie-apply, deploy, enrollment, fitting, test/live-UI of plugininstallatie.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E4 gerichte reparatie gereviewd; latency bleef de blokkade
+
+- Gerichte lokale reparatie op basis `85c73b3e`, branch `fix/pitwall-learning-s2e4-latency`.
+  Bevroren bron/harnas `0f33ee19c9459475a2d7a8121bc2453bbf5e2754`; latere commits zijn
+  docs-only en de runtimebytes zijn bytegelijk overgedragen.
+- Drie bestaande Edge-compilerfouten verholpen met expliciete PACE-tupels, een
+  `PromiseLike`-contextport en een smalle SDK-adapter. **Volledige typecheck van de
+  kandidaat-entry: exit 0.** Live baseline blijft exit 1 met dezelfde drie fouten.
+  Geen `any`-cast, `ts-ignore` of configuratieverruiming.
+- Diagnose: de policy-read was onnodig serieel na de geaccepteerde core-persist.
+  Die leesactie start nu pas na core-succes, overlapt bestaande best-effort
+  history-writes en wordt vóór de 202 samengevoegd. Geen cache, TTL, permissie-,
+  identiteits- of 750ms-deadlinewijziging. SQL is niet gewijzigd.
+- **Performance FAIL blijft geldig:** nieuwe vaste proef, 200 paren + 40 warmups per arm.
+  Baseline p95 242,118125 ms, kandidaat 266,899499 ms; +24,781374 ms / +10,235241%.
+  Beide grenzen (+10% én +20 ms) overschreden. Alle 480 samples behouden, geen herhaling.
+  Parent en reviewer herberekenden dit onafhankelijk uit de ruwe data.
+- Onafhankelijke review op de bevroren SHA: **SPEC PASS, QUALITY APPROVED**,
+  performance FAIL als enige blokkade. Twee eigen negatieve controles (seriële
+  volgorde, te vroege start) falen zoals bedoeld; 3/12/239 regressietests groen.
+- Kwalificaties: baseline is de gevangen live bron, dus de delta is pakket-versus-live
+  en níet "de reparatie kostte 24,78 ms"; oorzaak van de historische tail buiten de
+  aangetoonde seriële afhankelijkheid blijft open; clone-residuen en het onvolledige
+  historische helper-ledger blijven gekwalificeerd; `bun` ontbreekt lokaal.
+- Parent las de achtergebleven labomgeving live terug (7 containers, 6 volumes,
+  intern netwerk, 2944 MiB / 2 CPU, alle schakelaars OFF) en verwijderde uitsluitend
+  die exacte eigen resources; afwezigheid teruggelezen. Bewijs en ruwe samples behouden.
+- **Release/integratie geblokkeerd** door de geldige performance-FAIL. Geen merge,
+  push, deploy, enrollment of activatie. Oude→nieuwe automatische updaterproef blijft
+  apart open. Details: `docs/operations/pitwall-learning-s2e4-latency-repair.md`.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
+## Historie — S2E3 realistische cloneproef uitgevoerd; vrijgave geblokkeerd
+
+- Read-only live-catalogus/schema-export en een geïsoleerde HTTP-proef zijn op
+  14 november 2026 uitgevoerd. Harnas/resultaatbron `9375419860163a3788bc880275e69524d0545c65`;
+  applicatie, migraties en plugin bleven bytegelijk aan de geaccepteerde bron.
+- Werkelijke Kong → Edge → Kong → PostgREST → PostgreSQL-route en de uitgevoerde
+  functionele matrix PASS: feature-on capture, deny/missing/error fail-closed,
+  legacy/core-inname, replay/binding/authority en default-off nul extra calls.
+- **Performance FAIL:** vaste geldige proef, 200 gemeten paren + 40 warmups per arm.
+  p95 baseline 201.1858349999966 ms, kandidaat 251.65781199999037 ms;
+  +50.471976999993785 ms / +25.087241852784835%, boven de strengste 20 ms-grens.
+  Parent herberekende alle 480 ruwe samples onafhankelijk; geen gunstige herhaling.
+- **Volledige Edge-entrytypecheck FAIL in beide armen:** dezelfde drie foutklassen;
+  geen nieuwe typecheckregressie aangetoond, maar geen volledig groen bewijs.
+- Gedocumenteerde **safe-disable rollback PASS**, met behouden datahashes en
+  werkende legacy/core-HTTP. Dit is geen volledige byte-/schemarestauratie;
+  die afzonderlijke poort blijft OPEN. Component-/rol-/publicatieverschillen in
+  de clone en beperkte fresh-write-taildekking blijven expliciete kwalificaties.
+- Parent verifieerde de actuele backendmarkers, exacte resourcehandles en alle
+  bevroren manifestbestanden. Alleen de nog schrijvende uitvoerder-CLI-log was na
+  zijn eigen manifest aangevuld; dit is als erratum vastgelegd, niet weggepoetst.
+- Eigen **7 containers, 6 volumes en 1 intern netwerk verwijderd**; afwezigheid
+  teruggelezen. Privé schema-/catalogusexport en ruwe bewijzen blijven behouden.
+- Details: `docs/operations/pitwall-learning-s2e3-clone-result.md`; privé bewijsroot
+  `/home/hermes/artifacts/3sm/pitwall-learning-p2-readonly-clone-20261114/`, waaronder
+  `PARENT-FINAL-VERIFICATION.json` en `PARENT-CLEANUP-VERIFIED.json`.
+- Vervolg vereist gericht latencyonderzoek/herstel en een vaste nieuwe kandidaat,
+  niet een ongewijzigde herproef tot groen. Oude→nieuwe automatische updaterproef
+  blijft afzonderlijk open. Geen fitting, advies, test/live-UI of productieactivatie.
+  Production frontend changes: NONE. PRODUCTIEWIJZIGING: NEE.
+
+## T09 / T10 geaccepteerd en lokaal geïntegreerd
+
+- Gereviewde bron: `3422b47e87c2473c7ccfcfb1f6e331233bd91f6d`.
+- Onafhankelijke SPEC-herkeuring: PASS; zes eerdere blokkades gesloten.
+- Afzonderlijke kwaliteitsreview: APPROVED, geen blokkerende bevindingen.
+- Lokale integratiecommit: `0da53e0e30dceb36604860bb1d7ea4b485dcb1d5`.
+- Parent-run op die integratie: **165/165 learningtests geslaagd**, inclusief
+  bestaande P1-contracttests; Vite-build exit 0. Geen volledige P2-eindverificatie.
+- Nieuwe modules zijn nog niet verbonden met productie-ingest, worker of UI.
+  De DB-adapter volgt in T25; er is nog geen bewijs van betere modelvoorspellingen.
+
+Bewijs buiten Git onder `/home/hermes/artifacts/3sm/`:
+- `pitwall-learning-p2-context-quality-spec-recheck/`
+- `pitwall-learning-p2-context-quality-quality-review/`
+- `pitwall-learning-p2-context-quality-parent/integrated-0da53e0e.json`
+- `pitwall-learning-p2-context-quality-parent/build-0da53e0e.log`
+
+## T11 geaccepteerd en lokaal geïntegreerd
+
+- Gereviewde bron: `efb289bd0573e8ef25673504a6289e4983722cf5`.
+- Onafhankelijke SPEC: PASS; afzonderlijke quality: APPROVED.
+- Lokale integratie: `84de1e893bbf7c052313adf11e54610f1d929f90`.
+- Parent-run: **257/257 learningtests**, Vite-build exit 0.
+- Volledige tijdprecisie en getagde streamidentiteit gerepareerd; oude verworpen
+  bronversies en harnas-errata afzonderlijk bewaard. Geen modelkwaliteitsclaim.
+- Bewijs: `pitwall-learning-p2-tyre-time-precision-spec-review-isolated/` en
+  `pitwall-learning-p2-tyre-time-precision-quality-recheck/` onder de artifactroot.
+- Fysieke bruikbaarheid blijft afzonderlijk van trainingsgeschiktheid en advies.
+
+## T12-acceptatie en resterende P2-poorten
+
+- **T12 geaccepteerd en lokaal geïntegreerd:** gereviewde bron
+  `9ce954ea13cad9390e9ef2364a794b7274f98b14`, SPEC PASS en quality APPROVED.
+  Integratiecommit: `d8127e657e94fdb829d3c07175d4f591738debcc`.
+  De drie T12-bestanden zijn bytegelijk aan de geaccepteerde bron.
+  Parent-integratie: **458/458 learningtests** geslaagd.
+  Volledige suite: **2284 geslaagd / 1 bestaande fout**; de volledige testidentiteit
+  en foutmelding zijn, na expliciete worktreepadnormalisatie, gelijk aan de P1-baseline.
+  Geen nieuwe falende test. Eerste volledige run timeout na 180 s zonder JSON-rapport;
+  geen overgebleven testproces gevonden. Herhaling met 600 s: echte exit 1 en JSON-resultaat.
+  **Vite-integratiebuild ONBEVESTIGD:** foreground-aanroepen werden als serverstart
+  geweigerd; de vervolgens gevraagde tracked background-build werd vóór uitvoering
+  door de gateway-lifecycleguard geblokkeerd: Vite-chunk `node.js` overschrijdt diens
+  script-scangrens van 1 MiB. Geen build-PASS claim, geen guardomzeiling/configwijziging.
+  Dit blijft een open P2-integratiepoort, geen aangetoonde broncode-buildfout.
+  Bewijs: `pitwall-learning-p2-pit-reason-spec-recheck/`,
+  `pitwall-learning-p2-pit-reason-quality-recheck/` en parent-rapporten
+  `integrated-d8127e65.json` / `full-d8127e65-retry600.json`.
+  Eerdere afgewezen bronversies, foutproeven en errata blijven afzonderlijk bewaard.
+- **T13 pure core geaccepteerd en lokaal geïntegreerd:** bron
+  `5025896bdbdd17cfe7526dcd055ac2d029deb9b9`, SPEC PASS en quality APPROVED.
+  Integratie: `fc74bc2437f363f2c452ddc4c45d2f86757ed99e`.
+  Parent op die integratie: **216/216 Deno-tests** en **458/458 learningtests**,
+  beide exit 0; de drie T13-bestanden zijn bytegelijk aan de gereviewde bron.
+  Op die pure-core-integratie waren parser en meetrij-scopebeslissing nog niet aan de receiver gekoppeld;
+  geen complete T13-gegevensketen, bruikbare brandstofpopulatie of leeractivatie bewezen.
+  Bewijs: `pitwall-learning-p2-observation-numeric-spec-recheck/`,
+  `pitwall-learning-p2-observation-core-quality-review/` en parent-log/resultaat
+  `observation-fc74bc24.log` / `learning-fc74bc24.json`.
+- **T13-S1 geaccepteerd en lokaal geïntegreerd:** gereviewde bron
+  `ce5d62c34d78c2d9e32de9bf0835f53db2a90a4e`, onafhankelijke SPEC PASS en
+  afzonderlijke QUALITY APPROVED. Integratiecommit:
+  `58820eed28b6e80c420fe952c20b27f348a39a6b`.
+  Alle gereviewde server-, SQL-, rollback-, test- en contractbestanden zijn bytegelijk
+  aan de kandidaat. De eerder afgewezen `724c841f` blijft ongewijzigd bewaard.
+  De echte Edge-parser classificeert de ruwe meetrij met de device-ID uit de
+  tokenopzoeking; ontbrekende identiteit, vreemde devices en onjuiste rondevensters
+  worden per rij afgewezen. De service-role fallback werkt met minimale helperrechten;
+  verplichte SQL-velden en expliciete nulls worden fail-closed gevalideerd.
+  Parent op de integratie: **239/239 Deno-runtime-tests** (`--no-check --deny-net`),
+  **458/458 learningtests**; volledige Vitest-suite **2284 PASS / 1 bestaande FAIL**.
+  De volledige foutidentiteit en genormaliseerde foutmelding zijn exact gelijk aan
+  de gepinde T12-baseline; geen nieuwe falende test. De volledige Deno-typegraph blijft
+  baseline-rood; runtime PASS is geen typecheck- of build-PASS.
+  SPEC en quality draaiden elk de **298 SQL-harnasasserties**; onafhankelijke
+  aanvullende rol-/NULL- en mutatieproeven staan in hun afzonderlijke rapporten.
+  SQL-verificatie uitsluitend met synthetische fixtures in de geïsoleerde container
+  `pitwall-learning-p2-observation-s1` (geen netwerk/poorten/productiemounts).
+  Parent-readback: 15 laprows, 7 observations, 6 capturebatches, 2 sourcerevisies;
+  `observation_enabled=false` en `capture_enabled=false`.
+  Nieuwe lokale migratie en gepaarde data-preserving rollback:
+  `20261112134500_pitwall_learning_observation_capture.sql`; **niet op productie toegepast**.
+  Feature blijft standaard uit. Het harnas gebruikt expliciet een `older_wrapper_fixture`;
+  actuele batchschrijver is uitgevoerd, nieuwste outer-wrapperdispatch alleen brongecontroleerd.
+  Heractiveren na rollback vereist ook herstel van de forward-P1-projectie; alleen een
+  flag omschakelen is geen ondersteunde heractivatie. Directe trusted-role table-DML heeft
+  alleen size/device-CHECKs, niet de volledige writer-shapevalidatie; dit is geen clientpad.
+  Bewijs: `pitwall-learning-p2-observation-server-spec-recheck/`,
+  `pitwall-learning-p2-observation-server-quality-review/` en parent-resultaten
+  `pitwall-learning-p2-observation-server-evidence/integrated-58820eed-*`.
+  Producer/outbox/quarantaine, echte SDK-verificatie, connectorpublicatie en DLL-wissel
+  zijn niet inbegrepen; geen complete T13- of leeractivatieclaim.
+- **Producer-bouwcontract lokaal geaccepteerd:** `acd6ea3931c241824f03d3c123ec0393dd903a23`,
+  onafhankelijke gerichte preflight PASS; docs-integratie `743c447cdfcdd502c7046141336599a3a4b9bc8e`.
+  PairingBinding en historische LapContext zijn gescheiden; het afzonderlijke
+  observation-ledger laat de normale v1-wachtrij en oude DLL-lezer ongemoeid.
+  Dit is contractacceptatie, geen runtime- of net48/SDK-bewijs.
+  **T13-S2A geaccepteerd en lokaal geïntegreerd:** bron
+  `1dfa5eedf169c7bfacadcf78c768a9801db32f82`, integratie
+  `7876f49469d8534d25474b245a810f1aea046bd5`. SPEC PASS op de bytegelijke
+  runtime van `9bd252bf`; kwaliteitsherkeuring APPROVED op `1dfa5eed` na twee
+  strikt test-only correcties die de null-fuel- en null-name-mutanten afvangen.
+  Gereviewde bron-, test-, project- en interopbestanden zijn bytegelijk aan de integratie.
+  Parent op de integratie: offline projectbuild exit 0; **55/55 observation**,
+  **354/354 measurement**, **710/710 volledige C#-harnastests** en **37/37 echte
+  C#-serializer→Deno-interoproeven**, alle exits 0. Dit is geen volledige
+  Windows/SimHub-net48-pluginbuild of live SDK-bewijs; net48-bewijs is alleen subsetcompilatie.
+  De eerste volledige Vitest-poging op `7876f494` eindigde in een tooltransport-timeout
+  na 420 s, zonder JSON-resultaat en zonder resterend Vitest-proces; oorzaak niet bewezen.
+  De afzonderlijke tracked herhaling is afgerond met **exit 1: 2284 PASS / 1 bestaande FAIL**,
+  geen overgeslagen tests. De volledige failure-identiteit én foutmelding zijn na
+  expliciete worktreepadnormalisatie exact gelijk aan de gepinde T12-baseline;
+  ook de suite-tellingen en falende bestandsidentiteit zijn gelijk. Geen nieuwe
+  regressie aangetroffen; dit is geen volledig groene suite. Bewijs:
+  `full-vitest-7876f494-retry.json` en `full-vitest-7876f494-retry.log`.
+  S2A zelf omvat geen plugin-/sampler-/ledger-/verzendintegratie; geen updater-,
+  versie-, instellingen- of geïnstalleerde-DLL-wijziging.
+  **T13-S2B geaccepteerd en lokaal geïntegreerd:** gereviewde bron
+  `f72eb54802d108342011b33128919031b395618d`, onafhankelijke SPEC PASS en
+  QUALITY APPROVED; integratie `1d7d2b628ee3e4babfd23568a72f17f2bdff96ec`.
+  De volledige gereviewde runtime-, project-, test- en interopbron is bytegelijk.
+  De oorspronkelijke `2ccd73e7` blijft frozen: de quality-blokker Q1 telde een
+  brandstofstap over een SDK-sessiewissel. De minimale contextkey-reparatie en
+  afzonderlijke OP25/OP26-mutantkills sluiten dit; OP27 bewijst de positieve controle.
+  Parent op de integratie: offline restore/build exit 0, 0 warnings/errors;
+  **37/37 pipeline**, **55/55 observation**, **391/391 measurement**,
+  **747/747 volledige C#-harnastests inclusief soak**, **50/50 C#→Deno-interop**,
+  alle exits 0; eigen export 52 bestanden. Geen volledige SDK-/Windows-pluginbuild.
+  Deze componenttests vervangen niet de open P2-Vite-buildpoort of andere baseline-schuld.
+  StartLap bevriest context/binding; pairing-fences gelden ook op overgeslagen ticks.
+  De gewone v1-outbox bevat ook bij lokale opt-in geen observations; capture blijft
+  standaard uit, zonder plugin-/instellingenbedrading of productieactivatie.
+  **Q2 expliciet open:** hergebruik van een door legacy genormaliseerd non-UTC
+  sample kan provenance verliezen. Huidige plugin maakt verse UTC-samples;
+  oplossen en testen vóór bedrading van enige sample-reusing/non-UTC caller.
+  De afzonderlijke duurzame opslag volgt hieronder als S2C1;
+  sendlease, ACK en complete eindketen blijven apart te bouwen/toetsen vóór activatie.
+  Bewijs: `pitwall-learning-p2-observation-sampler-session-spec-recheck/`,
+  `pitwall-learning-p2-observation-sampler-session-quality-recheck/` en
+  `pitwall-learning-p2-observation-sampler-integration/` onder de artifactroot.
+  Bewijs: `pitwall-learning-p2-observation-producer-bounds-spec-recheck/`,
+  `pitwall-learning-p2-observation-producer-quality-review/`,
+  `pitwall-learning-p2-observation-producer-test-quality-recheck/` en
+  `pitwall-learning-p2-observation-producer-integration/` onder de artifactroot.
+  P3/fitting, UI-publicatie en modelactivatie blijven gesloten; de Vite-buildpoort blijft open.
+
+## T13-S2C1 — duurzaam ledger lokaal geaccepteerd
+
+- Gereviewde bron `c5cb018e6d84201ca062130c5b784267ecbbef4d`: onafhankelijke
+  SPEC PASS en QUALITY APPROVED; lokale integratie
+  `7106b7fa2a71421c3ba77102b3a1422f77ceafdf`. Alle gereviewde bestanden bytegelijk.
+- Vier oorspronkelijke crash-/retryfouten en drie aanvullende runtimefouten zijn
+  met onderscheidende old/new-proeven gesloten. De drie testgaten zijn met
+  afzonderlijke mutantkills OL41/OL42/OL43 gesloten; geen productiebeleid gewijzigd.
+- Parent op de exacte integratie: offline restore/build exit 0, 0 warnings/errors;
+  **57/57 ledgertests**, **448/448 meetlaagtests**, **804/804 volledige C#-harnastests
+  inclusief soak** en **50/50 C#→Deno-interop**, alle exits 0. Eigen export: 52 bestanden.
+- Eén los ledgerbestand, onveranderlijke RowJson, 64 entries/1 MiB worst-state
+  UTF-8-reservering, duurzame deferred/quarantine-overgangen en atomische preserve.
+  Onzekere readback geeft geen definitieve legacy-terugvalstatus; geen delivery-API.
+- Bewijs: `pitwall-learning-p2-observation-ledger-certainty-spec-recheck/`,
+  `pitwall-learning-p2-observation-ledger-certainty-quality-recheck/` en
+  `pitwall-learning-p2-observation-ledger-integration/` onder de artifactroot.
+  Afgewezen bronnen/rapporten en mislukte pogingen blijven apart beschreven.
+- ACK-classificatie en duurzame per-rij-afhandeling volgen hieronder als S2C2a;
+  async sendlease, echte beide verzendcallers en plugin-/settingsbedrading volgen
+  afzonderlijk. Geen activering, SDK-/Windows-runtime, productie of volledige
+  P2-buildclaim. Sampler-Q2 (hergebruik non-UTC sample) blijft expliciet open.
+
+## T13-S2C2a — ACK-classificatie en duurzame afhandeling lokaal geaccepteerd
+
+- Gereviewde runtime `71a209a8d0beaa9f0eabd850bb2fe05e25b3ac95`: SPEC PASS.
+  Definitieve bron `f000c49cd388bc8424f1fc9409da1e13be8ec053`: QUALITY APPROVED;
+  alleen 17 testregels toegevoegd, alle andere tracked bytes gelijk. Runtime-SPEC
+  is expliciet overgedragen, niet opnieuw uitgevoerd. Lokale integratie
+  `8e2d4daef01c6b9c4fb66fbd71067ba8ef3b88d7`; gereviewde bestanden bytegelijk.
+- Parent op de integratie: offline restore/Release build exit 0, 0 warnings/errors;
+  **87/87 ACK**, **57/57 ledger**, **535/535 measurement**, **891/891 volledige
+  C#-harnastests inclusief soak**, **50/50 C#→Deno-interop**, alle exits 0.
+  Eigen DLL-export 52 bestanden. Geen volledige Windows-/SimHub-SDK-build.
+- Per-rij ACK-union, revisie-/payload-/epochfences, volledige gemengde offerindexen,
+  tegenstrijdige metadata fail-closed en atomaire cleanup+tellers zijn getest.
+  Quarantaine blijft terminaal bij zowel accepted als tijdelijk ACK; M8 wordt nu
+  door OA40c/OA40b gedood. M7 bewijst OA26's directe in-memory readback.
+- Bronpack compleet gecontroleerd zonder release-uitvoering. Echte Edge-ACKs
+  bevatten `recordRevision`, DB-ACKs `record_revision`; de nieuwe resolver verwerkt
+  beide veilig. De bestaande legacy-parser is niet gerepareerd. `stored:false`
+  kan parser-rejections bevatten; de geaccepteerde policy blijft NotDelivered,
+  geen cleanup/quarantaine. De eerdere onjuiste bronclaim heeft een apart erratum.
+- Bewijs: `pitwall-learning-p2-observation-ack-block-type-spec-recheck/`,
+  `pitwall-learning-p2-observation-ack-quality-review/`,
+  `pitwall-learning-p2-observation-ack-terminal-quality-recheck/` en
+  `pitwall-learning-p2-observation-ack-integration/` onder de artifactroot.
+- Die afzonderlijke S2C2b-module is inmiddels lokaal geaccepteerd; zie hieronder.
+  Bedrading van beide bestaande verzendcallers en lokale Pair/Unpair/settings is
+  nog niet bewezen. Geen activation/release; sampler-Q2 en P2-Vite-buildpoort open.
+
+## T13-S2C2b zelfstandige verzendketen lokaal geaccepteerd
+
+- Runtime-SPEC PASS en volledige runtime-QUALITY APPROVED op `447878bd`.
+  Finale bron `3562e413f88577956d32afe7b0bdf5a4fc8c6b63` versterkt uitsluitend
+  één testbestand (+122 regels); alle 2257 overige tracked blobs bytegelijk.
+  Runtime-SPEC expliciet overgedragen, geen nieuwe SPEC-uitvoering geclaimd.
+  Gerichte onafhankelijke QUALITY APPROVED: OS34 doodt alle zes eerder
+  overlevende UTF-8-/bulkidentiteits-/atomiciteits-/terminaliteitsmutanten.
+- Lokale integratie `7616cd5faf9dd21e288181787b767f74fb7eb5f9`; gereviewde
+  bronbestanden bytegelijk. Parent offline restore/Release-build exit 0;
+  **34 send / 87 ACK / 57 ledger / 37 pipeline / 55 pure / 569 measurement /
+  925 volledige C#-harnasasserties inclusief soak / 50 C#→Deno-interop**, alle
+  geslaagd, alle stage-exits 0; eigen serializer-export 52 bestanden.
+- Eén async lease bewaakt plan/envelope/transport/ACK en lokale pairingcallbacks.
+  Een callback die de timeout overleeft behoudt de lease tot terminale afhandeling;
+  een bevestigde late binding wordt vóór leasehergebruik gepubliceerd.
+  Opties zijn defensief bevroren; bulkquarantaine controleert de exacte rijbinding.
+- OS34 bewijst de exacte **2088-byte** UTF-8-fixturegrens en weigering bij 2087;
+  niet een tot 24576 bytes opgevulde body. De eerdere comment/reportformulering
+  over een exacte 24576-byte body was onjuist; harde bovengrens apart gecontroleerd.
+- Shutdown-/rapportageverharding is geaccepteerd op finale bron
+  `44a5c81717b7f42c4f4100ff1ac1a87f360155b6`; lokale integratie
+  `8d1bf8b0b8689f022c61c4f61c440f40fb45f715`. H1 Dispose en H3 POST-diagnostiek
+  onafhankelijk SPEC/QUALITY goedgekeurd op `19466a65` en bytegelijk overgedragen;
+  H2-F1 apart SPEC PASS / QUALITY APPROVED op `44a5c817`. OS41 faalt uitsluitend
+  op de oude initializer; nieuwe code rapporteert eerdere duurzame quarantaine
+  ook als de tweede planwrite faalt. First-write-failure, all-success, partial-retry
+  en nul nieuwe commits bij een niet-nul historische teller zijn gecontroleerd.
+- Parent op die integratie: offline restore/Release-build 0 warnings/errors;
+  **41 send / 87 ACK / 57 ledger / 37 pipeline / 55 pure / 576 measurement /
+  932 volledige C#-harnasasserties inclusief soak / 50 C#→Deno-interop** geslaagd,
+  alle stage-exits 0; eigen serializer-export 52 bestanden. R1/R2/POST-flag nu
+  gerepareerd, geen nieuwe Windows-/SDK-build geclaimd.
+- W1 blijft open: na unpair met incomplete binding weigert de gemengde route;
+  onafhankelijke legacy-bypass blijft beschikbaar, daadwerkelijke callerbedrading
+  moet dit regelen. Sampler-Q2 blijft een afzonderlijke caller-voorwaarde.
+- Nieuwe bewijzen: `pitwall-learning-p2-observation-send-plan-count-spec-cli/`,
+  `pitwall-learning-p2-observation-send-plan-count-quality-cli/` en
+  `pitwall-learning-p2-observation-send-shutdown-integration/`. De eerder
+  onderbroken SPEC-workers leverden geen oordeel en gelden niet als software-FAIL.
+- Default-off, uitsluitend lokale onderschepte HTTP-proeven. Beide echte callers,
+  plugin/settings/DPAPI/PairingGeneration en capture→ledger blijven onbedraad.
+  Geen Windows-/SimHub-SDK-pluginbuild, live HTTP, model-/performance- of activatieclaim.
+- Bewijs: `pitwall-learning-p2-observation-send-{lease-spec-recheck,quality-review,
+  coverage-quality-recheck,integration}/` onder `/home/hermes/artifacts/3sm/`.
+
+## S2D producer-host: lokaal geaccepteerd en geïntegreerd
+
+- Bronbedrading `5389fcc3ca72474bfecb46bb0ecafee85281dc34`: onafhankelijke SPEC PASS;
+  volledige QUALITY vond geen aangetoonde runtimefout, maar drie Important testgaten.
+- Strikt test-only herstel `8dd96fc0e1340962c27773eda9e394c937c08276`: één testbestand
+  +83 regels, alle 2260 overige tracked bestanden bytegelijk. Gerichte onafhankelijke
+  QUALITY APPROVED: Q1 Stop-flush, Q2 conflicterende gemengde ACK en Q3 eligibility-
+  wissel zonder volgende tick gesloten; M10/M11/M12 bouwen en falen uitsluitend op
+  hun bedoelde assertions. Ongewijzigde runtime-SPEC/QUALITY expliciet overgedragen.
+- Lokale integratie `cd5b46cf1dc32921006d73c253bd72492a1fa557`; volledige Git-boom
+  bytegelijk aan gereviewde kandidaat vóór deze statusdocumentatie.
+- Parent op de integratie: normale offline Release-build exit 0; **65 host / 997
+  volledige C#-harnasasserties inclusief soak / 16 wiring / 50 C#→Deno-interop PASS**,
+  alle zes stages exit 0; eigen serializer-export **52 bestanden**. Selector-totalen
+  overlappen. Dit is geen volledige vendor-pluginbuild of geïnstalleerde runtime.
+- Eén productiehost verbindt Init, verse UTC-samples, pipeline/capture, centrale
+  SendV3, Pair/Unpair en End met dezelfde lazy store/fence/lease. Eén centrale
+  productie-SEND-caller; `MeasurementSender.SendAsync` is een testroute. Eerdere
+  formuleringen over twee productiecallers worden hiermee gecorrigeerd.
+- Default-off en productie-readiness blijven expliciet false. De volledige
+  Windows/SimHub-SDK-compile-only build op Beest is geslaagd vanaf `2f70eb72`:
+  48 echte Compile-items, 0 errors / 1 CS0169-warning; alle 119 bronbestanden
+  gehasht vóór bouwen. Embedded updater en productie-public-key in de echte
+  oude/nieuwe DLL gecontroleerd; geen testsleutel. Nieuwe compile-only DLL blijft
+  versie `0.7.6.2`, SHA-256 `5e24dbdf96276ef0c71ef14fb014d3c14d4c6a8a474fb2de9f36f84012ca0753`.
+  Dit is GEEN release; geïnstalleerde en Desktop-DLL zijn voor/na ongewijzigd.
+  WPF/DPAPI/GUI/SDK-runtime, receiverhandshake, activatie en publicatie blijven open.
+  Bewijs: `pitwall-learning-p2-observation-host-windows/` onder de artifactroot.
+- **Verse-Pair-initialisatie lokaal geaccepteerd en geïntegreerd.** Eerdere
+  aanname dat hiervoor een servernumerieke epoch/SQL-kolom nodig was, is
+  onafhankelijk weerlegd: het bestaande contract definieert een lokale
+  samengestelde fence (device+owner+generatie). Bron `d5d0c3c0` initialiseert
+  generatie 1 uitsluitend na een werkelijk nieuwe, gevalideerde, duurzaam
+  gecommitte Pair met nieuw device én token; onbekende historie wordt niet
+  geadopteerd. SPEC PASS; QUALITY vond de seam correct maar vier
+  testbewijsgaten. Strikt test-only `2c8ffd74` sluit die; gerichte hercontrole
+  APPROVED met eigen mutanten en positieve controles.
+- Lokale integratie **`d9bf8d75e6569526fb058f33429ca608f6fd835d`**; Git-boom
+  bytegelijk aan de gereviewde kandidaat. Parent op de integratie: offline
+  Release-build exit 0; **171 host / 1105 volledige C#-harnasasserties inclusief
+  soak / 17 wiring / 50 C#→Deno-interop**, zes stages exit 0, 52 exports.
+- Updater/versie/sleutel/manifest blijven bytegelijk; versie nog `0.7.6.2`.
+  Geen SQL-, server- of UI-wijziging.
+- **Herstel na een mislukte Pair lokaal geaccepteerd en geïntegreerd** als
+  `b2e280717762badb5802bdb4203dc058217691f9` (boom exact gelijk aan
+  `8caef5ba4e30c46ff869660e41d9ce262c88a2a8`). Runtime `5a5237e9` heeft
+  onafhankelijke SPEC PASS; de strikt test-only aanvulling `8caef5ba` heeft
+  gerichte QUALITY APPROVED, Q-1 gesloten. Het vroegere permanent geblokkeerde
+  tellerherstel is daarmee lokaal opgelost, niet geactiveerd.
+- Eén additief OptionalField `ObservationPairingGenerationRecoverable` bewaart
+  uitsluitend bewezen, veilige en niet-gepoisonede tellerhistorie na invalidatie
+  of een werkelijk geprobeerde allocatie. Alleen een nieuwe geldige Pair in de
+  bestaande commitseam verbruikt de strikt hogere opvolger, duurzaam opgeslagen
+  samen met device/owner/token vóór publicatie. Herhaalde invalidatie/restart is
+  geen autorisatie. Ongemarkeerde historie, poison, ongeldige bereiken en maximum
+  blijven dicht. Een markering zonder ruwe waarde wordt een blijvende bestaande
+  poison-tombstone; ze kan nooit als verse afwezigheid naar 1 worden gewassen.
+  Oude autorisatie en oude meetrij-identiteiten worden niet hersteld.
+- **Parent-integratie opnieuw uitgevoerd:** offline Release-build, **224 host**,
+  **1167 volledige C#-harnasasserties inclusief soak**, **17 wiring**, **50
+  C#→Deno-interop**, **52 serializer-exportbestanden**; zes stages exit 0.
+  Alle builds/toestand van deze integratierun staan in een eigen artifactkopie,
+  niet in de bevroren reviewwerkboom. Selecties overlappen en zijn niet optelbaar.
+  De originele afgekeurde SPEC-1-kandidaat en de QUALITY-testgap blijven bewaard;
+  de definitieve onafhankelijke hercontroles sluiten beide op exacte bronbytes.
+- **Nieuwe volledige Windows/net48/SimHub-build PASS vanaf `b2e28071`:** alle
+  119 gearchiveerde bronbestanden op Beest gehasht; alle 48 Compile-items in de
+  echte compilerregel; 0 errors / 1 bestaande CS0169-warning. DLL 836096 bytes,
+  compile-only `0.7.6.2`, SHA-256
+  `3ccc0ad37288f8f2a542eee7f42131a4f5c6ded632f0aeaff1a10c3d46f4bec2`.
+  Recoveryveld en host zitten in de echte DLL; embedded updater gelijk aan de
+  afzonderlijk in dezelfde build gebouwde updater; productie-public-key gelijk
+  aan de oude geïnstalleerde DLL, testsleutel afwezig. Installed/Desktop-DLL's
+  vóór/na ongewijzigd. Dit vervangt niet de echte runtime- of upgradeproef.
+  Zie [Windows-bewijs](pitwall-observation-recovery-windows-build.md).
+  Artifactroots: `pitwall-learning-p2-observation-generation-recovery-`
+  met suffixen `null-proof-spec/`, `quality/`, `coverage-quality/`,
+  `integration/` en `windows/`. Geen activatie-, installatie- of releaseclaim.
+- **Harde updaterpoort:** de ondersteunde geïnstalleerde oude release moet via de
+  bestaande automatische keten naar de toekomstige nieuwe bevroren release kunnen.
+  Geen nieuwe verplichte bootstrap of handmatige DLL-wissel als vervangend bewijs.
+  Updaterbron, versies, sleutels, manifest en updateblokken zijn behouden; `release.sh`
+  verschilt alleen door het nieuwe broninventaristoken en is niet uitgevoerd.
+  Echte oude DLL→nieuwe DLL download/stage/handshake/afsluiten/installatie/herstart,
+  geladen versie en verse telemetrie moeten vóór vrijgave nog worden bewezen.
+- Bewijs: `pitwall-learning-p2-observation-host-{spec-cli,quality-native,coverage,
+  coverage-quality,integration}/` onder `/home/hermes/artifacts/3sm/`.
+  De oorspronkelijke afgewezen/onderbroken pogingen en mutanten blijven bewaard.
+- Implementatie en terugval: [lokale S2D-notitie](pitwall-observation-host-s2d.md).
+
+## S2E1 client-readiness lokaal geaccepteerd en geïntegreerd
+
+- Gereviewde bron `b32e7bdf28ea63a9d103193635885f41e6253bf0`: één onafhankelijke
+  beoordeling, SPEC PASS gevolgd door QUALITY APPROVED, geen blokkerende punten.
+- Integratie `431d6c9958960b22353fd40a25c1dd19adf3d366`, boom exact gelijk aan
+  de gereviewde kandidaat. Parent: normale offline build, **32 readiness /224 host /
+  1199 volledig inclusief soak /19 wiring /50 interop**,52 exports; zeven stages exit0.
+- De echte legacy- en mixed-antwoordroutes voeden één geheugenlezer. Alleen bestaande
+  receiver-ability is nooit toestemming: zonder een geldig identity-scoped policyfeit
+  blijft readiness false. Policy-subobject en60s TTL zijn lokaal ontwerp, geen reeds
+  gepubliceerd servercontract. Settingsopt-in blijftfalse, geen UI/capability toegevoegd.
+- Echte volledige Windows/net48/SimHub-compile vanaf431d:121 bronbestanden vóór
+  compilatie gehasht, alle49 Compile-items aanwezig,0 fouten/1 bestaandeCS0169-warning.
+  Werkelijke DLL869376bytes, compile-only0.7.6.2, SHA256
+  `801e0958bb76c961c883c2f029e0517791614ca0e87d54d327ed02e796e7b15f`.
+  Nieuwe cache/host/recoveryveld aanwezig; embedded updater gelijk aan dezelfde build,
+  productiepublickey oud/nieuw gelijk en testsleutel afwezig. Installed/Desktop vóór/na
+  ongewijzigd. Geen installatie/SDK-runtime/automatische-upgrade/activatieclaim.
+- Legacy-body pin is bewust uitgebreid met precies drie readonly observerstatements:
+  na verwijderen van uitsluitend die statements is de oude body bytegelijk. ACK/drop/
+  backoff/requestbytes en localbridge blijven gelijk; release.sh alleenbroninventaris.
+- Bewijs onder `/home/hermes/artifacts/3sm/pitwall-learning-p2-observation-readiness-`
+  met suffixen `client/`, `client-review/`, `client-integration/`, `client-windows/`.
+- **Volgende echte afhankelijkheid:** identity-scoped backend-accountpolicyprojectie
+  voor deze receiver, inclusief bestaande learning-policyhandhaving. Er is nog geen
+  consentpublisher, SQL/Edge-deploy of ingeschreven account door dit clientpakket.
+  De oorspronkelijke automatische oude→nieuwe upgradepoort blijft afzonderlijk open.
+- Niet-blokkerende cosmetische/aanvullende testpunten uit de ene review blijven uitgesteld;
+  geen extra audit of test-only modelronde. Production frontend changes: NONE.
+
+## S2E2 backend-policy-publisher lokaal geaccepteerd en geïntegreerd
+
+- Bron `88f0b7e200d6cd3553d05036bd03d81e30cabeb9`: één onafhankelijke run,
+  SPEC PASS gevolgd door QUALITY APPROVED. Geen blokkerende punten.
+  Integratie `e939c32aa5dd73d9d6ebf4a9b8e5a108e3c39277`, boom exact gelijk aan
+  de gereviewde kandidaat; parent geselecteerde Deno12 en preflight6 opnieuw PASS.
+  SQL-/wire-/rolbewijs expliciet overgedragen: reviewer voerde de18 stages opnieuw
+  uit, inclusief verwachte duplicate-forward-refusal (exit3), exacte rollback-
+  object/data-inventaris en zeven PG→Edge→C#-gevallen. Geen derde volledige SQL-run.
+- Parent heeft beide exacte testcontainer-ID's, isolatie en post-rollbacktoestand
+  zelf teruggelezen en de twee eigen wegwerpcontainers daarna verwijderd;
+  afwezigheid van beide ID's is geverifieerd. Ruwe bewijzen blijven bewaard.
+  De KiB→MiB-resourceguard en het stoppen met productiecontainerinspectie zijn
+  vóór de ene review gerepareerd; dezelfde zes unitproeven zijn rood op b931,
+  groen op88. Een casingfout in de parent-cleanupcontrole is als scaffoldfout
+  bewaard en hersteld; geen SQL- of productfout.
+- Nieuwe additieve migratie `20261114000945_pitwall_learning_observation_policy.sql`:
+  alleen `public.simhub_observation_policy_v1(text)` plus ACL, met paired
+  rollback die uitsluitend die functie dropt. Geen tabellen/kolommen/private
+  grants/return-typewijzigingen.
+- Autoriteit: bestaande `public.simhub_devices.token_hash -> owner_user_id`
+  (`revoked_at IS NULL`) LEFT JOIN `pitwall_learning.account_policy`. Onbekend,
+  ingetrokken, geen policy of `capture_enabled = false` is deny/null; een echte
+  toekomstige `policy_version` blijft staan.
+- Edge: `simhub-ingest-v3` publiceert het optionele `observation.policy` alleen
+  na een geaccepteerde V3-write en mode `on`, met dezelfde al gevalideerde
+  tokenhash. Default off betekent nul extra RPC's; fout/timeout/ontbrekende RPC
+  laat het veld weg zonder de 202/ACK te veranderen.
+- Bewezen in een nieuwe wegwerp-PG15.19-instance: echte forward/rollback,
+  effectieve ACL (service_role en nested-service ja; anon/authenticated en
+  nested-authenticated nee; directe private read nee), readonly lookup, A-toegestaan/B-geweigerd plus
+  intrekking op de bestaande P1-guard, en een cross-language
+  PG→Edge-composer→echte net8 `ObservationReadinessReader`-proef.
+- Contract en grenzen:
+  [observation-policy-publisher v1](../contracts/pitwall-learning-observation-policy-publisher-v1.md).
+  Geen deploy, enrollment, clientactivatie of performance-PASS; de bestaande
+  +10%/+20 ms-p95-poort blijft open. De750ms-bovengrens is geen latencybudget
+  of garantie voor de totale requestdeadline. Ook volledige Edge-entrytypecheck
+  blijft open (remote import niet cached); helper/tests zijn wel gecontroleerd.
+- Client/updater blijven bytegelijk aan648996af; de bewezen Windows-build431d
+  wordt daarom overgedragen, niet opnieuw gebouwd. De fixture is minimaal met
+  oudere wrapper, geen live-schema/full-ingestkloon. Volgende echte poort:
+  read-only live-catalogus/schemabasis en geïsoleerde realistische clone-/latencyproef;
+  geen productie-DDL, deployment, enrollment of activering onder deze acceptatie.
+- Bewijs onder `/home/hermes/artifacts/3sm/pitwall-learning-p2-observation-policy-`
+  met suffixen `publisher/`, `publisher-review/`, `publisher-integration/`.
+
+## Beperkingen en vervolgnotities
+
+- Historische P1-records missen meerdere context-/resetvelden; onbekend blijft
+  onbekend. Positieve fixtures zijn synthetisch, geen historische dekkingsclaim.
+- T10 bevat een enkel wear-label; ongelijke hoeken blijven daar ambigu. T11 moet
+  echte per-hoekdata verwerken en niet normale ongelijke banden afwijzen omdat
+  het aggregaat geen enkel label kan leveren.
+- Een handmatig inconsistente CanonicalContext kan buiten de builder vallen;
+  adapters moeten de constructor/trustgrens respecteren, geen losse typecasts.
+- De kwaliteitsreview noemt ontbrekende extra fuel-/vensterbovengrenzen en enkele
+  strengere fail-closed gates als niet-blokkerende vervolgpunten. Deze zijn geen
+  goedkeuring om later onbetrouwbare input te gebruiken.
+- Lokale CLI: Vitest accepteert `--maxWorkers=1`, niet `--minWorkers`.
+  De geweigerde parent-aanroep bleef als apart log bewaard; geen testresultaat.
+
+Productiefrontendwijzigingen: **NONE**. Productie-DDL/data/API/connector: **NONE**.
+PRODUCTIEWIJZIGING: NEE.

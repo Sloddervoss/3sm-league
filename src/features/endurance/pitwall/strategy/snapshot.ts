@@ -26,6 +26,8 @@ export interface SnapshotInput {
   reserveLaps?: number;
   /** Verbruik per ronde uit eerdere rondes, indien beschikbaar. */
   fuelPerLapSamples?: number[];
+  /** Validated authorised learning upper bound. Never lowers the measured safety baseline. */
+  learnedFuelUpper?: number | null;
   /** Gemeten rondetijden; de mediaan daarvan is de gemiddelde rondetijd. */
   lapTimeSamples?: number[];
   /** Al berekende gemiddelde rondetijd, als de aanroeper die zelf heeft. */
@@ -93,6 +95,7 @@ export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
     plannedDurationMinutes: input.plannedDurationMinutes ?? null,
     fuelPerLapSamples: input.fuelPerLapSamples ?? [],
     fuelPerLapPrior: prior ?? null,
+    ...(input.learnedFuelUpper != null ? { learnedFuelUpper: input.learnedFuelUpper } : {}),
     sampleAgeSeconds:
       laatsteMeting == null ? Number.POSITIVE_INFINITY : Math.max(0, (nowMs - laatsteMeting) / 1000),
     pitLaneSeconds: input.pitLaneSeconds ?? null,

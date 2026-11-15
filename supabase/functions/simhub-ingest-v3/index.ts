@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
 import { assertAllowedOrigin, consumeEdgeRateLimit, jsonResponse, readBoundedJson, sha256Hex } from "../_shared/simhub.ts";
 import { resolveTelemetryContext } from "./context.ts";
+import type { TelemetryContextClient } from "./context.ts";
 import { tyreObservationTiming } from "../_shared/tyreObservation.ts";
 import {
   MaxMeasurementBatchBytes,
@@ -19,6 +20,14 @@ import {
   shouldAttemptAggregates,
   snapshotDto,
 } from "../_shared/simhubAggregates.ts";
+import {
+  afterObservationProbe,
+  initialObservationCapability,
+  observationCaptureMode,
+  probeObservationV1,
+  shouldProbeObservation,
+} from "./observationCapability.ts";
+import { resolveObservationPolicy, observationUpgradeMetadata } from "../_shared/observationPolicyV1.ts";
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -28,6 +37,25 @@ declare const Deno: {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+// Adapt the fixed SDK's thenables at the boundary rather than structurally
+// expanding its generic client into the context resolver's small read port.
+const contextClient: TelemetryContextClient = {
+  from: (table) => ({
+    select: (columns) => ({
+      eq: (column, value) => ({
+        maybeSingle: async (): Promise<{ data: unknown; error: unknown }> => {
+          const { data, error } = await service.from(table).select(columns).eq(column, value).maybeSingle();
+          return { data, error };
+        },
+      }),
+    }),
+  }),
+  rpc: async (fn, args): Promise<{ data: unknown; error: unknown }> => {
+    const { data, error } = await service.rpc(fn, args);
+    return { data, error };
+  },
+};
 
 /**
  * Heeft de database de acht-argumentversie van simhub_persist_v3?
@@ -41,6 +69,16 @@ const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSe
  * uitschakelen.
  */
 let aggregatesCapability = initialCapability(0);
+
+/**
+ * T13-S1. De observation-capture staat standaard UIT. Activeren vereist de
+ * env-vlag én een database die de hele package heeft (probe). De client kan
+ * dit nooit zetten: het is geen payloadveld.
+ */
+const OBSERVATION_V1_ENABLED = (Deno.env.get("SIMHUB_OBSERVATION_V1_ENABLED") ?? "")
+  .trim()
+  .toLowerCase() === "true";
+let observationCapability = initialObservationCapability();
 
 const deviceToken = (request: Request): string => {
   const authorization = request.headers.get("authorization") || "";
@@ -110,7 +148,24 @@ Deno.serve(async (request) => {
 
     // V3 dispatch via context resolution + Phase E persistence
     if (version === 3) {
-      const context = await resolveTelemetryContext(token, rawBody, service, sha256Hex);
+      // De probe staat vóór het parsen: zonder bewezen ontvanger wordt een rij
+      // met `observation` expliciet afgekeurd in plaats van stil gestript.
+      if (OBSERVATION_V1_ENABLED && shouldProbeObservation(observationCapability, Date.now())) {
+        const available = await probeObservationV1(async (fn, args) => {
+          const { data, error } = await service.rpc(fn, args);
+          return { data, error };
+        });
+        observationCapability = afterObservationProbe(available, Date.now());
+        if (!available) {
+          console.warn(
+            "simhub-ingest-v3 observation capture unavailable; observation rows are rejected",
+          );
+        }
+      }
+      const observationMode = observationCaptureMode(OBSERVATION_V1_ENABLED, observationCapability);
+      const context = await resolveTelemetryContext(token, rawBody, contextClient, sha256Hex, {
+        observationCapture: observationMode,
+      });
 
       if (context.result === "invalid_device") return jsonResponse(request, { error: "invalid_device" }, 401);
       if (context.result === "revoked") return jsonResponse(request, { error: "invalid_device" }, 401);
@@ -126,12 +181,18 @@ Deno.serve(async (request) => {
       // mee en hoort niet in simhub_telemetry_latest.v3_normalized, want die
       // snapshot is browserleesbaar. De database heeft daarnaast een trigger die
       // de sleutels alsnog verwijdert (tweede wachter).
+      const tokenHash = await sha256Hex(token);
       const baseArguments = {
-        p_token_hash: await sha256Hex(token),
+        p_token_hash: tokenHash,
         p_session_id: context.normalized!.transportSessionId,
         p_sequence: context.normalized!.sequence,
         p_captured_at: context.normalized!.capturedAt,
-        p_v3_normalized: snapshotDto(context.normalized!),
+        // Compose only after parsing/context validation. Never spread raw body
+        // intent/owner fields into this service-role-only SQL request.
+        p_v3_normalized: {
+          ...snapshotDto(context.normalized!),
+          observationPolicyRequested: observationMode === "on",
+        },
       };
       // 0.7.2.0: de meetreeksen gaan als aparte parameters mee — alleen als er
       // iets te sturen is én de database de signatuur (nog) lijkt te hebben.
@@ -209,6 +270,20 @@ Deno.serve(async (request) => {
       if (result !== "accepted") {
         return jsonResponse(request, { error: "internal_error", measurements, aggregates: aggregateStatus }, 500);
       }
+
+      // S2E5: het identity-scoped policyfeit komt nu mee in het resultaat van
+      // de persist-RPC hierboven — dezelfde service-role-transactie, dezelfde
+      // gevalideerde tokenhash. Er is dus geen tweede hop meer op dit pad.
+      // Alleen als de database de additieve kolom niet kent (oudere database
+      // zonder de migratie) valt dit terug op de bestaande begrensde lookup,
+      // zodat de uitrolvolgorde niet fragiel is. `null` in het veld betekent
+      // fail-closed: dan publiceren we niets en doen we géén tweede hop.
+      const pendingPolicy = resolveObservationPolicy(
+        observationMode,
+        row,
+        tokenHash,
+        (fn, args) => service.rpc(fn, args),
+      );
 
       // 0.7.4.0: bewezen rondetijden van de connector. Best-effort, net als de
       // tegenstandersteekproef hieronder: een fout kost de tijd, niet het frame.
@@ -303,11 +378,26 @@ Deno.serve(async (request) => {
         console.error("simhub-ingest-v3 opponent sampling non-fatal", (sampleErr as Error).message ?? "unknown");
       }
 
+      // S2E5: optioneel identity-scoped policyfeit voor de client. Bij een
+      // gemigreerde database komt het uit het persist-resultaat zelf; alleen een
+      // oudere database gebruikt nog de bestaande begrensde fallback. Ontbrekend,
+      // null of malformaat laat `policy` weg en de bestaande 202/ACK blijft
+      // ongewijzigd (fail-closed).
+      const policy = await pendingPolicy;
+
       return jsonResponse(request, {
         accepted: true,
         receivedAt: row.received_at,
         measurements,
         aggregates: aggregateStatus,
+        observation: {
+          enabled: OBSERVATION_V1_ENABLED,
+          mode: observationMode,
+          available: observationCapability.available,
+          ...(policy ? { policy } : {}),
+          ...observationUpgradeMetadata(observationMode, policy,
+            Deno.env.get("SIMHUB_OBSERVATION_V2_DEPLOYED") === "true", context.deviceId, context.ownerUserId),
+        },
       }, 202);
     }
 

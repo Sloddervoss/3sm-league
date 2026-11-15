@@ -36,6 +36,20 @@
     <!-- 0.7.2.0: meetlaag. ID's, wire-DTO's, sampler en rondeaccumulator. -->
     <Compile Include="..\3SM.EnduranceConnector\MeasurementIds.cs" Link="MeasurementIds.cs" />
     <Compile Include="..\3SM.EnduranceConnector\MeasurementEvent.cs" Link="MeasurementEvent.cs" />
+    <!-- T13-S2A: de pure observatiekern deelt exact dezelfde bron als de plugin. -->
+    <Compile Include="..\3SM.EnduranceConnector\ObservationCapture.cs" Link="ObservationCapture.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ObservationSampling.cs" Link="ObservationSampling.cs" />
+    <!-- T13-S2C1: durable observation-ledger, echte filesystemtests. -->
+    <Compile Include="..\3SM.EnduranceConnector\ObservationLedger.cs" Link="ObservationLedger.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ObservationLedgerStore.cs" Link="ObservationLedgerStore.cs" />
+    <!-- T13-S2C2a: ACK-classificatie en duurzame per-rij-toepassing. -->
+    <Compile Include="..\3SM.EnduranceConnector\ObservationAck.cs" Link="ObservationAck.cs" />
+    <!-- T13-S2C2b: bounded async send lifecycle, envelope, planner and transport. -->
+    <Compile Include="..\3SM.EnduranceConnector\ObservationSend.cs" Link="ObservationSend.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\ObservationProducerHost.cs" Link="ObservationProducerHost.cs" />
+    <!-- S2E1: memory-only readiness reader/cache plus both response seams. SimHub-vrij. -->
+    <Compile Include="..\3SM.EnduranceConnector\ObservationReadiness.cs" Link="ObservationReadiness.cs" />
+    <Compile Include="..\3SM.EnduranceConnector\TrackIdentityReader.cs" Link="TrackIdentityReader.cs" />
     <Compile Include="..\3SM.EnduranceConnector\TelemetrySampler.cs" Link="TelemetrySampler.cs" />
     <Compile Include="..\3SM.EnduranceConnector\LapAccumulator.cs" Link="LapAccumulator.cs" />
     <Compile Include="..\3SM.EnduranceConnector\PitServiceTracker.cs" Link="PitServiceTracker.cs" />

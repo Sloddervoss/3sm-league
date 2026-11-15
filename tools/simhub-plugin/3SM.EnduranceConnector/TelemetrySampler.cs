@@ -24,6 +24,13 @@ namespace ThreeSM.EnduranceConnector
         /// <summary>Twee monsters met dezelfde sessietijd (zonder tick) zijn hetzelfde monster.</summary>
         public double DuplicateSessionTimeEpsilonSeconds = 0.0005;
 
+        /// <summary>
+        /// T13-S2B: interne, niet-gebruikersinstelling. Standaard uit; zonder deze
+        /// opt-in verandert er niets aan legacy-rijen en wordt er geen
+        /// observation-state opgebouwd.
+        /// </summary>
+        public bool ObservationCaptureEnabled = false;
+
         public double MinIntervalSeconds
         {
             get
@@ -112,8 +119,15 @@ namespace ThreeSM.EnduranceConnector
         public SamplerOutcome Offer(TelemetrySample sample)
         {
             if (sample == null) return Reject("sample_null");
+
+            // De identiteitsfence hoort bij elke tick, ook bij een duplicate of
+            // een rate-limited tick. Zo kan een pairingwissel niet verdwijnen
+            // zonder één geaccepteerd punt of één verzonnen feit.
+            if (_current != null) _current.ObservePairing(sample.ObservationPairingBinding);
+
             if (sample.ObservedAtUtc == default(DateTime)) return Reject("observed_at_missing");
             var at = sample.ObservedAtUtc;
+            var timestampUtcKnown = at.Kind == DateTimeKind.Utc;
             if (at.Kind != DateTimeKind.Utc) at = at.ToUniversalTime();
             sample.ObservedAtUtc = at;
 
@@ -146,21 +160,25 @@ namespace ThreeSM.EnduranceConnector
                 if (SessionChanged(sample))
                 {
                     CloseCurrent(_lastAcceptedUtc ?? _current.StartedAtUtc, new[] { "session_changed" });
+                    if (sample.ResetOrTow != true) sample.ResetOrTow = null;
                 }
                 else if (SessionTimeWentBackwards(sample))
                 {
                     CloseCurrent(_lastAcceptedUtc ?? _current.StartedAtUtc, new[] { "session_time_reset" });
+                    sample.ResetOrTow = true;
                 }
                 else if (LapChanged(sample, out var gap))
                 {
-                    var reasons = gap ? new[] { "lap_boundary_gap" } : null;
+                    var reasons = sample.LapNumber < _currentLapNumber ? new[] { "lap_counter_reset" }
+                        : gap ? new[] { "lap_boundary_gap" } : null;
                     CloseCurrent(at, reasons);
+                    if (reasons != null) sample.ResetOrTow = true;
                 }
             }
 
             if (_current == null) StartLap(sample);
 
-            _current.Add(sample);
+            _current.Add(sample, timestampUtcKnown);
             _segmentId = sample.SegmentId ?? _segmentId;
             _observedSessionId = sample.ObservedSessionId ?? _observedSessionId;
             _lastAcceptedUtc = at;
@@ -260,8 +278,12 @@ namespace ThreeSM.EnduranceConnector
         private void StartLap(TelemetrySample sample)
         {
             _currentLapNumber = sample.LapNumber ?? 0;
+            // De sessiestring wordt hier bevroren; null blijft null en wordt
+            // later nooit uit een volgende sessie aangevuld.
             _current = new LapAccumulator(_currentLapNumber.Value, sample.ObservedAtUtc,
-                sample.SegmentId ?? _segmentId, sample.CurrentDriverName, _lapOptions);
+                sample.SegmentId ?? _segmentId, sample.CurrentDriverName, _lapOptions,
+                _options.ObservationCaptureEnabled, sample.ObservationPairingBinding,
+                sample.ObservationLapContext, sample.ObservedSessionId, true);
             if (!string.IsNullOrEmpty(sample.SegmentId)) _segmentId = sample.SegmentId;
             if (!string.IsNullOrEmpty(sample.ObservedSessionId)) _observedSessionId = sample.ObservedSessionId;
         }

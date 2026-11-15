@@ -1,5 +1,38 @@
 # Meetlaag 0.7.2.0 — wat er is gebouwd en waar de plugin hem aanroept
 
+## Source-semantics addendum: sampled reset/tow (2026-11-14)
+
+The existing v2 `fuelQuality.resetOrTow` now uses the direct SDK snapshot through
+`BuildMeasurementSample` → `IrSdkImage.PopulateResetEvidence` → `TelemetrySample`
+→ `ObservationLapCapture` → `ObservationCapture` → the existing JSON serializer.
+No channel offset is assumed: presence, scalar count and SDK type come from the
+actual variable headers. `PlayerCarTowTime` must be float seconds in [0,86400];
+positive means towing. Zero alone is not reset absence: a safe sample also requires
+bool `IsOnTrack=1`, bool `IsOnTrackCar=1`, int `PlayerTrackSurface=3` (OnTrack).
+Other physical states, malformed values/types, absent channels or disconnected
+SDK are unknown. Direct double `SessionTime`, int `Lap` and SDK header tick must
+be known, nonnegative and continuous; backwards clock/lap/tick is discontinuity
+evidence. Existing sampler session/clock/lap-reset and lap-gap closure reasons
+also mark the affected capture; no new epoch/authority is introduced.
+
+True is sticky observed tow/discontinuity evidence. False requires at least two
+known-safe accepted samples, increasing source time/ticks, unchanged source lap,
+stable context/driver, gaps at most 1 second in UTC and source time, and row edges
+at most 1 second (reported separately by the existing interval DTO). Unknown is
+sticky for the interval; a safe tail cannot repair it. False means no reset/tow
+OBSERVED within the declared accepted-sample coverage, not proof nothing happened
+between samples or in the reported unsampled edges, just as sampled refuel
+absence is not continuous surveillance. Positive evidence takes precedence over
+unknown coverage. `CanResetToPits`, owner identity and missing payloads are not
+evidence. V1, bootstrap, pairing, ACKs and frozen persisted rows are unchanged.
+
+Metadata verified against https://github.com/LeoAdamek/iracing.rs/blob/master/sample.yaml
+and https://github.com/kutu/pyirsdk/blob/master/vars.txt; the latter project's
+`irsdk.py` defines `TrkLoc.on_track=3`. The metadata describes IsOnTrack as active
+physics with player in car and IsOnTrackCar as active car physics. The local
+C#7.3 tests use SDK-format byte fixtures and the real reader/serializer; live
+Windows SDK channel availability and driving verification remain release gates.
+
 Deze map bevat de meetlaag uit de brief (sectie 2) en het contract in
 `docs/contracts/measurement-ids-v1.md`. Alles hier is **SimHub-vrij** en wordt door
 `3SM.EnduranceConnector.DiagnosticsTests` gecompileerd en getest zonder sim, zonder

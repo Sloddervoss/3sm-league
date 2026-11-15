@@ -132,7 +132,12 @@ export function bindingConstraint(input: BindingInput): BindingResult {
 
 export function advise(snapshot: StrategySnapshot): Advice {
   const reserve = snapshot.reserveLaps ?? 0.5;
-  const fuel = estimateFuelPerLap(snapshot.fuelPerLapSamples, snapshot.fuelPerLapPrior);
+  const measuredFuel = estimateFuelPerLap(snapshot.fuelPerLapSamples, snapshot.fuelPerLapPrior);
+  const learned = snapshot.learnedFuelUpper;
+  const fuel = typeof learned === "number" && Number.isFinite(learned) && learned >= 0.2 && learned <= 15
+    ? { ...measuredFuel, perLap: Math.max(measuredFuel.perLap ?? 0, learned),
+      source: measuredFuel.source === "none" ? "prior" as const : measuredFuel.source }
+    : measuredFuel;
   const perLap = fuel.perLap;
   const resterend = lapsToFinish(snapshot);
   const voorraad = computeLapsOnFuel(snapshot.fuelLitres, perLap, reserve);
