@@ -36,6 +36,16 @@ describe("prospective authoritative fuel evidence", () => {
      expect(qualifyFuelRevision(s)).toBeNull();
    }
  });
+ it("accepts canonical P1 projection without optional legacy columns only with conclusive v2 evidence", () => {
+   const s = source();
+   for (const key of ["pit_lap", "driver_changed", "invalid_reasons", "fuel_added_litres_observed"]) delete s.payload[key];
+   expect(qualifyFuelRevision(s)?.usedLitres).toBe(3);
+   for (const key of ["pitRoad", "refuel", "resetOrTow", "driverChanged"]) {
+     const copy = structuredClone(s);
+     (observation(copy).fuelQuality as Record<string, unknown>)[key] = null;
+     expect(qualifyFuelRevision(copy)).toBeNull();
+   }
+ });
  it("v1 absence of bad observations is not negative evidence", () => {
    const s = source(); observation(s).version = 1; expect(qualifyFuelRevision(s)).toBeNull();
  });

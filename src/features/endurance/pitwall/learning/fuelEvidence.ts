@@ -61,9 +61,15 @@ export function qualifyFuelRevision(source: VisibleFuelRevision): QualifiedFuelO
   const q = o.fuelQuality, c = o.context, cov = o.interval;
   if (o.capture.deviceId !== source.device || q.pitRoad !== false || q.refuel !== false
     || q.resetOrTow !== false || q.driverChanged !== false || !text(q.driverId)
-    || p.complete !== true || p.pit_lap !== false || p.driver_changed !== false
-    || !Array.isArray(p.invalid_reasons) || p.invalid_reasons.length !== 0
-    || p.fuel_added_litres_observed !== 0) return null;
+    || p.complete !== true) return null;
+  // v2 fuelQuality is the required sampled evidence. The legacy optional
+  // bookkeeping columns can be NULL/omitted in a legitimate serialized lap
+  // (P1 strips SQL NULLs); their absence is not a negative observation.
+  // If supplied, they may never contradict the explicit v2 evidence.
+  if (("pit_lap" in p && p.pit_lap !== false)
+    || ("driver_changed" in p && p.driver_changed !== false)
+    || ("invalid_reasons" in p && (!Array.isArray(p.invalid_reasons) || p.invalid_reasons.length !== 0))
+    || ("fuel_added_litres_observed" in p && p.fuel_added_litres_observed !== 0)) return null;
   if (!finite(cov.samples) || !Number.isSafeInteger(cov.samples) || cov.samples < 2
     || !finite(cov.maxGapSeconds) || cov.maxGapSeconds < 0 || cov.maxGapSeconds > 1
     || !finite(cov.unknownSeconds) || cov.unknownSeconds < 0 || cov.unknownSeconds > 1
