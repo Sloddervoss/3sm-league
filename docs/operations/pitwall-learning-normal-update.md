@@ -1,93 +1,103 @@
-# Pitwall learning — normal plugin update (incomplete implementation)
+# Pitwall learning — normal update 0.7.6.3
 
-Authority: Vincent's explicit GO, Discord `1571219534478708778`, 14 November
-2026: extend the existing plugin and pitwall through a normal additive update.
-Personal first; no new pooling, separate plugin, cohort platform or re-pairing
-requirement. Parent owns acceptance and normal publication. Historical P1/P2
-restrictions do not prohibit fitting under this new GO.
+Authority: Vincent's complete normal-update GO, Discord `1571219534478708778`
+(14 November 2026). Personal first; no new cross-account training pool, separate
+plugin, canary programme or re-pairing requirement. Existing credentials,
+updater/signing trust, ACK/outboxes and three plugin panels are preserved.
 
-## Actual source scope and verification
+## Implemented chain
 
-Base: `d83bcf8cf89a43dc77ba5bc7aa23386de7c1095f`.
-The only implemented addition is `learning/fuelCandidate.ts` and its synthetic
-unit tests under `src/features/endurance/pitwall/`. It reuses the existing pinned
-`strategy/fuelModel.ts` baseline. It fits a deterministic previous-complete-lap
-ratio using train sessions, calibrates an absolute residual interval on separate
-sessions and evaluates untouched later test sessions. It rejects duplicates,
-unknown qualification, mixed owners/contexts and inconsistent causal chronology.
-It does not authenticate source claims. `qualified: true` is not evidence of
-server authorization; no production caller may construct it from client intent.
+- Existing update → automatic observation mode for missing legacy settings;
+  explicit local disable and existing server-policy refusals remain respected.
+- Sampled SDK tow/reset/clock continuity supplies v2 fuel-quality evidence.
+  Unknown v2 facts never become false; safe tails cannot repair unknown intervals.
+- Authenticated ingestion accepts optional v2 observations and captures immutable
+  P1 revisions. P1 history stays non-training/as-of-unverifiable.
+- Restricted worker records its first visibility, forecasts a not-yet-started
+  full lap, and labels only a later exact owner/device/context/session/lap match.
+- Actual executable consumes the bounded queue, fits the deterministic personal
+  fuel candidate, stores an immutable manifest and activates its deployment.
+- The authenticated device reader and additive team reader verify current
+  policy, source/context, model hash/version, freshness and model expiration.
+  Team lookup delegates to the same ownership/admin gate: it does not share
+  another member's personal model merely because they belong to the same team.
+- Normal endurance route: `PitwallTab` → `usePitwallData` / repository → separate
+  optional learning query → `usePitwallStrategy` → snapshot → `advise`.
+  The device sandbox is also connected, but is not the acceptance surface.
+  Missing, denied, malformed, stale or nonresponding learning stays baseline.
 
-This is not the requested useful vertical slice. There is no automatic enrollment
-change, prospective authority adapter, worker, persistence migration, authorised
-read contribution or actual learned fuel consumer in this implementation. Do not
-release it as a completed learner. Existing advice remains entirely baseline.
+The required quality facts are the explicit sampled v2 `fuelQuality` fields.
+Legacy optional lap bookkeeping may be omitted by the actual serializer/P1 null
+projection. Its absence is not evidence; supplied contradictory values reject.
+The canonical C# serializer → real Edge parser → real service-role batch writer
+→ private projection → strict qualification replay verifies this boundary.
 
-Actual checks:
-- Candidate Vitest: 14 synthetic tests passed; targeted ESLint exit 0.
-- Learning and strategy Vitest: 655 tests passed in 18 files, exit 0.
-- Package typecheck: exit 2, diagnostics retained in private artifacts. No
-  candidate-file diagnostic; exact clean-base diagnostic comparison not completed.
-- Package build: exit 1 at the existing environment precheck; public Supabase
-  build configuration was absent. No credentials were read or invented.
-- No real SQL role/contract/rollback or end-to-end wire test was completed.
-- Ingest, updater, ACK/outbox and accepted migration bytes are unchanged. Accepted
-  S2E5 performance evidence remains historical evidence of those unchanged bytes;
-  it does not validate this incomplete learner. No timing trial was repeated.
+## Candidate/serving contract
 
-## Registered candidate thresholds, not a serving authorization
+`personal-fuel-v1`, `previous-complete-lap-v1`: at least 100 qualified examples,
+20 independent chronological session groups, 10 train / 5 calibration / 5 test
+sessions. MAE improves at least 10%, mean underprediction does not worsen;
+held-out interval coverage at least 90%, full width at most 20% of median
+prediction, ratio drift at most 10%. Models expire after seven days.
+These are eligibility checks, not claims of driving accuracy. Existing reserve
+and finish policies remain; a learned upper bound never lowers measured fuel.
 
-Version `personal-fuel-v1`, features `previous-complete-lap-v1`:
-100 qualified laps, 20 independent chronological session groups, at least
-10 train / 5 calibration / 5 test sessions. Minimum 10% MAE improvement over the
-existing baseline; no worse mean underprediction. Nominal 90% interval with
-actual held-out coverage at least 90%, full width at most 20% of median holdout
-prediction; holdout median consumption-ratio drift at most 10% from training.
-These limits were written before the first candidate test execution. A seven-day
-age limit is declared for a future adapter; no serving/expiration implementation
-exists. No threshold is asserted to confer production accuracy or safe ACTIVE
-advice. Reserve and finish policies have not changed.
+## Frozen executable artifacts
 
-## Actual gaps and release ordering
+- Plugin source: `843c8a0097d537ce1b2eaa6f70c82cccd09749c7`; later backend/frontend
+  commits leave the plugin subtree byte-identical. Actual full Windows vendor
+  Release build: 49 compile inputs, embedded updater verified, production key
+  preserved, test define absent. Installed/Desktop DLLs unchanged by compilation.
+- DLL: `3SM.EnduranceConnector-0.7.6.3.dll`, 880128 bytes,
+  SHA-256 `9e3d9cfcdd2a779c73315a9ca1385d624ae6eea7496a7d34d964ac76b6ede220`.
+- Worker immutable image:
+  `sha256:e93a4b051ed33abe074bcc964f26b0d2d3ebdc64a27eb232e62df2bc5f8f05ca`.
+  Source inventory SHA-256:
+  `b77f2c555782a0f62d43c6f69ef4aada11a685b3576395ea028d59c213571633`.
+  Run non-root/read-only, 256 MiB, 0.25 CPU, 64 PIDs, no bind mounts or ports.
+  Deployment template: `deploy/pitwall-learning.compose.yml`; protected connection
+  env remains outside Git and uses only the dedicated worker role.
 
-The current client requires a hidden default-false flag and a known local pairing
-generation; older configurations lack the latter. A normal update needs a durable
-prospective epoch transition which preserves poisoned/high-watermark evidence,
-not a reset/adoption of historical state. Server policies must provision only
-missing eligible personal accounts, never overwrite denial rows or resurrect
-opt-outs/deletion. Neither change has been implemented here.
+## Executed evidence (not live driving)
 
-Observation v1 deliberately does not carry owner/driver/reset proof and does not
-turn missing pit/refuel facts into negative evidence. The private revision table
-explicitly constrains every current row to non-training/as-of-unverifiable.
-Existing context/quality modules must remain fail-closed. A future adapter must
-establish causal authority before example construction; joining later device
-ownership or treating name continuity as driver identity is not a fix.
+Private root: `/home/hermes/artifacts/3sm/pitwall-learning-normal-update-20261114/`.
+The guarded PG15 fixture uses captured real table/function dependencies, not
+production records; it is not asserted to be a complete production-schema clone.
 
-The real initial surface is `PitwallDeviceTestPage.tsx` -> `usePitwallStrategy`
--> `buildStrategySnapshot` -> `advise` -> `estimateFuelPerLap`. The normal
-endurance `get_pitwall_data` path and all three existing panels are unchanged.
+- Real elapsed-time prospective forecast → later label, plus refusal/idempotency.
+- Final image with a filled synthetic queue, real fitting and active model,
+  real forecast and later label, normal team reader → strategy (2.5 to 3 L/lap).
+  Its initial 100 examples/20 sessions are synthetic test vectors, not real laps.
+- C# serializer replay uses explicit equal timestamp translation and isolated
+  UUID substitutions; other serializer fields go through the actual Edge parser.
+- Actual normal React component/hook/strategy tests cover permitted contribution,
+  absence, denial, context mismatch, never-answering query and stale telemetry.
+- Automatic enrollment preserves refusal rows and does not enroll old clients.
+- Bounded retention contract exercised, with original source guard retained.
+- Package typecheck has the exact same 16 diagnostics as the pinned base, no new
+  diagnostics. Targeted lint/tests and frontend build are separately recorded.
 
-Parent must not publish until the complete chain and paired disable/rollback have
-been built and verified. Required ordering remains: new SQL/role contracts and
-server acceptance first, then Edge acceptance if necessary, least-privilege
-scheduled worker with capture/worker/shadow/advice independent switches, authorised
-frontend integration, then Windows Release and updater old-to-new validation,
-then the ordinary plugin manifest/publication. Intended version is 0.7.6.3;
-no version/signing/manifest change is made here. No executable production
-provisioning commands are supplied because that runtime is not implemented.
+## Deployment and rollback
 
-Disable/retention/restart: there is no new runtime to disable or roll back. The
-new pure module has no production imports, storage or background activity. The
-existing 7/180/90-day contracts remain unchanged, not newly implemented by this
-work. Windows/device/publication and every worker/deployment gate remain open.
+Production publication remains OPEN until the actual supported old→new device
+update is verified. Build-only is not installed/runtime evidence. Do not start
+SimHub through SSH without permission; simulator control is outside this scope.
 
-Private evidence and exact owned lab handles:
-`/home/hermes/artifacts/3sm/pitwall-learning-normal-update-20261114/REPORT.md`.
-An isolated PG15.19 instance was initialized but never restored with the captured
-schema. Tool approval policy blocked the explicit owned-container cleanup command;
-parent must clean up the handles in the checkpoint. No production SQL, deployment,
-client installation, push, merge, child agent or external training service.
+Before writes, refresh live object/ACL conflicts and drift, record exact forward
+and paired rollback hashes, and verify a restricted backup. The ten named
+`pitwall_learning` migrations belong to this package, not a general backlog sweep.
+Apply schema/contracts first with switches closed, then compatible Edge bytes,
+worker role/immutable service, consumer frontend and approved runtime flags.
+Publish the verified versioned DLL/ZIP and signed normal manifest coherently.
+No new optional endpoint may become an updater or core-telemetry prerequisite.
 
-Impact: no runtime frontend/API/auth/bot behavior or database schema change.
-Deployment impact: none applied. Local test lab cleanup remains required.
+Stop the dedicated worker and disable capture/worker/shadow/advice/enrollment
+before reverse-order paired rollbacks. These are data-preserving safe-disable
+amendments, NOT zero-diff schema restoration. Retain immutable source/model
+provenance and additive structures; never delete evidence to make rollback pass.
+Transport/job retention is seven days, compact evidence/examples 180 days,
+forecast/evaluation records 90 days, and retired model metadata 90 days.
+
+Production DB/Edge/frontend/manifest have not been changed by these local proofs.
+Real driving availability/accuracy, real device upgrade and post-deploy health
+must be reported separately, never inferred from synthetic fixtures.
