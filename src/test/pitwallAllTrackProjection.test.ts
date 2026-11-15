@@ -5,13 +5,13 @@ import { applySvgTransform, inferArrowDirection, orientProjectionPoints, parseSv
 
 const manifest = JSON.parse(readFileSync('public/tracks/layered/manifest.json', 'utf8')) as LayeredTrackManifest;
 
-// Deze tests lopen de volledige catalogus door (424 layouts) en deden gemeten
+// Deze tests lopen de volledige catalogus door (425 layouts) en deden gemeten
 // ~5,4s: net over de standaardlimiet van 5s, waardoor de suite af en toe rood
 // werd zonder dat er iets mis was. Ruimer zetten, niet de asserties versoepelen.
 vi.setConfig({ testTimeout: 30_000 });
 
 describe('Pitwall projection for the complete official track catalog', () => {
-  it('selects all 424 layouts by authoritative ID regardless of display labels', () => {
+  it('selects all 425 layouts by authoritative ID regardless of display labels', () => {
     for (const entry of manifest.tracks) {
       expect(resolvePitwallTrackPath('unrelated name', 'Full Course', manifest, entry.trackId)).toBe(entry.path);
     }
@@ -63,7 +63,7 @@ describe('Pitwall projection for the complete official track catalog', () => {
     expect(inferArrowDirection(parseSvgPointList('0 0 60 0 60 -20 100 10 60 40 60 20 0 20'))?.x).toBeGreaterThan(0.9);
   });
   it('resolves every official circuit/layout combination to its own SVG', () => {
-    expect(manifest.count).toBe(424);
+    expect(manifest.count).toBe(425);
     for (const entry of manifest.tracks) {
       const escapedConfig = entry.configName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const circuit = entry.configName ? entry.name.replace(new RegExp(`\\s+-\\s+${escapedConfig}$`), '') : entry.name;
@@ -71,7 +71,7 @@ describe('Pitwall projection for the complete official track catalog', () => {
     }
   });
 
-  it('finds the official active course and start/finish layers in all 424 SVGs', () => {
+  it('finds the official active course and start/finish layers in all 425 SVGs', () => {
     for (const entry of manifest.tracks) {
       const svg = readFileSync(`public/tracks/layered/track-${entry.trackId}.svg`, 'utf8');
       expect(svg, `${entry.name}: active course`).toContain('filter="url(#activeColor)"');
