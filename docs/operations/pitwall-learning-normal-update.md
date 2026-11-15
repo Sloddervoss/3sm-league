@@ -98,6 +98,9 @@ provenance and additive structures; never delete evidence to make rollback pass.
 Transport/job retention is seven days, compact evidence/examples 180 days,
 forecast/evaluation records 90 days, and retired model metadata 90 days.
 
-Production DB/Edge/frontend/manifest have not been changed by these local proofs.
-Real driving availability/accuracy, real device upgrade and post-deploy health
-must be reported separately, never inferred from synthetic fixtures.
+The preceding sections record pre-publication local proofs, not the current live
+state. Deployment and the actual normal 0.7.6.2 → 0.7.6.3 device upgrade are recorded
+in `2026-11-15-simhub-0.7.6.3-publication.md`. That execution record distinguishes
+successful installation/heartbeat and separately rendered installed-DLL panels
+from the still-open in-app UI and fresh-driving-telemetry gates. Driving accuracy
+must never be inferred from synthetic fixtures.
