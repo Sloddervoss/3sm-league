@@ -1,0 +1,33 @@
+# Only this service; use an explicit project name and immutable image ID.
+# Connection env file is root-owned mode 0600, outside the repository.
+services:
+  pitwall-learning-worker:
+    image: ${PITWALL_LEARNING_IMAGE:?Pinned immutable worker image required}
+    user: "100:101"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.25
+    pids_limit: 64
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=33554432,mode=1777
+    env_file:
+      - ${PITWALL_LEARNING_ENV_FILE:?Protected worker connection env required}
+    environment:
+      PGUSER: pitwall_learning_worker
+      PGAPPNAME: 3sm-pitwall-learning
+    restart: unless-stopped
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"
+    networks: [supabase]
+networks:
+  supabase:
+    external: true
+    name: ${SUPABASE_NETWORK:?Existing database network required}
