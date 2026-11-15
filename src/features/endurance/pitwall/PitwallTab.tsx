@@ -180,6 +180,7 @@ export const PitwallTab = ({ event }: Props) => {
     strategy,
     v3: isDemo ? null : real.v3 ?? null,
     tyreEstimate: isDemo ? null : real.tyreEstimate,
+    learnedFuelUpper: isDemo ? null : real.learnedFuelUpper,
     plannedLaps:
       strategy?.session_laps_remaining != null && strategy?.last_completed_laps != null
         ? strategy.session_laps_remaining + strategy.last_completed_laps

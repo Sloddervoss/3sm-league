@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchPitwallData } from "../repository/pitwallRepository";
+import { fetchPitwallData, fetchPersonalFuelLearning } from "../repository/pitwallRepository";
+import { resolveFuelLearning } from "./learning/fuelServing";
 import type {
   PitwallStrategyRow, PitwallTimelineEvent, TeamOption,
   PitwallPositionData, PitwallPaceData, PitwallRaceClock,
@@ -144,6 +145,22 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
   const events = rpcData?.timeline ?? [];
   const teams = rpcData ? extractTeams(rpcData) : [];
   const v3 = rpcData?.v3_normalized ?? null;
+  // Optional learning must never delay or fail the existing telemetry query.
+  const learningEnabled = Boolean(eventId && selectedTeamId && actorId && isLive);
+  const learningQuery = useQuery({
+    queryKey: ["pitwall", "personal-fuel", eventId, selectedTeamId, actorId],
+    enabled: learningEnabled,
+    queryFn: () => fetchPersonalFuelLearning(eventId, selectedTeamId!),
+    refetchInterval: 5_000,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const learnedFuel = resolveFuelLearning(
+    learningEnabled && !learningQuery.error ? learningQuery.data : null,
+    isLive ? v3 : null,
+    now,
+  );
   const position = extractPosition(v3);
   const pace = extractPace(v3);
   const raceClock = extractRaceClock(v3);
@@ -243,6 +260,7 @@ export function usePitwallData(eventId: string, initialTeamId: string | null, ac
     context: rpcData?.context ?? null,
     isLive,
     tyreEstimate,
+    learnedFuelUpper: learnedFuel?.upper ?? null,
     fuelSamples: rpcData?.fuel_samples ?? [],
     pitStopMeasurement,
     pitLaneSeconds: pitStopMeasurement.pitLaneSeconds,
