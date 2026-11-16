@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { ChevronDown, FlaskConical } from "lucide-react";
 import type { SimHubDeviceDetail } from "@/features/control-room/connectors/types";
 import type { V3Normalized, PitwallPaceData, PitwallStrategyRow } from "../pitwallHelpers";
@@ -21,6 +21,7 @@ import type { PacePoint } from "../PaceGraph";
 import { trackSectorCount } from "../paceSeries";
 import { PremiumMasthead } from "./PremiumMasthead";
 import { PremiumTimingPanel } from "./PremiumTimingPanel";
+import { useSectorLayoutCount } from "./useSectorLayout";
 import "./testPremium.css";
 
 type TyreState = ReturnType<typeof useTyreModel>;
@@ -83,7 +84,15 @@ export function PitwallPremiumView({
   gap,
   lastSeen,
 }: PitwallPremiumViewProps) {
-  const sectorCount = live ? trackSectorCount(v3) : 0;
+  // Driver names, online state and metric freshness must not reshape this layout.
+  const sectorContext = JSON.stringify([
+    deviceId,
+    v3?.transportSessionId ?? detail.device.last_session_id ?? '',
+    v3?.identity?.trackId ?? v3?.identity?.trackName ?? trackLabel,
+    v3?.identity?.trackConfig ?? '',
+  ]);
+  const sectorCount = useSectorLayoutCount(sectorContext, live ? trackSectorCount(v3) : 0);
+  const deviceSource = useMemo(() => ({ deviceId }), [deviceId]);
   const state = live ? "live" : online ? "stale" : "offline";
 
   const panel = (slot: string, body: ReactNode) => (
@@ -108,7 +117,7 @@ export function PitwallPremiumView({
       />
 
       <div className="ptp-kpi" data-ptp-sectors={sectorCount > 0 ? "known" : "unknown"}>
-        <RaceTelemetryStrip v3={v3} live={live} showClassPosition={false} />
+        <RaceTelemetryStrip v3={v3} live={live} showClassPosition={false} sectorCountOverride={sectorCount} stableLayout />
       </div>
 
       <DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />
@@ -138,6 +147,7 @@ export function PitwallPremiumView({
             contextKey={contextKey}
             gap={gap}
             motionEnabled={motionEnabled}
+            layoutSectorCount={sectorCount}
           />
         </div>
       </div>
@@ -146,7 +156,7 @@ export function PitwallPremiumView({
         {panel(
           "pace",
           <PacePanel
-            paceSource={{ deviceId }}
+            paceSource={deviceSource}
             v3={v3}
             live={live}
             strategy={strategy}
@@ -170,7 +180,7 @@ export function PitwallPremiumView({
           "tyres",
           <VehicleTelemetryPanel v3={v3} live={live} tyreEstimate={tyreEstimate} tyreModel={tyre.estimate} />,
         )}
-        {panel("pitstop", <PitStopAnchor source={{ deviceId }} enabled showExample />)}
+        {panel("pitstop", <PitStopAnchor source={deviceSource} enabled showExample />)}
       </div>
 
       <details className="ptp-more" data-pitwall-more="true">

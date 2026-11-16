@@ -31,7 +31,7 @@ const second = (value: number | null | undefined): string =>
  *
  * De rondedelta vergelijkt uitsluitend laatste met beste; sessietijd is geen stinttijd.
  */
-export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinutes, showClassPosition = true }: { v3: V3Normalized | null; live: boolean; plannedLaps?: number | null; plannedDurationMinutes?: number | null; showClassPosition?: boolean }) {
+export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinutes, showClassPosition = true, sectorCountOverride, stableLayout = false }: { v3: V3Normalized | null; live: boolean; plannedLaps?: number | null; plannedDurationMinutes?: number | null; showClassPosition?: boolean; sectorCountOverride?: number; stableLayout?: boolean }) {
   const data = live ? v3 : null;
   const planLaps = typeof plannedLaps === "number" && Number.isSafeInteger(plannedLaps) && plannedLaps > 0 ? plannedLaps : null;
   const planMinutes = typeof plannedDurationMinutes === "number" && Number.isSafeInteger(plannedDurationMinutes) && plannedDurationMinutes > 0 ? plannedDurationMinutes : null;
@@ -42,7 +42,11 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   const laps = data?.timing?.completedLaps;
   const difference = lapDifference(last, best);
   const player = data?.opponents?.find(o=>o.isPlayer);
-  const sectors = player ? rowSectors(data,player.id,player.lastLapSeconds) : null;
+  const sectorCount = sectorCountOverride === undefined ? trackSectorCount(data)
+    : Number.isInteger(sectorCountOverride) && sectorCountOverride >= 1 && sectorCountOverride <= 16 ? sectorCountOverride : 0;
+  const currentSectors = player ? rowSectors(data,player.id,player.lastLapSeconds) : null;
+  const sectors = sectorCountOverride === undefined ? currentSectors
+    : currentSectors?.length === sectorCount ? currentSectors : null;
   const rest = data?.session?.sessionTimeRemainingSeconds;
   // Waar verliezen we tijd? Per sector het verschil met de snelste tijd in het veld.
   // Alleen binnen dezelfde sectordeling; anders blijft het verschil leeg.
@@ -53,23 +57,24 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
     <div
       className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[5fr_6fr_8fr]"
       data-pitwall-kpi="true"
+      data-sector-count={sectorCount}
     >
-      <KpiGroup label={sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd"} group="sectoren" className={trackSectorCount(data)>3 ? "pitwall-many-sectors" : ""}>
-        {trackSectorCount(data) === 0 && <Cell label="Sectorindeling onbekend" value="—" compact />}
-        {Array.from({length:trackSectorCount(data)},(_,i)=><Cell key={i} compact={trackSectorCount(data)>3} label={`S${i+1}`} value={second(sectors?.[i])} hint={deltas?.[i] != null ? <span className={deltas[i]! > 0 ? "text-red-300" : "text-emerald-300"}>{deltas[i]! > 0 ? "+" : ""}{deltas[i]!.toFixed(3)}</span> : undefined} />)}
+      <KpiGroup label={sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd"} group="sectoren" className={sectorCount>3 ? "pitwall-many-sectors" : ""}>
+        {sectorCount === 0 && <Cell label="Sectorindeling onbekend" value="—" compact />}
+        {Array.from({length:sectorCount},(_,i)=><Cell key={i} compact={sectorCount>3} label={`S${i+1}`} value={second(sectors?.[i])} hint={deltas?.[i] != null ? <span className={deltas[i]! > 0 ? "text-red-300" : "text-emerald-300"}>{deltas[i]! > 0 ? "+" : ""}{deltas[i]!.toFixed(3)}</span> : undefined} />)}
       </KpiGroup>
 
       <KpiGroup label="Rondetijd" group="rondetijd">
         <Cell label="Laatste" value={lap(last)} tone="text-white" />
         <Cell label="Beste" value={lap(best)} tone="text-emerald-300" />
-        {difference != null && <Cell label="Δ laatste − beste" value={`${difference > 0 ? '▲ +' : difference < 0 ? '▼ ' : ''}${difference.toFixed(3)} s`} tone={difference > 0 ? "text-red-300" : "text-emerald-300"} />}
+        {(difference != null || stableLayout) && <Cell label="Δ laatste − beste" value={difference == null ? '—' : `${difference > 0 ? '▲ +' : difference < 0 ? '▼ ' : ''}${difference.toFixed(3)} s`} tone={difference != null && difference > 0 ? "text-red-300" : "text-emerald-300"} />}
       </KpiGroup>
 
       <KpiGroup label="Positie" group="positie">
         <Cell label="P" value={pos != null ? `P${pos}` : '—'} />
         {showClassPosition && <Cell label="K" value={cls != null ? `K${cls}` : '—'} tone="text-sky-300" />}
         <Cell label={planLaps != null ? `Ronde · plan ${planLaps}` : "Ronde"} value={laps != null ? String(laps) : '—'} />
-        {finiteClock(data?.session?.sessionTimeSeconds) && <Cell label={planMinutes != null ? `Sessie · plan ${clock(planMinutes * 60)}` : "Verstreken sessie"} value={clock(data?.session?.sessionTimeSeconds)} />}
+        {(finiteClock(data?.session?.sessionTimeSeconds) || stableLayout) && <Cell label={planMinutes != null ? `Sessie · plan ${clock(planMinutes * 60)}` : "Verstreken sessie"} value={clock(data?.session?.sessionTimeSeconds)} />}
         <Cell label="Resttijd" value={clock(rest)} tone="text-emerald-300" />
       </KpiGroup>
     </div>
