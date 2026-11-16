@@ -1,6 +1,8 @@
-# GO — stabiele bestaande Pitwall-test
+# Implementatie-GO — stabiele bestaande Pitwall-test
 
-Toestemming: Vincent, bericht `1571977526920745071` (maak de benodigde aanpassingen).
+Toestemming voor implementatie: Vincent, “maak de benodigde aanpassingen,”.
+Een afzonderlijke expliciete push-/productie-GO voor deze layout is niet
+vastgelegd. De live webroot, hoofdbranch en SEO-pin blijven daarom ongewijzigd.
 Werkbranch: `fix/pitwall-test-stable-layout-20261116`.
 Exacte basis: `8406d67b7ca2895baf3d22ec066d9eab36560c19`.
 
@@ -37,8 +39,16 @@ houden hun bestaande standaardgedrag. De gevestigde stijl en copy blijven behoud
 - BLOCKED: lokale volledige TypeScript-CLI werd door de lifecycle-scanner
   geweigerd omdat _tsc.js boven de scancap ligt. Dit is geen geslaagde typecheck
   en ook geen gerapporteerde TypeScript-fout. Geen guard-omzeiling gebruiken.
-- PENDING: Node24 releasebuild, browsercontrole echte bestaande route en live
-  readback. De statische CSS-harness van de reviewer vervangt deze controles niet.
+- PASS: eerste Node24 releasebuild op c6410d13, zonder publicatie.
+- PASS: geauthenticeerde bestaande app met echte read-RPCs; bron-CSS gecontroleerd
+  op 390, 1366, 1600 en 1920px, zonder horizontale pagina-overflow. Definitieve
+  gecompileerde bundel wordt apart gecontroleerd; CSS-injectie is geen buildbewijs.
+- De echte browser toonde tijdens de controle geen gecontroleerde sectorreeks.
+  Een live overgang van geldige tijden naar ontbrekende tijden is dus niet
+  geclaimd; de gerichte regressies bewijzen wel metadataretentie en tijdverval.
+- PENDING: definitieve build/browserreadback. Productiepublicatie en live
+  readback wachten op expliciete toestemming. De statische CSS-harness van de
+  reviewer vervangt de controle van de echte app niet.
 
 ## Publicatiegrenzen
 
@@ -54,5 +64,5 @@ oude webroot plus actieve SEO-pin; bereid een gepaarde rollback voor en pin de
 SEO-timer aan de nieuwe release. Readback moet publieke HTML/JS/CSS, de gekozen
 Pitwall-testweergave en de nieuwe pin bevestigen.
 
-Productie vóór publicatie: ongewijzigd.
+Productie vóór publicatie: ongewijzigd. Geen hoofdbranch-fast-forward uitvoeren.
 Beoogde productie-impact: frontend JA; backend/DB/bot/plugin NEE.

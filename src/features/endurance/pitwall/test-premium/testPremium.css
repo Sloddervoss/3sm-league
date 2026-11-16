@@ -418,8 +418,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 9px;
-  line-height: 12px;
+  font-size: 10px;
+  line-height: 14px;
   color: var(--ptp-muted);
 }
 [data-pitwall-test-premium] .ptp-status-block {
@@ -489,9 +489,9 @@
   border-right: 0;
 }
 [data-pitwall-test-premium] .ptp-meta dt {
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 700;
-  line-height: 10px;
+  line-height: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ptp-dim);
@@ -502,8 +502,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 10px;
+  line-height: 13px;
   font-weight: 600;
   color: #c6d1dc;
 }
@@ -652,11 +652,42 @@
    bekende en een onbekende sectorindeling. Urgente extra blokken (in de box,
    stay-out, bandenactie) groeien zoals voorheen. */
 @media (min-width: 1081px) {
-  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-of-type(2) {
-    min-height: 28px;
+  [data-pitwall-test-premium] .ptp-meta {
+    display: grid;
+    grid-template-columns: minmax(180px, 2fr) minmax(100px, 1fr) 86px 100px 100px 170px;
   }
-  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare {
-    min-height: 68px;
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+    grid-template-rows: minmax(20px, auto) minmax(32px, auto) minmax(48px, auto);
+    gap: 4px 16px;
+    align-items: start;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > :not(.pitwall-decision-compare) {
+    grid-column: 1;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > p:first-of-type {
+    grid-row: 1;
+    margin: 0;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-of-type(2) {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 32px;
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 16px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] [data-pitwall-tyre-action] {
+    margin-top: 0;
+    min-height: 36px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > .pitwall-decision-compare {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    min-height: 0;
+    margin-top: 0;
+    align-self: stretch;
   }
   [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-tyre-fuel] > p:first-child {
     font-size: 9px;
@@ -1092,7 +1123,7 @@
   width: 42px;
 }
 [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-gap {
-  width: 66px;
+  width: 80px;
 }
 [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pit {
   width: 36px;
@@ -1402,8 +1433,8 @@
   margin: 0;
   padding: 4px 12px 5px;
   border-top: 1px solid var(--ptp-line-soft);
-  font-size: 8px;
-  line-height: 11px;
+  font-size: 10px;
+  line-height: 13px;
   color: var(--ptp-dim);
 }
 [data-pitwall-test-premium] .ptp-timing-empty {
