@@ -46,9 +46,20 @@ houden hun bestaande standaardgedrag. De gevestigde stijl en copy blijven behoud
 - De echte browser toonde tijdens de controle geen gecontroleerde sectorreeks.
   Een live overgang van geldige tijden naar ontbrekende tijden is dus niet
   geclaimd; de gerichte regressies bewijzen wel metadataretentie en tijdverval.
-- PENDING: definitieve build/browserreadback. Productiepublicatie en live
-  readback wachten op expliciete toestemming. De statische CSS-harness van de
-  reviewer vervangt de controle van de echte app niet.
+- PASS: definitieve Node24 build van
+  `f2e0ac6c378ff1a049c7a2103519b7f79e2147f5`, schoon detached worktree.
+- PASS: definitieve gecompileerde app, zonder CSS-injectie, op dezelfde vier
+  schermbreedtes. Echte pointerselectie en echte read-RPCs; vaste kopgeometrie
+  in het gemeten updatevenster, geen horizontale pagina-overflow.
+- PASS: Pace-toelichting is bereikbaar via de bedoelde interne scroller
+  (196px zichtbaar, 243px inhoud, scrollTop 47). Geen onbereikbare afgekapt tekst.
+- PASS: live SEO-pin blijft `/opt/3sm-release-572d4cf8`; nieuwe JS/CSS ontbreken
+  in de live webroot en origin/main blijft de oorspronkelijke basis.
+- WACHT OP GO: productiepublicatie en live readback. De definitieve bewijzen
+  staan onder `/home/hermes/artifacts/3sm/pitwall-test-live-review-20261116/`:
+  `FINAL-FRONTEND-PREPARED.json`, `FINAL-COMPILED-BROWSER.json`,
+  `PACE-SCROLL-VERIFIED.json` en `fix-final-tests.json`.
+  Deze afrondingsnotitie verandert uitsluitend documentatie na de gepinde build.
 
 ## Publicatiegrenzen
 
