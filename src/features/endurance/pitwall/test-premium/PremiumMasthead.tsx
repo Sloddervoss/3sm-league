@@ -69,12 +69,10 @@ export function PremiumMasthead({
           <dt>Circuit</dt>
           <dd>{trackLabel || "—"}</dd>
         </div>
-        {teamName && (
-          <div>
-            <dt>Team</dt>
-            <dd>{teamName}</dd>
-          </div>
-        )}
+        <div>
+          <dt>Team</dt>
+          <dd>{teamName || "—"}</dd>
+        </div>
         <div>
           <dt>Connector</dt>
           <dd>{connector ?? "—"}</dd>
@@ -89,12 +87,10 @@ export function PremiumMasthead({
             {sectorCount > 0 ? `${sectorCount} beschikbaar` : "niet beschikbaar"}
           </dd>
         </div>
-        {refreshing && (
-          <div className="ptp-meta-refresh">
+          <div className="ptp-meta-refresh" aria-hidden={!refreshing} style={{ visibility: refreshing ? 'visible' : 'hidden' }}>
             <dt>Update</dt>
             <dd>telemetrie verversen…</dd>
           </div>
-        )}
       </dl>
     </header>
   );

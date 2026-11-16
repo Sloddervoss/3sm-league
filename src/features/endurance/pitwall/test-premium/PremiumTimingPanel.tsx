@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { ChevronRight, Flag, ListOrdered } from "lucide-react";
 import type { V3Normalized, V3Opponent } from "../pitwallHelpers";
 import { renderGap, renderPosition, type StandingsDerivation } from "../standings";
@@ -6,6 +6,7 @@ import { freshMetrics, rowSectors, trackSectorCount } from "../paceSeries";
 import { preciseLapTime } from "../telemetryFormat";
 import { initialTimingState, reduceTimingTransitions } from "./timingTransitions";
 import { useRowFlip } from "./useRowFlip";
+import { useSectorLayoutCount, validSectorLayoutCount } from "./useSectorLayout";
 
 interface Props {
   v3: V3Normalized | null;
@@ -18,6 +19,8 @@ interface Props {
   /** Offline, RPC-fout of een expliciet datagat. */
   gap?: boolean;
   motionEnabled: boolean;
+  /** Shared premium layout metadata; never cached sector measurements. */
+  layoutSectorCount?: number;
 }
 
 type TimingView = "live" | "class";
@@ -125,6 +128,7 @@ export function PremiumTimingPanel({
   contextKey,
   gap = false,
   motionEnabled,
+  layoutSectorCount,
 }: Props) {
   const [view, setView] = useState<TimingView>("live");
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
@@ -132,7 +136,8 @@ export function PremiumTimingPanel({
   const [transition, dispatch] = useReducer(reduceTimingTransitions, initialTimingState());
 
   const rows = standings.rows;
-  const sectorCount = live ? trackSectorCount(v3) : 0;
+  const rememberedSectorCount = useSectorLayoutCount(contextKey, live ? trackSectorCount(v3) : 0);
+  const sectorCount = layoutSectorCount === undefined ? rememberedSectorCount : validSectorLayoutCount(layoutSectorCount);
   const sectorColumns = useMemo(() => Array.from({ length: sectorCount }, (_, n) => n), [sectorCount]);
   const classes = useMemo(() => [...new Set(rows.map(classOf))], [rows]);
   const activeClass = selectedClass && classes.includes(selectedClass) ? selectedClass : classes[0] ?? null;
@@ -220,7 +225,8 @@ export function PremiumTimingPanel({
     const move = pinned ? 0 : moves[r.id] ?? 0;
     const modelName = typeof r.carName === "string" ? r.carName.trim() : "";
     const carName = modelName || (r.isPlayer ? ownCarLabel?.trim() : null) || null;
-    const sectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
+    const currentSectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
+    const sectors = currentSectors?.length === sectorCount ? currentSectors : null;
     const metrics = freshMetrics(v3, r.id);
     // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
     // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
@@ -400,10 +406,22 @@ export function PremiumTimingPanel({
         role="region"
         aria-label="Live timing — scrollbaar klassement"
       >
-        <table className="ptp-timing-table" data-sector-count={sectorCount}>
+        <table className="ptp-timing-table" data-sector-count={sectorCount} style={{ '--ptp-sector-count': Math.max(1, sectorCount) } as CSSProperties}>
           <caption className="sr-only">
             Live timing per klasse met positie, coureur, rondetijden, ronde, gap tot jouw auto en pitstatus.
           </caption>
+          <colgroup>
+            <col className="ptp-col-pos" />
+            <col className="ptp-col-num" />
+            <col className="ptp-col-driver" />
+            <col className="ptp-col-car" />
+            <col className="ptp-col-time" />
+            <col className="ptp-col-time" />
+            {Array.from({ length: Math.max(1, sectorCount) }, (_, n) => <col key={n} className="ptp-col-sector" />)}
+            <col className="ptp-col-lap" />
+            <col className="ptp-col-gap" />
+            <col className="ptp-col-pit" />
+          </colgroup>
           <thead>
             <tr>
               <th scope="col" className="ptp-col-pos">P</th>

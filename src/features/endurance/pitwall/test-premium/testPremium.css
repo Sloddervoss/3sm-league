@@ -343,7 +343,7 @@
 [data-pitwall-test-premium] .ptp-masthead {
   position: relative;
   margin-bottom: 8px;
-  padding: 5px 13px 6px;
+  padding: 4px 12px 5px;
   border: 1px solid var(--ptp-line);
   border-radius: 9px;
   background:
@@ -354,37 +354,38 @@
 [data-pitwall-test-premium] .ptp-brandline {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 7.5px;
+  gap: 6px;
+  font-size: 7px;
   font-weight: 800;
+  line-height: 10px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
 }
 [data-pitwall-test-premium] .ptp-brand {
   color: var(--ptp-orange);
-  font-size: 10px;
+  font-size: 9.5px;
   letter-spacing: 0.12em;
 }
 [data-pitwall-test-premium] .ptp-brand-sub {
   color: #aeb9c5;
 }
 [data-pitwall-test-premium] .ptp-brand-rule {
-  flex: 0 0 38px;
+  flex: 0 0 28px;
   height: 1px;
   background: #2a3542;
 }
 [data-pitwall-test-premium] .ptp-brand-tag {
-  padding: 1px 5px;
+  padding: 0 4px;
   border: 1px solid #2a3542;
   border-radius: 3px;
   color: var(--ptp-dim);
 }
 [data-pitwall-test-premium] .ptp-mast-main {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-top: 2px;
+  gap: 14px;
+  margin-top: 1px;
 }
 [data-pitwall-test-premium] .ptp-mast-title {
   min-width: 0;
@@ -406,36 +407,38 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: "Exo 2", sans-serif;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
-  line-height: 1.02;
+  line-height: 1;
   letter-spacing: 0.005em;
   color: #f3f7fa;
 }
 [data-pitwall-test-premium] .ptp-mast-sub {
-  margin: 1px 0 0;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 9.5px;
+  font-size: 10px;
+  line-height: 14px;
   color: var(--ptp-muted);
 }
 [data-pitwall-test-premium] .ptp-status-block {
   flex: none;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 [data-pitwall-test-premium] .ptp-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 1px 6px;
+  gap: 5px;
+  padding: 0 5px;
   border: 1px solid var(--ptp-line);
   border-radius: 4px;
-  font-size: 8.5px;
+  font-size: 8px;
   font-weight: 800;
+  line-height: 14px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -460,7 +463,9 @@
 }
 [data-pitwall-test-premium] .ptp-readonly {
   font-size: 7px;
-  letter-spacing: 0.12em;
+  line-height: 10px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
   text-transform: uppercase;
   color: var(--ptp-dim);
 }
@@ -468,14 +473,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0;
-  margin: 3px 0 0;
-  padding-top: 3px;
+  margin: 2px 0 0;
+  padding-top: 2px;
   border-top: 1px solid var(--ptp-line-soft);
 }
 [data-pitwall-test-premium] .ptp-meta > div {
   min-width: 0;
-  margin-right: 14px;
-  padding-right: 14px;
+  margin-right: 12px;
+  padding-right: 12px;
   border-right: 1px solid var(--ptp-line-soft);
 }
 [data-pitwall-test-premium] .ptp-meta > div:last-child {
@@ -484,19 +489,21 @@
   border-right: 0;
 }
 [data-pitwall-test-premium] .ptp-meta dt {
-  font-size: 7.5px;
+  font-size: 9px;
   font-weight: 700;
+  line-height: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ptp-dim);
 }
 [data-pitwall-test-premium] .ptp-meta dd {
   margin: 0;
-  max-width: 230px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 9.5px;
+  font-size: 10px;
+  line-height: 13px;
   font-weight: 600;
   color: #c6d1dc;
 }
@@ -514,9 +521,20 @@
 }
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi] {
   gap: 10px;
+  align-items: stretch;
+}
+/* De sectorstrip is de breedste KPI-groep: 3/6/16 kolommen krijgen daar de
+   ruimte, zonder de andere twee groepen hun leesbare waarden te ontnemen. */
+@media (min-width: 1281px) {
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi] {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1.1fr) minmax(0, 1.37fr);
+  }
 }
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] {
-  padding: 6px 12px 7px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 5px 10px 6px;
   border: 1px solid var(--ptp-line);
   border-radius: 9px;
   background: linear-gradient(180deg, #0f151c 0%, #0b1015 100%);
@@ -535,7 +553,7 @@
 }
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div {
   flex: 1;
-  padding-inline: 12px;
+  padding-inline: 8px;
   border-left: 1px solid var(--ptp-line-soft);
 }
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div:first-child {
@@ -549,17 +567,23 @@
   letter-spacing: 0.1em;
   color: var(--ptp-dim);
 }
-[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] .font-mono {
+[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(2) {
   margin-top: 1px;
-  font-size: 24px;
+  white-space: nowrap;
+  font-size: 20px;
   line-height: 1;
   letter-spacing: -0.01em;
 }
-[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] .pitwall-many-sectors .font-mono,
-[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group].pitwall-many-sectors .font-mono {
-  font-size: 18px;
+[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group].pitwall-many-sectors > div > div > p:nth-child(2) {
+  font-size: 16px;
 }
-[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="rondetijd"] .font-mono {
+[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(3) {
+  margin-top: 2px;
+  font-size: 9px;
+  line-height: 11px;
+  font-weight: 700;
+}
+[data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="rondetijd"] > div > div > p:nth-child(2) {
   color: #f2f6f9;
 }
 [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="positie"] > div > div:nth-child(1) .font-mono,
@@ -572,17 +596,17 @@
 [data-pitwall-test-premium] [data-pitwall-decision-band] {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 8px;
-  padding: 5px 14px;
+  padding: 4px 12px 5px;
   border-radius: 9px;
   background: linear-gradient(180deg, #0e141a 0%, #0a0f14 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 [data-pitwall-test-premium] [data-pitwall-decision-band] [role="status"] {
   font-family: "Exo 2", sans-serif;
-  font-size: 16px;
-  line-height: 19px;
+  font-size: 15px;
+  line-height: 18px;
   letter-spacing: 0.01em;
 }
 
@@ -622,11 +646,72 @@
   border-radius: 6px;
 }
 
+/* Vaste plekken in de beslissingsband. De reden houdt twee regels ruimte en de
+   vergelijkingsstrook houdt haar eigen hoogte, ook als er (nog) geen
+   tyre/fuel-vergelijking is. Daardoor verschuift de main-zone niet tussen een
+   bekende en een onbekende sectorindeling. Urgente extra blokken (in de box,
+   stay-out, bandenactie) groeien zoals voorheen. */
+@media (min-width: 1081px) {
+  [data-pitwall-test-premium] .ptp-meta {
+    display: grid;
+    grid-template-columns: minmax(180px, 2fr) minmax(100px, 1fr) 86px 100px 100px 170px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+    grid-template-rows: minmax(20px, auto) minmax(32px, auto) minmax(48px, auto);
+    gap: 4px 16px;
+    align-items: start;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > :not(.pitwall-decision-compare) {
+    grid-column: 1;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > p:first-of-type {
+    grid-row: 1;
+    margin: 0;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-of-type(2) {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 32px;
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 16px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] [data-pitwall-tyre-action] {
+    margin-top: 0;
+    min-height: 36px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content > .pitwall-decision-compare {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    min-height: 0;
+    margin-top: 0;
+    align-self: stretch;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-tyre-fuel] > p:first-child {
+    font-size: 9px;
+    line-height: 12px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare ul {
+    margin-top: 2px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare li {
+    font-size: 11.5px;
+    line-height: 16px;
+  }
+  [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-binding-sentence] {
+    margin-top: 2px;
+    font-size: 10.5px;
+    line-height: 14px;
+  }
+}
+
 /* ── Hoofdraster ───────────────────────────────────────────────────────── */
 
 [data-pitwall-test-premium] .ptp-main {
   display: grid;
-  grid-template-columns: minmax(380px, 0.9fr) minmax(0, 2fr);
+  grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
   gap: 8px;
   align-items: stretch;
   margin-bottom: 8px;
@@ -636,10 +721,12 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  min-height: 0;
 }
 [data-pitwall-test-premium] .ptp-timing-col {
   display: flex;
   min-width: 0;
+  min-height: 0;
 }
 [data-pitwall-test-premium] .ptp-timing-col > * {
   width: 100%;
@@ -724,13 +811,46 @@
 [data-pitwall-test-premium] [data-pitwall-slot="trackmap"] p.text-\[10px\] {
   line-height: 13px;
 }
+[data-pitwall-test-premium] [data-pitwall-slot="own-car"] {
+  flex: 0 0 auto;
+}
+
+/* De kaartkolom is op desktop even hoog als de timing, maar de kaart zelf
+   houdt een eigen, gecentreerde zone. De rondebalk blijft onderaan; zo
+   ontstaat geen grote lege lap onder de SVG en geen uitgerekte projectie.
+   Op tablet/mobiel blijft de natuurlijke kaarthoogte (met de bestaande
+   viewport-cap) gelden. */
+@media (min-width: 1081px) {
+  [data-pitwall-test-premium] .ptp-main [data-ptp-circuit] [data-pitwall-slot="trackmap"] > div {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  [data-pitwall-test-premium] .ptp-main [data-ptp-circuit] [data-pitwall-slot="trackmap"] > div > div:first-of-type {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  [data-pitwall-test-premium] .ptp-main [data-ptp-circuit] [data-pitwall-slot="trackmap"] > div > div:first-of-type svg {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+  }
+  [data-pitwall-test-premium] .ptp-main [data-ptp-circuit] [data-ptp-lap-labels] {
+    margin-top: auto;
+  }
+}
 
 /* ── Premium timing ────────────────────────────────────────────────────── */
 
 [data-pitwall-test-premium] .ptp-timing {
   display: flex;
   flex-direction: column;
-  height: clamp(700px, calc(100dvh - 280px), 1200px);
+  height: clamp(560px, calc(100dvh - 450px), 860px);
   min-height: 0;
   max-height: none;
   border: 1px solid var(--ptp-line);
@@ -745,15 +865,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 43px;
-  padding: 7px 13px 8px;
+  min-height: 38px;
+  padding: 5px 12px 6px;
   border-bottom: 1px solid var(--ptp-line-soft);
   background: rgba(255, 255, 255, 0.012);
 }
 [data-pitwall-test-premium] .ptp-panel-head h2 {
-  margin: 1px 0 0;
+  margin: 0;
   font-family: "Exo 2", sans-serif;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: 0.02em;
@@ -816,13 +936,13 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  min-height: 31px;
-  padding: 3px 9px;
+  min-height: 27px;
+  padding: 2px 8px;
   border-bottom: 1px solid var(--ptp-line-soft);
 }
 [data-pitwall-test-premium] .ptp-timing-tabs > button,
 [data-pitwall-test-premium] .ptp-class-filter button {
-  min-height: 23px;
+  min-height: 22px;
   padding: 0 8px;
   border: 0;
   border-radius: 4px;
@@ -870,7 +990,7 @@
 }
 [data-pitwall-test-premium] .ptp-focus-cell {
   min-width: 0;
-  padding: 4px 10px 5px;
+  padding: 3px 10px 4px;
   border-right: 1px solid var(--ptp-line-soft);
 }
 [data-pitwall-test-premium] .ptp-focus-cell:last-child {
@@ -882,8 +1002,9 @@
 }
 [data-pitwall-test-premium] .ptp-focus-label {
   display: block;
-  font-size: 7.5px;
+  font-size: 7px;
   font-weight: 800;
+  line-height: 10px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--ptp-dim);
@@ -964,24 +1085,76 @@
 }
 [data-pitwall-test-premium] .ptp-timing-table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 0;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12.5px;
   line-height: 17px;
+}
+/* Expliciete kolombreedtes. De JSX levert een echte <colgroup> met deze
+   bestaande ptp-col-* klassen en --ptp-sector-count op de tabel. Daardoor
+   staan de kolommen bij 3/6/16 sectoren op dezelfde plek en is de 3-sector-
+   tabel op 1600px breed zonder horizontale overflow. Alleen echt brede
+   sectorindelingen (16) scrollen nog binnen de timingregio. */
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pos {
+  width: 52px;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-num {
+  width: 36px;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-driver {
+  width: 170px;
+  min-width: 0;
+  max-width: none;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-car {
+  width: 148px;
+  min-width: 0;
+  max-width: none;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-time {
+  width: 76px;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-sector {
+  width: clamp(60px, calc(384px / var(--ptp-sector-count, 1)), 84px);
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-lap {
+  width: 42px;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-gap {
+  width: 80px;
+}
+[data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pit {
+  width: 36px;
+}
+/* De kolom bepaalt de breedte; celbreedtes uit de losse kolomregels mogen
+   die niet meer overschrijven. */
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-pos,
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-num,
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-driver,
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-car,
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-time,
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-sector,
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-lap,
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-gap,
+[data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-pit {
+  width: auto;
+  min-width: 0;
+  max-width: none;
 }
 [data-pitwall-test-premium] .ptp-timing-table thead th {
   position: sticky;
   top: 0;
   height: 28px;
   z-index: 3;
-  padding: 5px 7px 5px;
+  padding: 4px 5px;
   border-bottom: 1px solid var(--ptp-line);
   background: #0a0e13;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 800;
   line-height: 13px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   text-align: left;
   white-space: nowrap;
@@ -1003,9 +1176,14 @@
 [data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-pit {
   text-align: center;
 }
+[data-pitwall-test-premium] .ptp-timing-table thead th.ptp-col-gap {
+  padding-inline: 4px;
+  font-size: 9px;
+  letter-spacing: 0.01em;
+}
 [data-pitwall-test-premium] .ptp-timing-table tbody td {
   height: 42px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.035);
   white-space: nowrap;
   color: #aebbc8;
@@ -1177,7 +1355,7 @@
 }
 [data-pitwall-test-premium] .ptp-car-name {
   display: block;
-  max-width: 220px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1199,9 +1377,11 @@
 }
 [data-pitwall-test-premium] .ptp-col-sector {
   width: 78px;
+  padding-inline: 4px;
   text-align: right;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
   color: #b9c9d8;
 }
 [data-pitwall-test-premium] .ptp-col-lap {
@@ -1251,10 +1431,10 @@
 [data-pitwall-test-premium] .ptp-timing-note {
   flex: none;
   margin: 0;
-  padding: 5px 12px 6px;
+  padding: 4px 12px 5px;
   border-top: 1px solid var(--ptp-line-soft);
-  font-size: 8.5px;
-  line-height: 12px;
+  font-size: 10px;
+  line-height: 13px;
   color: var(--ptp-dim);
 }
 [data-pitwall-test-premium] .ptp-timing-empty {
@@ -1357,6 +1537,35 @@
   letter-spacing: 0.03em;
 }
 
+/* Op desktop krijgen de vijf secundaire kaarten één vaste, redelijke zone.
+   Ze lijnen daardoor onderling uit en de rijhoogte verandert niet meer mee met
+   een pitstop- of analysedetail. Inhoud die niet past, scrolt binnen de kaart;
+   op tablet/mobiel blijft de natuurlijke hoogte gelden. */
+@media (min-width: 1081px) {
+  [data-pitwall-test-premium] .ptp-panels {
+    align-items: stretch;
+    grid-auto-rows: 236px;
+  }
+  [data-pitwall-test-premium] .ptp-panels .ptp-panel-wrap {
+    min-height: 0;
+  }
+  [data-pitwall-test-premium] .ptp-panels [data-pitwall-slot] {
+    min-height: 0;
+    height: 100%;
+  }
+  [data-pitwall-test-premium] .ptp-panels [data-pitwall-slot="pitstop"] {
+    min-height: 0;
+    align-self: stretch;
+  }
+  [data-pitwall-test-premium] .ptp-panels [data-pitwall-slot] > div {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #33404d #0a0f14;
+  }
+}
+
 /* ── Meer analyse ──────────────────────────────────────────────────────── */
 
 [data-pitwall-test-premium] .ptp-more {
@@ -1413,11 +1622,42 @@
   color: var(--ptp-dim);
 }
 
+/* Desktop: de KPI-strip houdt één vaste hoogte. De sectorcellen worden op
+   één regel gehouden (6/16 blijven volledig bereikbaar via de eigen strip)
+   en de hintregel houdt haar plek ook als metingen tijdelijk ontbreken. */
+@media (min-width: 1081px) {
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group] > div {
+    min-height: 54px;
+    align-items: flex-start;
+  }
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="sectoren"] > div {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #33404d #0a0f14;
+  }
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi-group="sectoren"] > div > div {
+    flex: 0 0 auto;
+  }
+  /* Bij een compacte 1–6-sectorstrip vullen de cellen de groep; bij 7–16
+     blijft de strip zijn eigen breedte houden en horizontaal scrollen. */
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi][data-sector-count="1"] [data-pitwall-kpi-group="sectoren"] > div > div,
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi][data-sector-count="2"] [data-pitwall-kpi-group="sectoren"] > div > div,
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi][data-sector-count="3"] [data-pitwall-kpi-group="sectoren"] > div > div,
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi][data-sector-count="4"] [data-pitwall-kpi-group="sectoren"] > div > div,
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi][data-sector-count="5"] [data-pitwall-kpi-group="sectoren"] > div > div,
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi][data-sector-count="6"] [data-pitwall-kpi-group="sectoren"] > div > div {
+    flex: 1 1 0;
+  }
+}
+
 /* ── Responsief ────────────────────────────────────────────────────────── */
 
 @media (max-width: 1380px) {
   [data-pitwall-test-premium] .ptp-main {
-    grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.45fr);
+    grid-template-columns: minmax(300px, 330px) minmax(0, 1fr);
   }
   [data-pitwall-test-premium] .ptp-panels {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1429,7 +1669,7 @@
     grid-template-columns: 1fr;
   }
   [data-pitwall-test-premium] .ptp-timing {
-    height: 600px;
+    height: clamp(420px, 68dvh, 560px);
     min-height: 0;
     max-height: none;
   }
@@ -1454,9 +1694,11 @@
     gap: 6px;
   }
   [data-pitwall-test-premium] .ptp-status-block {
+    flex-direction: column;
     align-items: flex-start;
+    gap: 2px;
   }
-  [data-pitwall-test-premium] .ptp-kpi[data-ptp-sectors="unknown"] [data-pitwall-kpi] {
+  [data-pitwall-test-premium] .ptp-kpi [data-pitwall-kpi] {
     grid-template-columns: 1fr;
   }
   [data-pitwall-test-premium] [data-pitwall-decision-band] .pitwall-decision-content {
