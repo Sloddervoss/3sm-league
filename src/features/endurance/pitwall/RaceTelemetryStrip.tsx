@@ -1,5 +1,13 @@
-import { rowSectors, trackSectorCount } from "./paceSeries";
+import { freshPaceHistory, rowSectors, trackSectorCount } from "./paceSeries";
 import { fieldSectorBests, sectorDeltas } from "./sectorField";
+import {
+  buildSectorTimingIndex,
+  describeSectorSlot,
+  formatSectorDelta,
+  formatSectorSeconds,
+  sectorDeltaTone,
+  type SectorSlot,
+} from "./sectorTiming";
 import { lapDifference } from './elementPresentation';
 import type { ReactNode } from 'react';
 import type { V3Normalized } from './pitwallHelpers';
@@ -44,9 +52,19 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   const player = data?.opponents?.find(o=>o.isPlayer);
   const sectorCount = sectorCountOverride === undefined ? trackSectorCount(data)
     : Number.isInteger(sectorCountOverride) && sectorCountOverride >= 1 && sectorCountOverride <= 16 ? sectorCountOverride : 0;
-  const currentSectors = player ? rowSectors(data,player.id,player.lastLapSeconds) : null;
+  // Persisted sector results zijn onafhankelijk van de 5-seconden metriekpoort.
+  const sectorTimings = buildSectorTimingIndex(
+    data ? freshPaceHistory(data) : null,
+    (data?.opponents ?? []).map(o => ({ id: o.id, currentLap: o.lap })),
+  );
+  const playerTiming = player ? sectorTimings.get(player.id) ?? null : null;
+  const usingSectorUpdates = playerTiming != null && playerTiming.sectorCount === sectorCount;
+  const currentSectors = player && !usingSectorUpdates ? rowSectors(data,player.id,player.lastLapSeconds) : null;
   const sectors = sectorCountOverride === undefined ? currentSectors
     : currentSectors?.length === sectorCount ? currentSectors : null;
+  const sectorLabel = usingSectorUpdates && playerTiming
+    ? playerTiming.mixedLaps ? "Sectoren · meerdere ronden" : `Sectoren · ronde ${playerTiming.lap}`
+    : sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd";
   const rest = data?.session?.sessionTimeRemainingSeconds;
   // Waar verliezen we tijd? Per sector het verschil met de snelste tijd in het veld.
   // Alleen binnen dezelfde sectordeling; anders blijft het verschil leeg.
@@ -59,9 +77,12 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
       data-pitwall-kpi="true"
       data-sector-count={sectorCount}
     >
-      <KpiGroup label={sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd"} group="sectoren" className={sectorCount>3 ? "pitwall-many-sectors" : ""}>
+      <KpiGroup label={sectorLabel} group="sectoren" className={sectorCount>3 ? "pitwall-many-sectors" : ""}>
         {sectorCount === 0 && <Cell label="Sectorindeling onbekend" value="—" compact />}
-        {Array.from({length:sectorCount},(_,i)=><Cell key={i} compact={sectorCount>3} label={`S${i+1}`} value={second(sectors?.[i])} hint={deltas?.[i] != null ? <span className={deltas[i]! > 0 ? "text-red-300" : "text-emerald-300"}>{deltas[i]! > 0 ? "+" : ""}{deltas[i]!.toFixed(3)}</span> : undefined} />)}
+        {usingSectorUpdates && Array.from({length:sectorCount},(_,i)=>(
+          <SectorKpi key={i} label={`S${i+1}`} slot={playerTiming?.slots[i] ?? null} compact={sectorCount>3} />
+        ))}
+        {!usingSectorUpdates && Array.from({length:sectorCount},(_,i)=><Cell key={i} compact={sectorCount>3} label={`S${i+1}`} value={second(sectors?.[i])} hint={deltas?.[i] != null ? <span className={deltas[i]! > 0 ? "text-red-300" : "text-emerald-300"}>{deltas[i]! > 0 ? "+" : ""}{deltas[i]!.toFixed(3)}</span> : undefined} />)}
       </KpiGroup>
 
       <KpiGroup label="Rondetijd" group="rondetijd">
@@ -77,6 +98,43 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
         {(finiteClock(data?.session?.sessionTimeSeconds) || stableLayout) && <Cell label={planMinutes != null ? `Sessie · plan ${clock(planMinutes * 60)}` : "Verstreken sessie"} value={clock(data?.session?.sessionTimeSeconds)} />}
         <Cell label="Resttijd" value={clock(rest)} tone="text-emerald-300" />
       </KpiGroup>
+    </div>
+  );
+}
+
+function SectorKpi({ label, slot, compact }: { label: string; slot: SectorSlot | null; compact: boolean }) {
+  const delta = slot ? formatSectorDelta(slot.deltaSeconds) : null;
+  const tone = sectorDeltaTone(slot?.deltaSeconds);
+  const deltaClass = tone === "negative" ? "text-emerald-400" : tone === "positive" ? "text-red-400" : "text-slate-500";
+  const value = slot && slot.seconds != null ? formatSectorSeconds(slot.seconds) : "—";
+  return (
+    <div
+      className={`min-w-0 ${slot?.isPreviousLap ? "opacity-60" : ""}`}
+      data-sector-status={slot?.status ?? "missing"}
+      data-sector-lap={slot?.lap}
+      data-sector-previous={slot?.isPreviousLap ? "true" : undefined}
+      data-sector-session-best={slot?.isSessionBest ? "true" : undefined}
+      title={describeSectorSlot(slot) ?? undefined}
+    >
+      <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
+      <p className={`mt-0.5 font-mono ${compact ? "text-[18px]" : "text-[26px]"} font-bold leading-none tabular-nums ${slot?.isSessionBest ? "text-fuchsia-300" : "text-white"}`}>
+        {value}
+        {slot && (slot.status === "provisional" || slot.status === "verified") && (
+          <span
+            className={`ml-1 align-super text-[8px] font-bold ${slot.status === "provisional" ? "text-amber-300" : "text-emerald-400"}`}
+            title={slot.status === "provisional" ? "Voorlopig" : "Geverifieerd"}
+            aria-label={slot.status === "provisional" ? "Voorlopig" : "Geverifieerd"}
+          >
+            {slot.status === "provisional" ? "P" : "✓"}
+          </span>
+        )}
+      </p>
+      {(delta != null || slot?.lap != null) && (
+        <p className="mt-0.5 font-mono text-[10px] leading-none tabular-nums">
+          {delta != null && <span className={deltaClass}>{delta}</span>}
+          {slot?.lap != null && <span className={`text-slate-500 ${delta != null ? "ml-1" : ""}`}>R{slot.lap}</span>}
+        </p>
+      )}
     </div>
   );
 }
