@@ -18,7 +18,7 @@ let db:any;
 describe.skipIf(!input || !engine)('actual C# sender → V3 parser → PostgreSQL → projector → Pitwall',()=>{
  beforeAll(async()=>{
   const {PGlite}=await import(/* @vite-ignore */ engine!);db=await PGlite.create();
-  await db.exec('CREATE ROLE service_role');
+  await db.exec('CREATE ROLE service_role; CREATE ROLE anon; CREATE ROLE authenticated');
   const rollback=readFileSync('supabase/rollbacks/20261117201558_live_sector_updates.rollback.sql','utf8');
   await db.exec(rollback.match(/CREATE OR REPLACE FUNCTION public\.simhub_pace_merge_v1[\s\S]*?\$function\$;/)![0]);
   await db.exec(readFileSync('supabase/migrations/20261117201558_live_sector_updates.sql','utf8'));

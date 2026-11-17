@@ -17,7 +17,7 @@ const car=h=>h.cars.find(c=>c.id==='rival');
 const results=[];
 async function test(name,fn){try{await fn();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:String(e.stack??e)});throw e;}}
 try{
- await db.exec("CREATE ROLE service_role");
+ await db.exec("CREATE ROLE service_role; CREATE ROLE anon; CREATE ROLE authenticated; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,authenticated,service_role;");
  await db.exec(oldDefinition);
  await db.exec('GRANT EXECUTE ON FUNCTION public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz) TO service_role');
  await db.exec('REVOKE ALL ON FUNCTION public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz) FROM PUBLIC');
@@ -29,6 +29,11 @@ try{
   await assert.rejects(db.exec(forward),/baseline drift/);await db.exec('ROLLBACK');await db.exec(oldDefinition);
  });
  await db.exec(forward);
+ await test('helpers deny explicit Supabase default grants to browser roles',async()=>{
+  for(const role of ['anon','authenticated']) for(const signature of ['public.simhub_sector_update_valid_v1(jsonb)','public.simhub_sector_car_merge_v1(jsonb,jsonb)']){
+   const {rows}=await db.query('select has_function_privilege($1,$2,\'EXECUTE\') allowed',[role,signature]);assert.equal(rows[0].allowed,false);
+  }
+ });
  await db.exec(readFileSync(resolve(root,'supabase/tests/fixtures/pace-sector-project-baseline.sql'),'utf8'));
  await test('old-client output remains byte-structurally equal',async()=>assert.deepEqual(await merge(null,capture(undefined)),baseline));
  await test('existing merge signature/volatility/security/ACL are unchanged',async()=>{

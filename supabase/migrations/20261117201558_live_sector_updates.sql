@@ -36,7 +36,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN RETURN false;
 END;
 $sector$;
-REVOKE ALL ON FUNCTION public.simhub_sector_update_valid_v1(jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.simhub_sector_update_valid_v1(jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.simhub_sector_update_valid_v1(jsonb) TO postgres,service_role;
 
 CREATE OR REPLACE FUNCTION public.simhub_sector_car_merge_v1(previous_car jsonb, updates jsonb)
@@ -97,7 +97,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN RETURN previous_car;
 END;
 $sector$;
-REVOKE ALL ON FUNCTION public.simhub_sector_car_merge_v1(jsonb,jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.simhub_sector_car_merge_v1(jsonb,jsonb) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.simhub_sector_car_merge_v1(jsonb,jsonb) TO postgres,service_role;
 
 CREATE OR REPLACE FUNCTION public.simhub_pace_merge_v1(previous jsonb, capture jsonb, transport text, at_time timestamp with time zone)
