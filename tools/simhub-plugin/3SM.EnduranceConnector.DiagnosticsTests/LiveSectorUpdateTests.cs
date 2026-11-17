@@ -155,8 +155,8 @@ internal static class LiveSectorUpdateTests
         }
         var churn=new PaceCaptureBuffer();
         for(int i=0;i<100;i++)churn.Observe("churn",i*0.05,i,new[]{Sample("churn-"+i,1,0.1,123.05,123.05,false)},Three);
-        var retired=(System.Collections.IDictionary)typeof(PaceCaptureBuffer).GetField("retiredSectors",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(churn);
-        Check("transient-bounded",churn.CarCount+retired.Count<=PaceCaptureBuffer.MaxCars,"active and retired sector states remain jointly bounded during id churn");
+        var retired=(System.Collections.IDictionary)typeof(PaceCaptureBuffer).GetField("retiredSectors",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(churn);
+        Check("transient-bounded",retired!=null && churn.CarCount+retired.Count<=PaceCaptureBuffer.MaxCars,"active and retired sector states remain jointly bounded during id churn");
 
         // Frozen previous verified reference: lap 3 keeps lap 2's best even when
         // lap 3 becomes a new PB. Lap 4 then freezes lap 3.
