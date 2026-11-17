@@ -48,7 +48,7 @@ internal static class LiveSectorUpdateTests
         };
     }
     private static Capture Drive(double[] starts, int laps, Func<int,double> lapTime, Func<int,double?> reported=null,
-        double startOffset=0, bool gap=false, bool pit=false, int targetLap=0, double from=0.35, double to=0.45, double margin=0.6, string id="car")
+        double startOffset=0, bool gap=false, bool pit=false, int targetLap=0, double from=0.35, double to=0.45, double margin=0.6, string id="car", bool missingMetadata=false, bool missingOpponent=false)
     {
         var capture = new Capture { Buffer = new PaceCaptureBuffer() };
         double total = 0;
@@ -71,7 +71,7 @@ internal static class LiveSectorUpdateTests
             }
             if (!best.HasValue) best=last;
             var observation = Sample(id,lap,distance,last,best,inPit);
-            capture.Buffer.Observe("live-sector-session",t,tick,new[]{observation},starts);
+            capture.Buffer.Observe("live-sector-session",t,tick,missingOpponent && tick==6000?new PaceObservation[0]:new[]{observation},missingMetadata && tick==6200?null:starts);
             capture.LastTime=t; capture.LastTick=tick; capture.LastObservation=observation;
             var frame = capture.Buffer.NextFrame();
             if (frame==null) continue;
@@ -143,6 +143,20 @@ internal static class LiveSectorUpdateTests
             && afterLayout.OpponentMetrics.Length==1 && afterLayout.OpponentMetrics[0].SectorCount==3
             && (afterLayout.SectorUpdates==null || afterLayout.SectorUpdates.All(u=>u.SectorCount==3)),
             "layout change starts a new segment and only the new sector count remains");
+
+        // Frozen previous verified reference: lap 3 keeps lap 2's best even when
+        foreach(bool metadata in new[]{true,false})
+        {
+            var transient=Drive(Three,3,Constant(123.05),null,0,false,false,0,0.35,0.45,0.2,"transient-car",metadata,!metadata);
+            string kind=metadata?"metadata":"opponent";
+            Check("transient-"+kind+"-namespace",transient.Frames.Select(f=>f.SegmentId).Distinct().Count()==1,"a single missing source row does not replace the session namespace");
+            Check("transient-"+kind+"-verified",transient.Updates.Where(u=>u.Lap==3 && u.Status==PaceSectorUpdate.Verified).Select(u=>u.SectorIndex).Distinct().Count()==3,"brief omission preserves anchors and permits the actual full-lap gate");
+            Check("transient-"+kind+"-reference",transient.Updates.Where(u=>u.Lap==3 && u.Status==PaceSectorUpdate.Verified).Any() && transient.Updates.Where(u=>u.Lap==3 && u.Status==PaceSectorUpdate.Verified).All(u=>u.ReferenceSeconds.HasValue),"verified personal references survive a brief omission");
+        }
+        var churn=new PaceCaptureBuffer();
+        for(int i=0;i<100;i++)churn.Observe("churn",i*0.05,i,new[]{Sample("churn-"+i,1,0.1,123.05,123.05,false)},Three);
+        var retired=(System.Collections.IDictionary)typeof(PaceCaptureBuffer).GetField("retiredSectors",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(churn);
+        Check("transient-bounded",churn.CarCount+retired.Count<=PaceCaptureBuffer.MaxCars,"active and retired sector states remain jointly bounded during id churn");
 
         // Frozen previous verified reference: lap 3 keeps lap 2's best even when
         // lap 3 becomes a new PB. Lap 4 then freezes lap 3.

@@ -435,9 +435,15 @@ namespace ThreeSM.EnduranceConnector
             public int SnapshotCursor;
             public readonly SectorMeasurement Sectors;
             public Car(long revisionBase=0) { Sectors=new SectorMeasurement(revisionBase); }
+            public Car(SectorMeasurement sectors) { Sectors=sectors; }
         }
         private readonly object gate = new object();
         private readonly Dictionary<string, Car> cars = new Dictionary<string, Car>(StringComparer.Ordinal);
+        // A short opponent-list omission must not restart sector revisions or
+        // forget verified references. Active plus retired states remain <=40.
+        private readonly Dictionary<string, SectorMeasurement> retiredSectors = new Dictionary<string, SectorMeasurement>(StringComparer.Ordinal);
+        private readonly LinkedList<string> retiredOrder = new LinkedList<string>();
+        private long revisionFloor;
         private string session, segment;
         private double lastTime = -1, lastSent = -1;
         private long? lastTick;
@@ -447,7 +453,7 @@ namespace ThreeSM.EnduranceConnector
         public int StoredLapCount { get { lock(gate) return cars.Values.Sum(c=>c.Laps.Count); } }
         public int StoredSectorUpdateCount { get { lock(gate) return cars.Values.Sum(c=>c.Sectors.SnapshotCount); } }
         public int PointCount { get { lock(gate) return cars.Values.Sum(c => new[] {c.Current,c.Last,c.Best}.Where(t=>t!=null).Sum(t=>t.Points.Count(p=>p!=null))); } }
-        public void Reset() { lock(gate) { cars.Clear(); session=null; segment=null; lastTime=-1; lastSent=-1; lastTick=null; cursor=0; metricCursor=0; sectorChangeCursor=0; snapshotCarCursor=0; activeLayout=null; } }
+        public void Reset() { lock(gate) { cars.Clear(); retiredSectors.Clear(); retiredOrder.Clear(); revisionFloor=0; session=null; segment=null; lastTime=-1; lastSent=-1; lastTick=null; cursor=0; metricCursor=0; sectorChangeCursor=0; snapshotCarCursor=0; activeLayout=null; } }
         public static double? Number(double? n, double min, double max)
         { return n.HasValue && !double.IsNaN(n.Value) && !double.IsInfinity(n.Value) && n >= min && n <= max ? n : null; }
         public static double?[] Sectors(double?[] sectors, double? lap)
@@ -466,10 +472,11 @@ namespace ThreeSM.EnduranceConnector
                 // A different measured layout is a new namespace, never a merge of
                 // sectors from two geometries.
                 var layout=SectorMeasurement.Layout(sectorStarts);
-                if(activeLayout!=null && (layout==null || !activeLayout.SequenceEqual(layout)))
+                if(activeLayout!=null && layout!=null && !activeLayout.SequenceEqual(layout))
                 { Reset(); session=observedSession; segment=Guid.NewGuid().ToString("N"); }
-                if(layout==null) activeLayout=null;
-                else if(activeLayout==null || !activeLayout.SequenceEqual(layout)) activeLayout=(double[])layout.Clone();
+                // Missing metadata is not a new track geometry. Keep completed
+                // results, but do not measure against an unconfirmed layout.
+                if(layout!=null && (activeLayout==null || !activeLayout.SequenceEqual(layout))) activeLayout=(double[])layout.Clone();
                 if (lastTime>=0 && (time-lastTime < 0.049999 || (tick.HasValue && tick==lastTick))) return;
                 var input=observations.Where(o=>o!=null && !string.IsNullOrEmpty(o.Id) && o.Id.Length<=64)
                     .OrderBy(o=>o.IsPlayer?0:o.Position==1?1:2).ThenBy(o=>o.Id,StringComparer.Ordinal).Take(MaxCars).ToArray();
@@ -479,17 +486,31 @@ namespace ThreeSM.EnduranceConnector
                 { Reset(); session=observedSession; segment=Guid.NewGuid().ToString("N"); }
                 lastTime=time.Value; lastTick=tick;
                 var active=new HashSet<string>(input.Select(o=>o.Id),StringComparer.Ordinal);
-                foreach(var old in cars.Keys.Where(id=>!active.Contains(id)).ToArray()) cars.Remove(old);
+                foreach(var old in cars.Keys.Where(id=>!active.Contains(id)).ToArray())
+                {
+                    retiredSectors[old]=cars[old].Sectors;
+                    retiredOrder.Remove(old); retiredOrder.AddLast(old);
+                    cars.Remove(old);
+                }
                 foreach(var o in input)
                 {
                     Car c;
-                    if(!cars.TryGetValue(o.Id,out c)) { if(cars.Count>=MaxCars) continue; cars[o.Id]=c=new Car(); }
+                    if(!cars.TryGetValue(o.Id,out c))
+                    {
+                        if(cars.Count>=MaxCars) continue;
+                        SectorMeasurement retained;
+                        if(retiredSectors.TryGetValue(o.Id,out retained))
+                        { c=new Car(retained); retiredSectors.Remove(o.Id); retiredOrder.Remove(o.Id); }
+                        else c=new Car(revisionFloor);
+                        cars[o.Id]=c;
+                    }
                     if(c.Previous?.Lap > o.Lap) cars[o.Id]=c=new Car(c.Sectors.Revision);
-                    c.Sectors.Observe(time.Value,o,sectorStarts);
+                    if(layout!=null) c.Sectors.Observe(time.Value,o,sectorStarts);
+                    revisionFloor=Math.Max(revisionFloor,c.Sectors.Revision);
                     var m=o.Metric;
                     if(m!=null)
                     {
-                        int? count=SectorMeasurement.Layout(sectorStarts)==null ? (int?)null : sectorStarts.Length;
+                        int? count=activeLayout==null ? (int?)null : activeLayout.Length;
                         // Legacy senders with no layout retain their existing three-field path.
                         var last=count.HasValue && m.LastLapSectorSeconds?.Length!=count ? null : Sectors(m.LastLapSectorSeconds,o.LastLapSeconds);
                         var best=count.HasValue && m.BestLapSectorSeconds?.Length!=count ? null : Sectors(m.BestLapSectorSeconds,o.BestLapSeconds);
@@ -553,6 +574,8 @@ namespace ThreeSM.EnduranceConnector
                     else if(previousUsable) c.Current=NewTrace(o.Lap.Value); // gap: invalidate anchor
                     c.Previous=o; c.Time=time.Value;
                 }
+                while(cars.Count+retiredSectors.Count>MaxCars && retiredOrder.First!=null)
+                { string oldest=retiredOrder.First.Value; retiredOrder.RemoveFirst(); retiredSectors.Remove(oldest); }
             }
         }
         private static void Fill(Trace trace,double from,double to,double start,double end,double? speedA,double? speedB)
