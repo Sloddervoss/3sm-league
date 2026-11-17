@@ -1,4 +1,6 @@
-import { freshMetrics, rowSectors, trackSectorCount } from "./paceSeries";
+import { freshMetrics, freshPaceHistory, rowSectors, trackSectorCount } from "./paceSeries";
+import { buildSectorTimingIndex } from "./sectorTiming";
+import { SectorTimingCell } from "./SectorTimingCell";
 import type { V3Normalized } from "./pitwallHelpers";
 import { Fragment, useState } from "react";
 import type { StandingsDerivation } from "./standings";
@@ -79,6 +81,9 @@ const TrendMark = ({ rate }: { rate: number | null }) => {
 export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live = true, plannedStints = [], events = [] }: Props) => {
   const sectorCount = live ? trackSectorCount(v3) : 0;
   const sectorColumns = Array.from({length:sectorCount},(_,n)=>n);
+  const sectorTimings = live
+    ? buildSectorTimingIndex(freshPaceHistory(v3), (v3?.opponents ?? []).map(o => ({ id: o.id, currentLap: o.lap })))
+    : null;
   const [view, setView] = useState('live');
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const pitEvents = events.filter(e => e.event_type === 'pit_entry' || e.event_type === 'pit_exit');
@@ -161,7 +166,14 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
               </tr>
             </thead>
             <tbody>
-              {visibleRows.map((r, index) => (
+              {visibleRows.map((r, index) => {
+                const legacySectors = live ? rowSectors(v3,r.id,r.lastLapSeconds) : null;
+                const timing = sectorTimings?.get(r.id) ?? null;
+                const usingSectorUpdates = live && timing != null && timing.sectorCount === sectorCount;
+                const legacySectorTitle = live && legacySectors
+                  ? `Gecontroleerde laatste ronde · ${freshMetrics(v3,r.id)?.sectorSource ?? "bron onbekend"} · afwijking ${freshMetrics(v3,r.id)?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
+                  : `Geen gecontroleerde sectorreeks · bronafwijkingen ${freshMetrics(v3,r.id)?.sectorMismatchCount ?? "onbekend"}`;
+                return (
                 <Fragment key={r.id}>
                   {(index === 0 || visibleRows[index - 1].carClass !== r.carClass) && (
                     <tr className="border-t border-[#1D2431] bg-[#0A0C10]">
@@ -203,16 +215,17 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                       >
                         {(r as { lastLapInvalid?: boolean }).lastLapInvalid
                           ? "—"
-                          : preciseLapTime(live && rowSectors(v3,r.id,r.lastLapSeconds) ? freshMetrics(v3,r.id)?.lastLapSeconds : r.lastLapSeconds)}
+                          : preciseLapTime(live && legacySectors ? freshMetrics(v3,r.id)?.lastLapSeconds : r.lastLapSeconds)}
                       </td>
                     <td data-timing="best-lap" className="px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
-                    {sectorColumns.map(n=><td key={n} className="px-2 py-1.5 text-right font-mono text-slate-300" title={live && rowSectors(v3,r.id,r.lastLapSeconds) ? `Gecontroleerde laatste ronde · ${freshMetrics(v3,r.id)?.sectorSource ?? "bron onbekend"} · afwijking ${freshMetrics(v3,r.id)?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s` : `Geen gecontroleerde sectorreeks · bronafwijkingen ${freshMetrics(v3,r.id)?.sectorMismatchCount ?? "onbekend"}`}>{live ? rowSectors(v3,r.id,r.lastLapSeconds)?.[n]?.toFixed(3) ?? "—" : "—"}</td>)}
+                    {sectorColumns.map(n=><td key={n} data-sector-index={n} className="px-2 py-1.5 text-right font-mono text-slate-300" title={usingSectorUpdates ? undefined : legacySectorTitle}>{live ? (usingSectorUpdates ? <SectorTimingCell slot={timing?.slots[n] ?? null} /> : legacySectors?.[n]?.toFixed(3) ?? "—") : "—"}</td>)}
                     <td className="px-2 py-1.5 text-right font-mono text-slate-300">{r.lap ?? "—"}</td>
                     <td className="px-2 py-1.5 text-right font-mono font-semibold text-orange-300">{renderGap(r, false)}</td>
                     <td className="px-2 py-1.5 text-center text-[11px] font-bold text-yellow-400">{r.inPit ? "PIT" : "—"}</td>
                   </tr>
                 </Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

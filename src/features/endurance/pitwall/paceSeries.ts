@@ -1,6 +1,7 @@
 import type { PaceCar, PaceTrace, PaceHistory } from "../../../../supabase/functions/_shared/paceCapture";
 import { validatedSectors } from "../../../../supabase/functions/_shared/paceCapture";
 import type { V3Normalized } from "./pitwallHelpers";
+import { sectorCountFromHistory } from "./sectorTiming";
 export type SeriesPoint = {x: number; y: number; marker?: "pit" | "swap"};
 export type StoredTrace = PaceTrace;
 export const freshPaceHistory = (v3?: V3Normalized | null, history = v3?.paceHistory): PaceHistory | null => {
@@ -21,9 +22,12 @@ export const rowSectors = (v3: V3Normalized | null | undefined, id: string, last
   const sameLap = m?.sectorLap != null ? row?.lap === m.sectorLap + 1 : m?.lastLapSeconds === last;
   return m && sameLap && m.lapValid !== false ? validatedSectors(m.lastLapSectorSeconds, m.lastLapSeconds, m.sectorCount) : null;
 };
-/** No guessed three-sector layout. Legacy validated arrays can identify their own count. */
+/** No guessed three-sector layout. Persisted sector updates also expose their measured count without the 5s metric gate. */
 export const trackSectorCount = (v3?: V3Normalized | null): number => {
-  const counts = new Set((freshPaceHistory(v3)?.cars ?? []).map(c => freshMetrics(v3,c.id)).filter(m=>m!=null).map(m => m.sectorCount ?? validatedSectors(m.lastLapSectorSeconds,m.lastLapSeconds)?.length).filter((n): n is number => Number.isInteger(n) && n! >= 1 && n! <= 16));
+  const history = freshPaceHistory(v3);
+  const counts = new Set<number>((history?.cars ?? []).map(c => freshMetrics(v3,c.id)).filter(m=>m!=null).map(m => m.sectorCount ?? validatedSectors(m.lastLapSectorSeconds,m.lastLapSeconds)?.length).filter((n): n is number => Number.isInteger(n) && n! >= 1 && n! <= 16));
+  const persisted = sectorCountFromHistory(history);
+  if (persisted >= 1 && persisted <= 16) counts.add(persisted);
   return counts.size === 1 ? [...counts][0] : 0;
 };
 export const newestTrace = (car?: PaceCar): StoredTrace | null => {

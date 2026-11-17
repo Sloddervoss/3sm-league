@@ -2,7 +2,9 @@ import { Fragment, useEffect, useMemo, useReducer, useRef, useState, type CSSPro
 import { ChevronRight, Flag, ListOrdered } from "lucide-react";
 import type { V3Normalized, V3Opponent } from "../pitwallHelpers";
 import { renderGap, renderPosition, type StandingsDerivation } from "../standings";
-import { freshMetrics, rowSectors, trackSectorCount } from "../paceSeries";
+import { freshMetrics, freshPaceHistory, rowSectors, trackSectorCount } from "../paceSeries";
+import { buildSectorTimingIndex } from "../sectorTiming";
+import { SectorTimingCell } from "../SectorTimingCell";
 import { preciseLapTime } from "../telemetryFormat";
 import { initialTimingState, reduceTimingTransitions } from "./timingTransitions";
 import { useRowFlip } from "./useRowFlip";
@@ -138,6 +140,9 @@ export function PremiumTimingPanel({
   const rows = standings.rows;
   const rememberedSectorCount = useSectorLayoutCount(contextKey, live ? trackSectorCount(v3) : 0);
   const sectorCount = layoutSectorCount === undefined ? rememberedSectorCount : validSectorLayoutCount(layoutSectorCount);
+  const sectorTimings = live
+    ? buildSectorTimingIndex(freshPaceHistory(v3), (v3?.opponents ?? []).map(o => ({ id: o.id, currentLap: o.lap })))
+    : null;
   const sectorColumns = useMemo(() => Array.from({ length: sectorCount }, (_, n) => n), [sectorCount]);
   const classes = useMemo(() => [...new Set(rows.map(classOf))], [rows]);
   const activeClass = selectedClass && classes.includes(selectedClass) ? selectedClass : classes[0] ?? null;
@@ -225,8 +230,11 @@ export function PremiumTimingPanel({
     const move = pinned ? 0 : moves[r.id] ?? 0;
     const modelName = typeof r.carName === "string" ? r.carName.trim() : "";
     const carName = modelName || (r.isPlayer ? ownCarLabel?.trim() : null) || null;
-    const currentSectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
-    const sectors = currentSectors?.length === sectorCount ? currentSectors : null;
+    const timing = live ? sectorTimings?.get(r.id) ?? null : null;
+    const legacySectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
+    const legacyComplete = legacySectors?.length === sectorCount;
+    const usingSectorUpdates = timing != null && timing.sectorCount === sectorCount;
+    const sectors = !usingSectorUpdates && legacyComplete ? legacySectors : null;
     const metrics = freshMetrics(v3, r.id);
     // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
     // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
@@ -234,10 +242,10 @@ export function PremiumTimingPanel({
     const invalidLast = (r as { lastLapInvalid?: boolean }).lastLapInvalid === true;
     const last = invalidLast
       ? null
-      : live && sectors
+      : live && legacyComplete
         ? metrics?.lastLapSeconds ?? r.lastLapSeconds
         : r.lastLapSeconds;
-    const sectorTitle = live && sectors
+    const sectorTitle = usingSectorUpdates ? undefined : live && legacyComplete
       ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
       : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
     const flashLap = !pinned && lapFlash[r.id] === r.lap ? r.lap : null;
@@ -293,8 +301,10 @@ export function PremiumTimingPanel({
         <td data-timing="best-lap" className="ptp-col-time ptp-best">{preciseLapTime(r.bestLapSeconds)}</td>
         {sectorCount === 0 && <td className="ptp-col-sector" title="Sectorindeling onbekend; geen tijden beschikbaar">—</td>}
         {sectorColumns.map((n) => (
-          <td key={n} className="ptp-col-sector" title={sectorTitle}>
-            {sectors?.[n] != null ? sectors[n]!.toFixed(3) : "—"}
+          <td key={n} className="ptp-col-sector" data-sector-index={n} title={sectorTitle}>
+            {usingSectorUpdates
+              ? <SectorTimingCell slot={timing?.slots[n] ?? null} />
+              : sectors?.[n] != null ? sectors[n]!.toFixed(3) : "—"}
           </td>
         ))}
         <td className="ptp-col-lap ptp-lap" data-lap-flash={flashLap ?? undefined}>
