@@ -417,5 +417,41 @@ internal static class LiveSectorUpdateTests
             note="Synthetic producer scenarios; exact C# wire bytes for TS parser and SQL merge interop.",
             frames=bundle
         },options));
+        // Actual NextFrame sequences, not manually assembled DTO batches. Keep
+        // namespace/ordering/serializer bytes exactly as produced and label the
+        // input samples synthetic (not a live accuracy claim).
+        var streams=new List<object>();
+        foreach (var count in new[]{3,6,16})
+        {
+            var layout=count==3?Three:count==6?Six:Sixteen;
+            foreach (bool gap in count==3?new[]{false,true}:new[]{false})
+            {
+                var run=Drive(layout,3,lap=>lap==3?120:123.05,null,0,gap,false,3,0.35,0.45,0.2,"stream-car");
+                var revisions=new Dictionary<string,int>(StringComparer.Ordinal);
+                var wires=new List<string>();
+                foreach (var frame in run.Frames)
+                {
+                    if (frame.SectorUpdates==null) continue;
+                    var wire=PaceCaptureBuffer.AppendWithinBudget("{}",frame);
+                    using (var parsed=JsonDocument.Parse(wire))
+                    {
+                        JsonElement pace,updates;
+                        if (!parsed.RootElement.TryGetProperty("paceCapture",out pace) || !pace.TryGetProperty("sectorUpdates",out updates)) continue;
+                        bool changed=false;
+                        foreach (var update in updates.EnumerateArray())
+                        {
+                            string key=update.GetProperty("id").GetString()+"/"+update.GetProperty("lap").GetInt32()+"/"+update.GetProperty("sectorIndex").GetInt32();
+                            int revision=update.GetProperty("revision").GetInt32(),previous;
+                            if (!revisions.TryGetValue(key,out previous) || revision>previous) { changed=true; revisions[key]=revision; }
+                        }
+                        if (changed) wires.Add(wire);
+                    }
+                }
+                streams.Add(new {sectorCount=count,kind=gap?"gap":"clean",wires=wires});
+            }
+        }
+        File.WriteAllText(Path.Combine(directory,"pace-live-sector-streams.json"),JsonSerializer.Serialize(new {
+            note="Synthetic samples through actual Observe, NextFrame and AppendWithinBudget; no live accuracy claim.",streams=streams
+        },options));
     }
 }
