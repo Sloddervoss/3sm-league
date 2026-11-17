@@ -1,4 +1,12 @@
 /** Nullable, isolated PACE transport; no strategy inputs. Units are explicit. */
+export type PaceSectorUpdate = {
+  id: string; lap: number; sectorIndex: number; sectorCount: number;
+  seconds: number | null; completedSessionTimeSeconds: number;
+  observedSessionTimeSeconds: number; revision: number;
+  status: "provisional" | "verified" | "invalidated";
+  referenceSeconds: number | null;
+};
+export type PaceSectorBest = {sectorIndex: number; lap: number; seconds: number};
 export type PaceMetric = {
   id: string; observedSessionTimeSeconds: number;
   lastLapSeconds: number | null; bestLapSeconds: number | null;
@@ -23,9 +31,9 @@ export type PaceChunk = {
   provenance: "simhub-opponent-sampled"; speedUnit: "km/h" | null;
   points: [number, number | null, number | null][];
 };
-export type PaceCapture = {schemaRevision: 1; observedSessionId: string; segmentId: string; opponentMetrics: PaceMetric[]; opponentLaps: PaceLap[]; traceChunks: PaceChunk[]};
+export type PaceCapture = {schemaRevision: 1; observedSessionId: string; segmentId: string; opponentMetrics: PaceMetric[]; opponentLaps: PaceLap[]; traceChunks: PaceChunk[]; sectorUpdates?: PaceSectorUpdate[]};
 export type PaceTrace = Omit<PaceChunk, "chunkIndex"> & {chunkIndex?: number; complete: boolean; conflict?: boolean};
-export type PaceCar = {id: string; metrics?: PaceMetric; laps: PaceLap[]; traces: PaceTrace[]};
+export type PaceCar = {id: string; metrics?: PaceMetric; laps: PaceLap[]; traces: PaceTrace[]; sectors?: PaceSectorUpdate[]; sectorBests?: PaceSectorBest[]};
 export type PaceHistory = {schemaRevision: 1; observedSessionId: string; segmentId: string; transportSessionId: string; updatedAt: string; cars: PaceCar[]};
 export const PaceLimits = {cars: 40, bins: 128, traces: 3, laps: 20, wireBytes: 4096, storageBytes: 524288} as const;
 const object = (x: unknown): Record<string, unknown> => { if (!x || typeof x !== "object" || Array.isArray(x)) throw Error("pace_object"); return x as Record<string, unknown>; };
