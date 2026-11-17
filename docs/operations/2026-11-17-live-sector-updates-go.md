@@ -48,6 +48,28 @@ Publicatie, manifestwissel, productie-DDL en installatie wachten op aparte GO.
   EnduranceConnectorPlugin.cs, FlagProfileInstaller.cs en SettingsControl.cs.
   Die blijven onaangeroerd; ook de oudere Desktop-DLL wordt niet overschreven.
 
+## Geïntegreerd bewijs na samenvoegen
+
+- PASS: plugincommit `b311a4f8` en UI-commit `39251d21` geïntegreerd.
+- PASS: 150/150 gecombineerde parser-, PACE-, sector- en premiumtests.
+- PASS: volledig echte net8-projectharnas: SUMMARY PASS=1312 FAIL=0;
+  build 0 warnings/errors. Dit blijft afzonderlijk van de vendorbuild.
+- PASS: vier interopscenario's met 61 echte NextFrame-/serializerframes bij
+  synthetische bronmonsters: 3/6/16 sectoren en een gat/invalidation. Ongewijzigde
+  V3-parser → geïsoleerde PostgreSQL → echte projector → helper/React-sectorcel.
+  Geen bewijs van nauwkeurigheid op een gereden ronde.
+- PASS: volledige Windows net48 Release met echte SimHub SDK, commit
+  `390fc60a7563891a1e372d0b888afdf0ccba2727`, alle 49 Compile-items aanwezig.
+  DLL 0.7.6.4, 888320 bytes,
+  SHA-256 `5e31d070581476b074e73aae7930fd05f0c6550c9da837d4fab7c05f509239f5`.
+  Embedded updater gelijk aan die uit dezelfde build; productiesleutel aanwezig,
+  testdefine/sleutel afwezig. Eén bestaande CS0169-waarschuwing, nul fouten.
+- PASS: DLL/log/resultaten teruggelezen; installed én Desktop vóór/na ongewijzigd.
+- OPEN: definitieve freeze volgt pas na bronreview en browserpoort. Het bovenstaande
+  is een geverifieerde kandidaat, nog geen gepubliceerde of geïnstalleerde release.
+- NIET AFGEROND: eigen volledige Vitest-suite stopte na 180 seconden zonder rapport.
+  Die run telt niet als groen; de gerichte 150 tests en vier interopproeven wel.
+
 ## Open poorten — niet als klaar melden
 
 1. Plugin- en UI-commits integreren; eigen diff- en volledige relevante regressiecheck.
