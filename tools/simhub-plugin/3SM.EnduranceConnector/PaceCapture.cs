@@ -17,6 +17,24 @@ namespace ThreeSM.EnduranceConnector
         [DataMember(Name="opponentMetrics")] public PaceMetric[] OpponentMetrics;
         [DataMember(Name="opponentLaps")] public PaceLap[] OpponentLaps;
         [DataMember(Name="traceChunks")] public PaceChunk[] TraceChunks;
+        // Additive v1 extension. Absent on frames without live sectors, so the old
+        // byte shape of main telemetry is unchanged.
+        [DataMember(Name="sectorUpdates", EmitDefaultValue=false)] public PaceSectorUpdate[] SectorUpdates;
+    }
+    [DataContract]
+    public sealed class PaceSectorUpdate
+    {
+        public const string Provisional="provisional", Verified="verified", Invalidated="invalidated";
+        [DataMember(Name="id")] public string Id;
+        [DataMember(Name="lap")] public int Lap;
+        [DataMember(Name="sectorIndex")] public int SectorIndex;
+        [DataMember(Name="sectorCount")] public int SectorCount;
+        [DataMember(Name="seconds")] public double? Seconds;
+        [DataMember(Name="completedSessionTimeSeconds")] public double CompletedSessionTimeSeconds;
+        [DataMember(Name="observedSessionTimeSeconds")] public double ObservedSessionTimeSeconds;
+        [DataMember(Name="revision")] public long Revision;
+        [DataMember(Name="status")] public string Status;
+        [DataMember(Name="referenceSeconds")] public double? ReferenceSeconds;
     }
     [DataContract]
     public sealed class PaceMetric
@@ -56,19 +74,33 @@ namespace ThreeSM.EnduranceConnector
     }
 
     /// <summary>Boundary interpolation in source session time, never wall time.
-    /// Every seam needs consecutive, on-track samples; incomplete laps stay empty.</summary>
+    /// Every seam needs consecutive, on-track samples; incomplete laps stay empty.
+    /// Sectors are published provisionally as soon as both ends are genuinely
+    /// observed, then revised to verified or invalidated by the whole-lap gate.</summary>
     public sealed class SectorMeasurement
     {
-        private double[] starts, crossings, pending, verified, best;
+        private const int MaxSnapshotStates = 48, MaxChangedUpdates = 64;
+        private double[] starts, crossings, pending, pendingEnds, verified, best;
+        private double?[] sectorBest;
         private PaceObservation previous;
         private double time, pendingAt;
-        private int pendingLap, verifiedLap, completed;
+        private int pendingLap, verifiedLap, completed, openLap;
+        private bool pendingActive, openValid;
         private bool firstCompleteDiagnostic, sampleDiagnostic;
+        private bool[] published;
+        private long revision;
+        private readonly List<PaceSectorUpdate> changed = new List<PaceSectorUpdate>();
+        private readonly List<PaceSectorUpdate> latest = new List<PaceSectorUpdate>();
+        private readonly Dictionary<long, PaceSectorUpdate> latestByKey = new Dictionary<long, PaceSectorUpdate>();
+        public SectorMeasurement() { }
+        public SectorMeasurement(long revisionBase) { revision = revisionBase < 0 ? 0 : revisionBase; }
         public bool DiagnosticReady { get { return Diagnostic!=null && time-pendingAt>=2; } }
         private double? verifiedReported, bestReported;
         public SectorDiagnostic Diagnostic { get; private set; }
         public double? Error { get; private set; }
         public double? BestError { get; private set; }
+        public long Revision { get { return revision; } }
+        public int SnapshotCount { get { return latest.Count; } }
         public static double[] Layout(double[] value)
         {
             if (value == null || value.Length < 1 || value.Length > 16 || value[0] != 0) return null;
@@ -82,13 +114,14 @@ namespace ThreeSM.EnduranceConnector
         { return best != null && o.BestLapSeconds == bestReported ? best.Select(v=>(double?)v).ToArray() : null; }
         public void Observe(double now, PaceObservation o, double[] layout)
         {
-            layout=Layout(layout);
-            if (layout == null) { previous=null; crossings=null; pending=null; verified=null; best=null; starts=null; Diagnostic=null; firstCompleteDiagnostic=false; sampleDiagnostic=false; Error=null; BestError=null; return; }
-            if(starts==null || !starts.SequenceEqual(layout))
-            { starts=(double[])layout.Clone(); previous=null; crossings=null; pending=null; verified=null; best=null; Diagnostic=null; firstCompleteDiagnostic=false; sampleDiagnostic=false; Error=null; BestError=null; }
-            bool usable=o.Connected && !o.InPit && o.Lap>=1 && o.Lap<=100000 && PaceCaptureBuffer.Number(o.Distance,0,1).HasValue && o.Metric?.LapValid!=false;
+            if (!PrepareLayout(layout)) { time=now; return; }
+            // Validation has its own delayed-last-lap grace; a later gap or pit on the
+            // next lap must never erase an already finished, still-valid measurement.
+            if (pendingActive) ResolvePending(now,o);
+            bool usable=o!=null && o.Connected && !o.InPit && o.Lap.HasValue && o.Lap.Value>=1 && o.Lap.Value<=100000
+                && PaceCaptureBuffer.Number(o.Distance,0,1).HasValue && (o.Metric==null || o.Metric.LapValid!=false);
+            if(!usable) { InvalidateOpenLap(now); previous=null; crossings=null; time=now; return; }
             double dt=now-time;
-            if(!usable) { previous=null; crossings=null; pending=null; verified=null; time=now; return; }
             if(previous!=null)
             {
                 double from=previous.Distance.Value, to=o.Distance.Value;
@@ -96,46 +129,240 @@ namespace ThreeSM.EnduranceConnector
                 bool forward=o.Lap==previous.Lap && to>=from;
                 double travel=wrap ? 1-from+to : to-from;
                 if(dt<=0 || dt>0.25 || (!wrap && !forward) || travel>2.0/127)
-                { crossings=null; pending=null; verified=null; }
-                else if(travel>0)
+                {
+                    // A gap/pit/reset makes the open lap discontinuous. Already
+                    // verified laps and an earlier pending finish are left alone.
+                    InvalidateOpenLap(now); crossings=null;
+                    previous=o; time=now; return;
+                }
+                if(travel>0)
                 {
                     double end=wrap ? 1+to : to;
-                    // Finish first, then boundaries of the next lap, even with very short sectors.
-                    if(wrap)
-                    {
-                        double finish=time+dt*(1-from)/travel;
-                        Cross(from,1,time,finish);
-                        pending = crossings!=null && crossings.All(v=>!double.IsNaN(v))
-                            ? Enumerable.Range(0,starts.Length).Select(i=>(i+1<starts.Length?crossings[i+1]:finish)-crossings[i]).ToArray() : null;
-                        pendingLap=previous.Lap.Value; pendingAt=now; verified=null; Error=null;
-                        completed++;
-                        sampleDiagnostic=completed==1 || completed%20==0 || (!firstCompleteDiagnostic && pending!=null);
-                        if(pending!=null) firstCompleteDiagnostic=true;
-                        if(sampleDiagnostic)
-                            Diagnostic=new SectorDiagnostic { Source="measured", Count=starts.Length, Reason="incomplete", ReportedSeconds=o.LastLapSeconds };
-                        crossings=Enumerable.Repeat(double.NaN,starts.Length).ToArray(); crossings[0]=finish;
-                        Cross(0,to,finish,now);
-                    }
-                    else Cross(from,end,time,now);
-                }
-            }
-            // CarIdxLastLapTime may arrive after the finish tick. Retry this exact pending
-            // lap for at most 2 s; never let a later lap validate an earlier measurement.
-            if(pending!=null && o.Lap==pendingLap+1 && (!o.ReportedLap.HasValue || o.ReportedLap==pendingLap) && now-pendingAt<=2)
-            {
-                double sum=pending.Sum();
-                Error=PaceCaptureBuffer.Number(o.LastLapSeconds,0.001,86400).HasValue ? (double?)(sum-o.LastLapSeconds.Value) : null;
-                if(Diagnostic!=null && sampleDiagnostic)
-                { Diagnostic.SumSeconds=sum; Diagnostic.ReportedSeconds=o.LastLapSeconds; Diagnostic.ErrorSeconds=Error; Diagnostic.Reason=Error.HasValue ? Math.Abs(Error.Value)<=0.100000001 ? "valid" : "sum_mismatch" : "missing_lap"; }
-                if(Error.HasValue && Math.Abs(Error.Value)<=0.100000001 && pending.All(v=>v>0))
-                {
-                    verified=pending; verifiedLap=pendingLap; verifiedReported=o.LastLapSeconds;
-                    if(o.BestLapSeconds.HasValue && Math.Abs(o.BestLapSeconds.Value-o.LastLapSeconds.Value)<0.000001)
-                    { best=(double[])verified.Clone(); bestReported=o.BestLapSeconds; BestError=Error; }
+                    if(wrap) HandleWrap(from,to,time,now,o,travel);
+                    else { Cross(from,end,time,now); PublishCrossed(o.Id,now); }
                 }
             }
             previous=o; time=now;
         }
+        private bool PrepareLayout(double[] layout)
+        {
+            layout=Layout(layout);
+            if(layout==null) { ClearState(); return false; }
+            if(starts==null || !starts.SequenceEqual(layout))
+            {
+                ClearState();
+                starts=(double[])layout.Clone();
+                sectorBest=new double?[starts.Length];
+            }
+            return true;
+        }
+        private void ClearState()
+        {
+            starts=null; crossings=null; pending=null; pendingEnds=null; verified=null; best=null;
+            previous=null; Diagnostic=null; firstCompleteDiagnostic=false; sampleDiagnostic=false;
+            Error=null; BestError=null; pendingActive=false; pendingLap=0; pendingAt=0;
+            verifiedLap=0; openLap=0; openValid=false; published=null;
+            sectorBest=null; changed.Clear(); latest.Clear(); latestByKey.Clear();
+        }
+        private void HandleWrap(double from,double to,double begin,double now,PaceObservation o,double travel)
+        {
+            // A pending validation older than the delayed window must not survive
+            // another full lap.
+            if(pendingActive) InvalidatePending(now);
+            int finishedLap=previous.Lap.HasValue ? previous.Lap.Value : openLap;
+            double finish=begin+(now-begin)*(1-from)/travel;
+            Cross(from,1,begin,finish);
+            double[] candidate=null;
+            double[] ends=null;
+            if(openValid && published!=null && openLap==finishedLap)
+            {
+                PublishAllCompleted(o.Id,finish,now);
+                if(crossings!=null && crossings.All(v=>!double.IsNaN(v)))
+                {
+                    candidate=Enumerable.Range(0,starts.Length)
+                        .Select(i=>(i+1<starts.Length?crossings[i+1]:finish)-crossings[i]).ToArray();
+                    ends=Enumerable.Range(0,starts.Length)
+                        .Select(i=>(i+1<starts.Length?crossings[i+1]:finish)).ToArray();
+                }
+                if(candidate==null) InvalidateOpenLap(now);
+            }
+            pending=candidate; pendingEnds=ends;
+            pendingLap=finishedLap; pendingAt=now; pendingActive=pending!=null;
+            verified=null; Error=null;
+            completed++;
+            sampleDiagnostic=completed==1 || completed%20==0 || (!firstCompleteDiagnostic && pending!=null);
+            if(pending!=null) firstCompleteDiagnostic=true;
+            if(sampleDiagnostic)
+                Diagnostic=new SectorDiagnostic { Source="measured", Count=starts.Length, Reason="incomplete", ReportedSeconds=o.LastLapSeconds };
+            // Finish first, then boundaries of the next lap, even with very short sectors.
+            crossings=Enumerable.Repeat(double.NaN,starts.Length).ToArray(); crossings[0]=finish;
+            openLap=o.Lap.HasValue ? o.Lap.Value : finishedLap+1;
+            openValid=true; published=new bool[starts.Length];
+            Cross(0,to,finish,now);
+            if(pendingActive) ResolvePending(now,o);
+        }
+        private void PublishCrossed(string id,double now)
+        {
+            if(!openValid || crossings==null || published==null) return;
+            for(int i=1;i<starts.Length;i++)
+            {
+                if(published[i-1] || double.IsNaN(crossings[i]) || double.IsNaN(crossings[i-1])) continue;
+                PublishSector(openLap,i-1,crossings[i-1],crossings[i],id,now);
+            }
+        }
+        private void PublishAllCompleted(string id,double finish,double now)
+        {
+            if(!openValid || crossings==null || published==null) return;
+            for(int i=0;i<starts.Length;i++)
+            {
+                if(published[i]) continue;
+                double start=i==0 ? crossings[0] : crossings[i];
+                double end=i+1<starts.Length ? crossings[i+1] : finish;
+                if(double.IsNaN(start) || double.IsNaN(end)) continue;
+                PublishSector(openLap,i,start,end,id,now);
+            }
+        }
+        private void PublishSector(int lap,int index,double start,double end,string id,double now)
+        {
+            if(published==null || index<0 || index>=starts.Length || published[index]) return;
+            double seconds=end-start;
+            if(!(seconds>0) || seconds>86400) return;
+            double? reference=sectorBest!=null && index<sectorBest.Length ? sectorBest[index] : null;
+            Emit(new PaceSectorUpdate {
+                Id=id, Lap=lap, SectorIndex=index, SectorCount=starts.Length, Seconds=seconds,
+                CompletedSessionTimeSeconds=end, ObservedSessionTimeSeconds=now,
+                Status=PaceSectorUpdate.Provisional, ReferenceSeconds=reference
+            });
+            published[index]=true;
+        }
+        private void ResolvePending(double now,PaceObservation o)
+        {
+            if(!pendingActive) return;
+            // The only invalidation on the clock is the explicit delayed-lap grace.
+            if(now-pendingAt>2.000001) { InvalidatePending(now); return; }
+            if(o==null || !o.Lap.HasValue || o.Lap.Value!=pendingLap+1) return;
+            if(o.ReportedLap.HasValue && o.ReportedLap.Value!=pendingLap) return;
+            double? reported=PaceCaptureBuffer.Number(o.LastLapSeconds,0.001,86400);
+            double sum=pending.Sum();
+            Error=reported.HasValue ? (double?)(sum-reported.Value) : null;
+            if(Diagnostic!=null && sampleDiagnostic)
+            {
+                Diagnostic.SumSeconds=sum; Diagnostic.ReportedSeconds=o.LastLapSeconds; Diagnostic.ErrorSeconds=Error;
+                Diagnostic.Reason=Error.HasValue ? (Math.Abs(Error.Value)<=0.100000001 ? "valid" : "sum_mismatch") : "missing_lap";
+            }
+            // A stale LastLapTime may still arrive inside the grace window: retry
+            // instead of invalidating a mismatch on its first sighting.
+            if(Error.HasValue && Math.Abs(Error.Value)<=0.100000001 && pending.All(v=>v>0))
+                VerifyPending(now,o);
+        }
+        private void VerifyPending(double now,PaceObservation o)
+        {
+            int lap=pendingLap;
+            double[] values=pending;
+            double[] ends=pendingEnds;
+            for(int i=0;i<values.Length;i++)
+            {
+                double? reference=ReferenceFor(lap,i);
+                Emit(new PaceSectorUpdate {
+                    Id=o.Id, Lap=lap, SectorIndex=i, SectorCount=values.Length, Seconds=values[i],
+                    CompletedSessionTimeSeconds=ends!=null && i<ends.Length ? ends[i] : now,
+                    ObservedSessionTimeSeconds=now, Status=PaceSectorUpdate.Verified,
+                    ReferenceSeconds=reference
+                });
+                // Freeze the next lap's reference only after this lap is proven.
+                if(sectorBest==null || sectorBest.Length!=values.Length) sectorBest=new double?[values.Length];
+                if(!sectorBest[i].HasValue || values[i]<sectorBest[i].Value) sectorBest[i]=values[i];
+            }
+            verified=values; verifiedLap=lap; verifiedReported=o.LastLapSeconds;
+            if(o.BestLapSeconds.HasValue && o.LastLapSeconds.HasValue && Math.Abs(o.BestLapSeconds.Value-o.LastLapSeconds.Value)<0.000001)
+            { best=(double[])values.Clone(); bestReported=o.BestLapSeconds; BestError=Error; }
+            pending=null; pendingEnds=null; pendingActive=false;
+        }
+        private void InvalidatePending(double now)
+        {
+            if(!pendingActive) return;
+            int lap=pendingLap;
+            for(int i=0;i<starts.Length;i++) InvalidateIdentity(lap,i,now);
+            pending=null; pendingEnds=null; pendingActive=false;
+        }
+        private void InvalidateOpenLap(double now)
+        {
+            if(openValid && published!=null)
+                for(int i=0;i<published.Length;i++)
+                    if(published[i]) InvalidateIdentity(openLap,i,now);
+            published=null; openLap=0; openValid=false;
+        }
+        private void InvalidateIdentity(int lap,int index,double now)
+        {
+            PaceSectorUpdate existing;
+            if(!latestByKey.TryGetValue(Key(lap,index),out existing)) return;
+            if(existing.Status!=PaceSectorUpdate.Provisional) return;
+            Emit(new PaceSectorUpdate {
+                Id=existing.Id, Lap=lap, SectorIndex=index, SectorCount=existing.SectorCount,
+                Seconds=null, CompletedSessionTimeSeconds=existing.CompletedSessionTimeSeconds,
+                ObservedSessionTimeSeconds=now, Status=PaceSectorUpdate.Invalidated,
+                ReferenceSeconds=existing.ReferenceSeconds
+            });
+        }
+        private double? ReferenceFor(int lap,int index)
+        {
+            PaceSectorUpdate existing;
+            if(latestByKey.TryGetValue(Key(lap,index),out existing)) return existing.ReferenceSeconds;
+            return sectorBest!=null && index<sectorBest.Length ? sectorBest[index] : null;
+        }
+        private void Emit(PaceSectorUpdate update)
+        {
+            update.Revision=++revision;
+            Store(update);
+        }
+        private void Store(PaceSectorUpdate update)
+        {
+            long key=Key(update.Lap,update.SectorIndex);
+            PaceSectorUpdate existing;
+            if(latestByKey.TryGetValue(key,out existing))
+            {
+                // A later lower revision may never replace newer state.
+                if(existing.Revision>update.Revision) return;
+                int at=latest.IndexOf(existing);
+                if(at>=0) latest[at]=update; else latest.Add(update);
+                latestByKey[key]=update;
+            }
+            else
+            {
+                latestByKey[key]=update;
+                latest.Add(update);
+            }
+            int changedAt=-1;
+            for(int i=0;i<changed.Count;i++)
+                if(Key(changed[i].Lap,changed[i].SectorIndex)==key) { changedAt=i; break; }
+            if(changedAt>=0) changed[changedAt]=update;
+            else
+            {
+                changed.Add(update);
+                while(changed.Count>MaxChangedUpdates) changed.RemoveAt(0);
+            }
+            while(latest.Count>MaxSnapshotStates)
+            {
+                int oldest=0;
+                for(int i=1;i<latest.Count;i++)
+                    if(latest[i].Lap<latest[oldest].Lap || latest[i].Lap==latest[oldest].Lap && latest[i].SectorIndex<latest[oldest].SectorIndex) oldest=i;
+                var drop=latest[oldest];
+                latest.RemoveAt(oldest);
+                latestByKey.Remove(Key(drop.Lap,drop.SectorIndex));
+            }
+        }
+        public PaceSectorUpdate TakeChanged()
+        {
+            if(changed.Count==0) return null;
+            var update=changed[0]; changed.RemoveAt(0); return update;
+        }
+        public PaceSectorUpdate SnapshotAt(int offset)
+        {
+            if(latest.Count==0) return null;
+            int at=offset%latest.Count; if(at<0) at+=latest.Count;
+            return latest[at];
+        }
+        private static long Key(int lap,int index) { return ((long)lap<<8)|(uint)index; }
         private void Cross(double from,double to,double begin,double end)
         {
             if(crossings==null || to<=from) return;
@@ -205,18 +432,22 @@ namespace ThreeSM.EnduranceConnector
             public SectorDiagnostic EmittedDiagnostic;
             public int? PendingHistoryLap;
             public double PendingHistoryAt;
-            public readonly SectorMeasurement Sectors = new SectorMeasurement();
+            public int SnapshotCursor;
+            public readonly SectorMeasurement Sectors;
+            public Car(long revisionBase=0) { Sectors=new SectorMeasurement(revisionBase); }
         }
         private readonly object gate = new object();
         private readonly Dictionary<string, Car> cars = new Dictionary<string, Car>(StringComparer.Ordinal);
         private string session, segment;
         private double lastTime = -1, lastSent = -1;
         private long? lastTick;
-        private int cursor;
+        private int cursor, metricCursor, sectorChangeCursor, snapshotCarCursor;
+        private double[] activeLayout;
         public int CarCount { get { lock(gate) return cars.Count; } }
         public int StoredLapCount { get { lock(gate) return cars.Values.Sum(c=>c.Laps.Count); } }
+        public int StoredSectorUpdateCount { get { lock(gate) return cars.Values.Sum(c=>c.Sectors.SnapshotCount); } }
         public int PointCount { get { lock(gate) return cars.Values.Sum(c => new[] {c.Current,c.Last,c.Best}.Where(t=>t!=null).Sum(t=>t.Points.Count(p=>p!=null))); } }
-        public void Reset() { lock(gate) { cars.Clear(); session=null; segment=null; lastTime=-1; lastSent=-1; lastTick=null; cursor=0; } }
+        public void Reset() { lock(gate) { cars.Clear(); session=null; segment=null; lastTime=-1; lastSent=-1; lastTick=null; cursor=0; metricCursor=0; sectorChangeCursor=0; snapshotCarCursor=0; activeLayout=null; } }
         public static double? Number(double? n, double min, double max)
         { return n.HasValue && !double.IsNaN(n.Value) && !double.IsInfinity(n.Value) && n >= min && n <= max ? n : null; }
         public static double?[] Sectors(double?[] sectors, double? lap)
@@ -232,6 +463,13 @@ namespace ThreeSM.EnduranceConnector
             {
                 if (string.IsNullOrEmpty(observedSession) || observedSession.Length>64 || Number(time,0,86400)==null) { Reset(); return; }
                 if(session!=observedSession || (lastTime>=0 && time<lastTime-0.000001)) { Reset(); session=observedSession; segment=Guid.NewGuid().ToString("N"); }
+                // A different measured layout is a new namespace, never a merge of
+                // sectors from two geometries.
+                var layout=SectorMeasurement.Layout(sectorStarts);
+                if(activeLayout!=null && (layout==null || !activeLayout.SequenceEqual(layout)))
+                { Reset(); session=observedSession; segment=Guid.NewGuid().ToString("N"); }
+                if(layout==null) activeLayout=null;
+                else if(activeLayout==null || !activeLayout.SequenceEqual(layout)) activeLayout=(double[])layout.Clone();
                 if (lastTime>=0 && (time-lastTime < 0.049999 || (tick.HasValue && tick==lastTick))) return;
                 var input=observations.Where(o=>o!=null && !string.IsNullOrEmpty(o.Id) && o.Id.Length<=64)
                     .OrderBy(o=>o.IsPlayer?0:o.Position==1?1:2).ThenBy(o=>o.Id,StringComparer.Ordinal).Take(MaxCars).ToArray();
@@ -246,7 +484,7 @@ namespace ThreeSM.EnduranceConnector
                 {
                     Car c;
                     if(!cars.TryGetValue(o.Id,out c)) { if(cars.Count>=MaxCars) continue; cars[o.Id]=c=new Car(); }
-                    if(c.Previous?.Lap > o.Lap) cars[o.Id]=c=new Car();
+                    if(c.Previous?.Lap > o.Lap) cars[o.Id]=c=new Car(c.Sectors.Revision);
                     c.Sectors.Observe(time.Value,o,sectorStarts);
                     var m=o.Metric;
                     if(m!=null)
@@ -335,34 +573,161 @@ namespace ThreeSM.EnduranceConnector
                 if(session==null || cars.Count==0 || lastTime-lastSent<1) return null;
                 lastSent=lastTime;
                 var ids=cars.OrderBy(k=>k.Value.Previous!=null && k.Value.Previous.IsPlayer?0:k.Value.Previous!=null && k.Value.Previous.Position==1?1:2).ThenBy(k=>k.Key,StringComparer.Ordinal).Select(k=>k.Key).ToArray();
-                // Alternating own / leader / round-robin. Chunks are repeated, never ACKed as durable.
-                int turn=cursor++; int index=turn%3==0?0:turn%3==1?Math.Min(1,ids.Length-1):(turn/3)%ids.Length;
-                var id=ids[index]; var c=cars[id];
-                var traces=new[] {c.Current,c.Last,c.Best}.Where(t=>t!=null).Distinct().ToArray();
+                int n=ids.Length;
+                // Heavy trace round-robin is deliberately independent from changed
+                // sector delivery; both use fair rotating cursors over all cars.
+                int turn=cursor++; int index=turn%3==0?0:turn%3==1?Math.Min(1,n-1):(turn/3)%n;
+                var traceCar=cars[ids[index]];
+                var traces=new[] {traceCar.Current,traceCar.Last,traceCar.Best}.Where(t=>t!=null).Distinct().ToArray();
                 var chunks=new List<PaceChunk>();
                 if(traces.Length>0)
                 {
-                    int round=turn/(Math.Max(1,ids.Length)); var trace=traces[(round/4)%traces.Length]; int part=round%4;
+                    int round=turn/Math.Max(1,n); var trace=traces[(round/4)%traces.Length]; int part=round%4;
                     var pts=trace.Points.Skip(part*32).Take(32).Where(p=>p!=null).ToArray();
-                    if(pts.Length>0) chunks.Add(new PaceChunk {Id=id,TraceId=trace.TraceId,Lap=trace.Lap,ChunkIndex=part,FinalChunk=trace.Seconds.HasValue,
+                    if(pts.Length>0) chunks.Add(new PaceChunk {Id=ids[index],TraceId=trace.TraceId,Lap=trace.Lap,ChunkIndex=part,FinalChunk=trace.Seconds.HasValue,
                         AnchorSessionTimeMs=trace.Anchor,AnchorUncertaintyMs=trace.Uncertainty,LapSeconds=trace.Seconds,
                         SpeedUnit=pts.Any(p=>p[2].HasValue)?"km/h":null,Points=pts});
                 }
-                var metric=c.Metric?.Copy();
-                if(metric!=null)
+                // Up to four metrics per frame, in a pure rotation: own/leader get no
+                // permanent slot at the expense of other cars.
+                var metrics=new List<PaceMetric>();
+                int metricScanned=0;
+                for(int k=0;k<n && metrics.Count<4;k++)
                 {
+                    metricScanned++;
+                    var candidate=cars[ids[(metricCursor+k)%n]];
+                    var metric=candidate.Metric?.Copy();
+                    if(metric==null) continue;
                     var diagnostic=metric.SectorDiagnostic;
                     // First completed lap, then every twentieth. Emit only after the
                     // delayed-lap window; one attempt, no retransmit/outbox/ACK pressure.
-                    metric.SectorDiagnostic=diagnostic!=null && diagnostic!=c.EmittedDiagnostic && c.Sectors.DiagnosticReady ? diagnostic.Copy() : null;
-                    if(metric.SectorDiagnostic!=null) c.EmittedDiagnostic=diagnostic;
+                    metric.SectorDiagnostic=diagnostic!=null && diagnostic!=candidate.EmittedDiagnostic && candidate.Sectors.DiagnosticReady ? diagnostic.Copy() : null;
+                    if(metric.SectorDiagnostic!=null) candidate.EmittedDiagnostic=diagnostic;
+                    metrics.Add(metric);
                 }
-                return new PaceCaptureFrame {ObservedSessionId=session,SegmentId=segment,OpponentMetrics=metric==null?new PaceMetric[0]:new[]{metric},OpponentLaps=c.Laps.Reverse().Skip((turn/4%5)*4).Take(4).Reverse().ToArray(),TraceChunks=chunks.ToArray()};
+                if(n>0) metricCursor=(metricCursor+Math.Max(1,metricScanned))%n;
+                // Changed sectors first, one per car per pass, so a 40-car burst is
+                // spread evenly instead of one car monopolising all eight slots.
+                var updates=new List<PaceSectorUpdate>();
+                var seen=new HashSet<string>(StringComparer.Ordinal);
+                if(n>0)
+                {
+                    int start=sectorChangeCursor%n, next=start;
+                    for(int pass=0;pass<8 && updates.Count<8;pass++)
+                    {
+                        bool took=false;
+                        for(int k=0;k<n && updates.Count<8;k++)
+                        {
+                            int at=(start+k)%n; next=(at+1)%n;
+                            var update=cars[ids[at]].Sectors.TakeChanged();
+                            if(update==null) continue;
+                            updates.Add(update); took=true;
+                            seen.Add(update.Id+"/"+update.Lap+"/"+update.SectorIndex);
+                        }
+                        if(!took) break;
+                    }
+                    sectorChangeCursor=next;
+                    // Repeat/background snapshots fill the remaining slots for loss
+                    // recovery. Identical revisions are idempotent for the server.
+                    if(updates.Count<8)
+                    {
+                        int snapStart=snapshotCarCursor%n, snapNext=snapStart;
+                        for(int k=0;k<n && updates.Count<8;k++)
+                        {
+                            int at=(snapStart+k)%n; snapNext=(at+1)%n;
+                            var car=cars[ids[at]];
+                            var update=car.Sectors.SnapshotAt(car.SnapshotCursor);
+                            if(update==null) continue;
+                            car.SnapshotCursor++;
+                            var key=update.Id+"/"+update.Lap+"/"+update.SectorIndex;
+                            if(!seen.Add(key)) continue;
+                            updates.Add(update);
+                        }
+                        snapshotCarCursor=snapNext;
+                    }
+                }
+                return new PaceCaptureFrame {ObservedSessionId=session,SegmentId=segment,
+                    OpponentMetrics=metrics.ToArray(),
+                    OpponentLaps=traceCar.Laps.Reverse().Skip((turn/4%5)*4).Take(4).Reverse().ToArray(),
+                    TraceChunks=chunks.ToArray(),
+                    SectorUpdates=updates.Count==0?null:updates.ToArray()};
             }
+        }
+        private static PaceCaptureFrame TrimFrame(PaceCaptureFrame source,int updateCount,int metricCount,int lapCount,bool traces,bool diagnostics)
+        {
+            var frame=new PaceCaptureFrame {ObservedSessionId=source.ObservedSessionId,SegmentId=source.SegmentId};
+            var sourceUpdates=source.SectorUpdates??new PaceSectorUpdate[0];
+            frame.SectorUpdates=sourceUpdates.Take(Math.Max(0,Math.Min(updateCount,sourceUpdates.Length))).ToArray();
+            var sourceMetrics=source.OpponentMetrics??new PaceMetric[0];
+            var metrics=new List<PaceMetric>();
+            for(int i=0;i<sourceMetrics.Length && metrics.Count<metricCount;i++)
+            {
+                var metric=sourceMetrics[i].Copy();
+                if(!diagnostics) metric.SectorDiagnostic=null;
+                metrics.Add(metric);
+            }
+            frame.OpponentMetrics=metrics.ToArray();
+            var sourceLaps=source.OpponentLaps??new PaceLap[0];
+            frame.OpponentLaps=sourceLaps.Take(Math.Max(0,lapCount)).ToArray();
+            frame.TraceChunks=traces ? (source.TraceChunks??new PaceChunk[0]) : new PaceChunk[0];
+            return frame;
+        }
+        private static bool TryAppendMember(string body,PaceCaptureFrame capture,int bodyCap,out string result)
+        {
+            result=null;
+            string json;
+            using(var stream=new MemoryStream()) { new DataContractJsonSerializer(typeof(PaceCaptureFrame)).WriteObject(stream,capture); json=Encoding.UTF8.GetString(stream.ToArray()); }
+            var member="\"paceCapture\":"+json;
+            if(Encoding.UTF8.GetByteCount(member)>4096) return false;
+            if(Encoding.UTF8.GetByteCount(body)+Encoding.UTF8.GetByteCount(member)+1>bodyCap) return false;
+            result=body.Substring(0,body.Length-1)+(body.Trim()=="{}"?"":",")+member+"}";
+            return true;
+        }
+        private static int[] DescendingCounts(int maximum,int[] wanted)
+        {
+            if(maximum<=0) return new[]{0};
+            var result=new List<int>();
+            foreach(var value in wanted)
+            {
+                int bounded=Math.Min(maximum,value);
+                if(bounded>0 && !result.Contains(bounded)) result.Add(bounded);
+            }
+            result.Sort(); result.Reverse();
+            return result.ToArray();
+        }
+        private static string AppendLiveWithinBudget(string body,PaceCaptureFrame capture,int bodyCap)
+        {
+            // Priority: keep every possible changed sector, then metrics, then lap
+            // extras, traces and diagnostics. Never mutate the capture owned by the
+            // sampler; each candidate is a fresh shallow view.
+            var updateCounts=DescendingCounts(Math.Min(8,capture.SectorUpdates.Length),new[]{8,4,2,1});
+            var metricCounts=new List<int>(DescendingCounts(capture.OpponentMetrics==null?0:Math.Min(4,capture.OpponentMetrics.Length),new[]{4,2,1,0}));
+            // Metrics are existing core PACE, so zero is only a final fallback.
+            if(metricCounts.Count==0 || metricCounts[metricCounts.Count-1]!=0) metricCounts.Add(0);
+            int[][] optional={ new[]{4,1,1}, new[]{4,0,1}, new[]{2,0,1}, new[]{0,0,1}, new[]{0,0,0} };
+            foreach(var updates in updateCounts)
+                foreach(var metrics in metricCounts)
+                    foreach(var level in optional)
+                    {
+                        string result;
+                        if(TryAppendMember(body,TrimFrame(capture,updates,metrics,level[0],level[1]!=0,level[2]!=0),bodyCap,out result)) return result;
+                    }
+            return body;
         }
         public static string AppendWithinBudget(string body,PaceCaptureFrame capture,int bodyCap=24000)
         {
             if(capture==null || string.IsNullOrEmpty(body)) return body;
+            if(capture.SectorUpdates!=null && capture.SectorUpdates.Length==0)
+            {
+                // An explicitly empty array is the same optional absence on the wire.
+                capture=new PaceCaptureFrame {
+                    ObservedSessionId=capture.ObservedSessionId,SegmentId=capture.SegmentId,
+                    OpponentMetrics=capture.OpponentMetrics,OpponentLaps=capture.OpponentLaps,
+                    TraceChunks=capture.TraceChunks,SectorUpdates=null
+                };
+            }
+            if(capture.SectorUpdates!=null && capture.SectorUpdates.Length>0)
+                return AppendLiveWithinBudget(body,capture,bodyCap);
             string json;
             using(var stream=new MemoryStream()) { new DataContractJsonSerializer(typeof(PaceCaptureFrame)).WriteObject(stream,capture); json=Encoding.UTF8.GetString(stream.ToArray()); }
             // Diagnostics have the lowest budget priority. Strip only the optional member

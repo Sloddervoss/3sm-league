@@ -455,10 +455,24 @@ internal static class FaseDTests
                 Console.Write(V3PayloadFixtureTests.Serialize(V3PayloadFixtureTests.BuildRepresentativeFrame()));
                 return 0;
             }
+            if (string.Equals(args[0], "--only-live-sectors", StringComparison.Ordinal))
+            {
+                Group("LiveSectorUpdateTests", () => LiveSectorUpdateTests.Run(Check));
+                Console.WriteLine("SUMMARY PASS=" + passed + " FAIL=" + failed);
+                return failed == 0 ? 0 : 1;
+            }
+            if (string.Equals(args[0], "--export-live-sectors", StringComparison.Ordinal))
+            {
+                if (args.Length < 2) throw new ArgumentException("doelmap ontbreekt");
+                LiveSectorUpdateTests.ExportFixtures(args[1]);
+                Console.WriteLine("EXPORTED " + args[1]);
+                return 0;
+            }
             // Snelle iteratie op de meetlaag zonder de 60 s-soaktest van de rest.
             if (string.Equals(args[0], "--only-measurement", StringComparison.Ordinal))
             {
                 Group("PaceCaptureTests", () => PaceCaptureTests.Run(Check));
+                Group("LiveSectorUpdateTests", () => LiveSectorUpdateTests.Run(Check));
                   Group("PaceSourceSelectionTests", () => PaceSourceSelectionTests.Run(Check));
                   Group("LapAttributionTests", () => LapAttributionTests.Run(Check));
                 Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
@@ -496,6 +510,7 @@ internal static class FaseDTests
             baselineChecks += Group("SettingsCompatibilityTests", () => SettingsCompatibilityTests.Run(Check));
             baselineChecks += Group("UpdaterTransitionTests", () => UpdaterTransitionTests.Run(Check));
             baselineChecks += Group("PaceCaptureTests", () => PaceCaptureTests.Run(Check));
+            baselineChecks += Group("LiveSectorUpdateTests", () => LiveSectorUpdateTests.Run(Check));
               baselineChecks += Group("PaceSourceSelectionTests", () => PaceSourceSelectionTests.Run(Check));
               baselineChecks += Group("LapAttributionTests", () => LapAttributionTests.Run(Check));
             baselineChecks += Group("MeasurementCoreTests", () => MeasurementCoreTests.Run(Check));
