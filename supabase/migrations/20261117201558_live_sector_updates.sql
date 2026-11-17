@@ -1,5 +1,12 @@
 -- Additive live sectors; retain the deployed hardened PACE merge, signature and ACL.
 BEGIN;
+DO $baseline$
+BEGIN
+ IF md5((SELECT prosrc FROM pg_proc WHERE oid=to_regprocedure('public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz)'))) IS DISTINCT FROM '5a8ead0f2c8e29633b7f647697c86e2a' THEN
+  RAISE EXCEPTION 'Live sector migration baseline drift: recapture the current PACE helper first';
+ END IF;
+END;
+$baseline$;
 -- Internal, bounded, optional sector helpers. No exposed table and no auth change.
 CREATE OR REPLACE FUNCTION public.simhub_sector_update_valid_v1(u jsonb)
 RETURNS boolean LANGUAGE plpgsql IMMUTABLE SET search_path=pg_catalog,public,pg_temp AS $sector$

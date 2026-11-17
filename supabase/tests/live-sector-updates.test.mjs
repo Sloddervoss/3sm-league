@@ -8,6 +8,7 @@ const db=await PGlite.create();
 const prefix='20261117201558';
 const forward=readFileSync(resolve(root,`supabase/migrations/${prefix}_live_sector_updates.sql`),'utf8');
 const rollback=readFileSync(resolve(root,`supabase/rollbacks/${prefix}_live_sector_updates.rollback.sql`),'utf8');
+const oldDefinition=rollback.match(/CREATE OR REPLACE FUNCTION public\.simhub_pace_merge_v1[\s\S]*?\$function\$;/)[0];
 const at='2026-11-17T20:00:00Z';
 const capture=(updates,extra={})=>({schemaRevision:1,observedSessionId:'session',segmentId:'segment',opponentMetrics:[],opponentLaps:[],traceChunks:[],...(updates===undefined?{}:{sectorUpdates:updates}),...extra});
 const sector=(o={})=>({id:'rival',lap:2,sectorIndex:0,sectorCount:3,seconds:31.125,completedSessionTimeSeconds:131.125,observedSessionTimeSeconds:131.125,revision:1,status:'provisional',referenceSeconds:32,...o});
@@ -17,12 +18,16 @@ const results=[];
 async function test(name,fn){try{await fn();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:String(e.stack??e)});throw e;}}
 try{
  await db.exec("CREATE ROLE service_role");
- await db.exec(rollback);
+ await db.exec(oldDefinition);
  await db.exec('GRANT EXECUTE ON FUNCTION public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz) TO service_role');
  await db.exec('REVOKE ALL ON FUNCTION public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz) FROM PUBLIC');
  const original=(await db.query("select prosrc,provolatile,prosecdef,proconfig,proargnames,proacl::text from pg_proc where oid='public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz)'::regprocedure")).rows[0];
  const baseline=await merge(null,capture(undefined));
  await test('RED: production helper rejects the new sector key before migration',async()=>assert.equal(await merge(null,capture([sector()])),null));
+ await test('forward refuses a drifted existing function instead of overwriting it',async()=>{
+  await db.exec(oldDefinition.replace('AS $function$','AS $function$\n-- deliberate isolated test drift'));
+  await assert.rejects(db.exec(forward),/baseline drift/);await db.exec('ROLLBACK');await db.exec(oldDefinition);
+ });
  await db.exec(forward);
  await test('old-client output remains byte-structurally equal',async()=>assert.deepEqual(await merge(null,capture(undefined)),baseline));
  await test('existing merge signature/volatility/security/ACL are unchanged',async()=>{
@@ -103,6 +108,7 @@ try{
   await db.exec(rollback);const restored=(await db.query("select prosrc,provolatile,prosecdef,proconfig,proargnames,proacl::text from pg_proc where oid='public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz)'::regprocedure")).rows[0];assert.deepEqual(restored,original);
   assert.equal((await db.query("select to_regprocedure('public.simhub_sector_car_merge_v1(jsonb,jsonb)') as f")).rows[0].f,null);
  });
- console.log(JSON.stringify({engine:'actual isolated PostgreSQL via PGlite; not production Postgres 15',passed:results.length,failed:0,results}));
- if(process.env.SECTOR_SQL_REPORT)writeFileSync(process.env.SECTOR_SQL_REPORT,JSON.stringify({passed:results.length,failed:0,results},null,2));
+ const engine=(await db.query('select version() as version')).rows[0].version;
+ console.log(JSON.stringify({engine,isolatedPGlite:true,productionExecuted:false,passed:results.length,failed:0,results}));
+ if(process.env.SECTOR_SQL_REPORT)writeFileSync(process.env.SECTOR_SQL_REPORT,JSON.stringify({engine,isolatedPGlite:true,productionExecuted:false,passed:results.length,failed:0,results},null,2));
 }catch(error){console.error(JSON.stringify({passed:results.filter(r=>r.passed).length,failed:1,message:error.message,sqlState:error.code,position:error.position,where:error.where}));process.exitCode=1;if(process.env.SECTOR_SQL_REPORT)writeFileSync(process.env.SECTOR_SQL_REPORT,JSON.stringify({results,error:error.message},null,2));}finally{await db.close();}

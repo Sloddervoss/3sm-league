@@ -1,5 +1,12 @@
 -- Restore captured production function; no change to simhub_persist_v3.
 BEGIN;
+DO $baseline$
+BEGIN
+ IF md5((SELECT prosrc FROM pg_proc WHERE oid=to_regprocedure('public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz)'))) IS DISTINCT FROM '365cc2f487cde1e6fbe94f696e1c4d63' THEN
+  RAISE EXCEPTION 'Live sector rollback baseline drift: do not overwrite a newer PACE helper';
+ END IF;
+END;
+$baseline$;
 CREATE OR REPLACE FUNCTION public.simhub_pace_merge_v1(previous jsonb, capture jsonb, transport text, at_time timestamp with time zone)
  RETURNS jsonb
  LANGUAGE plpgsql
