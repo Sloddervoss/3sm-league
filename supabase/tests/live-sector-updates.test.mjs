@@ -16,7 +16,9 @@ const car=h=>h.cars.find(c=>c.id==='rival');
 const results=[];
 async function test(name,fn){try{await fn();results.push({name,passed:true});}catch(e){results.push({name,passed:false,error:String(e.stack??e)});throw e;}}
 try{
+ await db.exec("CREATE ROLE service_role");
  await db.exec(rollback);
+ await db.exec('GRANT EXECUTE ON FUNCTION public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz) TO service_role');
  await db.exec('REVOKE ALL ON FUNCTION public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz) FROM PUBLIC');
  const original=(await db.query("select prosrc,provolatile,prosecdef,proconfig,proargnames,proacl::text from pg_proc where oid='public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz)'::regprocedure")).rows[0];
  const baseline=await merge(null,capture(undefined));
@@ -26,6 +28,9 @@ try{
  await test('existing merge signature/volatility/security/ACL are unchanged',async()=>{
   const now=(await db.query("select provolatile,prosecdef,proconfig,proargnames,proacl::text from pg_proc where oid='public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz)'::regprocedure")).rows[0];
   const {prosrc,...metadata}=original;assert.deepEqual(now,metadata);
+ });
+ await test('existing trusted invoker can use the new nested helpers',async()=>{
+  await db.exec('SET ROLE service_role');try{const v=await merge(null,capture([sector()]));assert.equal(car(v).sectors[0].seconds,31.125);}finally{await db.exec('RESET ROLE');}
  });
  let h;
  await test('partial sector is stored without waiting for a completed lap',async()=>{h=await merge(null,capture([sector()]));assert.equal(car(h).sectors[0].seconds,31.125);assert.deepEqual(car(h).sectorBests,[]);});
