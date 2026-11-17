@@ -35,7 +35,7 @@ export type PaceCapture = {schemaRevision: 1; observedSessionId: string; segment
 export type PaceTrace = Omit<PaceChunk, "chunkIndex"> & {chunkIndex?: number; complete: boolean; conflict?: boolean};
 export type PaceCar = {id: string; metrics?: PaceMetric; laps: PaceLap[]; traces: PaceTrace[]; sectors?: PaceSectorUpdate[]; sectorBests?: PaceSectorBest[]};
 export type PaceHistory = {schemaRevision: 1; observedSessionId: string; segmentId: string; transportSessionId: string; updatedAt: string; cars: PaceCar[]};
-export const PaceLimits = {cars: 40, bins: 128, traces: 3, laps: 20, wireBytes: 4096, storageBytes: 524288} as const;
+export const PaceLimits = {cars: 40, bins: 128, traces: 3, laps: 20, sectorUpdates: 8, wireBytes: 4096, storageBytes: 524288} as const;
 const object = (x: unknown): Record<string, unknown> => { if (!x || typeof x !== "object" || Array.isArray(x)) throw Error("pace_object"); return x as Record<string, unknown>; };
 const keys = (r: Record<string, unknown>, allowed: string[]) => { if (Object.keys(r).some(k => !allowed.includes(k))) throw Error("pace_keys"); };
 const num = (x: unknown, min: number, max: number, integer = false): number => { if (typeof x !== "number" || !Number.isFinite(x) || x < min || x > max || integer && !Number.isInteger(x)) throw Error("pace_number"); return x; };
@@ -43,6 +43,24 @@ const opt = (x: unknown, min: number, max: number, integer = false) => x == null
 const text = (x: unknown, max = 64): string => { if (typeof x !== "string" || !x.trim() || x.length > max) throw Error("pace_id"); return x; };
 const bool = (x: unknown) => { if (x == null) return null; if (typeof x !== "boolean") throw Error("pace_bool"); return x; };
 const list = (x: unknown, cap: number): unknown[] => { if (!Array.isArray(x) || x.length > cap) throw Error("pace_list"); return x; };
+/** A bad optional sector must not discard the existing PACE block or core frame. */
+export const parsePaceSectorUpdate = (value: unknown): PaceSectorUpdate | null => {
+  try {
+    const r = object(value);
+    keys(r, ["id", "lap", "sectorIndex", "sectorCount", "seconds", "completedSessionTimeSeconds", "observedSessionTimeSeconds", "revision", "status", "referenceSeconds"]);
+    const sectorCount = num(r.sectorCount, 1, 16, true);
+    const sectorIndex = num(r.sectorIndex, 0, sectorCount - 1, true);
+    if (r.status !== "provisional" && r.status !== "verified" && r.status !== "invalidated") return null;
+    const status = r.status;
+    if (status === "invalidated" && r.seconds !== null) return null;
+    const seconds = status === "invalidated" ? null : num(r.seconds, Number.MIN_VALUE, 86400);
+    const completedSessionTimeSeconds = num(r.completedSessionTimeSeconds, 0, 86400);
+    const observedSessionTimeSeconds = num(r.observedSessionTimeSeconds, completedSessionTimeSeconds, 86400);
+    return {id: text(r.id), lap: num(r.lap, 1, 100000, true), sectorIndex, sectorCount, seconds,
+      completedSessionTimeSeconds, observedSessionTimeSeconds, revision: num(r.revision, 1, Number.MAX_SAFE_INTEGER, true), status,
+      referenceSeconds: r.referenceSeconds === null ? null : num(r.referenceSeconds, Number.MIN_VALUE, 86400)};
+  } catch { return null; }
+};
 export const validatedSectors = (value: unknown, lap: unknown, count?: number | null): number[] | null => {
   if (!Array.isArray(value) || value.length < 1 || value.length > 16 || count != null && value.length !== count || typeof lap !== "number" || !Number.isFinite(lap) || lap <= 0 || lap > 86400) return null;
   if (value.some(x => typeof x !== "number" || !Number.isFinite(x) || x <= 0 || x > 86400)) return null;
@@ -53,7 +71,7 @@ export const parsePaceCapture = (value: unknown): PaceCapture | null => {
   if (value == null) return null;
   try {
     if (new TextEncoder().encode(JSON.stringify(value)).length + 14 > PaceLimits.wireBytes) return null;
-    const r = object(value); keys(r, ["schemaRevision", "observedSessionId", "segmentId", "opponentMetrics", "opponentLaps", "traceChunks"]);
+    const r = object(value); keys(r, ["schemaRevision", "observedSessionId", "segmentId", "opponentMetrics", "opponentLaps", "traceChunks", "sectorUpdates"]);
     if (r.schemaRevision !== 1) return null;
     const opponentMetrics = list(r.opponentMetrics, 4).map(v => {
       const m = object(v); keys(m, ["id", "observedSessionTimeSeconds", "lastLapSeconds", "bestLapSeconds", "lastLapSectorSeconds", "bestLapSectorSeconds", "bestSectorSeconds", "bestLapDeltaToFieldBestSeconds", "bestLapDeltaToPlayerSeconds", "lapValid", "lapHighPrecision", "trackPositionPercentRaw", "sectorMismatchCount", "sectorCount", "sectorLap", "sectorSource", "sectorErrorSeconds", "bestSectorSource", "bestSectorErrorSeconds", "sectorDiagnostic"]);
@@ -98,6 +116,10 @@ export const parsePaceCapture = (value: unknown): PaceCapture | null => {
         anchorSessionTimeMs: opt(t.anchorSessionTimeMs, 0, 86400000, true), anchorUncertaintyMs: opt(t.anchorUncertaintyMs, 0, 250, true), lapSeconds: opt(t.lapSeconds, 0.001, 86400),
         provenance: "simhub-opponent-sampled" as const, speedUnit: t.speedUnit === "km/h" ? "km/h" as const : null, points};
     });
-    return {schemaRevision: 1, observedSessionId: text(r.observedSessionId), segmentId: text(r.segmentId), opponentMetrics, opponentLaps, traceChunks};
+    const sectorUpdates = Object.prototype.hasOwnProperty.call(r, "sectorUpdates") ? {
+      sectorUpdates: Array.isArray(r.sectorUpdates) && r.sectorUpdates.length <= PaceLimits.sectorUpdates
+        ? r.sectorUpdates.map(parsePaceSectorUpdate).filter((s): s is PaceSectorUpdate => s !== null) : [],
+    } : {};
+    return {schemaRevision: 1, observedSessionId: text(r.observedSessionId), segmentId: text(r.segmentId), opponentMetrics, opponentLaps, traceChunks, ...sectorUpdates};
   } catch { return null; }
 };
