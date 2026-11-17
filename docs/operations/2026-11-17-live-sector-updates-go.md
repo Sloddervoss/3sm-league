@@ -65,24 +65,46 @@ Publicatie, manifestwissel, productie-DDL en installatie wachten op aparte GO.
   Embedded updater gelijk aan die uit dezelfde build; productiesleutel aanwezig,
   testdefine/sleutel afwezig. Eén bestaande CS0169-waarschuwing, nul fouten.
 - PASS: DLL/log/resultaten teruggelezen; installed én Desktop vóór/na ongewijzigd.
-- OPEN: definitieve freeze volgt pas na bronreview en browserpoort. Het bovenstaande
-  is een geverifieerde kandidaat, nog geen gepubliceerde of geïnstalleerde release.
+- TUSSENSTAND bij de eerste kandidaat: definitieve freeze en browserpoort waren nog
+  open; de hieronder vastgelegde eindpoorten vervangen die tussenstand.
 - NIET AFGEROND: eigen volledige Vitest-suite stopte na 180 seconden zonder rapport.
   Die run telt niet als groen; de gerichte 150 tests en vier interopproeven wel.
 
 ## Open poorten — niet als klaar melden
 
-1. Plugin- en UI-commits integreren; eigen diff- en volledige relevante regressiecheck.
-2. Echte C# serializer → TS-normalizer/snapshot → SQL-merge/projector → UI-consumer.
-3. Schone exacte commit archiveren met bronmanifest; full net48/vendor-SDK Release
-   in unieke Windows-scratchmap, zonder GUI/procesactie/installatie/Desktop-copy.
-4. Werkelijke DLL/updater/log terughalen, assemblyversie en inputs controleren,
-   geïnstalleerde/Desktop-hashes vóór/na bewijzen en één artifact bevriezen.
-5. Echte browsercontrole van gebouwde bestaande app met gemarkeerde replay waar
-   nodig; geen synthetische data als live nauwkeurigheid of gereden ronde opvoeren.
-6. Bron- en contractreview afsluiten; exacte BLOCKED/OPEN gates blijven zichtbaar.
-7. Publicatie en ondersteunde 0.7.6.3 → bevroren 0.7.6.4 apparaatupgrade apart
-   uitvoeren en bewijzen. Geen download of offline harness als echte upgrade tellen.
+1. PASS: integratie en gerichte regressies, uiteindelijk 154/154 TS/UI/interoptests,
+   8/8 download/updaterchecks en SUMMARY PASS=1319 FAIL=0 in het volledige C#-harnas.
+2. PASS: daadwerkelijke NextFrame-streams door V3-parser, merge, bestaande projector
+   en gedeelde React-sectorcel. 25/25 afzonderlijke SQL-controles opnieuw groen.
+3. PASS: definitieve vendorbuild vanaf `168ac68abc580c2d919552fe0a8ba99caa5d91d1`.
+   Versie 0.7.6.4, 889344 bytes, SHA-256
+   `76505822fb277f959a8b922950ac5f57a479360a381fcd5f8239848c70d8b6c9`.
+   De eerdere 390fc60a-DLL is vervallen en mag niet worden gepubliceerd.
+4. PASS: DLL en human-ZIP bevroren, byte-identiek teruggelezen op Windows en in
+   `/root/3sm-release-prepared/sector-live-0764-168ac68a` op de releasehost.
+   Dit is private staging, GEEN publieke download of manifestwissel.
+5. PASS, begrensd: echte gebouwde premiumcomponent met expliciet synthetische
+   C#→SQL-replay bij 390/1366/1600px en 3/16 sectoren: geen celoverlap of
+   horizontale pagina-overflow. Geen bewijs van volledige ingelogde app of live rit.
+   Volledige Vite-clientbuild geslaagd; dit is geen typecheck of SEO-publicatiebuild.
+6. PASS: onafhankelijke review op be1f0ad vond geen blokkerende fouten. Twee lage
+   bevindingen aanvullend opgelost: tijdelijke ontbrekende baanmetadata wist geen
+   namespace meer, kort verdwenen auto's behouden sectorstaat/revisies/referenties.
+   Eigen regressie op eerdere producer: 83 PASS / 6 FAIL; verbeterde subset: 89/89.
+7. OPEN: afzonderlijke publicatie-GO, echte ondersteunde 0.7.6.3 → 0.7.6.4
+   automatische apparaatupgrade en een werkelijke gereden sectorreeks. Geen download,
+   offline harnas of replay als uitgevoerde upgrade/nauwkeurigheidsproef tellen.
+
+## Overblijvende beperkingen
+
+- Bij theoretisch continu >8 gewijzigde sectorfeiten/seconde én payloadsnoei kan
+  background replay worden verdrongen. De 40-auto's-burst is getest, niet iedere
+  onbegrensde belasting. Geen onbeperkte directe aflevering beloven.
+- Interne sectorGuards worden door de bestaande projector meegeleverd; dit is
+  extra leesvolume, geen extra bevoegdheid. Projector-DDL is bewust niet uitgebreid.
+- De volledige eigen Vitest-run en typecheck zijn niet groen verklaard. De volledige
+  Vitest-run bereikte de 180s-grens zonder rapport; gerichte suites staan hierboven.
+- SQL-enginebewijs is geïsoleerde PostgreSQL 18 via PGlite, niet productie-PG15.
 
 ## Latere uitrolvolgorde na GO
 
