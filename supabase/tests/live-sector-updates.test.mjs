@@ -29,6 +29,7 @@ try{
   await assert.rejects(db.exec(forward),/baseline drift/);await db.exec('ROLLBACK');await db.exec(oldDefinition);
  });
  await db.exec(forward);
+ await db.exec(readFileSync(resolve(root,'supabase/tests/fixtures/pace-sector-project-baseline.sql'),'utf8'));
  await test('old-client output remains byte-structurally equal',async()=>assert.deepEqual(await merge(null,capture(undefined)),baseline));
  await test('existing merge signature/volatility/security/ACL are unchanged',async()=>{
   const now=(await db.query("select provolatile,prosecdef,proconfig,proargnames,proacl::text from pg_proc where oid='public.simhub_pace_merge_v1(jsonb,jsonb,text,timestamptz)'::regprocedure")).rows[0];
@@ -89,6 +90,17 @@ try{
   for(const bad of [{seconds:0},{seconds:'31.125'},{revision:0},{sectorIndex:3},{lap:1.5},{id:1},{referenceSeconds:0},{observedSessionTimeSeconds:100},{unknown:1}]){
    const r=await db.query('select public.simhub_sector_update_valid_v1($1::jsonb) as valid',[JSON.stringify({...sector(),...bad})]);assert.equal(r.rows[0].valid,false,JSON.stringify(bad));
   }
+ });
+ await test('actual production projector retains sectors for non-selected opponents',async()=>{
+  const v=await merge(null,capture([sector({status:'verified'})]));v.updatedAt=new Date().toISOString();
+  const snapshot={opponents:[{id:'own',isPlayer:true,position:2},{id:'leader',position:1},{id:'rival',position:3}],paceHistory:v};
+  const projected=(await db.query('select public.simhub_pace_project_v1($1::jsonb,NULL) as v',[JSON.stringify(snapshot)])).rows[0].v;
+  const rival=projected.paceHistory.cars[0];assert.deepEqual(rival.sectors,car(v).sectors);assert.deepEqual(rival.sectorBests,car(v).sectorBests);assert.equal(rival.traces,undefined);assert.equal(rival.laps,undefined);
+ });
+ await test('canonical read preserves required null invalidation and absent-reference facts',async()=>{
+  const v=await merge(null,capture([sector({status:'invalidated',seconds:null,referenceSeconds:null})]));v.updatedAt=new Date().toISOString();
+  const projected=(await db.query('select public.simhub_pace_project_v1($1::jsonb,NULL) as v',[JSON.stringify({opponents:[],paceHistory:v})])).rows[0].v;
+  assert.equal(projected.paceHistory.cars[0].sectors[0].seconds,null);assert.equal(projected.paceHistory.cars[0].sectors[0].referenceSeconds,null);
  });
  await test('16 sectors for 40 cars remain bounded with verified best history',async()=>{
   let v=null,updates=[];
