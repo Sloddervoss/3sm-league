@@ -29,6 +29,7 @@ import { VehicleTelemetryPanel } from "./VehicleTelemetryPanel";
 import { LiveTrackPanel } from "./LiveTrackPanel";
 import { RaceTelemetryStrip } from "./RaceTelemetryStrip";
 import { deriveStandings, geldigeLaatsteRonde } from "./standings";
+import { withoutLiveTelemetry } from "./strategy";
 import { useMemo, useCallback, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { PitwallPositionData, PitwallPaceData, PitwallRaceClock } from "./pitwallHelpers";
@@ -196,7 +197,13 @@ export const PitwallTab = ({ event }: Props) => {
   ) ?? null;
   const ownBestLap = (isDemo ? null : real.v3?.timing?.bestLapTimeSeconds) ?? pace?.bestLapSeconds ?? null;
 
-  const connectionState = !isLive ? "offline" : strategy?.strategy_status === "low_sample" ? "stale" : "live";
+  const connectionState = !isLive
+    ? strategy?.strategy_status === "stale_telemetry" || real.context?.status === "stale_telemetry"
+      ? "stale"
+      : "offline"
+    : strategy?.strategy_status === "low_sample"
+      ? "stale"
+      : "live";
 
   return (
     /* data-pitwall + data-pitwall-focus for CSS targeting */
@@ -211,6 +218,8 @@ export const PitwallTab = ({ event }: Props) => {
         eyebrow="3SM · Endurance"
         title={event.name}
         state={connectionState}
+        stateLabel={connectionState === "live" ? "LIVE" : connectionState === "stale" ? "ONLINE — geen telemetrie" : "OFFLINE"}
+        stateDetail={connectionState === "live" ? "1s polling" : real.context?.telemetry_received_at ? `laatste telemetrie ${new Date(real.context.telemetry_received_at).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}` : "nog geen telemetrie"}
         note={!isLive ? "Planning blijft beschikbaar" : undefined}
         items={[
           ...(teamName ? [{ label: "Team", value: teamName }] : []),
@@ -335,7 +344,7 @@ export const PitwallTab = ({ event }: Props) => {
         <div className="min-w-0 space-y-3 2xl:col-start-1 2xl:row-start-1">
           <PitwallDashboard
             kpi={<RaceTelemetryStrip plannedLaps={event.plannedLaps} plannedDurationMinutes={event.plannedDurationMinutes} v3={isDemo ? null : real.v3 ?? null} live={isLive} />}
-            decision={strategy ? <DecisionBand advice={advice} /> : undefined}
+            decision={strategy ? <DecisionBand advice={isLive ? advice : withoutLiveTelemetry(advice)} /> : undefined}
             notice={
               <PitStopAnchor
                 source={isDemo ? null : { eventId: event.id, teamId: selectedTeamId }}

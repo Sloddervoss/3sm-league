@@ -91,9 +91,21 @@ export function PitwallPremiumView({
     v3?.identity?.trackId ?? v3?.identity?.trackName ?? trackLabel,
     v3?.identity?.trackConfig ?? '',
   ]);
-  const sectorCount = useSectorLayoutCount(sectorContext, live ? trackSectorCount(v3) : 0);
+  const sectorCount = useSectorLayoutCount(sectorContext, trackSectorCount(v3));
   const deviceSource = useMemo(() => ({ deviceId }), [deviceId]);
   const state = live ? "live" : online ? "stale" : "offline";
+  const telemetryAge = (() => {
+    const iso = detail.telemetry?.received_at;
+    if (!iso) return null;
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) return null;
+    const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (s < 5) return "nu";
+    if (s < 60) return `${s}s geleden`;
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m}m geleden`;
+    return `${Math.round(m / 60)}u geleden`;
+  })();
 
   const panel = (slot: string, body: ReactNode) => (
     <div className="ptp-panel-wrap" data-ptp-panel={slot}>
@@ -111,6 +123,7 @@ export function PitwallPremiumView({
         teamName={linkedTeamName}
         connector={detail.health?.connector_version ?? null}
         lastSeen={lastSeen}
+        telemetryAge={telemetryAge}
         state={state}
         sectorCount={sectorCount}
         refreshing={refreshing}
@@ -120,7 +133,9 @@ export function PitwallPremiumView({
         <RaceTelemetryStrip v3={v3} live={live} showClassPosition={false} sectorCountOverride={sectorCount} stableLayout contextKey={contextKey} />
       </div>
 
-      <DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />
+      {/* Zonder live telemetrie geen bandenbeeld uit een oude meting naast een
+          "geen advies"-beslissing. De band komt uit dezelfde live staat. */}
+      <DecisionBand advice={{ ...strategyAdvice, tyreEstimate: live ? tyreEstimate : null }} />
 
       <div className="ptp-main" data-pitwall-row="track-timing">
         <div className="ptp-track-col" data-pitwall-col="track">

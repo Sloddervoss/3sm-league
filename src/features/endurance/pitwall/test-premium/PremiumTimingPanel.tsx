@@ -139,7 +139,7 @@ export function PremiumTimingPanel({
   const [transition, dispatch] = useReducer(reduceTimingTransitions, initialTimingState());
 
   const rows = standings.rows;
-  const retained = useRetainedLapSectors(live ? v3 : null, contextKey);
+  const retained = useRetainedLapSectors(v3, contextKey);
   const rememberedSectorCount = useSectorLayoutCount(contextKey, retained.count);
   const sectorCount = layoutSectorCount === undefined ? rememberedSectorCount : validSectorLayoutCount(layoutSectorCount);
   const sectorTimings = live
@@ -237,8 +237,9 @@ export function PremiumTimingPanel({
     const legacyComplete = legacySectors?.length === sectorCount;
     const usingSectorUpdates = timing != null && timing.sectorCount === sectorCount;
     const retainedLap = !timing ? retained.laps.get(r.id) : undefined;
-    const sectors = retainedLap?.seconds.length === sectorCount ? retainedLap.seconds : null;
+    const sectors = !gap && retainedLap?.seconds.length === sectorCount ? retainedLap.seconds : null;
     const prior = retainedLap?.lap != null && r.lap != null && r.lap > retainedLap.lap + 1;
+    const retainedStale = sectors != null && (!live || !legacyComplete);
     const metrics = freshMetrics(v3, r.id);
     // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
     // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
@@ -249,9 +250,13 @@ export function PremiumTimingPanel({
       : live && legacyComplete
         ? metrics?.lastLapSeconds ?? r.lastLapSeconds
         : r.lastLapSeconds;
-    const sectorTitle = usingSectorUpdates || (sectors && !legacyComplete) ? undefined : live && legacyComplete
-      ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
-      : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
+    const sectorTitle = usingSectorUpdates
+      ? undefined
+      : sectors && retainedLap
+        ? `Laatst geverifieerd · ronde ${retainedLap.lap ?? "?"}${retainedStale ? " · bewaard na ontbrekende poll" : ""}`
+        : live && legacyComplete
+          ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
+          : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
     const flashLap = !pinned && lapFlash[r.id] === r.lap ? r.lap : null;
     return (
       <tr
@@ -288,6 +293,20 @@ export function PremiumTimingPanel({
               )}
               <SafetyRating opponent={r} />
             </span>
+            {/* Op smalle schermen zijn de secundaire kolommen visueel verborgen;
+                deze tekst houdt positie, auto, beste tijd, ronde, gap en pit
+                bereikbaar voor hulpsoftware. */}
+            <span className="ptp-mobile-secondary sr-only" data-ptp-mobile-secondary="true">
+              {[
+                r.position != null ? `Positie ${r.position}` : null,
+                r.carNumber ? `nummer ${r.carNumber}` : null,
+                carName ? `auto ${carName}` : null,
+                r.bestLapSeconds != null ? `beste ${preciseLapTime(r.bestLapSeconds)}` : null,
+                r.lap != null ? `ronde ${r.lap}` : null,
+                renderGap(r, false) !== "—" ? `gap ${renderGap(r, false)}` : null,
+                r.inPit ? "in de pit" : null,
+              ].filter(Boolean).join(" · ")}
+            </span>
           </div>
         </td>
         <td className="ptp-col-car">
@@ -302,13 +321,27 @@ export function PremiumTimingPanel({
         >
           {preciseLapTime(last)}
         </td>
-        <td data-timing="best-lap" className="ptp-col-time ptp-best">{preciseLapTime(r.bestLapSeconds)}</td>
+        <td data-timing="best-lap" className="ptp-col-time ptp-col-best">{preciseLapTime(r.bestLapSeconds)}</td>
         {sectorCount === 0 && <td className="ptp-col-sector" title="Sectorindeling onbekend; geen tijden beschikbaar">—</td>}
         {sectorColumns.map((n) => (
           <td key={n} className="ptp-col-sector" data-sector-index={n} title={sectorTitle}>
             {usingSectorUpdates
               ? <SectorTimingCell slot={timing?.slots[n] ?? null} />
-              : sectors?.[n] != null && retainedLap ? <span data-sector-lap={retainedLap.lap ?? undefined} data-sector-previous={prior || undefined} className={prior ? "opacity-60" : undefined} title={retainedLap.lap == null ? undefined : `Gecontroleerde sectorreeks · ronde ${retainedLap.lap}`}>{sectors[n].toFixed(3)}</span> : "—"}
+              : sectors?.[n] != null && retainedLap
+                ? (
+                  <span
+                    data-sector-lap={retainedLap.lap ?? undefined}
+                    data-sector-source="verified-lap"
+                    data-sector-previous={prior || undefined}
+                    data-retained-stale={retainedStale || undefined}
+                    className={prior || retainedStale ? "opacity-60" : undefined}
+                    title={retainedLap.lap == null ? undefined : `Laatst geverifieerd · ronde ${retainedLap.lap}`}
+                  >
+                    <span data-sector-value="true">{sectors[n].toFixed(3)}</span>
+                    {retainedLap.lap != null && <span className="ptp-sector-lap-mark" data-sector-lap-mark={retainedLap.lap}>R{retainedLap.lap}</span>}
+                  </span>
+                )
+                : "—"}
           </td>
         ))}
         <td className="ptp-col-lap ptp-lap" data-lap-flash={flashLap ?? undefined}>
@@ -397,6 +430,12 @@ export function PremiumTimingPanel({
         )}
       </div>
 
+      {retained.laps.size > 0 && (
+        <p className="ptp-timing-legend" data-ptp-verified-legend="true">
+          R… bij een sectortijd = laatst geverifieerde volledige ronde; live sectoren tonen hun eigen ronde.
+        </p>
+      )}
+
       <div className="ptp-focus" aria-label="Direct voor, jij en direct achter">
         <FocusCell tone="ahead" label="Voor" opponent={standings.ahead} />
         <FocusCell
@@ -430,7 +469,7 @@ export function PremiumTimingPanel({
             <col className="ptp-col-driver" />
             <col className="ptp-col-car" />
             <col className="ptp-col-time" />
-            <col className="ptp-col-time" />
+            <col className="ptp-col-time ptp-col-best" />
             {Array.from({ length: Math.max(1, sectorCount) }, (_, n) => <col key={n} className="ptp-col-sector" />)}
             <col className="ptp-col-lap" />
             <col className="ptp-col-gap" />
@@ -443,7 +482,7 @@ export function PremiumTimingPanel({
               <th scope="col" className="ptp-col-driver">Coureur</th>
               <th scope="col" className="ptp-col-car">Auto</th>
               <th scope="col" className="ptp-col-time">Laatste</th>
-              <th scope="col" className="ptp-col-time">Beste</th>
+              <th scope="col" className="ptp-col-time ptp-col-best">Beste</th>
               {sectorCount === 0 && <th scope="col" className="ptp-col-sector">Sectoren</th>}
               {sectorColumns.map((n) => (
                 <th key={n} scope="col" className="ptp-col-sector">S{n + 1}</th>
@@ -453,7 +492,9 @@ export function PremiumTimingPanel({
               <th scope="col" className="ptp-col-pit">Pit</th>
             </tr>
           </thead>
-          {ownRow && (
+          {/* Alleen vastzetten als er meer dan één auto is; bij een enkele auto
+              zou dezelfde rij twee keer onder elkaar staan. */}
+          {ownRow && visibleRows.length > 1 && (
             <tbody className="ptp-own-pinned" aria-label="Eigen auto — vastgezet">
               {renderTimingRow(ownRow, true)}
             </tbody>

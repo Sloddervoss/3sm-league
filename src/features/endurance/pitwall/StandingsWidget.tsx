@@ -10,6 +10,7 @@ import type { PitwallPlannedStint, PitwallTimelineEvent, V3Opponent } from "./pi
 import { formatClosingRate } from "./closingRate";
 import { preciseLapTime } from "./telemetryFormat";
 import { PitwallPanel } from "./PitwallPanel";
+import "./pitwallTimingResponsive.css";
 
 interface Props {
   v3?: V3Normalized | null;
@@ -80,7 +81,7 @@ const TrendMark = ({ rate }: { rate: number | null }) => {
  * vervalt. Ontbrekende ratings blijven onbekend, ook met een oudere connector.
  */
 export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live = true, plannedStints = [], events = [] }: Props) => {
-  const retained = useRetainedLapSectors(live ? v3 : null);
+  const retained = useRetainedLapSectors(v3);
   const sectorCount = retained.count;
   const sectorColumns = Array.from({length:sectorCount},(_,n)=>n);
   const sectorTimings = live
@@ -127,6 +128,11 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
         {views.map(v => <button key={v.id} type="button" aria-pressed={active === v.id} onClick={() => setView(v.id)} className={`text-[12px] font-bold ${active === v.id ? 'border-b border-orange-400 text-orange-300' : 'text-slate-400'}`}>{v.label}</button>)}
       </div>
       {active === 'class' && <div className="flex flex-wrap gap-2 px-3.5 py-1">{classes.map(c => <button key={c} type="button" aria-pressed={activeClass === c} onClick={() => setSelectedClass(c)} className="text-[12px] text-sky-300">{c}</button>)}</div>}
+      {active !== 'stints' && active !== 'pits' && active !== 'events' && retained.laps.size > 0 && (
+        <p className="border-b border-[#161C27] px-3.5 py-1 text-[10px]" data-pitwall-verified-legend="true">
+          R… bij een sectortijd = laatst geverifieerde volledige ronde; live sectoren tonen hun eigen ronde.
+        </p>
+      )}
       {(active === 'stints' || active === 'pits' || active === 'events') ? <div className="pitwall-timing-scroll p-3 text-[12px] text-slate-300" tabIndex={0} role="region" aria-label="Eigen opgeslagen planning en gebeurtenissen">
         <p className="mb-2 text-[12px] text-slate-400">{active === 'stints' ? 'Eigen team · planning, geen gemeten rivalenstints.' : 'Eigen auto · opgeslagen gebeurtenissen, geen volledig wedstrijdtotaal.'}</p>
         {active === 'stints' ? <ol>{plannedStints.map((s, i) => <li key={s.id} className="border-t border-white/10 py-2">{i + 1}. {s.driver_id} · {s.expected_laps} ronden gepland · {s.status}{s.tyre_change ? ' · bandenwissel gepland' : ''}</li>)}</ol> : <ol>{(active === 'pits' ? pitEvents : events).map((e, i) => <li key={`${e.event_key}:${i}`} className="border-t border-white/10 py-1"><time>{e.captured_at}</time> · R{e.completed_laps ?? e.lap ?? '—'} · {e.event_type}</li>)}</ol>}
@@ -150,21 +156,21 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
 
       {visibleRows.length > 0 && (
         <div className="pitwall-timing-scroll overflow-x-auto" tabIndex={0} role="region" aria-label="Live timing — scrollbaar klassement">
-          <table data-sector-count={sectorCount} className={`w-full min-w-[840px] text-left tabular-nums ${sectorCount > 3 ? "text-[10px] [&_th]:px-1 [&_td]:px-1" : "text-[12px]"}`}>
+          <table data-sector-count={sectorCount} data-pitwall-timing-table="true" data-pitwall-sector-source={sectorTimings && sectorCount > 0 ? "live" : sectorCount > 0 ? "verified-lap" : "unknown"} className={`pitwall-timing-table w-full min-w-[840px] text-left tabular-nums max-[430px]:min-w-0 ${sectorCount > 3 ? "text-[10px] [&_th]:px-1 [&_td]:px-1" : "text-[12px]"}`}>
             <thead className="bg-[#0A0C10] text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
               <tr>
-                <th className="px-2.5 py-1.5">P</th>
-                <th className="px-2 py-1.5">#</th>
-                <th className="px-2 py-1.5">Coureur</th>
-                <th scope="col" className="px-2 py-1.5 text-right"><abbr title="iRating" className="no-underline">iR</abbr></th>
-                <th scope="col" className="px-2 py-1.5"><abbr title="Safety Rating en licentieklasse" className="no-underline">SR</abbr></th>
-                <th className="px-2 py-1.5">Klasse</th>
-                <th className="px-2 py-1.5 text-right">Laatste</th>
-                <th className="px-2 py-1.5 text-right">Beste</th>
-                {sectorColumns.map(n=><th key={n} className="px-2 py-1.5 text-right">S{n+1}</th>)}
-                <th className="px-2 py-1.5 text-right">Ronde</th>
-                <th className="px-2 py-1.5 text-right">Gap tot jou</th>
-                <th className="px-2 py-1.5 text-center">Pit</th>
+                <th className="pitwall-col-pos px-2.5 py-1.5">P</th>
+                <th className="pitwall-col-secondary px-2 py-1.5">#</th>
+                <th className="pitwall-col-driver px-2 py-1.5">Coureur</th>
+                <th scope="col" className="pitwall-col-secondary px-2 py-1.5 text-right"><abbr title="iRating" className="no-underline">iR</abbr></th>
+                <th scope="col" className="pitwall-col-secondary px-2 py-1.5"><abbr title="Safety Rating en licentieklasse" className="no-underline">SR</abbr></th>
+                <th className="pitwall-col-secondary px-2 py-1.5">Klasse</th>
+                <th className="pitwall-col-last px-2 py-1.5 text-right">Laatste</th>
+                <th className="pitwall-col-secondary px-2 py-1.5 text-right">Beste</th>
+                {sectorColumns.map(n=><th key={n} className="pitwall-col-sector px-2 py-1.5 text-right">S{n+1}</th>)}
+                <th className="pitwall-col-secondary px-2 py-1.5 text-right">Ronde</th>
+                <th className="pitwall-col-secondary px-2 py-1.5 text-right">Gap tot jou</th>
+                <th className="pitwall-col-secondary px-2 py-1.5 text-center">Pit</th>
               </tr>
             </thead>
             <tbody>
@@ -174,10 +180,12 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                 const cached = !timing ? retained.laps.get(r.id) : undefined;
                 const lastSectors = cached?.seconds.length === sectorCount ? cached : undefined;
                 const prior = lastSectors?.lap != null && r.lap != null && r.lap > lastSectors.lap + 1;
+                const retainedStale = lastSectors != null && (!live || !legacySectors);
                 const usingSectorUpdates = live && timing != null && timing.sectorCount === sectorCount;
+                const metrics = live ? freshMetrics(v3,r.id) : null;
                 const legacySectorTitle = live && legacySectors
-                  ? `Gecontroleerde laatste ronde · ${freshMetrics(v3,r.id)?.sectorSource ?? "bron onbekend"} · afwijking ${freshMetrics(v3,r.id)?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
-                  : `Geen gecontroleerde sectorreeks · bronafwijkingen ${freshMetrics(v3,r.id)?.sectorMismatchCount ?? "onbekend"}`;
+                  ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
+                  : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
                 return (
                 <Fragment key={r.id}>
                   {(index === 0 || visibleRows[index - 1].carClass !== r.carClass) && (
@@ -200,33 +208,43 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                         : "text-slate-300 hover:bg-white/[0.03]"
                     }`}
                   >
-                    <td className="px-2.5 py-1.5 font-mono font-bold">{r.position != null ? `P${renderPosition(r.position)}` : "—"}</td>
-                    <td data-timing="car-number" className="px-2 py-1.5 font-mono text-slate-400">{r.carNumber ?? "—"}</td>
-                    <td className="max-w-[15rem] px-2 py-1.5">
+                    <td className="pitwall-col-pos px-2.5 py-1.5 font-mono font-bold">{r.position != null && r.position > 0 ? `P${renderPosition(r.position)}` : "—"}</td>
+                    <td data-timing="car-number" className="pitwall-col-secondary px-2 py-1.5 font-mono text-slate-400">{r.carNumber ?? "—"}</td>
+                    <td className="pitwall-col-driver max-w-[15rem] px-2 py-1.5">
                       <p className={`truncate ${r.isPlayer ? "font-bold text-white before:mr-1 before:text-orange-400 before:content-['▸']" : "font-semibold text-slate-100"}`}>
                         {driverLabel(r)}
                       </p>
                       {teamLabel(r) && <p className="mt-0.5 truncate text-[10.5px] leading-tight text-slate-500">{teamLabel(r)}</p>}
+                      <span className="sr-only" data-pitwall-mobile-secondary="true">
+                        {[
+                          r.position != null ? `Positie ${r.position}` : null,
+                          r.carNumber ? `nummer ${r.carNumber}` : null,
+                          r.bestLapSeconds != null ? `beste ${preciseLapTime(r.bestLapSeconds)}` : null,
+                          r.lap != null ? `ronde ${r.lap}` : null,
+                          renderGap(r, false) !== "—" ? `gap ${renderGap(r, false)}` : null,
+                          r.inPit ? "in de pit" : null,
+                        ].filter(Boolean).join(" · ")}
+                      </span>
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono text-slate-200" title="iRating · huidige coureur, sessiegegevens">
+                    <td className="pitwall-col-secondary px-2 py-1.5 text-right font-mono text-slate-200" title="iRating · huidige coureur, sessiegegevens">
                       {Number.isInteger(r.irating) && r.irating > 0 && r.irating <= 100000 ? r.irating : "—"}
                     </td>
-                    <td className="px-2 py-1.5 font-mono"><SafetyRatingBadge opponent={r} /></td>
-                    <td className="px-2 py-1.5 text-[11px] uppercase tracking-[0.08em] text-sky-300">{r.carClass ?? "—"}</td>
+                    <td className="pitwall-col-secondary px-2 py-1.5 font-mono"><SafetyRatingBadge opponent={r} /></td>
+                    <td className="pitwall-col-secondary px-2 py-1.5 text-[11px] uppercase tracking-[0.08em] text-sky-300">{r.carClass ?? "—"}</td>
                     <td
                         data-timing="last-lap"
-                        className="px-2 py-1.5 text-right font-mono text-amber-200"
+                        className="pitwall-col-last px-2 py-1.5 text-right font-mono text-amber-200"
                         title={(r as { lastLapInvalid?: boolean }).lastLapInvalid ? "Laatste ronde ongeldig (reset of baanverlating) — telt niet als rondetijd" : undefined}
                       >
                         {(r as { lastLapInvalid?: boolean }).lastLapInvalid
                           ? "—"
                           : preciseLapTime(live && legacySectors ? freshMetrics(v3,r.id)?.lastLapSeconds : r.lastLapSeconds)}
                       </td>
-                    <td data-timing="best-lap" className="px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
-                    {sectorColumns.map(n=><td key={n} data-sector-index={n} className="px-2 py-1.5 text-right font-mono text-slate-300" title={usingSectorUpdates || (lastSectors && !legacySectors) ? undefined : legacySectorTitle}>{live ? (usingSectorUpdates ? <SectorTimingCell slot={timing?.slots[n] ?? null} /> : lastSectors?.seconds[n] != null ? <span data-sector-lap={lastSectors.lap ?? undefined} data-sector-previous={prior || undefined} className={prior ? "opacity-60" : undefined} title={lastSectors.lap == null ? undefined : `Gecontroleerde sectorreeks · ronde ${lastSectors.lap}`}>{lastSectors.seconds[n].toFixed(3)}</span> : "—") : "—"}</td>)}
-                    <td className="px-2 py-1.5 text-right font-mono text-slate-300">{r.lap ?? "—"}</td>
-                    <td className="px-2 py-1.5 text-right font-mono font-semibold text-orange-300">{renderGap(r, false)}</td>
-                    <td className="px-2 py-1.5 text-center text-[11px] font-bold text-yellow-400">{r.inPit ? "PIT" : "—"}</td>
+                    <td data-timing="best-lap" className="pitwall-col-secondary px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
+                    {sectorColumns.map(n=><td key={n} data-sector-index={n} className="pitwall-col-sector px-2 py-1.5 text-right font-mono text-slate-300" title={usingSectorUpdates ? undefined : lastSectors ? `Laatst geverifieerd · ronde ${lastSectors.lap ?? "?"}${retainedStale ? " · bewaard na ontbrekende poll" : ` · ${legacySectorTitle}`}` : legacySectorTitle}>{usingSectorUpdates ? <SectorTimingCell slot={timing?.slots[n] ?? null} /> : lastSectors?.seconds[n] != null ? <span data-sector-lap={lastSectors.lap ?? undefined} data-sector-source="verified-lap" data-sector-previous={prior || undefined} data-retained-stale={retainedStale || undefined} className={prior || retainedStale ? "opacity-60" : undefined} title={lastSectors.lap == null ? undefined : `Laatst geverifieerd · ronde ${lastSectors.lap}`}><span data-sector-value="true">{lastSectors.seconds[n].toFixed(3)}</span>{lastSectors.lap != null && <span className="ml-1 text-[8px] text-slate-500" data-sector-lap-mark={lastSectors.lap}>R{lastSectors.lap}</span>}</span> : "—"}</td>)}
+                    <td className="pitwall-col-secondary px-2 py-1.5 text-right font-mono text-slate-300">{r.lap ?? "—"}</td>
+                    <td className="pitwall-col-secondary px-2 py-1.5 text-right font-mono font-semibold text-orange-300">{renderGap(r, false)}</td>
+                    <td className="pitwall-col-secondary px-2 py-1.5 text-center text-[11px] font-bold text-yellow-400">{r.inPit ? "PIT" : "—"}</td>
                   </tr>
                 </Fragment>
                 );

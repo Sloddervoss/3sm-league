@@ -71,22 +71,24 @@ describe('premium sector layout — metadata stays, measurements do not', () => 
     const view = render(timing(frame()));
     expect(screen.getByRole('columnheader', { name: 'S1' })).toBeTruthy();
     expect(view.container.querySelector('thead .ptp-col-sector')?.textContent).toBe('S1');
-    expect(view.container.querySelector('tbody .ptp-col-sector')?.textContent).toBe('30.000');
+    expect(view.container.querySelector('tbody .ptp-col-sector')?.textContent).toBe('30.000R9');
     view.rerender(timing(frame(3, 107)));
     expect(screen.getByRole('columnheader', { name: 'S1' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'S3' })).toBeTruthy();
-    expect(view.container.querySelector('tbody .ptp-col-sector')?.textContent).toBe('30.000');
+    expect(view.container.querySelector('tbody .ptp-col-sector')?.textContent).toBe('30.000R9');
     expect(view.container.querySelectorAll('colgroup col').length).toBe(12);
     view.rerender(timing(frame(3, 107), 'other-device|transport-b|168'));
     expect(screen.queryByRole('columnheader', { name: 'S1' })).toBeNull();
   });
 
-  it('supports six-sector layouts without inventing three, including offline placeholders', () => {
+  it('keeps S1..S6 and dims the validated result when the live feed is missing', () => {
     const view = render(timing(frame(6)));
     expect(screen.getByRole('columnheader', { name: 'S6' })).toBeTruthy();
     view.rerender(timing(frame(6), 'device|transport-a|596', false));
     expect(screen.getByRole('columnheader', { name: 'S6' })).toBeTruthy();
-    for (const cell of view.container.querySelectorAll('tbody .ptp-col-sector')) expect(cell.textContent).toBe('—');
+    const cell = view.container.querySelector('tbody .ptp-col-sector') as HTMLElement;
+    expect(cell.textContent).toBe('15.000R9');
+    expect(cell.querySelector('[data-retained-stale="true"]')).not.toBeNull();
   });
 
   it('does not truncate a conflicting measurement into an old fixed layout', () => {
@@ -98,7 +100,7 @@ describe('premium sector layout — metadata stays, measurements do not', () => 
     expect(view.container.textContent).not.toContain('15.000');
   });
 
-  it('the KPI strip keeps the supplied layout with unknown times and clock', () => {
+  it('the KPI strip keeps the supplied layout with dimmed retained times and unknown clock', () => {
     const view = render(<RaceTelemetryStrip v3={frame()} live sectorCountOverride={3} stableLayout />);
     expect(screen.getByText('S3')).toBeTruthy();
     view.rerender(<RaceTelemetryStrip v3={null} live={false} sectorCountOverride={3} stableLayout />);
@@ -106,6 +108,7 @@ describe('premium sector layout — metadata stays, measurements do not', () => 
     expect(screen.getByText('S3')).toBeTruthy();
     expect(screen.getByText('Δ laatste − beste')).toBeTruthy();
     expect(screen.getByText('Verstreken sessie')).toBeTruthy();
-    expect(view.container.textContent).not.toContain('30.000');
+    expect(view.container.textContent).toContain('30.000');
+    expect(view.container.querySelector('[data-retained-stale="true"]')).not.toBeNull();
   });
 });

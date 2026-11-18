@@ -1,9 +1,9 @@
 import type { PitwallConnectionState } from "../PitwallContextBar";
 
-const statusCopy: Record<PitwallConnectionState, { label: string; tone: string }> = {
-  live: { label: "LIVE", tone: "is-live" },
-  stale: { label: "ONLINE · GEEN TELEMETRIE", tone: "is-stale" },
-  offline: { label: "OFFLINE", tone: "is-offline" },
+const statusCopy: Record<PitwallConnectionState, { label: string; tone: string; detail: string }> = {
+  live: { label: "LIVE", tone: "is-live", detail: "LIVE TELEMETRIE · 1s polling" },
+  stale: { label: "ONLINE · GEEN TELEMETRIE", tone: "is-stale", detail: "wacht op telemetrie · 1s polling" },
+  offline: { label: "OFFLINE", tone: "is-offline", detail: "geen verbinding · 1s polling" },
 };
 
 /**
@@ -19,6 +19,7 @@ export function PremiumMasthead({
   teamName,
   connector,
   lastSeen,
+  telemetryAge,
   state,
   sectorCount,
   refreshing,
@@ -30,11 +31,18 @@ export function PremiumMasthead({
   teamName: string | null;
   connector: string | null;
   lastSeen: string;
+  /** Leeftijd van de laatste échte telemetrie, niet van het gezondheidssignaal. */
+  telemetryAge?: string | null;
   state: PitwallConnectionState;
   sectorCount: number;
   refreshing: boolean;
 }) {
   const copy = statusCopy[state];
+  const telemetryDetail = state === "live"
+    ? "telemetrie nu"
+    : telemetryAge && telemetryAge !== "—"
+      ? `laatste telemetrie ${telemetryAge}`
+      : "nog geen telemetrie ontvangen";
   return (
     <header className="ptp-masthead" data-pitwall-connection={state}>
       <div className="ptp-brandline">
@@ -60,7 +68,12 @@ export function PremiumMasthead({
             <span aria-hidden className="ptp-status-dot" />
             {copy.label}
           </span>
-          <span className="ptp-readonly">LIVE TELEMETRIE · 1s polling</span>
+          <span className="ptp-readonly" data-ptp-polling={state}>{copy.detail}</span>
+          {state !== "live" && (
+            <span className="ptp-readonly" data-ptp-telemetry-age={telemetryAge ?? "unknown"}>
+              {telemetryDetail}
+            </span>
+          )}
         </div>
       </div>
 
@@ -78,7 +91,7 @@ export function PremiumMasthead({
           <dd>{connector ?? "—"}</dd>
         </div>
         <div>
-          <dt>Laatst gezien</dt>
+          <dt>Apparaat gezien</dt>
           <dd>{lastSeen}</dd>
         </div>
         <div>

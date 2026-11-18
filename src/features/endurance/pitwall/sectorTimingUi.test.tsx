@@ -139,7 +139,7 @@ describe("retained full-lap sectors", () => {
     const first = [16, 17, 18, 19, 20];
     const { container, rerender } = render(views(make(11, 300, first)));
     const all = (value: string) => {
-      for (const name of ["normal", "premium", "kpi"]) expect(container.querySelector(`[data-view=${name}]`)?.textContent).toContain(value);
+      for (const name of ["normal", "premium", "kpi"]) expect(container.querySelector(`[data-view=${name}]`)?.textContent, name).toContain(value);
     };
     all("16.000"); all("20.000");
     rerender(views(make(11, 308, null)));
@@ -370,7 +370,7 @@ describe("live sector updates — klassieke consumenten", () => {
     data.paceHistory!.cars[0].metrics = staleMetric("a");
 
     const view = render(<RaceTelemetryStrip v3={data} live />);
-    expect(screen.getByText("Sectoren · ronde 10")).toBeTruthy();
+    expect(screen.getByText("Sectoren · live ronde 10")).toBeTruthy();
     expect(screen.getByText("29.800")).toBeTruthy();
     expect(screen.getByText("-0.200")).toBeTruthy();
     expect(screen.getByText("-0.500")).toBeTruthy();
@@ -408,8 +408,10 @@ describe("live sector updates — klassieke consumenten", () => {
       <StandingsWidget v3={data} standings={deriveStandings(data, 40)} ownCarLabel="Eigen" ownCarNumber="1" />,
     );
     const cell = view.container.querySelector("td[data-sector-index='0']") as HTMLElement;
-    expect(cell.textContent).toBe("30.000");
+    expect(cell.textContent).toBe("30.000R10");
     expect(cell.querySelector("[data-sector-status]")).toBeNull();
+    expect(cell.querySelector("[data-sector-value]")?.textContent).toBe("30.000");
+    expect(cell.querySelector("[data-sector-lap-mark='10']")).not.toBeNull();
     expect(cell.getAttribute("title")).toContain("Gecontroleerde laatste ronde");
   });
 });

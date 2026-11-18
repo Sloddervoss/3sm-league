@@ -69,7 +69,9 @@ export function SectorTimingCell({ slot, className = "" }: { slot: SectorSlot | 
         </span>
       </span>
       <span className="inline-flex items-baseline gap-1 text-[9px]">
-        {delta != null && <span className={deltaClass[tone]}>{delta}</span>}
+        {delta != null
+          ? <span className={deltaClass[tone]} data-sector-delta={delta}>{delta}</span>
+          : <span className="text-slate-600" data-sector-delta="missing" title="Geen referentie voor dit verschil">—</span>}
         <span className="text-slate-500">R{slot.lap}</span>
       </span>
     </span>

@@ -51,7 +51,10 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   const laps = data?.timing?.completedLaps;
   const difference = lapDifference(last, best);
   const player = data?.opponents?.find(o=>o.isPlayer);
-  const retained = useRetainedLapSectors(data, contextKey);
+  // Bewaar de laatst geverifieerde volledige ronde ook over een ontbrekende
+  // poll heen. `data` is leeg zodra de feed niet live is; de identiteit en het
+  // laatst bekende frame blijven dan nodig om de reeks te kunnen tonen.
+  const retained = useRetainedLapSectors(v3, contextKey);
   const sectorCount = sectorCountOverride === undefined ? retained.count
     : Number.isInteger(sectorCountOverride) && sectorCountOverride >= 1 && sectorCountOverride <= 16 ? sectorCountOverride : 0;
   // Persisted sector results zijn onafhankelijk van de 5-seconden metriekpoort.
@@ -61,27 +64,32 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   );
   const playerTiming = player ? sectorTimings.get(player.id) ?? null : null;
   const usingSectorUpdates = playerTiming != null && playerTiming.sectorCount === sectorCount;
-  const retainedLap = player && !playerTiming ? retained.laps.get(player.id) : undefined;
-  const previous = retainedLap?.lap != null && player?.lap != null && player.lap > retainedLap.lap + 1;
+  // De eigen rij kan ook zonder live-frame bekend zijn: gebruik die alleen voor
+  // de presentatie van de bewaarde volledige ronde.
+  const retainedPlayer = ((v3 ?? retained.lastInput)?.opponents ?? []).find(o => o.isPlayer);
+  const retainedLap = retainedPlayer && !playerTiming ? retained.laps.get(retainedPlayer.id) : undefined;
+  const previous = retainedLap?.lap != null && retainedPlayer?.lap != null && retainedPlayer.lap > retainedLap.lap + 1;
+  const retainedFresh = Boolean(retainedLap && playerTiming === null && player && rowSectors(data, player.id, player.lastLapSeconds));
   const currentSectors = retainedLap?.seconds ?? null;
   const sectors = sectorCountOverride === undefined ? currentSectors
     : currentSectors?.length === sectorCount ? currentSectors : null;
   const sectorLabel = usingSectorUpdates && playerTiming
-    ? playerTiming.mixedLaps ? "Sectoren · meerdere ronden" : `Sectoren · ronde ${playerTiming.lap}`
-    : sectors && retainedLap ? `Sectoren laatste ronde${retainedLap.lap != null ? ` · R${retainedLap.lap}` : ""}` : "Sectoren · niet gecontroleerd";
+    ? playerTiming.mixedLaps ? "Sectoren · live · meerdere ronden" : `Sectoren · live ronde ${playerTiming.lap}`
+    : sectors && retainedLap ? `Sectoren · laatst geverifieerd${retainedLap.lap != null ? ` R${retainedLap.lap}` : ""}` : "Sectoren · niet gecontroleerd";
   const rest = data?.session?.sessionTimeRemainingSeconds;
   // Waar verliezen we tijd? Per sector het verschil met de snelste tijd in het veld.
   // Alleen binnen dezelfde sectordeling; anders blijft het verschil leeg.
   const sectorBest = fieldSectorBests((data?.opponents ?? []).map(o => ({ id: o.id, sectors: rowSectors(data,o.id,o.lastLapSeconds) })));
-  const deltas = sectors && !previous && player && rowSectors(data, player.id, player.lastLapSeconds) ? sectorDeltas(sectors, sectorBest) : null;
+  const deltas = sectors && !previous && retainedFresh && player && rowSectors(data, player.id, player.lastLapSeconds) ? sectorDeltas(sectors, sectorBest) : null;
 
   return (
     <div
       className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[5fr_6fr_8fr]"
       data-pitwall-kpi="true"
       data-sector-count={sectorCount}
+      data-sector-source={usingSectorUpdates ? "live" : sectors ? "verified-lap" : "unknown"}
     >
-      <KpiGroup label={sectorLabel} group="sectoren" className={`${sectorCount>3 ? "pitwall-many-sectors" : ""}${previous ? " opacity-60" : ""}`}>
+      <KpiGroup label={sectorLabel} group="sectoren" className={`${sectorCount>3 ? "pitwall-many-sectors" : ""}${(previous || (sectors != null && !retainedFresh)) ? " opacity-60" : ""}`} dimmed={sectors != null && !retainedFresh && !usingSectorUpdates}>
         {sectorCount === 0 && <Cell label="Sectorindeling onbekend" value="—" compact />}
         {usingSectorUpdates && Array.from({length:sectorCount},(_,i)=>(
           <SectorKpi key={i} label={`S${i+1}`} slot={playerTiming?.slots[i] ?? null} compact={sectorCount>3} />
@@ -96,8 +104,8 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
       </KpiGroup>
 
       <KpiGroup label="Positie" group="positie">
-        <Cell label="P" value={pos != null ? `P${pos}` : '—'} />
-        {showClassPosition && <Cell label="K" value={cls != null ? `K${cls}` : '—'} tone="text-sky-300" />}
+        <Cell label="P" value={pos != null && pos > 0 ? `P${pos}` : '—'} />
+        {showClassPosition && <Cell label="K" value={cls != null && cls > 0 ? `K${cls}` : '—'} tone="text-sky-300" />}
         <Cell label={planLaps != null ? `Ronde · plan ${planLaps}` : "Ronde"} value={laps != null ? String(laps) : '—'} />
         {(finiteClock(data?.session?.sessionTimeSeconds) || stableLayout) && <Cell label={planMinutes != null ? `Sessie · plan ${clock(planMinutes * 60)}` : "Verstreken sessie"} value={clock(data?.session?.sessionTimeSeconds)} />}
         <Cell label="Resttijd" value={clock(rest)} tone="text-emerald-300" />
@@ -147,15 +155,17 @@ function KpiGroup({
   label,
   group,
   className = '',
+  dimmed = false,
   children,
 }: {
   label: string;
   group: string;
   className?: string;
+  dimmed?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className={`rounded-lg border border-[#1D2431] bg-[#0B0D11] px-4 py-2.5 ${className}`} data-pitwall-kpi-group={group}>
+    <div className={`rounded-lg border border-[#1D2431] bg-[#0B0D11] px-4 py-2.5 ${className}`} data-pitwall-kpi-group={group} data-retained-stale={dimmed ? "true" : undefined}>
       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">{label}</p>
       <div className="mt-1.5 flex flex-wrap items-start gap-x-6 gap-y-2">{children}</div>
     </div>

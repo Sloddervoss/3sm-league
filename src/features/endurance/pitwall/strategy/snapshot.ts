@@ -47,10 +47,13 @@ export function buildStrategySnapshot(input: SnapshotInput): StrategySnapshot {
 
   const updatedAt = strategy?.updated_at ? Date.parse(strategy.updated_at) : NaN;
   const capturedAt = v3?.capturedAt ? Date.parse(v3.capturedAt) : NaN;
-  const laatsteMeting = Number.isFinite(updatedAt)
-    ? updatedAt
-    : Number.isFinite(capturedAt)
-      ? capturedAt
+  // Leeftijd gaat over de telemetrie, niet over het moment waarop de server de
+  // strategierij heeft bijgewerkt. Anders lijkt een oude meting vers zodra een
+  // poll zonder frame de rij toch ververst.
+  const laatsteMeting = Number.isFinite(capturedAt)
+    ? capturedAt
+    : Number.isFinite(updatedAt)
+      ? updatedAt
       : null;
 
   const fuelLitres =

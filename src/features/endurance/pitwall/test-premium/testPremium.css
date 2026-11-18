@@ -1749,6 +1749,106 @@
   display: none !important;
 }
 
+/* Toegankelijke samenvatting van de verborgen kolommen. Niet van `sr-only`
+   afhankelijk: de fixture en de premium CSS kennen de Tailwind-utilities niet
+   allemaal, en een inline sr-only span kan anders de tabelbreedte oprekken. */
+[data-pitwall-test-premium] .ptp-mobile-secondary,
+[data-pitwall-mobile-secondary] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* ── Smalle telefoon (390px): prioriteit bij coureur, laatste tijd en sectoren ──
+   De secundaire kolommen blijven in de DOM (en in de sr-only samenvatting per
+   rij) maar kosten op 390px geen horizontale ruimte. De tabel scrollt alleen
+   binnen het eigen timinggebied wanneer een 16-sectorlayout echt breder is. */
+[data-pitwall-test-premium] .ptp-sector-lap-mark {
+  display: block;
+  margin-top: 1px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 9px;
+  letter-spacing: 0.03em;
+  color: #7d8b99;
+}
+[data-pitwall-test-premium] .ptp-timing-legend {
+  padding: 3px 10px 4px;
+  border-bottom: 1px solid var(--ptp-line-soft);
+  font-size: 9px;
+  line-height: 12px;
+  color: #8d9aa8;
+}
+
+@media (max-width: 430px) {
+  [data-pitwall-test-premium] .ptp-timing-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 0;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-num,
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-car,
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-best,
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-lap,
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-gap,
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pit,
+  [data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-num,
+  [data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-car,
+  [data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-best,
+  [data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-lap,
+  [data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-gap,
+  [data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-pit {
+    display: none;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-pos {
+    width: 36px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-driver {
+    width: 34%;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-time {
+    width: 62px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table col.ptp-col-sector {
+    width: clamp(40px, calc(144px / var(--ptp-sector-count, 1)), 48px);
+  }
+  [data-pitwall-test-premium] .ptp-timing-table tbody.ptp-own-pinned {
+    display: none;
+  }
+  [data-pitwall-test-premium] .ptp-sector-lap-mark {
+    font-size: 9px;
+    line-height: 10px;
+    color: #aab7c4;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table :is(th, td).ptp-col-time.ptp-last {
+    border-right: 1px solid var(--ptp-line-soft);
+  }
+  [data-pitwall-test-premium] .ptp-timing-table tbody td {
+    padding-inline: 4px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table thead th {
+    padding-inline: 4px;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table .ptp-col-driver {
+    overflow: hidden;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table .ptp-driver-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  [data-pitwall-test-premium] .ptp-timing-table .ptp-driver-meta {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-pitwall-test-premium] *,
   [data-pitwall-test-premium] *::before,

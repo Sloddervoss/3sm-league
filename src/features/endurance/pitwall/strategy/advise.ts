@@ -130,6 +130,32 @@ export function bindingConstraint(input: BindingInput): BindingResult {
     : { binding: "fuel", laps: fuelLaps };
 }
 
+/**
+ * Presentatie-uitkomst zonder live telemetrie.
+ *
+ * De rekenkern weigert zelf al op een oude meting, maar de UI mag daar niet van
+ * afhangen: een server kan de strategierij verversen zonder dat er een nieuw
+ * frame is. Deze functie maakt van elke bestaande Advice expliciet "geen
+ * advies", zonder de oude stop, liters of banden te laten staan.
+ */
+export function withoutLiveTelemetry(advice: Advice, reason = "Geen actuele telemetrie — geen advies."): Advice {
+  return {
+    ...advice,
+    decision: "NO_ADVICE",
+    lapsUntilPit: null,
+    fuelToAddLitres: null,
+    confidence: "none",
+    reasonCode: "stale_telemetry",
+    reason,
+    window: null,
+    binding: null,
+    tyreFuel: null,
+    tyres: null,
+    tyreEstimate: null,
+    inBox: null,
+  };
+}
+
 export function advise(snapshot: StrategySnapshot): Advice {
   const reserve = snapshot.reserveLaps ?? 0.5;
   const measuredFuel = estimateFuelPerLap(snapshot.fuelPerLapSamples, snapshot.fuelPerLapPrior);

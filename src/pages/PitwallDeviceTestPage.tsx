@@ -23,6 +23,7 @@ import type { TyreEstimate } from "@/features/endurance/pitwall/strategy/tyreGra
 import { naarTyreEstimate, type TyreRpcClient } from "@/features/endurance/pitwall/strategy/tyreEstimateV2";
 import { useTyreModel } from "@/features/endurance/pitwall/useTyreModel";
 import { usePitwallStrategy } from "@/features/endurance/pitwall/usePitwallStrategy";
+import { withoutLiveTelemetry } from "@/features/endurance/pitwall/strategy";
 import { RaceTelemetryStrip } from "@/features/endurance/pitwall/RaceTelemetryStrip";
 import { OwnCarPanel } from "@/features/endurance/pitwall/OwnCarPanel";
 import { LiveTrackPanel } from "@/features/endurance/pitwall/LiveTrackPanel";
@@ -222,6 +223,9 @@ export default function PitwallDeviceTestPage() {
   const strategy = useMemo(() => deviceStrategyRow(live ? v3 : null), [v3, live]);
   const learnedFuel = resolveFuelLearning(sandboxQuery.error ? null : sandboxQuery.data?.learningFuel, live ? v3 : null, Date.now());
   const strategyAdvice = usePitwallStrategy({ strategy, v3, nowMs: Date.now(), learnedFuelUpper: learnedFuel?.upper });
+  // Een verversde strategierij is geen nieuw telemetrieframe. Zonder live feed
+  // mag de band geen oude stop of tankinhoud blijven voorstellen.
+  const effectiveAdvice = live ? strategyAdvice : withoutLiveTelemetry(strategyAdvice);
 
   // Het bandenbeeld komt uit de servermeting (ankers), niet uit de live payload:
   // alleen de RPC weet wat er bij de laatste stop gemeten is. Sinds v2 hangt dat
@@ -394,6 +398,13 @@ export default function PitwallDeviceTestPage() {
                       title={detail.device.device_name}
                       state={live ? "live" : online ? "stale" : "offline"}
                       stateLabel={live ? "LIVE" : online ? "ONLINE — geen telemetrie" : "OFFLINE"}
+                      stateDetail={
+                        live
+                          ? "1s polling"
+                          : tele?.received_at
+                            ? `laatste telemetrie ${relTime(tele.received_at)} · 1s polling`
+                            : "nog geen telemetrie · 1s polling"
+                      }
                       items={[
                         { label: "Circuit", value: trackLabel || "geen sessie" },
                         { label: "Connector", value: detail.health?.connector_version ?? "—" },
@@ -401,16 +412,11 @@ export default function PitwallDeviceTestPage() {
                         ...(linkedTeamName ? [{ label: "Team", value: linkedTeamName, tone: "accent" as const }] : []),
                       ]}
                       note={live || online ? undefined : "Wissel naar een gebonden team-pitwall voor pit-in / fuel-to-add."}
-                      actions={
-                        <span className="text-[11px] text-slate-500">
-                          {relTime(tele?.received_at)} · 1s polling
-                        </span>
-                      }
                     />
 
                     <PitwallDashboard
                       kpi={<RaceTelemetryStrip v3={v3} live={live} />}
-                      decision={<DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />}
+                      decision={<DecisionBand advice={{ ...effectiveAdvice, tyreEstimate: live ? tyreEstimate : null }} />}
                       track={<><LiveTrackPanel v3={v3} live={live} fallbackTrack={trackLabel || detail.device.device_name} /><OwnCarPanel driverName={ownDriverName} carName={ownCarName} teamName={null} carNumber={live ? v3?.opponents?.find(c => c.isPlayer)?.carNumber : null} completedLaps={live ? v3?.timing?.completedLaps : null} lastLapSeconds={live ? v3?.timing?.lastLapTimeSeconds ?? null : null} bestLapSeconds={live ? v3?.timing?.bestLapTimeSeconds ?? null : null} gapToLeaderSeconds={live ? v3?.position?.gapToLeaderSeconds ?? null : null} /></>}
                       timing={
                         <StandingsWidget v3={v3}
@@ -509,7 +515,7 @@ export default function PitwallDeviceTestPage() {
                 linkedTeamName={linkedTeamName ?? null}
                 standings={standings}
                 strategy={strategy}
-                strategyAdvice={strategyAdvice}
+                strategyAdvice={effectiveAdvice}
                 pace={pace}
                 points={samplePoints}
                 sessionPace={sessionPace}

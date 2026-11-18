@@ -36,25 +36,35 @@ export function LiveTrackPanel({ v3, live, fallbackTrack, presentation = 'defaul
           </span>
         )}
       </div>
-      <div data-ptp-lap-labels="true" className="mb-2 mt-2 flex justify-between text-[10px] uppercase tracking-[0.12em] text-slate-500">
-        <span>Start / finish</span>
-        <span>Rondevoortgang</span>
-        <span>100%</span>
-      </div>
-      <div data-ptp-lap-bar="true" className="relative mx-3 mb-8 h-1 rounded bg-white/15" aria-label="Live rondeposities">
-        {cars.map(car => (
-          <span
-            key={car.id}
-            data-ptp-lap-badge="true"
-            title={`${car.driverName ?? car.id}: ${(car.lapDistancePct! * 100).toFixed(1)}%${car.inPit ? ' · PIT' : ''}`}
-            className={`absolute -top-2 flex h-5 min-w-5 -translate-x-1/2 items-center justify-center rounded px-1 text-[10px] font-black ${
-              car.isPlayer ? 'bg-orange-400 text-black' : car.inPit ? 'bg-amber-300 text-black' : 'bg-sky-900 text-sky-100'
-            }`}
-            style={{ left: `${car.lapDistancePct! * 100}%` }}
-          >
-            {car.carNumber ?? '·'}
-          </span>
-        ))}
+      <div data-ptp-lap-progress={cars.length ? "available" : "unavailable"}>
+        {cars.length > 0 ? (
+          <>
+            <div data-ptp-lap-labels="true" className="mb-2 mt-2 flex justify-between text-[10px] uppercase tracking-[0.12em] text-slate-500">
+              <span>Start / finish</span>
+              <span>Rondevoortgang</span>
+              <span>100%</span>
+            </div>
+            <div data-ptp-lap-bar="true" className="relative mx-3 mb-8 h-1 rounded bg-white/15" aria-label="Live rondeposities">
+              {cars.map(car => (
+                <span
+                  key={car.id}
+                  data-ptp-lap-badge="true"
+                  title={`${car.driverName ?? car.id}: ${(car.lapDistancePct! * 100).toFixed(1)}%${car.inPit ? ' · PIT' : ''}`}
+                  className={`absolute -top-2 flex h-5 min-w-5 -translate-x-1/2 items-center justify-center rounded px-1 text-[10px] font-black ${
+                    car.isPlayer ? 'bg-orange-400 text-black' : car.inPit ? 'bg-amber-300 text-black' : 'bg-sky-900 text-sky-100'
+                  }`}
+                  style={{ left: `${car.lapDistancePct! * 100}%` }}
+                >
+                  {car.carNumber ?? '·'}
+                </span>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="mb-2 mt-2 text-[11px] text-slate-500" data-ptp-lap-empty="true">
+            {live ? "Nog geen autopositie — rondevoortgang niet beschikbaar." : "Offline — geen live rondevoortgang."}
+          </p>
+        )}
       </div>
     </PitwallPanel>
   );

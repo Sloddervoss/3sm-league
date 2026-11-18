@@ -27,6 +27,7 @@ export function PitwallContextBar({
   title,
   state,
   stateLabel,
+  stateDetail,
   items = [],
   note,
   actions,
@@ -36,6 +37,8 @@ export function PitwallContextBar({
   state: PitwallConnectionState;
   /** Afwijkend woord bij de status, bijvoorbeeld "geen telemetrie". */
   stateLabel?: string;
+  /** Leeftijd van de laatste echte telemetrie; los van het gezondheidssignaal. */
+  stateDetail?: string;
   items?: PitwallContextItem[];
   note?: string;
   actions?: ReactNode;
@@ -77,6 +80,11 @@ export function PitwallContextBar({
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${copy.dot}`} aria-hidden />
           {stateLabel ?? copy.label}
         </span>
+        {stateDetail && (
+          <span className="text-[11px] text-slate-500" data-pitwall-telemetry-detail={state}>
+            {stateDetail}
+          </span>
+        )}
         {actions}
       </div>
     </div>
