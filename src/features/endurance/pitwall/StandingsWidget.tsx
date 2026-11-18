@@ -1,4 +1,5 @@
-import { freshMetrics, freshPaceHistory, rowSectors, trackSectorCount } from "./paceSeries";
+import { freshMetrics, freshPaceHistory, rowSectors } from "./paceSeries";
+import { useRetainedLapSectors } from "./useRetainedLapSectors";
 import { buildSectorTimingIndex } from "./sectorTiming";
 import { SectorTimingCell } from "./SectorTimingCell";
 import type { V3Normalized } from "./pitwallHelpers";
@@ -79,7 +80,8 @@ const TrendMark = ({ rate }: { rate: number | null }) => {
  * vervalt. Ontbrekende ratings blijven onbekend, ook met een oudere connector.
  */
 export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live = true, plannedStints = [], events = [] }: Props) => {
-  const sectorCount = live ? trackSectorCount(v3) : 0;
+  const retained = useRetainedLapSectors(live ? v3 : null);
+  const sectorCount = retained.count;
   const sectorColumns = Array.from({length:sectorCount},(_,n)=>n);
   const sectorTimings = live
     ? buildSectorTimingIndex(freshPaceHistory(v3), (v3?.opponents ?? []).map(o => ({ id: o.id, currentLap: o.lap })))
@@ -169,6 +171,9 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
               {visibleRows.map((r, index) => {
                 const legacySectors = live ? rowSectors(v3,r.id,r.lastLapSeconds) : null;
                 const timing = sectorTimings?.get(r.id) ?? null;
+                const cached = !timing ? retained.laps.get(r.id) : undefined;
+                const lastSectors = cached?.seconds.length === sectorCount ? cached : undefined;
+                const prior = lastSectors?.lap != null && r.lap != null && r.lap > lastSectors.lap + 1;
                 const usingSectorUpdates = live && timing != null && timing.sectorCount === sectorCount;
                 const legacySectorTitle = live && legacySectors
                   ? `Gecontroleerde laatste ronde · ${freshMetrics(v3,r.id)?.sectorSource ?? "bron onbekend"} · afwijking ${freshMetrics(v3,r.id)?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
@@ -218,7 +223,7 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                           : preciseLapTime(live && legacySectors ? freshMetrics(v3,r.id)?.lastLapSeconds : r.lastLapSeconds)}
                       </td>
                     <td data-timing="best-lap" className="px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
-                    {sectorColumns.map(n=><td key={n} data-sector-index={n} className="px-2 py-1.5 text-right font-mono text-slate-300" title={usingSectorUpdates ? undefined : legacySectorTitle}>{live ? (usingSectorUpdates ? <SectorTimingCell slot={timing?.slots[n] ?? null} /> : legacySectors?.[n]?.toFixed(3) ?? "—") : "—"}</td>)}
+                    {sectorColumns.map(n=><td key={n} data-sector-index={n} className="px-2 py-1.5 text-right font-mono text-slate-300" title={usingSectorUpdates || (lastSectors && !legacySectors) ? undefined : legacySectorTitle}>{live ? (usingSectorUpdates ? <SectorTimingCell slot={timing?.slots[n] ?? null} /> : lastSectors?.seconds[n] != null ? <span data-sector-lap={lastSectors.lap ?? undefined} data-sector-previous={prior || undefined} className={prior ? "opacity-60" : undefined} title={lastSectors.lap == null ? undefined : `Gecontroleerde sectorreeks · ronde ${lastSectors.lap}`}>{lastSectors.seconds[n].toFixed(3)}</span> : "—") : "—"}</td>)}
                     <td className="px-2 py-1.5 text-right font-mono text-slate-300">{r.lap ?? "—"}</td>
                     <td className="px-2 py-1.5 text-right font-mono font-semibold text-orange-300">{renderGap(r, false)}</td>
                     <td className="px-2 py-1.5 text-center text-[11px] font-bold text-yellow-400">{r.inPit ? "PIT" : "—"}</td>

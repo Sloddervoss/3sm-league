@@ -2,9 +2,10 @@ import { Fragment, useEffect, useMemo, useReducer, useRef, useState, type CSSPro
 import { ChevronRight, Flag, ListOrdered } from "lucide-react";
 import type { V3Normalized, V3Opponent } from "../pitwallHelpers";
 import { renderGap, renderPosition, type StandingsDerivation } from "../standings";
-import { freshMetrics, freshPaceHistory, rowSectors, trackSectorCount } from "../paceSeries";
+import { freshMetrics, freshPaceHistory, rowSectors } from "../paceSeries";
 import { buildSectorTimingIndex } from "../sectorTiming";
 import { SectorTimingCell } from "../SectorTimingCell";
+import { useRetainedLapSectors } from "../useRetainedLapSectors";
 import { preciseLapTime } from "../telemetryFormat";
 import { initialTimingState, reduceTimingTransitions } from "./timingTransitions";
 import { useRowFlip } from "./useRowFlip";
@@ -138,7 +139,8 @@ export function PremiumTimingPanel({
   const [transition, dispatch] = useReducer(reduceTimingTransitions, initialTimingState());
 
   const rows = standings.rows;
-  const rememberedSectorCount = useSectorLayoutCount(contextKey, live ? trackSectorCount(v3) : 0);
+  const retained = useRetainedLapSectors(live ? v3 : null, contextKey);
+  const rememberedSectorCount = useSectorLayoutCount(contextKey, retained.count);
   const sectorCount = layoutSectorCount === undefined ? rememberedSectorCount : validSectorLayoutCount(layoutSectorCount);
   const sectorTimings = live
     ? buildSectorTimingIndex(freshPaceHistory(v3), (v3?.opponents ?? []).map(o => ({ id: o.id, currentLap: o.lap })))
@@ -234,7 +236,9 @@ export function PremiumTimingPanel({
     const legacySectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
     const legacyComplete = legacySectors?.length === sectorCount;
     const usingSectorUpdates = timing != null && timing.sectorCount === sectorCount;
-    const sectors = !usingSectorUpdates && legacyComplete ? legacySectors : null;
+    const retainedLap = !timing ? retained.laps.get(r.id) : undefined;
+    const sectors = retainedLap?.seconds.length === sectorCount ? retainedLap.seconds : null;
+    const prior = retainedLap?.lap != null && r.lap != null && r.lap > retainedLap.lap + 1;
     const metrics = freshMetrics(v3, r.id);
     // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
     // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
@@ -245,7 +249,7 @@ export function PremiumTimingPanel({
       : live && legacyComplete
         ? metrics?.lastLapSeconds ?? r.lastLapSeconds
         : r.lastLapSeconds;
-    const sectorTitle = usingSectorUpdates ? undefined : live && legacyComplete
+    const sectorTitle = usingSectorUpdates || (sectors && !legacyComplete) ? undefined : live && legacyComplete
       ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
       : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
     const flashLap = !pinned && lapFlash[r.id] === r.lap ? r.lap : null;
@@ -304,7 +308,7 @@ export function PremiumTimingPanel({
           <td key={n} className="ptp-col-sector" data-sector-index={n} title={sectorTitle}>
             {usingSectorUpdates
               ? <SectorTimingCell slot={timing?.slots[n] ?? null} />
-              : sectors?.[n] != null ? sectors[n]!.toFixed(3) : "—"}
+              : sectors?.[n] != null && retainedLap ? <span data-sector-lap={retainedLap.lap ?? undefined} data-sector-previous={prior || undefined} className={prior ? "opacity-60" : undefined} title={retainedLap.lap == null ? undefined : `Gecontroleerde sectorreeks · ronde ${retainedLap.lap}`}>{sectors[n].toFixed(3)}</span> : "—"}
           </td>
         ))}
         <td className="ptp-col-lap ptp-lap" data-lap-flash={flashLap ?? undefined}>

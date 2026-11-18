@@ -516,8 +516,7 @@ describe("premium timing — echte tabel, echte rerender", () => {
     expect((timingRow.querySelector("[data-timing='car-number']") as HTMLElement).textContent).toBe("17");
 
     const sector = timingRow.querySelector(".ptp-col-sector") as HTMLElement;
-    expect(sector.textContent).toBe("10.000");
-    expect(sector.getAttribute("title")).toBe("Gecontroleerde laatste ronde · simhub · afwijking 0.000 s");
+    expect(sector.textContent).toBe("—");
     expect(timingRow.querySelector("td[data-timing='last-lap']")).toBe(last);
   });
 

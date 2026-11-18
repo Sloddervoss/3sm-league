@@ -67,7 +67,7 @@ describe('premium sector layout — metadata stays, measurements do not', () => 
     rerender({ key: 'b', count: 3 }); expect(result.current).toBe(3);
   });
 
-  it('keeps S1..S3 when metrics age out, but removes the expired times', () => {
+  it('keeps S1..S3 and the validated result when metrics age out', () => {
     const view = render(timing(frame()));
     expect(screen.getByRole('columnheader', { name: 'S1' })).toBeTruthy();
     expect(view.container.querySelector('thead .ptp-col-sector')?.textContent).toBe('S1');
@@ -75,7 +75,7 @@ describe('premium sector layout — metadata stays, measurements do not', () => 
     view.rerender(timing(frame(3, 107)));
     expect(screen.getByRole('columnheader', { name: 'S1' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'S3' })).toBeTruthy();
-    for (const cell of view.container.querySelectorAll('tbody .ptp-col-sector')) expect(cell.textContent).toBe('—');
+    expect(view.container.querySelector('tbody .ptp-col-sector')?.textContent).toBe('30.000');
     expect(view.container.querySelectorAll('colgroup col').length).toBe(12);
     view.rerender(timing(frame(3, 107), 'other-device|transport-b|168'));
     expect(screen.queryByRole('columnheader', { name: 'S1' })).toBeNull();

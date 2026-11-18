@@ -1,4 +1,5 @@
-import { freshPaceHistory, rowSectors, trackSectorCount } from "./paceSeries";
+import { freshPaceHistory, rowSectors } from "./paceSeries";
+import { useRetainedLapSectors } from "./useRetainedLapSectors";
 import { fieldSectorBests, sectorDeltas } from "./sectorField";
 import {
   buildSectorTimingIndex,
@@ -39,7 +40,7 @@ const second = (value: number | null | undefined): string =>
  *
  * De rondedelta vergelijkt uitsluitend laatste met beste; sessietijd is geen stinttijd.
  */
-export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinutes, showClassPosition = true, sectorCountOverride, stableLayout = false }: { v3: V3Normalized | null; live: boolean; plannedLaps?: number | null; plannedDurationMinutes?: number | null; showClassPosition?: boolean; sectorCountOverride?: number; stableLayout?: boolean }) {
+export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinutes, showClassPosition = true, sectorCountOverride, stableLayout = false, contextKey }: { v3: V3Normalized | null; live: boolean; plannedLaps?: number | null; plannedDurationMinutes?: number | null; showClassPosition?: boolean; sectorCountOverride?: number; stableLayout?: boolean; contextKey?: string }) {
   const data = live ? v3 : null;
   const planLaps = typeof plannedLaps === "number" && Number.isSafeInteger(plannedLaps) && plannedLaps > 0 ? plannedLaps : null;
   const planMinutes = typeof plannedDurationMinutes === "number" && Number.isSafeInteger(plannedDurationMinutes) && plannedDurationMinutes > 0 ? plannedDurationMinutes : null;
@@ -50,7 +51,8 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   const laps = data?.timing?.completedLaps;
   const difference = lapDifference(last, best);
   const player = data?.opponents?.find(o=>o.isPlayer);
-  const sectorCount = sectorCountOverride === undefined ? trackSectorCount(data)
+  const retained = useRetainedLapSectors(data, contextKey);
+  const sectorCount = sectorCountOverride === undefined ? retained.count
     : Number.isInteger(sectorCountOverride) && sectorCountOverride >= 1 && sectorCountOverride <= 16 ? sectorCountOverride : 0;
   // Persisted sector results zijn onafhankelijk van de 5-seconden metriekpoort.
   const sectorTimings = buildSectorTimingIndex(
@@ -59,17 +61,19 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   );
   const playerTiming = player ? sectorTimings.get(player.id) ?? null : null;
   const usingSectorUpdates = playerTiming != null && playerTiming.sectorCount === sectorCount;
-  const currentSectors = player && !usingSectorUpdates ? rowSectors(data,player.id,player.lastLapSeconds) : null;
+  const retainedLap = player && !playerTiming ? retained.laps.get(player.id) : undefined;
+  const previous = retainedLap?.lap != null && player?.lap != null && player.lap > retainedLap.lap + 1;
+  const currentSectors = retainedLap?.seconds ?? null;
   const sectors = sectorCountOverride === undefined ? currentSectors
     : currentSectors?.length === sectorCount ? currentSectors : null;
   const sectorLabel = usingSectorUpdates && playerTiming
     ? playerTiming.mixedLaps ? "Sectoren · meerdere ronden" : `Sectoren · ronde ${playerTiming.lap}`
-    : sectors ? "Sectoren laatste ronde" : "Sectoren · niet gecontroleerd";
+    : sectors && retainedLap ? `Sectoren laatste ronde${retainedLap.lap != null ? ` · R${retainedLap.lap}` : ""}` : "Sectoren · niet gecontroleerd";
   const rest = data?.session?.sessionTimeRemainingSeconds;
   // Waar verliezen we tijd? Per sector het verschil met de snelste tijd in het veld.
   // Alleen binnen dezelfde sectordeling; anders blijft het verschil leeg.
   const sectorBest = fieldSectorBests((data?.opponents ?? []).map(o => ({ id: o.id, sectors: rowSectors(data,o.id,o.lastLapSeconds) })));
-  const deltas = sectors ? sectorDeltas(sectors, sectorBest) : null;
+  const deltas = sectors && !previous && player && rowSectors(data, player.id, player.lastLapSeconds) ? sectorDeltas(sectors, sectorBest) : null;
 
   return (
     <div
@@ -77,7 +81,7 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
       data-pitwall-kpi="true"
       data-sector-count={sectorCount}
     >
-      <KpiGroup label={sectorLabel} group="sectoren" className={sectorCount>3 ? "pitwall-many-sectors" : ""}>
+      <KpiGroup label={sectorLabel} group="sectoren" className={`${sectorCount>3 ? "pitwall-many-sectors" : ""}${previous ? " opacity-60" : ""}`}>
         {sectorCount === 0 && <Cell label="Sectorindeling onbekend" value="—" compact />}
         {usingSectorUpdates && Array.from({length:sectorCount},(_,i)=>(
           <SectorKpi key={i} label={`S${i+1}`} slot={playerTiming?.slots[i] ?? null} compact={sectorCount>3} />

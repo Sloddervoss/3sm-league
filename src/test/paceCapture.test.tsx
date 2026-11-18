@@ -77,7 +77,7 @@ describe("PACE reeksen en tweede lijn",()=>{
    const {rerender}=render(<RaceTelemetryStrip v3={state} live />);
    expect(screen.getByText("Sectoren · niet gecontroleerd")).toBeInTheDocument();
    state.paceHistory!.cars[0].metrics={id:"own",observedSessionTimeSeconds:300,lastLapSeconds:100,bestLapSeconds:null,lastLapSectorSeconds:[30,30,40],bestLapSectorSeconds:null,bestSectorSeconds:null,bestLapDeltaToFieldBestSeconds:null,bestLapDeltaToPlayerSeconds:null,lapValid:null,lapHighPrecision:null,trackPositionPercentRaw:null,sectorMismatchCount:0};
-   rerender(<RaceTelemetryStrip v3={state} live />);
+   rerender(<RaceTelemetryStrip v3={{...state}} live />);
    expect(screen.getByText("40.000")).toBeInTheDocument(); expect(screen.queryByText("1.000")).not.toBeInTheDocument();
  });
  it("sectorkolommen tonen alleen een actueel gecontroleerd triplet",()=>{
@@ -86,7 +86,7 @@ describe("PACE reeksen en tweede lijn",()=>{
    expect(rowSectors(state,"rival",100)).toEqual([30,30,40]);
    const {rerender}=render(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
    expect(screen.getByText("40.000")).toBeInTheDocument();
-   metric.lastLapSectorSeconds=[1,2,3]; rerender(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
+   metric.lastLapSectorSeconds=[1,2,3]; rerender(<StandingsWidget v3={{...state}} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
    expect(screen.queryByText("40.000")).not.toBeInTheDocument(); expect(rowSectors(state,"rival",100)).toBeNull();
    metric.lastLapSectorSeconds=[30,30,40]; metric.observedSessionTimeSeconds=290; expect(rowSectors(state,"rival",100)).toBeNull();
  });
@@ -112,7 +112,7 @@ describe("PACE definitief: werkelijke sectorindeling en herkomst",()=>{
    expect(container.querySelector("td[colspan]")?.getAttribute("colspan")).toBe(String(koppen));
    expect(screen.getAllByTitle(/Gecontroleerde laatste ronde · measured · afwijking 0.000 s/)).toHaveLength(6);
    metric.lastLapSectorSeconds=[1,2,3,4,5,6];
-   rerender(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
+   rerender(<StandingsWidget v3={{...state}} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
    expect(screen.queryByText("30.000")).not.toBeInTheDocument();
    expect(screen.getByRole("columnheader",{name:"S6"})).toBeInTheDocument();
  });

@@ -119,6 +119,49 @@ const premiumCell = (container: HTMLElement, carId: string, index: number): HTML
   return cell as HTMLElement;
 };
 
+describe("retained full-lap sectors", () => {
+  const make = (lap: number, time: number, values: number[] | null, segmentId = "seg-a") => {
+    const data = frame([car("a", [])], { sessionTime: time, opponents: [opponent("a", { lap, isPlayer: true })], history: { segmentId } });
+    data.paceHistory!.cars[0].metrics = {
+      ...staleMetric("a"), sectorCount: 5, sectorLap: lap - 1,
+      observedSessionTimeSeconds: values ? time : time - 6,
+      lastLapSectorSeconds: values,
+    };
+    return data;
+  };
+  function views(v3: V3Normalized) {
+    const standings = deriveStandings(v3, 40);
+    return <><section data-view="normal"><StandingsWidget v3={v3} standings={standings} ownCarLabel={null} ownCarNumber={null} /></section>
+      <section data-view="premium"><PremiumTimingPanel v3={v3} standings={standings} ownCarLabel={null} ownCarNumber={null} live contextKey="device" motionEnabled={false} /></section>
+      <section data-view="kpi"><RaceTelemetryStrip v3={v3} live /></section></>;
+  }
+  it("holds five proved sectors through a blank poll and lap advance, then replaces or clears them", () => {
+    const first = [16, 17, 18, 19, 20];
+    const { container, rerender } = render(views(make(11, 300, first)));
+    const all = (value: string) => {
+      for (const name of ["normal", "premium", "kpi"]) expect(container.querySelector(`[data-view=${name}]`)?.textContent).toContain(value);
+    };
+    all("16.000"); all("20.000");
+    rerender(views(make(11, 308, null)));
+    all("16.000"); all("20.000");
+    rerender(views(make(12, 390, [1, 2, 3, 4, 5]))); // Wrong sum must not overwrite R10.
+    all("16.000");
+    expect(container.querySelector('[data-view=normal] [data-sector-lap="10"][data-sector-previous="true"]')).not.toBeNull();
+    rerender(views(make(12, 391, [20, 19, 18, 17.5, 15.5])));
+    all("15.500");
+    rerender(views(make(12, 392, null, "new-segment")));
+    expect(container.textContent).not.toContain("15.500");
+  });
+  it("does not resurrect a full-lap fallback for explicit invalidation", () => {
+    const { container, rerender } = render(views(make(11, 300, [16, 17, 18, 19, 20])));
+    const invalid = make(11, 301, [16, 17, 18, 19, 20]);
+    invalid.paceHistory!.cars[0].sectors = [update({ status: "invalidated", seconds: null, sectorCount: 5 })];
+    rerender(views(invalid));
+    expect(container.querySelector('[data-view=normal] [data-sector-status=invalidated]')).not.toBeNull();
+    expect(container.textContent).not.toContain("16.000");
+  });
+});
+
 describe("live sector updates — premium consumer", () => {
   it("toont persistente sectortijden ruim na de 5-seconden metriekpoort zonder de geometrie te wijzigen", () => {
     const data = frame([car("a", [

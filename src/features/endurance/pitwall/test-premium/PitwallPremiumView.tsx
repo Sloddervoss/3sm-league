@@ -117,7 +117,7 @@ export function PitwallPremiumView({
       />
 
       <div className="ptp-kpi" data-ptp-sectors={sectorCount > 0 ? "known" : "unknown"}>
-        <RaceTelemetryStrip v3={v3} live={live} showClassPosition={false} sectorCountOverride={sectorCount} stableLayout />
+        <RaceTelemetryStrip v3={v3} live={live} showClassPosition={false} sectorCountOverride={sectorCount} stableLayout contextKey={contextKey} />
       </div>
 
       <DecisionBand advice={{ ...strategyAdvice, tyreEstimate }} />
