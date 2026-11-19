@@ -1,4 +1,4 @@
-import { freshMetrics, freshPaceHistory, rowSectors } from "./paceSeries";
+import { freshMetrics, freshPaceHistory, persistedMetrics, rowSectors } from "./paceSeries";
 import { useRetainedLapSectors } from "./useRetainedLapSectors";
 import { buildSectorTimingIndex } from "./sectorTiming";
 import { SectorTimingCell } from "./SectorTimingCell";
@@ -177,15 +177,22 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
               {visibleRows.map((r, index) => {
                 const legacySectors = live ? rowSectors(v3,r.id,r.lastLapSeconds) : null;
                 const timing = sectorTimings?.get(r.id) ?? null;
-                const cached = !timing ? retained.laps.get(r.id) : undefined;
+                const usingSectorUpdates = live && timing != null && timing.sectorCount === sectorCount;
+                // Een live stand met een andere layout duwt een bewezen ronde
+                // niet weg; alleen de echte live weergave heeft voorrang.
+                const cached = !usingSectorUpdates ? retained.laps.get(r.id) : undefined;
                 const lastSectors = cached?.seconds.length === sectorCount ? cached : undefined;
                 const prior = lastSectors?.lap != null && r.lap != null && r.lap > lastSectors.lap + 1;
-                const retainedStale = lastSectors != null && (!live || !legacySectors);
-                const usingSectorUpdates = live && timing != null && timing.sectorCount === sectorCount;
+                // Alleen een stilstaande feed of een oudere ronde dimt; het
+                // verstrijken van de 5s-metriekpoort is geen veroudering.
+                const retainedStale = lastSectors != null && (!live || prior);
                 const metrics = live ? freshMetrics(v3,r.id) : null;
-                const legacySectorTitle = live && legacySectors
-                  ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
-                  : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;
+                // Herkomst van de bewezen ronde: de opgeslagen meting, niet de
+                // 5s-levendigheidsstand, zodat de tooltip niet elke 5s wisselt.
+                const persisted = live ? persistedMetrics(v3,r.id) : null;
+                const legacySectorTitle = live && persisted
+                  ? `Gecontroleerde laatste ronde · ${persisted.sectorSource ?? "bron onbekend"} · afwijking ${persisted.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
+                  : `Geen gecontroleerde sectorreeks · bronafwijkingen ${persisted?.sectorMismatchCount ?? "onbekend"}`;
                 return (
                 <Fragment key={r.id}>
                   {(index === 0 || visibleRows[index - 1].carClass !== r.carClass) && (
@@ -241,7 +248,7 @@ export const StandingsWidget = ({ v3, standings, ownCarLabel, ownCarNumber, live
                           : preciseLapTime(live && legacySectors ? freshMetrics(v3,r.id)?.lastLapSeconds : r.lastLapSeconds)}
                       </td>
                     <td data-timing="best-lap" className="pitwall-col-secondary px-2 py-1.5 text-right font-mono text-fuchsia-300">{preciseLapTime(r.bestLapSeconds)}</td>
-                    {sectorColumns.map(n=><td key={n} data-sector-index={n} className="pitwall-col-sector px-2 py-1.5 text-right font-mono text-slate-300" title={usingSectorUpdates ? undefined : lastSectors ? `Laatst geverifieerd · ronde ${lastSectors.lap ?? "?"}${retainedStale ? " · bewaard na ontbrekende poll" : ` · ${legacySectorTitle}`}` : legacySectorTitle}>{usingSectorUpdates ? <SectorTimingCell slot={timing?.slots[n] ?? null} /> : lastSectors?.seconds[n] != null ? <span data-sector-lap={lastSectors.lap ?? undefined} data-sector-source="verified-lap" data-sector-previous={prior || undefined} data-retained-stale={retainedStale || undefined} className={prior || retainedStale ? "opacity-60" : undefined} title={lastSectors.lap == null ? undefined : `Laatst geverifieerd · ronde ${lastSectors.lap}`}><span data-sector-value="true">{lastSectors.seconds[n].toFixed(3)}</span>{lastSectors.lap != null && <span className="ml-1 text-[8px] text-slate-500" data-sector-lap-mark={lastSectors.lap}>R{lastSectors.lap}</span>}</span> : "—"}</td>)}
+                    {sectorColumns.map(n=><td key={n} data-sector-index={n} className="pitwall-col-sector px-2 py-1.5 text-right font-mono text-slate-300" title={usingSectorUpdates ? undefined : lastSectors ? live && !prior ? `Laatst geverifieerd${lastSectors.lap != null ? ` · ronde ${lastSectors.lap}` : ""} · ${legacySectorTitle}` : `Laatst geverifieerd${lastSectors.lap != null ? ` · ronde ${lastSectors.lap}` : ""}${!live ? " · bewaard na ontbrekende poll" : " · oudere ronde"}` : legacySectorTitle}>{usingSectorUpdates ? <SectorTimingCell slot={timing?.slots[n] ?? null} /> : lastSectors?.seconds[n] != null ? <span data-sector-lap={lastSectors.lap ?? undefined} data-sector-source="verified-lap" data-sector-previous={prior || undefined} data-retained-stale={retainedStale || undefined} className={prior || retainedStale ? "opacity-60" : undefined} title={lastSectors.lap == null ? undefined : `Laatst geverifieerd · ronde ${lastSectors.lap}`}><span data-sector-value="true">{lastSectors.seconds[n].toFixed(3)}</span>{lastSectors.lap != null && <span className="ml-1 text-[8px] text-slate-500" data-sector-lap-mark={lastSectors.lap}>R{lastSectors.lap}</span>}</span> : "—"}</td>)}
                     <td className="pitwall-col-secondary px-2 py-1.5 text-right font-mono text-slate-300">{r.lap ?? "—"}</td>
                     <td className="pitwall-col-secondary px-2 py-1.5 text-right font-mono font-semibold text-orange-300">{renderGap(r, false)}</td>
                     <td className="pitwall-col-secondary px-2 py-1.5 text-center text-[11px] font-bold text-yellow-400">{r.inPit ? "PIT" : "—"}</td>

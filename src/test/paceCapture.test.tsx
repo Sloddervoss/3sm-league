@@ -80,15 +80,21 @@ describe("PACE reeksen en tweede lijn",()=>{
    rerender(<RaceTelemetryStrip v3={{...state}} live />);
    expect(screen.getByText("40.000")).toBeInTheDocument(); expect(screen.queryByText("1.000")).not.toBeInTheDocument();
  });
- it("sectorkolommen tonen alleen een actueel gecontroleerd triplet",()=>{
+ it("sectorkolommen tonen de laatste bewezen reeks en wissen die alleen bij een echte wissel",()=>{
    const state=v3(); const metric={id:"rival",observedSessionTimeSeconds:300,lastLapSeconds:100,bestLapSeconds:100,lastLapSectorSeconds:[30,30,40],bestLapSectorSeconds:null,bestSectorSeconds:null,bestLapDeltaToFieldBestSeconds:null,bestLapDeltaToPlayerSeconds:null,lapValid:null,lapHighPrecision:null,trackPositionPercentRaw:null,sectorMismatchCount:2};
    state.paceHistory!.cars[1].metrics=metric;
    expect(rowSectors(state,"rival",100)).toEqual([30,30,40]);
    const {rerender}=render(<StandingsWidget v3={state} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
    expect(screen.getByText("40.000")).toBeInTheDocument();
+   // Een nieuw maar onbewezen triplet is geen ongeldigheid van de vorige ronde:
+   // de bewezen reeks blijft staan (gedimd) en de live-poort blijft dicht.
    metric.lastLapSectorSeconds=[1,2,3]; rerender(<StandingsWidget v3={{...state}} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
-   expect(screen.queryByText("40.000")).not.toBeInTheDocument(); expect(rowSectors(state,"rival",100)).toBeNull();
+   expect(screen.getByText("40.000")).toBeInTheDocument(); expect(rowSectors(state,"rival",100)).toBeNull();
    metric.lastLapSectorSeconds=[30,30,40]; metric.observedSessionTimeSeconds=290; expect(rowSectors(state,"rival",100)).toBeNull();
+   // Een echte sessiewissel wist de reeks wel.
+   const switched={...state, transportSessionId:"other-transport"};
+   rerender(<StandingsWidget v3={switched} standings={deriveStandings(switched,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
+   expect(screen.queryByText("40.000")).not.toBeInTheDocument();
  });
 });
 
@@ -113,7 +119,9 @@ describe("PACE definitief: werkelijke sectorindeling en herkomst",()=>{
    expect(screen.getAllByTitle(/Gecontroleerde laatste ronde · measured · afwijking 0.000 s/)).toHaveLength(6);
    metric.lastLapSectorSeconds=[1,2,3,4,5,6];
    rerender(<StandingsWidget v3={{...state}} standings={deriveStandings(state,40)} ownCarLabel="Eigen" ownCarNumber={null} />);
-   expect(screen.queryByText("30.000")).not.toBeInTheDocument();
+   // Een onbewezen vervolgmeting wist de laatste bewezen reeks niet; de
+   // 6-sectorkolommen en de bewezen waarden blijven staan.
+   expect(screen.getByText("30.000")).toBeInTheDocument();
    expect(screen.getByRole("columnheader",{name:"S6"})).toBeInTheDocument();
  });
  it("weigert verkeerde sectoraantallen en publiceert ook bij lapValid=false niets",()=>{

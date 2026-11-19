@@ -247,7 +247,7 @@ describe("Bart UX defect 2 — verified lap versus live sectors and honest refer
 });
 
 describe("Bart UX defect 3 — bounded retention without cross-identity or invalidation leaks", () => {
-  it("keeps a verified lap through a missing poll and a null frame, then expires it", () => {
+  it("keeps a verified lap through a missing poll, a null frame and a late poll", () => {
     const first = frame();
     const { result, rerender } = renderHook(
       ({ input }) => useRetainedLapSectors(input, "device|transport-a"),
@@ -264,8 +264,11 @@ describe("Bart UX defect 3 — bounded retention without cross-identity or inval
     rerender({ input: null });
     expect(result.current.laps.get("me")?.seconds).toEqual([30, 30, 30]);
 
+    // Retentie is geen hartslag: ook twee minuten zonder nieuwe meting is de
+    // laatste bewezen ronde nog steeds de laatste bewezen ronde. Alleen een
+    // echte wissel (sessie/track/ronde-identiteit) wist hem.
     rerender({ input: frame({ sessionTime: 430 }) });
-    expect(result.current.laps.size).toBe(0);
+    expect(result.current.laps.get("me")?.seconds).toEqual([30, 30, 30]);
   });
 
   it("still shows the verified lap in the KPI after a poll returns no frame", () => {

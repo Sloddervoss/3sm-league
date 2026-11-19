@@ -77,7 +77,11 @@ describe('premium sector layout — metadata stays, measurements do not', () => 
     expect(screen.getByRole('columnheader', { name: 'S3' })).toBeTruthy();
     expect(view.container.querySelector('tbody .ptp-col-sector')?.textContent).toBe('30.000R9');
     expect(view.container.querySelectorAll('colgroup col').length).toBe(12);
-    view.rerender(timing(frame(3, 107), 'other-device|transport-b|168'));
+    // Een nieuwe context zonder eigen PACE begint zonder oude kolommen; een
+    // frame dat nog de oude layout meedraagt, is geen bewijs voor de nieuwe.
+    const otherContext = frame(3, 107);
+    delete (otherContext as { paceHistory?: unknown }).paceHistory;
+    view.rerender(timing(otherContext, 'other-device|transport-b|168'));
     expect(screen.queryByRole('columnheader', { name: 'S1' })).toBeNull();
   });
 

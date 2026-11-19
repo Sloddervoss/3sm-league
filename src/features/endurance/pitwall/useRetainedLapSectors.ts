@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { freshMetrics, freshPaceHistory, rowSectors, trackSectorCount } from "./paceSeries";
+import { completedLap, freshPaceHistory, persistedMetrics, rowSectors, trackSectorCount } from "./paceSeries";
 import type { V3Normalized } from "./pitwallHelpers";
-import { buildSectorTimingIndex } from "./sectorTiming";
+import { buildSectorTimingIndex, type CarSectorTiming } from "./sectorTiming";
 import { geldigeLaatsteRonde } from "./standings";
 
 export type RetainedLapSectors = {
@@ -27,14 +27,6 @@ type State = {
   stale: boolean;
 };
 
-/**
- * Hoe lang een geverifieerde volledige ronde mag blijven staan wanneer een poll
- * geen nieuwe meting levert. Dit is presentatie, geen bewijs: na deze grens
- * verdwijnt de oude reeks in plaats van een halve minuut als "laatst gezien"
- * door te leven.
- */
-export const RETAINED_SECTOR_TTL_SECONDS = 120;
-
 const empty = (input: State["input"], context: string): State => ({
   input,
   lastInput: null,
@@ -47,37 +39,64 @@ const empty = (input: State["input"], context: string): State => ({
   stale: true,
 });
 
-const identityOf = (input: V3Normalized | null | undefined): string | null =>
-  input
-    ? JSON.stringify([
-        input.transportSessionId ?? "",
-        input.identity?.trackId ?? input.identity?.trackName ?? "",
-        input.identity?.trackConfig ?? "",
-      ])
-    : null;
+/** Sessie/track-identiteit. Ontbrekende metadata is "onbekend", geen wissel. */
+const identityOf = (input: V3Normalized | null | undefined): string | null => {
+  if (!input) return null;
+  const track = input.identity?.trackId ?? input.identity?.trackName ?? null;
+  const config = input.identity?.trackConfig ?? null;
+  if (track == null && config == null && !input.transportSessionId) return null;
+  return JSON.stringify([input.transportSessionId ?? "", track ?? "", config ?? ""]);
+};
 
 const segmentOf = (input: V3Normalized | null | undefined): string | null => {
   const history = freshPaceHistory(input);
   return history ? JSON.stringify([history.observedSessionId, history.segmentId]) : null;
 };
 
-const expired = (entry: RetainedLapSectors, clock: number | null, nowMs: number): boolean => {
-  if (clock != null && entry.observedSessionTime != null) {
-    return clock - entry.observedSessionTime > RETAINED_SECTOR_TTL_SECONDS;
+/** Nieuwste observatie wint; gelijke standen mogen niet ouderd worden overschreven. */
+const newerThan = (
+  candidate: { lap: number | null; observedSessionTime: number | null },
+  cached: RetainedLapSectors | undefined,
+): boolean => {
+  if (!cached) return true;
+  if (candidate.lap == null) {
+    // Een onbekende ronde mag een bekende ronde niet verdringen; twee
+    // onbekende standen vergelijken alleen op observatietijd.
+    return cached.lap == null && (
+      candidate.observedSessionTime == null
+      || cached.observedSessionTime == null
+      || candidate.observedSessionTime >= cached.observedSessionTime
+    );
   }
-  return nowMs - entry.observedAtMs > RETAINED_SECTOR_TTL_SECONDS * 1000;
+  if (cached.lap == null) return true;
+  if (candidate.lap !== cached.lap) return candidate.lap > cached.lap;
+  return candidate.observedSessionTime == null
+    || cached.observedSessionTime == null
+    || candidate.observedSessionTime >= cached.observedSessionTime;
+};
+
+/**
+ * Een volledige ronde uit de live sectorstand: alleen wanneer alle sectoren van
+ * dezelfde, geverifieerde ronde aanwezig zijn. Een halve/mixende stand is geen
+ * volledige ronde en wordt hier niet als bewaarde reeks opgeslagen.
+ */
+const liveLap = (timing: CarSectorTiming | undefined): { seconds: number[]; lap: number } | null => {
+  if (!timing || timing.status !== "verified" || timing.mixedLaps) return null;
+  if (timing.slots.length < 1 || timing.slots.length > 16) return null;
+  const seconds: number[] = [];
+  for (const slot of timing.slots) {
+    if (!slot || slot.status === "invalidated" || slot.seconds == null || slot.seconds <= 0) return null;
+    seconds.push(slot.seconds);
+  }
+  return seconds.length === timing.sectorCount ? { seconds, lap: timing.lap } : null;
 };
 
 function update(previous: State | null, input: State["input"], context: string, nowMs = Date.now()): State {
-  // Een ontbrekende poll (null-frame) is geen identiteitswissel. Bewaar de
-  // laatste bekende context, maar markeer hem als stale en begrens de leeftijd.
+  // Een ontbrekende poll (null-frame) is geen identiteitswissel en geen
+  // ongeldigheid: de laatste bewezen stand blijft staan, alleen gedimd.
   if (!input) {
     if (!previous || previous.context !== context) return empty(input, context);
-    const laps = new Map<string, RetainedLapSectors>();
-    for (const [id, entry] of previous.laps) {
-      if (!expired(entry, previous.clock, nowMs)) laps.set(id, entry);
-    }
-    return { ...previous, input, lastInput: previous.lastInput, laps, stale: true };
+    return { ...previous, input, lastInput: previous.lastInput, stale: true };
   }
 
   const identity = identityOf(input);
@@ -88,52 +107,62 @@ function update(previous: State | null, input: State["input"], context: string, 
     : null;
   const observedCount = trackSectorCount(input);
 
-  const identityChanged = previous != null && previous.context === context && previous.identity != null && identity !== previous.identity;
+  // Alleen een *bevestigde* wissel wist de reeks. Ontbrekende track- of
+  // segmentmetadata in één frame is onbekend, geen nieuwe sessie.
+  const identityChanged = previous != null && previous.context === context && previous.identity != null && identity != null && identity !== previous.identity;
   const segmentChanged = previous != null && previous.context === context && previous.segment != null && segment != null && segment !== previous.segment;
   const clockRewound = previous != null && previous.clock != null && clock != null && clock < previous.clock - 0.001;
   const layoutChanged = observedCount > 0 && previous != null && previous.count > 0 && observedCount !== previous.count;
   const reset = !previous || previous.context !== context || identityChanged || segmentChanged || clockRewound || layoutChanged;
 
-  const laps = new Map<string, RetainedLapSectors>(
-    reset ? undefined : [...(previous?.laps ?? [])].filter(([, entry]) => !expired(entry, clock, nowMs)),
-  );
-  // Een reeks zonder bekende ronde kan niet als "laatst geverifieerd" blijven
-  // staan: alleen de ronde-identiteit maakt hem later controleerbaar.
-  for (const [id, entry] of laps) if (entry.lap == null) laps.delete(id);
+  const laps = new Map<string, RetainedLapSectors>(reset ? undefined : [...(previous?.laps ?? [])]);
+
   const opponents = (input.opponents ?? []).slice(0, 40);
   const live = buildSectorTimingIndex(history, opponents.map(o => ({ id: o.id, currentLap: o.lap })));
 
   for (const o of opponents) {
     const cached = laps.get(o.id);
     const completed = typeof o.lap === "number" && Number.isInteger(o.lap) && o.lap > 0 ? o.lap - 1 : null;
-    const metrics = freshMetrics(input, o.id);
+    const metrics = persistedMetrics(input, o.id);
     const historyCar = history?.cars.find(car => car.id === o.id);
-    const invalidated = Array.isArray(historyCar?.sectors) && historyCar.sectors.some(sector =>
-      sector && sector.status === "invalidated" && (completed == null || sector.lap >= completed),
-    );
 
-    // Een expliciete ongeldigheid (reset/tow, ongeldige laatste ronde of een
-    // geannuleerde sectorreeks) wist de bewaarde reeks. Een ontbrekende poll
-    // doet dat niet.
-    if (invalidated ||
-        (metrics?.lapValid === false && completed != null && metrics.sectorLap === completed) ||
-        (o.lastLapSeconds != null && geldigeLaatsteRonde(o.lastLapSeconds, o.bestLapSeconds) == null) ||
-        (completed != null && cached?.lap != null && completed < cached.lap)) {
+    // Expliciete ongeldigheid wist alleen de reeks waar zij over gaat. Een
+    // reset of tow van de *lopende* ronde maakt de vorige bewezen ronde niet
+    // onwaar; die blijft als "laatst geverifieerd" staan.
+    const invalidatedLaps = new Set<number>();
+    for (const sector of historyCar?.sectors ?? []) {
+      if (sector && sector.status === "invalidated" && Number.isInteger(sector.lap)) invalidatedLaps.add(sector.lap);
+    }
+    const invalidatedCachedLap = cached?.lap != null && invalidatedLaps.has(cached.lap);
+    const cachedLapMarkedInvalid = cached?.lap != null && metrics?.lapValid === false && metrics.sectorLap === cached.lap;
+    const cachedLapIsShortArtifact = cached?.lap != null && completed != null && completed === cached.lap &&
+      o.lastLapSeconds != null && geldigeLaatsteRonde(o.lastLapSeconds, o.bestLapSeconds) == null;
+    const lapCounterWentBack = cached?.lap != null && completed != null && completed < cached.lap;
+
+    if (invalidatedCachedLap || cachedLapMarkedInvalid || cachedLapIsShortArtifact || lapCounterWentBack) {
       laps.delete(o.id);
       continue;
     }
 
-    // Reeds bewezen live sectorupdates zijn nieuwer; de volledige-rondecache
-    // blijft als fallback staan tot een nieuwere volledige ronde hem vervangt.
-    if (live.has(o.id)) continue;
+    // De live sectorstand is per sector nieuwer; bewaar hem als volledige
+    // ronde zodat een tijdelijke lege stand de rij niet leegmaakt.
+    const liveSectors = liveLap(live.get(o.id));
+    if (liveSectors && newerThan({ lap: liveSectors.lap, observedSessionTime: clock }, cached)) {
+      laps.set(o.id, { seconds: liveSectors.seconds, lap: liveSectors.lap, observedSessionTime: clock, observedAtMs: nowMs });
+      continue;
+    }
 
-    const seconds = rowSectors(input, o.id, o.lastLapSeconds);
-    if (seconds && (completed == null || completed > 0) && (cached?.lap == null || (completed != null && completed > cached.lap))) {
-      laps.delete(o.id);
+    const completedLapResult = completedLap(input, o.id, o.lap, o.lastLapSeconds);
+    if (!completedLapResult) continue;
+    // Een expliciet ongeldig verklaarde ronde komt niet terug via een oudere
+    // meting die dezelfde ronde nog als geldig in zijn slot heeft.
+    if (invalidatedLaps.has(completedLapResult.lap)) continue;
+    const observed = metrics?.observedSessionTimeSeconds ?? clock ?? null;
+    if (newerThan({ lap: completedLapResult.lap, observedSessionTime: observed }, cached)) {
       laps.set(o.id, {
-        seconds,
-        lap: completed,
-        observedSessionTime: clock ?? metrics?.observedSessionTimeSeconds ?? null,
+        seconds: completedLapResult.seconds,
+        lap: completedLapResult.lap,
+        observedSessionTime: observed,
         observedAtMs: nowMs,
       });
     }
@@ -142,7 +171,7 @@ function update(previous: State | null, input: State["input"], context: string, 
   // Zacht begrensd: maximaal 40 auto's, elk met de bestaande 1–16 sectorlayout.
   while (laps.size > 40) laps.delete(laps.keys().next().value!);
   for (const [id, entry] of laps) {
-    if (entry.seconds.length < 1 || entry.seconds.length > 16 || expired(entry, clock, nowMs)) laps.delete(id);
+    if (entry.seconds.length < 1 || entry.seconds.length > 16) laps.delete(id);
   }
 
   const count = observedCount >= 1 && observedCount <= 16
@@ -153,20 +182,27 @@ function update(previous: State | null, input: State["input"], context: string, 
     input,
     lastInput: input,
     context,
-    identity,
+    identity: identity ?? (reset ? null : previous?.identity ?? null),
     segment: segment ?? (reset ? null : previous?.segment ?? null),
     clock,
     count,
     laps,
-    stale: !history || opponents.every(o => freshMetrics(input, o.id) == null),
+    stale: !history || opponents.every(o => rowSectors(input, o.id, o.lastLapSeconds) == null && !persistedMetrics(input, o.id)),
   };
 }
 
 /**
  * Alleen weergave-retentie. De cache wordt nooit als live sectorupdate, als
  * actuele rondetijd of als bewijs gebruikt. Een identiteitswissel, een
- * sessierestart, een andere sectordeling of een expliciete ongeldigheid wist
- * hem; een ontbrekende poll niet.
+ * sessierestart, een andere sectordeling, een lagere ronde of een expliciete
+ * ongeldigheid van precies die ronde wist hem; een ontbrekende of sparse poll
+ * niet.
+ *
+ * Er is bewust geen tijdsgebonden verval: de connector levert met een vol veld
+ * maar enkele metingen per frame, dus een auto kan tientallen seconden geen
+ * nieuwe reeks hebben zonder dat de oude onwaar wordt. De waarde blijft staan
+ * met ronde-identiteit en wordt gedimd zodra zij niet meer de laatste
+ * afgeronde ronde is.
  */
 export function useRetainedLapSectors(input: State["input"], context = ""): State {
   const [state, setState] = useState<State>(() => update(null, input, context));

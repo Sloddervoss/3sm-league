@@ -236,10 +236,14 @@ export function PremiumTimingPanel({
     const legacySectors = live ? rowSectors(v3, r.id, r.lastLapSeconds) : null;
     const legacyComplete = legacySectors?.length === sectorCount;
     const usingSectorUpdates = timing != null && timing.sectorCount === sectorCount;
-    const retainedLap = !timing ? retained.laps.get(r.id) : undefined;
+    // Een live stand met een afwijkende layout mag een bewezen volledige ronde
+    // niet wegduwen: alleen de échte live weergave heeft voorrang.
+    const retainedLap = !usingSectorUpdates ? retained.laps.get(r.id) : undefined;
     const sectors = !gap && retainedLap?.seconds.length === sectorCount ? retainedLap.seconds : null;
     const prior = retainedLap?.lap != null && r.lap != null && r.lap > retainedLap.lap + 1;
-    const retainedStale = sectors != null && (!live || !legacyComplete);
+    // Dimen betekent "niet meer de laatste afgeronde ronde" of "feed ligt stil",
+    // nooit "de meting is vijf seconden oud".
+    const retainedStale = sectors != null && (!live || prior);
     const metrics = freshMetrics(v3, r.id);
     // Zelfde ongeldigheidsgrens als de klassieke StandingsWidget: een
     // reset/tow-ronde mag ook niet via de verse PACE-meting als tijd
@@ -253,7 +257,7 @@ export function PremiumTimingPanel({
     const sectorTitle = usingSectorUpdates
       ? undefined
       : sectors && retainedLap
-        ? `Laatst geverifieerd · ronde ${retainedLap.lap ?? "?"}${retainedStale ? " · bewaard na ontbrekende poll" : ""}`
+        ? `Laatst geverifieerd${retainedLap.lap != null ? ` · ronde ${retainedLap.lap}` : ""}${!live ? " · bewaard na ontbrekende poll" : ""}`
         : live && legacyComplete
           ? `Gecontroleerde laatste ronde · ${metrics?.sectorSource ?? "bron onbekend"} · afwijking ${metrics?.sectorErrorSeconds?.toFixed(3) ?? "onbekend"} s`
           : `Geen gecontroleerde sectorreeks · bronafwijkingen ${metrics?.sectorMismatchCount ?? "onbekend"}`;

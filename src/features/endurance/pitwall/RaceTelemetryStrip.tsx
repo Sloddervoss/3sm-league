@@ -67,9 +67,11 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
   // De eigen rij kan ook zonder live-frame bekend zijn: gebruik die alleen voor
   // de presentatie van de bewaarde volledige ronde.
   const retainedPlayer = ((v3 ?? retained.lastInput)?.opponents ?? []).find(o => o.isPlayer);
-  const retainedLap = retainedPlayer && !playerTiming ? retained.laps.get(retainedPlayer.id) : undefined;
+  const retainedLap = retainedPlayer && !usingSectorUpdates ? retained.laps.get(retainedPlayer.id) : undefined;
   const previous = retainedLap?.lap != null && retainedPlayer?.lap != null && retainedPlayer.lap > retainedLap.lap + 1;
-  const retainedFresh = Boolean(retainedLap && playerTiming === null && player && rowSectors(data, player.id, player.lastLapSeconds));
+  // Delta's blijven aan een verse meting hangen; een bewaarde reeks toont wel
+  // haar tijden, maar geen verschil dat op een andere ronde zou slaan.
+  const retainedFresh = Boolean(retainedLap && !usingSectorUpdates && player && rowSectors(data, player.id, player.lastLapSeconds));
   const currentSectors = retainedLap?.seconds ?? null;
   const sectors = sectorCountOverride === undefined ? currentSectors
     : currentSectors?.length === sectorCount ? currentSectors : null;
@@ -89,7 +91,7 @@ export function RaceTelemetryStrip({ v3, live, plannedLaps, plannedDurationMinut
       data-sector-count={sectorCount}
       data-sector-source={usingSectorUpdates ? "live" : sectors ? "verified-lap" : "unknown"}
     >
-      <KpiGroup label={sectorLabel} group="sectoren" className={`${sectorCount>3 ? "pitwall-many-sectors" : ""}${(previous || (sectors != null && !retainedFresh)) ? " opacity-60" : ""}`} dimmed={sectors != null && !retainedFresh && !usingSectorUpdates}>
+      <KpiGroup label={sectorLabel} group="sectoren" className={`${sectorCount>3 ? "pitwall-many-sectors" : ""}${(previous || (sectors != null && !usingSectorUpdates && !live)) ? " opacity-60" : ""}`} dimmed={sectors != null && !usingSectorUpdates && (!live || previous)}>
         {sectorCount === 0 && <Cell label="Sectorindeling onbekend" value="—" compact />}
         {usingSectorUpdates && Array.from({length:sectorCount},(_,i)=>(
           <SectorKpi key={i} label={`S${i+1}`} slot={playerTiming?.slots[i] ?? null} compact={sectorCount>3} />
