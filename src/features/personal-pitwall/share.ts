@@ -26,6 +26,9 @@ const reader = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     persistSession: false,
     autoRefreshToken: false,
     detectSessionInUrl: false,
+    // Never share the owner's storage key: opening a public link must not
+    // initialise/recover (and thereby clear) the signed-in Supabase session.
+    storageKey: "sb-3sm-shared-reader",
   },
 });
 
