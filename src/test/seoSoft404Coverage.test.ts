@@ -20,7 +20,7 @@ describe("soft-404 dekking en echte 404", () => {
   const firstSegments = (paths: string[]) =>
     paths.map((p) => p.split("/").filter(Boolean)[0]).filter(Boolean);
 
-  const privatePrefixes = ["admin", "news-editor", "stewards", "koppel", "simhub-koppelen", "profile", "auth"];
+  const privatePrefixes = ["admin", "news-editor", "stewards", "koppel", "simhub-koppelen", "profile", "auth", "pitwall"];
 
   const publicSegments = [...new Set(
     firstSegments(routePaths.filter((p) => {
