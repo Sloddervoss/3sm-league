@@ -393,3 +393,139 @@ describe("pitwall-test — geen klassieke regressie in dezelfde run", () => {
     expect(calls).toHaveBeenCalledWith("pitwall_sandbox_v1", { p_device_id: "device-1" });
   });
 });
+
+describe("pitwall-test premium — focusweergave is presentatie op dezelfde boom", () => {
+  const enterFocus = async (view: ReturnType<typeof render>) => {
+    await waitFor(() => expect(premiumShell(view)).not.toBeNull());
+    const entry = screen.getByRole("button", { name: "Focus mode" });
+    enterFocus.trigger = entry;
+    fireEvent.click(entry);
+    await waitFor(() => expect(view.container.querySelector('[data-ptp-focus="true"]')).not.toBeNull());
+    return entry;
+  };
+  enterFocus.trigger = null as HTMLButtonElement | null;
+
+  it("houdt hetzelfde dashboard, dezelfde rijder en dezelfde telemetrie bij focus aan/uit", async () => {
+    const { view } = await renderPage();
+    await waitFor(() => expect(premiumShell(view)).not.toBeNull());
+
+    const premiumNode = premiumShell(view);
+    const driverRow = view.container.querySelector("tbody tr[data-timing-row-id]");
+    const driverBefore = view.container.querySelector(".ptp-mast-title h1")?.textContent;
+    const detailCallsBefore = calls.mock.calls.filter(([fn]) => fn === "get_simhub_device_details").length;
+
+    await enterFocus(view);
+
+    expect(view.container.querySelector('[data-ptp-focus="true"]')).not.toBeNull();
+    expect(premiumShell(view)).toBe(premiumNode);
+    expect(view.container.querySelector("tbody tr[data-timing-row-id]")).toBe(driverRow);
+    expect(view.container.querySelector(".ptp-mast-title h1")?.textContent).toBe(driverBefore);
+    expect(view.container.textContent).toContain("Vincent");
+    expect(calls.mock.calls.filter(([fn]) => fn === "get_simhub_device_details").length).toBe(detailCallsBefore);
+    // De focusweergave is een echte presentatie: navbar/footer en testdock wijken,
+    // maar het apparaat en de gekozen coureur blijven exact hetzelfde.
+    expect(screen.queryByTestId("navbar")).toBeNull();
+    expect(screen.queryByTestId("footer")).toBeNull();
+    expect(view.container.querySelector(".ptp-dock")).not.toBeVisible();
+    expect(screen.getByRole("button", { name: "Focus verlaten" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Focus verlaten" }));
+    await waitFor(() => expect(view.container.querySelector('[data-ptp-focus="true"]')).toBeNull());
+    expect(screen.getByTestId("navbar")).toBeTruthy();
+    expect(screen.getByTestId("footer")).toBeTruthy();
+    expect(premiumShell(view)).toBe(premiumNode);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Focus mode" })).toHaveFocus());
+  });
+
+  it("houdt profielkeuze en archief bereikbaar zonder de focus te verlaten", async () => {
+    const { view } = await renderPage();
+    await enterFocus(view);
+
+    fireEvent.click(screen.getByRole("button", { name: /Profielen/ }));
+    const dock = view.container.querySelector("#ptp-focus-profiles") as HTMLElement;
+    expect(dock).not.toHaveAttribute("hidden");
+    fireEvent.click(within(dock).getByRole("button", { name: /BEEST/ }));
+    await waitFor(() => expect(view.container.querySelector(".ptp-mast-title h1")?.textContent).toBe("BEEST"));
+    expect(view.container.querySelector('[data-ptp-focus="true"]')).not.toBeNull();
+    expect(calls).toHaveBeenCalledWith("get_simhub_device_details", { p_device_id: "device-2" });
+
+    const scrollIntoView = vi.fn();
+    const archive = view.container.querySelector("[data-ptp-archive]") as HTMLElement;
+    archive.scrollIntoView = scrollIntoView;
+    fireEvent.click(screen.getByRole("button", { name: "Archief" }));
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(archive).toHaveFocus();
+    expect(archive.textContent).toContain("Coureurs op dit apparaat");
+    expect(view.container.querySelector('[data-ptp-focus="true"]')).not.toBeNull();
+  });
+
+  it("verlaat de focus met Escape en zet de focus terug op de ingang", async () => {
+    const { view } = await renderPage();
+    const entry = await enterFocus(view);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(view.container.querySelector('[data-ptp-focus="true"]')).toBeNull());
+    await waitFor(() => expect(entry).toHaveFocus());
+    expect(screen.getByTestId("navbar")).toBeTruthy();
+  });
+
+  it("verlaat focus en fullscreen netjes wanneer de klassieke weergave gekozen wordt", async () => {
+    const shell = document.createElement("div");
+    let fullscreenElement: Element | null = null;
+    const requestFullscreen = vi.fn(async () => {
+      fullscreenElement = document.querySelector('[data-ptp-focus-shell="true"]');
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+    const exitFullscreen = vi.fn(async () => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+    const requestDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "requestFullscreen");
+    const exitDescriptor = Object.getOwnPropertyDescriptor(document, "exitFullscreen");
+    const elementDescriptor = Object.getOwnPropertyDescriptor(document, "fullscreenElement");
+    const enabledDescriptor = Object.getOwnPropertyDescriptor(document, "fullscreenEnabled");
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: true });
+    try {
+      const { view } = await renderPage();
+      await enterFocus(view);
+      fireEvent.click(screen.getByRole("button", { name: "Volledig scherm" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Volledig scherm" })).toHaveAttribute("aria-pressed", "true"));
+
+      fireEvent.click(screen.getByRole("button", { name: /Profielen/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Klassiek" }));
+      await waitFor(() => expect(premiumShell(view)).toBeNull());
+      await waitFor(() => expect(view.container.querySelector('[data-ptp-focus="true"]')).toBeNull());
+      expect(view.container.querySelector('[data-pitwall-look="true"]')).not.toBeNull();
+      expect(screen.getByText("Pitwall Test — live device data")).toBeTruthy();
+      expect(exitFullscreen).toHaveBeenCalled();
+    } finally {
+      if (requestDescriptor) Object.defineProperty(HTMLElement.prototype, "requestFullscreen", requestDescriptor);
+      else delete (HTMLElement.prototype as { requestFullscreen?: unknown }).requestFullscreen;
+      if (exitDescriptor) Object.defineProperty(document, "exitFullscreen", exitDescriptor);
+      else delete (document as { exitFullscreen?: unknown }).exitFullscreen;
+      if (elementDescriptor) Object.defineProperty(document, "fullscreenElement", elementDescriptor);
+      else delete (document as { fullscreenElement?: unknown }).fullscreenElement;
+      if (enabledDescriptor) Object.defineProperty(document, "fullscreenEnabled", enabledDescriptor);
+      else delete (document as { fullscreenEnabled?: unknown }).fullscreenEnabled;
+      shell.remove();
+    }
+  });
+
+  it("laat de normale premiumweergave zonder focus-attributen en met alle panelen intact", async () => {
+    const { view } = await renderPage();
+    await waitFor(() => expect(premiumShell(view)).not.toBeNull());
+
+    expect(view.container.querySelector('[data-ptp-focus="true"]')).toBeNull();
+    expect(view.container.querySelector('[data-ptp-focus-bar="true"]')).toBeNull();
+    expect(screen.getByTestId("navbar")).toBeTruthy();
+    expect(screen.getByTestId("footer")).toBeTruthy();
+    expect(view.container.querySelector(".ptp-dock")).toBeVisible();
+    expect(view.container.querySelector('[data-pitwall-row="track-timing"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-pitwall-slot="trackmap"]')).not.toBeNull();
+    expect(view.container.querySelector('[data-premium-timing]')).not.toBeNull();
+    expect(view.container.querySelector('[data-ptp-archive]')).not.toBeNull();
+  });
+});

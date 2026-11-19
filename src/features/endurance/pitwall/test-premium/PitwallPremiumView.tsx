@@ -23,6 +23,7 @@ import { PremiumMasthead } from "./PremiumMasthead";
 import { PremiumTimingPanel } from "./PremiumTimingPanel";
 import { useSectorLayoutCount } from "./useSectorLayout";
 import "./testPremium.css";
+import "./premiumFocus.css";
 
 type TyreState = ReturnType<typeof useTyreModel>;
 

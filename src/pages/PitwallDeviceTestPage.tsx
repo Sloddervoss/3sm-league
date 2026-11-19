@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cable, ChevronRight, Cpu, Lock, RefreshCw } from "lucide-react";
+import { Cable, ChevronRight, Cpu, Lock, Maximize2, RefreshCw } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,6 +40,8 @@ import { newestDeviceTelemetry } from "@/features/endurance/pitwall/deviceTeleme
 import { devicePresence, devicePresenceLabel } from "@/features/endurance/pitwall/devicePresence";
 import { PremiumDeviceDock } from "@/features/endurance/pitwall/test-premium/PremiumDeviceDock";
 import { PitwallPremiumView } from "@/features/endurance/pitwall/test-premium/PitwallPremiumView";
+import { PremiumFocusBar } from "@/features/endurance/pitwall/test-premium/PremiumFocusBar";
+import { usePitwallFocus } from "@/features/endurance/pitwall/test-premium/usePitwallFocus";
 import { usePitwallTestSettings } from "@/features/endurance/pitwall/test-premium/usePitwallTestSettings";
 import { resolveFuelLearning } from "@/features/endurance/pitwall/learning/fuelServing";
 
@@ -76,6 +78,8 @@ function TestViewControls({
   motionLocked,
   onMotion,
   overridden,
+  onEnterFocus,
+  focusActive = false,
 }: {
   view: "classic" | "premium";
   onView: (view: "classic" | "premium") => void;
@@ -83,6 +87,9 @@ function TestViewControls({
   motionLocked: boolean;
   onMotion: () => void;
   overridden: boolean;
+  /** Alleen de premiumweergave biedt focus; klassiek blijft ongewijzigd. */
+  onEnterFocus?: (trigger: HTMLButtonElement) => void;
+  focusActive?: boolean;
 }) {
   return (
     <div className="ptp-controls mb-2 flex flex-wrap items-center gap-x-4 gap-y-2" data-pitwall-test-controls style={view === "classic" ? { marginTop: 64 } : undefined}>
@@ -130,6 +137,20 @@ function TestViewControls({
         <span className={`ptp-motion-dot h-1.5 w-1.5 rounded-full ${motionEnabled ? "bg-emerald-400" : "bg-gray-600"}`} aria-hidden />
         Beweging
       </button>
+      {onEnterFocus && (
+        <button
+          type="button"
+          data-pitwall-focus-entry="true"
+          onClick={(event) => onEnterFocus(event.currentTarget)}
+          disabled={focusActive}
+          aria-disabled={focusActive}
+          title={focusActive ? "Focus is al actief" : "Racegerichte focusweergave; Esc verlaat de focus"}
+          className="ptp-focus-entry inline-flex min-h-7 items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-gray-300 hover:border-orange-500/40 hover:text-white disabled:cursor-default disabled:opacity-50"
+        >
+          <Maximize2 aria-hidden size={12} />
+          Focus mode
+        </button>
+      )}
       {overridden && (
         <span className="ptp-override text-[10px] font-semibold text-amber-300" data-pitwall-view-override>
           URL-override actief — kies een weergave om die op te heffen
@@ -145,6 +166,35 @@ export default function PitwallDeviceTestPage() {
   const queryClient = useQueryClient();
   const { view, chooseView, overridden, motionEnabled, motionLocked, toggleMotion } = usePitwallTestSettings();
   const premium = view === "premium";
+  /* Presentatie-only focus. De staat hangt niet aan een URL, profiel of link en
+     verandert geen enkele query; alle bestaande inhoud blijft in dezelfde boom. */
+  const [dockOpen, setDockOpen] = useState(true);
+  const openDock = useCallback(() => setDockOpen(true), []);
+  const focus = usePitwallFocus({ onExit: openDock });
+  const { active: focusOn, enter: enterFocusMode, exit: exitFocusMode } = focus;
+  const focusActive = premium && focusOn;
+  const archiveRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // Wie tijdens focus naar klassiek wisselt, verlaat de focuspresentatie.
+    if (!premium && focusOn) exitFocusMode();
+  }, [premium, focusOn, exitFocusMode]);
+
+  const enterFocus = useCallback(
+    (trigger?: HTMLElement | null) => {
+      if (focusOn) return;
+      setDockOpen(false);
+      enterFocusMode(trigger);
+    },
+    [focusOn, enterFocusMode],
+  );
+
+  const showArchive = useCallback(() => {
+    const archive = archiveRef.current;
+    if (!archive) return;
+    archive.scrollIntoView?.({ block: "start", behavior: motionEnabled ? "smooth" : "auto" });
+    archive.focus({ preventScroll: true });
+  }, [motionEnabled]);
   // Poll only the authorized, bounded RPC projection. No 512-KiB row subscription.
 
   /* Fleet: connected SimHub profiles, online-first (same read RPC as the
@@ -295,11 +345,51 @@ export default function PitwallDeviceTestPage() {
   const dataGap = Boolean(detailQuery.error) || !tele;
   const lastSeen = relTime(detail?.health?.received_at);
 
+  /* Brok buiten het dashboard. Staat in beide weergaven op dezelfde plek in de
+     boom (premium: binnen de focus-shell) en is dus ook in focus bereikbaar. */
+  const archiveSection = (
+    <section
+      ref={archiveRef}
+      tabIndex={-1}
+      className="mt-4 rounded-xl border border-[#1D2431] bg-[#0B0D11] px-5 py-4"
+      data-ptp-archive
+      aria-label="Coureurs op dit apparaat"
+    >
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Coureurs op dit apparaat</h2>
+        <span className="text-[11px] text-gray-500">
+          {sandboxQuery.data?.pace?.count ?? 0} rondes vastgelegd
+          {sandboxQuery.data?.pace?.fastest != null ? ` · snelste ${sandboxQuery.data.pace.fastest.toFixed(2)} s` : ""}
+        </span>
+      </div>
+      {coureurs.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          Nog niemand gereden in deze sessie. Zodra er een ronde wordt afgerond, verschijnt de coureur hier.
+        </p>
+      ) : (
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {coureurs.map((c) => (
+            <li key={c.naam} className="flex items-center justify-between rounded-xl border border-[#1D2431] bg-black/30 px-3 py-2">
+              <span className="text-sm text-white">{c.naam}</span>
+              <span className="text-xs text-gray-400">
+                {c.ronden} rondes{c.snelste != null ? ` · ${c.snelste.toFixed(2)} s` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+
   return (
-    <div className={premium ? "min-h-screen bg-[#07090c]" : "min-h-screen bg-background"} data-no-translate>
-      <Navbar />
+    <div
+      className={premium ? "min-h-screen bg-[#07090c]" : "min-h-screen bg-background"}
+      data-no-translate
+      data-ptp-focus={focusActive ? "true" : undefined}
+    >
+      {!focusActive && <Navbar />}
       <main
-        className={premium ? "ptp-shell" : "container mx-auto max-w-[1600px] px-4 py-6"}
+        className={premium ? `ptp-shell${focusActive ? " ptp-shell--focus" : ""}` : "container mx-auto max-w-[1600px] px-4 py-6"}
         data-pitwall-test-premium={premium ? "true" : undefined}
       >
         {!premium && (
@@ -465,28 +555,57 @@ export default function PitwallDeviceTestPage() {
                 )}
               </section>
             </div>
+            {archiveSection}
           </>
         )}
 
         {premium && (
-          <>
-            <PremiumDeviceDock
-              rows={fleetQuery.data}
-              selectedId={deviceId}
-              onSelect={setDeviceId}
-              loading={fleetQuery.isFetching}
-              error={Boolean(fleetQuery.error)}
-              controls={
-                <TestViewControls
-                  view={view}
-                  onView={chooseView}
-                  motionEnabled={motionEnabled}
-                  motionLocked={motionLocked}
-                  onMotion={toggleMotion}
-                  overridden={overridden}
-                />
-              }
+          <div
+            ref={focus.shellRef}
+            className="ptp-focus-shell"
+            data-ptp-focus-shell={focusActive ? "true" : undefined}
+            role={focusActive ? "region" : undefined}
+            aria-label={focusActive ? "Pitwall focusweergave" : undefined}
+            tabIndex={focusActive ? -1 : undefined}
+          >
+            <PremiumFocusBar
+              active={focusActive}
+              fullscreen={focus.fullscreen}
+              message={focus.message}
+              profilesOpen={dockOpen}
+              deviceCount={fleetQuery.data?.length ?? 0}
+              exitButtonRef={focus.exitButtonRef}
+              onToggleProfiles={() => setDockOpen((open) => !open)}
+              onShowArchive={showArchive}
+              onToggleFullscreen={() => void focus.toggleFullscreen()}
+              onExit={focus.exit}
             />
+
+            <div
+              className="ptp-focus-dock"
+              id="ptp-focus-profiles"
+              hidden={focusActive && !dockOpen}
+            >
+              <PremiumDeviceDock
+                rows={fleetQuery.data}
+                selectedId={deviceId}
+                onSelect={setDeviceId}
+                loading={fleetQuery.isFetching}
+                error={Boolean(fleetQuery.error)}
+                controls={
+                  <TestViewControls
+                    view={view}
+                    onView={chooseView}
+                    motionEnabled={motionEnabled}
+                    motionLocked={motionLocked}
+                    onMotion={toggleMotion}
+                    overridden={overridden}
+                    onEnterFocus={enterFocus}
+                    focusActive={focusActive}
+                  />
+                }
+              />
+            </div>
 
             {!deviceId && (
               <div className="ptp-empty-state">
@@ -528,37 +647,12 @@ export default function PitwallDeviceTestPage() {
                 lastSeen={lastSeen}
               />
             )}
-          </>
-        )}
 
-        {/* Coureurs op dit apparaat — ook zonder event, uit het rondearchief. */}
-        <section className="mt-4 rounded-xl border border-[#1D2431] bg-[#0B0D11] px-5 py-4" data-ptp-archive>
-          <div className="mb-3 flex items-baseline justify-between gap-3">
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Coureurs op dit apparaat</h2>
-            <span className="text-[11px] text-gray-500">
-              {sandboxQuery.data?.pace?.count ?? 0} rondes vastgelegd
-              {sandboxQuery.data?.pace?.fastest != null ? ` · snelste ${sandboxQuery.data.pace.fastest.toFixed(2)} s` : ""}
-            </span>
+            {archiveSection}
           </div>
-          {coureurs.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              Nog niemand gereden in deze sessie. Zodra er een ronde wordt afgerond, verschijnt de coureur hier.
-            </p>
-          ) : (
-            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {coureurs.map((c) => (
-                <li key={c.naam} className="flex items-center justify-between rounded-xl border border-[#1D2431] bg-black/30 px-3 py-2">
-                  <span className="text-sm text-white">{c.naam}</span>
-                  <span className="text-xs text-gray-400">
-                    {c.ronden} rondes{c.snelste != null ? ` · ${c.snelste.toFixed(2)} s` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        )}
       </main>
-      <Footer />
+      {!focusActive && <Footer />}
     </div>
   );
 }

@@ -1,0 +1,839 @@
+/* Premium focusweergave — alleen presentatie, uitsluitend binnen
+   [data-ptp-focus="true"]. De normale premium- en klassieke weergave krijgen dit
+   attribuut nooit. De focusweergave hergebruikt dezelfde componenten en dezelfde
+   DOM; er wordt niets geconditioneerd gerenderd behalve de bedieningsstrook zelf. */
+
+[data-ptp-focus="true"] .ptp-shell {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Eén eigen scrollgebied over de hele viewport. Geen body-lock: bij unmount of
+   navigatie blijft de pagina dus gewoon bruikbaar. */
+[data-ptp-focus="true"] .ptp-focus-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgba(255, 122, 26, 0.055), transparent 55%),
+    #07090c;
+  color: var(--ptp-text);
+}
+[data-ptp-focus="true"] .ptp-focus-shell:focus {
+  outline: none;
+}
+[data-ptp-focus="true"] .ptp-focus-shell:focus-visible {
+  outline: 2px solid var(--ptp-orange);
+  outline-offset: -2px;
+}
+[data-ptp-focus="true"] .ptp-focus-shell:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  padding: 10px 12px 12px;
+}
+[data-ptp-focus="true"] .ptp-focus-shell::backdrop {
+  background: #07090c;
+}
+
+/* ── Focusbediening ────────────────────────────────────────────────────── */
+
+.ptp-focus-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 3px 8px;
+  border: 1px solid #1d2733;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #10161d 0%, #0a0f14 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  color: #e8eef4;
+}
+.ptp-focus-bar[hidden] {
+  display: none !important;
+}
+.ptp-focus-brand {
+  flex: none;
+  font-family: "Exo 2", sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #ff7a1a;
+}
+.ptp-focus-brand b {
+  color: #e8eef4;
+  font-weight: 800;
+}
+.ptp-focus-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8e9cac;
+}
+.ptp-focus-state.is-alert {
+  color: #e8b45d;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-size: 10px;
+  white-space: normal;
+}
+.ptp-focus-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.ptp-focus-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid #25303c;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #c4cfda;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ptp-focus-btn:hover {
+  border-color: #384656;
+  color: #fff;
+}
+.ptp-focus-btn[aria-pressed="true"] {
+  border-color: rgba(71, 211, 139, 0.4);
+  background: rgba(71, 211, 139, 0.09);
+  color: #47d38b;
+}
+.ptp-focus-btn:focus-visible {
+  outline: 2px solid #ff7a1a;
+  outline-offset: 2px;
+}
+.ptp-focus-count {
+  display: inline-block;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 8px;
+  line-height: 12px;
+  text-align: center;
+  color: #8e9cac;
+}
+.ptp-focus-exit {
+  border-color: rgba(255, 122, 26, 0.55);
+  background: #ff7a1a;
+  color: #0a0d10;
+}
+.ptp-focus-exit:hover {
+  border-color: #ff9b4d;
+  background: #ff9b4d;
+  color: #0a0d10;
+}
+
+/* Toegang tot de focusweergave staat naast de bestaande testbediening. */
+.ptp-focus-entry:focus-visible {
+  outline: 2px solid #ff7a1a;
+  outline-offset: 2px;
+}
+
+[data-ptp-focus="true"] .ptp-focus-dock {
+  flex: none;
+}
+[data-ptp-focus="true"] .ptp-focus-dock[hidden] {
+  display: none !important;
+}
+[data-ptp-focus="true"] .ptp-focus-dock .ptp-dock {
+  margin: 0;
+}
+
+/* ── Eén race-eerst raster ─────────────────────────────────────────────── */
+
+[data-ptp-focus="true"] .ptp-root {
+  display: grid;
+  flex: 0 0 auto;
+  height: calc(100dvh - 58px);
+  grid-template-rows: auto auto auto minmax(270px, 1fr) clamp(168px, 21dvh, 240px) auto;
+  gap: 6px;
+  min-height: 0;
+  margin: 0;
+  align-content: stretch;
+}
+[data-ptp-focus="true"] .ptp-root > * {
+  min-width: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+[data-ptp-focus="true"] :is(.ptp-mast-main, .ptp-mast-title, .ptp-status-block, .ptp-meta, .ptp-meta > div) {
+  min-width: 0;
+}
+[data-ptp-focus="true"] .ptp-status-block {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi] > * {
+  min-width: 0;
+}
+
+/* Context: één compacte kop, maar alle bronvelden blijven zichtbaar. */
+[data-ptp-focus="true"] .ptp-masthead {
+  margin: 0;
+  padding: 3px 10px 4px;
+  border-radius: 7px;
+}
+[data-ptp-focus="true"] .ptp-brandline {
+  display: none;
+}
+[data-ptp-focus="true"] .ptp-mast-main {
+  gap: 10px;
+  margin-top: 0;
+}
+[data-ptp-focus="true"] .ptp-mast-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 100%;
+}
+[data-ptp-focus="true"] .ptp-mast-title h1 {
+  max-width: 100%;
+  font-size: 16px;
+  line-height: 1;
+}
+[data-ptp-focus="true"] .ptp-mast-sub {
+  max-width: 100%;
+  font-size: 9.5px;
+  line-height: 12px;
+}
+[data-ptp-focus="true"] .ptp-status {
+  font-size: 7.5px;
+  line-height: 12px;
+  padding: 0 4px;
+}
+[data-ptp-focus="true"] .ptp-readonly {
+  font-size: 6.5px;
+  line-height: 9px;
+}
+[data-ptp-focus="true"] .ptp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin-top: 1px;
+  padding-top: 1px;
+}
+[data-ptp-focus="true"] .ptp-meta > div {
+  margin-right: 8px;
+  padding-right: 8px;
+}
+[data-ptp-focus="true"] .ptp-meta dt {
+  font-size: 7.5px;
+  line-height: 9px;
+  letter-spacing: 0.1em;
+}
+[data-ptp-focus="true"] .ptp-meta dd {
+  max-width: 220px;
+  font-size: 9px;
+  line-height: 11px;
+}
+
+/* KPI: dezelfde drie groepen en dezelfde 1–16 sectorstrip, compacter. */
+[data-ptp-focus="true"] .ptp-kpi {
+  margin: 0;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi] {
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1.1fr) minmax(0, 1.37fr);
+  gap: 6px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] {
+  padding: 3px 8px 4px;
+  border-radius: 7px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 7.5px;
+  line-height: 10px;
+  letter-spacing: 0.13em;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div {
+  min-height: 40px;
+  margin-top: 2px;
+  align-items: flex-start;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div {
+  padding-inline: 7px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
+  font-size: 7.5px;
+  line-height: 10px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(2) {
+  font-size: 18px;
+  line-height: 1;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group].pitwall-many-sectors > div > div > p:nth-child(2) {
+  font-size: 14px;
+}
+[data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(3) {
+  margin-top: 1px;
+  font-size: 8px;
+  line-height: 10px;
+}
+
+/* Beslissing: actie en reden blijven, de onderbouwing staat ernaast. */
+[data-ptp-focus="true"] [data-pitwall-decision-band] {
+  margin: 0;
+  padding: 3px 10px 4px;
+  gap: 8px;
+  border-radius: 7px;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] [role="status"] {
+  font-size: 14px;
+  line-height: 16px;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
+  grid-template-rows: auto auto auto;
+  column-gap: 14px;
+  row-gap: 2px;
+  align-items: start;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > p:first-of-type {
+  grid-column: 1;
+  grid-row: 1;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-of-type(2) {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 10.5px;
+  line-height: 13px;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > [data-pitwall-tyre-action],
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > [data-pitwall-in-box],
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > [data-pitwall-stay-out] {
+  grid-column: 1;
+  margin-top: 1px;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > .pitwall-decision-compare {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  min-height: 0;
+  margin-top: 0;
+  align-self: stretch;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-tyre-fuel] > p:first-child {
+  font-size: 8px;
+  line-height: 10px;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare li {
+  font-size: 10px;
+  line-height: 13px;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-compare [data-pitwall-binding-sentence] {
+  margin-top: 1px;
+  font-size: 9px;
+  line-height: 12px;
+}
+[data-ptp-focus="true"] [data-pitwall-decision-band] [class*="rounded-xl"] {
+  border-radius: 5px;
+}
+
+/* Kaart en timing delen de hoofdrij en de volledige resthoogte. */
+[data-ptp-focus="true"] .ptp-main {
+  grid-template-columns: clamp(260px, 24vw, 390px) minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
+  margin: 0;
+}
+[data-ptp-focus="true"] .ptp-track-col {
+  gap: 6px;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] {
+  min-width: 0;
+  overflow: hidden;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-pitwall-slot="trackmap"] svg {
+  max-width: 100%;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-pitwall-slot="trackmap"] > header {
+  min-height: 28px;
+  padding: 3px 8px;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-pitwall-slot="trackmap"] > div {
+  padding: 3px 8px 4px;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-pitwall-slot="trackmap"] > div > p:first-child,
+[data-ptp-focus="true"] [data-ptp-circuit] [data-pitwall-slot="trackmap"] [data-ptp-lap-progress] {
+  flex: none;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-pitwall-slot="trackmap"] p.font-heading {
+  font-size: 12px;
+  line-height: 15px;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-ptp-lap-labels] {
+  margin: 5px 18px 15px;
+  font-size: 8px;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-ptp-lap-badge] {
+  top: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 3px;
+  font-size: 9px;
+}
+[data-ptp-focus="true"] [data-ptp-circuit] [data-ptp-lap-bar] {
+  margin-bottom: 12px;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  column-gap: 10px;
+  padding: 4px 8px 5px;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(1) {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 8px;
+  line-height: 10px;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+  margin-top: 1px;
+  font-size: 14px;
+  line-height: 15px;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] > p:nth-child(3) {
+  grid-column: 1;
+  grid-row: 3;
+  margin-top: 1px;
+  font-size: 9px;
+  line-height: 11px;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl dt {
+  font-size: 7px;
+  line-height: 9px;
+}
+[data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl dd {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 14px;
+}
+[data-ptp-focus="true"] .ptp-timing {
+  height: 100%;
+  min-height: 0;
+  border-radius: 7px;
+}
+[data-ptp-focus="true"] .ptp-panel-head {
+  min-height: 32px;
+  padding: 3px 10px 4px;
+}
+[data-ptp-focus="true"] .ptp-panel-head h2 {
+  font-size: 12.5px;
+}
+[data-ptp-focus="true"] .ptp-timing-tabs {
+  min-height: 23px;
+  padding: 1px 7px;
+}
+[data-ptp-focus="true"] .ptp-timing-tabs > button,
+[data-ptp-focus="true"] .ptp-class-filter button {
+  min-height: 20px;
+  font-size: 8.5px;
+}
+[data-ptp-focus="true"] .ptp-focus-cell {
+  padding: 2px 8px 3px;
+}
+[data-ptp-focus="true"] .ptp-focus-pos {
+  font-size: 11px;
+}
+[data-ptp-focus="true"] .ptp-focus-value {
+  font-size: 9px;
+}
+[data-ptp-focus="true"] .ptp-timing-table tbody td {
+  height: 40px;
+}
+[data-ptp-focus="true"] .ptp-timing-note {
+  padding: 2px 10px 3px;
+  font-size: 8.5px;
+  line-height: 11px;
+}
+
+/* De vijf secundaire kaarten blijven samen zichtbaar; elke kaart scrollt
+   zelfstandig, zodat brandstof en banden nooit achter een drawer verdwijnen. */
+[data-ptp-focus="true"] .ptp-panels {
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.24fr) minmax(0, 0.9fr) minmax(0, 1.06fr) minmax(0, 1.2fr) minmax(0, 0.9fr);
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 6px;
+  align-items: stretch;
+}
+[data-ptp-focus="true"] .ptp-panel-wrap,
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] {
+  min-height: 0;
+  height: 100%;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header {
+  min-height: 28px;
+  padding: 3px 8px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
+  font-size: 9.5px;
+  line-height: 12px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > div {
+  min-height: 0;
+  padding: 6px 8px 7px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #33404d #0a0f14;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="pace"] [data-pitwall-pace-graph] {
+  height: 54px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="pace"] dd {
+  font-size: 14px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="my-session"] > div > div > p:nth-child(2) {
+  font-size: 18px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="fuel"] [data-pitwall-fuel-value] {
+  font-size: 28px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="tyres"] [data-pitwall-tyre-corner] {
+  padding: 3px 5px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="tyres"] [data-pitwall-tyre-corner] > p:nth-child(2) {
+  font-size: 16px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="tyres"] [data-pitwall-tyre-corner] > p:nth-child(4) {
+  margin-top: 1px;
+  font-size: 9.5px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="pitstop"] > div {
+  padding: 6px 8px;
+}
+[data-ptp-focus="true"] .ptp-panels [data-pitwall-slot="pitstop"] button {
+  font-size: 8.5px;
+}
+
+[data-ptp-focus="true"] .ptp-more {
+  margin: 0;
+  border-radius: 7px;
+}
+[data-ptp-focus="true"] .ptp-more > summary {
+  padding: 4px 10px;
+  font-size: 8.5px;
+}
+[data-ptp-focus="true"] .ptp-more-body {
+  max-height: 52vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Brok buiten het dashboard: blijft in dezelfde boom en dus bereikbaar. */
+[data-ptp-focus="true"] [data-ptp-archive] {
+  flex: none;
+  margin-top: 6px;
+  padding: 9px 12px 10px;
+  border-radius: 7px;
+}
+[data-ptp-focus="true"] [data-ptp-archive] h2 {
+  font-size: 9.5px;
+}
+[data-ptp-focus="true"] [data-ptp-archive] li {
+  min-height: 30px;
+}
+[data-ptp-focus="true"] [data-ptp-archive] li span:first-child {
+  font-size: 12px;
+}
+[data-ptp-focus="true"] [data-ptp-archive] li span:last-child {
+  font-size: 10.5px;
+}
+
+/* ── Responsief: andere compositie, niet alleen kleiner ────────────────── */
+
+@media (max-width: 1280px) {
+  [data-ptp-focus="true"] .ptp-main {
+    grid-template-columns: clamp(250px, 23vw, 320px) minmax(0, 1fr);
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.12fr) minmax(0, 0.83fr);
+  }
+}
+
+@media (max-width: 1100px) {
+  [data-ptp-focus="true"] .ptp-root {
+    height: auto;
+    grid-template-rows: auto auto auto minmax(270px, 1fr) auto auto;
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    height: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 156px;
+  }
+  [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] {
+    height: 156px;
+  }
+  [data-ptp-focus="true"] .ptp-panel-wrap {
+    height: 156px;
+  }
+}
+
+@media (max-width: 900px) {
+  [data-ptp-focus="true"] .ptp-root {
+    grid-template-rows: auto auto auto minmax(300px, 1fr) auto auto;
+  }
+  [data-ptp-focus="true"] .ptp-main {
+    grid-template-columns: 1fr;
+  }
+  [data-ptp-focus="true"] [data-ptp-circuit] [data-pitwall-slot="trackmap"] svg[data-track-presentation="premium"] {
+    max-height: 250px;
+  }
+  [data-ptp-focus="true"] .ptp-timing {
+    height: 380px;
+    min-height: 0;
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > .pitwall-decision-compare {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 3px;
+  }
+  [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-of-type(2) {
+    grid-column: 1;
+    grid-row: auto;
+    -webkit-line-clamp: 3;
+  }
+  [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > [data-pitwall-tyre-action],
+  [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > [data-pitwall-in-box],
+  [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > [data-pitwall-stay-out] {
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  [data-ptp-focus="true"] .ptp-focus-shell {
+    gap: 5px;
+    padding: 6px 7px 8px;
+  }
+  .ptp-focus-bar {
+    flex-wrap: wrap;
+    row-gap: 5px;
+    min-height: 44px;
+    padding: 4px 6px;
+  }
+  .ptp-focus-brand {
+    font-size: 9px;
+  }
+  .ptp-focus-state {
+    flex: 1 1 auto;
+    font-size: 9px;
+  }
+  .ptp-focus-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+    gap: 5px;
+  }
+  .ptp-focus-btn {
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 10px;
+    gap: 4px;
+  }
+  .ptp-focus-count {
+    font-size: 9px;
+    line-height: 14px;
+  }
+  [data-ptp-focus="true"] .ptp-root {
+    grid-template-rows: auto auto auto auto auto auto;
+  }
+  [data-ptp-focus="true"] .ptp-mast-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  [data-ptp-focus="true"] .ptp-mast-title h1 {
+    font-size: 17px;
+  }
+  [data-ptp-focus="true"] .ptp-mast-sub {
+    font-size: 11px;
+    line-height: 14px;
+  }
+  [data-ptp-focus="true"] .ptp-status {
+    font-size: 8.5px;
+    line-height: 14px;
+  }
+  [data-ptp-focus="true"] .ptp-meta {
+    gap: 4px 10px;
+  }
+  [data-ptp-focus="true"] .ptp-meta dt {
+    font-size: 8.5px;
+    line-height: 10px;
+  }
+  [data-ptp-focus="true"] .ptp-meta dd {
+    font-size: 10.5px;
+    line-height: 13px;
+  }
+  [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi] {
+    grid-template-columns: 1fr;
+  }
+  [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > p:first-child {
+    font-size: 8.5px;
+  }
+  [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div {
+    min-height: 0;
+  }
+  [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group="sectoren"] > div {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #33404d #0a0f14;
+  }
+  [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group="sectoren"] > div > div {
+    flex: 0 0 auto;
+    min-width: 48px;
+  }
+  [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:first-child {
+    font-size: 8.5px;
+  }
+  [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(2) {
+    font-size: 19px;
+  }
+  [data-ptp-focus="true"] [data-pitwall-decision-band] [role="status"] {
+    font-size: 16px;
+    line-height: 18px;
+  }
+  [data-ptp-focus="true"] [data-pitwall-decision-band] .pitwall-decision-content > p:nth-of-type(2) {
+    font-size: 12px;
+    line-height: 15px;
+  }
+  [data-ptp-focus="true"] .ptp-focus-label {
+    font-size: 8.5px;
+    line-height: 11px;
+  }
+  [data-ptp-focus="true"] .ptp-focus-pos {
+    font-size: 12px;
+  }
+  [data-ptp-focus="true"] .ptp-focus-value {
+    font-size: 10px;
+  }
+  [data-ptp-focus="true"] [data-pitwall-slot="own-car"] {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+  }
+  [data-ptp-focus="true"] [data-pitwall-slot="own-car"] dl {
+    grid-column: 1;
+    grid-row: 4;
+    margin-top: 3px;
+    padding-top: 3px;
+    border-top: 1px solid #161c27;
+  }
+  [data-ptp-focus="true"] .ptp-timing {
+    height: 460px;
+  }
+  [data-ptp-focus="true"] .ptp-panels {
+    grid-template-columns: 1fr;
+    grid-auto-rows: 170px;
+  }
+  [data-ptp-focus="true"] .ptp-panel-wrap,
+  [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] {
+    height: 170px;
+  }
+  [data-ptp-focus="true"] .ptp-panels [data-pitwall-slot] > header h3 {
+    font-size: 10.5px;
+    line-height: 13px;
+  }
+  [data-ptp-focus="true"] [data-ptp-archive] ul {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .ptp-focus-brand {
+    display: none;
+  }
+  .ptp-focus-state:not(.is-alert) {
+    display: none;
+  }
+  .ptp-focus-state.is-alert {
+    flex-basis: 100%;
+  }
+  .ptp-focus-actions {
+    justify-content: flex-start;
+  }
+  .ptp-focus-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 0 5px;
+  }
+  .ptp-focus-btn svg {
+    display: none;
+  }
+  [data-ptp-focus="true"] .ptp-mast-title h1 {
+    font-size: 15px;
+  }
+  [data-ptp-focus="true"] .ptp-kpi [data-pitwall-kpi-group] > div > div > p:nth-child(2) {
+    font-size: 17px;
+  }
+  [data-ptp-focus="true"] .ptp-timing {
+    height: 460px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ptp-focus="true"] .ptp-focus-shell {
+    scroll-behavior: auto;
+  }
+}
