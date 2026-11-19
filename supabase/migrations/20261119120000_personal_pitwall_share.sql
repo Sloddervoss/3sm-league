@@ -147,6 +147,7 @@ BEGIN
         WHERE d.owner_user_id = v_uid
           AND d.revoked_at IS NULL
           AND coalesce(d.device_status, '') <> 'revoked'
+          AND (d.expires_at IS NULL OR d.expires_at > pg_catalog.now())
         ORDER BY ord
         LIMIT 20
       ) ranked
