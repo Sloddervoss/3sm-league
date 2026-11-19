@@ -69,6 +69,8 @@ begin
 
   return new;
 exception
+  -- Een fout hier mag nooit de telemetrie-ingest blokkeren: de ronde gaat
+  -- verloren, het frame niet.
   when others then
     return new;
 end;

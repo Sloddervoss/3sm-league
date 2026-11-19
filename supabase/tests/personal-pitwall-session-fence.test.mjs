@@ -412,6 +412,29 @@ const run = async () => {
   check(parkedDevices.devices[0].shareable === false, "isInCar false is not shareable");
 
   await resetLive();
+  console.log("3b. meatball/mechanical warning is not a session end");
+  const meatballV3 = makeV3({ session: { ...makeV3().session, sessionState: "racing", flags: ["yellow", "meatball"] } });
+  await setLive(meatballV3);
+  check(await asAdmin(async () => (await db.query(
+    "SELECT public.pitwall_share_session_active_v2($1::jsonb) AS x",
+    [JSON.stringify(meatballV3)],
+  )).rows[0].x), "a meatball frame is still an active session");
+  const meatballDevices = await asOwner(OWNER, () => rpc("pitwall_my_devices_v2"));
+  check(meatballDevices.devices[0].shareable === true, "the owner can still share while meatball is shown");
+  const meatballShare = await asOwner(OWNER, () => rpc("pitwall_share_create_v2", [DEVICE, 14400], ["uuid", "int"]));
+  check(meatballShare.ok === true && TOKEN_RE.test(meatballShare.token), "share creation succeeds under a meatball flag");
+  // Real driving shape: the flag stays set on subsequent accepted frames.
+  const meatballNext = makeV3({
+    session: { ...meatballV3.session, sessionTimeSeconds: 620 },
+    timing: { ...makeV3().timing, completedLaps: 19, lastLapTimeSeconds: 103.1 },
+  });
+  await setLive(meatballNext);
+  const meatballStored = await activeShare();
+  check(meatballStored.revoked_at === null && meatballStored.revoke_reason === null, "a meatball ingest frame does not revoke the share");
+  const meatballRead = await asAnon(() => rpc("pitwall_shared_snapshot_v2", [meatballShare.token]));
+  check(meatballRead.ok === true, "the spectator still reads the session while meatball is shown");
+
+  await resetLive();
   console.log("4. share creation binds the simulator session");
   const created = await asOwner(OWNER, () => rpc("pitwall_share_create_v2", [DEVICE, 14400], ["uuid", "int"]));
   check(created.ok === true && TOKEN_RE.test(created.token), "create returns a 64-hex token");
@@ -636,6 +659,10 @@ const run = async () => {
   check(afterRollback.new_cols === 0 && afterRollback.lap_col === 0, "rollback removes the additive binding columns");
   check(afterRollback.fence_trg === 0, "rollback removes the ingest fence trigger");
   check(afterRollback.share !== null, "rollback keeps the existing share table");
+  const restoredCapture = await asAdmin(async () => (await db.query(
+    "SELECT pg_catalog.md5(prosrc) AS h FROM pg_proc WHERE proname='simhub_capture_lap' AND pronamespace='public'::regnamespace",
+  )).rows[0].h);
+  check(restoredCapture === "01678a9619cad2dbcfa94deeb4d0ca6d", "rollback restores the exact production lap-capture baseline");
   check(await asAnon(async () => (await db.query("SELECT has_function_privilege('anon','public.pitwall_shared_snapshot_v1(text)','EXECUTE') AS x")).rows[0].x), "rollback re-grants the v1 reader");
   await db.exec(fence);
   check(true, "session fence migration can be re-applied after rollback");

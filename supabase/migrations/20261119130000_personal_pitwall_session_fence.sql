@@ -90,6 +90,8 @@ REVOKE ALL ON FUNCTION public.pitwall_observed_session_v1(jsonb) FROM PUBLIC, an
 
 -- Terminal signals always win. "checkered" is included even while the state
 -- string still says racing, because the flag arrives one frame earlier.
+-- "meatball" is deliberately NOT terminal: it is the mechanical-warning flag
+-- and real driving snapshots keep it set while the session continues.
 CREATE OR REPLACE FUNCTION public.pitwall_share_terminal_v1(p_v3 jsonb)
 RETURNS boolean
 LANGUAGE sql
@@ -108,7 +110,7 @@ AS $$
                 THEN p_v3 #> '{session,flags}' ELSE '[]'::jsonb END
          ) AS flag(value)
          WHERE pg_catalog.lower(flag.value)
-           IN ('checkered', 'checkered flag', 'black', 'disqualify', 'meatball')
+           IN ('checkered', 'checkered flag', 'black', 'disqualify')
        )
      );
 $$;

@@ -37,7 +37,9 @@ or update) doet niets zolang het device geen actieve share heeft. Anders
 revoket hij de share onmiddellijk en onherstelbaar bij:
 
 - terminale sessie (`checkered`, `cool_down`, `ended`, `not_in_world`, of
-  checkered/black/disqualify/meatball flag);
+  checkered/black/disqualify flag). `meatball` is géén terminaal signaal: dat
+  is de mechanische waarschuwingsvlag en blijft in echte rijsnapshots staan
+  terwijl de sessie doorloopt;
 - gewijzigde `observed_session_id` (met dezelfde transport-id);
 - verdwijnende `observed_session_id` (bewijs weg = geen continuïteit);
 - gewijzigde transport-id, circuitnaam/config/trackId of eigenaar;
